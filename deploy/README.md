@@ -15,7 +15,7 @@ MicroK8s cluster
 ├── master (84.38.184.105)         hostname=master
 │   ├── postgres StatefulSet (PVC 50Gi)
 │   ├── redis StatefulSet (PVC 10Gi)
-│   ├── 9 application Deployments (flows, frontend, crm, rag, sync, scheduler-api, office, voice, browser)
+│   ├── 10 application Deployments (flows, frontend, crm, rag, sync, scheduler-api, office, voice, browser, search)
 │   ├── 6 worker Deployments (flows-worker x2, scheduler, rag-worker, sync-worker, crm-worker, idle-worker)
 │   ├── livekit + livekit-egress + coturn DaemonSet (hostNetwork)
 │   ├── onlyoffice Deployment
@@ -53,7 +53,7 @@ MicroK8s cluster
 | Input | Значение |
 |---|---|
 | `image_tag` | Пусто = тег из build (короткий SHA); иначе явный immutable тег образа. `latest` запрещён. |
-| `apps_node` | Нода для всех 9 apps. `unchanged` = дефолт из `values.yaml` (master). |
+| `apps_node` | Нода для всех 10 apps. `unchanged` = дефолт из `values.yaml` (master). |
 | `workers_node` | Нода для всех 6 workers. `unchanged` = дефолт (master). |
 | `data_node` | Нода для StatefulSets (postgres/redis/loki/tempo/grafana). `unchanged` = master. **ВНИМАНИЕ:** переезд требует `migrate-pvc.sh`. |
 | `public_node` | Нода для hostNetwork-сервисов (livekit/coturn/onlyoffice). `unchanged` = master. **ВНИМАНИЕ:** переезд требует `rebind-public-node.sh`. |
@@ -154,6 +154,7 @@ kubectl delete secret platform-secrets -n platform
 | `LLM_OPENROUTER_API_KEY` | (опционально) OpenRouter |
 | `STT_CLOUD_RU_API_KEY` | (опционально) GitHub → `STT__CLOUD_RU__API_KEY` → Secret `stt-cloud-ru-api-key` → Pod env `VOICE__STT__CLOUD_RU__API_KEY` |
 | `RAG_EMBEDDING_API_KEY` | (опционально) RAG embeddings (если отличается от LLM) |
+| `SEARCH__TINYFISH__API_KEY` / `SEARCH__LINKUP__API_KEY` / `SEARCH__SERPER__API_KEY` / `SEARCH__TAVILY__API_KEY` | (опционально) ключи провайдеров Search MCP |
 | `PUSH_VAPID_PUBLIC_KEY` / `PUSH_VAPID_PRIVATE_KEY` | (опционально) Web Push VAPID |
 | `PUSH_APNS_PRIVATE_KEY` | (опционально) APNs .p8 |
 | `PUSH_FCM_CREDENTIALS_JSON` / `PUSH_FCM_PROJECT_ID` | (опционально) FCM service account |

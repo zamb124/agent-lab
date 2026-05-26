@@ -48,7 +48,7 @@ async def test_list_spans_pending_billing_naive_datetime_raises(frontend_contain
 
 
 @pytest.mark.asyncio
-async def test_save_pending_span_list_then_legacy_settle_creates_usage(
+async def test_save_pending_span_list_then_rule_settle_creates_usage(
     frontend_container, unique_id: str, system_user_id: str
 ) -> None:
     from core.models.identity_models import Company
@@ -116,12 +116,21 @@ async def test_save_pending_span_list_then_legacy_settle_creates_usage(
 
     settlement = SpanBillingSettlement(frontend_container.shared_storage)
     billing = frontend_container.billing_service
-    rules_doc = SettlementRulesDocument()
+    rules_doc = SettlementRulesDocument(
+        rules=[
+            SettlementRule(
+                rule_id=f"pipe_rule_{unique_id}",
+                resource_name="llm:*",
+                usage_type="llm_request",
+                quantity_from=f"attr:{trace_attr.ATTR_BILLING_QUANTITY}",
+                match=SettlementRuleMatch(operation_name_prefix=f"bill.pipe.{unique_id}"),
+            )
+        ]
+    )
 
     n = await billing.settle_pending_span_in_job(
         span=span,
         settlement=settlement,
-        fallback_user_id="",
         rules_doc=rules_doc,
     )
     assert n == 1
@@ -129,7 +138,6 @@ async def test_save_pending_span_list_then_legacy_settle_creates_usage(
     n2 = await billing.settle_pending_span_in_job(
         span=span,
         settlement=settlement,
-        fallback_user_id="",
         rules_doc=rules_doc,
     )
     assert n2 == 0
@@ -231,7 +239,6 @@ async def test_pending_span_rules_engine_quantity_from_attr(
     n = await billing.settle_pending_span_in_job(
         span=span,
         settlement=settlement,
-        fallback_user_id="",
         rules_doc=doc,
     )
     assert n == 1

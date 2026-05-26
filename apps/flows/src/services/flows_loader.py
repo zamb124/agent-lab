@@ -125,13 +125,9 @@ def _function_tool_template_code(tool_instance: FunctionTool) -> str:
     if tool_instance.name not in _INLINE_SOURCE_BUILTIN_TOOLS:
         return textwrap.dedent(
             f"""
-            # platform:builtin:{tool_instance.name}
+            # platform:tool-capability:{tool_instance.name}
             async def {tool_instance.name}(args, state):
-                return await capability(
-                    "tools.call_builtin",
-                    tool_id="{tool_instance.name}",
-                    arguments=dict(args),
-                )
+                return await tools.call("{tool_instance.name}", **dict(args))
             """
         ).lstrip()
 
@@ -298,12 +294,6 @@ class FlowsLoader:
         branches = await self._load_branches_with_prompts(bundle_dir, raw_config)
         branches = self._inline_tools_in_branches(branches)
 
-        raw_evaluation = raw_config.get("evaluation")
-        evaluation = None
-        if raw_evaluation:
-            evaluation_obj = require_json_object(raw_evaluation, "flow.evaluation")
-            evaluation = {k: v for k, v in evaluation_obj.items() if not k.startswith("_")}
-
         triggers: dict[str, TriggerConfig] = {}
         raw_triggers = raw_config.get("triggers")
         if raw_triggers is not None:
@@ -341,7 +331,6 @@ class FlowsLoader:
                 "edges": edges,
                 "variables": raw_config.get("variables", {}),
                 "branches": branches,
-                "evaluation": evaluation,
                 "triggers": triggers,
                 "source": "file",
                 "store_card_image_url": store_card_image_url,

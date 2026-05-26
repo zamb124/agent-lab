@@ -9,15 +9,16 @@
 
 import uuid
 from datetime import datetime, timezone
-from typing import Any
 
 from sqlalchemy import delete, select, update
 from sqlalchemy.dialects.postgresql import insert
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from core.db.database import get_session_factory
+from core.db.models import PushSubscription
 from core.db.utils import get_rowcount
 from core.logging import get_logger
-from core.push.models import PushSubscription
+from core.types import PushSubscriptionKeys
 
 logger = get_logger(__name__)
 
@@ -31,15 +32,15 @@ class PushSubscriptionRepository:
     - Использует get_session_factory для работы с БД
     """
 
-    def __init__(self, db_url: str):
+    def __init__(self, db_url: str) -> None:
         """
         Args:
             db_url: URL базы данных (shared БД)
         """
-        self._db_url = db_url
-        self._session_factory = None
+        self._db_url: str = db_url
+        self._session_factory: async_sessionmaker[AsyncSession] | None = None
 
-    async def _get_session_factory(self):
+    async def _get_session_factory(self) -> async_sessionmaker[AsyncSession]:
         """Получает session factory (с кешированием)"""
         if self._session_factory is None:
             self._session_factory = await get_session_factory(self._db_url)
@@ -68,7 +69,7 @@ class PushSubscriptionRepository:
         self,
         user_id: str,
         endpoint: str,
-        keys: dict[str, Any],
+        keys: PushSubscriptionKeys,
         platform: str = "unknown",
         user_agent: str | None = None,
     ) -> PushSubscription:
@@ -183,7 +184,7 @@ class PushSubscriptionRepository:
         """
         session_factory = await self._get_session_factory()
         async with session_factory() as session:
-            await session.execute(
+            _ = await session.execute(
                 update(PushSubscription)
                 .where(PushSubscription.endpoint == endpoint)
                 .values(last_used_at=datetime.now(timezone.utc))

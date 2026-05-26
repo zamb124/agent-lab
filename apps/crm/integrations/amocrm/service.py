@@ -24,13 +24,13 @@ from apps.crm.integrations.entity_upsert import upsert_canonical_by_external_ref
 from apps.crm.models.api import NoteProcessingConfig
 from apps.crm.services.entity_service import EntityService
 from apps.crm.services.task_service import ActiveTaskExistsError, TaskService
-from apps.crm.types import JsonObject
 from core.context import get_context
 from core.db.repositories.namespace_repository import NamespaceRepository
 from core.http.client import get_httpx_client
 from core.identity.integration_external_author import IntegrationExternalAuthorService
 from core.integrations.models import IntegrationProvider
 from core.integrations.oauth_service import OAuthService, OAuthTokenRefreshError
+from core.types import JsonObject
 
 AMO_RPS_DELAY_SEC = 0.15
 AMO_PROGRESS_BATCH = 500
@@ -333,7 +333,7 @@ class AmoCRMIntegrationService:
         )
 
     @staticmethod
-    def _note_date_from_amo_created_at(created: object, *, fallback: date) -> date:
+    def _note_date_from_amo_created_at(created: object) -> date:
         """
         AmoCRM v4 отдаёт created_at как unix-seconds (число); в ответах бывает строка.
         Без распознанной даты ежедневник (фильтр по note_date) не покажет заметку.
@@ -343,18 +343,18 @@ class AmoCRMIntegrationService:
         if isinstance(created, str):
             s = created.strip()
             if not s:
-                return fallback
+                raise ValueError("AmoCRM note created_at is empty")
             if s.isdigit():
                 return datetime.fromtimestamp(int(s), tz=UTC).date()
             normalized = s.replace("Z", "+00:00") if s.endswith("Z") else s
             try:
                 dt = datetime.fromisoformat(normalized)
-            except ValueError:
-                return fallback
+            except ValueError as exc:
+                raise ValueError(f"AmoCRM note created_at is invalid: {created!r}") from exc
             if dt.tzinfo is None:
                 dt = dt.replace(tzinfo=UTC)
             return dt.astimezone(UTC).date()
-        return fallback
+        raise ValueError(f"AmoCRM note created_at has unsupported type: {type(created).__name__}")
 
     async def _upsert_amocrm_note_if_text(
         self,
@@ -380,12 +380,7 @@ class AmoCRMIntegrationService:
         name = first_line if first_line else f"Amo примечание {nid}"
         if len(name) > 500:
             name = name[:500]
-        parent_ts = parent_entity.created_at
-        fallback_date = parent_ts.astimezone(UTC).date()
-        note_date = self._note_date_from_amo_created_at(
-            raw.get("created_at"),
-            fallback=fallback_date,
-        )
+        note_date = self._note_date_from_amo_created_at(raw.get("created_at"))
         patch_attrs: JsonObject = {}
         nt = raw.get("note_type")
         if nt is not None:

@@ -1,4 +1,4 @@
-"""Данные flows: legacy-ключ skills -> branches; skill_ids в evaluation -> branch_ids
+"""Данные flows: legacy-ключ skills -> branches
 
 Revision ID: agents_0005
 Revises: agents_0004
@@ -20,22 +20,6 @@ branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 
 
-def _migrate_evaluation(ev: Any) -> bool:
-    changed = False
-    if not isinstance(ev, dict):
-        return changed
-    for case in ev.values():
-        if not isinstance(case, dict):
-            continue
-        if "skill_ids" not in case:
-            continue
-        if "branch_ids" in case:
-            raise ValueError("evaluation: в одном кейсе одновременно skill_ids и branch_ids")
-        case["branch_ids"] = case.pop("skill_ids")
-        changed = True
-    return changed
-
-
 def _migrate_flow_payload(value: Dict[str, Any]) -> Tuple[Dict[str, Any], bool]:
     out = copy.deepcopy(value)
     changed = False
@@ -48,9 +32,6 @@ def _migrate_flow_payload(value: Dict[str, Any]) -> Tuple[Dict[str, Any], bool]:
             if has_branches:
                 raise ValueError("flow: одновременно branches и skills")
             out["branches"] = legacy
-    ev = out.get("evaluation")
-    if _migrate_evaluation(ev):
-        changed = True
     return out, changed
 
 

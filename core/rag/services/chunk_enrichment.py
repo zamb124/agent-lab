@@ -8,15 +8,18 @@
 
 from __future__ import annotations
 
-from typing import Any, Protocol, runtime_checkable
+from typing import ClassVar, Protocol, runtime_checkable
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import ConfigDict, Field
+
+from core.models import StrictBaseModel
+from core.types import JsonObject
 
 
-class ChunkEnrichmentContext(BaseModel):
+class ChunkEnrichmentContext(StrictBaseModel):
     """Вход одного шага обогащения для одного чанка."""
 
-    model_config = ConfigDict(extra="forbid")
+    model_config: ClassVar[ConfigDict] = ConfigDict(extra="forbid")
 
     namespace_id: str
     document_id: str
@@ -26,15 +29,15 @@ class ChunkEnrichmentContext(BaseModel):
     chunk_text: str
 
 
-class ChunkEnrichmentResult(BaseModel):
+class ChunkEnrichmentResult(StrictBaseModel):
     """Выход шага обогащения; при no-op — skipped=True."""
 
-    model_config = ConfigDict(extra="forbid")
+    model_config: ClassVar[ConfigDict] = ConfigDict(extra="forbid")
 
     schema_version: int = Field(default=1, ge=1)
     skipped: bool = True
     summary: str | None = None
-    extra: dict[str, Any] = Field(default_factory=dict)
+    extra: JsonObject = Field(default_factory=dict)
 
 
 @runtime_checkable

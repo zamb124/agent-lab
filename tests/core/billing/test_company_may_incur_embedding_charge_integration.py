@@ -1,4 +1,4 @@
-"""Интеграция: ``BillingService.company_may_incur_embedding_charge`` на живом frontend_container."""
+"""Интеграция: ``BillingService.company_may_incur_billable_operation_charge``."""
 
 from __future__ import annotations
 
@@ -36,7 +36,7 @@ def _make_billing(
 async def test_empty_id_raises(frontend_container) -> None:
     billing = _make_billing(frontend_container)
     with pytest.raises(ValueError, match="company_id обязателен"):
-        await billing.company_may_incur_embedding_charge("  ")
+        await billing.company_may_incur_billable_operation_charge("  ")
 
 
 @pytest.mark.asyncio
@@ -54,19 +54,19 @@ async def test_enforcement_off_allows_zero_balance(
         )
     )
     billing = _make_billing(frontend_container, enforcement=False)
-    assert await billing.company_may_incur_embedding_charge(cid) is True
+    assert await billing.company_may_incur_billable_operation_charge(cid) is True
 
 
 @pytest.mark.asyncio
 async def test_exempt_company_allowed(frontend_container) -> None:
     billing = _make_billing(frontend_container, exempt=[SYSTEM_COMPANY_ID])
-    assert await billing.company_may_incur_embedding_charge(SYSTEM_COMPANY_ID) is True
+    assert await billing.company_may_incur_billable_operation_charge(SYSTEM_COMPANY_ID) is True
 
 
 @pytest.mark.asyncio
 async def test_missing_company_returns_false(frontend_container, unique_id) -> None:
     billing = _make_billing(frontend_container)
-    assert await billing.company_may_incur_embedding_charge(f"nosuch_{unique_id}") is False
+    assert await billing.company_may_incur_billable_operation_charge(f"nosuch_{unique_id}") is False
 
 
 @pytest.mark.asyncio
@@ -84,7 +84,7 @@ async def test_zero_balance_returns_false(
         )
     )
     billing = _make_billing(frontend_container)
-    assert await billing.company_may_incur_embedding_charge(cid) is False
+    assert await billing.company_may_incur_billable_operation_charge(cid) is False
 
 
 @pytest.mark.asyncio
@@ -102,4 +102,4 @@ async def test_positive_balance_returns_true(
         )
     )
     billing = _make_billing(frontend_container)
-    assert await billing.company_may_incur_embedding_charge(cid) is True
+    assert await billing.company_may_incur_billable_operation_charge(cid) is True

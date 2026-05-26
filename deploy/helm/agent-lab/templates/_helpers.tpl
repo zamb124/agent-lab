@@ -73,6 +73,11 @@
 - name: SERVER__BROWSER_SERVICE_URL
   value: http://{{ $browser.serviceName }}:{{ $browser.port }}
 {{- end }}
+{{- $search := index .Values.applications "search" }}
+{{- if and $search $search.enabled }}
+- name: SERVER__SEARCH_SERVICE_URL
+  value: http://{{ $search.serviceName }}:{{ $search.port }}
+{{- end }}
 {{- $voice := index .Values.applications "voice" }}
 {{- if and $voice $voice.enabled }}
 - name: SERVER__VOICE_SERVICE_URL
@@ -395,6 +400,30 @@
     secretKeyRef:
       name: {{ .Values.platformSecretName }}
       key: proxy-proxies
+- name: SEARCH__TINYFISH__API_KEY
+  valueFrom:
+    secretKeyRef:
+      name: {{ .Values.platformSecretName }}
+      key: search-tinyfish-api-key
+      optional: true
+- name: SEARCH__LINKUP__API_KEY
+  valueFrom:
+    secretKeyRef:
+      name: {{ .Values.platformSecretName }}
+      key: search-linkup-api-key
+      optional: true
+- name: SEARCH__SERPER__API_KEY
+  valueFrom:
+    secretKeyRef:
+      name: {{ .Values.platformSecretName }}
+      key: search-serper-api-key
+      optional: true
+- name: SEARCH__TAVILY__API_KEY
+  valueFrom:
+    secretKeyRef:
+      name: {{ .Values.platformSecretName }}
+      key: search-tavily-api-key
+      optional: true
 - name: OTEL_EXPORTER_OTLP_ENDPOINT
   value: http://alloy:4317
 - name: LOGGING__LOKI_QUERY_URL

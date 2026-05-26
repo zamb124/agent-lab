@@ -4,6 +4,7 @@
 
 from datetime import datetime, timezone
 from enum import Enum
+from typing import ClassVar
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -25,7 +26,7 @@ class EmbedConfig(BaseModel):
     is_global=False - изоляция по компаниям через префикс company:{company_id}:
     """
 
-    model_config = ConfigDict(
+    model_config: ClassVar[ConfigDict] = ConfigDict(
         json_schema_extra={"storage_prefix": "embed_config"}
     )
 
@@ -202,7 +203,7 @@ class EmbedMapping(BaseModel):
     Необходим для публичного API, который не знает company_id заранее.
     """
 
-    model_config = ConfigDict(
+    model_config: ClassVar[ConfigDict] = ConfigDict(
         json_schema_extra={"storage_prefix": "embed_mapping"}
     )
 
@@ -216,5 +217,4 @@ class EmbedMapping(BaseModel):
         description="ID компании, которой принадлежит виджет",
         json_schema_extra={"readonly": True},
     )
-
 

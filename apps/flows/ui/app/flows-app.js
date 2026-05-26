@@ -28,7 +28,22 @@ import { variablesResource } from '../events/resources/variables.resource.js';
 import { nodesCatalogResource, nodeCatalogUpdateOp } from '../events/resources/nodes-catalog.resource.js';
 import { sessionsResource, sessionStateOp } from '../events/resources/sessions.resource.js';
 import { tracesBySessionOp, tracesByTaskOp, tracesByTraceOp } from '../events/resources/traces.resource.js';
-import { logsByTraceOp, logsBySessionOp } from '../events/resources/logs.resource.js';
+import {
+    durableHistoryOp,
+    durableBranchesOp,
+    durableStateAtOp,
+    durableForkOp,
+    durableRewindOp,
+    durableRetryFromFailureOp,
+    durableManualPatchOp,
+} from '../events/resources/durable-history.resource.js';
+import {
+    logsByTraceOp,
+    logsBySessionOp,
+    logsByRequestOp,
+    logsBySpanOp,
+    logsByUserOp,
+} from '../events/resources/logs.resource.js';
 import {
     nodeTypesOp,
     resourceTypesOp,
@@ -51,6 +66,40 @@ import { operatorQueuesResource, operatorQueueAddMemberOp, operatorQueueRemoveMe
          operatorTaskPostMessageOp, operatorTaskCompleteOp } from '../events/resources/operator.resource.js';
 import { editorResource, editorBulkDeleteOp, stickyNoteUpsertOp } from '../events/resources/editor.resource.js';
 import { executionUiSlice } from '../events/resources/execution-ui.resource.js';
+import {
+    evaluationUiSlice,
+    evaluationEvaluatorCatalogOp,
+    evaluationSuitesListOp,
+    evaluationSuiteCreateOp,
+    evaluationSuiteUpdateOp,
+    evaluationSuiteArchiveOp,
+    evaluationCasesListOp,
+    evaluationCaseCreateOp,
+    evaluationCaseUpdateOp,
+    evaluationCaseDeleteOp,
+    evaluationCaseImportOp,
+    evaluationCaseFromDialogOp,
+    evaluationCaseFromTraceOp,
+    evaluationRunsListOp,
+    evaluationRunCreateOp,
+    evaluationRunGetOp,
+    evaluationRunCancelOp,
+    evaluationRunCasesOp,
+    evaluationRunEventsOp,
+    evaluationRunEventsPageOp,
+    evaluationMatrixGetOp,
+    evaluationCompareRunsOp,
+    evaluationCaseRunTraceOp,
+    evaluationAnnotationsListOp,
+    evaluationAnnotationCreateOp,
+    evaluationBaselinesListOp,
+    evaluationBaselineSetOp,
+    evaluationGatePoliciesListOp,
+    evaluationMonitorsListOp,
+    evaluationMonitorObservationsOp,
+    evaluationMonitorObservationCaseCreateOp,
+    evaluationPairwiseJudgmentCreateOp,
+} from '../events/resources/evaluation.resource.js';
 import { asString, isPlainObject } from '../_helpers/flows-resolvers.js';
 import {
     LARA_FLOWS_BRANCH_ID,
@@ -72,6 +121,8 @@ const FLOWS_ROUTES = [
     { key: 'flow_chat_session',    path: ':flowId/session/:sessionId',    parent: 'flow_chat', titleKey: 'routes.flow_chat_session' },
     { key: 'flow_editor',          path: ':flowId/editor',                parent: 'flow_chat', titleKey: 'routes.flow_editor' },
     { key: 'flow_editor_branch',   path: ':flowId/editor/:branchId',      parent: 'flow_editor', titleKey: 'routes.flow_editor_branch' },
+    { key: 'flow_evaluation',      path: ':flowId/evaluation',            parent: 'flow_chat', titleKey: 'routes.flow_evaluation' },
+    { key: 'flow_evaluation_branch', path: ':flowId/evaluation/:branchId', parent: 'flow_evaluation', titleKey: 'routes.flow_evaluation_branch' },
 ];
 
 /**
@@ -91,6 +142,8 @@ const FLOWS_BOTTOM_NAV_HIDE_ON_ROUTES = [
     'flow_chat_session',
     'flow_editor',
     'flow_editor_branch',
+    'flow_evaluation',
+    'flow_evaluation_branch',
 ];
 
 export class FlowsApp extends PlatformApp {
@@ -135,8 +188,18 @@ export class FlowsApp extends PlatformApp {
         tracesBySessionOp,
         tracesByTaskOp,
         tracesByTraceOp,
+        durableHistoryOp,
+        durableBranchesOp,
+        durableStateAtOp,
+        durableForkOp,
+        durableRewindOp,
+        durableRetryFromFailureOp,
+        durableManualPatchOp,
         logsByTraceOp,
         logsBySessionOp,
+        logsByRequestOp,
+        logsBySpanOp,
+        logsByUserOp,
         nodeTypesOp,
         resourceTypesOp,
         exceptionAbsorbAllowNamesOp,
@@ -173,6 +236,38 @@ export class FlowsApp extends PlatformApp {
         editorBulkDeleteOp,
         stickyNoteUpsertOp,
         executionUiSlice,
+        evaluationUiSlice,
+        evaluationEvaluatorCatalogOp,
+        evaluationSuitesListOp,
+        evaluationSuiteCreateOp,
+        evaluationSuiteUpdateOp,
+        evaluationSuiteArchiveOp,
+        evaluationCasesListOp,
+        evaluationCaseCreateOp,
+        evaluationCaseUpdateOp,
+        evaluationCaseDeleteOp,
+        evaluationCaseImportOp,
+        evaluationCaseFromDialogOp,
+        evaluationCaseFromTraceOp,
+        evaluationRunsListOp,
+        evaluationRunCreateOp,
+        evaluationRunGetOp,
+        evaluationRunCancelOp,
+        evaluationRunCasesOp,
+        evaluationRunEventsOp,
+        evaluationRunEventsPageOp,
+        evaluationMatrixGetOp,
+        evaluationCompareRunsOp,
+        evaluationCaseRunTraceOp,
+        evaluationAnnotationsListOp,
+        evaluationAnnotationCreateOp,
+        evaluationBaselinesListOp,
+        evaluationBaselineSetOp,
+        evaluationGatePoliciesListOp,
+        evaluationMonitorsListOp,
+        evaluationMonitorObservationsOp,
+        evaluationMonitorObservationCaseCreateOp,
+        evaluationPairwiseJudgmentCreateOp,
     ];
 
     static styles = [
@@ -206,6 +301,7 @@ export class FlowsApp extends PlatformApp {
                 min-width: 0;
             }
             flow-editor-page,
+            flows-evaluation-page,
             operator-page {
                 flex: 1;
                 min-width: 0;
@@ -378,6 +474,15 @@ export class FlowsApp extends PlatformApp {
                         .flowId=${params.flowId}
                         .branchId=${typeof params.branchId === 'string' && params.branchId.length > 0 ? params.branchId : 'base'}
                     ></flow-editor-page>
+                    ${this._renderLara()}
+                `;
+            case 'flow_evaluation':
+            case 'flow_evaluation_branch':
+                return html`
+                    <flows-evaluation-page
+                        .flowId=${params.flowId}
+                        .branchId=${typeof params.branchId === 'string' && params.branchId.length > 0 ? params.branchId : 'default'}
+                    ></flows-evaluation-page>
                     ${this._renderLara()}
                 `;
             case 'list':

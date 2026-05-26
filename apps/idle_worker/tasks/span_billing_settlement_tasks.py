@@ -79,7 +79,6 @@ async def span_billing_settlement_tick(
             n = await billing.settle_pending_span_in_job(
                 span=span,
                 settlement=settlement,
-                fallback_user_id=cfg.fallback_user_id,
                 rules_doc=rules_doc,
             )
             settled += n

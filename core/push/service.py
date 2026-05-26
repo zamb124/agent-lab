@@ -6,9 +6,9 @@ from typing import TypeAlias
 
 from pywebpush import WebPushException, webpush
 
+from core.db.models import PushSubscription
 from core.logging import get_logger
-from core.push.models import PushSubscription
-from core.types import JsonObject
+from core.types import JsonObject, PushSubscriptionKeys
 
 logger = get_logger(__name__)
 
@@ -23,8 +23,8 @@ class WebPushService:
         self,
         vapid_private_key: str,
         vapid_public_key: str,
-        vapid_email: str
-    ):
+        vapid_email: str,
+    ) -> None:
         self.vapid_private_key: str = vapid_private_key
         self.vapid_public_key: str = vapid_public_key
         self.vapid_claims: dict[str, str | int] = {"sub": f"mailto:{vapid_email}"}
@@ -61,11 +61,15 @@ class WebPushService:
             "url": url or "/",
             "tag": tag or "notification",
             "priority": priority,
-            "data": data or {}
+            "data": data if data is not None else {},
         }
 
         try:
-            keys: WebPushKeys = dict(subscription.keys)
+            subscription_keys: PushSubscriptionKeys = subscription.keys
+            keys: WebPushKeys = {
+                "p256dh": subscription_keys["p256dh"],
+                "auth": subscription_keys["auth"],
+            }
             subscription_info: WebPushSubscriptionInfo = {
                 "endpoint": subscription.endpoint,
                 "keys": keys,
@@ -74,7 +78,7 @@ class WebPushService:
                 subscription_info=subscription_info,
                 data=json.dumps(payload),
                 vapid_private_key=self.vapid_private_key,
-                vapid_claims=self.vapid_claims
+                vapid_claims=self.vapid_claims,
             )
             logger.debug(f"Push отправлен: {title} -> {subscription.platform}")
             return True
@@ -120,7 +124,7 @@ class WebPushService:
                 url=url,
                 tag=tag,
                 priority=priority,
-                data=data
+                data=data,
             )
             if not success:
                 expired_endpoints.append(subscription.endpoint)
@@ -135,14 +139,14 @@ _web_push_service: WebPushService | None = None
 def init_web_push_service(
     vapid_private_key: str,
     vapid_public_key: str,
-    vapid_email: str
+    vapid_email: str,
 ) -> WebPushService:
     """Инициализация глобального сервиса"""
     global _web_push_service
     _web_push_service = WebPushService(
         vapid_private_key=vapid_private_key,
         vapid_public_key=vapid_public_key,
-        vapid_email=vapid_email
+        vapid_email=vapid_email,
     )
     return _web_push_service
 
@@ -150,7 +154,3 @@ def init_web_push_service(
 def get_web_push_service() -> WebPushService | None:
     """Получить глобальный сервис"""
     return _web_push_service
-
-
-# Алиас для обратной совместимости
-web_push_service = None

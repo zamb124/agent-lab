@@ -39,6 +39,44 @@ ATTR_NODE_ID = "platform.node_id"
 ATTR_NODE_TYPE = "platform.node_type"
 ATTR_NODE_ITERATION = "platform.node.iteration"
 
+# Durable workflow runtime
+ATTR_WORKFLOW_SESSION_ID = "platform.workflow.session_id"
+ATTR_WORKFLOW_EXECUTION_BRANCH_ID = "platform.workflow.execution_branch_id"
+ATTR_WORKFLOW_NODE_SCHEDULE_SEQUENCE = "platform.workflow.node_schedule_sequence"
+
+# HITL
+ATTR_HITL_COMMAND_ID = "platform.hitl.command_id"
+ATTR_HITL_CORRELATION_ID = "platform.hitl.correlation_id"
+ATTR_HITL_QUEUE_SLUG = "platform.hitl.queue_slug"
+ATTR_HITL_OPERATOR_TASK_ID = "platform.hitl.operator_task_id"
+
+# Memory
+ATTR_MEMORY_CURSOR_KEY = "platform.memory.cursor_key"
+ATTR_MEMORY_CURSOR_START = "platform.memory.cursor_start"
+ATTR_MEMORY_CURSOR_END = "platform.memory.cursor_end"
+ATTR_MEMORY_SCOPE = "platform.memory.scope"
+ATTR_MEMORY_COMPACTION = "platform.memory.compaction"
+
+# Reflection
+ATTR_REFLECTION_POLICY_ID = "platform.reflection.policy_id"
+ATTR_REFLECTION_GATE = "platform.reflection.gate"
+ATTR_REFLECTION_TARGET = "platform.reflection.target"
+
+# MCP
+ATTR_MCP_SERVER_ID = "platform.mcp.server_id"
+ATTR_MCP_METHOD = "platform.mcp.method"
+ATTR_MCP_PROTOCOL_VERSION = "platform.mcp.protocol_version"
+ATTR_MCP_HAS_SESSION = "platform.mcp.has_session"
+ATTR_MCP_NOTIFICATION = "platform.mcp.notification"
+ATTR_MCP_REQUEST_PREVIEW = "platform.mcp.request_preview"
+ATTR_MCP_TOOL_NAME = "platform.mcp.tool_name"
+ATTR_MCP_TOOL_ARGS_KEYS = "platform.mcp.tool_args_keys"
+ATTR_MCP_RESPONSE_CONTENT_TYPE = "platform.mcp.response_content_type"
+ATTR_MCP_RESPONSE_BYTES = "platform.mcp.response_bytes"
+ATTR_MCP_RESPONSE_SHA256 = "platform.mcp.response_sha256"
+ATTR_MCP_RESPONSE_PREVIEW = "platform.mcp.response_preview"
+ATTR_MCP_RESPONSE_SESSION_ID = "platform.mcp.response_session_id"
+
 # Agent
 ATTR_AGENT_NAME = "platform.agent.name"
 ATTR_AGENT_ID = "platform.agent.id"

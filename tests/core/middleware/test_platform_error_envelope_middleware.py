@@ -8,6 +8,7 @@ from starlette.middleware.base import BaseHTTPMiddleware
 
 from core.middleware.access_log import AccessLogMiddleware
 from core.middleware.platform_error_envelope import PlatformHttpErrorEnvelopeMiddleware
+from core.models.identity_models import Company
 
 
 class _CompanyInjectMiddleware(BaseHTTPMiddleware):
@@ -18,7 +19,7 @@ class _CompanyInjectMiddleware(BaseHTTPMiddleware):
     async def dispatch(self, request, call_next):
         if self._company_id is None:
             return await call_next(request)
-        request.state.company = SimpleNamespace(company_id=self._company_id)
+        request.state.company = Company(company_id=self._company_id, name=self._company_id)
         return await call_next(request)
 
 

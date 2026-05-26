@@ -20,7 +20,7 @@ class TokenCounter(Protocol):
 
 
 class SimpleTokenCounter:
-    """Deterministic fallback counter for tests and dependency-light runtimes."""
+    """Deterministic token estimator for tests and dependency-light runtimes."""
 
     _token_re: re.Pattern[str] = re.compile(r"\S+", flags=re.UNICODE)
 

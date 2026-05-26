@@ -28,8 +28,6 @@ def split_knowledge_text(
     chunk_max_chars: int = DEFAULT_CHUNK_MAX_CHARS,
     split_by_headings: bool = False,
 ) -> list[str]:
-    if not isinstance(text, str):
-        raise TypeError("text должен быть str")
     if len(text) > MAX_IMPORT_TEXT_CHARS:
         raise ValueError(
             f"Текст импорта превышает лимит {MAX_IMPORT_TEXT_CHARS} символов: {len(text)}"

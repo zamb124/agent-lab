@@ -222,6 +222,18 @@ class SessionWorkerManager:
         print(f"🧹 Очистка старых {self.name} worker процессов...")
 
         for pattern in self.cleanup_patterns:
+            matches = subprocess.run(
+                ["pgrep", "-f", pattern],
+                check=False,
+                capture_output=True,
+                text=True,
+            )
+            for raw_pid in matches.stdout.splitlines():
+                try:
+                    matched_pid = int(raw_pid.strip())
+                except ValueError:
+                    continue
+                self._terminate_process_group_or_pid(matched_pid)
             subprocess.run(
                 ["pkill", "-9", "-f", pattern],
                 check=False,
@@ -277,6 +289,7 @@ class SessionWorkerManager:
             "S3__DEFAULT_BUCKET",
             "DATABASE__FLOWS_URL",
             "SERVER__OFFICE_SERVICE_URL",
+            "SERVER__SEARCH_SERVICE_URL",
             "SERVER__DOCUMENT_SERVER_DEV_UPSTREAM_URL",
             "MOCK_LLM_REDIS_KEY",
         )
@@ -514,6 +527,7 @@ def taskiq_worker():
             "DATABASE__REDIS_URL": "redis://localhost:63792/0",
             "TASKS__BROKER_URL": "redis://localhost:63792/1",
             "AUTH__PERMISSIONS_ENABLED": "false",
+            "SERVER__SEARCH_SERVICE_URL": "http://localhost:9010",
             "MOCK_LLM_REDIS_KEY": "mock_llm:responses:flows",
             "CALLS__LIVEKIT_URL": "ws://localhost:7890",
             "CALLS__LIVEKIT_PUBLIC_URL": "http://localhost:7890",
@@ -630,6 +644,7 @@ def sync_worker():
             "SERVER__CRM_SERVICE_URL": "http://localhost:9003",
             "SERVER__FRONTEND_SERVICE_URL": "http://localhost:9004",
             "SERVER__SYNC_SERVICE_URL": "http://127.0.0.1:9005",
+            "SERVER__SEARCH_SERVICE_URL": "http://localhost:9010",
             "SERVER__CAPABILITY_GATEWAY_SERVICE_URL": "http://localhost:9016",
             "SERVER__CODE_RUNNER_PYTHON_SERVICE_URL": "http://localhost:9017",
             "SERVER__CODE_RUNNER_NODE_SERVICE_URL": "http://localhost:9018",

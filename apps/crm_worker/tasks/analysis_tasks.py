@@ -88,7 +88,7 @@ async def process_note_task(
     try:
         config = NoteProcessingConfig.model_validate(config_payload)
     except ValidationError as exc:
-        raise ValueError(format_validation_for_taskiq(exc.errors())) from exc
+        raise ValueError(format_validation_for_taskiq(exc)) from exc
 
     async def _progress(stage: str, pct: int, msg: str = "") -> None:
         await repo.patch_progress(
@@ -215,7 +215,7 @@ async def process_note_task(
         )
         raise ValueError(err_msg) from exc
     except ValidationError as exc:
-        err_msg = format_validation_for_taskiq(exc.errors())
+        err_msg = format_validation_for_taskiq(exc)
         await repo.patch_progress(
             task_id, company_id,
             status="failed", stage="failed", progress_pct=100,

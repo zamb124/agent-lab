@@ -160,9 +160,12 @@ OTel SDK → OTLP → Alloy → **Tempo** (retention 7 дней). Alloy → **Lo
 
 - `GET /flows/api/v1/observability/logs/by-trace/{trace_id}` — whitelist LogQL по `trace_id`.
 - `GET /flows/api/v1/observability/logs/by-session/{session_id}` — whitelist LogQL по полю JSON `session_agent` (сессия агента `flow_id:context_id`, `LOG_SESSION_AGENT` в `core/logging/attributes.py`), не по `session_id` (это JWT).
+- `GET /flows/api/v1/observability/logs/by-request/{request_id}` — whitelist LogQL по `request_id`.
+- `GET /flows/api/v1/observability/logs/by-span/{span_id}` — whitelist LogQL по `span_id`.
+- `GET /flows/api/v1/observability/logs/by-user/{user_id}` — whitelist LogQL по `user_id`.
 - Произвольный LogQL от клиента запрещён — только серверные whitelist-шаблоны.
 
-**`FlowsLogsModal`** — `apps/flows/ui/modals/flows-logs-modal.js` — встроенный log viewer без Grafana. Кнопка «Логи» рядом с «Трейсы» в `flows-execution-panel.js` (вкладка Trace) и `chat-page.js` (header + overflow-меню); в модалку — `sessionId` и при наличии `currentTaskId` — `taskId`; вкладка «По trace_id» резолвит `trace_id` через op `flows/traces_by_task` (Tempo) или принимает props `traceId`.
+**`FlowsLogsModal`** — `apps/flows/ui/modals/flows-logs-modal.js` — встроенный log viewer без Grafana. Кнопка «Логи» рядом с «Трейсы» в `flows-execution-panel.js` (вкладка Trace) и `chat-page.js` (header + overflow-меню); модалка принимает `sessionId`, `traceId`, `requestId`, `spanId`, `userId`, а при наличии `taskId` резолвит `trace_id` через Tempo ops `flows/traces_by_task` / `flows/traces_by_session`. Из `flows.span_details` кнопка «Логи» открывает Loki-запрос по `spanId`.
 
 Подробнее — `infrastructure.mdc` (Observability).
 

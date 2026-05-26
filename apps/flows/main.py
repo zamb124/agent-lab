@@ -32,6 +32,7 @@ from apps.flows.src.api import (  # noqa: E402
 )
 from apps.flows.src.api.v1 import api_v1_router  # noqa: E402
 from apps.flows.src.container import FlowContainer, get_container  # noqa: E402
+from apps.flows.src.container_contracts import as_flow_runtime_container  # noqa: E402
 from apps.flows.src.middleware.embed_dynamic_cors import EmbedDynamicCorsMiddleware  # noqa: E402
 from apps.flows.src.realtime import register_flows_ws_commands  # noqa: E402
 from apps.flows.src.services.flows_loader import (  # noqa: E402
@@ -168,8 +169,9 @@ async def on_startup(_app: FastAPI, container: FlowContainer, settings: FlowSett
             logger.info(f"Загружено flows: {loaded_flow_ids}")
 
             try:
-                _ = await ensure_default_mcp_servers_for_company(container=container)
-                synced = await sync_auto_mcp_servers_for_company(container=container)
+                runtime_container = as_flow_runtime_container(container)
+                _ = await ensure_default_mcp_servers_for_company(container=runtime_container)
+                synced = await sync_auto_mcp_servers_for_company(container=runtime_container)
                 logger.info(
                     "MCP синхронизация для system: servers=%s tools=%s",
                     synced["servers"],
@@ -208,8 +210,9 @@ async def on_startup(_app: FastAPI, container: FlowContainer, settings: FlowSett
                 loaded_tools = await load_tools_to_db(container.tool_repository)
                 logger.info(f"Загружено tools: {loaded_tools}")
 
-                _ = await ensure_default_mcp_servers_for_company(container=container)
-                synced = await sync_auto_mcp_servers_for_company(container=container)
+                runtime_container = as_flow_runtime_container(container)
+                _ = await ensure_default_mcp_servers_for_company(container=runtime_container)
+                synced = await sync_auto_mcp_servers_for_company(container=runtime_container)
                 logger.info(
                     "MCP синхронизация для system: servers=%s tools=%s",
                     synced["servers"],

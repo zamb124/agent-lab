@@ -62,7 +62,6 @@ async def start_knowledge_import(
         row = await container.task_service.start_knowledge_import(
             namespace=body.namespace,
             mode=body.mode,
-            source_file_id=body.source_file_id,
             source_file_ids=body.source_file_ids,
             source_text=body.source_text,
             extract_entity_types=body.extract_entity_types,

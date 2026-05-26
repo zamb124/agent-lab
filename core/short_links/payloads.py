@@ -1,10 +1,30 @@
-from pydantic import BaseModel, Field
+from __future__ import annotations
+
+from typing import Annotated, TypeAlias
+
+from pydantic import StringConstraints
+
+from core.models import StrictBaseModel
+
+ShortLinkPayloadField: TypeAlias = Annotated[
+    str,
+    StringConstraints(strip_whitespace=True, min_length=1),
+]
 
 
-class SyncCallJoinPayload(BaseModel):
-    link_token: str = Field(min_length=1)
-    company_id: str = Field(min_length=1)
+class SyncCallJoinPayload(StrictBaseModel):
+    link_token: ShortLinkPayloadField
+    company_id: ShortLinkPayloadField
 
 
-class CompanyInvitePayload(BaseModel):
-    jwt: str = Field(min_length=1)
+class CompanyInvitePayload(StrictBaseModel):
+    jwt: ShortLinkPayloadField
+
+
+class FlowPreviewEmbedPayload(StrictBaseModel):
+    handoff_id: ShortLinkPayloadField
+
+
+ShortLinkPayload: TypeAlias = (
+    SyncCallJoinPayload | CompanyInvitePayload | FlowPreviewEmbedPayload
+)

@@ -5,6 +5,8 @@
 """
 
 
+from pydantic import Field
+
 from core.config import BaseSettings
 from core.config.loader import load_merged_config
 
@@ -17,10 +19,8 @@ class FrontendSettings(BaseSettings):
     Все базовые поля (database, auth, logging, etc) доступны из родителя.
     """
 
-    # Пока специфичных настроек нет, но можно добавить при необходимости
-    # Например:
-    # session_timeout: int = Field(default=7200, description="Таймаут сессии в секундах")
-    pass
+    cors_allow_origins: list[str] = Field(default_factory=list)
+    cors_allow_origin_regex: str | None = None
 
 
 _frontend_settings: FrontendSettings | None = None

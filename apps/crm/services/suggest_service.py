@@ -8,8 +8,7 @@ from apps.crm.db.repositories.suggest_repository import CRMSuggestPage, SuggestR
 from apps.crm.models.api import EntityMergeRequest, MergeSide
 from apps.crm.services.entity_service import EntityService
 from apps.crm.services.note_processing_service import NoteProcessingService
-from apps.crm.types import JsonObject
-from core.types import require_json_object
+from core.types import JsonObject, require_json_object
 
 _DUPLICATE_SIMILARITY_THRESHOLD = 0.85
 _SUGGEST_SCAN_LIMIT = 50

@@ -13,6 +13,7 @@ export const LARA_NODE_HELPER_BRANCH_BY_TYPE = Object.freeze({
     mcp: 'mcp_node_helper',
     channel: 'channel_node_helper',
     hitl_node: 'hitl_node_helper',
+    reflection: 'reflection_node_helper',
     resource: 'resource_node_helper',
 });
 

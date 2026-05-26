@@ -32,16 +32,6 @@ from core.websocket.publisher import Notification, NotificationType, notify_user
 logger = get_logger(__name__)
 
 
-def _optional_payload_str(data: JsonObject, key: str) -> str | None:
-    value = data.get(key)
-    if value is None:
-        return None
-    if isinstance(value, str):
-        stripped = value.strip()
-        return stripped if stripped else None
-    raise ValueError(f"data.{key} должен быть строкой")
-
-
 def _payload_str_list(data: JsonObject, key: str) -> list[str]:
     value = data.get(key)
     if value is None:
@@ -159,9 +149,6 @@ async def run_knowledge_import_task(
             pending = await get_pending_import_text(task_id)
             if pending and str(pending).strip():
                 parts.append(str(pending).strip())
-        single_id = _optional_payload_str(data, "source_file_id")
-        if single_id is not None:
-            parts.append((await load_text_from_stored_file_id(single_id)).strip())
         for fid in _payload_str_list(data, "source_file_ids"):
             parts.append((await load_text_from_stored_file_id(fid)).strip())
         text = "\n\n---\n\n".join(p for p in parts if p)

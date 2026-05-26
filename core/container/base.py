@@ -118,10 +118,11 @@ class _LazyProperty(Generic[_LazyT]):
         _ = owner
         if instance is None:
             return self
-        cached = getattr(instance, self._attr_name, _UNSET)
+        instance_dict = cast(dict[str, object], instance.__dict__)
+        cached = instance_dict.get(self._attr_name, _UNSET)
         if cached is _UNSET:
             cached = self._func(cast(Never, instance))
-            setattr(instance, self._attr_name, cached)
+            instance_dict[self._attr_name] = cached
             logger.debug(f"{self._func.__name__} инициализирован")
         return cast(_LazyT, cached)
 
@@ -158,15 +159,13 @@ class BaseContainer:
         self,
         db_url: str | None = None,
         shared_db_url: str | None = None,
-        service_db_url: str | None = None,  # Алиас для db_url
     ) -> None:
         """
         Args:
-            db_url: URL service БД (или service_db_url)
+            db_url: URL service БД
             shared_db_url: URL shared БД для User, Company, Session
-            service_db_url: Алиас для db_url (для совместимости)
         """
-        self.db_url: str | None = service_db_url or db_url
+        self.db_url: str | None = db_url
         if shared_db_url is None:
             settings = get_settings()
             shared_db_url = settings.database.shared_url

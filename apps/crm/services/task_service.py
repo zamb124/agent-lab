@@ -27,7 +27,6 @@ from apps.crm.services.knowledge_import_text_redis import (
     delete_pending_import_text,
     store_pending_import_text,
 )
-from apps.crm.types import JsonObject
 from apps.crm_worker.broker import broker as crm_worker_broker
 from apps.crm_worker.task_names import (
     CRM_FORMAT_NOTE_DESCRIPTION_MARKDOWN_TASK_NAME,
@@ -44,6 +43,7 @@ from core.models.context_models import Context
 from core.models.i18n_models import Language
 from core.models.identity_models import User
 from core.tasks.kicker import kiq_task_name_with_context
+from core.types import JsonObject
 from core.utils.knowledge_text_split import validate_chunk_max_chars
 
 logger = get_logger(__name__)
@@ -143,21 +143,13 @@ class ActiveTaskExistsError(ValueError):
         self.dedup: dict[str, str] = dict(dedup) if dedup else {}
 
 
-def _normalize_import_file_ids(
-    source_file_id: str | None,
-    source_file_ids: list[str] | None,
-) -> list[str]:
-    legacy = str(source_file_id).strip() if source_file_id else ""
+def _normalize_import_file_ids(source_file_ids: list[str] | None) -> list[str]:
     from_list: list[str] = []
     if source_file_ids:
         for x in source_file_ids:
             s = str(x).strip()
             if s:
                 from_list.append(s)
-    if legacy:
-        if from_list:
-            raise ValueError("Нельзя одновременно передавать source_file_id и source_file_ids")
-        return [legacy]
     seen: set[str] = set()
     out: list[str] = []
     for s in from_list:
@@ -238,14 +230,13 @@ class TaskService:
         *,
         namespace: str,
         mode: KnowledgeImportMode,
-        source_file_id: str | None,
         source_file_ids: list[str] | None,
         source_text: str | None,
         extract_entity_types: list[str] | None,
         split_by_headings: bool,
         chunk_max_chars: int,
     ) -> CRMTask:
-        file_ids = _normalize_import_file_ids(source_file_id, source_file_ids)
+        file_ids = _normalize_import_file_ids(source_file_ids)
         text_raw = source_text if source_text is not None else ""
         if len(text_raw) > MAX_SOURCE_TEXT_INLINE_CHARS:
             raise ValueError(
@@ -281,8 +272,7 @@ class TaskService:
             user_id=self._get_user_id(),
             data={
                 "mode": mode,
-                "source_file_id": file_ids[0] if len(file_ids) == 1 else None,
-                "source_file_ids": file_ids if len(file_ids) > 1 else [],
+                "source_file_ids": file_ids,
                 "source_text_sha256": sha,
                 "split_by_headings": split_by_headings,
                 "chunk_max_chars": chunk_max_chars,
@@ -1054,7 +1044,6 @@ class TaskService:
         return await self.start_knowledge_import(
             namespace=old.namespace,
             mode=_task_data_import_mode(data, "mode", "notes_only"),
-            source_file_id=_task_data_optional_str(data, "source_file_id"),
             source_file_ids=_task_data_str_list(data, "source_file_ids") or None,
             source_text=None,
             extract_entity_types=_task_data_str_list(data, "extract_entity_types") or None,

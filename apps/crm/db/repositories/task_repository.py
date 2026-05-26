@@ -13,8 +13,8 @@ from sqlalchemy.sql import ColumnElement
 
 from apps.crm.db.base import BaseCRMRepository
 from apps.crm.db.models import CRMTask
-from apps.crm.types import JsonObject
 from core.context import get_context
+from core.types import JsonObject, SqlParameterValue
 
 CRM_TASK_TERMINAL_STATUSES = frozenset({"completed", "failed", "cancelled", "rolled_back"})
 
@@ -84,7 +84,7 @@ class TaskRepository(BaseCRMRepository[CRMTask]):
         started_at: datetime | None = None,
         completed_at: datetime | None = None,
     ) -> None:
-        values: dict[str, object] = {"updated_at": datetime.now(UTC)}
+        values: dict[str, SqlParameterValue] = {"updated_at": datetime.now(UTC)}
         if status is not None:
             values["status"] = status
         if stage is not None:

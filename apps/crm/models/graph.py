@@ -6,7 +6,7 @@
 
 from pydantic import BaseModel, Field
 
-from apps.crm.types import JsonObject
+from core.types import JsonObject
 
 
 class GraphNode(BaseModel):

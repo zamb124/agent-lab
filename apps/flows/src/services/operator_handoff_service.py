@@ -30,7 +30,7 @@ from apps.flows.src.models.operator_schemas import (
 from apps.flows.src.services.operator_tasks_broadcast import publish_operator_tasks_refresh
 from apps.flows.src.streaming.emitter import Emitter
 from apps.flows.src.tasks.task_names import TASK_PROCESS_FLOW
-from apps.flows_worker.broker import broker as flows_broker
+from apps.flows_worker.broker_core import broker as flows_broker
 from core.clients.redis_client import RedisClient
 from core.context import get_context
 from core.files.file_repository import FileRepository
@@ -38,6 +38,16 @@ from core.logging import get_logger
 from core.state import ExecutionState
 from core.state.interrupt import HandoffMode
 from core.tasks.kicker import kiq_task_name_with_context
+from core.tracing.attributes import (
+    ATTR_HITL_COMMAND_ID,
+    ATTR_HITL_CORRELATION_ID,
+    ATTR_HITL_OPERATOR_TASK_ID,
+    ATTR_HITL_QUEUE_SLUG,
+    ATTR_NODE_ID,
+    ATTR_WORKFLOW_EXECUTION_BRANCH_ID,
+    ATTR_WORKFLOW_NODE_SCHEDULE_SEQUENCE,
+    ATTR_WORKFLOW_SESSION_ID,
+)
 from core.tracing.operation_span import traced_operation
 from core.types import JsonObject, parse_json_object
 
@@ -219,13 +229,13 @@ class OperatorHandoffService:
             resource_type="operator_task",
             resource_id=cid_str,
             extra_attributes={
-                "platform.hitl.command_id": command.idempotency_key,
-                "platform.hitl.correlation_id": cid_str,
-                "platform.hitl.queue_slug": queue.slug,
-                "platform.workflow.session_id": state.session_id,
-                "platform.workflow.execution_branch_id": command.execution_branch_id,
-                "platform.workflow.node_schedule_sequence": command.node_schedule_sequence,
-                "platform.node.id": command.node_id,
+                ATTR_HITL_COMMAND_ID: command.idempotency_key,
+                ATTR_HITL_CORRELATION_ID: cid_str,
+                ATTR_HITL_QUEUE_SLUG: queue.slug,
+                ATTR_WORKFLOW_SESSION_ID: state.session_id,
+                ATTR_WORKFLOW_EXECUTION_BRANCH_ID: command.execution_branch_id,
+                ATTR_WORKFLOW_NODE_SCHEDULE_SEQUENCE: command.node_schedule_sequence,
+                ATTR_NODE_ID: command.node_id,
             },
         ):
             task_row = OperatorTasks(
@@ -580,10 +590,10 @@ class OperatorHandoffService:
             resource_type="operator_task",
             resource_id=payload.operator_task_id,
             extra_attributes={
-                "platform.hitl.command_id": payload.handoff_command_id,
-                "platform.hitl.correlation_id": payload.correlation_id,
-                "platform.hitl.operator_task_id": payload.operator_task_id,
-                "platform.workflow.session_id": session_id,
+                ATTR_HITL_COMMAND_ID: payload.handoff_command_id,
+                ATTR_HITL_CORRELATION_ID: payload.correlation_id,
+                ATTR_HITL_OPERATOR_TASK_ID: payload.operator_task_id,
+                ATTR_WORKFLOW_SESSION_ID: session_id,
             },
         ):
             _ = await self._workflow_runtime.record_lifecycle_event(

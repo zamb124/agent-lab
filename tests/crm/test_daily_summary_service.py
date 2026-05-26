@@ -9,6 +9,7 @@ import pytest
 
 import apps.crm.services.entity_service as entity_service_module
 from apps.crm.services.entity_service import EntityService
+from core.clients.a2a_client import A2ATaskResponse
 from core.context import Context, set_context
 from core.models.identity_models import Company, User
 
@@ -35,6 +36,10 @@ def _analyzed_note() -> SimpleNamespace:
         tags=[],
         attributes={"ai_analysis_applied_at": "2026-01-01T00:00:00+00:00"},
     )
+
+
+def _a2a_response(*, response: str, raw: dict) -> A2ATaskResponse:
+    return A2ATaskResponse(response=response, status="completed", raw=raw)
 
 
 def _build_service() -> EntityService:
@@ -375,9 +380,9 @@ async def test_compute_daily_summary_uses_structured_data_summary():
     )
     service._entity_to_dict = lambda _: {"name": "n1"}
     service._a2a_client.send_task = AsyncMock(
-        return_value={
-            "response": "",
-            "raw": {
+        return_value=_a2a_response(
+            response="",
+            raw={
                 "result": {
                     "artifacts": [
                         {
@@ -394,7 +399,7 @@ async def test_compute_daily_summary_uses_structured_data_summary():
                     ]
                 }
             },
-        }
+        )
     )
 
     payload = await service.compute_daily_summary(date_str="2026-03-28", namespace=None)
@@ -444,9 +449,9 @@ async def test_compute_daily_summary_adds_inline_entity_links_from_note_graph():
         ]
     )
     service._a2a_client.send_task = AsyncMock(
-        return_value={
-            "response": "",
-            "raw": {
+        return_value=_a2a_response(
+            response="",
+            raw={
                 "result": {
                     "artifacts": [
                         {
@@ -463,7 +468,7 @@ async def test_compute_daily_summary_adds_inline_entity_links_from_note_graph():
                     ]
                 }
             },
-        }
+        )
     )
 
     payload = await service.compute_daily_summary(date_str="2026-03-28", namespace="sales")
@@ -501,9 +506,9 @@ async def test_compute_daily_summary_uses_nested_structured_output_summary():
     )
     service._entity_to_dict = lambda _: {"name": "n1"}
     service._a2a_client.send_task = AsyncMock(
-        return_value={
-            "response": "",
-            "raw": {
+        return_value=_a2a_response(
+            response="",
+            raw={
                 "result": {
                     "artifacts": [
                         {
@@ -523,7 +528,7 @@ async def test_compute_daily_summary_uses_nested_structured_output_summary():
                     ]
                 }
             },
-        }
+        )
     )
 
     payload = await service.compute_daily_summary(date_str="2026-03-28", namespace=None)
@@ -533,7 +538,7 @@ async def test_compute_daily_summary_uses_nested_structured_output_summary():
 
 
 @pytest.mark.asyncio
-async def test_compute_daily_summary_falls_back_to_entities_from_notes():
+async def test_compute_daily_summary_uses_entities_from_notes_when_payload_entities_empty():
     _set_test_context()
     service = _build_service()
     note = SimpleNamespace(
@@ -550,9 +555,9 @@ async def test_compute_daily_summary_falls_back_to_entities_from_notes():
     )
     service._entity_to_dict = lambda _: {"name": "n1"}
     service._a2a_client.send_task = AsyncMock(
-        return_value={
-            "response": '{"summary":"Итог дня без списка сущностей"}',
-            "raw": {
+        return_value=_a2a_response(
+            response='{"summary":"Итог дня без списка сущностей"}',
+            raw={
                 "result": {
                     "artifacts": [
                         {
@@ -566,7 +571,7 @@ async def test_compute_daily_summary_falls_back_to_entities_from_notes():
                     ]
                 }
             },
-        }
+        )
     )
 
     payload = await service.compute_daily_summary(date_str="2026-03-28", namespace=None)
@@ -576,7 +581,7 @@ async def test_compute_daily_summary_falls_back_to_entities_from_notes():
 
 
 @pytest.mark.asyncio
-async def test_compute_daily_summary_fallback_from_highlights_when_summary_empty():
+async def test_compute_daily_summary_raises_when_summary_empty():
     _set_test_context()
     service = _build_service()
     note = SimpleNamespace(
@@ -601,9 +606,9 @@ async def test_compute_daily_summary_fallback_from_highlights_when_summary_empty
         "statistics": {"entities_created": 0, "notes_added": 0, "tasks_completed": 0},
     }
     service._a2a_client.send_task = AsyncMock(
-        return_value={
-            "response": "",
-            "raw": {
+        return_value=_a2a_response(
+            response="",
+            raw={
                 "result": {
                     "artifacts": [
                         {
@@ -617,21 +622,20 @@ async def test_compute_daily_summary_fallback_from_highlights_when_summary_empty
                     ]
                 }
             },
-        }
+        )
     )
 
-    payload = await service.compute_daily_summary(date_str="2026-03-28", namespace=None)
-
-    assert payload["summary"] == "Главное\nСобытие дня"
+    with pytest.raises(ValueError, match="empty summary"):
+        await service.compute_daily_summary(date_str="2026-03-28", namespace=None)
 
 
 def test_extract_data_from_a2a_response_res_as_dict_not_string():
     _set_test_context()
     service = _build_service()
     out = service._extract_data_from_a2a_response(
-        {
-            "response": "",
-            "raw": {
+        _a2a_response(
+            response="",
+            raw={
                 "result": {
                     "artifacts": [
                         {
@@ -647,7 +651,7 @@ def test_extract_data_from_a2a_response_res_as_dict_not_string():
                     ]
                 }
             },
-        }
+        )
     )
     assert out.get("summary") == "OK"
 

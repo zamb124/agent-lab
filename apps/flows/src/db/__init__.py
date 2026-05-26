@@ -1,13 +1,18 @@
 from core.db import BaseRepository, Storage
 from core.db.repositories import VariableRepository
 
-from .evaluation_repository import EvaluationRepository
+from .evaluation_lab_repository import EvaluationLabRepository
 from .flow_repository import FlowRepository
 from .llm_model_repository import LLMModelRepository
 from .mcp_repository import MCPServerRepository
 from .models import (  # noqa: F401
     ActivityTasks,
-    EvaluationResults,
+    EvaluationCaseRuns,
+    EvaluationCases,
+    EvaluationRunEvents,
+    EvaluationRuns,
+    EvaluationSuites,
+    EvaluationSuiteVersions,
     ExecutionBranches,
     Flows,
     FlowsVersions,
@@ -26,7 +31,7 @@ __all__ = [
     "Storage",
     "BaseRepository",
     "NodeRepository",
-    "EvaluationRepository",
+    "EvaluationLabRepository",
     "FlowRepository",
     "LLMModelRepository",
     "ToolRepository",
@@ -34,7 +39,12 @@ __all__ = [
     "MCPServerRepository",
     "ResourceRepository",
     "OperatorRepository",
-    "EvaluationResults",
+    "EvaluationSuites",
+    "EvaluationCases",
+    "EvaluationSuiteVersions",
+    "EvaluationRuns",
+    "EvaluationCaseRuns",
+    "EvaluationRunEvents",
     "WorkflowInstances",
     "ExecutionBranches",
     "WorkflowEvents",

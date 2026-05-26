@@ -14,8 +14,8 @@ from apps.crm.services.namespace_notification_recipients import (
     normalize_namespace_for_broadcast,
     resolve_user_ids_for_namespace_broadcast,
 )
-from apps.crm.types import JsonObject
 from core.logging import get_logger
+from core.types import JsonObject
 from core.ui_events.dispatcher import publish_ui_event_to_user
 
 if TYPE_CHECKING:

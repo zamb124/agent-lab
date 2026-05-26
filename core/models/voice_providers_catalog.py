@@ -2,6 +2,9 @@
 
 from __future__ import annotations
 
+from collections.abc import Sequence
+from typing import TYPE_CHECKING, ClassVar, Protocol
+
 from pydantic import BaseModel, ConfigDict, Field
 
 from core.clients.speech_provider_catalog import (
@@ -22,11 +25,22 @@ from core.clients.speech_provider_catalog import (
 )
 from core.config.models import SILERO_V5_RU_SPEAKERS_BY_BUNDLE
 
+if TYPE_CHECKING:
+    from core.config.models import (
+        ProviderLitserveConfig,
+        ProviderLitserveSTTModelEntry,
+        ProviderLitserveTTSModelEntry,
+    )
+
+
+class _LitserveModelWithApiId(Protocol):
+    api_model_id: str
+
 
 class TtsLitserveVoiceHint(BaseModel):
     """Подсказка по голосу для одной Litserve TTS-модели."""
 
-    model_config = ConfigDict(extra="forbid")
+    model_config: ClassVar[ConfigDict] = ConfigDict(extra="forbid")
 
     api_model_id: str
     default_voice: str | None = None
@@ -36,7 +50,7 @@ class TtsLitserveVoiceHint(BaseModel):
 class VoiceProvidersCatalogDTO(BaseModel):
     """Ответ GET .../voice-providers/catalog (без конфиденциальных данных из conf)."""
 
-    model_config = ConfigDict(extra="forbid")
+    model_config: ClassVar[ConfigDict] = ConfigDict(extra="forbid")
 
     stt_tts_provider_ids: list[str] = Field(default_factory=list)
     response_format_ids: list[str] = Field(default_factory=list)
@@ -58,17 +72,8 @@ class VoiceProvidersCatalogDTO(BaseModel):
     sber_tts_voice_ids: list[str] = Field(default_factory=list)
 
 
-def build_voice_providers_catalog_dto(pls_settings: object) -> VoiceProvidersCatalogDTO:
+def build_voice_providers_catalog_dto(pls_settings: "ProviderLitserveConfig") -> VoiceProvidersCatalogDTO:
     """Собирает каталог: статические allowlist из speech_provider_catalog, Litserve из conf."""
-
-    def _nested_models(pls_any: object, name: str) -> list[object]:
-        infra = getattr(pls_any, "infra", None)
-        if infra is not None:
-            inner = getattr(infra, name, None)
-            if isinstance(inner, list):
-                return list(inner)
-        direct = getattr(pls_any, name, None)
-        return list(direct) if isinstance(direct, list) else []
 
     credential_field_groups: dict[str, list[list[str]]] = {
         "cloud_ru": [["api_key"]],
@@ -76,53 +81,39 @@ def build_voice_providers_catalog_dto(pls_settings: object) -> VoiceProvidersCat
         "sber": [["client_id"], ["client_secret"], ["scope"]],
     }
 
-    def _pull_ids(items: list[object], field: str = "api_model_id") -> list[str]:
-        ident: list[str] = []
-        for entry in items:
-            v = getattr(entry, field, None)
-            if v is None:
-                continue
-            ident.append(str(v))
-        return ident
+    def _pull_ids(items: Sequence[_LitserveModelWithApiId]) -> list[str]:
+        return [entry.api_model_id for entry in items]
 
-    pls_any = pls_settings
-    stt_models = _nested_models(pls_any, "stt_models")
-    tts_models = _nested_models(pls_any, "tts_models")
+    infra = pls_settings.infra
+    stt_models: list[ProviderLitserveSTTModelEntry] = infra.stt_models
+    tts_models: list[ProviderLitserveTTSModelEntry] = infra.tts_models
     voice_hints: list[TtsLitserveVoiceHint] = []
     for tts in tts_models:
-        api_model_id = getattr(tts, "api_model_id", None)
-        if api_model_id is None:
-            continue
-        bundle_raw = getattr(tts, "silero_bundle", None)
-        bundle = str(bundle_raw).strip().lower() if bundle_raw is not None else ""
+        bundle = tts.silero_bundle.strip().lower()
         allowed = SILERO_V5_RU_SPEAKERS_BY_BUNDLE.get(bundle, frozenset())
         voice_ids = sorted(allowed) if allowed else []
-        voice = getattr(tts, "voice", None)
         voice_hints.append(
             TtsLitserveVoiceHint(
-                api_model_id=str(api_model_id),
-                default_voice=voice if isinstance(voice, str) else None,
+                api_model_id=tts.api_model_id,
+                default_voice=tts.voice,
                 voice_ids=voice_ids,
             )
         )
 
     speech_langs: set[str] = set(BASE_SPEECH_LANGUAGE_IDS)
     for tts in tts_models:
-        loc = getattr(tts, "synthesis_locale", None)
+        loc = tts.synthesis_locale
         if loc is None:
-            continue
-        if not isinstance(loc, str):
             continue
         base = loc.strip().lower().split("-")[0].split("_")[0]
         if len(base) >= 2:
             speech_langs.add(base[:2])
 
     vad_rates: set[int] = set(VAD_SAMPLE_RATE_BASE_IDS)
-    vad_models = _nested_models(pls_any, "vad_models")
-    for vad in vad_models:
-        sr = getattr(vad, "sample_rate", None)
+    for vad in infra.vad_models:
+        sr = vad.sample_rate
         if sr is not None:
-            vad_rates.add(int(sr))
+            vad_rates.add(sr)
 
     return VoiceProvidersCatalogDTO(
         stt_tts_provider_ids=sorted(STT_TTS_PROVIDER_IDS),

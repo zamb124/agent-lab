@@ -12,8 +12,7 @@ from typing import cast as type_cast
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from apps.crm.types import JsonObject
-from core.types import require_json_object
+from core.types import JsonObject, require_json_object
 
 
 def _as_json_object(value: object, context: str) -> JsonObject:

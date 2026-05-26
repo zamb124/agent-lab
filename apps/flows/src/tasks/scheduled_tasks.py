@@ -10,7 +10,7 @@ from apps.flows.src.channels.types import PreparedTaskParams
 from apps.flows.src.container import FlowContainer, get_container
 from apps.flows.src.tasks.task_names import TASK_EXECUTE_SCHEDULED
 from apps.flows.src.tools.base import ToolArguments
-from apps.flows_worker.broker import broker
+from apps.flows_worker.broker_core import broker
 from core.context import Context, set_context
 from core.logging import get_logger
 from core.models.identity_models import Company, User

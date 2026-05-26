@@ -66,6 +66,7 @@ from apps.flows.src.runtime.llm_resource_config import (
     resolve_llm_config_with_resource_key,
 )
 from apps.flows.src.runtime.runners import LlmNodeRunner
+from apps.flows.src.services.mcp_sync import sync_mcp_server_tools
 from apps.flows.src.services.operator_handoff_service import (
     HANDOFF_PREVIEW_MAX_LEN,
     build_operator_handoff_command,
@@ -105,6 +106,12 @@ from core.state.interrupt import HandoffMode, OperatorTaskInterrupt
 from core.state.mutation_policy import (
     forbid_frozen_update_key,
     should_skip_field_on_user_returned_state_copy,
+)
+from core.tracing.attributes import (
+    ATTR_NODE_ID,
+    ATTR_REFLECTION_GATE,
+    ATTR_REFLECTION_POLICY_ID,
+    ATTR_REFLECTION_TARGET,
 )
 from core.tracing.operation_span import traced_operation
 from core.types import JsonObject, JsonValue, require_json_object, require_json_value
@@ -1335,7 +1342,7 @@ class CodeNode(BaseNode):
         if self.config.get("resources"):
             raise ValueError(
                 f"Code node '{self.node_id}': resources are not injected into sandbox code. "
-                + "Use capability('tools.call', ...) / Capability('tools.call', ...) or a dedicated platform capability."
+                + "Use tools.<tool_id>(...) / tools.call('<tool_id>', ...) from the sandbox SDK or a dedicated platform capability."
             )
         args = self._build_args(inputs)
         logger.info(f"[node:{self.node_id}] execute_tool с args: {list(args.keys())}")
@@ -2136,9 +2143,25 @@ class MCPNode(BaseNode):
         tool_id = mcp_tool_reference_id(server_id, tool_name)
         tool_ref = await container.tool_repository.get(tool_id)
         if tool_ref is None:
-            raise ValueError(
-                f"MCPNode '{self.node_id}' requires synced ToolReference '{tool_id}'"
+            logger.info(
+                "MCPNode '%s': syncing missing ToolReference '%s'",
+                self.node_id,
+                tool_id,
             )
+            try:
+                _tool_ids, _tools = await sync_mcp_server_tools(
+                    container=container,
+                    server_config=server,
+                )
+            except Exception as exc:
+                raise ValueError(
+                    f"MCPNode '{self.node_id}' could not sync ToolReference '{tool_id}': {exc}"
+                ) from exc
+            tool_ref = await container.tool_repository.get(tool_id)
+            if tool_ref is None:
+                raise ValueError(
+                    f"MCPNode '{self.node_id}' requires synced ToolReference '{tool_id}'"
+                )
         mcp_contract = tool_ref.require_mcp_contract()
 
         variables = require_json_object(state.variables, "state.variables")
@@ -2526,12 +2549,12 @@ class ReflectionNode(BaseNode):
         policy_payload = _config_mapping(self.config, "critic_policy")
         if policy_payload is None:
             raise ValueError(f"reflection node {self.node_id}: critic_policy is required")
-        self.critic_policy = CriticPolicy.model_validate(policy_payload)
+        self.critic_policy: CriticPolicy = CriticPolicy.model_validate(policy_payload)
 
         llm_payload = _config_mapping(self.config, "llm")
         if llm_payload is None:
             raise ValueError(f"reflection node {self.node_id}: llm is required")
-        self.llm_config = NodeLLMConfig.model_validate(llm_payload)
+        self.llm_config: NodeLLMConfig = NodeLLMConfig.model_validate(llm_payload)
         if self.llm_config.model is None:
             raise ValueError(f"reflection node {self.node_id}: llm.model is required")
         if self.llm_config.fallback_models:
@@ -2635,10 +2658,10 @@ class ReflectionNode(BaseNode):
                 event_type="reflection.critique",
                 operation_category="reflection",
                 extra_attributes={
-                    "platform.node.id": self.node_id,
-                    "platform.reflection.policy_id": self.critic_policy.policy_id,
-                    "platform.reflection.gate": self.critic_policy.gate,
-                    "platform.reflection.target": self.critic_policy.target.kind,
+                    ATTR_NODE_ID: self.node_id,
+                    ATTR_REFLECTION_POLICY_ID: self.critic_policy.policy_id,
+                    ATTR_REFLECTION_GATE: self.critic_policy.gate,
+                    ATTR_REFLECTION_TARGET: self.critic_policy.target.kind,
                 },
             ):
                 critique = await self._invoke_critic_llm(

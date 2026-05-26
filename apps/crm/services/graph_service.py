@@ -24,10 +24,9 @@ from apps.crm.models.graph import (
     ShortestPathResponse,
 )
 from apps.crm.services.access_control_service import AccessControlService
-from apps.crm.types import JsonObject
 from core.context import get_context
 from core.logging import get_logger
-from core.types import require_json_object
+from core.types import JsonObject, require_json_object
 
 logger = get_logger(__name__)
 

@@ -8,6 +8,7 @@
     "sync_service_url": "http://localhost:8005",
     "office_service_url": "http://localhost:8008",
     "browser_service_url": "http://localhost:8009",
+    "search_service_url": "http://localhost:8010",
     "provider_litserve_service_url": "https://humanitec.ru/litserve",
     "voice_service_url": "http://localhost:8015",
     "capability_gateway_service_url": "http://localhost:8016",
@@ -59,11 +60,11 @@
       "Структура: категория → имя_ресурса → цена. В списании span поле resource_name вида «категория:ресурс», например llm:gpt-4o или livekit:room_minute. Ключ «*» внутри категории — цена по умолчанию, если нет точного совпадения имени.",
       "llm — запросы к моделям (трейсы llm.*, flows.llm_resource.*, flows.llm.*). «*»: типично цена за 1 токен; можно добавить отдельные ключи под конкретные модели.",
       "embedding — пакетные эмбеддинги RAG (rag.embed.*); единица обычно из атрибута span (токены/батч) по правилу settlement.",
-      "livekit — аудио/видео: room_minute / egress_composite_minute / egress_segmented_minute — единица 1 минута использования (см. livekit_usage_spans); room_create / egress_composite / egress_segmented — те же числа для обратной совместимости каталога; «*» — прочие livekit:*.",
+      "livekit — аудио/видео: room_minute / egress_composite_minute / egress_segmented_minute — единица 1 минута использования (см. livekit_usage_spans); «*» — прочие livekit:*.",
       "Вызовы инструментов flows (категория tool в resource_name) в этом каталоге не задаются — для биллинга считаются бесплатно.",
       "billing:rub — 1 ₽ за единицу quantity; quantity = platform.billing.settlement_quantity_rub (OpenRouter: USD из ответа × актуальный курс ЦБ РФ, округление).",
       "usd_to_rub_rate — FALLBACK-курс USD/RUB, используется только если ЦБ РФ недоступен. При старте сервиса платформа запрашивает актуальный курс с cbr.ru и обновляет его каждые 5 минут; это значение подставляется только при ошибке или до первого успешного ответа ЦБ.",
-      "span_settlement — фоновая джоба idle worker: находит spans с platform.billing.pending_settlement и создаёт записи usage по правилам компании. enabled — вкл/выкл; cron — расписание; lookback_minutes — как глубоко искать spans назад; batch_limit — максимум spans за один тик; fallback_user_id — user_id для UsageRecord, если в span нет user_id (пустая строка — такие spans пропускаются с ошибкой в лог).",
+      "span_settlement — фоновая джоба idle worker: находит spans с platform.billing.pending_settlement и создаёт записи usage по правилам компании. enabled — вкл/выкл; cron — расписание; lookback_minutes — как глубоко искать spans назад; batch_limit — максимум spans за один тик; span без user_id считается ошибкой данных.",
       "balance_enforcement_enabled — pre-flight перед LLM/embed/vision/billable LiveKit: при balance <= 0 операция не стартует (BillingBalanceBlockedError → HTTP 403). Не отменяет фоновый settlement.",
       "balance_enforcement_exempt_company_ids — company_id без этой проверки (по умолчанию [\"system\"]; можно добавить демо-компанию для локальной разработки)."
     ],
@@ -83,9 +84,6 @@
         "room_minute": 0.01,
         "egress_composite_minute": 0.05,
         "egress_segmented_minute": 0.02,
-        "room_create": 0.01,
-        "egress_composite": 0.05,
-        "egress_segmented": 0.02,
         "*": 0.0
       },
       "stt": {
@@ -115,8 +113,7 @@
       "enabled": true,
       "cron": "*/15 * * * *",
       "lookback_minutes": 360,
-      "batch_limit": 500,
-      "fallback_user_id": ""
+      "batch_limit": 500
     }
   },
   "push": {
@@ -622,6 +619,58 @@
         "warm_idle_sec": 300,
         "init_scripts_version": "v1",
         "control_backend": "playwright"
+      }
+    },
+    "search": {
+      "service_name": "search",
+      "server": {
+        "name": "search",
+        "host": "0.0.0.0",
+        "port": 8010,
+        "debug": true
+      },
+      "auth": {
+        "permissions_enabled": false
+      },
+      "search": {
+        "provider_order": [
+          "tinyfish",
+          "linkup",
+          "serper",
+          "tavily"
+        ],
+        "provider_state_key_prefix": "search:providers",
+        "available_ttl_seconds": 300,
+        "unavailable_ttl_seconds": 300,
+        "tinyfish": {
+          "api_key": "",
+          "base_url": "https://api.search.tinyfish.ai",
+          "timeout_seconds": 10.0,
+          "enabled": true
+        },
+        "linkup": {
+          "api_key": "",
+          "base_url": "https://api.linkup.so",
+          "timeout_seconds": 10.0,
+          "enabled": true,
+          "depth": "standard",
+          "output_type": "searchResults"
+        },
+        "serper": {
+          "api_key": "",
+          "base_url": "https://google.serper.dev",
+          "timeout_seconds": 10.0,
+          "enabled": true
+        },
+        "tavily": {
+          "api_key": "",
+          "base_url": "https://api.tavily.com",
+          "timeout_seconds": 15.0,
+          "enabled": true,
+          "search_depth": "basic",
+          "topic": "general",
+          "include_answer": false
+        }
       }
     },
     "voice": {

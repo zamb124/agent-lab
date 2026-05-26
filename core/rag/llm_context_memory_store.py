@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import hashlib
 from datetime import datetime
-from typing import cast as type_cast
 
 from core.context import get_context
 from core.db.repositories.namespace_repository import NamespaceRepository
@@ -35,17 +34,17 @@ class RAGLLMContextMemoryStore:
         namespace_id: str | None = None,
         provider: str = "pgvector",
     ) -> None:
-        self.repository = repository
-        self.namespace_repository = namespace_repository
-        self.namespace_id = namespace_id
-        self.provider = provider
+        self.repository: RAGRepository = repository
+        self.namespace_repository: NamespaceRepository | None = namespace_repository
+        self.namespace_id: str | None = namespace_id
+        self.provider: str = provider
 
     async def write_episode(self, episode: LLMContextMemoryEpisode) -> str:
         company_id = _active_company_id()
         namespace_id = self._namespace_id(company_id)
         await self._ensure_namespace(namespace_id, company_id)
         metadata = _episode_metadata(episode, company_id)
-        await self.repository.upload_text(
+        _ = await self.repository.upload_text(
             namespace_id=namespace_id,
             text=episode.content,
             document_name=episode.title or episode.memory_id,
@@ -81,7 +80,7 @@ class RAGLLMContextMemoryStore:
             return
         existing = await self.namespace_repository.get(namespace_id)
         if existing is None:
-            await self.namespace_repository.set(
+            _ = await self.namespace_repository.set(
                 Namespace(
                     name=namespace_id,
                     company_id=company_id,
@@ -199,7 +198,7 @@ def _record_content(metadata: JsonObject, document_content: str) -> str:
 
 def _memory_scope(value: JsonValue | None) -> LLMContextMemoryScope:
     if isinstance(value, str) and value in _MEMORY_SCOPES:
-        return type_cast(LLMContextMemoryScope, value)
+        return value
     raise ValueError("LLM context memory metadata.memory_scope должен быть допустимым scope")
 
 

@@ -15,19 +15,20 @@ Session Lock Middleware для TaskIQ.
 """
 
 import asyncio
-from typing import Any
+from collections.abc import Awaitable
+from typing import Protocol, cast, override
 
+import redis.asyncio as redis_async
 from taskiq import TaskiqMessage, TaskiqMiddleware, TaskiqResult
 
 from core.config import get_settings
 from core.logging import get_logger
-
-try:
-    import redis.asyncio as redis_async
-except ImportError:
-    redis_async = None
-
-_redis_available = redis_async is not None
+from core.tasks.message_contract import (
+    task_message_labels,
+    task_message_string_arg,
+    task_message_string_kwarg,
+)
+from core.types import JsonValue
 
 logger = get_logger(__name__)
 
@@ -40,6 +41,33 @@ LOCK_WAIT_MAX_MS = 2000  # Максимальная задержка
 LOCK_WAIT_TIMEOUT_SECONDS = 60  # Таймаут ожидания
 
 
+class _SessionLockRedisClient(Protocol):
+    def set(
+        self,
+        name: str,
+        value: str,
+        *,
+        nx: bool,
+        ex: int,
+    ) -> Awaitable[bool | None]: ...
+
+    def delete(self, name: str) -> Awaitable[int]: ...
+
+
+class _SessionLockRedisFromUrl(Protocol):
+    def __call__(
+        self,
+        url: str,
+        *,
+        decode_responses: bool,
+    ) -> _SessionLockRedisClient: ...
+
+
+def _session_lock_redis_client(redis_url: str) -> _SessionLockRedisClient:
+    redis_from_url = cast(_SessionLockRedisFromUrl, redis_async.from_url)
+    return redis_from_url(redis_url, decode_responses=True)
+
+
 class SessionLockMiddleware(TaskiqMiddleware):
     """
     Middleware для последовательного выполнения задач одной сессии.
@@ -48,21 +76,16 @@ class SessionLockMiddleware(TaskiqMiddleware):
     Задачи без session_id выполняются параллельно без ограничений.
     """
 
-    def __init__(self):
+    def __init__(self) -> None:
         super().__init__()
-        self._redis_client = None
+        self._redis_client: _SessionLockRedisClient | None = None
         self._locks_held: set[str] = set()
 
-    async def _get_redis(self):
+    async def _get_redis(self) -> _SessionLockRedisClient:
         """Получить Redis клиент (lazy initialization)"""
-        if not _redis_available or redis_async is None:
-            raise RuntimeError("redis не установлен")
         if self._redis_client is None:
             settings = get_settings()
-            self._redis_client = redis_async.from_url(
-                settings.database.redis_url,
-                decode_responses=True,
-            )
+            self._redis_client = _session_lock_redis_client(settings.database.redis_url)
         return self._redis_client
 
     def _get_lock_key(self, session_id: str) -> str:
@@ -118,23 +141,24 @@ class SessionLockMiddleware(TaskiqMiddleware):
         redis_client = await self._get_redis()
         lock_key = self._get_lock_key(session_id)
 
-        await redis_client.delete(lock_key)
+        _ = await redis_client.delete(lock_key)
         self._locks_held.discard(session_id)
         logger.debug("session_lock.released", session_id=session_id)
 
     def _extract_session_id(self, message: TaskiqMessage) -> str | None:
         """Извлечь session_id из аргументов задачи"""
         # Проверяем kwargs
-        if "session_id" in message.kwargs:
-            return message.kwargs["session_id"]
+        session_id = task_message_string_kwarg(message, "session_id")
+        if session_id is not None:
+            return session_id
 
-        # Проверяем args (session_id обычно второй аргумент после flow_id)
-        # НО только если это строка! (не dict или другой тип)
-        if len(message.args) >= 2 and isinstance(message.args[1], str):
-            return message.args[1]
+        positional_session_id = task_message_string_arg(message, 1)
+        if positional_session_id is not None:
+            return positional_session_id
 
         return None
 
+    @override
     async def pre_execute(self, message: TaskiqMessage) -> TaskiqMessage:
         """
         Вызывается перед выполнением задачи.
@@ -151,23 +175,27 @@ class SessionLockMiddleware(TaskiqMiddleware):
         # Пытаемся взять lock (с ожиданием если занят)
         if await self._wait_for_lock(session_id):
             # Lock получен, сохраняем session_id для post_execute
-            message.labels["_session_lock_id"] = session_id
+            labels = task_message_labels(message)
+            labels["_session_lock_id"] = session_id
+            message.labels = labels
         else:
             logger.error("session_lock.acquire_failed", session_id=session_id)
 
         return message
 
+    @override
     async def post_execute(
         self,
         message: TaskiqMessage,
-        result: TaskiqResult[Any],
+        result: TaskiqResult[JsonValue],
     ) -> None:
         """
         Вызывается после выполнения задачи.
 
         Освобождает lock.
         """
-        session_id = message.labels.get("_session_lock_id")
+        _ = result
+        session_id = task_message_labels(message).get("_session_lock_id")
 
         if not session_id:
             return
@@ -175,10 +203,11 @@ class SessionLockMiddleware(TaskiqMiddleware):
         # Освобождаем lock после выполнения
         await self._release_lock(session_id)
 
+    @override
     async def on_error(
         self,
         message: TaskiqMessage,
-        result: TaskiqResult[Any],
+        result: TaskiqResult[JsonValue],
         exception: BaseException,
     ) -> None:
         """
@@ -186,7 +215,9 @@ class SessionLockMiddleware(TaskiqMiddleware):
 
         Освобождает lock чтобы не блокировать сессию.
         """
-        session_id = message.labels.get("_session_lock_id")
+        _ = result
+        _ = exception
+        session_id = task_message_labels(message).get("_session_lock_id")
 
         if session_id and session_id in self._locks_held:
             await self._release_lock(session_id)

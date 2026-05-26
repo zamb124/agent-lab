@@ -605,9 +605,7 @@
             "$ref": "#/components/schemas/CalendarProvider"
           },
           "settings": {
-            "additionalProperties": true,
-            "type": "object",
-            "title": "Settings"
+            "$ref": "#/components/schemas/CalendarIntegrationSettings"
           },
           "created_at": {
             "type": "string",
@@ -631,6 +629,44 @@
           "updated_at"
         ],
         "title": "CalendarIntegrationPublic"
+      },
+      "CalendarIntegrationSettings": {
+        "properties": {
+          "default_calendar_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Default Calendar Id"
+          },
+          "sync_enabled": {
+            "type": "boolean",
+            "title": "Sync Enabled",
+            "default": true
+          },
+          "sync_inbound_enabled": {
+            "type": "boolean",
+            "title": "Sync Inbound Enabled",
+            "default": true
+          },
+          "sync_outbound_enabled": {
+            "type": "boolean",
+            "title": "Sync Outbound Enabled",
+            "default": true
+          },
+          "notifications_enabled": {
+            "type": "boolean",
+            "title": "Notifications Enabled",
+            "default": true
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "title": "CalendarIntegrationSettings"
       },
       "CalendarListRequest": {
         "properties": {
@@ -1639,6 +1675,20 @@
         "title": "CallTranscriptEntry",
         "description": "Одна реплика в транскрипте звонка."
       },
+      "CallsInvitePayload": {
+        "properties": {
+          "channel_id": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Channel Id"
+          }
+        },
+        "type": "object",
+        "required": [
+          "channel_id"
+        ],
+        "title": "CallsInvitePayload"
+      },
       "ChannelCreate": {
         "properties": {
           "namespace": {
@@ -2105,6 +2155,44 @@
         "title": "CompanyMemberRead",
         "description": "Краткие данные участника активной компании."
       },
+      "CompanyMembershipResponse": {
+        "properties": {
+          "company_id": {
+            "type": "string",
+            "title": "Company Id"
+          },
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "subdomain": {
+            "type": "string",
+            "title": "Subdomain"
+          },
+          "role": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Role"
+          },
+          "is_active": {
+            "type": "boolean",
+            "title": "Is Active"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "company_id",
+          "name",
+          "subdomain",
+          "role",
+          "is_active"
+        ],
+        "title": "CompanyMembershipResponse",
+        "description": "Компания, в которой состоит текущий пользователь, с ролями и активным флагом."
+      },
       "CredentialInfo": {
         "properties": {
           "provider": {
@@ -2139,7 +2227,9 @@
             "description": "Имя инструмента, сформировавшего ответ."
           },
           "response_data": {
-            "additionalProperties": true,
+            "additionalProperties": {
+              "$ref": "#/components/schemas/JsonValue"
+            },
             "type": "object",
             "title": "Response Data",
             "description": "Произвольные данные ответа инструмента."
@@ -2446,7 +2536,9 @@
           "extra": {
             "anyOf": [
               {
-                "additionalProperties": true,
+                "additionalProperties": {
+                  "$ref": "#/components/schemas/JsonValue"
+                },
                 "type": "object"
               },
               {
@@ -2498,7 +2590,9 @@
             "description": "Канонический URL ресурса."
           },
           "extra": {
-            "additionalProperties": true,
+            "additionalProperties": {
+              "$ref": "#/components/schemas/JsonValue"
+            },
             "type": "object",
             "title": "Extra",
             "description": "Дополнительные метаданные ресурса."
@@ -2601,6 +2695,7 @@
         "title": "JoinResponse",
         "description": "Ответ при входе в звонок (registered или guest)."
       },
+      "JsonValue": {},
       "ListResponse_CalendarIntegrationPublic_": {
         "properties": {
           "items": {
@@ -2632,6 +2727,22 @@
           "items"
         ],
         "title": "ListResponse[ChannelMemberRead]"
+      },
+      "ListResponse_CompanyMembershipResponse_": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/CompanyMembershipResponse"
+            },
+            "type": "array",
+            "title": "Items"
+          }
+        },
+        "type": "object",
+        "required": [
+          "items"
+        ],
+        "title": "ListResponse[CompanyMembershipResponse]"
       },
       "ListResponse_CredentialInfo_": {
         "properties": {
@@ -2680,23 +2791,6 @@
           "items"
         ],
         "title": "ListResponse[UserSearchResult]"
-      },
-      "ListResponse_dict_str__Any__": {
-        "properties": {
-          "items": {
-            "items": {
-              "additionalProperties": true,
-              "type": "object"
-            },
-            "type": "array",
-            "title": "Items"
-          }
-        },
-        "type": "object",
-        "required": [
-          "items"
-        ],
-        "title": "ListResponse[dict[str, Any]]"
       },
       "MessageContentModel-Input": {
         "properties": {
@@ -3376,6 +3470,20 @@
         ],
         "title": "PaginationResponse[MessageRead]"
       },
+      "PushSuccessResponse": {
+        "properties": {
+          "success": {
+            "type": "boolean",
+            "title": "Success"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "success"
+        ],
+        "title": "PushSuccessResponse"
+      },
       "ReactionEntry": {
         "properties": {
           "user_id": {
@@ -3434,9 +3542,29 @@
             "default": "unknown"
           }
         },
+        "additionalProperties": false,
         "type": "object",
         "title": "SubscribeRequest",
         "description": "Тело POST /api/push/subscribe."
+      },
+      "SubscribeResponse": {
+        "properties": {
+          "success": {
+            "type": "boolean",
+            "title": "Success"
+          },
+          "subscription_id": {
+            "type": "string",
+            "title": "Subscription Id"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "success",
+          "subscription_id"
+        ],
+        "title": "SubscribeResponse"
       },
       "SwitchCompanyRequest": {
         "properties": {
@@ -3592,8 +3720,33 @@
             "default": "Это тестовое push-уведомление от Humanitec"
           }
         },
+        "additionalProperties": false,
         "type": "object",
         "title": "TestPushRequest"
+      },
+      "TestPushResponse": {
+        "properties": {
+          "success": {
+            "type": "boolean",
+            "title": "Success"
+          },
+          "sent_to_devices": {
+            "type": "integer",
+            "title": "Sent To Devices"
+          },
+          "expired_subscriptions": {
+            "type": "integer",
+            "title": "Expired Subscriptions"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "success",
+          "sent_to_devices",
+          "expired_subscriptions"
+        ],
+        "title": "TestPushResponse"
       },
       "TextPlainContent": {
         "properties": {
@@ -3967,7 +4120,9 @@
           "ui_preferences": {
             "anyOf": [
               {
-                "additionalProperties": true,
+                "additionalProperties": {
+                  "$ref": "#/components/schemas/JsonValue"
+                },
                 "type": "object"
               },
               {
@@ -4021,6 +4176,7 @@
             "title": "Publickey"
           }
         },
+        "additionalProperties": false,
         "type": "object",
         "required": [
           "publicKey"
@@ -4117,7 +4273,9 @@
             "title": "Signal Type"
           },
           "data": {
-            "additionalProperties": true,
+            "additionalProperties": {
+              "$ref": "#/components/schemas/JsonValue"
+            },
             "type": "object",
             "title": "Data"
           }

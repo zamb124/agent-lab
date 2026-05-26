@@ -14,12 +14,17 @@ from __future__ import annotations
 import logging
 import time
 import uuid
-from typing import Any
+from typing import override
 
-from starlette.middleware.base import BaseHTTPMiddleware
+import structlog
+from starlette.datastructures import Headers
+from starlette.middleware.base import BaseHTTPMiddleware, RequestResponseEndpoint
 from starlette.requests import Request
+from starlette.responses import Response
+from starlette.types import ASGIApp
 
 from core.logging import (
+    bind_log_context,
     enter_request_scope,
     exit_request_scope,
     get_logger,
@@ -38,6 +43,7 @@ from core.logging.attributes import (
     LOG_HTTP_USER_AGENT,
     LOG_REQUEST_ID,
 )
+from core.types import JsonObject
 
 REQUEST_ID_HEADER = "X-Request-Id"
 TRACE_ID_HEADER = "X-Trace-Id"
@@ -48,17 +54,18 @@ class AccessLogMiddleware(BaseHTTPMiddleware):
 
     def __init__(
         self,
-        app,
+        app: ASGIApp,
         *,
         service_name: str,
     ) -> None:
         super().__init__(app)
-        if not isinstance(service_name, str) or not service_name.strip():
+        if not service_name.strip():
             raise ValueError("AccessLogMiddleware: service_name обязателен")
-        self._service_name = service_name
-        self._logger = get_logger("platform.http")
+        self._service_name: str = service_name
+        self._logger: structlog.stdlib.BoundLogger = get_logger("platform.http")
 
-    async def dispatch(self, request: Request, call_next):
+    @override
+    async def dispatch(self, request: Request, call_next: RequestResponseEndpoint) -> Response:
         path = request.url.path
         method = request.method
 
@@ -71,7 +78,7 @@ class AccessLogMiddleware(BaseHTTPMiddleware):
         request.state.request_id = request_id
         request.state.trace_id = trace_id
 
-        scope_extra: dict[str, Any] = {
+        scope_extra: JsonObject = {
             LOG_HTTP_METHOD: method,
             LOG_HTTP_PATH: path,
             LOG_HTTP_USER_AGENT: user_agent,
@@ -81,8 +88,8 @@ class AccessLogMiddleware(BaseHTTPMiddleware):
             request_id=request_id,
             trace_id=trace_id,
             service_name=self._service_name,
-            **scope_extra,
         )
+        bind_log_context(**scope_extra)
 
         start = time.perf_counter()
         status_code: int | None = None
@@ -130,7 +137,7 @@ class AccessLogMiddleware(BaseHTTPMiddleware):
 
     def _resolve_request_id(self, request: Request) -> str:
         raw = request.headers.get(REQUEST_ID_HEADER)
-        if isinstance(raw, str):
+        if raw is not None:
             value = raw.strip()
             if value:
                 return value
@@ -138,15 +145,15 @@ class AccessLogMiddleware(BaseHTTPMiddleware):
 
     def _resolve_trace_id(self, request: Request) -> str:
         raw = request.headers.get(TRACE_ID_HEADER)
-        if isinstance(raw, str):
+        if raw is not None:
             value = raw.strip()
             if value:
                 return value
         return f"{self._service_name}:{uuid.uuid4().hex}"
 
     @staticmethod
-    def _content_length(headers) -> int | None:
-        raw = headers.get("content-length") if hasattr(headers, "get") else None
+    def _content_length(headers: Headers) -> int | None:
+        raw = headers.get("content-length")
         if not raw:
             return None
         try:
@@ -183,8 +190,8 @@ class AccessLogMiddleware(BaseHTTPMiddleware):
         request_size: int | None,
         response_size: int | None,
         request_id: str,
-    ) -> dict[str, Any]:
-        fields: dict[str, Any] = {
+    ) -> JsonObject:
+        fields: JsonObject = {
             LOG_HTTP_METHOD: method,
             LOG_HTTP_ROUTE: route,
             LOG_HTTP_PATH: path,

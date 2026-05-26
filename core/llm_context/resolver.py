@@ -77,8 +77,9 @@ def resolve_llm_context_policy(
 def resolve_company_llm_context_patch() -> LLMContextPatch | None:
     """Read company-level context patch from active company metadata."""
     ctx = get_context()
-    company = ctx.active_company if ctx is not None else None
-    metadata = require_json_object(getattr(company, "metadata", None) or {}, "company.metadata")
+    if ctx is None or ctx.active_company is None:
+        return None
+    metadata = require_json_object(ctx.active_company.metadata, "company.metadata")
     raw_ai = metadata.get(_COMPANY_AI_METADATA_KEY)
     if raw_ai is None:
         return None

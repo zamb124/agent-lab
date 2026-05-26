@@ -16,7 +16,7 @@
           "companies"
         ],
         "summary": "Get My Companies",
-        "description": "Получить список компаний текущего пользователя\n\nArgs:\n    request: FastAPI request\n    container: DI контейнер\n\nReturns:\n    Список компаний с их данными",
+        "description": "Возвращает компании текущего пользователя с subdomain и ролями.",
         "operationId": "get_my_companies_frontend_api_companies_me_get",
         "responses": {
           "200": {
@@ -24,7 +24,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ListResponse_dict_str__Any__"
+                  "$ref": "#/components/schemas/ListResponse_CompanyMembershipResponse_"
                 }
               }
             }
@@ -159,9 +159,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "type": "object",
-                  "additionalProperties": true,
-                  "title": "Response Enter Company As System Member Frontend Api Companies  Company Id  System Access Post"
+                  "$ref": "#/components/schemas/SystemAccessGrantedResponse"
                 }
               }
             }
@@ -341,7 +339,7 @@
           "provider"
         ],
         "title": "AIProvidersCapabilityUpdate",
-        "description": "PUT /api/settings/ai-providers/{capability}: задать override capability компании.\n\n- ``provider`` платформенный (``openrouter|openai|bothub|yandex|provider_litserve``)\n  или ``custom:<id>``; для rerank допустимы ``inherit|none|provider_litserve|custom:<id>``;\n  для voice — литералы провайдеров речи или ``custom:<id>`` (кроме VAD).\n- ``api_key`` (plaintext) шифруется на сервере; для ``custom:<id>`` не используется\n  (ключ в custom-провайдере)."
+        "description": "PUT /api/settings/ai-providers/{capability}: задать override capability компании.\n\n- ``provider`` платформенный (``openrouter|openai|bothub|yandex|humanitec_llm``)\n  или ``custom:<id>``; для rerank допустимы ``inherit|none|provider_litserve|custom:<id>``;\n  для voice — литералы провайдеров речи или ``custom:<id>`` (кроме VAD).\n- ``api_key`` (plaintext) шифруется на сервере; для ``custom:<id>`` не используется\n  (ключ в custom-провайдере)."
       },
       "AcceptInviteRequest": {
         "properties": {
@@ -355,6 +353,42 @@
           "short_code"
         ],
         "title": "AcceptInviteRequest"
+      },
+      "AcceptInviteResponse": {
+        "properties": {
+          "company_id": {
+            "type": "string",
+            "title": "Company Id"
+          },
+          "company_name": {
+            "type": "string",
+            "title": "Company Name"
+          },
+          "role": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Role"
+          },
+          "already_member": {
+            "type": "boolean",
+            "title": "Already Member"
+          },
+          "subdomain": {
+            "type": "string",
+            "title": "Subdomain"
+          }
+        },
+        "type": "object",
+        "required": [
+          "company_id",
+          "company_name",
+          "role",
+          "already_member",
+          "subdomain"
+        ],
+        "title": "AcceptInviteResponse"
       },
       "ApiKey": {
         "properties": {
@@ -497,6 +531,30 @@
         ],
         "title": "ApiKeyUpdate",
         "description": "Запрос на обновление API ключа"
+      },
+      "BillingPlanChangeResponse": {
+        "properties": {
+          "success": {
+            "type": "boolean",
+            "title": "Success"
+          },
+          "plan": {
+            "type": "string",
+            "title": "Plan"
+          },
+          "message": {
+            "type": "string",
+            "title": "Message"
+          }
+        },
+        "type": "object",
+        "required": [
+          "success",
+          "plan",
+          "message"
+        ],
+        "title": "BillingPlanChangeResponse",
+        "description": "Результат смены тарифного плана компании."
       },
       "BillingSubscription": {
         "properties": {
@@ -699,48 +757,39 @@
         "properties": {
           "notification_type": {
             "type": "string",
-            "title": "Notification Type",
-            "default": ""
+            "title": "Notification Type"
           },
           "operation_id": {
             "type": "string",
-            "title": "Operation Id",
-            "default": ""
+            "title": "Operation Id"
           },
           "amount": {
             "type": "string",
-            "title": "Amount",
-            "default": ""
+            "title": "Amount"
           },
           "currency": {
             "type": "string",
-            "title": "Currency",
-            "default": ""
+            "title": "Currency"
           },
           "datetime": {
             "type": "string",
-            "title": "Datetime",
-            "default": ""
+            "title": "Datetime"
           },
           "sender": {
             "type": "string",
-            "title": "Sender",
-            "default": ""
+            "title": "Sender"
           },
           "codepro": {
             "type": "string",
-            "title": "Codepro",
-            "default": ""
+            "title": "Codepro"
           },
           "sha1_hash": {
             "type": "string",
-            "title": "Sha1 Hash",
-            "default": ""
+            "title": "Sha1 Hash"
           },
           "label": {
             "type": "string",
-            "title": "Label",
-            "default": ""
+            "title": "Label"
           },
           "test_notification": {
             "anyOf": [
@@ -755,54 +804,56 @@
           }
         },
         "type": "object",
+        "required": [
+          "notification_type",
+          "operation_id",
+          "amount",
+          "currency",
+          "datetime",
+          "sender",
+          "codepro",
+          "sha1_hash",
+          "label"
+        ],
         "title": "Body_payment_webhook_api_v1_payments_webhook__provider_name__post"
       },
       "Body_payment_webhook_frontend_api_v1_payments_webhook__provider_name__post": {
         "properties": {
           "notification_type": {
             "type": "string",
-            "title": "Notification Type",
-            "default": ""
+            "title": "Notification Type"
           },
           "operation_id": {
             "type": "string",
-            "title": "Operation Id",
-            "default": ""
+            "title": "Operation Id"
           },
           "amount": {
             "type": "string",
-            "title": "Amount",
-            "default": ""
+            "title": "Amount"
           },
           "currency": {
             "type": "string",
-            "title": "Currency",
-            "default": ""
+            "title": "Currency"
           },
           "datetime": {
             "type": "string",
-            "title": "Datetime",
-            "default": ""
+            "title": "Datetime"
           },
           "sender": {
             "type": "string",
-            "title": "Sender",
-            "default": ""
+            "title": "Sender"
           },
           "codepro": {
             "type": "string",
-            "title": "Codepro",
-            "default": ""
+            "title": "Codepro"
           },
           "sha1_hash": {
             "type": "string",
-            "title": "Sha1 Hash",
-            "default": ""
+            "title": "Sha1 Hash"
           },
           "label": {
             "type": "string",
-            "title": "Label",
-            "default": ""
+            "title": "Label"
           },
           "test_notification": {
             "anyOf": [
@@ -817,6 +868,17 @@
           }
         },
         "type": "object",
+        "required": [
+          "notification_type",
+          "operation_id",
+          "amount",
+          "currency",
+          "datetime",
+          "sender",
+          "codepro",
+          "sha1_hash",
+          "label"
+        ],
         "title": "Body_payment_webhook_frontend_api_v1_payments_webhook__provider_name__post"
       },
       "Body_upload_file_frontend_api_v1_files__post": {
@@ -1275,9 +1337,7 @@
             "$ref": "#/components/schemas/CalendarProvider"
           },
           "settings": {
-            "additionalProperties": true,
-            "type": "object",
-            "title": "Settings"
+            "$ref": "#/components/schemas/CalendarIntegrationSettings"
           },
           "created_at": {
             "type": "string",
@@ -1301,6 +1361,44 @@
           "updated_at"
         ],
         "title": "CalendarIntegrationPublic"
+      },
+      "CalendarIntegrationSettings": {
+        "properties": {
+          "default_calendar_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Default Calendar Id"
+          },
+          "sync_enabled": {
+            "type": "boolean",
+            "title": "Sync Enabled",
+            "default": true
+          },
+          "sync_inbound_enabled": {
+            "type": "boolean",
+            "title": "Sync Inbound Enabled",
+            "default": true
+          },
+          "sync_outbound_enabled": {
+            "type": "boolean",
+            "title": "Sync Outbound Enabled",
+            "default": true
+          },
+          "notifications_enabled": {
+            "type": "boolean",
+            "title": "Notifications Enabled",
+            "default": true
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "title": "CalendarIntegrationSettings"
       },
       "CalendarListRequest": {
         "properties": {
@@ -1597,6 +1695,44 @@
         ],
         "title": "CheckSlugResponse"
       },
+      "CompanyMembershipResponse": {
+        "properties": {
+          "company_id": {
+            "type": "string",
+            "title": "Company Id"
+          },
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "subdomain": {
+            "type": "string",
+            "title": "Subdomain"
+          },
+          "role": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Role"
+          },
+          "is_active": {
+            "type": "boolean",
+            "title": "Is Active"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "company_id",
+          "name",
+          "subdomain",
+          "role",
+          "is_active"
+        ],
+        "title": "CompanyMembershipResponse",
+        "description": "Компания, в которой состоит текущий пользователь, с ролями и активным флагом."
+      },
       "CompanySecretsMetaDTO": {
         "properties": {
           "api_key_set": {
@@ -1660,6 +1796,77 @@
         "title": "CompanySecretsMetaDTO",
         "description": "Не выдаёт сырое значение api_key/client_secret."
       },
+      "CompanySettingsResponse": {
+        "properties": {
+          "company_id": {
+            "type": "string",
+            "title": "Company Id"
+          },
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "subdomain": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Subdomain"
+          },
+          "owner_user_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Owner User Id"
+          },
+          "status": {
+            "type": "string",
+            "title": "Status"
+          },
+          "monthly_budget": {
+            "type": "number",
+            "title": "Monthly Budget"
+          },
+          "tariff_plan": {
+            "type": "string",
+            "title": "Tariff Plan"
+          },
+          "created_at": {
+            "type": "string",
+            "title": "Created At"
+          },
+          "metadata": {
+            "additionalProperties": {
+              "$ref": "#/components/schemas/JsonValue"
+            },
+            "type": "object",
+            "title": "Metadata"
+          }
+        },
+        "type": "object",
+        "required": [
+          "company_id",
+          "name",
+          "subdomain",
+          "owner_user_id",
+          "status",
+          "monthly_budget",
+          "tariff_plan",
+          "created_at",
+          "metadata"
+        ],
+        "title": "CompanySettingsResponse",
+        "description": "Текущие базовые настройки активной компании."
+      },
       "CompanySettingsUpdate": {
         "properties": {
           "name": {
@@ -1689,7 +1896,9 @@
           "metadata": {
             "anyOf": [
               {
-                "additionalProperties": true,
+                "additionalProperties": {
+                  "$ref": "#/components/schemas/JsonValue"
+                },
                 "type": "object"
               },
               {
@@ -1703,6 +1912,56 @@
         "type": "object",
         "title": "CompanySettingsUpdate",
         "description": "Обновление базовых настроек компании.\n\nAI-провайдеры конфигурируются отдельным CRUD-роутером ``/ai-providers``\n(см. core.company_ai). Поля legacy (``rag_embedding`` / ``rag_rerank`` /\n``crm_summarize_provider``) удалены вместе с парсерами в ``core.company_ai``."
+      },
+      "CompanySettingsUpdateResponse": {
+        "properties": {
+          "success": {
+            "type": "boolean",
+            "title": "Success",
+            "default": true
+          },
+          "message": {
+            "type": "string",
+            "title": "Message"
+          },
+          "company": {
+            "$ref": "#/components/schemas/CompanySettingsUpdatedCompany"
+          }
+        },
+        "type": "object",
+        "required": [
+          "message",
+          "company"
+        ],
+        "title": "CompanySettingsUpdateResponse",
+        "description": "Результат обновления настроек компании."
+      },
+      "CompanySettingsUpdatedCompany": {
+        "properties": {
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "monthly_budget": {
+            "type": "number",
+            "title": "Monthly Budget"
+          },
+          "metadata": {
+            "additionalProperties": {
+              "$ref": "#/components/schemas/JsonValue"
+            },
+            "type": "object",
+            "title": "Metadata"
+          }
+        },
+        "type": "object",
+        "required": [
+          "name",
+          "monthly_budget",
+          "metadata"
+        ],
+        "title": "CompanySettingsUpdatedCompany",
+        "description": "Изменяемая часть настроек компании после PATCH."
       },
       "CompanyVoiceProviderItem": {
         "properties": {
@@ -2190,6 +2449,45 @@
         "title": "CreatePaymentRequest",
         "description": "Запрос на создание платежа"
       },
+      "CreatePaymentResponse": {
+        "properties": {
+          "transaction_id": {
+            "type": "string",
+            "title": "Transaction Id",
+            "description": "ID транзакции"
+          },
+          "payment_url": {
+            "type": "string",
+            "title": "Payment Url",
+            "description": "URL для оплаты"
+          },
+          "provider": {
+            "type": "string",
+            "title": "Provider",
+            "description": "Использованный провайдер"
+          },
+          "status": {
+            "type": "string",
+            "title": "Status",
+            "description": "Статус транзакции"
+          },
+          "amount": {
+            "type": "number",
+            "title": "Amount",
+            "description": "Сумма пополнения"
+          }
+        },
+        "type": "object",
+        "required": [
+          "transaction_id",
+          "payment_url",
+          "provider",
+          "status",
+          "amount"
+        ],
+        "title": "CreatePaymentResponse",
+        "description": "Ответ при создании платежа"
+      },
       "CredentialInfo": {
         "properties": {
           "provider": {
@@ -2216,12 +2514,11 @@
         "title": "CredentialInfo",
         "description": "Публичная проекция credential для UI (без токенов)."
       },
-      "CursorPage_dict_str__Any__": {
+      "CursorPage_LeadRequestRecord_": {
         "properties": {
           "items": {
             "items": {
-              "additionalProperties": true,
-              "type": "object"
+              "$ref": "#/components/schemas/LeadRequestRecord"
             },
             "type": "array",
             "title": "Items"
@@ -2247,7 +2544,39 @@
           "items",
           "has_more"
         ],
-        "title": "CursorPage[dict[str, Any]]"
+        "title": "CursorPage[LeadRequestRecord]"
+      },
+      "CursorPage_PlatformTracingSpanItem_": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/PlatformTracingSpanItem"
+            },
+            "type": "array",
+            "title": "Items"
+          },
+          "next_cursor": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Next Cursor"
+          },
+          "has_more": {
+            "type": "boolean",
+            "title": "Has More"
+          }
+        },
+        "type": "object",
+        "required": [
+          "items",
+          "has_more"
+        ],
+        "title": "CursorPage[PlatformTracingSpanItem]"
       },
       "CustomProviderCreate": {
         "properties": {
@@ -2288,7 +2617,9 @@
           "extra_request_body": {
             "anyOf": [
               {
-                "additionalProperties": true,
+                "additionalProperties": {
+                  "$ref": "#/components/schemas/JsonValue"
+                },
                 "type": "object"
               },
               {
@@ -2400,7 +2731,9 @@
           "extra_request_body": {
             "anyOf": [
               {
-                "additionalProperties": true,
+                "additionalProperties": {
+                  "$ref": "#/components/schemas/JsonValue"
+                },
                 "type": "object"
               },
               {
@@ -2962,6 +3295,7 @@
         "type": "object",
         "title": "HTTPValidationError"
       },
+      "JsonValue": {},
       "LLMCallConfig": {
         "properties": {
           "provider": {
@@ -3118,7 +3452,9 @@
           "extra_request_body": {
             "anyOf": [
               {
-                "additionalProperties": true,
+                "additionalProperties": {
+                  "$ref": "#/components/schemas/JsonValue"
+                },
                 "type": "object"
               },
               {
@@ -3194,13 +3530,566 @@
         "title": "LLMCallConfig",
         "description": "One concrete LLM attempt config.\n\n`provider` and `model` may be partial at authoring time for primary node\noverrides; by the time the HTTP client attempts a call, both are resolved."
       },
+      "LLMContextBudgetPatch": {
+        "properties": {
+          "max_input_tokens": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "exclusiveMinimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Max Input Tokens"
+          },
+          "output_reserve_tokens": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "minimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Output Reserve Tokens"
+          },
+          "reasoning_reserve_tokens": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "minimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reasoning Reserve Tokens"
+          },
+          "safety_buffer_tokens": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "minimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Safety Buffer Tokens"
+          },
+          "active_window_tokens": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "minimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Active Window Tokens"
+          },
+          "memory_tokens": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "minimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Memory Tokens"
+          },
+          "rag_tokens": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "minimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Rag Tokens"
+          },
+          "tool_result_tokens": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "minimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Tool Result Tokens"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "title": "LLMContextBudgetPatch",
+        "description": "Partial token budget overlay."
+      },
+      "LLMContextPatch": {
+        "properties": {
+          "profile": {
+            "anyOf": [
+              {
+                "type": "string",
+                "minLength": 1
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Profile"
+          },
+          "mode": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "off",
+                  "window",
+                  "smart",
+                  "agent"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Mode"
+          },
+          "budget": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/LLMContextBudgetPatch"
+              },
+              {
+                "type": "string",
+                "enum": [
+                  "tiny",
+                  "small",
+                  "medium",
+                  "large",
+                  "max"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Budget"
+          },
+          "memory": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "off",
+                  "session",
+                  "node",
+                  "flow",
+                  "company"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Memory"
+          },
+          "retrieval": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/LLMContextRetrievalPatch"
+              },
+              {
+                "type": "string",
+                "enum": [
+                  "off",
+                  "semantic",
+                  "lexical",
+                  "hybrid"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Retrieval"
+          },
+          "compaction": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "off",
+                  "auto",
+                  "force"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Compaction"
+          },
+          "cache": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "off",
+                  "auto",
+                  "provider_hints"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Cache"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "title": "LLMContextPatch",
+        "description": "Partial overlay accepted from company/resource/node/inline layers."
+      },
+      "LLMContextRetrievalPatch": {
+        "properties": {
+          "mode": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "off",
+                  "semantic",
+                  "lexical",
+                  "hybrid"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Mode"
+          },
+          "top_k": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "maximum": 256.0,
+                "minimum": 1.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Top K"
+          },
+          "rerank": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Rerank"
+          },
+          "min_score": {
+            "anyOf": [
+              {
+                "type": "number",
+                "maximum": 1.0,
+                "minimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Min Score"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "title": "LLMContextRetrievalPatch",
+        "description": "Partial retrieval overlay."
+      },
       "LeadCreateBody": {
         "properties": {
-          "name": {
+          "contact_name": {
             "type": "string",
-            "title": "Name"
+            "maxLength": 200,
+            "minLength": 1,
+            "title": "Contact Name"
           },
           "email": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 320
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Email"
+          },
+          "phone": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 64
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Phone"
+          },
+          "organization_name": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 200
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Organization Name"
+          },
+          "comment": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 4000
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Comment"
+          },
+          "job_title": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 200
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Job Title"
+          },
+          "headcount_range": {
+            "type": "string",
+            "enum": [
+              "1_49",
+              "50_199",
+              "200_499",
+              "500_plus"
+            ],
+            "title": "Headcount Range"
+          },
+          "interested_products": {
+            "items": {
+              "type": "string",
+              "enum": [
+                "agents",
+                "rag",
+                "crm",
+                "sync",
+                "documents"
+              ]
+            },
+            "type": "array",
+            "minItems": 1,
+            "title": "Interested Products"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "contact_name",
+          "headcount_range",
+          "interested_products"
+        ],
+        "title": "LeadCreateBody",
+        "description": "Публичная заявка с лендинга."
+      },
+      "LeadCreateResponse": {
+        "properties": {
+          "success": {
+            "type": "boolean",
+            "title": "Success",
+            "default": true
+          },
+          "message": {
+            "type": "string",
+            "title": "Message"
+          },
+          "lead_request_id": {
+            "type": "string",
+            "title": "Lead Request Id"
+          }
+        },
+        "type": "object",
+        "required": [
+          "message",
+          "lead_request_id"
+        ],
+        "title": "LeadCreateResponse",
+        "description": "Результат приема публичной заявки."
+      },
+      "LeadRequestRecord": {
+        "properties": {
+          "contact_name": {
+            "type": "string",
+            "maxLength": 200,
+            "minLength": 1,
+            "title": "Contact Name"
+          },
+          "email": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 320
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Email"
+          },
+          "phone": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 64
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Phone"
+          },
+          "organization_name": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 200
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Organization Name"
+          },
+          "comment": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 4000
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Comment"
+          },
+          "job_title": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 200
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Job Title"
+          },
+          "headcount_range": {
+            "type": "string",
+            "enum": [
+              "1_49",
+              "50_199",
+              "200_499",
+              "500_plus"
+            ],
+            "title": "Headcount Range"
+          },
+          "interested_products": {
+            "items": {
+              "type": "string",
+              "enum": [
+                "agents",
+                "rag",
+                "crm",
+                "sync",
+                "documents"
+              ]
+            },
+            "type": "array",
+            "minItems": 1,
+            "title": "Interested Products"
+          },
+          "lead_request_id": {
+            "type": "string",
+            "title": "Lead Request Id"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "contact_name",
+          "headcount_range",
+          "interested_products",
+          "lead_request_id",
+          "created_at"
+        ],
+        "title": "LeadRequestRecord",
+        "description": "Каноническая запись заявки в shared storage и ответе system UI."
+      },
+      "LegalConfig": {
+        "properties": {
+          "company_name_ru": {
+            "type": "string",
+            "title": "Company Name Ru",
+            "default": "ООО «Энжилабс»"
+          },
+          "company_name_en": {
+            "type": "string",
+            "title": "Company Name En",
+            "default": "Angilabs LLC"
+          },
+          "legal_form_ru": {
+            "type": "string",
+            "title": "Legal Form Ru",
+            "default": "Общество с ограниченной ответственностью"
+          },
+          "legal_form_en": {
+            "type": "string",
+            "title": "Legal Form En",
+            "default": "Limited Liability Company"
+          },
+          "inn": {
             "anyOf": [
               {
                 "type": "string"
@@ -3209,7 +4098,55 @@
                 "type": "null"
               }
             ],
-            "title": "Email"
+            "title": "Inn"
+          },
+          "ogrn": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ogrn"
+          },
+          "legal_address_ru": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Legal Address Ru"
+          },
+          "legal_address_en": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Legal Address En"
+          },
+          "contact_email": {
+            "type": "string",
+            "title": "Contact Email",
+            "default": "info@angilabs.ru"
+          },
+          "support_email": {
+            "type": "string",
+            "title": "Support Email",
+            "default": "support@angilabs.ru"
+          },
+          "dpo_email": {
+            "type": "string",
+            "title": "Dpo Email",
+            "default": "dpo@angilabs.ru"
           },
           "phone": {
             "anyOf": [
@@ -3222,7 +4159,42 @@
             ],
             "title": "Phone"
           },
-          "company": {
+          "min_age": {
+            "type": "integer",
+            "title": "Min Age",
+            "default": 18
+          },
+          "retention_logs": {
+            "type": "string",
+            "title": "Retention Logs",
+            "default": "30 дней / 30 days"
+          },
+          "retention_messages": {
+            "type": "string",
+            "title": "Retention Messages",
+            "default": "1 год / 1 year"
+          },
+          "retention_accounts": {
+            "type": "string",
+            "title": "Retention Accounts",
+            "default": "3 года после последней активности / 3 years after last activity"
+          },
+          "cloud_provider": {
+            "type": "string",
+            "title": "Cloud Provider",
+            "default": "AWS/Yandex Cloud"
+          },
+          "cloud_region": {
+            "type": "string",
+            "title": "Cloud Region",
+            "default": "EU/RU"
+          },
+          "analytics_tools": {
+            "type": "string",
+            "title": "Analytics Tools",
+            "default": "Internal analytics"
+          },
+          "billing_provider": {
             "anyOf": [
               {
                 "type": "string"
@@ -3231,61 +4203,12 @@
                 "type": "null"
               }
             ],
-            "title": "Company"
-          },
-          "comment": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Comment"
-          },
-          "job_title": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Job Title"
-          },
-          "headcount_range": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Headcount Range"
-          },
-          "interested_products": {
-            "anyOf": [
-              {
-                "items": {
-                  "type": "string"
-                },
-                "type": "array"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Interested Products"
+            "title": "Billing Provider"
           }
         },
         "type": "object",
-        "required": [
-          "name"
-        ],
-        "title": "LeadCreateBody"
+        "title": "LegalConfig",
+        "description": "Конфигурация юридической информации компании"
       },
       "ListResponse_CalendarIntegrationPublic_": {
         "properties": {
@@ -3302,6 +4225,22 @@
           "items"
         ],
         "title": "ListResponse[CalendarIntegrationPublic]"
+      },
+      "ListResponse_CompanyMembershipResponse_": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/CompanyMembershipResponse"
+            },
+            "type": "array",
+            "title": "Items"
+          }
+        },
+        "type": "object",
+        "required": [
+          "items"
+        ],
+        "title": "ListResponse[CompanyMembershipResponse]"
       },
       "ListResponse_CredentialInfo_": {
         "properties": {
@@ -3350,23 +4289,6 @@
           "items"
         ],
         "title": "ListResponse[UserSearchResult]"
-      },
-      "ListResponse_dict_str__Any__": {
-        "properties": {
-          "items": {
-            "items": {
-              "additionalProperties": true,
-              "type": "object"
-            },
-            "type": "array",
-            "title": "Items"
-          }
-        },
-        "type": "object",
-        "required": [
-          "items"
-        ],
-        "title": "ListResponse[dict[str, Any]]"
       },
       "OffsetPage_ApiKey_": {
         "properties": {
@@ -3491,6 +4413,45 @@
           "offset"
         ],
         "title": "OffsetPage[ServiceStatus]"
+      },
+      "PaymentHistoryResponse": {
+        "properties": {
+          "payments": {
+            "items": {
+              "$ref": "#/components/schemas/TransactionResponse"
+            },
+            "type": "array",
+            "title": "Payments"
+          }
+        },
+        "type": "object",
+        "required": [
+          "payments"
+        ],
+        "title": "PaymentHistoryResponse",
+        "description": "История транзакций пополнения баланса."
+      },
+      "PaymentProviderType": {
+        "type": "string",
+        "enum": [
+          "yoomoney",
+          "yukassa",
+          "grant"
+        ],
+        "title": "PaymentProviderType",
+        "description": "Типы источника пополнения: платёжные провайдеры или начисление гранта из админки platform."
+      },
+      "PaymentStatus": {
+        "type": "string",
+        "enum": [
+          "pending",
+          "success",
+          "failed",
+          "cancelled",
+          "refunded"
+        ],
+        "title": "PaymentStatus",
+        "description": "Статус транзакции пополнения"
       },
       "PlatformBillingBalanceGrantRequest": {
         "properties": {
@@ -3807,7 +4768,9 @@
       "PlatformBillingSettlementRulesResponse": {
         "properties": {
           "document": {
-            "additionalProperties": true,
+            "additionalProperties": {
+              "$ref": "#/components/schemas/JsonValue"
+            },
             "type": "object",
             "title": "Document"
           }
@@ -3823,7 +4786,9 @@
         "properties": {
           "items": {
             "items": {
-              "additionalProperties": true,
+              "additionalProperties": {
+                "$ref": "#/components/schemas/JsonValue"
+              },
               "type": "object"
             },
             "type": "array",
@@ -4255,12 +5220,16 @@
             "title": "Taskiq Task Id"
           },
           "kwargs": {
-            "additionalProperties": true,
+            "additionalProperties": {
+              "$ref": "#/components/schemas/JsonValue"
+            },
             "type": "object",
             "title": "Kwargs"
           },
           "labels": {
-            "additionalProperties": true,
+            "additionalProperties": {
+              "$ref": "#/components/schemas/JsonValue"
+            },
             "type": "object",
             "title": "Labels"
           },
@@ -4363,7 +5332,9 @@
             "default": "UTC"
           },
           "payload": {
-            "additionalProperties": true,
+            "additionalProperties": {
+              "$ref": "#/components/schemas/JsonValue"
+            },
             "type": "object",
             "title": "Payload",
             "description": "kwargs для задачи"
@@ -4472,7 +5443,9 @@
             "default": "UTC"
           },
           "payload": {
-            "additionalProperties": true,
+            "additionalProperties": {
+              "$ref": "#/components/schemas/JsonValue"
+            },
             "type": "object",
             "title": "Payload"
           },
@@ -4601,6 +5574,346 @@
         ],
         "title": "PlatformTracingFacetsResponse",
         "description": "Подсказки для автокомплита (distinct значения)."
+      },
+      "PlatformTracingSpanItem": {
+        "properties": {
+          "span_id": {
+            "type": "string",
+            "title": "Span Id"
+          },
+          "trace_id": {
+            "type": "string",
+            "title": "Trace Id"
+          },
+          "parent_span_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Parent Span Id"
+          },
+          "operation_name": {
+            "type": "string",
+            "title": "Operation Name"
+          },
+          "kind": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Kind"
+          },
+          "start_time": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Start Time"
+          },
+          "end_time": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "End Time"
+          },
+          "duration_ms": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Duration Ms"
+          },
+          "status": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Status"
+          },
+          "status_message": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Status Message"
+          },
+          "service_name": {
+            "type": "string",
+            "title": "Service Name"
+          },
+          "company_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Company Id"
+          },
+          "namespace": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Namespace"
+          },
+          "user_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "User Id"
+          },
+          "user_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "User Name"
+          },
+          "user_groups": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "User Groups"
+          },
+          "session_auth": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Session Auth"
+          },
+          "session_agent": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Session Agent"
+          },
+          "channel": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Channel"
+          },
+          "event_type": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Event Type"
+          },
+          "resource_type": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Resource Type"
+          },
+          "resource_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Resource Id"
+          },
+          "attributes": {
+            "additionalProperties": {
+              "$ref": "#/components/schemas/JsonValue"
+            },
+            "type": "object",
+            "title": "Attributes"
+          },
+          "events": {
+            "items": {
+              "$ref": "#/components/schemas/TraceSpanEvent"
+            },
+            "type": "array",
+            "title": "Events"
+          },
+          "flow_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Flow Id"
+          },
+          "task_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Task Id"
+          },
+          "context_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Context Id"
+          },
+          "branch_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Branch Id"
+          },
+          "node_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Node Id"
+          },
+          "agent_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Agent Name"
+          },
+          "is_resume": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Is Resume"
+          },
+          "company_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Company Name"
+          },
+          "user_display_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "User Display Name"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "span_id",
+          "trace_id",
+          "operation_name",
+          "start_time",
+          "service_name"
+        ],
+        "title": "PlatformTracingSpanItem",
+        "description": "Span для админского API с человекочитаемым enrichment."
       },
       "PreviewInviteRequest": {
         "properties": {
@@ -5065,6 +6378,116 @@
         ],
         "title": "PronunciationRulesListResponse"
       },
+      "PublicBlogCard": {
+        "properties": {
+          "slug": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Slug"
+          },
+          "title_ru": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Title Ru"
+          },
+          "title_en": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Title En"
+          },
+          "summary_ru": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Summary Ru"
+          },
+          "summary_en": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Summary En"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "slug",
+          "title_ru",
+          "title_en",
+          "summary_ru",
+          "summary_en"
+        ],
+        "title": "PublicBlogCard",
+        "description": "Карточка публичной статьи блога."
+      },
+      "PublicBlogListResponse": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/PublicBlogCard"
+            },
+            "type": "array",
+            "title": "Items"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "items"
+        ],
+        "title": "PublicBlogListResponse",
+        "description": "Список публичных статей блога."
+      },
+      "PublicBlogPost": {
+        "properties": {
+          "slug": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Slug"
+          },
+          "title_ru": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Title Ru"
+          },
+          "title_en": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Title En"
+          },
+          "summary_ru": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Summary Ru"
+          },
+          "summary_en": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Summary En"
+          },
+          "body_ru": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Body Ru"
+          },
+          "body_en": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Body En"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "slug",
+          "title_ru",
+          "title_en",
+          "summary_ru",
+          "summary_en",
+          "body_ru",
+          "body_en"
+        ],
+        "title": "PublicBlogPost",
+        "description": "Полная публичная статья блога."
+      },
       "PublicDocsAssistantSessionRequest": {
         "properties": {
           "embed_id": {
@@ -5115,6 +6538,7 @@
             "title": "Branch Id"
           }
         },
+        "additionalProperties": false,
         "type": "object",
         "required": [
           "token",
@@ -5303,6 +6727,217 @@
         ],
         "title": "PublicLandingSessionResponse"
       },
+      "PublicSearchSessionRequest": {
+        "properties": {
+          "mode": {
+            "type": "string",
+            "enum": [
+              "quick",
+              "deep",
+              "research",
+              "source"
+            ],
+            "title": "Mode",
+            "default": "quick"
+          },
+          "origin": {
+            "type": "string",
+            "title": "Origin",
+            "description": "window.location.origin",
+            "default": ""
+          },
+          "expires_in_seconds": {
+            "type": "integer",
+            "maximum": 900.0,
+            "minimum": 60.0,
+            "title": "Expires In Seconds",
+            "default": 300
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "title": "PublicSearchSessionRequest"
+      },
+      "PublicSearchSessionResponse": {
+        "properties": {
+          "token": {
+            "type": "string",
+            "title": "Token"
+          },
+          "token_type": {
+            "type": "string",
+            "title": "Token Type"
+          },
+          "expires_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Expires At"
+          },
+          "embed_id": {
+            "type": "string",
+            "title": "Embed Id"
+          },
+          "flow_id": {
+            "type": "string",
+            "title": "Flow Id"
+          },
+          "branch_id": {
+            "type": "string",
+            "title": "Branch Id"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "token",
+          "token_type",
+          "expires_at",
+          "embed_id",
+          "flow_id",
+          "branch_id"
+        ],
+        "title": "PublicSearchSessionResponse"
+      },
+      "PublicSiteBundle": {
+        "properties": {
+          "legal": {
+            "$ref": "#/components/schemas/LegalConfig"
+          },
+          "marketing": {
+            "$ref": "#/components/schemas/PublicSiteConfig"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "legal",
+          "marketing"
+        ],
+        "title": "PublicSiteBundle",
+        "description": "Публичная конфигурация лендинга."
+      },
+      "PublicSiteConfig": {
+        "properties": {
+          "telegram_community_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Telegram Community Url"
+          },
+          "yandex_metrika_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Yandex Metrika Id"
+          },
+          "google_analytics_measurement_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Google Analytics Measurement Id"
+          }
+        },
+        "type": "object",
+        "title": "PublicSiteConfig",
+        "description": "Публичные настройки маркетингового слоя сайта (виджеты, аналитика, комьюнити)."
+      },
+      "PublicStartupCard": {
+        "properties": {
+          "name": {
+            "type": "string",
+            "const": "Humanitec",
+            "title": "Name"
+          },
+          "tagline_ru": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Tagline Ru"
+          },
+          "tagline_en": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Tagline En"
+          },
+          "website_url": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Website Url"
+          },
+          "products": {
+            "items": {
+              "type": "string",
+              "enum": [
+                "AI Studio",
+                "Knowledge Base",
+                "NetWorkle",
+                "Sync",
+                "Documents"
+              ]
+            },
+            "type": "array",
+            "title": "Products"
+          },
+          "deployment_modes": {
+            "items": {
+              "type": "string",
+              "enum": [
+                "cloud",
+                "hybrid",
+                "on-premise"
+              ]
+            },
+            "type": "array",
+            "title": "Deployment Modes"
+          },
+          "logo_url": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Logo Url"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "name",
+          "tagline_ru",
+          "tagline_en",
+          "website_url",
+          "products",
+          "deployment_modes",
+          "logo_url"
+        ],
+        "title": "PublicStartupCard",
+        "description": "Карточка продукта для внешних каталогов."
+      },
+      "PushSuccessResponse": {
+        "properties": {
+          "success": {
+            "type": "boolean",
+            "title": "Success"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "success"
+        ],
+        "title": "PushSuccessResponse"
+      },
       "ScheduledTaskStatus": {
         "type": "string",
         "enum": [
@@ -5323,6 +6958,11 @@
           },
           "status": {
             "type": "string",
+            "enum": [
+              "healthy",
+              "unhealthy",
+              "unknown"
+            ],
             "title": "Status"
           },
           "url": {
@@ -5380,9 +7020,29 @@
             "default": "unknown"
           }
         },
+        "additionalProperties": false,
         "type": "object",
         "title": "SubscribeRequest",
         "description": "Тело POST /api/push/subscribe."
+      },
+      "SubscribeResponse": {
+        "properties": {
+          "success": {
+            "type": "boolean",
+            "title": "Success"
+          },
+          "subscription_id": {
+            "type": "string",
+            "title": "Subscription Id"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "success",
+          "subscription_id"
+        ],
+        "title": "SubscribeResponse"
       },
       "SwitchCompanyRequest": {
         "properties": {
@@ -5398,6 +7058,32 @@
         "title": "SwitchCompanyRequest",
         "description": "Переключение активной компании пользователя"
       },
+      "SystemAccessGrantedResponse": {
+        "properties": {
+          "success": {
+            "type": "boolean",
+            "title": "Success"
+          },
+          "company_id": {
+            "type": "string",
+            "title": "Company Id"
+          },
+          "roles": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Roles"
+          }
+        },
+        "type": "object",
+        "required": [
+          "success",
+          "company_id",
+          "roles"
+        ],
+        "title": "SystemAccessGrantedResponse"
+      },
       "SystemAccessRequest": {
         "properties": {
           "role": {
@@ -5410,6 +7096,25 @@
           "role"
         ],
         "title": "SystemAccessRequest"
+      },
+      "TeamMemberRemoveResponse": {
+        "properties": {
+          "success": {
+            "type": "boolean",
+            "title": "Success",
+            "default": true
+          },
+          "message": {
+            "type": "string",
+            "title": "Message"
+          }
+        },
+        "type": "object",
+        "required": [
+          "message"
+        ],
+        "title": "TeamMemberRemoveResponse",
+        "description": "Результат удаления участника из компании."
       },
       "TeamMemberResponse": {
         "properties": {
@@ -5470,6 +7175,33 @@
         ],
         "title": "TeamMemberResponse"
       },
+      "TeamMemberRoleUpdateResponse": {
+        "properties": {
+          "success": {
+            "type": "boolean",
+            "title": "Success",
+            "default": true
+          },
+          "user_id": {
+            "type": "string",
+            "title": "User Id"
+          },
+          "roles": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Roles"
+          }
+        },
+        "type": "object",
+        "required": [
+          "user_id",
+          "roles"
+        ],
+        "title": "TeamMemberRoleUpdateResponse",
+        "description": "Результат изменения ролей участника."
+      },
       "TeamMemberUpdate": {
         "properties": {
           "roles": {
@@ -5501,8 +7233,137 @@
             "default": "Это тестовое push-уведомление от Humanitec"
           }
         },
+        "additionalProperties": false,
         "type": "object",
         "title": "TestPushRequest"
+      },
+      "TestPushResponse": {
+        "properties": {
+          "success": {
+            "type": "boolean",
+            "title": "Success"
+          },
+          "sent_to_devices": {
+            "type": "integer",
+            "title": "Sent To Devices"
+          },
+          "expired_subscriptions": {
+            "type": "integer",
+            "title": "Expired Subscriptions"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "success",
+          "sent_to_devices",
+          "expired_subscriptions"
+        ],
+        "title": "TestPushResponse"
+      },
+      "TraceSpanEvent": {
+        "properties": {
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "timestamp": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Timestamp"
+          },
+          "attributes": {
+            "additionalProperties": {
+              "$ref": "#/components/schemas/JsonValue"
+            },
+            "type": "object",
+            "title": "Attributes"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "name"
+        ],
+        "title": "TraceSpanEvent",
+        "description": "OpenTelemetry event внутри сохраненного span."
+      },
+      "TransactionResponse": {
+        "properties": {
+          "transaction_id": {
+            "type": "string",
+            "title": "Transaction Id"
+          },
+          "company_id": {
+            "type": "string",
+            "title": "Company Id"
+          },
+          "amount": {
+            "type": "number",
+            "title": "Amount"
+          },
+          "status": {
+            "$ref": "#/components/schemas/PaymentStatus"
+          },
+          "payment_provider": {
+            "$ref": "#/components/schemas/PaymentProviderType"
+          },
+          "external_payment_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "External Payment Id"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At"
+          },
+          "completed_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Completed At"
+          },
+          "metadata": {
+            "additionalProperties": {
+              "$ref": "#/components/schemas/JsonValue"
+            },
+            "type": "object",
+            "title": "Metadata",
+            "description": "Аудит и комментарии (для гранта: granted_by_user_id, note)"
+          }
+        },
+        "type": "object",
+        "required": [
+          "transaction_id",
+          "company_id",
+          "amount",
+          "status",
+          "payment_provider",
+          "external_payment_id",
+          "created_at",
+          "completed_at"
+        ],
+        "title": "TransactionResponse",
+        "description": "Информация о транзакции"
       },
       "TtsLitserveVoiceHint": {
         "properties": {
@@ -5934,7 +7795,9 @@
           "ui_preferences": {
             "anyOf": [
               {
-                "additionalProperties": true,
+                "additionalProperties": {
+                  "$ref": "#/components/schemas/JsonValue"
+                },
                 "type": "object"
               },
               {
@@ -5988,6 +7851,7 @@
             "title": "Publickey"
           }
         },
+        "additionalProperties": false,
         "type": "object",
         "required": [
           "publicKey"

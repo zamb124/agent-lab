@@ -7,7 +7,7 @@ from typing import ClassVar, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
-from apps.crm.types import JsonObject, JsonValue
+from core.types import JsonObject, JsonValue
 
 SemanticTextIndexStatus = Literal["absent", "pending_embedding", "ready"]
 
@@ -818,13 +818,12 @@ class LaraNamespaceSummaryResponse(BaseModel):
 
 
 class KnowledgeImportStartRequest(BaseModel):
+    model_config: ClassVar[ConfigDict] = ConfigDict(extra="forbid")
+
     namespace: str = Field(..., description="Пространство назначения")
     mode: Literal["notes_only", "graph"] = Field(
         ...,
         description="Только заметки или нарезка + analyze/apply по каждому чанку",
-    )
-    source_file_id: str | None = Field(
-        default=None, description="Один file_id в shared files (legacy)"
     )
     source_file_ids: list[str] | None = Field(
         default=None,
@@ -852,7 +851,6 @@ class KnowledgeImportResponse(BaseModel):
     mode: str
     status: str
     extract_entity_types: list[str] | None = None
-    source_file_id: str | None = None
     source_file_ids: list[str] | None = None
     source_text_sha256: str | None = None
     split_by_headings: bool = False
@@ -937,9 +935,10 @@ class TaskResponse(BaseModel):
 class StartKnowledgeImportRequest(BaseModel):
     """Запуск импорта знаний через /tasks/knowledge-import."""
 
+    model_config: ClassVar[ConfigDict] = ConfigDict(extra="forbid")
+
     namespace: str = Field(..., description="Пространство назначения")
     mode: Literal["notes_only", "graph"] = Field(...)
-    source_file_id: str | None = Field(default=None)
     source_file_ids: list[str] | None = Field(default=None)
     source_text: str | None = Field(default=None)
     extract_entity_types: list[str] | None = Field(default=None)

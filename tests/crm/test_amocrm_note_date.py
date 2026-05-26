@@ -19,31 +19,26 @@ pytestmark = pytest.mark.timeout(30, func_only=True)
 
 
 def test_note_date_from_amo_unix_int() -> None:
-    fb = date(2020, 1, 1)
-    got = AmoCRMIntegrationService._note_date_from_amo_created_at(1_704_067_200, fallback=fb)
+    got = AmoCRMIntegrationService._note_date_from_amo_created_at(1_704_067_200)
     assert got == date(2024, 1, 1)
 
 
 def test_note_date_from_amo_unix_string() -> None:
-    fb = date(2020, 1, 1)
-    got = AmoCRMIntegrationService._note_date_from_amo_created_at("1704067200", fallback=fb)
+    got = AmoCRMIntegrationService._note_date_from_amo_created_at("1704067200")
     assert got == date(2024, 1, 1)
 
 
 def test_note_date_from_amo_iso_z() -> None:
-    fb = date(2020, 1, 1)
     got = AmoCRMIntegrationService._note_date_from_amo_created_at(
         "2024-06-15T12:00:00Z",
-        fallback=fb,
     )
     assert got == date(2024, 6, 15)
 
 
-def test_note_date_fallback_on_garbage() -> None:
-    fb = date(2019, 5, 5)
-    assert AmoCRMIntegrationService._note_date_from_amo_created_at("not-a-date", fallback=fb) == fb
-    assert AmoCRMIntegrationService._note_date_from_amo_created_at(None, fallback=fb) == fb
-    assert AmoCRMIntegrationService._note_date_from_amo_created_at([], fallback=fb) == fb
+def test_note_date_invalid_input_raises() -> None:
+    for value in ("not-a-date", None, []):
+        with pytest.raises(ValueError):
+            AmoCRMIntegrationService._note_date_from_amo_created_at(value)
 
 
 @pytest.mark.asyncio

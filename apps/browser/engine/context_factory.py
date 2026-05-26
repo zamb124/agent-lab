@@ -116,18 +116,7 @@ class ContextFactory:
                 user_agent=signature.user_agent,
                 storage_state=storage_state,
             )
-            try:
-                setattr(context, "_browser_runtime_shared_context", True)
-            except Exception:
-                pass
-            try:
-                setattr(context, "_browser_runtime_signature", signature)
-            except Exception:
-                pass
-            try:
-                setattr(context, "_browser_runtime_endpoint_key", endpoint_key)
-            except Exception:
-                pass
+            _ = endpoint_key
             await apply_stealth_to_context(context, signature)
             return context
 

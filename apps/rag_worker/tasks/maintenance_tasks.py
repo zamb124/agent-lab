@@ -253,8 +253,8 @@ async def rag_cleanup_orphan_company_chunks_tick(
     """
     Батчево удаляет ``vector_documents`` без ``company_id`` (NULL/'').
 
-    Такие строки осиротевшие — биллинг и поиск по тенанту невозможны; они появляются
-    исторически (legacy) и подлежат удалению. reembed-тик их не обрабатывает.
+    Такие строки осиротевшие: биллинг и поиск по тенанту невозможны.
+    Cleanup-тик удаляет их, reembed-тик их не обрабатывает.
     """
     _ = company_id
     if not schedule_task_id or not schedule_task_id.strip():

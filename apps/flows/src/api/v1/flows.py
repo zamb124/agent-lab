@@ -29,7 +29,6 @@ from apps.flows.src.models import (
     GraphNodeConfig,
     NodeConfig,
     ResourceReference,
-    TestCaseConfig,
     TriggerConfig,
     branch_payload_to_config,
 )
@@ -531,7 +530,6 @@ class FlowCreateRequest(BaseModel):
     variables: JsonObject = Field(default_factory=dict)
     tags: list[str] = Field(default_factory=list)
     branches: dict[str, BranchRequest] = Field(default_factory=dict)
-    evaluation: dict[str, TestCaseConfig] | None = None
     triggers: dict[str, TriggerConfig] = Field(default_factory=dict)
     resources: dict[str, ResourceReference] = Field(default_factory=dict)
     store_card_image_url: str | None = None
@@ -565,7 +563,6 @@ class FlowResponse(BaseModel):
     variables: dict[str, FlowVariableConfig] = Field(default_factory=dict)
     tags: list[str] = Field(default_factory=list)
     branches: dict[str, BranchResponse] = Field(default_factory=dict)
-    evaluation: dict[str, TestCaseConfig] | None = None
     hidden: bool = False
     has_bundle_update: bool = False
 
@@ -857,7 +854,6 @@ async def list_flows(
                     edges=f.edges,
                     variables=f.variables,
                     branches=branches_response,
-                    evaluation=f.evaluation,
                 )
             )
         elif f.type == FlowType.EXTERNAL:
@@ -1063,7 +1059,6 @@ async def create_flow(request: FlowCreateRequest, container: ContainerDep) -> Fl
         variables=variables,
         tags=request.tags,
         branches=branches_payload,
-        evaluation=request.evaluation,
         source="api",
         store_card_image_url=request.store_card_image_url,
         speech=request.speech,
@@ -1088,7 +1083,6 @@ async def create_flow(request: FlowCreateRequest, container: ContainerDep) -> Fl
         variables=flow_config.variables,
         tags=flow_config.tags,
         branches=branches_response,
-        evaluation=flow_config.evaluation,
         hidden=flow_config.hidden,
         url=_generate_flow_url(flow_config.flow_id, flow_config.type, flow_config.url),
         source=flow_config.source,
@@ -1175,7 +1169,6 @@ async def get_flow(flow_id: str, container: ContainerDep) -> FlowResponse:
             variables=flow_cfg.variables or {},
             tags=flow_cfg.tags or [],
             branches=branches_response,
-            evaluation=flow_cfg.evaluation,
             hidden=flow_cfg.hidden,
             url=_generate_flow_url(flow_cfg.flow_id, flow_cfg.type, flow_cfg.url),
             triggers=flow_cfg.triggers,
@@ -1406,7 +1399,6 @@ async def update_flow(
         variables=variables,
         tags=request.tags,
         branches=branches,
-        evaluation=request.evaluation,
         source=existing.source,
         triggers=request.triggers,
         resources=request.resources,
@@ -1442,7 +1434,6 @@ async def update_flow(
         variables=flow_config.variables,
         tags=flow_config.tags,
         branches=branches_response,
-        evaluation=flow_config.evaluation,
         hidden=flow_config.hidden,
         url=_generate_flow_url(flow_config.flow_id, flow_config.type, flow_config.url),
         triggers=flow_config.triggers,
@@ -1512,7 +1503,6 @@ async def bulk_delete_nodes(
         variables=existing.variables or {},
         tags=existing.tags or [],
         branches=existing.branches or {},
-        evaluation=existing.evaluation,
         source=existing.source,
         triggers=existing.triggers or {},
         resources=existing.resources or {},
@@ -1574,7 +1564,6 @@ async def update_flow_metadata(
         variables=existing.variables or {},
         tags=existing.tags or [],
         branches=existing.branches or {},
-        evaluation=existing.evaluation,
         source=existing.source,
         triggers=existing.triggers or {},
         resources=existing.resources or {},
@@ -1640,7 +1629,6 @@ async def get_version(
         variables=version_cfg.variables or {},
         tags=version_cfg.tags or [],
         branches=branches_response,
-        evaluation=version_cfg.evaluation,
         hidden=version_cfg.hidden,
         url=_generate_flow_url(version_cfg.flow_id, version_cfg.type, version_cfg.url),
         triggers=version_cfg.triggers,

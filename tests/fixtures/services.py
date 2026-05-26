@@ -15,12 +15,15 @@
 - frontend_service: Frontend сервис (порт 9004)
 - sync_service: Sync сервис (порт 9005)
 - office_service: Documents/Office сервис (порт 9008)
+- search_service: Search MCP сервис (порт 9010)
 - capability_gateway_service: capability gateway (порт 9016)
 - code_runner_python_service: Python runner (порт 9017)
 - code_runner_node_service: Node.js runner (порт 9018)
 - code_runner_go_service: Go runner (порт 9019)
 - code_runner_csharp_service: C# runner (порт 9020)
 """
+
+import os
 
 import pytest
 
@@ -45,6 +48,9 @@ _SYNC_SERVER_PID = "/tmp/platform_test_sync_server.pid"
 
 _OFFICE_SERVER_LOCK = "/tmp/platform_test_office_server.lock"
 _OFFICE_SERVER_PID = "/tmp/platform_test_office_server.pid"
+
+_SEARCH_SERVER_LOCK = "/tmp/platform_test_search_server.lock"
+_SEARCH_SERVER_PID = "/tmp/platform_test_search_server.pid"
 
 _CAPABILITY_GATEWAY_SERVER_LOCK = "/tmp/platform_test_capability_gateway_server.lock"
 _CAPABILITY_GATEWAY_SERVER_PID = "/tmp/platform_test_capability_gateway_server.pid"
@@ -75,6 +81,7 @@ _COMMON_TEST_ENV = {
     "SERVER__CRM_SERVICE_URL": "http://localhost:9003",
     "SERVER__FRONTEND_SERVICE_URL": "http://localhost:9004",
     "SERVER__SYNC_SERVICE_URL": "http://localhost:9005",
+    "SERVER__SEARCH_SERVICE_URL": "http://localhost:9010",
     "SERVER__VOICE_SERVICE_URL": "http://localhost:9015",
     "SERVER__CAPABILITY_GATEWAY_SERVICE_URL": "http://localhost:9016",
     "SERVER__CODE_RUNNER_PYTHON_SERVICE_URL": "http://localhost:9017",
@@ -404,7 +411,49 @@ def office_service():
 
 
 @pytest.fixture(scope="session")
-def all_services(flows_service, rag_service, crm_service, frontend_service, sync_service, office_service):
+def search_service():
+    """
+    Search MCP сервис как реальный HTTP сервер на порту 9010.
+
+    В интеграционных тестах Search MCP поднимается реальным HTTP-сервисом.
+    TinyFish/Linkup/Serper отключены конфигом, Tavily оставлен включенным,
+    чтобы public_search flow прошел через настоящий MCP и настоящий provider.
+    """
+    manager = SessionServerManager(
+        name="Search",
+        lock_file=_SEARCH_SERVER_LOCK,
+        pid_file=_SEARCH_SERVER_PID,
+        app_path="apps.search.main:app",
+        port=9010,
+        startup_wait=12.0,
+        env={
+            **_COMMON_TEST_ENV,
+            "SEARCH__TINYFISH__API_KEY": "",
+            "SEARCH__TINYFISH__ENABLED": "false",
+            "SEARCH__LINKUP__API_KEY": "",
+            "SEARCH__LINKUP__ENABLED": "false",
+            "SEARCH__SERPER__API_KEY": "",
+            "SEARCH__SERPER__ENABLED": "false",
+            "SEARCH__TAVILY__ENABLED": "true",
+            "SEARCH__PROVIDER_STATE_KEY_PREFIX": f"test:search:providers:{os.getpid()}",
+            "SEARCH__UNAVAILABLE_TTL_SECONDS": "30",
+        },
+    )
+
+    with manager.start():
+        yield
+
+
+@pytest.fixture(scope="session")
+def all_services(
+    flows_service,
+    rag_service,
+    crm_service,
+    frontend_service,
+    sync_service,
+    office_service,
+    search_service,
+):
     """
     Запускает все сервисы платформы.
 
@@ -417,6 +466,7 @@ def all_services(flows_service, rag_service, crm_service, frontend_service, sync
     4. Frontend (9004) - зависит от Agents
     5. Sync (9005) - зависит от PostgreSQL и Redis
     6. Office (9008) - зависит от PostgreSQL, Redis, MinIO и OnlyOffice Document Server
+    7. Search (9010) - MCP primary search
     """
     return {
         "flows": "http://localhost:9001",
@@ -425,6 +475,7 @@ def all_services(flows_service, rag_service, crm_service, frontend_service, sync
         "frontend": "http://localhost:9004",
         "sync": "http://localhost:9005",
         "office": "http://localhost:9008",
+        "search": "http://localhost:9010",
         "capability_gateway": "http://localhost:9016",
         "code_runner_python": "http://localhost:9017",
         "code_runner_node": "http://localhost:9018",

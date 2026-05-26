@@ -69,7 +69,6 @@ from apps.crm.services.note_attachment_description import (
 )
 from apps.crm.services.saga import EntityDeletionSaga, SagaCompensationError, SagaStep
 from apps.crm.services.user_person_service import UserPersonService
-from apps.crm.types import JsonObject
 from apps.crm_worker.broker import broker as crm_worker_broker
 from apps.crm_worker.task_names import (
     CRM_REBUILD_DAILY_SUMMARY_TASK_NAME,
@@ -82,7 +81,7 @@ from core.logging import get_logger
 from core.models.i18n_models import Language
 from core.models.identity_models import Namespace, NamespaceCRMSettings
 from core.tasks.kicker import kiq_task_name_with_context
-from core.types import JsonValue, require_json_object, require_json_value
+from core.types import JsonObject, JsonValue, require_json_object, require_json_value
 
 logger = get_logger(__name__)
 from apps.crm.config import get_crm_settings  # noqa: E402
@@ -1044,7 +1043,7 @@ class EntityService:
             "op": "$eq",
             "value": date_str,
         }
-        eff_type, list_nf, legacy_nf = await self._list_by_cursor_note_family_args(
+        eff_type = self._list_by_cursor_note_family_type(
             NOTE_ROOT_ENTITY_TYPE_ID,
             None,
             self._normalize_namespace(namespace),
@@ -1056,8 +1055,6 @@ class EntityService:
             filters=query_filters,
             filter_field_types={"note_date": "date"},
             limit=1000,
-            list_note_family=list_nf,
-            note_family_legacy_entity_types=legacy_nf,
         )
         return entities
 
@@ -1684,11 +1681,7 @@ class EntityService:
         user_id = self._get_user_id()
         company_id = self._get_company_id()
 
-        (
-            eff_entity_type,
-            list_note_family,
-            note_family_legacy,
-        ) = await self._list_by_cursor_note_family_args(
+        eff_entity_type = self._list_by_cursor_note_family_type(
             entity_type,
             entity_subtype,
             namespace,
@@ -1709,8 +1702,6 @@ class EntityService:
                 filter_field_types=filter_field_types,
                 limit=limit * oversample_factor,
                 cursor=current_cursor,
-                list_note_family=list_note_family,
-                note_family_legacy_entity_types=note_family_legacy,
             )
             filtered = await self._access_control.batch_filter_readable(
                 entities,
@@ -2304,7 +2295,7 @@ class EntityService:
                 entity_names = [
                     e.name
                     for e in (snapshot.entities or [])
-                    if isinstance(getattr(e, "name", None), str) and e.name.strip()
+                    if e.name.strip()
                 ]
                 if entity_names:
                     attrs["ai_summary_entities"] = entity_names[:8]
@@ -3068,7 +3059,7 @@ class EntityService:
                 entity_names = [
                     e.name
                     for e in (draft.entities or [])
-                    if isinstance(getattr(e, "name", None), str) and e.name.strip()
+                    if e.name.strip()
                 ]
                 if entity_names:
                     attrs["ai_summary_entities"] = entity_names[:8]
@@ -3110,24 +3101,19 @@ class EntityService:
 
         return (leaf_type_id, initial_subtype)
 
-    async def _list_by_cursor_note_family_args(
+    def _list_by_cursor_note_family_type(
         self,
         entity_type: str | None,
         entity_subtype: str | None,
         namespace: str | None = None,
-    ) -> tuple[str | None, bool, list[str] | None]:
-        """
-        Для ленты заметок (entity_type=note без subtype) учитываем и канонические строки
-        (entity_type=note), и устаревшие (type_id потомка в колонке entity_type).
-        """
+    ) -> str | None:
+        """Для ленты заметок используем канон: entity_type=note, subtype хранится отдельно."""
         if entity_type != NOTE_ROOT_ENTITY_TYPE_ID or entity_subtype is not None:
-            return entity_type, False, None
+            return entity_type
         ns = self._normalize_namespace(namespace)
         if ns is None:
-            return NOTE_ROOT_ENTITY_TYPE_ID, False, None
-        family = await self._collect_note_family_type_ids(ns)
-        legacy = sorted(t for t in family if t != NOTE_ROOT_ENTITY_TYPE_ID)
-        return None, True, legacy
+            return NOTE_ROOT_ENTITY_TYPE_ID
+        return NOTE_ROOT_ENTITY_TYPE_ID
 
     async def _collect_note_family_type_ids(self, namespace: str) -> set[str]:
         """Возвращает множество type_id, принадлежащих ветке note (включая note и дочерние типы)."""
@@ -3845,31 +3831,6 @@ class EntityService:
             if extracted:
                 return extracted
         return {}
-
-    @staticmethod
-    def _compose_summary_fallback_from_structured(payload: JsonObject) -> str:
-        """Если модель вернула пустой summary, собираем читаемый текст из highlights/key_events."""
-        lines: list[str] = []
-        for key in ("highlights", "key_events"):
-            raw = payload.get(key)
-            if not isinstance(raw, list):
-                continue
-            for item in cast(list[object], raw):
-                if isinstance(item, str):
-                    normalized = item.strip()
-                    if normalized:
-                        lines.append(normalized)
-        if not lines:
-            return ""
-        deduped: list[str] = []
-        seen: set[str] = set()
-        for line in lines:
-            k = line.lower()
-            if k in seen:
-                continue
-            seen.add(k)
-            deduped.append(line)
-        return "\n".join(deduped)
 
     def _extract_json_from_text(self, text: str) -> JsonObject:
         """Извлекает JSON из текста (включая markdown code blocks)."""
@@ -4726,12 +4687,8 @@ class EntityService:
         if summary_text is None:
             s = structured.get("summary")
             summary_text = s if isinstance(s, str) else None
-        if summary_text is None:
-            summary_text = ""
-        if not summary_text.strip():
-            fallback = self._compose_summary_fallback_from_structured(structured)
-            if fallback.strip():
-                summary_text = fallback
+        if summary_text is None or not summary_text.strip():
+            raise ValueError("daily summary skill returned empty summary")
         summary_text = self._enrich_summary_text_with_entity_links(
             summary_text,
             summary_link_entries,
@@ -5121,12 +5078,8 @@ class EntityService:
         if summary_text is None:
             s = structured.get("summary")
             summary_text = s if isinstance(s, str) else None
-        if summary_text is None:
-            summary_text = ""
-        if not summary_text.strip():
-            fallback = self._compose_summary_fallback_from_structured(structured)
-            if fallback.strip():
-                summary_text = fallback
+        if summary_text is None or not summary_text.strip():
+            raise ValueError("period summary skill returned empty summary")
         summary_text = self._enrich_summary_text_with_entity_links(
             summary_text,
             period_link_entries,

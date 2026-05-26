@@ -1,6 +1,7 @@
 {
     "routes": {
         "landing": "Home",
+        "search": "Search",
         "product-agents": "Agents",
         "product-rag": "RAG",
         "product-crm": "NetWorkle",

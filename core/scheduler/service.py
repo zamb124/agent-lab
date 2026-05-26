@@ -23,6 +23,7 @@ from core.scheduler.models import (
 from core.scheduler.repository import SchedulerTaskRepository
 from core.scheduler.source import get_schedule_source
 from core.tasks.kicker import build_log_labels
+from core.types import JsonObject
 
 BrokerForQueue: TypeAlias = Callable[[str], AsyncBroker]
 
@@ -88,6 +89,18 @@ class SchedulerService:
             raise ValueError(f"queue_name is required for scheduled task: {task.task_name}")
         return {"queue_name": task.queue_name}
 
+    @staticmethod
+    def _canonical_payload(
+        payload: JsonObject,
+        *,
+        company_id: str,
+        schedule_task_id: str,
+    ) -> JsonObject:
+        canonical_payload = dict(payload)
+        canonical_payload["schedule_task_id"] = schedule_task_id
+        canonical_payload["company_id"] = company_id
+        return canonical_payload
+
     async def _create_schedule(self, task: PlatformScheduledTask) -> str:
         source = get_schedule_source(self._redis_url)
         await source.startup()
@@ -130,8 +143,9 @@ class SchedulerService:
         request: PlatformScheduleCreateRequest,
     ) -> PlatformScheduledTask:
         now = datetime.now(timezone.utc)
+        schedule_task_id = str(uuid4())
         task = PlatformScheduledTask(
-            schedule_task_id=str(uuid4()),
+            schedule_task_id=schedule_task_id,
             company_id=company_id,
             target_service=request.target_service,
             task_name=request.task_name,
@@ -141,17 +155,55 @@ class SchedulerService:
             interval_seconds=request.interval_seconds,
             run_at=request.run_at,
             timezone=request.timezone,
-            payload=request.payload,
+            payload=self._canonical_payload(
+                request.payload,
+                company_id=company_id,
+                schedule_task_id=schedule_task_id,
+            ),
             status=ScheduledTaskStatus.PENDING,
             created_by_user_id=user_id,
             created_at=now,
             updated_at=now,
             next_run_at=None,
         )
-        task.payload["schedule_task_id"] = task.schedule_task_id
-        task.payload["company_id"] = company_id
         task.next_run_at = self._calculate_next_run_at(task, base_time_utc=now)
         task.schedule_id = await self._create_schedule(task)
+        return await self._repository.save(task)
+
+    async def reconcile_payload(
+        self,
+        company_id: str,
+        schedule_task_id: str,
+        payload: JsonObject,
+        *,
+        recreate_schedule: bool = False,
+    ) -> PlatformScheduledTask:
+        task = await self.get(company_id=company_id, schedule_task_id=schedule_task_id)
+        if task.status not in (ScheduledTaskStatus.PENDING, ScheduledTaskStatus.PAUSED):
+            raise ValueError(
+                f"cannot reconcile task payload with status={self._status_value(task.status)}"
+            )
+
+        canonical_payload = self._canonical_payload(
+            payload,
+            company_id=company_id,
+            schedule_task_id=schedule_task_id,
+        )
+        if task.payload == canonical_payload and not recreate_schedule:
+            return task
+
+        if task.schedule_id:
+            source = get_schedule_source(self._redis_url)
+            await source.startup()
+            _ = await source.delete_schedule(task.schedule_id)
+            task.schedule_id = None
+
+        task.payload = canonical_payload
+        task.updated_at = datetime.now(timezone.utc)
+        task.error_message = None
+        if task.status == ScheduledTaskStatus.PENDING:
+            task.schedule_id = await self._create_schedule(task)
+            task.next_run_at = self._calculate_next_run_at(task)
         return await self._repository.save(task)
 
     async def get(self, company_id: str, schedule_task_id: str) -> PlatformScheduledTask:

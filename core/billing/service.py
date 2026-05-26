@@ -40,7 +40,7 @@ from core.billing.settlement_rules import (
     quantity_from_span,
     resolve_matched_rules,
 )
-from core.billing.span_billing_settlement import LEGACY_SPAN_ONLY_RULE_ID, SpanBillingSettlement
+from core.billing.span_billing_settlement import SpanBillingSettlement
 from core.identity.system_bootstrap import SYSTEM_COMPANY_ID
 from core.websocket.publisher import Notification, NotificationType, notify_user
 
@@ -246,10 +246,6 @@ class BillingService:
         if company is None:
             return False
         return company.balance > 0
-
-    async def company_may_incur_embedding_charge(self, company_id: str) -> bool:
-        """Backward-compatible alias for background re-embedding checks."""
-        return await self.company_may_incur_billable_operation_charge(company_id)
 
     async def can_use_resource(
         self,
@@ -486,79 +482,12 @@ class BillingService:
 
         return usage_record.usage_id
 
-    async def settle_span_charge(
-        self,
-        *,
-        span: BillingSettlementSpan,
-        settlement: SpanBillingSettlement,
-        fallback_user_id: str,
-    ) -> str:
-        """
-        Legacy: списание по platform.billing.* на span.
-        Идемпотентность: LEGACY_SPAN_ONLY_RULE_ID + старый ключ billing:settled_span:{span_id}.
-        """
-        span_id = span.span_id
-        prev = await settlement.get_usage_id(span_id, LEGACY_SPAN_ONLY_RULE_ID)
-        if prev is not None:
-            return prev
-
-        resource_name = span.required_billing_resource_name()
-
-        company_id = span.company_id
-        if not company_id:
-            raise ValueError(f"span {span_id}: нет company_id в колонке span")
-
-        uid = span.user_id
-        if not uid:
-            if not fallback_user_id:
-                raise ValueError(
-                    f"span {span_id}: нет user_id; задайте billing.span_settlement.fallback_user_id в конфиге"
-                )
-            uid = fallback_user_id
-
-        user = await self._user_repository.get(uid)
-        if user is None:
-            raise ValueError(f"span {span_id}: пользователь {uid} не найден")
-
-        company = await self._company_repository.get(company_id)
-        if company is None:
-            raise ValueError(f"span {span_id}: компания {company_id} не найдена")
-
-        usage_type = span.billing_usage_type_or_default()
-        quantity = span.billing_quantity_or_default()
-
-        unit_cost = await self.get_resource_cost_for_company(company, resource_name)
-        cost = unit_cost * quantity
-
-        meta: JsonObject = {
-            "span_id": span_id,
-            "trace_id": span.trace_id,
-            "settlement_source": "span_billing_job",
-        }
-        custom_pid = span.billing_custom_provider_id()
-        if custom_pid is not None:
-            meta["custom_provider_id"] = custom_pid
-
-        usage_id = await self.record_usage(
-            user,
-            company,
-            resource_name,
-            cost,
-            usage_type=usage_type,
-            quantity=quantity,
-            metadata=meta,
-            cost_origin=span.billing_cost_origin_or_default(),
-        )
-        await settlement.mark(span_id, LEGACY_SPAN_ONLY_RULE_ID, usage_id)
-        return usage_id
-
     async def settle_span_rule_charge(
         self,
         *,
         span: BillingSettlementSpan,
         rule: SettlementRule,
         settlement: SpanBillingSettlement,
-        fallback_user_id: str,
     ) -> str:
         """Списание по одному правилу; идемпотентность по (span_id, rule.rule_id)."""
         span_id = span.span_id
@@ -572,11 +501,7 @@ class BillingService:
 
         uid = span.user_id
         if not uid:
-            if not fallback_user_id:
-                raise ValueError(
-                    f"span {span_id}: нет user_id; задайте billing.span_settlement.fallback_user_id в конфиге"
-                )
-            uid = fallback_user_id
+            raise ValueError(f"span {span_id}: нет user_id в колонке span")
 
         user = await self._user_repository.get(uid)
         if user is None:
@@ -626,23 +551,14 @@ class BillingService:
         *,
         span: BillingSettlementSpan,
         settlement: SpanBillingSettlement,
-        fallback_user_id: str,
         rules_doc: SettlementRulesDocument,
     ) -> int:
         """
-        Один span из джобы: либо legacy (пустой каталог правил), либо N списаний по совпавшим правилам.
+        Один span из джобы: N списаний по совпавшим правилам.
         Возвращает число успешных вызовов record_usage (0 если уже всё списано или нет матча).
         """
         if not rules_doc.rules:
-            sid = span.span_id
-            if await settlement.get_usage_id(sid, LEGACY_SPAN_ONLY_RULE_ID) is not None:
-                return 0
-            _ = await self.settle_span_charge(
-                span=span,
-                settlement=settlement,
-                fallback_user_id=fallback_user_id,
-            )
-            return 1
+            raise ValueError("settlement rules document must contain at least one enabled rule")
 
         matched = resolve_matched_rules(rules_doc, span)
         if not matched:
@@ -662,7 +578,6 @@ class BillingService:
                 span=span,
                 rule=rule,
                 settlement=settlement,
-                fallback_user_id=fallback_user_id,
             )
             count += 1
         return count

@@ -4,10 +4,19 @@ API endpoints для управления push-подписками
 
 from fastapi import APIRouter, HTTPException, Request
 
+from core.app_state import require_platform_app_state
+from core.context import get_context
 from core.logging import get_logger
 from core.push.apns_service import get_apns_push_service
 from core.push.delivery import deliver_offline_push
-from core.push.schemas import SubscribeRequest, TestPushRequest, VapidPublicKeyResponse
+from core.push.schemas import (
+    PushSuccessResponse,
+    SubscribeRequest,
+    SubscribeResponse,
+    TestPushRequest,
+    TestPushResponse,
+    VapidPublicKeyResponse,
+)
 from core.push.service import get_web_push_service
 
 logger = get_logger(__name__)
@@ -16,7 +25,7 @@ router = APIRouter(prefix="/api/push", tags=["push"])
 
 
 @router.get("/vapid-public-key", response_model=VapidPublicKeyResponse)
-async def get_vapid_public_key(request: Request):
+async def get_vapid_public_key() -> VapidPublicKeyResponse:
     """Получить публичный VAPID ключ для подписки"""
     push_service = get_web_push_service()
 
@@ -29,31 +38,17 @@ async def get_vapid_public_key(request: Request):
     return VapidPublicKeyResponse(publicKey=push_service.vapid_public_key)
 
 
-@router.post("/subscribe")
-async def subscribe(request: Request, body: SubscribeRequest):
+@router.post("/subscribe", response_model=SubscribeResponse)
+async def subscribe(request: Request, body: SubscribeRequest) -> SubscribeResponse:
     """Подписаться на push-уведомления (web_vapid или ios_apns)."""
-    # Получаем user_id из сессии/токена
-    user_id = getattr(request.state, 'user_id', None)
-    if not user_id:
-        # Пробуем получить из auth
-        user = getattr(request.state, 'user', None)
-        if user:
-            user_id = getattr(user, 'user_id', None) or getattr(user, 'id', None)
+    user_id = _require_current_user_id()
+    push_repo = require_platform_app_state(request).container.push_subscription_repository
 
-    if not user_id:
-        raise HTTPException(status_code=401, detail="Unauthorized")
-
-    # Получаем репозиторий из container
-    container = getattr(request.app.state, 'container', None)
-    if not container:
-        raise HTTPException(status_code=500, detail="Container not initialized")
-
-    push_repo = container.push_subscription_repository
-
-    user_agent = request.headers.get('user-agent', '')[:512]
+    raw_user_agent = request.headers.get("user-agent")
+    user_agent = raw_user_agent[:512] if raw_user_agent is not None else None
 
     subscription = await push_repo.upsert_subscription(
-        user_id=str(user_id),
+        user_id=user_id,
         endpoint=body.endpoint,
         keys=body.keys,
         platform=body.platform,
@@ -66,70 +61,46 @@ async def subscribe(request: Request, body: SubscribeRequest):
         body.transport,
         body.platform,
     )
-    return {"success": True, "subscription_id": subscription.id}
+    return SubscribeResponse(success=True, subscription_id=subscription.id)
 
 
-@router.delete("/unsubscribe")
+@router.delete("/unsubscribe", response_model=PushSuccessResponse)
 async def unsubscribe(
     request: Request,
-    endpoint: str
-):
+    endpoint: str,
+) -> PushSuccessResponse:
     """Отписаться от push-уведомлений"""
-    user_id = getattr(request.state, 'user_id', None)
-    if not user_id:
-        user = getattr(request.state, 'user', None)
-        if user:
-            user_id = getattr(user, 'user_id', None) or getattr(user, 'id', None)
-
-    if not user_id:
-        raise HTTPException(status_code=401, detail="Unauthorized")
-
-    container = getattr(request.app.state, 'container', None)
-    if not container:
-        raise HTTPException(status_code=500, detail="Container not initialized")
-
-    push_repo = container.push_subscription_repository
+    user_id = _require_current_user_id()
+    push_repo = require_platform_app_state(request).container.push_subscription_repository
 
     deleted = await push_repo.delete_subscription(
-        user_id=str(user_id),
-        endpoint=endpoint
+        user_id=user_id,
+        endpoint=endpoint,
     )
 
     if deleted:
         logger.info(f"Push subscription deleted for user {user_id}")
 
-    return {"success": True}
+    return PushSuccessResponse(success=True)
 
 
-@router.post("/test-send")
+@router.post("/test-send", response_model=TestPushResponse)
 async def test_send_push(
     request: Request,
-    body: TestPushRequest
-):
+    body: TestPushRequest,
+) -> TestPushResponse:
     """
     Отправить тестовое push-уведомление самому себе.
     Требует авторизации и наличия подписки.
     """
-    user_id = getattr(request.state, 'user_id', None)
-    if not user_id:
-        user = getattr(request.state, 'user', None)
-        if user:
-            user_id = getattr(user, 'user_id', None) or getattr(user, 'id', None)
-
-    if not user_id:
-        raise HTTPException(status_code=401, detail="Unauthorized")
-
-    container = getattr(request.app.state, 'container', None)
-    if not container:
-        raise HTTPException(status_code=500, detail="Container not initialized")
-
-    push_repo = container.push_subscription_repository
+    user_id = _require_current_user_id()
+    push_repo = require_platform_app_state(request).container.push_subscription_repository
     web_push = get_web_push_service()
     apns = get_apns_push_service()
     if (not web_push or not web_push.is_configured) and (not apns or not apns.is_configured):
         raise HTTPException(status_code=503, detail="Push not configured")
 
-    subscriptions = await push_repo.get_user_subscriptions(str(user_id))
+    subscriptions = await push_repo.get_user_subscriptions(user_id)
     if not subscriptions:
         raise HTTPException(
             status_code=404,
@@ -138,7 +109,7 @@ async def test_send_push(
 
     before = len(subscriptions)
     expired_endpoints = await deliver_offline_push(
-        str(user_id),
+        user_id,
         title=body.title,
         message=body.message,
         action_url="/dashboard",
@@ -156,8 +127,18 @@ async def test_send_push(
         expired_count,
     )
 
-    return {
-        "success": True,
-        "sent_to_devices": sent_ok,
-        "expired_subscriptions": expired_count,
-    }
+    return TestPushResponse(
+        success=True,
+        sent_to_devices=sent_ok,
+        expired_subscriptions=expired_count,
+    )
+
+
+def _require_current_user_id() -> str:
+    ctx = get_context()
+    if ctx is None:
+        raise HTTPException(status_code=401, detail="Unauthorized")
+    user_id = ctx.user.user_id.strip()
+    if not user_id:
+        raise HTTPException(status_code=401, detail="Unauthorized")
+    return user_id

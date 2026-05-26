@@ -348,6 +348,16 @@ class PageLeaseManager:
     def endpoint_is_draining(self, endpoint_key: str) -> bool:
         return endpoint_key in self._draining_endpoints
 
+    async def context_signature_for_context(
+        self,
+        context: BrowserContextHandle,
+    ) -> ContextSignature:
+        async with self._lock:
+            for record in self._session_contexts.values():
+                if record.context is context:
+                    return record.context_signature
+        raise RuntimeError("BrowserContext не зарегистрирован в PageLeaseManager")
+
     async def lease_page(
         self,
         browser: BrowserHandle,

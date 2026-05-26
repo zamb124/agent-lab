@@ -2,7 +2,7 @@
 Оркестрация перевекторизации stale chunks `vector_documents` с группировкой по
 ``company_id``: единый ``execute_reembed_tick`` для CRM/RAG воркеров.
 
-Биллинг: ``BillingService.company_may_incur_embedding_charge`` (без notify_user).
+Биллинг: ``BillingService.company_may_incur_billable_operation_charge`` (без notify_user).
 Контекст на каждую компанию: ``build_job_context`` + ``pick_company_billing_user``.
 NULL ``company_id`` строки в reembed НЕ попадают (SQL-фильтр на стороне провайдера);
 для них существует отдельный maintenance — ``rag_cleanup_orphan_company_chunks_tick``.
@@ -132,7 +132,7 @@ async def _run_reembed_round(
             )
             continue
 
-        if not await billing.company_may_incur_embedding_charge(cid):
+        if not await billing.company_may_incur_billable_operation_charge(cid):
             logger.info(
                 "reembed_stale.skipped_low_balance",
                 company_id=cid,

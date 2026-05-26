@@ -7,16 +7,14 @@
 from __future__ import annotations
 
 from collections.abc import Sequence
-from typing import cast
+from typing import TypeAlias, cast
 
+from apps.crm.db.models import EntityType, NamespaceTemplateType
 from core.models.identity_models import BoardStage, NamespaceCRMSettings, TaskBoardPreset
 
 TASK_ENTITY_TYPE = "task"
 type TaskBoardEditorRow = dict[str, object]
-
-
-def _object_attr(value: object, name: str) -> object:
-    return cast(object, getattr(value, name, None))
+TaskBoardEntityType: TypeAlias = EntityType | NamespaceTemplateType
 
 
 def task_board_key(entity_type: str, entity_subtype: str | None) -> str:
@@ -63,7 +61,7 @@ def resolve_allowed_task_status_ids(
 def build_task_board_editor_boards(
     *,
     allowed_type_ids: Sequence[str],
-    entity_types: Sequence[object],
+    entity_types: Sequence[TaskBoardEntityType],
     crm: NamespaceCRMSettings,
 ) -> list[TaskBoardEditorRow]:
     """
@@ -72,17 +70,17 @@ def build_task_board_editor_boards(
     entity_types: объекты с полями type_id, name, parent_type_id (как ORM EntityType).
     """
     allowed = set(allowed_type_ids)
-    by_id: dict[str, object] = {}
+    by_id: dict[str, TaskBoardEntityType] = {}
     for t in entity_types:
-        tid = _object_attr(t, "type_id")
-        if isinstance(tid, str) and tid:
+        tid = t.type_id
+        if tid:
             by_id[tid] = t
 
     boards: list[TaskBoardEditorRow] = []
     if "task" in allowed:
         key = task_board_key(TASK_ENTITY_TYPE, None)
         meta = by_id.get("task")
-        title = _object_attr(meta, "name") if meta is not None else None
+        title = meta.name if meta is not None else None
         label = title if isinstance(title, str) and title.strip() else "task"
         stages = resolve_task_board_stages(crm, key)
         boards.append(
@@ -98,11 +96,11 @@ def build_task_board_editor_boards(
         if tid == "task":
             continue
         meta = by_id.get(tid)
-        parent = _object_attr(meta, "parent_type_id") if meta is not None else None
+        parent = meta.parent_type_id if meta is not None else None
         if parent != TASK_ENTITY_TYPE:
             continue
         key = task_board_key(TASK_ENTITY_TYPE, tid)
-        title = _object_attr(meta, "name") if meta is not None else None
+        title = meta.name if meta is not None else None
         label = title if isinstance(title, str) and title.strip() else tid
         stages = resolve_task_board_stages(crm, key)
         boards.append(

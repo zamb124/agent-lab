@@ -74,7 +74,7 @@ from apps.flows.src.tasks.task_names import TASK_PROCESS_FLOW
 from apps.flows.src.triggers.output_actions import OutputActionExecutor
 from apps.flows.src.triggers.trigger_type_contract import effective_output_actions_for_trigger
 from apps.flows.src.utils import extract_json_from_response
-from apps.flows_worker.broker import broker as flows_broker
+from apps.flows_worker.broker_core import broker as flows_broker
 from apps.idle_worker.broker import broker as idle_broker
 from apps.idle_worker.tasks.task_names import TASK_SEND_TASK_UPDATE
 from core.auth import permission_checker

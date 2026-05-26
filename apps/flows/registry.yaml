@@ -58,6 +58,11 @@ flows:
     public: true
     description: "Простой краулер snapshot-first через MCP browser: 3 search URL -> top-3 links -> дедуп -> обход 9 URL. Чтение/markdown/RAG ingestion — отдельный шаг."
 
+  - id: public_search
+    public: true
+    landing_public_demo: true
+    description: "Публичный поисковый агент: Search MCP выполняет SERP, suggestions и result insights, затем LLM формирует ответ и источники."
+
   - id: browser_agent
     public: true
     description: "Интерактивный агент управления браузером через MCP Browser Runtime (multi-turn): хранит browser_session_id в state, выполняет произвольные команды пользователя (navigate/observe/click/fill) и закрывает сессию по явной команде."

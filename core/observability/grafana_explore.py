@@ -10,6 +10,8 @@ from __future__ import annotations
 import json
 from urllib.parse import quote
 
+from core.types import JsonObject
+
 # Должен оставаться согласован с _PLATFORM_TRACE_SELECTOR в core.clients.loki_client.
 _PLATFORM_TRACE_SELECTOR = (
     'service=~"(agents|frontend|flows|flows_worker|crm|crm_worker|rag|rag_worker|'
@@ -18,8 +20,6 @@ _PLATFORM_TRACE_SELECTOR = (
 
 
 def sanitize_logql_value(value: str) -> str:
-    if not isinstance(value, str):
-        raise TypeError("sanitize_logql_value: value must be str")
     return value.replace('"', "").replace("\\", "").strip()
 
 
@@ -31,7 +31,7 @@ def build_platform_correlation_logql(*, trace_id: str | None, request_id: str) -
     if not rid:
         raise ValueError("build_platform_correlation_logql: request_id обязателен")
 
-    tid = sanitize_logql_value(trace_id) if isinstance(trace_id, str) and trace_id.strip() else ""
+    tid = sanitize_logql_value(trace_id) if trace_id is not None and trace_id.strip() else ""
     if tid:
         return f'{{{_PLATFORM_TRACE_SELECTOR}}} | json | trace_id="{tid}"'
     return f'{{{_PLATFORM_TRACE_SELECTOR}}} | json | request_id="{rid}"'
@@ -44,19 +44,19 @@ def build_grafana_explore_loki_url(
     org_id: str,
     logql: str,
 ) -> str:
-    if not isinstance(grafana_public_url, str) or not grafana_public_url.strip():
+    if not grafana_public_url.strip():
         raise ValueError("build_grafana_explore_loki_url: grafana_public_url обязателен")
-    if not isinstance(datasource_uid, str) or not datasource_uid.strip():
+    if not datasource_uid.strip():
         raise ValueError("build_grafana_explore_loki_url: datasource_uid обязателен")
-    if not isinstance(org_id, str) or not org_id.strip():
+    if not org_id.strip():
         raise ValueError("build_grafana_explore_loki_url: org_id обязателен")
-    if not isinstance(logql, str) or not logql.strip():
+    if not logql.strip():
         raise ValueError("build_grafana_explore_loki_url: logql обязателен")
 
     base = grafana_public_url.strip().rstrip("/")
     uid = datasource_uid.strip()
     oid = org_id.strip()
-    left: dict[str, object] = {
+    left: JsonObject = {
         "datasource": uid,
         "queries": [
             {

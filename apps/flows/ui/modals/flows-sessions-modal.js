@@ -434,6 +434,14 @@ export class FlowsSessionsModal extends PlatformModal {
         this.close();
     }
 
+    _openDurableHistory(session) {
+        const sessionId = this._sessionId(session);
+        if (sessionId.length === 0) {
+            return;
+        }
+        this.openModal('flows.durable_history', { sessionId });
+    }
+
     async _delete(session) {
         const sessionId = this._sessionId(session);
         if (sessionId.length === 0) {
@@ -516,6 +524,15 @@ export class FlowsSessionsModal extends PlatformModal {
                             @click=${() => this._open(s)}
                         >
                             <platform-icon name="chat" size="18"></platform-icon>
+                        </platform-button>
+                        <platform-button
+                            icon-only
+                            variant="secondary"
+                            title=${this.t('sessions_modal.history_aria')}
+                            aria-label=${this.t('sessions_modal.history_aria')}
+                            @click=${() => this._openDurableHistory(s)}
+                        >
+                            <platform-icon name="trace-timeline" size="18"></platform-icon>
                         </platform-button>
                         <platform-button
                             icon-only

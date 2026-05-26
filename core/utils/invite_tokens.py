@@ -6,7 +6,9 @@
 """
 
 import uuid
+from collections.abc import Awaitable
 from datetime import datetime, timedelta, timezone
+from typing import Protocol, cast
 
 import jwt
 import redis.asyncio as aioredis
@@ -20,6 +22,44 @@ INVITE_TOKEN_TYPE = "invite"
 INVITE_TOKEN_AUDIENCE = "invite"
 INVITE_EXPIRES_SECONDS = 60 * 60 * 24 * 7  # 7 дней
 INVITE_REDIS_KEY_PREFIX = "invite:used:"
+
+
+class _InviteRedisClient(Protocol):
+    def set(
+        self,
+        name: str,
+        value: str,
+        *,
+        nx: bool,
+        ex: int,
+    ) -> Awaitable[bool | None]: ...
+
+    def get(self, name: str) -> Awaitable[str | None]: ...
+
+    def aclose(self) -> Awaitable[None]: ...
+
+
+class _InviteRedisFromUrl(Protocol):
+    def __call__(
+        self,
+        url: str,
+        *,
+        decode_responses: bool,
+        socket_connect_timeout: int,
+        socket_timeout: int,
+    ) -> _InviteRedisClient: ...
+
+
+def _invite_redis_client() -> _InviteRedisClient:
+    settings = get_settings()
+    redis_from_url = cast(_InviteRedisFromUrl, aioredis.from_url)
+    return redis_from_url(
+        settings.database.redis_url,
+        decode_responses=True,
+        socket_connect_timeout=5,
+        socket_timeout=5,
+    )
+
 
 class InviteTokenData(BaseModel):
     """Данные инвайт-токена"""
@@ -41,8 +81,8 @@ class InviteTokenService:
         secret = settings.auth.jwt_secret_key
         if not secret:
             raise ValueError("JWT secret key не настроен (auth.jwt_secret_key)")
-        self._secret = secret
-        self._algorithm = "HS256"
+        self._secret: str = secret
+        self._algorithm: str = "HS256"
 
     def create(self, company_id: str, role: str, *, invited_by: str) -> tuple[str, str]:
         """
@@ -51,7 +91,7 @@ class InviteTokenService:
         Returns:
             (jwt_string, jti) — строка токена и его уникальный ID
         """
-        if not isinstance(invited_by, str) or invited_by == "":
+        if invited_by == "":
             raise ValueError("invited_by must be non-empty string")
 
         now = datetime.now(timezone.utc)
@@ -108,15 +148,9 @@ async def burn_invite_token(jti: str, ttl_seconds: int) -> bool:
         True — токен успешно записан (ещё не использовался)
         False — токен уже был использован ранее
     """
-    settings = get_settings()
     key = f"{INVITE_REDIS_KEY_PREFIX}{jti}"
 
-    client = aioredis.from_url(
-        settings.database.redis_url,
-        decode_responses=True,
-        socket_connect_timeout=5,
-        socket_timeout=5,
-    )
+    client = _invite_redis_client()
     try:
         result = await client.set(key, "1", nx=True, ex=ttl_seconds)
         return result is True
@@ -125,14 +159,8 @@ async def burn_invite_token(jti: str, ttl_seconds: int) -> bool:
 
 async def invite_jti_already_used(jti: str) -> bool:
     """True, если jti отмечен использованным в Redis (одноразовый инвайт израсходован)."""
-    settings = get_settings()
     key = f"{INVITE_REDIS_KEY_PREFIX}{jti}"
-    client = aioredis.from_url(
-        settings.database.redis_url,
-        decode_responses=True,
-        socket_connect_timeout=5,
-        socket_timeout=5,
-    )
+    client = _invite_redis_client()
     try:
         val = await client.get(key)
         return val is not None

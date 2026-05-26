@@ -14,6 +14,7 @@
     python scripts/run.py scheduler   # Запуск TaskIQ scheduler
     python scripts/run.py scheduler-api  # Запуск scheduler API
     python scripts/run.py browser       # Browser Runtime (Playwright + CDP)
+    python scripts/run.py search        # Search MCP service
     python scripts/run.py capability_gateway # Trusted sandbox capabilities
     python scripts/run.py code_runner_python # Python sandbox runner
     python scripts/run.py code_runner_node   # JavaScript/TypeScript sandbox runner
@@ -94,6 +95,11 @@ SERVICES = {
         "env": {
             "BROWSER__CDP_URL": "http://127.0.0.1:9222",
         },
+    },
+    "search": {
+        "type": "uvicorn",
+        "app": "apps.search.main:app",
+        "port": "8010",
     },
     "provider_litserve": {
         "type": "module",

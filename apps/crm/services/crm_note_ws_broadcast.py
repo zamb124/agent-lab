@@ -25,9 +25,8 @@ from apps.crm.services.namespace_notification_recipients import (
     normalize_namespace_for_broadcast,
     resolve_user_ids_for_namespace_broadcast,
 )
-from apps.crm.types import JsonObject
 from core.logging import get_logger
-from core.types import require_json_object
+from core.types import JsonObject, require_json_object
 from core.ui_events.dispatcher import publish_ui_event_to_user
 from core.websocket.publisher import Notification, NotificationType, notify_user
 

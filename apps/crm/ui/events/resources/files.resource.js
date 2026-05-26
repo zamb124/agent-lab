@@ -6,7 +6,7 @@
  *                        download_url, ... }
  *
  * Возвращаемый объект используется wizard'ом импорта знаний для построения
- * `source_file_id` / `source_file_ids` в payload `taskKnowledgeImportStartOp`.
+ * `source_file_ids` в payload `taskKnowledgeImportStartOp`.
  */
 
 import { createMultipartFileUploadOp } from '@platform/lib/events/index.js';

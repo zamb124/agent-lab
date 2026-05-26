@@ -46,11 +46,11 @@ from apps.crm.services.crm_note_ws_broadcast import broadcast_crm_note_event
 from apps.crm.services.entity_response_enrichment import build_entity_responses_with_semantic_index
 from apps.crm.services.entity_service import DraftVersionConflictError, SchemaValidationError
 from apps.crm.services.task_service import ActiveTaskExistsError
-from apps.crm.types import JsonObject
 from core.clients.service_client import ServiceClient
 from core.context import get_context, resolve_namespace_or_raise
 from core.i18n.service import t
 from core.pagination import CursorPage
+from core.types import JsonObject
 from core.websocket.publisher import Notification, NotificationType, notify_user
 
 router = APIRouter(prefix="/entities", tags=["Entities"])

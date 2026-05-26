@@ -125,6 +125,24 @@ class ToolRegistry:
         prompt = config.get("prompt")
         return isinstance(prompt, str) and bool(prompt.strip())
 
+    @staticmethod
+    def _is_generated_platform_tool_template(config: ToolReference) -> bool:
+        code = config.code
+        if code is None:
+            return False
+        source = code.lstrip()
+        return source.startswith(f"# platform:builtin:{config.tool_id}") or source.startswith(
+            f"# platform:tool-capability:{config.tool_id}"
+        )
+
+    def _registered_builtin_tool(self, tool_id: str) -> BaseTool:
+        if not self._initialized:
+            self.register_builtin_tools()
+        builtin_tool = self.get(tool_id)
+        if builtin_tool is None:
+            raise ValueError(f"Builtin platform tool '{tool_id}' is not registered")
+        return builtin_tool
+
     # =========================================================================
     # Методы создания tools
     # =========================================================================
@@ -139,12 +157,11 @@ class ToolRegistry:
 
         Порядок веток:
         1. ``code_mode=mcp_tool`` → MCPTool
-        2. ``tool_id`` без ``code``/``prompt`` (не ``mcp:``), тип не нода-as-tool → template из ``tool_repository``
-        3. Поле ``type`` (flow / llm_node / …) или ``prompt`` → NodeAsToolWrapper
-        4. Непустой ``code`` → CodeTool.
-        5. ``tool_id`` из builtin ids без DB/inline code → процессный FunctionTool
-        6. ``type=code`` без кода → NodeAsToolWrapper
-        7. иначе ValueError
+        2. ``tool_id`` из builtin ids без inline source или со сгенерированным platform-шаблоном → зарегистрированный platform tool
+        3. ``tool_id`` без ``code``/``prompt`` (не ``mcp:``), тип не нода-as-tool → template из ``tool_repository``
+        4. Поле ``type`` (flow / llm_node / …) или ``prompt`` → NodeAsToolWrapper
+        5. Непустой ``code`` → CodeTool.
+        6. иначе ValueError
         """
         if isinstance(tool_ref, NodeConfig):
             return self._create_node_as_tool(tool_ref)
@@ -168,6 +185,11 @@ class ToolRegistry:
         tid = ref.tool_id
         has_inline_code = bool(ref.code and ref.code.strip())
 
+        if tid and tid in builtin_tool_ids() and (
+            not has_inline_code or self._is_generated_platform_tool_template(ref)
+        ):
+            return self._registered_builtin_tool(tid)
+
         if tid and not has_inline_code and not tid.startswith("mcp:"):
             container = self.container
             if container is None:
@@ -189,14 +211,6 @@ class ToolRegistry:
 
         if has_inline_code:
             return self._create_code_tool_from_config(ref)
-
-        if tid and tid in builtin_tool_ids():
-            if not self._initialized:
-                self.register_builtin_tools()
-            builtin_tool = self.get(tid)
-            if builtin_tool is None:
-                raise ValueError(f"Builtin platform tool '{tid}' is not registered")
-            return builtin_tool
 
         raise ValueError(f"Tool config requires 'type' or 'code' field: {ref.tool_id}")
 

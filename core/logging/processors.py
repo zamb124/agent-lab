@@ -12,11 +12,11 @@ import json
 import random
 import sys
 import zlib
-from collections.abc import Callable
+from collections.abc import Callable, MutableMapping
+from typing import Protocol, TypeAlias
 
 import structlog
 from opentelemetry import trace as otel_trace
-from structlog.types import EventDict, WrappedLogger
 
 from core.context import get_context
 from core.logging.contract import REDACT_PLACEHOLDER
@@ -26,47 +26,63 @@ from core.logging.scope import (
     get_log_scope,
     get_log_scope_requires_user,
 )
+from core.types import JsonValue
 
 
-def add_service_fields(service_name: str, version: str | None, environment: str) -> Callable[[WrappedLogger, str, EventDict], EventDict]:
+class LogProcessorLogger(Protocol):
+    name: str
+
+
+LogEvent: TypeAlias = MutableMapping[str, JsonValue]
+LogProcessor: TypeAlias = Callable[[LogProcessorLogger, str, LogEvent], LogEvent]
+
+
+def add_service_fields(service_name: str, version: str | None, environment: str) -> LogProcessor:
     """Процессор-замыкание: проставляет service.name/version и deployment.environment."""
 
-    def processor(_logger: WrappedLogger, _method: str, event_dict: EventDict) -> EventDict:
-        event_dict.setdefault("service.name", service_name)
-        if version:
-            event_dict.setdefault("service.version", version)
-        event_dict.setdefault("deployment.environment", environment)
+    def processor(_logger: LogProcessorLogger, _method: str, event_dict: LogEvent) -> LogEvent:
+        if "service.name" not in event_dict:
+            event_dict["service.name"] = service_name
+        if version and "service.version" not in event_dict:
+            event_dict["service.version"] = version
+        if "deployment.environment" not in event_dict:
+            event_dict["deployment.environment"] = environment
         return event_dict
 
     return processor
 
 
-def add_otel_trace_context(_logger: WrappedLogger, _method: str, event_dict: EventDict) -> EventDict:
+def add_otel_trace_context(
+    _logger: LogProcessorLogger,
+    _method: str,
+    event_dict: LogEvent,
+) -> LogEvent:
     """
     Подмешивает trace_id/span_id из текущего OpenTelemetry-спана.
 
-    Ничего не пишет, если активного спана нет — fallback на trace_id из
-    core.context делает другой процессор (add_platform_context).
+    Ничего не пишет, если активного спана нет. Платформенный Context
+    добавляется отдельным процессором add_platform_context.
     """
     span = otel_trace.get_current_span()
-    if span is None:
-        return event_dict
-
     span_context = span.get_span_context()
-    if not span_context or not span_context.is_valid:
+    if not span_context.is_valid:
         return event_dict
 
-    event_dict.setdefault("trace_id", format(span_context.trace_id, "032x"))
-    event_dict.setdefault("span_id", format(span_context.span_id, "016x"))
+    if "trace_id" not in event_dict:
+        event_dict["trace_id"] = format(span_context.trace_id, "032x")
+    if "span_id" not in event_dict:
+        event_dict["span_id"] = format(span_context.span_id, "016x")
     return event_dict
 
 
-def add_platform_context(_logger: WrappedLogger, _method: str, event_dict: EventDict) -> EventDict:
+def add_platform_context(
+    _logger: LogProcessorLogger,
+    _method: str,
+    event_dict: LogEvent,
+) -> LogEvent:
     """
-    Fallback: если trace_id ещё не выставлен (нет OTel-спана) — берём из
-    core.context.Context. user_id/company_id биндятся явно через
-    bind_log_context в AuthMiddleware, но fallback тут оставлен для случаев,
-    когда контекст уже есть, а bind ещё не выполнен (раннее логирование).
+    Добавляет поля из core.context.Context, когда они ещё не были забинжены
+    request-scope middleware.
     """
     if "trace_id" in event_dict and "user_id" in event_dict and "company_id" in event_dict:
         return event_dict
@@ -75,28 +91,32 @@ def add_platform_context(_logger: WrappedLogger, _method: str, event_dict: Event
     if context is None:
         return event_dict
 
-    if "trace_id" not in event_dict and getattr(context, "trace_id", None):
+    if "trace_id" not in event_dict and context.trace_id:
         event_dict["trace_id"] = context.trace_id
-    if "user_id" not in event_dict and context.user is not None:
-        event_dict.setdefault("user_id", context.user.user_id)
+    if "user_id" not in event_dict:
+        event_dict["user_id"] = context.user.user_id
     if "company_id" not in event_dict and context.active_company is not None:
-        event_dict.setdefault("company_id", context.active_company.company_id)
+        event_dict["company_id"] = context.active_company.company_id
         if context.active_company.subdomain:
-            event_dict.setdefault("company_subdomain", context.active_company.subdomain)
-    if "session_id" not in event_dict and getattr(context, "session_id", None):
+            event_dict["company_subdomain"] = context.active_company.subdomain
+    if "session_id" not in event_dict and context.session_id:
         event_dict["session_id"] = context.session_id
-    if "namespace" not in event_dict and getattr(context, "active_namespace", None) and context.active_namespace != "default":
+    if (
+        "namespace" not in event_dict
+        and context.active_namespace
+        and context.active_namespace != "default"
+    ):
         event_dict["namespace"] = context.active_namespace
     return event_dict
 
 
-def truncate_strings(max_length: int) -> Callable[[WrappedLogger, str, EventDict], EventDict]:
+def truncate_strings(max_length: int) -> LogProcessor:
     """Ограничить длину строковых значений; обрезанные помечаются `_truncated`."""
 
     if max_length <= 0:
         raise ValueError("max_length должен быть положительным")
 
-    def processor(_logger: WrappedLogger, _method: str, event_dict: EventDict) -> EventDict:
+    def processor(_logger: LogProcessorLogger, _method: str, event_dict: LogEvent) -> LogEvent:
         truncated_keys: list[str] = []
         for key, value in list(event_dict.items()):
             if isinstance(value, str) and len(value) > max_length:
@@ -109,7 +129,7 @@ def truncate_strings(max_length: int) -> Callable[[WrappedLogger, str, EventDict
     return processor
 
 
-def redact_keys(drop_keys: list[str]) -> Callable[[WrappedLogger, str, EventDict], EventDict]:
+def redact_keys(drop_keys: list[str]) -> LogProcessor:
     """Заменить значения указанных ключей на маркер REDACT_PLACEHOLDER."""
 
     if not drop_keys:
@@ -117,7 +137,7 @@ def redact_keys(drop_keys: list[str]) -> Callable[[WrappedLogger, str, EventDict
 
     drop_set = frozenset(drop_keys)
 
-    def processor(_logger: WrappedLogger, _method: str, event_dict: EventDict) -> EventDict:
+    def processor(_logger: LogProcessorLogger, _method: str, event_dict: LogEvent) -> LogEvent:
         for key in list(event_dict.keys()):
             if key in drop_set:
                 event_dict[key] = REDACT_PLACEHOLDER
@@ -133,7 +153,7 @@ def _should_sample(trace_id: str, rate: float) -> bool:
     return h < rate * (2**32)
 
 
-def sample_info_logs(rate: float, sampled_loggers: list[str]) -> Callable[[WrappedLogger, str, EventDict], EventDict]:
+def sample_info_logs(rate: float, sampled_loggers: list[str]) -> LogProcessor:
     """
     Дропнуть часть INFO-записей у hot-path логгеров.
 
@@ -154,11 +174,16 @@ def sample_info_logs(rate: float, sampled_loggers: list[str]) -> Callable[[Wrapp
 
     sampled_prefixes = tuple(sampled_loggers)
 
-    def processor(logger: WrappedLogger, method_name: str, event_dict: EventDict) -> EventDict:
+    def processor(
+        logger: LogProcessorLogger,
+        method_name: str,
+        event_dict: LogEvent,
+    ) -> LogEvent:
         if method_name != "info":
             return event_dict
-        logger_name = event_dict.get("logger", "") or getattr(logger, "name", "")
-        if not isinstance(logger_name, str) or not logger_name.startswith(sampled_prefixes):
+        logger_name_raw = event_dict.get("logger")
+        logger_name = logger_name_raw if isinstance(logger_name_raw, str) else logger.name
+        if not logger_name.startswith(sampled_prefixes):
             return event_dict
         trace_id = event_dict.get("trace_id")
         if isinstance(trace_id, str) and trace_id.strip():
@@ -173,7 +198,11 @@ def sample_info_logs(rate: float, sampled_loggers: list[str]) -> Callable[[Wrapp
     return processor
 
 
-def rename_event_to_message(_logger: WrappedLogger, _method: str, event_dict: EventDict) -> EventDict:
+def rename_event_to_message(
+    _logger: LogProcessorLogger,
+    _method: str,
+    event_dict: LogEvent,
+) -> LogEvent:
     """
     structlog по умолчанию кладёт первую позицию в "event"; мы хотим, чтобы
     в JSON это было "message". Если уже задано "event" пользователем —
@@ -184,11 +213,15 @@ def rename_event_to_message(_logger: WrappedLogger, _method: str, event_dict: Ev
     return event_dict
 
 
-def _passthrough(_logger: WrappedLogger, _method: str, event_dict: EventDict) -> EventDict:
+def _passthrough(_logger: LogProcessorLogger, _method: str, event_dict: LogEvent) -> LogEvent:
     return event_dict
 
 
-def add_log_level_uppercase(_logger: WrappedLogger, _method: str, event_dict: EventDict) -> EventDict:
+def add_log_level_uppercase(
+    _logger: LogProcessorLogger,
+    _method: str,
+    event_dict: LogEvent,
+) -> LogEvent:
     """Приводит ключ level к UPPER (стандарт OTel logs)."""
     level = event_dict.get("level")
     if isinstance(level, str):
@@ -196,15 +229,23 @@ def add_log_level_uppercase(_logger: WrappedLogger, _method: str, event_dict: Ev
     return event_dict
 
 
-def remove_internal_keys(_logger: WrappedLogger, _method: str, event_dict: EventDict) -> EventDict:
+def remove_internal_keys(
+    _logger: LogProcessorLogger,
+    _method: str,
+    event_dict: LogEvent,
+) -> LogEvent:
     """Удаляет служебные ключи structlog (positional_args), которые не нужны в выводе."""
-    event_dict.pop("positional_args", None)
-    event_dict.pop("_record", None)
-    event_dict.pop("_from_structlog", None)
+    _ = event_dict.pop("positional_args", None)
+    _ = event_dict.pop("_record", None)
+    _ = event_dict.pop("_from_structlog", None)
     return event_dict
 
 
-def enforce_required_fields(_logger: WrappedLogger, _method: str, event_dict: EventDict) -> EventDict:
+def enforce_required_fields(
+    _logger: LogProcessorLogger,
+    _method: str,
+    event_dict: LogEvent,
+) -> LogEvent:
     """
     Гарантирует контракт обязательных полей записи в request-скоупе.
 
@@ -253,7 +294,7 @@ def enforce_required_fields(_logger: WrappedLogger, _method: str, event_dict: Ev
     return event_dict
 
 
-def _has_field(event_dict: EventDict, key: str) -> bool:
+def _has_field(event_dict: LogEvent, key: str) -> bool:
     value = event_dict.get(key)
     if value is None:
         return False
@@ -263,7 +304,7 @@ def _has_field(event_dict: EventDict, key: str) -> bool:
 
 
 def _emit_contract_violation(
-    event_dict: EventDict,
+    event_dict: LogEvent,
     *,
     missing: tuple[str, ...],
     scope: str,
@@ -284,10 +325,5 @@ def _emit_contract_violation(
         "violating_logger": event_dict.get("logger"),
         "violating_event": event_dict.get("event") or event_dict.get("message"),
     }
-    try:
-        sys.stderr.write(json.dumps(payload, ensure_ascii=False) + "\n")
-        sys.stderr.flush()
-    except Exception:
-        # Никаких фолбеков на скрытие ошибок: stderr недоступен — процесс
-        # бесполезен, но писать в random handler нельзя (петля).
-        pass
+    _ = sys.stderr.write(json.dumps(payload, ensure_ascii=False) + "\n")
+    _ = sys.stderr.flush()

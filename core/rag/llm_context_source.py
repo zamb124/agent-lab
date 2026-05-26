@@ -25,11 +25,11 @@ class RAGLLMContextSource:
         filters: RAGMetadataFilter | None = None,
         timeout: float = 30.0,
     ) -> None:
-        self.repository = repository
-        self.bind = bind
-        self.name = _source_name(name or f"rag.{self.bind.namespace}")
-        self.filters = dict(filters) if filters else None
-        self.timeout = timeout
+        self.repository: RAGRepository = repository
+        self.bind: RagResourceBindParams = bind
+        self.name: str = _source_name(name or f"rag.{self.bind.namespace}")
+        self.filters: RAGMetadataFilter | None = dict(filters) if filters else None
+        self.timeout: float = timeout
 
     async def collect(self, request: LLMContextSourceRequest) -> list[LLMContextBlock]:
         query = str(request.query or "").strip()

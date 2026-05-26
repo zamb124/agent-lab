@@ -60,7 +60,7 @@ MicroK8s cluster
 | `ONLYOFFICE_JWT_SECRET` | OnlyOffice DocumentServer JWT |
 | `GRAFANA_ADMIN_PASSWORD` | пароль admin@grafana |
 
-Опциональные: OAuth (Yandex/Google/GitHub/AmoCRM/Apple), LLM API (BotHub/OpenRouter), Push (VAPID/APNs/FCM), YooMoney, STT cloud.ru, HF token для litserve.
+Опциональные: OAuth (Yandex/Google/GitHub/AmoCRM/Apple), LLM API (BotHub/OpenRouter), Search Serper API, Push (VAPID/APNs/FCM), YooMoney, STT cloud.ru, HF token для litserve.
 
 ## OAuth Callback URLs
 

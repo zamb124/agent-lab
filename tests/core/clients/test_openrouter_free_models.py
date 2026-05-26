@@ -77,7 +77,11 @@ def test_is_free_text_model_rejects_paid_expired_or_non_text_models() -> None:
     }
 
     assert is_free_text_model(base)
+    assert is_free_text_model({**base, "pricing": {"prompt": "0", "completion": "0"}})
     assert not is_free_text_model({**base, "pricing": {"prompt": "0.01"}})
+    assert not is_free_text_model(
+        {**base, "pricing": {"prompt": "0", "completion": "0", "request": "0.01"}}
+    )
     assert not is_free_text_model({**base, "expiration_date": 1_800_000_000})
     assert not is_free_text_model(
         {

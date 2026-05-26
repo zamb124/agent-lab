@@ -4,7 +4,9 @@ CORS заголовки для публичных cross-origin ресурсов 
 
 from __future__ import annotations
 
-from starlette.middleware.base import BaseHTTPMiddleware
+from typing import override
+
+from starlette.middleware.base import BaseHTTPMiddleware, RequestResponseEndpoint
 from starlette.requests import Request
 from starlette.responses import Response
 
@@ -18,7 +20,8 @@ PUBLIC_EMBED_CORS_PREFIXES = (
 class StaticCoreModuleCorsMiddleware(BaseHTTPMiddleware):
     """Добавляет Access-Control-Allow-Origin для публичных ресурсов embed без учёта общего CORSMiddleware."""
 
-    async def dispatch(self, request: Request, call_next) -> Response:
+    @override
+    async def dispatch(self, request: Request, call_next: RequestResponseEndpoint) -> Response:
         path = request.url.path
         if not any(path.startswith(prefix) for prefix in PUBLIC_EMBED_CORS_PREFIXES):
             return await call_next(request)

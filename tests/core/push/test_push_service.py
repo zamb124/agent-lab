@@ -135,7 +135,7 @@ class TestWebPushService:
         """send_push вызывает pywebpush с правильными параметрами."""
         import json
 
-        from core.push.models import PushSubscription
+        from core.db.models import PushSubscription
         from core.push.service import WebPushService
 
         mock_webpush.return_value = MagicMock(status_code=201)
@@ -209,7 +209,7 @@ class TestWebPushService:
         """410 Gone возвращает endpoint в списке expired."""
         from pywebpush import WebPushException
 
-        from core.push.models import PushSubscription
+        from core.db.models import PushSubscription
         from core.push.service import WebPushService
 
         # Мокаем 410 Gone

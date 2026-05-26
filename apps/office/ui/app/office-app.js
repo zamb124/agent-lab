@@ -10,7 +10,6 @@
  * Маршруты:
  *   /documents                                   → documents_list
  *   /documents/catalogs                          → documents_catalogs
- *   /documents/catalog/:catalogId                → documents_catalogs (legacy alias)
  *   /documents/edit/:bindingId                   → document_editor
  *   /documents/embed/edit/:bindingId             → document_editor_embed
  */
@@ -70,7 +69,6 @@ const OFFICE_ROUTES = [
     { key: 'documents_list',     path: '',                                           titleKey: 'routes.documents_list' },
     { key: 'platform_services',  path: 'services',           parent: 'documents_list', titleKey: 'routes.platform_services' },
     { key: 'documents_catalogs', path: 'catalogs',           parent: 'documents_list', titleKey: 'routes.documents_catalogs' },
-    { key: 'documents_catalogs', path: 'catalog/:catalogId', parent: 'documents_list', titleKey: 'routes.documents_catalogs' },
     { key: 'document_editor',    path: 'edit/:bindingId',    parent: 'documents_list', titleKey: 'routes.document_editor' },
     { key: 'document_editor_embed', path: 'embed/edit/:bindingId', titleKey: 'routes.document_editor' },
 ];
@@ -198,9 +196,7 @@ export class OfficeApp extends PlatformApp {
                 content = html`<office-documents-list-page></office-documents-list-page>`;
                 break;
             case 'documents_catalogs':
-                content = html`<office-documents-catalogs-page
-                    .focusCatalogId=${typeof params.catalogId === 'string' ? params.catalogId : ''}
-                ></office-documents-catalogs-page>`;
+                content = html`<office-documents-catalogs-page></office-documents-catalogs-page>`;
                 break;
             case 'document_editor':
                 editorMode = true;

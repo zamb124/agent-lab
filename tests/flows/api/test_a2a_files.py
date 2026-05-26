@@ -13,6 +13,7 @@ from typing import Any, Dict
 import pytest
 
 from apps.flows.src.container import get_container
+from core.files.file_ref import FileRef
 
 
 def _msg_with_file(
@@ -56,6 +57,18 @@ def _msg_with_image(
         mime_type="image/png",
         context_id=context_id,
     )
+
+
+def _state_files(state: object) -> list[FileRef]:
+    if not hasattr(state, "files"):
+        raise TypeError("state must expose typed files")
+    files = state.files
+    if not isinstance(files, list):
+        raise TypeError("state.files must be list")
+    for item in files:
+        if not isinstance(item, FileRef):
+            raise TypeError("state.files[] must be FileRef")
+    return files
 
 
 class TestA2AFilesHandling:
@@ -106,22 +119,17 @@ class TestA2AFilesHandling:
         state = await workflow_runtime.get_state(session_id)
 
         assert state is not None, "State should exist after message"
-        assert "files" in state, "State should have files"
-        assert len(state["files"]) > 0, "State should have at least one file"
+        files = _state_files(state)
+        assert len(files) > 0, "State should have at least one file"
 
-        file_info = state["files"][0]
-        assert "original_name" in file_info, "File info should have original_name"
-        assert "url" in file_info, "File info should have url"
-        assert "content_type" in file_info, "File info should have content_type"
-        assert "file_size" in file_info, "File info should have file_size"
-        assert "file_id" in file_info, "File info should have file_id after persist"
-
-        assert file_info["original_name"] == "document.txt"
-        assert file_info["content_type"] == "text/plain"
-        assert file_info["file_size"] == len(test_content)
-
-        assert "/api/v1/files/download/" in file_info["url"]
-        stored = await get_container().file_processor.get_file_record(file_info["file_id"])
+        file_info = files[0]
+        assert file_info.original_name == "document.txt"
+        assert file_info.content_type == "text/plain"
+        assert file_info.file_size == len(test_content)
+        assert file_info.file_id is not None
+        assert file_info.url is not None
+        assert "/api/v1/files/download/" in file_info.url
+        stored = await get_container().file_processor.get_file_record(file_info.file_id)
         assert stored is not None
         assert stored.file_size == len(test_content)
 
@@ -180,13 +188,14 @@ class TestA2AFilesHandling:
         assert resp.status_code == 200
         state = await get_container().workflow_runtime.get_state(f"{flow_id}:{context_id}")
         assert state is not None
-        assert len(state["files"]) == 1
-        file_info = state["files"][0]
-        assert file_info["file_id"] == file_id
-        assert file_info["original_name"] == "linked.csv"
-        assert file_info["url"] == uri
-        assert file_info["content_type"] == "text/csv"
-        assert file_info["file_size"] == len(b"a,b\n1,2\n")
+        files = _state_files(state)
+        assert len(files) == 1
+        file_info = files[0]
+        assert file_info.file_id == file_id
+        assert file_info.original_name == "linked.csv"
+        assert file_info.url == uri
+        assert file_info.content_type == "text/csv"
+        assert file_info.file_size == len(b"a,b\n1,2\n")
 
     @pytest.mark.asyncio
     async def test_file_info_in_content(self, client, flow_id, mock_llm_with_queue, sync_tools):
@@ -286,13 +295,14 @@ class TestA2AFilesHandling:
         state = await workflow_runtime.get_state(session_id)
 
         assert state is not None
-        assert len(state["files"]) == 2, f"Should have 2 files, got: {state['files']}"
+        files = _state_files(state)
+        assert len(files) == 2, f"Should have 2 files, got: {files}"
 
-        file_names = [f["original_name"] for f in state["files"]]
+        file_names = [f.original_name for f in files]
         assert "file1.txt" in file_names
         assert "file2.txt" in file_names
-        for f in state["files"]:
-            assert f.get("file_id"), "Each persisted file should have file_id"
+        for file_info in files:
+            assert file_info.file_id is not None, "Each persisted file should have file_id"
 
         content = state.get("content", "")
         assert content.count("[FILE]") == 2, "Content should have 2 [FILE] tags"
@@ -330,7 +340,7 @@ class TestA2AFilesHandling:
         state = await workflow_runtime.get_state(session_id)
 
         assert state is not None
-        assert state.get("files", []) == [], "Files should be empty list"
+        assert _state_files(state) == [], "Files should be empty list"
         assert "[FILE]" not in state.get("content", "")
 
 
@@ -376,19 +386,19 @@ class TestIncomingA2aFilesUnit:
         from apps.flows.src.files.handler import format_a2a_files_content
 
         files_data = [
-            {
-                "original_name": "doc.pdf",
-                "url": "/flows/api/v1/files/download/file_abc",
-                "content_type": "application/pdf",
-                "file_size": 1024,
-                "file_id": "file_abc",
-            },
-            {
-                "original_name": "ref.png",
-                "url": "https://cdn.example.com/ref.png",
-                "content_type": "image/png",
-                "file_size": 0,
-            },
+            FileRef(
+                original_name="doc.pdf",
+                url="/flows/api/v1/files/download/file_abc",
+                content_type="application/pdf",
+                file_size=1024,
+                file_id="file_abc",
+            ),
+            FileRef(
+                original_name="ref.png",
+                url="https://cdn.example.com/ref.png",
+                content_type="image/png",
+                file_size=0,
+            ),
         ]
 
         formatted = format_a2a_files_content(files_data)

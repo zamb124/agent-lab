@@ -1,4 +1,4 @@
-"""Legacy: skill_id -> branch_id в evaluation_results; branch_id в operator_tasks при отсутствии
+"""Legacy: branch_id в operator_tasks при отсутствии
 
 Revision ID: agents_0006
 Revises: agents_0005
@@ -34,11 +34,6 @@ def _has_column(conn, table: str, column: str) -> bool:
 def upgrade() -> None:
     conn = op.get_bind()
 
-    if _has_column(conn, "evaluation_results", "skill_id") and not _has_column(
-        conn, "evaluation_results", "branch_id"
-    ):
-        op.alter_column("evaluation_results", "skill_id", new_column_name="branch_id")
-
     if _has_column(conn, "operator_tasks", "skill_id") and not _has_column(
         conn, "operator_tasks", "branch_id"
     ):
@@ -58,11 +53,6 @@ def upgrade() -> None:
 
 def downgrade() -> None:
     conn = op.get_bind()
-
-    if _has_column(conn, "evaluation_results", "branch_id") and not _has_column(
-        conn, "evaluation_results", "skill_id"
-    ):
-        op.alter_column("evaluation_results", "branch_id", new_column_name="skill_id")
 
     if _has_column(conn, "operator_tasks", "branch_id") and not _has_column(
         conn, "operator_tasks", "skill_id"

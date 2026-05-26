@@ -15,7 +15,7 @@ from core.billing.settlement_rules import (
     SettlementRuleMatch,
     SettlementRulesDocument,
 )
-from core.billing.span_billing_settlement import LEGACY_SPAN_ONLY_RULE_ID, SpanBillingSettlement
+from core.billing.span_billing_settlement import SpanBillingSettlement
 from core.models.billing_models import DEFAULT_TARIFF_PRICES, TariffPlan
 from core.models.identity_models import Company
 from core.tracing.models import BillingSettlementSpan
@@ -83,13 +83,11 @@ async def test_settle_span_rule_charge_idempotent(frontend_container, unique_id,
         span=span,
         rule=rule,
         settlement=settlement,
-        fallback_user_id="",
     )
     uid2 = await billing.settle_span_rule_charge(
         span=span,
         rule=rule,
         settlement=settlement,
-        fallback_user_id="",
     )
     assert uid1 == uid2
 
@@ -150,7 +148,6 @@ async def test_settle_pending_two_rules_two_usages(frontend_container, unique_id
     n = await billing.settle_pending_span_in_job(
         span=span,
         settlement=settlement,
-        fallback_user_id="",
         rules_doc=doc,
     )
     assert n == 2
@@ -158,7 +155,6 @@ async def test_settle_pending_two_rules_two_usages(frontend_container, unique_id
     n2 = await billing.settle_pending_span_in_job(
         span=span,
         settlement=settlement,
-        fallback_user_id="",
         rules_doc=doc,
     )
     assert n2 == 0
@@ -197,111 +193,7 @@ async def test_company_price_override_changes_unit_cost(frontend_container, uniq
 
 
 @pytest.mark.asyncio
-async def test_legacy_settlement_uses_composite_and_old_key(frontend_container, unique_id, system_user_id) -> None:
-    company_id = f"bill_co4_{unique_id}"
-    company = Company(
-        company_id=company_id,
-        name="Legacy co",
-        owner_user_id=system_user_id,
-        members={system_user_id: ["owner"]},
-        balance=500.0,
-        monthly_budget=0.0,
-        current_month_spent=0.0,
-    )
-    await frontend_container.company_repository.set(company)
-
-    import core.tracing.attributes as trace_attr
-
-    span_id = f"spL_{unique_id}"
-    span = _settlement_span(
-        span_id=span_id,
-        trace_id=f"trL_{unique_id}",
-        operation_name="legacy.op",
-        company_id=company_id,
-        user_id=system_user_id,
-        attributes={
-            trace_attr.ATTR_BILLING_RESOURCE_NAME: "llm:*",
-            trace_attr.ATTR_BILLING_USAGE_TYPE: "llm_request",
-            trace_attr.ATTR_BILLING_QUANTITY: 1,
-        },
-    )
-    settlement = SpanBillingSettlement(frontend_container.shared_storage)
-    billing = frontend_container.billing_service
-
-    uid = await billing.settle_span_charge(
-        span=span,
-        settlement=settlement,
-        fallback_user_id="",
-    )
-    assert uid
-
-    same = await settlement.get_usage_id(span_id, LEGACY_SPAN_ONLY_RULE_ID)
-    assert same == uid
-    old = await frontend_container.shared_storage.get(f"billing:settled_span:{span_id}", force_global=True)
-    assert old is not None
-
-
-@pytest.mark.asyncio
-async def test_settle_span_charge_missing_resource_name_raises(
-    frontend_container, unique_id: str, system_user_id: str
-) -> None:
-    company_id = f"bill_co5_{unique_id}"
-    company = Company(
-        company_id=company_id,
-        name="Co5",
-        owner_user_id=system_user_id,
-        members={system_user_id: ["owner"]},
-        balance=100.0,
-        monthly_budget=0.0,
-        current_month_spent=0.0,
-    )
-    await frontend_container.company_repository.set(company)
-    settlement = SpanBillingSettlement(frontend_container.shared_storage)
-    billing = frontend_container.billing_service
-    span = _settlement_span(
-        span_id=f"sp5_{unique_id}",
-        trace_id="t",
-        operation_name="x",
-        company_id=company_id,
-        user_id=system_user_id,
-    )
-    with pytest.raises(ValueError, match="platform.billing.resource_name"):
-        await billing.settle_span_charge(
-            span=span,
-            settlement=settlement,
-            fallback_user_id="",
-        )
-
-
-@pytest.mark.asyncio
-async def test_settle_span_charge_missing_company_id_raises(
-    frontend_container, unique_id: str, system_user_id: str
-) -> None:
-    import core.tracing.attributes as trace_attr
-
-    settlement = SpanBillingSettlement(frontend_container.shared_storage)
-    billing = frontend_container.billing_service
-    span = _settlement_span(
-        span_id=f"sp6_{unique_id}",
-        trace_id="t",
-        operation_name="x",
-        company_id=None,
-        user_id=system_user_id,
-        attributes={
-            trace_attr.ATTR_BILLING_RESOURCE_NAME: "llm:*",
-            trace_attr.ATTR_BILLING_QUANTITY: 1,
-        },
-    )
-    with pytest.raises(ValueError, match="company_id"):
-        await billing.settle_span_charge(
-            span=span,
-            settlement=settlement,
-            fallback_user_id="",
-        )
-
-
-@pytest.mark.asyncio
-async def test_settle_span_rule_charge_uses_fallback_user_id(
+async def test_settle_span_rule_charge_missing_user_id_raises(
     frontend_container, unique_id: str, system_user_id: str
 ) -> None:
     company_id = f"bill_co7_{unique_id}"
@@ -332,21 +224,16 @@ async def test_settle_span_rule_charge_uses_fallback_user_id(
     )
     settlement = SpanBillingSettlement(frontend_container.shared_storage)
     billing = frontend_container.billing_service
-    uid = await billing.settle_span_rule_charge(
-        span=span,
-        rule=rule,
-        settlement=settlement,
-        fallback_user_id=system_user_id,
-    )
-    assert uid
-    recs = await frontend_container.usage_repository.admin_search_usage_records(
-        company_id=company_id, limit=10
-    )
-    assert any(r.usage_id == uid for r in recs)
+    with pytest.raises(ValueError, match="user_id"):
+        await billing.settle_span_rule_charge(
+            span=span,
+            rule=rule,
+            settlement=settlement,
+        )
 
 
 @pytest.mark.asyncio
-async def test_settle_pending_legacy_second_run_zero_without_double_usage(
+async def test_settle_pending_empty_rules_document_raises(
     frontend_container, unique_id: str, system_user_id: str
 ) -> None:
     company_id = f"bill_co8_{unique_id}"
@@ -360,42 +247,23 @@ async def test_settle_pending_legacy_second_run_zero_without_double_usage(
         current_month_spent=0.0,
     )
     await frontend_container.company_repository.set(company)
-    import core.tracing.attributes as trace_attr
 
     span = _settlement_span(
         span_id=f"sp8_{unique_id}",
         trace_id="t",
-        operation_name="leg2",
+        operation_name="empty_rules",
         company_id=company_id,
         user_id=system_user_id,
-        attributes={
-            trace_attr.ATTR_BILLING_RESOURCE_NAME: "llm:*",
-            trace_attr.ATTR_BILLING_USAGE_TYPE: "llm_request",
-            trace_attr.ATTR_BILLING_QUANTITY: 1,
-        },
     )
     settlement = SpanBillingSettlement(frontend_container.shared_storage)
     billing = frontend_container.billing_service
     doc = SettlementRulesDocument()
-    n1 = await billing.settle_pending_span_in_job(
-        span=span,
-        settlement=settlement,
-        fallback_user_id="",
-        rules_doc=doc,
-    )
-    assert n1 == 1
-    n2 = await billing.settle_pending_span_in_job(
-        span=span,
-        settlement=settlement,
-        fallback_user_id="",
-        rules_doc=doc,
-    )
-    assert n2 == 0
-    recs = await frontend_container.usage_repository.admin_search_usage_records(
-        company_id=company_id, limit=20
-    )
-    span_usages = [r for r in recs if r.metadata.get("span_id") == span.span_id]
-    assert len(span_usages) == 1
+    with pytest.raises(ValueError, match="at least one enabled rule"):
+        await billing.settle_pending_span_in_job(
+            span=span,
+            settlement=settlement,
+            rules_doc=doc,
+        )
 
 
 @pytest.mark.asyncio
@@ -435,7 +303,6 @@ async def test_settle_pending_rules_no_match_returns_zero(
     n = await billing.settle_pending_span_in_job(
         span=span,
         settlement=settlement,
-        fallback_user_id="",
         rules_doc=doc,
     )
     assert n == 0

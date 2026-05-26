@@ -9,11 +9,11 @@ def test_mrl_pads_to_full_dimension_and_normalizes_prefix() -> None:
     svc = EmbeddingService(
         api_key="k",
         base_url="https://example.com/v1",
-        models=["qwen/qwen3-embedding-0.6b"],
+        model="qwen/qwen3-embedding-0.6b",
         dimension=8,
         mrl_output_dimension=2,
     )
-    svc._active_dimension = 8
+    svc._response_dimension = 8
     out = svc._truncate_vectors([[3.0, 4.0, 9.0, 9.0, 9.0, 9.0, 9.0, 9.0]])
     assert len(out) == 1
     vec = out[0]
@@ -27,11 +27,11 @@ def test_mrl_dense_vector_when_dimension_equals_prefix_length() -> None:
     svc = EmbeddingService(
         api_key="k",
         base_url="https://example.com/v1",
-        models=["qwen/qwen3-embedding-0.6b"],
+        model="qwen/qwen3-embedding-0.6b",
         dimension=4,
         mrl_output_dimension=4,
     )
-    svc._active_dimension = 8
+    svc._response_dimension = 8
     out = svc._truncate_vectors([[3.0, 4.0, 9.0, 9.0, 1.0, 1.0, 1.0, 1.0]])
     assert len(out) == 1
     vec = out[0]
@@ -44,22 +44,22 @@ def test_get_embedding_dimension_returns_storage_column_size() -> None:
     svc = EmbeddingService(
         api_key="k",
         base_url="https://example.com/v1",
-        models=["qwen/qwen3-embedding-0.6b"],
+        model="qwen/qwen3-embedding-0.6b",
         dimension=1024,
         mrl_output_dimension=1024,
     )
     assert svc.get_embedding_dimension() == 1024
 
 
-def test_mrl_legacy_padding_when_dimension_exceeds_prefix() -> None:
+def test_mrl_padding_when_dimension_exceeds_prefix() -> None:
     svc = EmbeddingService(
         api_key="k",
         base_url="https://example.com/v1",
-        models=["qwen/qwen3-embedding-0.6b"],
+        model="qwen/qwen3-embedding-0.6b",
         dimension=4096,
         mrl_output_dimension=512,
     )
-    svc._active_dimension = 4096
+    svc._response_dimension = 4096
     src = [float(i % 11) * 0.01 for i in range(4096)]
     out = svc._truncate_vectors([src])
     assert len(out[0]) == 4096

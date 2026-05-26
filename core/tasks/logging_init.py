@@ -17,7 +17,7 @@ def setup_worker_logging_early(
     *,
     logging_config: LoggingConfig | None = None,
 ) -> None:
-    if not isinstance(service_name, str) or not service_name.strip():
+    if not service_name.strip():
         raise ValueError("setup_worker_logging_early: service_name must be a non-empty string")
     setup_logging(
         service_name=service_name.strip(),

@@ -10,6 +10,7 @@
 """
 
 from collections.abc import Awaitable, Callable
+from typing import Protocol, TypeAlias, TypedDict, cast
 
 import redis.asyncio as redis
 from redis.exceptions import ResponseError as RedisResponseError
@@ -23,8 +24,52 @@ from core.logging import get_logger
 from core.logging.setup import setup_logging
 from core.tasks.logging_middleware import build_logging_middleware
 from core.tasks.session_lock import session_lock_middleware
+from core.types import JsonValue
 
 logger = get_logger(__name__)
+
+
+class _RedisConsumerInfo(TypedDict):
+    name: str
+    idle: int
+
+
+_RedisStreamEntry: TypeAlias = tuple[str, dict[str, str]]
+_RedisAutoClaimResult: TypeAlias = tuple[str, list[_RedisStreamEntry], list[str]]
+
+
+class _TaskRecoveryRedisClient(Protocol):
+    def xinfo_consumers(
+        self,
+        name: str,
+        groupname: str,
+    ) -> Awaitable[list[_RedisConsumerInfo]]: ...
+
+    def xautoclaim(
+        self,
+        name: str,
+        groupname: str,
+        consumername: str,
+        min_idle_time: int,
+        start_id: str,
+        count: int,
+    ) -> Awaitable[_RedisAutoClaimResult]: ...
+
+    def aclose(self) -> Awaitable[None]: ...
+
+
+class _TaskRecoveryRedisFromUrl(Protocol):
+    def __call__(
+        self,
+        url: str,
+        *,
+        decode_responses: bool,
+    ) -> _TaskRecoveryRedisClient: ...
+
+
+def _task_recovery_redis_client(broker_url: str) -> _TaskRecoveryRedisClient:
+    redis_from_url = cast(_TaskRecoveryRedisFromUrl, redis.from_url)
+    return redis_from_url(broker_url, decode_responses=True)
 
 
 def create_broker(
@@ -57,7 +102,10 @@ def create_broker(
         service=effective_service,
     )
 
-    result_backend = RedisAsyncResultBackend(redis_url=broker_url, result_ex_time=3600)
+    result_backend: RedisAsyncResultBackend[JsonValue] = RedisAsyncResultBackend(
+        redis_url=broker_url,
+        result_ex_time=3600,
+    )
 
     # Порядок middleware (TaskIQ receiver):
     # - pre_execute: по порядку регистрации — Logging → SessionLock → SimpleRetry (без pre_execute).
@@ -125,7 +173,7 @@ def create_stale_tasks_recovery(queue_name: str = "taskiq") -> Callable[[], Awai
 
         logger.info("task.stale_recover_started", queue=queue_name)
 
-        r = redis.from_url(broker_url)
+        r = _task_recovery_redis_client(broker_url)
         try:
             try:
                 consumers = await r.xinfo_consumers(queue_name, queue_name)
@@ -160,7 +208,7 @@ def create_stale_tasks_recovery(queue_name: str = "taskiq") -> Callable[[], Awai
                 count=100,
             )
 
-            claimed_count = len(result[1]) if result and len(result) > 1 else 0
+            claimed_count = len(result[1])
             if claimed_count > 0:
                 logger.warning(
                     "task.stale_recovered",
@@ -205,11 +253,11 @@ def register_worker_events(
     if not service_name:
         raise ValueError("register_worker_events: service_name пустой")
 
-    async def _logging_pre_startup(state: TaskiqState) -> None:
+    async def _logging_pre_startup(_state: TaskiqState) -> None:
         setup_logging(service_name=service_name)
 
-    broker.on_event(TaskiqEvents.WORKER_STARTUP)(_logging_pre_startup)
-    broker.on_event(TaskiqEvents.WORKER_STARTUP)(startup_handler)
-    broker.on_event(TaskiqEvents.WORKER_SHUTDOWN)(shutdown_handler)
+    _ = broker.on_event(TaskiqEvents.WORKER_STARTUP)(_logging_pre_startup)
+    _ = broker.on_event(TaskiqEvents.WORKER_STARTUP)(startup_handler)
+    _ = broker.on_event(TaskiqEvents.WORKER_SHUTDOWN)(shutdown_handler)
 
     logger.info("task.worker_events_registered", service=service_name)

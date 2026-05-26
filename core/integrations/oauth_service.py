@@ -124,7 +124,7 @@ class OAuthService:
             client_secret=auth_provider.client_secret,
             auth_url=auth_url,
             token_url=token_url,
-            token_request_format=getattr(auth_provider, "token_request_format", None) or "form",
+            token_request_format=auth_provider.token_request_format,
         )
 
     async def build_auth_url(

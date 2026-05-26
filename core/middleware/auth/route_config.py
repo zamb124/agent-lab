@@ -23,6 +23,7 @@ SPA_FALLBACK_EXCLUDED_PREFIXES: tuple[str, ...] = (
     "/documents/",
     "/frontend/",
     "/browser/",
+    "/search/api/",
     "/static/",
     "/assets/",
     "/src/",
@@ -96,6 +97,7 @@ SKIP_PATHS = [
     "/frontend/health",
     "/flows/health",
     "/crm/health",
+    "/search/health",
     "/voice/health*",
     "/debug/*",
     "/api/v1/payments/webhook/*",
@@ -109,6 +111,8 @@ ROUTE_RULES: list[RouteRule] = [
 
     # Главная страница
     RouteRule("/", auth_required=False, context_type="anonymous"),
+    RouteRule("/search", auth_required=False, context_type="anonymous"),
+    RouteRule("/frontend/search", auth_required=False, context_type="anonymous"),
     RouteRule("/policy", auth_required=False, context_type="anonymous"),
     RouteRule("/terms", auth_required=False, context_type="anonymous"),
     RouteRule("/support", auth_required=False, context_type="anonymous"),
@@ -168,6 +172,8 @@ ROUTE_RULES: list[RouteRule] = [
     RouteRule("/frontend/api/public/docs-assistant/session", auth_required=False, context_type="anonymous"),
     RouteRule("/frontend/api/public/landing-agents", auth_required=False, context_type="anonymous"),
     RouteRule("/frontend/api/public/landing-agents/session", auth_required=False, context_type="anonymous"),
+    RouteRule("/api/public/search/session", auth_required=False, context_type="anonymous"),
+    RouteRule("/frontend/api/public/search/session", auth_required=False, context_type="anonymous"),
     RouteRule("/api/public/site-bundle", auth_required=False, context_type="anonymous"),
     RouteRule("/frontend/api/public/site-bundle", auth_required=False, context_type="anonymous"),
     RouteRule("/api/public/blog", auth_required=False, context_type="anonymous"),
@@ -188,6 +194,7 @@ ROUTE_RULES: list[RouteRule] = [
     # Control-plane Browser Runtime (Playwright/CDP). Технический сервис, auth делается на уровне внешнего контура.
     RouteRule("/browser/api/v1/control/*", auth_required=False, context_type="anonymous"),
     RouteRule("/browser/api/v1/mcp*", auth_required=False, context_type="anonymous"),
+    RouteRule("/search/api/v1/mcp*", auth_required=False, context_type="anonymous"),
 
     # Документация
     RouteRule("/docs*", auth_required=False, context_type="anonymous"),
@@ -388,7 +395,6 @@ ROUTE_RULES: list[RouteRule] = [
     # API агентов (устаревший путь /api/v1)
     RouteRule("/flows/api/v1/tool-runtime/manifest", context_type="anonymous", auth_required=False),
     RouteRule("/flows/api/v1/tool-runtime/call", context_type="anonymous", auth_required=False),
-    RouteRule("/flows/api/v1/tool-runtime/call-builtin", context_type="anonymous", auth_required=False),
     RouteRule("/flows/api/v1/auth/me", context_type="api", auth_required=True),
     RouteRule("/flows/api/v1/*", context_type="api", auth_required=True),
 

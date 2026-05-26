@@ -8,7 +8,7 @@ from a2a.types import TaskArtifactUpdateEvent, TaskStatusUpdateEvent, TextPart
 
 import core.tracing.attributes as trace_attributes
 from apps.flows.src.tasks.task_names import TASK_INVOKE_LLM
-from apps.flows_worker.broker import broker
+from apps.flows_worker.broker_core import broker
 from core.billing import get_billing_service
 from core.billing.service import BALANCE_BLOCK_OPERATION_LLM
 from core.clients.llm import get_llm

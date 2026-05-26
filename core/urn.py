@@ -18,7 +18,7 @@ URN обеспечивает:
 
 from __future__ import annotations
 
-from typing import Literal, Self
+from typing import Literal, Self, override
 
 from pydantic import BaseModel, Field, model_validator
 
@@ -41,7 +41,7 @@ def _parse_urn_resource_type(value: str) -> URNResourceType:
     valid_types = ("flow", "node", "tool", "branch", "variable")
     raise ValueError(
         f"Неизвестный тип ресурса: '{value}'. "
-        f"Допустимые значения: {', '.join(valid_types)}"
+        + f"Допустимые значения: {', '.join(valid_types)}"
     )
 
 
@@ -84,7 +84,7 @@ class URN(BaseModel):
         if len(parts) != 4:
             raise ValueError(
                 f"Невалидный URN формат: '{urn_string}'. "
-                f"Ожидается: 'urn:namespace:resource_type:resource_id'"
+                + "Ожидается: 'urn:namespace:resource_type:resource_id'"
             )
 
         prefix, namespace_part, resource_type_part, resource_id = parts
@@ -125,22 +125,17 @@ class URN(BaseModel):
             return value
         return cls.parse(value)
 
+    @override
     def __str__(self) -> str:
         """Строковое представление - полный URN"""
         return self.urn
 
+    @override
     def __repr__(self) -> str:
         """Представление для отладки"""
         return f"URN('{self.urn}')"
 
-    def __eq__(self, other) -> bool:
-        """Сравнение URN"""
-        if isinstance(other, URN):
-            return self.urn == other.urn
-        if isinstance(other, str):
-            return self.urn == other
-        return False
-
+    @override
     def __hash__(self) -> int:
         """Хеш для использования в dict/set"""
         return hash(self.urn)
@@ -348,7 +343,7 @@ def is_urn(value: str) -> bool:
         False
     """
     try:
-        URN.parse(value)
+        _ = URN.parse(value)
         return True
     except (ValueError, Exception):
         return False
@@ -373,7 +368,7 @@ def extract_resource_id(value: str | URN) -> str:
     if isinstance(value, URN):
         return value.resource_id
 
-    if isinstance(value, str) and is_urn(value):
+    if is_urn(value):
         return URN.parse(value).resource_id
 
     return value

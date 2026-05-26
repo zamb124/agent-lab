@@ -7,10 +7,10 @@ from __future__ import annotations
 from collections.abc import Awaitable, Callable
 from typing import Protocol, runtime_checkable
 
-from apps.crm.types import JsonObject
 from core.integrations.guided_integration_error import OAuthErrorLocale
 from core.integrations.models import IntegrationCredential, IntegrationProvider
 from core.models.identity_models import NamespaceCRMSettings
+from core.types import JsonObject
 
 IntegrationProgressFn = Callable[[str, int], Awaitable[None]]
 

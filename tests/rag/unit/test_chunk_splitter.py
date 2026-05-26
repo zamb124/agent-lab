@@ -1,9 +1,9 @@
-"""Нарезка: Chonkie + согласование с legacy tiktoken (RAG-40, RAG-41)."""
+"""Нарезка: Chonkie + fixed-token tiktoken strategy."""
 
 import pytest
 from pydantic import ValidationError
 
-from core.rag.chunking import fixed_token_chunks_match_legacy, split_parsed_document
+from core.rag.chunking import split_parsed_document, split_plain_text_fixed_tokens
 from core.rag.parsed_document import ParsedBlock, ParsedDocument
 from core.rag_indexing_schema import IndexProfileSplitConfig
 
@@ -11,10 +11,19 @@ from core.rag_indexing_schema import IndexProfileSplitConfig
 pytestmark = pytest.mark.timeout(120)
 
 
-def test_fixed_tokens_matches_legacy_multisize() -> None:
+def test_fixed_tokens_profile_uses_plain_tiktoken_strategy() -> None:
     text = "абв " * 200 + "english words " * 50
-    assert fixed_token_chunks_match_legacy(text, chunk_size=64, chunk_overlap=8)
-    assert fixed_token_chunks_match_legacy(text, chunk_size=120, chunk_overlap=20)
+    for chunk_size, chunk_overlap in ((64, 8), (120, 20)):
+        expected = split_plain_text_fixed_tokens(text, chunk_size=chunk_size, chunk_overlap=chunk_overlap)
+        actual = split_parsed_document(
+            ParsedDocument(canonical_text=text, blocks=None, source_metadata={}),
+            IndexProfileSplitConfig(
+                strategy="fixed_tokens",
+                chunk_size=chunk_size,
+                chunk_overlap=chunk_overlap,
+            ),
+        )
+        assert actual == expected
 
 
 def test_semantic_strategy_uses_recursive_chunker() -> None:

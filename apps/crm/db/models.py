@@ -30,8 +30,8 @@ from sqlalchemy import (
 from sqlalchemy.dialects.postgresql import ARRAY, JSONB, TSVECTOR
 from sqlalchemy.orm import Mapped, mapped_column
 
-from apps.crm.types import JsonObject
 from core.db.models import Base
+from core.types import JsonObject
 
 
 class CRMEntity(Base):

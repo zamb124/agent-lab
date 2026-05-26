@@ -7,7 +7,7 @@ from typing import ClassVar
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from apps.crm.types import JsonObject
+from core.types import JsonObject
 
 
 class SidebarItemConfig(BaseModel):

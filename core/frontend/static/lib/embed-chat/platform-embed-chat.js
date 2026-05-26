@@ -1465,7 +1465,26 @@ export class PlatformEmbedChat extends LitElement {
         if (!resp.ok) {
             return;
         }
-        this._credentials = await resp.json();
+        const data = await resp.json();
+        if (!data || typeof data !== 'object' || !Array.isArray(data.items)) {
+            throw new Error('platform-embed-chat credentials response must be ListResponse<CredentialInfo>');
+        }
+        this._credentials = data.items.map((item) => {
+            if (
+                !item ||
+                typeof item !== 'object' ||
+                typeof item.provider !== 'string' ||
+                typeof item.service !== 'string' ||
+                typeof item.created_at !== 'string'
+            ) {
+                throw new Error('platform-embed-chat credential item contract violation');
+            }
+            return {
+                provider: item.provider,
+                service: item.service,
+                created_at: item.created_at,
+            };
+        });
     }
 
     async _deleteEmbedCredential(provider, service) {

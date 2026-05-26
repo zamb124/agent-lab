@@ -24,13 +24,13 @@ from httpx import ASGITransport, AsyncClient
 from tests.fixtures.test_database_env import TEST_DATABASE_ENV
 
 pytest_plugins = [
+    "tests.fixtures.workers",
     "tests.fixtures.services",
     "tests.fixtures.clients",
     "tests.fixtures.auth",
     "tests.fixtures.push",
     "tests.fixtures.mcp_http_stub",
     "tests.fixtures.embed_e2e",
-    "tests.fixtures.workers",
 ]
 
 os.environ["TESTING"] = "true"
@@ -51,6 +51,7 @@ os.environ["SERVER__CRM_SERVICE_URL"] = "http://localhost:9003"
 os.environ["SERVER__FRONTEND_SERVICE_URL"] = "http://localhost:9004"
 os.environ["SERVER__SYNC_SERVICE_URL"] = "http://localhost:9005"
 os.environ["SERVER__OFFICE_SERVICE_URL"] = "http://localhost:9008"
+os.environ["SERVER__SEARCH_SERVICE_URL"] = "http://localhost:9010"
 os.environ["SERVER__VOICE_SERVICE_URL"] = "http://localhost:9015"
 os.environ["SERVER__CAPABILITY_GATEWAY_SERVICE_URL"] = "http://localhost:9016"
 os.environ["SERVER__CODE_RUNNER_PYTHON_SERVICE_URL"] = "http://localhost:9017"
@@ -510,6 +511,9 @@ _TEST_SERVER_MARKERS = (
     "/tmp/platform_test_office_server.pid",
     "/tmp/platform_test_office_server.pid.ref_count",
     "/tmp/platform_test_office_server.pid.envsig",
+    "/tmp/platform_test_search_server.pid",
+    "/tmp/platform_test_search_server.pid.ref_count",
+    "/tmp/platform_test_search_server.pid.envsig",
     "/tmp/platform_test_voice_server.pid",
     "/tmp/platform_test_voice_server.pid.ref_count",
     "/tmp/platform_test_voice_server.pid.envsig",

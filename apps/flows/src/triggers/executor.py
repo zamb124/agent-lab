@@ -11,7 +11,7 @@ import uuid
 from apps.flows.src.models import TriggerConfig
 from apps.flows.src.tasks.task_names import TASK_PROCESS_FLOW
 from apps.flows.src.triggers.input_mapper import InputMapper
-from apps.flows_worker.broker import broker as flows_broker
+from apps.flows_worker.broker_core import broker as flows_broker
 from core.context import Context, User, get_context
 from core.logging import get_logger
 from core.tasks.kicker import kiq_task_name_with_context

@@ -65,6 +65,7 @@ import {
 } from '../../_helpers/flows-tool-visual.js';
 import { getBlankCodeNodeConfig } from '../../_helpers/code-node-defaults.js';
 import { getBlankExternalApiNodeConfig } from '../../_helpers/flows-external-api-defaults.js';
+import { getBlankReflectionNodeConfig } from '../../_helpers/flows-reflection-defaults.js';
 const NODE_RADIUS = 12;
 const PORT_R = 6;
 const SNAP_THRESHOLD = 4;
@@ -1490,6 +1491,10 @@ export class FlowsFlowCanvas extends PlatformElement {
                 this._onDropMcpNode({ local });
                 return;
             }
+            if (nodeType === 'reflection') {
+                this._placeReflectionNode({ nodeId: genId('n'), local });
+                return;
+            }
             const id = genId('n');
             const base = {
                 type: nodeType,
@@ -1707,6 +1712,24 @@ export class FlowsFlowCanvas extends PlatformElement {
             tool_name,
             headers,
             state_mapping,
+        };
+        const nodes = { ...asObject(data.nodes), [nodeId]: newNode };
+        const next = { ...data, nodes };
+        this._editor.updateBranchData({ data: next });
+        this._editor.pushHistory({ snapshot: next });
+        this._editor.setDirty({ dirty: true });
+        this._editor.selectNode({ nodeId });
+    }
+
+    _placeReflectionNode(p) {
+        const { nodeId, local } = p;
+        const data = this._branchData();
+        const newNode = {
+            type: 'reflection',
+            name: 'reflection',
+            pos_x: local.x - NODE_W / 2,
+            pos_y: local.y - NODE_H / 2,
+            ...getBlankReflectionNodeConfig(),
         };
         const nodes = { ...asObject(data.nodes), [nodeId]: newNode };
         const next = { ...data, nodes };

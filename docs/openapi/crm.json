@@ -148,12 +148,16 @@
           "attributes": {
             "anyOf": [
               {
-                "$ref": "#/components/schemas/JsonObject"
+                "additionalProperties": {
+                  "$ref": "#/components/schemas/JsonValue"
+                },
+                "type": "object"
               },
               {
                 "type": "null"
               }
-            ]
+            ],
+            "title": "Attributes"
           }
         },
         "type": "object",
@@ -213,12 +217,16 @@
           "attributes": {
             "anyOf": [
               {
-                "$ref": "#/components/schemas/JsonObject"
+                "additionalProperties": {
+                  "$ref": "#/components/schemas/JsonValue"
+                },
+                "type": "object"
               },
               {
                 "type": "null"
               }
-            ]
+            ],
+            "title": "Attributes"
           },
           "note_date": {
             "anyOf": [
@@ -611,11 +619,11 @@
       },
       "BoardStage": {
         "properties": {
-          "id": {
+          "stage_id": {
             "type": "string",
             "minLength": 1,
             "pattern": "^[a-z][a-z0-9_]*$",
-            "title": "Id",
+            "title": "Stage Id",
             "description": "Стабильный идентификатор стадии (snake_case)"
           },
           "label": {
@@ -640,11 +648,11 @@
         "additionalProperties": false,
         "type": "object",
         "required": [
-          "id",
+          "stage_id",
           "label"
         ],
         "title": "BoardStage",
-        "description": "Стадия канбана задач: id хранится в attributes.status у CRMEntity с entity_type=task."
+        "description": "Стадия канбана задач.\n\nЗначение хранится в attributes.status у CRMEntity с entity_type=task."
       },
       "Body_auth_callback_post_crm_api_auth_callback__provider_name__post": {
         "properties": {
@@ -873,7 +881,11 @@
             "title": "Entity Id"
           },
           "updates": {
-            "$ref": "#/components/schemas/JsonObject"
+            "additionalProperties": {
+              "$ref": "#/components/schemas/JsonValue"
+            },
+            "type": "object",
+            "title": "Updates"
           }
         },
         "type": "object",
@@ -1354,9 +1366,7 @@
             "$ref": "#/components/schemas/CalendarProvider"
           },
           "settings": {
-            "additionalProperties": true,
-            "type": "object",
-            "title": "Settings"
+            "$ref": "#/components/schemas/CalendarIntegrationSettings"
           },
           "created_at": {
             "type": "string",
@@ -1380,6 +1390,44 @@
           "updated_at"
         ],
         "title": "CalendarIntegrationPublic"
+      },
+      "CalendarIntegrationSettings": {
+        "properties": {
+          "default_calendar_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Default Calendar Id"
+          },
+          "sync_enabled": {
+            "type": "boolean",
+            "title": "Sync Enabled",
+            "default": true
+          },
+          "sync_inbound_enabled": {
+            "type": "boolean",
+            "title": "Sync Inbound Enabled",
+            "default": true
+          },
+          "sync_outbound_enabled": {
+            "type": "boolean",
+            "title": "Sync Outbound Enabled",
+            "default": true
+          },
+          "notifications_enabled": {
+            "type": "boolean",
+            "title": "Notifications Enabled",
+            "default": true
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "title": "CalendarIntegrationSettings"
       },
       "CalendarListRequest": {
         "properties": {
@@ -1630,6 +1678,44 @@
         ],
         "title": "CalendarUpsertRequest"
       },
+      "CompanyMembershipResponse": {
+        "properties": {
+          "company_id": {
+            "type": "string",
+            "title": "Company Id"
+          },
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "subdomain": {
+            "type": "string",
+            "title": "Subdomain"
+          },
+          "role": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Role"
+          },
+          "is_active": {
+            "type": "boolean",
+            "title": "Is Active"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "company_id",
+          "name",
+          "subdomain",
+          "role",
+          "is_active"
+        ],
+        "title": "CompanyMembershipResponse",
+        "description": "Компания, в которой состоит текущий пользователь, с ролями и активным флагом."
+      },
       "CredentialInfo": {
         "properties": {
           "provider": {
@@ -1813,12 +1899,16 @@
           "attributes": {
             "anyOf": [
               {
-                "$ref": "#/components/schemas/JsonObject"
+                "additionalProperties": {
+                  "$ref": "#/components/schemas/JsonValue"
+                },
+                "type": "object"
               },
               {
                 "type": "null"
               }
-            ]
+            ],
+            "title": "Attributes"
           },
           "entity_subtype": {
             "anyOf": [
@@ -1918,12 +2008,16 @@
           "attributes": {
             "anyOf": [
               {
-                "$ref": "#/components/schemas/JsonObject"
+                "additionalProperties": {
+                  "$ref": "#/components/schemas/JsonValue"
+                },
+                "type": "object"
               },
               {
                 "type": "null"
               }
-            ]
+            ],
+            "title": "Attributes"
           }
         },
         "type": "object",
@@ -1973,12 +2067,16 @@
           "attributes": {
             "anyOf": [
               {
-                "$ref": "#/components/schemas/JsonObject"
+                "additionalProperties": {
+                  "$ref": "#/components/schemas/JsonValue"
+                },
+                "type": "object"
               },
               {
                 "type": "null"
               }
-            ]
+            ],
+            "title": "Attributes"
           },
           "tags": {
             "anyOf": [
@@ -2204,7 +2302,11 @@
             "title": "Status"
           },
           "attributes": {
-            "$ref": "#/components/schemas/JsonObject"
+            "additionalProperties": {
+              "$ref": "#/components/schemas/JsonValue"
+            },
+            "type": "object",
+            "title": "Attributes"
           },
           "tags": {
             "items": {
@@ -2297,7 +2399,10 @@
           },
           "external_relationships": {
             "items": {
-              "$ref": "#/components/schemas/JsonObject"
+              "additionalProperties": {
+                "$ref": "#/components/schemas/JsonValue"
+              },
+              "type": "object"
             },
             "type": "array",
             "title": "External Relationships",
@@ -2649,22 +2754,30 @@
           "required_fields": {
             "anyOf": [
               {
-                "$ref": "#/components/schemas/JsonObject"
+                "additionalProperties": {
+                  "$ref": "#/components/schemas/JsonValue"
+                },
+                "type": "object"
               },
               {
                 "type": "null"
               }
-            ]
+            ],
+            "title": "Required Fields"
           },
           "optional_fields": {
             "anyOf": [
               {
-                "$ref": "#/components/schemas/JsonObject"
+                "additionalProperties": {
+                  "$ref": "#/components/schemas/JsonValue"
+                },
+                "type": "object"
               },
               {
                 "type": "null"
               }
-            ]
+            ],
+            "title": "Optional Fields"
           },
           "icon": {
             "anyOf": [
@@ -2774,10 +2887,18 @@
             "title": "Prompt"
           },
           "required_fields": {
-            "$ref": "#/components/schemas/JsonObject"
+            "additionalProperties": {
+              "$ref": "#/components/schemas/JsonValue"
+            },
+            "type": "object",
+            "title": "Required Fields"
           },
           "optional_fields": {
-            "$ref": "#/components/schemas/JsonObject"
+            "additionalProperties": {
+              "$ref": "#/components/schemas/JsonValue"
+            },
+            "type": "object",
+            "title": "Optional Fields"
           },
           "public_fields": {
             "items": {
@@ -2938,22 +3059,30 @@
           "required_fields": {
             "anyOf": [
               {
-                "$ref": "#/components/schemas/JsonObject"
+                "additionalProperties": {
+                  "$ref": "#/components/schemas/JsonValue"
+                },
+                "type": "object"
               },
               {
                 "type": "null"
               }
-            ]
+            ],
+            "title": "Required Fields"
           },
           "optional_fields": {
             "anyOf": [
               {
-                "$ref": "#/components/schemas/JsonObject"
+                "additionalProperties": {
+                  "$ref": "#/components/schemas/JsonValue"
+                },
+                "type": "object"
               },
               {
                 "type": "null"
               }
-            ]
+            ],
+            "title": "Optional Fields"
           },
           "icon": {
             "anyOf": [
@@ -3053,12 +3182,16 @@
           "attributes": {
             "anyOf": [
               {
-                "$ref": "#/components/schemas/JsonObject"
+                "additionalProperties": {
+                  "$ref": "#/components/schemas/JsonValue"
+                },
+                "type": "object"
               },
               {
                 "type": "null"
               }
-            ]
+            ],
+            "title": "Attributes"
           },
           "tags": {
             "anyOf": [
@@ -3411,12 +3544,16 @@
           "attributes": {
             "anyOf": [
               {
-                "$ref": "#/components/schemas/JsonObject"
+                "additionalProperties": {
+                  "$ref": "#/components/schemas/JsonValue"
+                },
+                "type": "object"
               },
               {
                 "type": "null"
               }
             ],
+            "title": "Attributes",
             "description": "Дополнительные атрибуты связи"
           }
         },
@@ -3475,12 +3612,16 @@
           "attributes": {
             "anyOf": [
               {
-                "$ref": "#/components/schemas/JsonObject"
+                "additionalProperties": {
+                  "$ref": "#/components/schemas/JsonValue"
+                },
+                "type": "object"
               },
               {
                 "type": "null"
               }
             ],
+            "title": "Attributes",
             "description": "Атрибуты entity (только если access=True)"
           }
         },
@@ -3698,10 +3839,6 @@
         ],
         "title": "IntegrationsListResponse"
       },
-      "JsonObject": {
-        "additionalProperties": true,
-        "type": "object"
-      },
       "JsonValue": {},
       "KnowledgeImportCreatedEntityItem": {
         "properties": {
@@ -3793,6 +3930,22 @@
         ],
         "title": "ListResponse[CalendarIntegrationPublic]"
       },
+      "ListResponse_CompanyMembershipResponse_": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/CompanyMembershipResponse"
+            },
+            "type": "array",
+            "title": "Items"
+          }
+        },
+        "type": "object",
+        "required": [
+          "items"
+        ],
+        "title": "ListResponse[CompanyMembershipResponse]"
+      },
       "ListResponse_CredentialInfo_": {
         "properties": {
           "items": {
@@ -3840,23 +3993,6 @@
           "items"
         ],
         "title": "ListResponse[UserSearchResult]"
-      },
-      "ListResponse_dict_str__Any__": {
-        "properties": {
-          "items": {
-            "items": {
-              "additionalProperties": true,
-              "type": "object"
-            },
-            "type": "array",
-            "title": "Items"
-          }
-        },
-        "type": "object",
-        "required": [
-          "items"
-        ],
-        "title": "ListResponse[dict[str, Any]]"
       },
       "NamespaceAutomationRule": {
         "properties": {
@@ -3935,7 +4071,9 @@
           },
           "integrations": {
             "additionalProperties": {
-              "additionalProperties": true,
+              "additionalProperties": {
+                "$ref": "#/components/schemas/JsonValue"
+              },
               "type": "object"
             },
             "type": "object",
@@ -4018,7 +4156,9 @@
           },
           "integrations": {
             "additionalProperties": {
-              "additionalProperties": true,
+              "additionalProperties": {
+                "$ref": "#/components/schemas/JsonValue"
+              },
               "type": "object"
             },
             "type": "object",
@@ -4521,7 +4661,11 @@
             "title": "Operators"
           },
           "defaults": {
-            "$ref": "#/components/schemas/JsonObject"
+            "additionalProperties": {
+              "$ref": "#/components/schemas/JsonValue"
+            },
+            "type": "object",
+            "title": "Defaults"
           },
           "validation_limits": {
             "additionalProperties": {
@@ -4583,10 +4727,18 @@
             "title": "Prompt"
           },
           "required_fields": {
-            "$ref": "#/components/schemas/JsonObject"
+            "additionalProperties": {
+              "$ref": "#/components/schemas/JsonValue"
+            },
+            "type": "object",
+            "title": "Required Fields"
           },
           "optional_fields": {
-            "$ref": "#/components/schemas/JsonObject"
+            "additionalProperties": {
+              "$ref": "#/components/schemas/JsonValue"
+            },
+            "type": "object",
+            "title": "Optional Fields"
           },
           "icon": {
             "anyOf": [
@@ -4697,10 +4849,18 @@
             "title": "Prompt"
           },
           "required_fields": {
-            "$ref": "#/components/schemas/JsonObject"
+            "additionalProperties": {
+              "$ref": "#/components/schemas/JsonValue"
+            },
+            "type": "object",
+            "title": "Required Fields"
           },
           "optional_fields": {
-            "$ref": "#/components/schemas/JsonObject"
+            "additionalProperties": {
+              "$ref": "#/components/schemas/JsonValue"
+            },
+            "type": "object",
+            "title": "Optional Fields"
           },
           "icon": {
             "anyOf": [
@@ -5270,6 +5430,20 @@
         "title": "PeriodSummaryRequest",
         "description": "Получение cached/SWR сводки за период через /entities/period-summary."
       },
+      "PushSuccessResponse": {
+        "properties": {
+          "success": {
+            "type": "boolean",
+            "title": "Success"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "success"
+        ],
+        "title": "PushSuccessResponse"
+      },
       "RelatedEntitiesResponse": {
         "properties": {
           "entity_id": {
@@ -5349,12 +5523,16 @@
           "attributes": {
             "anyOf": [
               {
-                "$ref": "#/components/schemas/JsonObject"
+                "additionalProperties": {
+                  "$ref": "#/components/schemas/JsonValue"
+                },
+                "type": "object"
               },
               {
                 "type": "null"
               }
-            ]
+            ],
+            "title": "Attributes"
           }
         },
         "type": "object",
@@ -5403,7 +5581,11 @@
             "description": "Достоверность связи; на длину пути и на поиск сущностей не влияет."
           },
           "attributes": {
-            "$ref": "#/components/schemas/JsonObject"
+            "additionalProperties": {
+              "$ref": "#/components/schemas/JsonValue"
+            },
+            "type": "object",
+            "title": "Attributes"
           },
           "created_at": {
             "type": "string",
@@ -5741,10 +5923,10 @@
       },
       "SidebarNavEntry-Input": {
         "properties": {
-          "id": {
+          "nav_id": {
             "type": "string",
             "minLength": 1,
-            "title": "Id",
+            "title": "Nav Id",
             "description": "Стабильный id для active state и редактора"
           },
           "label": {
@@ -5793,18 +5975,18 @@
         "additionalProperties": false,
         "type": "object",
         "required": [
-          "id",
+          "nav_id",
           "label"
         ],
         "title": "SidebarNavEntry",
-        "description": "Элемент дерева бокового меню пространства (NetWorkle). Лист: задан route_key. Группа: непустой children."
+        "description": "Элемент дерева бокового меню пространства (NetWorkle).\n\nЛист: задан ``route_key``. Группа: непустой ``children``."
       },
       "SidebarNavEntry-Output": {
         "properties": {
-          "id": {
+          "nav_id": {
             "type": "string",
             "minLength": 1,
-            "title": "Id",
+            "title": "Nav Id",
             "description": "Стабильный id для active state и редактора"
           },
           "label": {
@@ -5853,11 +6035,11 @@
         "additionalProperties": false,
         "type": "object",
         "required": [
-          "id",
+          "nav_id",
           "label"
         ],
         "title": "SidebarNavEntry",
-        "description": "Элемент дерева бокового меню пространства (NetWorkle). Лист: задан route_key. Группа: непустой children."
+        "description": "Элемент дерева бокового меню пространства (NetWorkle).\n\nЛист: задан ``route_key``. Группа: непустой ``children``."
       },
       "StartDailySummaryRequest": {
         "properties": {
@@ -5899,17 +6081,6 @@
               "graph"
             ],
             "title": "Mode"
-          },
-          "source_file_id": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Source File Id"
           },
           "source_file_ids": {
             "anyOf": [
@@ -5963,6 +6134,7 @@
             "default": 50000
           }
         },
+        "additionalProperties": false,
         "type": "object",
         "required": [
           "namespace",
@@ -6093,14 +6265,20 @@
           },
           "entities": {
             "items": {
-              "$ref": "#/components/schemas/JsonObject"
+              "additionalProperties": {
+                "$ref": "#/components/schemas/JsonValue"
+              },
+              "type": "object"
             },
             "type": "array",
             "title": "Entities"
           },
           "relationships": {
             "items": {
-              "$ref": "#/components/schemas/JsonObject"
+              "additionalProperties": {
+                "$ref": "#/components/schemas/JsonValue"
+              },
+              "type": "object"
             },
             "type": "array",
             "title": "Relationships"
@@ -6143,9 +6321,29 @@
             "default": "unknown"
           }
         },
+        "additionalProperties": false,
         "type": "object",
         "title": "SubscribeRequest",
         "description": "Тело POST /api/push/subscribe."
+      },
+      "SubscribeResponse": {
+        "properties": {
+          "success": {
+            "type": "boolean",
+            "title": "Success"
+          },
+          "subscription_id": {
+            "type": "string",
+            "title": "Subscription Id"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "success",
+          "subscription_id"
+        ],
+        "title": "SubscribeResponse"
       },
       "SuggestResponse": {
         "properties": {
@@ -6169,7 +6367,11 @@
             "title": "Target Entity Ids"
           },
           "payload": {
-            "$ref": "#/components/schemas/JsonObject"
+            "additionalProperties": {
+              "$ref": "#/components/schemas/JsonValue"
+            },
+            "type": "object",
+            "title": "Payload"
           }
         },
         "type": "object",
@@ -6418,7 +6620,11 @@
             "title": "Error Message"
           },
           "data": {
-            "$ref": "#/components/schemas/JsonObject"
+            "additionalProperties": {
+              "$ref": "#/components/schemas/JsonValue"
+            },
+            "type": "object",
+            "title": "Data"
           },
           "taskiq_task_id": {
             "anyOf": [
@@ -6570,8 +6776,33 @@
             "default": "Это тестовое push-уведомление от Humanitec"
           }
         },
+        "additionalProperties": false,
         "type": "object",
         "title": "TestPushRequest"
+      },
+      "TestPushResponse": {
+        "properties": {
+          "success": {
+            "type": "boolean",
+            "title": "Success"
+          },
+          "sent_to_devices": {
+            "type": "integer",
+            "title": "Sent To Devices"
+          },
+          "expired_subscriptions": {
+            "type": "integer",
+            "title": "Expired Subscriptions"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "success",
+          "sent_to_devices",
+          "expired_subscriptions"
+        ],
+        "title": "TestPushResponse"
       },
       "UpdatePublicFieldsRequest": {
         "properties": {
@@ -6736,7 +6967,9 @@
           "ui_preferences": {
             "anyOf": [
               {
-                "additionalProperties": true,
+                "additionalProperties": {
+                  "$ref": "#/components/schemas/JsonValue"
+                },
                 "type": "object"
               },
               {
@@ -6790,6 +7023,7 @@
             "title": "Publickey"
           }
         },
+        "additionalProperties": false,
         "type": "object",
         "required": [
           "publicKey"

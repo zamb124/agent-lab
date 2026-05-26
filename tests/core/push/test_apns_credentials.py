@@ -1,18 +1,21 @@
-"""resolve_apns_credentials: push + fallback на auth.providers.apple."""
+"""resolve_apns_credentials: push + auth.providers.apple."""
 
-from types import SimpleNamespace
-
+from core.config import BaseSettings
+from core.config.models import AuthConfig, AuthProviderConfig, PushConfig
 from core.push.apns_credentials import resolve_apns_credentials
 
 
-def _settings(push: dict, apple: dict | None = None) -> SimpleNamespace:
-    apple_cfg = None
+def _settings(
+    push: dict[str, str | bool | None],
+    apple: dict[str, str] | None = None,
+) -> BaseSettings:
+    providers: dict[str, AuthProviderConfig] = {}
     if apple is not None:
-        apple_cfg = SimpleNamespace(**apple)
-    providers = {"apple": apple_cfg} if apple_cfg is not None else {}
-    auth = SimpleNamespace(providers=providers)
-    push_ns = SimpleNamespace(**push)
-    return SimpleNamespace(push=push_ns, auth=auth)
+        providers["apple"] = AuthProviderConfig(**apple)
+    return BaseSettings(
+        auth=AuthConfig(providers=providers),
+        push=PushConfig(**push),
+    )
 
 
 def test_requires_bundle_id():
@@ -38,7 +41,7 @@ def test_from_push_only():
     assert r.use_sandbox is True
 
 
-def test_fallback_apple_team_key_pem():
+def test_uses_apple_provider_team_key_pem():
     s = _settings(
         {
             "apns_bundle_id": "ru.app.test",

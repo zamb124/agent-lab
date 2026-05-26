@@ -5,29 +5,26 @@
 from __future__ import annotations
 
 import json
-from collections.abc import Mapping
-from typing import cast as type_cast
 
-from apps.crm.types import JsonObject
+from botocore.exceptions import ClientError
+
 from core.files.s3_client import S3ClientFactory
 from core.logging import get_logger
+from core.types import JsonObject, parse_json_object, require_json_object
 
 logger = get_logger(__name__)
 
 _SCHEMA_VERSION = 1
+_S3_MISSING_ERROR_CODES = frozenset({"404", "NoSuchKey", "NotFound", "NoSuchBucket"})
 
 
-def _s3_error_code(exc: Exception) -> str:
-    response = type_cast(object, getattr(exc, "response", None))
-    if not isinstance(response, dict):
-        return ""
-    response_data = type_cast(dict[str, object], response)
-    error = response_data.get("Error")
-    if not isinstance(error, dict):
-        return ""
-    error_data = type_cast(dict[str, object], error)
-    code = error_data.get("Code")
-    return code if isinstance(code, str) else ""
+def _s3_error_code(exc: ClientError) -> str:
+    response = require_json_object(exc.response, "s3.error.response")
+    error = require_json_object(response["Error"], "s3.error.response.Error")
+    code = error["Code"]
+    if not isinstance(code, str):
+        raise ValueError("s3.error.response.Error.Code must be string")
+    return code
 
 
 class DailySummaryArtifactService:
@@ -63,10 +60,10 @@ class DailySummaryArtifactService:
         company_id: str,
         namespace: str | None,
         date_str: str,
-        payload: Mapping[str, object],
+        payload: JsonObject,
     ) -> None:
         key = self.daily_object_key(company_id, namespace, date_str)
-        body = json.dumps(dict(payload), ensure_ascii=False, default=str).encode("utf-8")
+        body = json.dumps(payload, ensure_ascii=False).encode("utf-8")
         client = S3ClientFactory.create_default_client()
         try:
             _ = await client.upload_bytes(
@@ -88,17 +85,13 @@ class DailySummaryArtifactService:
         client = S3ClientFactory.create_default_client()
         try:
             raw = await client.download_bytes(key=key)
-        except Exception as exc:
-            code = _s3_error_code(exc)
-            if code in ("404", "NoSuchKey", "NotFound", "NoSuchBucket"):
+        except ClientError as exc:
+            if _s3_error_code(exc) in _S3_MISSING_ERROR_CODES:
                 return None
             raise
         finally:
             await client.close()
-        data = type_cast(object, json.loads(raw.decode("utf-8")))
-        if not isinstance(data, dict):
-            raise ValueError("Daily summary S3 payload must be a JSON object")
-        return type_cast(JsonObject, data)
+        return parse_json_object(raw, "daily_summary.s3_payload")
 
     async def put_period_payload(
         self,
@@ -107,10 +100,10 @@ class DailySummaryArtifactService:
         namespace: str | None,
         date_from: str,
         date_to: str,
-        payload: Mapping[str, object],
+        payload: JsonObject,
     ) -> None:
         key = self.period_object_key(company_id, namespace, date_from, date_to)
-        body = json.dumps(dict(payload), ensure_ascii=False, default=str).encode("utf-8")
+        body = json.dumps(payload, ensure_ascii=False).encode("utf-8")
         client = S3ClientFactory.create_default_client()
         try:
             _ = await client.upload_bytes(
@@ -133,14 +126,10 @@ class DailySummaryArtifactService:
         client = S3ClientFactory.create_default_client()
         try:
             raw = await client.download_bytes(key=key)
-        except Exception as exc:
-            code = _s3_error_code(exc)
-            if code in ("404", "NoSuchKey", "NotFound", "NoSuchBucket"):
+        except ClientError as exc:
+            if _s3_error_code(exc) in _S3_MISSING_ERROR_CODES:
                 return None
             raise
         finally:
             await client.close()
-        data = type_cast(object, json.loads(raw.decode("utf-8")))
-        if not isinstance(data, dict):
-            raise ValueError("Period summary S3 payload must be a JSON object")
-        return type_cast(JsonObject, data)
+        return parse_json_object(raw, "period_summary.s3_payload")

@@ -33,7 +33,7 @@
 
 ## Как работает Flows
 
-Flow — исполняемый граф `FlowConfig`: базовый `entry`, `nodes`, `edges`, `variables`, `resources`, `triggers`, `evaluation`, `speech`. Branch — вариант графа внутри того же `flow_id`; в UI базовая branch называется `base`, на API/рантайме это `default`. Branch может заменять или merge-ить nodes, edges и variables поверх базового flow.
+Flow — исполняемый граф `FlowConfig`: базовый `entry`, `nodes`, `edges`, `variables`, `resources`, `triggers`, `speech`. Branch — вариант графа внутри того же `flow_id`; в UI базовая branch называется `base`, на API/рантайме это `default`. Branch может заменять или merge-ить nodes, edges и variables поверх базового flow.
 
 Выполнение начинается с `entry`. Ноды одной волны могут выполняться параллельно. После завершения ноды рантайм смотрит исходящие edges, проверяет условия и строит следующую волну. Если у ноды несколько входов, `incoming_policy=any` запускает её после любого входа, `incoming_policy=all` ждёт все релевантные входы; `contributes_to_join` на edge управляет участием ребра в join. Flow не должен тихо завершаться, если остался незакрытый AND-join или все условные переходы не выбрали следующий путь.
 
@@ -43,9 +43,9 @@ Code-нода — inline-код на поддерживаемом языке. П
 
 Resources merge-ятся слоями flow → branch → node. Code-ресурсы дают общие функции/модули для inline-кода, files-ресурсы дают S3-like операции, LLM-ресурсы задают модельные пресеты. Файлы, прикреплённые к нодам, попадают в `state.files`; в code-ноду их нужно читать через доступные runtime helpers/capabilities, а не через локальный filesystem.
 
-## Inline eval / isolated runner contract
+## Inline code / isolated runner contract
 
-Пользовательский inline-код, inline CodeTool, evaluation inline-code и edge `condition.type="code"` никогда не исполняются in-process внутри `flows`. Каноничный путь: `flows runtime / code API -> RemoteCodeRunner -> code-runner-python | code-runner-node | code-runner-go | code-runner-csharp -> capability-gateway -> trusted platform services`.
+Пользовательский inline-код, inline CodeTool и edge `condition.type="code"` никогда не исполняются in-process внутри `flows`. Каноничный путь: `flows runtime / code API -> RemoteCodeRunner -> code-runner-python | code-runner-node | code-runner-go | code-runner-csharp -> capability-gateway -> trusted platform services`.
 
 Запреты:
 1. Не предлагай in-process `exec`, `eval`, `safe_eval`, `PythonNamespaceBuilder`, `PythonCompiler` или `apps/flows/src/eval`.

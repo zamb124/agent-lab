@@ -27,7 +27,7 @@ def _transliterate(text: str) -> str:
     Returns:
         Транслитерированный текст
     """
-    result = []
+    result: list[str] = []
     for char in text:
         result.append(TRANSLIT_MAP.get(char, char))
     return ''.join(result)
@@ -159,4 +159,3 @@ def validate_slug(slug: str) -> tuple[bool, str | None]:
         return False, f"'{slug}' - зарезервированное имя"
 
     return True, None
-

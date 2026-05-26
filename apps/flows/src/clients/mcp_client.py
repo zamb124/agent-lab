@@ -21,6 +21,21 @@ from apps.flows.src.services.browser_preview import emit_browser_preview_mcp_eve
 from core.http import ProxyStrategy, get_httpx_client
 from core.integrations.mcp import MCP_PROTOCOL_VERSION
 from core.logging import get_logger
+from core.tracing.attributes import (
+    ATTR_MCP_HAS_SESSION,
+    ATTR_MCP_METHOD,
+    ATTR_MCP_NOTIFICATION,
+    ATTR_MCP_PROTOCOL_VERSION,
+    ATTR_MCP_REQUEST_PREVIEW,
+    ATTR_MCP_RESPONSE_BYTES,
+    ATTR_MCP_RESPONSE_CONTENT_TYPE,
+    ATTR_MCP_RESPONSE_PREVIEW,
+    ATTR_MCP_RESPONSE_SESSION_ID,
+    ATTR_MCP_RESPONSE_SHA256,
+    ATTR_MCP_SERVER_ID,
+    ATTR_MCP_TOOL_ARGS_KEYS,
+    ATTR_MCP_TOOL_NAME,
+)
 from core.tracing.operation_span import traced_operation
 from core.types import JsonObject, JsonValue, require_json_object
 from core.variables import VarResolver
@@ -170,14 +185,14 @@ class MCPClient:
             event_type=event_type,
             operation_category="mcp",
             extra_attributes={
-                "platform.mcp.server_id": self.config.server_id,
-                "platform.mcp.method": method,
-                "platform.mcp.protocol_version": (
+                ATTR_MCP_SERVER_ID: self.config.server_id,
+                ATTR_MCP_METHOD: method,
+                ATTR_MCP_PROTOCOL_VERSION: (
                     self.protocol_version if self.protocol_version is not None else ""
                 ),
-                "platform.mcp.has_session": bool(self.session_id) if include_session else False,
-                "platform.mcp.notification": notification,
-                "platform.mcp.request_preview": MCPClient._trace_text(payload),
+                ATTR_MCP_HAS_SESSION: bool(self.session_id) if include_session else False,
+                ATTR_MCP_NOTIFICATION: notification,
+                ATTR_MCP_REQUEST_PREVIEW: MCPClient._trace_text(payload),
             },
         ) as span:
             params_raw = payload.get("params")
@@ -185,10 +200,10 @@ class MCPClient:
                 raw_name = params_raw.get("name")
                 raw_args = params_raw.get("arguments")
                 if isinstance(raw_name, str) and raw_name.strip():
-                    span.set_attribute("platform.mcp.tool_name", raw_name.strip())
+                    span.set_attribute(ATTR_MCP_TOOL_NAME, raw_name.strip())
                 if isinstance(raw_args, dict):
                     keys = sorted(str(key) for key in raw_args.keys())
-                    span.set_attribute("platform.mcp.tool_args_keys", ",".join(keys[:50]))
+                    span.set_attribute(ATTR_MCP_TOOL_ARGS_KEYS, ",".join(keys[:50]))
 
             async with get_httpx_client(
                 timeout=self.timeout,
@@ -204,19 +219,19 @@ class MCPClient:
                 content_type = cast(str, response.headers.get("content-type", ""))
 
                 span.set_attribute("http.status_code", int(response.status_code))
-                span.set_attribute("platform.mcp.response_content_type", content_type.strip())
+                span.set_attribute(ATTR_MCP_RESPONSE_CONTENT_TYPE, content_type.strip())
                 span.set_attribute(
-                    "platform.mcp.response_bytes",
+                    ATTR_MCP_RESPONSE_BYTES,
                     len(text.encode("utf-8", errors="replace")),
                 )
-                span.set_attribute("platform.mcp.response_sha256", MCPClient._sha256_hex(text))
-                span.set_attribute("platform.mcp.response_preview", MCPClient._trace_text(text))
+                span.set_attribute(ATTR_MCP_RESPONSE_SHA256, MCPClient._sha256_hex(text))
+                span.set_attribute(ATTR_MCP_RESPONSE_PREVIEW, MCPClient._trace_text(text))
                 sid = cast(
                     str | None,
                     response_headers.get("mcp-session-id"),
                 )
                 if sid is not None and sid.strip():
-                    span.set_attribute("platform.mcp.response_session_id", sid.strip())
+                    span.set_attribute(ATTR_MCP_RESPONSE_SESSION_ID, sid.strip())
 
                 return (
                     self._jsonrpc_envelope_from_body(text),

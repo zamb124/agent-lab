@@ -63,6 +63,10 @@ jq -n \
   --arg yoomoneyAccessToken "${YOOMONEY_ACCESS_TOKEN:-}" \
   --arg proxyEnabled "$PROXY_ENABLED" \
   --arg proxyProxies "$PROXY_PROXIES" \
+  --arg searchTinyfishApiKey "${SEARCH__TINYFISH__API_KEY:-}" \
+  --arg searchLinkupApiKey "${SEARCH__LINKUP__API_KEY:-}" \
+  --arg searchSerperApiKey "${SEARCH__SERPER__API_KEY:-}" \
+  --arg searchTavilyApiKey "${SEARCH__TAVILY__API_KEY:-}" \
   '{
     create: true,
     postgresPassword: $postgresPassword,
@@ -111,5 +115,9 @@ jq -n \
     yoomoneyClientSecret: $yoomoneyClientSecret,
     yoomoneyAccessToken: $yoomoneyAccessToken,
     proxyEnabled: $proxyEnabled,
-    proxyProxies: $proxyProxies
+    proxyProxies: $proxyProxies,
+    searchTinyfishApiKey: $searchTinyfishApiKey,
+    searchLinkupApiKey: $searchLinkupApiKey,
+    searchSerperApiKey: $searchSerperApiKey,
+    searchTavilyApiKey: $searchTavilyApiKey
   }'

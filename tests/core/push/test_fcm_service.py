@@ -60,7 +60,10 @@ async def test_send_alert_delivers_via_fcm(rsa_pem):
     def handler(request: httpx.Request) -> httpx.Response:
         calls.append(request)
         if "oauth2.googleapis.com" in str(request.url):
-            return httpx.Response(200, json={"access_token": "ya29.fake", "expires_in": 3600})
+            return httpx.Response(
+                200,
+                json={"access_token": "ya29.fake", "expires_in": 3600, "token_type": "Bearer"},
+            )
         if "fcm.googleapis.com" in str(request.url):
             assert request.headers.get("authorization") == "Bearer ya29.fake"
             payload = json.loads(request.content)
@@ -88,7 +91,10 @@ async def test_send_alert_delivers_via_fcm(rsa_pem):
 async def test_send_alert_drops_unregistered_token(rsa_pem):
     def handler(request: httpx.Request) -> httpx.Response:
         if "oauth2.googleapis.com" in str(request.url):
-            return httpx.Response(200, json={"access_token": "ya29.fake", "expires_in": 3600})
+            return httpx.Response(
+                200,
+                json={"access_token": "ya29.fake", "expires_in": 3600, "token_type": "Bearer"},
+            )
         return httpx.Response(
             404,
             json={
@@ -120,7 +126,10 @@ async def test_send_alert_drops_unregistered_token(rsa_pem):
 async def test_send_alert_keeps_subscription_on_server_error(rsa_pem):
     def handler(request: httpx.Request) -> httpx.Response:
         if "oauth2.googleapis.com" in str(request.url):
-            return httpx.Response(200, json={"access_token": "ya29.fake", "expires_in": 3600})
+            return httpx.Response(
+                200,
+                json={"access_token": "ya29.fake", "expires_in": 3600, "token_type": "Bearer"},
+            )
         return httpx.Response(500, json={"error": {"code": 500, "status": "INTERNAL"}})
 
     service = _build_service(rsa_pem)

@@ -11,7 +11,7 @@
  * Шаг source:
  *   - upload файла идёт через POST /crm/api/v1/files/, который возвращает file_id;
  *     id-шники накапливаются в this._files и подставляются в payload как
- *     source_file_id (если ровно один) или source_file_ids (если несколько).
+ *     source_file_ids.
  *   - paste-area — обычный textarea, отдаётся в payload как source_text.
  *   - хотя бы один источник (файл ИЛИ текст) обязателен.
  *
@@ -510,9 +510,7 @@ export class CRMKnowledgeImportModal extends PlatformModal {
         if (text.length > 0) {
             part.source_text = this._pasteText;
         }
-        if (this._files.length === 1) {
-            part.source_file_id = this._files[0].file_id;
-        } else if (this._files.length > 1) {
+        if (this._files.length > 0) {
             part.source_file_ids = this._files.map((f) => f.file_id);
         }
         return part;

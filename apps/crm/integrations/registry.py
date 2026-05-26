@@ -8,9 +8,9 @@ from collections.abc import Iterable
 from pathlib import Path
 
 from apps.crm.integrations.protocol import NamespaceIntegrationConnector
-from apps.crm.types import JsonObject
 from core.integrations.models import IntegrationCredential, IntegrationProvider
 from core.models.identity_models import NamespaceCRMSettings
+from core.types import JsonObject
 
 _CRM_UI_ROOT = Path(__file__).resolve().parents[1] / "ui"
 

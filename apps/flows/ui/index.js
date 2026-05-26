@@ -28,6 +28,7 @@ import './pages/flows-list-page.js';
 import './pages/flows-home-page.js';
 import './pages/chat-page.js';
 import './pages/flow-editor-page.js';
+import './pages/flows-evaluation-page.js';
 import './pages/operator-page.js';
 
 // Компоненты
@@ -57,6 +58,7 @@ import './components/nodes/flows-channel-node-editor.js';
 import './components/nodes/flows-flow-node-editor.js';
 import './components/nodes/flows-mcp-node-editor.js';
 import './components/nodes/flows-hitl-node-editor.js';
+import './components/nodes/flows-reflection-node-editor.js';
 import './components/nodes/flows-resource-node-editor.js';
 import './components/nodes/flows-external-api-editor.js';
 import './components/nodes/flows-remote-flow-editor.js';
@@ -90,6 +92,7 @@ import './modals/flows-code-docs-modal.js';
 import './modals/flows-tracing-modal.js';
 import './modals/flows-span-details-modal.js';
 import './modals/flows-logs-modal.js';
+import './modals/flows-durable-history-modal.js';
 import './modals/flows-raw-json-modal.js';
 import './modals/flows-state-modal.js';
 

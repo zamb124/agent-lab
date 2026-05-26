@@ -263,9 +263,9 @@ async def _read_stored_file_by_id(file_id: str) -> tuple[bytes, str]:
     record = await proc.get_file_record(file_id)
     if record is None:
         raise FileReadError(f"Файл не найден в хранилище: {file_id}")
-    s3_bucket = getattr(record, "s3_bucket", None)
-    s3_key = getattr(record, "s3_key", None)
-    if isinstance(s3_bucket, str) and s3_bucket != "" and isinstance(s3_key, str) and s3_key != "":
+    s3_bucket = record.s3_bucket
+    s3_key = record.s3_key
+    if s3_bucket != "" and s3_key != "":
         s3_client = S3ClientFactory.create_client_for_bucket(s3_bucket)
         try:
             try:
@@ -286,8 +286,8 @@ async def _read_stored_file_by_id(file_id: str) -> tuple[bytes, str]:
             return raw, record.original_name
         finally:
             await s3_client.close()
-    storage_url = getattr(record, "storage_url", None)
-    if isinstance(storage_url, str) and storage_url.startswith(("http://", "https://")):
+    storage_url = record.storage_url
+    if storage_url is not None and storage_url.startswith(("http://", "https://")):
         raw = await _read_http_bytes(storage_url)
         return raw, record.original_name
     raise FileReadError(f"Источник файла не настроен: {file_id}")

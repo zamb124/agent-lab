@@ -885,6 +885,16 @@ export class ChatPage extends PlatformPage {
         this.openModal('flows.logs', props);
     }
 
+    _openDurableHistory() {
+        this._overflowOpen = false;
+        const state = this._chat.state;
+        const ctxId = state?.currentContextId;
+        if (!ctxId || !this.flowId) {
+            return;
+        }
+        this.openModal('flows.durable_history', { sessionId: `${this.flowId}:${ctxId}` });
+    }
+
     _openLara() {
         this._overflowOpen = false;
         dispatchEmbedChatWindowToggle('flows-lara-open', { open: true });
@@ -971,6 +981,15 @@ export class ChatPage extends PlatformPage {
             <button
                 type="button"
                 class="action-btn"
+                title=${this.t('platform_chat.btn_history')}
+                aria-label=${this.t('platform_chat.btn_history')}
+                @click=${this._openDurableHistory}
+            >
+                <platform-icon name="trace-timeline" size="16"></platform-icon>
+            </button>
+            <button
+                type="button"
+                class="action-btn"
                 title=${this.t('platform_chat.btn_editor')}
                 aria-label=${this.t('platform_chat.btn_editor')}
                 @click=${this._openEditor}
@@ -1045,6 +1064,10 @@ export class ChatPage extends PlatformPage {
                                 <button type="button" class="action-btn-menu" @click=${this._openLogs}>
                                     <platform-icon name="file-text" size="16"></platform-icon>
                                     ${this.t('platform_chat.btn_logs')}
+                                </button>
+                                <button type="button" class="action-btn-menu" @click=${this._openDurableHistory}>
+                                    <platform-icon name="trace-timeline" size="16"></platform-icon>
+                                    ${this.t('platform_chat.btn_history')}
                                 </button>
                                 <button type="button" class="action-btn-menu" @click=${this._openEditor}>
                                     <platform-icon name="edit" size="16"></platform-icon>

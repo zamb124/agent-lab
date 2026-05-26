@@ -18,7 +18,9 @@ from core.identity.system_bootstrap import (
 )
 from core.logging import get_logger
 from core.scheduler.models import (
+    PlatformRedisScheduleSnapshot,
     PlatformScheduleCreateRequest,
+    PlatformScheduledTask,
     PlatformScheduleFilter,
     PlatformScheduleType,
     ScheduledTaskStatus,
@@ -40,6 +42,68 @@ CRM_RECONCILE_DAILY_SUMMARY_CRON = "0 * * * *"
 SYSTEM_SCHEDULER_COMPANY_ID = "system"
 LLM_MODELS_SYNC_PAYLOAD_MARKER = "llm_models_background_sync"
 OPENROUTER_FREE_MODELS_SYNC_PAYLOAD_MARKER = "openrouter_free_models_background_sync"
+
+
+def _canonical_system_payload(schedule_task_id: str, payload: JsonObject) -> JsonObject:
+    canonical_payload = dict(payload)
+    canonical_payload["schedule_task_id"] = schedule_task_id
+    canonical_payload["company_id"] = SYSTEM_SCHEDULER_COMPANY_ID
+    return canonical_payload
+
+
+def _is_redis_interval_snapshot_current(
+    snapshot: PlatformRedisScheduleSnapshot,
+    *,
+    task_name: str,
+    interval_seconds: int,
+    expected_payload: JsonObject,
+) -> bool:
+    return (
+        snapshot.exists_in_redis
+        and snapshot.task_name == task_name
+        and snapshot.interval_seconds == interval_seconds
+        and snapshot.kwargs == expected_payload
+    )
+
+
+async def _reconcile_idle_interval_payload(
+    *,
+    container: SchedulerContainer,
+    task: PlatformScheduledTask,
+    task_name: str,
+    interval_seconds: int,
+    payload: JsonObject,
+    log_label: str,
+) -> PlatformScheduledTask:
+    expected_payload = _canonical_system_payload(task.schedule_task_id, payload)
+    recreate_schedule = False
+    if task.status == ScheduledTaskStatus.PENDING:
+        snapshot = await container.scheduler_service.get_redis_snapshot(
+            company_id=SYSTEM_SCHEDULER_COMPANY_ID,
+            schedule_task_id=task.schedule_task_id,
+        )
+        recreate_schedule = not _is_redis_interval_snapshot_current(
+            snapshot,
+            task_name=task_name,
+            interval_seconds=interval_seconds,
+            expected_payload=expected_payload,
+        )
+    if task.payload == expected_payload and not recreate_schedule:
+        return task
+
+    repaired = await container.scheduler_service.reconcile_payload(
+        company_id=SYSTEM_SCHEDULER_COMPANY_ID,
+        schedule_task_id=task.schedule_task_id,
+        payload=payload,
+        recreate_schedule=recreate_schedule,
+    )
+    logger.warning(
+        "%s interval schedule reconciled: schedule_task_id=%s recreate_schedule=%s",
+        log_label,
+        repaired.schedule_task_id,
+        recreate_schedule,
+    )
+    return repaired
 
 
 async def _ensure_calendar_schedule(
@@ -177,6 +241,14 @@ async def _ensure_idle_interval_schedule(
                 task.schedule_task_id,
                 task.schedule_id,
             )
+    task = await _reconcile_idle_interval_payload(
+        container=container,
+        task=task,
+        task_name=task_name,
+        interval_seconds=interval_seconds,
+        payload=payload,
+        log_label=log_label,
+    )
     if run_now_on_start:
         _ = await container.scheduler_service.run_now(
             company_id=SYSTEM_SCHEDULER_COMPANY_ID,

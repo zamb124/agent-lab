@@ -31,5 +31,5 @@ def sanitize_text_for_speech_backend(text: str) -> str:
         out.append(ch)
     t = "".join(out)
 
-    t.encode("utf-8")
+    _ = t.encode("utf-8")
     return t.strip()

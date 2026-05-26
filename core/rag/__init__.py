@@ -46,7 +46,6 @@ if TYPE_CHECKING:
     )
     from .llm_context_source import RAGLLMContextSource
     from .parsed_document import BlockKind, ParsedBlock, ParsedDocument
-    from .parsing import parse_document_bytes
     from .post_retrieval_rerank import (
         RerankerClientError,
         apply_rerank_after_retrieve,
@@ -79,7 +78,6 @@ _LAZY_EXPORTS: dict[str, tuple[str, str]] = {
     "BlockKind": ("core.rag.parsed_document", "BlockKind"),
     "ParsedBlock": ("core.rag.parsed_document", "ParsedBlock"),
     "ParsedDocument": ("core.rag.parsed_document", "ParsedDocument"),
-    "parse_document_bytes": ("core.rag.parsing", "parse_document_bytes"),
     "RAGResource": ("core.rag.rag_resource", "RAGResource"),
     "split_parsed_document": ("core.rag.chunking", "split_parsed_document"),
     "split_plain_text_fixed_tokens": ("core.rag.chunking", "split_plain_text_fixed_tokens"),
@@ -125,7 +123,6 @@ __all__ = [
     "BlockKind",
     "ParsedBlock",
     "ParsedDocument",
-    "parse_document_bytes",
     "RAGResource",
     "RAG_IN_PROCESS_PROVIDER_ID",
     "RAG_API_V1_PREFIX",

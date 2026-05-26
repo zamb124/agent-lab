@@ -41,7 +41,7 @@ async def test_start_import_empty_source(crm_client, auth_headers_system, unique
 
 
 @pytest.mark.asyncio
-async def test_start_import_conflict_file_id_and_list(crm_client, auth_headers_system, unique_id) -> None:
+async def test_start_import_rejects_single_file_id_field(crm_client, auth_headers_system, unique_id) -> None:
     ns = f"g_{unique_id}"
     response = await crm_client.post(
         "/crm/api/v1/tasks/knowledge-import",
@@ -53,6 +53,5 @@ async def test_start_import_conflict_file_id_and_list(crm_client, auth_headers_s
         },
         headers=auth_headers_system,
     )
-    assert response.status_code == 400
-    detail = str(response.json().get("detail", ""))
-    assert "source_file" in detail.lower() or "одновременно" in detail.lower()
+    assert response.status_code == 422
+    assert "source_file_id" in response.text

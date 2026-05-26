@@ -11,10 +11,3 @@
     pytest_plugins = ["tests.fixtures.services", "tests.fixtures.clients", "tests.fixtures.workers", "tests.fixtures.auth"]
 """
 
-# Экспортируем основные классы
-from tests.fixtures.workers import SessionServerManager, SessionWorkerManager
-
-__all__ = [
-    "SessionWorkerManager",
-    "SessionServerManager",
-]

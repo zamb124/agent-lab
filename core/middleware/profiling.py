@@ -7,9 +7,12 @@ import io
 import pstats
 import time
 from contextvars import ContextVar
+from typing import override
 
 from fastapi import Request
-from starlette.middleware.base import BaseHTTPMiddleware
+from starlette.middleware.base import BaseHTTPMiddleware, RequestResponseEndpoint
+from starlette.responses import Response
+from starlette.types import ASGIApp
 
 from core.logging import get_logger
 
@@ -20,12 +23,18 @@ profiler_output: ContextVar[str | None] = ContextVar("profiler_output", default=
 class ProfilingMiddleware(BaseHTTPMiddleware):
     """Middleware для профилирования запросов"""
 
-    def __init__(self, app, log_slow_requests: bool = True, slow_threshold_ms: float = 500):
+    def __init__(
+        self,
+        app: ASGIApp,
+        log_slow_requests: bool = True,
+        slow_threshold_ms: float = 500,
+    ) -> None:
         super().__init__(app)
-        self.log_slow_requests = log_slow_requests
-        self.slow_threshold_ms = slow_threshold_ms
+        self.log_slow_requests: bool = log_slow_requests
+        self.slow_threshold_ms: float = slow_threshold_ms
 
-    async def dispatch(self, request: Request, call_next):
+    @override
+    async def dispatch(self, request: Request, call_next: RequestResponseEndpoint) -> Response:
         # Пропускаем статику
         if request.url.path.startswith("/static/"):
             return await call_next(request)
@@ -47,8 +56,8 @@ class ProfilingMiddleware(BaseHTTPMiddleware):
             # Формируем вывод профилировщика
             output = io.StringIO()
             stats = pstats.Stats(profiler, stream=output)
-            stats.sort_stats('cumulative')
-            stats.print_stats(50)  # Топ 50 функций
+            _ = stats.sort_stats("cumulative")
+            _ = stats.print_stats(50)  # Топ 50 функций
 
             profile_data = output.getvalue()
 
@@ -59,8 +68,11 @@ class ProfilingMiddleware(BaseHTTPMiddleware):
             response.headers["X-Process-Time"] = f"{process_time:.2f}ms"
 
             logger.info(
-                f"ПРОФИЛИРОВАНИЕ: {request.method} {request.url.path} "
-                f"[{process_time:.2f}ms]\n{profile_data[:2000]}"
+                "profiling.enabled_request",
+                http_method=request.method,
+                http_path=request.url.path,
+                duration_ms=round(process_time, 2),
+                profile_preview=profile_data[:2000],
             )
 
             return response
@@ -88,4 +100,3 @@ class ProfilingMiddleware(BaseHTTPMiddleware):
                 )
 
             return response
-

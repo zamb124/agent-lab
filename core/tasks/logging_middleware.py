@@ -27,12 +27,15 @@ from __future__ import annotations
 
 import time
 import uuid
-from typing import Any
+from typing import override
 
+import structlog
 from taskiq import TaskiqMessage, TaskiqMiddleware, TaskiqResult
 
 from core.config import get_settings
 from core.logging import (
+    ScopeToken,
+    bind_log_context,
     enter_request_scope,
     exit_request_scope,
     get_log_context,
@@ -50,8 +53,9 @@ from core.logging.attributes import (
     LOG_TASK_QUEUE,
     LOG_TASK_RETRY,
 )
-from core.logging.scope import _ScopeToken
 from core.tasks.kicker import build_log_labels
+from core.tasks.message_contract import task_message_labels
+from core.types import JsonValue, TaskLabelMap
 
 _LABEL_TRACE_ID = "trace_id"
 _LABEL_USER_ID = "user_id"
@@ -70,16 +74,17 @@ class LoggingMiddleware(TaskiqMiddleware):
 
     def __init__(self, *, queue_name: str, service_name: str) -> None:
         super().__init__()
-        if not isinstance(queue_name, str) or not queue_name.strip():
+        if not queue_name.strip():
             raise ValueError("LoggingMiddleware: queue_name обязателен")
-        if not isinstance(service_name, str) or not service_name.strip():
+        if not service_name.strip():
             raise ValueError("LoggingMiddleware: service_name обязателен")
-        self._logger = get_logger("platform.task")
-        self._queue_name = queue_name
-        self._service_name = service_name
+        self._logger: structlog.stdlib.BoundLogger = get_logger("platform.task")
+        self._queue_name: str = queue_name
+        self._service_name: str = service_name
 
+    @override
     async def pre_send(self, message: TaskiqMessage) -> TaskiqMessage:
-        labels = message.labels or {}
+        labels = task_message_labels(message)
         log_ctx = get_log_context()
 
         if not _label_present(labels, _LABEL_REQUEST_ID):
@@ -114,8 +119,9 @@ class LoggingMiddleware(TaskiqMiddleware):
         message.labels = labels
         return message
 
+    @override
     async def pre_execute(self, message: TaskiqMessage) -> TaskiqMessage:
-        labels = dict(message.labels or {})
+        labels = task_message_labels(message)
         if (
             not _label_present(labels, _LABEL_REQUEST_ID)
             or not _label_present(labels, _LABEL_TRACE_ID)
@@ -141,25 +147,30 @@ class LoggingMiddleware(TaskiqMiddleware):
 
         request_id = self._require_label(labels, _LABEL_REQUEST_ID, message)
         trace_id = self._require_label(labels, _LABEL_TRACE_ID, message)
-        service_name = self._service_or_default(labels)
+        service_name = self._require_label(labels, _LABEL_SERVICE_NAME, message)
 
-        scope_extra: dict[str, Any] = {
-            LOG_NAMESPACE: self._optional_label(labels, _LABEL_NAMESPACE),
-            LOG_SESSION_ID: self._optional_label(labels, _LABEL_SESSION_ID),
+        scope_extra: dict[str, str] = {
             LOG_TASK_ID: message.task_id,
             LOG_TASK_NAME: message.task_name,
             LOG_TASK_QUEUE: self._queue_name,
         }
+        namespace = self._optional_label(labels, _LABEL_NAMESPACE)
+        if namespace is not None:
+            scope_extra[LOG_NAMESPACE] = namespace
+        session_id = self._optional_label(labels, _LABEL_SESSION_ID)
+        if session_id is not None:
+            scope_extra[LOG_SESSION_ID] = session_id
         token = enter_request_scope(
             request_id=request_id,
             trace_id=trace_id,
             service_name=service_name,
             user_id=self._optional_label(labels, _LABEL_USER_ID),
             company_id=self._optional_label(labels, _LABEL_COMPANY_ID),
-            **scope_extra,
         )
-        message.labels[_START_TIME_LABEL] = str(time.perf_counter())
-        message.labels[_SCOPE_TOKEN_LABEL] = id(token)
+        bind_log_context(**scope_extra)
+        labels[_START_TIME_LABEL] = str(time.perf_counter())
+        labels[_SCOPE_TOKEN_LABEL] = str(id(token))
+        message.labels = labels
         # Сохраняем токен в attribute словаря: TaskiqMessage не позволяет
         # хранить объекты в labels (str-only сериализация), поэтому держим
         # в side-канале по message id.
@@ -175,10 +186,11 @@ class LoggingMiddleware(TaskiqMiddleware):
         )
         return message
 
+    @override
     async def post_execute(
         self,
         message: TaskiqMessage,
-        result: TaskiqResult[Any],
+        result: TaskiqResult[JsonValue],
     ) -> None:
         duration_ms = self._duration_ms(message)
         if result.is_err:
@@ -203,16 +215,19 @@ class LoggingMiddleware(TaskiqMiddleware):
             )
         self._exit_scope(message)
 
+    @override
     async def on_error(
         self,
         message: TaskiqMessage,
-        result: TaskiqResult[Any],
+        result: TaskiqResult[JsonValue],
         exception: BaseException,
     ) -> None:
+        _ = result
         duration_ms = self._duration_ms(message)
-        retry_raw = message.labels.get("_taskiq_retry_count")
+        labels = task_message_labels(message)
+        retry_raw = labels.get("_taskiq_retry_count")
         if retry_raw is None:
-            retry_raw = message.labels.get("_retries")
+            retry_raw = labels.get("_retries")
         try:
             retry_value: int | None = int(retry_raw) if retry_raw is not None else None
         except (TypeError, ValueError):
@@ -235,25 +250,20 @@ class LoggingMiddleware(TaskiqMiddleware):
         token = _scope_tokens.pop(id(message), None)
         exit_request_scope(token)
 
-    def _require_label(self, labels: dict[str, Any], key: str, message: TaskiqMessage) -> str:
+    def _require_label(self, labels: TaskLabelMap, key: str, message: TaskiqMessage) -> str:
         value = labels.get(key)
         if not isinstance(value, str) or not value.strip():
-            raise ValueError(
+            message_text = (
                 f"TaskIQ logging contract violation: задача {message.task_name!r} "
-                f"({message.task_id}) не содержит обязательной метки {key!r}. "
-                "Каждый kiq() обязан передавать labels=trace_id, request_id, "
-                "service_name (используйте core.tasks.kicker.with_log_labels)."
+                + f"({message.task_id}) не содержит обязательной метки {key!r}. "
+                + "Каждый kiq() обязан передавать labels=trace_id, request_id, "
+                + "service_name (используйте core.tasks.kicker.with_log_labels)."
             )
+            raise ValueError(message_text)
         return value.strip()
 
-    def _service_or_default(self, labels: dict[str, Any]) -> str:
-        value = labels.get(_LABEL_SERVICE_NAME)
-        if isinstance(value, str) and value.strip():
-            return value.strip()
-        return self._service_name
-
     @staticmethod
-    def _optional_label(labels: dict[str, Any], key: str) -> str | None:
+    def _optional_label(labels: TaskLabelMap, key: str) -> str | None:
         value = labels.get(key)
         if not isinstance(value, str) or not value.strip():
             return None
@@ -261,7 +271,8 @@ class LoggingMiddleware(TaskiqMiddleware):
 
     @staticmethod
     def _duration_ms(message: TaskiqMessage) -> float | None:
-        raw = message.labels.get(_START_TIME_LABEL)
+        labels = task_message_labels(message)
+        raw = labels.get(_START_TIME_LABEL)
         if raw is None:
             return None
         try:
@@ -275,12 +286,12 @@ class LoggingMiddleware(TaskiqMiddleware):
         return f"{prefix}:{uuid.uuid4().hex}"
 
 
-def _label_present(labels: dict[str, Any], key: str) -> bool:
+def _label_present(labels: TaskLabelMap, key: str) -> bool:
     value = labels.get(key)
     return isinstance(value, str) and value.strip() != ""
 
 
-_scope_tokens: dict[int, _ScopeToken] = {}
+_scope_tokens: dict[int, ScopeToken] = {}
 
 
 def build_logging_middleware(*, queue_name: str, service_name: str) -> LoggingMiddleware:

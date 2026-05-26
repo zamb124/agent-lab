@@ -8,15 +8,18 @@
 from __future__ import annotations
 
 from datetime import datetime, timezone
+from typing import TYPE_CHECKING
 
 from apps.flows.src.clients.mcp_client import MCPClient
-from apps.flows.src.container import FlowContainer
 from apps.flows.src.models.enums import CodeMode
 from apps.flows.src.models.mcp import MCPDiscoveredTool, MCPServerConfig
 from apps.flows.src.models.tool_reference import ToolReference
 from apps.flows.src.services.mcp_defaults import build_default_mcp_servers
 from core.integrations.mcp import mcp_tool_reference_id
 from core.logging import get_logger
+
+if TYPE_CHECKING:
+    from apps.flows.src.container_contracts import FlowRuntimeContainer
 
 logger = get_logger(__name__)
 
@@ -26,7 +29,7 @@ def _mcp_headers_need_variables(server_config: MCPServerConfig) -> bool:
 
 
 async def _mcp_resolved_variables(
-    container: FlowContainer, server_config: MCPServerConfig
+    container: FlowRuntimeContainer, server_config: MCPServerConfig
 ) -> dict[str, str]:
     if not _mcp_headers_need_variables(server_config):
         return {}
@@ -35,7 +38,7 @@ async def _mcp_resolved_variables(
 
 async def sync_mcp_server_tools(
     *,
-    container: FlowContainer,
+    container: FlowRuntimeContainer,
     server_config: MCPServerConfig,
 ) -> tuple[list[str], list[MCPDiscoveredTool]]:
     """
@@ -93,7 +96,10 @@ async def sync_mcp_server_tools(
     return tool_ids, tools
 
 
-async def ensure_default_mcp_servers_for_company(*, container: FlowContainer) -> list[MCPServerConfig]:
+async def ensure_default_mcp_servers_for_company(
+    *,
+    container: FlowRuntimeContainer,
+) -> list[MCPServerConfig]:
     """
     Upsert'ит дефолтные MCP серверы компании в mcp_server_repository.
     """
@@ -103,15 +109,26 @@ async def ensure_default_mcp_servers_for_company(*, container: FlowContainer) ->
     return servers
 
 
-async def sync_auto_mcp_servers_for_company(*, container: FlowContainer) -> dict[str, int]:
+async def sync_auto_mcp_servers_for_company(*, container: FlowRuntimeContainer) -> dict[str, int]:
     """
     Синхронизирует tools для всех активных MCP серверов компании.
     """
     servers = await container.mcp_server_repository.list_active()
     synced = 0
     tools_total = 0
+    failed = 0
     for srv in servers:
-        tool_ids, _ = await sync_mcp_server_tools(container=container, server_config=srv)
+        try:
+            tool_ids, _ = await sync_mcp_server_tools(container=container, server_config=srv)
+        except Exception as exc:
+            failed += 1
+            logger.warning(
+                "MCP server auto-sync skipped: server_id=%s error=%s",
+                srv.server_id,
+                exc,
+                exc_info=True,
+            )
+            continue
         synced += 1
         tools_total += len(tool_ids)
-    return {"servers": synced, "tools": tools_total}
+    return {"servers": synced, "tools": tools_total, "failed": failed}

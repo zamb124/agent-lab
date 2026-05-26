@@ -2,7 +2,9 @@
 Заголовки деплоя и сброс кэша браузера для статики и HTML (не для REST /api).
 """
 
-from starlette.middleware.base import BaseHTTPMiddleware
+from typing import override
+
+from starlette.middleware.base import BaseHTTPMiddleware, RequestResponseEndpoint
 from starlette.requests import Request
 from starlette.responses import Response
 
@@ -26,7 +28,8 @@ def _should_set_no_cache(path: str) -> bool:
 
 
 class DeploymentHeadersMiddleware(BaseHTTPMiddleware):
-    async def dispatch(self, request: Request, call_next) -> Response:
+    @override
+    async def dispatch(self, request: Request, call_next: RequestResponseEndpoint) -> Response:
         response = await call_next(request)
         settings = get_settings()
         version = settings.server.deployment_version

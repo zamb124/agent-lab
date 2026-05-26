@@ -54,6 +54,12 @@ def _float_zero(value: JsonValue | None) -> bool:
         return False
 
 
+def _float_zero_or_missing(value: JsonValue | None) -> bool:
+    if value is None:
+        return True
+    return _float_zero(value)
+
+
 def _model_size_score(*texts: str) -> float:
     """Returns size in billions when the slug/name contains 80B, 120b, 1.2B, etc."""
     best_size_billions = 0.0
@@ -95,7 +101,7 @@ def is_free_text_model(item: JsonObject) -> bool:
     return (
         _float_zero(pricing.get("prompt"))
         and _float_zero(pricing.get("completion"))
-        and _float_zero(pricing.get("request"))
+        and _float_zero_or_missing(pricing.get("request"))
     )
 
 

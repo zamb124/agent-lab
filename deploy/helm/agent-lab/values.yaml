@@ -196,6 +196,20 @@ applications:
       limits:
         cpu: "2"
         memory: 2Gi
+  search:
+    nodeName: master
+    enabled: true
+    port: 8010
+    replicas: 1
+    serviceName: search
+    command: ["python", "-m", "apps.search.main"]
+    resources:
+      requests:
+        cpu: 100m
+        memory: 256Mi
+      limits:
+        cpu: "1"
+        memory: 1Gi
   capability-gateway:
     nodeName: master
     enabled: true
@@ -556,5 +570,9 @@ platformSecrets:
   yoomoneyAccessToken: ""
   proxyEnabled: ""
   proxyProxies: ""
+  searchTinyfishApiKey: ""
+  searchLinkupApiKey: ""
+  searchSerperApiKey: ""
+  searchTavilyApiKey: ""
 
 platformSecretName: platform-secrets

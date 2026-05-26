@@ -8,7 +8,12 @@ from uuid import uuid4
 import pytest
 
 from core.config import get_settings
-from core.short_links import SHORT_LINK_KIND_COMPANY_INVITE, ShortLinkRepository, ShortLinkService
+from core.short_links import (
+    SHORT_LINK_KIND_COMPANY_INVITE,
+    CompanyInvitePayload,
+    ShortLinkRepository,
+    ShortLinkService,
+)
 
 
 @pytest.mark.asyncio
@@ -67,8 +72,12 @@ async def test_insert_try_duplicate_code_returns_false(setup_database_before_tes
     repo = ShortLinkRepository(db_url=shared_url)
     code = f"d{uuid4().hex[:15]}"
     exp = datetime.now(UTC) + timedelta(minutes=5)
-    ok1 = await repo.insert_try(code, SHORT_LINK_KIND_COMPANY_INVITE, {"jwt": "a"}, exp)
-    ok2 = await repo.insert_try(code, SHORT_LINK_KIND_COMPANY_INVITE, {"jwt": "b"}, exp)
+    ok1 = await repo.insert_try(
+        code, SHORT_LINK_KIND_COMPANY_INVITE, CompanyInvitePayload(jwt="a"), exp
+    )
+    ok2 = await repo.insert_try(
+        code, SHORT_LINK_KIND_COMPANY_INVITE, CompanyInvitePayload(jwt="b"), exp
+    )
     assert ok1 is True
     assert ok2 is False
     await repo.delete_by_code(code)

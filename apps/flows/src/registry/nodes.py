@@ -104,6 +104,7 @@ def create_default_node_registry() -> NodeRegistry:
         NodeType.MCP: "MCP tool",
         NodeType.CHANNEL: "Отправка в канал (Telegram, Email, Webhook)",
         NodeType.HITL_NODE: "Оператор очереди (пауза до специалиста)",
+        NodeType.REFLECTION: "Typed critic / test-time compute gate",
         NodeType.RESOURCE: "Нода-ресурс на графе (pass-through)",
     }
     for node_type, node_class in RUNTIME_NODE_CLASSES.items():

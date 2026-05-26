@@ -4,9 +4,9 @@ from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel
 
 from apps.crm.dependencies import ContainerDep
-from apps.crm.types import JsonObject
 from core.context import get_context
 from core.pagination import OffsetPage
+from core.types import JsonObject
 
 router = APIRouter(prefix="/namespaces/{namespace}/suggests", tags=["Suggests"])
 

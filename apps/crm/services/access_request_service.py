@@ -9,8 +9,8 @@ from apps.crm.db.models import AccessRequest, CRMEntity, Relationship
 from apps.crm.db.repositories.access_request_repository import AccessRequestRepository
 from apps.crm.db.repositories.entity_repository import EntityRepository
 from apps.crm.db.repositories.relationship_repository import RelationshipRepository
-from apps.crm.types import JsonObject
 from core.logging import get_logger
+from core.types import JsonObject
 from core.websocket.publisher import Notification, NotificationType, notify_user
 
 logger = get_logger(__name__)

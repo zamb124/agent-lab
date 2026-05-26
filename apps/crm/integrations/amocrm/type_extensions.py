@@ -10,7 +10,7 @@ from apps.crm.integrations.amocrm.mapping import (
     AMO_USERS_ENTITY_TYPE_ID,
     ENTITY_TYPE_BY_AMO_COLLECTION,
 )
-from apps.crm.types import JsonObject
+from core.types import JsonObject
 
 AMO_OPTIONAL_FIELD_EXTERNAL_REFS: JsonObject = {
     "type": "external_refs",

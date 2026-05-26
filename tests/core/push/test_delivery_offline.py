@@ -6,7 +6,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from core.push.models import PushSubscription
+from core.db.models import PushSubscription
 
 
 @pytest.mark.asyncio

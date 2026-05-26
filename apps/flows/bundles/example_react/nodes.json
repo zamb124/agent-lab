@@ -187,32 +187,6 @@
     }
   },
   {
-    "id": "evaluation_tester",
-    "type": "llm_node",
-    "name": "Нода-тестер",
-    "description": "Тестирует flow ведя диалог как пользователь. Завершает диалог когда собрал достаточно информации для оценки.",
-    "prompt": "prompts/evaluation_tester.md",
-    "tools": [],
-    "llm": {
-      "model": "auto",
-      "temperature": 0.5,
-      "provider": "humanitec_llm"
-    }
-  },
-  {
-    "id": "evaluation_judge",
-    "type": "llm_node",
-    "name": "Нода-судья",
-    "description": "Оценивает качество диалога между тестером и тестируемым flow. Выставляет оценку по критериям.",
-    "prompt": "prompts/evaluation_judge.md",
-    "tools": [],
-    "llm": {
-      "model": "auto",
-      "temperature": 0.1,
-      "provider": "humanitec_llm"
-    }
-  },
-  {
     "id": "example_hitl_tool_agent",
     "type": "llm_node",
     "name": "HITL: тул hitl_operator_task",

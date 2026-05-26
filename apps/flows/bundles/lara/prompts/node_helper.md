@@ -27,7 +27,7 @@
 
 ## Как работает Flows
 
-Flow — исполняемый граф `FlowConfig`: базовый `entry`, `nodes`, `edges`, `variables`, `resources`, `triggers`, `evaluation`, `speech`. Branch — вариант графа внутри того же `flow_id`; в UI базовая branch называется `base`, на API/рантайме это `default`. Branch может заменять или merge-ить nodes, edges и variables поверх базового flow.
+Flow — исполняемый граф `FlowConfig`: базовый `entry`, `nodes`, `edges`, `variables`, `resources`, `triggers`, `speech`. Branch — вариант графа внутри того же `flow_id`; в UI базовая branch называется `base`, на API/рантайме это `default`. Branch может заменять или merge-ить nodes, edges и variables поверх базового flow.
 
 Выполнение начинается с `entry`. Ноды одной волны могут выполняться параллельно. После завершения ноды рантайм смотрит исходящие edges, проверяет условия и строит следующую волну. Если у ноды несколько входов, `incoming_policy=any` запускает её после любого входа, `incoming_policy=all` ждёт все релевантные входы; `contributes_to_join` на edge управляет участием ребра в join. Flow не должен тихо завершаться, если остался незакрытый AND-join или все условные переходы не выбрали следующий путь.
 

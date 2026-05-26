@@ -339,6 +339,7 @@ async def test_capability_manifest_and_docs_are_served_by_gateway(sandbox_servic
         assert capability_names >= tool_capability_names
         assert capability_names >= builtin_tool_capability_names
         assert "tools.call" not in capability_names
+        assert "tools.call_builtin" not in capability_names
 
         for language in CAPABILITY_LANGUAGES:
             docs_response = await client.get(

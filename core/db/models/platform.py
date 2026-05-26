@@ -23,7 +23,7 @@ from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column
 
 from core.db.models.base import Base
-from core.types import JsonObject
+from core.types import JsonObject, PushSubscriptionKeys
 
 _TableArgs: TypeAlias = tuple[CheckConstraint | Index | UniqueConstraint, ...]
 
@@ -381,7 +381,7 @@ class PushSubscription(Base):
     id: Mapped[str] = mapped_column(String(255), primary_key=True, index=True)
     user_id: Mapped[str] = mapped_column(String(255), nullable=False, index=True)
     endpoint: Mapped[str] = mapped_column(String(2048), nullable=False, unique=True)
-    keys: Mapped[dict[str, str]] = mapped_column(JSONB, nullable=False)
+    keys: Mapped[PushSubscriptionKeys] = mapped_column(JSONB, nullable=False)
     user_agent: Mapped[str | None] = mapped_column(String(512), nullable=True)
     platform: Mapped[str | None] = mapped_column(String(50), nullable=True)
     created_at: Mapped[datetime] = mapped_column(

@@ -23,12 +23,15 @@ setup_worker_logging_early("flows_worker", logging_config=_flow_worker_settings.
 set_flow_settings(_flow_worker_settings)
 
 import asyncio  # noqa: E402
+import os  # noqa: E402
+
+os.environ["FLOWS_WORKER_REGISTER_TASKS"] = "true"
 
 from taskiq import TaskiqState  # noqa: E402
 
 from apps.flows.config import get_settings  # noqa: E402
+from apps.flows_worker.task_registry import recovery_handler, worker_app  # noqa: E402
 from apps.flows.src.container import FlowContainer, get_container  # noqa: E402
-from apps.flows_worker.broker import broker as worker_app, recovery_handler  # noqa: E402
 from core.billing import set_billing_service  # noqa: E402
 from core.billing.cbr_rate_provider import refresh_loop_coro as _cbr_loop_coro  # noqa: E402
 from core.billing.cbr_rate_provider import refresh_rate_once as _cbr_refresh_once  # noqa: E402
@@ -154,22 +157,6 @@ register_worker_events(
     worker_startup,
     worker_shutdown,
     service_name="flows_worker",
-)
-
-import apps.flows.src.tasks.company_init_tasks as _company_init_tasks  # noqa: E402
-import apps.flows.src.tasks.flow_tasks as _flow_tasks  # noqa: E402
-import apps.flows.src.tasks.llm_tasks as _llm_tasks  # noqa: E402
-import apps.flows.src.tasks.node_tasks as _node_tasks  # noqa: E402
-import apps.flows.src.tasks.scheduled_tasks as _scheduled_tasks  # noqa: E402
-import apps.flows.src.tasks.tool_tasks as _tool_tasks  # noqa: E402
-
-_TASK_REGISTRATION_MODULES = (
-    _company_init_tasks,
-    _flow_tasks,
-    _llm_tasks,
-    _node_tasks,
-    _scheduled_tasks,
-    _tool_tasks,
 )
 
 # CRM attachment tasks теперь в rag worker (apps/rag_worker/worker.py)

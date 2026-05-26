@@ -517,7 +517,7 @@ class SmartProxyClient:
         **kwargs: Unpack[HttpRequestKwargs],
     ) -> httpx.Response:
         http_method = method.upper()
-        strategy = getattr(self, "_strategy", ProxyStrategy.DIRECT_FIRST)
+        strategy = self._strategy
 
         if self._is_local_url(url):
             async with self._create_client() as client:

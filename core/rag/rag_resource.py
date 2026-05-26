@@ -8,7 +8,7 @@
 
 from __future__ import annotations
 
-from typing import Protocol
+from typing import Protocol, override
 
 from core.clients.service_client import ServiceClientError
 from core.context import get_context
@@ -56,7 +56,7 @@ class RAGResource:
         index_profile_config: JsonObject | None = None,
     ) -> None:
         self._container: _RAGResourceContainer = container
-        self._bind = RagResourceBindParams(
+        self._bind: RagResourceBindParams = RagResourceBindParams(
             namespace=namespace,
             provider=provider,
             default_top_k=default_top_k,
@@ -134,10 +134,10 @@ class RAGResource:
         namespace_repo = self._container.namespace_repository
         existing_namespace = await namespace_repo.get(self._bind.namespace)
         if existing_namespace is None:
-            await namespace_repo.set(
+            _ = await namespace_repo.set(
                 Namespace(name=self._bind.namespace, company_id=context.active_company.company_id)
             )
-        doc_metadata = {**(metadata or {})}
+        doc_metadata: RAGMetadata = dict(metadata) if metadata is not None else {}
         doc_metadata["document_id"] = document_id
 
         ipc_from_meta = doc_metadata.get("index_profile_config")
@@ -161,6 +161,7 @@ class RAGResource:
 
         return {"document_id": doc.document_id, "status": "added"}
 
+    @override
     def __repr__(self) -> str:
         return f"<RAGResource namespace={self._bind.namespace} provider={self._bind.provider}>"
 

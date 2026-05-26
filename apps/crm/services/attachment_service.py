@@ -15,12 +15,11 @@ from apps.crm.services.file_text_reader import load_text_from_bytes
 from apps.crm.services.note_attachment_description import (
     merge_attachment_extracted_into_description,
 )
-from apps.crm.types import JsonObject
 from core.clients.rag_client import RagClient
 from core.clients.service_client import ServiceClientError
 from core.context import get_context
 from core.logging import get_logger
-from core.types import require_json_object
+from core.types import JsonObject, require_json_object
 
 if TYPE_CHECKING:
     from apps.crm.db.repositories.access_grant_repository import AccessGrantRepository

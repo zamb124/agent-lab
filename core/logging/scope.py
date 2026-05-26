@@ -80,7 +80,7 @@ class LogContractViolation(RuntimeError):
 
 
 @dataclass(frozen=True)
-class _ScopeToken:
+class ScopeToken:
     """Снимок токенов скоупа и контекста для аккуратного выхода."""
 
     scope_token: Token[LogScope]
@@ -105,7 +105,7 @@ def enter_request_scope(
     company_id: str | None = None,
     requires_user: bool = False,
     **extra: object,
-) -> _ScopeToken:
+) -> ScopeToken:
     """
     Перевести логирование в request-скоуп и забиндить обязательные поля.
 
@@ -155,10 +155,10 @@ def enter_request_scope(
 
     scope_token = _LOG_SCOPE.set("request")
     auth_token = _LOG_SCOPE_REQUIRES_USER.set(bool(requires_user))
-    return _ScopeToken(scope_token=scope_token, auth_token=auth_token, snapshot=snapshot)
+    return ScopeToken(scope_token=scope_token, auth_token=auth_token, snapshot=snapshot)
 
 
-def exit_request_scope(token: _ScopeToken | None) -> None:
+def exit_request_scope(token: ScopeToken | None) -> None:
     """Снять request-скоуп и восстановить лог-контекст из snapshot."""
     if token is not None:
         _LOG_SCOPE.reset(token.scope_token)
@@ -196,7 +196,7 @@ class RequestLogScope:
         self._company_id: str | None = company_id
         self._requires_user: bool = requires_user
         self._extra: dict[str, object] = extra
-        self._token: _ScopeToken | None = None
+        self._token: ScopeToken | None = None
 
     def __enter__(self) -> "RequestLogScope":
         self._token = enter_request_scope(
@@ -283,6 +283,7 @@ __all__ = [
     "REQUIRED_AUTHENTICATED_REQUEST_KEYS",
     "REQUIRED_REQUEST_KEYS",
     "RequestLogScope",
+    "ScopeToken",
     "SystemLogScope",
     "enter_request_scope",
     "exit_request_scope",

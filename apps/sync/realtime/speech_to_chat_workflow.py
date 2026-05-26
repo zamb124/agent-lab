@@ -339,7 +339,7 @@ async def _post_segment_file_as_message(
 
     normalized_url = _normalize_storage_url_for_worker(
         storage_url=storage_url,
-        testing=bool(getattr(settings, "testing", False)),
+        testing=settings.testing,
     )
     raw = await _fetch_segment_bytes(storage_url=normalized_url)
     if file_size > 0 and len(raw) != file_size:

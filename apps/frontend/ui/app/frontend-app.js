@@ -35,6 +35,10 @@ import {
 import { teamMembersResource, inviteGenerateOp } from '../events/resources/team.resource.js';
 import { embedConfigsResource, embedCodeLoadOp } from '../events/resources/embed.resource.js';
 import { landingAgentsLoadOp, landingDemoSessionOp } from '../events/resources/landing-demo.resource.js';
+import {
+    publicSearchRunOp,
+    publicSearchSourceDescribeOp,
+} from '../events/resources/public-search.resource.js';
 import { flowsCatalogOp } from '../events/resources/flows-catalog.resource.js';
 import {
     schedulerTasksResource,
@@ -101,6 +105,7 @@ import { applyPublicDocumentMeta } from '../utils/public-document-meta.js';
 import '@platform/lib/components/layout/platform-island.js';
 import '../components/frontend-sidebar.js';
 import '../pages/landing-page.js';
+import '../pages/search-page.js';
 import '../pages/products/product-agents-page.js';
 import '../pages/products/product-rag-page.js';
 import '../pages/products/product-crm-page.js';
@@ -130,6 +135,7 @@ import '../pages/admin/billing-admin-page.js';
 
 const FRONTEND_ROUTES = [
     { key: 'landing',                 path: '',                                                titleKey: 'routes.landing' },
+    { key: 'search',                  path: 'search',                   parent: 'landing',     titleKey: 'routes.search' },
     { key: 'product-agents',          path: 'products/agents',          parent: 'landing',     titleKey: 'routes.product-agents' },
     { key: 'product-rag',             path: 'products/rag',             parent: 'landing',     titleKey: 'routes.product-rag' },
     { key: 'product-crm',             path: 'products/crm',             parent: 'landing',     titleKey: 'routes.product-crm' },
@@ -162,6 +168,7 @@ const FRONTEND_ROUTES = [
 
 const PUBLIC_ROUTE_KEYS = new Set([
     'landing',
+    'search',
     'product-agents', 'product-rag', 'product-crm', 'product-sync', 'product-documents',
     'policy', 'terms', 'support',
     'digital-workers',
@@ -171,6 +178,7 @@ const PUBLIC_ROUTE_KEYS = new Set([
 
 const LANDING_ROUTE_KEYS = new Set([
     'landing',
+    'search',
     'product-agents', 'product-rag', 'product-crm', 'product-sync', 'product-documents',
     'policy', 'terms', 'support',
     'digital-workers',
@@ -201,6 +209,7 @@ const FRONTEND_BOTTOM_NAV_ITEMS = [
 
 const FRONTEND_BOTTOM_NAV_HIDE_ON_ROUTES = [
     'landing',
+    'search',
     'product-agents', 'product-rag', 'product-crm', 'product-sync', 'product-documents',
     'policy', 'terms', 'support',
     'digital-workers',
@@ -230,6 +239,8 @@ export class FrontendApp extends PlatformApp {
         embedCodeLoadOp,
         landingAgentsLoadOp,
         landingDemoSessionOp,
+        publicSearchRunOp,
+        publicSearchSourceDescribeOp,
         flowsCatalogOp,
         schedulerTasksResource,
         schedulerPauseOp,
@@ -380,6 +391,7 @@ export class FrontendApp extends PlatformApp {
         if (typeof window === 'undefined') return true;
         const path = window.location.pathname.replace(/\/+$/, '') || '/';
         if (path === '/') return false;
+        if (path === '/search') return false;
         if (/^\/demo\/digital-workers(\/|$)/.test(path)) return false;
         if (path.startsWith('/products/')) return false;
         if (path === '/policy' || path === '/terms' || path === '/support') return false;
@@ -400,6 +412,7 @@ export class FrontendApp extends PlatformApp {
             auth.status === 'unauthenticated' &&
             auth.sessionEndCause === null &&
             routeKey &&
+            !PUBLIC_ROUTE_KEYS.has(routeKey) &&
             !this._deferredAuthMeRequested
         ) {
             this._deferredAuthMeRequested = true;
@@ -496,6 +509,10 @@ export class FrontendApp extends PlatformApp {
                 title = this.t('meta.home_title', {}, 'landing');
                 description = this.t('meta.home_description', {}, 'landing');
                 break;
+            case 'search':
+                title = this.t('meta.search_title', {}, 'landing');
+                description = this.t('meta.search_description', {}, 'landing');
+                break;
             case 'blog':
                 title = this.t('meta.blog_title', {}, 'landing');
                 description = this.t('meta.blog_description', {}, 'landing');
@@ -591,6 +608,7 @@ export class FrontendApp extends PlatformApp {
         const slug = typeof p.slug === 'string' ? p.slug : '';
         switch (routeKey) {
             case 'landing':            return html`<landing-page></landing-page>`;
+            case 'search':             return html`<public-search-page></public-search-page>`;
             case 'product-agents':     return html`<product-agents-page></product-agents-page>`;
             case 'product-rag':        return html`<product-rag-page></product-rag-page>`;
             case 'product-crm':        return html`<product-crm-page></product-crm-page>`;

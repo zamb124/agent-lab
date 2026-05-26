@@ -18,7 +18,7 @@ Pydantic-схема ``rag.document_indexing`` (merged ``RAGConfig``): парси
 
 from __future__ import annotations
 
-from typing import Literal
+from typing import ClassVar, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
@@ -40,7 +40,7 @@ __all__ = [
 class IndexProfileParsingConfig(BaseModel):
     """Движок парсинга и опции, маппящиеся на адаптеры в core/rag/."""
 
-    model_config = ConfigDict(extra="forbid")
+    model_config: ClassVar[ConfigDict] = ConfigDict(extra="forbid")
 
     engine: Literal["unstructured", "marker"] = "unstructured"
     languages: list[str] = Field(default_factory=lambda: ["rus", "eng"])
@@ -63,9 +63,9 @@ IndexProfileSplitStrategy = Literal[
 
 
 class IndexProfileSplitConfig(BaseModel):
-    """Параметры нарезки текста на чанки (Chonkie + legacy tiktoken)."""
+    """Параметры нарезки текста на чанки (Chonkie + fixed-token tiktoken strategy)."""
 
-    model_config = ConfigDict(extra="forbid")
+    model_config: ClassVar[ConfigDict] = ConfigDict(extra="forbid")
 
     strategy: IndexProfileSplitStrategy = "fixed_tokens"
     chunk_size: int = Field(default=512, gt=0)
@@ -86,7 +86,7 @@ class IndexProfileSplitConfig(BaseModel):
 class IndexProfileLexicalConfig(BaseModel):
     """Лексический слой по чанкам (FTS/BM25 и т.д.)."""
 
-    model_config = ConfigDict(extra="forbid")
+    model_config: ClassVar[ConfigDict] = ConfigDict(extra="forbid")
 
     enabled: bool = False
     language: str | None = Field(
@@ -99,7 +99,7 @@ class IndexProfileLexicalConfig(BaseModel):
 
 
 class SearchChannelsDefaults(BaseModel):
-    model_config = ConfigDict(extra="forbid")
+    model_config: ClassVar[ConfigDict] = ConfigDict(extra="forbid")
 
     semantic: bool = True
     lexical: bool = True
@@ -112,7 +112,7 @@ class SearchChannelsDefaults(BaseModel):
 
 
 class RerankerSearchDefaults(BaseModel):
-    model_config = ConfigDict(extra="forbid")
+    model_config: ClassVar[ConfigDict] = ConfigDict(extra="forbid")
 
     enabled: bool = True
     url: str | None = None
@@ -122,7 +122,7 @@ class RerankerSearchDefaults(BaseModel):
 class IndexProfileSearchDefaults(BaseModel):
     """Дефолты поиска (запрос может переопределить)."""
 
-    model_config = ConfigDict(extra="forbid")
+    model_config: ClassVar[ConfigDict] = ConfigDict(extra="forbid")
 
     channels: SearchChannelsDefaults | None = None
     rrf_k: int | None = Field(default=None, gt=0)
@@ -141,7 +141,7 @@ class IndexProfileConfig(BaseModel):
     Поле `embedding` здесь отсутствует — модель эмбеддинга задаётся глобальным ``rag.embedding``.
     """
 
-    model_config = ConfigDict(extra="forbid")
+    model_config: ClassVar[ConfigDict] = ConfigDict(extra="forbid")
 
     split: IndexProfileSplitConfig = Field(default_factory=IndexProfileSplitConfig)
     parsing: IndexProfileParsingConfig = Field(default_factory=IndexProfileParsingConfig)

@@ -1,8 +1,7 @@
 /**
  * OfficeDocumentsCatalogsPage — дашборд каталогов документов.
  *
- * Маршрут `/documents/catalogs` (+ legacy alias `/documents/catalog/:catalogId`,
- * приходящий через `focusCatalogId` prop). Фабрики:
+ * Маршрут `/documents/catalogs`. Фабрики:
  *   - useResource('office/catalogs', autoload) — список каталогов
  *   - useOp('office/documents')               — `setActiveCatalog` action
  *
@@ -27,10 +26,6 @@ import '../components/office-catalog-card.js';
 
 export class OfficeDocumentsCatalogsPage extends PlatformPage {
     static i18nNamespace = 'documents';
-
-    static properties = {
-        focusCatalogId: { type: String },
-    };
 
     static styles = [
         PlatformPage.styles,
@@ -77,27 +72,13 @@ export class OfficeDocumentsCatalogsPage extends PlatformPage {
 
     constructor() {
         super();
-        this.focusCatalogId = '';
         this._catalogs = this.useResource('office/catalogs', { autoload: true });
         this._documents = this.useOp('office/documents');
-        this._focusHandled = false;
     }
 
     connectedCallback() {
         super.connectedCallback();
         this.useEvent(CoreEvents.UI_DOCUMENTS_RELOAD_REQUESTED, () => this._catalogs.load());
-    }
-
-    updated(changed) {
-        super.updated && super.updated(changed);
-        if (!this._focusHandled
-            && typeof this.focusCatalogId === 'string'
-            && this.focusCatalogId.length > 0) {
-            this._focusHandled = true;
-            this._documents.setActiveCatalog({ catalogId: this.focusCatalogId });
-            this._documents.setFilterCatalogs({ catalogIds: [this.focusCatalogId] });
-            this.navigate('documents_list');
-        }
     }
 
     _onCreateCatalog() {
@@ -155,14 +136,6 @@ export class OfficeDocumentsCatalogsPage extends PlatformPage {
     render() {
         const items = this._catalogs.items;
         const loading = this._catalogs.loading;
-        const focusedCatalog = typeof this.focusCatalogId === 'string' && this.focusCatalogId.length > 0
-            ? items.find((c) => c && c.catalog_id === this.focusCatalogId)
-            : null;
-        const crumbLabel = focusedCatalog
-            && typeof focusedCatalog.title === 'string'
-            && focusedCatalog.title.length > 0
-            ? focusedCatalog.title
-            : '';
         return html`
             <page-header title=${this.t('catalogs.heading')} actions-overflow="visible">
                 <div slot="actions">
@@ -173,7 +146,7 @@ export class OfficeDocumentsCatalogsPage extends PlatformPage {
             </page-header>
             <div class="page-body">
             <div class="breadcrumbs-wrap">
-                <platform-breadcrumbs current-label=${crumbLabel}></platform-breadcrumbs>
+                <platform-breadcrumbs current-label=""></platform-breadcrumbs>
             </div>
             ${loading ? html`<div class="loading">${this.t('list.loading')}</div>` : ''}
             ${!loading && items.length === 0 ? this._renderEmpty() : ''}

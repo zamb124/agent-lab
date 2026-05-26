@@ -39,6 +39,7 @@ from apps.frontend.api.platform_pronunciation_rules import (
 from apps.frontend.api.platform_tracing import router as platform_tracing_router
 from apps.frontend.api.public_docs_assistant import router as public_docs_assistant_router
 from apps.frontend.api.public_landing_agents import router as public_landing_agents_router
+from apps.frontend.api.public_search import router as public_search_router
 from apps.frontend.api.public_site import router as public_site_router
 from apps.frontend.api.scheduler import router as scheduler_router
 from apps.frontend.api.services import router as services_router
@@ -60,6 +61,7 @@ from apps.frontend.services.flow_preview_guest_html import (
 )
 from core.app.factory import create_service_app
 from core.app.health_payload import build_health_payload
+from core.app_state import get_request_correlation_ids
 from core.clients.payment import PaymentProviderFactory
 from core.clients.voice_resolver import invalidate_platform_pronunciation_cache
 from core.config import get_settings
@@ -74,6 +76,7 @@ from core.logging import get_logger
 from core.middleware.auth.company_resolver import build_service_base_url
 from core.middleware.static_core_module_cors import StaticCoreModuleCorsMiddleware
 from core.short_links.kinds import SHORT_LINK_KIND_FLOW_PREVIEW_EMBED
+from core.short_links.payloads import FlowPreviewEmbedPayload
 
 logger = get_logger(__name__)
 _FRONTEND_DEV_CORS_ORIGIN_REGEX = (
@@ -113,8 +116,8 @@ def _flow_preview_preferred_lang(request: Request) -> str:
 
 def _flow_preview_unavailable_response(request: Request) -> Response:
     lang = _flow_preview_preferred_lang(request)
-    rid_raw = getattr(request.state, "request_id", None)
-    request_id = rid_raw if isinstance(rid_raw, str) and rid_raw.strip() else None
+    correlation = get_request_correlation_ids(request)
+    request_id = correlation.request_id if correlation is not None else None
     body = build_flow_preview_unavailable_html(lang=lang, request_id=request_id)
     return Response(status_code=404, content=body, media_type="text/html; charset=utf-8")
 
@@ -274,8 +277,8 @@ async def on_startup(app: FastAPI, container: FrontendContainer, settings: Front
 
 # Создаем приложение через фабрику (автоматически подключает middleware, контейнер и т.д.)
 _frontend_settings = get_frontend_settings()
-_frontend_cors_regex = getattr(_frontend_settings, "cors_allow_origin_regex", None)
-_frontend_cors_origins = list(getattr(_frontend_settings, "cors_allow_origins", []))
+_frontend_cors_regex = _frontend_settings.cors_allow_origin_regex
+_frontend_cors_origins = list(_frontend_settings.cors_allow_origins)
 if _frontend_cors_regex is None and _frontend_settings.server.debug and not is_testing():
     _frontend_cors_regex = _FRONTEND_DEV_CORS_ORIGIN_REGEX
 
@@ -296,6 +299,7 @@ app = create_service_app(
         embed_configs_router,
         public_landing_agents_router,
         public_docs_assistant_router,
+        public_search_router,
         public_site_router,
         invites_router,
         team_router,
@@ -382,11 +386,8 @@ async def resolve_short_link(request: Request, container: ContainerDep, code: st
         now = datetime.now(UTC)
         if row.expires_at <= now:
             raise HTTPException(status_code=404, detail="Ссылка не найдена или истекла")
-        handoff_raw = row.payload.get("handoff_id")
-        if not isinstance(handoff_raw, str) or not handoff_raw.strip():
-            raise HTTPException(status_code=404, detail="Ссылка не найдена или истекла")
-        handoff_id = handoff_raw.strip()
-        loc_path = f"/flow-preview?h={quote(handoff_id, safe='')}"
+        payload = FlowPreviewEmbedPayload.model_validate(row.payload)
+        loc_path = f"/flow-preview?h={quote(payload.handoff_id, safe='')}"
         return RedirectResponse(url=_short_link_redirect_location(loc_path), status_code=303)
 
     target = await container.short_link_service.resolve_absolute_redirect_url(trimmed)

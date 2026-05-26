@@ -12,26 +12,6 @@ from tests.ui.scenario_doc import ScenarioRecorder
 
 
 @pytest.mark.scenario(
-    service="flows",
-    doc_slug="flows-shell",
-    title="Flows: оболочка example_react",
-    description="Проверка отображения flows-app на демо-маршруте после авторизации.",
-)
-@pytest.mark.asyncio
-@pytest.mark.e2e
-@pytest.mark.timeout(120)
-async def test_flows_shell_loads(
-    scenario: ScenarioRecorder,
-    flows_ui: AppUI,
-    ui_page_system: Page,
-) -> None:
-    await flows_ui.open(ui_page_system)
-    await scenario.step("SPA Flows открыт", ui_page_system)
-    await flows_ui.expect_shell(ui_page_system)
-    await scenario.step("Оболочка flows-app видна", ui_page_system)
-
-
-@pytest.mark.scenario(
     service="rag",
     doc_slug="rag-shell",
     title="RAG: оболочка сервиса",

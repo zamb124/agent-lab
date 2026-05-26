@@ -9,7 +9,8 @@ Sign in with Apple, подходит для push, только если в Apple
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any
+
+from core.config import BaseSettings
 
 
 @dataclass(frozen=True)
@@ -21,42 +22,36 @@ class ResolvedApnsCredentials:
     use_sandbox: bool
 
 
-def resolve_apns_credentials(settings: Any) -> ResolvedApnsCredentials | None:
+def resolve_apns_credentials(settings: BaseSettings) -> ResolvedApnsCredentials | None:
     push = settings.push
-    bundle_id = push.apns_bundle_id
-    if bundle_id is None or not str(bundle_id).strip():
+    bundle_id = _clean_optional_config_value(push.apns_bundle_id)
+    if bundle_id is None:
         return None
 
-    apple = None
-    providers = getattr(settings.auth, "providers", None)
-    if isinstance(providers, dict):
-        apple = providers.get("apple")
+    apple = settings.auth.providers.get("apple")
 
-    team_id = push.apns_team_id or _apple_field(apple, "apple_team_id")
-    key_id = push.apns_key_id or _apple_field(apple, "apple_key_id")
-    private_key = push.apns_private_key or _apple_field(apple, "apple_private_key")
+    team_id = _clean_optional_config_value(push.apns_team_id)
+    key_id = _clean_optional_config_value(push.apns_key_id)
+    private_key = _clean_optional_config_value(push.apns_private_key)
+    if apple is not None:
+        team_id = team_id or _clean_optional_config_value(apple.apple_team_id)
+        key_id = key_id or _clean_optional_config_value(apple.apple_key_id)
+        private_key = private_key or _clean_optional_config_value(apple.apple_private_key)
 
     if not team_id or not key_id or not private_key:
         return None
 
-    pem = str(private_key).strip()
-    if not pem:
-        return None
-
     return ResolvedApnsCredentials(
-        team_id=str(team_id).strip(),
-        key_id=str(key_id).strip(),
-        private_key_pem=pem,
-        bundle_id=str(bundle_id).strip(),
-        use_sandbox=bool(push.apns_use_sandbox),
+        team_id=team_id,
+        key_id=key_id,
+        private_key_pem=private_key,
+        bundle_id=bundle_id,
+        use_sandbox=push.apns_use_sandbox,
     )
 
 
-def _apple_field(apple: Any, name: str) -> str | None:
-    if apple is None:
-        return None
-    value = getattr(apple, name, None)
+def _clean_optional_config_value(value: str | None) -> str | None:
     if value is None:
         return None
-    s = str(value).strip()
-    return s if s else None
+    cleaned = value.strip()
+    return cleaned if cleaned else None

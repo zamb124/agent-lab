@@ -3,7 +3,7 @@
 from apps.flows.src.channels.types import PreparedTaskParams
 from apps.flows.src.container import get_container
 from apps.flows.src.tasks.task_names import TASK_PROCESS_FLOW
-from apps.flows_worker.broker import broker
+from apps.flows_worker.broker_core import broker
 from core.context import Context, set_context
 from core.files.file_ref import FileRef
 from core.logging import get_logger

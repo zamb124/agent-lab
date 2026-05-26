@@ -12,7 +12,7 @@ on:
         required: false
         default: ""
       apps_node:
-        description: "Нода для всех apps (flows/frontend/crm/rag/sync/office/voice/browser/scheduler-api). unchanged = из values.yaml"
+        description: "Нода для всех apps (flows/frontend/crm/rag/sync/office/voice/browser/search/scheduler-api). unchanged = из values.yaml"
         type: choice
         default: unchanged
         options:
@@ -316,6 +316,10 @@ jobs:
           YOOMONEY_ACCESS_TOKEN: ${{ secrets.YOOMONEY_ACCESS_TOKEN }}
           PROXY_ENABLED: ${{ secrets.PROXY__ENABLED }}
           PROXY_PROXIES: ${{ secrets.PROXY__PROXIES }}
+          SEARCH__TINYFISH__API_KEY: ${{ secrets.SEARCH__TINYFISH__API_KEY }}
+          SEARCH__LINKUP__API_KEY: ${{ secrets.SEARCH__LINKUP__API_KEY }}
+          SEARCH__SERPER__API_KEY: ${{ secrets.SEARCH__SERPER__API_KEY }}
+          SEARCH__TAVILY__API_KEY: ${{ secrets.SEARCH__TAVILY__API_KEY }}
           HELM_DELETE_ORPHAN_PLATFORM_SECRET: ${{ inputs.replace_orphan_platform_secret == true && '1' || '0' }}
         run: |
           set -euo pipefail

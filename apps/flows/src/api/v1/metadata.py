@@ -35,6 +35,16 @@ _NODE_TYPES: list[JsonObject] = [
         "outputs": 1,
     },
     {
+        "category": "core",
+        "type": "reflection",
+        "name": "Reflection Gate",
+        "icon": "sparkle",
+        "description": "Typed critic gate без side effects",
+        "color": "#14b8a6",
+        "inputs": 1,
+        "outputs": 1,
+    },
+    {
         "category": "tools",
         "type": "external_api",
         "name": "External API",

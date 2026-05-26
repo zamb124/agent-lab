@@ -21,6 +21,7 @@ export const NODE_TYPE_META = Object.freeze({
     channel:      { icon: 'send',     category: 'flow' },
     flow:         { icon: 'workflow', category: 'flow' },
     hitl_node:    { icon: 'users',    category: 'hitl' },
+    reflection:   { icon: 'sparkle',  category: 'core' },
 });
 
 export const CATEGORY_TOKEN = Object.freeze({

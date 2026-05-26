@@ -71,7 +71,6 @@ async def _start_notes_import(
     *,
     namespace: str,
     source_text: str | None = None,
-    source_file_id: str | None = None,
     source_file_ids: list[str] | None = None,
     split_by_headings: bool = False,
     chunk_max_chars: int = 50_000,
@@ -86,8 +85,6 @@ async def _start_notes_import(
     }
     if source_text is not None:
         body["source_text"] = source_text
-    if source_file_id is not None:
-        body["source_file_id"] = source_file_id
     if source_file_ids is not None:
         body["source_file_ids"] = source_file_ids
     response = await crm_client.post(
@@ -215,7 +212,7 @@ class TestKnowledgeImportE2E:
             crm_client,
             auth_headers_system,
             namespace=ns,
-            source_file_id=fid,
+            source_file_ids=[fid],
         )
         await _assert_blob_then_rollback(
             crm_client,

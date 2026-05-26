@@ -4,21 +4,33 @@ from datetime import datetime
 
 from sqlalchemy import delete, select
 from sqlalchemy.exc import IntegrityError
+from sqlalchemy.sql.elements import ColumnElement
 
 from core.db.database import get_session_factory
+from core.db.jsonb import jsonb_text
 from core.db.models.platform import PlatformShortLink
 from core.db.utils import get_rowcount
 from core.short_links.kinds import SHORT_LINK_KIND_SYNC_CALL_JOIN
+from core.short_links.payloads import ShortLinkPayload
+from core.types import parse_json_object
+
+
+def _payload_text(key: str) -> ColumnElement[str | None]:
+    return jsonb_text(PlatformShortLink.payload, key)
+
+
+def _payload_text_eq(key: str, value: str) -> ColumnElement[bool]:
+    return _payload_text(key) == value
 
 
 class ShortLinkRepository:
     """platform_short_links в shared БД."""
 
     def __init__(self, db_url: str | None = None) -> None:
-        self._db_url = db_url
+        self._db_url: str | None = db_url
 
     async def insert_try(
-        self, code: str, kind: str, payload: dict[str, str], expires_at: datetime
+        self, code: str, kind: str, payload: ShortLinkPayload, expires_at: datetime
     ) -> bool:
         """Возвращает True если вставка прошла, False при дубликате code."""
         factory = await get_session_factory(self._db_url)
@@ -26,7 +38,7 @@ class ShortLinkRepository:
             row = PlatformShortLink(
                 code=code,
                 kind=kind,
-                payload=payload,
+                payload=parse_json_object(payload.model_dump_json(), "short_link.payload"),
                 expires_at=expires_at,
             )
             session.add(row)
@@ -52,7 +64,7 @@ class ShortLinkRepository:
                 select(PlatformShortLink)
                 .where(
                     PlatformShortLink.kind == SHORT_LINK_KIND_SYNC_CALL_JOIN,
-                    PlatformShortLink.payload["link_token"].astext == link_token,
+                    _payload_text_eq("link_token", link_token),
                 )
                 .limit(1)
             )
@@ -98,7 +110,7 @@ class ShortLinkRepository:
         async with factory() as session:
             stmt = delete(PlatformShortLink).where(
                 PlatformShortLink.kind == SHORT_LINK_KIND_SYNC_CALL_JOIN,
-                PlatformShortLink.payload["link_token"].astext == link_token,
+                _payload_text_eq("link_token", link_token),
             )
             res = await session.execute(stmt)
             await session.commit()

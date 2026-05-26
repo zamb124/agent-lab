@@ -14,9 +14,9 @@ from sqlalchemy import update as sa_update
 
 from apps.crm.db.base import BaseCRMRepository
 from apps.crm.db.models import EntityType
-from apps.crm.types import JsonObject
 from core.db.utils import get_rowcount
 from core.logging import get_logger
+from core.types import JsonObject
 
 logger = get_logger(__name__)
 

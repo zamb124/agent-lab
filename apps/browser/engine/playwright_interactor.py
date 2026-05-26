@@ -219,14 +219,12 @@ class PlaywrightBrowserInteractor:
         if len(pages) == 0:
             raise RuntimeError("Нет страниц в контексте для сохранения состояния")
         page = pages[0]
-        sig_raw: object = getattr(context, "_browser_runtime_signature", None)
-        if not isinstance(sig_raw, ContextSignature):
-            raise RuntimeError("Context не содержит _browser_runtime_signature для сохранения состояния")
+        signature: ContextSignature = await self._leases.context_signature_for_context(context)
         return await self._store.capture_from(
             context,
             page,
             shared_storage_key=shared_storage_key,
-            context_signature=sig_raw,
+            context_signature=signature,
             last_snapshot_ref=None,
         )
 

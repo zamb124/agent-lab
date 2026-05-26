@@ -7,8 +7,8 @@ from sqlalchemy import delete, func, select
 
 from apps.crm.db.base import BaseCRMRepository, CRMDatabase
 from apps.crm.db.models import NamespaceTemplate, NamespaceTemplateType
-from apps.crm.types import JsonObject
 from core.db.utils import get_rowcount
+from core.types import JsonObject
 
 
 class NamespaceTemplateRepository(BaseCRMRepository[NamespaceTemplate]):

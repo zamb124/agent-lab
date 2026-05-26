@@ -1,4 +1,4 @@
-.PHONY: test test-all test-static test-up test-down test-reset test-cov test-cov-all test-cov-report test-browser test-unit test-ui test-ui-doc test-ui-components test-frontend-core test-frontend-core-canon test-frontend-core-unit test-frontend-core-browser
+.PHONY: test test-all test-static test-up test-down test-reset test-cov test-cov-all test-cov-report test-browser test-unit test-ui test-ui-doc test-ui-components test-frontend-core test-frontend-core-canon test-frontend-core-unit test-frontend-core-browser check-strict-agent-architecture check-wider-repo-strictness
 
 WORKERS ?= 5
 PYTEST_COMMAND_TIMEOUT_SECONDS ?= 600
@@ -15,8 +15,18 @@ _PYTEST_IGNORE_UI := --ignore=tests/frontend/browser --ignore=tests/ui
 test-static:
 	@echo "=== Python static checks: ruff ==="
 	uv run ruff check $(RUFF_CHECK_ARGS)
+	@echo "=== Architecture strict gates: agent runtime ==="
+	uv run python scripts/check_strict_agent_architecture.py
+	@echo "=== Architecture strict gates: wider repo audit ==="
+	uv run python scripts/audit_wider_repo_strictness.py
 	@echo "=== Python static checks: basedpyright ==="
 	uv run basedpyright $(BASEDPYRIGHT_CHECK_ARGS)
+
+check-strict-agent-architecture:
+	@uv run python scripts/check_strict_agent_architecture.py
+
+check-wider-repo-strictness:
+	@uv run python scripts/audit_wider_repo_strictness.py
 
 test-up: runtime-bootstrap
 	docker-compose -f docker-compose-test.yaml up -d --pull $(DOCKER_COMPOSE_PULL) postgres-test redis-test minio-test onlyoffice-documentserver provider_litserve test-a2a-agent livekit-test livekit-egress-test livekit-cli-test loki-test tempo-test alloy-test grafana-test

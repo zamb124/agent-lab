@@ -39,7 +39,7 @@ def _envelope(event: UIEvent, target: UIEventTarget) -> str:
 def _resolve_trace_id() -> str | None:
     """Берём trace_id из текущего бизнес-контекста или из лог-контекста."""
     context = get_context()
-    if context is not None and getattr(context, "trace_id", None):
+    if context is not None and context.trace_id:
         return context.trace_id
     log_ctx_trace = get_log_context().get("trace_id")
     if isinstance(log_ctx_trace, str) and log_ctx_trace:

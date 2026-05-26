@@ -7,10 +7,9 @@ from datetime import UTC, date, datetime
 from apps.crm.db.models import AccessGrant, CRMEntity
 from apps.crm.db.repositories.access_grant_repository import AccessGrantRepository
 from apps.crm.db.repositories.entity_type_repository import EntityTypeRepository
-from apps.crm.types import JsonObject
 from core.context import get_context
 from core.logging import get_logger
-from core.types import require_json_object, require_json_value
+from core.types import JsonObject, require_json_object, require_json_value
 
 logger = get_logger(__name__)
 

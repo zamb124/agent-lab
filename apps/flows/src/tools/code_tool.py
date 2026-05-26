@@ -94,7 +94,7 @@ class CodeTool(BaseTool):
         if self._resources_config:
             message = (
                 f"CodeTool '{self.name}': resources are not injected into sandbox code. "
-                + "Use capability('tools.call', ...) / Capability('tools.call', ...) or a dedicated platform capability."
+                + "Use tools.<tool_id>(...) / tools.call('<tool_id>', ...) from the sandbox SDK or a dedicated platform capability."
             )
             raise ValueError(message)
         full_args = self._apply_defaults(args)

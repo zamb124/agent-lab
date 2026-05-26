@@ -16,10 +16,9 @@ from sqlalchemy.exc import IntegrityError
 
 from apps.crm.db.base import BaseCRMRepository
 from apps.crm.db.models import Relationship
-from apps.crm.types import JsonObject
 from core.db.utils import get_rowcount
 from core.logging import get_logger
-from core.types import require_json_object
+from core.types import JsonObject, require_json_object
 
 logger = get_logger(__name__)
 

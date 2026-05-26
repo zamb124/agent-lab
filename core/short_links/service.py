@@ -10,7 +10,11 @@ from core.short_links.kinds import (
     SHORT_LINK_KIND_FLOW_PREVIEW_EMBED,
     SHORT_LINK_KIND_SYNC_CALL_JOIN,
 )
-from core.short_links.payloads import CompanyInvitePayload, SyncCallJoinPayload
+from core.short_links.payloads import (
+    CompanyInvitePayload,
+    FlowPreviewEmbedPayload,
+    SyncCallJoinPayload,
+)
 from core.short_links.repository import ShortLinkRepository
 
 
@@ -44,8 +48,7 @@ class ShortLinkService:
     async def mint_sync_call_join(
         self, link_token: str, expires_at: datetime, company_id: str
     ) -> str:
-        payload_model = SyncCallJoinPayload(link_token=link_token, company_id=company_id)
-        payload = payload_model.model_dump()
+        payload = SyncCallJoinPayload(link_token=link_token, company_id=company_id)
 
         existing_any = await self._repo.find_sync_by_link_token(link_token)
         if existing_any is not None:
@@ -66,8 +69,7 @@ class ShortLinkService:
         raise RuntimeError("Не удалось выделить уникальный код короткой ссылки")
 
     async def mint_company_invite(self, jwt: str, expires_at: datetime) -> str:
-        payload_model = CompanyInvitePayload(jwt=jwt)
-        payload = payload_model.model_dump()
+        payload = CompanyInvitePayload(jwt=jwt)
 
         for _ in range(12):
             code = _random_code()
@@ -83,9 +85,7 @@ class ShortLinkService:
         raise RuntimeError("Не удалось выделить уникальный код короткой ссылки")
 
     async def mint_flow_preview_embed(self, handoff_id: str, expires_at: datetime) -> str:
-        if not isinstance(handoff_id, str) or not handoff_id.strip():
-            raise ValueError("handoff_id must be non-empty string")
-        payload = {"handoff_id": handoff_id.strip()}
+        payload = FlowPreviewEmbedPayload(handoff_id=handoff_id)
 
         for _ in range(12):
             code = _random_code()
@@ -109,14 +109,10 @@ class ShortLinkService:
             return None
 
         if row.kind == SHORT_LINK_KIND_SYNC_CALL_JOIN:
-            token = row.payload.get("link_token")
-            if not isinstance(token, str) or token == "":
-                return None
+            payload = SyncCallJoinPayload.model_validate(row.payload)
             base = require_platform_public_base_url()
-            cid = row.payload.get("company_id")
-            if isinstance(cid, str) and cid != "":
-                return f"{base}/sync/join/{token}?company_id={quote(cid, safe='')}"
-            return f"{base}/sync/join/{token}"
+            company_id = quote(payload.company_id, safe="")
+            return f"{base}/sync/join/{payload.link_token}?company_id={company_id}"
 
         base = require_platform_public_base_url()
 
@@ -141,7 +137,5 @@ class ShortLinkService:
             return None
         if row.kind != SHORT_LINK_KIND_COMPANY_INVITE:
             return None
-        jwt = row.payload.get("jwt")
-        if not isinstance(jwt, str) or jwt == "":
-            return None
-        return jwt
+        payload = CompanyInvitePayload.model_validate(row.payload)
+        return payload.jwt

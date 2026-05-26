@@ -36,7 +36,6 @@ import core.tracing.attributes as trace_attributes
 from apps.crm.db.base import BaseCRMRepository, CRMDatabase
 from apps.crm.db.models import CRMEntity
 from apps.crm.models.api import SemanticTextIndexStatus
-from apps.crm.types import JsonObject
 from core.config import get_settings
 from core.context import get_context, resolve_namespace_or_raise
 from core.db.utils import get_rowcount
@@ -47,6 +46,7 @@ from core.rag.models import RAGMetadata, RAGMetadataFilter
 from core.rag.post_retrieval_rerank import apply_rerank_after_retrieve
 from core.rag.providers.pgvector_provider import PgVectorProvider
 from core.tracing.operation_span import traced_operation
+from core.types import JsonObject
 
 logger = get_logger(__name__)
 
@@ -419,9 +419,6 @@ class EntityRepository(BaseCRMRepository[CRMEntity]):
         limit: int = 100,
         company_id: str | None = None,
         cursor: str | None = None,
-        *,
-        list_note_family: bool = False,
-        note_family_legacy_entity_types: list[str] | None = None,
     ) -> tuple[list[CRMEntity], str | None, bool]:
         """
         Entities c SQL-фильтрами и cursor-пагинацией.
@@ -434,18 +431,7 @@ class EntityRepository(BaseCRMRepository[CRMEntity]):
         async with self._db.session() as session:
             stmt = select(CRMEntity).where(CRMEntity.company_id == cid)
 
-            if list_note_family:
-                legacy = note_family_legacy_entity_types or []
-                if len(legacy) > 0:
-                    stmt = stmt.where(
-                        or_(
-                            CRMEntity.entity_type == "note",
-                            CRMEntity.entity_type.in_(legacy),
-                        )
-                    )
-                else:
-                    stmt = stmt.where(CRMEntity.entity_type == "note")
-            elif entity_type:
+            if entity_type:
                 stmt = stmt.where(CRMEntity.entity_type == entity_type)
             if entity_subtype:
                 stmt = stmt.where(CRMEntity.entity_subtype == entity_subtype)

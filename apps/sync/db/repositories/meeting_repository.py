@@ -10,6 +10,7 @@ from sqlalchemy.orm.attributes import InstrumentedAttribute
 
 from apps.sync.db.base import BaseSyncRepository, SyncDatabase
 from apps.sync.db.models import SyncCallRecording
+from core.types import SqlParameterValue
 
 
 class CallRecordingRepository(BaseSyncRepository[SyncCallRecording]):
@@ -64,7 +65,7 @@ class CallRecordingRepository(BaseSyncRepository[SyncCallRecording]):
         error: str | None = None,
         ended_at: datetime | None = None,
     ) -> None:
-        values: dict[str, object] = {"status": status}
+        values: dict[str, SqlParameterValue] = {"status": status}
         if provider_job_id is not None:
             values["provider_job_id"] = provider_job_id
         if raw_file_id is not None:

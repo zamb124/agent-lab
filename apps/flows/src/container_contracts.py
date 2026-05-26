@@ -2,14 +2,14 @@
 
 from __future__ import annotations
 
-from collections.abc import AsyncIterator, Awaitable, Callable, Mapping, Sequence
+from collections.abc import Awaitable, Callable, Mapping, Sequence
 from typing import TYPE_CHECKING, Protocol, TypeAlias, TypedDict, cast
+from uuid import UUID
 
 from core.types import JsonObject, JsonValue
 
 if TYPE_CHECKING:
     from apps.flows.src.db import (
-        EvaluationRepository,
         FlowRepository,
         LLMModelRepository,
         NodeRepository,
@@ -28,15 +28,22 @@ if TYPE_CHECKING:
         TriggerConfig,
     )
     from apps.flows.src.models.enums import ChannelType, NodeType
-    from apps.flows.src.models.evaluation_result import EvaluationServiceStreamEvent
+    from apps.flows.src.models.evaluation_lab import (
+        EvaluationGatePolicyRunRequest,
+        EvaluationMonitorCycleRequest,
+        EvaluationMonitorCycleResult,
+        EvaluationRunJob,
+        EvaluationRunWithCases,
+        EvaluationTaskiqExecutionContext,
+    )
     from apps.flows.src.models.flow_config import Edge
+    from apps.flows.src.models.operator_schemas import OperatorHandoffCommand
     from apps.flows.src.models.registry_contracts import RegistryFlowSchema
     from apps.flows.src.runners.remote import RemoteCodeRunner
     from apps.flows.src.services.flow_discovery import FlowDiscoveryService
     from apps.flows.src.services.lara_action_engine import LaraActionEngine
     from apps.flows.src.services.lara_facade import LaraFacade
     from apps.flows.src.services.llm_models_service import LLMModelsService
-    from apps.flows.src.services.operator_handoff_service import OperatorHandoffService
     from apps.flows.src.services.schedule_service import ScheduleService
     from apps.flows.src.tools.base import BaseTool
     from apps.flows.src.variables import VariablesService
@@ -57,6 +64,7 @@ if TYPE_CHECKING:
     from core.rag.llm_context_memory_store import RAGLLMContextMemoryStore
     from core.rag.repository import RAGRepository
     from core.state import ExecutionState
+    from core.state.interrupt import HandoffMode
     from core.text_transforms import TextTransformService
 
 
@@ -194,18 +202,6 @@ class FlowFactoryProtocol(Protocol):
     async def get_flow_schema(self, flow_id: str) -> RegistryFlowSchema | None: ...
 
 
-class FlowEvaluationFactoryProtocol(Protocol):
-    @property
-    def container(self) -> "FlowRuntimeContainer": ...
-
-    async def get_effective_nodes_map(
-        self,
-        flow_id: str,
-        branch_id: str,
-        config_version: str | None = None,
-    ) -> dict[str, FlowNodeRuntimeConfig]: ...
-
-
 class TriggerRegistryProtocol(Protocol):
     async def sync_triggers(
         self,
@@ -221,14 +217,99 @@ class TriggerRegistryProtocol(Protocol):
     ) -> TriggerConfig: ...
 
 
-class EvaluationServiceProtocol(Protocol):
-    def run_test_stream(
+class EvaluationLabServiceProtocol(Protocol):
+    async def create_run_job(
         self,
-        flow_id: str,
-        branch_id: str,
-        test_case_id: str,
-        task_id: str | None = None,
-    ) -> AsyncIterator[EvaluationServiceStreamEvent]: ...
+        run_id: str,
+        *,
+        context_data: JsonObject,
+        trace_context: JsonObject | None,
+    ) -> EvaluationRunJob: ...
+
+    async def get_run_job(self, run_id: str) -> EvaluationRunJob: ...
+
+    async def list_pending_run_jobs(self, limit: int) -> list[EvaluationRunJob]: ...
+
+    async def mark_run_job_enqueued(self, run_id: str) -> EvaluationRunJob: ...
+
+    async def mark_run_job_failed(self, run_id: str, error: str) -> EvaluationRunJob: ...
+
+    async def mark_run_enqueue_failed(
+        self,
+        run_id: str,
+        error: str,
+    ) -> EvaluationRunWithCases: ...
+
+    async def execute_run_from_taskiq(
+        self,
+        run_id: str,
+        execution: EvaluationTaskiqExecutionContext,
+    ) -> EvaluationRunWithCases: ...
+
+    async def get_run(self, run_id: str) -> EvaluationRunWithCases: ...
+
+    async def create_gate_policy_run(
+        self,
+        gate_policy_id: str,
+        request: EvaluationGatePolicyRunRequest,
+    ) -> EvaluationRunWithCases: ...
+
+    async def run_monitor_cycle(
+        self,
+        monitor_id: str,
+        request: EvaluationMonitorCycleRequest,
+    ) -> EvaluationMonitorCycleResult: ...
+
+
+class OperatorHandoffServiceProtocol(Protocol):
+    async def register_handoff(
+        self,
+        state: ExecutionState,
+        *,
+        question: str,
+        task_title: str,
+        assignee_queue_slug: str,
+        handoff_mode: HandoffMode,
+        command: OperatorHandoffCommand,
+    ) -> tuple[UUID, str]: ...
+
+    async def receive_user_reply(
+        self,
+        *,
+        company_id: str,
+        task_id: str,
+        text: str,
+        user_id: str,
+        file_ids: list[str] | None = None,
+    ) -> None: ...
+
+    async def claim_task(
+        self,
+        *,
+        company_id: str,
+        task_id: str,
+        operator_user_id: str,
+    ) -> None: ...
+
+    async def publish_operator_message_to_user_stream(
+        self,
+        *,
+        company_id: str,
+        task_id: str,
+        operator_user_id: str,
+        text: str,
+        file_ids: list[str] | None = None,
+    ) -> None: ...
+
+    async def complete_handoff(
+        self,
+        *,
+        company_id: str,
+        task_id: str,
+        operator_user_id: str,
+        resolution: str,
+        file_ids: list[str] | None = None,
+    ) -> None: ...
 
 
 class FlowRuntimeContainer(Protocol):
@@ -240,6 +321,9 @@ class FlowRuntimeContainer(Protocol):
 
     @property
     def flow_factory(self) -> FlowFactoryProtocol: ...
+
+    @property
+    def evaluation_lab_service(self) -> EvaluationLabServiceProtocol: ...
 
     @property
     def workflow_runtime(self) -> DurableWorkflowRuntime: ...
@@ -278,7 +362,7 @@ class FlowRuntimeContainer(Protocol):
     def operator_repository(self) -> OperatorRepository: ...
 
     @property
-    def operator_handoff_service(self) -> OperatorHandoffService: ...
+    def operator_handoff_service(self) -> OperatorHandoffServiceProtocol: ...
 
     @property
     def a2a_client(self) -> A2AClient: ...
@@ -291,9 +375,6 @@ class FlowRuntimeContainer(Protocol):
 
     @property
     def file_processor(self) -> FileProcessor: ...
-
-    @property
-    def evaluation_service(self) -> EvaluationServiceProtocol: ...
 
     @property
     def base_tool_class(self) -> type[BaseTool]: ...
@@ -314,9 +395,6 @@ class FlowRuntimeContainer(Protocol):
 
     @property
     def file_repository(self) -> FileRepository: ...
-
-    @property
-    def evaluation_repository(self) -> EvaluationRepository: ...
 
     @property
     def node_registry(self) -> NodeRegistryProtocol: ...

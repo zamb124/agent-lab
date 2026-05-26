@@ -8,7 +8,7 @@ Permissions основаны на группах пользователя из J
 # Группа с полным доступом
 ADMIN_GROUP = "admin"
 
-# Fallback permission если не указан
+# Secure default permission если permission не указан.
 DEFAULT_PERMISSION: tuple[str, ...] = (ADMIN_GROUP,)
 
 
@@ -50,7 +50,7 @@ class PermissionChecker:
         branch_permission: str | list[str] | None,
         flow_permission: str | list[str] | None = None,
     ) -> bool:
-        """Проверяет доступ к ветке графа. Fallback на permission flow."""
+        """Проверяет доступ к ветке графа. При отсутствии branch policy наследует flow policy."""
         if branch_permission:
             required = self.normalize(branch_permission)
         else:

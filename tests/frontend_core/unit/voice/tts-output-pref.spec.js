@@ -1,5 +1,5 @@
 /**
- * prefs авто-TTS: canonical localStorage key + миграция legacy.
+ * prefs авто-TTS: canonical localStorage key.
  */
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { installFakeStorage } from '../../helpers/fake-storage.js';
@@ -41,15 +41,6 @@ describe('tts-output-pref', () => {
         expect(storage.localStorage.getItem(canonical)).toBe('1');
         expect(m.readTtsOutputEnabled()).toBe(true);
         expect(globalThis.window.dispatchEvent).toHaveBeenCalled();
-    });
-
-    it('миграция platform_tts_output_enabled → canonical', async () => {
-        storage.localStorage.setItem('platform_tts_output_enabled', '0');
-        const m = await import('@platform/lib/voice/tts-output-pref.js');
-        const canonical = platformStorageKey('voice', 'tts_output_enabled');
-        expect(m.readTtsOutputEnabled()).toBe(false);
-        expect(storage.localStorage.getItem(canonical)).toBe('0');
-        expect(storage.localStorage.getItem('platform_tts_output_enabled')).toBeNull();
     });
 
     it('toggleTtsOutputEnabled переключает значение', async () => {

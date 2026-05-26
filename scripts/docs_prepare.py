@@ -36,12 +36,12 @@ _SERVICE_NAV_LABEL_EN: dict[str, str] = {
 
 _SERVICE_SCENARIO_INTRO_RU: dict[str, str] = {
     "platform": "Базовые инструкции для нового пользователя: вход, Dashboard, список сервисов и меню аккаунта.",
-    "flows": "Пошаговые инструкции по Flows: создание flow, работа с канвой, LLM-ноды и редактирование.",
+    "flows": "Пошаговые инструкции по Flows: главная сервиса, запуск агента в чате, создание и редактирование flow, операции published flow и Evaluation Lab.",
 }
 
 _SERVICE_SCENARIO_INTRO_EN: dict[str, str] = {
     "platform": "Basic instructions for a new user: entry, Dashboard, service list, and account menu.",
-    "flows": "Step-by-step Flows instructions: creating a flow, using the canvas, LLM nodes, and editing.",
+    "flows": "Step-by-step Flows instructions: service home, agent chat, creating and editing flows, published-flow operations, and Evaluation Lab.",
 }
 
 _TAG_NAV_LABEL: dict[str, str] = {
@@ -268,6 +268,8 @@ def _write_hub_index(
     links: list[tuple[str, str]],
     *,
     heading: str = "Сценарии",
+    hero_image: str | None = None,
+    hero_alt: str | None = None,
 ) -> None:
     title_json = json.dumps(title, ensure_ascii=False)
     lines = [
@@ -277,10 +279,11 @@ def _write_hub_index(
         "",
         intro,
         "",
-        f"## {heading}",
-        "",
-        '<div class="docs-link-grid">',
     ]
+    if hero_image is not None:
+        alt = hero_alt or title
+        lines.extend([f"![{alt}]({hero_image})", ""])
+    lines.extend([f"## {heading}", "", '<div class="docs-link-grid">'])
     for label, href in sorted(links, key=lambda x: x[0].lower()):
         label_html = html.escape(label)
         href_html = html.escape(href, quote=True)
@@ -333,7 +336,15 @@ def _write_ru_scenario_hub_indices(scenarios_dst: Path) -> None:
             continue
         title = _service_label(service)
         intro = _service_intro_ru(service, title)
-        _write_hub_index(svc_dir / "index.md", title, intro, links)
+        hero_image = "screenshots/001.png" if (svc_dir / "screenshots" / "001.png").is_file() else None
+        _write_hub_index(
+            svc_dir / "index.md",
+            title,
+            intro,
+            links,
+            hero_image=hero_image,
+            hero_alt=f"{title}: главная страница сервиса",
+        )
 
     for svc_dir in sorted(p for p in scenarios_dst.iterdir() if p.is_dir() and not p.name.startswith(".")):
         service = svc_dir.name
@@ -366,6 +377,7 @@ def _write_ru_scenario_hub_indices(scenarios_dst: Path) -> None:
 def _populate_ru_scenario_index_tree(scenarios_src: Path, scenarios_dst: Path) -> None:
     scenarios_dst.mkdir(parents=True, exist_ok=True)
     mapping = _collect_scenario_slug_readmes(scenarios_src)
+    _copy_service_screenshots(scenarios_src, scenarios_dst)
     for parts in sorted(mapping, key=lambda t: (len(t), t)):
         src_dir = mapping[parts]
         dst_dir = scenarios_dst.joinpath(*parts)
@@ -455,6 +467,19 @@ def _copy_screenshots(src_slug_dir: Path, dst_slug_dir: Path) -> None:
     shutil.copytree(shots, dst_shots)
 
 
+def _copy_service_screenshots(scenarios_src: Path, scenarios_dst: Path) -> None:
+    for service_dir in sorted(p for p in scenarios_src.iterdir() if p.is_dir() and not p.name.startswith(".")):
+        shots = service_dir / "screenshots"
+        if not shots.is_dir():
+            continue
+        dst_service_dir = scenarios_dst / service_dir.name
+        dst_service_dir.mkdir(parents=True, exist_ok=True)
+        dst_shots = dst_service_dir / "screenshots"
+        if dst_shots.exists():
+            shutil.rmtree(dst_shots)
+        shutil.copytree(shots, dst_shots)
+
+
 def _build_en_scenarios_from_readmes(scenarios_src: Path, en_scenarios_out: Path) -> None:
     if en_scenarios_out.exists():
         shutil.rmtree(en_scenarios_out)
@@ -462,6 +487,7 @@ def _build_en_scenarios_from_readmes(scenarios_src: Path, en_scenarios_out: Path
         return
 
     mapping = _collect_scenario_slug_readmes(scenarios_src)
+    _copy_service_screenshots(scenarios_src, en_scenarios_out)
     for dest_parts, src_dir in sorted(mapping.items(), key=lambda item: item[0]):
         readme = src_dir / "README.en.md"
         if not readme.is_file():
@@ -495,12 +521,15 @@ def _build_en_scenarios_from_readmes(scenarios_src: Path, en_scenarios_out: Path
             continue
         title = _service_label_en(d.name)
         links = [(_title_from_index_md(sub / "index.md"), f"{sub.name}/") for sub in subdirs]
+        hero_image = "screenshots/001.png" if (d / "screenshots" / "001.png").is_file() else None
         _write_hub_index(
             d / "index.md",
             title,
             _service_intro_en(d.name),
             links,
             heading="Pages",
+            hero_image=hero_image,
+            hero_alt=f"{title}: service home page",
         )
 
     services = sorted(

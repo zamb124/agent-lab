@@ -14,6 +14,7 @@ from apps.flows.src.clients.mcp_client import (
     MCPClient,
     MCPClientError,
 )
+from apps.flows.src.container_contracts import as_flow_runtime_container
 from apps.flows.src.dependencies import ContainerDep
 from apps.flows.src.models.mcp import MCPServerConfig, MCPTransportType
 from apps.flows.src.services.mcp_sync import sync_mcp_server_tools
@@ -234,7 +235,10 @@ async def sync_server_tools(
         raise HTTPException(status_code=404, detail="Server not found")
 
     try:
-        _tool_ids, tools = await sync_mcp_server_tools(container=container, server_config=server)
+        _tool_ids, tools = await sync_mcp_server_tools(
+            container=as_flow_runtime_container(container),
+            server_config=server,
+        )
     except MCPClientError as e:
         raise HTTPException(status_code=502, detail=f"MCP server error: {e}") from e
     except ValueError as e:

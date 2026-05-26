@@ -5,6 +5,7 @@ TaskIQ задачи для инициализации компаний и system
 from pathlib import Path
 
 from apps.flows.src.container import get_container
+from apps.flows.src.container_contracts import as_flow_runtime_container
 from apps.flows.src.services.flows_loader import FlowsLoader, load_tools_to_db
 from apps.flows.src.services.mcp_sync import (
     ensure_default_mcp_servers_for_company,
@@ -12,7 +13,7 @@ from apps.flows.src.services.mcp_sync import (
 )
 from apps.flows.src.services.operator_demo_queue import ensure_example_hitl_queue
 from apps.flows.src.tasks.task_names import TASK_INIT_COMPANY_RESOURCES
-from apps.flows_worker.broker import broker
+from apps.flows_worker.broker_core import broker
 from core.context import Context, clear_context, set_context
 from core.logging import get_logger
 from core.models.i18n_models import Language
@@ -54,9 +55,11 @@ async def init_company_resources(
     """
     is_system = (company_id == "system")
     action = "Загрузка" if is_system else "Копирование"
+    company_display_name = company_name.strip() if company_name.strip() else company_id
+    company_subdomain = subdomain.strip() if subdomain.strip() else None
 
     logger.info(
-        f"{action} ресурсов для компании: {company_id} ({company_name or 'system'})"
+        f"{action} ресурсов для компании: {company_id} ({company_display_name})"
     )
 
     # Установить контекст компании
@@ -68,8 +71,8 @@ async def init_company_resources(
         language=Language.RU,
         active_company=Company(
             company_id=company_id,
-            name=company_name or company_id,
-            subdomain=subdomain or company_id  # Используем subdomain или fallback на company_id
+            name=company_display_name,
+            subdomain=company_subdomain,
         ),
         user_companies=[],
         trace_id=f"system:init_company:{company_id}",
@@ -88,8 +91,9 @@ async def init_company_resources(
         logger.info(f"Загружено {len(loaded_tools)} tools для {company_id}")
 
         try:
-            _ = await ensure_default_mcp_servers_for_company(container=container)
-            synced = await sync_auto_mcp_servers_for_company(container=container)
+            runtime_container = as_flow_runtime_container(container)
+            _ = await ensure_default_mcp_servers_for_company(container=runtime_container)
+            synced = await sync_auto_mcp_servers_for_company(container=runtime_container)
             logger.info(
                 "MCP синхронизация для %s: servers=%s tools=%s",
                 company_id,

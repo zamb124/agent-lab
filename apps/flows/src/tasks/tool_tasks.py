@@ -13,7 +13,7 @@ from apps.flows.src.state.interrupt_manager import InterruptManager
 from apps.flows.src.tasks.task_names import TASK_EXECUTE_TOOL
 from apps.flows.src.tools.base import ToolArguments
 from apps.flows.src.tools.registry import ToolMaterializeInput
-from apps.flows_worker.broker import broker
+from apps.flows_worker.broker_core import broker
 from core.context import clear_context, get_context, set_context
 from core.logging import get_logger
 from core.models.context_models import Context

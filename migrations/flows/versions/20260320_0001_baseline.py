@@ -89,30 +89,6 @@ def upgrade() -> None:
     op.create_index("ix_resources_expired_at", "resources", ["expired_at"])
 
     op.create_table(
-        "evaluation_results",
-        sa.Column("id", sa.Integer(), primary_key=True, autoincrement=True, nullable=False),
-        sa.Column("flow_id", sa.String(), nullable=False),
-        sa.Column("branch_id", sa.String(), nullable=False),
-        sa.Column("run_date", sa.Date(), nullable=False),
-        sa.Column("iteration", sa.Integer(), nullable=False),
-        sa.Column("test_case_id", sa.String(), nullable=False),
-        sa.Column("task_id", sa.String(), nullable=True),
-        sa.Column("status", sa.String(), nullable=False),
-        sa.Column("duration_ms", sa.Integer(), nullable=False),
-        sa.Column("turns_count", sa.Integer(), nullable=False),
-        sa.Column("dialog", postgresql.JSONB(), nullable=True),
-        sa.Column("scores", postgresql.JSONB(), nullable=True),
-        sa.Column("judge_feedback", sa.String(), nullable=True),
-        sa.Column("error", sa.String(), nullable=True),
-        sa.Column("created_at", sa.DateTime(timezone=True), nullable=True),
-        sa.UniqueConstraint(
-            "flow_id", "branch_id", "run_date", "iteration", "test_case_id",
-            name="uq_evaluation_results",
-        ),
-    )
-    op.create_index("ix_evaluation_results_flow_skill", "evaluation_results", ["flow_id", "branch_id"])
-
-    op.create_table(
         "scheduled_tasks",
         sa.Column("id", sa.String(), primary_key=True, nullable=False),
         sa.Column("schedule_id", sa.String(), nullable=True),
@@ -141,7 +117,6 @@ def upgrade() -> None:
 
 def downgrade() -> None:
     op.drop_table("scheduled_tasks")
-    op.drop_table("evaluation_results")
     op.drop_table("resources")
     op.drop_table("tools")
     op.drop_table("nodes")

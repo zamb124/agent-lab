@@ -15,6 +15,7 @@ from apps.sync.db.models import (
     SyncCallParticipant,
     SyncChannelMember,
 )
+from core.types import SqlParameterValue
 
 
 class CallNotFoundError(ValueError):
@@ -83,7 +84,7 @@ class CallRepository(BaseSyncRepository[SyncCall]):
         started_at: datetime | None = None,
         ended_at: datetime | None = None,
     ) -> None:
-        values: dict[str, object] = {"status": status}
+        values: dict[str, SqlParameterValue] = {"status": status}
         if started_at is not None:
             values["started_at"] = started_at
         if ended_at is not None:
@@ -119,7 +120,7 @@ class CallRepository(BaseSyncRepository[SyncCall]):
         joined_at: datetime | None = None,
         left_at: datetime | None = None,
     ) -> None:
-        values: dict[str, object] = {"status": status}
+        values: dict[str, SqlParameterValue] = {"status": status}
         if joined_at is not None:
             values["joined_at"] = joined_at
         if left_at is not None:
@@ -235,7 +236,7 @@ class CallRepository(BaseSyncRepository[SyncCall]):
         row = await self.get_link_for_company(link_token, company_id)
         if row.calendar_event_id is None:
             raise ValueError("Ссылка не привязана к событию календаря.")
-        values: dict[str, object] = {}
+        values: dict[str, SqlParameterValue] = {}
         if title is not None:
             values["title"] = title
         if scheduled_start_at is not None:

@@ -13,7 +13,6 @@ from apps.crm.integrations.amocrm.type_extensions import (
     AMO_OPTIONAL_FIELDS_BY_TYPE_ID,
     amo_canonical_type_ids,
 )
-from apps.crm.types import JsonObject
 from core.integrations.guided_integration_error import (
     GuidedIntegrationError,
     GuidedIntegrationLink,
@@ -21,7 +20,7 @@ from core.integrations.guided_integration_error import (
 )
 from core.integrations.models import IntegrationCredential, IntegrationProvider
 from core.models.identity_models import NamespaceCRMSettings
-from core.types import require_json_object
+from core.types import JsonObject, require_json_object
 
 if TYPE_CHECKING:
     from apps.crm.db.repositories.entity_repository import EntityRepository

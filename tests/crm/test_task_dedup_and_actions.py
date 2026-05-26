@@ -565,8 +565,7 @@ class TestTaskRetry:
             user_id=system_user_id,
             data={
                 "mode": "notes_only",
-                "source_file_id": "file_000000000000",
-                "source_file_ids": [],
+                "source_file_ids": ["file_000000000000"],
                 "split_by_headings": False,
                 "chunk_max_chars": 50000,
                 "notes_created_count": 0,

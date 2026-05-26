@@ -53,9 +53,6 @@ PRODUCTION_LIKE_BASE: dict[str, dict[str, float]] = {
         "room_minute": 0.01,
         "egress_composite_minute": 0.05,
         "egress_segmented_minute": 0.02,
-        "room_create": 0.01,
-        "egress_composite": 0.05,
-        "egress_segmented": 0.02,
         "*": 0.0,
     },
 }
@@ -374,7 +371,6 @@ async def test_settle_span_rule_charge_cost_matches_unit_times_quantity_livekit(
         span=span,
         rule=rule,
         settlement=settlement,
-        fallback_user_id="",
     )
     recs = await frontend_container.usage_repository.admin_search_usage_records(company_id=cid, limit=30)
     row = next(r for r in recs if r.usage_id == usage_id)
@@ -430,7 +426,6 @@ async def test_settle_span_rule_charge_llm_tokens_attr_production_base(
         span=span,
         rule=rule,
         settlement=settlement,
-        fallback_user_id="",
     )
     recs = await frontend_container.usage_repository.admin_search_usage_records(company_id=cid, limit=30)
     row = next(r for r in recs if r.usage_id == usage_id)
@@ -494,7 +489,6 @@ async def test_settle_pending_first_win_single_usage_high_priority_rule(
     n = await billing.settle_pending_span_in_job(
         span=span,
         settlement=settlement,
-        fallback_user_id="",
         rules_doc=doc,
     )
     assert n == 1

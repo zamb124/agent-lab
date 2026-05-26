@@ -261,6 +261,7 @@ class ServerConfig(BaseModel):
     scheduler_service_url: str | None = None
     office_service_url: str | None = None
     browser_service_url: str | None = None
+    search_service_url: str | None = None
     provider_litserve_service_url: str | None = None
     voice_service_url: str | None = None
     capability_gateway_service_url: str | None = None
@@ -291,6 +292,7 @@ class ServerConfig(BaseModel):
         "scheduler": 8006,
         "office": 8008,
         "browser": 8009,
+        "search": 8010,
         "provider_litserve": 8014,
         "voice": 8015,
         "capability_gateway": 8016,
@@ -337,6 +339,8 @@ class ServerConfig(BaseModel):
                 return self.office_service_url
             case "browser":
                 return self.browser_service_url
+            case "search":
+                return self.search_service_url
             case "provider_litserve":
                 return self.provider_litserve_service_url
             case "voice":
@@ -871,14 +875,10 @@ class RAGProviderConfig(BaseModel):
     base_url: str | None = None
     timeout: int = 60
 
-    # Legacy (не используются для pgvector)
-    host: str | None = None
-    port: int | None = None
-
     # Специфика PgVector
     db_url: str | None = None
 
-    # Legacy: override ключа эмбеддингов pgvector (ENV); иначе llm.<provider>.api_key. У agentset — см. AgentsetRAGProvider.
+    # Provider-level ключ эмбеддингов pgvector; иначе используется ключ активного LLM provider.
     embedding_api_key: str | None = None
     # Средняя цена за 1M токенов (в рублях). ~$0.05 ≈ 5₽
     embedding_cost_per_1m_tokens: float = 5.0
@@ -1800,8 +1800,7 @@ def default_billing_resource_base_prices() -> dict[str, dict[str, float]]:
     - embedding: RAG эмбеддинги (rag.embed.*).
     - billing:rub — единица = 1 ₽; quantity из platform.billing.settlement_quantity_rub (OpenRouter USD×usd_to_rub_rate).
     - livekit: поминутное списание — room_minute, egress_composite_minute, egress_segmented_minute
-      (см. core/calls/livekit_usage_spans.py); legacy-ключи room_create, egress_composite, egress_segmented
-      сохранены с теми же числами для обратной совместимости прайса; "*" — прочие livekit:*.
+      (см. core/calls/livekit_usage_spans.py); "*" — прочие livekit:*.
 
     Категория tool в биллинге не используется (тулы flows бесплатны в учёте).
     Подробнее: conf.json → billing._docs_ru, configuration.mdc, billing.mdc.
@@ -1815,9 +1814,6 @@ def default_billing_resource_base_prices() -> dict[str, dict[str, float]]:
             "room_minute": 0.01,
             "egress_composite_minute": 0.05,
             "egress_segmented_minute": 0.02,
-            "room_create": 0.01,
-            "egress_composite": 0.05,
-            "egress_segmented": 0.02,
             "*": 0.0,
         },
     }
@@ -1843,10 +1839,6 @@ class BillingSpanSettlementConfig(BaseModel):
         default=500,
         ge=1,
         description="Максимум spans, обрабатываемых за один тик.",
-    )
-    fallback_user_id: str = Field(
-        default="",
-        description="user_id для UsageRecord, если в span нет user_id (пусто — span пропускается, ошибка в логе).",
     )
 
 

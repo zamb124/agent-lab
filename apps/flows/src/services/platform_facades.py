@@ -31,16 +31,16 @@ logger = get_logger(__name__)
 
 if TYPE_CHECKING:
     from apps.flows.src.clients.mcp_client import MCPClient
+    from apps.flows.src.container_contracts import OperatorHandoffServiceProtocol
     from apps.flows.src.models.mcp import MCPCallResult
     from apps.flows.src.runners.remote import RemoteCodeRunner
     from apps.flows.src.services.lara_facade import LaraFacade
-    from apps.flows.src.services.operator_handoff_service import OperatorHandoffService
     from apps.flows.src.services.schedule_service import ScheduleService
     from core.integrations.oauth_service import OAuthService
     from core.state import ExecutionState
 
 
-def get_operator_handoff_service() -> "OperatorHandoffService":
+def get_operator_handoff_service() -> "OperatorHandoffServiceProtocol":
     return require_current_container().operator_handoff_service
 
 

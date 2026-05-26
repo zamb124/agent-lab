@@ -19,14 +19,14 @@ from datetime import datetime
 from enum import Enum
 from typing import Annotated, ClassVar, Literal, cast
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
+from pydantic import ConfigDict, Field, field_validator, model_validator
 
 from apps.flows.src.constants.execution_limits import get_flow_execution_wall_time_cap_seconds
 from core.models import StrictBaseModel
-from core.types import JsonObject, JsonValue, require_json_object, require_json_value
+from core.types import JsonObject, JsonValue, require_json_value
 from core.urn import extract_resource_id
 
-from .enums import MergeMode, TestTargetType
+from .enums import MergeMode
 from .flow_speech_settings import FlowSpeechSettings
 from .resource import ResourceReference
 from .trigger_config import TriggerConfig
@@ -61,16 +61,6 @@ def normalize_flow_variables_payload(data: object) -> object:
     out = dict(raw)
     out["variables"] = normalized
     return out
-
-
-def _node_payload_to_json_object(value: object, field_name: str) -> JsonObject | None | object:
-    if value is None:
-        return None
-    if isinstance(value, dict):
-        return require_json_object(cast(object, value), field_name)
-    if isinstance(value, BaseModel):
-        return require_json_object(cast(object, value.model_dump(mode="json")), field_name)
-    return value
 
 
 def _parse_flow_config_int(value: object, field_name: str) -> int:
@@ -182,144 +172,6 @@ class Edge(StrictBaseModel):
     )
 
     model_config: ClassVar[ConfigDict] = ConfigDict(populate_by_name=True)
-
-
-class InputType(str, Enum):
-    """Тип входа для теста."""
-    TEXT = "text"
-    INLINE_CODE = "inline_code"
-    NODE = "node"
-
-
-class CheckType(str, Enum):
-    """Тип проверки для теста."""
-    STRING = "string"
-    INLINE_CODE = "inline_code"
-    NODE = "node"
-
-
-class InputConfig(StrictBaseModel):
-    """
-    Конфигурация входа теста.
-
-    Примеры:
-    - {"type": "text", "value": "Привет"}
-    - {"type": "inline_code", "language": "typescript", "value": "export async function run(args, state) { return 'test' }"}
-    - {"type": "node", "value": "tester_node_id"}
-    - {"type": "node", "node": {...}}  # inline node config как dict
-    """
-    type: InputType = Field(..., description="Тип входа: text, inline_code, node")
-    value: str = Field(default="", description="Текст | inline код | node_id")
-    language: str = Field(default="python", description="Язык inline code: python, javascript, typescript, go, csharp")
-    entrypoint: str | None = Field(default=None, description="Имя entrypoint-функции inline code; null = первая функция")
-    node: JsonObject | None = Field(
-        default=None, description="Inline нода как dict (будет преобразована в NodeConfig)"
-    )
-
-    @field_validator("node", mode="before")
-    @classmethod
-    def convert_node_to_dict(cls, v: object) -> JsonObject | None | object:
-        """Преобразует NodeConfig в dict, если передан объект."""
-        return _node_payload_to_json_object(v, "input.node")
-
-
-class CheckConfig(StrictBaseModel):
-    """
-    Конфигурация проверки результата.
-
-    Примеры:
-    - {"type": "string", "value": "contains:привет"}
-    - {"type": "inline_code", "language": "python", "value": "async def run(args, state): return args['response'] == 'ok'"}
-    - {"type": "node", "value": "judge_node_id"}
-    - {"type": "node", "node": {...}}  # inline node config как dict
-    """
-    type: CheckType = Field(..., description="Тип проверки: string, inline_code, node")
-    value: str = Field(default="", description="Checker expr | inline код | node_id")
-    language: str = Field(default="python", description="Язык inline code: python, javascript, typescript, go, csharp")
-    entrypoint: str | None = Field(default=None, description="Имя entrypoint-функции inline code; null = первая функция")
-    node: JsonObject | None = Field(
-        default=None, description="Inline нода-судья как dict (будет преобразована в NodeConfig)"
-    )
-
-    @field_validator("node", mode="before")
-    @classmethod
-    def convert_node_to_dict(cls, v: object) -> JsonObject | None | object:
-        """Преобразует NodeConfig в dict, если передан объект."""
-        return _node_payload_to_json_object(v, "check.node")
-
-
-class TestTurn(StrictBaseModel):
-    """
-    Один ход теста: input + check.
-
-    Примеры:
-    - {"input": {"type": "text", "value": "Привет"}, "check": {"type": "string", "value": "contains:здравствуй"}}
-    - {"input": {"type": "flow", "value": "tester_id"}, "check": {"type": "flow", "value": "judge_id"}}
-    """
-
-    __test__: ClassVar[bool] = False
-
-    input: InputConfig = Field(..., description="Конфигурация входа")
-    check: CheckConfig | None = Field(default=None, description="Конфигурация проверки (опционально)")
-
-
-class TestTarget(StrictBaseModel):
-    """
-    Цель тестирования -- что именно тестируем.
-
-    Примеры:
-    - {"type": "flow", "flow_id": "my_flow", "branch_id": "default"}
-    - {"type": "node", "node_config": {"type": "llm_node", "prompt": "..."}}
-    """
-
-    __test__: ClassVar[bool] = False
-
-    type: TestTargetType = Field(..., description="Тип цели: flow, node")
-
-    # FLOW -- тестируем другой flow (если None, используется flow_id из контекста)
-    flow_id: str | None = Field(default=None, description="ID flow")
-    branch_id: str | None = Field(default="default", description="ID ветки графа (branch)")
-
-    # NODE -- только inline конфиг ноды
-    node_config: JsonObject | None = Field(
-        default=None, description="Inline конфиг ноды для тестирования"
-    )
-
-
-class TestCaseConfig(StrictBaseModel):
-    """
-    Унифицированный тест-кейс = список ходов (turns).
-
-    Любой тест это диалог из пар [input, check]:
-    - Один ход: простой тест
-    - Много ходов: многошаговый диалог
-    - Flow-flow: автоматический диалог с max_turns
-
-    target определяет что тестируем:
-    - None / {"type": "flow"} -- полный flow
-    - {"type": "node", "node_config": {...}} -- отдельная нода
-    """
-
-    __test__: ClassVar[bool] = False
-
-    name: str = Field(..., description="Название теста")
-    description: str = Field(default="", description="Описание теста")
-
-    target: TestTarget | None = Field(
-        default=None,
-        description="Цель тестирования. None = flow из контекста"
-    )
-    initial_state: JsonObject | None = Field(
-        default=None,
-        description="Начальное состояние для теста (переменные, данные)"
-    )
-
-    branch_ids: Literal["*"] | list[str] = Field(
-        default="*", description="ID веток для теста. '*' = все"
-    )
-    turns: list[TestTurn] = Field(..., description="Список ходов теста")
-    max_turns: int = Field(default=10, description="Макс. итераций для flow-flow")
-    timeout: int = Field(default=300, description="Таймаут в секундах")
 
 
 class BranchConfig(StrictBaseModel):
@@ -541,12 +393,6 @@ class FlowConfig(StrictBaseModel):
     resources: dict[str, ResourceReference] = Field(
         default_factory=dict,
         description="Ресурсы flow, доступные всем нодам"
-    )
-
-    # Evaluation - словарь тест-кейсов {test_id: TestCaseConfig}
-    evaluation: dict[str, TestCaseConfig] | None = Field(
-        default=None,
-        description="Тест-кейсы для оценки flow {test_id: config}"
     )
 
     speech: FlowSpeechSettings | None = Field(

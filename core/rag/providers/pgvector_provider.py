@@ -213,7 +213,7 @@ class PgVectorProvider(BaseRAGProvider):
 
         self._embedding_service: EmbeddingService = embedding_service_cls(
             api_key=api_key,
-            models=[model],
+            model=model,
             base_url=embedding_base_url or None,
             timeout=timeout,
             dimension=dimension,

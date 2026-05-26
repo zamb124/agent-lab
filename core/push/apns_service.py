@@ -5,13 +5,14 @@
 from __future__ import annotations
 
 import time
-from typing import Any
+from typing import Literal, NotRequired, Required, TypedDict
 
 import httpx
 import jwt
 from jwt import PyJWTError
 
 from core.logging import get_logger
+from core.types import JsonObject
 
 logger = get_logger(__name__)
 
@@ -19,6 +20,23 @@ APNS_PROD_HOST = "https://api.push.apple.com"
 APNS_SANDBOX_HOST = "https://api.sandbox.push.apple.com"
 
 _apns_push_service: ApnsPushService | None = None
+
+
+class ApnsAlert(TypedDict):
+    title: str
+    body: str
+
+
+class ApnsAps(TypedDict):
+    alert: ApnsAlert
+    sound: Literal["default"]
+
+
+class ApnsPayload(TypedDict, total=False):
+    aps: Required[ApnsAps]
+    url: NotRequired[str]
+    tag: NotRequired[str]
+    data: NotRequired[JsonObject]
 
 
 class ApnsPushService:
@@ -37,11 +55,11 @@ class ApnsPushService:
             raise ValueError(
                 "APNs: apns_team_id, apns_key_id, apns_private_key и apns_bundle_id обязательны"
             )
-        self._team_id = team_id
-        self._key_id = key_id
-        self._private_key_pem = pem
-        self._bundle_id = bundle_id
-        self._base_url = APNS_SANDBOX_HOST if use_sandbox else APNS_PROD_HOST
+        self._team_id: str = team_id
+        self._key_id: str = key_id
+        self._private_key_pem: str = pem
+        self._bundle_id: str = bundle_id
+        self._base_url: str = APNS_SANDBOX_HOST if use_sandbox else APNS_PROD_HOST
         self._jwt_token: str | None = None
         self._jwt_expires_at: float = 0.0
         # HTTP/2 клиент на жизнь сервиса: APNs построен на HTTP/2 c
@@ -71,8 +89,8 @@ class ApnsPushService:
         now = time.time()
         if self._jwt_token and now < self._jwt_expires_at - 60:
             return self._jwt_token
-        headers = {"kid": self._key_id, "alg": "ES256"}
-        payload: dict[str, Any] = {"iss": self._team_id, "iat": int(now)}
+        headers: dict[str, str] = {"kid": self._key_id, "alg": "ES256"}
+        payload: dict[str, str | int] = {"iss": self._team_id, "iat": int(now)}
         try:
             self._jwt_token = jwt.encode(
                 payload,
@@ -92,14 +110,14 @@ class ApnsPushService:
         body: str,
         url: str | None = None,
         tag: str | None = None,
-        extra: dict[str, Any] | None = None,
+        extra: JsonObject | None = None,
     ) -> tuple[bool, bool]:
         """
         Returns:
             (доставлено, удалить_подписку_из_БД)
         """
         token = device_token_hex.lower().replace(" ", "")
-        apns_body: dict[str, Any] = {
+        apns_body: ApnsPayload = {
             "aps": {
                 "alert": {"title": title, "body": body},
                 "sound": "default",

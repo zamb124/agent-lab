@@ -2,7 +2,7 @@
 Alembic env для БД сервиса flows.
 
 Таблицы: flows, flows_versions, nodes, tools, durable workflow ledger,
-evaluation_results, resources, operator queues/tasks.
+evaluation lab, resources, operator queues/tasks.
 """
 
 import asyncio
@@ -20,7 +20,12 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspa
 from apps.flows.src.db.models import (  # noqa: F401
     ActivityTasks,
     Base,
-    EvaluationResults,
+    EvaluationCaseRuns,
+    EvaluationCases,
+    EvaluationRunEvents,
+    EvaluationRuns,
+    EvaluationSuites,
+    EvaluationSuiteVersions,
     ExecutionBranches,
     Flows,
     FlowsVersions,
@@ -47,7 +52,9 @@ MANAGED_TABLES = {
     "flows", "flows_versions", "nodes", "tools",
     "workflow_instances", "execution_branches", "workflow_events",
     "workflow_snapshots", "activity_tasks",
-    "evaluation_results", "resources",
+    "evaluation_suites", "evaluation_cases",
+    "evaluation_suite_versions", "evaluation_runs", "evaluation_case_runs",
+    "evaluation_run_events", "resources",
     "operator_queues", "operator_queue_members", "operator_tasks",
 }
 

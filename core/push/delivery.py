@@ -4,15 +4,14 @@
 
 from __future__ import annotations
 
-from typing import Any
-
 from core.config import get_settings
+from core.db.models import PushSubscription
 from core.logging import get_logger
 from core.push.apns_service import get_apns_push_service
 from core.push.fcm_service import get_fcm_push_service
-from core.push.models import PushSubscription
 from core.push.repository import PushSubscriptionRepository
 from core.push.service import get_web_push_service
+from core.types import JsonObject
 
 logger = get_logger(__name__)
 
@@ -33,7 +32,7 @@ async def deliver_offline_push(
     action_url: str | None,
     tag: str,
     priority: str,
-    data: dict[str, Any],
+    data: JsonObject,
 ) -> list[str]:
     settings = get_settings()
     if not settings.database.shared_url:
@@ -109,7 +108,7 @@ async def deliver_offline_push(
                 )
 
     for endpoint in expired_endpoints:
-        await repo.delete_by_endpoint(endpoint)
+        _ = await repo.delete_by_endpoint(endpoint)
 
     if expired_endpoints:
         logger.info("Удалено %s истёкших или невалидных push подписок", len(expired_endpoints))

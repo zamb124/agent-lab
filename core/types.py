@@ -38,6 +38,7 @@ if TYPE_CHECKING:
         OtelAttributeScalar | Sequence[str] | Sequence[bool] | Sequence[int] | Sequence[float]
     )
     OtelAttributes: TypeAlias = Mapping[str, OtelAttributeValue]
+    SqlParameterValue: TypeAlias = JsonValue | date | datetime | Decimal
 else:
     JsonScalar: TypeAlias = str | int | float | bool | None
     JsonValue: TypeAlias = PydanticJsonValue
@@ -57,6 +58,7 @@ else:
         OtelAttributeScalar | Sequence[str] | Sequence[bool] | Sequence[int] | Sequence[float]
     )
     OtelAttributes: TypeAlias = Mapping[str, OtelAttributeValue]
+    SqlParameterValue: TypeAlias = JsonValue | date | datetime | Decimal
 
 
 class ASGIScope(TypedDict, total=False):
@@ -126,6 +128,8 @@ MigrationDatabaseUrlKey: TypeAlias = Literal[
     "office_url",
     "tracing_url",
 ]
+PushSubscriptionKeys: TypeAlias = dict[str, str]
+TaskLabelMap: TypeAlias = dict[str, str]
 
 
 class RuntimeChannel(Protocol):

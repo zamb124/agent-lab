@@ -145,12 +145,15 @@ export class FlowsEditorHeader extends PlatformElement {
             .header-right { display: flex; justify-content: flex-end; align-items: center; gap: var(--space-2); }
             .header-btn {
                 display: inline-flex; align-items: center; gap: var(--space-1);
+                height: 34px;
                 padding: 6px var(--space-3);
                 border-radius: var(--radius-lg);
                 border: 1px solid var(--border-subtle);
                 background: var(--glass-solid-subtle);
                 color: var(--text-secondary);
                 font-size: var(--text-sm);
+                line-height: 1;
+                box-sizing: border-box;
                 cursor: pointer;
                 transition: var(--motion-transition-interactive);
             }
@@ -254,6 +257,16 @@ export class FlowsEditorHeader extends PlatformElement {
         this.openModal('flows.preview_share', { flowId: this.flowId, branchId: bid });
     }
 
+    _openEvaluationLab() {
+        if (typeof this.flowId !== 'string' || this.flowId.length === 0) {
+            return;
+        }
+        const raw =
+            typeof this.branchId === 'string' && this.branchId.trim() !== '' ? this.branchId.trim() : 'base';
+        const bid = raw === 'base' ? 'default' : raw;
+        this.navigate('flow_evaluation_branch', { flowId: this.flowId, branchId: bid });
+    }
+
     render() {
         const state = asObject(this._editor.state);
         let flowName;
@@ -321,6 +334,15 @@ export class FlowsEditorHeader extends PlatformElement {
                 </button>
                 <button class="header-btn icon-only" type="button" title=${this.t('editor_header.lara')} @click=${this._openLara}>
                     <platform-icon name="ai" size="16"></platform-icon>
+                </button>
+                <button
+                    class="header-btn"
+                    type="button"
+                    title=${this.t('editor_header.evaluation_lab')}
+                    @click=${this._openEvaluationLab}
+                >
+                    <platform-icon name="science" size="14"></platform-icon>
+                    ${this.t('editor_header.evaluation')}
                 </button>
                 <button class="header-btn" type="button" @click=${this._openCodeView}>
                     <platform-icon name="code" size="14"></platform-icon>

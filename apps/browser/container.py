@@ -6,7 +6,7 @@ from __future__ import annotations
 
 from apps.browser.config import get_browser_settings, settings_to_runtime_view
 from apps.browser.orchestration.runtime_facade import BrowserRuntimeFacade
-from core.container import BaseContainer, ContainerRegistry, lazy
+from core.container import BaseContainer, ContainerRegistry
 from core.logging import get_logger
 
 logger = get_logger(__name__)
@@ -34,9 +34,30 @@ class BrowserContainer(BaseContainer):
     - Стоит: как единственный DI entrypoint для HTTP-слоя и тестов сервиса browser.
     """
 
-    @lazy
+    def __init__(
+        self,
+        db_url: str | None = None,
+        shared_db_url: str | None = None,
+    ) -> None:
+        super().__init__(
+            db_url=db_url,
+            shared_db_url=shared_db_url,
+        )
+        self._browser_runtime: BrowserRuntimeFacade | None = None
+
+    @property
     def browser_runtime(self) -> BrowserRuntimeFacade:
-        return BrowserRuntimeFacade(settings_to_runtime_view(get_browser_settings()))
+        if self._browser_runtime is None:
+            self._browser_runtime = BrowserRuntimeFacade(settings_to_runtime_view(get_browser_settings()))
+        return self._browser_runtime
+
+    async def stop_browser_runtime(self) -> bool:
+        if self._browser_runtime is None:
+            return False
+        runtime = self._browser_runtime
+        self._browser_runtime = None
+        await runtime.stop()
+        return True
 
 
 def _create_browser_container() -> BrowserContainer:

@@ -201,6 +201,7 @@ services:
       - OFFICE__DOCUMENT_SERVER_PUBLIC_URL=http://onlyoffice-documentserver
       - OFFICE__CALLBACK_PUBLIC_BASE_URL=http://testserver
       - PROVIDER_LITSERVE__API__BASE_URL=http://provider_litserve:8014/v1
+      - SERVER__SEARCH_SERVICE_URL=http://localhost:9010
       - SERVER__CAPABILITY_GATEWAY_SERVICE_URL=http://localhost:9016
       - SERVER__CODE_RUNNER_PYTHON_SERVICE_URL=http://localhost:9017
       - SERVER__CODE_RUNNER_NODE_SERVICE_URL=http://localhost:9018

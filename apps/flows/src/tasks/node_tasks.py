@@ -19,7 +19,7 @@ from apps.flows.src.durable_execution import (
 )
 from apps.flows.src.runtime.nodes import create_node
 from apps.flows.src.tasks.task_names import TASK_EXECUTE_NODE
-from apps.flows_worker.broker import broker
+from apps.flows_worker.broker_core import broker
 from core.logging import get_logger
 from core.state import ExecutionState
 from core.types import JsonObject, require_json_object

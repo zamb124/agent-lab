@@ -5,9 +5,12 @@ Pydantic-схемы для API push-подписок.
 from __future__ import annotations
 
 import re
-from typing import Literal
+from typing import Literal, Self
 
-from pydantic import BaseModel, Field, model_validator
+from pydantic import Field, model_validator
+
+from core.models import StrictBaseModel
+from core.types import PushSubscriptionKeys
 
 PushTransport = Literal["web_vapid", "ios_apns", "android_fcm"]
 
@@ -25,22 +28,21 @@ def _normalize_fcm_registration_token(raw: str) -> str:
     s = raw.strip()
     if not re.fullmatch(r"[A-Za-z0-9_:\-]{20,4096}", s):
         raise ValueError(
-            "android_fcm: keys.device_token должен быть FCM registration token "
-            "(буквы, цифры, _, -, :, длиной 20–4096 символов)"
+            "android_fcm: keys.device_token должен быть FCM registration token (буквы, цифры, _, -, :, длиной 20–4096 символов)"
         )
     return s
 
 
-class SubscribeRequest(BaseModel):
+class SubscribeRequest(StrictBaseModel):
     """Тело POST /api/push/subscribe."""
 
     transport: PushTransport = "web_vapid"
     endpoint: str = ""
-    keys: dict[str, str] = Field(default_factory=dict)
+    keys: PushSubscriptionKeys = Field(default_factory=dict)
     platform: str = "unknown"
 
     @model_validator(mode="after")
-    def validate_by_transport(self) -> SubscribeRequest:
+    def validate_by_transport(self) -> Self:
         if self.transport == "web_vapid":
             ep = self.endpoint.strip()
             if not ep.startswith("https://"):
@@ -78,10 +80,25 @@ class SubscribeRequest(BaseModel):
         return self
 
 
-class VapidPublicKeyResponse(BaseModel):
+class VapidPublicKeyResponse(StrictBaseModel):
     publicKey: str
 
 
-class TestPushRequest(BaseModel):
+class SubscribeResponse(StrictBaseModel):
+    success: bool
+    subscription_id: str
+
+
+class PushSuccessResponse(StrictBaseModel):
+    success: bool
+
+
+class TestPushRequest(StrictBaseModel):
     title: str = "Тестовое уведомление"
     message: str = "Это тестовое push-уведомление от Humanitec"
+
+
+class TestPushResponse(StrictBaseModel):
+    success: bool
+    sent_to_devices: int
+    expired_subscriptions: int

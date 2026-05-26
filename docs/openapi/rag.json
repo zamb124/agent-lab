@@ -11,11 +11,11 @@
     "schemas": {
       "BoardStage": {
         "properties": {
-          "id": {
+          "stage_id": {
             "type": "string",
             "minLength": 1,
             "pattern": "^[a-z][a-z0-9_]*$",
-            "title": "Id",
+            "title": "Stage Id",
             "description": "Стабильный идентификатор стадии (snake_case)"
           },
           "label": {
@@ -40,11 +40,11 @@
         "additionalProperties": false,
         "type": "object",
         "required": [
-          "id",
+          "stage_id",
           "label"
         ],
         "title": "BoardStage",
-        "description": "Стадия канбана задач: id хранится в attributes.status у CRMEntity с entity_type=task."
+        "description": "Стадия канбана задач.\n\nЗначение хранится в attributes.status у CRMEntity с entity_type=task."
       },
       "Body_auth_callback_post_rag_api_auth_callback__provider_name__post": {
         "properties": {
@@ -561,9 +561,7 @@
             "$ref": "#/components/schemas/CalendarProvider"
           },
           "settings": {
-            "additionalProperties": true,
-            "type": "object",
-            "title": "Settings"
+            "$ref": "#/components/schemas/CalendarIntegrationSettings"
           },
           "created_at": {
             "type": "string",
@@ -587,6 +585,44 @@
           "updated_at"
         ],
         "title": "CalendarIntegrationPublic"
+      },
+      "CalendarIntegrationSettings": {
+        "properties": {
+          "default_calendar_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Default Calendar Id"
+          },
+          "sync_enabled": {
+            "type": "boolean",
+            "title": "Sync Enabled",
+            "default": true
+          },
+          "sync_inbound_enabled": {
+            "type": "boolean",
+            "title": "Sync Inbound Enabled",
+            "default": true
+          },
+          "sync_outbound_enabled": {
+            "type": "boolean",
+            "title": "Sync Outbound Enabled",
+            "default": true
+          },
+          "notifications_enabled": {
+            "type": "boolean",
+            "title": "Notifications Enabled",
+            "default": true
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "title": "CalendarIntegrationSettings"
       },
       "CalendarListRequest": {
         "properties": {
@@ -837,6 +873,44 @@
         ],
         "title": "CalendarUpsertRequest"
       },
+      "CompanyMembershipResponse": {
+        "properties": {
+          "company_id": {
+            "type": "string",
+            "title": "Company Id"
+          },
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "subdomain": {
+            "type": "string",
+            "title": "Subdomain"
+          },
+          "role": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Role"
+          },
+          "is_active": {
+            "type": "boolean",
+            "title": "Is Active"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "company_id",
+          "name",
+          "subdomain",
+          "role",
+          "is_active"
+        ],
+        "title": "CompanyMembershipResponse",
+        "description": "Компания, в которой состоит текущий пользователь, с ролями и активным флагом."
+      },
       "CredentialInfo": {
         "properties": {
           "provider": {
@@ -881,6 +955,144 @@
         ],
         "title": "DemoLoginRequest"
       },
+      "DocumentProcessingStatus": {
+        "properties": {
+          "document_id": {
+            "type": "string",
+            "title": "Document Id"
+          },
+          "task_id": {
+            "type": "string",
+            "title": "Task Id"
+          },
+          "namespace_id": {
+            "type": "string",
+            "title": "Namespace Id"
+          },
+          "document_name": {
+            "type": "string",
+            "title": "Document Name"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "pending",
+              "processing",
+              "completed",
+              "failed"
+            ],
+            "title": "Status"
+          },
+          "error_message": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error Message"
+          },
+          "s3_key": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "S3 Key"
+          },
+          "s3_bucket": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "S3 Bucket"
+          },
+          "file_size": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "File Size"
+          },
+          "chunks_count": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Chunks Count"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At"
+          },
+          "updated_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Updated At"
+          },
+          "completed_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Completed At"
+          },
+          "extra_metadata": {
+            "anyOf": [
+              {
+                "additionalProperties": {
+                  "$ref": "#/components/schemas/JsonValue"
+                },
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Extra Metadata"
+          },
+          "ttl_seconds": {
+            "type": "integer",
+            "title": "Ttl Seconds",
+            "default": 864000
+          }
+        },
+        "type": "object",
+        "required": [
+          "document_id",
+          "task_id",
+          "namespace_id",
+          "document_name",
+          "status",
+          "created_at",
+          "updated_at"
+        ],
+        "title": "DocumentProcessingStatus",
+        "description": "Статус обработки документа в RAG.\n\nСтатусы:\n- pending: документ принят, ожидает обработки\n- processing: документ обрабатывается (парсинг, chunking, индексация)\n- completed: документ успешно проиндексирован\n- failed: ошибка при обработке\n\nПервичный ключ в БД — document_id (одна строка на документ)."
+      },
       "DocumentUploadResponse": {
         "properties": {
           "document_id": {
@@ -899,6 +1111,7 @@
             "$ref": "#/components/schemas/FileResponse"
           }
         },
+        "additionalProperties": false,
         "type": "object",
         "required": [
           "document_id",
@@ -1029,101 +1242,6 @@
         "title": "FileResponse",
         "description": "Публичное представление файла для API-ответов.\n\nНе содержит внутренних полей (s3_key, s3_bucket, s3_endpoint).\nИспользуется как return-тип всех file-эндпоинтов во всех сервисах."
       },
-      "GlobalSearchRequest": {
-        "properties": {
-          "query": {
-            "type": "string",
-            "title": "Query"
-          },
-          "namespace_ids": {
-            "items": {
-              "type": "string"
-            },
-            "type": "array",
-            "title": "Namespace Ids"
-          },
-          "limit": {
-            "type": "integer",
-            "title": "Limit",
-            "default": 5
-          },
-          "filters": {
-            "anyOf": [
-              {
-                "additionalProperties": true,
-                "type": "object"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Filters"
-          },
-          "channels": {
-            "anyOf": [
-              {
-                "additionalProperties": true,
-                "type": "object"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Channels"
-          },
-          "rrf_k": {
-            "anyOf": [
-              {
-                "type": "integer"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Rrf K"
-          },
-          "per_channel_top_k": {
-            "anyOf": [
-              {
-                "type": "integer"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Per Channel Top K"
-          },
-          "rerank": {
-            "anyOf": [
-              {
-                "type": "boolean"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Rerank"
-          },
-          "retrieval": {
-            "anyOf": [
-              {
-                "type": "boolean"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Retrieval"
-          }
-        },
-        "type": "object",
-        "required": [
-          "query",
-          "namespace_ids"
-        ],
-        "title": "GlobalSearchRequest",
-        "description": "Запрос на глобальный поиск (опции поиска совпадают с namespace search, кроме namespace_id)."
-      },
       "GlobalSearchResponse": {
         "properties": {
           "results": {
@@ -1186,7 +1304,9 @@
             "title": "Document Name"
           },
           "metadata": {
-            "additionalProperties": true,
+            "additionalProperties": {
+              "$ref": "#/components/schemas/JsonValue"
+            },
             "type": "object",
             "title": "Metadata"
           },
@@ -1209,39 +1329,7 @@
         ],
         "title": "IngestTextRequest"
       },
-      "IngestTextResponse": {
-        "properties": {
-          "document_id": {
-            "type": "string",
-            "title": "Document Id"
-          },
-          "document_name": {
-            "type": "string",
-            "title": "Document Name"
-          },
-          "namespace_id": {
-            "type": "string",
-            "title": "Namespace Id"
-          },
-          "status": {
-            "type": "string",
-            "title": "Status"
-          },
-          "provider": {
-            "type": "string",
-            "title": "Provider"
-          }
-        },
-        "type": "object",
-        "required": [
-          "document_id",
-          "document_name",
-          "namespace_id",
-          "status",
-          "provider"
-        ],
-        "title": "IngestTextResponse"
-      },
+      "JsonValue": {},
       "ListResponse_CalendarIntegrationPublic_": {
         "properties": {
           "items": {
@@ -1257,6 +1345,22 @@
           "items"
         ],
         "title": "ListResponse[CalendarIntegrationPublic]"
+      },
+      "ListResponse_CompanyMembershipResponse_": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/CompanyMembershipResponse"
+            },
+            "type": "array",
+            "title": "Items"
+          }
+        },
+        "type": "object",
+        "required": [
+          "items"
+        ],
+        "title": "ListResponse[CompanyMembershipResponse]"
       },
       "ListResponse_CredentialInfo_": {
         "properties": {
@@ -1305,23 +1409,6 @@
           "items"
         ],
         "title": "ListResponse[UserSearchResult]"
-      },
-      "ListResponse_dict_str__Any__": {
-        "properties": {
-          "items": {
-            "items": {
-              "additionalProperties": true,
-              "type": "object"
-            },
-            "type": "array",
-            "title": "Items"
-          }
-        },
-        "type": "object",
-        "required": [
-          "items"
-        ],
-        "title": "ListResponse[dict[str, Any]]"
       },
       "Namespace": {
         "properties": {
@@ -1476,7 +1563,9 @@
           },
           "integrations": {
             "additionalProperties": {
-              "additionalProperties": true,
+              "additionalProperties": {
+                "$ref": "#/components/schemas/JsonValue"
+              },
               "type": "object"
             },
             "type": "object",
@@ -1547,12 +1636,33 @@
             "title": "Description"
           }
         },
+        "additionalProperties": false,
         "type": "object",
         "required": [
           "name"
         ],
         "title": "NamespaceCreateRequest",
         "description": "Запрос на создание namespace"
+      },
+      "NamespaceDeleteResponse": {
+        "properties": {
+          "success": {
+            "type": "boolean",
+            "title": "Success"
+          },
+          "name": {
+            "type": "string",
+            "title": "Name"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "success",
+          "name"
+        ],
+        "title": "NamespaceDeleteResponse",
+        "description": "Ответ удаления namespace."
       },
       "NamespaceSyncSettings": {
         "properties": {
@@ -1654,6 +1764,7 @@
             "title": "Type"
           }
         },
+        "additionalProperties": false,
         "type": "object",
         "required": [
           "name",
@@ -1671,12 +1782,38 @@
             "title": "Provider Name"
           }
         },
+        "additionalProperties": false,
         "type": "object",
         "required": [
           "provider_name"
         ],
         "title": "ProviderSwitchRequest",
         "description": "Запрос на переключение провайдера"
+      },
+      "ProviderSwitchResponse": {
+        "properties": {
+          "success": {
+            "type": "boolean",
+            "title": "Success"
+          },
+          "provider": {
+            "type": "string",
+            "title": "Provider"
+          },
+          "message": {
+            "type": "string",
+            "title": "Message"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "success",
+          "provider",
+          "message"
+        ],
+        "title": "ProviderSwitchResponse",
+        "description": "Ответ переключения RAG провайдера."
       },
       "ProvidersView": {
         "properties": {
@@ -1699,6 +1836,20 @@
         ],
         "title": "ProvidersView",
         "description": "Композитный ответ: канонический `items` из core.pagination +\nметаполе `current_provider` (имя активного провайдера для компании).\n\nНаследуется от ``ListResponse[ProviderInfo]`` — не ad-hoc модель\nпагинации, а расширение канонической формы дополнительным полем\n(см. правило «только CursorPage/OffsetPage/ListResponse» в main.mdc)."
+      },
+      "PushSuccessResponse": {
+        "properties": {
+          "success": {
+            "type": "boolean",
+            "title": "Success"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "success"
+        ],
+        "title": "PushSuccessResponse"
       },
       "RAGDocument": {
         "properties": {
@@ -1726,10 +1877,11 @@
             "title": "Content"
           },
           "metadata": {
-            "additionalProperties": true,
+            "additionalProperties": {
+              "$ref": "#/components/schemas/JsonValue"
+            },
             "type": "object",
-            "title": "Metadata",
-            "default": {}
+            "title": "Metadata"
           },
           "status": {
             "type": "string",
@@ -1783,7 +1935,9 @@
           "split": {
             "anyOf": [
               {
-                "additionalProperties": true,
+                "additionalProperties": {
+                  "$ref": "#/components/schemas/JsonValue"
+                },
                 "type": "object"
               },
               {
@@ -1793,6 +1947,7 @@
             "title": "Split"
           }
         },
+        "additionalProperties": false,
         "type": "object",
         "required": [
           "document_id",
@@ -1802,102 +1957,23 @@
         "title": "RAGDocument",
         "description": "Универсальная модель документа для RAG"
       },
-      "RAGSearchResult": {
+      "RAGGlobalSearchRequest": {
         "properties": {
-          "content": {
-            "type": "string",
-            "title": "Content"
-          },
-          "score": {
-            "type": "number",
-            "title": "Score"
-          },
-          "document_id": {
-            "type": "string",
-            "title": "Document Id"
-          },
-          "document_name": {
-            "type": "string",
-            "title": "Document Name"
-          },
-          "metadata": {
-            "additionalProperties": true,
-            "type": "object",
-            "title": "Metadata",
-            "default": {}
-          },
-          "namespace": {
-            "type": "string",
-            "title": "Namespace"
-          },
-          "chunk_id": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Chunk Id"
-          },
-          "provenance": {
-            "additionalProperties": true,
-            "type": "object",
-            "title": "Provenance",
-            "default": {}
-          }
-        },
-        "type": "object",
-        "required": [
-          "content",
-          "score",
-          "document_id",
-          "document_name",
-          "namespace"
-        ],
-        "title": "RAGSearchResult",
-        "description": "Универсальная модель результата поиска"
-      },
-      "SearchRequest": {
-        "properties": {
-          "query": {
-            "type": "string",
-            "title": "Query"
-          },
-          "limit": {
-            "type": "integer",
-            "title": "Limit",
-            "default": 5
-          },
-          "filters": {
-            "anyOf": [
-              {
-                "additionalProperties": true,
-                "type": "object"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Filters"
-          },
           "channels": {
             "anyOf": [
               {
-                "additionalProperties": true,
-                "type": "object"
+                "$ref": "#/components/schemas/SearchChannelsDefaults"
               },
               {
                 "type": "null"
               }
-            ],
-            "title": "Channels"
+            ]
           },
           "rrf_k": {
             "anyOf": [
               {
-                "type": "integer"
+                "type": "integer",
+                "exclusiveMinimum": 0.0
               },
               {
                 "type": "null"
@@ -1908,7 +1984,8 @@
           "per_channel_top_k": {
             "anyOf": [
               {
-                "type": "integer"
+                "type": "integer",
+                "exclusiveMinimum": 0.0
               },
               {
                 "type": "null"
@@ -1937,14 +2014,250 @@
               }
             ],
             "title": "Retrieval"
+          },
+          "query": {
+            "type": "string",
+            "title": "Query"
+          },
+          "limit": {
+            "type": "integer",
+            "minimum": 1.0,
+            "title": "Limit",
+            "default": 5
+          },
+          "filters": {
+            "anyOf": [
+              {
+                "additionalProperties": {
+                  "$ref": "#/components/schemas/JsonValue"
+                },
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Filters"
+          },
+          "namespace_ids": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Namespace Ids"
           }
         },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "query",
+          "namespace_ids"
+        ],
+        "title": "RAGGlobalSearchRequest",
+        "description": "Тело поиска по нескольким RAG namespace."
+      },
+      "RAGIngestTextResponse": {
+        "properties": {
+          "document_id": {
+            "type": "string",
+            "title": "Document Id"
+          },
+          "document_name": {
+            "type": "string",
+            "title": "Document Name"
+          },
+          "namespace_id": {
+            "type": "string",
+            "title": "Namespace Id"
+          },
+          "status": {
+            "type": "string",
+            "title": "Status"
+          },
+          "provider": {
+            "type": "string",
+            "title": "Provider"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "document_id",
+          "document_name",
+          "namespace_id",
+          "status",
+          "provider"
+        ],
+        "title": "RAGIngestTextResponse",
+        "description": "Ответ синхронной индексации текста в RAG namespace."
+      },
+      "RAGNamespaceSearchRequest": {
+        "properties": {
+          "channels": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/SearchChannelsDefaults"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "rrf_k": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "exclusiveMinimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Rrf K"
+          },
+          "per_channel_top_k": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "exclusiveMinimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Per Channel Top K"
+          },
+          "rerank": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Rerank"
+          },
+          "retrieval": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Retrieval"
+          },
+          "query": {
+            "type": "string",
+            "title": "Query"
+          },
+          "limit": {
+            "type": "integer",
+            "minimum": 1.0,
+            "title": "Limit",
+            "default": 5
+          },
+          "filters": {
+            "anyOf": [
+              {
+                "additionalProperties": {
+                  "$ref": "#/components/schemas/JsonValue"
+                },
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Filters"
+          }
+        },
+        "additionalProperties": false,
         "type": "object",
         "required": [
           "query"
         ],
-        "title": "SearchRequest",
-        "description": "Запрос на поиск (опции совпадают с телом RAGRepository.search_namespace)."
+        "title": "RAGNamespaceSearchRequest",
+        "description": "Тело поиска внутри одного RAG namespace."
+      },
+      "RAGSearchResult": {
+        "properties": {
+          "content": {
+            "type": "string",
+            "title": "Content"
+          },
+          "score": {
+            "type": "number",
+            "title": "Score"
+          },
+          "document_id": {
+            "type": "string",
+            "title": "Document Id"
+          },
+          "document_name": {
+            "type": "string",
+            "title": "Document Name"
+          },
+          "metadata": {
+            "additionalProperties": {
+              "$ref": "#/components/schemas/JsonValue"
+            },
+            "type": "object",
+            "title": "Metadata"
+          },
+          "namespace": {
+            "type": "string",
+            "title": "Namespace"
+          },
+          "chunk_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Chunk Id"
+          },
+          "provenance": {
+            "additionalProperties": {
+              "$ref": "#/components/schemas/JsonValue"
+            },
+            "type": "object",
+            "title": "Provenance"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "content",
+          "score",
+          "document_id",
+          "document_name",
+          "namespace"
+        ],
+        "title": "RAGSearchResult",
+        "description": "Универсальная модель результата поиска"
+      },
+      "SearchChannelsDefaults": {
+        "properties": {
+          "semantic": {
+            "type": "boolean",
+            "title": "Semantic",
+            "default": true
+          },
+          "lexical": {
+            "type": "boolean",
+            "title": "Lexical",
+            "default": true
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "title": "SearchChannelsDefaults"
       },
       "SearchResponse": {
         "properties": {
@@ -1980,10 +2293,10 @@
       },
       "SidebarNavEntry": {
         "properties": {
-          "id": {
+          "nav_id": {
             "type": "string",
             "minLength": 1,
-            "title": "Id",
+            "title": "Nav Id",
             "description": "Стабильный id для active state и редактора"
           },
           "label": {
@@ -2032,11 +2345,11 @@
         "additionalProperties": false,
         "type": "object",
         "required": [
-          "id",
+          "nav_id",
           "label"
         ],
         "title": "SidebarNavEntry",
-        "description": "Элемент дерева бокового меню пространства (NetWorkle). Лист: задан route_key. Группа: непустой children."
+        "description": "Элемент дерева бокового меню пространства (NetWorkle).\n\nЛист: задан ``route_key``. Группа: непустой ``children``."
       },
       "SubscribeRequest": {
         "properties": {
@@ -2068,9 +2381,29 @@
             "default": "unknown"
           }
         },
+        "additionalProperties": false,
         "type": "object",
         "title": "SubscribeRequest",
         "description": "Тело POST /api/push/subscribe."
+      },
+      "SubscribeResponse": {
+        "properties": {
+          "success": {
+            "type": "boolean",
+            "title": "Success"
+          },
+          "subscription_id": {
+            "type": "string",
+            "title": "Subscription Id"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "success",
+          "subscription_id"
+        ],
+        "title": "SubscribeResponse"
       },
       "SuggestsSettings": {
         "properties": {
@@ -2207,8 +2540,33 @@
             "default": "Это тестовое push-уведомление от Humanitec"
           }
         },
+        "additionalProperties": false,
         "type": "object",
         "title": "TestPushRequest"
+      },
+      "TestPushResponse": {
+        "properties": {
+          "success": {
+            "type": "boolean",
+            "title": "Success"
+          },
+          "sent_to_devices": {
+            "type": "integer",
+            "title": "Sent To Devices"
+          },
+          "expired_subscriptions": {
+            "type": "integer",
+            "title": "Expired Subscriptions"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "success",
+          "sent_to_devices",
+          "expired_subscriptions"
+        ],
+        "title": "TestPushResponse"
       },
       "UserSearchResult": {
         "properties": {
@@ -2356,7 +2714,9 @@
           "ui_preferences": {
             "anyOf": [
               {
-                "additionalProperties": true,
+                "additionalProperties": {
+                  "$ref": "#/components/schemas/JsonValue"
+                },
                 "type": "object"
               },
               {
@@ -2410,6 +2770,7 @@
             "title": "Publickey"
           }
         },
+        "additionalProperties": false,
         "type": "object",
         "required": [
           "publicKey"

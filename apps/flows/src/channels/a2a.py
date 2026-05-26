@@ -2,7 +2,6 @@
 A2AChannel - реализация A2A протокола.
 
 Полная поддержка A2A спецификации через a2a-sdk.
-Поддержка evaluation через metadata.evaluation.test_case_id.
 """
 
 import asyncio
@@ -33,7 +32,6 @@ from a2a.types import (
     TextPart,
 )
 from a2a.utils.message import get_message_text, new_agent_text_message
-from pydantic import Field
 
 from apps.flows.config import FLOWS_PUBLIC_API_PREFIX
 from apps.flows.src.channels.base import BaseChannel
@@ -55,7 +53,6 @@ from core.config.testing import is_testing
 from core.context import set_current_channel
 from core.files.file_ref import FileRef, file_id_from_download_url
 from core.logging import get_logger
-from core.models import StrictBaseModel
 from core.state import ExecutionState
 from core.tasks.kicker import kiq_task_name_with_context
 from core.tasks.push_notifications import (
@@ -67,12 +64,6 @@ from core.tasks.push_notifications import (
 from core.types import JsonObject, require_json_object
 
 logger = get_logger(__name__)
-
-
-class A2AEvaluationMetadata(StrictBaseModel):
-    """Строгий контракт metadata.evaluation публичного A2A message/send."""
-
-    test_case_id: str = Field(min_length=1)
 
 
 def _text_part(text: str) -> Part:
@@ -103,16 +94,6 @@ def _branch_id_from_message_metadata(metadata: JsonObject | None) -> str:
     if not isinstance(branch, str) or not branch.strip():
         raise ValueError("a2a.message.metadata.branch must be a non-empty string")
     return branch.strip()
-
-
-def _get_evaluation_metadata(metadata: JsonObject | None) -> A2AEvaluationMetadata | None:
-    """Извлекает параметры evaluation из metadata."""
-    if not metadata:
-        return None
-    evaluation = metadata.get("evaluation")
-    if evaluation is None:
-        return None
-    return A2AEvaluationMetadata.model_validate(evaluation)
 
 
 def _is_async_message_send(metadata: JsonObject | None) -> bool:
@@ -485,9 +466,6 @@ class A2AChannel(BaseChannel):
         Если metadata.execution_mode == "async", возвращает submitted Task сразу; результат
         забирается через tasks/get по task_id или context_id.
 
-        Поддерживает evaluation через metadata.evaluation:
-        - test_case_id: ID тест-кейса для запуска
-
         ВАЖНО: подписка на канал ПЕРЕД киком задачи, иначе race condition -
         события могут быть опубликованы до подписки и потеряны.
 
@@ -501,27 +479,6 @@ class A2AChannel(BaseChannel):
         branch_for_perm = _branch_id_from_message_metadata(metadata)
         await self.check_permissions(self._get_user_groups_from_context(context), branch_for_perm)
 
-        # Проверяем evaluation mode
-        eval_metadata = _get_evaluation_metadata(metadata)
-        if eval_metadata is not None:
-            eval_task_id = params.message.task_id or str(uuid.uuid4())
-            # Собираем все события и формируем Task
-            events = [
-                event
-                async for event in self._run_evaluation(
-                    params, metadata, eval_metadata, task_id=eval_task_id
-                )
-            ]
-            return await _build_task_from_events(
-                events=events,
-                task_id=eval_task_id,
-                context_id=params.message.context_id or str(uuid.uuid4()),
-                input_message=params.message,
-                flow_id=self.flow_id,
-                container=self.container,
-            )
-
-        # Обычный режим
         prepared = await self._prepare_a2a_params(params, metadata)
 
         # A2A Section 3.4.3: follow-up при активном operator takeover
@@ -583,140 +540,12 @@ class A2AChannel(BaseChannel):
             container=self.container,
         )
 
-    async def _run_evaluation(
-        self,
-        params: MessageSendParams,
-        metadata: JsonObject | None,
-        eval_metadata: A2AEvaluationMetadata,
-        task_id: str,
-    ) -> AsyncGenerator[TaskStatusUpdateEvent | TaskArtifactUpdateEvent, None]:
-        """
-        Запускает evaluation тест через EvaluationService и yield'ит A2A события.
-
-        A2A канал только конвертирует события сервиса в A2A формат.
-        Вся логика тестирования в EvaluationService.
-        """
-        test_case_id = eval_metadata.test_case_id
-
-        branch_id = _branch_id_from_message_metadata(metadata)
-        context_id = params.message.context_id or str(uuid.uuid4())
-
-        service = self.container.evaluation_service
-
-        try:
-            async for event in service.run_test_stream(
-                self.flow_id, branch_id, test_case_id, task_id=task_id
-            ):
-                if event["type"] == "error":
-                    raise ValueError(event["message"])
-
-                elif event["type"] == "start":
-                    yield TaskArtifactUpdateEvent(
-                        task_id=task_id,
-                        context_id=context_id,
-                        artifact=Artifact(
-                            artifact_id=str(uuid.uuid4()),
-                            name="response",
-                            parts=[_text_part(f"🧪 Запуск теста: {test_case_id}\n\n")],
-                        ),
-                        append=False,
-                        last_chunk=False,
-                    )
-
-                elif event["type"] == "user":
-                    text = f"👤 **USER**: {event['content']}\n"
-                    yield TaskArtifactUpdateEvent(
-                        task_id=task_id,
-                        context_id=context_id,
-                        artifact=Artifact(
-                            artifact_id=str(uuid.uuid4()),
-                            name="response",
-                            parts=[_text_part(text)],
-                        ),
-                        append=True,
-                        last_chunk=False,
-                    )
-
-                elif event["type"] == "assistant":
-                    text = f"🤖 **ASSISTANT**: {event['content']}\n\n"
-                    yield TaskArtifactUpdateEvent(
-                        task_id=task_id,
-                        context_id=context_id,
-                        artifact=Artifact(
-                            artifact_id=str(uuid.uuid4()),
-                            name="response",
-                            parts=[_text_part(text)],
-                        ),
-                        append=True,
-                        last_chunk=False,
-                    )
-
-                elif event["type"] == "result":
-                    status_icon = "" if event["status"] == "passed" else "❌"
-                    result_text = f"\n---\n{status_icon} **Результат**: {event['status'].upper()}"
-                    result_text += f"\n⏱Время: {event['duration_ms']}ms"
-                    turns_count = event["turns_count"] if "turns_count" in event else 0
-                    if turns_count > 0:
-                        result_text += f"\n💬 Ходов: {turns_count}"
-                    error = event["error"] if "error" in event else None
-                    if error:
-                        result_text += f"\n⚠️ Ошибка: {error}"
-
-                    # task_id для трейсинга
-                    eval_task_id = event.get("task_id")
-                    if eval_task_id:
-                        result_text += f"\nTask ID: {eval_task_id}"
-
-                    yield TaskArtifactUpdateEvent(
-                        task_id=task_id,
-                        context_id=context_id,
-                        artifact=Artifact(
-                            artifact_id=str(uuid.uuid4()),
-                            name="response",
-                            parts=[_text_part(result_text)],
-                        ),
-                        append=True,
-                        last_chunk=True,
-                    )
-
-                    # Для evaluation тестов всегда completed - passed/failed это результат теста, а не ошибка
-                    yield TaskStatusUpdateEvent(
-                        task_id=task_id,
-                        context_id=context_id,
-                        status=TaskStatus(state=TaskState.completed),
-                        final=True,
-                    )
-
-        except Exception as e:
-            logger.exception(f"Error running evaluation test {test_case_id}")
-
-            yield TaskArtifactUpdateEvent(
-                task_id=task_id,
-                context_id=context_id,
-                artifact=Artifact(
-                    artifact_id=str(uuid.uuid4()),
-                    name="response",
-                    parts=[_text_part(f"❌ Ошибка теста: {str(e)}")],
-                ),
-                append=True,
-                last_chunk=True,
-            )
-            yield TaskStatusUpdateEvent(
-                task_id=task_id,
-                context_id=context_id,
-                status=TaskStatus(state=TaskState.failed),
-                final=True,
-            )
-
     @override
     async def on_message_stream(
         self, params: MessageSendParams, context: ChannelRequestContext = None
     ) -> AsyncGenerator[Message | Task | TaskStatusUpdateEvent | TaskArtifactUpdateEvent, None]:
         """
         Streaming выполнение - yield'ит события по мере генерации через Redis Pub/Sub.
-
-        Поддерживает evaluation через metadata.evaluation:
-        - test_case_id: ID тест-кейса для запуска
 
         ВАЖНО: подписка на канал ПЕРЕД киком задачи, иначе race condition.
 
@@ -734,17 +563,6 @@ class A2AChannel(BaseChannel):
         branch_for_perm = _branch_id_from_message_metadata(metadata)
         await self.check_permissions(self._get_user_groups_from_context(context), branch_for_perm)
 
-        # Проверяем evaluation mode
-        eval_metadata = _get_evaluation_metadata(metadata)
-        if eval_metadata is not None:
-            eval_task_id = params.message.task_id or str(uuid.uuid4())
-            async for event in self._run_evaluation(
-                params, metadata, eval_metadata, task_id=eval_task_id
-            ):
-                yield event
-            return
-
-        # Обычный режим
         prepared = await self._prepare_a2a_params(params, metadata)
 
         # A2A Section 3.4.3: follow-up при активном operator takeover

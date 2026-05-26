@@ -6,18 +6,37 @@
 from __future__ import annotations
 
 import json
+from collections.abc import AsyncIterator
+from typing import Protocol, TypeGuard, override
 
-from starlette.middleware.base import BaseHTTPMiddleware
+from starlette.background import BackgroundTask
+from starlette.datastructures import MutableHeaders
+from starlette.middleware.base import BaseHTTPMiddleware, RequestResponseEndpoint
 from starlette.requests import Request
 from starlette.responses import Response
+from starlette.types import ASGIApp
 
+from core.app_state import get_request_company_id, get_request_correlation_ids
 from core.config import get_settings
 from core.logging import get_logger
 from core.observability.error_payload import try_merge_platform_error_into_dict
+from core.types import JsonObject, parse_json_object
 
 _LOGGER = get_logger(__name__)
 
 _MAX_BODY_BYTES = 65536
+
+
+class BodyIteratorResponse(Protocol):
+    body_iterator: AsyncIterator[bytes]
+    status_code: int
+    headers: MutableHeaders
+    media_type: str | None
+    background: BackgroundTask | None
+
+
+def _has_body_iterator(response: Response) -> TypeGuard[BodyIteratorResponse]:
+    return hasattr(response, "body_iterator")
 
 
 class PlatformHttpErrorEnvelopeMiddleware(BaseHTTPMiddleware):
@@ -25,16 +44,17 @@ class PlatformHttpErrorEnvelopeMiddleware(BaseHTTPMiddleware):
 
     def __init__(
         self,
-        app,
+        app: ASGIApp,
         *,
         service_name: str,
     ) -> None:
         super().__init__(app)
-        if not isinstance(service_name, str) or not service_name.strip():
+        if not service_name.strip():
             raise ValueError("PlatformHttpErrorEnvelopeMiddleware: service_name обязателен")
-        self._service_name = service_name.strip()
+        self._service_name: str = service_name.strip()
 
-    async def dispatch(self, request: Request, call_next) -> Response:
+    @override
+    async def dispatch(self, request: Request, call_next: RequestResponseEndpoint) -> Response:
         response = await call_next(request)
         if response.status_code < 400:
             return response
@@ -45,17 +65,22 @@ class PlatformHttpErrorEnvelopeMiddleware(BaseHTTPMiddleware):
 
         body = b""
         try:
-            body_iterator = getattr(response, "body_iterator", None)
-            if body_iterator is None:
+            if not _has_body_iterator(response):
                 return response
-            async for chunk in body_iterator:
+            async for chunk in response.body_iterator:
                 body += chunk
         except Exception:
             _LOGGER.warning(
                 "platform_error_envelope.body_read_failed",
                 status_code=response.status_code,
             )
-            return response
+            return Response(
+                content=body,
+                status_code=response.status_code,
+                headers=dict(response.headers),
+                media_type=response.media_type,
+                background=response.background,
+            )
 
         if not body.strip():
             return Response(
@@ -75,8 +100,8 @@ class PlatformHttpErrorEnvelopeMiddleware(BaseHTTPMiddleware):
                     media_type=response.media_type,
                     background=response.background,
                 )
-            decoded = json.loads(body.decode("utf-8"))
-        except (UnicodeDecodeError, json.JSONDecodeError, TypeError):
+            decoded: JsonObject = parse_json_object(body.decode("utf-8"), "http error response")
+        except (UnicodeDecodeError, ValueError):
             return Response(
                 content=body,
                 status_code=response.status_code,
@@ -85,33 +110,16 @@ class PlatformHttpErrorEnvelopeMiddleware(BaseHTTPMiddleware):
                 background=response.background,
             )
 
-        if not isinstance(decoded, dict):
-            return Response(
-                content=body,
-                status_code=response.status_code,
-                headers=dict(response.headers),
-                media_type=response.media_type,
-                background=response.background,
-            )
-
-        request_id_raw = getattr(request.state, "request_id", None)
-        trace_id_raw = getattr(request.state, "trace_id", None)
-
-        company = getattr(request.state, "company", None)
-        active_company_id: str | None = None
-        if company is not None and hasattr(company, "company_id"):
-            cid = getattr(company, "company_id", None)
-            if isinstance(cid, str) and cid:
-                active_company_id = cid
+        correlation = get_request_correlation_ids(request)
 
         settings = get_settings()
         merged = try_merge_platform_error_into_dict(
             decoded,
-            trace_id=trace_id_raw if isinstance(trace_id_raw, str) else None,
-            platform_request_id=request_id_raw if isinstance(request_id_raw, str) else None,
+            trace_id=correlation.trace_id if correlation is not None else None,
+            platform_request_id=correlation.request_id if correlation is not None else None,
             service_name=self._service_name,
             logging_cfg=settings.logging,
-            active_company_id=active_company_id,
+            active_company_id=get_request_company_id(request),
         )
 
         if merged is decoded:

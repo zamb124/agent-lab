@@ -1,6 +1,7 @@
 {
     "routes": {
         "landing": "Главная",
+        "search": "Поиск",
         "product-agents": "Агенты",
         "product-rag": "RAG",
         "product-crm": "NetWorkle",

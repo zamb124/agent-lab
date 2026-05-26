@@ -14,7 +14,7 @@ from apps.flows.src.container_state import (
     set_current_container,
 )
 from apps.flows.src.db import (
-    EvaluationRepository,
+    EvaluationLabRepository,
     FlowRepository,
     LLMModelRepository,
     NodeRepository,
@@ -27,7 +27,7 @@ from apps.flows.src.durable_execution import (
     DurableWorkflowRepository,
     DurableWorkflowRuntime,
 )
-from apps.flows.src.evaluation.service import EvaluationService
+from apps.flows.src.evaluation.lab_service import EvaluationLabService
 from apps.flows.src.models import TriggerType
 from apps.flows.src.registry.nodes import NodeRegistry, create_default_node_registry
 from apps.flows.src.runners.remote import RemoteCodeRunner
@@ -106,8 +106,8 @@ class FlowContainer(BaseContainer):
         return client
 
     @lazy
-    def evaluation_repository(self) -> EvaluationRepository:
-        return EvaluationRepository(storage=self.storage)
+    def evaluation_lab_repository(self) -> EvaluationLabRepository:
+        return EvaluationLabRepository(storage=self.storage)
 
     # push_subscription_repository наследуется из BaseContainer (core/push/)
 
@@ -153,14 +153,14 @@ class FlowContainer(BaseContainer):
         return VariablesService(self.variable_repository)
 
     @lazy
-    def evaluation_service(self) -> EvaluationService:
-        return EvaluationService(
-            evaluation_repository=self.evaluation_repository,
+    def evaluation_lab_service(self) -> EvaluationLabService:
+        return EvaluationLabService(
+            repository=self.evaluation_lab_repository,
             flow_repository=self.flow_repository,
             flow_factory=self.flow_factory,
             node_registry=self.node_registry,
             node_repository=self.node_repository,
-            tool_registry=self.tool_registry,
+            span_repository=self.span_repository,
         )
 
     # push сервис перенесен в core/push/service.py и инициализируется в factory.py

@@ -104,6 +104,17 @@ from core.state import (
 )
 from core.state.mutation_policy import FROZEN_STATE_FIELDS, USER_TOOL_PARALLEL_STATE_MERGE_FIELDS
 from core.tracing import TraceContext, get_tracer
+from core.tracing.attributes import (
+    ATTR_MEMORY_COMPACTION,
+    ATTR_MEMORY_CURSOR_END,
+    ATTR_MEMORY_CURSOR_KEY,
+    ATTR_MEMORY_CURSOR_START,
+    ATTR_MEMORY_SCOPE,
+    ATTR_NODE_ID,
+    ATTR_WORKFLOW_EXECUTION_BRANCH_ID,
+    ATTR_WORKFLOW_NODE_SCHEDULE_SEQUENCE,
+    ATTR_WORKFLOW_SESSION_ID,
+)
 from core.tracing.context import get_current_trace_context
 from core.types import JsonObject, JsonValue, require_json_object, require_json_value
 
@@ -290,15 +301,15 @@ class LlmNodeRunner(BaseLlmNodeRunner):
                 resource_id=command.episode.memory_id,
                 trace_ctx=trace_ctx,
                 extra_attributes={
-                    "platform.workflow.session_id": command.session_id,
-                    "platform.workflow.execution_branch_id": command.execution_branch_id,
-                    "platform.workflow.node_schedule_sequence": command.node_schedule_sequence,
-                    "platform.node.id": command.node_id,
-                    "platform.memory.cursor_key": command.cursor_key,
-                    "platform.memory.cursor_start": command.cursor,
-                    "platform.memory.cursor_end": command.next_cursor,
-                    "platform.memory.scope": command.episode.scope,
-                    "platform.memory.compaction": command.compaction,
+                    ATTR_WORKFLOW_SESSION_ID: command.session_id,
+                    ATTR_WORKFLOW_EXECUTION_BRANCH_ID: command.execution_branch_id,
+                    ATTR_WORKFLOW_NODE_SCHEDULE_SEQUENCE: command.node_schedule_sequence,
+                    ATTR_NODE_ID: command.node_id,
+                    ATTR_MEMORY_CURSOR_KEY: command.cursor_key,
+                    ATTR_MEMORY_CURSOR_START: command.cursor,
+                    ATTR_MEMORY_CURSOR_END: command.next_cursor,
+                    ATTR_MEMORY_SCOPE: command.episode.scope,
+                    ATTR_MEMORY_COMPACTION: command.compaction,
                 },
             ):
                 result = await write_runtime_memory_episode(

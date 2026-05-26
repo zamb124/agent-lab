@@ -32,6 +32,7 @@ from core.logging.contract import (
 from core.logging.scope import (
     LogContractViolation,
     RequestLogScope,
+    ScopeToken,
     SystemLogScope,
     enter_request_scope,
     exit_request_scope,
@@ -48,6 +49,7 @@ __all__ = [
     "LoggingMisconfigured",
     "REDACT_PLACEHOLDER",
     "RequestLogScope",
+    "ScopeToken",
     "SystemLogScope",
     "bind_log_context",
     "clear_log_context",

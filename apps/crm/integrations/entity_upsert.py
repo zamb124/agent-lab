@@ -12,7 +12,7 @@ from apps.crm.constants_graph import NOTE_ROOT_ENTITY_TYPE_ID
 from apps.crm.db.models import CRMEntity
 from apps.crm.db.repositories.entity_repository import EntityRepository
 from apps.crm.integrations.external_ref import external_ref_now, merge_external_refs
-from apps.crm.types import JsonObject
+from core.types import JsonObject
 
 
 async def upsert_canonical_by_external_ref(

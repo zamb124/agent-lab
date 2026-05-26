@@ -195,58 +195,6 @@ async def call_tool_runtime(
             set_context(previous_context)
 
 
-@router.post("/call-builtin", response_model=CapabilityCallResponse)
-async def call_builtin_tool_runtime(
-    container: ContainerDep,
-    request: ToolRuntimeCallRequest,
-) -> CapabilityCallResponse:
-    """Execute the trusted builtin implementation, bypassing editable DB templates."""
-    verify_execution_context(request.context)
-    runtime_context = await _build_context(container, request.context)
-    previous_context = get_context()
-    set_context(runtime_context)
-    try:
-        state = ExecutionState.model_validate(request.state)
-        _attach_durable_context(state, request.context)
-        container.tool_registry.register_builtin_tools()
-        tool = container.tool_registry.get(request.tool_id)
-        if tool is None:
-            raise HTTPException(status_code=404, detail=f"Builtin tool not found: {request.tool_id}")
-        try:
-            with _active_tool_runtime_context(request, state):
-                result = await tool.run(request.arguments, state)
-        except FlowInterrupt as exc:
-            body = require_json_object(exc.body.model_dump(mode="json"), "FlowInterrupt.body")
-            raw_kind = body.get("kind")
-            if not isinstance(raw_kind, str):
-                raise ValueError("FlowInterrupt.body.kind must be a string")
-            return CapabilityCallResponse(
-                status="interrupt",
-                state=require_json_object(
-                    state.model_dump(mode="json", exclude_none=False),
-                    "ExecutionState",
-                ),
-                interrupt=CapabilityInterruptEnvelope(
-                    kind=raw_kind,
-                    body=body,
-                    correlation_id=str(exc.correlation_id) if exc.correlation_id is not None else None,
-                ),
-            )
-        return CapabilityCallResponse(
-            status="ok",
-            result=result,
-            state=require_json_object(
-                state.model_dump(mode="json", exclude_none=False),
-                "ExecutionState",
-            ),
-        )
-    finally:
-        if previous_context is None:
-            clear_context()
-        else:
-            set_context(previous_context)
-
-
 def _attach_durable_context(
     state: ExecutionState,
     execution_context: CapabilityExecutionContext,
