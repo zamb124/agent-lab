@@ -73,7 +73,12 @@ WORKDIR /app
 # ============================================
 FROM base-with-core AS builder-all
 COPY pyproject.toml uv.lock README.md ./
+ENV VIRTUAL_ENV=/opt/venv
+ENV PATH="/opt/venv/bin:${PATH}"
+# UV_HTTP_TIMEOUT по дефолту 30s, мало для тяжёлых NVIDIA CUDA wheels (>500MB).
+ENV UV_HTTP_TIMEOUT=600
 RUN --mount=type=cache,target=/root/.cache/uv \
+    uv venv --python 3.14t "${VIRTUAL_ENV}" && \
     uv export --frozen --no-dev --no-default-groups \
         --group core \
         --group agents \
@@ -85,7 +90,7 @@ RUN --mount=type=cache,target=/root/.cache/uv \
         --group browser \
         --no-annotate --no-header --no-emit-project \
         -o /tmp/requirements.txt && \
-    uv pip install --python 3.14t --system -r /tmp/requirements.txt
+    uv pip install --python "${VIRTUAL_ENV}/bin/python" -r /tmp/requirements.txt
 
 # ============================================
 # Этап 3: сборщик документации (статический сайт Zensical)
