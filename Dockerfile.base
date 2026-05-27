@@ -70,7 +70,7 @@ COPY pyproject.toml uv.lock README.md ./
 
 # Torch только для CPU (экономит ~2-3 GB по сравнению с CUDA версией)
 RUN --mount=type=cache,target=/root/.cache/uv \
-    uv pip install --system torch torchvision \
+    uv pip install --python 3.14t --system torch torchvision \
     --index-url https://download.pytorch.org/whl/cpu
 
 # Core + worker-base зависимости (строго по uv.lock)
@@ -79,4 +79,4 @@ RUN --mount=type=cache,target=/root/.cache/uv \
         --group core --group worker-base \
         --no-annotate --no-header --no-emit-project \
         -o /tmp/requirements.txt && \
-    uv pip install --system -r /tmp/requirements.txt
+    uv pip install --python 3.14t --system -r /tmp/requirements.txt

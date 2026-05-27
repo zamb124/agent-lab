@@ -85,7 +85,7 @@ RUN --mount=type=cache,target=/root/.cache/uv \
         --group browser \
         --no-annotate --no-header --no-emit-project \
         -o /tmp/requirements.txt && \
-    uv pip install --system -r /tmp/requirements.txt
+    uv pip install --python 3.14t --system -r /tmp/requirements.txt
 
 # ============================================
 # Этап 3: сборщик документации (статический сайт Zensical)

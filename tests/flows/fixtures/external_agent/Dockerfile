@@ -7,7 +7,7 @@ ENV UV_PYTHON_PREFERENCE=only-managed
 ENV PYTHON_GIL=0
 RUN uv python install 3.14t && uv python pin 3.14t
 
-RUN uv pip install --system fastapi granian>=2.7.4 pydantic
+RUN uv pip install --python 3.14t --system fastapi granian>=2.7.4 pydantic
 
 COPY main.py .
 
