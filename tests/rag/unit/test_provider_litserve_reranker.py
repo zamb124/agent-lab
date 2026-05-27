@@ -20,7 +20,7 @@ def test_placeholder_scores_length_matches_passages() -> None:
 def test_engine_rerank_empty_passages() -> None:
     eng = LocalRerankerEngine(_cfg(backend="placeholder"))
     eng.setup(None)
-    assert eng.rerank("q", []) == {"scores": []}
+    assert eng.rerank("q", []).model_dump() == {"scores": []}
 
 
 def test_engine_rerank_too_many_passages_422() -> None:
@@ -38,12 +38,12 @@ def test_engine_rerank_matches_client_contract() -> None:
     eng = LocalRerankerEngine(_cfg(backend="placeholder"))
     eng.setup(None)
     out = eng.rerank("hello world", ["hello", "bye"])
-    assert out == {"scores": [1.0, 0.0]}
+    assert out.model_dump() == {"scores": [1.0, 0.0]}
 
 
 def test_parse_rerank_body_valid() -> None:
     d = parse_rerank_body({"query": "q", "passages": ["a", "b"]})
-    assert d == {"query": "q", "passages": ["a", "b"]}
+    assert d.model_dump(exclude_none=True) == {"query": "q", "passages": ["a", "b"]}
 
 
 def test_parse_rerank_body_extra_field_forbidden() -> None:

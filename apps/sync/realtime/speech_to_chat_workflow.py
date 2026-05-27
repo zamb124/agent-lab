@@ -449,14 +449,14 @@ async def _post_segment_file_as_message(
 async def process_new_files_for_egress_row(
     *,
     row: SyncCallSpeechEgressTrack,
-    egress_info: EgressInfo,
+    egress_info: EgressInfo | None,
     call_id: str,
 ) -> None:
     container = get_sync_container()
     repo = container.call_speech_egress_track_repository
     budget = get_settings().calls.speech_to_chat.max_segments_per_poll_per_track
 
-    livekit_entries = _file_entries_from_egress_info(egress_info)
+    livekit_entries = _file_entries_from_egress_info(egress_info) if egress_info is not None else []
     if len(livekit_entries) > 0:
         while budget > 0:
             fresh = await repo.get_by_call_and_track(call_id, row.track_sid)
@@ -760,13 +760,8 @@ async def _run_speech_to_chat_poll_cycle_inner(*, call_id: str, company_id: str)
 
                 rows = await speech_repo.list_for_call(call_id, company_id)
                 for row in rows:
-                    info = await _find_egress_info(
-                        lk, room_name=room_name, egress_id=row.egress_id, api=api
-                    )
-                    if info is None:
-                        continue
                     await process_new_files_for_egress_row(
-                        row=row, egress_info=info, call_id=call_id
+                        row=row, egress_info=None, call_id=call_id
                     )
     except TimeoutError:
         logger.warning("speech_to_chat: LiveKit запрос превысил таймаут room=%s", room_name)

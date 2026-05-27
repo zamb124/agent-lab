@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import json
+from collections.abc import Sequence
+from dataclasses import dataclass
 from datetime import datetime
 
 from a2a.types import Message, TextPart
@@ -31,6 +33,7 @@ from apps.flows.src.durable_execution.repository import (
     DurableWorkflowRepository,
     NonIdempotentActivityReplayBlockedError,
     WorkflowConcurrencyError,
+    WorkflowStateTransitionWrite,
 )
 from apps.flows.src.durable_execution.state_delta import apply_state_delta, build_state_delta
 from apps.flows.src.models import SessionConfig
@@ -60,6 +63,23 @@ def create_initial_state(
     )
 
 
+@dataclass(frozen=True)
+class WorkflowStateEventSpec:
+    state: ExecutionState | JsonObject
+    event_type: WorkflowEventType
+    payload: WorkflowEventPayload | None = None
+    snapshot: bool = False
+
+
+@dataclass(frozen=True)
+class _CachedWorkflowHead:
+    state: ExecutionState
+    head_sequence: int
+    head_state_hash: str
+    execution_branch_id: str
+    status: WorkflowStatus
+
+
 class DurableWorkflowRuntime:
     """State projection runtime backed by append-only workflow events."""
 
@@ -81,6 +101,70 @@ class DurableWorkflowRuntime:
     def _cache_key(self, company_id: str, session_id: str) -> str:
         return f"flows:workflow_projection:{company_id}:{session_id}"
 
+    async def _get_cached_head(
+        self,
+        *,
+        company_id: str,
+        session_id: str,
+    ) -> _CachedWorkflowHead | None:
+        raw = await self._redis.get(self._cache_key(company_id, session_id))
+        if not raw:
+            return None
+        payload = parse_json_object(raw, "workflow_projection_cache")
+        head_sequence_raw = payload.get("head_sequence")
+        head_state_hash = payload.get("head_state_hash")
+        execution_branch_id = payload.get("execution_branch_id")
+        status_raw = payload.get("status")
+        if (
+            not isinstance(head_sequence_raw, int)
+            or not isinstance(head_state_hash, str)
+            or not isinstance(execution_branch_id, str)
+        ):
+            return None
+        if isinstance(status_raw, str):
+            try:
+                status = self._workflow_status_from_value(status_raw)
+            except ValueError:
+                return None
+        else:
+            status = WorkflowStatus.running
+        state_json = require_json_object(payload.get("state_json"), "cached_state")
+        return _CachedWorkflowHead(
+            state=ExecutionState.model_validate(state_json),
+            head_sequence=head_sequence_raw,
+            head_state_hash=head_state_hash,
+            execution_branch_id=execution_branch_id,
+            status=status,
+        )
+
+    async def _load_head_for_append(
+        self,
+        *,
+        company_id: str,
+        session_id: str,
+    ) -> tuple[ExecutionState | None, int | None, str | None, WorkflowStatus | None]:
+        cached = await self._get_cached_head(company_id=company_id, session_id=session_id)
+        if cached is not None:
+            return (
+                cached.state,
+                cached.head_sequence,
+                cached.execution_branch_id,
+                cached.status,
+            )
+        loaded = await self._repository.load_state_at_head(
+            company_id=company_id,
+            session_id=session_id,
+        )
+        if loaded is None:
+            return None, None, None, None
+        state, instance = loaded
+        return (
+            state,
+            int(instance.head_sequence),
+            instance.active_execution_branch_id,
+            self._workflow_status_from_value(instance.status),
+        )
+
     @staticmethod
     def _require_side_effect_policy(value: object) -> SideEffectPolicy:
         if type(value) is not SideEffectPolicy:
@@ -95,6 +179,10 @@ class DurableWorkflowRuntime:
 
     async def get_state(self, session_id: str) -> ExecutionState | None:
         company_id = self._company_id()
+        cached = await self._get_cached_head(company_id=company_id, session_id=session_id)
+        if cached is not None:
+            return cached.state
+
         instance = await self._repository.get_instance(
             company_id=company_id,
             session_id=session_id,
@@ -130,6 +218,7 @@ class DurableWorkflowRuntime:
             head_sequence=int(refreshed_instance.head_sequence),
             head_state_hash=head_state_hash,
             execution_branch_id=refreshed_instance.active_execution_branch_id,
+            status=self._workflow_status_from_value(refreshed_instance.status),
         )
         return state
 
@@ -138,6 +227,13 @@ class DurableWorkflowRuntime:
     ) -> WorkflowExecutionPosition | None:
         """Return active branch/head metadata for durable command keys."""
         company_id = self._company_id()
+        cached = await self._get_cached_head(company_id=company_id, session_id=session_id)
+        if cached is not None:
+            return WorkflowExecutionPosition(
+                execution_branch_id=cached.execution_branch_id,
+                head_sequence=cached.head_sequence,
+                head_state_hash=cached.head_state_hash,
+            )
         instance = await self._repository.get_instance(
             company_id=company_id,
             session_id=session_id,
@@ -165,13 +261,14 @@ class DurableWorkflowRuntime:
         """
         company_id = self._company_id()
         for attempt_index in range(5):
-            loaded = await self._repository.load_state_at_head(
-                company_id=company_id,
-                session_id=session_id,
+            state, expected_head_sequence, expected_execution_branch_id, status = (
+                await self._load_head_for_append(
+                    company_id=company_id,
+                    session_id=session_id,
+                )
             )
-            if loaded is None:
+            if state is None or expected_head_sequence is None or status is None:
                 raise ValueError(f"Workflow instance not found: {session_id!r}")
-            state, instance = loaded
             state_json = self._dump_state(state)
             try:
                 result = await self._repository.append_state_transition(
@@ -181,10 +278,10 @@ class DurableWorkflowRuntime:
                     payload=payload,
                     state_delta=build_state_delta(state, state),
                     state_json=state_json,
-                    status=self._workflow_status_from_value(instance.status),
+                    status=status,
                     snapshot=False,
-                    expected_head_sequence=int(instance.head_sequence),
-                    expected_execution_branch_id=instance.active_execution_branch_id,
+                    expected_head_sequence=expected_head_sequence,
+                    expected_execution_branch_id=expected_execution_branch_id,
                 )
             except WorkflowConcurrencyError:
                 if attempt_index == 4:
@@ -197,6 +294,7 @@ class DurableWorkflowRuntime:
                 head_sequence=result.sequence,
                 head_state_hash=result.state_hash,
                 execution_branch_id=result.execution_branch_id,
+                status=status,
             )
             return result
         raise WorkflowConcurrencyError(
@@ -232,17 +330,12 @@ class DurableWorkflowRuntime:
     ) -> WorkflowAppendResult:
         st = ExecutionState.model_validate(state) if isinstance(state, dict) else state
         company_id = self._company_id()
-        loaded = await self._repository.load_state_at_head(
-            company_id=company_id,
-            session_id=session_id,
+        before, expected_head_sequence, expected_execution_branch_id, _status = (
+            await self._load_head_for_append(
+                company_id=company_id,
+                session_id=session_id,
+            )
         )
-        before: ExecutionState | None = None
-        expected_head_sequence: int | None = None
-        expected_execution_branch_id: str | None = None
-        if loaded is not None:
-            before, instance = loaded
-            expected_head_sequence = int(instance.head_sequence)
-            expected_execution_branch_id = instance.active_execution_branch_id
         state_json = self._dump_state(st)
         delta = build_state_delta(before, st)
         result = await self._repository.append_state_transition(
@@ -269,8 +362,76 @@ class DurableWorkflowRuntime:
             head_sequence=result.sequence,
             head_state_hash=result.state_hash,
             execution_branch_id=result.execution_branch_id,
+            status=WorkflowStatus.running,
         )
         return result
+
+    async def record_state_events(
+        self,
+        session_id: str,
+        events: Sequence[WorkflowStateEventSpec],
+    ) -> list[WorkflowAppendResult]:
+        if not events:
+            return []
+
+        states = [
+            ExecutionState.model_validate(event.state)
+            if isinstance(event.state, dict)
+            else event.state
+            for event in events
+        ]
+        company_id = self._company_id()
+        before, expected_head_sequence, expected_execution_branch_id, _status = (
+            await self._load_head_for_append(
+                company_id=company_id,
+                session_id=session_id,
+            )
+        )
+
+        transitions: list[WorkflowStateTransitionWrite] = []
+        snapshot_head_sequence = expected_head_sequence
+        previous = before
+        for event, state in zip(events, states, strict=True):
+            state_json = self._dump_state(state)
+            delta = build_state_delta(previous, state)
+            transitions.append(
+                WorkflowStateTransitionWrite(
+                    event_type=event.event_type,
+                    payload=self._resolve_event_payload(event.event_type, event.payload),
+                    state_delta=delta,
+                    state_json=state_json,
+                    status=WorkflowStatus.running,
+                    snapshot=self._should_snapshot(
+                        requested=event.snapshot,
+                        event_type=event.event_type,
+                        delta=delta,
+                        expected_head_sequence=snapshot_head_sequence,
+                    ),
+                )
+            )
+            previous = state
+            snapshot_head_sequence = (
+                1 if snapshot_head_sequence is None else snapshot_head_sequence + 1
+            )
+
+        results = await self._repository.append_state_transitions(
+            company_id=company_id,
+            session_id=session_id,
+            transitions=transitions,
+            expected_head_sequence=expected_head_sequence,
+            expected_execution_branch_id=expected_execution_branch_id,
+        )
+        last_state = states[-1]
+        last_result = results[-1]
+        await self._cache_projection(
+            company_id=company_id,
+            session_id=session_id,
+            state=last_state,
+            head_sequence=last_result.sequence,
+            head_state_hash=last_result.state_hash,
+            execution_branch_id=last_result.execution_branch_id,
+        )
+        return results
 
     @staticmethod
     def _resolve_event_payload(
@@ -299,17 +460,12 @@ class DurableWorkflowRuntime:
 
         status = self._workflow_status_for_terminal(terminal_task_state)
         company_id = self._company_id()
-        loaded = await self._repository.load_state_at_head(
-            company_id=company_id,
-            session_id=session_id,
+        before, expected_head_sequence, expected_execution_branch_id, _current_status = (
+            await self._load_head_for_append(
+                company_id=company_id,
+                session_id=session_id,
+            )
         )
-        before: ExecutionState | None = None
-        expected_head_sequence: int | None = None
-        expected_execution_branch_id: str | None = None
-        if loaded is not None:
-            before, instance = loaded
-            expected_head_sequence = int(instance.head_sequence)
-            expected_execution_branch_id = instance.active_execution_branch_id
         state_json = self._dump_state(st)
         delta = build_state_delta(before, st)
         result = await self._repository.append_state_transition(
@@ -334,6 +490,7 @@ class DurableWorkflowRuntime:
             head_sequence=result.sequence,
             head_state_hash=result.state_hash,
             execution_branch_id=result.execution_branch_id,
+            status=status,
         )
         return True
 
@@ -816,15 +973,15 @@ class DurableWorkflowRuntime:
         event_type: WorkflowEventType,
     ) -> None:
         for attempt_index in range(5):
-            loaded = await self._repository.load_state_at_head(
-                company_id=record.company_id,
-                session_id=record.session_id,
+            state, expected_head_sequence, expected_execution_branch_id, status = (
+                await self._load_head_for_append(
+                    company_id=record.company_id,
+                    session_id=record.session_id,
+                )
             )
-            if loaded is None:
+            if state is None or expected_head_sequence is None:
                 return
-            state, instance = loaded
             state_json = self._dump_state(state)
-            status = self._workflow_status_from_value(instance.status)
             try:
                 result = await self._repository.append_state_transition(
                     company_id=record.company_id,
@@ -848,10 +1005,10 @@ class DurableWorkflowRuntime:
                     ),
                     state_delta=build_state_delta(state, state),
                     state_json=state_json,
-                    status=status,
+                    status=status or WorkflowStatus.running,
                     snapshot=False,
-                    expected_head_sequence=int(instance.head_sequence),
-                    expected_execution_branch_id=instance.active_execution_branch_id,
+                    expected_head_sequence=expected_head_sequence,
+                    expected_execution_branch_id=expected_execution_branch_id,
                 )
             except WorkflowConcurrencyError:
                 if attempt_index == 4:
@@ -864,6 +1021,7 @@ class DurableWorkflowRuntime:
                 head_sequence=result.sequence,
                 head_state_hash=result.state_hash,
                 execution_branch_id=result.execution_branch_id,
+                status=status or WorkflowStatus.running,
             )
             return
 
@@ -876,6 +1034,7 @@ class DurableWorkflowRuntime:
         head_sequence: int,
         head_state_hash: str,
         execution_branch_id: str,
+        status: WorkflowStatus = WorkflowStatus.running,
     ) -> None:
         state_json = self._dump_state(state)
         computed_hash = hash_state_json(state_json)
@@ -892,6 +1051,7 @@ class DurableWorkflowRuntime:
                     "execution_branch_id": execution_branch_id,
                     "head_sequence": head_sequence,
                     "head_state_hash": head_state_hash,
+                    "status": status.value,
                     "state_json": state_json,
                 },
                 ensure_ascii=False,

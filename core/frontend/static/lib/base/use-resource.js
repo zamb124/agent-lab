@@ -154,6 +154,7 @@ export class OpController {
     get busy() { return Boolean(this.state.busy); }
     get error() { return this.state.error; }
     get lastResult() { return this.state.lastResult; }
+    get lastRequestId() { return this.state.lastRequestId; }
 
     run(payload) {
         const okType = this.op.events.SUCCEEDED;

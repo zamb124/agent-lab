@@ -4,10 +4,10 @@
 Простой API для интеграционных тестов ExternalAPINode и ExternalAPITool.
 """
 
-from typing import Any, Dict, Optional
-
 from fastapi import FastAPI, Header, HTTPException
 from pydantic import BaseModel
+
+from core.types import JsonObject
 
 external_api_app = FastAPI(title="Test External API")
 
@@ -28,17 +28,17 @@ class CalculatorRequest(BaseModel):
 class InterruptResponse(BaseModel):
     """Ответ с interrupt."""
     status: str = "waiting_input"
-    interrupt: Dict[str, Any]
+    interrupt: JsonObject
 
 
 @external_api_app.get("/health")
-async def health() -> Dict[str, str]:
+async def health() -> dict[str, str]:
     """Health check."""
     return {"status": "ok"}
 
 
 @external_api_app.post("/echo")
-async def echo(request: EchoRequest) -> Dict[str, Any]:
+async def echo(request: EchoRequest) -> JsonObject:
     """Echo API - возвращает сообщение."""
     message = request.message
     if request.uppercase:
@@ -54,7 +54,7 @@ async def echo(request: EchoRequest) -> Dict[str, Any]:
 
 
 @external_api_app.post("/calculate")
-async def calculate(request: CalculatorRequest) -> Dict[str, Any]:
+async def calculate(request: CalculatorRequest) -> JsonObject:
     """Калькулятор."""
     result = 0
     if request.operation == "add":
@@ -86,7 +86,7 @@ async def calculate(request: CalculatorRequest) -> Dict[str, Any]:
 
 
 @external_api_app.get("/user/{user_id}")
-async def get_user(user_id: str) -> Dict[str, Any]:
+async def get_user(user_id: str) -> JsonObject:
     """Получение пользователя по ID."""
     users = {
         "1": {"name": "Alice", "email": "alice@example.com"},
@@ -106,14 +106,14 @@ async def get_user(user_id: str) -> Dict[str, Any]:
 
 
 @external_api_app.post("/ask-clarification")
-async def ask_clarification(request: EchoRequest) -> Dict[str, Any]:
+async def ask_clarification(request: EchoRequest) -> JsonObject:
     """API который требует уточнения (interrupt)."""
     if len(request.message) < 10:
         return {
             "status": "waiting_input",
             "interrupt": {
+                "kind": "user_message",
                 "question": "Пожалуйста, предоставьте больше деталей",
-                "min_length": 10
             }
         }
 
@@ -128,9 +128,9 @@ async def ask_clarification(request: EchoRequest) -> Dict[str, Any]:
 @external_api_app.post("/auth-required")
 async def auth_required(
     request: EchoRequest,
-    authorization: Optional[str] = Header(None),
-    x_api_key: Optional[str] = Header(None, alias="X-API-Key")
-) -> Dict[str, Any]:
+    authorization: str | None = Header(None),
+    x_api_key: str | None = Header(None, alias="X-API-Key")
+) -> JsonObject:
     """API требующий авторизации."""
     if not authorization and not x_api_key:
         raise HTTPException(status_code=401, detail="Authorization required")
@@ -149,4 +149,3 @@ async def auth_required(
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run(external_api_app, host="0.0.0.0", port=8081)
-

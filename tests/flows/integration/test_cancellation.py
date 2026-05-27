@@ -13,13 +13,16 @@ import pytest
 
 from apps.flows.src.container import get_container
 from apps.flows.src.models import Edge, FlowConfig
-from apps.flows.src.runtime.flow import Flow
 from apps.flows.src.state.cancellation import (
     CancellationToken,
     FlowCancelled,
     set_cancellation_token,
 )
-from core.state import ExecutionState
+from core.clients.redis_client import RedisClient
+from core.types import JsonObject
+from tests.flows.durable_runtime_harness import run_flow, workflow_state
+
+EMPTY_PARAMETERS_SCHEMA: JsonObject = {"type": "object", "properties": {}, "required": []}
 
 
 class TestCancellationBetweenNodes:
@@ -33,34 +36,32 @@ class TestCancellationBetweenNodes:
         Ни одна нода не выполняется.
         """
         container = get_container()
-        flow = await Flow.from_config(
-            config={
-                "id": f"cancel_graph_{unique_id}",
-                "name": "Cancel Graph",
-                "entry": "node_a",
-                "nodes": {
-                    "node_a": {
-                        "type": "code",
-                        "code": "async def run(args, state):\n    state['executed_a'] = True\n    return state\n",
-                    },
-                    "node_b": {
-                        "type": "code",
-                        "code": "async def run(args, state):\n    state['executed_b'] = True\n    return state\n",
-                    },
+        flow_id = f"cancel_graph_{unique_id}"
+        flow_config = FlowConfig(
+            flow_id=flow_id,
+            name="Cancel Graph",
+            entry="node_a",
+            nodes={
+                "node_a": {
+                    "type": "code",
+                    "code": "async def run(args, state):\n    state['executed_a'] = True\n    return state\n",
                 },
-                "edges": [
-                    {"from_node": "node_a", "to_node": "node_b"},
-                    {"from_node": "node_b", "to_node": None},
-                ],
+                "node_b": {
+                    "type": "code",
+                    "code": "async def run(args, state):\n    state['executed_b'] = True\n    return state\n",
+                },
             },
-            variables={},
-            container=container,
+            edges=[
+                Edge(from_node="node_a", to_node="node_b"),
+                Edge(from_node="node_b", to_node=None),
+            ],
         )
-        state = ExecutionState(
+        await container.flow_repository.set(flow_config)
+        flow = await container.flow_factory.get_flow(flow_id)
+        state = workflow_state(
+            flow_id=flow_id,
+            unique_id=f"before-{unique_id}",
             task_id=f"task-{unique_id}",
-            context_id=f"ctx-{unique_id}",
-            user_id=f"user-{unique_id}",
-            session_id=f"cancel_graph_{unique_id}:ctx-{unique_id}",
             content="go",
         )
         token = CancellationToken(state.task_id, container.redis_client, check_interval=0)
@@ -68,10 +69,10 @@ class TestCancellationBetweenNodes:
         set_cancellation_token(token)
         try:
             with pytest.raises(FlowCancelled) as exc_info:
-                await flow.run(state)
+                await run_flow(container=container, flow=flow, state=state)
             assert exc_info.value.task_id == state.task_id
-            assert not getattr(state, "executed_a", False)
-            assert not getattr(state, "executed_b", False)
+            assert not state.get("executed_a", False)
+            assert not state.get("executed_b", False)
         finally:
             await token.cleanup()
             set_cancellation_token(None)
@@ -84,34 +85,32 @@ class TestCancellationBetweenNodes:
         """
         container = get_container()
         task_id = f"task-{unique_id}"
-        flow = await Flow.from_config(
-            config={
-                "id": f"cancel_mid_{unique_id}",
-                "name": "Cancel Mid",
-                "entry": "node_a",
-                "nodes": {
-                    "node_a": {
-                        "type": "code",
-                        "code": "async def run(args, state):\n    state['executed_a'] = True\n    return state\n",
-                    },
-                    "node_b": {
-                        "type": "code",
-                        "code": "async def run(args, state):\n    state['executed_b'] = True\n    return state\n",
-                    },
+        flow_id = f"cancel_mid_{unique_id}"
+        flow_config = FlowConfig(
+            flow_id=flow_id,
+            name="Cancel Mid",
+            entry="node_a",
+            nodes={
+                "node_a": {
+                    "type": "code",
+                    "code": "async def run(args, state):\n    state['executed_a'] = True\n    return state\n",
                 },
-                "edges": [
-                    {"from_node": "node_a", "to_node": "node_b"},
-                    {"from_node": "node_b", "to_node": None},
-                ],
+                "node_b": {
+                    "type": "code",
+                    "code": "async def run(args, state):\n    state['executed_b'] = True\n    return state\n",
+                },
             },
-            variables={},
-            container=container,
+            edges=[
+                Edge(from_node="node_a", to_node="node_b"),
+                Edge(from_node="node_b", to_node=None),
+            ],
         )
-        state = ExecutionState(
+        await container.flow_repository.set(flow_config)
+        flow = await container.flow_factory.get_flow(flow_id)
+        state = workflow_state(
+            flow_id=flow_id,
+            unique_id=f"mid-{unique_id}",
             task_id=task_id,
-            context_id=f"ctx-{unique_id}",
-            user_id=f"user-{unique_id}",
-            session_id=f"cancel_mid_{unique_id}:ctx-{unique_id}",
             content="go",
         )
         token = CancellationToken(task_id, container.redis_client, check_interval=0)
@@ -127,9 +126,11 @@ class TestCancellationBetweenNodes:
         node_a.execute = patched_execute
         try:
             with pytest.raises(FlowCancelled):
-                await flow.run(state)
-            assert getattr(state, "executed_a", False) is True
-            assert not getattr(state, "executed_b", False)
+                await run_flow(container=container, flow=flow, state=state)
+            saved_state = await container.workflow_runtime.get_state(state.session_id)
+            assert saved_state is not None
+            assert saved_state.get("executed_a", False) is True
+            assert not saved_state.get("executed_b", False)
         finally:
             await token.cleanup()
             set_cancellation_token(None)
@@ -141,7 +142,7 @@ class _DelayedCancelToken(CancellationToken):
     Имитирует ситуацию когда cancel появляется МЕЖДУ итерациями ReAct.
     """
 
-    def __init__(self, task_id: str, redis_client: object, skip_first: int = 1):
+    def __init__(self, task_id: str, redis_client: RedisClient, skip_first: int = 1):
         super().__init__(task_id, redis_client, check_interval=0)
         self._checks_remaining = skip_first
 
@@ -165,46 +166,44 @@ class TestCancellationInReactLoop:
         """
         container = get_container()
         task_id = f"task-{unique_id}"
-        flow = await Flow.from_config(
-            config={
-                "id": f"cancel_react_{unique_id}",
-                "name": "Cancel React",
-                "entry": "main",
-                "nodes": {
-                    "main": {
-                        "type": "llm_node",
-                        "prompt": "You are an assistant.",
-                        "tools": [
-                            {
-                                "tool_id": "dummy",
-                                "type": "code",
-                                "name": "dummy",
-                                "description": "dummy tool",
-                                "code": "async def run(args, state):\n    return 'ok'\n",
-                            }
-                        ],
-                    }
-                },
-                "edges": [{"from_node": "main", "to_node": None}],
+        flow_id = f"cancel_react_{unique_id}"
+        flow_config = FlowConfig(
+            flow_id=flow_id,
+            name="Cancel React",
+            entry="main",
+            nodes={
+                "main": {
+                    "type": "llm_node",
+                    "prompt": "You are an assistant.",
+                    "tools": [
+                        {
+                            "tool_id": "dummy",
+                            "name": "dummy",
+                            "description": "dummy tool",
+                            "parameters_schema": EMPTY_PARAMETERS_SCHEMA,
+                            "code": "async def run(args, state):\n    return 'ok'\n",
+                        }
+                    ],
+                }
             },
-            variables={},
-            container=container,
+            edges=[Edge(from_node="main", to_node=None)],
         )
+        await container.flow_repository.set(flow_config)
+        flow = await container.flow_factory.get_flow(flow_id)
         mock_llm_with_queue(
             [{"type": "tool_call", "tool": "dummy", "args": {}}, "This should not be reached"]
         )
-        state = ExecutionState(
+        state = workflow_state(
+            flow_id=flow_id,
+            unique_id=f"react-{unique_id}",
             task_id=task_id,
-            context_id=f"ctx-{unique_id}",
-            user_id=f"user-{unique_id}",
-            session_id=f"cancel_react_{unique_id}:ctx-{unique_id}",
             content="go",
         )
         token = _DelayedCancelToken(task_id, container.redis_client, skip_first=1)
         set_cancellation_token(token)
         try:
             with pytest.raises(FlowCancelled):
-                await flow.run(state)
+                await run_flow(container=container, flow=flow, state=state)
             assert state.response != "This should not be reached"
         finally:
             set_cancellation_token(None)
@@ -222,8 +221,6 @@ class TestCancellationStateRestoration:
         """
         container = get_container()
         flow_id = f"cancel_state_{unique_id}"
-        context_id = f"ctx-{unique_id}"
-        session_id = f"{flow_id}:{context_id}"
         flow_config = FlowConfig(
             flow_id=flow_id,
             name="Cancel State Test",
@@ -238,24 +235,22 @@ class TestCancellationStateRestoration:
         )
         await container.flow_repository.set(flow_config)
         flow = await container.flow_factory.get_flow(flow_id)
-        state_v1 = ExecutionState(
+        state_v1 = workflow_state(
+            flow_id=flow_id,
+            unique_id=f"state-{unique_id}",
             task_id=f"task1-{unique_id}",
-            context_id=context_id,
-            user_id=f"user-{unique_id}",
-            session_id=session_id,
             content="first",
         )
-        result_v1 = await flow.run(state_v1)
+        result_v1 = await run_flow(container=container, flow=flow, state=state_v1)
         assert result_v1.response == "counter=1"
-        await container.workflow_runtime.save_state(session_id, result_v1)
-        saved_before_cancel = await container.workflow_runtime.get_state(session_id)
+        await container.workflow_runtime.save_state(state_v1.session_id, result_v1)
+        saved_before_cancel = await container.workflow_runtime.get_state(state_v1.session_id)
         assert saved_before_cancel is not None
         assert saved_before_cancel.response == "counter=1"
-        state_v2 = ExecutionState(
+        state_v2 = workflow_state(
+            flow_id=flow_id,
+            unique_id=f"state-{unique_id}",
             task_id=f"task2-{unique_id}",
-            context_id=context_id,
-            user_id=f"user-{unique_id}",
-            session_id=session_id,
             content="second",
         )
         token = CancellationToken(state_v2.task_id, container.redis_client, check_interval=0)
@@ -264,11 +259,11 @@ class TestCancellationStateRestoration:
         flow_v2 = await container.flow_factory.get_flow(flow_id)
         try:
             with pytest.raises(FlowCancelled):
-                await flow_v2.run(state_v2)
+                await run_flow(container=container, flow=flow_v2, state=state_v2)
         finally:
             await token.cleanup()
             set_cancellation_token(None)
-        saved_after_cancel = await container.workflow_runtime.get_state(session_id)
+        saved_after_cancel = await container.workflow_runtime.get_state(state_v1.session_id)
         assert saved_after_cancel is not None
         assert saved_after_cancel.response == "counter=1"
         assert saved_after_cancel.get("counter") == 1

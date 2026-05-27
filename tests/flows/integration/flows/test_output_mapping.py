@@ -448,8 +448,8 @@ class TestExecutionStateReturnFromFunction:
         """CodeNode: возврат ExecutionState мержится в state."""
         code = """
 async def run(args, state):
-    state.modified_field = "modified"
-    state.new_field = "new"
+    state["modified_field"] = "modified"
+    state["new_field"] = "new"
     return state
 """
         node = code_node(container, node_id="test_func", config={"code": code})
@@ -467,7 +467,7 @@ async def run(args, state):
         """CodeNode: при возврате ExecutionState output_mapping игнорируется."""
         code = """
 async def run(args, state):
-    state.field1 = "value1"
+    state["field1"] = "value1"
     return state
 """
         node = code_node(

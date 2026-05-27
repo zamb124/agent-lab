@@ -11,13 +11,13 @@ from pathlib import Path
 
 import litserve as ls
 import uvicorn
-from fastapi import APIRouter, BackgroundTasks, Depends, FastAPI, HTTPException, Request
+from fastapi import APIRouter, Depends, FastAPI
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.routing import APIRoute
-from huggingface_hub import scan_cache_dir, snapshot_download
 from litserve.server import response_queue_to_buffer
-from pydantic import BaseModel, Field
 
+from apps.provider_litserve.api import models_router
+from apps.provider_litserve.api.models import system_auth_dependency
 from apps.provider_litserve.config import (
     ProviderLitserveServiceSettings,
     get_provider_litserve_settings,
@@ -28,14 +28,7 @@ from apps.provider_litserve.container import (
 )
 from apps.provider_litserve.embedding.api import EmbeddingLitAPI
 from apps.provider_litserve.model_registry import (
-    ModelKind,
-    RegistryModel,
-    create_or_replace_model,
-    get_model,
     init_registry,
-    list_models,
-    mark_model_deleted,
-    mark_model_status,
     sync_defaults_from_config,
 )
 from apps.provider_litserve.openai_server_contracts import (
@@ -52,11 +45,8 @@ from apps.provider_litserve.tts.api import TTSLitAPI
 from apps.provider_litserve.vad.api import VADLitAPI
 from core.app import create_service_app
 from core.app.health_payload import build_health_payload
-from core.utils.tokens import get_token_service
 
-SYSTEM_COMPANY_ID = "system"
 UI_PREFIX = "/litserve"
-UI_API_PREFIX = f"{UI_PREFIX}/api"
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 UI_ROOT_PATH = Path(__file__).parent / "ui"
 UI_INDEX_PATH = UI_ROOT_PATH / "index.html"
@@ -66,78 +56,9 @@ _provider_litserve_manager: ls.LitServerManager | None = None
 _provider_litserve_response_task: asyncio.Task[None] | None = None
 
 
-class ProviderLitserveModelCreateRequest(BaseModel):
-    kind: ModelKind = Field(description="embedding | rerank | stt | tts | vad")
-    hf_model_id: str
-    api_model_id: str
-
-
-class ProviderLitserveModelListResponse(BaseModel):
-    items: list[RegistryModel]
-
-
-class ProviderLitserveModelDeleteResponse(BaseModel):
-    model_id: str
-
-
 class ProviderLitserveArgNamespace(argparse.Namespace):
     host: str | None = None
     port: int | None = None
-
-
-def _system_auth_dependency(request: Request) -> None:
-    auth_header = request.headers.get("Authorization", "").strip()
-    token = request.cookies.get("auth_token", "").strip()
-    if auth_header:
-        prefix = "Bearer "
-        if not auth_header.startswith(prefix):
-            raise HTTPException(status_code=401, detail="Invalid Authorization header")
-        token = auth_header[len(prefix):].strip()
-    if not token:
-        raise HTTPException(status_code=401, detail="Authentication required")
-    token_data = get_token_service().validate_token(token)
-    if token_data is None:
-        raise HTTPException(status_code=401, detail="Invalid token")
-    if token_data.company_id != SYSTEM_COMPANY_ID:
-        raise HTTPException(status_code=403, detail="System company required")
-
-
-def _reload_catalog() -> None:
-    cfg = get_provider_litserve_settings().provider_litserve.infra
-    _ = reload_runtime_catalog_from_sqlite(cfg)
-
-
-def _download_model_weights(model_id: str) -> None:
-    settings = get_provider_litserve_settings()
-    cfg = settings.provider_litserve.infra
-    model = get_model(cfg, model_id=model_id)
-    mark_model_status(cfg, model_id=model_id, status="downloading")
-    try:
-        _ = snapshot_download(
-            repo_id=model.hf_model_id,
-            token=cfg.hf_token,
-            local_files_only=False,
-        )
-    except Exception as exc:
-        mark_model_status(cfg, model_id=model_id, status="failed", error=str(exc))
-        raise
-    mark_model_status(cfg, model_id=model_id, status="ready", error=None)
-    _reload_catalog()
-
-
-def _delete_model_weights(model_id: str) -> None:
-    settings = get_provider_litserve_settings()
-    cfg = settings.provider_litserve.infra
-    model = get_model(cfg, model_id=model_id)
-    try:
-        cache_info = scan_cache_dir()
-        strategy = cache_info.delete_revisions(model.hf_model_id)
-        _ = strategy.execute()
-    except Exception as exc:
-        mark_model_status(cfg, model_id=model_id, status="failed", error=str(exc))
-        raise
-    mark_model_deleted(cfg, model_id=model_id)
-    _reload_catalog()
 
 
 def _ui_index_handler() -> FileResponse:
@@ -158,81 +79,15 @@ def _register_ui_routes(app: FastAPI) -> None:
         UI_PREFIX,
         _ui_index_handler,
         methods=["GET"],
-        dependencies=[Depends(_system_auth_dependency)],
+        dependencies=[Depends(system_auth_dependency)],
     )
     router.add_api_route(
         f"{UI_PREFIX}/",
         _ui_index_handler,
         methods=["GET"],
-        dependencies=[Depends(_system_auth_dependency)],
+        dependencies=[Depends(system_auth_dependency)],
     )
     router.add_api_route(f"{UI_PREFIX}/health", _ui_health_handler, methods=["GET"])
-    app.include_router(router)
-
-
-def _list_registry_models_handler() -> ProviderLitserveModelListResponse:
-    cfg = get_provider_litserve_settings().provider_litserve.infra
-    return ProviderLitserveModelListResponse(items=list_models(cfg))
-
-
-def _add_registry_model_handler(
-    payload: ProviderLitserveModelCreateRequest,
-    background: BackgroundTasks,
-) -> RegistryModel:
-    cfg = get_provider_litserve_settings().provider_litserve.infra
-    model = create_or_replace_model(
-        cfg,
-        kind=payload.kind,
-        hf_model_id=payload.hf_model_id,
-        api_model_id=payload.api_model_id,
-    )
-    background.add_task(_download_model_weights, model.model_id)
-    return model
-
-
-def _retry_download_handler(model_id: str, background: BackgroundTasks) -> RegistryModel:
-    cfg = get_provider_litserve_settings().provider_litserve.infra
-    mark_model_status(cfg, model_id=model_id, status="pending", error=None)
-    background.add_task(_download_model_weights, model_id)
-    return get_model(cfg, model_id=model_id)
-
-
-def _delete_registry_model_handler(model_id: str, background: BackgroundTasks) -> ProviderLitserveModelDeleteResponse:
-    background.add_task(_delete_model_weights, model_id)
-    return ProviderLitserveModelDeleteResponse(model_id=model_id)
-
-
-def _register_model_management_api(app: FastAPI) -> None:
-    router = APIRouter(prefix="/litserve/api", tags=["litserve-models"])
-    deps = [Depends(_system_auth_dependency)]
-    router.add_api_route(
-        "/models",
-        _list_registry_models_handler,
-        methods=["GET"],
-        dependencies=deps,
-        response_model=ProviderLitserveModelListResponse,
-    )
-    router.add_api_route(
-        "/models",
-        _add_registry_model_handler,
-        methods=["POST"],
-        dependencies=deps,
-        response_model=RegistryModel,
-    )
-    router.add_api_route(
-        "/models/{model_id}/retry",
-        _retry_download_handler,
-        methods=["POST"],
-        dependencies=deps,
-        response_model=RegistryModel,
-    )
-    router.add_api_route(
-        "/models/{model_id}",
-        _delete_registry_model_handler,
-        methods=["DELETE"],
-        dependencies=deps,
-        response_model=ProviderLitserveModelDeleteResponse,
-    )
     app.include_router(router)
 
 
@@ -396,9 +251,10 @@ def build_app() -> FastAPI:
         settings_class=ProviderLitserveServiceSettings,
         get_container=get_provider_litserve_container,
         services_spa_index=UI_INDEX_PATH,
-        routers=[],
+        routers=[models_router],
         on_startup=_on_startup,
         on_shutdown=_on_shutdown,
+        api_version=None,
         include_crud_routers=False,
         documentation_gateway_prefix="litserve",
         static_mounts=[
@@ -408,7 +264,6 @@ def build_app() -> FastAPI:
         mount_repo_documentation=False,
     )
     _register_ui_routes(app)
-    _register_model_management_api(app)
     _register_litserver_v1(app)
     return app
 

@@ -105,7 +105,6 @@ class TestE2EFlowCreationViaAPI:
                 "tool_id": "e2e_calculator",
                 "title": "E2E Calculator",
                 "description": "Калькулятор для E2E теста",
-                "code_mode": "INLINE_CODE",
                 "code": "\nasync def run(args, state):\n    a = args.get('a', 0)\n    b = args.get('b', 0)\n    return a + b\n",
                 "parameters_schema": {
                     "type": "object",
@@ -147,7 +146,7 @@ class TestE2EFlowCreationViaAPI:
                     },
                     "process": {
                         "type": "code",
-                        "code": "async def run(args, state):\n    company = state.variables.get('e2e_company_name', 'Unknown')\n    state.response = f'Hello from {company}!'\n    return state",
+                        "code": "async def run(args, state):\n    company = state['variables']['e2e_company_name']\n    state['response'] = f'Hello from {company}!'\n    return state",
                     },
                 },
                 "edges": [
@@ -244,7 +243,7 @@ class TestE2EInterruptInCodeNode:
                 "nodes": {
                     "ask_name": {
                         "type": "code",
-                        "code": "\nasync def run(args, state):\n    if 'user_name' not in state:\n        state['interrupt'] = {'question': 'Как вас зовут?'}\n        return state\n    return state\n",
+                        "code": "\nfrom apps.flows.src.runtime.exceptions import FlowInterrupt\n\nasync def run(args, state):\n    if state.get('user_name'):\n        return state\n    if state.get('asked_name'):\n        state['user_name'] = state.get('content', '')\n        return state\n    state['asked_name'] = True\n    raise FlowInterrupt(question='Как вас зовут?')\n",
                     },
                     "greet": {
                         "type": "code",
@@ -272,7 +271,7 @@ class TestE2EInterruptInCodeNode:
                 "nodes": {
                     "ask_name": {
                         "type": "code",
-                        "code": "\nasync def run(args, state):\n    if 'user_name' not in state:\n        state['interrupt'] = {'question': 'Как вас зовут?'}\n        return state\n    return state\n",
+                        "code": "\nfrom apps.flows.src.runtime.exceptions import FlowInterrupt\n\nasync def run(args, state):\n    if state.get('user_name'):\n        return state\n    if state.get('asked_name'):\n        state['user_name'] = state.get('content', '')\n        return state\n    state['asked_name'] = True\n    raise FlowInterrupt(question='Как вас зовут?')\n",
                     },
                     "greet": {
                         "type": "code",
@@ -324,11 +323,11 @@ class TestE2EInterruptInCodeNodeV2:
                 "nodes": {
                     "ask_name": {
                         "type": "code",
-                        "code": "\nfrom apps.flows.src.runtime.exceptions import FlowInterrupt\n\nasync def run(args, state):\n    # Не используем ключ user_name: в state.variables уже есть user_name из JWT\n    # (flow_variables_from_request_context), иначе interrupt никогда не сработает.\n    if state.variables.get('interrupt_demo_name'):\n        return state\n\n    if state.content and state.content != 'Start':\n        state.variables['interrupt_demo_name'] = state.content\n        return state\n\n    raise FlowInterrupt(question='Как вас зовут?')\n",
+                        "code": "\nfrom apps.flows.src.runtime.exceptions import FlowInterrupt\n\nasync def run(args, state):\n    # Не используем ключ user_name: в state['variables'] уже есть user_name из JWT\n    # (flow_variables_from_request_context), иначе interrupt никогда не сработает.\n    variables = state['variables']\n    if 'interrupt_demo_name' in variables:\n        return state\n\n    content = state['content']\n    if content != 'Start':\n        variables['interrupt_demo_name'] = content\n        return state\n\n    raise FlowInterrupt(question='Как вас зовут?')\n",
                     },
                     "greet": {
                         "type": "code",
-                        "code": "\nasync def run(args, state):\n    name = state.variables.get('interrupt_demo_name', 'Guest')\n    state.response = f'Привет, {name}!'\n    return state\n",
+                        "code": "\nasync def run(args, state):\n    name = state['variables']['interrupt_demo_name']\n    state['response'] = f'Привет, {name}!'\n    return state\n",
                     },
                 },
                 "edges": [
@@ -421,11 +420,11 @@ class TestE2EMultipleInterruptScenarios:
                     },
                     "order_handler": {
                         "type": "code",
-                        "code": "\nasync def run(args, state):\n    if 'order_id' in state:\n        state['response'] = f\"Заказ {state['order_id']} найден!\"\n        return state\n    if state.get('was_interrupted_order'):\n        state['order_id'] = state.get('content', '')\n        state['response'] = f\"Заказ {state['order_id']} найден!\"\n        return state\n    state['interrupt'] = {'question': 'Введите номер заказа:'}\n    state['was_interrupted_order'] = True\n    return state\n",
+                        "code": "\nfrom apps.flows.src.runtime.exceptions import FlowInterrupt\n\nasync def run(args, state):\n    if 'order_id' in state:\n        state['response'] = f\"Заказ {state['order_id']} найден!\"\n        return state\n    if state.get('was_interrupted_order'):\n        state['order_id'] = state.get('content', '')\n        state['response'] = f\"Заказ {state['order_id']} найден!\"\n        return state\n    state['was_interrupted_order'] = True\n    raise FlowInterrupt(question='Введите номер заказа:')\n",
                     },
                     "support_handler": {
                         "type": "code",
-                        "code": "\nasync def run(args, state):\n    if 'problem' in state:\n        state['response'] = f\"Создан тикет по проблеме: {state['problem']}\"\n        return state\n    if state.get('was_interrupted_support'):\n        state['problem'] = state.get('content', '')\n        state['response'] = f\"Создан тикет по проблеме: {state['problem']}\"\n        return state\n    state['interrupt'] = {'question': 'Опишите вашу проблему:'}\n    state['was_interrupted_support'] = True\n    return state\n",
+                        "code": "\nfrom apps.flows.src.runtime.exceptions import FlowInterrupt\n\nasync def run(args, state):\n    if 'problem' in state:\n        state['response'] = f\"Создан тикет по проблеме: {state['problem']}\"\n        return state\n    if state.get('was_interrupted_support'):\n        state['problem'] = state.get('content', '')\n        state['response'] = f\"Создан тикет по проблеме: {state['problem']}\"\n        return state\n    state['was_interrupted_support'] = True\n    raise FlowInterrupt(question='Опишите вашу проблему:')\n",
                     },
                     "general_handler": {
                         "type": "code",
@@ -496,11 +495,11 @@ class TestE2EMultipleInterruptScenarios:
                     },
                     "order_handler": {
                         "type": "code",
-                        "code": "\nasync def run(args, state):\n    # При resume content содержит ответ пользователя (номер заказа)\n    if 'order_id' in state:\n        state['response'] = f\"Заказ {state['order_id']} найден!\"\n        return state\n    # Первый вызов после interrupt - сохраняем номер\n    if state.get('was_interrupted_order'):\n        state['order_id'] = state.get('content', '')\n        state['response'] = f\"Заказ {state['order_id']} найден!\"\n        return state\n    # Первый вызов - спрашиваем номер\n    state['interrupt'] = {'question': 'Введите номер заказа:'}\n    state['was_interrupted_order'] = True\n    return state\n",
+                        "code": "\nfrom apps.flows.src.runtime.exceptions import FlowInterrupt\n\nasync def run(args, state):\n    if 'order_id' in state:\n        state['response'] = f\"Заказ {state['order_id']} найден!\"\n        return state\n    if state.get('was_interrupted_order'):\n        state['order_id'] = state.get('content', '')\n        state['response'] = f\"Заказ {state['order_id']} найден!\"\n        return state\n    state['was_interrupted_order'] = True\n    raise FlowInterrupt(question='Введите номер заказа:')\n",
                     },
                     "support_handler": {
                         "type": "code",
-                        "code": "\nasync def run(args, state):\n    if 'problem' in state:\n        state['response'] = f\"Создан тикет по проблеме: {state['problem']}\"\n        return state\n    if state.get('was_interrupted_support'):\n        state['problem'] = state.get('content', '')\n        state['response'] = f\"Создан тикет по проблеме: {state['problem']}\"\n        return state\n    state['interrupt'] = {'question': 'Опишите вашу проблему:'}\n    state['was_interrupted_support'] = True\n    return state\n",
+                        "code": "\nfrom apps.flows.src.runtime.exceptions import FlowInterrupt\n\nasync def run(args, state):\n    if 'problem' in state:\n        state['response'] = f\"Создан тикет по проблеме: {state['problem']}\"\n        return state\n    if state.get('was_interrupted_support'):\n        state['problem'] = state.get('content', '')\n        state['response'] = f\"Создан тикет по проблеме: {state['problem']}\"\n        return state\n    state['was_interrupted_support'] = True\n    raise FlowInterrupt(question='Опишите вашу проблему:')\n",
                     },
                     "general_handler": {
                         "type": "code",
@@ -684,7 +683,6 @@ class TestE2EFullScenario:
                 "tool_id": "e2e_full_formatter",
                 "title": "E2E Formatter",
                 "description": "Форматирует текст",
-                "code_mode": "INLINE_CODE",
                 "code": "\nasync def run(args, state):\n    text = args.get('text', '')\n    return f'[FORMATTED] {text}'\n",
                 "parameters_schema": {
                     "type": "object",
@@ -692,6 +690,7 @@ class TestE2EFullScenario:
                     "required": ["text"],
                 },
             },
+            headers=auth_headers_system,
         )
         create_resp = await client.post(
             "/flows/api/v1/flows/",
@@ -706,7 +705,7 @@ class TestE2EFullScenario:
                     },
                     "ask_action": {
                         "type": "code",
-                        "code": "\nasync def run(args, state):\n    if 'action' in state:\n        return state\n    if state.get('asked_action'):\n        state['action'] = state.get('content', '').lower()\n        return state\n    state['interrupt'] = {'question': state['welcome_msg'] + ' Что вы хотите сделать?'}\n    state['asked_action'] = True\n    return state\n",
+                        "code": "\nfrom apps.flows.src.runtime.exceptions import FlowInterrupt\n\nasync def run(args, state):\n    if 'action' in state:\n        return state\n    if state.get('asked_action'):\n        state['action'] = state.get('content', '').lower()\n        return state\n    state['asked_action'] = True\n    raise FlowInterrupt(question=state['welcome_msg'] + ' Что вы хотите сделать?')\n",
                     },
                     "process_action": {
                         "type": "code",

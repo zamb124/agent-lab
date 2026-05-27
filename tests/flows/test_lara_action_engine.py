@@ -51,8 +51,8 @@ async def test_preview_and_apply_idempotent() -> None:
         risk="medium",
         idempotency_key="idem-1",
     )
-    assert action["status"] == "previewed"
-    pending_action_id = action["pending_action_id"]
+    assert action.status == "previewed"
+    pending_action_id = action.pending_action_id
 
     applied = await engine.apply_action(
         company_id="c1",
@@ -62,8 +62,9 @@ async def test_preview_and_apply_idempotent() -> None:
         idempotency_key="idem-1",
         apply_fn=lambda _: _apply_ok(),
     )
-    assert applied["status"] == "applied"
-    assert applied["result"]["ok"] is True
+    assert applied.status == "applied"
+    assert applied.result is not None
+    assert applied.result["ok"] is True
 
     replayed = await engine.apply_action(
         company_id="c1",
@@ -73,8 +74,9 @@ async def test_preview_and_apply_idempotent() -> None:
         idempotency_key="idem-1",
         apply_fn=lambda _: _apply_should_not_run(),
     )
-    assert replayed["status"] == "applied"
-    assert replayed["result"]["ok"] is True
+    assert replayed.status == "applied"
+    assert replayed.result is not None
+    assert replayed.result["ok"] is True
 
 
 async def _apply_ok() -> dict[str, bool]:
@@ -101,7 +103,7 @@ async def test_apply_rejects_wrong_idempotency_key_when_previewed() -> None:
         risk="low",
         idempotency_key="golden",
     )
-    pending_action_id = action["pending_action_id"]
+    pending_action_id = action.pending_action_id
     with pytest.raises(ValueError, match="idempotency_key mismatch"):
         await engine.apply_action(
             company_id="c1",
@@ -132,10 +134,10 @@ async def test_reject_action_marks_previewed_as_rejected() -> None:
         company_id="c1",
         user_id="u1",
         context_id="ctx1",
-        pending_action_id=action["pending_action_id"],
+        pending_action_id=action.pending_action_id,
         reason="cancelled-by-test",
     )
-    assert out["status"] == "rejected"
+    assert out.status == "rejected"
 
 
 @pytest.mark.asyncio
@@ -154,7 +156,7 @@ async def test_apply_already_applied_rejects_wrong_idempotency_key() -> None:
         risk="low",
         idempotency_key="golden",
     )
-    pending_action_id = action["pending_action_id"]
+    pending_action_id = action.pending_action_id
     await engine.apply_action(
         company_id="c1",
         user_id="u1",
@@ -197,7 +199,7 @@ async def test_owner_guard_rejects_different_user() -> None:
             company_id="c1",
             user_id="u2",
             context_id="ctx1",
-            pending_action_id=action["pending_action_id"],
+            pending_action_id=action.pending_action_id,
         )
 
 
@@ -221,15 +223,15 @@ async def test_concurrent_apply_invokes_effect_once() -> None:
         risk="low",
         idempotency_key="golden",
     )
-    pid = action["pending_action_id"]
+    pid = action.pending_action_id
 
-    async def slow_apply(_: dict) -> dict[str, bool]:
+    async def slow_apply(_) -> dict[str, bool]:
         counts["n"] += 1
         gate.set()
         await blocker.wait()
         return {"ok": True}
 
-    async def run_apply() -> dict:
+    async def run_apply():
         return await engine.apply_action(
             company_id="c1",
             user_id="u1",
@@ -245,6 +247,7 @@ async def test_concurrent_apply_invokes_effect_once() -> None:
     blocker.set()
     out_a, out_b = await asyncio.gather(t_a, t_b)
     assert counts["n"] == 1
-    assert out_a["status"] == "applied"
-    assert out_b["status"] == "applied"
-    assert out_b["result"]["ok"] is True
+    assert out_a.status == "applied"
+    assert out_b.status == "applied"
+    assert out_b.result is not None
+    assert out_b.result["ok"] is True

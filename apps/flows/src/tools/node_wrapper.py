@@ -14,7 +14,15 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, ClassVar, cast, override
 
-from apps.flows.src.container_contracts import FlowRuntimeContainer
+from apps.flows.src.container_contracts import FlowRuntimeContainer, as_flow_runtime_container
+from apps.flows.src.durable_execution import (
+    NodeCompletedPayload,
+    NodeScheduledPayload,
+    NodeWriteRecordedPayload,
+    SuperstepStartedPayload,
+    WorkflowEventType,
+    build_state_delta,
+)
 from apps.flows.src.models import NodeConfig
 from apps.flows.src.models.enums import NodeType
 from apps.flows.src.runtime.exceptions import FlowInterrupt
@@ -158,11 +166,7 @@ class NodeAsToolWrapper(BaseTool):
         if self._bound_node is not None:
             return self._bound_node
         if self._node is None:
-            container = cast(FlowRuntimeContainer | None, self.container)
-            if container is None:
-                raise RuntimeError(
-                    f"Node tool '{self.name}' requires FlowRuntimeContainer"
-                )
+            container = self._require_container()
             node_dict = cast(
                 JsonObject,
                 self.node_config.model_dump(mode="json", exclude_none=True),
@@ -177,6 +181,66 @@ class NodeAsToolWrapper(BaseTool):
 
         return self._node
 
+    def _require_container(self) -> FlowRuntimeContainer:
+        if self.container is None:
+            raise RuntimeError(f"Node tool '{self.name}' requires FlowRuntimeContainer")
+        return as_flow_runtime_container(self.container)
+
+    async def _execute_node_with_durable_context(
+        self,
+        node: BaseNode,
+        node_id: str,
+        node_type: NodeType,
+        state: ExecutionState,
+    ) -> ExecutionState:
+        container = self._require_container()
+        runtime = container.workflow_runtime
+
+        state.current_nodes = [node_id]
+        superstep_event = await runtime.record_state_event(
+            state.session_id,
+            state,
+            event_type=WorkflowEventType.superstep_started,
+            payload=SuperstepStartedPayload(current_nodes=[node_id]),
+        )
+        scheduled_event = await runtime.record_state_event(
+            state.session_id,
+            state,
+            event_type=WorkflowEventType.node_scheduled,
+            payload=NodeScheduledPayload(
+                node_id=node_id,
+                node_type=node_type.value,
+                current_nodes=[node_id],
+            ),
+        )
+        state.attach_durable_node_context(
+            execution_branch_id=scheduled_event.execution_branch_id,
+            node_schedule_sequence=scheduled_event.sequence,
+            superstep_sequence=superstep_event.sequence,
+        )
+
+        before_state = ExecutionState.model_validate(
+            state.model_dump(mode="python", exclude_none=False)
+        )
+        result_state = await node.execute(state)
+        _ = await runtime.record_state_event(
+            result_state.session_id,
+            result_state,
+            event_type=WorkflowEventType.node_write_recorded,
+            payload=NodeWriteRecordedPayload(
+                node_id=node_id,
+                node_type=node_type.value,
+                state_delta=build_state_delta(before_state, result_state),
+            ),
+        )
+        _ = await runtime.record_state_event(
+            result_state.session_id,
+            result_state,
+            event_type=WorkflowEventType.node_completed,
+            payload=NodeCompletedPayload(node_id=node_id, node_type=node_type.value),
+        )
+        return result_state
+
     @override
     async def _run_impl(self, args: ToolArguments, state: ExecutionState) -> ToolResult:
         """
@@ -190,17 +254,27 @@ class NodeAsToolWrapper(BaseTool):
 
         # Для llm_node создаем изолированный state
         if node_type == NodeType.LLM_NODE:
-            return await self._run_llm_node(node, node_id, args, state)
+            return await self._run_llm_node(node, node_id, node_type, args, state)
 
         # Для остальных нод - простой вызов
         for key, value in args.items():
             state[key] = value
 
-        result = await node.execute(state)
+        result = await self._execute_node_with_durable_context(
+            node,
+            node_id,
+            node_type,
+            state,
+        )
         return self._extract_response(result)
 
     async def _run_llm_node(
-        self, node: BaseNode, node_id: str, args: ToolArguments, parent_state: ExecutionState
+        self,
+        node: BaseNode,
+        node_id: str,
+        node_type: NodeType,
+        args: ToolArguments,
+        parent_state: ExecutionState,
     ) -> ToolResult:
         """
         Выполняет llm_node с изолированным state.
@@ -223,7 +297,12 @@ class NodeAsToolWrapper(BaseTool):
             nested_state = self._create_nested_state(parent_state, args)
 
         try:
-            result = await node.execute(nested_state)
+            result = await self._execute_node_with_durable_context(
+                node,
+                node_id,
+                node_type,
+                nested_state,
+            )
 
             # Успешное завершение - копируем результат в родительский state
             self._copy_result_to_parent(nested_state, parent_state)

@@ -17,6 +17,7 @@ from core.rag.llm_context_memory_store import llm_context_memory_namespace_id
 from core.rag.rag_resource import RAGResource
 from core.state import ExecutionState
 from tests.fixtures.auth import service_client_asgi_auth_context
+from tests.flows.durable_runtime_harness import run_flow
 
 pytestmark = pytest.mark.asyncio
 
@@ -298,7 +299,7 @@ async def _run_branch(
     with service_client_asgi_auth_context(auth_headers_system):
         flow = await container.flow_factory.get_flow(flow_id, branch_id=branch_id)
         assert flow is not None
-        result = await flow.run(state)
+        result = await run_flow(container=container, flow=flow, state=state)
 
     calls = await capture()
     assert result["response"] == f"LLM_RESPONSE_{response_marker}"

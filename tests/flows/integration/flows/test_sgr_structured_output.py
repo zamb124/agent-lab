@@ -122,10 +122,10 @@ async def run(args, state):
             container=container,
         )
 
-        # Tool2 - CodeNode: доступ строго через state.field
+        # Tool2 - CodeNode: доступ через канонический state dict.
         tool2_code = """
 async def run(args, state):
-    data = state.data
+    data = state["data"]
     processed = [x * 2 for x in data]
     return {"tool2_result": "Data processed", "processed_data": processed}
 """
@@ -139,8 +139,8 @@ async def run(args, state):
         done_code = """
 async def run(args, state):
     return {
-        "response": f"Flow completed. Final: {state.final_result}",
-        "execution_log": [state.tool1_result, state.tool2_result]
+        "response": f"Flow completed. Final: {state['final_result']}",
+        "execution_log": [state["tool1_result"], state["tool2_result"]]
     }
 """
         done_node = CodeNode(
@@ -264,7 +264,7 @@ async def run(args, state):
                 "type": NodeType.CODE.value,
                 "code": """
 async def run(args, state):
-    return {"final": f"Summary: {state.summary}", "remote_result": state.response}
+    return {"final": f"Summary: {state['summary']}", "remote_result": state["response"]}
 """,
             },
             container=container,
@@ -362,8 +362,8 @@ async def run(args, state):
                 "type": NodeType.CODE.value,
                 "code": """
 async def run(args, state):
-    current = state.counter
-    history = state.history
+    current = state["counter"]
+    history = state["history"]
     return {"counter": current + 1, "history": history + [f"inc_{current}"]}
 """,
             },
@@ -377,7 +377,7 @@ async def run(args, state):
                 "type": NodeType.CODE.value,
                 "code": """
 async def run(args, state):
-    return {"response": f"Done! Counter={state.counter}, History={state.history}"}
+    return {"response": f"Done! Counter={state['counter']}, History={state['history']}"}
 """,
             },
             container=container,
@@ -461,14 +461,14 @@ async def run(args, state):
             container=container,
         )
 
-        # fast_track: строгий доступ к state.priority
+        # fast_track: строгий доступ к state dict.
         fast_track = CodeNode(
             node_id="fast_track",
             config={
                 "type": NodeType.CODE.value,
                 "code": """
 async def run(args, state):
-    return {"processed_by": "FAST", "fast_result": f"Urgent handling: {state.priority}"}
+    return {"processed_by": "FAST", "fast_result": f"Urgent handling: {state['priority']}"}
 """,
             },
             container=container,
@@ -486,14 +486,14 @@ async def run(args, state):
             container=container,
         )
 
-        # done: строгий доступ к state.processed_by и state.result
+        # done: строгий доступ к state dict.
         done_node = CodeNode(
             node_id="done",
             config={
                 "type": NodeType.CODE.value,
                 "code": """
 async def run(args, state):
-    return {"response": f"Completed via {state.processed_by}: {state.result}"}
+    return {"response": f"Completed via {state['processed_by']}: {state['result']}"}
 """,
             },
             container=container,
@@ -609,7 +609,7 @@ async def run(args, state):
                 "type": NodeType.CODE.value,
                 "code": """
 async def run(args, state):
-    prev = state.tool1_data
+    prev = state["tool1_data"]
     return {"tool2_executed": True, "tool2_data": f"processed_{prev}"}
 """,
             },
@@ -636,11 +636,11 @@ async def run(args, state):
                 "code": """
 async def run(args, state):
     return {
-        "final_response": f"SGR completed: {state.summary}",
+        "final_response": f"SGR completed: {state['summary']}",
         "steps_executed": {
-            "tool1": state.tool1_executed,
-            "tool2": state.tool2_executed,
-            "tool3_response": state.response
+            "tool1": state["tool1_executed"],
+            "tool2": state["tool2_executed"],
+            "tool3_response": state["response"]
         }
     }
 """,
@@ -768,14 +768,14 @@ async def run(args, state):
             container=container,
         )
 
-        # recovery: строгий доступ к state.error_message
+        # recovery: строгий доступ к state dict.
         recovery_node = CodeNode(
             node_id="recovery",
             config={
                 "type": NodeType.CODE.value,
                 "code": """
 async def run(args, state):
-    return {"recovered": True, "recovery_log": f"Recovered from: {state.error_message}"}
+    return {"recovered": True, "recovery_log": f"Recovered from: {state['error_message']}"}
 """,
             },
             container=container,
@@ -789,9 +789,9 @@ async def run(args, state):
                 "code": """
 async def run(args, state):
     return {
-        "response": f"Flow finished with status: {state.final_status}",
-        "was_recovered": state.recovered,
-        "recovery_details": state.recovery_log
+        "response": f"Flow finished with status: {state['final_status']}",
+        "was_recovered": state["recovered"],
+        "recovery_details": state["recovery_log"]
     }
 """,
             },

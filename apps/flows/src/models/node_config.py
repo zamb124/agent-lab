@@ -68,6 +68,8 @@ type LLMCapability = Literal[
 class ReactConfig(StrictBaseModel):
     """Конфигурация ReAct цикла для llm_node"""
 
+    model_config: ClassVar[ConfigDict] = ConfigDict(use_enum_values=False)
+
     loop_mode: ReactLoopMode = Field(
         default=ReactLoopMode.AUTO,
         description="Режим выхода: auto (текст = финал) или explicit (только через exit_tool)",

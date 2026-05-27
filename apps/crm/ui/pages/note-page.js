@@ -324,7 +324,7 @@ export class CRMNotePage extends CRMNamespacePage {
     _isStaleEntityCardOpEvent(event) {
         const meta = event && event.meta;
         const causationId = meta && typeof meta.causation_id === 'string' ? meta.causation_id : null;
-        const latestId = this._cardOp.op.selectors.lastRequestId(this.bus.getState());
+        const latestId = this._cardOp.lastRequestId;
         return causationId !== null && latestId !== null && causationId !== latestId;
     }
 

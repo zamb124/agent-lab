@@ -27,6 +27,7 @@ class ToolReference(BaseModel):
     model_config: ClassVar[ConfigDict] = ConfigDict(
         json_schema_extra={"storage_prefix": "tool"},
         extra="forbid",
+        use_enum_values=False,
     )
 
     tool_id: str = Field(..., description="ID инструмента")

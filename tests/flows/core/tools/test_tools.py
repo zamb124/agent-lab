@@ -1,49 +1,23 @@
-"""
-Тесты для tools.
-
-TESTING=true установлен в conftest.py - tools работают в mock режиме.
-"""
-
-import os
+"""Тесты для tools."""
 
 import pytest
 
 from apps.flows.src.runtime.exceptions import FlowInterrupt
-from apps.flows.src.tools.base import BaseTool, is_test_mode
+from apps.flows.src.tools.base import BaseTool
 from apps.flows.tools.agent_session_tools import ask_user
 from apps.flows.tools.finish_tool import finish
 from apps.flows.tools.math_tools import calculator
 from core.state import ExecutionState
 
-
-class TestIsTestMode:
-    """Тесты для is_test_mode()."""
-
-    def test_is_test_mode_returns_true_in_tests(self):
-        """TESTING=true установлен в conftest - должен быть True."""
-        assert is_test_mode() is True
-
-    def test_testing_env_is_set(self):
-        """Переменная TESTING установлена."""
-        assert os.environ.get("TESTING") == "true"
+EMPTY_PARAMETERS_SCHEMA = {"type": "object", "properties": {}, "required": []}
 
 
 class TestBaseTool:
     """Тесты BaseTool."""
 
     @pytest.mark.asyncio
-    async def test_run_calls_execute_mock_when_overridden(self):
-        """В тестах execute_mock вызывается только если переопределён."""
-
-        class ToolWithMock(BaseTool):
-            name = "tool_with_mock"
-            description = "Test"
-
-            async def _run_impl(self, args, state=None):
-                return "real_called"
-
-            async def execute_mock(self, args, state=None):
-                return "mock_called"
+    async def test_run_calls_run_impl(self):
+        """BaseTool.run вызывает каноническую реализацию _run_impl."""
 
         class ToolWithoutMock(BaseTool):
             name = "tool_without_mock"
@@ -52,72 +26,16 @@ class TestBaseTool:
             async def _run_impl(self, args, state=None):
                 return "real_called"
 
-        tool_with_mock = ToolWithMock()
         state = ExecutionState(
             task_id="test-task",
             context_id="test-context",
             user_id="test-user",
             session_id="test-agent:test-context",
         )
-        result_mock = await tool_with_mock.run({}, state)
-        assert result_mock == "mock_called"
 
         tool_without_mock = ToolWithoutMock()
         result_real = await tool_without_mock.run({}, state)
         assert result_real == "real_called"
-
-    @pytest.mark.asyncio
-    async def test_execute_mock_returns_mock_response_by_default(self):
-        """execute_mock по умолчанию возвращает mock_response."""
-
-        class TestTool(BaseTool):
-            name = "test_tool"
-            description = "Test"
-            mock_response = {"status": "ok", "data": [1, 2, 3]}
-
-            async def _run_impl(self, args, state=None):
-                return "real"
-
-        tool = TestTool()
-        state = ExecutionState(
-            task_id="test-task",
-            context_id="test-context",
-            user_id="test-user",
-            session_id="test-agent:test-context",
-        )
-        result = await tool.execute_mock({}, state)
-
-        assert result == {"status": "ok", "data": [1, 2, 3]}
-
-    @pytest.mark.asyncio
-    async def test_custom_execute_mock(self):
-        """Можно переопределить execute_mock() для сложной логики."""
-
-        class ApiTool(BaseTool):
-            name = "api_tool"
-            description = "API call"
-
-            async def _run_impl(self, args, state=None):
-                return {"status": "real"}
-
-            async def execute_mock(self, args, state=None):
-                if args.get("id") == "123":
-                    return {"status": "found", "name": "Test User"}
-                return {"status": "not_found"}
-
-        tool = ApiTool()
-        state = ExecutionState(
-            task_id="test-task",
-            context_id="test-context",
-            user_id="test-user",
-            session_id="test-agent:test-context",
-        )
-
-        result1 = await tool.run({"id": "123"}, state)
-        assert result1 == {"status": "found", "name": "Test User"}
-
-        result2 = await tool.run({"id": "999"}, state)
-        assert result2 == {"status": "not_found"}
 
 
 class TestCalculatorTool:
@@ -168,14 +86,15 @@ class TestAskUserTool:
 
     @pytest.mark.asyncio
     async def test_registry_builtin_ids_use_repository_templates(self, app):
-        """Builtin ids are editable DB templates; FunctionTool is only bootstrap fallback."""
+        """Builtin ids resolve to registered platform tools unless explicit inline code is supplied."""
         from apps.flows.src.container import get_container
         from apps.flows.src.tools.code_tool import CodeTool
+        from apps.flows.src.tools.decorator import FunctionTool
 
         container = get_container()
         for tool_id in ("ask_user", "calculator"):
             tool = await container.tool_registry.create_tool({"tool_id": tool_id})
-            assert isinstance(tool, CodeTool)
+            assert isinstance(tool, FunctionTool)
             assert tool.name == tool_id
 
             legacy_inline = await container.tool_registry.create_tool(
@@ -183,6 +102,7 @@ class TestAskUserTool:
                     "tool_id": tool_id,
                     "code": f"async def {tool_id}(args, state) -> JsonDict:\n"
                     "    return {'wrong': True}\n",
+                    "parameters_schema": EMPTY_PARAMETERS_SCHEMA,
                 }
             )
             assert isinstance(legacy_inline, CodeTool)
@@ -201,6 +121,7 @@ class TestAskUserTool:
             ToolReference(
                 tool_id=tid,
                 code="async def run(args, state):\n    return 'from_repo'",
+                parameters_schema=EMPTY_PARAMETERS_SCHEMA,
             )
         )
         tool = await container.tool_registry.create_tool({"tool_id": tid})
@@ -219,6 +140,7 @@ class TestToolRegistryPolicy:
         ct = CodeTool(
             tool_id="ephemeral",
             code="async def run(args, state):\n    return {}",
+            parameters_schema=EMPTY_PARAMETERS_SCHEMA,
         )
         with pytest.raises(ValueError, match="CodeTool"):
             reg.register(ct)

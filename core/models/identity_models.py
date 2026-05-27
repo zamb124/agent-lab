@@ -356,7 +356,7 @@ class BoardStage(BaseModel):
 
     model_config: ClassVar[ConfigDict] = ConfigDict(extra="forbid")
 
-    stage_id: str = Field(
+    id: str = Field(
         min_length=1,
         pattern=r"^[a-z][a-z0-9_]*$",
         description="Стабильный идентификатор стадии (snake_case)",
@@ -374,7 +374,7 @@ class TaskBoardPreset(BaseModel):
 
     @model_validator(mode="after")
     def _unique_stage_ids(self) -> "TaskBoardPreset":
-        ids = [s.stage_id for s in self.stages]
+        ids = [s.id for s in self.stages]
         if len(ids) != len(set(ids)):
             raise ValueError("TaskBoardPreset: повторяющиеся id стадий")
         return self

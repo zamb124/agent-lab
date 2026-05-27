@@ -38,20 +38,23 @@ class NoteProcessingService:
         attachment_chars_limit: int = 40_000,
         progress_cb: ProgressCb | None = None,
     ) -> str:
-        """Собрать текст из description + текстового содержимого вложений.
+        """Собрать текст из пользовательского description + текстового содержимого вложений.
 
         Если текст вложения превышает attachment_chars_limit символов,
         он суммаризируется LLM перед добавлением в общий контекст.
         Если любое вложение не содержит извлекаемого текста — бросает ValueError.
+        Блоки, автоматически добавленные в description при чтении вложений,
+        не являются пользовательским текстом заметки: источник содержимого
+        вложений — note.attachment_ids.
         """
         note = await self._entity_service.get_entity(note_id)
         if note is None:
             raise ValueError(f"Заметка не найдена: {note_id}")
 
         parts: list[str] = []
-        desc_raw = note.description or ""
-        if not include_attachments:
-            desc_raw = strip_auto_merged_attachment_blocks_from_note_description(desc_raw)
+        desc_raw = strip_auto_merged_attachment_blocks_from_note_description(
+            note.description or ""
+        )
         if desc_raw:
             stripped = desc_raw.strip()
             if stripped:

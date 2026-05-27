@@ -11,8 +11,8 @@ from aiohttp import web
 from apps.flows.src.models import Edge, FlowConfig
 from apps.flows.src.runtime.flow import Flow
 from apps.flows.src.runtime.nodes import RemoteFlowNode, create_node
-from core.state import ExecutionState
 from tests.fixtures.aiohttp_ephemeral import tcp_site_assigned_port
+from tests.flows.durable_runtime_harness import run_flow, run_node, workflow_state
 
 
 class TestRemoteFlowNode:
@@ -86,45 +86,41 @@ class TestRemoteFlowNode:
         assert node.branch_id == "default"
 
     @pytest.mark.asyncio
-    async def test_remote_flow_node_execution(self, remote_flow_server, container):
+    async def test_remote_flow_node_execution(self, remote_flow_server, container, unique_id):
         """Выполнение RemoteFlowNode."""
         node = RemoteFlowNode(
             node_id="remote",
-            config={"url": remote_flow_server},
+            config={"type": "remote_flow", "url": remote_flow_server},
             container=container,
         )
 
-        state = ExecutionState(
-            task_id="test-task",
-            context_id="test-context",
-            user_id="test-user",
-            session_id="test-agent:test-context",
-            content="Hello from flow"
+        state = workflow_state(
+            flow_id="remote_node",
+            unique_id=f"remote-node-{unique_id}",
+            content="Hello from flow",
         )
-        result = await node.run(state)
+        result = await run_node(container=container, node=node, state=state)
 
         assert result["response"] == "Remote says: Hello from flow"
         assert result["remote_status"] == "completed"
 
     @pytest.mark.asyncio
-    async def test_remote_flow_node_preserves_state(self, remote_flow_server, container):
+    async def test_remote_flow_node_preserves_state(self, remote_flow_server, container, unique_id):
         """RemoteFlowNode сохраняет существующие поля state."""
         node = RemoteFlowNode(
             node_id="remote",
-            config={"url": remote_flow_server},
+            config={"type": "remote_flow", "url": remote_flow_server},
             container=container,
         )
 
-        state = ExecutionState(
-            task_id="test-task",
-            context_id="test-context",
-            user_id="test-user",
-            session_id="test-agent:test-context",
+        state = workflow_state(
+            flow_id="remote_node_preserve",
+            unique_id=f"remote-node-preserve-{unique_id}",
             content="Test",
             existing_field="preserved",
-            counter=42
+            counter=42,
         )
-        result = await node.run(state)
+        result = await run_node(container=container, node=node, state=state)
 
         assert result["existing_field"] == "preserved"
         assert result["counter"] == 42
@@ -177,7 +173,7 @@ class TestFlowWithRemoteAgent:
         await runner.cleanup()
 
     @pytest.mark.asyncio
-    async def test_flow_with_single_remote_node(self, remote_flow_server, container):
+    async def test_flow_with_single_remote_node(self, remote_flow_server, container, unique_id):
         """Agent с одной remote нодой."""
         config = FlowConfig(
             flow_id="remote_flow",
@@ -195,30 +191,22 @@ class TestFlowWithRemoteAgent:
         )
 
         flow = await Flow.from_config(
-            config={
-                "id": config.flow_id,
-                "name": config.name,
-                "entry": config.entry,
-                "nodes": config.nodes,
-                "edges": config.edges
-            },
+            config=config.model_dump(mode="json"),
             variables={},
             container=container,
         )
 
-        state = ExecutionState(
-            task_id="test-task",
-            context_id="test-context",
-            user_id="test-user",
-            session_id="test-agent:test-context",
-            content="Hello remote"
+        state = workflow_state(
+            flow_id=config.flow_id,
+            unique_id=f"remote-single-{unique_id}",
+            content="Hello remote",
         )
-        result = await flow.run(state)
+        result = await run_flow(container=container, flow=flow, state=state)
 
         assert result["response"] == "Processed: Hello remote"
 
     @pytest.mark.asyncio
-    async def test_flow_with_inline_then_remote(self, remote_flow_server, container):
+    async def test_flow_with_inline_then_remote(self, remote_flow_server, container, unique_id):
         """Agent: inline function → remote agent."""
         config = FlowConfig(
             flow_id="mixed_flow",
@@ -246,31 +234,23 @@ async def run(args, state):
         )
 
         flow = await Flow.from_config(
-            config={
-                "id": config.flow_id,
-                "name": config.name,
-                "entry": config.entry,
-                "nodes": config.nodes,
-                "edges": config.edges
-            },
+            config=config.model_dump(mode="json"),
             variables={},
             container=container,
         )
 
-        state = ExecutionState(
-            task_id="test-task",
-            context_id="test-context",
-            user_id="test-user",
-            session_id="test-agent:test-context",
-            content="hello"
+        state = workflow_state(
+            flow_id=config.flow_id,
+            unique_id=f"remote-inline-{unique_id}",
+            content="hello",
         )
-        result = await flow.run(state)
+        result = await run_flow(container=container, flow=flow, state=state)
 
         assert result["prepared"] is True
         assert result["response"] == "Processed: HELLO"
 
     @pytest.mark.asyncio
-    async def test_flow_remote_then_inline(self, remote_flow_server, container):
+    async def test_flow_remote_then_inline(self, remote_flow_server, container, unique_id):
         """Agent: remote agent → inline function."""
         config = FlowConfig(
             flow_id="remote_first_flow",
@@ -298,25 +278,17 @@ async def run(args, state):
         )
 
         flow = await Flow.from_config(
-            config={
-                "id": config.flow_id,
-                "name": config.name,
-                "entry": config.entry,
-                "nodes": config.nodes,
-                "edges": config.edges
-            },
+            config=config.model_dump(mode="json"),
             variables={},
             container=container,
         )
 
-        state = ExecutionState(
-            task_id="test-task",
-            context_id="test-context",
-            user_id="test-user",
-            session_id="test-agent:test-context",
-            content="test"
+        state = workflow_state(
+            flow_id=config.flow_id,
+            unique_id=f"remote-first-{unique_id}",
+            content="test",
         )
-        result = await flow.run(state)
+        result = await run_flow(container=container, flow=flow, state=state)
 
         assert result["final"] == "Final: Processed: test"
 
@@ -369,83 +341,87 @@ class TestRemoteAgentInputMapping:
         await runner.cleanup()
 
     @pytest.mark.asyncio
-    async def test_input_mapping_content_default(self, mock_a2a_server_with_logging, container):
+    async def test_input_mapping_content_default(
+        self, mock_a2a_server_with_logging, container, unique_id
+    ):
         """По умолчанию берётся state['content']."""
         server = mock_a2a_server_with_logging
         node = RemoteFlowNode(
             node_id="remote",
-            config={"url": server["url"]},
+            config={"type": "remote_flow", "url": server["url"]},
             container=container,
         )
 
-        state = ExecutionState(
-            task_id="test-task",
-            context_id="test-context",
-            user_id="test-user",
-            session_id="test-agent:test-context",
+        state = workflow_state(
+            flow_id="remote_input_default",
+            unique_id=f"remote-input-default-{unique_id}",
             content="default content",
-            other_field="ignored"
+            other_field="ignored",
         )
-        await node.run(state)
+        await run_node(container=container, node=node, state=state)
 
         assert len(server["received"]) == 1
         assert server["received"][0] == "default content"
 
     @pytest.mark.asyncio
-    async def test_input_mapping_state_field(self, mock_a2a_server_with_logging, container):
+    async def test_input_mapping_state_field(
+        self, mock_a2a_server_with_logging, container, unique_id
+    ):
         """input_mapping с @state:field берёт указанное поле."""
         server = mock_a2a_server_with_logging
         node = RemoteFlowNode(
             node_id="remote",
             config={
+                "type": "remote_flow",
                 "url": server["url"],
                 "input_mapping": {"content": "@state:my_query"}
             },
             container=container,
         )
 
-        state = ExecutionState(
-            task_id="test-task",
-            context_id="test-context",
-            user_id="test-user",
-            session_id="test-agent:test-context",
+        state = workflow_state(
+            flow_id="remote_input_field",
+            unique_id=f"remote-input-field-{unique_id}",
             content="ignored",
-            my_query="custom field value"
+            my_query="custom field value",
         )
-        await node.run(state)
+        await run_node(container=container, node=node, state=state)
 
         assert len(server["received"]) == 1
         assert server["received"][0] == "custom field value"
 
     @pytest.mark.asyncio
-    async def test_input_mapping_state_field_json(self, mock_a2a_server_with_logging, container):
+    async def test_input_mapping_state_field_json(
+        self, mock_a2a_server_with_logging, container, unique_id
+    ):
         """Если поле не строка - сериализуется в JSON."""
         server = mock_a2a_server_with_logging
         node = RemoteFlowNode(
             node_id="remote",
             config={
+                "type": "remote_flow",
                 "url": server["url"],
                 "input_mapping": {"content": "@state:data"}
             },
             container=container,
         )
 
-        state = ExecutionState(
-            task_id="test-task",
-            context_id="test-context",
-            user_id="test-user",
-            session_id="test-agent:test-context",
+        state = workflow_state(
+            flow_id="remote_input_json",
+            unique_id=f"remote-input-json-{unique_id}",
             content="ignored",
-            data={"key": "value", "num": 42}
+            data={"key": "value", "num": 42},
         )
-        await node.run(state)
+        await run_node(container=container, node=node, state=state)
 
         assert len(server["received"]) == 1
         received_data = json.loads(server["received"][0])
         assert received_data == {"key": "value", "num": 42}
 
     @pytest.mark.asyncio
-    async def test_flow_with_input_mapping(self, mock_a2a_server_with_logging, container):
+    async def test_flow_with_input_mapping(
+        self, mock_a2a_server_with_logging, container, unique_id
+    ):
         """Agent где function пишет в state, а remote_flow читает через input_mapping."""
         server = mock_a2a_server_with_logging
 
@@ -477,25 +453,17 @@ async def run(args, state):
         )
 
         flow = await Flow.from_config(
-            config={
-                "id": config.flow_id,
-                "name": config.name,
-                "entry": config.entry,
-                "nodes": config.nodes,
-                "edges": config.edges
-            },
+            config=config.model_dump(mode="json"),
             variables={},
             container=container,
         )
 
-        state = ExecutionState(
-            task_id="test-task",
-            context_id="test-context",
-            user_id="test-user",
-            session_id="test-agent:test-context",
-            content="original content"
+        state = workflow_state(
+            flow_id=config.flow_id,
+            unique_id=f"remote-input-flow-{unique_id}",
+            content="original content",
         )
-        result = await flow.run(state)
+        result = await run_flow(container=container, flow=flow, state=state)
 
         # Проверяем что remote agent получил данные из prepared_query
         assert len(server["received"]) == 1

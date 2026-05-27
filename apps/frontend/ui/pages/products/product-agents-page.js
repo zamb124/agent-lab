@@ -2,17 +2,17 @@
  * Product Agents Page - Страница продукта AI Studio
  */
 import { html, css } from 'lit';
-import { PlatformElement } from '@platform/lib/platform-element/index.js';
+import { PlatformPage } from '@platform/lib/base/PlatformPage.js';
 import { buildServiceEntryUrl } from '@platform/lib/utils/last-visited-service.js';
 import { applyPublicDocumentMeta } from '../../utils/public-document-meta.js';
 import { productLandingFaqStyles } from '../../styles/product-landing-faq.styles.js';
 import { landFlowsAbilityUrl } from '../../utils/land-product-images.js';
 
-export class ProductAgentsPage extends PlatformElement {
+export class ProductAgentsPage extends PlatformPage {
     static i18nNamespace = 'frontend_products';
 
     static styles = [
-        PlatformElement.styles,
+        PlatformPage.styles,
         productLandingFaqStyles,
         css`
             :host {
@@ -292,8 +292,14 @@ export class ProductAgentsPage extends PlatformElement {
         `
     ];
 
+    constructor() {
+        super();
+        this._authStatusSel = this.select((s) => s.auth.status);
+        this._localeSel = this.select((s) => s.i18n.locale);
+    }
+
     _handleProductCtaClick = () => {
-        if (this.bus.getState().auth.status === 'authenticated') {
+        if (this._authStatusSel.value === 'authenticated') {
             window.location.href = buildServiceEntryUrl('flows');
             return;
         }
@@ -318,7 +324,7 @@ export class ProductAgentsPage extends PlatformElement {
 
     render() {
         const t = (key) => this.t(`agents.${key}`);
-        const locale = this.bus.getState().i18n.locale;
+        const locale = this._localeSel.value;
         if (locale !== 'ru' && locale !== 'en') {
             throw new Error('product-agents-page: i18n.locale must be ru or en');
         }

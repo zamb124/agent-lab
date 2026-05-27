@@ -589,6 +589,9 @@
   "args_schema_form": {
     "empty": "Схема аргументов пуста"
   },
+  "parameters_schema_form": {
+    "empty": "Параметры не заданы"
+  },
   "llm_mocks_editor": {
     "empty": "Моки не заданы",
     "placeholder_match": "Подстрока запроса",
@@ -1355,6 +1358,7 @@
       "tool_add": "Добавить ноду",
       "undo": "Отменить",
       "redo": "Повторить",
+      "open_variables": "Открыть переменные",
       "toggle_variables": "Переменные",
       "toggle_breakpoints": "Брейкпоинты",
       "toggle_guides": "Направляющие",
@@ -1404,6 +1408,12 @@
     },
     "sticky_note": {
       "placeholder": "Текст заметки…",
+      "drag_hint": "Перетащить заметку",
+      "link_start": "Привязать к ноде",
+      "link_cancel": "Отменить привязку",
+      "unlink": "Отвязать от ноды",
+      "expand": "Развернуть заметку",
+      "collapse": "Свернуть заметку",
       "delete": "Удалить заметку"
     },
     "minimap": {

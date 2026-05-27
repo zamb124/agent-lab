@@ -174,7 +174,8 @@ def _normalize_path(path: str) -> str:
 
 def _derive_collection_paths(base_url: str, id_field: str | None, operations: list[str]) -> dict[str, tuple[str, str]]:
     """Auto-derive restMirror для createResourceCollection."""
-    item_path = f"{base_url}/{{{id_field}}}" if id_field else None
+    item_base_url = base_url.rstrip("/")
+    item_path = f"{item_base_url}/{{{id_field}}}" if id_field else None
     mapping: dict[str, tuple[str, str]] = {}
     for op in operations:
         if op == "list":

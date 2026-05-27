@@ -8,11 +8,9 @@ Reason tool добавляется при сборке агента (FlowsLoader
 Тесты проверяют что reason tool корректно работает если он в списке tools.
 """
 
-from typing import cast
-
 import pytest
 
-from apps.flows.src.container_contracts import FlowRuntimeContainer
+from apps.flows.src.container import get_container
 from apps.flows.src.models import NodeConfig
 from apps.flows.src.models.enums import NodeType, ReactToolRole
 from apps.flows.src.models.node_config import NodeLLMConfig
@@ -21,49 +19,23 @@ from apps.flows.src.streaming import InMemoryEmitter
 from apps.flows.tools.agent_session_tools import reason
 from apps.flows.tools.math_tools import calculator
 from core.state import ExecutionState
+from core.types import JsonObject
+from tests.flows.durable_runtime_harness import ensure_workflow_started
 
 
-class _BillingService:
-    async def company_may_incur_billable_operation_charge(self, company_id: str) -> bool:
-        _ = company_id
-        return True
-
-    async def require_balance_for_billable_operation(
-        self,
-        company_id: str,
-        user_id: str,
-        *,
-        operation_code: str,
-        notification_service: str,
-    ) -> None:
-        _ = company_id, user_id, operation_code, notification_service
-
-
-class _NoopWorkflowRuntime:
-    async def save_state(self, session_id: str, state: ExecutionState, **kwargs: object) -> bool:
-        _ = session_id, state, kwargs
-        return True
-
-    async def record_activity_scheduled(self, **kwargs: object) -> None:
-        _ = kwargs
-
-    async def record_activity_completed(self, **kwargs: object) -> bool:
-        _ = kwargs
-        return True
-
-
-class _RuntimeContainer:
-    billing_service = _BillingService()
-    workflow_runtime = _NoopWorkflowRuntime()
-
-
-def _runtime_container() -> FlowRuntimeContainer:
-    return cast(FlowRuntimeContainer, _RuntimeContainer())
-
-
-async def run_agent_to_completion(runner, input_data, state):
+async def run_agent_to_completion(
+    runner: LlmNodeRunner,
+    input_data: JsonObject,
+    state: ExecutionState,
+) -> tuple[list[JsonObject], ExecutionState]:
     """Helper: запускает агента до завершения, собирает события."""
-    events = []
+    await ensure_workflow_started(
+        container=get_container(),
+        state=state,
+        flow_id=state.session_flow_id,
+        branch_id=state.branch_id,
+    )
+    events: list[JsonObject] = []
     async for event in runner.run(input_data, state, InMemoryEmitter(state)):
         events.append(event)
     return events, state
@@ -103,6 +75,7 @@ class TestReasonToolInTools:
             tools=[reason, calculator],
             llm=None,
             prompt="You are a helpful assistant.",
+            container=get_container(),
         )
 
         tool_names = [t.name for t in runner.tools]
@@ -115,6 +88,7 @@ class TestReasonToolInTools:
             tools=[calculator],
             llm=None,
             prompt="You are a helpful assistant.",
+            container=get_container(),
         )
 
         tool_names = [t.name for t in runner.tools]
@@ -127,6 +101,7 @@ class TestReasonToolInTools:
             tools=[reason, calculator],
             llm=None,
             prompt="You are a helpful assistant.",
+            container=get_container(),
         )
 
         reason_tool = next(t for t in runner.tools if t.name == "reason")
@@ -155,7 +130,7 @@ class TestReasonToolExecution:
             tools=[reason, calculator],
             llm=None,
             prompt="You are a helpful assistant.",
-            container=_runtime_container(),
+            container=get_container(),
         )
 
     @pytest.mark.asyncio
@@ -222,7 +197,7 @@ class TestAgentWithoutReasonWorks:
             tools=[calculator],
             llm=None,
             prompt="You are a helpful assistant.",
-            container=_runtime_container(),
+            container=get_container(),
         )
 
     @pytest.mark.asyncio

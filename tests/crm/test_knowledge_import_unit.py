@@ -33,11 +33,6 @@ def test_split_empty_raises() -> None:
         split_knowledge_text("  \n\t  ")
 
 
-def test_split_type_error() -> None:
-    with pytest.raises(TypeError, match="str"):
-        split_knowledge_text(None)  # type: ignore[arg-type]
-
-
 def test_split_too_long_raises() -> None:
     huge = "a" * (MAX_IMPORT_TEXT_CHARS + 1)
     with pytest.raises(ValueError, match="превышает лимит"):

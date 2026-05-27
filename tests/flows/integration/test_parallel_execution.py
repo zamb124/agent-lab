@@ -56,6 +56,7 @@ class TestParallelNodeExecution:
                 "node_c": {"type": "code", "code": node_code_template.format(node_name="node_c")},
                 "final": {
                     "type": "code",
+                    "incoming_policy": "all",
                     "code": "\nasync def run(args, state):\n    import time\n    state['execution_end'] = time.time()\n    state['response'] = 'All nodes completed'\n    return state\n",
                 },
             },
@@ -101,7 +102,7 @@ class TestParallelNodeExecution:
         overall_duration = overall_end - overall_start
         assert not result.is_err, f"Task failed: {result.error}"
         state = result.return_value
-        assert state["status"] == "completed"
+        assert state["task_state"] == "completed"
         assert state["response"] == "All nodes completed"
         print(f"\n⏱️  Overall duration: {overall_duration:.2f}s")
         assert overall_duration < 2.0, (
@@ -181,6 +182,7 @@ class TestParallelNodesMerge:
                 },
                 "final": {
                     "type": "code",
+                    "incoming_policy": "all",
                     "code": "\nasync def run(args, state):\n    state['response'] = f\"a={state.get('field_a')}, b={state.get('field_b')}\"\n    return state\n",
                 },
             },
@@ -217,7 +219,7 @@ class TestParallelNodesMerge:
         result = await task.wait_result(timeout=30)
         assert not result.is_err, f"Task failed: {result.error}"
         state = result.return_value
-        assert state["status"] == "completed"
+        assert state["task_state"] == "completed"
         response = state.get("response", "")
         assert "value_a" in response, "field_a lost during merge"
         assert "value_b" in response, "field_b lost during merge"

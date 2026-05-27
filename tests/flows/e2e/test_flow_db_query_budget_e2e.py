@@ -18,6 +18,7 @@ from sqlalchemy import text
 from sqlalchemy.ext.asyncio import create_async_engine
 
 from apps.flows.config import get_settings
+from apps.flows.src.durable_execution import WorkflowEventType
 
 pytestmark = [pytest.mark.e2e, pytest.mark.real_taskiq, pytest.mark.timeout(120, func_only=True)]
 _PG_STAT_LOCK = "/tmp/platform_pg_stat_statements_flow_budget.lock"
@@ -238,7 +239,7 @@ async def test_parallel_llm_flow_db_query_budget(client, container, mock_llm_red
         assert persisted_state.terminal_task_state == "completed"
         (history, total_history) = await container.workflow_runtime.get_state_history(session_id)
         assert total_history >= 1
-        assert history[-1]["event_type"] == "RunTerminal"
+        assert history[-1].event_type is WorkflowEventType.run_terminal
         app_stats = _application_stats(stats)
         agents_stats = [stat for stat in app_stats if stat.database == "platform_agents"]
         shared_stats = [stat for stat in app_stats if stat.database == "platform_shared"]

@@ -17,11 +17,11 @@ from core.llm_context import LLMContextSourceRegistry
 from core.rag.llm_context_source import RAGLLMContextSource
 from core.rag.rag_resource_bind import RagResourceBindParams
 from core.rag.repository import RAGRepository
+from core.state import ExecutionState
 from core.types import JsonObject, require_json_object
 
 if TYPE_CHECKING:
     from apps.flows.src.db import ResourceRepository
-    from core.state import ExecutionState
 
 
 async def resolve_rag_context_source_registry_for_runtime(
@@ -118,11 +118,12 @@ def _resolve_runtime_templates(
     config: JsonObject,
     state: ExecutionState | None,
 ) -> JsonObject:
+    config_obj = require_json_object(config, "rag_resource.config")
     if state is None:
-        return config
+        return config_obj
     variables = _state_variables(state)
     resolved = MappingResolver.resolve_json_template_tree(
-        config,
+        config_obj,
         state,
         variables,
     )

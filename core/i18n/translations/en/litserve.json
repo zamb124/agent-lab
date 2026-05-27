@@ -14,6 +14,7 @@
     "models": {
         "title": "Model registry",
         "subtitle": "Local LitServe models (embedding, rerank)",
+        "kind": "Kind",
         "kind_embedding": "Embedding",
         "kind_rerank": "Rerank",
         "hf_model": "HuggingFace ID",

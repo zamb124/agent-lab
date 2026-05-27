@@ -68,8 +68,8 @@ async def test_apply_pending_http_creates_note(
         context_id=state.context_id,
         idempotency_key=None,
     )
-    assert applied.get("status") == "applied"
-    res = applied.get("result")
-    assert isinstance(res, dict), applied
+    assert applied.status == "applied"
+    res = applied.result
+    assert res is not None, applied
     ent = res.get("entity")
     assert isinstance(ent, dict) and ent.get("entity_id")

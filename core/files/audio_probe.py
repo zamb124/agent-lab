@@ -8,16 +8,16 @@ import subprocess
 import tempfile
 from pathlib import Path
 
-from core.models import StrictBaseModel
+from core.models import FlexibleBaseModel
 
 
-class FfprobeDurationNode(StrictBaseModel):
+class FfprobeDurationNode(FlexibleBaseModel):
     """Duration fragment emitted by ffprobe format/stream sections."""
 
     duration: str | None = None
 
 
-class FfprobeDurationPayload(StrictBaseModel):
+class FfprobeDurationPayload(FlexibleBaseModel):
     """Typed ffprobe payload for duration probing."""
 
     format: FfprobeDurationNode | None = None

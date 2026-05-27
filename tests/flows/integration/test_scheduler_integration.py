@@ -19,15 +19,28 @@ import datetime
 import pytest
 
 from apps.flows.src.models.scheduled_task_payload import FlowScheduledTaskPayload
+from apps.flows.src.services.schedule_service import ScheduleService
+from apps.scheduler.container import scheduler_broker_for_queue
+from core.config import get_settings
+from core.scheduler.service import SchedulerService
 
 pytestmark = pytest.mark.real_taskiq
 _TEST_COMPANY_ID = "system"
 
 
 @pytest.fixture(autouse=True)
-def require_taskiq_processes(taskiq_worker, taskiq_scheduler):
+def require_taskiq_processes(taskiq_worker, taskiq_scheduler, container):
     """Все тесты в этом модуле требуют реальный TaskIQ worker и scheduler."""
-    pass
+    settings = get_settings()
+    scheduler_service = SchedulerService(
+        repository=container.scheduler_task_repository,
+        redis_url=settings.database.redis_url,
+        broker_for_queue=scheduler_broker_for_queue,
+    )
+    container.__dict__["_cached_schedule_service"] = ScheduleService(
+        scheduler_client=container.scheduler_client,
+        scheduler_service=scheduler_service,
+    )
 
 
 class TestScheduleService:
@@ -168,7 +181,7 @@ class TestScheduleService:
             company_id=_TEST_COMPANY_ID, schedule_task_id=task.schedule_task_id
         )
         assert cancelled_task is not None
-        assert cancelled_task.status.value == "cancelled"
+        assert cancelled_task.status == "cancelled"
 
     @pytest.mark.asyncio
     async def test_cancel_nonexistent_task_returns_false(self, app, container):
@@ -353,7 +366,7 @@ class TestScheduledTaskExecution:
             content="Scheduled message test",
             company_id="system",
         )
-        assert result["status"] == "completed"
+        assert result["task_state"] == "completed"
         assert "Scheduled message test" in result["response"]
         updated_task = await container.scheduler_task_repository.get(
             company_id="system", schedule_task_id=task.schedule_task_id

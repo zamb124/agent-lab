@@ -385,10 +385,10 @@ async def run(args, state):
 
     @pytest.mark.asyncio
     async def test_function_diff_removed(self, client, app):
-        """Установка поля в None вместо удаления (ExecutionState - Pydantic модель)."""
+        """Установка поля в None через канонический mapping-контракт state."""
         code = """
 async def run(args, state):
-    state.to_remove = None
+    state["to_remove"] = None
     return state
 """
         state = {"to_remove": "value", "keep": "value"}
@@ -1389,7 +1389,16 @@ class TestLlmNode:
                 "node_type": "llm_node",
                 "node_config": {
                     "prompt": "You can use calculator tool.",
-                    "tools": ["calculator"],
+                    "tools": [
+                        {
+                            "tool_id": "calculator",
+                            "parameters_schema": {
+                                "type": "object",
+                                "properties": {"expression": {"type": "string"}},
+                                "required": ["expression"],
+                            },
+                        }
+                    ],
                     "llm": {"model": "gpt-4o"}
                 },
                 "state": state
@@ -1620,7 +1629,16 @@ class TestLlmNode:
                 "node_type": "llm_node",
                 "node_config": {
                     "prompt": "Use calculator tool when needed.",
-                    "tools": ["calculator"],
+                    "tools": [
+                        {
+                            "tool_id": "calculator",
+                            "parameters_schema": {
+                                "type": "object",
+                                "properties": {"expression": {"type": "string"}},
+                                "required": ["expression"],
+                            },
+                        }
+                    ],
                     "llm": {"model": "gpt-4o"}
                 },
                 "state": state
@@ -1753,4 +1771,3 @@ async def run(args, state):
         data = response.json()
         assert_execute_response(data, expected_success=True)
         assert "route" in data["output_state"] or "response" in data["output_state"]
-

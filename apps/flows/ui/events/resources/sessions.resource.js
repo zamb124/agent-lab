@@ -8,16 +8,15 @@ import { createResourceCollection, createAsyncOp } from '@platform/lib/events/in
 import { httpRequest } from '@platform/lib/events/http.js';
 
 const FLOWS_API_V1 = '/flows/api/v1';
-const SESSIONS_RESOURCE_BASE = `${FLOWS_API_V1}/sessions/`;
 
 export const sessionsResource = createResourceCollection({
     name: 'flows/sessions',
-    baseUrl: SESSIONS_RESOURCE_BASE,
+    baseUrl: '/flows/api/v1/sessions/',
     idField: 'session_id',
     buildItemUrl: (id) => `${FLOWS_API_V1}/sessions/${encodeURIComponent(id)}`,
     restMirror: {
-        list: { method: 'GET', path: SESSIONS_RESOURCE_BASE },
-        remove: { method: 'DELETE', path: `${FLOWS_API_V1}/sessions/{session_id}` },
+        list: { method: 'GET', path: '/flows/api/v1/sessions/' },
+        remove: { method: 'DELETE', path: '/flows/api/v1/sessions/{session_id}' },
     },
     operations: ['list', 'remove'],
     toastKeys: {
@@ -56,7 +55,7 @@ export const sessionsResource = createResourceCollection({
 export const sessionStateOp = createAsyncOp({
     name: 'flows/session_state',
     silent: true,
-    restMirror: { method: 'GET', path: `${FLOWS_API_V1}/tasks/state` },
+    restMirror: { method: 'GET', path: '/flows/api/v1/tasks/state' },
     request: async ({ payload }) => {
         if (!payload || typeof payload.session_id !== 'string' || payload.session_id.length === 0) {
             throw new Error('sessionStateOp: { session_id } required');

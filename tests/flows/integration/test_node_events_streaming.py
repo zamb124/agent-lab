@@ -15,6 +15,7 @@ from apps.flows.src.runtime.flow import Flow
 from apps.flows.src.streaming import EventSubscriber
 from core.errors import CodeExecutionRuntimeError
 from core.state import ExecutionState
+from tests.flows.durable_runtime_harness import run_flow
 
 
 @pytest.mark.real_taskiq
@@ -28,9 +29,10 @@ class TestNodeEventsStreaming:
         await redis_client.connect()
         task_id = f"test-node-events-{uuid.uuid4()}"
         context_id = f"ctx-{uuid.uuid4()}"
+        flow_id = "test_node_events_agent"
         agent = await Flow.from_config(
             {
-                "id": "test_node_events_agent",
+                "flow_id": flow_id,
                 "name": "Test Node Events",
                 "entry": "process",
                 "nodes": {
@@ -47,7 +49,7 @@ class TestNodeEventsStreaming:
             task_id=task_id,
             context_id=context_id,
             user_id="test-user",
-            session_id=f"test-agent:{context_id}",
+            session_id=f"{flow_id}:{context_id}",
             content="test input",
         )
         subscriber = EventSubscriber(redis_client)
@@ -63,7 +65,7 @@ class TestNodeEventsStreaming:
         async def execute():
             await ready_event.wait()
             await asyncio.sleep(0.05)
-            await agent.run(state)
+            await run_flow(container=container, flow=agent, state=state)
 
         try:
             await asyncio.wait_for(asyncio.gather(collect(), execute()), timeout=10.0)
@@ -84,9 +86,10 @@ class TestNodeEventsStreaming:
         await redis_client.connect()
         task_id = f"test-multi-node-{uuid.uuid4()}"
         context_id = f"ctx-{uuid.uuid4()}"
+        flow_id = "test_multi_node_agent"
         agent = await Flow.from_config(
             {
-                "id": "test_multi_node_agent",
+                "flow_id": flow_id,
                 "name": "Test Multi Node",
                 "entry": "step1",
                 "nodes": {
@@ -115,7 +118,7 @@ class TestNodeEventsStreaming:
             task_id=task_id,
             context_id=context_id,
             user_id="test-user",
-            session_id=f"test-agent:{context_id}",
+            session_id=f"{flow_id}:{context_id}",
             content="test",
         )
         subscriber = EventSubscriber(redis_client)
@@ -140,7 +143,7 @@ class TestNodeEventsStreaming:
         async def execute():
             await ready_event.wait()
             await asyncio.sleep(0.05)
-            await agent.run(state)
+            await run_flow(container=container, flow=agent, state=state)
 
         try:
             await asyncio.wait_for(asyncio.gather(collect(), execute()), timeout=10.0)
@@ -168,9 +171,10 @@ class TestNodeEventsStreaming:
         await redis_client.connect()
         task_id = f"test-node-error-{uuid.uuid4()}"
         context_id = f"ctx-{uuid.uuid4()}"
+        flow_id = "test_error_node_agent"
         agent = await Flow.from_config(
             {
-                "id": "test_error_node_agent",
+                "flow_id": flow_id,
                 "name": "Test Error Node",
                 "entry": "failing",
                 "nodes": {
@@ -187,7 +191,7 @@ class TestNodeEventsStreaming:
             task_id=task_id,
             context_id=context_id,
             user_id="test-user",
-            session_id=f"test-agent:{context_id}",
+            session_id=f"{flow_id}:{context_id}",
             content="test",
         )
         subscriber = EventSubscriber(redis_client)
@@ -204,7 +208,7 @@ class TestNodeEventsStreaming:
             await ready_event.wait()
             await asyncio.sleep(0.05)
             try:
-                await agent.run(state)
+                await run_flow(container=container, flow=agent, state=state)
             except (ValueError, CodeExecutionRuntimeError):
                 pass
 

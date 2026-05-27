@@ -8,17 +8,45 @@
 4. User отвечает → управление возвращается в support_agent → завершение
 """
 
-from typing import Any, Dict
-
 import pytest
 
-from apps.flows.src.container import get_container
+from apps.flows.src.models.flow_config import FlowConfig
 from apps.flows.src.runtime.flow import Flow
 from apps.flows.src.tools.base import BaseTool
 from apps.flows.src.tools.code_tool import CodeTool
 from apps.flows.src.tools.node_wrapper import NodeAsToolWrapper
 from core.clients.llm import setup_mock_responses
-from core.state import ExecutionState
+from core.types import JsonObject
+from tests.flows.durable_runtime_harness import run_flow, workflow_state
+
+
+EMPTY_PARAMETERS_SCHEMA: JsonObject = {
+    "type": "object",
+    "properties": {},
+    "required": [],
+}
+
+QUERY_PARAMETERS_SCHEMA: JsonObject = {
+    "type": "object",
+    "properties": {
+        "query": {
+            "type": "string",
+            "description": "Запрос к субагенту",
+        }
+    },
+    "required": ["query"],
+}
+
+QUESTION_PARAMETERS_SCHEMA: JsonObject = {
+    "type": "object",
+    "properties": {
+        "question": {
+            "type": "string",
+            "description": "Вопрос пользователю",
+        }
+    },
+    "required": ["question"],
+}
 
 
 class TestNodeAsToolWrapper:
@@ -32,6 +60,7 @@ class TestNodeAsToolWrapper:
             "name": "Support Agent",
             "description": "Агент поддержки",
             "prompt": "Ты агент поддержки",
+            "parameters_schema": QUERY_PARAMETERS_SCHEMA,
         }
         wrapper = NodeAsToolWrapper(node_config=config)
         assert wrapper.name == "support_agent"
@@ -45,6 +74,7 @@ class TestNodeAsToolWrapper:
             "type": "llm_node",
             "name": "Helper",
             "prompt": "Ты помощник",
+            "parameters_schema": QUERY_PARAMETERS_SCHEMA,
         }
         wrapper = NodeAsToolWrapper(node_config=config)
         schema = wrapper.to_openai_schema()
@@ -66,11 +96,11 @@ class TestFlowWithSubagentInterrupt:
     """
 
     @pytest.fixture
-    def main_agent_config(self) -> Dict[str, Any]:
+    def main_agent_config(self) -> JsonObject:
         """Конфиг главного flow с субагентом как inline tool."""
         ask_user_code = '\nfrom apps.flows.src.runtime.exceptions import FlowInterrupt\n\nasync def run(args, state):\n    question = args.get("question", "")\n    raise FlowInterrupt(question)\n'
         return {
-            "id": "main_flow",
+            "flow_id": "main_flow",
             "name": "Main Agent",
             "entry": "main",
             "nodes": {
@@ -84,21 +114,13 @@ class TestFlowWithSubagentInterrupt:
                             "name": "Support Agent",
                             "description": "Агент поддержки, задаёт уточняющие вопросы",
                             "prompt": "Ты агент поддержки. Если нужна информация от пользователя - используй ask_user.",
+                            "parameters_schema": QUERY_PARAMETERS_SCHEMA,
                             "tools": [
                                 {
                                     "tool_id": "ask_user",
                                     "description": "Задать вопрос пользователю",
                                     "code": ask_user_code,
-                                    "parameters_schema": {
-                                        "type": "object",
-                                        "properties": {
-                                            "question": {
-                                                "type": "string",
-                                                "description": "Вопрос пользователю",
-                                            }
-                                        },
-                                        "required": ["question"],
-                                    },
+                                    "parameters_schema": QUESTION_PARAMETERS_SCHEMA,
                                 }
                             ],
                             "llm": {"model": "mock-gpt-4"},
@@ -111,7 +133,12 @@ class TestFlowWithSubagentInterrupt:
         }
 
     @pytest.mark.asyncio
-    async def test_flow_with_subagent_interrupt(self, main_agent_config: Dict[str, Any], app):
+    async def test_flow_with_subagent_interrupt(
+        self,
+        main_agent_config: JsonObject,
+        app,
+        unique_id: str,
+    ):
         """
         Полный тест: Agent → субагент → ask_user → interrupt.
         Все конфиги inline - никакого обращения к БД.
@@ -130,20 +157,24 @@ class TestFlowWithSubagentInterrupt:
                 },
             ]
         )
-        flow = await Flow.from_config(main_agent_config, container=app.state.container)
-        state = ExecutionState(
-            task_id="test-task",
-            context_id="test-context",
-            user_id="test-user",
-            session_id="test-agent:test-context",
+        config = FlowConfig.model_validate(main_agent_config)
+        flow = await Flow.from_config(config.model_dump(mode="json"), container=app.state.container)
+        state = workflow_state(
+            flow_id=config.flow_id,
+            unique_id=f"subagent-interrupt-{unique_id}",
             content="Помогите с моим заказом",
         )
-        result = await flow.run(state)
+        result = await run_flow(container=app.state.container, flow=flow, state=state)
         assert result.interrupt is not None
         assert result.interrupt.question == "Какой у вас номер заказа?"
 
     @pytest.mark.asyncio
-    async def test_flow_resume_after_interrupt(self, main_agent_config: Dict[str, Any], app):
+    async def test_flow_resume_after_interrupt(
+        self,
+        main_agent_config: JsonObject,
+        app,
+        unique_id: str,
+    ):
         """
         Тест resume после interrupt.
         Все конфиги inline.
@@ -160,15 +191,14 @@ class TestFlowWithSubagentInterrupt:
                 "Готово! Ваш заказ отправлен.",
             ]
         )
-        flow = await Flow.from_config(main_agent_config, container=app.state.container)
-        state = ExecutionState(
-            task_id="test-task",
-            context_id="test-context",
-            user_id="test-user",
-            session_id="test-agent:test-context",
+        config = FlowConfig.model_validate(main_agent_config)
+        flow = await Flow.from_config(config.model_dump(mode="json"), container=app.state.container)
+        state = workflow_state(
+            flow_id=config.flow_id,
+            unique_id=f"subagent-resume-{unique_id}",
             content="Где мой заказ?",
         )
-        result = await flow.run(state)
+        result = await run_flow(container=app.state.container, flow=flow, state=state)
         assert result.interrupt is not None
         assert result.interrupt.question == "Номер заказа?"
 
@@ -181,11 +211,11 @@ class TestSubagentMessagesIntegrity:
     """
 
     @pytest.fixture
-    def main_flow_with_subagent(self) -> Dict[str, Any]:
+    def main_flow_with_subagent(self) -> JsonObject:
         """Agent с субагентом - полностью inline."""
         ask_user_code = '\nfrom apps.flows.src.runtime.exceptions import FlowInterrupt\n\nasync def run(args, state):\n    question = args.get("question", "")\n    raise FlowInterrupt(question)\n'
         return {
-            "id": "test_flow",
+            "flow_id": "test_flow",
             "name": "Test Agent",
             "entry": "main",
             "nodes": {
@@ -199,18 +229,13 @@ class TestSubagentMessagesIntegrity:
                             "name": "Info Collector",
                             "description": "Собирает информацию от пользователя",
                             "prompt": "Ты собираешь информацию. Используй ask_user для вопросов.",
+                            "parameters_schema": QUERY_PARAMETERS_SCHEMA,
                             "tools": [
                                 {
                                     "tool_id": "ask_user",
                                     "description": "Задать вопрос пользователю",
                                     "code": ask_user_code,
-                                    "parameters_schema": {
-                                        "type": "object",
-                                        "properties": {
-                                            "question": {"type": "string", "description": "Вопрос"}
-                                        },
-                                        "required": ["question"],
-                                    },
+                                    "parameters_schema": QUESTION_PARAMETERS_SCHEMA,
                                 }
                             ],
                             "llm": {"model": "mock-gpt-4"},
@@ -242,7 +267,12 @@ class TestSubagentMessagesIntegrity:
         )
 
     @pytest.mark.asyncio
-    async def test_full_resume_cycle(self, main_flow_with_subagent: Dict[str, Any], app):
+    async def test_full_resume_cycle(
+        self,
+        main_flow_with_subagent: JsonObject,
+        app,
+        unique_id: str,
+    ):
         """
         Полный цикл: interrupt -> resume -> завершение.
         Все конфиги inline.
@@ -255,20 +285,19 @@ class TestSubagentMessagesIntegrity:
                 "Данные собраны успешно!",
             ]
         )
-        flow = await Flow.from_config(main_flow_with_subagent, container=app.state.container)
-        state = ExecutionState(
-            task_id="test-task",
-            context_id="test-context",
-            user_id="test-user",
-            session_id="test-agent:test-context",
+        config = FlowConfig.model_validate(main_flow_with_subagent)
+        flow = await Flow.from_config(config.model_dump(mode="json"), container=app.state.container)
+        state = workflow_state(
+            flow_id=config.flow_id,
+            unique_id=f"subagent-full-resume-{unique_id}",
             content="Начни сбор",
         )
-        result1 = await flow.run(state)
+        result1 = await run_flow(container=app.state.container, flow=flow, state=state)
         assert result1.interrupt is not None
         assert len(result1.interrupt_path) > 0
         result1.content = "test@test.com"
         result1.interrupt = None
-        result2 = await flow.run(result1)
+        result2 = await run_flow(container=app.state.container, flow=flow, state=result1)
         assert result2.interrupt is None, (
             f"Agent должен завершиться без interrupt, получен: {result2.interrupt}"
         )
@@ -281,7 +310,7 @@ class TestToolRegistryInline:
     @pytest.mark.asyncio
     async def test_tool_registry_creates_inline_tool(self, app):
         """ToolRegistry создаёт CodeTool из inline конфига."""
-        container = get_container()
+        container = app.state.container
         tool_config = {
             "tool_id": "test_simple_adder",
             "title": "Simple Adder",
@@ -301,13 +330,14 @@ class TestToolRegistryInline:
     @pytest.mark.asyncio
     async def test_tool_registry_creates_node_as_tool(self, app):
         """ToolRegistry создаёт NodeAsToolWrapper из inline llm_node конфига."""
-        container = get_container()
+        container = app.state.container
         tool_config = {
             "tool_id": "helper_agent",
             "type": "llm_node",
             "name": "Helper Agent",
             "description": "Помощник",
             "prompt": "Ты помощник. Отвечай на вопросы.",
+            "parameters_schema": QUERY_PARAMETERS_SCHEMA,
             "llm": {"model": "mock-gpt-4"},
         }
         tool = await container.tool_registry.create_tool(tool_config)
@@ -318,7 +348,7 @@ class TestToolRegistryInline:
     @pytest.mark.asyncio
     async def test_tool_registry_raises_on_missing_code(self, app):
         """ToolRegistry выбрасывает ошибку если нет code."""
-        container = get_container()
+        container = app.state.container
         tool_config = {"tool_id": "no_code_tool", "description": "Tool без кода"}
         with pytest.raises(ValueError, match="code"):
             await container.tool_registry.create_tool(tool_config)
@@ -326,7 +356,7 @@ class TestToolRegistryInline:
     @pytest.mark.asyncio
     async def test_tool_registry_rejects_string_refs(self, app):
         """ToolRegistry выбрасывает ошибку для строковых tool_id."""
-        container = get_container()
+        container = app.state.container
         with pytest.raises(ValueError, match="passed as string"):
             await container.tool_registry.create_tool("calculator")
         with pytest.raises(ValueError, match="passed as string"):
@@ -335,7 +365,7 @@ class TestToolRegistryInline:
     @pytest.mark.asyncio
     async def test_builtin_tools_in_repository(self, app):
         """Встроенные tools загружены в БД с inline code."""
-        container = get_container()
+        container = app.state.container
         calculator = await container.tool_repository.get("calculator")
         assert calculator is not None, "calculator не найден в БД"
         assert calculator.code is not None, "calculator должен иметь code"
@@ -348,11 +378,11 @@ class TestFilesPassingToSubnode:
     """Тест: файлы передаются в субноду через shared state."""
 
     @pytest.fixture
-    def agent_with_file_tool(self) -> Dict[str, Any]:
+    def agent_with_file_tool(self) -> JsonObject:
         """Агент с субагентом который проверяет наличие файлов в state."""
         check_files_code = '\nasync def run(args, state):\n    files = state.get("files", [])\n    if not files:\n        return {"success": False, "error": "No files in state"}\n    return {"success": True, "files_count": len(files), "first_file": files[0].get("original_name")}\n'
         return {
-            "id": "file_test_flow",
+            "flow_id": "file_test_flow",
             "name": "File Test Agent",
             "entry": "main",
             "nodes": {
@@ -366,11 +396,13 @@ class TestFilesPassingToSubnode:
                             "name": "File Processor",
                             "description": "Обрабатывает файлы",
                             "prompt": "Проверь файлы с помощью check_files.",
+                            "parameters_schema": QUERY_PARAMETERS_SCHEMA,
                             "tools": [
                                 {
                                     "tool_id": "check_files",
                                     "description": "Проверяет наличие файлов в state",
                                     "code": check_files_code,
+                                    "parameters_schema": EMPTY_PARAMETERS_SCHEMA,
                                 }
                             ],
                             "llm": {"model": "mock-gpt-4"},
@@ -383,7 +415,12 @@ class TestFilesPassingToSubnode:
         }
 
     @pytest.mark.asyncio
-    async def test_files_available_in_subagent(self, agent_with_file_tool: Dict[str, Any], app):
+    async def test_files_available_in_subagent(
+        self,
+        agent_with_file_tool: JsonObject,
+        app,
+        unique_id: str,
+    ):
         """Файлы из родительского state доступны в субагенте."""
         setup_mock_responses(
             response_queue=[
@@ -393,12 +430,11 @@ class TestFilesPassingToSubnode:
                 "Обработка завершена. Файл test.jpg обработан.",
             ]
         )
-        flow = await Flow.from_config(agent_with_file_tool, container=app.state.container)
-        state = ExecutionState(
-            task_id="test-task",
-            context_id="test-context",
-            user_id="test-user",
-            session_id="test-agent:test-context",
+        config = FlowConfig.model_validate(agent_with_file_tool)
+        flow = await Flow.from_config(config.model_dump(mode="json"), container=app.state.container)
+        state = workflow_state(
+            flow_id=config.flow_id,
+            unique_id=f"subagent-files-{unique_id}",
             content="Обработай мои файлы",
             files=[
                 {
@@ -409,6 +445,6 @@ class TestFilesPassingToSubnode:
                 }
             ],
         )
-        result = await flow.run(state)
+        result = await run_flow(container=app.state.container, flow=flow, state=state)
         assert result.response, f"Должен быть ответ, state: {result}"
         assert result.interrupt is None, "Не должно быть interrupt"

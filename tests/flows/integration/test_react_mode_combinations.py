@@ -11,15 +11,22 @@
 ПРАВИЛО: Мок только LLM. Tools, state, flow - реальные.
 """
 
+import time
+
 from a2a.types import TaskArtifactUpdateEvent
 
 from apps.flows.src.container import get_container
 from apps.flows.src.models import FlowConfig, ReactLoopMode
 from apps.flows.src.models.enums import ReactToolRole
 from apps.flows.src.models.node_config import NodeConfig, NodeLLMConfig, ReactConfig
+from apps.flows.src.runtime.flow import Flow
 from apps.flows.src.runtime.runners.llm_runner import LlmNodeRunner
 from apps.flows.src.tools.code_tool import CodeTool
 from core.state import ExecutionState
+from core.types import JsonObject
+from tests.flows.durable_runtime_harness import ensure_workflow_started, run_flow, workflow_state
+
+EMPTY_PARAMETERS_SCHEMA: JsonObject = {"type": "object", "properties": {}, "required": []}
 
 INLINE_CALCULATOR = {
     "tool_id": "calculator",
@@ -82,6 +89,19 @@ INLINE_CUSTOM_COMPLETE = {
 }
 
 
+async def run_flow_state(flow: Flow | None, state: ExecutionState) -> ExecutionState:
+    assert flow is not None
+    return await run_flow(container=flow.container, flow=flow, state=state)
+
+
+def make_flow_state(flow_id: str, content: str | None = None) -> ExecutionState:
+    return workflow_state(
+        flow_id=flow_id,
+        unique_id=f"{flow_id}-{time.time_ns()}",
+        content=content,
+    )
+
+
 class TestAutoModeWithoutReason:
     """
     AUTO режим БЕЗ reason tool.
@@ -112,10 +132,10 @@ class TestAutoModeWithoutReason:
             task_id="test-task",
             context_id="test-context",
             user_id="test-user",
-            session_id="test-agent:test-context",
+            session_id=f"{flow.flow_id}:test-context",
             content="Привет",
         )
-        result = await flow.run(state)
+        result = await run_flow_state(flow, state)
         assert result["response"] == "Привет! Я готов помочь."
         assert not result.reasoning_history
         await container.flow_repository.delete(flow_id)
@@ -149,10 +169,10 @@ class TestAutoModeWithoutReason:
             task_id="test-task",
             context_id="test-context",
             user_id="test-user",
-            session_id="test-agent:test-context",
+            session_id=f"{flow.flow_id}:test-context",
             content="7+3?",
         )
-        result = await flow.run(state)
+        result = await run_flow_state(flow, state)
         assert "10" in result["response"]
         assert not result.reasoning_history
         await container.flow_repository.delete(flow_id)
@@ -187,10 +207,10 @@ class TestAutoModeWithoutReason:
             task_id="test-task",
             context_id="test-context",
             user_id="test-user",
-            session_id="test-agent:test-context",
+            session_id=f"{flow.flow_id}:test-context",
             content="Посчитай 2+2 и 4*3",
         )
-        result = await flow.run(state)
+        result = await run_flow_state(flow, state)
         assert "12" in result["response"]
         await container.flow_repository.delete(flow_id)
 
@@ -240,10 +260,10 @@ class TestAutoModeWithReason:
             task_id="test-task",
             context_id="test-context",
             user_id="test-user",
-            session_id="test-agent:test-context",
+            session_id=f"{flow.flow_id}:test-context",
             content="Сколько 5+5?",
         )
-        result = await flow.run(state)
+        result = await run_flow_state(flow, state)
         assert "10" in result["response"]
         assert result.reasoning_history
         assert len(result.reasoning_history) == 1
@@ -301,10 +321,10 @@ class TestAutoModeWithReason:
             task_id="test-task",
             context_id="test-context",
             user_id="test-user",
-            session_id="test-agent:test-context",
+            session_id=f"{flow.flow_id}:test-context",
             content="10+10?",
         )
-        result = await flow.run(state)
+        result = await run_flow_state(flow, state)
         assert "20" in result["response"]
         assert result.reasoning_history
         assert len(result.reasoning_history) == 2
@@ -350,10 +370,10 @@ class TestAutoModeWithReason:
             task_id="test-task",
             context_id="test-context",
             user_id="test-user",
-            session_id="test-agent:test-context",
+            session_id=f"{flow.flow_id}:test-context",
             content="Вопрос",
         )
-        result = await flow.run(state)
+        result = await run_flow_state(flow, state)
         assert result["response"] == "Ответ на вопрос"
         assert result.reasoning_history
         assert len(result.reasoning_history) == 1
@@ -393,10 +413,10 @@ class TestExplicitModeWithExitOnly:
             task_id="test-task",
             context_id="test-context",
             user_id="test-user",
-            session_id="test-agent:test-context",
+            session_id=f"{flow.flow_id}:test-context",
             content="Сделай",
         )
-        result = await flow.run(state)
+        result = await run_flow_state(flow, state)
         assert result["response"] == "Готово!"
         assert not result.reasoning_history
         await container.flow_repository.delete(flow_id)
@@ -431,10 +451,10 @@ class TestExplicitModeWithExitOnly:
             task_id="test-task",
             context_id="test-context",
             user_id="test-user",
-            session_id="test-agent:test-context",
+            session_id=f"{flow.flow_id}:test-context",
             content="8*8?",
         )
-        result = await flow.run(state)
+        result = await run_flow_state(flow, state)
         assert "64" in result["response"]
         assert not result.reasoning_history
         await container.flow_repository.delete(flow_id)
@@ -469,10 +489,10 @@ class TestExplicitModeWithExitOnly:
             task_id="test-task",
             context_id="test-context",
             user_id="test-user",
-            session_id="test-agent:test-context",
+            session_id=f"{flow.flow_id}:test-context",
             content="test",
         )
-        result = await flow.run(state)
+        result = await run_flow_state(flow, state)
         assert result["response"] == "Теперь правильно!"
         await container.flow_repository.delete(flow_id)
 
@@ -483,11 +503,13 @@ class TestExplicitModeWithExitOnly:
         step1 = {
             "tool_id": "step1",
             "description": "Шаг 1",
+            "parameters_schema": EMPTY_PARAMETERS_SCHEMA,
             "code": "async def run(args, state): return 'step1_done'",
         }
         step2 = {
             "tool_id": "step2",
             "description": "Шаг 2",
+            "parameters_schema": EMPTY_PARAMETERS_SCHEMA,
             "code": "async def run(args, state): return 'step2_done'",
         }
         flow_config = FlowConfig(
@@ -517,10 +539,10 @@ class TestExplicitModeWithExitOnly:
             task_id="test-task",
             context_id="test-context",
             user_id="test-user",
-            session_id="test-agent:test-context",
+            session_id=f"{flow.flow_id}:test-context",
             content="Выполни",
         )
-        result = await flow.run(state)
+        result = await run_flow_state(flow, state)
         assert "выполнены" in result["response"]
         await container.flow_repository.delete(flow_id)
 
@@ -570,10 +592,10 @@ class TestExplicitModeWithReasonAndExit:
             task_id="test-task",
             context_id="test-context",
             user_id="test-user",
-            session_id="test-agent:test-context",
+            session_id=f"{flow.flow_id}:test-context",
             content="Сделай",
         )
-        result = await flow.run(state)
+        result = await run_flow_state(flow, state)
         assert result["response"] == "Готово!"
         assert result.reasoning_history
         assert len(result.reasoning_history) == 1
@@ -634,7 +656,7 @@ class TestExplicitModeWithReasonAndExit:
             session_id=f"{flow_id}:{context_id}",
             content="15-5?",
         )
-        result = await flow.run(state)
+        result = await run_flow_state(flow, state)
         assert "10" in result["response"]
         assert result.reasoning_history
         assert len(result.reasoning_history) == 2
@@ -682,10 +704,10 @@ class TestExplicitModeWithReasonAndExit:
             task_id="test-task",
             context_id="test-context",
             user_id="test-user",
-            session_id="test-agent:test-context",
+            session_id=f"{flow.flow_id}:test-context",
             content="test",
         )
-        result = await flow.run(state)
+        result = await run_flow_state(flow, state)
         assert result["response"] == "Правильный ответ"
         assert result.reasoning_history
         assert len(result.reasoning_history) == 1
@@ -732,7 +754,7 @@ class TestCustomReasonAndExitTools:
             session_id=f"{flow_id}:{context_id}",
             content="3*3?",
         )
-        result = await flow.run(state)
+        result = await run_flow_state(flow, state)
         assert "9" in result["response"]
         assert result.reasoning_history
         assert len(result.reasoning_history) == 1
@@ -773,7 +795,7 @@ class TestCustomReasonAndExitTools:
             session_id=f"{flow_id}:{context_id}",
             content="6/2?",
         )
-        result = await flow.run(state)
+        result = await run_flow_state(flow, state)
         assert "3" in result["response"]
         await container.flow_repository.delete(flow_id)
 
@@ -821,7 +843,7 @@ class TestCustomReasonAndExitTools:
             session_id=f"{flow_id}:{context_id}",
             content="100/4?",
         )
-        result = await flow.run(state)
+        result = await run_flow_state(flow, state)
         assert "25" in result["response"]
         assert result.reasoning_history
         assert len(result.reasoning_history) == 2
@@ -851,10 +873,10 @@ class TestEdgeCases:
             task_id="test-task",
             context_id="test-context",
             user_id="test-user",
-            session_id="test-agent:test-context",
+            session_id=f"{flow.flow_id}:test-context",
             content="Привет",
         )
-        result = await flow.run(state)
+        result = await run_flow_state(flow, state)
         assert result["response"] == "Простой ответ"
         await container.flow_repository.delete(flow_id)
 
@@ -891,10 +913,10 @@ class TestEdgeCases:
             task_id="test-task",
             context_id="test-context",
             user_id="test-user",
-            session_id="test-agent:test-context",
+            session_id=f"{flow.flow_id}:test-context",
             content="test",
         )
-        result = await flow.run(state)
+        result = await run_flow_state(flow, state)
         assert "Auto-injected" in result["response"]
         await container.flow_repository.delete(flow_id)
 
@@ -923,10 +945,10 @@ class TestEdgeCases:
             task_id="test-task",
             context_id="test-context",
             user_id="test-user",
-            session_id="test-agent:test-context",
+            session_id=f"{flow.flow_id}:test-context",
             content="test",
         )
-        result = await flow.run(state)
+        result = await run_flow_state(flow, state)
         assert result["response"] == "Текстовый ответ без finish"
         await container.flow_repository.delete(flow_id)
 
@@ -970,10 +992,10 @@ class TestEdgeCases:
             task_id="test-task",
             context_id="test-context",
             user_id="test-user",
-            session_id="test-agent:test-context",
+            session_id=f"{flow.flow_id}:test-context",
             content="Вопрос",
         )
-        result = await flow.run(state)
+        result = await run_flow_state(flow, state)
         assert result["response"] == "Прямой ответ"
         assert result.reasoning_history
         assert len(result.reasoning_history) == 1
@@ -1035,12 +1057,13 @@ class TestExplicitModeStreaming:
             prompt="Отвечай через finish.",
             container=container,
         )
-        state = ExecutionState(
-            task_id="test",
-            context_id="test",
-            user_id="test-user",
-            session_id="test-agent:test",
-            messages=[],
+        state = make_flow_state(flow_id)
+        state.messages = []
+        await ensure_workflow_started(
+            container=container,
+            state=state,
+            flow_id=flow_id,
+            branch_id=state.branch_id,
         )
         events = []
         async for event in runner.run({"content": "Привет"}, state):
@@ -1081,12 +1104,13 @@ class TestExplicitModeStreaming:
             prompt="Отвечай как хочешь.",
             container=container,
         )
-        state = ExecutionState(
-            task_id="test",
-            context_id="test",
-            user_id="test-user",
-            session_id="test-agent:test",
-            messages=[],
+        state = make_flow_state(flow_id)
+        state.messages = []
+        await ensure_workflow_started(
+            container=container,
+            state=state,
+            flow_id=flow_id,
+            branch_id=state.branch_id,
         )
         events = []
         async for event in runner.run({"content": "Привет"}, state):

@@ -35,6 +35,7 @@ from apps.flows.src.durable_execution import (
     WorkflowAppendResult,
     WorkflowEventPayload,
     WorkflowEventType,
+    WorkflowStateEventSpec,
     build_state_delta,
     hash_state_json,
 )
@@ -62,7 +63,9 @@ from core.errors import (
 from core.logging import get_logger
 from core.state import ExecutionState
 from core.state.interrupt import OperatorTaskInterrupt
-from core.state.mutation_policy import should_skip_field_on_user_returned_state_copy
+from core.state.mutation_policy import (
+    should_skip_field_on_runtime_node_state_merge,
+)
 from core.tracing import get_tracer
 from core.tracing.context import TraceContext, get_current_trace_context
 from core.tracing.provider import is_tracing_enabled
@@ -150,6 +153,30 @@ class Flow:
             state,
             event_type=event_type,
             payload=payload,
+        )
+
+    async def _checkpoint_state_events(
+        self,
+        events: Sequence[WorkflowStateEventSpec],
+    ) -> list[WorkflowAppendResult]:
+        if not events:
+            return []
+        for event in events:
+            state = (
+                ExecutionState.model_validate(event.state)
+                if isinstance(event.state, dict)
+                else event.state
+            )
+            if state.session_flow_id != self.flow_id:
+                raise RuntimeError(
+                    f"Flow {self.flow_id!r} cannot checkpoint session for flow "
+                    + f"{state.session_flow_id!r}"
+                )
+        return await self.container.workflow_runtime.record_state_events(
+            events[0].state.session_id
+            if isinstance(events[0].state, ExecutionState)
+            else str(events[0].state["session_id"]),
+            events,
         )
 
     @staticmethod
@@ -451,26 +478,37 @@ class Flow:
                     logger.debug(f"Flow {self.flow_id}: executing node '{node_id}' (type={node_type})")
 
                 superstep_base_state = self._clone_state(state)
-                superstep_event = await self._checkpoint_state(
-                    superstep_base_state,
-                    event_type=WorkflowEventType.superstep_started,
-                    payload=SuperstepStartedPayload(current_nodes=current_nodes),
-                )
+                schedule_specs = [
+                    WorkflowStateEventSpec(
+                        state=superstep_base_state,
+                        event_type=WorkflowEventType.superstep_started,
+                        payload=SuperstepStartedPayload(current_nodes=current_nodes),
+                    )
+                ]
+                for node_id in current_nodes:
+                    node_type = self._node_type_from_config(self.nodes[node_id])
+                    schedule_specs.append(
+                        WorkflowStateEventSpec(
+                            state=superstep_base_state,
+                            event_type=WorkflowEventType.node_scheduled,
+                            payload=NodeScheduledPayload(
+                                node_id=node_id,
+                                node_type=node_type,
+                                current_nodes=current_nodes,
+                            ),
+                        )
+                    )
+                scheduled_events = await self._checkpoint_state_events(schedule_specs)
+                superstep_event = scheduled_events[0]
                 recover_sequence = self._event_sequence(superstep_event)
                 superstep_sequence = recover_sequence
                 execution_branch_id = self._event_execution_branch_id(superstep_event)
                 node_schedule_contexts: dict[str, tuple[str | None, int | None]] = {}
-                for node_id in current_nodes:
-                    node_type = self._node_type_from_config(self.nodes[node_id])
-                    scheduled_event = await self._checkpoint_state(
-                        superstep_base_state,
-                        event_type=WorkflowEventType.node_scheduled,
-                        payload=NodeScheduledPayload(
-                            node_id=node_id,
-                            node_type=node_type,
-                            current_nodes=current_nodes,
-                        ),
-                    )
+                for node_id, scheduled_event in zip(
+                    current_nodes,
+                    scheduled_events[1:],
+                    strict=True,
+                ):
                     scheduled_sequence = self._event_sequence(scheduled_event)
                     scheduled_branch_id = self._event_execution_branch_id(scheduled_event)
                     if scheduled_branch_id is not None:
@@ -539,6 +577,7 @@ class Flow:
                         if exc is None and result is not None
                     ]
                     successful_node_writes: list[NodeWriteRecordedPayload] = []
+                    completion_specs: list[WorkflowStateEventSpec] = []
                     for node_id, result in successful_results:
                         node_type = self._node_type_from_config(self.nodes[node_id])
                         state_delta = build_state_delta(superstep_base_state, result)
@@ -548,27 +587,35 @@ class Flow:
                             state_delta=state_delta,
                         )
                         successful_node_writes.append(write_payload)
-                        write_event = await self._checkpoint_state(
-                            superstep_base_state,
-                            event_type=WorkflowEventType.node_write_recorded,
-                            payload=write_payload,
+                        completion_specs.append(
+                            WorkflowStateEventSpec(
+                                state=superstep_base_state,
+                                event_type=WorkflowEventType.node_write_recorded,
+                                payload=write_payload,
+                            )
                         )
-                        write_branch_id = self._event_execution_branch_id(write_event)
-                        if write_branch_id is not None:
-                            execution_branch_id = write_branch_id
-                        recover_sequence = self._event_sequence(write_event) or recover_sequence
-                        completed_event = await self._checkpoint_state(
-                            superstep_base_state,
-                            event_type=WorkflowEventType.node_completed,
-                            payload=NodeCompletedPayload(
-                                node_id=node_id,
-                                node_type=node_type,
-                            ),
+                        completion_specs.append(
+                            WorkflowStateEventSpec(
+                                state=superstep_base_state,
+                                event_type=WorkflowEventType.node_completed,
+                                payload=NodeCompletedPayload(
+                                    node_id=node_id,
+                                    node_type=node_type,
+                                ),
+                            )
                         )
-                        completed_branch_id = self._event_execution_branch_id(completed_event)
-                        if completed_branch_id is not None:
-                            execution_branch_id = completed_branch_id
-                        recover_sequence = self._event_sequence(completed_event) or recover_sequence
+                    completion_events = await self._checkpoint_state_events(
+                        completion_specs
+                    )
+                    for completion_event in completion_events:
+                        completion_branch_id = self._event_execution_branch_id(
+                            completion_event
+                        )
+                        if completion_branch_id is not None:
+                            execution_branch_id = completion_branch_id
+                        recover_sequence = (
+                            self._event_sequence(completion_event) or recover_sequence
+                        )
 
                     result_states = [result for _, result in successful_results]
 
@@ -682,47 +729,57 @@ class Flow:
                         await self._raise_if_premature_completion(current_nodes, state)
                         logger.debug(f"Flow {self.flow_id}: completed")
                         state.current_nodes = []
-                        _ = await self._checkpoint_state(
-                            state,
-                            event_type=WorkflowEventType.superstep_committed,
-                            payload=SuperstepCommittedPayload(
-                                completed_nodes=current_nodes,
-                                next_nodes=[],
-                            ),
+                        _ = await self._checkpoint_state_events(
+                            [
+                                WorkflowStateEventSpec(
+                                    state=state,
+                                    event_type=WorkflowEventType.superstep_committed,
+                                    payload=SuperstepCommittedPayload(
+                                        completed_nodes=current_nodes,
+                                        next_nodes=[],
+                                    ),
+                                )
+                            ]
                         )
                         return state
 
+                    transition_specs: list[WorkflowStateEventSpec] = []
                     for edge_idx, from_n, to_n in edge_activations:
                         await emitter.emit_edge_executed(edge_idx, from_n, to_n)
-                        _ = await self._checkpoint_state(
-                            superstep_base_state,
-                            event_type=WorkflowEventType.edge_activated,
-                            payload=EdgeActivatedPayload(
-                                edge_index=edge_idx,
-                                from_node=from_n,
-                                to_node=to_n,
-                            ),
+                        transition_specs.append(
+                            WorkflowStateEventSpec(
+                                state=superstep_base_state,
+                                event_type=WorkflowEventType.edge_activated,
+                                payload=EdgeActivatedPayload(
+                                    edge_index=edge_idx,
+                                    from_node=from_n,
+                                    to_node=to_n,
+                                ),
+                            )
                         )
 
                     completed_nodes = list(current_nodes)
                     current_nodes = list(next_nodes)
                     state.current_nodes = current_nodes
-                    _ = await self._checkpoint_state(
-                        state,
-                        event_type=WorkflowEventType.superstep_committed,
-                        payload=SuperstepCommittedPayload(
-                            completed_nodes=completed_nodes,
-                            next_nodes=current_nodes,
-                            edge_activations=[
-                                EdgeActivatedPayload(
-                                    edge_index=edge_idx,
-                                    from_node=from_n,
-                                    to_node=to_n,
-                                )
-                                for edge_idx, from_n, to_n in edge_activations
-                            ],
-                        ),
+                    transition_specs.append(
+                        WorkflowStateEventSpec(
+                            state=state,
+                            event_type=WorkflowEventType.superstep_committed,
+                            payload=SuperstepCommittedPayload(
+                                completed_nodes=completed_nodes,
+                                next_nodes=current_nodes,
+                                edge_activations=[
+                                    EdgeActivatedPayload(
+                                        edge_index=edge_idx,
+                                        from_node=from_n,
+                                        to_node=to_n,
+                                    )
+                                    for edge_idx, from_n, to_n in edge_activations
+                                ],
+                            ),
+                        )
                     )
+                    _ = await self._checkpoint_state_events(transition_specs)
                 except EdgeConditionError as ece:
                     await self._emit_edge_condition_error_artifact(emitter, ece)
                     raise ece.original from ece
@@ -761,19 +818,23 @@ class Flow:
                     "execution_exceptions",
                 ):
                     continue
-                if should_skip_field_on_user_returned_state_copy(field):
+                if should_skip_field_on_runtime_node_state_merge(field):
                     continue
                 value = result[field]
                 original_value = original_state[field]
-                if value is not None or value != original_value:
-                    merged[field] = value
+                if value == original_value:
+                    continue
+                if field == "variables":
+                    merged.variables = {**merged.variables, **result.variables}
+                    continue
+                merged[field] = value
 
             extra = result.json_extra()
             original_extra = original_state.json_extra()
             for key, value in extra.items():
-                if should_skip_field_on_user_returned_state_copy(key):
+                if should_skip_field_on_runtime_node_state_merge(key):
                     continue
-                if value is not None or original_extra.get(key) != value:
+                if key not in original_extra or original_extra[key] != value:
                     merged[key] = value
 
         self._merge_join_arrived_preds(merged, results)

@@ -15,6 +15,7 @@ import pytest_asyncio
 
 from apps.flows.src.container import get_container
 from core.state import ExecutionState
+from tests.flows.durable_runtime_harness import run_flow
 
 
 @pytest.mark.real_taskiq
@@ -29,7 +30,7 @@ class TestInterruptE2E:
         return flow
 
     @pytest.mark.asyncio
-    async def test_simple_ask_user_interrupt(self, agent_flow, mock_llm_with_queue):
+    async def test_simple_ask_user_interrupt(self, agent_flow, mock_llm_with_queue, unique_id):
         """
         Простой interrupt от ask_user tool.
 
@@ -45,25 +46,26 @@ class TestInterruptE2E:
                 "Приятно познакомиться, Иван!",
             ]
         )
+        context_id = f"e2e-context-1-{unique_id}"
         state = ExecutionState(
-            task_id="e2e-test-1",
-            context_id="e2e-context",
+            task_id=f"e2e-test-1-{unique_id}",
+            context_id=context_id,
             user_id="test-user",
-            session_id="e2e-agent:e2e-context",
+            session_id=f"{agent_flow.flow_id}:{context_id}",
             content="Привет",
         )
-        result = await agent_flow.run(state)
+        result = await run_flow(container=agent_flow.container, flow=agent_flow, state=state)
         assert result.interrupt is not None, "Должен быть interrupt"
         assert "зовут" in result.interrupt.question.lower()
         assert len(result.interrupt_path) > 0, "interrupt_path не должен быть пустым"
         result.content = "Иван"
-        final_result = await agent_flow.run(result)
+        final_result = await run_flow(container=agent_flow.container, flow=agent_flow, state=result)
         assert final_result.interrupt is None, "После resume interrupt должен быть None"
         assert final_result.response is not None, "Должен быть response"
         assert "иван" in final_result.response.lower()
 
     @pytest.mark.asyncio
-    async def test_subagent_interrupt_and_resume(self, agent_flow, mock_llm_with_queue):
+    async def test_subagent_interrupt_and_resume(self, agent_flow, mock_llm_with_queue, unique_id):
         """
         Interrupt в субагенте (llm_node как tool).
 
@@ -87,14 +89,15 @@ class TestInterruptE2E:
                 "Рекомендую магазин на Тверской!",
             ]
         )
+        context_id = f"e2e-context-2-{unique_id}"
         state = ExecutionState(
-            task_id="e2e-test-2",
-            context_id="e2e-context",
+            task_id=f"e2e-test-2-{unique_id}",
+            context_id=context_id,
             user_id="test-user",
-            session_id="e2e-agent:e2e-context",
+            session_id=f"{agent_flow.flow_id}:{context_id}",
             content="где купить цветы",
         )
-        result = await agent_flow.run(state)
+        result = await run_flow(container=agent_flow.container, flow=agent_flow, state=state)
         assert result.interrupt is not None, "Должен быть interrupt от субагента"
         assert "город" in result.interrupt.question.lower()
         assert "example_subflow" in result.nested_states, (
@@ -104,7 +107,7 @@ class TestInterruptE2E:
             f"interrupt_path должен содержать [subagent, ask_user]: {result.interrupt_path}"
         )
         result.content = "москва"
-        final_result = await agent_flow.run(result)
+        final_result = await run_flow(container=agent_flow.container, flow=agent_flow, state=result)
         assert final_result.interrupt is None, "После resume interrupt должен быть None"
         assert final_result.response is not None, "Должен быть response"
         subagent_state = final_result.nested_states.get("example_subflow")
@@ -112,7 +115,9 @@ class TestInterruptE2E:
         assert len(subagent_state.messages) > 0, "Субагент должен иметь историю сообщений"
 
     @pytest.mark.asyncio
-    async def test_multiple_interrupts_preserve_history(self, agent_flow, mock_llm_with_queue):
+    async def test_multiple_interrupts_preserve_history(
+        self, agent_flow, mock_llm_with_queue, unique_id
+    ):
         """
         Множественные interrupts сохраняют историю.
 
@@ -136,18 +141,19 @@ class TestInterruptE2E:
                 "Рекомендую магазин в Раменках!",
             ]
         )
+        context_id = f"e2e-context-3-{unique_id}"
         state = ExecutionState(
-            task_id="e2e-test-3",
-            context_id="e2e-context",
+            task_id=f"e2e-test-3-{unique_id}",
+            context_id=context_id,
             user_id="test-user",
-            session_id="e2e-agent:e2e-context",
+            session_id=f"{agent_flow.flow_id}:{context_id}",
             content="найти цветочный магазин",
         )
-        result1 = await agent_flow.run(state)
+        result1 = await run_flow(container=agent_flow.container, flow=agent_flow, state=state)
         assert result1.interrupt is not None
         assert "город" in result1.interrupt.question.lower()
         result1.content = "москва"
-        result2 = await agent_flow.run(result1)
+        result2 = await run_flow(container=agent_flow.container, flow=agent_flow, state=result1)
         assert result2.interrupt is not None
         assert "район" in result2.interrupt.question.lower()
         subagent_state = result2.nested_states.get("example_subflow")
@@ -156,7 +162,7 @@ class TestInterruptE2E:
             f"Должно быть минимум 4 сообщения после первого resume: {len(subagent_state.messages)}"
         )
         result2.content = "раменки"
-        result3 = await agent_flow.run(result2)
+        result3 = await run_flow(container=agent_flow.container, flow=agent_flow, state=result2)
         assert result3.interrupt is None
         assert result3.response is not None
         final_subagent = result3.nested_states.get("example_subflow")
@@ -166,7 +172,7 @@ class TestInterruptE2E:
         )
 
     @pytest.mark.asyncio
-    async def test_interrupt_path_correctness(self, agent_flow, mock_llm_with_queue):
+    async def test_interrupt_path_correctness(self, agent_flow, mock_llm_with_queue, unique_id):
         """
         Проверка правильности interrupt_path.
 
@@ -180,14 +186,15 @@ class TestInterruptE2E:
                 {"type": "tool_call", "tool": "ask_user", "args": {"question": "test?"}},
             ]
         )
+        context_id = f"e2e-context-4-{unique_id}"
         state = ExecutionState(
-            task_id="e2e-test-4",
-            context_id="e2e-context",
+            task_id=f"e2e-test-4-{unique_id}",
+            context_id=context_id,
             user_id="test-user",
-            session_id="e2e-agent:e2e-context",
+            session_id=f"{agent_flow.flow_id}:{context_id}",
             content="test",
         )
-        result = await agent_flow.run(state)
+        result = await run_flow(container=agent_flow.container, flow=agent_flow, state=state)
         assert result.interrupt is not None
         assert len(result.interrupt_path) >= 2, (
             f"interrupt_path должен содержать минимум 2 элемента: {result.interrupt_path}"
@@ -202,7 +209,9 @@ class TestInterruptE2E:
         assert second.node_id == "ask_user", f"ID должен быть ask_user: {second.node_id}"
 
     @pytest.mark.asyncio
-    async def test_nested_states_preserved_through_resume(self, agent_flow, mock_llm_with_queue):
+    async def test_nested_states_preserved_through_resume(
+        self, agent_flow, mock_llm_with_queue, unique_id
+    ):
         """
         nested_states сохраняются через весь цикл interrupt/resume.
         """
@@ -214,18 +223,19 @@ class TestInterruptE2E:
                 "Ответ готов!",
             ]
         )
+        context_id = f"e2e-context-5-{unique_id}"
         state = ExecutionState(
-            task_id="e2e-test-5",
-            context_id="e2e-context",
+            task_id=f"e2e-test-5-{unique_id}",
+            context_id=context_id,
             user_id="test-user",
-            session_id="e2e-agent:e2e-context",
+            session_id=f"{agent_flow.flow_id}:{context_id}",
             content="тест",
         )
-        result = await agent_flow.run(state)
+        result = await run_flow(container=agent_flow.container, flow=agent_flow, state=state)
         assert "example_subflow" in result.nested_states
         initial_messages_count = len(result.nested_states["example_subflow"].messages)
         result.content = "Тест"
-        final_result = await agent_flow.run(result)
+        final_result = await run_flow(container=agent_flow.container, flow=agent_flow, state=result)
         assert "example_subflow" in final_result.nested_states
         final_messages_count = len(final_result.nested_states["example_subflow"].messages)
         assert final_messages_count > initial_messages_count, (
@@ -308,7 +318,7 @@ class TestSubflowInterruptE2E:
             session_id=f"{parent_agent_with_subflow}:subflow-context",
             content="start",
         )
-        result = await flow.run(state)
+        result = await run_flow(container=container, flow=flow, state=state)
         assert result.interrupt is not None, "Должен быть interrupt от CodeNode"
         assert "зовут" in result.interrupt.question.lower(), (
             f"Вопрос должен содержать 'зовут': {result.interrupt.question}"
@@ -339,17 +349,14 @@ class TestSubflowInterruptE2E:
             session_id=f"{parent_agent_with_subflow}:subflow-context-2",
             content="start",
         )
-        result = await flow.run(state)
+        result = await run_flow(container=container, flow=flow, state=state)
         assert result.interrupt is not None, "Должен быть interrupt"
         assert result.interrupt.question == "Как вас зовут?"
         result.content = "Иван"
-        final_result = await flow.run(result)
+        final_result = await run_flow(container=container, flow=flow, state=result)
         assert final_result.interrupt is None, "После resume interrupt должен быть None"
         assert final_result.response is not None, "Должен быть response"
-        assert (
-            hasattr(final_result, "received_answer")
-            or getattr(final_result, "received_answer", None) == "Иван"
-        ), "CodeNode должна была записать received_answer='Иван'"
+        assert final_result.json_extra()["received_answer"] == "Иван"
         assert "иван" in final_result.response.lower(), (
             f"Response должен содержать 'Иван', получили: {final_result.response}"
         )
@@ -424,6 +431,16 @@ class TestSubflowInterruptE2E:
                             "type": "llm_node",
                             "name": "Child Agent",
                             "description": "Агент для приветствия пользователей",
+                            "parameters_schema": {
+                                "type": "object",
+                                "properties": {
+                                    "query": {
+                                        "type": "string",
+                                        "description": "Запрос для дочернего агента",
+                                    }
+                                },
+                                "required": ["query"],
+                            },
                             "prompt": "Ты агент приветствия. Спроси имя используя ask_user.",
                             "tools": [
                                 {
@@ -476,7 +493,7 @@ class TestSubflowInterruptE2E:
             session_id=f"{parent_agent_with_react_subflow}:subflow-react-context",
             content="Привет",
         )
-        result = await flow.run(state)
+        result = await run_flow(container=container, flow=flow, state=state)
         assert result.interrupt is not None, "Должен быть interrupt от ask_user"
         assert "зовут" in result.interrupt.question.lower()
         assert len(result.interrupt_path) >= 2, (
@@ -520,12 +537,12 @@ class TestSubflowInterruptE2E:
             session_id=f"{parent_agent_with_react_subflow}:subflow-react-context-2",
             content="Привет",
         )
-        result = await flow.run(state)
+        result = await run_flow(container=container, flow=flow, state=state)
         assert result.interrupt is not None
         child_before = result.nested_states["child_agent"]
         messages_count_before = len(child_before.messages)
         result.content = "Иван"
-        final_result = await flow.run(result)
+        final_result = await run_flow(container=container, flow=flow, state=result)
         assert final_result.interrupt is None
         child_after = final_result.nested_states.get("child_agent")
         assert child_after is not None, "child_agent должен быть в nested_states"
@@ -535,7 +552,7 @@ class TestSubflowInterruptE2E:
         )
         found_answer = False
         for msg in child_after.messages:
-            text = get_message_text(msg) if hasattr(msg, "parts") else str(msg)
+            text = get_message_text(msg)
             if "Иван" in text or "иван" in text.lower():
                 found_answer = True
                 break
@@ -574,10 +591,10 @@ class TestSubflowInterruptE2E:
             session_id=f"{parent_agent_with_react_subflow}:subflow-multi-context",
             content="Регистрация",
         )
-        result1 = await flow.run(state)
+        result1 = await run_flow(container=container, flow=flow, state=state)
         assert result1.interrupt is not None
         result1.content = "Иван"
-        result2 = await flow.run(result1)
+        result2 = await run_flow(container=container, flow=flow, state=result1)
         assert result2.interrupt is not None
         child_state_after_first = result2.nested_states.get("child_agent")
         assert child_state_after_first is not None
@@ -585,7 +602,7 @@ class TestSubflowInterruptE2E:
         found_ivan = any(("Иван" in t or "иван" in t.lower() for t in messages_texts_1))
         assert found_ivan, f"'Иван' должен быть в messages после первого resume: {messages_texts_1}"
         result2.content = "Москва"
-        result3 = await flow.run(result2)
+        result3 = await run_flow(container=container, flow=flow, state=result2)
         assert result3.interrupt is None
         final_child = result3.nested_states.get("child_agent")
         assert final_child is not None

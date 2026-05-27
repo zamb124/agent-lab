@@ -198,6 +198,11 @@ export class LandingAbilities extends PlatformElement {
         `
     ];
 
+    constructor() {
+        super();
+        this._localeSel = this.select((s) => s.i18n.locale);
+    }
+
     connectedCallback() {
         super.connectedCallback();
     }
@@ -208,7 +213,7 @@ export class LandingAbilities extends PlatformElement {
 
     render() {
         const t = (key) => (this.t(key) || key);
-        const locale = (this.bus.getState().i18n.locale || 'ru');
+        const locale = (this._localeSel.value || 'ru');
         const flowsSrc = landFlowsAbilityUrl(locale);
         return html`
             <div class="abilities-container">
@@ -351,4 +356,3 @@ export class LandingAbilities extends PlatformElement {
 }
 
 customElements.define('landing-abilities', LandingAbilities);
-

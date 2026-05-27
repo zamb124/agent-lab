@@ -4,6 +4,7 @@
 Messages - это A2A типы.
 """
 
+import time
 from typing import List
 
 import pytest
@@ -50,9 +51,38 @@ def filter_messages_by_role(messages: List[Message], role: str) -> List[Message]
 
 
 from apps.flows.src.container import get_container  # noqa: E402
+from apps.flows.src.container_contracts import FlowRuntimeContainer  # noqa: E402
 from apps.flows.src.models import FlowConfig  # noqa: E402
+from apps.flows.src.runtime.flow import Flow  # noqa: E402
 from core.state import ExecutionState  # noqa: E402
-from tests.flows.durable_runtime_harness import run_node, workflow_state  # noqa: E402
+from tests.flows.durable_runtime_harness import run_flow, run_node, workflow_state  # noqa: E402
+
+
+def make_flow_state(
+    *,
+    flow_id: str,
+    content: str,
+    branch_id: str = "default",
+    unique_id: str | None = None,
+    **extra: object,
+) -> ExecutionState:
+    return workflow_state(
+        flow_id=flow_id,
+        unique_id=unique_id or str(time.time_ns()),
+        branch_id=branch_id,
+        content=content,
+        **extra,
+    )
+
+
+async def run_loaded_flow(
+    *,
+    container: FlowRuntimeContainer,
+    flow: Flow | None,
+    state: ExecutionState,
+) -> ExecutionState:
+    assert flow is not None
+    return await run_flow(container=container, flow=flow, state=state)
 
 
 class TestExampleReactAgent:
@@ -523,11 +553,9 @@ class TestExampleGraphAgent:
         """Formatter функция работает."""
         from apps.flows.bundles.example_graph.nodes import format_response
 
-        state = ExecutionState(
-            task_id="test-task",
-            context_id="test-context",
-            user_id="test-user",
-            session_id="test-agent:test-context",
+        state = make_flow_state(
+            flow_id="example_graph",
+            content="",
             route="order",
             response="Ваш заказ готов",
         )
@@ -603,14 +631,8 @@ class TestExampleReactE2E:
         container = get_container()
         flow = await container.flow_factory.get_flow("example_react")
 
-        state = ExecutionState(
-            task_id="test-task",
-            context_id="test-context",
-            user_id="test-user",
-            session_id="test-agent:test-context",
-            content="Привет",
-        )
-        result = await flow.run(state)
+        state = make_flow_state(flow_id="example_react", content="Привет")
+        result = await run_loaded_flow(container=container, flow=flow, state=state)
 
         assert "response" in result
         assert result.current_nodes == []  # Agent завершен
@@ -629,15 +651,12 @@ class TestExampleReactE2E:
         container = get_container()
         flow = await container.flow_factory.get_flow("example_react")
 
-        context_id = f"calc-{unique_id}"
-        state = ExecutionState(
-            task_id=f"test-task-{unique_id}",
-            context_id=context_id,
-            user_id=f"test-user-{unique_id}",
-            session_id=f"example_react:{context_id}",
+        state = make_flow_state(
+            flow_id="example_react",
+            unique_id=f"calc-{unique_id}",
             content="Сколько будет 25 умножить на 4?",
         )
-        result = await flow.run(state)
+        result = await run_loaded_flow(container=container, flow=flow, state=state)
 
         assert "response" in result
         assert "tool_results" in result.model_dump()
@@ -655,14 +674,8 @@ class TestExampleReactE2E:
         container = get_container()
         flow = await container.flow_factory.get_flow("example_react")
 
-        state = ExecutionState(
-            task_id="test-task",
-            context_id="test-context",
-            user_id="test-user",
-            session_id="test-agent:test-context",
-            content="Хочу познакомиться",
-        )
-        result = await flow.run(state)
+        state = make_flow_state(flow_id="example_react", content="Хочу познакомиться")
+        result = await run_loaded_flow(container=container, flow=flow, state=state)
 
         # Interrupt возвращается в state
         assert result.interrupt is not None
@@ -691,14 +704,8 @@ class TestExampleReactE2E:
         container = get_container()
         flow = await container.flow_factory.get_flow("example_react")
 
-        state = ExecutionState(
-            task_id="test-task",
-            context_id="test-context",
-            user_id="test-user",
-            session_id="test-agent:test-context",
-            content="Нужна информация о локации",
-        )
-        result = await flow.run(state)
+        state = make_flow_state(flow_id="example_react", content="Нужна информация о локации")
+        result = await run_loaded_flow(container=container, flow=flow, state=state)
 
         # Interrupt возвращается в state
         assert result.interrupt is not None
@@ -715,14 +722,12 @@ class TestExampleReactE2E:
         # Проверяем переменные
         assert flow.variables.get("max_response_length") == "200"
 
-        state = ExecutionState(
-            task_id="test-task",
-            context_id="test-context",
-            user_id="test-user",
-            session_id="test-agent:test-context",
+        state = make_flow_state(
+            flow_id="example_react",
+            branch_id="concise",
             content="Что-нибудь",
         )
-        result = await flow.run(state)
+        result = await run_loaded_flow(container=container, flow=flow, state=state)
 
         assert "response" in result
         # Variables доступны в state
@@ -738,14 +743,12 @@ class TestExampleReactE2E:
 
         assert flow.variables.get("max_response_length") == "2000"
 
-        state = ExecutionState(
-            task_id="test-task",
-            context_id="test-context",
-            user_id="test-user",
-            session_id="test-agent:test-context",
+        state = make_flow_state(
+            flow_id="example_react",
+            branch_id="detailed",
             content="Расскажи подробно",
         )
-        result = await flow.run(state)
+        result = await run_loaded_flow(container=container, flow=flow, state=state)
 
         assert result.variables["max_response_length"] == "2000"
 
@@ -768,16 +771,14 @@ class TestExampleReactE2E:
         # Entry изменен на direct_subflow
         assert flow.entry == "direct_subflow"
 
-        state = ExecutionState(
-            task_id="test-task",
-            context_id="test-context",
-            user_id="test-user",
-            session_id="test-agent:test-context",
+        state = make_flow_state(
+            flow_id="example_react",
+            branch_id="direct_mode",
             content="Начать",
         )
 
         # Субагент сразу задает вопрос через interrupt (сохраняется в state)
-        result = await flow.run(state)
+        result = await run_loaded_flow(container=container, flow=flow, state=state)
 
         assert result.interrupt is not None
         assert "узнать" in result.interrupt.question.lower()
@@ -790,14 +791,12 @@ class TestExampleReactE2E:
         container = get_container()
         flow = await container.flow_factory.get_flow("example_react", branch_id="no_subflow")
 
-        state = ExecutionState(
-            task_id="test-task",
-            context_id="test-context",
-            user_id="test-user",
-            session_id="test-agent:test-context",
+        state = make_flow_state(
+            flow_id="example_react",
+            branch_id="no_subflow",
             content="Вопрос",
         )
-        result = await flow.run(state)
+        result = await run_loaded_flow(container=container, flow=flow, state=state)
 
         assert "response" in result
         # Субагент не использовался
@@ -815,14 +814,8 @@ class TestExampleGraphE2E:
         container = get_container()
         flow = await container.flow_factory.get_flow("example_graph")
 
-        state = ExecutionState(
-            task_id="test-task",
-            context_id="test-context",
-            user_id="test-user",
-            session_id="test-agent:test-context",
-            content="Где мой заказ?",
-        )
-        result = await flow.run(state)
+        state = make_flow_state(flow_id="example_graph", content="Где мой заказ?")
+        result = await run_loaded_flow(container=container, flow=flow, state=state)
 
         # Classifier определил route = order
         assert result.get("route") == "order"
@@ -840,14 +833,8 @@ class TestExampleGraphE2E:
         container = get_container()
         flow = await container.flow_factory.get_flow("example_graph")
 
-        state = ExecutionState(
-            task_id="test-task",
-            context_id="test-context",
-            user_id="test-user",
-            session_id="test-agent:test-context",
-            content="Хочу подать жалобу на сервис",
-        )
-        result = await flow.run(state)
+        state = make_flow_state(flow_id="example_graph", content="Хочу подать жалобу на сервис")
+        result = await run_loaded_flow(container=container, flow=flow, state=state)
 
         assert result.get("route") == "complaint"
         assert "[COMPLAINT]" in result.get("response", "")
@@ -861,14 +848,8 @@ class TestExampleGraphE2E:
         container = get_container()
         flow = await container.flow_factory.get_flow("example_graph")
 
-        state = ExecutionState(
-            task_id="test-task",
-            context_id="test-context",
-            user_id="test-user",
-            session_id="test-agent:test-context",
-            content="Какой у вас график работы?",
-        )
-        result = await flow.run(state)
+        state = make_flow_state(flow_id="example_graph", content="Какой у вас график работы?")
+        result = await run_loaded_flow(container=container, flow=flow, state=state)
 
         assert result.get("route") == "general"
         assert "[GENERAL]" in result.get("response", "")
@@ -890,14 +871,8 @@ class TestExampleGraphE2E:
         container = get_container()
         flow = await container.flow_factory.get_flow("example_graph")
 
-        state = ExecutionState(
-            task_id="test-task",
-            context_id="test-context",
-            user_id="test-user",
-            session_id="test-agent:test-context",
-            content="Проверить статус заказа",
-        )
-        result = await flow.run(state)
+        state = make_flow_state(flow_id="example_graph", content="Проверить статус заказа")
+        result = await run_loaded_flow(container=container, flow=flow, state=state)
 
         assert result.interrupt is not None
         assert "заказ" in result.interrupt.question.lower()
@@ -910,14 +885,12 @@ class TestExampleGraphE2E:
         container = get_container()
         flow = await container.flow_factory.get_flow("example_graph", branch_id="fast_track")
 
-        state = ExecutionState(
-            task_id="test-task",
-            context_id="test-context",
-            user_id="test-user",
-            session_id="test-agent:test-context",
+        state = make_flow_state(
+            flow_id="example_graph",
+            branch_id="fast_track",
             content="Срочный вопрос про заказ",
         )
-        result = await flow.run(state)
+        result = await run_loaded_flow(container=container, flow=flow, state=state)
 
         assert result.get("route") == "order"
         # Formatter пропущен - нет префикса и processed
@@ -933,14 +906,12 @@ class TestExampleGraphE2E:
         flow = await container.flow_factory.get_flow("example_graph", branch_id="orders_only")
 
         # Жалоба идет в general (так как complaint route убран)
-        state = ExecutionState(
-            task_id="test-task",
-            context_id="test-context",
-            user_id="test-user",
-            session_id="test-agent:test-context",
+        state = make_flow_state(
+            flow_id="example_graph",
+            branch_id="orders_only",
             content="Хочу подать жалобу",
         )
-        result = await flow.run(state)
+        result = await run_loaded_flow(container=container, flow=flow, state=state)
 
         # С этим skill жалобы идут в general
         assert result.get("route") == "general"
@@ -953,14 +924,8 @@ class TestExampleGraphE2E:
         container = get_container()
         flow = await container.flow_factory.get_flow("example_graph")
 
-        state = ExecutionState(
-            task_id="test-task",
-            context_id="test-context",
-            user_id="test-user",
-            session_id="test-agent:test-context",
-            content="Статус order",
-        )
-        result = await flow.run(state)
+        state = make_flow_state(flow_id="example_graph", content="Статус order")
+        result = await run_loaded_flow(container=container, flow=flow, state=state)
 
         # Variables переданы в state
         assert result.variables.get("order_prefix") == "ORD-"
@@ -982,14 +947,8 @@ class TestExampleGraphE2E:
         container = get_container()
         flow = await container.flow_factory.get_flow("example_graph")
 
-        state = ExecutionState(
-            task_id="test-task",
-            context_id="test-context",
-            user_id="test-user",
-            session_id="test-agent:test-context",
-            content="У меня серьезная жалоба",
-        )
-        result = await flow.run(state)
+        state = make_flow_state(flow_id="example_graph", content="У меня серьезная жалоба")
+        result = await run_loaded_flow(container=container, flow=flow, state=state)
 
         assert result.interrupt is not None
         assert "проблем" in result.interrupt.question.lower()
@@ -1010,14 +969,8 @@ class TestExampleGraphE2E:
         flow.variables["company_name"] = "MetadataCompany"
         flow.variables["max_response_length"] = "300"
 
-        state = ExecutionState(
-            task_id="test-task",
-            context_id="test-context",
-            user_id="test-user",
-            session_id="test-agent:test-context",
-            content="Тест",
-        )
-        result = await flow.run(state)
+        state = make_flow_state(flow_id="example_react", content="Тест")
+        result = await run_loaded_flow(container=container, flow=flow, state=state)
 
         assert result.variables["company_name"] == "MetadataCompany"
         assert result.variables["max_response_length"] == "300"
@@ -1040,14 +993,8 @@ class TestExampleGraphE2E:
             },
         }
 
-        state = ExecutionState(
-            task_id="test-task",
-            context_id="test-context",
-            user_id="test-user",
-            session_id="test-agent:test-context",
-            content="Тест",
-        )
-        result = await flow.run(state)
+        state = make_flow_state(flow_id="example_react", content="Тест")
+        result = await run_loaded_flow(container=container, flow=flow, state=state)
 
         assert isinstance(result.variables["user_config"], dict)
         assert result.variables["user_config"]["name"] == "TestUser"
@@ -1065,14 +1012,8 @@ class TestExampleFlowsEdgeCases:
         container = get_container()
         flow = await container.flow_factory.get_flow("example_react")
 
-        state = ExecutionState(
-            task_id="test-task",
-            context_id="test-context",
-            user_id="test-user",
-            session_id="test-agent:test-context",
-            content="",
-        )
-        result = await flow.run(state)
+        state = make_flow_state(flow_id="example_react", content="")
+        result = await run_loaded_flow(container=container, flow=flow, state=state)
 
         assert "response" in result
 
@@ -1087,14 +1028,8 @@ class TestExampleFlowsEdgeCases:
         # Используется базовый entry
         assert flow.entry == "main"
 
-        state = ExecutionState(
-            task_id="test-task",
-            context_id="test-context",
-            user_id="test-user",
-            session_id="test-agent:test-context",
-            content="Тест",
-        )
-        result = await flow.run(state)
+        state = make_flow_state(flow_id="example_react", content="Тест")
+        result = await run_loaded_flow(container=container, flow=flow, state=state)
 
         assert "response" in result
 
@@ -1112,15 +1047,12 @@ class TestExampleFlowsEdgeCases:
         container = get_container()
         flow = await container.flow_factory.get_flow("example_react")
 
-        context_id = f"multi-tool-{unique_id}"
-        state = ExecutionState(
-            task_id=f"test-task-{unique_id}",
-            context_id=context_id,
-            user_id=f"test-user-{unique_id}",
-            session_id=f"example_react:{context_id}",
+        state = make_flow_state(
+            flow_id="example_react",
+            unique_id=f"multi-tool-{unique_id}",
             content="Посчитай 10+5, потом умножь на 2",
         )
-        result = await flow.run(state)
+        result = await run_loaded_flow(container=container, flow=flow, state=state)
 
         assert "response" in result
         assert "calculator" in result.tool_results
@@ -1133,15 +1065,12 @@ class TestExampleFlowsEdgeCases:
         container = get_container()
         flow = await container.flow_factory.get_flow("example_graph")
 
-        state = ExecutionState(
-            task_id="test-task",
-            context_id="test-context",
-            user_id="test-user",
-            session_id="test-agent:test-context",
+        state = make_flow_state(
+            flow_id="example_graph",
             content="Мой заказ",
             custom_field="preserved_value",
         )
-        result = await flow.run(state)
+        result = await run_loaded_flow(container=container, flow=flow, state=state)
 
         # Custom field сохранен
         assert result.get("custom_field") == "preserved_value"
@@ -1189,14 +1118,8 @@ class TestSubagentInterruptResume:
         container = get_container()
         flow = await container.flow_factory.get_flow("example_react")
 
-        state = ExecutionState(
-            task_id="test-task",
-            context_id="test-context",
-            user_id="test-user",
-            session_id="test-agent:test-context",
-            content="где купить цветы",
-        )
-        result = await flow.run(state)
+        state = make_flow_state(flow_id="example_react", content="где купить цветы")
+        result = await run_loaded_flow(container=container, flow=flow, state=state)
 
         # Agent возвращает state с interrupt
         assert result.interrupt is not None
@@ -1241,14 +1164,8 @@ class TestSubagentInterruptResume:
         flow = await container.flow_factory.get_flow("example_react")
 
         # === ПЕРВЫЙ ЗАПРОС ===
-        state = ExecutionState(
-            task_id="test-task",
-            context_id="test-context",
-            user_id="test-user",
-            session_id="test-agent:test-context",
-            content="где купить цветы",
-        )
-        result = await flow.run(state)
+        state = make_flow_state(flow_id="example_react", content="где купить цветы")
+        result = await run_loaded_flow(container=container, flow=flow, state=state)
 
         # Проверяем состояние после interrupt
         assert result.interrupt is not None
@@ -1256,7 +1173,7 @@ class TestSubagentInterruptResume:
 
         # === RESUME ===
         result.content = "москва"
-        final_result = await flow.run(result)
+        final_result = await run_loaded_flow(container=container, flow=flow, state=result)
 
         # Проверяем что flow завершился с ответом
         assert final_result.get("response") is not None, "Должен быть финальный ответ"
@@ -1308,20 +1225,14 @@ class TestSubagentInterruptResume:
         flow = await container.flow_factory.get_flow("example_react")
 
         # === ПЕРВЫЙ ЗАПРОС ===
-        state = ExecutionState(
-            task_id="test-task",
-            context_id="test-context",
-            user_id="test-user",
-            session_id="test-agent:test-context",
-            content="где купить цветы",
-        )
-        result1 = await flow.run(state)
+        state = make_flow_state(flow_id="example_react", content="где купить цветы")
+        result1 = await run_loaded_flow(container=container, flow=flow, state=state)
         assert result1.interrupt is not None
         assert "город" in result1.interrupt.question.lower()
 
         # === RESUME 1 ===
         result1.content = "москва"
-        result2 = await flow.run(result1)
+        result2 = await run_loaded_flow(container=container, flow=flow, state=result1)
         assert result2.interrupt is not None
         assert "район" in result2.interrupt.question.lower()
 
@@ -1339,7 +1250,7 @@ class TestSubagentInterruptResume:
 
         # === RESUME 2 ===
         result2.content = "раменки"
-        result3 = await flow.run(result2)
+        result3 = await run_loaded_flow(container=container, flow=flow, state=result2)
 
         # Финальная проверка истории через nested_states
         nested_states3 = result3.nested_states
@@ -1386,18 +1297,12 @@ class TestSubagentInterruptResume:
         container = get_container()
         flow = await container.flow_factory.get_flow("example_react")
 
-        state = ExecutionState(
-            task_id="test-task",
-            context_id="test-context",
-            user_id="test-user",
-            session_id="test-agent:test-context",
-            content="где купить цветы",
-        )
-        result = await flow.run(state)
+        state = make_flow_state(flow_id="example_react", content="где купить цветы")
+        result = await run_loaded_flow(container=container, flow=flow, state=state)
 
         # Resume
         result.content = "москва"
-        final_result = await flow.run(result)
+        final_result = await run_loaded_flow(container=container, flow=flow, state=result)
 
         # Проверяем что messages главного агента НЕ содержат "москва" как user message
         # (ответ должен идти в субагента, не в главного)
@@ -1450,14 +1355,8 @@ class TestSubagentInterruptResume:
         flow = await container.flow_factory.get_flow("example_react")
 
         # === ПЕРВЫЙ ЗАПРОС ===
-        state = ExecutionState(
-            task_id="test-task",
-            context_id="test-context",
-            user_id="test-user",
-            session_id="test-agent:test-context",
-            content="найти цветочный магазин",
-        )
-        result = await flow.run(state)
+        state = make_flow_state(flow_id="example_react", content="найти цветочный магазин")
+        result = await run_loaded_flow(container=container, flow=flow, state=state)
 
         # ПРОВЕРКА 1: interrupt_path сохранён
         assert len(result.interrupt_path) > 0, (
@@ -1477,7 +1376,7 @@ class TestSubagentInterruptResume:
 
         # === RESUME С ОТВЕТОМ "москва" ===
         result.content = "москва"
-        final_result = await flow.run(result)
+        final_result = await run_loaded_flow(container=container, flow=flow, state=result)
 
         # ПРОВЕРКА 4: interrupt_path очищен
         assert len(final_result.interrupt_path) == 0, (

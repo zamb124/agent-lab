@@ -147,7 +147,7 @@ def flows_service():
 
 @pytest.fixture(scope="session")
 def capability_gateway_service(setup_database_before_tests, flows_service):
-    """Trusted capability gateway как реальный HTTP сервер на порту 9016."""
+    """Trusted capability gateway как реальный HTTP-сервер на порту 9016."""
     _ = setup_database_before_tests, flows_service
     manager = SessionServerManager(
         name="CapabilityGateway",
@@ -255,13 +255,13 @@ def rag_service():
     RAG сервис как реальный HTTP сервер на порту 9002.
 
     Используется для:
-    - Semantic search через pgvector
-    - Document processing
-    - Namespace management
+    - Семантический поиск через pgvector
+    - Обработка документов
+    - Управление namespace
 
     Зависимости:
-    - PostgreSQL (порт 54322) - для document_processing_status, namespaces, pgvector embeddings
-    - MinIO (порт 19002) - для хранения файлов
+    - PostgreSQL (порт 54322) — для document_processing_status, namespaces, pgvector embeddings
+    - MinIO (порт 19002) — для хранения файлов
     - RAGWorker (должен быть запущен отдельно)
     """
     manager = SessionServerManager(
@@ -304,10 +304,10 @@ def crm_service(flows_service, rag_service, voice_service):
     CRM сервис как реальный HTTP сервер на порту 9003.
 
     Используется для:
-    - Entity management (contacts, notes, tasks)
-    - Relationship management
-    - Entity types и schemas
-    - Attachments (через RAG service)
+    - Управление сущностями (контакты, заметки, задачи)
+    - Управление связями
+    - Типы сущностей и схемы
+    - Вложения (через RAG-сервис)
 
     Зависимости:
     - PostgreSQL (порт 54322) - для entity_types, relationships, relationship_types, entities через pgvector
@@ -336,12 +336,12 @@ def frontend_service():
     Frontend сервис как реальный HTTP сервер на порту 9004.
 
     Используется для:
-    - Web UI
-    - Static файлы
-    - Frontend API endpoints
+    - Веб-интерфейс
+    - Статические файлы
+    - API-эндпоинты frontend
 
     Зависимости:
-    - Agents service (порт 9001) - для backend API
+    - Agents-сервис (порт 9001) — для backend API
     """
     manager = SessionServerManager(
         name="Frontend",
@@ -466,7 +466,7 @@ def all_services(
     4. Frontend (9004) - зависит от Agents
     5. Sync (9005) - зависит от PostgreSQL и Redis
     6. Office (9008) - зависит от PostgreSQL, Redis, MinIO и OnlyOffice Document Server
-    7. Search (9010) - MCP primary search
+    7. Search (9010) — основной MCP-поиск
     """
     return {
         "flows": "http://localhost:9001",

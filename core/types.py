@@ -39,6 +39,7 @@ if TYPE_CHECKING:
     )
     OtelAttributes: TypeAlias = Mapping[str, OtelAttributeValue]
     SqlParameterValue: TypeAlias = JsonValue | date | datetime | Decimal
+    TaskiqLabelValue: TypeAlias = str | int | float | bool | bytes
 else:
     JsonScalar: TypeAlias = str | int | float | bool | None
     JsonValue: TypeAlias = PydanticJsonValue
@@ -59,6 +60,7 @@ else:
     )
     OtelAttributes: TypeAlias = Mapping[str, OtelAttributeValue]
     SqlParameterValue: TypeAlias = JsonValue | date | datetime | Decimal
+    TaskiqLabelValue: TypeAlias = str | int | float | bool | bytes
 
 
 class ASGIScope(TypedDict, total=False):
@@ -141,6 +143,7 @@ _JSON_VALUE_ADAPTER: TypeAdapter[PydanticJsonValue] = TypeAdapter(PydanticJsonVa
 _JSON_OBJECT_ADAPTER: TypeAdapter[dict[str, PydanticJsonValue]] = TypeAdapter(dict[str, PydanticJsonValue])
 _JSON_ARRAY_ADAPTER: TypeAdapter[list[PydanticJsonValue]] = TypeAdapter(list[PydanticJsonValue])
 _ASGI_RECEIVE_MESSAGE_ADAPTER: TypeAdapter[ASGIReceiveMessage] = TypeAdapter(ASGIReceiveMessage)
+_TASKIQ_LABEL_VALUE_ADAPTER: TypeAdapter[TaskiqLabelValue] = TypeAdapter(TaskiqLabelValue)
 
 
 def require_json_value(value: object, field_name: str = "value") -> JsonValue:
@@ -181,6 +184,17 @@ def require_json_array(value: object, field_name: str = "value") -> JsonArray:
         return cast(JsonArray, _JSON_ARRAY_ADAPTER.validate_python(value))
     except ValidationError as exc:
         raise ValueError(f"{field_name} must be a JSON array") from exc
+
+
+def require_taskiq_label_value(
+    value: object,
+    field_name: str = "value",
+) -> TaskiqLabelValue:
+    """Проверить внешнее значение на совместимость с TaskIQ label."""
+    try:
+        return _TASKIQ_LABEL_VALUE_ADAPTER.validate_python(value, strict=True)
+    except ValidationError as exc:
+        raise ValueError(f"{field_name} must be a TaskIQ label value") from exc
 
 
 def parse_json_array(data: str | bytes, field_name: str = "value") -> JsonArray:

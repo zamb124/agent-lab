@@ -30,6 +30,7 @@ from core.types import JsonObject
 from tests.flows.durable_runtime_harness import run_flow
 
 MockLLMQueue = Callable[[list[JsonObject]], None]
+EMPTY_PARAMETERS_SCHEMA: JsonObject = {"type": "object", "properties": {}, "required": []}
 
 USER_FORGE_GUARD_FIELDS: tuple[str, ...] = (
     "task_id",
@@ -284,17 +285,25 @@ class TestLlmNodeRunnerParallelToolsFrozen:
 
         code_a = f"""
 async def run(args, state):
-    state.variables["vk_{unique_id}_a"] = "a"
+    state["variables"]["vk_{unique_id}_a"] = "a"
     return "a"
 """
         code_b = f"""
 async def run(args, state):
-    state.variables["vk_{unique_id}_b"] = "b"
+    state["variables"]["vk_{unique_id}_b"] = "b"
     return "b"
 """
 
-        t_a = CodeTool(tool_id=f"t_a_{unique_id}", code=code_a)
-        t_b = CodeTool(tool_id=f"t_b_{unique_id}", code=code_b)
+        t_a = CodeTool(
+            tool_id=f"t_a_{unique_id}",
+            code=code_a,
+            parameters_schema=EMPTY_PARAMETERS_SCHEMA,
+        )
+        t_b = CodeTool(
+            tool_id=f"t_b_{unique_id}",
+            code=code_b,
+            parameters_schema=EMPTY_PARAMETERS_SCHEMA,
+        )
 
         node_config = NodeConfig(
             node_id=f"agent_{unique_id}",
@@ -345,17 +354,25 @@ async def run(args, state):
 
         code_ok = f"""
 async def run(args, state):
-    state.variables["vk_{unique_id}_ok"] = 1
+    state["variables"]["vk_{unique_id}_ok"] = 1
     return "ok"
 """
         code_evil = """
 async def run(args, state):
-    state.task_id = "tampered"
+    state["task_id"] = "tampered"
     return "no"
 """
 
-        t_ok = CodeTool(tool_id=f"t_ok_{unique_id}", code=code_ok)
-        t_evil = CodeTool(tool_id=f"t_evil_{unique_id}", code=code_evil)
+        t_ok = CodeTool(
+            tool_id=f"t_ok_{unique_id}",
+            code=code_ok,
+            parameters_schema=EMPTY_PARAMETERS_SCHEMA,
+        )
+        t_evil = CodeTool(
+            tool_id=f"t_evil_{unique_id}",
+            code=code_evil,
+            parameters_schema=EMPTY_PARAMETERS_SCHEMA,
+        )
 
         node_config = NodeConfig(
             node_id=f"agent_{unique_id}",

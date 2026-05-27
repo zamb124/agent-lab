@@ -9,11 +9,9 @@
 
 import { createResourceCollection } from '@platform/lib/events/index.js';
 
-const VARIABLES_COLLECTION_URL = '/flows/api/v1/variables/';
-
 export const variablesResource = createResourceCollection({
     name: 'flows/variables',
-    baseUrl: VARIABLES_COLLECTION_URL,
+    baseUrl: '/flows/api/v1/variables/',
     idField: 'key',
     itemPathTemplate: '/flows/api/v1/variables/:key',
     buildItemUrl: (id) => `/flows/api/v1/variables/${encodeURIComponent(id)}`,

@@ -552,6 +552,7 @@ export class LandingHeader extends PlatformElement {
         this.mobileMenuOpen = false;
         this.productsDropdownOpen = false;
         this._authSel = this.select((s) => ({ status: s.auth.status, user: s.auth.user }));
+        this._localeSel = this.select((s) => s.i18n.locale);
     }
 
     get isAuthenticated() {
@@ -595,7 +596,7 @@ export class LandingHeader extends PlatformElement {
     }
 
     _setLang(lang) {
-        if (this.bus.getState().i18n.locale === lang) {
+        if (this._localeSel.value === lang) {
             return;
         }
         this.setLocale(lang);
@@ -685,7 +686,7 @@ export class LandingHeader extends PlatformElement {
     }
 
     render() {
-        const uiLocale = this.bus.getState().i18n.locale;
+        const uiLocale = this._localeSel.value;
         const h = (sub) => this._lt(`header.${sub}`);
         return html`
             <header class="header-container" @click=${this._onHeaderBarClick}>
@@ -851,4 +852,3 @@ export class LandingHeader extends PlatformElement {
 }
 
 customElements.define('landing-header', LandingHeader);
-

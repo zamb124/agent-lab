@@ -8,7 +8,7 @@ import pytest
 from a2a.types import Message, Part, Role, TextPart
 
 from apps.flows.src.db.models import OperatorTasks
-from apps.flows.src.models.operator_schemas import OperatorTaskStatus
+from apps.flows.src.models.operator_schemas import OperatorInterruptSnapshot, OperatorTaskStatus
 from core.state import ExecutionState
 
 
@@ -112,7 +112,7 @@ async def test_operator_member_can_leave_queue(
         json={"name": "Leave me", "slug": slug},
     )
     assert create.status_code == 200, create.text
-    qid = create.json()["id"]
+    qid = create.json()["queue_id"]
 
     rm = await client.delete(
         f"/flows/api/v1/operator/queues/{qid}/members/{system_user_id}",
@@ -169,7 +169,7 @@ async def test_operator_get_task_includes_message_text_for_a2a_messages(
         json={"name": "Msg test", "slug": slug},
     )
     assert create.status_code == 200, create.text
-    qid = create.json()["id"]
+    qid = create.json()["queue_id"]
 
     flow_id = f"fl_op_{unique_id}"
     ctx_id = f"ctx_{unique_id}"
@@ -205,13 +205,17 @@ async def test_operator_get_task_includes_message_text_for_a2a_messages(
         a2a_task_id=a2a_tid,
         context_id=ctx_id,
         correlation_id=cor_id,
-        interrupt_snapshot={
-            "question": line,
-            "task_title": "Msg test",
-            "assignee_queue": slug,
-            "queue_id": qid,
-            "handoff_mode": "single_reply",
-        },
+        interrupt_snapshot=OperatorInterruptSnapshot(
+            question=line,
+            task_title="Msg test",
+            assignee_queue=slug,
+            queue_id=qid,
+            handoff_mode="single_reply",
+            handoff_command_id=f"handoff_{unique_id}",
+            execution_branch_id=f"branch_{unique_id}",
+            node_schedule_sequence=1,
+            node_id="hitl",
+        ).model_dump(mode="json"),
     )
     await container.operator_repository.insert_task(row)
 

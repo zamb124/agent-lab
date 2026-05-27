@@ -33,7 +33,7 @@ class TestCodeNodeInAgent:
     @pytest.mark.asyncio
     async def test_flow_with_inline_tool_node(self, container, unique_id):
         """Agent с inline CodeNode."""
-        prepare_code = "\nasync def run(args, state):\n    state.value = 10\n    state.multiplier = 3\n    return state\n"
+        prepare_code = '\nasync def run(args, state):\n    state["value"] = 10\n    state["multiplier"] = 3\n    return state\n'
         prepare_node = CodeNode(
             node_id="prepare",
             config={"type": "code", "code": prepare_code},
@@ -51,7 +51,7 @@ class TestCodeNodeInAgent:
             },
             container=container,
         )
-        format_code = '\nasync def run(args, state):\n    state.response = f"Результат: {state.result}"\n    return state\n'
+        format_code = '\nasync def run(args, state):\n    state["response"] = f"Результат: {state[\'result\']}"\n    return state\n'
         format_node = CodeNode(
             node_id="format",
             config={"type": "code", "code": format_code},
@@ -109,7 +109,7 @@ class TestCodeNodeInAgent:
     @pytest.mark.asyncio
     async def test_flow_with_conditional_tool_node(self, container, unique_id):
         """Agent с условным переходом к CodeNode."""
-        classifier_code = '\nasync def run(args, state):\n    content = state.content or ""\n    state.needs_calc = "=" in content\n    state.expr = content.replace("=", "").strip()\n    return state\n'
+        classifier_code = '\nasync def run(args, state):\n    content = state.get("content") or ""\n    state["needs_calc"] = "=" in content\n    state["expr"] = content.replace("=", "").strip()\n    return state\n'
         classifier_node = CodeNode(
             node_id="classifier",
             config={"type": "code", "code": classifier_code},
@@ -122,7 +122,7 @@ class TestCodeNodeInAgent:
             container=container,
         )
         skip_code = (
-            '\nasync def run(args, state):\n    state.calc_result = "N/A"\n    return state\n'
+            '\nasync def run(args, state):\n    state["calc_result"] = "N/A"\n    return state\n'
         )
         skip_node = CodeNode(
             node_id="skip",
@@ -215,7 +215,7 @@ class TestCodeNodeFromConfig:
             "nodes": {
                 "prepare": {
                     "type": "code",
-                    "code": "async def run(args, state):\n    state.input_value = 5\n    return state",
+                    "code": 'async def run(args, state):\n    state["input_value"] = 5\n    return state',
                 },
                 "process": {
                     "type": "code",
@@ -224,7 +224,7 @@ class TestCodeNodeFromConfig:
                 },
                 "finish": {
                     "type": "code",
-                    "code": 'async def run(args, state):\n    state.response = f"Processed: {state.processed}"\n    return state',
+                    "code": 'async def run(args, state):\n    state["response"] = f"Processed: {state[\'processed\']}"\n    return state',
                 },
             },
             "edges": [
@@ -529,9 +529,9 @@ class TestCodeNodeDynamicDataAgent:
     @pytest.mark.asyncio
     async def test_mixed_function_and_tool_nodes_data_flow(self, container, unique_id):
         """Тест смешанного flow: CodeNode передают данные друг другу."""
-        init_code = "\nasync def run(args, state):\n    state.x_value = 7\n    state.y_value = 8\n    return state\n"
+        init_code = '\nasync def run(args, state):\n    state["x_value"] = 7\n    state["y_value"] = 8\n    return state\n'
         multiply_code = "async def run(args, state):\n    return {'product': args['x'] * args['y']}"
-        process_code = "\nasync def run(args, state):\n    state.processed_value = state.product + 100\n    return state\n"
+        process_code = '\nasync def run(args, state):\n    state["processed_value"] = state["product"] + 100\n    return state\n'
         finalize_code = "async def run(args, state):\n    return {'final_message': f\"Result: {args['value']} (bonus: {args['bonus']})\"}"
         init_func = CodeNode(
             node_id="init_func",

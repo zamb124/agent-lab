@@ -26,6 +26,7 @@ from apps.crm.models.api import (
 )
 from apps.flows.src.models.flow_config import FlowConfig
 from apps.flows.src.runtime_helpers.state_utils import push_ui_event
+from apps.flows.src.services.lara_facade import flow_config_from_flow_api_response
 from apps.flows.src.services.platform_facades import get_lara_facade
 from apps.flows.src.tools.decorator import tool
 from core.clients.service_client import ServiceClient, ServiceClientError
@@ -910,8 +911,11 @@ async def flows_read_context(
 
     _ = state
     client = ServiceClient()
-    flow_config = FlowConfig.model_validate(
-        await client.get("flows", f"/flows/api/v1/flows/{quote(flow_id, safe='')}")
+    flow_config = flow_config_from_flow_api_response(
+        require_json_object(
+            await client.get("flows", f"/flows/api/v1/flows/{quote(flow_id, safe='')}"),
+            "flows.read_context.response",
+        )
     )
     flow_payload = require_json_object(flow_config.model_dump(mode="json"), "flows.read_context.flow")
 

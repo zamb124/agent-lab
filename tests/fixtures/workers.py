@@ -41,15 +41,15 @@ _TEST_INFRA_EPOCH_FILE = Path("/tmp/platform_test_infra_epoch")
 
 
 def _terminate_process_group_or_pid(pid: int, *, graceful_timeout: float = 0.2) -> None:
-    """Terminate an isolated fixture process group, falling back to one PID.
+    """Завершает изолированную группу процессов фикстуры; при необходимости — один PID.
 
-    Managed fixture subprocesses are started with ``start_new_session=True``;
-    for them the recorded main PID is also the process-group id. In that case
-    killing the process group stops the parent plus all subprocesses it spawned.
+    Дочерние процессы фикстур запускаются с ``start_new_session=True``;
+    для них записанный основной PID совпадает с id группы процессов. Тогда
+    завершение группы останавливает родителя и все порождённые им subprocess.
 
-    For stale processes started before that convention, do not kill the whole
-    inherited process group because it may contain unrelated pytest/shell
-    processes. Terminate only the recorded PID instead.
+    Для устаревших процессов, запущенных до этой конвенции, не убиваем всю
+    унаследованную группу: в ней могут быть чужие pytest/shell-процессы.
+    Завершаем только записанный PID.
     """
     try:
         pgid = os.getpgid(pid)
@@ -125,7 +125,7 @@ class SessionWorkerManager:
     Поддерживает:
     - Запуск worker один раз на всю сессию тестов
     - Переиспользование worker несколькими pytest worker'ами (pytest-xdist)
-    - Reference counting для корректной остановки worker
+    - Подсчёт ссылок для корректной остановки worker
     - Очистку старых процессов перед запуском
     - Убийство дочерних процессов (multiprocessing)
 
@@ -147,7 +147,7 @@ class SessionWorkerManager:
             with manager.start() as process:
                 yield process
 
-    2. Custom worker:
+    2. Пользовательский worker:
         manager = SessionWorkerManager(
             name="MyWorker",
             lock_file="/tmp/my_worker.lock",
@@ -187,7 +187,7 @@ class SessionWorkerManager:
         taskiq_redis_url: str | None = None,
     ):
         """
-        Args:
+        Аргументы:
             name: Название worker (для логов)
             lock_file: Путь к файлу блокировки
             pid_file: Путь к файлу с PID
@@ -326,8 +326,8 @@ class SessionWorkerManager:
         """
         Проверяет существующий worker.
 
-        Returns:
-            True если worker запущен и можно его переиспользовать
+        Возвращает:
+            True, если worker запущен и его можно переиспользовать
         """
         if self.pid_path.exists():
             try:
@@ -371,7 +371,7 @@ class SessionWorkerManager:
             with open(self.err_file, "r") as f:
                 err_content = f.read()
             raise RuntimeError(
-                f"{self.name} worker failed to start. Error log:\n{err_content}"
+                f"{self.name} worker не запустился. Лог ошибок:\n{err_content}"
             )
 
         if worker_process.poll() is not None:
@@ -425,7 +425,7 @@ class SessionWorkerManager:
 
         # Сервисная страховка для старых воркеров, запущенных до того, как
         # начали использоваться process groups. Не добавляйте широкие multiprocessing-паттерны:
-        # they kill children of other worker services under xdist.
+        # под xdist они убивают дочерние процессы других worker-сервисов.
         print(f"🧹 Очистка оставшихся процессов {self.name}...")
         for pattern in self.cleanup_patterns:
             subprocess.run(
@@ -442,7 +442,7 @@ class SessionWorkerManager:
         """
         Контекстный менеджер для запуска worker.
 
-        Usage:
+        Пример:
             with manager.start() as process:
                 yield process
         """
@@ -759,7 +759,7 @@ def taskiq_scheduler():
             stderr = f.read()
         print(f"Scheduler stdout: {stdout}")
         print(f"Scheduler stderr: {stderr}")
-        raise RuntimeError(f"Scheduler failed to start: {stderr}")
+        raise RuntimeError(f"Планировщик TaskIQ не запустился: {stderr}")
 
     yield scheduler_process
 
@@ -812,18 +812,18 @@ class SessionServerManager:
         readiness_path: str | None = "/health",
     ):
         """
-        Args:
+        Аргументы:
             name: Название сервера (для логов)
             lock_file: Путь к файлу блокировки
             pid_file: Путь к файлу с PID
-            app_path: Путь к ASGI приложению (e.g. "apps.rag.main:app")
+            app_path: Путь к ASGI-приложению (например, "apps.rag.main:app")
             port: Порт для сервера
             host: Хост для сервера
             startup_wait: Время ожидания запуска сервера
             log_file: Путь к файлу логов
             err_file: Путь к файлу ошибок
             env: Дополнительные переменные окружения
-            readiness_path: HTTP endpoint, который должен ответить после ASGI startup
+            readiness_path: HTTP-эндпоинт, который должен ответить после ASGI startup
         """
         self.name = name
         self.lock_file = lock_file
@@ -888,7 +888,7 @@ class SessionServerManager:
     def _invalidate_existing_server(self, existing_pid: int, reason: str) -> None:
         print(
             f"⚠️  {self.name} server PID {existing_pid}: {reason}; "
-            "останавливаем stale процесс и очищаем markers."
+            "останавливаем устаревший процесс и очищаем маркеры."
         )
         _terminate_process_group_or_pid(existing_pid)
         self._clear_server_markers()
@@ -948,10 +948,10 @@ class SessionServerManager:
                         encoding="utf-8"
                     ).strip()
                 except OSError:
-                    self._invalidate_existing_server(existing_pid, "нет env signature")
+                    self._invalidate_existing_server(existing_pid, "нет env-сигнатуры")
                     return False
                 if on_disk_sig != self._server_env_signature():
-                    self._invalidate_existing_server(existing_pid, "env signature устарела")
+                    self._invalidate_existing_server(existing_pid, "env-сигнатура устарела")
                     return False
                 if not self._wait_for_port(timeout=0.5):
                     self._invalidate_existing_server(existing_pid, "процесс жив, но порт не слушается")
@@ -983,7 +983,7 @@ class SessionServerManager:
 
     def _readiness_url(self) -> str:
         if self.readiness_path is None:
-            raise ValueError(f"{self.name}: readiness_path is not configured")
+            raise ValueError(f"{self.name}: readiness_path не задан")
         readiness_path = self.readiness_path
         if not readiness_path.startswith("/"):
             readiness_path = f"/{readiness_path}"
@@ -1104,8 +1104,8 @@ class SessionServerManager:
                 f"stdout:\n{log_content or '(empty)'}"
             )
             raise RuntimeError(
-                f"{self.name} server failed to start "
-                f"(port {self.port}, timeout {self.startup_wait}s). {detail}"
+                f"{self.name} server не запустился "
+                f"(порт {self.port}, таймаут {self.startup_wait}s). {detail}"
             )
 
         if not self._wait_for_readiness(timeout=self.startup_wait, process=server_process):
@@ -1129,8 +1129,8 @@ class SessionServerManager:
                 f"stdout:\n{log_content or '(empty)'}"
             )
             raise RuntimeError(
-                f"{self.name} server failed readiness check "
-                f"(port {self.port}, timeout {self.startup_wait}s). {detail}"
+                f"{self.name} server не прошёл readiness check "
+                f"(порт {self.port}, таймаут {self.startup_wait}s). {detail}"
             )
 
         if server_process.poll() is not None:
@@ -1139,8 +1139,8 @@ class SessionServerManager:
             with open(self.err_file, "r") as f:
                 err_content = f.read()
             raise RuntimeError(
-                f"{self.name} server died after port became available. "
-                f"Error log:\n{err_content}"
+                f"{self.name} server завершился после того, как порт стал доступен. "
+                f"Лог ошибок:\n{err_content}"
             )
 
         self.pid_path.write_text(str(server_process.pid))
@@ -1163,7 +1163,7 @@ class SessionServerManager:
         """
         Контекстный менеджер для запуска server.
 
-        Usage:
+        Пример:
             with manager.start():
                 yield
         """

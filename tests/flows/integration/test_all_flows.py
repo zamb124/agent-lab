@@ -15,8 +15,8 @@ import pytest
 from apps.flows.src.container import get_container
 from apps.flows.src.runtime.flow import Flow
 from core.clients.llm import setup_mock_responses
-from core.state import ExecutionState
 from core.types import JsonObject, JsonValue, parse_json_object, require_json_object
+from tests.flows.durable_runtime_harness import run_flow, workflow_state
 
 # Базовая директория агентов
 AGENTS_DIR = Path(__file__).parent.parent.parent.parent / "apps" / "flows" / "bundles"
@@ -276,17 +276,13 @@ class TestAllFlowsExecution:
 
         assert flow is not None, f"Agent {flow_id} не загружен в БД (flow_factory.get_flow)"
 
-        # Выполняем
-        context_id = f"test-context-{uuid.uuid4().hex}"
-        state = ExecutionState(
-            task_id=f"test-task-{uuid.uuid4().hex}",
-            context_id=context_id,
-            user_id="test-user",
-            session_id=f"{flow_id}:{context_id}",
+        state = workflow_state(
+            flow_id=flow_id,
+            unique_id=uuid.uuid4().hex,
             content="Тестовый запрос",
-            messages=[]
+            messages=[],
         )
-        result = await flow.run(state)
+        result = await run_flow(container=container, flow=flow, state=state)
 
         # Проверяем что flow завершился
         assert result is not None

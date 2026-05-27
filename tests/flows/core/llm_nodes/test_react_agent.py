@@ -8,12 +8,15 @@ State и messages - A2A типы.
 
 import pytest
 
+from apps.flows.src.container import get_container
 from apps.flows.src.models.node_config import NodeConfig, NodeLLMConfig
 from apps.flows.src.runtime.exceptions import FlowInterrupt
 from apps.flows.src.runtime.runners.llm_runner import LlmNodeRunner
 from apps.flows.src.tools.base import BaseTool
 from apps.flows.tools.math_tools import calculator
+from core.clients.llm import LLMToolCall
 from core.state import ExecutionState
+from tests.flows.durable_runtime_harness import ensure_workflow_started
 
 
 class _StateWritingTool(BaseTool):
@@ -69,6 +72,7 @@ class TestReactAgentWithToolCalls:
             tools=[calculator_tool],
             llm=None,
             prompt="You are a helpful assistant.",
+            container=get_container(),
         )
         assert runner is not None
 
@@ -80,6 +84,7 @@ class TestReactAgentWithToolCalls:
             tools=[calculator_tool],
             llm=None,
             prompt="You are a helpful assistant.",
+            container=get_container(),
         )
         assert runner is not None
 
@@ -107,6 +112,7 @@ class TestReactAgentStreaming:
             tools=[calculator],
             llm=None,
             prompt="You are a helpful assistant.",
+            container=get_container(),
         )
         assert runner is not None
 
@@ -140,8 +146,9 @@ class TestToolExecution:
         assert "1" in result
 
     @pytest.mark.asyncio
-    async def test_parallel_tool_interrupt_keeps_completed_sibling_state(self):
+    async def test_parallel_tool_interrupt_keeps_completed_sibling_state(self, app, unique_id: str):
         """При parallel tools interrupt не теряет state успешных соседних tools."""
+        _ = app
         node_config = NodeConfig(
             node_id="test_agent",
             type="llm_node",
@@ -153,33 +160,42 @@ class TestToolExecution:
             tools=[_InterruptingTool(), _StateWritingTool()],
             llm=None,
             prompt="Test",
+            container=get_container(),
         )
+        context_id = f"test-context-{unique_id}"
         state = ExecutionState(
-            task_id="test-task",
-            context_id="test-context",
+            task_id=f"test-task-{unique_id}",
+            context_id=context_id,
             user_id="test-user",
-            session_id="test-agent:test-context",
+            session_id=f"test_agent:{context_id}",
+        )
+        await ensure_workflow_started(
+            container=get_container(),
+            state=state,
+            flow_id=state.session_flow_id,
+            branch_id=state.branch_id,
         )
 
         with pytest.raises(FlowInterrupt) as exc_info:
             await runner._execute_tools_parallel(
                 [
-                    {
-                        "name": "ask_user",
-                        "arguments": {"question": "Need input"},
-                        "id": "call_interrupt",
-                    },
-                    {
-                        "name": "state_writer",
-                        "arguments": {"value": "done"},
-                        "id": "call_writer",
-                    },
+                    LLMToolCall(
+                        name="ask_user",
+                        arguments={"question": "Need input"},
+                        id="call_interrupt",
+                    ),
+                    LLMToolCall(
+                        name="state_writer",
+                        arguments={"value": "done"},
+                        id="call_writer",
+                    ),
                 ],
                 state,
             )
 
         assert state.variables["state_writer"] == "done"
-        assert exc_info.value.tool_call["name"] == "ask_user"
+        assert exc_info.value.tool_call is not None
+        assert exc_info.value.tool_call.name == "ask_user"
 
     @pytest.mark.asyncio
     async def test_calculator_tool_raises_on_invalid_expression(self):

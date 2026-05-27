@@ -17,7 +17,20 @@ import pytest
 
 from apps.flows.src.container import get_container
 from apps.flows.src.models import FlowConfig
-from core.state import ExecutionState
+from core.types import JsonObject
+from tests.flows.durable_runtime_harness import run_flow, workflow_state
+
+EMPTY_PARAMETERS_SCHEMA: JsonObject = {"type": "object", "properties": {}, "required": []}
+EXPRESSION_PARAMETERS_SCHEMA: JsonObject = {
+    "type": "object",
+    "properties": {"expression": {"type": "string", "description": "Выражение"}},
+    "required": ["expression"],
+}
+QUERY_PARAMETERS_SCHEMA: JsonObject = {
+    "type": "object",
+    "properties": {"query": {"type": "string"}},
+    "required": ["query"],
+}
 
 
 @pytest.fixture
@@ -96,14 +109,12 @@ class TestInlineReactAgentWithTools:
             ]
         )
         flow = await container.flow_factory.get_flow(flow_id)
-        state = ExecutionState(
-            task_id="test-task",
-            context_id="test-context",
-            user_id="test-user",
-            session_id="test-agent:test-context",
+        state = workflow_state(
+            flow_id=flow_id,
+            unique_id=f"inline-tool-{unique_id}",
             content="Поприветствуй Тест",
         )
-        result = await flow.run(state)
+        result = await run_flow(container=container, flow=flow, state=state)
         assert "response" in result
         assert "Hello, Тест" in result["response"]
         await container.flow_repository.delete(flow_id)
@@ -121,6 +132,7 @@ class TestInlineReactAgentWithTools:
             "type": "llm_node",
             "name": helper_node_config["name"],
             "description": helper_node_config["description"],
+            "parameters_schema": QUERY_PARAMETERS_SCHEMA,
             "prompt": helper_node_config["prompt"],
             "tools": [],
         }
@@ -151,14 +163,12 @@ class TestInlineReactAgentWithTools:
         )
         factory = container.flow_factory
         agent = await factory.get_flow(flow_id)
-        state = ExecutionState(
-            task_id="test-task",
-            context_id="test-context",
-            user_id="test-user",
-            session_id="test-agent:test-context",
+        state = workflow_state(
+            flow_id=flow_id,
+            unique_id=f"node-tool-{unique_id}",
             content="Мне нужна помощь",
         )
-        result = await agent.run(state)
+        result = await run_flow(container=container, flow=agent, state=state)
         assert "response" in result
         await container.flow_repository.delete(flow_id)
 
@@ -203,14 +213,12 @@ class TestInlineReactAgentWithTools:
         )
         factory = container.flow_factory
         flow = await factory.get_flow(flow_id)
-        state = ExecutionState(
-            task_id="test-task",
-            context_id="test-context",
-            user_id="test-user",
-            session_id="test-agent:test-context",
+        state = workflow_state(
+            flow_id=flow_id,
+            unique_id=f"db-inline-{unique_id}",
             content="Сколько 3+5?",
         )
-        result = await flow.run(state)
+        result = await run_flow(container=container, flow=flow, state=state)
         assert "response" in result
         assert "8" in result["response"]
         await container.flow_repository.delete(flow_id)
@@ -236,12 +244,14 @@ class TestInlineReactAgentWithTools:
             "type": "llm_node",
             "name": helper_node_config["name"],
             "description": helper_node_config["description"],
+            "parameters_schema": QUERY_PARAMETERS_SCHEMA,
             "prompt": helper_node_config["prompt"],
             "tools": [],
         }
         calc_tool_config = {
             "tool_id": db_tool_id,
             "description": "Calculator",
+            "parameters_schema": EXPRESSION_PARAMETERS_SCHEMA,
             "code": calculator_tool_code,
         }
         flow_config = FlowConfig(
@@ -266,14 +276,12 @@ class TestInlineReactAgentWithTools:
         )
         factory = container.flow_factory
         agent = await factory.get_flow(flow_id)
-        state = ExecutionState(
-            task_id="test-task",
-            context_id="test-context",
-            user_id="test-user",
-            session_id="test-agent:test-context",
+        state = workflow_state(
+            flow_id=flow_id,
+            unique_id=f"mixed-{unique_id}",
             content="Поприветствуй User",
         )
-        result = await agent.run(state)
+        result = await run_flow(container=container, flow=agent, state=state)
         assert "response" in result
         await container.flow_repository.delete(flow_id)
         await container.node_repository.delete(helper_node_config["node_id"])
@@ -325,14 +333,12 @@ class TestToolExecutionResults:
         )
         factory = container.flow_factory
         flow = await factory.get_flow(flow_id)
-        state = ExecutionState(
-            task_id="test-task",
-            context_id="test-context",
-            user_id="test-user",
-            session_id="test-agent:test-context",
+        state = workflow_state(
+            flow_id=flow_id,
+            unique_id=f"result-{unique_id}",
             content="Сложи 10 и 20",
         )
-        result = await flow.run(state)
+        result = await run_flow(container=container, flow=flow, state=state)
         assert "response" in result
         assert "30" in result["response"]
         await container.flow_repository.delete(flow_id)
@@ -355,6 +361,7 @@ class TestToolExecutionResults:
                         {
                             "tool_id": "greet_user",
                             "description": "Приветствует пользователя из state",
+                            "parameters_schema": EMPTY_PARAMETERS_SCHEMA,
                             "code": tool_code,
                         }
                     ],
@@ -372,15 +379,13 @@ class TestToolExecutionResults:
         )
         factory = container.flow_factory
         flow = await factory.get_flow(flow_id)
-        state = ExecutionState(
-            task_id="test-task",
-            context_id="test-context",
-            user_id="test-user",
-            session_id="test-agent:test-context",
+        state = workflow_state(
+            flow_id=flow_id,
+            unique_id=f"state-{unique_id}",
             content="Поприветствуй",
             user_name="Виктор",
         )
-        result = await flow.run(state)
+        result = await run_flow(container=container, flow=flow, state=state)
         assert "response" in result
         await container.flow_repository.delete(flow_id)
 
@@ -401,11 +406,13 @@ class TestToolExecutionResults:
                         {
                             "tool_id": "step1",
                             "description": "Первый шаг",
+                            "parameters_schema": EMPTY_PARAMETERS_SCHEMA,
                             "code": "async def run(args, state):\n    return 'STEP1_DONE'",
                         },
                         {
                             "tool_id": "step2",
                             "description": "Второй шаг",
+                            "parameters_schema": EMPTY_PARAMETERS_SCHEMA,
                             "code": "async def run(args, state):\n    return 'STEP2_DONE'",
                         },
                     ],
@@ -424,13 +431,11 @@ class TestToolExecutionResults:
         )
         factory = container.flow_factory
         flow = await factory.get_flow(flow_id)
-        state = ExecutionState(
-            task_id="test-task",
-            context_id="test-context",
-            user_id="test-user",
-            session_id="test-agent:test-context",
+        state = workflow_state(
+            flow_id=flow_id,
+            unique_id=f"sequence-{unique_id}",
             content="Выполни шаги",
         )
-        result = await flow.run(state)
+        result = await run_flow(container=container, flow=flow, state=state)
         assert "response" in result
         await container.flow_repository.delete(flow_id)

@@ -54,7 +54,13 @@ from core.logging.attributes import (
     LOG_TASK_RETRY,
 )
 from core.tasks.kicker import build_log_labels
-from core.tasks.message_contract import task_message_labels
+from core.tasks.message_contract import (
+    set_task_message_string_label,
+    set_task_message_string_labels,
+    task_message_int_label,
+    task_message_string_label,
+    task_message_string_labels,
+)
 from core.types import JsonValue, TaskLabelMap
 
 _LABEL_TRACE_ID = "trace_id"
@@ -64,6 +70,17 @@ _LABEL_NAMESPACE = "namespace"
 _LABEL_SESSION_ID = "session_id"
 _LABEL_REQUEST_ID = "request_id"
 _LABEL_SERVICE_NAME = "service_name"
+_LOG_LABEL_KEYS = frozenset(
+    {
+        _LABEL_TRACE_ID,
+        _LABEL_USER_ID,
+        _LABEL_COMPANY_ID,
+        _LABEL_NAMESPACE,
+        _LABEL_SESSION_ID,
+        _LABEL_REQUEST_ID,
+        _LABEL_SERVICE_NAME,
+    }
+)
 
 _START_TIME_LABEL = "_logging_start_perf"
 _SCOPE_TOKEN_LABEL = "_logging_scope_token"
@@ -84,7 +101,7 @@ class LoggingMiddleware(TaskiqMiddleware):
 
     @override
     async def pre_send(self, message: TaskiqMessage) -> TaskiqMessage:
-        labels = task_message_labels(message)
+        labels = task_message_string_labels(message, keys=_LOG_LABEL_KEYS)
         log_ctx = get_log_context()
 
         if not _label_present(labels, _LABEL_REQUEST_ID):
@@ -116,12 +133,12 @@ class LoggingMiddleware(TaskiqMiddleware):
             if isinstance(value, str) and value.strip():
                 labels[key] = value.strip()
 
-        message.labels = labels
+        set_task_message_string_labels(message, labels)
         return message
 
     @override
     async def pre_execute(self, message: TaskiqMessage) -> TaskiqMessage:
-        labels = task_message_labels(message)
+        labels = task_message_string_labels(message, keys=_LOG_LABEL_KEYS)
         if (
             not _label_present(labels, _LABEL_REQUEST_ID)
             or not _label_present(labels, _LABEL_TRACE_ID)
@@ -137,7 +154,7 @@ class LoggingMiddleware(TaskiqMiddleware):
                 labels[_LABEL_TRACE_ID] = fb[_LABEL_TRACE_ID]
             if not _label_present(labels, _LABEL_SERVICE_NAME):
                 labels[_LABEL_SERVICE_NAME] = fb[_LABEL_SERVICE_NAME]
-            message.labels = labels
+            set_task_message_string_labels(message, labels)
             self._logger.warning(
                 "task.execute_log_labels_recovered",
                 task_name=message.task_name,
@@ -170,7 +187,16 @@ class LoggingMiddleware(TaskiqMiddleware):
         bind_log_context(**scope_extra)
         labels[_START_TIME_LABEL] = str(time.perf_counter())
         labels[_SCOPE_TOKEN_LABEL] = str(id(token))
-        message.labels = labels
+        set_task_message_string_label(
+            message,
+            _START_TIME_LABEL,
+            labels[_START_TIME_LABEL],
+        )
+        set_task_message_string_label(
+            message,
+            _SCOPE_TOKEN_LABEL,
+            labels[_SCOPE_TOKEN_LABEL],
+        )
         # Сохраняем токен в attribute словаря: TaskiqMessage не позволяет
         # хранить объекты в labels (str-only сериализация), поэтому держим
         # в side-канале по message id.
@@ -224,14 +250,9 @@ class LoggingMiddleware(TaskiqMiddleware):
     ) -> None:
         _ = result
         duration_ms = self._duration_ms(message)
-        labels = task_message_labels(message)
-        retry_raw = labels.get("_taskiq_retry_count")
-        if retry_raw is None:
-            retry_raw = labels.get("_retries")
-        try:
-            retry_value: int | None = int(retry_raw) if retry_raw is not None else None
-        except (TypeError, ValueError):
-            retry_value = None
+        retry_value = task_message_int_label(message, "_taskiq_retry_count")
+        if retry_value is None:
+            retry_value = task_message_int_label(message, "_retries")
 
         self._logger.exception(
             EVENT_TASK_FAILED,
@@ -271,8 +292,7 @@ class LoggingMiddleware(TaskiqMiddleware):
 
     @staticmethod
     def _duration_ms(message: TaskiqMessage) -> float | None:
-        labels = task_message_labels(message)
-        raw = labels.get(_START_TIME_LABEL)
+        raw = task_message_string_label(message, _START_TIME_LABEL)
         if raw is None:
             return None
         try:

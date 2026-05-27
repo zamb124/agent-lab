@@ -9,7 +9,11 @@ from sqlalchemy import update
 
 from apps.flows.src.container import get_container
 from apps.flows.src.db.models import WorkflowInstances
-from apps.flows.src.durable_execution import WorkflowEventType, create_initial_state
+from apps.flows.src.durable_execution import (
+    UserInputAppliedPayload,
+    WorkflowEventType,
+    create_initial_state,
+)
 from core.state import ExecutionState
 
 
@@ -66,6 +70,11 @@ async def save_test_state(state: ExecutionState) -> None:
         state.session_id,
         state,
         event_type=WorkflowEventType.user_input_applied,
+        payload=UserInputAppliedPayload(
+            task_id=state.task_id,
+            context_id=state.context_id,
+            is_resume=False,
+        ),
         snapshot=True,
     )
 

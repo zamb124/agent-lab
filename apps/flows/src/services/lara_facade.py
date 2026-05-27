@@ -33,6 +33,77 @@ class _MinimalLaraToolState:
         self.context_id = cid
 
 
+_FLOW_CONFIG_RESPONSE_KEYS = frozenset(
+    {
+        "flow_id",
+        "version",
+        "name",
+        "description",
+        "type",
+        "entry",
+        "nodes",
+        "edges",
+        "variables",
+        "tags",
+        "branches",
+        "hidden",
+        "url",
+        "headers",
+        "status",
+        "last_health_check",
+        "agent_card",
+        "triggers",
+        "resources",
+        "metadata",
+        "store_card_image_url",
+        "source",
+        "speech",
+    }
+)
+_BRANCH_CONFIG_RESPONSE_KEYS = frozenset(
+    {
+        "name",
+        "description",
+        "tags",
+        "permission",
+        "entry",
+        "nodes",
+        "edges",
+        "variables",
+        "nodes_mode",
+        "edges_mode",
+        "variables_mode",
+        "resources",
+        "resources_mode",
+        "speech",
+    }
+)
+
+
+def _known_non_null_fields(source: JsonObject, keys: frozenset[str]) -> JsonObject:
+    payload: JsonObject = {}
+    for key in keys:
+        if key in source and source[key] is not None:
+            payload[key] = source[key]
+    return payload
+
+
+def flow_config_from_flow_api_response(response: JsonObject) -> FlowConfig:
+    """Преобразует FlowResponse REST API в строгий FlowConfig без UI-only полей ответа."""
+    payload = _known_non_null_fields(response, _FLOW_CONFIG_RESPONSE_KEYS)
+    branches_raw = response.get("branches")
+    if branches_raw is not None:
+        branches = require_json_object(branches_raw, "flows.response.branches")
+        payload["branches"] = {
+            branch_id: _known_non_null_fields(
+                require_json_object(branch_payload, f"flows.response.branches.{branch_id}"),
+                _BRANCH_CONFIG_RESPONSE_KEYS,
+            )
+            for branch_id, branch_payload in branches.items()
+        }
+    return FlowConfig.model_validate(payload)
+
+
 class LaraFacade:
     """Безопасный фасад для тулов: preview/apply через LaraActionEngine."""
 
@@ -164,8 +235,11 @@ class LaraFacade:
     ) -> LaraPendingAction:
         company_id, user_id, context_id = self._require_runtime_ids(state)
         encoded_flow_id = self._encode_flow_id(flow_id)
-        flow_config = FlowConfig.model_validate(
-            await self._client.get("flows", f"/flows/api/v1/flows/{encoded_flow_id}")
+        flow_config = flow_config_from_flow_api_response(
+            require_json_object(
+                await self._client.get("flows", f"/flows/api/v1/flows/{encoded_flow_id}"),
+                "flows.node.preview.response",
+            )
         )
         resolved_branch_id = branch_id or "base"
         graph_nodes = self._resolve_graph_nodes(
@@ -223,8 +297,11 @@ class LaraFacade:
             branch_id = branch_id_raw.strip() if isinstance(branch_id_raw, str) and branch_id_raw.strip() else "base"
             patch = require_json_object(patch_raw, "pending_action.payload.patch")
             encoded_flow_id = self._encode_flow_id(flow_id)
-            flow_config = FlowConfig.model_validate(
-                await self._client.get("flows", f"/flows/api/v1/flows/{encoded_flow_id}")
+            flow_config = flow_config_from_flow_api_response(
+                require_json_object(
+                    await self._client.get("flows", f"/flows/api/v1/flows/{encoded_flow_id}"),
+                    "flows.node.apply.response",
+                )
             )
             graph_nodes = self._resolve_graph_nodes(
                 flow_config,
@@ -264,8 +341,11 @@ class LaraFacade:
     ) -> LaraPendingAction:
         company_id, user_id, context_id = self._require_runtime_ids(state)
         encoded_flow_id = self._encode_flow_id(flow_id)
-        flow_before = FlowConfig.model_validate(
-            await self._client.get("flows", f"/flows/api/v1/flows/{encoded_flow_id}")
+        flow_before = flow_config_from_flow_api_response(
+            require_json_object(
+                await self._client.get("flows", f"/flows/api/v1/flows/{encoded_flow_id}"),
+                "flows.flow.preview.response",
+            )
         )
         flow_before_payload = require_json_object(
             flow_before.model_dump(mode="json"),
@@ -314,8 +394,11 @@ class LaraFacade:
             flow_id = flow_id_raw.strip()
             patch = require_json_object(patch_raw, "pending_action.payload.patch")
             encoded_flow_id = self._encode_flow_id(flow_id)
-            flow_before = FlowConfig.model_validate(
-                await self._client.get("flows", f"/flows/api/v1/flows/{encoded_flow_id}")
+            flow_before = flow_config_from_flow_api_response(
+                require_json_object(
+                    await self._client.get("flows", f"/flows/api/v1/flows/{encoded_flow_id}"),
+                    "flows.flow.apply.response",
+                )
             )
             flow_before_payload = require_json_object(
                 flow_before.model_dump(mode="json"),

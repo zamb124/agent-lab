@@ -14,6 +14,7 @@ from datetime import datetime
 
 import pytest
 
+from apps.flows.src.container import get_container
 from apps.flows.src.models.node_config import NodeConfig, NodeLLMConfig
 from apps.flows.src.runtime.runners.llm_runner import LlmNodeRunner
 from core.context import Context, User, clear_context, set_context
@@ -41,6 +42,7 @@ def runner(flow_config):
         tools=[],
         llm=None,
         prompt="",
+        container=get_container(),
     )
 
 
@@ -888,4 +890,3 @@ API Key: {config.api.key}
         assert "admin" in rendered
         assert "FlowUser" not in rendered
         assert "user" not in rendered
-

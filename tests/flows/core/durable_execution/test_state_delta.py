@@ -68,3 +68,18 @@ def test_state_delta_preserves_json_string_whitespace() -> None:
         mode="json",
         exclude_none=False,
     )
+
+
+def test_state_delta_preserves_extra_field_set_to_null() -> None:
+    before = _state(to_remove="value", keep="value")
+    after = _state(to_remove=None, keep="value")
+
+    delta = build_state_delta(before, after)
+    restored = apply_state_delta(before, delta)
+
+    assert delta.fields_set["to_remove"] is None
+    assert "to_remove" not in delta.fields_unset
+    assert restored.model_dump(mode="json", exclude_none=False) == after.model_dump(
+        mode="json",
+        exclude_none=False,
+    )

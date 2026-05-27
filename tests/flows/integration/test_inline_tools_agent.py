@@ -9,6 +9,8 @@ import pytest
 from apps.flows.src.tools.code_tool import CodeTool
 from core.state import ExecutionState
 
+EMPTY_PARAMETERS_SCHEMA = {"type": "object", "properties": {}, "required": []}
+
 
 class TestToolRegistryInlineConfig:
     """Тесты ToolRegistry с inline tool конфигами."""
@@ -45,7 +47,11 @@ class TestToolRegistryInlineConfig:
     @pytest.mark.asyncio
     async def test_get_tool_from_dict_minimal(self, container):
         """ToolRegistry создает CodeTool из минимального dict."""
-        config = {"tool_id": "simple", "code": "async def run(args, state):\n    return 'ok'"}
+        config = {
+            "tool_id": "simple",
+            "code": "async def run(args, state):\n    return 'ok'",
+            "parameters_schema": EMPTY_PARAMETERS_SCHEMA,
+        }
         tool = await container.tool_registry.create_tool(config)
         assert isinstance(tool, CodeTool)
         state = ExecutionState(
@@ -115,9 +121,13 @@ class TestCodeToolSchema:
             tool_id="greeter",
             code="async def run(args, state):\n    return f\"Hello, {args['name']}!\"",
             description="Приветствует пользователя",
-            parameters={
-                "name": {"type": "string", "description": "Имя пользователя"},
-                "formal": {"type": "boolean", "description": "Формальное приветствие"},
+            parameters_schema={
+                "type": "object",
+                "properties": {
+                    "name": {"type": "string", "description": "Имя пользователя"},
+                    "formal": {"type": "boolean", "description": "Формальное приветствие"},
+                },
+                "required": ["name"],
             },
         )
         schema = tool.to_openai_schema()
@@ -137,6 +147,7 @@ class TestCodeToolSchema:
             tool_id="state_reader",
             code="async def run(args, state):\n    user = state.get('user', {})\n    return f\"User: {user.get('name', 'anonymous')}\"\n",
             description="Читает данные пользователя из state",
+            parameters_schema=EMPTY_PARAMETERS_SCHEMA,
             container=container,
         )
         state = ExecutionState(
@@ -160,6 +171,14 @@ class TestCodeToolsExecution:
             tool_id="data_processor",
             code="async def run(args, state):\n    items = args.get('items', [])\n    multiplier = args.get('multiplier', 1)\n\n    processed = []\n    for item in items:\n        if isinstance(item, (int, float)):\n            processed.append(item * multiplier)\n        else:\n            processed.append(item)\n\n    return {\n        'processed': processed,\n        'count': len(processed),\n        'sum': sum(x for x in processed if isinstance(x, (int, float)))\n    }\n",
             description="Обрабатывает список элементов",
+            parameters_schema={
+                "type": "object",
+                "properties": {
+                    "items": {"type": "array"},
+                    "multiplier": {"type": "number"},
+                },
+                "required": ["items"],
+            },
             container=container,
         )
         state = ExecutionState(
@@ -180,6 +199,11 @@ class TestCodeToolsExecution:
             tool_id="json_tool",
             code="async def run(args, state):\n    import json\n    data = {'key': args['value']}\n    return json.dumps(data)\n",
             description="Сериализует в JSON",
+            parameters_schema={
+                "type": "object",
+                "properties": {"value": {"type": "string"}},
+                "required": ["value"],
+            },
             container=container,
         )
         state = ExecutionState(
@@ -198,6 +222,11 @@ class TestCodeToolsExecution:
             tool_id="math_tool",
             code="async def run(args, state):\n    import math\n    return {\n        'sqrt': math.sqrt(args['x']),\n        'pow': math.pow(args['x'], 2),\n        'ceil': math.ceil(args['x'] / 3)\n    }\n",
             description="Математические операции",
+            parameters_schema={
+                "type": "object",
+                "properties": {"x": {"type": "number"}},
+                "required": ["x"],
+            },
             container=container,
         )
         state = ExecutionState(
@@ -261,9 +290,21 @@ class TestCodeToolsInFlowConfig:
     async def test_multiple_inline_tools(self, container):
         """Несколько inline tools в одном агенте."""
         tools_config = [
-            {"tool_id": "tool_a", "code": "async def run(args, state):\n    return 'A'"},
-            {"tool_id": "tool_b", "code": "async def run(args, state):\n    return 'B'"},
-            {"tool_id": "tool_c", "code": "async def run(args, state):\n    return 'C'"},
+            {
+                "tool_id": "tool_a",
+                "code": "async def run(args, state):\n    return 'A'",
+                "parameters_schema": EMPTY_PARAMETERS_SCHEMA,
+            },
+            {
+                "tool_id": "tool_b",
+                "code": "async def run(args, state):\n    return 'B'",
+                "parameters_schema": EMPTY_PARAMETERS_SCHEMA,
+            },
+            {
+                "tool_id": "tool_c",
+                "code": "async def run(args, state):\n    return 'C'",
+                "parameters_schema": EMPTY_PARAMETERS_SCHEMA,
+            },
         ]
         tools = await container.tool_registry.create_tools(tools_config)
         assert len(tools) == 3

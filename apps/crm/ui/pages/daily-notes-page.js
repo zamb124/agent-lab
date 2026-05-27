@@ -871,7 +871,7 @@ export class CRMDailyNotesPage extends CRMNamespacePage {
             if (causationId === null || causationId.length === 0) {
                 throw new Error('crm/note_search/succeeded: causation_id required');
             }
-            const expectedId = this._search.op.selectors.lastRequestId(this.bus.getState());
+            const expectedId = this._search.lastRequestId;
             if (typeof expectedId !== 'string' || expectedId.length === 0) {
                 throw new Error('crm/note_search/succeeded: slice lastRequestId missing');
             }
@@ -887,7 +887,7 @@ export class CRMDailyNotesPage extends CRMNamespacePage {
             if (causationId === null || causationId.length === 0) {
                 throw new Error('crm/note_search/failed: causation_id required');
             }
-            const expectedId = this._search.op.selectors.lastRequestId(this.bus.getState());
+            const expectedId = this._search.lastRequestId;
             if (typeof expectedId !== 'string' || expectedId.length === 0) {
                 throw new Error('crm/note_search/failed: slice lastRequestId missing');
             }
@@ -977,7 +977,7 @@ export class CRMDailyNotesPage extends CRMNamespacePage {
         if (causationId === null || causationId.length === 0) {
             throw new Error('crm/note_latest_range/succeeded: causation_id required');
         }
-        const expectedId = this._latestRange.op.selectors.lastRequestId(this.bus.getState());
+        const expectedId = this._latestRange.lastRequestId;
         if (typeof expectedId !== 'string' || expectedId.length === 0) {
             throw new Error('crm/note_latest_range/succeeded: slice lastRequestId missing');
         }

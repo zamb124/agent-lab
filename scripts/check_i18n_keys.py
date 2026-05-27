@@ -95,15 +95,27 @@ DYNAMIC_LIST_HINTS = ("list", "items", "options", "values")
 CALL_RE = re.compile(
     r"""
     (?<![\w.])              # не часть длинного идентификатора, но this. перед t — ОК
-    (?:this\.)?             # опционально this.
+    (?P<receiver>this\.)?   # опционально this.
     t                       # имя метода
     \(                      # открывающая скобка
     \s*
-    (['"`])                 # 1: тип кавычки
-    ([\s\S]*?)              # 2: содержимое строки-ключа
-    \1                      # закрытие тем же типом кавычки
-    ([^)]*)                 # 3: остаток до ближайшей закрывающей скобки (наивно)
+    (?P<quote>['"`])        # тип кавычки
+    (?P<body>[\s\S]*?)      # содержимое строки-ключа
+    (?P=quote)              # закрытие тем же типом кавычки
+    (?P<rest>[^)]*)         # остаток до ближайшей закрывающей скобки (наивно)
     \)
+    """,
+    re.VERBOSE,
+)
+LOCAL_T_PREFIX_RE = re.compile(
+    r"""
+    \b(?:const|let|var)\s+t\s*=\s*
+    \(\s*(?P<arg>[A-Za-z_$][\w$]*)\s*\)\s*=>\s*
+    this\.t\s*\(\s*`
+    (?P<prefix>[^`$]*)
+    \$\{\s*(?P=arg)\s*\}
+    (?P<suffix>[^`$]*)
+    `\s*\)
     """,
     re.VERBOSE,
 )
@@ -287,6 +299,18 @@ def line_of(text: str, pos: int) -> int:
     return text.count("\n", 0, pos) + 1
 
 
+def local_t_prefix(text: str) -> str | None:
+    """Detect simple wrappers: `const t = (key) => this.t(`section.${key}`)`."""
+    match = LOCAL_T_PREFIX_RE.search(text)
+    if not match:
+        return None
+    prefix = match.group("prefix")
+    suffix = match.group("suffix")
+    if suffix:
+        return None
+    return prefix if prefix else None
+
+
 def scan_file(path: Path, available: set[str], stats: Stats) -> list[Usage]:
     text = path.read_text(encoding="utf-8")
     class_ns_match = CLASS_NS_RE.search(text)
@@ -298,13 +322,14 @@ def scan_file(path: Path, available: set[str], stats: Stats) -> list[Usage]:
     else:
         class_ns = None
     default_ns = file_default_namespace(path, available)
+    bare_t_prefix = local_t_prefix(text)
 
     usages: list[Usage] = []
     for m in CALL_RE.finditer(text):
         stats.calls_total += 1
-        quote = m.group(1)
-        body = m.group(2)
-        rest = m.group(3) or ""
+        quote = m.group("quote")
+        body = m.group("body")
+        rest = m.group("rest") or ""
         if is_dynamic_key(quote, body):
             stats.calls_dynamic += 1
             continue
@@ -315,6 +340,8 @@ def scan_file(path: Path, available: set[str], stats: Stats) -> list[Usage]:
             stats.calls_dynamic += 1
             continue
         stats.calls_static += 1
+        if bare_t_prefix and not m.group("receiver"):
+            body = f"{bare_t_prefix}{body}"
         ns = explicit_ns or class_ns or default_ns
         usages.append(
             Usage(

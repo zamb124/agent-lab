@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from dataclasses import dataclass
 from datetime import datetime, timedelta
 from uuid import uuid4
 
@@ -53,6 +54,18 @@ class NonIdempotentActivityReplayBlockedError(RuntimeError):
 
 
 ACTIVITY_LEASE_SECONDS = 900
+
+
+@dataclass(frozen=True)
+class WorkflowStateTransitionWrite:
+    event_type: WorkflowEventType
+    payload: WorkflowEventPayload
+    state_delta: ExecutionStateDelta
+    state_json: JsonObject
+    status: WorkflowStatus
+    snapshot: bool
+    causation_id: str | None = None
+    correlation_id: str | None = None
 
 
 class DurableWorkflowRepository:
@@ -411,6 +424,177 @@ class DurableWorkflowRepository:
             state_hash=state_hash,
             snapshot_id=snapshot_id,
         )
+
+    async def append_state_transitions(
+        self,
+        *,
+        company_id: str,
+        session_id: str,
+        transitions: list[WorkflowStateTransitionWrite],
+        expected_head_sequence: int | None = None,
+        expected_execution_branch_id: str | None = None,
+    ) -> list[WorkflowAppendResult]:
+        """Append multiple canonical events and update workflow head once."""
+        if not transitions:
+            return []
+
+        event_ids = [str(uuid4()) for _ in transitions]
+        snapshot_ids = [str(uuid4()) if item.snapshot else None for item in transitions]
+        state_hashes = [hash_state_json(item.state_json) for item in transitions]
+
+        async with self._storage.get_session() as session:
+            async with session.begin():
+                result = await session.execute(
+                    select(WorkflowInstances)
+                    .where(
+                        WorkflowInstances.company_id == company_id,
+                        WorkflowInstances.session_id == session_id,
+                    )
+                    .with_for_update()
+                )
+                instance = result.scalar_one_or_none()
+
+                now = utc_now()
+                if instance is None:
+                    if expected_head_sequence is not None or expected_execution_branch_id is not None:
+                        raise WorkflowConcurrencyError(
+                            f"Workflow {session_id!r} does not exist for expected append"
+                        )
+                    execution_branch_id = str(uuid4())
+                    instance_id = str(uuid4())
+                    first_state_json = transitions[0].state_json
+                    branch = ExecutionBranches(
+                        execution_branch_id=execution_branch_id,
+                        company_id=company_id,
+                        session_id=session_id,
+                        parent_execution_branch_id=None,
+                        base_sequence=0,
+                        base_state_hash=None,
+                        reason=ExecutionBranchReason.start.value,
+                        created_at=now,
+                    )
+                    session.add(branch)
+                    instance = WorkflowInstances(
+                        workflow_instance_id=instance_id,
+                        company_id=company_id,
+                        session_id=session_id,
+                        flow_id=self._flow_id_from_session_id(session_id),
+                        context_id=self._context_id_from_state(first_state_json, session_id),
+                        task_id=self._string_or_none(first_state_json.get("task_id")),
+                        user_id=self._string_or_none(first_state_json.get("user_id")),
+                        flow_branch_id=self._string_or_none(first_state_json.get("branch_id")),
+                        active_execution_branch_id=execution_branch_id,
+                        head_sequence=0,
+                        head_state_hash=None,
+                        latest_snapshot_id=None,
+                        status=WorkflowStatus.running.value,
+                        last_event_at=now,
+                        created_at=now,
+                        updated_at=now,
+                    )
+                    session.add(instance)
+                    await session.flush()
+
+                execution_branch_id = instance.active_execution_branch_id
+                if (
+                    expected_execution_branch_id is not None
+                    and execution_branch_id != expected_execution_branch_id
+                ):
+                    raise WorkflowConcurrencyError(
+                        "Workflow active branch changed during append: "
+                        + f"session_id={session_id!r}, "
+                        + f"expected={expected_execution_branch_id!r}, got={execution_branch_id!r}"
+                    )
+                if (
+                    expected_head_sequence is not None
+                    and int(instance.head_sequence) != expected_head_sequence
+                ):
+                    raise WorkflowConcurrencyError(
+                        "Workflow head sequence changed during append: "
+                        + f"session_id={session_id!r}, "
+                        + f"expected={expected_head_sequence}, got={instance.head_sequence}"
+                    )
+
+                prev_hash = instance.head_state_hash
+                start_sequence = int(instance.head_sequence)
+                event_rows: list[dict[str, object | None]] = []
+                snapshot_rows: list[dict[str, object | None]] = []
+                results: list[WorkflowAppendResult] = []
+
+                for index, item in enumerate(transitions):
+                    sequence = start_sequence + index + 1
+                    state_hash = state_hashes[index]
+                    snapshot_id = snapshot_ids[index]
+                    event_rows.append(
+                        {
+                            "event_id": event_ids[index],
+                            "company_id": company_id,
+                            "session_id": session_id,
+                            "execution_branch_id": execution_branch_id,
+                            "sequence": sequence,
+                            "event_type": item.event_type.value,
+                            "payload": workflow_event_payload_json(item.payload),
+                            "state_delta": item.state_delta.model_dump(
+                                mode="json",
+                                exclude_none=False,
+                            ),
+                            "prev_state_hash": prev_hash,
+                            "next_state_hash": state_hash,
+                            "causation_id": item.causation_id,
+                            "correlation_id": item.correlation_id,
+                            "schema_version": 1,
+                            "created_at": now,
+                        }
+                    )
+                    if snapshot_id is not None:
+                        snapshot_rows.append(
+                            {
+                                "snapshot_id": snapshot_id,
+                                "company_id": company_id,
+                                "session_id": session_id,
+                                "execution_branch_id": execution_branch_id,
+                                "sequence": sequence,
+                                "state_json": item.state_json,
+                                "state_hash": state_hash,
+                                "schema_version": 1,
+                                "created_at": now,
+                            }
+                        )
+                    results.append(
+                        WorkflowAppendResult(
+                            event_id=event_ids[index],
+                            execution_branch_id=execution_branch_id,
+                            sequence=sequence,
+                            state_hash=state_hash,
+                            snapshot_id=snapshot_id,
+                        )
+                    )
+                    prev_hash = state_hash
+
+                if event_rows:
+                    _ = await session.execute(insert(WorkflowEvents).values(event_rows))
+                if snapshot_rows:
+                    _ = await session.execute(insert(WorkflowSnapshots).values(snapshot_rows))
+
+                last = transitions[-1]
+                last_sequence = start_sequence + len(transitions)
+                last_snapshot_id = next(
+                    (snapshot_id for snapshot_id in reversed(snapshot_ids) if snapshot_id is not None),
+                    None,
+                )
+                instance.head_sequence = last_sequence
+                instance.head_state_hash = state_hashes[-1]
+                instance.latest_snapshot_id = last_snapshot_id or instance.latest_snapshot_id
+                instance.status = last.status.value
+                instance.flow_id = self._flow_id_from_session_id(session_id)
+                instance.context_id = self._context_id_from_state(last.state_json, session_id)
+                instance.task_id = self._string_or_none(last.state_json.get("task_id"))
+                instance.user_id = self._string_or_none(last.state_json.get("user_id"))
+                instance.flow_branch_id = self._string_or_none(last.state_json.get("branch_id"))
+                instance.last_event_at = now
+                instance.updated_at = now
+
+        return results
 
     async def create_branch_transition(
         self,

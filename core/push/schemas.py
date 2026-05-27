@@ -5,12 +5,12 @@ Pydantic-схемы для API push-подписок.
 from __future__ import annotations
 
 import re
-from typing import Literal, Self
+from typing import Literal
 
 from pydantic import Field, model_validator
 
 from core.models import StrictBaseModel
-from core.types import PushSubscriptionKeys
+from core.types import JsonObject, JsonValue, PushSubscriptionKeys, require_json_object
 
 PushTransport = Literal["web_vapid", "ios_apns", "android_fcm"]
 
@@ -33,6 +33,38 @@ def _normalize_fcm_registration_token(raw: str) -> str:
     return s
 
 
+def _parse_transport(raw: JsonValue | None) -> PushTransport:
+    if raw is None:
+        return "web_vapid"
+    if raw == "web_vapid":
+        return "web_vapid"
+    if raw == "ios_apns":
+        return "ios_apns"
+    if raw == "android_fcm":
+        return "android_fcm"
+    raise ValueError("transport должен быть web_vapid, ios_apns или android_fcm")
+
+
+def _parse_optional_string(raw: JsonValue | None, field_name: str, default: str) -> str:
+    if raw is None:
+        return default
+    if not isinstance(raw, str):
+        raise ValueError(f"{field_name} должен быть строкой")
+    return raw
+
+
+def _parse_push_keys(raw: JsonValue | None) -> PushSubscriptionKeys:
+    if raw is None:
+        return {}
+    raw_keys = require_json_object(raw, "keys")
+    keys: PushSubscriptionKeys = {}
+    for key, value in raw_keys.items():
+        if not isinstance(value, str):
+            raise ValueError(f"keys.{key} должен быть строкой")
+        keys[key] = value
+    return keys
+
+
 class SubscribeRequest(StrictBaseModel):
     """Тело POST /api/push/subscribe."""
 
@@ -41,43 +73,52 @@ class SubscribeRequest(StrictBaseModel):
     keys: PushSubscriptionKeys = Field(default_factory=dict)
     platform: str = "unknown"
 
-    @model_validator(mode="after")
-    def validate_by_transport(self) -> Self:
-        if self.transport == "web_vapid":
-            ep = self.endpoint.strip()
+    @model_validator(mode="before")
+    @classmethod
+    def normalize_by_transport(cls, data: JsonValue) -> JsonObject:
+        payload = require_json_object(data, "SubscribeRequest")
+        transport = _parse_transport(payload.get("transport"))
+        endpoint = _parse_optional_string(payload.get("endpoint"), "endpoint", "")
+        keys = _parse_push_keys(payload.get("keys"))
+        platform = _parse_optional_string(payload.get("platform"), "platform", "unknown")
+
+        if transport == "web_vapid":
+            ep = endpoint.strip()
             if not ep.startswith("https://"):
                 raise ValueError("web_vapid: endpoint должен начинаться с https://")
-            self.endpoint = ep
             for key_name in ("p256dh", "auth"):
-                v = self.keys.get(key_name)
-                if not v or not str(v).strip():
+                value = keys.get(key_name)
+                if not value or not value.strip():
                     raise ValueError(f"web_vapid: keys.{key_name} обязателен")
-            self.keys = {
-                "p256dh": str(self.keys["p256dh"]).strip(),
-                "auth": str(self.keys["auth"]).strip(),
+            payload["transport"] = transport
+            payload["endpoint"] = ep
+            payload["keys"] = {
+                "p256dh": keys["p256dh"].strip(),
+                "auth": keys["auth"].strip(),
             }
-            return self
+            payload["platform"] = platform
+            return payload
 
-        if self.transport == "ios_apns":
-            token_raw = self.keys.get("device_token")
+        if transport == "ios_apns":
+            token_raw = keys.get("device_token")
             if not token_raw:
                 raise ValueError("ios_apns: keys.device_token обязателен")
-            normalized = _normalize_apns_device_token(str(token_raw))
-            self.endpoint = f"apns:{normalized}"
-            self.keys = {"device_token": normalized}
-            if self.platform == "unknown":
-                self.platform = "ios_native"
-            return self
+            normalized = _normalize_apns_device_token(token_raw)
+            payload["transport"] = transport
+            payload["endpoint"] = f"apns:{normalized}"
+            payload["keys"] = {"device_token": normalized}
+            payload["platform"] = "ios_native" if platform == "unknown" else platform
+            return payload
 
-        token_raw = self.keys.get("device_token")
+        token_raw = keys.get("device_token")
         if not token_raw:
             raise ValueError("android_fcm: keys.device_token обязателен")
-        normalized = _normalize_fcm_registration_token(str(token_raw))
-        self.endpoint = f"fcm:{normalized}"
-        self.keys = {"device_token": normalized}
-        if self.platform == "unknown":
-            self.platform = "android_native"
-        return self
+        normalized = _normalize_fcm_registration_token(token_raw)
+        payload["transport"] = transport
+        payload["endpoint"] = f"fcm:{normalized}"
+        payload["keys"] = {"device_token": normalized}
+        payload["platform"] = "android_native" if platform == "unknown" else platform
+        return payload
 
 
 class VapidPublicKeyResponse(StrictBaseModel):

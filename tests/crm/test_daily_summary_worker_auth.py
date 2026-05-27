@@ -31,7 +31,7 @@ async def test_build_auth_token_ignores_crm_worker_placeholder(monkeypatch):
 
     monkeypatch.setattr(dst, "get_token_service", lambda: SimpleNamespace(create_token=create_token))
 
-    out = await dst._build_auth_token_for_company("comp-x", "crm-worker")
+    out = await dst.build_auth_token_for_company("comp-x", "crm-worker")
     assert out == "jwt-test"
     assert len(captured) == 1
     assert captured[0]["user_id"] == "owner-1"

@@ -61,6 +61,12 @@ USER_CODE_OVERRIDABLE_FROZEN_FIELDS: frozenset[str] = FIELDS_COPY_FROM_USER_RETU
     "pending_reasoning",
 }
 
+FIELDS_COPY_FROM_RUNTIME_NODE_STATE: frozenset[str] = USER_CODE_OVERRIDABLE_FROZEN_FIELDS | {
+    "prompt_history",
+    "llm_context_memory_cursor",
+    "scheduled_tasks",
+}
+
 # Снимок после user/eval-кода: не сравниваем поля, которые inline-код и тулзы
 # вправе выставлять (interrupt), дополнять (reasoning_history) и т.д.
 FROZEN_STATE_SNAPSHOT_FIELDS: frozenset[str] = frozenset(
@@ -144,15 +150,23 @@ def should_skip_field_on_user_returned_state_copy(field_name: str) -> bool:
     return field_name not in FIELDS_COPY_FROM_USER_RETURNED_STATE
 
 
+def should_skip_field_on_runtime_node_state_merge(field_name: str) -> bool:
+    if field_name not in FROZEN_STATE_FIELDS:
+        return False
+    return field_name not in FIELDS_COPY_FROM_RUNTIME_NODE_STATE
+
+
 __all__ = [
     "FROZEN_STATE_FIELDS",
     "FROZEN_STATE_SNAPSHOT_FIELDS",
+    "FIELDS_COPY_FROM_RUNTIME_NODE_STATE",
     "USER_CODE_OVERRIDABLE_FROZEN_FIELDS",
     "USER_TOOL_PARALLEL_STATE_MERGE_FIELDS",
     "assert_frozen_fields_unchanged",
     "forbid_frozen_update_key",
     "guard_setattr_if_user_code",
     "is_runtime_state_mutation_allowed",
+    "should_skip_field_on_runtime_node_state_merge",
     "should_skip_field_on_user_returned_state_copy",
     "snapshot_frozen_fields",
     "user_code_state_mutation_guard",

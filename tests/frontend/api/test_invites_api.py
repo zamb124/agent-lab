@@ -20,6 +20,7 @@ from httpx import ASGITransport, AsyncClient
 from core.config import get_settings
 from core.models.identity_models import Company, User
 from core.short_links.kinds import SHORT_LINK_KIND_COMPANY_INVITE
+from core.short_links.payloads import CompanyInvitePayload
 from core.short_links.repository import ShortLinkRepository
 from core.utils.invite_tokens import (
     INVITE_REDIS_KEY_PREFIX,
@@ -60,7 +61,7 @@ async def _insert_invite_short_link_row(jwt_str: str, expires_at: datetime) -> s
     ok = await repo.insert_try(
         code,
         SHORT_LINK_KIND_COMPANY_INVITE,
-        {"jwt": jwt_str},
+        CompanyInvitePayload(jwt=jwt_str),
         expires_at,
     )
     if not ok:

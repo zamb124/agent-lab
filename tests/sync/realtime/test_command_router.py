@@ -10,18 +10,28 @@ import pytest
 
 from apps.sync.realtime.command_router import SYNC_OPERATIONS, register_sync_ws_commands
 from core.websocket import has_ws_command_handler, list_ws_command_types
-from core.websocket.command_router import _reset_handlers_for_tests
 
 
 @pytest.fixture(autouse=True)
-def _reset_ws_handlers():
-    _reset_handlers_for_tests()
+def _ensure_no_partial_sync_registry():
+    registered = set(list_ws_command_types())
+    expected = set(SYNC_OPERATIONS)
+    if registered.intersection(expected) and not expected.issubset(registered):
+        missing = sorted(expected - registered)
+        raise AssertionError(f"Частичная регистрация sync WS handlers: отсутствуют {missing}")
     yield
-    _reset_handlers_for_tests()
+
+
+def _ensure_sync_handlers_registered() -> None:
+    expected = set(SYNC_OPERATIONS)
+    registered = set(list_ws_command_types())
+    if expected.issubset(registered):
+        return
+    register_sync_ws_commands()
 
 
 def test_register_sync_ws_commands_registers_all_canonical_names() -> None:
-    register_sync_ws_commands()
+    _ensure_sync_handlers_registered()
 
     for canonical in SYNC_OPERATIONS:
         assert has_ws_command_handler(canonical), f"Нет handler для {canonical}"
@@ -32,7 +42,7 @@ def test_register_sync_ws_commands_registers_all_canonical_names() -> None:
 
 
 def test_register_sync_ws_commands_command_count_is_stable() -> None:
-    register_sync_ws_commands()
+    _ensure_sync_handlers_registered()
     sync_handlers = [t for t in list_ws_command_types() if t.startswith("sync/")]
     assert len(sync_handlers) == len(SYNC_OPERATIONS)
 

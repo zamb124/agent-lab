@@ -206,6 +206,7 @@ export class LandingFooter extends PlatformElement {
     constructor() {
         super();
         this._bundle = this.useOp('frontend/public_site_bundle');
+        this._localeSel = this.select((s) => s.i18n.locale);
     }
 
     connectedCallback() {
@@ -218,7 +219,7 @@ export class LandingFooter extends PlatformElement {
     }
 
     _legalUrl(pathname) {
-        const lang = this.bus.getState().i18n.locale;
+        const lang = this._localeSel.value;
         if (lang === 'ru') {
             return `${pathname}?lang=ru`;
         }
@@ -229,14 +230,14 @@ export class LandingFooter extends PlatformElement {
     }
 
     _companyName(legal) {
-        const locale = this.bus.getState().i18n.locale;
+        const locale = this._localeSel.value;
         if (locale === 'ru') return legal.company_name_ru;
         if (locale === 'en') return legal.company_name_en;
         throw new Error('landing-footer: i18n.locale must be ru or en');
     }
 
     _legalAddress(legal) {
-        const locale = this.bus.getState().i18n.locale;
+        const locale = this._localeSel.value;
         if (locale === 'ru') return legal.legal_address_ru;
         if (locale === 'en') return legal.legal_address_en;
         throw new Error('landing-footer: i18n.locale must be ru or en');

@@ -24,9 +24,10 @@ from taskiq import TaskiqMessage, TaskiqMiddleware, TaskiqResult
 from core.config import get_settings
 from core.logging import get_logger
 from core.tasks.message_contract import (
-    task_message_labels,
+    set_task_message_string_label,
     task_message_string_arg,
     task_message_string_kwarg,
+    task_message_string_label,
 )
 from core.types import JsonValue
 
@@ -175,9 +176,7 @@ class SessionLockMiddleware(TaskiqMiddleware):
         # Пытаемся взять lock (с ожиданием если занят)
         if await self._wait_for_lock(session_id):
             # Lock получен, сохраняем session_id для post_execute
-            labels = task_message_labels(message)
-            labels["_session_lock_id"] = session_id
-            message.labels = labels
+            set_task_message_string_label(message, "_session_lock_id", session_id)
         else:
             logger.error("session_lock.acquire_failed", session_id=session_id)
 
@@ -195,7 +194,7 @@ class SessionLockMiddleware(TaskiqMiddleware):
         Освобождает lock.
         """
         _ = result
-        session_id = task_message_labels(message).get("_session_lock_id")
+        session_id = task_message_string_label(message, "_session_lock_id")
 
         if not session_id:
             return
@@ -217,7 +216,7 @@ class SessionLockMiddleware(TaskiqMiddleware):
         """
         _ = result
         _ = exception
-        session_id = task_message_labels(message).get("_session_lock_id")
+        session_id = task_message_string_label(message, "_session_lock_id")
 
         if session_id and session_id in self._locks_held:
             await self._release_lock(session_id)

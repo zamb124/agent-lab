@@ -67,15 +67,20 @@ class TestPushAPIEndpoints:
         Успешная подписка.
         """
         subscription_data = {
-            **push_subscription_data,
-            "endpoint": f"{push_subscription_data['endpoint']}_{unique_id}"
+            "transport": push_subscription_data["transport"],
+            "endpoint": f"{push_subscription_data['endpoint']}_{unique_id}",
+            "keys": push_subscription_data["keys"],
+            "platform": push_subscription_data["platform"],
         }
 
         with httpx.Client(base_url=FRONTEND_URL, timeout=30.0) as client:
             response = client.post(
                 "/frontend/api/push/subscribe",
                 json=subscription_data,
-                headers={"Authorization": f"Bearer {auth_token_system}"}
+                headers={
+                    "Authorization": f"Bearer {auth_token_system}",
+                    "User-Agent": push_subscription_data["user_agent"],
+                },
             )
 
             assert response.status_code == 200, f"Subscribe failed: {response.text}"
@@ -87,7 +92,10 @@ class TestPushAPIEndpoints:
             client.delete(
                 "/frontend/api/push/unsubscribe",
                 params={"endpoint": subscription_data["endpoint"]},
-                headers={"Authorization": f"Bearer {auth_token_system}"}
+                headers={
+                    "Authorization": f"Bearer {auth_token_system}",
+                    "User-Agent": push_subscription_data["user_agent"],
+                },
             )
 
     @pytest.mark.e2e
@@ -103,12 +111,17 @@ class TestPushAPIEndpoints:
         """
         endpoint = f"{push_subscription_data['endpoint']}_cycle_{unique_id}"
         subscription_data = {
-            **push_subscription_data,
-            "endpoint": endpoint
+            "transport": push_subscription_data["transport"],
+            "endpoint": endpoint,
+            "keys": push_subscription_data["keys"],
+            "platform": push_subscription_data["platform"],
         }
 
         with httpx.Client(base_url=FRONTEND_URL, timeout=30.0) as client:
-            headers = {"Authorization": f"Bearer {auth_token_system}"}
+            headers = {
+                "Authorization": f"Bearer {auth_token_system}",
+                "User-Agent": push_subscription_data["user_agent"],
+            }
 
             # 1. Подписываемся
             response = client.post(

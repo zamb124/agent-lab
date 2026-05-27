@@ -15,13 +15,13 @@ API возвращает A2A Task формат.
 """
 
 import uuid
-from typing import Any, Dict
 
 import pytest
 
 from apps.flows.src.tasks.flow_tasks import process_flow_task
 from apps.flows.src.tasks.tool_tasks import execute_tool
-from core.state import ExecutionState
+from core.clients.llm import LLMToolCall
+from core.state import ExecutionState, InterruptData
 
 pytestmark = pytest.mark.real_taskiq
 
@@ -32,19 +32,6 @@ def require_taskiq_worker(taskiq_worker, container):
     container.use_worker = True
     yield
     container.use_worker = False
-
-
-def get_task_state(data: Dict[str, Any]) -> str:
-    """Извлекает state из A2A Task ответа."""
-    return data["status"]["state"]
-
-
-def get_task_response(data: Dict[str, Any]) -> str:
-    """Извлекает текст ответа из A2A Task."""
-    msg = data["status"].get("message")
-    if msg and msg.get("parts"):
-        return msg["parts"][0].get("text", "")
-    return ""
 
 
 @pytest.mark.real_taskiq
@@ -59,6 +46,15 @@ class TestTaskIQToolExecution:
             "title": "TaskIQ Test Calculator",
             "description": "Calculator for TaskIQ tests",
             "code": "\nasync def run(args, state):\n    a = args.get('a', 0)\n    b = args.get('b', 0)\n    op = args.get('op', 'add')\n    if op == 'add':\n        return a + b\n    elif op == 'mul':\n        return a * b\n    return 0\n",
+            "parameters_schema": {
+                "type": "object",
+                "properties": {
+                    "a": {"type": "number"},
+                    "b": {"type": "number"},
+                    "op": {"type": "string"},
+                },
+                "required": ["a", "b"],
+            },
         }
 
     @pytest.mark.asyncio
@@ -129,6 +125,11 @@ class TestTaskIQToolExecution:
             "title": "State Tool",
             "description": "Tool that uses state",
             "code": "\nasync def run(args, state):\n    prefix = state.get('prefix', '')\n    value = args.get('value', '')\n    return f\"{prefix}:{value}\"\n",
+            "parameters_schema": {
+                "type": "object",
+                "properties": {"value": {"type": "string"}},
+                "required": ["value"],
+            },
         }
         state_dict = {
             "task_id": "test-task",
@@ -159,6 +160,11 @@ class TestTaskIQToolExecution:
             "title": "Multiplier",
             "description": "Multiplies",
             "code": "\nasync def run(args, state):\n    return args.get('x', 0) * 2\n",
+            "parameters_schema": {
+                "type": "object",
+                "properties": {"x": {"type": "number"}},
+                "required": ["x"],
+            },
         }
         tool1 = await container.tool_registry.create_tool(calculator_tool_config)
         tool2 = await container.tool_registry.create_tool(tool2_config)
@@ -166,15 +172,19 @@ class TestTaskIQToolExecution:
             node_id="test_node", name="Test Node", type="llm_node", prompt="Test"
         )
         runner = LlmNodeRunner(
-            node_config=node_config, tools=[tool1, tool2], llm=None, prompt="Test"
+            node_config=node_config,
+            tools=[tool1, tool2],
+            llm=None,
+            prompt="Test",
+            container=container,
         )
         tool_calls = [
-            {
-                "name": "taskiq_test_calculator",
-                "arguments": {"a": 5, "b": 3, "op": "add"},
-                "id": "call_1",
-            },
-            {"name": tool2_id, "arguments": {"x": 10}, "id": "call_2"},
+            LLMToolCall(
+                name="taskiq_test_calculator",
+                arguments={"a": 5, "b": 3, "op": "add"},
+                id="call_1",
+            ),
+            LLMToolCall(name=tool2_id, arguments={"x": 10}, id="call_2"),
         ]
         state = ExecutionState(
             task_id="test-task",
@@ -261,7 +271,7 @@ class TestTaskIQInterruptResume:
             nodes={
                 "ask": {
                     "type": "code",
-                    "code": "\nasync def run(args, state):\n    if 'name' in state:\n        return state\n    if state.get('asked_name'):\n        state['name'] = state.get('content', '')\n        return state\n    state['interrupt'] = {'question': 'What is your name?'}\n    state['asked_name'] = True\n    return state\n",
+                    "code": "\nfrom apps.flows.src.runtime.exceptions import FlowInterrupt\n\nasync def run(args, state):\n    if 'name' in state:\n        return state\n    if state.get('asked_name'):\n        state['name'] = state.get('content', '')\n        return state\n    state['asked_name'] = True\n    raise FlowInterrupt(question='What is your name?')\n",
                 },
                 "greet": {
                     "type": "code",
@@ -294,20 +304,10 @@ class TestTaskIQInterruptResume:
             context_data=mock_context.model_dump(),
         )
         result = await task.wait_result(timeout=5)
-        if result.is_err:
-            print("\n❌ Task failed!")
-            print(f"Error type: {type(result.error)}")
-            print(f"Error: {result.error}")
-            if hasattr(result.error, "__traceback__"):
-                import traceback
-
-                print("Traceback:")
-                traceback.print_exception(
-                    type(result.error), result.error, result.error.__traceback__
-                )
         assert not result.is_err, f"Task failed: {result.error}"
         assert result.return_value["task_state"] == "input-required"
-        assert result.return_value["interrupt"]["question"] == "What is your name?"
+        interrupt = InterruptData.model_validate(result.return_value["interrupt"])
+        assert interrupt.question == "What is your name?"
 
     @pytest.mark.asyncio
     async def test_resume_via_taskiq(

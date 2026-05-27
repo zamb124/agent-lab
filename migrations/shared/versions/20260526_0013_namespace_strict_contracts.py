@@ -6,7 +6,7 @@ Create Date: 2026-05-26
 
 Runtime namespace models are strict. This migration rewrites persisted JSON
 created by older UI contracts:
-- CRM board stages: `id` -> `stage_id`
+- CRM board stages: `stage_id` -> `id`
 - Sidebar navigation entries: `id` -> `nav_id`
 """
 
@@ -29,9 +29,9 @@ def _normalize_stage(raw: Any) -> Any:
     if not isinstance(raw, Mapping):
         return raw
     stage: dict[str, Any] = dict(raw)
-    legacy_id = stage.pop("id", None)
-    if "stage_id" not in stage and isinstance(legacy_id, str) and legacy_id.strip():
-        stage["stage_id"] = legacy_id
+    legacy_stage_id = stage.pop("stage_id", None)
+    if "id" not in stage and isinstance(legacy_stage_id, str) and legacy_stage_id.strip():
+        stage["id"] = legacy_stage_id
     return stage
 
 

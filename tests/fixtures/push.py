@@ -114,7 +114,7 @@ async def test_push_subscription(push_repository, push_subscription_data, unique
 
     yield subscription
 
-    # Cleanup
+    # Очистка
     try:
         await push_repository.delete_subscription(user_id, endpoint)
     except Exception:
@@ -149,7 +149,7 @@ async def test_push_subscriptions_multi_device(push_repository, unique_id):
 
     yield user_id, subscriptions
 
-    # Cleanup
+    # Очистка
     for endpoint in endpoints:
         try:
             await push_repository.delete_subscription(user_id, endpoint)

@@ -55,7 +55,7 @@ async def embed_test_auth(frontend_container, unique_id):
                 ),
             }
         },
-        edges=[{"from": "main", "to": None}],
+        edges=[{"from_node": "main", "to_node": None}],
     )
     await flows_container.flow_repository.set(agent)
     clear_context()

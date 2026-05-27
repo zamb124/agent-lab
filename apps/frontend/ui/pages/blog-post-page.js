@@ -91,6 +91,7 @@ export class BlogPostPage extends PlatformPage {
         super();
         this.slug = '';
         this._postOp = this.useOp('frontend/public_blog_post');
+        this._localeSel = this.select((s) => s.i18n.locale);
     }
 
     updated(changed) {
@@ -111,7 +112,7 @@ export class BlogPostPage extends PlatformPage {
         }
         if (typeof window === 'undefined') return;
         const origin = window.location.origin;
-        const locale = this.bus.getState().i18n.locale;
+        const locale = this._localeSel.value;
         let title;
         let description;
         let bodyHtml;
@@ -144,14 +145,14 @@ export class BlogPostPage extends PlatformPage {
     }
 
     _title(post) {
-        const locale = this.bus.getState().i18n.locale;
+        const locale = this._localeSel.value;
         if (locale === 'ru') return post.title_ru;
         if (locale === 'en') return post.title_en;
         throw new Error('blog-post-page: i18n.locale must be ru or en');
     }
 
     _body(post) {
-        const locale = this.bus.getState().i18n.locale;
+        const locale = this._localeSel.value;
         if (locale === 'ru') return post.body_ru;
         if (locale === 'en') return post.body_en;
         throw new Error('blog-post-page: i18n.locale must be ru or en');

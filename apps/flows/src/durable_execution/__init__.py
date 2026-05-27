@@ -1,7 +1,7 @@
 """Durable execution ledger for flows."""
 
 from .hashing import hash_state_json
-from .manager import DurableWorkflowRuntime, create_initial_state
+from .manager import DurableWorkflowRuntime, WorkflowStateEventSpec, create_initial_state
 from .models import (
     ActivityLifecyclePayload,
     ActivityRecord,
@@ -88,6 +88,7 @@ __all__ = [
     "WorkflowExecutionPosition",
     "WorkflowConcurrencyError",
     "WorkflowStatus",
+    "WorkflowStateEventSpec",
     "apply_state_delta",
     "build_state_delta",
     "create_initial_state",

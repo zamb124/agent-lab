@@ -164,7 +164,10 @@ def test_merge_shared_rag_resource_deep_merges_filters_and_search_options() -> N
             "namespace": "kb",
             "default_top_k": 8,
             "filters": {"tenant": "acme"},
-            "search_options": {"channels": {"semantic": True}, "rerank": False},
+            "search_options": {
+                "channels": {"semantic": True, "lexical": False},
+                "rerank": False,
+            },
         },
         {
             "filters": {"collection_id": "support"},
@@ -177,5 +180,8 @@ def test_merge_shared_rag_resource_deep_merges_filters_and_search_options() -> N
         "provider": "pgvector",
         "default_top_k": 8,
         "filters": {"tenant": "acme", "collection_id": "support"},
-        "search_options": {"channels": {"semantic": True}, "rerank": True},
+        "search_options": {
+            "channels": {"semantic": True, "lexical": False},
+            "rerank": True,
+        },
     }

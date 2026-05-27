@@ -1,9 +1,9 @@
-"""Test-only company AI provider defaults.
+"""Тестовые дефолты AI-провайдеров компании.
 
-Production runtime stays fail-closed: LLM nodes require either explicit
-provider/model or a company capability override. Tests that exercise generic
-flow execution use this helper to make the company override explicit in the
-test context and in test companies persisted to repositories.
+В production runtime — fail-closed: LLM-ноды требуют явный provider/model
+или company capability override. Тесты общего исполнения flow используют
+этот helper, чтобы override компании был явным в контексте теста и в
+компаниях, сохранённых в репозиториях.
 """
 
 from __future__ import annotations
@@ -31,7 +31,7 @@ _TEXT_LLM_CAPABILITY_FIELDS = (
 def build_test_ai_providers(
     existing_metadata: dict[str, Any] | None = None,
 ) -> CompanyAIProviders:
-    """Return company AI providers with missing text LLM overrides filled for tests."""
+    """Возвращает AI-провайдеров компании с заполненными text LLM override для тестов."""
     metadata = dict(existing_metadata or {})
     providers = CompanyAIProviders.from_metadata(metadata)
 
@@ -51,14 +51,14 @@ def build_test_ai_providers(
 def build_test_ai_providers_metadata(
     existing_metadata: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
-    """Merge test text LLM overrides into a Company.metadata dict."""
+    """Добавляет тестовые text LLM override в словарь Company.metadata."""
     metadata = dict(existing_metadata or {})
     metadata[METADATA_KEY] = build_test_ai_providers(metadata).to_metadata_dict()
     return metadata
 
 
 def company_with_test_ai_provider_defaults(company: Company) -> Company:
-    """Return a copy of company with explicit test text LLM capability overrides."""
+    """Возвращает копию компании с явными тестовыми text LLM capability override."""
     metadata = build_test_ai_providers_metadata(company.metadata)
     return company.model_copy(update={"metadata": metadata})
 
@@ -69,7 +69,7 @@ def make_test_company(
     name: str = "System",
     **kwargs: Any,
 ) -> Company:
-    """Build a test Company with explicit text LLM capability overrides."""
+    """Создаёт тестовую Company с явными text LLM capability override."""
     company = Company(company_id=company_id, name=name, **kwargs)
     return company_with_test_ai_provider_defaults(company)
 

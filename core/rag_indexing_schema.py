@@ -101,8 +101,8 @@ class IndexProfileLexicalConfig(BaseModel):
 class SearchChannelsDefaults(BaseModel):
     model_config: ClassVar[ConfigDict] = ConfigDict(extra="forbid")
 
-    semantic: bool = True
-    lexical: bool = True
+    semantic: bool
+    lexical: bool
 
     @model_validator(mode="after")
     def at_least_one_channel(self) -> SearchChannelsDefaults:

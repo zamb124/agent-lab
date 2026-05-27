@@ -46,15 +46,6 @@ import { formatDurationSeconds } from '@platform/lib/utils/format-duration.js';
 const SCROLL_TOP_THRESHOLD = 60;
 const COPY_LINK_FEEDBACK_MS = 2000;
 
-function _syncCallOverlayDebug() {
-    if (typeof location === 'undefined') return false;
-    try {
-        return /[?&]sync_call_debug=1\b/.test(location.search);
-    } catch (_e) {
-        return false;
-    }
-}
-
 function _canUseMediaDevices() {
     if (typeof navigator === 'undefined') return false;
     const md = navigator.mediaDevices;
@@ -1110,9 +1101,6 @@ export class SyncCallOverlayModal extends PlatformModal {
         } else {
             this.removeAttribute('data-minimized');
         }
-        if (_syncCallOverlayDebug()) {
-            console.info('[sync-call-overlay]', 'updated', { minimized, hasAttr: this.hasAttribute('data-minimized') });
-        }
         // Attach LiveKit tracks к видеоэлементам после Lit-render.
         if (!this._room || !this._lk) return;
         const tileEls = this.renderRoot.querySelectorAll('.tile');
@@ -1786,9 +1774,6 @@ export class SyncCallOverlayModal extends PlatformModal {
     _onMinimize(e) {
         if (e) {
             e.stopPropagation();
-        }
-        if (_syncCallOverlayDebug()) {
-            console.info('[sync-call-overlay]', 'minimizeOverlay', { type: e && e.type, callId: this.callId });
         }
         if (this._minimizeDeferTimer !== null) {
             return;

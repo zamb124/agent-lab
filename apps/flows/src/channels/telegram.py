@@ -92,9 +92,71 @@ class TelegramChannelHandler(BaseChannelHandler):
     channel_type: ChannelType = ChannelType.TELEGRAM
 
     @override
+    async def execute_action(
+        self,
+        action: str,
+        params: JsonObject,
+        config: JsonObject,
+        variables: JsonObject,
+    ) -> JsonObject:
+        recipient = self._require_str_or_int_param(params, "recipient")
+        if action == "send_message":
+            text = self._require_str_param(params, "text")
+            reply_to_message_id = self._optional_int_param(params, "reply_to_message_id")
+            kwargs = self._extra_params(params, {"recipient", "text", "reply_to_message_id"})
+            return await self.send_message(
+                recipient=recipient,
+                text=text,
+                config=config,
+                variables=variables,
+                reply_to_message_id=reply_to_message_id,
+                **kwargs,
+            )
+        if action == "send_photo":
+            photo = self._require_file_param(params, "photo")
+            caption = self._optional_str_param(params, "caption")
+            reply_to_message_id = self._optional_int_param(params, "reply_to_message_id")
+            kwargs = self._extra_params(
+                params,
+                {"recipient", "photo", "caption", "reply_to_message_id"},
+            )
+            return await self.send_photo(
+                recipient=recipient,
+                photo=photo,
+                config=config,
+                variables=variables,
+                caption=caption,
+                reply_to_message_id=reply_to_message_id,
+                **kwargs,
+            )
+        if action == "send_document":
+            document = self._require_file_param(params, "document")
+            caption = self._optional_str_param(params, "caption")
+            filename = self._optional_str_param(params, "filename")
+            reply_to_message_id = self._optional_int_param(params, "reply_to_message_id")
+            kwargs = self._extra_params(
+                params,
+                {"recipient", "document", "caption", "filename", "reply_to_message_id"},
+            )
+            return await self.send_document(
+                recipient=recipient,
+                document=document,
+                config=config,
+                variables=variables,
+                caption=caption,
+                filename=filename,
+                reply_to_message_id=reply_to_message_id,
+                **kwargs,
+            )
+        raise ValueError(
+            f"Unknown action '{action}' for channel telegram. "
+            + "Available: send_message, send_photo, send_document"
+        )
+
+    @override
     async def send_message(
         self,
-        recipient: str,
+        recipient: str | int,
         text: str,
         config: JsonObject,
         variables: JsonObject,
@@ -228,7 +290,7 @@ class TelegramChannelHandler(BaseChannelHandler):
     @override
     async def send_photo(
         self,
-        recipient: str,
+        recipient: str | int,
         photo: str | bytes,
         config: JsonObject,
         variables: JsonObject,
@@ -288,7 +350,7 @@ class TelegramChannelHandler(BaseChannelHandler):
     @override
     async def send_document(
         self,
-        recipient: str,
+        recipient: str | int,
         document: str | bytes,
         config: JsonObject,
         variables: JsonObject,
@@ -351,7 +413,7 @@ class TelegramChannelHandler(BaseChannelHandler):
 
     async def reply(
         self,
-        recipient: str,
+        recipient: str | int,
         message_id: int,
         text: str,
         config: JsonObject,

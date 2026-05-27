@@ -6,6 +6,7 @@
  * `/sync/api/ws/notifications` (см. `architecture.mdc`).
  */
 
+import '@platform/lib/components/app-loader.js';
 import '@platform/lib/components/platform-notification-manager.js';
 import '@platform/lib/components/glass-card.js';
 import '@platform/lib/components/glass-spinner.js';

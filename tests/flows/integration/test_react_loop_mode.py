@@ -8,12 +8,24 @@
 ПРАВИЛО: Мок только LLM. Tools, state, flow - реальные.
 """
 
+import time
+
 import pytest
 
 from apps.flows.src.container import get_container
 from apps.flows.src.models import FlowConfig
+from apps.flows.src.runtime.flow import Flow
 from core.errors import FlowExecutionError
 from core.state import ExecutionState
+from core.types import JsonObject
+from tests.flows.durable_runtime_harness import run_flow, workflow_state
+
+EMPTY_PARAMETERS_SCHEMA: JsonObject = {"type": "object", "properties": {}, "required": []}
+EXPR_PARAMETERS_SCHEMA: JsonObject = {
+    "type": "object",
+    "properties": {"expr": {"type": "string"}},
+    "required": ["expr"],
+}
 
 INLINE_CALCULATOR = {
     "tool_id": "calculator",
@@ -48,6 +60,20 @@ INLINE_ASK_USER = {
 }
 
 
+async def run_flow_state(flow: Flow | None, state: ExecutionState) -> ExecutionState:
+    assert flow is not None
+    return await run_flow(container=flow.container, flow=flow, state=state)
+
+
+def make_flow_state(flow_id: str, content: str, *, branch_id: str = "default") -> ExecutionState:
+    return workflow_state(
+        flow_id=flow_id,
+        unique_id=f"{flow_id}-{time.time_ns()}",
+        branch_id=branch_id,
+        content=content,
+    )
+
+
 class TestReactLoopModeAuto:
     """
     Тесты режима AUTO (по умолчанию).
@@ -80,10 +106,10 @@ class TestReactLoopModeAuto:
             task_id="test-task",
             context_id="test-context",
             user_id="test-user",
-            session_id="test-agent:test-context",
+            session_id=f"{flow.flow_id}:test-context",
             content="Привет",
         )
-        result = await flow.run(state)
+        result = await run_flow_state(flow, state)
         assert "response" in result
         assert result["response"] == "Привет! Чем могу помочь?"
         await container.flow_repository.delete(flow_id)
@@ -131,10 +157,10 @@ class TestReactLoopModeAuto:
             task_id="test-task",
             context_id="test-context",
             user_id="test-user",
-            session_id="test-agent:test-context",
+            session_id=f"{flow.flow_id}:test-context",
             content="5+3?",
         )
-        result = await flow.run(state)
+        result = await run_flow_state(flow, state)
         assert "response" in result
         assert "8" in result["response"]
         await container.flow_repository.delete(flow_id)
@@ -161,10 +187,10 @@ class TestReactLoopModeAuto:
             task_id="test-task",
             context_id="test-context",
             user_id="test-user",
-            session_id="test-agent:test-context",
+            session_id=f"{flow.flow_id}:test-context",
             content="test",
         )
-        result = await flow.run(state)
+        result = await run_flow_state(flow, state)
         assert result["response"] == "Ответ по умолчанию"
         await container.flow_repository.delete(flow_id)
 
@@ -204,10 +230,10 @@ class TestReactLoopModeExplicit:
             task_id="test-task",
             context_id="test-context",
             user_id="test-user",
-            session_id="test-agent:test-context",
+            session_id=f"{flow.flow_id}:test-context",
             content="Завершись",
         )
-        result = await flow.run(state)
+        result = await run_flow_state(flow, state)
         assert "response" in result
         assert result["response"] == "Готово!"
         await container.flow_repository.delete(flow_id)
@@ -257,10 +283,10 @@ class TestReactLoopModeExplicit:
             task_id="test-task",
             context_id="test-context",
             user_id="test-user",
-            session_id="test-agent:test-context",
+            session_id=f"{flow.flow_id}:test-context",
             content="10*5?",
         )
-        result = await flow.run(state)
+        result = await run_flow_state(flow, state)
         assert "response" in result
         assert "50" in result["response"]
         await container.flow_repository.delete(flow_id)
@@ -299,10 +325,10 @@ class TestReactLoopModeExplicit:
             task_id="test-task",
             context_id="test-context",
             user_id="test-user",
-            session_id="test-agent:test-context",
+            session_id=f"{flow.flow_id}:test-context",
             content="test",
         )
-        result = await flow.run(state)
+        result = await run_flow_state(flow, state)
         assert "response" in result
         assert result["response"] == "Теперь правильно!"
         await container.flow_repository.delete(flow_id)
@@ -342,10 +368,10 @@ class TestReactLoopModeExplicit:
             task_id="test-task",
             context_id="test-context",
             user_id="test-user",
-            session_id="test-agent:test-context",
+            session_id=f"{flow.flow_id}:test-context",
             content="test",
         )
-        result = await flow.run(state)
+        result = await run_flow_state(flow, state)
         assert "response" in result
         assert "автоматически" in result["response"]
         await container.flow_repository.delete(flow_id)
@@ -379,10 +405,10 @@ class TestReactLoopModeExplicit:
             task_id="test-task",
             context_id="test-context",
             user_id="test-user",
-            session_id="test-agent:test-context",
+            session_id=f"{flow.flow_id}:test-context",
             content="Привет",
         )
-        result = await flow.run(state)
+        result = await run_flow_state(flow, state)
         assert "interrupt" in result or result.get("interrupt") is not None
         await container.flow_repository.delete(flow_id)
 
@@ -405,8 +431,18 @@ class TestReactLoopModeExplicit:
                     "type": "llm_node",
                     "prompt": "Выполни шаги и заверши через finish.",
                     "tools": [
-                        {"tool_id": "step1", "description": "Шаг 1", "code": step1_code},
-                        {"tool_id": "step2", "description": "Шаг 2", "code": step2_code},
+                        {
+                            "tool_id": "step1",
+                            "description": "Шаг 1",
+                            "parameters_schema": EMPTY_PARAMETERS_SCHEMA,
+                            "code": step1_code,
+                        },
+                        {
+                            "tool_id": "step2",
+                            "description": "Шаг 2",
+                            "parameters_schema": EMPTY_PARAMETERS_SCHEMA,
+                            "code": step2_code,
+                        },
                         INLINE_FINISH,
                     ],
                     "react": {"loop_mode": "explicit", "exit_tool": "finish"},
@@ -427,10 +463,10 @@ class TestReactLoopModeExplicit:
             task_id="test-task",
             context_id="test-context",
             user_id="test-user",
-            session_id="test-agent:test-context",
+            session_id=f"{flow.flow_id}:test-context",
             content="Выполни",
         )
-        result = await flow.run(state)
+        result = await run_flow_state(flow, state)
         assert "response" in result
         assert "выполнены" in result["response"]
         await container.flow_repository.delete(flow_id)
@@ -477,10 +513,10 @@ class TestReactLoopModeStrictAndReminder:
             task_id="test-task",
             context_id="test-context",
             user_id="test-user",
-            session_id="test-agent:test-context",
+            session_id=f"{flow.flow_id}:test-context",
             content="test",
         )
-        result = await flow.run(state)
+        result = await run_flow_state(flow, state)
         assert "response" in result
         assert result["response"] == "Правильный ответ через finish"
         await container.flow_repository.delete(flow_id)
@@ -512,10 +548,10 @@ class TestReactLoopModeStrictAndReminder:
             task_id="test-task",
             context_id="test-context",
             user_id="test-user",
-            session_id="test-agent:test-context",
+            session_id=f"{flow.flow_id}:test-context",
             content="test",
         )
-        result = await flow.run(state)
+        result = await run_flow_state(flow, state)
         assert "response" in result
         assert result["response"] == "Текстовый ответ без finish"
         await container.flow_repository.delete(flow_id)
@@ -558,10 +594,10 @@ class TestReactLoopModeStrictAndReminder:
             task_id="test-task",
             context_id="test-context",
             user_id="test-user",
-            session_id="test-agent:test-context",
+            session_id=f"{flow.flow_id}:test-context",
             content="test",
         )
-        result = await flow.run(state)
+        result = await run_flow_state(flow, state)
         assert "response" in result
         assert result["response"] == "OK"
         messages = result.get("messages", [])
@@ -585,7 +621,12 @@ class TestReactLoopModeStrictAndReminder:
                     "type": "llm_node",
                     "prompt": "Вычисли и ответь.",
                     "tools": [
-                        {"tool_id": "calc", "description": "Calc", "code": calc_code},
+                        {
+                            "tool_id": "calc",
+                            "description": "Calc",
+                            "parameters_schema": EXPR_PARAMETERS_SCHEMA,
+                            "code": calc_code,
+                        },
                         INLINE_FINISH,
                     ],
                     "react": {"loop_mode": "explicit", "exit_tool": "finish", "strict": False},
@@ -605,10 +646,10 @@ class TestReactLoopModeStrictAndReminder:
             task_id="test-task",
             context_id="test-context",
             user_id="test-user",
-            session_id="test-agent:test-context",
+            session_id=f"{flow.flow_id}:test-context",
             content="2*3?",
         )
-        result = await flow.run(state)
+        result = await run_flow_state(flow, state)
         assert "response" in result
         assert "6" in result["response"]
         await container.flow_repository.delete(flow_id)
@@ -635,7 +676,12 @@ class TestReactLoopModeMaxIterations:
                     "type": "llm_node",
                     "prompt": "Вызывай tool пока не закончатся итерации.",
                     "tools": [
-                        {"tool_id": "loop_tool", "description": "Loop", "code": loop_code},
+                        {
+                            "tool_id": "loop_tool",
+                            "description": "Loop",
+                            "parameters_schema": EMPTY_PARAMETERS_SCHEMA,
+                            "code": loop_code,
+                        },
                         INLINE_FINISH,
                     ],
                     "react": {"loop_mode": "explicit", "exit_tool": "finish", "max_iterations": 3},
@@ -661,11 +707,11 @@ class TestReactLoopModeMaxIterations:
             task_id="test-task",
             context_id="test-context",
             user_id="test-user",
-            session_id="test-agent:test-context",
+            session_id=f"{flow.flow_id}:test-context",
             content="Loop",
         )
         with pytest.raises(FlowExecutionError):
-            await flow.run(state)
+            await run_flow_state(flow, state)
         await container.flow_repository.delete(flow_id)
 
 
@@ -684,7 +730,7 @@ class TestExampleReactExplicitMode:
         assert flow is not None
 
     async def test_example_explicit_loop_executes_calculator_and_finish(
-        self, app, mock_llm_with_queue
+        self, app, unique_id, mock_llm_with_queue
     ):
         """
         Агент вычисляет через calculator и завершается через finish.
@@ -697,18 +743,19 @@ class TestExampleReactExplicitMode:
             ]
         )
         flow = await container.flow_factory.get_flow("example_react", branch_id="explicit_mode")
-        state = ExecutionState(
-            task_id="test-task",
-            context_id="test-context",
-            user_id="test-user",
-            session_id="test-agent:test-context",
+        state = workflow_state(
+            flow_id="example_react",
+            unique_id=f"explicit-calc-{unique_id}",
+            branch_id="explicit_mode",
             content="Сколько будет 7+8?",
         )
-        result = await flow.run(state)
+        result = await run_flow_state(flow, state)
         assert "response" in result
         assert "15" in result["response"]
 
-    async def test_example_explicit_loop_asks_user_when_unclear(self, app, mock_llm_with_queue):
+    async def test_example_explicit_loop_asks_user_when_unclear(
+        self, app, unique_id, mock_llm_with_queue
+    ):
         """
         Агент использует ask_user для уточнения и interrupt происходит.
         """
@@ -723,19 +770,18 @@ class TestExampleReactExplicitMode:
             ]
         )
         flow = await container.flow_factory.get_flow("example_react", branch_id="explicit_mode")
-        state = ExecutionState(
-            task_id="test-task",
-            context_id="test-context",
-            user_id="test-user",
-            session_id="test-agent:test-context",
+        state = workflow_state(
+            flow_id="example_react",
+            unique_id=f"explicit-ask-{unique_id}",
+            branch_id="explicit_mode",
             content="Посчитай",
         )
-        result = await flow.run(state)
+        result = await run_flow_state(flow, state)
         assert result.interrupt is not None
 
-    async def test_example_test_explicit_skill_with_mock(self, app, mock_llm_with_queue):
+    async def test_example_explicit_mode_with_mock(self, app, unique_id, mock_llm_with_queue):
         """
-        Skill test_explicit с предустановленными mock ответами работает.
+        Каноническая ветка explicit_mode с предустановленными mock ответами работает.
         """
         container = get_container()
         mock_llm_with_queue(
@@ -744,15 +790,14 @@ class TestExampleReactExplicitMode:
                 {"type": "tool_call", "tool": "finish", "args": {"answer": "Результат: 10+5 = 15"}},
             ]
         )
-        flow = await container.flow_factory.get_flow("example_react", branch_id="test_explicit")
-        state = ExecutionState(
-            task_id="test-task",
-            context_id="test-context",
-            user_id="test-user",
-            session_id="test-agent:test-context",
+        flow = await container.flow_factory.get_flow("example_react", branch_id="explicit_mode")
+        state = workflow_state(
+            flow_id="example_react",
+            unique_id=f"explicit-mock-{unique_id}",
+            branch_id="explicit_mode",
             content="10+5",
         )
-        result = await flow.run(state)
+        result = await run_flow_state(flow, state)
         assert "response" in result
         assert "15" in result["response"]
 
@@ -779,10 +824,10 @@ class TestExampleReactExplicitMode:
             task_id="test-task",
             context_id="test-context",
             user_id="test-user",
-            session_id="test-agent:test-context",
+            session_id=f"{flow.flow_id}:test-context",
             content="Привет",
         )
-        result = await flow.run(state)
+        result = await run_flow_state(flow, state)
         assert "response" in result
         assert result["response"] == "Простой текстовый ответ"
 
@@ -821,15 +866,15 @@ class TestReactLoopModeEdgeCases:
             task_id="test-task",
             context_id="test-context",
             user_id="test-user",
-            session_id="test-agent:test-context",
+            session_id=f"{flow.flow_id}:test-context",
             content="",
         )
-        result = await flow.run(state)
+        result = await run_flow_state(flow, state)
         assert "response" in result
         await container.flow_repository.delete(flow_id)
 
     async def test_finish_tool_auto_added_in_explicit_mode(
-        self, app, unique_id, mock_llm_with_queue, make_test_state
+        self, app, unique_id, mock_llm_with_queue
     ):
         """
         Finish tool автоматически добавляется если его нет в списке tools.
@@ -861,7 +906,8 @@ class TestReactLoopModeEdgeCases:
             ]
         )
         flow = await container.flow_factory.get_flow(flow_id)
-        result = await flow.run(make_test_state(content="test"))
+        state = make_flow_state(flow_id, "test")
+        result = await run_flow_state(flow, state)
         assert result.response is not None
         assert "автоматически" in result.response
         await container.flow_repository.delete(flow_id)
@@ -901,10 +947,10 @@ class TestReactLoopModeEdgeCases:
             task_id="test-task",
             context_id="test-context",
             user_id="test-user",
-            session_id="test-agent:test-context",
+            session_id=f"{flow.flow_id}:test-context",
             content="test",
         )
-        result = await flow.run(state)
+        result = await run_flow_state(flow, state)
         assert "response" in result
         assert result["response"] == "Наконец finish!"
         await container.flow_repository.delete(flow_id)
@@ -950,10 +996,10 @@ class TestReactLoopModeEdgeCases:
             task_id="test-task",
             context_id="test-context",
             user_id="test-user",
-            session_id="test-agent:test-context",
+            session_id=f"{flow.flow_id}:test-context",
             content="test",
         )
-        result = await flow.run(state)
+        result = await run_flow_state(flow, state)
         assert "response" in result
         assert "Задача выполнена" in result["response"]
         await container.flow_repository.delete(flow_id)
@@ -987,10 +1033,10 @@ class TestReactLoopModeEdgeCases:
             task_id="test-task",
             context_id="test-context",
             user_id="test-user",
-            session_id="test-agent:test-context",
+            session_id=f"{flow.flow_id}:test-context",
             content="test",
         )
-        result = await flow.run(state)
+        result = await run_flow_state(flow, state)
         assert "response" in result
         assert result["response"] == "Текстовый ответ в auto режиме"
         await container.flow_repository.delete(flow_id)

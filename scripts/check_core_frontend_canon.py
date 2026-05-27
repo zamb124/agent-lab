@@ -232,12 +232,9 @@ def check_components_zone() -> None:
         "platform-modal-stack.js",
         "platform-confirm-modal.js",  # абстрактный родитель для apps/<svc>/ui/modals/confirm-modal.js
     }
-    legacy_modals = {
-        "file-text-preview-modal.js",  # known legacy: BaseService + I18nNs, ждёт миграции
-    }
     modal_files = [
         p for p in files
-        if "modal" in p.name and p.name not in base_modals and p.name not in legacy_modals
+        if "modal" in p.name and p.name not in base_modals
     ]
     for path in modal_files:
         text = path.read_text(encoding="utf-8")

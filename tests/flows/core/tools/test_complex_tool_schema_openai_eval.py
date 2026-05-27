@@ -255,6 +255,8 @@ async def test_registry_materialize_merges_full_parameters_schema(app) -> None:
 
 @pytest.mark.asyncio
 async def test_llm_node_runner_build_tools_schema_matches_openai_canon(app) -> None:
+    from apps.flows.src.container import get_container
+
     schema = sanitize_parameters_schema_for_llm(pydantic_model_to_parameters_schema(ComplexArgs))
     complex_tool = CodeTool(
         tool_id="runner_complex_tool",
@@ -269,7 +271,13 @@ async def test_llm_node_runner_build_tools_schema_matches_openai_canon(app) -> N
         prompt="p",
         llm=NodeLLMConfig(model="mock-gpt-4", temperature=0.0),
     )
-    runner = LlmNodeRunner(node_config=cfg, tools=[complex_tool], llm=None, prompt="p")
+    runner = LlmNodeRunner(
+        node_config=cfg,
+        tools=[complex_tool],
+        llm=None,
+        prompt="p",
+        container=get_container(),
+    )
     built = runner._build_tools_schema()
     assert len(built) == 1
     assert_openai_tools_list_entry(built[0])

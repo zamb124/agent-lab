@@ -50,7 +50,7 @@ class UserRepository(BaseRepository[User]):
                 select(UsersModel.value)
                 .where(
                     UsersModel.key.like("user:%"),
-                    text("(users.value->'emails') @> jsonb_build_array(:email)"),
+                    text("(users.value->'emails') @> jsonb_build_array(CAST(:email AS text))"),
                 )
                 .limit(1),
                 {"email": email},

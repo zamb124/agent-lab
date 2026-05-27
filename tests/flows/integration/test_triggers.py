@@ -22,6 +22,7 @@ from fastapi.responses import JSONResponse
 
 from apps.flows.src.container import get_container
 from apps.flows.src.models import FlowConfig, TriggerConfig, TriggerStatus, TriggerType
+from tests.flows.durable_runtime_harness import run_flow, workflow_state
 
 
 class TestTriggerModels:
@@ -499,6 +500,8 @@ class TestTriggersAPI:
             c = MagicMock()
             r = MagicMock()
             r.status_code = 200
+            r.content = b'{"ok": true, "result": true}'
+            r.text = '{"ok": true, "result": true}'
             r.json = MagicMock(return_value={"ok": True, "result": True})
             c.post = AsyncMock(return_value=r)
             yield c
@@ -1904,11 +1907,8 @@ class TestChannelNodeE2E:
         self, notification_server, unique_id, container, mock_llm_with_queue
     ):
         """ChannelNode реально отправляет webhook уведомление."""
-        from core.state import ExecutionState
-
         (server, base_url) = notification_server
         flow_id = f"channel_e2e_{unique_id}"
-        context_id = f"ctx_{unique_id}"
         flow_config = FlowConfig(
             flow_id=flow_id,
             name="Channel E2E Agent",
@@ -1916,7 +1916,7 @@ class TestChannelNodeE2E:
             nodes={
                 "process": {
                     "type": "code",
-                    "code": '\nasync def run(args, state):\n    state.response = "Processing complete"\n    return {"success": True}\n',
+                    "code": '\nasync def run(args, state):\n    state["response"] = "Processing complete"\n    return {"success": True}\n',
                 },
                 "notify": {
                     "type": "channel",
@@ -1937,15 +1937,13 @@ class TestChannelNodeE2E:
         )
         await container.flow_repository.set(flow_config)
         agent = await container.flow_factory.get_flow(flow_id)
-        state = ExecutionState(
-            task_id=f"task_{unique_id}",
-            context_id=context_id,
-            session_id=f"{flow_id}:{context_id}",
-            user_id="test_user",
+        state = workflow_state(
+            flow_id=flow_id,
+            unique_id=unique_id,
             content="Test with webhook",
+            variables={"notification_url": f"{base_url}/notify"},
         )
-        state.variables["notification_url"] = f"{base_url}/notify"
-        final_state = await agent.run(state)
+        final_state = await run_flow(container=container, flow=agent, state=state)
         assert final_state.response == "Processing complete"
         requests = server.get_requests("notify")
         assert len(requests) >= 1
@@ -1956,12 +1954,9 @@ class TestChannelNodeE2E:
         self, notification_server, unique_id, container, mock_llm_with_queue
     ):
         """ChannelNode реально отправляет Telegram сообщение."""
-        from core.state import ExecutionState
-
         (server, base_url) = notification_server
         telegram_api_base = f"{base_url}/telegram"
         flow_id = f"tg_channel_e2e_{unique_id}"
-        context_id = f"ctx_{unique_id}"
         flow_config = FlowConfig(
             flow_id=flow_id,
             name="Telegram Channel E2E",
@@ -1969,7 +1964,7 @@ class TestChannelNodeE2E:
             nodes={
                 "process": {
                     "type": "code",
-                    "code": '\nasync def run(args, state):\n    state.response = "Your request has been processed"\n    return {"success": True}\n',
+                    "code": '\nasync def run(args, state):\n    state["response"] = "Your request has been processed"\n    return {"success": True}\n',
                 },
                 "send_telegram": {
                     "type": "channel",
@@ -1992,15 +1987,13 @@ class TestChannelNodeE2E:
         )
         await container.flow_repository.set(flow_config)
         agent = await container.flow_factory.get_flow(flow_id)
-        state = ExecutionState(
-            task_id=f"task_{unique_id}",
-            context_id=context_id,
-            session_id=f"{flow_id}:{context_id}",
-            user_id="test_user",
+        state = workflow_state(
+            flow_id=flow_id,
+            unique_id=unique_id,
             content="Test telegram notification",
+            variables={"chat_id": "987654321"},
         )
-        state.variables["chat_id"] = "987654321"
-        await agent.run(state)
+        await run_flow(container=container, flow=agent, state=state)
         requests = server.get_requests("telegram_send_message")
         assert len(requests) >= 1
         last_request = requests[-1]
@@ -2036,8 +2029,8 @@ class TestTriggerOutputActionsE2E:
         flow_id = f"output_action_e2e_{unique_id}"
         output_action = OutputAction(
             channel=ChannelType.WEBHOOK,
-            action="send_payload",
-            mapping={"recipient": f"@const:{base_url}/notify", "payload": "@state:response"},
+            action="send_message",
+            mapping={"recipient": f"@const:{base_url}/notify", "text": "@state:response"},
         )
         trigger = TriggerConfig(
             trigger_id="webhook_trigger",
@@ -2086,8 +2079,8 @@ class TestTriggerOutputActionsE2E:
         actions = [
             OutputAction(
                 channel=ChannelType.WEBHOOK,
-                action="send_payload",
-                mapping={"recipient": f"@const:{base_url}/notify", "payload": "@state:response"},
+                action="send_message",
+                mapping={"recipient": f"@const:{base_url}/notify", "text": "@state:response"},
             ),
             OutputAction(
                 channel=ChannelType.TELEGRAM,
@@ -2387,11 +2380,8 @@ class TestFullTriggerFlowE2E:
         Code агент → ChannelNode → реальный HTTP запрос.
         Без LLM, чистый code flow.
         """
-        from core.state import ExecutionState
-
         (server, base_url) = notification_server
         flow_id = f"code_channel_e2e_{unique_id}"
-        context_id = f"ctx_{unique_id}"
         flow_config = FlowConfig(
             flow_id=flow_id,
             name="Code Channel E2E",
@@ -2399,7 +2389,7 @@ class TestFullTriggerFlowE2E:
             nodes={
                 "calculate": {
                     "type": "code",
-                    "code": '\nasync def run(args, state):\n    a = state.variables.get("a", 0)\n    b = state.variables.get("b", 0)\n    result = a + b\n    state.response = f"Result: {result}"\n    state.variables["calculation_result"] = result\n    return {"result": result}\n',
+                    "code": '\nasync def run(args, state):\n    variables = state["variables"]\n    a = variables.get("a", 0)\n    b = variables.get("b", 0)\n    result = a + b\n    state["response"] = f"Result: {result}"\n    variables["calculation_result"] = result\n    return {"result": result}\n',
                 },
                 "send_result": {
                     "type": "channel",
@@ -2419,15 +2409,13 @@ class TestFullTriggerFlowE2E:
         )
         await container.flow_repository.set(flow_config)
         agent = await container.flow_factory.get_flow(flow_id)
-        state = ExecutionState(
-            task_id=f"task_{unique_id}",
-            context_id=context_id,
-            session_id=f"{flow_id}:{context_id}",
-            user_id="test_user",
+        state = workflow_state(
+            flow_id=flow_id,
+            unique_id=unique_id,
             content="5 + 3",
+            variables={"a": 5, "b": 3, "callback_url": f"{base_url}/notify"},
         )
-        state.variables = {"a": 5, "b": 3, "callback_url": f"{base_url}/notify"}
-        final_state = await agent.run(state)
+        final_state = await run_flow(container=container, flow=agent, state=state)
         assert "Result: 8" in final_state.response
         requests = server.get_requests("notify")
         assert len(requests) >= 1
@@ -2453,11 +2441,8 @@ class TestReactAgentWithChannelToolE2E:
         3. ChannelNode tool реально отправляет HTTP
         4. Проверяем что webhook получил данные
         """
-        from core.state import ExecutionState
-
         (server, base_url) = notification_server
         flow_id = f"react_channel_tool_{unique_id}"
-        context_id = f"ctx_{unique_id}"
         mock_llm_with_queue(
             [
                 {
@@ -2510,14 +2495,12 @@ class TestReactAgentWithChannelToolE2E:
         )
         await container.flow_repository.set(flow_config)
         agent = await container.flow_factory.get_flow(flow_id)
-        state = ExecutionState(
-            task_id=f"task_{unique_id}",
-            context_id=context_id,
-            session_id=f"{flow_id}:{context_id}",
-            user_id="test_user",
+        state = workflow_state(
+            flow_id=flow_id,
+            unique_id=unique_id,
             content="Отправь уведомление на webhook",
         )
-        await agent.run(state)
+        await run_flow(container=container, flow=agent, state=state)
         requests = server.get_requests("notify")
         assert len(requests) >= 1, (
             f"Expected webhook request. Server received: {server.received_requests}"
@@ -2535,12 +2518,9 @@ class TestReactAgentWithChannelToolE2E:
         1. Mock LLM вызывает send_telegram tool
         2. TelegramChannelHandler реально отправляет HTTP на mock Telegram API
         """
-        from core.state import ExecutionState
-
         (server, base_url) = notification_server
         telegram_api_base = f"{base_url}/telegram"
         flow_id = f"react_tg_tool_{unique_id}"
-        context_id = f"ctx_{unique_id}"
         mock_llm_with_queue(
             [
                 {
@@ -2590,14 +2570,12 @@ class TestReactAgentWithChannelToolE2E:
         )
         await container.flow_repository.set(flow_config)
         agent = await container.flow_factory.get_flow(flow_id)
-        state = ExecutionState(
-            task_id=f"task_{unique_id}",
-            context_id=context_id,
-            session_id=f"{flow_id}:{context_id}",
-            user_id="test_user",
+        state = workflow_state(
+            flow_id=flow_id,
+            unique_id=unique_id,
             content="Отправь сообщение в Telegram",
         )
-        await agent.run(state)
+        await run_flow(container=container, flow=agent, state=state)
         requests = server.get_requests("telegram_send_message")
         assert len(requests) >= 1
         last_request = requests[-1]

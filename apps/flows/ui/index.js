@@ -6,6 +6,7 @@
  * и REST для CRUD.
  */
 
+import '@platform/lib/components/app-loader.js';
 import '@platform/lib/components/glass-card.js';
 import '@platform/lib/components/glass-modal.js';
 import '@platform/lib/components/glass-form-modal.js';

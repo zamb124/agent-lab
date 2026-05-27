@@ -20,10 +20,17 @@ from __future__ import annotations
 import asyncio
 import json
 import time as _time
+from datetime import date
 
 import pytest
 
 from apps.crm.config import get_crm_settings
+
+
+@pytest.fixture(autouse=True)
+def disable_background_markdown_format(monkeypatch: pytest.MonkeyPatch) -> None:
+    settings = get_crm_settings()
+    monkeypatch.setattr(settings, "note_attachment_markdown_format_enabled", False)
 
 
 async def _analyze_note_task(crm_client, headers, note_id, *, fail_on_failed=True, **kwargs):
@@ -55,6 +62,11 @@ async def _analyze_note_task(crm_client, headers, note_id, *, fail_on_failed=Tru
 
 
 _ANALYZE_META = {"dates_mentioned": [], "places_mentioned": [], "key_topics": []}
+
+
+def _isolated_note_date(unique_id: str) -> str:
+    day_offset = int(unique_id[:8], 16) % 20_000
+    return date.fromordinal(date(2090, 1, 1).toordinal() + day_offset).isoformat()
 
 
 def _analyze_llm_response(*, note_name: str, person_name: str) -> str:
@@ -105,11 +117,6 @@ class TestResolveNoteText:
     на теле теста — отдельный лимит только для этого класса.
     """
 
-    @pytest.fixture(autouse=True)
-    def _disable_background_markdown_format(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        settings = get_crm_settings()
-        monkeypatch.setattr(settings, "note_attachment_markdown_format_enabled", False)
-
     @pytest.mark.asyncio
     async def test_description_without_attachments(
         self,
@@ -127,6 +134,7 @@ class TestResolveNoteText:
                 "name": f"Тест описания {unique_id}",
                 "description": description,
                 "namespace": "default",
+                "note_date": _isolated_note_date(unique_id),
             },
             headers=auth_headers_system,
         )
@@ -158,6 +166,7 @@ class TestResolveNoteText:
                 "name": f"Малый файл {unique_id}",
                 "description": description,
                 "namespace": "default",
+                "note_date": _isolated_note_date(unique_id),
             },
             headers=auth_headers_system,
         )
@@ -200,6 +209,7 @@ class TestResolveNoteText:
                 "name": f"Несколько файлов {unique_id}",
                 "description": f"Основная заметка {unique_id}.",
                 "namespace": "default",
+                "note_date": _isolated_note_date(unique_id),
             },
             headers=auth_headers_system,
         )
@@ -243,6 +253,7 @@ class TestResolveNoteText:
                 "name": f"Флаг attachments {unique_id}",
                 "description": description,
                 "namespace": "default",
+                "note_date": _isolated_note_date(unique_id),
             },
             headers=auth_headers_system,
         )
@@ -295,6 +306,7 @@ class TestAnalyzeWithAttachments:
                 "name": note_name,
                 "description": f"Короткая заметка {unique_id}.",
                 "namespace": "default",
+                "note_date": _isolated_note_date(unique_id),
             },
             headers=auth_headers_system,
         )
@@ -338,6 +350,7 @@ class TestAnalyzeWithAttachments:
                 "name": note_name,
                 "description": f"Заметка с большим файлом {unique_id}.",
                 "namespace": "default",
+                "note_date": _isolated_note_date(unique_id),
             },
             headers=auth_headers_system,
         )
@@ -396,6 +409,7 @@ class TestAnalyzeWithAttachments:
                 "name": note_name,
                 "description": f"Тест кастомного лимита {unique_id}.",
                 "namespace": "default",
+                "note_date": _isolated_note_date(unique_id),
             },
             headers=auth_headers_system,
         )
@@ -443,6 +457,7 @@ class TestAnalyzeWithAttachments:
                 "name": note_name,
                 "description": f"Анализируем только описание {unique_id}.",
                 "namespace": "default",
+                "note_date": _isolated_note_date(unique_id),
             },
             headers=auth_headers_system,
         )
@@ -486,6 +501,7 @@ class TestAttachmentGuarantee:
                 "name": f"Пустой файл {unique_id}",
                 "description": f"Описание заметки {unique_id}.",
                 "namespace": "default",
+                "note_date": _isolated_note_date(unique_id),
             },
             headers=auth_headers_system,
         )
@@ -523,6 +539,7 @@ class TestAttachmentGuarantee:
                 "name": f"Пробельный файл {unique_id}",
                 "description": f"Описание {unique_id}.",
                 "namespace": "default",
+                "note_date": _isolated_note_date(unique_id),
             },
             headers=auth_headers_system,
         )
@@ -560,6 +577,7 @@ class TestAttachmentGuarantee:
                 "name": f"Смешанные файлы {unique_id}",
                 "description": f"Описание {unique_id}.",
                 "namespace": "default",
+                "note_date": _isolated_note_date(unique_id),
             },
             headers=auth_headers_system,
         )
@@ -611,6 +629,7 @@ class TestAnalyzeBlockedByEmptyAttachment:
                 "name": f"HTTP пустой файл {unique_id}",
                 "description": f"Описание {unique_id}.",
                 "namespace": "default",
+                "note_date": _isolated_note_date(unique_id),
             },
             headers=auth_headers_system,
         )

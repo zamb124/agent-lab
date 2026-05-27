@@ -1132,11 +1132,11 @@ class EntityService:
             bkey = task_board_key("task", entity_subtype)
             stages = resolve_task_board_stages(crm, bkey)
             if "status" not in base_attrs or base_attrs.get("status") is None:
-                base_attrs["status"] = stages[0].stage_id
+                base_attrs["status"] = stages[0].id
             else:
                 st0 = base_attrs["status"]
                 if not isinstance(st0, str) or not st0.strip():
-                    base_attrs["status"] = stages[0].stage_id
+                    base_attrs["status"] = stages[0].id
             attributes = base_attrs
             await self._validate_task_entity_board_status(
                 namespace=namespace,

@@ -16,7 +16,7 @@
 
 from __future__ import annotations
 
-from apps.sync.container import get_sync_container
+from apps.sync.container import SyncContainer, get_sync_container
 from apps.sync.models.calls import (
     CallLinkCreate,
     CallsAcceptPayload,
@@ -113,10 +113,13 @@ from apps.sync.realtime.operations import (
     op_threads_item,
     op_threads_list,
 )
+from core.context import set_context
 from core.logging import get_logger
+from core.models.context_models import Context
+from core.models.i18n_models import Language
 from core.models.identity_models import User
 from core.types import JsonObject
-from core.websocket import CommandHandler, register_ws_command_handler
+from core.websocket import CommandHandler, WsCommandError, register_ws_command_handler
 
 logger = get_logger(__name__)
 
@@ -358,6 +361,36 @@ SYNC_OPERATIONS: dict[str, RegisteredOperation] = {
 }
 
 
+async def _set_sync_ws_context(user: User, container: SyncContainer) -> None:
+    company_id = user.active_company_id.strip()
+    if not company_id:
+        raise WsCommandError("ws_no_company", "Нет active_company_id для команды Sync.")
+
+    stored_user = await container.user_repository.get(user.user_id)
+    if stored_user is None:
+        raise WsCommandError("forbidden", f"Пользователь {user.user_id!r} не найден.")
+    if company_id not in stored_user.companies:
+        raise WsCommandError(
+            "forbidden",
+            f"Пользователь {stored_user.user_id!r} не состоит в компании {company_id!r}.",
+        )
+
+    active_company = await container.company_repository.get(company_id)
+    if active_company is None:
+        raise WsCommandError("not_found", f"Компания {company_id!r} не найдена.")
+
+    context_user = stored_user.model_copy(update={"active_company_id": company_id})
+    set_context(
+        Context(
+            user=context_user,
+            channel="ws",
+            active_company=active_company,
+            user_companies=[active_company],
+            language=Language.RU,
+        )
+    )
+
+
 def _make_ws_handler(op: RegisteredOperation) -> CommandHandler:
     """Тонкая обвязка WS-handler'а: validate payload → call op.fn → dump result.
 
@@ -368,6 +401,7 @@ def _make_ws_handler(op: RegisteredOperation) -> CommandHandler:
 
     async def handler(payload: JsonObject, user: User) -> JsonObject | None:
         container = get_sync_container()
+        await _set_sync_ws_context(user, container)
         return await op.run(payload, user=user, container=container)
 
     handler.__name__ = f"ws_handler_{op.canonical_type.replace('/', '_')}"

@@ -8,6 +8,7 @@ from typing import cast, override
 
 import pytest
 
+from apps.flows.src.container import get_container
 from apps.flows.src.runtime.nodes import BaseNode, NodeInputs, NodeRunResult
 from core.errors import FrozenStateFieldError
 from core.state import ExecutionState
@@ -75,15 +76,17 @@ class _DummyNode(BaseNode):
         self._copy_state_back(source, target, full_trust=full_trust)
 
 
-def test_apply_output_mapping_rejects_frozen_key() -> None:
-    node = _DummyNode("n1", config={"type": "test_dummy"})
+def test_apply_output_mapping_rejects_frozen_key(app) -> None:
+    _ = app
+    node = _DummyNode("n1", config={"type": "test_dummy"}, container=get_container())
     state = _minimal_state()
     with pytest.raises(FrozenStateFieldError):
         node.apply_output_mapping_for_test(state, {"session_id": "x:y"})
 
 
-def test_copy_state_back_preserves_target_identity_when_not_full_trust() -> None:
-    node = _DummyNode("n1", config={"type": "test_dummy"})
+def test_copy_state_back_preserves_target_identity_when_not_full_trust(app) -> None:
+    _ = app
+    node = _DummyNode("n1", config={"type": "test_dummy"}, container=get_container())
     tgt = _minimal_state()
     src_dict = tgt.model_dump(exclude_none=False)
     src_dict["task_id"] = "forged"

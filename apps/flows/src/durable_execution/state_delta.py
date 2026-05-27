@@ -119,7 +119,7 @@ def build_state_delta(
             fields_unset.append(key)
             continue
         if before_value != after_value:
-            if after_value is None:
+            if after_value is None and key in ExecutionState.model_fields:
                 fields_unset.append(key)
             else:
                 fields_set[key] = after_value

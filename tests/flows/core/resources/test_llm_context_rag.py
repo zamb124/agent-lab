@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import pytest
+from pydantic import ValidationError
 
 from apps.flows.src.models.resource import ResourceDefinition, ResourceReference, ResourceType
 from apps.flows.src.runtime.llm_context_rag import (
@@ -10,6 +11,7 @@ from apps.flows.src.runtime.llm_context_rag import (
     resolve_rag_context_source_registry_for_runtime,
     resolve_rag_resource_binds_for_runtime,
 )
+from core.state import ExecutionState
 from core.llm_context import (
     LLMContextBudget,
     LLMContextProfile,
@@ -53,11 +55,6 @@ class InMemoryRAGRepository:
         }
 
 
-class ObjectState:
-    def __init__(self) -> None:
-        self.variables = {"namespace": "object-kb"}
-
-
 def _profile() -> LLMContextProfile:
     return LLMContextProfile(
         mode="smart",
@@ -80,6 +77,16 @@ def _profile() -> LLMContextProfile:
 
 @pytest.mark.asyncio
 async def test_resolves_inline_rag_resource_with_state_templates() -> None:
+    state = ExecutionState.create(
+        task_id="task-rag-inline",
+        context_id="ctx-rag-inline",
+        user_id="user-rag-inline",
+        session_id="flow-rag-inline:ctx-rag-inline",
+        variables={},
+        rag_namespace_id="session-kb",
+        collection_id="support",
+    )
+
     binds = await resolve_rag_resource_binds_for_runtime(
         flow_resources={
             "kb": {
@@ -94,11 +101,7 @@ async def test_resolves_inline_rag_resource_with_state_templates() -> None:
         skill_resources=None,
         node_resources_raw={},
         repository=InMemoryResourceRepository(),
-        state={
-            "rag_namespace_id": "session-kb",
-            "collection_id": "support",
-            "variables": {},
-        },
+        state=state,
     )
 
     assert binds["kb"].namespace == "session-kb"
@@ -139,7 +142,7 @@ async def test_resolves_shared_rag_resource_with_deep_reference_patch() -> None:
                 "default_top_k": 12,
                 "filters": {"tenant": "acme"},
                 "search_options": {
-                    "channels": {"semantic": True},
+                    "channels": {"semantic": True, "lexical": False},
                     "rerank": False,
                 },
             },
@@ -165,7 +168,7 @@ async def test_resolves_shared_rag_resource_with_deep_reference_patch() -> None:
     assert binds["kb"].filters == {"tenant": "acme", "collection_id": "legal"}
     assert binds["kb"].search_options is not None
     assert binds["kb"].search_options.model_dump(mode="json", exclude_none=True) == {
-        "channels": {"semantic": True},
+        "channels": {"semantic": True, "lexical": False},
         "rerank": True,
     }
 
@@ -248,23 +251,34 @@ async def test_inline_rag_resource_without_config_is_rejected() -> None:
 
 
 def test_runtime_template_helpers_cover_object_state_and_invalid_variables() -> None:
+    state = ExecutionState.create(
+        task_id="task-rag-template",
+        context_id="ctx-rag-template",
+        user_id="user-rag-template",
+        session_id="flow-rag-template:ctx-rag-template",
+        variables={"namespace": "object-kb"},
+    )
+
     assert _resolve_runtime_templates(
         {"namespace": "@var:namespace"},
-        ObjectState(),
+        state,
     ) == {"namespace": "object-kb"}
 
-    class BadState:
-        variables = ["bad"]
-
-    with pytest.raises(TypeError, match="state.variables"):
-        _resolve_runtime_templates({"namespace": "kb"}, BadState())
+    with pytest.raises(ValidationError, match="variables"):
+        ExecutionState.create(
+            task_id="task-rag-template-bad",
+            context_id="ctx-rag-template-bad",
+            user_id="user-rag-template",
+            session_id="flow-rag-template:ctx-rag-template-bad",
+            variables=["bad"],
+        )
 
 
 def test_runtime_template_helpers_reject_non_object_result_and_empty_source_key() -> None:
     with pytest.raises(ValueError, match="JSON object"):
         _resolve_runtime_templates(
             ["not", "object"],
-            {"variables": {}},
+            None,
         )
 
     assert _source_name_from_resource_key("!!!").startswith("rag.resource.")

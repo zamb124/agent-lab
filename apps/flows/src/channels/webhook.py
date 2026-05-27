@@ -36,6 +36,44 @@ class WebhookChannelHandler(BaseChannelHandler):
     channel_type: ChannelType = ChannelType.WEBHOOK
 
     @override
+    async def execute_action(
+        self,
+        action: str,
+        params: JsonObject,
+        config: JsonObject,
+        variables: JsonObject,
+    ) -> JsonObject:
+        recipient = self._require_str_param(params, "recipient")
+        if action == "send_payload":
+            payload = require_json_object(params.get("payload"), "webhook.payload")
+            return await self.send_payload(
+                recipient=recipient,
+                payload=payload,
+                config=config,
+                variables=variables,
+            )
+        if action == "send_notification":
+            event_type = self._require_str_param(params, "event_type")
+            data = require_json_object(params.get("data"), "webhook.notification.data")
+            task_id = self._optional_str_param(params, "task_id")
+            session_id = self._optional_str_param(params, "session_id")
+            return await self.send_notification(
+                recipient=recipient,
+                event_type=event_type,
+                data=data,
+                config=config,
+                variables=variables,
+                task_id=task_id,
+                session_id=session_id,
+            )
+        return await super().execute_action(
+            action=action,
+            params=params,
+            config=config,
+            variables=variables,
+        )
+
+    @override
     async def send_message(
         self,
         recipient: str,

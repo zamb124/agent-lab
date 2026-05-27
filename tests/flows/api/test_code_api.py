@@ -131,13 +131,13 @@ class TestCodeValidate:
 
     @pytest.mark.asyncio
     async def test_validate_blocked_import(self, client, app):
-        """Валидация не исполняет код; import policy проверяет isolated runner при execute."""
+        """Валидация проверяет import policy через isolated runner."""
         code = "\nimport os\n\nasync def run(args, state):\n    state['files'] = os.listdir('/')\n    return state\n"
         response = await client.post("/flows/api/v1/code/validate", json={"code": code})
         assert response.status_code == 200
         data = response.json()
-        assert data["valid"] is True
-        assert data["error"] is None
+        assert data["valid"] is False
+        assert data["error"] is not None
 
     @pytest.mark.asyncio
     async def test_validate_allowed_import(self, client, app):

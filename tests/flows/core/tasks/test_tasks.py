@@ -14,6 +14,24 @@ from apps.flows.src.tasks.tool_tasks import execute_tool
 from apps.flows_worker.broker import broker
 from core.context import set_context
 from core.integrations.models import IntegrationCredential, IntegrationProvider
+from core.types import JsonObject
+
+
+EXPRESSION_PARAMETERS_SCHEMA: JsonObject = {
+    "type": "object",
+    "properties": {
+        "expression": {"type": "string"},
+    },
+    "required": ["expression"],
+}
+
+QUESTION_PARAMETERS_SCHEMA: JsonObject = {
+    "type": "object",
+    "properties": {
+        "question": {"type": "string"},
+    },
+    "required": ["question"],
+}
 
 
 class TestBroker:
@@ -448,6 +466,7 @@ class TestExecuteTool:
         return {
             "tool_id": "test_calculator",
             "description": "Calculator for tests",
+            "parameters_schema": EXPRESSION_PARAMETERS_SCHEMA,
             "code": """
 async def run(args, state):
     import re
@@ -590,6 +609,7 @@ async def run(args, state):
         ask_user_config = {
             "tool_id": "test_ask_user",
             "description": "Ask user question",
+            "parameters_schema": QUESTION_PARAMETERS_SCHEMA,
             "code": """
 async def run(args, state):
     question = args.get("question", "")

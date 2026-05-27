@@ -589,6 +589,9 @@
   "args_schema_form": {
     "empty": "Args schema is empty"
   },
+  "parameters_schema_form": {
+    "empty": "No parameters configured"
+  },
   "llm_mocks_editor": {
     "empty": "No mocks defined",
     "placeholder_match": "Request substring",
@@ -1355,6 +1358,7 @@
       "tool_add": "Add node",
       "undo": "Undo",
       "redo": "Redo",
+      "open_variables": "Open variables",
       "toggle_variables": "Variables",
       "toggle_breakpoints": "Breakpoints",
       "toggle_guides": "Smart guides",
@@ -1404,6 +1408,12 @@
     },
     "sticky_note": {
       "placeholder": "Note text…",
+      "drag_hint": "Drag note",
+      "link_start": "Link to node",
+      "link_cancel": "Cancel linking",
+      "unlink": "Unlink from node",
+      "expand": "Expand note",
+      "collapse": "Collapse note",
       "delete": "Delete note"
     },
     "minimap": {

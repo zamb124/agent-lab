@@ -58,6 +58,13 @@ def _rag_merge_config(base: JsonObject, patch: JsonObject) -> JsonObject:
     _ = RagResourceBindParams.model_validate(base)
     _ = RagResourceBindPatch.model_validate(patch)
     merged = require_json_object(deep_merge_dict(base, patch), "rag_resource.merge")
+    patch_search_options = patch.get("search_options")
+    if isinstance(patch_search_options, dict) and "channels" in patch_search_options:
+        merged_search_options = require_json_object(
+            merged["search_options"],
+            "rag_resource.merge.search_options",
+        )
+        merged_search_options["channels"] = patch_search_options["channels"]
     typed = RagResourceBindParams.model_validate(merged)
     return require_json_object(
         typed.model_dump(mode="json", exclude_none=True),

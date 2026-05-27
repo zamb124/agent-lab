@@ -125,6 +125,8 @@ function tokenLabel(value) {
 }
 
 export class PlatformLlmContextEditor extends PlatformElement {
+    static i18nNamespace = 'platform';
+
     static properties = {
         config: { type: Object },
         resolved: { type: Object },

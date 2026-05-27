@@ -14,6 +14,9 @@ import {
 import {
     logsBySessionOp,
     logsByTraceOp,
+    logsByRequestOp,
+    logsBySpanOp,
+    logsByUserOp,
 } from '../../../../apps/flows/ui/events/resources/logs.resource.js';
 import {
     FlowsTracingModal,
@@ -28,6 +31,9 @@ const FACTORIES = [
     tracesByTraceOp,
     logsBySessionOp,
     logsByTraceOp,
+    logsByRequestOp,
+    logsBySpanOp,
+    logsByUserOp,
 ];
 
 const SVG_RESPONSE = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1 1"></svg>';

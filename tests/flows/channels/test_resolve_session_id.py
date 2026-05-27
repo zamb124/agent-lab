@@ -7,7 +7,11 @@ import uuid
 import pytest
 
 from apps.flows.src.container import get_container
-from apps.flows.src.durable_execution import WorkflowEventType, create_initial_state
+from apps.flows.src.durable_execution import (
+    UserInputAppliedPayload,
+    WorkflowEventType,
+    create_initial_state,
+)
 
 
 @pytest.mark.asyncio
@@ -31,6 +35,11 @@ async def test_runtime_resolve_by_task_id(app, unique_id: str) -> None:
         session_id,
         state,
         event_type=WorkflowEventType.user_input_applied,
+        payload=UserInputAppliedPayload(
+            task_id=state.task_id,
+            context_id=state.context_id,
+            is_resume=False,
+        ),
         snapshot=True,
     )
     assert await container.workflow_runtime.get_state(session_id_wrong) is None

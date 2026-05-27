@@ -19,12 +19,19 @@ import pytest
 from sqlalchemy import func, select
 
 from core.db.models import VectorDocument
+from core.rag.models import RAGSearchOptions
+from core.rag_indexing_schema import SearchChannelsDefaults
 
 
 def _upload_metadata(company_id: str, extra: dict[str, Any] | None = None) -> dict[str, Any]:
     merged = dict(extra or {})
     merged["company_id"] = company_id
     return merged
+
+
+HYBRID_RRF_SEARCH_OPTIONS = RAGSearchOptions(
+    channels=SearchChannelsDefaults(semantic=True, lexical=True),
+)
 
 
 async def _vector_chunk_count(
@@ -774,7 +781,7 @@ async def test_search_hybrid_rrf_returns_provenance(rag_provider_pgvector, ns_na
         namespace_id,
         "unique_hybrid_token_zeta bravo",
         limit=5,
-        channels={"semantic": True, "lexical": True},
+        search_options=HYBRID_RRF_SEARCH_OPTIONS,
     )
     assert len(results) == doc.metadata["total_chunks"]
     r0 = results[0]
@@ -816,7 +823,7 @@ async def test_search_multiple_namespaces_hybrid_rrf_per_namespace(
         [ns_name, ns_name_2],
         "global_hybrid_alpha_one",
         limit=5,
-        channels={"semantic": True, "lexical": True},
+        search_options=HYBRID_RRF_SEARCH_OPTIONS,
     )
     assert {
         "ns1_docs": sorted({r.document_name for r in out[ns_name]}),
@@ -851,7 +858,7 @@ async def test_search_multiple_namespaces_filters_plus_lexical_no_duplicate_kwar
         "filters_lexical_token_xyz",
         limit=5,
         filters=None,
-        channels={"semantic": True, "lexical": True},
+        search_options=HYBRID_RRF_SEARCH_OPTIONS,
     )
     assert ns_name in out
     assert len(out[ns_name]) >= 1

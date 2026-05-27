@@ -8,16 +8,37 @@ import pytest
 
 from apps.flows.src.container import get_container
 from apps.flows.src.container_contracts import as_flow_runtime_container
+from apps.flows.src.models import FlowConfig
 from apps.flows.src.runtime.flow import Flow
 from core.state import ExecutionState
+from core.types import JsonObject, JsonValue
+from tests.flows.durable_runtime_harness import run_flow, workflow_state
+
+_STATE_SEQUENCE = 0
 
 
-async def build_flow(config, variables):
-    return await Flow.from_config(
-        config=config,
-        variables=variables,
-        container=as_flow_runtime_container(get_container()),
+async def build_flow(config: JsonObject, variables: JsonObject) -> Flow:
+    container = as_flow_runtime_container(get_container())
+    flow_config = FlowConfig.model_validate({**config, "variables": variables})
+    await container.flow_repository.set(flow_config)
+    return await container.flow_factory.get_flow(flow_config.flow_id)
+
+
+async def execute_flow(
+    flow: Flow,
+    *,
+    content: str | None = None,
+    **state_fields: JsonValue,
+) -> ExecutionState:
+    global _STATE_SEQUENCE
+    _STATE_SEQUENCE += 1
+    state = workflow_state(
+        flow_id=flow.flow_id,
+        unique_id=f"{flow.flow_id}-{_STATE_SEQUENCE}",
+        content=content,
+        **state_fields,
     )
+    return await run_flow(container=flow.container, flow=flow, state=state)
 
 
 class TestCodeNodeOverrides:
@@ -34,23 +55,15 @@ class TestCodeNodeOverrides:
                 "nodes": {
                     "classifier": {
                         "type": "code",
-                        "code": "async def run(args, state):\n    state.route = 'default'\n    return state",
+                        "code": "async def run(args, state):\n    state['route'] = 'default'\n    return state",
                     }
                 },
                 "edges": [{"from_node": "classifier", "to_node": None}],
             },
             variables={},
         )
-        state = await flow_default.run(
-            ExecutionState(
-                task_id="test-task",
-                context_id="test-context",
-                user_id="test-user",
-                session_id="test-agent:test-context",
-                content="test",
-            )
-        )
-        assert state.route == "default"
+        state = await execute_flow(flow_default, content="test")
+        assert state['route'] == "default"
         flow_skill = await build_flow(
             config={
                 "flow_id": "test_fn",
@@ -59,23 +72,15 @@ class TestCodeNodeOverrides:
                 "nodes": {
                     "classifier": {
                         "type": "code",
-                        "code": "async def run(args, state):\n    state.route = 'custom'\n    return state",
+                        "code": "async def run(args, state):\n    state['route'] = 'custom'\n    return state",
                     }
                 },
                 "edges": [{"from_node": "classifier", "to_node": None}],
             },
             variables={},
         )
-        state = await flow_skill.run(
-            ExecutionState(
-                task_id="test-task",
-                context_id="test-context",
-                user_id="test-user",
-                session_id="test-agent:test-context",
-                content="test",
-            )
-        )
-        assert state.route == "custom"
+        state = await execute_flow(flow_skill, content="test")
+        assert state['route'] == "custom"
 
     @pytest.mark.asyncio
     async def test_conditional_routing_override(self):
@@ -87,19 +92,19 @@ class TestCodeNodeOverrides:
             "nodes": {
                 "classifier": {
                     "type": "code",
-                    "code": "\nasync def run(args, state):\n    content = (getattr(state, 'content', None) or '').lower()\n    if 'заказ' in content:\n        state.route = 'order'\n    elif 'жалоб' in content:\n        state.route = 'complaint'\n    else:\n        state.route = 'general'\n    return state\n",
+                    "code": "\nasync def run(args, state):\n    content = (state.get('content') or '').lower()\n    if 'заказ' in content:\n        state['route'] = 'order'\n    elif 'жалоб' in content:\n        state['route'] = 'complaint'\n    else:\n        state['route'] = 'general'\n    return state\n",
                 },
                 "order": {
                     "type": "code",
-                    "code": "async def run(args, state): state.result = 'order'; return state",
+                    "code": "async def run(args, state): state['result'] = 'order'; return state",
                 },
                 "complaint": {
                     "type": "code",
-                    "code": "async def run(args, state): state.result = 'complaint'; return state",
+                    "code": "async def run(args, state): state['result'] = 'complaint'; return state",
                 },
                 "general": {
                     "type": "code",
-                    "code": "async def run(args, state): state.result = 'general'; return state",
+                    "code": "async def run(args, state): state['result'] = 'general'; return state",
                 },
             },
             "edges": [
@@ -139,17 +144,9 @@ class TestCodeNodeOverrides:
             ],
         }
         flow_base = await build_flow(config=config_base, variables={})
-        state = await flow_base.run(
-            ExecutionState(
-                task_id="test-task",
-                context_id="test-context",
-                user_id="test-user",
-                session_id="test-agent:test-context",
-                content="у меня жалоба",
-            )
-        )
-        assert state.route == "complaint"
-        assert state.result == "complaint"
+        state = await execute_flow(flow_base, content="у меня жалоба")
+        assert state['route'] == "complaint"
+        assert state['result'] == "complaint"
         config_orders_only = {
             "flow_id": "test_routing",
             "name": "Test",
@@ -157,15 +154,15 @@ class TestCodeNodeOverrides:
             "nodes": {
                 "classifier": {
                     "type": "code",
-                    "code": "\nasync def run(args, state):\n    content = (getattr(state, 'content', None) or '').lower()\n    if 'заказ' in content:\n        state.route = 'order'\n    else:\n        state.route = 'general'\n    return state\n",
+                    "code": "\nasync def run(args, state):\n    content = (state.get('content') or '').lower()\n    if 'заказ' in content:\n        state['route'] = 'order'\n    else:\n        state['route'] = 'general'\n    return state\n",
                 },
                 "order": {
                     "type": "code",
-                    "code": "async def run(args, state): state.result = 'order'; return state",
+                    "code": "async def run(args, state): state['result'] = 'order'; return state",
                 },
                 "general": {
                     "type": "code",
-                    "code": "async def run(args, state): state.result = 'general'; return state",
+                    "code": "async def run(args, state): state['result'] = 'general'; return state",
                 },
             },
             "edges": [
@@ -194,17 +191,9 @@ class TestCodeNodeOverrides:
             ],
         }
         flow_orders_only = await build_flow(config=config_orders_only, variables={})
-        state = await flow_orders_only.run(
-            ExecutionState(
-                task_id="test-task",
-                context_id="test-context",
-                user_id="test-user",
-                session_id="test-agent:test-context",
-                content="у меня жалоба",
-            )
-        )
-        assert state.route == "general"
-        assert state.result == "general"
+        state = await execute_flow(flow_orders_only, content="у меня жалоба")
+        assert state['route'] == "general"
+        assert state['result'] == "general"
 
 
 class TestVariablesOverrideE2E:
@@ -221,23 +210,16 @@ class TestVariablesOverrideE2E:
                 "nodes": {
                     "main": {
                         "type": "code",
-                        "code": "\nasync def run(args, state):\n    vars = getattr(state, 'variables', {})\n    state.company = vars.get('company_name', 'unknown')\n    state.max_len = vars.get('max_length', 0)\n    return state\n",
+                        "code": "\nasync def run(args, state):\n    flow_variables = state.get('variables', {})\n    state['company'] = flow_variables.get('company_name', 'unknown')\n    state['max_len'] = flow_variables.get('max_length', 0)\n    return state\n",
                     }
                 },
                 "edges": [{"from_node": "main", "to_node": None}],
             },
             variables={"company_name": "TestCorp", "max_length": 500},
         )
-        state = await flow.run(
-            ExecutionState(
-                task_id="test-task",
-                context_id="test-context",
-                user_id="test-user",
-                session_id="test-agent:test-context",
-            )
-        )
-        assert state.company == "TestCorp"
-        assert state.max_len == 500
+        state = await execute_flow(flow)
+        assert state['company'] == "TestCorp"
+        assert state['max_len'] == 500
 
     @pytest.mark.asyncio
     async def test_skill_variables_override_base(self):
@@ -250,21 +232,14 @@ class TestVariablesOverrideE2E:
                 "nodes": {
                     "main": {
                         "type": "code",
-                        "code": "\nasync def run(args, state):\n    vars = getattr(state, 'variables', {})\n    state.max_len = vars.get('max_length', 0)\n    return state\n",
+                        "code": "\nasync def run(args, state):\n    flow_variables = state.get('variables', {})\n    state['max_len'] = flow_variables.get('max_length', 0)\n    return state\n",
                     }
                 },
                 "edges": [{"from_node": "main", "to_node": None}],
             },
             variables={"max_length": 500},
         )
-        state_base = await flow_base.run(
-            ExecutionState(
-                task_id="test-task",
-                context_id="test-context",
-                user_id="test-user",
-                session_id="test-agent:test-context",
-            )
-        )
+        state_base = await execute_flow(flow_base)
         assert state_base["max_len"] == 500
         flow_skill = await build_flow(
             config={
@@ -274,21 +249,14 @@ class TestVariablesOverrideE2E:
                 "nodes": {
                     "main": {
                         "type": "code",
-                        "code": "\nasync def run(args, state):\n    vars = getattr(state, 'variables', {})\n    state.max_len = vars.get('max_length', 0)\n    return state\n",
+                        "code": "\nasync def run(args, state):\n    flow_variables = state.get('variables', {})\n    state['max_len'] = flow_variables.get('max_length', 0)\n    return state\n",
                     }
                 },
                 "edges": [{"from_node": "main", "to_node": None}],
             },
             variables={"max_length": 200},
         )
-        state_skill = await flow_skill.run(
-            ExecutionState(
-                task_id="test-task",
-                context_id="test-context",
-                user_id="test-user",
-                session_id="test-agent:test-context",
-            )
-        )
+        state_skill = await execute_flow(flow_skill)
         assert state_skill["max_len"] == 200
 
 
@@ -301,11 +269,11 @@ class TestEntryOverrideE2E:
         config_nodes = {
             "default_start": {
                 "type": "code",
-                "code": "async def run(args, state): state.path = 'default'; return state",
+                "code": "async def run(args, state): state['path'] = 'default'; return state",
             },
             "skill_start": {
                 "type": "code",
-                "code": "async def run(args, state): state.path = 'skill'; return state",
+                "code": "async def run(args, state): state['path'] = 'skill'; return state",
             },
         }
         flow_default = await build_flow(
@@ -321,15 +289,8 @@ class TestEntryOverrideE2E:
             },
             variables={},
         )
-        state = await flow_default.run(
-            ExecutionState(
-                task_id="test-task",
-                context_id="test-context",
-                user_id="test-user",
-                session_id="test-agent:test-context",
-            )
-        )
-        assert state.path == "default"
+        state = await execute_flow(flow_default)
+        assert state['path'] == "default"
         flow_skill = await build_flow(
             config={
                 "flow_id": "test_entry",
@@ -343,15 +304,8 @@ class TestEntryOverrideE2E:
             },
             variables={},
         )
-        state = await flow_skill.run(
-            ExecutionState(
-                task_id="test-task",
-                context_id="test-context",
-                user_id="test-user",
-                session_id="test-agent:test-context",
-            )
-        )
-        assert state.path == "skill"
+        state = await execute_flow(flow_skill)
+        assert state['path'] == "skill"
 
 
 class TestExternalApiNodeOverridesE2E:
@@ -368,23 +322,16 @@ class TestExternalApiNodeOverridesE2E:
                 "nodes": {
                     "mock_api": {
                         "type": "code",
-                        "code": "\nasync def run(args, state):\n    # Симулируем API response\n    api_response = {'fact': 'Cats sleep 16 hours', 'length': 20}\n    # Применяем state_mapping\n    state.cat_fact = api_response['fact']\n    state.cat_fact_length = api_response['length']\n    return state\n",
+                        "code": "\nasync def run(args, state):\n    # Симулируем API response\n    api_response = {'fact': 'Cats sleep 16 hours', 'length': 20}\n    # Применяем state_mapping\n    state['cat_fact'] = api_response['fact']\n    state['cat_fact_length'] = api_response['length']\n    return state\n",
                     }
                 },
                 "edges": [{"from_node": "mock_api", "to_node": None}],
             },
             variables={},
         )
-        state = await flow.run(
-            ExecutionState(
-                task_id="test-task",
-                context_id="test-context",
-                user_id="test-user",
-                session_id="test-agent:test-context",
-            )
-        )
-        assert state.cat_fact == "Cats sleep 16 hours"
-        assert state.cat_fact_length == 20
+        state = await execute_flow(flow)
+        assert state['cat_fact'] == "Cats sleep 16 hours"
+        assert state['cat_fact_length'] == 20
 
 
 class TestNestedOverridesE2E:
@@ -401,22 +348,15 @@ class TestNestedOverridesE2E:
                 "nodes": {
                     "main": {
                         "type": "code",
-                        "code": "\nasync def run(args, state):\n    # В реальности LLM config используется в LlmNode\n    # Здесь проверяем что конфиг правильно передан\n    state.config_passed = True\n    return state\n",
+                        "code": "\nasync def run(args, state):\n    # В реальности LLM config используется в LlmNode\n    # Здесь проверяем что конфиг правильно передан\n    state['config_passed'] = True\n    return state\n",
                     }
                 },
                 "edges": [{"from_node": "main", "to_node": None}],
             },
             variables={},
         )
-        state = await flow.run(
-            ExecutionState(
-                task_id="test-task",
-                context_id="test-context",
-                user_id="test-user",
-                session_id="test-agent:test-context",
-            )
-        )
-        assert state.config_passed is True
+        state = await execute_flow(flow)
+        assert state['config_passed'] is True
 
 
 class TestGraphOverridesE2E:
@@ -432,15 +372,15 @@ class TestGraphOverridesE2E:
             "nodes": {
                 "classifier": {
                     "type": "code",
-                    "code": "async def run(args, state): state.route = 'order'; state.step = ['classifier']; return state",
+                    "code": "async def run(args, state): state['route'] = 'order'; state['step'] = ['classifier']; return state",
                 },
                 "processor": {
                     "type": "code",
-                    "code": "async def run(args, state): state.step.append('processor'); return state",
+                    "code": "async def run(args, state): state['step'].append('processor'); return state",
                 },
                 "formatter": {
                     "type": "code",
-                    "code": "async def run(args, state): state.step.append('formatter'); return state",
+                    "code": "async def run(args, state): state['step'].append('formatter'); return state",
                 },
             },
             "edges": [
@@ -450,15 +390,8 @@ class TestGraphOverridesE2E:
             ],
         }
         flow_base = await build_flow(config=config_base, variables={})
-        state = await flow_base.run(
-            ExecutionState(
-                task_id="test-task",
-                context_id="test-context",
-                user_id="test-user",
-                session_id="test-agent:test-context",
-            )
-        )
-        assert state.step == ["classifier", "processor", "formatter"]
+        state = await execute_flow(flow_base)
+        assert state['step'] == ["classifier", "processor", "formatter"]
         config_fast = {
             "flow_id": "test_graph",
             "name": "Test",
@@ -466,11 +399,11 @@ class TestGraphOverridesE2E:
             "nodes": {
                 "classifier": {
                     "type": "code",
-                    "code": "async def run(args, state): state.route = 'order'; state.step = ['classifier']; return state",
+                    "code": "async def run(args, state): state['route'] = 'order'; state['step'] = ['classifier']; return state",
                 },
                 "processor": {
                     "type": "code",
-                    "code": "async def run(args, state): state.step.append('processor'); return state",
+                    "code": "async def run(args, state): state['step'].append('processor'); return state",
                 },
             },
             "edges": [
@@ -479,16 +412,9 @@ class TestGraphOverridesE2E:
             ],
         }
         flow_fast = await build_flow(config=config_fast, variables={})
-        state = await flow_fast.run(
-            ExecutionState(
-                task_id="test-task",
-                context_id="test-context",
-                user_id="test-user",
-                session_id="test-agent:test-context",
-            )
-        )
-        assert state.step == ["classifier", "processor"]
-        assert "formatter" not in state.step
+        state = await execute_flow(flow_fast)
+        assert state['step'] == ["classifier", "processor"]
+        assert "formatter" not in state['step']
 
     @pytest.mark.asyncio
     async def test_conditional_edge_override(self):
@@ -501,19 +427,19 @@ class TestGraphOverridesE2E:
                 "nodes": {
                     "start": {
                         "type": "code",
-                        "code": "async def run(args, state): state.route = getattr(state, 'input_route', 'a'); return state",
+                        "code": "async def run(args, state): state['route'] = state.get('input_route', 'a'); return state",
                     },
                     "path_a": {
                         "type": "code",
-                        "code": "async def run(args, state): state.result = 'A'; return state",
+                        "code": "async def run(args, state): state['result'] = 'A'; return state",
                     },
                     "path_b": {
                         "type": "code",
-                        "code": "async def run(args, state): state.result = 'B'; return state",
+                        "code": "async def run(args, state): state['result'] = 'B'; return state",
                     },
                     "path_c": {
                         "type": "code",
-                        "code": "async def run(args, state): state.result = 'C'; return state",
+                        "code": "async def run(args, state): state['result'] = 'C'; return state",
                     },
                 },
                 "edges": [
@@ -554,16 +480,8 @@ class TestGraphOverridesE2E:
             },
             variables={},
         )
-        state = await flow_all.run(
-            ExecutionState(
-                task_id="test-task",
-                context_id="test-context",
-                user_id="test-user",
-                session_id="test-agent:test-context",
-                input_route="b",
-            )
-        )
-        assert state.result == "B"
+        state = await execute_flow(flow_all, input_route="b")
+        assert state['result'] == "B"
         flow_redirect = await build_flow(
             config={
                 "flow_id": "test_edges",
@@ -572,15 +490,15 @@ class TestGraphOverridesE2E:
                 "nodes": {
                     "start": {
                         "type": "code",
-                        "code": "async def run(args, state): state.route = 'c' if getattr(state, 'input_route', None) == 'b' else getattr(state, 'input_route', 'a'); return state",
+                        "code": "async def run(args, state): state['route'] = 'c' if state.get('input_route') == 'b' else state.get('input_route', 'a'); return state",
                     },
                     "path_a": {
                         "type": "code",
-                        "code": "async def run(args, state): state.result = 'A'; return state",
+                        "code": "async def run(args, state): state['result'] = 'A'; return state",
                     },
                     "path_c": {
                         "type": "code",
-                        "code": "async def run(args, state): state.result = 'C'; return state",
+                        "code": "async def run(args, state): state['result'] = 'C'; return state",
                     },
                 },
                 "edges": [
@@ -610,16 +528,8 @@ class TestGraphOverridesE2E:
             },
             variables={},
         )
-        state = await flow_redirect.run(
-            ExecutionState(
-                task_id="test-task",
-                context_id="test-context",
-                user_id="test-user",
-                session_id="test-agent:test-context",
-                input_route="b",
-            )
-        )
-        assert state.result == "C"
+        state = await execute_flow(flow_redirect, input_route="b")
+        assert state['result'] == "C"
 
 
 class TestMultipleNodesOverrideE2E:
@@ -636,15 +546,15 @@ class TestMultipleNodesOverrideE2E:
                 "nodes": {
                     "step1": {
                         "type": "code",
-                        "code": "async def run(args, state): state.v1 = 'base1'; return state",
+                        "code": "async def run(args, state): state['v1'] = 'base1'; return state",
                     },
                     "step2": {
                         "type": "code",
-                        "code": "async def run(args, state): state.v2 = 'base2'; return state",
+                        "code": "async def run(args, state): state['v2'] = 'base2'; return state",
                     },
                     "step3": {
                         "type": "code",
-                        "code": "async def run(args, state): state.v3 = 'base3'; return state",
+                        "code": "async def run(args, state): state['v3'] = 'base3'; return state",
                     },
                 },
                 "edges": [
@@ -655,17 +565,10 @@ class TestMultipleNodesOverrideE2E:
             },
             variables={},
         )
-        state = await flow_base.run(
-            ExecutionState(
-                task_id="test-task",
-                context_id="test-context",
-                user_id="test-user",
-                session_id="test-agent:test-context",
-            )
-        )
-        assert state.v1 == "base1"
-        assert state.v2 == "base2"
-        assert state.v3 == "base3"
+        state = await execute_flow(flow_base)
+        assert state['v1'] == "base1"
+        assert state['v2'] == "base2"
+        assert state['v3'] == "base3"
         flow_override = await build_flow(
             config={
                 "flow_id": "test_pipeline",
@@ -674,15 +577,15 @@ class TestMultipleNodesOverrideE2E:
                 "nodes": {
                     "step1": {
                         "type": "code",
-                        "code": "async def run(args, state): state.v1 = 'override1'; return state",
+                        "code": "async def run(args, state): state['v1'] = 'override1'; return state",
                     },
                     "step2": {
                         "type": "code",
-                        "code": "async def run(args, state): state.v2 = 'base2'; return state",
+                        "code": "async def run(args, state): state['v2'] = 'base2'; return state",
                     },
                     "step3": {
                         "type": "code",
-                        "code": "async def run(args, state): state.v3 = 'override3'; return state",
+                        "code": "async def run(args, state): state['v3'] = 'override3'; return state",
                     },
                 },
                 "edges": [
@@ -693,17 +596,10 @@ class TestMultipleNodesOverrideE2E:
             },
             variables={},
         )
-        state = await flow_override.run(
-            ExecutionState(
-                task_id="test-task",
-                context_id="test-context",
-                user_id="test-user",
-                session_id="test-agent:test-context",
-            )
-        )
-        assert state.v1 == "override1"
-        assert state.v2 == "base2"
-        assert state.v3 == "override3"
+        state = await execute_flow(flow_override)
+        assert state['v1'] == "override1"
+        assert state['v2'] == "base2"
+        assert state['v3'] == "override3"
 
     @pytest.mark.asyncio
     async def test_add_new_node_in_skill(self):
@@ -716,11 +612,11 @@ class TestMultipleNodesOverrideE2E:
                 "nodes": {
                     "first": {
                         "type": "code",
-                        "code": "async def run(args, state): state.steps = ['first']; return state",
+                        "code": "async def run(args, state): state['steps'] = ['first']; return state",
                     },
                     "last": {
                         "type": "code",
-                        "code": "async def run(args, state): state.steps.append('last'); return state",
+                        "code": "async def run(args, state): state['steps'].append('last'); return state",
                     },
                 },
                 "edges": [
@@ -730,15 +626,8 @@ class TestMultipleNodesOverrideE2E:
             },
             variables={},
         )
-        state = await flow_base.run(
-            ExecutionState(
-                task_id="test-task",
-                context_id="test-context",
-                user_id="test-user",
-                session_id="test-agent:test-context",
-            )
-        )
-        assert state.steps == ["first", "last"]
+        state = await execute_flow(flow_base)
+        assert state["steps"] == ["first", "last"]
         flow_with_middle = await build_flow(
             config={
                 "flow_id": "test_add",
@@ -747,15 +636,15 @@ class TestMultipleNodesOverrideE2E:
                 "nodes": {
                     "first": {
                         "type": "code",
-                        "code": "async def run(args, state): state.steps = ['first']; return state",
+                        "code": "async def run(args, state): state['steps'] = ['first']; return state",
                     },
                     "middle": {
                         "type": "code",
-                        "code": "async def run(args, state): state.steps.append('middle'); return state",
+                        "code": "async def run(args, state): state['steps'].append('middle'); return state",
                     },
                     "last": {
                         "type": "code",
-                        "code": "async def run(args, state): state.steps.append('last'); return state",
+                        "code": "async def run(args, state): state['steps'].append('last'); return state",
                     },
                 },
                 "edges": [
@@ -766,12 +655,5 @@ class TestMultipleNodesOverrideE2E:
             },
             variables={},
         )
-        state = await flow_with_middle.run(
-            ExecutionState(
-                task_id="test-task",
-                context_id="test-context",
-                user_id="test-user",
-                session_id="test-agent:test-context",
-            )
-        )
-        assert state.steps == ["first", "middle", "last"]
+        state = await execute_flow(flow_with_middle)
+        assert state["steps"] == ["first", "middle", "last"]

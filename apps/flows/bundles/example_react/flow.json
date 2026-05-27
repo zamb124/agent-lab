@@ -127,6 +127,12 @@
           }
         }
       },
+      "edges": [
+        {
+          "from_node": "main",
+          "to_node": null
+        }
+      ],
       "nodes_mode": "replace"
     },
     "direct_mode": {

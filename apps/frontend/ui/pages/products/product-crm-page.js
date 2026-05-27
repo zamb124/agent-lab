@@ -2,17 +2,17 @@
  * Product CRM Page - Страница продукта NetWorkle
  */
 import { html, css } from 'lit';
-import { PlatformElement } from '@platform/lib/platform-element/index.js';
+import { PlatformPage } from '@platform/lib/base/PlatformPage.js';
 import { buildServiceEntryUrl } from '@platform/lib/utils/last-visited-service.js';
 import { applyPublicDocumentMeta } from '../../utils/public-document-meta.js';
 import { productLandingFaqStyles } from '../../styles/product-landing-faq.styles.js';
 import { landNetworkleAbilityUrl } from '../../utils/land-product-images.js';
 
-export class ProductCrmPage extends PlatformElement {
+export class ProductCrmPage extends PlatformPage {
     static i18nNamespace = 'frontend_products';
 
     static styles = [
-        PlatformElement.styles,
+        PlatformPage.styles,
         productLandingFaqStyles,
         css`
             :host {
@@ -355,8 +355,13 @@ export class ProductCrmPage extends PlatformElement {
         `
     ];
 
+    constructor() {
+        super();
+        this._authStatusSel = this.select((s) => s.auth.status);
+    }
+
     _handleProductCtaClick = () => {
-        if (this.bus.getState().auth.status === 'authenticated') {
+        if (this._authStatusSel.value === 'authenticated') {
             window.location.href = buildServiceEntryUrl('crm');
             return;
         }

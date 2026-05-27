@@ -1084,6 +1084,7 @@ def _compute_diff(old: JsonObject, new: JsonObject, path: str = "") -> list[Diff
         "breakpoints",
         "scheduled_tasks",
         "reasoning_history",
+        "reflection_history",
         "pending_reasoning",
         "breakpoint_hit",
         "breakpoint_state",

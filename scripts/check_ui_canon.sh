@@ -211,6 +211,10 @@ done
 #     - 'await (this.dispatch(...))' / fake await  — диспатч fire-and-forget, ответы — через useEvent
 #     - this.i18n.getCurrentLocale() / this.i18n.t — i18n только через this.t(...) и this.select(s => s.i18n.locale)
 RUNTIME_ANTI_GLOBS=(
+    apps -g '*.js'
+    --glob '!apps/*/ui/events/**'
+    --glob '!apps/*/ui/assets/**'
+    --glob '!**/*.min.js'
     core/frontend/static/lib -g '*.js'
     --glob '!core/frontend/static/lib/embed-chat/**'
     --glob '!core/frontend/static/lib/platform-element/**'

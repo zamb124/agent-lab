@@ -9,7 +9,11 @@ from sqlalchemy import update
 
 from apps.flows.src.container import get_container
 from apps.flows.src.db.models import WorkflowInstances
-from apps.flows.src.durable_execution import WorkflowEventType, create_initial_state
+from apps.flows.src.durable_execution import (
+    UserInputAppliedPayload,
+    WorkflowEventType,
+    create_initial_state,
+)
 from core.state import ExecutionState
 
 
@@ -66,6 +70,11 @@ async def save_test_state(state: ExecutionState) -> None:
         state.session_id,
         state,
         event_type=WorkflowEventType.user_input_applied,
+        payload=UserInputAppliedPayload(
+            task_id=state.task_id,
+            context_id=state.context_id,
+            is_resume=False,
+        ),
         snapshot=True,
     )
 
@@ -155,17 +164,19 @@ class TestDurableWorkflowSessionSearch:
         _ = app
         runtime = get_container().workflow_runtime
         flow_id = f"branch_flow_{unique_id}"
+        target_branch_id = f"branch-a-{unique_id}"
+        other_branch_id = f"branch-b-{unique_id}"
         session1_id = f"{flow_id}:session1_{unique_id}"
         session2_id = f"{flow_id}:session2_{unique_id}"
 
         await save_test_state(
-            create_test_state(session1_id, f"user1_{unique_id}", branch_id="branch-a")
+            create_test_state(session1_id, f"user1_{unique_id}", branch_id=target_branch_id)
         )
         await save_test_state(
-            create_test_state(session2_id, f"user2_{unique_id}", branch_id="branch-b")
+            create_test_state(session2_id, f"user2_{unique_id}", branch_id=other_branch_id)
         )
 
-        sessions, total = await runtime.search_sessions(branch_id="branch-a", limit=100)
+        sessions, total = await runtime.search_sessions(branch_id=target_branch_id, limit=100)
 
         assert total == 1
         assert sessions[0].session_id == session1_id

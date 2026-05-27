@@ -536,9 +536,11 @@ class BaseChannel(ABC):
         actions = effective_output_actions_for_trigger(trigger)
         if not actions:
             return
-        triggers_meta = params.metadata.get("triggers")
+        triggers_meta_raw = params.metadata.get("triggers")
+        triggers_meta: JsonObject = {}
         original_payload: JsonObject = {}
-        if isinstance(triggers_meta, dict):
+        if triggers_meta_raw is not None:
+            triggers_meta = require_json_object(triggers_meta_raw, "metadata.triggers")
             raw = triggers_meta.get(trigger_id)
             if isinstance(raw, dict):
                 pl = raw.get("payload")
@@ -548,6 +550,8 @@ class BaseChannel(ABC):
                     msg = "metadata.triggers[trigger_id] must contain 'payload' as dict"
                     raise ValueError(msg)
         state_dict = require_json_object(state.model_dump(mode="json"), "execution_state")
+        if triggers_meta:
+            state_dict["triggers"] = triggers_meta
         executor = OutputActionExecutor(container=self.container)
         _ = await executor.execute(
             output_actions=actions,
@@ -756,19 +760,18 @@ class BaseChannel(ABC):
             if breakpoints:
                 state.breakpoints = breakpoints
 
-            flow_config = await container.flow_factory.get_flow_config_snapshot(
-                self.flow_id, state.flow_config_version
-            )
+            flow_config_payload = dict(runtime_flow.config)
+            _ = flow_config_payload.pop("resolved_variables", None)
+            flow_config = FlowConfig.model_validate(flow_config_payload)
 
-            if flow_config is not None:
-                attach_flow_speech_layers_to_context(ctx, flow_config, params.branch_id)
+            attach_flow_speech_layers_to_context(ctx, flow_config, params.branch_id)
 
             final_response = ""
 
             if params.is_resume and state.interrupt:
                 state.content = params.content
 
-            if flow_config is not None and flow_config.timeout is not None:
+            if flow_config.timeout is not None:
                 _flow_t = int(flow_config.timeout)
             else:
                 _flow_t = int(get_settings().default_flow_timeout_seconds)
@@ -1757,6 +1760,17 @@ class BaseChannelHandler(ABC):
         return value
 
     @staticmethod
+    def _require_str_or_int_param(params: JsonObject, name: str) -> str | int:
+        value = params.get(name)
+        if isinstance(value, str) and value:
+            return value
+        if isinstance(value, int) and not isinstance(value, bool):
+            return value
+        raise ValueError(
+            f"Channel action parameter {name!r} must be a non-empty string or integer"
+        )
+
+    @staticmethod
     def _optional_str_param(params: JsonObject, name: str) -> str | None:
         value = params.get(name)
         if value is None:
@@ -1764,6 +1778,15 @@ class BaseChannelHandler(ABC):
         if not isinstance(value, str):
             raise ValueError(f"Channel action parameter {name!r} must be a string")
         return value
+
+    @staticmethod
+    def _optional_int_param(params: JsonObject, name: str) -> int | None:
+        value = params.get(name)
+        if value is None:
+            return None
+        if isinstance(value, int) and not isinstance(value, bool):
+            return value
+        raise ValueError(f"Channel action parameter {name!r} must be an integer")
 
     @staticmethod
     def _require_file_param(params: JsonObject, name: str) -> str | bytes:

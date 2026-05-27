@@ -132,6 +132,17 @@ async def _send_file_message(
     return data
 
 
+def _file_item_dict(item: object) -> dict[str, Any] | None:
+    if isinstance(item, dict):
+        return cast(dict[str, Any], item)
+    dump = getattr(item, "model_dump", None)
+    if callable(dump):
+        dumped = dump(mode="json", exclude_none=True)
+        if isinstance(dumped, dict):
+            return cast(dict[str, Any], dumped)
+    return None
+
+
 def _file_document(item: dict[str, Any]) -> dict[str, Any] | None:
     capabilities = item.get("capabilities")
     document = item.get("document")
@@ -157,9 +168,10 @@ async def _state_file(
             )
             files = files_raw if isinstance(files_raw, list) else []
             matches = [
-                cast(dict[str, Any], item)
+                file_item
                 for item in files
-                if isinstance(item, dict) and item.get("original_name") == file_name
+                if (file_item := _file_item_dict(item)) is not None
+                and file_item.get("original_name") == file_name
             ]
             for item in reversed(matches):
                 if _file_document(item):

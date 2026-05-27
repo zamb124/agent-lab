@@ -1,11 +1,14 @@
 """
 Тесты Google Docs тулов.
 
-TESTING=true — все тулы работают в mock режиме через mock_response из декоратора.
+Google Docs tools требуют явную авторизацию через state.variables или OAuth interrupt.
 """
 
 import pytest
 
+from apps.flows.src.runtime.exceptions import FlowInterrupt
+from apps.flows.src.tools.base import ToolArguments
+from apps.flows.src.tools.decorator import FunctionTool
 from apps.flows.tools.google_docs import (
     gdocs_append_text,
     gdocs_create_document,
@@ -15,6 +18,7 @@ from apps.flows.tools.google_docs import (
     gdocs_read_document,
     gdocs_share_document,
 )
+from core.state.interrupt import InterruptKind, OAuthInterrupt
 from core.state import ExecutionState
 
 
@@ -27,92 +31,79 @@ def _make_state() -> ExecutionState:
     )
 
 
+async def _assert_requires_google_docs_oauth(tool: FunctionTool, args: ToolArguments) -> None:
+    state = _make_state()
+    with pytest.raises(FlowInterrupt) as exc_info:
+        _ = await tool.run(args, state)
+    interrupt = exc_info.value.body
+    assert interrupt.kind == InterruptKind.OAUTH_REQUIRED
+    assert isinstance(interrupt, OAuthInterrupt)
+    assert interrupt.provider == "google"
+    assert interrupt.service == "docs"
+
+
 class TestGDocsCreateDocument:
     @pytest.mark.asyncio
-    async def test_mock_returns_document_id(self):
-        state = _make_state()
-        result = await gdocs_create_document.run(
-            {"title": "Отчёт Q1"}, state
-        )
-        assert result["success"] is True
-        assert "document_id" in result
-        assert result["title"] == "Отчёт Q1"
-        assert "web_url" in result
+    async def test_requires_oauth_without_credentials(self):
+        await _assert_requires_google_docs_oauth(gdocs_create_document, {"title": "Отчёт Q1"})
 
     @pytest.mark.asyncio
-    async def test_mock_with_file_id(self):
-        state = _make_state()
-        result = await gdocs_create_document.run(
-            {"title": "From template", "file_id": "file_abc"}, state
+    async def test_requires_oauth_with_file_id_without_credentials(self):
+        await _assert_requires_google_docs_oauth(
+            gdocs_create_document,
+            {"title": "From template", "file_id": "file_abc"},
         )
-        assert result["success"] is True
-        assert "document_id" in result
 
 
 class TestGDocsReadDocument:
     @pytest.mark.asyncio
-    async def test_mock_returns_text(self):
-        state = _make_state()
-        result = await gdocs_read_document.run(
-            {"document_id": "doc123"}, state
-        )
-        assert result["success"] is True
-        assert "text" in result
-        assert result["document_id"] == "doc123"
+    async def test_requires_oauth_without_credentials(self):
+        await _assert_requires_google_docs_oauth(gdocs_read_document, {"document_id": "doc123"})
 
 
 class TestGDocsAppendText:
     @pytest.mark.asyncio
-    async def test_mock_success(self):
-        state = _make_state()
-        result = await gdocs_append_text.run(
-            {"document_id": "doc123", "text": "Новый абзац"}, state
+    async def test_requires_oauth_without_credentials(self):
+        await _assert_requires_google_docs_oauth(
+            gdocs_append_text,
+            {"document_id": "doc123", "text": "Новый абзац"},
         )
-        assert result["success"] is True
-        assert result["document_id"] == "doc123"
 
 
 class TestGDocsInsertText:
     @pytest.mark.asyncio
-    async def test_mock_success(self):
-        state = _make_state()
-        result = await gdocs_insert_text.run(
-            {"document_id": "doc123", "text": "Вставка", "index": 5}, state
+    async def test_requires_oauth_without_credentials(self):
+        await _assert_requires_google_docs_oauth(
+            gdocs_insert_text,
+            {"document_id": "doc123", "text": "Вставка", "index": 5},
         )
-        assert result["success"] is True
 
 
 class TestGDocsFindReplace:
     @pytest.mark.asyncio
-    async def test_mock_returns_occurrences(self):
-        state = _make_state()
-        result = await gdocs_find_replace.run(
+    async def test_requires_oauth_without_credentials(self):
+        await _assert_requires_google_docs_oauth(
+            gdocs_find_replace,
             {"document_id": "doc123", "find": "старое", "replace": "новое"},
-            state,
         )
-        assert result["success"] is True
-        assert "occurrences_changed" in result
 
 
 class TestGDocsDeleteRange:
     @pytest.mark.asyncio
-    async def test_mock_success(self):
-        state = _make_state()
-        result = await gdocs_delete_range.run(
+    async def test_requires_oauth_without_credentials(self):
+        await _assert_requires_google_docs_oauth(
+            gdocs_delete_range,
             {"document_id": "doc123", "start_index": 1, "end_index": 10},
-            state,
         )
-        assert result["success"] is True
 
 
 class TestGDocsShareDocument:
     @pytest.mark.asyncio
-    async def test_mock_success(self):
-        state = _make_state()
-        result = await gdocs_share_document.run(
-            {"document_id": "doc123", "email": "user@example.com"}, state
+    async def test_requires_oauth_without_credentials(self):
+        await _assert_requires_google_docs_oauth(
+            gdocs_share_document,
+            {"document_id": "doc123", "email": "user@example.com"},
         )
-        assert result["success"] is True
 
 
 class TestGDocsToolSchemas:

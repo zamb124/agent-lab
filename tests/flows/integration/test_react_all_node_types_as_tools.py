@@ -18,19 +18,45 @@ from apps.flows.src.models import Edge, FlowConfig
 from apps.flows.src.models.enums import NodeType
 from apps.flows.src.runtime.nodes import LlmNode
 from apps.flows.src.tools.node_wrapper import NodeAsToolWrapper
+from core.reflection import CriticCriterion, CriticPolicy, ReflectionTarget
 from core.state import ExecutionState
+from core.types import JsonObject, require_json_object
+from tests.flows.durable_runtime_harness import run_flow, run_node, workflow_state
 
 
-def make_state(**kwargs) -> ExecutionState:
+EMPTY_PARAMETERS_SCHEMA: JsonObject = {"type": "object", "properties": {}, "required": []}
+REQUEST_PARAMETERS_SCHEMA: JsonObject = {
+    "type": "object",
+    "properties": {"request": {"type": "string"}},
+    "required": ["request"],
+}
+
+
+def make_state(*, flow_id: str = "test-agent", **kwargs) -> ExecutionState:
     """Создаёт ExecutionState."""
-    defaults = {
-        "task_id": "test-task",
-        "context_id": "test-context",
-        "user_id": "test-user",
-        "session_id": "test-agent:test-context",
-    }
-    defaults.update(kwargs)
-    return ExecutionState(**defaults)
+    return workflow_state(flow_id=flow_id, unique_id=str(time.time_ns()), **kwargs)
+
+
+async def run_react_node(node: LlmNode, state: ExecutionState) -> ExecutionState:
+    return await run_node(container=node.container, node=node, state=state)
+
+
+def reflection_policy() -> CriticPolicy:
+    return CriticPolicy(
+        policy_id="tool-wrapper-policy",
+        gate="final_answer",
+        target=ReflectionTarget(kind="response"),
+        instruction="Evaluate the response.",
+        criteria=[
+            CriticCriterion(
+                criterion_id="quality",
+                description="Response must satisfy the request.",
+                severity="error",
+            )
+        ],
+        min_confidence=0.5,
+        block_on_severities=["error"],
+    )
 
 
 class TestReactToolsModifyState:
@@ -47,39 +73,33 @@ class TestReactToolsModifyState:
         """
         tool1 = {
             "tool_id": "step1_tool",
-            "type": "code",
             "description": "Первый шаг",
             "parameters_schema": {
                 "type": "object",
                 "properties": {"value": {"type": "integer"}},
                 "required": ["value"],
             },
-            "input_mapping": {"value": "@state:value"},
-            "code": "\nasync def run(args, state):\n    state.step1_done = True\n    state.step1_value = args['value'] * 2\n    return {'step1': 'completed', 'result': state.step1_value}\n",
+            "code": "\nasync def run(args, state):\n    state['step1_done'] = True\n    state['step1_value'] = args['value'] * 2\n    return {'step1': 'completed', 'result': state['step1_value']}\n",
         }
         tool2 = {
             "tool_id": "step2_tool",
-            "type": "code",
             "description": "Второй шаг",
             "parameters_schema": {
                 "type": "object",
                 "properties": {"multiplier": {"type": "integer"}},
                 "required": ["multiplier"],
             },
-            "input_mapping": {"multiplier": "@state:multiplier"},
-            "code": "\nasync def run(args, state):\n    state.step2_done = True\n    state.step2_value = state.step1_value * args['multiplier']\n    return {'step2': 'completed', 'result': state.step2_value}\n",
+            "code": "\nasync def run(args, state):\n    state['step2_done'] = True\n    state['step2_value'] = state['step1_value'] * args['multiplier']\n    return {'step2': 'completed', 'result': state['step2_value']}\n",
         }
         tool3 = {
             "tool_id": "step3_tool",
-            "type": "code",
             "description": "Третий шаг",
             "parameters_schema": {
                 "type": "object",
                 "properties": {"suffix": {"type": "string"}},
                 "required": ["suffix"],
             },
-            "input_mapping": {"suffix": "@state:suffix"},
-            "code": "\nasync def run(args, state):\n    state.step3_done = True\n    state.final_result = f\"Result: {state.step2_value}{args['suffix']}\"\n    return {'step3': 'completed', 'final': state.final_result}\n",
+            "code": "\nasync def run(args, state):\n    state['step3_done'] = True\n    state['final_result'] = f\"Result: {state['step2_value']}{args['suffix']}\"\n    return {'step3': 'completed', 'final': state['final_result']}\n",
         }
         mock_llm_with_queue(
             [
@@ -99,7 +119,7 @@ class TestReactToolsModifyState:
             container=get_container(),
         )
         state = make_state(content="Run pipeline")
-        result = await llm_node.run(state)
+        result = await run_react_node(llm_node, state)
         assert result.step1_done is True, "step1 должен был выполниться"
         assert result.step1_value == 10, "step1: 5*2=10"
         assert result.step2_done is True, "step2 должен был выполниться"
@@ -118,34 +138,29 @@ class TestReactToolsModifyState:
         """
         init_tool = {
             "tool_id": "init_list",
-            "type": "code",
             "description": "Создает список",
             "parameters_schema": {
                 "type": "object",
                 "properties": {"items": {"type": "array"}},
                 "required": ["items"],
             },
-            "input_mapping": {"items": "@state:items"},
-            "code": "\nasync def run(args, state):\n    state.my_list = args['items']\n    state.list_created = True\n    return {'status': 'list created', 'count': len(state.my_list)}\n",
+            "code": "\nasync def run(args, state):\n    state['my_list'] = args['items']\n    state['list_created'] = True\n    return {'status': 'list created', 'count': len(state['my_list'])}\n",
         }
         append_tool = {
             "tool_id": "append_item",
-            "type": "code",
             "description": "Добавляет в список",
             "parameters_schema": {
                 "type": "object",
                 "properties": {"item": {"type": "integer"}},
                 "required": ["item"],
             },
-            "input_mapping": {"item": "@state:item"},
-            "code": "\nasync def run(args, state):\n    state.my_list.append(args['item'])\n    state.item_added = True\n    return {'status': 'item added', 'new_count': len(state.my_list)}\n",
+            "code": "\nasync def run(args, state):\n    state['my_list'].append(args['item'])\n    state['item_added'] = True\n    return {'status': 'item added', 'new_count': len(state['my_list'])}\n",
         }
         sum_tool = {
             "tool_id": "sum_list",
-            "type": "code",
             "description": "Суммирует список",
             "parameters_schema": {"type": "object", "properties": {}, "required": []},
-            "code": "\nasync def run(args, state):\n    state.total = sum(state.my_list)\n    state.sum_done = True\n    return {'total': state.total}\n",
+            "code": "\nasync def run(args, state):\n    state['total'] = sum(state['my_list'])\n    state['sum_done'] = True\n    return {'total': state['total']}\n",
         }
         mock_llm_with_queue(
             [
@@ -165,7 +180,7 @@ class TestReactToolsModifyState:
             container=get_container(),
         )
         state = make_state(content="Process list")
-        result = await llm_node.run(state)
+        result = await run_react_node(llm_node, state)
         assert result.list_created is True
         assert result.my_list == [1, 2, 3, 4], f"Список должен быть [1,2,3,4], got {result.my_list}"
         assert result.item_added is True
@@ -181,7 +196,6 @@ class TestCodeNodeWithNamedParams:
         """Все типы параметров передаются корректно."""
         tool = {
             "tool_id": "typed_tool",
-            "type": "code",
             "description": "Tool с разными типами",
             "parameters_schema": {
                 "type": "object",
@@ -202,15 +216,7 @@ class TestCodeNodeWithNamedParams:
                     "dict_param",
                 ],
             },
-            "input_mapping": {
-                "str_param": "@state:str_param",
-                "int_param": "@state:int_param",
-                "float_param": "@state:float_param",
-                "bool_param": "@state:bool_param",
-                "list_param": "@state:list_param",
-                "dict_param": "@state:dict_param",
-            },
-            "code": "\nasync def run(args, state):\n    state.received_str = args['str_param']\n    state.received_int = args['int_param']\n    state.received_float = args['float_param']\n    state.received_bool = args['bool_param']\n    state.received_list = args['list_param']\n    state.received_dict = args['dict_param']\n    state.all_received = True\n    return {'status': 'all params received'}\n",
+            "code": "\nasync def run(args, state):\n    state['received_str'] = args['str_param']\n    state['received_int'] = args['int_param']\n    state['received_float'] = args['float_param']\n    state['received_bool'] = args['bool_param']\n    state['received_list'] = args['list_param']\n    state['received_dict'] = args['dict_param']\n    state['all_received'] = True\n    return {'status': 'all params received'}\n",
         }
         mock_llm_with_queue(
             [
@@ -235,7 +241,7 @@ class TestCodeNodeWithNamedParams:
             container=get_container(),
         )
         state = make_state(content="Test params")
-        result = await llm_node.run(state)
+        result = await run_react_node(llm_node, state)
         assert result.all_received is True
         assert result.received_str == "hello"
         assert result.received_int == 42
@@ -269,7 +275,7 @@ class TestAgentSkillsAsTools:
                         "calc": {
                             "type": "code",
                             "input_mapping": {"x": "@state:x", "y": "@state:y"},
-                            "code": "\nasync def run(args, state):\n    state.math_executed = True\n    state.math_result = args['x'] + args['y']\n    state.response = f\"Math: {state.math_result}\"\n    return state\n",
+                            "code": "\nasync def run(args, state):\n    state['math_executed'] = True\n    state['math_result'] = args['x'] + args['y']\n    state['response'] = f\"Math: {state['math_result']}\"\n    return state\n",
                         }
                     },
                     "edges": [{"from_node": "calc", "to_node": None}],
@@ -281,7 +287,7 @@ class TestAgentSkillsAsTools:
                         "process": {
                             "type": "code",
                             "input_mapping": {"text": "@state:text"},
-                            "code": "\nasync def run(args, state):\n    state.text_executed = True\n    state.text_result = args['text'].upper()\n    state.response = f\"Text: {state.text_result}\"\n    return state\n",
+                            "code": "\nasync def run(args, state):\n    state['text_executed'] = True\n    state['text_result'] = args['text'].upper()\n    state['response'] = f\"Text: {state['text_result']}\"\n    return state\n",
                         }
                     },
                     "edges": [{"from_node": "process", "to_node": None}],
@@ -326,7 +332,7 @@ class TestAgentSkillsAsTools:
             container=container,
         )
         state = make_state(content="Use skills")
-        result = await llm_node.run(state)
+        result = await run_react_node(llm_node, state)
         assert result.math_executed is True, "math skill должен был выполниться"
         assert result.math_result == 30, "math: 10+20=30"
         assert result.text_executed is True, "text skill должен был выполниться"
@@ -345,15 +351,13 @@ class TestAllNodeTypesAsToolsWithStateChange:
         """CODE node как tool изменяет state."""
         tool = {
             "tool_id": "code_tool",
-            "type": "code",
             "description": "Code tool",
             "parameters_schema": {
                 "type": "object",
                 "properties": {"value": {"type": "integer"}},
                 "required": ["value"],
             },
-            "input_mapping": {"value": "@state:value"},
-            "code": "\nasync def run(args, state):\n    state.code_executed = True\n    state.code_result = args['value'] * 100\n    return {'result': state.code_result}\n",
+            "code": "\nasync def run(args, state):\n    state['code_executed'] = True\n    state['code_result'] = args['value'] * 100\n    return {'result': state['code_result']}\n",
         }
         mock_llm_with_queue(
             [
@@ -366,7 +370,7 @@ class TestAllNodeTypesAsToolsWithStateChange:
             config={"type": "llm_node", "prompt": "Use tool.", "tools": [tool]},
             container=get_container(),
         )
-        result = await react.run(make_state(content="test"))
+        result = await run_react_node(react, make_state(content="test"))
         assert result.code_executed is True, "CODE должен изменить state"
         assert result.code_result == 500, "CODE: 5*100=500"
 
@@ -378,12 +382,13 @@ class TestAllNodeTypesAsToolsWithStateChange:
             "type": "llm_node",
             "description": "Subagent",
             "prompt": "You are a helper. Set helper_done=True in state.",
+            "parameters_schema": REQUEST_PARAMETERS_SCHEMA,
             "tools": [
                 {
                     "tool_id": "set_flag",
-                    "type": "code",
                     "description": "Set flag",
-                    "code": "\nasync def run(args, state):\n    state.helper_flag = True\n    state.helper_value = 42\n    return {'status': 'flag set'}\n",
+                    "parameters_schema": EMPTY_PARAMETERS_SCHEMA,
+                    "code": "\nasync def run(args, state):\n    state['helper_flag'] = True\n    state['helper_value'] = 42\n    return {'status': 'flag set'}\n",
                 }
             ],
         }
@@ -400,7 +405,7 @@ class TestAllNodeTypesAsToolsWithStateChange:
             config={"type": "llm_node", "prompt": "Use subagent.", "tools": [subagent_tool]},
             container=get_container(),
         )
-        result = await react.run(make_state(content="test"))
+        result = await run_react_node(react, make_state(content="test"))
         assert result.helper_flag is True, "LLM_NODE subagent должен изменить state"
         assert result.helper_value == 42, "LLM_NODE: helper_value=42"
 
@@ -422,7 +427,7 @@ class TestAllNodeTypesAsToolsWithStateChange:
                         "do_work": {
                             "type": "code",
                             "input_mapping": {"param": "@state:param"},
-                            "code": "\nasync def run(args, state):\n    state.skill_executed = True\n    state.skill_result = f\"skill:{args['param']}\"\n    state.response = state.skill_result\n    return state\n",
+                            "code": "\nasync def run(args, state):\n    state['skill_executed'] = True\n    state['skill_result'] = f\"skill:{args['param']}\"\n    state['response'] = state['skill_result']\n    return state\n",
                         }
                     },
                     "edges": [{"from_node": "do_work", "to_node": None}],
@@ -453,7 +458,7 @@ class TestAllNodeTypesAsToolsWithStateChange:
             config={"type": "llm_node", "prompt": "Use skill.", "tools": [tool]},
             container=container,
         )
-        result = await react.run(make_state(content="test"))
+        result = await run_react_node(react, make_state(content="test"))
         assert result.skill_executed is True, "AGENT skill должен изменить state"
         assert result.skill_result == "skill:test_value", "AGENT: skill_result"
         await container.flow_repository.delete("skill_test_agent")
@@ -492,7 +497,7 @@ class TestAllNodeTypesAsToolsWithStateChange:
                 config={"type": "llm_node", "prompt": "Use API.", "tools": [tool]},
                 container=get_container(),
             )
-            result = await react.run(make_state(content="test"))
+            result = await run_react_node(react, make_state(content="test"))
             assert mock_api.called, "EXTERNAL_API должен быть вызван"
             assert "api_tool" in result.tool_results, "EXTERNAL_API результат в tool_results"
 
@@ -529,7 +534,7 @@ class TestAllNodeTypesAsToolsWithStateChange:
                 config={"type": "llm_node", "prompt": "Use remote.", "tools": [tool]},
                 container=get_container(),
             )
-            result = await react.run(make_state(content="test"))
+            result = await run_react_node(react, make_state(content="test"))
             assert mock_remote.called, "REMOTE_FLOW должен быть вызван"
             assert "remote_tool" in result.tool_results, "REMOTE_FLOW результат в tool_results"
 
@@ -567,7 +572,7 @@ class TestAllNodeTypesAsToolsWithStateChange:
                 config={"type": "llm_node", "prompt": "Use MCP.", "tools": [tool]},
                 container=get_container(),
             )
-            result = await react.run(make_state(content="test"))
+            result = await run_react_node(react, make_state(content="test"))
             assert mock_mcp.called, "MCP должен быть вызван"
             assert "mcp_tool" in result.tool_results, "MCP результат в tool_results"
 
@@ -634,7 +639,7 @@ class TestAgentCallsOwnSkillsAsTools:
                         "calc": {
                             "type": "code",
                             "input_mapping": {"number": "@state:number"},
-                            "code": "\nasync def run(args, state):\n    state.skill_a_executed = True\n    state.skill_a_result = args['number'] ** 2\n    state.response = f\"Skill A: {state.skill_a_result}\"\n    return state\n",
+                            "code": "\nasync def run(args, state):\n    state['skill_a_executed'] = True\n    state['skill_a_result'] = args['number'] ** 2\n    state['response'] = f\"Skill A: {state['skill_a_result']}\"\n    return state\n",
                         }
                     },
                     "edges": [Edge(from_node="calc", to_node=None)],
@@ -646,7 +651,7 @@ class TestAgentCallsOwnSkillsAsTools:
                         "process": {
                             "type": "code",
                             "input_mapping": {"text": "@state:text"},
-                            "code": '\nasync def run(args, state):\n    state.skill_b_executed = True\n    state.skill_b_result = args[\'text\'].upper() + "!!!"\n    state.response = f"Skill B: {state.skill_b_result}"\n    return state\n',
+                            "code": "\nasync def run(args, state):\n    state['skill_b_executed'] = True\n    state['skill_b_result'] = args['text'].upper() + '!!!'\n    state['response'] = f\"Skill B: {state['skill_b_result']}\"\n    return state\n",
                         }
                     },
                     "edges": [Edge(from_node="process", to_node=None)],
@@ -662,8 +667,9 @@ class TestAgentCallsOwnSkillsAsTools:
             ]
         )
         agent = await container.flow_factory.get_flow("self_skill_agent")
-        state = make_state(content="Use your skills")
-        result = await agent.run(state)
+        assert agent is not None
+        state = make_state(flow_id="self_skill_agent", content="Use your skills")
+        result = await run_flow(container=container, flow=agent, state=state)
         assert result.skill_a_executed is True, "Skill A должен выполниться"
         assert result.skill_a_result == 25, "Skill A: 5^2 = 25"
         assert result.skill_b_executed is True, "Skill B должен выполниться"
@@ -692,7 +698,7 @@ class TestAgentCallsOwnSkillsAsTools:
                         "help": {
                             "type": "code",
                             "input_mapping": {"request": "@state:request"},
-                            "code": "\nasync def run(args, state):\n    state.helper_executed = True\n    state.helper_response = f\"Helper helped with: {args['request']}\"\n    state.response = state.helper_response\n    return state\n",
+                            "code": "\nasync def run(args, state):\n    state['helper_executed'] = True\n    state['helper_response'] = f\"Helper helped with: {args['request']}\"\n    state['response'] = state['helper_response']\n    return state\n",
                         }
                     },
                     "edges": [Edge(from_node="help", to_node=None)],
@@ -745,7 +751,7 @@ class TestAgentCallsOwnSkillsAsTools:
                         "do_own": {
                             "type": "code",
                             "input_mapping": {"value": "@state:value"},
-                            "code": "\nasync def run(args, state):\n    state.own_skill_executed = True\n    state.own_result = args['value'] * 10\n    state.response = f\"Own: {state.own_result}\"\n    return state\n",
+                            "code": "\nasync def run(args, state):\n    state['own_skill_executed'] = True\n    state['own_result'] = args['value'] * 10\n    state['response'] = f\"Own: {state['own_result']}\"\n    return state\n",
                         }
                     },
                     "edges": [Edge(from_node="do_own", to_node=None)],
@@ -761,8 +767,9 @@ class TestAgentCallsOwnSkillsAsTools:
             ]
         )
         agent = await container.flow_factory.get_flow("main_agent")
-        state = make_state(content="Use skills")
-        result = await agent.run(state)
+        assert agent is not None
+        state = make_state(flow_id="main_agent", content="Use skills")
+        result = await run_flow(container=container, flow=agent, state=state)
         assert result.own_skill_executed is True, "Own skill должен выполниться"
         assert result.own_result == 70, "Own skill: 7*10=70"
         assert result.helper_executed is True, "Helper skill должен выполниться"
@@ -786,39 +793,33 @@ class TestParallelToolExecution:
         """
         tool1 = {
             "tool_id": "slow_tool",
-            "type": "code",
             "description": "Slow tool",
             "parameters_schema": {
                 "type": "object",
                 "properties": {"value": {"type": "integer"}},
                 "required": ["value"],
             },
-            "input_mapping": {"value": "@state:value"},
-            "code": "\nimport asyncio\nasync def run(args, state):\n    await asyncio.sleep(0.1)  # Медленный\n    state.slow_done = True\n    state.slow_result = args['value'] * 10\n    return {'tool': 'slow', 'result': state.slow_result}\n",
+            "code": "\nimport asyncio\nasync def run(args, state):\n    await asyncio.sleep(0.1)  # Медленный\n    state['slow_done'] = True\n    state['slow_result'] = args['value'] * 10\n    return {'tool': 'slow', 'result': state['slow_result']}\n",
         }
         tool2 = {
             "tool_id": "fast_tool",
-            "type": "code",
             "description": "Fast tool",
             "parameters_schema": {
                 "type": "object",
                 "properties": {"value": {"type": "integer"}},
                 "required": ["value"],
             },
-            "input_mapping": {"value": "@state:value"},
-            "code": "\nasync def run(args, state):\n    state.fast_done = True\n    state.fast_result = args['value'] * 100\n    return {'tool': 'fast', 'result': state.fast_result}\n",
+            "code": "\nasync def run(args, state):\n    state['fast_done'] = True\n    state['fast_result'] = args['value'] * 100\n    return {'tool': 'fast', 'result': state['fast_result']}\n",
         }
         tool3 = {
             "tool_id": "medium_tool",
-            "type": "code",
             "description": "Medium tool",
             "parameters_schema": {
                 "type": "object",
                 "properties": {"value": {"type": "integer"}},
                 "required": ["value"],
             },
-            "input_mapping": {"value": "@state:value"},
-            "code": "\nimport asyncio\nasync def run(args, state):\n    await asyncio.sleep(0.05)  # Средний\n    state.medium_done = True\n    state.medium_result = args['value'] * 50\n    return {'tool': 'medium', 'result': state.medium_result}\n",
+            "code": "\nimport asyncio\nasync def run(args, state):\n    await asyncio.sleep(0.05)  # Средний\n    state['medium_done'] = True\n    state['medium_result'] = args['value'] * 50\n    return {'tool': 'medium', 'result': state['medium_result']}\n",
         }
         mock_llm_with_queue(
             [
@@ -839,7 +840,7 @@ class TestParallelToolExecution:
             container=get_container(),
         )
         state = make_state(content="Run parallel")
-        result = await llm_node.run(state)
+        result = await run_react_node(llm_node, state)
         assert result.slow_done is True, "slow_tool должен выполниться"
         assert result.fast_done is True, "fast_tool должен выполниться"
         assert result.medium_done is True, "medium_tool должен выполниться"
@@ -867,24 +868,21 @@ class TestParallelToolExecution:
         """
         tool0 = {
             "tool_id": "sleep_tool_0",
-            "type": "code",
             "description": "Sleep tool 0",
             "parameters_schema": {"type": "object", "properties": {}, "required": []},
-            "code": "\nimport asyncio\nasync def run(args, state):\n    await asyncio.sleep(0.1)\n    state.tool_0_done = True\n    return {'idx': 0, 'done': True}\n",
+            "code": "\nimport asyncio\nimport time\nasync def run(args, state):\n    started_at = time.time()\n    await asyncio.sleep(0.2)\n    finished_at = time.time()\n    state['tool_0_done'] = True\n    return {'idx': 0, 'done': True, 'started_at': started_at, 'finished_at': finished_at}\n",
         }
         tool1 = {
             "tool_id": "sleep_tool_1",
-            "type": "code",
             "description": "Sleep tool 1",
             "parameters_schema": {"type": "object", "properties": {}, "required": []},
-            "code": "\nimport asyncio\nasync def run(args, state):\n    await asyncio.sleep(0.1)\n    state.tool_1_done = True\n    return {'idx': 1, 'done': True}\n",
+            "code": "\nimport asyncio\nimport time\nasync def run(args, state):\n    started_at = time.time()\n    await asyncio.sleep(0.2)\n    finished_at = time.time()\n    state['tool_1_done'] = True\n    return {'idx': 1, 'done': True, 'started_at': started_at, 'finished_at': finished_at}\n",
         }
         tool2 = {
             "tool_id": "sleep_tool_2",
-            "type": "code",
             "description": "Sleep tool 2",
             "parameters_schema": {"type": "object", "properties": {}, "required": []},
-            "code": "\nimport asyncio\nasync def run(args, state):\n    await asyncio.sleep(0.1)\n    state.tool_2_done = True\n    return {'idx': 2, 'done': True}\n",
+            "code": "\nimport asyncio\nimport time\nasync def run(args, state):\n    started_at = time.time()\n    await asyncio.sleep(0.2)\n    finished_at = time.time()\n    state['tool_2_done'] = True\n    return {'idx': 2, 'done': True, 'started_at': started_at, 'finished_at': finished_at}\n",
         }
         tools = [tool0, tool1, tool2]
         mock_llm_with_queue(
@@ -907,9 +905,27 @@ class TestParallelToolExecution:
         )
         state = make_state(content="test")
         start = time.time()
-        result = await llm_node.run(state)
+        result = await run_react_node(llm_node, state)
         elapsed = time.time() - start
-        assert elapsed < 0.35, f"Должно быть < 0.35 сек (параллельно), но заняло {elapsed:.2f} сек"
+
+        def execution_window(tool_name: str) -> tuple[float, float]:
+            tool_result = require_json_object(result.tool_results[tool_name], f"{tool_name}.result")
+            started_at = tool_result["started_at"]
+            finished_at = tool_result["finished_at"]
+            assert isinstance(started_at, int | float)
+            assert isinstance(finished_at, int | float)
+            return float(started_at), float(finished_at)
+
+        windows = [
+            execution_window("sleep_tool_0"),
+            execution_window("sleep_tool_1"),
+            execution_window("sleep_tool_2"),
+        ]
+        latest_start = max(started_at for started_at, _ in windows)
+        earliest_finish = min(finished_at for _, finished_at in windows)
+
+        assert latest_start < earliest_finish, "tool executions должны пересекаться по времени"
+        assert elapsed < 0.85, f"Параллельное выполнение заняло слишком долго: {elapsed:.2f} сек"
         assert result.tool_0_done is True
         assert result.tool_1_done is True
         assert result.tool_2_done is True
@@ -922,17 +938,15 @@ class TestParallelToolExecution:
         """
         tool1 = {
             "tool_id": "first_writer",
-            "type": "code",
             "description": "Writes fast",
             "parameters_schema": {"type": "object", "properties": {}, "required": []},
-            "code": "\nasync def run(args, state):\n    state.shared_value = 100\n    state.first_wrote = True\n    return {'wrote': 100}\n",
+            "code": "\nasync def run(args, state):\n    state['shared_value'] = 100\n    state['first_wrote'] = True\n    return {'wrote': 100}\n",
         }
         tool2 = {
             "tool_id": "second_writer",
-            "type": "code",
             "description": "Writes slow",
             "parameters_schema": {"type": "object", "properties": {}, "required": []},
-            "code": "\nimport asyncio\nasync def run(args, state):\n    await asyncio.sleep(0.05)  # Медленнее\n    state.shared_value = 999\n    state.second_wrote = True\n    return {'wrote': 999}\n",
+            "code": "\nimport asyncio\nasync def run(args, state):\n    await asyncio.sleep(0.05)  # Медленнее\n    state['shared_value'] = 999\n    state['second_wrote'] = True\n    return {'wrote': 999}\n",
         }
         mock_llm_with_queue(
             [
@@ -951,7 +965,7 @@ class TestParallelToolExecution:
             config={"type": "llm_node", "prompt": "Write.", "tools": [tool1, tool2]},
             container=get_container(),
         )
-        result = await llm_node.run(make_state(content="test"))
+        result = await run_react_node(llm_node, make_state(content="test"))
         assert result.first_wrote is True
         assert result.second_wrote is True
         assert result.shared_value == 999, "Последний (second_writer) должен победить"
@@ -967,6 +981,7 @@ class TestNodeAsToolWrapperBasics:
                 "tool_id": f"test_{node_type.value}",
                 "type": node_type.value,
                 "description": "Test",
+                "parameters_schema": EMPTY_PARAMETERS_SCHEMA,
             }
             if node_type == NodeType.CODE:
                 config["code"] = "async def run(args, state): return {}"
@@ -983,6 +998,16 @@ class TestNodeAsToolWrapperBasics:
             elif node_type == NodeType.MCP:
                 config["server_id"] = "test"
                 config["tool_name"] = "test"
+            elif node_type == NodeType.CHANNEL:
+                config["channel"] = "webhook"
+                config["action"] = "send"
+            elif node_type == NodeType.HITL_NODE:
+                config["operator_queue_slug"] = "support"
+                config["operator_task_title"] = "Test"
+                config["operator_user_message"] = "Test"
+            elif node_type == NodeType.REFLECTION:
+                config["critic_policy"] = reflection_policy().model_dump(mode="json")
+                config["llm"] = {"model": "mock-gpt-4"}
             wrapper = NodeAsToolWrapper(config)
             assert wrapper.name == f"test_{node_type.value}"
 

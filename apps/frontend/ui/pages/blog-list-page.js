@@ -87,6 +87,7 @@ export class BlogListPage extends PlatformPage {
     constructor() {
         super();
         this._listOp = this.useOp('frontend/public_blog_list');
+        this._localeSel = this.select((s) => s.i18n.locale);
     }
 
     connectedCallback() {
@@ -95,14 +96,14 @@ export class BlogListPage extends PlatformPage {
     }
 
     _titleFor(row) {
-        const locale = this.bus.getState().i18n.locale;
+        const locale = this._localeSel.value;
         if (locale === 'ru') return row.title_ru;
         if (locale === 'en') return row.title_en;
         throw new Error('blog-list-page: i18n.locale must be ru or en');
     }
 
     _summaryFor(row) {
-        const locale = this.bus.getState().i18n.locale;
+        const locale = this._localeSel.value;
         if (locale === 'ru') return row.summary_ru;
         if (locale === 'en') return row.summary_en;
         throw new Error('blog-list-page: i18n.locale must be ru or en');

@@ -107,7 +107,7 @@ class TestSaveToMessages:
     @pytest.mark.asyncio
     async def test_function_node_save_to_messages_disabled(self, container, unique_id: str):
         """CodeNode без save_to_messages не добавляет в messages."""
-        code = '\nasync def run(args, state):\n    state.result = "some_value"\n    return state\n'
+        code = '\nasync def run(args, state):\n    state["result"] = "some_value"\n    return state\n'
         node = code_node(
             container,
             node_id="no_messages",
@@ -120,7 +120,7 @@ class TestSaveToMessages:
     @pytest.mark.asyncio
     async def test_function_node_save_to_messages_with_diff(self, container, unique_id: str):
         """CodeNode с save_to_messages добавляет diff стейта."""
-        code = '\nasync def run(args, state):\n    state.new_field = "new_value"\n    state.another_field = 123\n    return state\n'
+        code = '\nasync def run(args, state):\n    state["new_field"] = "new_value"\n    state["another_field"] = 123\n    return state\n'
         node = code_node(
             container,
             node_id="with_messages",
@@ -192,7 +192,7 @@ class TestMessageField:
     @pytest.mark.asyncio
     async def test_function_node_message_field(self, container, unique_id: str):
         """CodeNode с message_field."""
-        code = '\nasync def run(args, state):\n    state.result = "public_info"\n    state.internal = "private_info"\n    return state\n'
+        code = '\nasync def run(args, state):\n    state["result"] = "public_info"\n    state["internal"] = "private_info"\n    return state\n'
         node = code_node(
             container,
             node_id="field_func",
@@ -212,7 +212,7 @@ class TestStateDiff:
     @pytest.mark.asyncio
     async def test_diff_only_new_fields(self, container, unique_id: str):
         """Diff содержит только новые поля."""
-        code = '\nasync def run(args, state):\n    state.new_field1 = "value1"\n    state.new_field2 = "value2"\n    return state\n'
+        code = '\nasync def run(args, state):\n    state["new_field1"] = "value1"\n    state["new_field2"] = "value2"\n    return state\n'
         node = code_node(
             container,
             node_id="diff_test",
@@ -234,7 +234,7 @@ class TestStateDiff:
     @pytest.mark.asyncio
     async def test_diff_changed_fields(self, container, unique_id: str):
         """Diff содержит измененные поля."""
-        code = '\nasync def run(args, state):\n    state.mutable_field = "changed_value"\n    return state\n'
+        code = '\nasync def run(args, state):\n    state["mutable_field"] = "changed_value"\n    return state\n'
         node = code_node(
             container,
             node_id="change_test",
@@ -259,7 +259,7 @@ class TestAllNodeTypesDataFlow:
     @pytest.mark.asyncio
     async def test_function_to_tool_data_flow(self, container, unique_id: str):
         """CodeNode -> CodeNode: передача данных."""
-        func_code = "\nasync def run(args, state):\n    state.calculated_value = 100\n    state.factor = 5\n    return state\n"
+        func_code = '\nasync def run(args, state):\n    state["calculated_value"] = 100\n    state["factor"] = 5\n    return state\n'
         func_node = code_node(container, node_id="prepare", config={"code": func_code})
         tool_node = code_node(
             container,
@@ -302,7 +302,7 @@ class TestAllNodeTypesDataFlow:
                 "input_mapping": {},
             },
         )
-        func_code = "\nasync def run(args, state):\n    item = state.generated_item\n    state.formatted = f\"Item #{item['id']}: {item['name']}\"\n    return state\n"
+        func_code = "\nasync def run(args, state):\n    item = state['generated_item']\n    state['formatted'] = f\"Item #{item['id']}: {item['name']}\"\n    return state\n"
         func_node = code_node(container, node_id="format", config={"code": func_code})
         flow_id = "tool_to_func"
         flow = Flow(
@@ -372,9 +372,9 @@ class TestAllNodeTypesDataFlow:
     @pytest.mark.asyncio
     async def test_function_chain_data_flow(self, container, unique_id: str):
         """Цепочка CodeNode: каждый модифицирует state."""
-        code1 = "\nasync def run(args, state):\n    state.step1_done = True\n    state.counter = 1\n    return state\n"
-        code2 = "\nasync def run(args, state):\n    state.step2_done = True\n    state.counter = state.counter + 1\n    return state\n"
-        code3 = '\nasync def run(args, state):\n    state.step3_done = True\n    state.counter = state.counter + 1\n    state.summary = f"Steps completed: {state.counter}"\n    return state\n'
+        code1 = '\nasync def run(args, state):\n    state["step1_done"] = True\n    state["counter"] = 1\n    return state\n'
+        code2 = '\nasync def run(args, state):\n    state["step2_done"] = True\n    state["counter"] = state["counter"] + 1\n    return state\n'
+        code3 = '\nasync def run(args, state):\n    state["step3_done"] = True\n    state["counter"] = state["counter"] + 1\n    state["summary"] = f"Steps completed: {state[\'counter\']}"\n    return state\n'
         node1 = code_node(container, node_id="step1", config={"code": code1})
         node2 = code_node(container, node_id="step2", config={"code": code2})
         node3 = code_node(container, node_id="step3", config={"code": code3})
@@ -403,7 +403,7 @@ class TestAllNodeTypesDataFlow:
     @pytest.mark.asyncio
     async def test_mixed_nodes_with_messages(self, container, unique_id: str):
         """Смешанная цепочка с save_to_messages."""
-        func_code = '\nasync def run(args, state):\n    state.user_data = {"name": "Alice", "score": 100}\n    return state\n'
+        func_code = '\nasync def run(args, state):\n    state["user_data"] = {"name": "Alice", "score": 100}\n    return state\n'
         func_node = code_node(
             container,
             node_id="init",
@@ -456,7 +456,7 @@ class TestFromConfig:
                 },
                 "step2": {
                     "type": "code",
-                    "code": '\nasync def run(args, state):\n    state.combined = f"Got: {state.first_result}"\n    return state\n',
+                    "code": '\nasync def run(args, state):\n    state["combined"] = f"Got: {state[\'first_result\']}"\n    return state\n',
                 },
             },
             "edges": [
@@ -532,7 +532,7 @@ class TestComplexPipeline:
         2. Transform (CodeNode): трансформирует
         3. Load (CodeNode): сохраняет с save_to_messages
         """
-        transform_code = "\nasync def run(args, state):\n    items = state.extracted['items']\n    # Увеличиваем цены на 10%\n    transformed = [\n        {**item, 'price': int(item['price'] * 1.1)}\n        for item in items\n    ]\n    state.transformed_items = transformed\n    state.total_price = sum(item['price'] for item in transformed)\n    return state\n"
+        transform_code = "\nasync def run(args, state):\n    items = state['extracted']['items']\n    transformed = [\n        {**item, 'price': int(item['price'] * 1.1)}\n        for item in items\n    ]\n    state['transformed_items'] = transformed\n    state['total_price'] = sum(item['price'] for item in transformed)\n    return state\n"
         extract_node = code_node(
             container,
             node_id="extract",
@@ -592,8 +592,8 @@ class TestComplexPipeline:
         3. Process (CodeNode): обрабатывает с save_to_messages
         4. Finalize (CodeNode): финализирует
         """
-        classify_code = '\nasync def run(args, state):\n    content = state.content or ""\n    state.is_urgent = "urgent" in content.lower()\n    state.request_type = "urgent" if state.is_urgent else "normal"\n    return state\n'
-        finalize_code = "\nasync def run(args, state):\n    result = state.process_result\n    state.response = f\"Processed by {result['handler']}: {result['message']}\"\n    return state\n"
+        classify_code = '\nasync def run(args, state):\n    content = state.get("content") or ""\n    state["is_urgent"] = "urgent" in content.lower()\n    state["request_type"] = "urgent" if state["is_urgent"] else "normal"\n    return state\n'
+        finalize_code = "\nasync def run(args, state):\n    result = state['process_result']\n    state['response'] = f\"Processed by {result['handler']}: {result['message']}\"\n    return state\n"
         classify_node = code_node(
             container,
             node_id="classify", config={"code": classify_code, "save_to_messages": True}

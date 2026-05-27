@@ -88,6 +88,7 @@ from core.clients.llm import (
 )
 from core.company_ai import COST_ORIGIN_COMPANY
 from core.config import get_settings
+from core.config.testing import is_testing
 from core.context import get_context
 from core.errors import FlowExecutionError, ToolExecutionError
 from core.llm_context import (
@@ -716,7 +717,12 @@ class LlmNodeRunner(BaseLlmNodeRunner):
             folder_id=billing_folder_id,
             settings=get_settings(),
         )
-        if not byok_override:
+        mock_llm_call = (
+            is_testing()
+            or str(billing_model or "").startswith("mock-")
+            or str(billing_provider or "") == "mock"
+        )
+        if not byok_override and not mock_llm_call:
             if uses_platform_free_pool:
                 allow_platform_paid_fallback = (
                     await container.billing_service.company_may_incur_billable_operation_charge(
@@ -793,6 +799,7 @@ class LlmNodeRunner(BaseLlmNodeRunner):
                         llm_messages = [system_msg] + messages
                         content = ""
                         tool_calls: list[LLMToolCall] | None = None
+                        had_reasoning_event = False
                         llm_start = time.time()
                         input_tokens = 0
                         output_tokens = 0
@@ -838,6 +845,8 @@ class LlmNodeRunner(BaseLlmNodeRunner):
 
                                     if isinstance(event, TaskArtifactUpdateEvent):
                                         artifact_name = event.artifact.name or "response"
+                                        if artifact_name == "reasoning":
+                                            had_reasoning_event = True
                                         if artifact_name != "reasoning":
                                             for part in event.artifact.parts:
                                                 if isinstance(part.root, TextPart):
@@ -1086,6 +1095,10 @@ class LlmNodeRunner(BaseLlmNodeRunner):
                                 await self._checkpoint_state(state)
                                 raise
                         else:
+                            if had_reasoning_event and not content:
+                                await self._checkpoint_state(state)
+                                continue
+
                             # Structured Output - всегда завершаем после первого ответа
                             if structured_output and output_schema:
                                 try:
@@ -1239,6 +1252,21 @@ class LlmNodeRunner(BaseLlmNodeRunner):
                 return False
             return await token.is_cancelled()
 
+        if isinstance(llm, MockLLM):
+            async for event in llm.stream(
+                messages=messages,
+                tools=tools,
+                response_format=response_format,
+                task_id=task_id,
+                context_id=context_id,
+                max_tokens=max_tok,
+                llm_context=self.llm_context_policy or self.node_config.llm_context or {},
+                llm_context_source_registry=self.llm_context_source_registry,
+                stream_cancel_poll=_stream_cancel_poll,
+            ):
+                await check_cancellation(state)
+                yield event
+            return
 
         for attempt in range(1, self.MAX_STREAM_IDLE_RETRIES + 2):  # +2: 1 original + N retries
             input_payload = require_json_object(
@@ -1352,6 +1380,7 @@ class LlmNodeRunner(BaseLlmNodeRunner):
 
         # Несколько tools - параллельное выполнение
         original_msg_count = len(state.messages)
+        original_reasoning_count = len(state.reasoning_history)
 
         # Создаем копии state для каждого tool
         state_copies = [state.runtime_copy() for _ in tool_calls]
@@ -1410,6 +1439,11 @@ class LlmNodeRunner(BaseLlmNodeRunner):
 
             # tool_results - мержим (не перезаписываем!)
             state.tool_results.update(state_copy.tool_results)
+
+            new_reasoning_entries = state_copy.reasoning_history[original_reasoning_count:]
+            if new_reasoning_entries:
+                state.reasoning_history.extend(new_reasoning_entries)
+                state.pending_reasoning = new_reasoning_entries[-1]
 
             for field in USER_TOOL_PARALLEL_STATE_MERGE_FIELDS:
                 if field == "variables":
@@ -1579,6 +1613,7 @@ class LlmNodeRunner(BaseLlmNodeRunner):
 
             logger.info(f"Выполняю tool: {tool_name}")
             try:
+                reasoning_count_before = len(state.reasoning_history)
                 with active_tool_call_context(
                     tool_name=tool_name,
                     tool_call_id=tool_call_id,
@@ -1587,6 +1622,12 @@ class LlmNodeRunner(BaseLlmNodeRunner):
                     emitter=emitter,
                 ):
                     result = await tool.run(tool_args, state)
+                self._record_reason_tool_call(
+                    tool=tool,
+                    tool_args=tool_args,
+                    state=state,
+                    reasoning_count_before=reasoning_count_before,
+                )
                 state.tool_results[tool_name] = result
 
                 tool_duration = (time.time() - tool_start) * 1000
@@ -1644,6 +1685,26 @@ class LlmNodeRunner(BaseLlmNodeRunner):
                         }
                     ]
                 raise ToolExecutionError(tool_name, e)
+
+    def _record_reason_tool_call(
+        self,
+        *,
+        tool: BaseTool,
+        tool_args: ToolArguments,
+        state: ExecutionState,
+        reasoning_count_before: int,
+    ) -> None:
+        if tool.react_role != ReactToolRole.REASON:
+            return
+        if len(state.reasoning_history) > reasoning_count_before:
+            state.pending_reasoning = state.reasoning_history[-1]
+            return
+        reasoning_entry = require_json_object(
+            dict(tool_args),
+            f"tool.{tool.name}.reasoning_entry",
+        )
+        state.reasoning_history.append(reasoning_entry)
+        state.pending_reasoning = reasoning_entry
 
     async def _render_prompt(self, state: ExecutionState) -> str:
         """Рендерит промпт с переменными и сохраняет в историю."""

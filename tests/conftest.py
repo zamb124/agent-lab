@@ -701,7 +701,7 @@ def mock_llm_with_queue():
     Фабрика для создания MockLLM с очередью ответов.
     Для локального выполнения (sync_tools).
 
-    Usage:
+    Пример:
         def test_flow(mock_llm_with_queue, sync_tools):
             mock = mock_llm_with_queue([
                 "First response",
@@ -735,7 +735,7 @@ async def mock_llm_capture(container, unique_id):
     ставить `active_scope` и перезаписывать глобальный ключ; worker тогда пишет
     журнал не в тот scope.
 
-    Usage:
+    Пример:
         async def test_smth(mock_llm_capture, mock_llm_redis):
             await mock_llm_redis([{"type": "text", "content": "..."}])
             ...  # запускаем сценарий
@@ -774,7 +774,7 @@ async def mock_llm_redis(container, request):
     Для real_taskiq ключ mock_llm:responses:<lane> по _real_taskiq_mock_llm_lane
     (tests/crm используют lane flows — LLM на сервисе flows через A2A).
 
-    Usage:
+    Пример:
         async def test_integration(mock_llm_redis):
             await mock_llm_redis([
                 {"type": "text", "content": "Response"}
@@ -835,7 +835,7 @@ def make_test_state():
     Фабрика для создания ExecutionState из dict в тестах.
     Автоматически добавляет обязательные поля (task_id, context_id, user_id).
 
-    Usage:
+    Пример:
         def test_something(make_test_state):
             state = make_test_state(content="hello", user={"name": "John"})
             result = await node.run(state)
@@ -1284,7 +1284,7 @@ async def flows_client(flows_app):
     """
     HTTP клиент для тестирования agents API.
 
-    Usage:
+    Пример:
         async def test_api(flows_client):
             response = await flows_client.get("/flows/api/health")
             assert response.status_code == 200
@@ -1300,7 +1300,7 @@ async def frontend_client(frontend_app):
     """
     HTTP клиент для тестирования frontend API.
 
-    Usage:
+    Пример:
         async def test_api(frontend_client):
             response = await frontend_client.get("/api/health")
             assert response.status_code == 200
@@ -1318,7 +1318,7 @@ async def frontend_client_with_auth(frontend_app, auth_token):
     """
     HTTP клиент с предустановленным auth token в cookies.
 
-    Usage:
+    Пример:
         async def test_api(frontend_client_with_auth):
             response = await frontend_client_with_auth.get("/api/something")
             assert response.status_code == 200
@@ -1337,7 +1337,7 @@ async def test_agent(app, container):
     """
     Создает тестового агента для API тестов.
 
-    Usage:
+    Пример:
         async def test_api(frontend_client, test_agent):
             # test_agent.flow_id == "test_agent"
     """
@@ -1357,15 +1357,15 @@ async def test_agent(app, container):
 @pytest_asyncio.fixture
 async def test_agent_fixture(app, unique_id):
     """
-    Создает уникального тестового агента с автоматическим cleanup.
+    Создает уникального тестового агента с автоматической очисткой.
 
     Гарантирует удаление агента даже если тест упал.
 
-    Usage:
+    Пример:
         async def test_something(test_agent_fixture):
             flow_id, container = test_agent_fixture
             # Создайте агента с flow_id
-            # Cleanup произойдет автоматически
+            # Очистка произойдёт автоматически
     """
     from apps.flows.src.container import get_container
 
@@ -1373,7 +1373,7 @@ async def test_agent_fixture(app, unique_id):
     flow_ids_to_cleanup = []
 
     def register_agent(flow_id: str):
-        """Регистрирует flow_id для cleanup"""
+        """Регистрирует flow_id для последующей очистки."""
         flow_ids_to_cleanup.append(flow_id)
         return flow_id
 
@@ -1390,7 +1390,7 @@ async def auth_token(frontend_container):
     """
     Создает авторизованного пользователя с компанией и возвращает токен.
 
-    Usage:
+    Пример:
         async def test_auth(frontend_client, auth_token):
             response = await frontend_client.get(
                 "/api/companies/me",
@@ -1433,7 +1433,7 @@ async def auth_headers(auth_token):
     Фикстура для авторизационных заголовков.
     Middleware поддерживает как cookies, так и Authorization header.
 
-    Usage:
+    Пример:
         async def test_api(frontend_client, auth_headers):
             response = await frontend_client.get(
                 "/api/something",
@@ -1476,7 +1476,7 @@ def unique_namespace_name(unique_id):
     """
     Уникальное имя namespace для изоляции тестов.
 
-    Usage:
+    Пример:
         def test_namespace(rag_client, unique_namespace_name):
             response = await rag_client.post(
                 "/rag/api/v1/namespaces",

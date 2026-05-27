@@ -86,7 +86,7 @@ async def auth_headers_system(auth_token_system):
     """
     Заголовки для основного пользователя системной компании.
 
-    Usage:
+    Пример:
         async def test_something(crm_client, auth_headers_system):
             response = await crm_client.get("/crm/api/v1/entities/", headers=auth_headers_system)
     """
@@ -98,7 +98,7 @@ async def ws_cookie_system(auth_token_system, system_user_id):
     """
     Cookie для WebSocket подключения системного пользователя.
 
-    Usage:
+    Пример:
         async with websockets.connect(ws_url, additional_headers=ws_cookie_system) as ws:
             ...
     """
@@ -154,7 +154,7 @@ async def auth_headers_system_user2(auth_token_system_user2):
     """
     Заголовки для второго пользователя системной компании.
 
-    Usage:
+    Пример:
         async def test_same_company_access(crm_client, auth_headers_system, auth_headers_system_user2):
             # Создаем entity как user1
             resp1 = await crm_client.post("/crm/api/v1/entities/", json={...}, headers=auth_headers_system)
@@ -226,7 +226,7 @@ async def auth_headers_company2(auth_token_company2):
     """
     Заголовки для пользователя из другой компании (company2).
 
-    Usage:
+    Пример:
         async def test_cross_company_access(crm_client, auth_headers_system, auth_headers_company2):
             # Создаем public entity как system user
             resp1 = await crm_client.post("/crm/api/v1/entities/", json={...}, headers=auth_headers_system)
@@ -288,7 +288,7 @@ async def auth_headers_company2_user2(auth_token_company2_user2):
     """
     Заголовки для второго пользователя из компании company2.
 
-    Usage:
+    Пример:
         async def test_company2_internal_access(crm_client, auth_headers_company2, auth_headers_company2_user2):
             # Создаем entity как company2 user1
             resp1 = await crm_client.post("/crm/api/v1/entities/", json={...}, headers=auth_headers_company2)

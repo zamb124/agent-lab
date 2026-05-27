@@ -282,11 +282,11 @@ class TestFlowWithSkills:
             nodes={
                 "default_start": {
                     "type": "code",
-                    "code": "async def run(args, state): state.path = 'default'; return state",
+                    "code": 'async def run(args, state): state["path"] = "default"; return state',
                 },
                 "skill_start": {
                     "type": "code",
-                    "code": "async def run(args, state): state.path = 'skill'; return state",
+                    "code": 'async def run(args, state): state["path"] = "skill"; return state',
                 },
             },
             edges=[
@@ -347,7 +347,7 @@ class TestFlowWithSkills:
                 "nodes": {
                     "main": {
                         "type": "code",
-                        "code": "\nasync def run(args, state):\n    vars = state.get('variables', {})\n    state['mode'] = vars.get('mode', 'unknown')\n    return state\n",
+                        "code": "\nasync def run(args, state):\n    flow_variables = state['variables']\n    state['mode'] = flow_variables.get('mode', 'unknown')\n    return state\n",
                     }
                 },
                 "edges": [{"from_node": "main", "to_node": None}],

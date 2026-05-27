@@ -5,6 +5,7 @@
  * транзитивно через `frontend-app.js`.
  */
 
+import '@platform/lib/components/app-loader.js';
 import '@platform/lib/components/platform-icon.js';
 import '@platform/lib/components/glass-button.js';
 import '@platform/lib/components/glass-card.js';

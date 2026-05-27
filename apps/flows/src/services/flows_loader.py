@@ -10,12 +10,10 @@
 
 from __future__ import annotations
 
-import ast
 import importlib
 import inspect
 import json
 import mimetypes
-import textwrap
 from pathlib import Path
 from types import FunctionType
 from typing import cast
@@ -46,106 +44,14 @@ from core.types import (
 
 logger = get_logger(__name__)
 
-_SANDBOX_IMPORT_ROOTS = {
-    "__future__",
-    "asyncio",
-    "ast",
-    "base64",
-    "collections",
-    "datetime",
-    "decimal",
-    "functools",
-    "hashlib",
-    "html",
-    "itertools",
-    "json",
-    "math",
-    "operator",
-    "random",
-    "re",
-    "statistics",
-    "string",
-    "time",
-    "typing",
-    "uuid",
-}
-
-_INLINE_SOURCE_BUILTIN_TOOLS = {
-    "ask_user",
-    "calculator",
-    "final_answer",
-    "finish",
-    "reason",
-}
-
-
-def _sandbox_safe_imports_for_function(func: FunctionType) -> list[str]:
-    module = inspect.getmodule(func)
-    if module is None:
-        return []
-    try:
-        source = inspect.getsource(module)
-    except (OSError, TypeError):
-        return []
-    try:
-        tree = ast.parse(source)
-    except SyntaxError:
-        return []
-
-    imports: list[str] = []
-    seen: set[str] = set()
-    for node in tree.body:
-        if isinstance(node, ast.Import):
-            names: list[ast.alias] = []
-            for alias in node.names:
-                root = alias.name.split(".", 1)[0]
-                if root in _SANDBOX_IMPORT_ROOTS:
-                    names.append(alias)
-            if not names:
-                continue
-            stmt: ast.stmt = ast.Import(names=names)
-        elif isinstance(node, ast.ImportFrom):
-            if node.level != 0 or node.module is None:
-                continue
-            root = node.module.split(".", 1)[0]
-            if root not in _SANDBOX_IMPORT_ROOTS:
-                continue
-            stmt = node
-        else:
-            continue
-        line = ast.unparse(stmt)
-        if line not in seen:
-            seen.add(line)
-            imports.append(line)
-    return imports
-
-
 def _function_tool_template_code(tool_instance: FunctionTool) -> str:
-    """Editable sandbox template for a decorated builtin FunctionTool."""
-    if tool_instance.name not in _INLINE_SOURCE_BUILTIN_TOOLS:
-        return textwrap.dedent(
-            f"""
-            # platform:tool-capability:{tool_instance.name}
-            async def {tool_instance.name}(args, state):
-                return await tools.call("{tool_instance.name}", **dict(args))
-            """
-        ).lstrip()
-
-    source = textwrap.dedent(tool_instance.get_source_code())
-    tree = ast.parse(source)
-    fn_node = next(
-        (node for node in tree.body if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef))),
-        None,
+    """Platform builtin marker used by ToolRegistry to materialize FunctionTool."""
+    tool_name = tool_instance.name
+    return (
+        f"# platform:tool-capability:{tool_name}\n"
+        f"async def {tool_name}(args, state):\n"
+        f"    return await tools.call({tool_name!r}, **dict(args))\n"
     )
-    if fn_node is None:
-        raise ValueError(f"Tool '{tool_instance.name}': function source not found")
-    fn_node.decorator_list = []
-    _ = ast.fix_missing_locations(fn_node)
-    imports = _sandbox_safe_imports_for_function(tool_instance.source_function)
-    body = ast.unparse(fn_node)
-    if imports:
-        return "\n".join(imports) + "\n\n" + body + "\n"
-    return body + "\n"
 
 
 class FlowsLoader:

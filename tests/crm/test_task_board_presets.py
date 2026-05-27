@@ -21,7 +21,7 @@ def test_task_board_key() -> None:
 def test_resolve_default_when_no_preset() -> None:
     crm = NamespaceCRMSettings()
     stages = resolve_task_board_stages(crm, "task")
-    assert [s.stage_id for s in stages] == ["todo", "in_progress", "done"]
+    assert [s.id for s in stages] == ["todo", "in_progress", "done"]
 
 
 def test_resolve_custom_preset() -> None:
@@ -29,14 +29,14 @@ def test_resolve_custom_preset() -> None:
         pipeline_stage_presets={
             "task": TaskBoardPreset(
                 stages=[
-                    BoardStage(stage_id="open", label="Открыто"),
-                    BoardStage(stage_id="closed", label="Закрыто"),
+                    BoardStage(id="open", label="Открыто"),
+                    BoardStage(id="closed", label="Закрыто"),
                 ]
             )
         }
     )
     stages = resolve_task_board_stages(crm, "task")
-    assert [s.stage_id for s in stages] == ["open", "closed"]
+    assert [s.id for s in stages] == ["open", "closed"]
 
 
 def test_default_task_board_three_stages() -> None:

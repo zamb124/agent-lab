@@ -4,14 +4,14 @@
 Проверяет работу before_prompt_render и after_prompt_render хуков.
 """
 
-from typing import Any, Dict
-
 import pytest
 
+from apps.flows.src.container import get_container
 from apps.flows.src.models.node_config import NodeConfig, NodeLLMConfig
 from apps.flows.src.runtime.nodes import LlmNode
 from apps.flows.src.runtime.runners.llm_runner import LlmNodeRunner
 from core.state import ExecutionState
+from core.types import JsonObject, require_json_object
 
 
 class AgentWithHooks(LlmNode):
@@ -21,17 +21,20 @@ class AgentWithHooks(LlmNode):
     description = "Test agent with hooks"
 
     async def before_prompt_render(
-        self, prompt_template: str, state: Dict[str, Any], variables: Dict[str, Any]
-    ) -> tuple[str, Dict[str, Any]]:
+        self, prompt_template: str, state: ExecutionState, variables: JsonObject
+    ) -> tuple[str, JsonObject]:
         """Добавляет переменную и модифицирует шаблон."""
-        variables["custom_var"] = "custom_value"
-        prompt_template = f"{prompt_template}\n\nДополнительная инструкция: используй {variables.get('custom_var')}."
-        return prompt_template, variables
+        _ = state
+        updated_variables: JsonObject = {**variables, "custom_var": "custom_value"}
+        prompt_template = (
+            f"{prompt_template}\n\n"
+            + f"Дополнительная инструкция: используй {updated_variables['custom_var']}."
+        )
+        return prompt_template, updated_variables
 
-    async def after_prompt_render(
-        self, rendered_prompt: str, state: Dict[str, Any]
-    ) -> str:
+    async def after_prompt_render(self, rendered_prompt: str, state: ExecutionState) -> str:
         """Добавляет текст в конец промпта."""
+        _ = state
         return f"{rendered_prompt}\n\nФинальная заметка: промпт обработан хуком."
 
 
@@ -58,26 +61,46 @@ def flow_config():
 @pytest.fixture
 def runner_with_hooks(flow_config):
     """LlmNodeRunner с агентом, у которого есть хуки."""
-    agent = AgentWithHooks(node_config=flow_config)
+    container = get_container()
+    node_config_json = require_json_object(
+        flow_config.model_dump(mode="json", exclude_none=True),
+        "test_agent_hooks.node_config",
+    )
+    agent = AgentWithHooks(
+        config=node_config_json,
+        node_config=flow_config,
+        container=container,
+    )
     return LlmNodeRunner(
         node_config=flow_config,
         tools=[],
         llm=None,
         prompt=flow_config.prompt,
         llm_node=agent,
+        container=container,
     )
 
 
 @pytest.fixture
 def runner_without_hooks(flow_config):
     """LlmNodeRunner с агентом без хуков."""
-    agent = AgentWithoutHooks(node_config=flow_config)
+    container = get_container()
+    node_config_json = require_json_object(
+        flow_config.model_dump(mode="json", exclude_none=True),
+        "test_agent_hooks.node_config",
+    )
+    agent = AgentWithoutHooks(
+        config=node_config_json,
+        node_config=flow_config,
+        container=container,
+    )
     return LlmNodeRunner(
         node_config=flow_config,
         tools=[],
         llm=None,
         prompt=flow_config.prompt,
         llm_node=agent,
+        container=container,
     )
 
 
@@ -205,18 +228,17 @@ class TestHooksWithoutAgent:
             user_id="test-user",
             session_id="test-agent:test-context",
         )
-        state_dict = state.model_dump(exclude_none=False)
 
         agent = runner_without_hooks.llm_node
         template, vars_before = await agent.before_prompt_render(
-            "Ты помощник. {test_var}", state_dict, variables.copy()
+            "Ты помощник. {test_var}", state, variables.copy()
         )
 
         assert template == "Ты помощник. {test_var}"
         assert vars_before == variables
 
         rendered = "Ты помощник. test_value"
-        rendered_after = await agent.after_prompt_render(rendered, state_dict)
+        rendered_after = await agent.after_prompt_render(rendered, state)
 
         assert rendered_after == rendered
 
@@ -261,4 +283,3 @@ class TestHooksIntegration:
         # Системные переменные должны быть доступны в хуках
         # (если они есть в контексте)
         assert "Ты помощник" in rendered
-

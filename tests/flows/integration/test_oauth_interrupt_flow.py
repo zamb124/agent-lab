@@ -16,15 +16,17 @@
 from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
-from typing import Any
 
 import pytest
 
 from apps.flows.src.container import get_container
 from apps.flows.src.models import FlowConfig
+from core.clients.google_docs_client import GoogleDocsClient
 from core.integrations.models import IntegrationCredential, IntegrationProvider
 from core.integrations.repository import IntegrationCredentialRepository
 from core.state import ExecutionState, InterruptKind
+from core.types import JsonObject
+from tests.flows.durable_runtime_harness import run_flow
 
 pytestmark = pytest.mark.xdist_group("flows_mock_llm_singleton")
 
@@ -34,12 +36,6 @@ def credential_repository(app) -> IntegrationCredentialRepository:
     from core.config import get_settings
     settings = get_settings()
     return IntegrationCredentialRepository(db_url=settings.database.shared_url)
-
-
-def _disable_gdocs_mock(monkeypatch) -> None:
-    """Выключает mock_response у gdocs_create_document чтобы шёл реальный _run_impl."""
-    from apps.flows.tools.google_docs import gdocs_create_document
-    monkeypatch.setattr(gdocs_create_document, "_mock_response", None)
 
 
 def _build_flow_config(flow_id: str) -> FlowConfig:
@@ -80,7 +76,13 @@ def _patch_oauth_config(monkeypatch) -> None:
     monkeypatch.setattr(settings, "auth", auth)
 
 
-async def _fake_create_document(self: Any, title: str, body_content: str = "") -> dict[str, Any]:
+async def _fake_create_document(
+    self: GoogleDocsClient,
+    title: str,
+    body_content: str = "",
+) -> JsonObject:
+    _ = self
+    _ = body_content
     return {
         "documentId": "fake-doc-id",
         "title": title,
@@ -101,11 +103,11 @@ class TestOAuthInterruptFlow:
         Flow с gdocs tool без credentials -> FlowInterrupt(OAuthInterrupt).
         """
         _patch_oauth_config(monkeypatch)
-        _disable_gdocs_mock(monkeypatch)
+        context_user_id = "test_user"
 
         await credential_repository.delete_by_user_provider_service(
             company_id="system",
-            user_id="test_user",
+            user_id=context_user_id,
             provider=IntegrationProvider.GOOGLE,
             service="docs",
         )
@@ -126,14 +128,14 @@ class TestOAuthInterruptFlow:
         state = ExecutionState(
             task_id=f"task-{unique_id}",
             context_id=f"ctx-{unique_id}",
-            user_id=f"user-oauth-{unique_id}",
+            user_id=context_user_id,
             session_id=f"{flow_id}:ctx-{unique_id}",
             content="Создай документ Test Doc",
         )
 
         flow.variables = {}
 
-        result = await flow.run(state)
+        result = await run_flow(container=container, flow=flow, state=state)
 
         assert result.interrupt is not None, "state.interrupt должен быть установлен"
         assert result.interrupt.body.kind == InterruptKind.OAUTH_REQUIRED
@@ -154,7 +156,6 @@ class TestOAuthInterruptFlow:
         Полный цикл: interrupt -> вставка credential -> resume -> успех.
         """
         _patch_oauth_config(monkeypatch)
-        _disable_gdocs_mock(monkeypatch)
 
         await credential_repository.delete_by_user_provider_service(
             company_id="system",
@@ -195,7 +196,7 @@ class TestOAuthInterruptFlow:
 
         flow.variables = {}
 
-        result = await flow.run(state)
+        result = await run_flow(container=container, flow=flow, state=state)
 
         assert result.interrupt is not None
         assert result.interrupt.body.kind == InterruptKind.OAUTH_REQUIRED
@@ -222,9 +223,16 @@ class TestOAuthInterruptFlow:
 
         result.content = "oauth_completed:google:docs"
 
-        resumed = await flow.run(result)
+        resumed = await run_flow(container=container, flow=flow, state=result)
 
         assert resumed.interrupt is None, \
             f"interrupt должен быть None после resume, получили: {resumed.interrupt}"
         assert resumed.response is not None
         assert "Resume Doc" in resumed.response or "Документ создан" in resumed.response
+
+        await credential_repository.delete_by_user_provider_service(
+            company_id=context_company_id,
+            user_id=context_user_id,
+            provider=IntegrationProvider.GOOGLE,
+            service="docs",
+        )
