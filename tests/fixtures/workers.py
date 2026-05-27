@@ -1178,7 +1178,11 @@ class SessionServerManager:
                 )
             else:
                 self.ref_count_path.write_text("1")
-                self._start_server()
+                try:
+                    self._start_server()
+                except Exception:
+                    self.ref_count_path.unlink(missing_ok=True)
+                    raise
 
         class _ServerContext:
             def __init__(ctx_self, manager):

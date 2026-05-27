@@ -155,7 +155,7 @@ def capability_gateway_service(setup_database_before_tests, flows_service):
         pid_file=_CAPABILITY_GATEWAY_SERVER_PID,
         app_path="apps.capability_gateway.main:app",
         port=9016,
-        startup_wait=20.0,
+        startup_wait=60.0,
         env=_COMMON_TEST_ENV,
     )
 
