@@ -9,7 +9,6 @@ from datetime import datetime
 from typing import TYPE_CHECKING, Annotated
 
 from fastapi import APIRouter, Body, HTTPException, Query
-from pydantic import ValidationError
 
 from apps.frontend.dependencies import ContainerDep
 
@@ -30,7 +29,7 @@ from apps.frontend.models import (
 )
 from core.billing.default_settlement_rules import default_settlement_rules_document
 from core.billing.service import company_resource_prices_storage_key
-from core.billing.settlement_rules import parse_settlement_rules_json
+from core.billing.settlement_rules import SettlementRulesDocument
 from core.context import get_context
 from core.identity.system_bootstrap import SYSTEM_COMPANY_ID, SYSTEM_COMPANY_SUBDOMAIN
 from core.models.billing_models import UsageType
@@ -317,8 +316,7 @@ async def get_default_settlement_rules_template(
     """Кодовый дефолт правил (без сохранения) — для подстановки в админке."""
     _ = _require_system_user_id()
     doc = default_settlement_rules_document()
-    document = require_json_object(doc.model_dump(mode="json"), "default_settlement_rules")
-    return PlatformBillingSettlementRulesResponse(document=document)
+    return PlatformBillingSettlementRulesResponse(document=doc)
 
 
 @router.get(
@@ -337,15 +335,14 @@ async def get_settlement_rules(
     if company is None:
         raise HTTPException(status_code=404, detail=f"Компания {cid} не найдена")
     doc = await container.billing_service.load_settlement_rules_document_for_company(cid)
-    document = require_json_object(doc.model_dump(mode="json"), f"settlement_rules.{cid}")
-    return PlatformBillingSettlementRulesResponse(document=document)
+    return PlatformBillingSettlementRulesResponse(document=doc)
 
 
 @router.put("/settlement-rules/{company_id}")
 async def put_settlement_rules(
     container: ContainerDep,
     company_id: str,
-    body: Annotated[JsonObject, Body()],
+    document: Annotated[SettlementRulesDocument, Body()],
 ) -> dict[str, str]:
     _ = _require_system_user_id()
     cid = company_id.strip()
@@ -354,10 +351,6 @@ async def put_settlement_rules(
     company = await container.company_repository.get(cid)
     if company is None:
         raise HTTPException(status_code=404, detail=f"Компания {cid} не найдена")
-    try:
-        document = parse_settlement_rules_json(json.dumps(body))
-    except (ValueError, ValidationError) as e:
-        raise HTTPException(status_code=422, detail=str(e)) from e
     for rule in document.rules:
         rn = rule.resource_name
         if rn.startswith("tool:"):

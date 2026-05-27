@@ -12,7 +12,7 @@ alwaysApply: true
 
 ## Стек
 
-Python 3.13+, FastAPI, PostgreSQL (pgvector), Redis, TaskIQ, UV, Lit 3, нативный EventBus + фабрики (`createAsyncOp`/`createResourceCollection`/`createCursorList`/`createFacets`/`createForm`).
+**Python 3.14t (free-threaded, PEP 779, ABI cp314t)** с `PYTHON_GIL=0`, FastAPI, **Granian** (Rust ASGI, не uvicorn — CI-gate `make check-no-uvicorn`), PostgreSQL (pgvector), Redis, TaskIQ, UV, Lit 3, нативный EventBus + фабрики (`createAsyncOp`/`createResourceCollection`/`createCursorList`/`createFacets`/`createForm`).
 
 ## Сервисы
 
@@ -267,7 +267,7 @@ UI в `apps/<svc>/ui/` строго наследуется от core (`PlatformE
 
 UV: `uv add <pkg>`, `uv sync`, `uv run python <file>`, `uv run pytest`. Документацию библиотек — через Context7.
 
-Все сервисы локально: **`make app`** (uvicorn `--reload` для HTTP, без reload для воркеров; падение одного процесса не валит остальные). Зависшие порты: **`make app APP_KILL=1`**.
+Все сервисы локально: **`make app`** (granian `--reload --reload-paths apps --reload-paths core` для HTTP, без reload для воркеров; падение одного процесса не валит остальные). Зависшие порты: **`make app APP_KILL=1`**.
 
 Портал документации (Zensical): **`make doc`** (RU+EN, артефакт `documentation-dist/`, путь `/documentation/`). Локальный предпросмотр: **`make doc-serve`**.
 

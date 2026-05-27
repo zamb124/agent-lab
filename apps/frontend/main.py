@@ -552,14 +552,7 @@ app.add_middleware(StaticCoreModuleCorsMiddleware)
 
 
 if __name__ == "__main__":
-    import uvicorn
-
     from apps.frontend.config import get_frontend_settings
+    from core.app.server import serve
 
-    settings = get_frontend_settings()
-    uvicorn.run(
-        "apps.frontend.main:app",
-        host=settings.server.host,
-        port=settings.server.port,
-        reload=settings.server.debug,
-    )
+    serve("frontend", "apps.frontend.main:app", get_frontend_settings())

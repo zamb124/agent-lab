@@ -52,28 +52,48 @@ files/                          # ConfigMap источники (loki, tempo, all
 
 `templates/_helpers.tpl::agentlab.appEnv` — общий блок env: URL баз через ClusterIP `postgres`/`redis`, OAuth, LLM, S3, push, OnlyOffice, OTLP. Все секреты — `valueFrom.secretKeyRef` на `platformSecretName`.
 
+## HTTP-сервер и Python runtime
+
+Все HTTP-сервисы запускаются через **Granian** (Rust ASGI поверх Hyper/Tokio), `--interface asgi --http auto --ws`. Один free-threaded Python-процесс на pod (shared interpreter), внутри — `GRANIAN_WORKERS` потоков-воркеров (каждый со своим asyncio loop) + `GRANIAN_RUNTIME_THREADS` Rust IO-потоков. Scaling между подами — `replicas:`. `import uvicorn` в `core/` и `apps/` запрещён — проверяется **`make check-no-uvicorn`** (входит в `make check-events-canon`).
+
+**Топология воркеров (k8s Downward API):**
+- `GRANIAN_WORKERS = resources.limits.cpu` (через `valueFrom.resourceFieldRef`, см. `agentlab.appEnv` в `_helpers.tpl`) — pod автоматически масштабирует число потоков под выделенный CPU-лимит, округление вверх. Меняешь `resources.limits.cpu` — workers едут следом без правок command.
+- `GRANIAN_RUNTIME_THREADS = 2` (Rust IO threads per worker; для HTTP/2 и большого числа WebSocket'ов).
+- Granian CLI читает эти ENV нативно, в `command` Helm/Docker `--workers` НЕ передаётся.
+- В `core/app/server.py` (программный запуск из `apps/<svc>/main.py`) — `_resolve_workers()` читает `GRANIAN_WORKERS` ENV, при отсутствии — `os.cpu_count()`.
+
+В **free-threaded build** (наш) workers = треды в едином интерпретаторе с shared memory. В GIL-build (если случайно соберётся cp314 вместо cp314t) workers = forked процессы. Granian сам отказывается стартовать на GIL-enabled cp314t — это наш sanity check.
+
+Базовый docker-образ — `ghcr.io/astral-sh/uv:trixie-slim` + `uv python install 3.14t` + `uv python pin 3.14t` + `ENV PYTHON_GIL=0`. Версия CPython — **3.14 free-threaded (PEP 779, cp314t ABI)**. Локальный `__main__` каждого `apps/<svc>/main.py` использует `core.app.server.serve(<service>, "apps.<svc>.main:app", settings)`, который сам поднимает `granian.Granian(...)` и пишет `service.python_runtime` (с `gil_enabled`) + `service.granian_topology` (с `workers`/`runtime_threads`/`cpu_count`) на старте.
+
+Статика отдаётся Granian-ом нативно через `--static-path-route` / `--static-path-mount` (см. `command:` в `values.yaml`). FastAPI `StaticFiles` оставлен только для in-process `httpx.ASGITransport` в тестах.
+
+**ML known limitation:** в `apps/provider_litserve` и `apps/rag_worker` импорт HuggingFace стека (`transformers`, `sentence-transformers`, `flagembedding`, `tokenizers`, `pyannote-audio`) автоматически включает GIL внутри их процесса. Эти сервисы перечислены в `core.app.server.ML_GIL_RESURRECTION_SERVICES` и помечены в `check_ft_wheels.sh` allowlist. Остальные сервисы работают полноценно free-threaded.
+
+Совместимость зависимостей под cp314t — `make check-ft-wheels` (smoke-install в эфемерный venv с `--only-binary=:all:`).
+
 ## Сервисы
 
-| Сервис | Порт | Реплики | Command |
+| Сервис | Порт | Реплики | Command (CMD заголовок) |
 |---|---|---|---|
-| flows | 8001 | 1 | `python -m apps.flows.main` |
-| frontend | 8002 | 1 | `python -m apps.frontend.main` |
-| crm | 8003 | 1 | `python -m apps.crm.main` |
-| rag | 8004 | 1 | `python -m apps.rag.main` |
-| sync | 8005 | 1 | `python -m apps.sync.main` |
-| scheduler-api | 8006 | 1 | `python -m apps.scheduler.main` |
-| office | 8008 | 1 | `python -m apps.office.main` |
-| voice | 8015 | 1 | `python -m apps.voice.main` |
-| browser | 8009 | 1 | `python -m apps.browser.main` + sidecar `zenika/alpine-chrome` (CDP 9222 в Pod) |
-| provider-litserve (GPU) | 8014 | 1 | `python -m apps.provider_litserve.main` (nodeSelector) |
+| flows | 8001 | 1 | `granian --interface asgi apps.flows.main:app …` |
+| frontend | 8002 | 1 | `granian --interface asgi apps.frontend.main:app …` |
+| crm | 8003 | 1 | `granian --interface asgi apps.crm.main:app …` |
+| rag | 8004 | 1 | `granian --interface asgi apps.rag.main:app …` |
+| sync | 8005 | 1 | `granian --interface asgi apps.sync.main:app …` |
+| scheduler-api | 8006 | 1 | `granian --interface asgi apps.scheduler.main:app …` |
+| office | 8008 | 1 | `granian --interface asgi apps.office.main:app …` |
+| voice | 8015 | 1 | `granian --interface asgi apps.voice.main:app …` |
+| browser | 8009 | 1 | `granian --interface asgi apps.browser.main:app …` + sidecar `zenika/alpine-chrome` (CDP 9222 в Pod) |
+| provider-litserve (GPU) | 8014 | 1 | `granian --interface asgi apps.provider_litserve.main:app …` (nodeSelector; ML GIL resurrection) |
 | flows-worker | — | 2 | `taskiq worker apps.flows_worker.worker:worker_app --workers 4` |
 | scheduler | — | 1 | `taskiq scheduler apps.scheduler.scheduler:scheduler` |
-| rag-worker | — | 1 | `taskiq worker apps.rag_worker.worker:worker_app --workers 2` |
+| rag-worker | — | 1 | `taskiq worker apps.rag_worker.worker:worker_app --workers 2` (ML GIL resurrection) |
 | sync-worker | — | 1 | `taskiq worker apps.sync_worker.worker:worker_app --workers 2` |
 | crm-worker | — | 1 | `taskiq worker apps.crm_worker.worker:worker_app --workers 2` |
 | idle-worker | — | 1 | `taskiq worker apps.idle_worker.worker:worker_app --workers 2` |
 
-Один immutable образ `ghcr.io/zamb124/agent-lab:<image.tag>`, разные `command:` через `values.yaml`.
+Один immutable образ `ghcr.io/zamb124/agent-lab:<image.tag>`, разные `command:` (полная строка granian с `--static-path-route`/`--static-path-mount`) через `values.yaml`.
 
 **Frontend:** Deployment добавляет `initContainer` `extract-static`, копирует `/app/static/` в `emptyDir` `shared-static`. Frontend сам обслуживает статику.
 
@@ -124,7 +144,7 @@ PWA-маршруты (`/manifest.json`, `/sw.js`, `/offline.html`, `/.well-known
 
 LitServe — единственный под на GPU-ноде через `nodeSelector: accelerator=nvidia-gpu` + `tolerations: nvidia.com/gpu`. Манифест: `templates/50-gpu/litserve.yaml`.
 
-- Образ: тот же `ghcr.io/zamb124/agent-lab:<image.tag>`, command `python -m apps.provider_litserve.main`.
+- Образ: тот же `ghcr.io/zamb124/agent-lab:<image.tag>`, command `granian --interface asgi apps.provider_litserve.main:app ...` (см. `templates/50-gpu/litserve.yaml`).
 - ENV: `PROVIDER_LITSERVE__INFRA__BACKEND=flagllm`, `PROVIDER_LITSERVE__INFRA__ACCELERATOR=cuda`, `MODEL_ID=Qwen/Qwen3-Reranker-0.6B`, `EMBEDDING_MODEL_ID=Qwen/Qwen3-Embedding-0.6B`, `HF_TOKEN` из `platform-secrets`.
 - Ресурсы: `nvidia.com/gpu: 1` (request + limit).
 - Кэш моделей: PVC `litserve-model-cache` (50Gi).

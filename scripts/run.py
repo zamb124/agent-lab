@@ -9,7 +9,7 @@
     python scripts/run.py rag         # Запуск rag сервиса
     python scripts/run.py sync        # Запуск sync сервиса
     python scripts/run.py office      # Запуск office (Documents / OnlyOffice BFF + UI)
-    python scripts/run.py provider_litserve # Запуск provider_litserve (локальные эмбеддинги/реранк)
+    python scripts/run.py provider_litserve # Запуск provider_litserve (локальные эмбеддинги/реранк, через granian)
     python scripts/run.py flows_worker # Запуск TaskIQ flows_worker
     python scripts/run.py scheduler   # Запуск TaskIQ scheduler
     python scripts/run.py scheduler-api  # Запуск scheduler API
@@ -50,46 +50,79 @@ project_root = Path(__file__).parent.parent
 if str(project_root) not in sys.path:
     sys.path.insert(0, str(project_root))
 
-# Конфигурация сервисов
+# Парные --static-path-route / --static-path-mount: реестр статики по сервисам
+# (Granian отдаёт Rust-ом, не касаясь ASGI; FastAPI StaticFiles остаётся как
+# fallback для in-process тестов через httpx.ASGITransport).
+CORE_FRONTEND_STATIC = ("/static/core", "core/frontend/static")
+
+# Конфигурация сервисов (HTTP — granian, taskiq — taskiq CLI, module — python -m)
 SERVICES = {
-    # FastAPI сервисы (uvicorn)
     "flows": {
-        "type": "uvicorn",
+        "type": "granian",
         "app": "apps.flows.main:app",
         "port": "8001",
+        "static": [
+            CORE_FRONTEND_STATIC,
+            ("/flows/static", "apps/flows/ui"),
+            ("/static", "apps/flows/static"),
+            ("/flows/demo_cards", "apps/flows/static/demo_cards"),
+            ("/documentation", "apps/flows/site"),
+        ],
     },
     "frontend": {
-        "type": "uvicorn",
+        "type": "granian",
         "app": "apps.frontend.main:app",
         "port": "8002",
+        "static": [
+            CORE_FRONTEND_STATIC,
+            ("/static/frontend", "apps/frontend/ui"),
+        ],
     },
     "crm": {
-        "type": "uvicorn",
+        "type": "granian",
         "app": "apps.crm.main:app",
         "port": "8003",
+        "static": [
+            CORE_FRONTEND_STATIC,
+            ("/crm/ui/static", "apps/crm/ui"),
+            ("/crm/ui/vendor/3d-force-graph", "node_modules/3d-force-graph/dist"),
+            ("/crm/ui/vendor/three", "node_modules/three/build"),
+        ],
     },
     "rag": {
-        "type": "uvicorn",
+        "type": "granian",
         "app": "apps.rag.main:app",
         "port": "8004",
+        "static": [
+            CORE_FRONTEND_STATIC,
+            ("/rag/ui/static", "apps/rag/ui"),
+        ],
     },
     "sync": {
-        "type": "uvicorn",
+        "type": "granian",
         "app": "apps.sync.main:app",
         "port": "8005",
+        "static": [
+            CORE_FRONTEND_STATIC,
+            ("/sync/ui/static", "apps/sync/ui"),
+        ],
     },
     "office": {
-        "type": "uvicorn",
+        "type": "granian",
         "app": "apps.office.main:app",
         "port": "8008",
+        "static": [
+            CORE_FRONTEND_STATIC,
+            ("/documents/ui/static", "apps/office/ui"),
+        ],
     },
     "scheduler-api": {
-        "type": "uvicorn",
+        "type": "granian",
         "app": "apps.scheduler.main:app",
         "port": "8006",
     },
     "browser": {
-        "type": "uvicorn",
+        "type": "granian",
         "app": "apps.browser.main:app",
         "port": "8009",
         "env": {
@@ -97,43 +130,47 @@ SERVICES = {
         },
     },
     "search": {
-        "type": "uvicorn",
+        "type": "granian",
         "app": "apps.search.main:app",
         "port": "8010",
     },
     "provider_litserve": {
-        "type": "module",
-        "module": "apps.provider_litserve.main",
+        "type": "granian",
+        "app": "apps.provider_litserve.main:app",
         "port": "8014",
+        "static": [
+            CORE_FRONTEND_STATIC,
+            ("/litserve/ui/static", "apps/provider_litserve/ui"),
+        ],
     },
 
     "voice": {
-        "type": "uvicorn",
+        "type": "granian",
         "app": "apps.voice.main:app",
         "port": "8015",
     },
     "capability_gateway": {
-        "type": "uvicorn",
+        "type": "granian",
         "app": "apps.capability_gateway.main:app",
         "port": "8016",
     },
     "code_runner_python": {
-        "type": "uvicorn",
+        "type": "granian",
         "app": "apps.code_runner_python.main:app",
         "port": "8017",
     },
     "code_runner_node": {
-        "type": "uvicorn",
+        "type": "granian",
         "app": "apps.code_runner_node.main:app",
         "port": "8018",
     },
     "code_runner_go": {
-        "type": "uvicorn",
+        "type": "granian",
         "app": "apps.code_runner_go.main:app",
         "port": "8019",
     },
     "code_runner_csharp": {
-        "type": "uvicorn",
+        "type": "granian",
         "app": "apps.code_runner_csharp.main:app",
         "port": "8020",
     },
@@ -184,33 +221,57 @@ def build_command(service: str) -> list[str]:
     if service not in SERVICES:
         raise ValueError(f"Неизвестный сервис: {service}")
     config = SERVICES[service]
-    service_type = config["type"]
-    if service_type == "uvicorn":
-        return _python_m_prefix() + [
-            "uvicorn",
-            config["app"],
+    service_type = str(config["type"])
+    if service_type == "granian":
+        cmd: list[str] = _python_m_prefix() + [
+            "granian",
+            "--interface",
+            "asgi",
+            str(config["app"]),
             "--host",
             "0.0.0.0",
             "--port",
-            config["port"],
+            str(config["port"]),
+            "--http",
+            "auto",
+            "--ws",
             "--reload",
+            "--reload-paths",
+            "apps",
+            "--reload-paths",
+            "core",
             "--no-access-log",
         ]
+        static = config.get("static") or []
+        if not isinstance(static, list):
+            raise ValueError(f"SERVICES[{service!r}].static must be list[tuple[str,str]]")
+        for route, mount in static:
+            if not Path(mount).exists():
+                continue
+            cmd += ["--static-path-route", route, "--static-path-mount", mount]
+        return cmd
     if service_type == "taskiq-worker":
+        worker_app = config.get("worker_app")
+        workers = config.get("workers")
+        if not isinstance(worker_app, str):
+            raise ValueError(f"SERVICES[{service!r}].worker_app must be str")
+        if not isinstance(workers, str):
+            raise ValueError(f"SERVICES[{service!r}].workers must be str")
         return _python_m_prefix() + [
             "taskiq",
             "worker",
-            config["worker_app"],
+            worker_app,
             "--workers",
-            config["workers"],
+            workers,
         ]
-    if service_type == "module":
-        return _python_m_prefix() + [config["module"]]
     if service_type == "taskiq-scheduler":
+        scheduler = config.get("scheduler")
+        if not isinstance(scheduler, str):
+            raise ValueError(f"SERVICES[{service!r}].scheduler must be str")
         return _python_m_prefix() + [
             "taskiq",
             "scheduler",
-            config["scheduler"],
+            scheduler,
         ]
     raise ValueError(f"Неизвестный тип сервиса: {service_type}")
 
@@ -228,17 +289,13 @@ def build_env(service: str) -> dict[str, str]:
     return out
 
 
-def _uvicorn_ports() -> list[str]:
-    return [
-        cfg["port"]
-        for cfg in SERVICES.values()
-        if cfg["type"] in {"uvicorn", "module"}
-    ]
+def _http_ports() -> list[str]:
+    return [str(cfg["port"]) for cfg in SERVICES.values() if cfg["type"] == "granian"]
 
 
 def kill_ports() -> None:
-    """Завершает процессы, слушающие порты HTTP-сервисов (uvicorn)."""
-    ports = _uvicorn_ports()
+    """Завершает процессы, слушающие порты HTTP-сервисов (granian)."""
+    ports = _http_ports()
     killed: list[tuple[str, int]] = []
     for port in ports:
         listed = subprocess.run(

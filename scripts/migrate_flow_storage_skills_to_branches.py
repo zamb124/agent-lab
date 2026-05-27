@@ -12,9 +12,10 @@ import asyncio
 import json
 import sys
 
+from apps.flows.src.services.flow_contract_normalize import normalize_flow_config_dict
+
 from apps.flows.src.container import get_container
 from apps.flows.src.models import FlowConfig
-from apps.flows.src.services.flow_contract_normalize import normalize_flow_config_dict
 
 
 async def _migrate_table(storage: object, table: str) -> tuple[int, int]:

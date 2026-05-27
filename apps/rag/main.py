@@ -4,7 +4,6 @@
 
 from pathlib import Path
 
-import uvicorn
 from fastapi import FastAPI, HTTPException
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
@@ -96,11 +95,7 @@ async def serve_ui(path: str = "") -> FileResponse:
 
 
 if __name__ == "__main__":
-    settings = get_rag_settings()
-    uvicorn.run(
-        "apps.rag.main:app",
-        host=settings.server.host,
-        port=settings.server.port,
-        reload=settings.server.debug,
-    )
+    from core.app.server import serve
+
+    serve("rag", "apps.rag.main:app", get_rag_settings())
 

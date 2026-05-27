@@ -7,7 +7,6 @@ import os
 from typing import ClassVar, override
 
 import httpx
-import uvicorn
 from a2a.server.apps import A2AStarletteApplication
 from a2a.server.request_handlers import DefaultRequestHandler
 from a2a.server.tasks import InMemoryTaskStore
@@ -106,5 +105,14 @@ app = create_app()
 
 
 if __name__ == "__main__":
+    from granian import Granian
+    from granian.constants import Interfaces
+
     port = int(os.environ["PORT"])
-    uvicorn.run(app, host="0.0.0.0", port=port)
+    Granian(
+        target="apps.test_a2a_sample.main:app",
+        address="0.0.0.0",
+        port=port,
+        interface=Interfaces.ASGI,
+        workers=1,
+    ).serve()

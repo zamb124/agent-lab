@@ -378,15 +378,6 @@ class ServerConfig(BaseModel):
                 return f"{trimmed.rstrip('/')}/flows"
         return self.get_flows_service_url().rstrip("/")
 
-    workers: int = 4
-    worker_class: str = "uvicorn.workers.UvicornWorker"
-    worker_connections: int = 1000
-    max_requests: int = 1000
-    max_requests_jitter: int = 50
-    timeout: int = 30
-    keepalive: int = 2
-
-
 class WorkerConfig(BaseModel):
     """Конфигурация воркеров"""
 

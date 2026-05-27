@@ -5,7 +5,7 @@
 - structlog держит pipeline процессоров и формирует event_dict.
 - ProcessorFormatter рендерит итоговую запись (JSON или console).
 - stdlib logging — единственный транспорт; root логгер пишет в stdout.
-- uvicorn/taskiq логгеры теряют свои handlers и пропагируют в root.
+- granian/taskiq логгеры теряют свои handlers и пропагируют в root.
 """
 
 from __future__ import annotations
@@ -247,7 +247,7 @@ def _silence_noisy_loggers(custom_levels: dict[str, str]) -> None:
     Уравнивает обработку чужих логгеров: handlers сбрасываются, propagate
     включается, чтобы запись попала в root и пошла через единый formatter.
     """
-    intercepted = {"uvicorn", "taskiq", "httpx", "httpcore", "sqlalchemy"}
+    intercepted = {"granian", "_granian", "taskiq", "httpx", "httpcore", "sqlalchemy"}
     manager = logging.Logger.manager
 
     for name, logger in list(manager.loggerDict.items()):

@@ -147,5 +147,13 @@ async def auth_required(
 
 
 if __name__ == "__main__":
-    import uvicorn
-    uvicorn.run(external_api_app, host="0.0.0.0", port=8081)
+    from granian import Granian
+    from granian.constants import Interfaces
+
+    Granian(
+        target="main:external_api_app",
+        address="0.0.0.0",
+        port=8081,
+        interface=Interfaces.ASGI,
+        workers=1,
+    ).serve()

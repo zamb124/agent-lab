@@ -138,13 +138,6 @@ async def serve_crm_ui(path: str = ""):
 
 
 if __name__ == "__main__":
-    import uvicorn
+    from core.app.server import serve
 
-    settings = get_settings()
-
-    uvicorn.run(
-        "apps.crm.main:app",
-        host=settings.server.host,
-        port=settings.server.port,
-        reload=settings.server.debug,
-    )
+    serve("crm", "apps.crm.main:app", get_settings())

@@ -30,7 +30,6 @@ from fastapi import APIRouter, FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
-from uvicorn.middleware.proxy_headers import ProxyHeadersMiddleware
 
 from core.api.auth import router as core_auth_router
 from core.api.calendar import router as core_calendar_router
@@ -66,6 +65,7 @@ from core.middleware.dev_inter_service_proxy import (
     DevInterServiceWsProxyMiddleware,
 )
 from core.middleware.platform_error_envelope import PlatformHttpErrorEnvelopeMiddleware
+from core.middleware.proxy_headers import ProxyHeadersMiddleware
 from core.push.apns_credentials import resolve_apns_credentials
 from core.push.apns_service import init_apns_push_service
 from core.push.fcm_credentials import resolve_fcm_credentials

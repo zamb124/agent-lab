@@ -169,6 +169,23 @@
             "python": "${workspaceFolder}/.venv/bin/python"
         },
         {
+            "name": "Run: search",
+            "consoleTitle": "run.py: search 🔎",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "${workspaceFolder}/scripts/run.py",
+            "args": [
+                "search"
+            ],
+            "cwd": "${workspaceFolder}",
+            "console": "integratedTerminal",
+            "justMyCode": false,
+            "env": {
+                "PYTHONPATH": "${workspaceFolder}"
+            },
+            "python": "${workspaceFolder}/.venv/bin/python"
+        },
+        {
             "name": "Run: provider_litserve",
             "consoleTitle": "run.py: provider_litserve 🤖",
             "type": "debugpy",
@@ -402,6 +419,7 @@
                 "Run: office",
                 "Run: scheduler-api",
                 "Run: browser",
+                "Run: search",
                 "Run: provider_litserve",
                 "Run: voice",
                 "Run: capability_gateway",

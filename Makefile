@@ -127,6 +127,12 @@ check-field-canon:
 check-logging:
 	@./scripts/check_logging_canon.sh
 
+check-no-uvicorn:
+	@./scripts/check_no_uvicorn.sh
+
+check-ft-wheels:
+	@./scripts/check_ft_wheels.sh
+
 check-ui-factories:
 	@uv run python scripts/check_ui_factories.py
 
@@ -157,7 +163,7 @@ check-rag-post-retrieval-rerank:
 
 check-voice-canon: check-voice-resolver check-speakable-parity check-tts-pipeline
 
-check-events-canon: check-core-frontend-canon check-ui-canon check-ui-factories check-command-rest-mirror check-voice-resolver check-speakable-parity check-tts-pipeline check-rag-post-retrieval-rerank check-company-ai check-i18n check-i18n-keys
+check-events-canon: check-core-frontend-canon check-ui-canon check-ui-factories check-command-rest-mirror check-voice-resolver check-speakable-parity check-tts-pipeline check-rag-post-retrieval-rerank check-company-ai check-i18n check-i18n-keys check-no-uvicorn
 	@echo "check-events-canon: OK"
 
 check-i18n:

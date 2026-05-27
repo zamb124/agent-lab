@@ -1,13 +1,19 @@
-# Python 3.13 — единая версия для всех окружений (dev/test/prod).
+# Python 3.14t (free-threaded, PEP 779) — единая версия для всех окружений (dev/test/prod).
 
 # ============================================
-# Этап 1: базовый образ Python 3.13
+# Этап 1: базовый образ Python 3.14t (no-GIL)
 # ============================================
-FROM python:3.13-slim AS base-with-core
+FROM ghcr.io/astral-sh/uv:trixie-slim AS base-with-core
 
 ARG NODE_MAJOR=24
 ARG GO_VERSION=1.26.1
 ARG DOTNET_CHANNEL=10.0
+
+ENV UV_PYTHON_INSTALL_DIR=/opt/uv-python
+ENV UV_PYTHON_PREFERENCE=only-managed
+ENV PYTHON_GIL=0
+ENV PYTHONUNBUFFERED=1
+ENV PYTHONDONTWRITEBYTECODE=1
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
     curl \
@@ -16,6 +22,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     build-essential \
     pkg-config \
     libcairo2-dev \
+    libpq-dev \
     ffmpeg \
     tesseract-ocr \
     poppler-utils \
@@ -24,6 +31,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     antiword \
     xz-utils \
     && rm -rf /var/lib/apt/lists/*
+
+RUN uv python install 3.14t && uv python pin 3.14t
 
 RUN mkdir -p /etc/apt/keyrings && \
     curl -fsSL https://deb.nodesource.com/gpgkey/nodesource-repo.gpg.key \
@@ -57,8 +66,6 @@ RUN curl -fsSL https://dot.net/v1/dotnet-install.sh -o /tmp/dotnet-install.sh &&
     rm -f /tmp/dotnet-install.sh && \
     dotnet --version
 
-RUN pip install --no-cache-dir uv
-
 WORKDIR /app
 
 # ============================================
@@ -83,8 +90,11 @@ RUN --mount=type=cache,target=/root/.cache/uv \
 # ============================================
 # Этап 3: сборщик документации (статический сайт Zensical)
 # ============================================
-FROM python:3.13-slim AS docs-builder
-RUN pip install --no-cache-dir "zensical>=0.0.32"
+FROM ghcr.io/astral-sh/uv:trixie-slim AS docs-builder
+ENV UV_PYTHON_INSTALL_DIR=/opt/uv-python
+ENV UV_PYTHON_PREFERENCE=only-managed
+RUN uv python install 3.14t && uv python pin 3.14t
+RUN uv pip install --system "zensical>=0.0.32"
 WORKDIR /app
 COPY zensical.ru.toml zensical.en.toml ./
 COPY docs ./docs
@@ -104,8 +114,6 @@ COPY core/ ./core/
 COPY apps/ ./apps/
 COPY scripts/ ./scripts/
 COPY migrations/ ./migrations/
-ENV PYTHONUNBUFFERED=1
-ENV PYTHONDONTWRITEBYTECODE=1
 
 # three + 3d-force-graph для CRM графа: apps/crm/main.py монтирует их из repo-root node_modules.
 # В образ без этой стадии vendor-URL отдавал index.html (SPA), что ломало загрузку модулей.
@@ -118,30 +126,30 @@ RUN npm ci --omit=dev
 # Финальные стадии - отличаются только CMD/EXPOSE
 # ============================================
 
-# Agents
+# Flows
 FROM base-final AS agents
 COPY --from=docs-builder /app/documentation-dist ./documentation-dist
 EXPOSE 8001
-CMD ["python", "-m", "apps.flows.main"]
+CMD ["granian", "--interface", "asgi", "apps.flows.main:app", "--host", "0.0.0.0", "--port", "8001", "--http", "auto", "--ws"]
 
 # Frontend
 FROM base-final AS frontend
 EXPOSE 8002
-CMD ["python", "-m", "apps.frontend.main"]
+CMD ["granian", "--interface", "asgi", "apps.frontend.main:app", "--host", "0.0.0.0", "--port", "8002", "--http", "auto", "--ws"]
 
 # CRM
 FROM base-final AS crm
 COPY --from=js-vendor /vendor/node_modules/three/build /app/node_modules/three/build
 COPY --from=js-vendor /vendor/node_modules/3d-force-graph/dist /app/node_modules/3d-force-graph/dist
 EXPOSE 8003
-CMD ["python", "-m", "apps.crm.main"]
+CMD ["granian", "--interface", "asgi", "apps.crm.main:app", "--host", "0.0.0.0", "--port", "8003", "--http", "auto", "--ws"]
 
 # RAG
 FROM base-final AS rag
 EXPOSE 8004
-CMD ["python", "-m", "apps.rag.main"]
+CMD ["granian", "--interface", "asgi", "apps.rag.main:app", "--host", "0.0.0.0", "--port", "8004", "--http", "auto", "--ws"]
 
-# Worker
+# Flows worker (TaskIQ — Granian не применим)
 FROM base-final AS worker
 CMD ["taskiq", "worker", "apps.flows_worker.worker:worker_app", "--workers", "4"]
 
@@ -156,7 +164,7 @@ CMD ["taskiq", "worker", "apps.rag_worker.worker:worker_app", "--workers", "2"]
 # Sync
 FROM base-final AS sync
 EXPOSE 8005
-CMD ["python", "-m", "apps.sync.main"]
+CMD ["granian", "--interface", "asgi", "apps.sync.main:app", "--host", "0.0.0.0", "--port", "8005", "--http", "auto", "--ws"]
 
 # Sync Worker
 FROM base-final AS sync-worker
@@ -165,36 +173,40 @@ CMD ["taskiq", "worker", "apps.sync_worker.worker:worker_app", "--workers", "2"]
 # Capability Gateway
 FROM base-final AS capability-gateway
 EXPOSE 8016
-CMD ["python", "-m", "apps.capability_gateway.main"]
+CMD ["granian", "--interface", "asgi", "apps.capability_gateway.main:app", "--host", "0.0.0.0", "--port", "8016", "--http", "auto", "--ws"]
 
 # Python Code Runner
 FROM base-final AS code-runner-python
 EXPOSE 8017
-CMD ["python", "-m", "apps.code_runner_python.main"]
+CMD ["granian", "--interface", "asgi", "apps.code_runner_python.main:app", "--host", "0.0.0.0", "--port", "8017", "--http", "auto", "--ws"]
 
 # Node Code Runner
 FROM base-final AS code-runner-node
 EXPOSE 8018
-CMD ["python", "-m", "apps.code_runner_node.main"]
+CMD ["granian", "--interface", "asgi", "apps.code_runner_node.main:app", "--host", "0.0.0.0", "--port", "8018", "--http", "auto", "--ws"]
 
 # Go Code Runner
 FROM base-final AS code-runner-go
 EXPOSE 8019
-CMD ["python", "-m", "apps.code_runner_go.main"]
+CMD ["granian", "--interface", "asgi", "apps.code_runner_go.main:app", "--host", "0.0.0.0", "--port", "8019", "--http", "auto", "--ws"]
 
 # C# Code Runner
 FROM base-final AS code-runner-csharp
 EXPOSE 8020
-CMD ["python", "-m", "apps.code_runner_csharp.main"]
+CMD ["granian", "--interface", "asgi", "apps.code_runner_csharp.main:app", "--host", "0.0.0.0", "--port", "8020", "--http", "auto", "--ws"]
 
 # Migrations (init container)
 FROM base-final AS migrations
 CMD ["python", "-m", "scripts.db_migrate", "upgrade"]
 
-# Full (для локальной разработки и тестов)
+# Full — production target для CI/CD (build-push-action target=full).
+# Один immutable образ для всех 15 application Deployment'ов + 5 TaskIQ workers
+# + db-migrate init container. Конкретная команда задаётся через `command:`
+# в values.yaml (granian-CLI с per-service флагами и static-path-mount).
+# Включает docs-builder артефакт + js-vendor для CRM 3d-graph (crm Pod
+# монтирует /app/node_modules/{three,3d-force-graph} напрямую).
 FROM base-final AS full
 COPY --from=docs-builder /app/documentation-dist ./documentation-dist
 COPY --from=js-vendor /vendor/node_modules/three/build /app/node_modules/three/build
 COPY --from=js-vendor /vendor/node_modules/3d-force-graph/dist /app/node_modules/3d-force-graph/dist
-EXPOSE 8001 8002 8003 8004 8005 8016 8017 8018 8019 8020
-CMD ["python", "run_prod.py"]
+EXPOSE 8001 8002 8003 8004 8005 8006 8008 8009 8010 8015 8016 8017 8018 8019 8020

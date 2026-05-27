@@ -38,12 +38,6 @@ app = create_service_app(
 
 
 if __name__ == "__main__":
-    import uvicorn
+    from core.app.server import serve
 
-    settings = get_browser_settings()
-    uvicorn.run(
-        "apps.browser.main:app",
-        host=settings.server.host,
-        port=settings.server.port,
-        reload=settings.server.debug,
-    )
+    serve("browser", "apps.browser.main:app", get_browser_settings())

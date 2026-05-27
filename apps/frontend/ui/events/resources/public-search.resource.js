@@ -17,6 +17,8 @@ const PUBLIC_SEARCH_STREAM_EVENT = 'frontend/public_search_run/stream_event';
 const PUBLIC_SEARCH_SOURCE_STREAM_EVENT = 'frontend/public_search_source_describe/stream_event';
 const RUN_ID_PATTERN = /^[A-Za-z0-9_-]+$/;
 
+let activeSearchRun = null;
+
 function _emptyStream() {
     return {
         kind: 'public_search_stream',
@@ -226,6 +228,12 @@ function _normalizeRunPayload(payload) {
     return { run_id: runId, query, mode, files };
 }
 
+function _normalizeFailedRunId(event) {
+    const payload = _requireObject(event.payload, 'failed payload');
+    const body = _requireObject(payload.body, 'failed payload body');
+    return _requireNonEmptyString(body.run_id, 'failed payload body.run_id');
+}
+
 function _normalizeSourceDescribePayload(payload) {
     const body = _requireObject(payload, 'frontend/public_search_source_describe payload');
     const runId = _requireNonEmptyString(body.run_id, 'run_id');
@@ -357,6 +365,31 @@ function _publishSourceDescribeStream(ctx, eventId, sourceStream) {
         { source_stream: _normalizeSourceDescribeStream(sourceStream) },
         { causation_id: eventId, source: 'http' },
     );
+}
+
+function _replaceActiveSearchRun(runId, controller) {
+    const id = _requireNonEmptyString(runId, 'active search run_id');
+    if (!(controller instanceof AbortController)) {
+        throw new Error('active search controller must be AbortController');
+    }
+    if (activeSearchRun !== null) {
+        activeSearchRun.controller.abort();
+    }
+    activeSearchRun = { run_id: id, controller };
+}
+
+function _clearActiveSearchRun(runId, controller) {
+    const id = _requireNonEmptyString(runId, 'active search run_id');
+    if (!(controller instanceof AbortController)) {
+        throw new Error('active search controller must be AbortController');
+    }
+    if (
+        activeSearchRun !== null
+        && activeSearchRun.run_id === id
+        && activeSearchRun.controller === controller
+    ) {
+        activeSearchRun = null;
+    }
 }
 
 function _applySearchUiEvent(stream, event) {
@@ -508,6 +541,7 @@ async function _runPublicSearch({ payload, ctx, event }) {
 
     let streamError = null;
     const controller = new AbortController();
+    _replaceActiveSearchRun(request.run_id, controller);
     const onEvent = (frame) => {
         if (streamError !== null) {
             return;
@@ -559,6 +593,8 @@ async function _runPublicSearch({ payload, ctx, event }) {
             throw streamError;
         }
         throw error;
+    } finally {
+        _clearActiveSearchRun(request.run_id, controller);
     }
     if (streamError !== null) {
         throw streamError;
@@ -670,35 +706,58 @@ export const publicSearchRunOp = createAsyncOp({
     name: 'frontend/public_search_run',
     silent: true,
     restMirror: { method: 'POST', path: '/frontend/api/public/search/session' },
-    extraInitial: { stream: _emptyStream() },
+    extraInitial: { stream: _emptyStream(), active_run_id: '' },
     extraEvents: { STREAM_EVENT: 'stream_event' },
     actions: { reset: 'reset' },
     extraReducer: (state, event, events) => {
         if (event.type === events.RESET) {
-            return { ...state, stream: _emptyStream(), lastResult: null, error: null };
+            return { ...state, stream: _emptyStream(), active_run_id: '', lastResult: null, error: null };
         }
         if (event.type === events.REQUESTED) {
-            return { ...state, stream: _streamFromRunPayload(_normalizeRunPayload(event.payload)) };
+            const request = _normalizeRunPayload(event.payload);
+            return { ...state, active_run_id: request.run_id, stream: _streamFromRunPayload(request) };
         }
         if (event.type === events.STREAM_EVENT) {
             const payload = _requireObject(event.payload, 'stream event payload');
-            return { ...state, stream: _normalizeStreamPayload(payload.stream) };
+            const stream = _normalizeStreamPayload(payload.stream);
+            if (stream.run_id !== state.active_run_id) {
+                return state;
+            }
+            return { ...state, stream };
         }
         if (event.type === events.SUCCEEDED) {
             const payload = _requireObject(event.payload, 'succeeded payload');
-            return { ...state, stream: _normalizeStreamPayload(payload.result) };
+            const stream = _normalizeStreamPayload(payload.result);
+            if (stream.run_id !== state.active_run_id) {
+                return {
+                    ...state,
+                    busy: state.active_run_id !== '',
+                    error: null,
+                };
+            }
+            return { ...state, active_run_id: '', stream };
+        }
+        if (event.type === events.FAILED) {
+            const runId = _normalizeFailedRunId(event);
+            if (runId !== state.active_run_id) {
+                return {
+                    ...state,
+                    busy: state.active_run_id !== '',
+                    error: null,
+                };
+            }
+            return { ...state, active_run_id: '' };
         }
         return state;
     },
     request: async (args) => {
+        const request = _normalizeRunPayload(args.payload);
         try {
-            return await _runPublicSearch(args);
+            return await _runPublicSearch({ ...args, payload: request });
         } catch (error) {
-            if (error instanceof HttpError) {
-                throw error;
-            }
             const message = _errorMessage(error);
-            throw new HttpError(message, 502, { detail: message });
+            const status = error instanceof HttpError ? error.status : 502;
+            throw new HttpError(message, status, { detail: message, run_id: request.run_id });
         }
     },
 });

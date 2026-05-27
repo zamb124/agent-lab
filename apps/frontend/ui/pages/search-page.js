@@ -252,7 +252,14 @@ export class PublicSearchPage extends PlatformPage {
             }
 
             .file-input {
-                display: none;
+                position: absolute;
+                width: 1px;
+                height: 1px;
+                opacity: 0;
+                overflow: hidden;
+                clip: rect(0 0 0 0);
+                clip-path: inset(50%);
+                pointer-events: none;
             }
 
             .file-list {
@@ -910,7 +917,7 @@ export class PublicSearchPage extends PlatformPage {
 
     _submit(event) {
         event.preventDefault();
-        if (this._search.busy || this._preparingFiles) {
+        if (this._preparingFiles) {
             return;
         }
         const query = this._query.trim();
@@ -931,7 +938,7 @@ export class PublicSearchPage extends PlatformPage {
     }
 
     async _runSearch(query, mode) {
-        if (this._search.busy || this._preparingFiles) {
+        if (this._preparingFiles) {
             return;
         }
         this._runSeq += 1;
@@ -1013,7 +1020,7 @@ export class PublicSearchPage extends PlatformPage {
     }
 
     _suggest(text) {
-        if (this._search.busy) {
+        if (this._preparingFiles) {
             return;
         }
         this._query = text;
@@ -1082,7 +1089,7 @@ export class PublicSearchPage extends PlatformPage {
     }
 
     _renderComposer() {
-        const busy = this._search.busy || this._preparingFiles;
+        const preparing = this._preparingFiles;
         return html`
             <form class="search-shell" @submit=${this._submit}>
                 <div class="search-line">
@@ -1096,7 +1103,7 @@ export class PublicSearchPage extends PlatformPage {
                         aria-label=${this.t('search_page.input_aria')}
                         @input=${this._handleInput}
                     />
-                    <button class="send-button" type="submit" ?disabled=${busy} aria-label=${this.t('search_page.submit')}>
+                    <button class="send-button" type="submit" ?disabled=${preparing} aria-label=${this.t('search_page.submit')}>
                         <platform-icon name="send" size="18"></platform-icon>
                     </button>
                 </div>
@@ -1117,7 +1124,7 @@ export class PublicSearchPage extends PlatformPage {
                             type="button"
                             title=${this.t('search_page.files_tool')}
                             aria-label=${this.t('search_page.files_tool')}
-                            ?disabled=${busy}
+                            ?disabled=${preparing}
                             @click=${this._openFilePicker}
                         >
                             <platform-icon name="paperclip" size="17"></platform-icon>
@@ -1295,7 +1302,7 @@ export class PublicSearchPage extends PlatformPage {
                 <p class="panel-label"><platform-icon name="sparkle" size="14"></platform-icon><span>${this.t('search_page.suggestions_label')}</span></p>
                 <div class="suggest-list">
                     ${suggestions.map((item) => html`
-                        <button class="suggest-chip" type="button" ?disabled=${this._search.busy} @click=${() => this._suggest(item.text)}>
+                        <button class="suggest-chip" type="button" ?disabled=${this._preparingFiles} @click=${() => this._suggest(item.text)}>
                             ${item.text}
                         </button>
                     `)}

@@ -495,12 +495,6 @@ app = create_service_app(
 
 
 if __name__ == "__main__":
-    import uvicorn
+    from core.app.server import serve
 
-    settings = get_scheduler_settings()
-    uvicorn.run(
-        "apps.scheduler.main:app",
-        host=settings.server.host,
-        port=settings.server.port,
-        reload=settings.server.debug,
-    )
+    serve("scheduler", "apps.scheduler.main:app", get_scheduler_settings())

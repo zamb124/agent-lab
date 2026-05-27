@@ -1,23 +1,23 @@
-FROM python:3.13-slim
+FROM ghcr.io/astral-sh/uv:trixie-slim
 
 WORKDIR /app
 
-# Копируем только необходимые файлы для тестового A2A sample
+ENV UV_PYTHON_INSTALL_DIR=/opt/uv-python
+ENV UV_PYTHON_PREFERENCE=only-managed
+ENV PYTHON_GIL=0
+RUN uv python install 3.14t && uv python pin 3.14t
+
 COPY apps/test_a2a_sample ./apps/test_a2a_sample
 COPY apps/__init__.py ./apps/
 
-# Устанавливаем только необходимые зависимости
-# Минимальный набор для A2A агента без платформы
-RUN pip install --no-cache-dir \
-    uvicorn>=0.27.0 \
+RUN uv pip install --system \
+    granian>=2.7.4 \
     httpx>=0.27.0 \
     a2a-sdk>=0.3.7 \
     starlette>=0.36.0 \
     sse-starlette>=2.0.0
 
-# Порт сервиса
 EXPOSE 8005
 
-# Запуск сервиса
-CMD ["python", "-m", "uvicorn", "apps.test_a2a_sample.main:app", "--host", "0.0.0.0", "--port", "8005"]
+CMD ["granian", "--interface", "asgi", "apps.test_a2a_sample.main:app", "--host", "0.0.0.0", "--port", "8005", "--http", "auto"]
 

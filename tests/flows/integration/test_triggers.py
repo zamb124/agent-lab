@@ -13,12 +13,13 @@
 """
 
 import asyncio
+import socket
 
 import pytest
 import pytest_asyncio
-import uvicorn
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
+from granian.server.embed import Server as GranianEmbedServer
 
 from apps.flows.src.container import get_container
 from apps.flows.src.models import FlowConfig, TriggerConfig, TriggerStatus, TriggerType
@@ -1575,7 +1576,7 @@ class NotificationServer:
             self._handle_telegram_send_message_draft,
             methods=["POST"],
         )
-        self._server: uvicorn.Server | None = None
+        self._server: GranianEmbedServer | None = None
         self._server_task: asyncio.Task | None = None
 
     async def _handle_notify(self, request: Request) -> JSONResponse:
@@ -1627,28 +1628,31 @@ class NotificationServer:
         return JSONResponse({"ok": True, "result": True})
 
     async def start(self) -> str:
-        """Запускает сервер и возвращает base URL."""
-        config = uvicorn.Config(
-            self._app, host=self.host, port=self.port, log_level="error", access_log=False
+        """Запускает granian embed-сервер и возвращает base URL."""
+        if self.port == 0:
+            with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+                s.bind((self.host, 0))
+                self.port = s.getsockname()[1]
+        self._server = GranianEmbedServer(
+            self._app, interface="asgi", address=self.host, port=self.port
         )
-        self._server = uvicorn.Server(config)
         self._server_task = asyncio.create_task(self._server.serve())
-        while not self._server.started:
-            await asyncio.sleep(0.01)
-        if not self._server.servers:
-            raise RuntimeError("Uvicorn сервер не поднялся.")
-        server = next(iter(self._server.servers))
-        sockets = getattr(server, "sockets", None)
-        if not sockets:
-            raise RuntimeError("Uvicorn не открыл сокеты для test server.")
-        actual_port = sockets[0].getsockname()[1]
-        self.port = actual_port
-        return f"http://{self.host}:{actual_port}"
+        for _ in range(100):
+            try:
+                reader, writer = await asyncio.open_connection(self.host, self.port)
+                writer.close()
+                await writer.wait_closed()
+                break
+            except OSError:
+                await asyncio.sleep(0.05)
+        else:
+            raise RuntimeError(f"granian embed server не поднялся на {self.host}:{self.port}")
+        return f"http://{self.host}:{self.port}"
 
     async def stop(self):
         if self._server is None:
             return
-        self._server.should_exit = True
+        self._server.stop()
         if self._server_task is not None:
             await self._server_task
 

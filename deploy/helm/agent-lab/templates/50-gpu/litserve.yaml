@@ -60,7 +60,26 @@ spec:
         - name: litserve
           image: {{ include "agentlab.image" . }}
           imagePullPolicy: {{ .Values.image.pullPolicy }}
-          command: ["python", "-m", "apps.provider_litserve.main"]
+          command:
+            - granian
+            - --interface
+            - asgi
+            - apps.provider_litserve.main:app
+            - --host
+            - "0.0.0.0"
+            - --port
+            - {{ .Values.litserve.port | quote }}
+            - --http
+            - auto
+            - --ws
+            - --static-path-route
+            - /static/core
+            - --static-path-mount
+            - core/frontend/static
+            - --static-path-route
+            - /litserve/ui/static
+            - --static-path-mount
+            - apps/provider_litserve/ui
           env:
             - name: PROVIDER_LITSERVE__INFRA__BACKEND
               value: flagllm

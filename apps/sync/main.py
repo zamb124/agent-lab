@@ -110,13 +110,6 @@ async def serve_sync_ui(container: ContainerDep, path: str = "") -> FileResponse
 
 
 if __name__ == "__main__":
-    import uvicorn
+    from core.app.server import serve
 
-    settings = get_settings()
-
-    uvicorn.run(
-        "apps.sync.main:app",
-        host=settings.server.host,
-        port=settings.server.port,
-        reload=settings.server.debug,
-    )
+    serve("sync", "apps.sync.main:app", get_settings())

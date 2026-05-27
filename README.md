@@ -11,7 +11,10 @@ Humanitec - Platform
 ### Локальная разработка
 
 ```bash
-# Установка зависимостей
+# Python 3.14t (free-threaded, PEP 779) — один раз
+uv python install 3.14t
+
+# Установка зависимостей (uv подхватит .python-version=3.14t)
 uv sync
 
 # Сервис browser (Playwright + CDP / Lightpanda): зависимость playwright в группе browser
@@ -20,11 +23,16 @@ uv sync --group browser
 # Поднять инфраструктуру (Postgres :54321, Redis :63791, MinIO :19001/19011)
 make dev-up
 
-# Все сервисы и воркеры локально
+# Все сервисы и воркеры локально (Granian с --reload)
 make app
 # или с предварительным освобождением портов 8001-8006/8014:
 make app APP_KILL=1
 ```
+
+HTTP-сервисы стартуют через **Granian** (Rust ASGI, не uvicorn). В docker/k8s
+`PYTHON_GIL=0` задан в окружении. `apps/provider_litserve` и `apps/rag_worker`
+импортируют HuggingFace стек — внутри их процесса CPython автоматически
+включает GIL (known limitation, фиксируется в startup-логе и OTEL).
 
 ### Тесты
 
@@ -225,19 +233,19 @@ REST API endpoints для управления системой.
 ### Зависимости (pyproject.toml)
 
 ```toml
-# Web Framework & Server
-fastapi>=0.104.0
-uvicorn[standard]>=0.24.0
+# Web Framework & Server (Python 3.14t free-threaded + Granian Rust ASGI)
+fastapi>=0.118.0
+granian>=2.7.4
 python-multipart>=0.0.6
 
 # Data Validation & Settings
-pydantic>=2.5.0
+pydantic>=2.11.0
 pydantic-settings>=2.1.0
 
 # Database & ORM
-sqlalchemy[asyncpg]>=2.0.23
+sqlalchemy[asyncpg]>=2.0.45
 alembic>=1.13.0
-psycopg2-binary>=2.9.9
+asyncpg>=0.31.0
 
 # HTTP Client
 httpx>=0.25.0

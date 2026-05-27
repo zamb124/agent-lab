@@ -23,7 +23,6 @@ from core.state import ExecutionState
 from core.types import JsonObject, require_json_object
 from tests.flows.durable_runtime_harness import run_flow, run_node, workflow_state
 
-
 EMPTY_PARAMETERS_SCHEMA: JsonObject = {"type": "object", "properties": {}, "required": []}
 REQUEST_PARAMETERS_SCHEMA: JsonObject = {
     "type": "object",

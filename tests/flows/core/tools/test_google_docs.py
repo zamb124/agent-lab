@@ -18,8 +18,8 @@ from apps.flows.tools.google_docs import (
     gdocs_read_document,
     gdocs_share_document,
 )
-from core.state.interrupt import InterruptKind, OAuthInterrupt
 from core.state import ExecutionState
+from core.state.interrupt import InterruptKind, OAuthInterrupt
 
 
 def _make_state() -> ExecutionState:

@@ -1,8 +1,8 @@
 import asyncio
 
 import pytest
-import uvicorn
 from fastapi import FastAPI, Request, Response
+from granian.server.embed import Server as GranianEmbedServer
 
 from apps.search.config import (
     SearchIntegrationConfig,
@@ -53,23 +53,26 @@ async def serper_stub_url(unused_tcp_port_factory):
             return Response("serper failed", status_code=app.state.status_code)
         return app.state.payload
 
-    config = uvicorn.Config(
-        app,
-        host="127.0.0.1",
-        port=port,
-        log_level="warning",
-    )
-    server = uvicorn.Server(config)
+    server = GranianEmbedServer(app, interface="asgi", address="127.0.0.1", port=port)
     task = asyncio.create_task(server.serve())
     try:
-        for _ in range(100):
-            if server.started:
-                break
-            await asyncio.sleep(0.01)
+        await _wait_tcp_ready("127.0.0.1", port)
         yield f"http://127.0.0.1:{port}", app.state
     finally:
-        server.should_exit = True
+        server.stop()
         await task
+
+
+async def _wait_tcp_ready(host: str, port: int, attempts: int = 100) -> None:
+    for _ in range(attempts):
+        try:
+            reader, writer = await asyncio.open_connection(host, port)
+            writer.close()
+            await writer.wait_closed()
+            return
+        except OSError:
+            await asyncio.sleep(0.05)
+    raise RuntimeError(f"granian embed server не поднял порт {host}:{port}")
 
 
 @pytest.fixture
@@ -159,22 +162,13 @@ async def provider_stub_url(unused_tcp_port_factory):
             ]
         }
 
-    config = uvicorn.Config(
-        app,
-        host="127.0.0.1",
-        port=port,
-        log_level="warning",
-    )
-    server = uvicorn.Server(config)
+    server = GranianEmbedServer(app, interface="asgi", address="127.0.0.1", port=port)
     task = asyncio.create_task(server.serve())
     try:
-        for _ in range(100):
-            if server.started:
-                break
-            await asyncio.sleep(0.01)
+        await _wait_tcp_ready("127.0.0.1", port)
         yield f"http://127.0.0.1:{port}", app.state
     finally:
-        server.should_exit = True
+        server.stop()
         await task
 
 

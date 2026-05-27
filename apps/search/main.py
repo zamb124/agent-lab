@@ -36,12 +36,6 @@ app = create_service_app(
 
 
 if __name__ == "__main__":  # pragma: no cover
-    import uvicorn
+    from core.app.server import serve
 
-    settings = get_search_settings()
-    uvicorn.run(
-        "apps.search.main:app",
-        host=settings.server.host,
-        port=settings.server.port,
-        reload=settings.server.debug,
-    )
+    serve("search", "apps.search.main:app", get_search_settings())

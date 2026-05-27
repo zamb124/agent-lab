@@ -19,7 +19,6 @@ from core.clients.llm import setup_mock_responses
 from core.types import JsonObject
 from tests.flows.durable_runtime_harness import run_flow, workflow_state
 
-
 EMPTY_PARAMETERS_SCHEMA: JsonObject = {
     "type": "object",
     "properties": {},

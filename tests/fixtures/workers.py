@@ -883,7 +883,7 @@ class SessionServerManager:
             text=True,
         )
         command = result.stdout.strip()
-        return result.returncode == 0 and "uvicorn" in command and self.app_path in command
+        return result.returncode == 0 and "granian" in command and self.app_path in command
 
     def _invalidate_existing_server(self, existing_pid: int, reason: str) -> None:
         print(
@@ -899,7 +899,7 @@ class SessionServerManager:
         print(f"🧹 Очистка старых {self.name} server процессов...")
 
         subprocess.run(
-            ["pkill", "-9", "-f", f"uvicorn.*{self.app_path}"],
+            ["pkill", "-9", "-f", f"granian.*{self.app_path}"],
             check=False,
             capture_output=True
         )
@@ -1058,7 +1058,7 @@ class SessionServerManager:
                 print(f"⚠️  Порт {self.port} не освободился после 8s")
 
     def _start_server(self) -> subprocess.Popen:
-        """Запускает новый uvicorn server"""
+        """Запускает новый granian server"""
         self._cleanup_old_processes()
         self._kill_port_occupant()
 
@@ -1066,11 +1066,17 @@ class SessionServerManager:
         server_err = open(self.err_file, "w", buffering=1, encoding="utf-8", errors="replace")
 
         command = [
-            sys.executable, "-m", "uvicorn",
+            sys.executable, "-m", "granian",
+            "--interface", "asgi",
             self.app_path,
             "--host", self.host,
             "--port", str(self.port),
-            "--log-level", "error"
+            "--http", "auto",
+            "--ws",
+            "--workers", "1",
+            "--runtime-threads", "1",
+            "--log-level", "error",
+            "--no-access-log",
         ]
 
         full_env = self._build_server_env()

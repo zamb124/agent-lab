@@ -10,7 +10,6 @@ import time
 from pathlib import Path
 
 import litserve as ls
-import uvicorn
 from fastapi import APIRouter, Depends, FastAPI
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.routing import APIRoute
@@ -45,6 +44,7 @@ from apps.provider_litserve.tts.api import TTSLitAPI
 from apps.provider_litserve.vad.api import VADLitAPI
 from core.app import create_service_app
 from core.app.health_payload import build_health_payload
+from core.app.server import serve
 
 UI_PREFIX = "/litserve"
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
@@ -279,15 +279,12 @@ def main() -> None:
     _ = parser.parse_args(namespace=args)
 
     settings = get_provider_litserve_settings()
-    host = args.host if args.host is not None else settings.server.host
-    port = args.port if args.port is not None else settings.server.port
+    if args.host is not None:
+        settings.server.host = args.host
+    if args.port is not None:
+        settings.server.port = args.port
 
-    uvicorn.run(
-        "apps.provider_litserve.main:app",
-        host=host,
-        port=port,
-        reload=settings.server.debug,
-    )
+    serve("provider_litserve", "apps.provider_litserve.main:app", settings)
 
 
 if __name__ == "__main__":

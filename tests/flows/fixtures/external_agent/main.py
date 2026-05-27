@@ -92,6 +92,14 @@ async def send_task(request: MessageSendRequest) -> Dict[str, Any]:
 
 
 if __name__ == "__main__":
-    import uvicorn
-    uvicorn.run(external_agent_app, host="0.0.0.0", port=8080)
+    from granian import Granian
+    from granian.constants import Interfaces
+
+    Granian(
+        target="main:external_agent_app",
+        address="0.0.0.0",
+        port=8080,
+        interface=Interfaces.ASGI,
+        workers=1,
+    ).serve()
 

@@ -511,7 +511,7 @@ class BillingService:
         if company is None:
             raise ValueError(f"span {span_id}: компания {company_id} не найдена")
 
-        usage_type = UsageType(rule.usage_type)
+        usage_type = rule.usage_type
         quantity = quantity_from_span(rule.quantity_from, span)
         resource_name = rule.resource_name
 

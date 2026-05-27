@@ -80,7 +80,7 @@ def test_parse_settlement_rules_json_root_not_object_raises() -> None:
 
 
 def test_parse_settlement_rules_json_invalid_json_raises() -> None:
-    with pytest.raises(json.JSONDecodeError):
+    with pytest.raises(ValueError, match="JSON-compatible"):
         parse_settlement_rules_json("not json {")
 
 
@@ -95,7 +95,7 @@ def test_settlement_rule_resource_name_without_colon_raises() -> None:
 
 
 def test_settlement_rule_invalid_usage_type_raises() -> None:
-    with pytest.raises(ValidationError, match="UsageType"):
+    with pytest.raises(ValidationError, match="usage_type"):
         SettlementRule(
             rule_id="a",
             resource_name="llm:*",

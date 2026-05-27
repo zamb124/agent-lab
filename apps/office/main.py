@@ -71,12 +71,6 @@ async def serve_documents_ui(container: ContainerDep, path: str = "") -> FileRes
     return FileResponse(index_file)
 
 if __name__ == "__main__":
-    import uvicorn
+    from core.app.server import serve
 
-    settings = get_office_settings()
-    uvicorn.run(
-        "apps.office.main:app",
-        host=settings.server.host,
-        port=settings.server.port,
-        reload=settings.server.debug,
-    )
+    serve("office", "apps.office.main:app", get_office_settings())

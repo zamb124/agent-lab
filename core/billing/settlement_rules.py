@@ -4,16 +4,22 @@
 
 from __future__ import annotations
 
-import json
 import re
 from enum import Enum
-from typing import cast
+from typing import ClassVar
 
-from pydantic import BaseModel, Field, field_validator, model_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from core.models.billing_models import UsageType
 from core.tracing.models import BillingSettlementSpan
-from core.types import JsonObject, JsonValue, require_json_object
+from core.types import JsonObject, JsonValue, parse_json_value, require_json_object
+
+_SETTLEMENT_MODEL_CONFIG: ConfigDict = ConfigDict(
+    extra="forbid",
+    validate_assignment=True,
+    str_strip_whitespace=True,
+    validate_default=True,
+)
 
 
 class SettlementApplicationMode(str, Enum):
@@ -25,6 +31,8 @@ class SettlementApplicationMode(str, Enum):
 
 class SettlementRuleMatch(BaseModel):
     """Условия на поля span; заданные поля объединяются через AND."""
+
+    model_config: ClassVar[ConfigDict] = _SETTLEMENT_MODEL_CONFIG
 
     operation_name_prefix: str | None = None
     operation_name_equals: str | None = None
@@ -63,23 +71,16 @@ class SettlementRuleMatch(BaseModel):
 
 
 class SettlementRule(BaseModel):
+    model_config: ClassVar[ConfigDict] = _SETTLEMENT_MODEL_CONFIG
+
     rule_id: str = Field(min_length=1)
     enabled: bool = True
     priority: int = 100
     exclusive_group: str | None = None
     resource_name: str = Field(min_length=3)
-    usage_type: str = Field(min_length=1)
+    usage_type: UsageType
     quantity_from: str = Field(default="const:1")
     match: SettlementRuleMatch = Field(default_factory=SettlementRuleMatch)
-
-    @field_validator("usage_type")
-    @classmethod
-    def usage_type_must_be_valid(cls, v: str) -> str:
-        try:
-            _ = UsageType(v)
-        except ValueError as e:
-            raise ValueError(f"неизвестный UsageType: {v!r}") from e
-        return v
 
     @field_validator("resource_name")
     @classmethod
@@ -90,13 +91,15 @@ class SettlementRule(BaseModel):
 
 
 class SettlementRulesDocument(BaseModel):
+    model_config: ClassVar[ConfigDict] = _SETTLEMENT_MODEL_CONFIG
+
     version: int = 1
     application_mode: SettlementApplicationMode = SettlementApplicationMode.ALL_MATCHING
     rules: list[SettlementRule] = Field(default_factory=list)
 
 
 def parse_settlement_rules_json(raw: str) -> SettlementRulesDocument:
-    parsed = cast(JsonValue, json.loads(raw))
+    parsed = parse_json_value(raw, "settlement rules")
     if not isinstance(parsed, dict):
         raise ValueError("settlement rules: корень должен быть объектом")
     data = require_json_object(parsed, "settlement rules")

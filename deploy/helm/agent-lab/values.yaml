@@ -72,7 +72,38 @@ applications:
     port: 8001
     replicas: 1
     serviceName: flows
-    command: ["python", "-m", "apps.flows.main"]
+    command:
+      - granian
+      - --interface
+      - asgi
+      - apps.flows.main:app
+      - --host
+      - "0.0.0.0"
+      - --port
+      - "8001"
+      - --http
+      - auto
+      - --ws
+      - --static-path-route
+      - /static/core
+      - --static-path-mount
+      - core/frontend/static
+      - --static-path-route
+      - /flows/static
+      - --static-path-mount
+      - apps/flows/ui
+      - --static-path-route
+      - /static
+      - --static-path-mount
+      - apps/flows/static
+      - --static-path-route
+      - /flows/demo_cards
+      - --static-path-mount
+      - apps/flows/static/demo_cards
+      - --static-path-route
+      - /documentation
+      - --static-path-mount
+      - apps/flows/site
     resources:
       requests:
         cpu: 200m
@@ -86,7 +117,26 @@ applications:
     port: 8002
     replicas: 1
     serviceName: frontend
-    command: ["python", "-m", "apps.frontend.main"]
+    command:
+      - granian
+      - --interface
+      - asgi
+      - apps.frontend.main:app
+      - --host
+      - "0.0.0.0"
+      - --port
+      - "8002"
+      - --http
+      - auto
+      - --ws
+      - --static-path-route
+      - /static/core
+      - --static-path-mount
+      - core/frontend/static
+      - --static-path-route
+      - /static/frontend
+      - --static-path-mount
+      - apps/frontend/ui
     resources:
       requests:
         cpu: 200m
@@ -100,7 +150,34 @@ applications:
     port: 8003
     replicas: 1
     serviceName: crm
-    command: ["python", "-m", "apps.crm.main"]
+    command:
+      - granian
+      - --interface
+      - asgi
+      - apps.crm.main:app
+      - --host
+      - "0.0.0.0"
+      - --port
+      - "8003"
+      - --http
+      - auto
+      - --ws
+      - --static-path-route
+      - /static/core
+      - --static-path-mount
+      - core/frontend/static
+      - --static-path-route
+      - /crm/ui/static
+      - --static-path-mount
+      - apps/crm/ui
+      - --static-path-route
+      - /crm/ui/vendor/3d-force-graph
+      - --static-path-mount
+      - node_modules/3d-force-graph/dist
+      - --static-path-route
+      - /crm/ui/vendor/three
+      - --static-path-mount
+      - node_modules/three/build
     resources:
       requests:
         cpu: 200m
@@ -114,7 +191,26 @@ applications:
     port: 8004
     replicas: 1
     serviceName: rag
-    command: ["python", "-m", "apps.rag.main"]
+    command:
+      - granian
+      - --interface
+      - asgi
+      - apps.rag.main:app
+      - --host
+      - "0.0.0.0"
+      - --port
+      - "8004"
+      - --http
+      - auto
+      - --ws
+      - --static-path-route
+      - /static/core
+      - --static-path-mount
+      - core/frontend/static
+      - --static-path-route
+      - /rag/ui/static
+      - --static-path-mount
+      - apps/rag/ui
     resources:
       requests:
         cpu: 200m
@@ -128,7 +224,26 @@ applications:
     port: 8005
     replicas: 1
     serviceName: sync
-    command: ["python", "-m", "apps.sync.main"]
+    command:
+      - granian
+      - --interface
+      - asgi
+      - apps.sync.main:app
+      - --host
+      - "0.0.0.0"
+      - --port
+      - "8005"
+      - --http
+      - auto
+      - --ws
+      - --static-path-route
+      - /static/core
+      - --static-path-mount
+      - core/frontend/static
+      - --static-path-route
+      - /sync/ui/static
+      - --static-path-mount
+      - apps/sync/ui
     resources:
       requests:
         cpu: 200m
@@ -142,7 +257,18 @@ applications:
     port: 8006
     replicas: 1
     serviceName: scheduler-api
-    command: ["python", "-m", "apps.scheduler.main"]
+    command:
+      - granian
+      - --interface
+      - asgi
+      - apps.scheduler.main:app
+      - --host
+      - "0.0.0.0"
+      - --port
+      - "8006"
+      - --http
+      - auto
+      - --ws
     resources:
       requests:
         cpu: 100m
@@ -156,7 +282,26 @@ applications:
     port: 8008
     replicas: 1
     serviceName: office
-    command: ["python", "-m", "apps.office.main"]
+    command:
+      - granian
+      - --interface
+      - asgi
+      - apps.office.main:app
+      - --host
+      - "0.0.0.0"
+      - --port
+      - "8008"
+      - --http
+      - auto
+      - --ws
+      - --static-path-route
+      - /static/core
+      - --static-path-mount
+      - core/frontend/static
+      - --static-path-route
+      - /documents/ui/static
+      - --static-path-mount
+      - apps/office/ui
     resources:
       requests:
         cpu: 100m
@@ -174,7 +319,18 @@ applications:
     port: 8015
     replicas: 1
     serviceName: voice
-    command: ["python", "-m", "apps.voice.main"]
+    command:
+      - granian
+      - --interface
+      - asgi
+      - apps.voice.main:app
+      - --host
+      - "0.0.0.0"
+      - --port
+      - "8015"
+      - --http
+      - auto
+      - --ws
     resources:
       requests:
         cpu: 100m
@@ -188,7 +344,18 @@ applications:
     port: 8009
     replicas: 1
     serviceName: browser
-    command: ["python", "-m", "apps.browser.main"]
+    command:
+      - granian
+      - --interface
+      - asgi
+      - apps.browser.main:app
+      - --host
+      - "0.0.0.0"
+      - --port
+      - "8009"
+      - --http
+      - auto
+      - --ws
     resources:
       requests:
         cpu: 200m
@@ -202,7 +369,18 @@ applications:
     port: 8010
     replicas: 1
     serviceName: search
-    command: ["python", "-m", "apps.search.main"]
+    command:
+      - granian
+      - --interface
+      - asgi
+      - apps.search.main:app
+      - --host
+      - "0.0.0.0"
+      - --port
+      - "8010"
+      - --http
+      - auto
+      - --ws
     resources:
       requests:
         cpu: 100m
@@ -216,7 +394,18 @@ applications:
     port: 8016
     replicas: 1
     serviceName: capability-gateway
-    command: ["python", "-m", "apps.capability_gateway.main"]
+    command:
+      - granian
+      - --interface
+      - asgi
+      - apps.capability_gateway.main:app
+      - --host
+      - "0.0.0.0"
+      - --port
+      - "8016"
+      - --http
+      - auto
+      - --ws
     resources:
       requests:
         cpu: 100m
@@ -230,7 +419,18 @@ applications:
     port: 8017
     replicas: 1
     serviceName: code-runner-python
-    command: ["python", "-m", "apps.code_runner_python.main"]
+    command:
+      - granian
+      - --interface
+      - asgi
+      - apps.code_runner_python.main:app
+      - --host
+      - "0.0.0.0"
+      - --port
+      - "8017"
+      - --http
+      - auto
+      - --ws
     resources:
       requests:
         cpu: 100m
@@ -244,7 +444,18 @@ applications:
     port: 8018
     replicas: 1
     serviceName: code-runner-node
-    command: ["python", "-m", "apps.code_runner_node.main"]
+    command:
+      - granian
+      - --interface
+      - asgi
+      - apps.code_runner_node.main:app
+      - --host
+      - "0.0.0.0"
+      - --port
+      - "8018"
+      - --http
+      - auto
+      - --ws
     resources:
       requests:
         cpu: 100m
@@ -258,7 +469,18 @@ applications:
     port: 8019
     replicas: 1
     serviceName: code-runner-go
-    command: ["python", "-m", "apps.code_runner_go.main"]
+    command:
+      - granian
+      - --interface
+      - asgi
+      - apps.code_runner_go.main:app
+      - --host
+      - "0.0.0.0"
+      - --port
+      - "8019"
+      - --http
+      - auto
+      - --ws
     resources:
       requests:
         cpu: 100m
@@ -272,7 +494,18 @@ applications:
     port: 8020
     replicas: 1
     serviceName: code-runner-csharp
-    command: ["python", "-m", "apps.code_runner_csharp.main"]
+    command:
+      - granian
+      - --interface
+      - asgi
+      - apps.code_runner_csharp.main:app
+      - --host
+      - "0.0.0.0"
+      - --port
+      - "8020"
+      - --http
+      - auto
+      - --ws
     resources:
       requests:
         cpu: 100m

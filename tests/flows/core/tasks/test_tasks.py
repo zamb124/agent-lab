@@ -16,7 +16,6 @@ from core.context import set_context
 from core.integrations.models import IntegrationCredential, IntegrationProvider
 from core.types import JsonObject
 
-
 EXPRESSION_PARAMETERS_SCHEMA: JsonObject = {
     "type": "object",
     "properties": {

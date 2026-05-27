@@ -31,12 +31,10 @@ app = create_service_app(
 
 
 if __name__ == "__main__":
-    import uvicorn
+    from core.app.server import serve
 
-    settings = get_code_runner_csharp_settings()
-    uvicorn.run(
+    serve(
+        "code_runner_csharp",
         "apps.code_runner_csharp.main:app",
-        host=settings.server.host,
-        port=settings.server.port,
-        reload=settings.server.debug,
+        get_code_runner_csharp_settings(),
     )

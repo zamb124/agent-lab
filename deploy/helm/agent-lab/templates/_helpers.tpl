@@ -21,6 +21,15 @@
 Секреты — из Secret platformSecretName. URL баз — через ClusterIP postgres / redis.
 */}}
 {{- define "agentlab.appEnv" -}}
+- name: PYTHON_GIL
+  value: "0"
+- name: GRANIAN_WORKERS
+  valueFrom:
+    resourceFieldRef:
+      resource: limits.cpu
+      divisor: "1"
+- name: GRANIAN_RUNTIME_THREADS
+  value: "2"
 - name: POSTGRES_PASSWORD
   valueFrom:
     secretKeyRef:

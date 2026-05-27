@@ -7,6 +7,7 @@ from typing import ClassVar, Literal, Self, override
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
+from core.billing.settlement_rules import SettlementRulesDocument
 from core.clients.llm.config import LLMCallConfig
 from core.company_ai import CapabilityLiteral
 from core.config.models import LegalConfig, PublicSiteConfig
@@ -459,7 +460,7 @@ class PlatformBillingUsageReportResponse(BaseModel):
 class PlatformBillingSettlementRulesResponse(BaseModel):
     """Документ правил span settlement (JSON)."""
 
-    document: JsonObject
+    document: SettlementRulesDocument
 
 
 class PlatformBillingCompanyPricesResponse(BaseModel):

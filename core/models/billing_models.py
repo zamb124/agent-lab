@@ -3,7 +3,7 @@
 """
 
 from datetime import datetime, timezone
-from enum import Enum
+from enum import Enum, StrEnum
 from typing import ClassVar, Literal
 
 from pydantic import BaseModel, ConfigDict, Field
@@ -22,7 +22,7 @@ class TariffPlan(str, Enum):
     ENTERPRISE = "enterprise"  # Корпоративный
 
 
-class UsageType(str, Enum):
+class UsageType(StrEnum):
     """Типы использования ресурсов"""
 
     TOOL_CALL = "tool_call"  # Вызов инструмента

@@ -395,15 +395,6 @@ async def ui_spa_flow(flow_id: str, rest: str = ""):
 
 
 if __name__ == "__main__":
-    try:
-        import uvicorn
-    except ImportError:
-        raise RuntimeError("uvicorn не установлен. Установите: pip install uvicorn")
+    from core.app.server import serve
 
-    settings = get_settings()
-    uvicorn.run(
-        "apps.flows.main:app",
-        host=settings.server.host,
-        port=settings.server.port,
-        reload=settings.server.debug,
-    )
+    serve("flows", "apps.flows.main:app", get_settings())

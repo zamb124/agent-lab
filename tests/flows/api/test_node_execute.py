@@ -21,7 +21,7 @@ import socket
 
 import pytest
 from aiohttp import web
-from uvicorn import Config, Server
+from granian.server.embed import Server as GranianEmbedServer
 
 from tests.fixtures.aiohttp_ephemeral import tcp_site_assigned_port
 from tests.flows.fixtures.external_api.main import external_api_app
@@ -29,21 +29,15 @@ from tests.flows.fixtures.external_api.main import external_api_app
 
 @pytest.fixture
 async def external_api_server():
-    """Запускает реальный HTTP сервер для external API."""
-    # Находим свободный порт
+    """Запускает реальный HTTP сервер для external API (granian embed)."""
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
         s.bind(("127.0.0.1", 0))
         port = s.getsockname()[1]
 
-    config = Config(app=external_api_app, host="127.0.0.1", port=port, log_level="error")
-    server = Server(config)
-
-    # Запускаем сервер в фоне
+    server = GranianEmbedServer(external_api_app, interface="asgi", address="127.0.0.1", port=port)
     server_task = asyncio.create_task(server.serve())
 
-    # Ждем пока сервер запустится
-    max_attempts = 20
-    for _ in range(max_attempts):
+    for _ in range(50):
         try:
             test_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
             test_socket.settimeout(0.1)
@@ -55,14 +49,13 @@ async def external_api_server():
             pass
         await asyncio.sleep(0.1)
     else:
-        server.should_exit = True
+        server.stop()
         raise RuntimeError(f"External API server failed to start on port {port}")
 
     base_url = f"http://127.0.0.1:{port}"
     yield base_url
 
-    # Останавливаем сервер
-    server.should_exit = True
+    server.stop()
     try:
         await asyncio.wait_for(server_task, timeout=5.0)
     except asyncio.TimeoutError:
