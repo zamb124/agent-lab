@@ -1,4 +1,4 @@
-FROM ghcr.io/astral-sh/uv:trixie-slim
+FROM ghcr.io/astral-sh/uv:bookworm-slim
 
 WORKDIR /app
 

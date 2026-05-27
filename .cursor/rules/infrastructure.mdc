@@ -64,7 +64,7 @@ files/                          # ConfigMap источники (loki, tempo, all
 
 В **free-threaded build** (наш) workers = треды в едином интерпретаторе с shared memory. В GIL-build (если случайно соберётся cp314 вместо cp314t) workers = forked процессы. Granian сам отказывается стартовать на GIL-enabled cp314t — это наш sanity check.
 
-Базовый docker-образ — `ghcr.io/astral-sh/uv:trixie-slim` + `uv python install 3.14t` + `uv python pin 3.14t` + `ENV PYTHON_GIL=0`. Версия CPython — **3.14 free-threaded (PEP 779, cp314t ABI)**. Локальный `__main__` каждого `apps/<svc>/main.py` использует `core.app.server.serve(<service>, "apps.<svc>.main:app", settings)`, который сам поднимает `granian.Granian(...)` и пишет `service.python_runtime` (с `gil_enabled`) + `service.granian_topology` (с `workers`/`runtime_threads`/`cpu_count`) на старте.
+Базовый docker-образ — `ghcr.io/astral-sh/uv:bookworm-slim` + `uv python install 3.14t` + `uv python pin 3.14t` + `ENV PYTHON_GIL=0`. Версия CPython — **3.14 free-threaded (PEP 779, cp314t ABI)**. Локальный `__main__` каждого `apps/<svc>/main.py` использует `core.app.server.serve(<service>, "apps.<svc>.main:app", settings)`, который сам поднимает `granian.Granian(...)` и пишет `service.python_runtime` (с `gil_enabled`) + `service.granian_topology` (с `workers`/`runtime_threads`/`cpu_count`) на старте.
 
 Статика отдаётся Granian-ом нативно через `--static-path-route` / `--static-path-mount` (см. `command:` в `values.yaml`). FastAPI `StaticFiles` оставлен только для in-process `httpx.ASGITransport` в тестах.
 

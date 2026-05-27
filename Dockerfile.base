@@ -2,7 +2,7 @@
 # Сборка и публикация (мультиплатформенная):
 #   docker buildx build --platform linux/amd64,linux/arm64 -f Dockerfile.base -t zambas/agent-lab-base:latest --push .
 
-FROM ghcr.io/astral-sh/uv:trixie-slim
+FROM ghcr.io/astral-sh/uv:bookworm-slim
 
 WORKDIR /app
 

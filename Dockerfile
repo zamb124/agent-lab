@@ -3,7 +3,7 @@
 # ============================================
 # Этап 1: базовый образ Python 3.14t (no-GIL)
 # ============================================
-FROM ghcr.io/astral-sh/uv:trixie-slim AS base-with-core
+FROM ghcr.io/astral-sh/uv:bookworm-slim AS base-with-core
 
 ARG NODE_MAJOR=24
 ARG GO_VERSION=1.26.1
@@ -90,17 +90,15 @@ RUN --mount=type=cache,target=/root/.cache/uv \
 # ============================================
 # Этап 3: сборщик документации (статический сайт Zensical)
 # ============================================
-FROM ghcr.io/astral-sh/uv:trixie-slim AS docs-builder
-ENV UV_PYTHON_INSTALL_DIR=/opt/uv-python
-ENV UV_PYTHON_PREFERENCE=only-managed
-ENV PATH="/root/.local/bin:${PATH}"
-RUN uv python install 3.14t
-RUN uv tool install --python 3.14t "zensical>=0.0.32"
+# Docs-builder отдельный, GIL-build cp314: статический HTML, free-threading не нужен,
+# а часть deps zensical тянет Rust-extension'ы без cp314t wheels.
+FROM python:3.14-slim AS docs-builder
+RUN pip install --no-cache-dir "zensical>=0.0.32"
 WORKDIR /app
 COPY zensical.ru.toml zensical.en.toml ./
 COPY docs ./docs
 COPY scripts/docs_prepare.py scripts/extract_openapi.py scripts/openapi_to_markdown.py ./scripts/
-RUN uv run --python 3.14t python scripts/docs_prepare.py && \
+RUN python scripts/docs_prepare.py && \
     zensical build --clean --config-file zensical.ru.toml && \
     zensical build --clean --config-file zensical.en.toml && \
     mkdir -p documentation-dist/en && \

@@ -1,6 +1,6 @@
 # Test Dockerfile — Python 3.14t (free-threaded), единая версия для всех окружений.
 
-FROM ghcr.io/astral-sh/uv:trixie-slim AS base-test
+FROM ghcr.io/astral-sh/uv:bookworm-slim AS base-test
 
 ARG NODE_MAJOR=24
 ARG GO_VERSION=1.26.1
