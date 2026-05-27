@@ -93,13 +93,14 @@ RUN --mount=type=cache,target=/root/.cache/uv \
 FROM ghcr.io/astral-sh/uv:trixie-slim AS docs-builder
 ENV UV_PYTHON_INSTALL_DIR=/opt/uv-python
 ENV UV_PYTHON_PREFERENCE=only-managed
-RUN uv python install 3.14t && uv python pin 3.14t
-RUN uv pip install --system "zensical>=0.0.32"
+ENV PATH="/root/.local/bin:${PATH}"
+RUN uv python install 3.14t
+RUN uv tool install --python 3.14t "zensical>=0.0.32"
 WORKDIR /app
 COPY zensical.ru.toml zensical.en.toml ./
 COPY docs ./docs
 COPY scripts/docs_prepare.py scripts/extract_openapi.py scripts/openapi_to_markdown.py ./scripts/
-RUN python scripts/docs_prepare.py && \
+RUN uv run --python 3.14t python scripts/docs_prepare.py && \
     zensical build --clean --config-file zensical.ru.toml && \
     zensical build --clean --config-file zensical.en.toml && \
     mkdir -p documentation-dist/en && \

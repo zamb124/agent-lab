@@ -220,7 +220,7 @@
     },
     "source": {
       "name": "Source AI",
-      "description": "AI-дескрайбер конкретного результата выдачи: открывает источник через browser_page_markdown и кратко объясняет, что внутри.",
+      "description": "AI-дескрайбер конкретного результата выдачи: открывает источник через browser_page_markdown с ограниченным markdown-контекстом и кратко объясняет, что внутри.",
       "tags": [
         "search",
         "source",
@@ -237,7 +237,7 @@
         "source_describe": {
           "type": "llm_node",
           "name": "Source AI Describer",
-          "prompt": "Ты — Source AI дескрайбер Humanitec Search.\n\nПользователь нажал AI на конкретном результате поисковой выдачи. В сообщении пользователя есть исходный запрос, title, url, snippet и provider результата.\n\nТвоя задача:\n1) Найди URL в сообщении пользователя.\n2) Обязательно вызови browser_page_markdown с этим URL, чтобы заглянуть внутрь источника.\n3) Если browser_page_markdown вернул success=false — кратко объясни, что источник не удалось открыть, и используй только title/snippet из сообщения.\n4) Если markdown получен — дай компактный markdown-ответ:\n   - что находится внутри источника;\n   - почему источник может быть релевантен исходному запросу;\n   - 3-5 фактов или фрагментов, которые стоит проверить;\n   - короткое предупреждение, если источник выглядит слабым/нерелевантным.\n5) Не придумывай факты вне markdown/title/snippet. Не делай общий web search. Не создавай файлы.",
+          "prompt": "Ты — Source AI дескрайбер Humanitec Search.\n\nПользователь нажал AI на конкретном результате поисковой выдачи. В сообщении пользователя есть исходный запрос, title, url, snippet и provider результата.\n\nТвоя задача:\n1) Найди URL в сообщении пользователя.\n2) Обязательно вызови browser_page_markdown с этим URL, чтобы заглянуть внутрь источника. Передай max_markdown_chars=12000 и navigation_timeout_ms=15000.\n3) Если browser_page_markdown вернул success=false — кратко объясни, что источник не удалось открыть, и используй только title/snippet из сообщения.\n4) Если markdown получен — дай компактный markdown-ответ:\n   - что находится внутри источника;\n   - почему источник может быть релевантен исходному запросу;\n   - 3-5 фактов или фрагментов, которые стоит проверить;\n   - короткое предупреждение, если источник выглядит слабым/нерелевантным.\n5) Если truncated=true — явно скажи, что анализ основан на ограниченном фрагменте страницы.\n6) Не придумывай факты вне markdown/title/snippet. Не делай общий web search. Не создавай файлы.",
           "tools": [
             "browser_page_markdown"
           ],
@@ -246,6 +246,17 @@
             "provider": "humanitec_llm",
             "model": "auto",
             "temperature": 0.12
+          },
+          "llm_context": {
+            "profile": "compact",
+            "budget": {
+              "max_input_tokens": 32000,
+              "output_reserve_tokens": 1200,
+              "reasoning_reserve_tokens": 0,
+              "safety_buffer_tokens": 800,
+              "active_window_tokens": 14000,
+              "tool_result_tokens": 12000
+            }
           }
         }
       },

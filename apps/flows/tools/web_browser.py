@@ -13,6 +13,8 @@ from core.types import JsonObject, JsonValue
 if TYPE_CHECKING:
     from core.state import ExecutionState
 
+DEFAULT_BROWSER_MARKDOWN_MAX_CHARS = 12_000
+
 
 _BROWSER_DUCKDUCKGO_LINKS_DESCRIPTION = """
 Поиск HTTP(S) URL по текстовому запросу через DuckDuckGo в браузере (MCP `browser`).
@@ -50,7 +52,7 @@ _BROWSER_PAGE_MARKDOWN_DESCRIPTION = """
 
 Поведение совпадает с `BrowserSnapshotDescribe.page_markdown`.
 
-Ответ при успехе: `success=true`, `markdown` (строка).
+Ответ при успехе: `success=true`, `markdown` (строка), `truncated`, `original_chars`, `max_markdown_chars`.
 Ответ при ошибке: `success=false`, `error`.
 
 Параметры:
@@ -58,6 +60,7 @@ _BROWSER_PAGE_MARKDOWN_DESCRIPTION = """
 - `server_id` (строка, по умолчанию `browser`).
 - `navigation_timeout_ms` (целое, по умолчанию 30000, ≥1): таймаут навигации.
 - `ingest_source` (строка, по умолчанию `simple_crawler`): метаданные `source` для загрузки в S3.
+- `max_markdown_chars` (целое, по умолчанию 12000): жесткий лимит markdown, передаваемого обратно в LLM.
 
 Когда вызывать: нужен текст страницы для анализа без полей `file_id` / `s3_path`.
 """.strip()
@@ -67,13 +70,26 @@ _BROWSER_PAGE_SNAPSHOT_DESCRIPTION = """
 
 Поведение совпадает с `BrowserSnapshotDescribe.page_snapshot`.
 
-Ответ при успехе: `success=true`, поля `url`, `file_id`, `s3_path`, `text` (markdown страницы).
+Ответ при успехе: `success=true`, поля `url`, `file_id`, `s3_path`, `text` (markdown страницы), `truncated`, `original_chars`, `max_markdown_chars`.
 Ответ при ошибке: `success=false`, `error`.
 
 Параметры: как у `browser_page_markdown`.
 
 Когда вызывать: нужен markdown и ссылки на файл в платформе (дальнейшее чтение, вложения, трейсинг).
 """.strip()
+
+
+def bound_browser_markdown(markdown: str, max_markdown_chars: int) -> tuple[str, bool]:
+    if max_markdown_chars < 1:
+        raise ValueError("max_markdown_chars must be positive")
+    if len(markdown) <= max_markdown_chars:
+        return markdown, False
+    suffix = (
+        "\n\n[markdown truncated "
+        f"original_chars={len(markdown)} max_markdown_chars={max_markdown_chars}]"
+    )
+    body_limit = max(max_markdown_chars - len(suffix), 0)
+    return markdown[:body_limit].rstrip() + suffix, True
 
 
 class BrowserDuckduckgoLinksArgs(BaseModel):
@@ -119,6 +135,7 @@ class BrowserPageMarkdownArgs(BaseModel):
     server_id: str = Field("browser", min_length=1)
     navigation_timeout_ms: int = Field(30000, ge=1)
     ingest_source: str = Field("simple_crawler", min_length=1)
+    max_markdown_chars: int = Field(DEFAULT_BROWSER_MARKDOWN_MAX_CHARS, ge=1, le=50_000)
 
 
 class BrowserPageSnapshotArgs(BaseModel):
@@ -128,6 +145,7 @@ class BrowserPageSnapshotArgs(BaseModel):
     server_id: str = Field("browser", min_length=1)
     navigation_timeout_ms: int = Field(30000, ge=1)
     ingest_source: str = Field("simple_crawler", min_length=1)
+    max_markdown_chars: int = Field(DEFAULT_BROWSER_MARKDOWN_MAX_CHARS, ge=1, le=50_000)
 
 
 @tool(
@@ -183,6 +201,7 @@ async def browser_page_markdown(
     server_id: str = "browser",
     navigation_timeout_ms: int = 30000,
     ingest_source: str = "simple_crawler",
+    max_markdown_chars: int = DEFAULT_BROWSER_MARKDOWN_MAX_CHARS,
     *,
     state: "ExecutionState",
 ) -> JsonObject:
@@ -193,7 +212,14 @@ async def browser_page_markdown(
             ingest_source=ingest_source,
         )
         markdown = await describe.page_markdown(state, url)
-        return {"success": True, "markdown": markdown}
+        bounded_markdown, truncated = bound_browser_markdown(markdown, max_markdown_chars)
+        return {
+            "success": True,
+            "markdown": bounded_markdown,
+            "truncated": truncated,
+            "original_chars": len(markdown),
+            "max_markdown_chars": max_markdown_chars,
+        }
     except Exception as exc:
         return {"success": False, "error": str(exc)}
 
@@ -209,6 +235,7 @@ async def browser_page_snapshot(
     server_id: str = "browser",
     navigation_timeout_ms: int = 30000,
     ingest_source: str = "simple_crawler",
+    max_markdown_chars: int = DEFAULT_BROWSER_MARKDOWN_MAX_CHARS,
     *,
     state: "ExecutionState",
 ) -> JsonObject:
@@ -219,6 +246,17 @@ async def browser_page_snapshot(
             ingest_source=ingest_source,
         )
         snap = await describe.page_snapshot(state, url)
-        return {"success": True, **snap}
+        raw_text = snap.get("text")
+        if not isinstance(raw_text, str):
+            raise TypeError("browser_page_snapshot: text must be string")
+        text, truncated = bound_browser_markdown(raw_text, max_markdown_chars)
+        return {
+            "success": True,
+            **snap,
+            "text": text,
+            "truncated": truncated,
+            "original_chars": len(raw_text),
+            "max_markdown_chars": max_markdown_chars,
+        }
     except Exception as exc:
         return {"success": False, "error": str(exc)}
