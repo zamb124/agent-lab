@@ -47,6 +47,17 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     xz-utils \
     && rm -rf /var/lib/apt/lists/*
 
+# Rust toolchain нужен для сборки PyO3-extensions без cp314t wheel:
+# safetensors (HuggingFace), tokenizers (HuggingFace), tokie (chonkie >=1.6),
+# pyo3-runtime и пр. Без него `uv pip install transformers/sentence-transformers`
+# падает с "maturin failed: Cargo metadata failed. Do you have cargo in your PATH?"
+ENV RUSTUP_HOME=/usr/local/rustup
+ENV CARGO_HOME=/usr/local/cargo
+ENV PATH="${CARGO_HOME}/bin:${PATH}"
+RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs \
+    | sh -s -- -y --default-toolchain stable --profile minimal --no-modify-path \
+    && rustc --version && cargo --version
+
 RUN uv python install 3.14t && uv python pin 3.14t
 
 RUN mkdir -p /etc/apt/keyrings && \
