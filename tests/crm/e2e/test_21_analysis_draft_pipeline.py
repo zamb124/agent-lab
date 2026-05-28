@@ -11,13 +11,15 @@ import json
 import time
 from collections.abc import Awaitable, Callable
 from datetime import datetime, timezone
+from typing import cast
 
 import pytest
-from httpx import AsyncClient
+from httpx import AsyncClient, Response
 
 from apps.crm.container import CRMContainer
 from apps.crm.models.api import AIAnalysisDraftStored, AIExtractedEntity
 from apps.crm.services.entity_service import ApplyAnalysisDraftEntityFailuresError, EntityService
+from core.types import JsonObject
 from tests.crm.e2e._json_helpers import json_object, object_dict, object_list, object_str
 
 MockLlmRedisFactory = Callable[[list[object]], Awaitable[None]]
@@ -55,6 +57,10 @@ def _json_object(response_payload: object) -> dict[str, object]:
     return json_object(response_payload)
 
 
+def _http_json(response: Response) -> dict[str, object]:
+    return _json_object(cast(object, response.json()))
+
+
 async def _apply_note(
     crm_client: AsyncClient,
     headers: dict[str, str],
@@ -67,8 +73,8 @@ async def _apply_note(
         headers=headers,
     )
     if start.status_code not in (200, 202):
-        return _TaskCompletionResponse(start.status_code, _json_object(start.json()))
-    start_payload = _json_object(start.json())
+        return _TaskCompletionResponse(start.status_code, _http_json(start))
+    start_payload = _http_json(start)
     task_id_raw = start_payload.get("task_id")
     assert isinstance(task_id_raw, str)
     task_id = task_id_raw
@@ -76,7 +82,7 @@ async def _apply_note(
     last: dict[str, object] = {}
     while time.monotonic() < deadline:
         tr = await crm_client.get(f"/crm/api/v1/tasks/{task_id}", headers=headers)
-        last = _json_object(tr.json())
+        last = _http_json(tr)
         status_raw = last.get("status")
         if status_raw in ("completed", "failed", "cancelled"):
             break
@@ -103,7 +109,7 @@ async def _analyze_note(
         headers=headers,
     )
     assert start.status_code == 202, start.text
-    start_payload = _json_object(start.json())
+    start_payload = _http_json(start)
     task_id_raw = start_payload.get("task_id")
     assert isinstance(task_id_raw, str)
     task_id = task_id_raw
@@ -112,18 +118,24 @@ async def _analyze_note(
     while time.monotonic() < deadline:
         tr = await crm_client.get(f"/crm/api/v1/tasks/{task_id}", headers=headers)
         assert tr.status_code == 200, tr.text
-        last = _json_object(tr.json())
+        last = _http_json(tr)
         status_raw = last.get("status")
         if status_raw in ("completed", "failed", "cancelled"):
             break
         await asyncio.sleep(0.4)
     assert last.get("status") == "completed", f"task failed: {last.get('error_message')}"
     nr = await crm_client.get(f"/crm/api/v1/entities/{note_id}", headers=headers)
-    note_payload = _json_object(nr.json())
+    note_payload = _http_json(nr)
     attributes_raw = note_payload.get("attributes")
-    attributes = object_dict(attributes_raw, field="attributes")
+    if isinstance(attributes_raw, dict):
+        attributes = object_dict(cast(object, attributes_raw), field="attributes")
+    else:
+        attributes = {}
     draft_raw = attributes.get("ai_analysis_draft")
-    draft: dict[str, object] = object_dict(draft_raw, field="ai_analysis_draft") if isinstance(draft_raw, dict) else {}
+    if isinstance(draft_raw, dict):
+        draft = object_dict(cast(object, draft_raw), field="ai_analysis_draft")
+    else:
+        draft = {}
 
     return last, _DraftResponse(nr.status_code, draft)
 
@@ -171,7 +183,7 @@ class TestAnalysisDraftPipeline:
             headers=auth_headers_system,
         )
         assert note_resp.status_code in (200, 201), note_resp.text
-        note_id = object_str(_json_object(note_resp.json()).get("entity_id"), field="entity_id")
+        note_id = object_str(_http_json(note_resp).get("entity_id"), field="entity_id")
 
         ivan = "Иван Иванов"
         petr = "Петр Петров"
@@ -243,7 +255,7 @@ class TestAnalysisDraftPipeline:
 
         stored = await crm_client.get(f"/crm/api/v1/entities/{note_id}", headers=auth_headers_system)
         assert stored.status_code == 200, stored.text
-        stored_payload = _json_object(stored.json())
+        stored_payload = _http_json(stored)
         attrs = object_dict(stored_payload.get("attributes"), field="attributes")
         draft = object_dict(attrs.get("ai_analysis_draft"), field="ai_analysis_draft")
         assert draft.get("draft_version") == 1
@@ -270,7 +282,7 @@ class TestAnalysisDraftPipeline:
             headers=auth_headers_system,
         )
         assert note_resp.status_code in (200, 201), note_resp.text
-        note_id = object_str(_json_object(note_resp.json()).get("entity_id"), field="entity_id")
+        note_id = object_str(_http_json(note_resp).get("entity_id"), field="entity_id")
 
         await mock_llm_redis(
             [
@@ -333,7 +345,7 @@ class TestAnalysisDraftPipeline:
             },
             headers=auth_headers_system,
         )
-        note_id = object_str(_json_object(note_resp.json()).get("entity_id"), field="entity_id")
+        note_id = object_str(_http_json(note_resp).get("entity_id"), field="entity_id")
 
         await mock_llm_redis(
             [
@@ -370,7 +382,7 @@ class TestAnalysisDraftPipeline:
         _ = await _analyze_note(crm_client, auth_headers_system, note_id)
 
         get1 = await crm_client.get(f"/crm/api/v1/entities/{note_id}", headers=auth_headers_system)
-        get1_payload = _json_object(get1.json())
+        get1_payload = _http_json(get1)
         draft1 = object_dict(
             object_dict(get1_payload.get("attributes"), field="attributes").get("ai_analysis_draft"),
             field="ai_analysis_draft",
@@ -399,7 +411,7 @@ class TestAnalysisDraftPipeline:
             headers=auth_headers_system,
         )
         assert patched.status_code == 200, patched.text
-        out = object_dict(_json_object(patched.json()), field="patched")
+        out = object_dict(_http_json(patched), field="patched")
         assert out.get("draft_version") == 2
         assert len(object_list(out.get("entities"))) == 1
 
@@ -422,7 +434,7 @@ class TestAnalysisDraftPipeline:
             },
             headers=auth_headers_system,
         )
-        note_id = object_str(_json_object(note_resp.json()).get("entity_id"), field="entity_id")
+        note_id = object_str(_http_json(note_resp).get("entity_id"), field="entity_id")
 
         contact = f"Контакт CRM {unique_id}"
         await mock_llm_redis(
@@ -468,14 +480,16 @@ class TestAnalysisDraftPipeline:
         assert apply_resp.status_code == 200, apply_resp.text
         result = apply_resp.json()
         task_data_raw = result.get("data")
-        task_data = task_data_raw if isinstance(task_data_raw, dict) else {}
+        if isinstance(task_data_raw, dict):
+            task_data = object_dict(cast(object, task_data_raw), field="data")
+        else:
+            task_data: dict[str, object] = {}
         assert task_data.get("result_entities_count") == 1
         assert task_data.get("result_relationships_count") == 1
 
         note_after = await crm_client.get(f"/crm/api/v1/entities/{note_id}", headers=auth_headers_system)
-        note_after_payload = _json_object(note_after.json())
-        note_after_attrs_raw = note_after_payload.get("attributes")
-        note_after_attrs = note_after_attrs_raw if isinstance(note_after_attrs_raw, dict) else {}
+        note_after_payload = _http_json(note_after)
+        note_after_attrs = object_dict(note_after_payload.get("attributes"), field="attributes")
         assert "ai_analysis_draft" not in note_after_attrs
 
         rels_resp = await crm_client.get(
@@ -483,7 +497,7 @@ class TestAnalysisDraftPipeline:
             headers=auth_headers_system,
         )
         assert rels_resp.status_code == 200, rels_resp.text
-        rels_payload = _json_object(rels_resp.json())
+        rels_payload = _http_json(rels_resp)
         rel_items = object_list(rels_payload.get("items"))
         mention_rels = [
             item
@@ -515,7 +529,7 @@ class TestAnalysisDraftPipeline:
             },
             headers=auth_headers_system,
         )
-        note_id = object_str(_json_object(note_resp.json()).get("entity_id"), field="entity_id")
+        note_id = object_str(_http_json(note_resp).get("entity_id"), field="entity_id")
 
         await mock_llm_redis(
             [
@@ -543,7 +557,7 @@ class TestAnalysisDraftPipeline:
             ]
         )
 
-        await _analyze_note(crm_client, auth_headers_system, note_id)
+        _ = await _analyze_note(crm_client, auth_headers_system, note_id)
 
         first = await _apply_note(crm_client, auth_headers_system, note_id)
         assert first.status_code == 200, first.text
@@ -583,7 +597,7 @@ class TestAnalysisDraftApplyPartialFailureCompensation:
             headers=auth_headers_system,
         )
         assert note_resp.status_code in (200, 201), note_resp.text
-        note_id = object_str(_json_object(note_resp.json()).get("entity_id"), field="entity_id")
+        note_id = object_str(_http_json(note_resp).get("entity_id"), field="entity_id")
 
         ok_name = f"OK_ROW_TASK_{unique_id}"
         fail_name = f"FAIL_ROW_CONTACT_{unique_id}"
@@ -616,12 +630,12 @@ class TestAnalysisDraftApplyPartialFailureCompensation:
             raise AssertionError(f"note {note_id} not found")
         attrs = dict(note_row.attributes or {})
         attrs["ai_analysis_draft"] = stored.model_dump(mode="json")
-        await entity_service.update_entity(note_id, {"attributes": attrs})
+        _ = await entity_service.update_entity(note_id, {"attributes": attrs})
 
-        orig = EntityService._persist_analysis_draft_entity_row
+        orig = EntityService._persist_analysis_draft_entity_row  # pyright: ignore[reportPrivateUsage]
 
         async def _patched(
-            self,
+            self: EntityService,
             ent: AIExtractedEntity,
             namespace: str,
             merge_target_locks: dict[str, asyncio.Lock],
@@ -634,7 +648,7 @@ class TestAnalysisDraftApplyPartialFailureCompensation:
         monkeypatch.setattr(EntityService, "_persist_analysis_draft_entity_row", _patched)
 
         with pytest.raises(ApplyAnalysisDraftEntityFailuresError) as exc_info:
-            await entity_service.apply_analysis_draft(note_id)
+            _ = await entity_service.apply_analysis_draft(note_id)
 
         failed = {f[0]: f for f in exc_info.value.failures}
         assert f"draft-fail-{unique_id}" in failed
@@ -646,7 +660,7 @@ class TestAnalysisDraftApplyPartialFailureCompensation:
         draft_after = object_dict(draft_raw, field="ai_analysis_draft")
         assert draft_after.get("draft_version") == 1
 
-        ok_task_filter = {"field": "name", "op": "$eq", "value": ok_name}
+        ok_task_filter: JsonObject = {"field": "name", "op": "$eq", "value": ok_name}
         ok_task_filter_types = await entity_service.resolve_filter_field_types(
             namespace="default",
             entity_type="task",
@@ -662,7 +676,7 @@ class TestAnalysisDraftApplyPartialFailureCompensation:
         )
         assert ok_tasks == []
 
-        fail_contact_filter = {"field": "name", "op": "$eq", "value": fail_name}
+        fail_contact_filter: JsonObject = {"field": "name", "op": "$eq", "value": fail_name}
         fail_contact_filter_types = await entity_service.resolve_filter_field_types(
             namespace="default",
             entity_type="contact",

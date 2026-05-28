@@ -10,22 +10,39 @@
 - Namespace template roundtrip для is_voice_target
 """
 
+from __future__ import annotations
+
+from typing import cast
+
 import pytest
+from httpx import AsyncClient, Response
+
+from tests.crm.e2e._json_helpers import json_object, object_list, object_str
 
 
-def _find_outgoing(rels: list, *, source_id: str, rel_type: str) -> dict | None:
-    for r in rels:
-        if not isinstance(r, dict):
-            continue
-        if r.get("source_entity_id") == source_id and r.get("relationship_type") == rel_type:
-            return r
+def _http_json(response: Response) -> dict[str, object]:
+    return json_object(cast(object, response.json()))
+
+
+def _find_outgoing(
+    rels: list[dict[str, object]],
+    *,
+    source_id: str,
+    rel_type: str,
+) -> dict[str, object] | None:
+    for rel in rels:
+        if rel.get("source_entity_id") == source_id and rel.get("relationship_type") == rel_type:
+            return rel
     return None
 
 
-async def _list_all_entity_types(crm_client, headers: dict) -> dict[str, dict]:
+async def _list_all_entity_types(
+    crm_client: AsyncClient,
+    headers: dict[str, str],
+) -> dict[str, dict[str, object]]:
     page_limit = 200
     offset = 0
-    by_id: dict[str, dict] = {}
+    by_id: dict[str, dict[str, object]] = {}
     while True:
         resp = await crm_client.get(
             "/crm/api/v1/entity-types/",
@@ -33,12 +50,11 @@ async def _list_all_entity_types(crm_client, headers: dict) -> dict[str, dict]:
             params={"limit": page_limit, "offset": offset, "namespace": "default"},
         )
         assert resp.status_code == 200
-        payload = resp.json()
-        items = payload.get("items") or []
+        payload = _http_json(resp)
+        items = object_list(payload.get("items"))
         for item in items:
-            type_id = item.get("type_id")
-            if isinstance(type_id, str) and type_id:
-                by_id[type_id] = item
+            type_id = object_str(item.get("type_id"), field="type_id")
+            by_id[type_id] = item
         if len(items) < page_limit:
             return by_id
         offset += page_limit
@@ -50,8 +66,8 @@ class TestSystemTypesFlags:
 
     @pytest.mark.asyncio
     async def test_system_types_include_member_company_namespace(
-        self, crm_client, auth_headers_system
-    ):
+        self, crm_client: AsyncClient, auth_headers_system: dict[str, str]
+    ) -> None:
         types_by_id = await _list_all_entity_types(crm_client, auth_headers_system)
 
         for type_id in ("member", "company", "namespace"):
@@ -64,16 +80,16 @@ class TestSystemTypesFlags:
 
     @pytest.mark.asyncio
     async def test_member_and_contact_are_voice_targets(
-        self, crm_client, auth_headers_system
-    ):
+        self, crm_client: AsyncClient, auth_headers_system: dict[str, str]
+    ) -> None:
         types_by_id = await _list_all_entity_types(crm_client, auth_headers_system)
         assert types_by_id["member"]["is_voice_target"] is True
         assert types_by_id["contact"]["is_voice_target"] is True
 
     @pytest.mark.asyncio
     async def test_non_voice_types_have_flag_false(
-        self, crm_client, auth_headers_system
-    ):
+        self, crm_client: AsyncClient, auth_headers_system: dict[str, str]
+    ) -> None:
         types_by_id = await _list_all_entity_types(crm_client, auth_headers_system)
         for type_id in ("note", "task", "namespace", "company"):
             assert types_by_id[type_id]["is_voice_target"] is False, (
@@ -87,8 +103,8 @@ class TestVoiceTargetAPI:
 
     @pytest.mark.asyncio
     async def test_create_entity_type_with_voice_target_flag(
-        self, crm_client, auth_headers_system, unique_id
-    ):
+        self, crm_client: AsyncClient, auth_headers_system: dict[str, str], unique_id: str
+    ) -> None:
         type_id = f"vt_create_{unique_id}"
         resp = await crm_client.post(
             "/crm/api/v1/entity-types/",
@@ -101,7 +117,7 @@ class TestVoiceTargetAPI:
             headers=auth_headers_system,
         )
         assert resp.status_code == 200
-        body = resp.json()
+        body = _http_json(resp)
         assert body["is_voice_target"] is True
 
         get_resp = await crm_client.get(
@@ -110,14 +126,14 @@ class TestVoiceTargetAPI:
             params={"namespace": "default"},
         )
         assert get_resp.status_code == 200
-        assert get_resp.json()["is_voice_target"] is True
+        assert _http_json(get_resp)["is_voice_target"] is True
 
     @pytest.mark.asyncio
     async def test_update_entity_type_voice_target_flag(
-        self, crm_client, auth_headers_system, unique_id
-    ):
+        self, crm_client: AsyncClient, auth_headers_system: dict[str, str], unique_id: str
+    ) -> None:
         type_id = f"vt_upd_{unique_id}"
-        await crm_client.post(
+        _ = await crm_client.post(
             "/crm/api/v1/entity-types/",
             json={
                 "type_id": type_id,
@@ -135,22 +151,22 @@ class TestVoiceTargetAPI:
             headers=auth_headers_system,
         )
         assert upd_resp.status_code == 200
-        assert upd_resp.json()["is_voice_target"] is True
+        assert _http_json(upd_resp)["is_voice_target"] is True
 
         get_resp = await crm_client.get(
             f"/crm/api/v1/entity-types/{type_id}",
             headers=auth_headers_system,
             params={"namespace": "default"},
         )
-        assert get_resp.json()["is_voice_target"] is True
+        assert _http_json(get_resp)["is_voice_target"] is True
 
     @pytest.mark.asyncio
     async def test_voice_entity_must_have_voice_target_flag(
-        self, crm_client, auth_headers_system, unique_id
-    ):
+        self, crm_client: AsyncClient, auth_headers_system: dict[str, str], unique_id: str
+    ) -> None:
         """Тип без is_voice_target=True не может быть голосом заметки."""
         type_id = f"novt_{unique_id}"
-        await crm_client.post(
+        _ = await crm_client.post(
             "/crm/api/v1/entity-types/",
             json={
                 "type_id": type_id,
@@ -171,7 +187,7 @@ class TestVoiceTargetAPI:
             headers=auth_headers_system,
         )
         assert ent_resp.status_code == 200
-        ent_id = ent_resp.json()["entity_id"]
+        ent_id = object_str(_http_json(ent_resp).get("entity_id"), field="entity_id")
 
         note_resp = await crm_client.post(
             "/crm/api/v1/entities/",
@@ -187,11 +203,11 @@ class TestVoiceTargetAPI:
 
     @pytest.mark.asyncio
     async def test_custom_voice_target_type_accepted(
-        self, crm_client, auth_headers_system, unique_id
-    ):
+        self, crm_client: AsyncClient, auth_headers_system: dict[str, str], unique_id: str
+    ) -> None:
         """Кастомный тип с is_voice_target=True допустим как голос заметки."""
         type_id = f"custom_vt_{unique_id}"
-        await crm_client.post(
+        _ = await crm_client.post(
             "/crm/api/v1/entity-types/",
             json={
                 "type_id": type_id,
@@ -212,7 +228,7 @@ class TestVoiceTargetAPI:
             headers=auth_headers_system,
         )
         assert voice_resp.status_code == 200
-        voice_id = voice_resp.json()["entity_id"]
+        voice_id = object_str(_http_json(voice_resp).get("entity_id"), field="entity_id")
 
         note_resp = await crm_client.post(
             "/crm/api/v1/entities/",
@@ -225,14 +241,14 @@ class TestVoiceTargetAPI:
             headers=auth_headers_system,
         )
         assert note_resp.status_code == 200
-        note_id = note_resp.json()["entity_id"]
+        note_id = object_str(_http_json(note_resp).get("entity_id"), field="entity_id")
 
         rel_resp = await crm_client.get(
             f"/crm/api/v1/entities/{note_id}/relationships",
             headers=auth_headers_system,
         )
         assert rel_resp.status_code == 200
-        rels = rel_resp.json().get("relationships") or []
+        rels = object_list(_http_json(rel_resp).get("relationships"))
         v = _find_outgoing(rels, source_id=note_id, rel_type="note_voice")
         assert v is not None
         assert v["target_entity_id"] == voice_id
@@ -244,9 +260,9 @@ class TestPersonEntityMember:
 
     @pytest.mark.asyncio
     async def test_person_entity_self_returns_member(
-        self, crm_client, auth_headers_system, unique_id
-    ):
-        await crm_client.put(
+        self, crm_client: AsyncClient, auth_headers_system: dict[str, str], unique_id: str
+    ) -> None:
+        _ = await crm_client.put(
             "/crm/api/auth/me",
             json={
                 "first_name": "Тестимя",
@@ -259,17 +275,17 @@ class TestPersonEntityMember:
             headers=auth_headers_system,
         )
         assert resp.status_code == 200
-        body = resp.json()
+        body = _http_json(resp)
         assert body["entity_type"] == "member"
         assert "entity_id" in body
         assert body["namespace"] == "default"
 
     @pytest.mark.asyncio
     async def test_member_voice_on_note(
-        self, crm_client, auth_headers_system, unique_id
-    ):
+        self, crm_client: AsyncClient, auth_headers_system: dict[str, str], unique_id: str
+    ) -> None:
         """member-сущность платформенного юзера может быть голосом заметки."""
-        await crm_client.put(
+        _ = await crm_client.put(
             "/crm/api/auth/me",
             json={
                 "first_name": "Автор",
@@ -282,7 +298,7 @@ class TestPersonEntityMember:
             headers=auth_headers_system,
         )
         assert person_resp.status_code == 200
-        member_id = person_resp.json()["entity_id"]
+        member_id = object_str(_http_json(person_resp).get("entity_id"), field="entity_id")
 
         note_resp = await crm_client.post(
             "/crm/api/v1/entities/",
@@ -295,14 +311,14 @@ class TestPersonEntityMember:
             headers=auth_headers_system,
         )
         assert note_resp.status_code == 200
-        note_id = note_resp.json()["entity_id"]
+        note_id = object_str(_http_json(note_resp).get("entity_id"), field="entity_id")
 
         rel_resp = await crm_client.get(
             f"/crm/api/v1/entities/{note_id}/relationships",
             headers=auth_headers_system,
         )
         assert rel_resp.status_code == 200
-        rels = rel_resp.json().get("relationships") or []
+        rels = object_list(_http_json(rel_resp).get("relationships"))
         v = _find_outgoing(rels, source_id=note_id, rel_type="note_voice")
         assert v is not None
         assert v["target_entity_id"] == member_id
@@ -314,8 +330,8 @@ class TestNamespaceTemplateVoiceTarget:
 
     @pytest.mark.asyncio
     async def test_namespace_template_type_voice_target_roundtrip(
-        self, crm_client, auth_headers_system, unique_id
-    ):
+        self, crm_client: AsyncClient, auth_headers_system: dict[str, str], unique_id: str
+    ) -> None:
         template_id = f"tmpl_vt_{unique_id}"
         r = await crm_client.post(
             "/crm/api/v1/namespaces/templates",
@@ -341,35 +357,37 @@ class TestNamespaceTemplateVoiceTarget:
             headers=auth_headers_system,
         )
         assert r.status_code == 201
-        assert r.json()["is_voice_target"] is True
+        assert _http_json(r)["is_voice_target"] is True
 
         details_resp = await crm_client.get(
             f"/crm/api/v1/namespaces/templates/{template_id}",
             headers=auth_headers_system,
         )
         assert details_resp.status_code == 200
-        details = details_resp.json()
-        speaker_type = next(
-            (t for t in details["types"] if t["type_id"] == type_id),
-            None,
-        )
+        details = _http_json(details_resp)
+        template_types = object_list(details.get("types"))
+        speaker_type: dict[str, object] | None = None
+        for template_type in template_types:
+            if object_str(template_type.get("type_id"), field="type_id") == type_id:
+                speaker_type = template_type
+                break
         assert speaker_type is not None
         assert speaker_type["is_voice_target"] is True
 
     @pytest.mark.asyncio
     async def test_namespace_from_template_materializes_voice_target(
-        self, crm_client, auth_headers_system, unique_id
-    ):
+        self, crm_client: AsyncClient, auth_headers_system: dict[str, str], unique_id: str
+    ) -> None:
         """Тип с is_voice_target=True из шаблона материализуется в EntityType."""
         template_id = f"tmpl_mat_vt_{unique_id}"
-        await crm_client.post(
+        _ = await crm_client.post(
             "/crm/api/v1/namespaces/templates",
             json={"template_id": template_id, "name": f"Mat {unique_id}"},
             headers=auth_headers_system,
         )
 
         type_id = f"narrator_{unique_id}"
-        await crm_client.post(
+        _ = await crm_client.post(
             f"/crm/api/v1/namespaces/templates/{template_id}/types",
             json={
                 "type_id": type_id,
@@ -400,4 +418,4 @@ class TestNamespaceTemplateVoiceTarget:
             params={"namespace": ns_name},
         )
         assert et_resp.status_code == 200
-        assert et_resp.json()["is_voice_target"] is True
+        assert _http_json(et_resp)["is_voice_target"] is True

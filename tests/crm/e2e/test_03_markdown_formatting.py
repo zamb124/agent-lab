@@ -4,14 +4,36 @@
 User Story: Форматирование текста как в markdown для читабельности заметок.
 """
 
+from typing import cast
+
 import pytest
+from httpx import AsyncClient, Response
+
+from tests.crm.e2e._json_helpers import json_object, object_str
+
+
+def _http_json(response: Response) -> dict[str, object]:
+    return json_object(cast(object, response.json()))
+
+
+def _entity_id(response: Response) -> str:
+    return object_str(_http_json(response).get("entity_id"), field="entity_id")
+
+
+def _entity_description(response: Response) -> str:
+    return object_str(_http_json(response).get("description"), field="description")
 
 
 class TestMarkdownFormatting:
     """Поддержка Markdown в description"""
 
     @pytest.mark.asyncio
-    async def test_markdown_in_description(self, crm_client, unique_id, auth_headers_system):
+    async def test_markdown_in_description(
+        self,
+        crm_client: AsyncClient,
+        unique_id: str,
+        auth_headers_system: dict[str, str],
+    ) -> None:
         """Markdown сохраняется и возвращается без изменений"""
         markdown_text = """# Заголовок встречи
 
@@ -37,17 +59,22 @@ def hello():
             "entity_type": "note",
             "entity_subtype": "meeting",
             "name": f"Markdown заметка {unique_id}",
-            "description": markdown_text
+            "description": markdown_text,
         }, headers=auth_headers_system)
         assert response.status_code == 200
-        entity_id = response.json()["entity_id"]
+        entity_id = _entity_id(response)
 
         get_resp = await crm_client.get(f"/crm/api/v1/entities/{entity_id}", headers=auth_headers_system)
-        retrieved = get_resp.json()
-        assert retrieved["description"] == markdown_text
+        retrieved_description = _entity_description(get_resp)
+        assert retrieved_description == markdown_text
 
     @pytest.mark.asyncio
-    async def test_markdown_with_links(self, crm_client, unique_id, auth_headers_system):
+    async def test_markdown_with_links(
+        self,
+        crm_client: AsyncClient,
+        unique_id: str,
+        auth_headers_system: dict[str, str],
+    ) -> None:
         """Markdown ссылки сохраняются"""
         markdown_text = """Полезные ссылки:
 - [Документация](https://docs.example.com)
@@ -57,17 +84,22 @@ def hello():
         response = await crm_client.post("/crm/api/v1/entities/", json={
             "entity_type": "note",
             "name": f"Заметка со ссылками {unique_id}",
-            "description": markdown_text
+            "description": markdown_text,
         }, headers=auth_headers_system)
-        entity_id = response.json()["entity_id"]
+        entity_id = _entity_id(response)
 
         get_resp = await crm_client.get(f"/crm/api/v1/entities/{entity_id}", headers=auth_headers_system)
-        retrieved = get_resp.json()
-        assert "[Документация]" in retrieved["description"]
-        assert "https://docs.example.com" in retrieved["description"]
+        retrieved_description = _entity_description(get_resp)
+        assert "[Документация]" in retrieved_description
+        assert "https://docs.example.com" in retrieved_description
 
     @pytest.mark.asyncio
-    async def test_markdown_tables(self, crm_client, unique_id, auth_headers_system):
+    async def test_markdown_tables(
+        self,
+        crm_client: AsyncClient,
+        unique_id: str,
+        auth_headers_system: dict[str, str],
+    ) -> None:
         """Markdown таблицы сохраняются"""
         markdown_text = """| Задача | Исполнитель | Срок |
 |--------|-------------|------|
@@ -78,17 +110,22 @@ def hello():
         response = await crm_client.post("/crm/api/v1/entities/", json={
             "entity_type": "note",
             "name": f"Заметка с таблицей {unique_id}",
-            "description": markdown_text
+            "description": markdown_text,
         }, headers=auth_headers_system)
-        entity_id = response.json()["entity_id"]
+        entity_id = _entity_id(response)
 
         get_resp = await crm_client.get(f"/crm/api/v1/entities/{entity_id}", headers=auth_headers_system)
-        retrieved = get_resp.json()
-        assert "| Задача |" in retrieved["description"]
-        assert "Дизайн" in retrieved["description"]
+        retrieved_description = _entity_description(get_resp)
+        assert "| Задача |" in retrieved_description
+        assert "Дизайн" in retrieved_description
 
     @pytest.mark.asyncio
-    async def test_markdown_code_blocks(self, crm_client, unique_id, auth_headers_system):
+    async def test_markdown_code_blocks(
+        self,
+        crm_client: AsyncClient,
+        unique_id: str,
+        auth_headers_system: dict[str, str],
+    ) -> None:
         """Блоки кода сохраняются"""
         markdown_text = """Пример кода:
 
@@ -109,18 +146,23 @@ def get_data():
         response = await crm_client.post("/crm/api/v1/entities/", json={
             "entity_type": "note",
             "name": f"Заметка с кодом {unique_id}",
-            "description": markdown_text
+            "description": markdown_text,
         }, headers=auth_headers_system)
-        entity_id = response.json()["entity_id"]
+        entity_id = _entity_id(response)
 
         get_resp = await crm_client.get(f"/crm/api/v1/entities/{entity_id}", headers=auth_headers_system)
-        retrieved = get_resp.json()
-        assert "```javascript" in retrieved["description"]
-        assert "async function" in retrieved["description"]
-        assert "```python" in retrieved["description"]
+        retrieved_description = _entity_description(get_resp)
+        assert "```javascript" in retrieved_description
+        assert "async function" in retrieved_description
+        assert "```python" in retrieved_description
 
     @pytest.mark.asyncio
-    async def test_markdown_mixed_formatting(self, crm_client, unique_id, auth_headers_system):
+    async def test_markdown_mixed_formatting(
+        self,
+        crm_client: AsyncClient,
+        unique_id: str,
+        auth_headers_system: dict[str, str],
+    ) -> None:
         """Смешанное форматирование"""
         markdown_text = """# Отчет о встрече
 
@@ -147,13 +189,12 @@ def get_data():
             "entity_type": "note",
             "entity_subtype": "meeting",
             "name": f"Сложная заметка {unique_id}",
-            "description": markdown_text
+            "description": markdown_text,
         }, headers=auth_headers_system)
-        entity_id = response.json()["entity_id"]
+        entity_id = _entity_id(response)
 
         get_resp = await crm_client.get(f"/crm/api/v1/entities/{entity_id}", headers=auth_headers_system)
-        retrieved = get_resp.json()
-        assert "# Отчет о встрече" in retrieved["description"]
-        assert "**Дата:**" in retrieved["description"]
-        assert "> Важно" in retrieved["description"]
-
+        retrieved_description = _entity_description(get_resp)
+        assert "# Отчет о встрече" in retrieved_description
+        assert "**Дата:**" in retrieved_description
+        assert "> Важно" in retrieved_description

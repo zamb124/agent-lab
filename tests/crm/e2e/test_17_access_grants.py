@@ -8,12 +8,25 @@ E2E тесты для системы AccessGrants.
 4. Отзыв grants
 """
 
+from typing import cast
+
 import pytest
-from httpx import AsyncClient
+from httpx import AsyncClient, Response
+
+from core.utils.tokens import get_token_service
+from tests.crm.e2e._json_helpers import json_object, object_str
+
+
+def _http_json(response: Response) -> dict[str, object]:
+    return json_object(cast(object, response.json()))
 
 
 @pytest.mark.asyncio
-async def test_01_entity_public_grant(crm_client: AsyncClient, auth_headers_system, auth_headers_company2):
+async def test_01_entity_public_grant(
+    crm_client: AsyncClient,
+    auth_headers_system: dict[str, str],
+    auth_headers_company2: dict[str, str],
+) -> None:
     """
     Тест 1: Сделать entity публичной
 
@@ -22,68 +35,68 @@ async def test_01_entity_public_grant(crm_client: AsyncClient, auth_headers_syst
     3. User из другой компании получает доступ с фильтрацией полей
     """
 
-    # 1. System user создает entity
     entity_data = {
         "entity_type": "note",
         "name": "Secret Meeting Notes",
         "description": "Confidential information about project X",
         "attributes": {
             "location": "Office 42",
-            "participants": ["Alice", "Bob"]
+            "participants": ["Alice", "Bob"],
         },
-        "tags": ["meeting", "confidential"]
+        "tags": ["meeting", "confidential"],
     }
 
     create_response = await crm_client.post(
         "/crm/api/v1/entities/",
         json=entity_data,
-        headers=auth_headers_system
+        headers=auth_headers_system,
     )
     assert create_response.status_code == 200
-    entity = create_response.json()
-    entity_id = entity["entity_id"]
+    entity = _http_json(create_response)
+    entity_id = object_str(entity.get("entity_id"), field="entity_id")
 
     print(f"✅ Entity created by system user: {entity_id}")
 
-    # 2. Делаем публичной
     grant_response = await crm_client.post(
         f"/crm/api/v1/entities/{entity_id}/grants/public",
-        headers=auth_headers_system
+        headers=auth_headers_system,
     )
     assert grant_response.status_code == 200
-    grant = grant_response.json()
+    grant = _http_json(grant_response)
 
-    assert grant["grant_type"] == "public"
-    assert grant["resource_type"] == "entity"
-    assert grant["resource_id"] == entity_id
-    assert grant["role"] == "viewer"
+    assert object_str(grant.get("grant_type"), field="grant_type") == "public"
+    assert object_str(grant.get("resource_type"), field="resource_type") == "entity"
+    assert object_str(grant.get("resource_id"), field="resource_id") == entity_id
+    assert object_str(grant.get("role"), field="role") == "viewer"
 
-    print(f"✅ Public grant created: {grant['grant_id']}")
+    print(f"✅ Public grant created: {object_str(grant.get('grant_id'), field='grant_id')}")
 
-    # 3. User из другой компании получает доступ с фильтрацией полей
     get_response = await crm_client.get(
         f"/crm/api/v1/entities/{entity_id}",
-        headers=auth_headers_company2  # User из company2
+        headers=auth_headers_company2,
     )
     assert get_response.status_code == 200
-    public_entity = get_response.json()
+    public_entity = _http_json(get_response)
 
-    # Проверяем что получили только публичные поля
     assert "entity_id" in public_entity
     assert "entity_type" in public_entity
     assert "name" in public_entity
     assert "tags" in public_entity
 
-    # Конфиденциальные поля должны быть скрыты
-    # (description не в public_fields для note по умолчанию)
-    assert "description" not in public_entity or public_entity["description"] is None
+    description = public_entity.get("description")
+    assert "description" not in public_entity or description is None
 
     print("✅ Company2 user access works with filtered fields")
     print(f"   Public fields: {list(public_entity.keys())}")
 
 
 @pytest.mark.asyncio
-async def test_02_entity_user_grant(crm_client: AsyncClient, auth_headers_system, auth_headers_company2, auth_headers_company2_user2):
+async def test_02_entity_user_grant(
+    crm_client: AsyncClient,
+    auth_headers_system: dict[str, str],
+    auth_headers_company2: dict[str, str],
+    auth_headers_company2_user2: dict[str, str],
+) -> None:
     """
     Тест 2: Пошерить entity конкретному user
 
@@ -93,73 +106,69 @@ async def test_02_entity_user_grant(crm_client: AsyncClient, auth_headers_system
     4. Company2 user2 НЕ получает доступ (не шарили ему)
     """
 
-    # Получаем user_id из токена company2 user
-    from core.utils.tokens import get_token_service
     token_service = get_token_service()
-    token_company2 = auth_headers_company2["Authorization"].replace("Bearer ", "")
+    authorization = auth_headers_company2["Authorization"]
+    token_company2 = authorization.removeprefix("Bearer ")
     payload_company2 = token_service.validate_token(token_company2)
     if payload_company2 is None:
         raise AssertionError("auth_headers_company2: невалидный JWT")
     user_b_id = payload_company2.user_id
 
-    # 1. System user создает entity
     entity_data = {
         "entity_type": "task",
         "name": "Project Alpha",
         "description": "Top secret project",
-        "attributes": {"priority": "high"}
+        "attributes": {"priority": "high"},
     }
 
     create_response = await crm_client.post(
         "/crm/api/v1/entities/",
         json=entity_data,
-        headers=auth_headers_system
+        headers=auth_headers_system,
     )
     assert create_response.status_code == 200
-    entity_id = create_response.json()["entity_id"]
+    entity_id = object_str(
+        _http_json(create_response).get("entity_id"),
+        field="entity_id",
+    )
 
     print(f"✅ Entity created by system user: {entity_id}")
 
-    # 2. System user шарит company2 user с правами editor
     grant_request = {
         "user_id": user_b_id,
-        "role": "editor"
+        "role": "editor",
     }
 
     grant_response = await crm_client.post(
         f"/crm/api/v1/entities/{entity_id}/grants/user",
         json=grant_request,
-        headers=auth_headers_system
+        headers=auth_headers_system,
     )
     assert grant_response.status_code == 200
-    grant = grant_response.json()
+    grant = _http_json(grant_response)
 
-    assert grant["grant_type"] == "user"
-    assert grant["target_user_id"] == user_b_id
-    assert grant["role"] == "editor"
+    assert object_str(grant.get("grant_type"), field="grant_type") == "user"
+    assert object_str(grant.get("target_user_id"), field="target_user_id") == user_b_id
+    assert object_str(grant.get("role"), field="role") == "editor"
 
-    print(f"✅ Grant created for company2 user: {grant['grant_id']}")
+    print(f"✅ Grant created for company2 user: {object_str(grant.get('grant_id'), field='grant_id')}")
 
-    # 3. Company2 user получает полный доступ
     get_b_response = await crm_client.get(
         f"/crm/api/v1/entities/{entity_id}",
-        headers=auth_headers_company2
+        headers=auth_headers_company2,
     )
     assert get_b_response.status_code == 200
-    entity_b = get_b_response.json()
+    entity_b = _http_json(get_b_response)
 
-    # Company2 user видит все поля (т.к. есть user grant)
-    assert entity_b["name"] == "Project Alpha"
-    assert entity_b["description"] == "Top secret project"
+    assert object_str(entity_b.get("name"), field="name") == "Project Alpha"
+    assert object_str(entity_b.get("description"), field="description") == "Top secret project"
 
     print("✅ Company2 user has full access")
 
-    # 4. Company2 user2 НЕ получает доступ (grant только для user1)
     get_c_response = await crm_client.get(
         f"/crm/api/v1/entities/{entity_id}",
-        headers=auth_headers_company2_user2
+        headers=auth_headers_company2_user2,
     )
     assert get_c_response.status_code == 403
 
     print("✅ Company2 user2 denied access (as expected)")
-

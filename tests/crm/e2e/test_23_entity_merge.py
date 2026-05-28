@@ -2,19 +2,36 @@
 Слияние двух сущностей: перенос связей на survivor, удаление source.
 """
 
+from typing import cast
+
 import pytest
+from httpx import AsyncClient, Response
+
+from tests.crm.e2e._json_helpers import json_object, object_dict, object_list, object_str
 
 pytestmark = pytest.mark.timeout(20, func_only=True)
+
+
+def _http_json(response: Response) -> dict[str, object]:
+    return json_object(cast(object, response.json()))
+
+
+def _entity_id(response: Response) -> str:
+    return object_str(_http_json(response).get("entity_id"), field="entity_id")
+
+
+def _relationship_rows(response: Response) -> list[dict[str, object]]:
+    return object_list(_http_json(response).get("relationships"))
 
 
 class TestEntityMerge:
     @pytest.mark.asyncio
     async def test_merge_rewires_relationships_to_survivor(
         self,
-        crm_client,
-        unique_id,
-        auth_headers_system,
-    ):
+        crm_client: AsyncClient,
+        unique_id: str,
+        auth_headers_system: dict[str, str],
+    ) -> None:
         a_resp = await crm_client.post(
             "/crm/api/v1/entities/",
             json={
@@ -24,7 +41,7 @@ class TestEntityMerge:
             headers=auth_headers_system,
         )
         assert a_resp.status_code == 200
-        a_id = a_resp.json()["entity_id"]
+        a_id = _entity_id(a_resp)
 
         b_resp = await crm_client.post(
             "/crm/api/v1/entities/",
@@ -35,7 +52,7 @@ class TestEntityMerge:
             headers=auth_headers_system,
         )
         assert b_resp.status_code == 200
-        b_id = b_resp.json()["entity_id"]
+        b_id = _entity_id(b_resp)
 
         x_resp = await crm_client.post(
             "/crm/api/v1/entities/",
@@ -46,7 +63,7 @@ class TestEntityMerge:
             headers=auth_headers_system,
         )
         assert x_resp.status_code == 200
-        x_id = x_resp.json()["entity_id"]
+        x_id = _entity_id(x_resp)
 
         rel_resp = await crm_client.post(
             "/crm/api/v1/relationships/",
@@ -70,10 +87,11 @@ class TestEntityMerge:
             headers=auth_headers_system,
         )
         assert merge_resp.status_code == 200, merge_resp.text
-        payload = merge_resp.json()
-        assert payload["entity"]["entity_id"] == a_id
-        assert payload["entity"]["name"] == f"MergeA {unique_id}"
-        assert payload["merged_from_entity_id"] == b_id
+        payload = _http_json(merge_resp)
+        entity = object_dict(payload.get("entity"), field="entity")
+        assert object_str(entity.get("entity_id"), field="entity_id") == a_id
+        assert object_str(entity.get("name"), field="name") == f"MergeA {unique_id}"
+        assert object_str(payload.get("merged_from_entity_id"), field="merged_from_entity_id") == b_id
 
         gone = await crm_client.get(f"/crm/api/v1/entities/{b_id}", headers=auth_headers_system)
         assert gone.status_code == 404
@@ -83,17 +101,23 @@ class TestEntityMerge:
             headers=auth_headers_system,
         )
         assert rels_a.status_code == 200
-        rel_list = rels_a.json()["relationships"]
-        targets_from_a = {r["target_entity_id"] for r in rel_list if r["source_entity_id"] == a_id}
+        rel_list = _relationship_rows(rels_a)
+        targets_from_a: set[str] = set()
+        for rel_row in rel_list:
+            source_id = object_str(rel_row.get("source_entity_id"), field="source_entity_id")
+            if source_id == a_id:
+                targets_from_a.add(
+                    object_str(rel_row.get("target_entity_id"), field="target_entity_id")
+                )
         assert x_id in targets_from_a
 
     @pytest.mark.asyncio
     async def test_merge_allows_different_entity_type_survivor_type_kept(
         self,
-        crm_client,
-        unique_id,
-        auth_headers_system,
-    ):
+        crm_client: AsyncClient,
+        unique_id: str,
+        auth_headers_system: dict[str, str],
+    ) -> None:
         contact_resp = await crm_client.post(
             "/crm/api/v1/entities/",
             json={
@@ -103,7 +127,7 @@ class TestEntityMerge:
             headers=auth_headers_system,
         )
         assert contact_resp.status_code == 200
-        contact_id = contact_resp.json()["entity_id"]
+        contact_id = _entity_id(contact_resp)
 
         task_resp = await crm_client.post(
             "/crm/api/v1/entities/",
@@ -114,7 +138,7 @@ class TestEntityMerge:
             headers=auth_headers_system,
         )
         assert task_resp.status_code == 200
-        task_id = task_resp.json()["entity_id"]
+        task_id = _entity_id(task_resp)
 
         merge_resp = await crm_client.post(
             "/crm/api/v1/entities/merge",
@@ -127,10 +151,11 @@ class TestEntityMerge:
             headers=auth_headers_system,
         )
         assert merge_resp.status_code == 200, merge_resp.text
-        payload = merge_resp.json()
-        assert payload["entity"]["entity_id"] == contact_id
-        assert payload["entity"]["entity_type"] == "contact"
-        assert payload["merged_from_entity_id"] == task_id
+        payload = _http_json(merge_resp)
+        entity = object_dict(payload.get("entity"), field="entity")
+        assert object_str(entity.get("entity_id"), field="entity_id") == contact_id
+        assert object_str(entity.get("entity_type"), field="entity_type") == "contact"
+        assert object_str(payload.get("merged_from_entity_id"), field="merged_from_entity_id") == task_id
 
         gone = await crm_client.get(f"/crm/api/v1/entities/{task_id}", headers=auth_headers_system)
         assert gone.status_code == 404
