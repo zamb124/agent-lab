@@ -66,6 +66,7 @@ on:
 
 env:
   IMAGE: ghcr.io/${{ github.repository_owner }}/agent-lab
+  IMAGE_GPU: ghcr.io/${{ github.repository_owner }}/agent-lab-gpu
   K8S_NAMESPACE: platform
   K8S_RELEASE: agent-lab
   HELM_CHART: ./deploy/helm/agent-lab
@@ -132,6 +133,29 @@ jobs:
           labels: ${{ steps.meta.outputs.labels }}
           cache-from: type=gha
           cache-to: type=gha,mode=min
+
+      # GPU image для provider-litserve. Базовый агент-стек 3.14t несовместим с
+      # torchaudio.abi3.so из GIL-build (PEP 703). Этот образ FROM agent-lab-base-gpu
+      # (Python 3.14 GIL build) с тем же кодом и подключается в Helm через litserve.image.
+      - name: Docker metadata (GPU)
+        id: meta_gpu
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.IMAGE_GPU }}
+          tags: |
+            type=sha,prefix=,format=short
+            type=raw,value=latest,enable={{is_default_branch}}
+
+      - name: Build and push GPU image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: Dockerfile.gpu
+          push: true
+          tags: ${{ steps.meta_gpu.outputs.tags }}
+          labels: ${{ steps.meta_gpu.outputs.labels }}
+          cache-from: type=gha,scope=gpu
+          cache-to: type=gha,scope=gpu,mode=min
 
   deploy:
     name: Deploy to Kubernetes
@@ -353,6 +377,7 @@ jobs:
             --values "$HELM_CHART/values.yaml" \
             --values "$HELM_CHART/values-prod.yaml" \
             --set image.tag="${{ steps.tag.outputs.image_tag }}" \
+            --set litserve.image="${IMAGE_GPU}:${{ steps.tag.outputs.image_tag }}" \
             $NODE_SETS \
             --set-json "platformSecrets=$(bash deploy/scripts/helm_platform_secrets_json.sh)" \
             --wait --timeout 60m

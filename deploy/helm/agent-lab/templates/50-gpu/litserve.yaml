@@ -61,7 +61,11 @@ spec:
 {{- end }}
       containers:
         - name: litserve
-          image: {{ include "agentlab.image" . }}
+          # GPU image на Python 3.14 GIL (отдельный от общего 3.14t-стека).
+          # См. values.yaml::litserve.image и Dockerfile.gpu. Если значение пустое —
+          # фолбэк на общий agent-lab image (для локальной отладки без CI; в прод
+          # CI всегда передаёт --set litserve.image=ghcr.io/<owner>/agent-lab-gpu:<sha>).
+          image: {{ default (include "agentlab.image" .) .Values.litserve.image | quote }}
           imagePullPolicy: {{ .Values.image.pullPolicy }}
           command:
             - granian

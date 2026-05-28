@@ -624,6 +624,13 @@ workers:
 
 litserve:
   enabled: true
+  # ВАЖНО: provider-litserve использует ОТДЕЛЬНЫЙ image на Python 3.14 (GIL build),
+  # потому что torchaudio (через silero_vad), torch+CUDA, transformers и пр.
+  # пока НЕ публикуют cp314t wheels (free-threaded ABI). Stable-ABI .so из GIL-build
+  # физически не загружается в free-threaded интерпретатор (PEP 703).
+  # Главный image платформы остаётся на 3.14t. См. .cursor/rules/infrastructure.mdc
+  # раздел "ML GIL resurrection" и Dockerfile.gpu / Dockerfile.base.gpu.
+  image: ""  # переопределяется в .github/workflows/deploy.yml через --set litserve.image=...
   # Целевая нода. gpu-worker → toleration dedicated=gpu:NoSchedule + nvidia.com/gpu resource.
   # master → CPU-режим (без GPU resource). auto → шедулер сам выбирает.
   nodeName: gpu-worker

@@ -1,0 +1,23 @@
+# GPU/ML image для provider-litserve (и других сервисов, требующих GIL-build
+# torchaudio / pyannote / silero). FROM agent-lab-base-gpu (Python 3.14 GIL).
+#
+# Главный платформенный образ платформы (ghcr.io/zamb124/agent-lab) — на 3.14t
+# free-threaded. Этот GPU-образ существует ТОЛЬКО потому, что torchaudio пока
+# не публикует cp314t wheels (PEP 703 stable-ABI). После того как pytorch/audio
+# выпустят cp314t wheels — этот файл и базу можно удалить, вернув provider-litserve
+# на общий image.
+
+ARG BASE_GPU_IMAGE=ghcr.io/zamb124/agent-lab-base-gpu:latest
+FROM ${BASE_GPU_IMAGE} AS base-with-core
+
+ENV PYTHONUNBUFFERED=1
+ENV PYTHONDONTWRITEBYTECODE=1
+WORKDIR /app
+
+COPY core/ ./core/
+COPY apps/ ./apps/
+COPY scripts/ ./scripts/
+COPY migrations/ ./migrations/
+
+EXPOSE 8014
+CMD ["granian", "--interface", "asgi", "apps.provider_litserve.main:app", "--host", "0.0.0.0", "--port", "8014", "--http", "auto", "--ws"]
