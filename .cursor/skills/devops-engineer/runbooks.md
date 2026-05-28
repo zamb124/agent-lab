@@ -158,6 +158,47 @@ kubectl -n platform scale deployment provider-litserve --replicas=1
 make k8s-health
 ```
 
+## 7a. Замена GPU-ноды на новую машину (тот же hostname)
+
+Сценарий: у хостера новый сервер с GPU, hostname в кластере оставляем `gpu-worker` (чтобы `values.yaml: nodeName: gpu-worker` подхватился без правки чарта).
+
+```bash
+# 1. Эвакуация: scale до 0 GPU-сервисы, чтобы дрейн прошёл быстро.
+kubectl -n platform scale deployment provider-litserve voice --replicas=0
+
+# 2. На master: убрать старую ноду из кластера.
+ssh root@84.38.184.105 'microk8s kubectl cordon gpu-worker; \
+  microk8s kubectl drain gpu-worker --ignore-daemonsets --delete-emptydir-data --force --timeout=5m; \
+  microk8s kubectl delete node gpu-worker; \
+  microk8s remove-node gpu-worker --force'
+
+# 3. На новой машине положить bootstrap-скрипты (с master, репо приватный):
+ssh root@84.38.184.105 'tar czf /tmp/agent-lab-scripts.tgz -C /root/agent-lab-deploy scripts/ && \
+  scp /tmp/agent-lab-scripts.tgz root@<NEW_IP>:/root/'
+ssh root@<NEW_IP> 'mkdir -p /root/agent-lab-deploy && cd /root/agent-lab-deploy && \
+  tar xzf /root/agent-lab-scripts.tgz && rm /root/agent-lab-scripts.tgz'
+
+# 4. Bootstrap новой ноды (driver требует reboot — exit 10).
+ssh root@<NEW_IP> 'cd /root/agent-lab-deploy && bash scripts/bootstrap-gpu-worker.sh'
+# exit 10? → reboot и повтор:
+ssh root@<NEW_IP> 'reboot' || true; sleep 60
+ssh root@<NEW_IP> 'cd /root/agent-lab-deploy && bash scripts/bootstrap-gpu-worker.sh'
+
+# 5. Join к кластеру (с master).
+ssh root@84.38.184.105 "cd /root/agent-lab-deploy/scripts && \
+  GPU_HOST_IP=<NEW_IP> GPU_WORKER_HOST=root@<NEW_IP> bash join-cluster.sh"
+
+# 6. ОБЯЗАТЕЛЬНО погасить старую машину у хостера. Иначе она держит ESTABLISHED
+#    коннекты к API (16443) и засоряет conntrack/SNAT на master — pod healthchecks
+#    на новой ноде получают client_ip=<OLD_IP> и могут флапать.
+#    Если не погашена сразу — флашим stale entries на master:
+ssh root@84.38.184.105 'conntrack -D -s <OLD_IP>; conntrack -D -d <OLD_IP>'
+
+# 7. Поднять сервисы и проверить.
+kubectl -n platform scale deployment provider-litserve voice --replicas=1
+make k8s-health
+```
+
 ## 8. Добавление новой ноды в кластер
 
 ```bash

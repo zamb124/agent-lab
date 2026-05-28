@@ -91,6 +91,27 @@ if ! microk8s status --wait-ready --timeout 300 >/dev/null 2>&1; then
   log_warn "microk8s ещё не ready — ожидается до join к кластеру"
 fi
 
+# 5a. --node-ip в kubelet args. Без него kubelet может зарегистрировать ноду со
+# stale IP из dqlite (наследие предыдущей ноды с тем же hostname после remove-node)
+# или подхватить старую запись через autodetection. INTERNAL-IP мимо реального
+# адреса ломает kubectl exec/logs, healthchecks и SNAT/conntrack между нодами.
+KUBELET_ARGS="/var/snap/microk8s/current/args/kubelet"
+NODE_IP="${NODE_IP:-$(ip -4 route get 1.1.1.1 2>/dev/null | awk '{for(i=1;i<=NF;i++) if ($i=="src") {print $(i+1); exit}}')}"
+if [ -z "$NODE_IP" ]; then
+  log_warn "не удалось определить NODE_IP (ip route get 1.1.1.1); пропускаю --node-ip"
+elif [ ! -f "$KUBELET_ARGS" ]; then
+  log_warn "$KUBELET_ARGS отсутствует — microk8s ещё не запустился; --node-ip применится при повторном bootstrap"
+else
+  if grep -qE "^--node-ip=${NODE_IP}\$" "$KUBELET_ARGS"; then
+    log_skip "kubelet --node-ip=${NODE_IP}"
+  else
+    log_do "kubelet --node-ip=${NODE_IP}"
+    sed -i '/^--node-ip=/d' "$KUBELET_ARGS"
+    echo "--node-ip=${NODE_IP}" >> "$KUBELET_ARGS"
+    snap restart microk8s.daemon-kubelite >/dev/null 2>&1 || true
+  fi
+fi
+
 # 6. NVIDIA runtime в containerd через drop-in.
 # nvidia-ctk пишет drop-in в /etc/containerd/conf.d/99-nvidia.toml; в containerd-template
 # добавляем imports = ["/etc/containerd/conf.d/*.toml"]; из drop-in убираем
