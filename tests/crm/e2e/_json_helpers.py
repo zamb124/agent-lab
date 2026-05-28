@@ -2,32 +2,34 @@
 
 from __future__ import annotations
 
+from typing import cast
+
 
 def json_object(response_payload: object) -> dict[str, object]:
     if not isinstance(response_payload, dict):
         raise AssertionError("expected JSON object response")
-    return response_payload
+    return cast(dict[str, object], response_payload)
 
 
 def object_dict(value: object, *, field: str = "value") -> dict[str, object]:
     if not isinstance(value, dict):
         raise AssertionError(f"{field} must be a dict")
-    return value
+    return cast(dict[str, object], value)
 
 
 def object_list(value: object) -> list[dict[str, object]]:
     if not isinstance(value, list):
         return []
     rows: list[dict[str, object]] = []
-    for item in value:
+    for item in cast(list[object], value):
         if isinstance(item, dict):
-            rows.append(item)
+            rows.append(cast(dict[str, object], item))
     return rows
 
 
 def optional_object_dict(value: object) -> dict[str, object]:
     if isinstance(value, dict):
-        return value
+        return cast(dict[str, object], value)
     return {}
 
 

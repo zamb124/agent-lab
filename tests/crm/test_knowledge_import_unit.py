@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from io import BytesIO
+from pathlib import Path
 
 import fitz
 import openpyxl
@@ -20,23 +21,23 @@ from core.utils.knowledge_text_split import (
 
 
 def test_validate_chunk_max_chars_bounds() -> None:
-    validate_chunk_max_chars(2000)
-    validate_chunk_max_chars(500_000)
+    _ = validate_chunk_max_chars(2000)
+    _ = validate_chunk_max_chars(500_000)
     with pytest.raises(ValueError, match="chunk_max_chars"):
-        validate_chunk_max_chars(1999)
+        _ = validate_chunk_max_chars(1999)
     with pytest.raises(ValueError, match="chunk_max_chars"):
-        validate_chunk_max_chars(500_001)
+        _ = validate_chunk_max_chars(500_001)
 
 
 def test_split_empty_raises() -> None:
     with pytest.raises(ValueError, match="пуст"):
-        split_knowledge_text("  \n\t  ")
+        _ = split_knowledge_text("  \n\t  ")
 
 
 def test_split_too_long_raises() -> None:
     huge = "a" * (MAX_IMPORT_TEXT_CHARS + 1)
     with pytest.raises(ValueError, match="превышает лимит"):
-        split_knowledge_text(huge)
+        _ = split_knowledge_text(huge)
 
 
 def test_split_single_chunk_trim() -> None:
@@ -90,7 +91,7 @@ async def test_file_reader_xlsx_bytes() -> None:
 @pytest.mark.asyncio
 async def test_file_reader_docx_bytes() -> None:
     doc = Document()
-    doc.add_paragraph("KN_UNIT_DOCX_MARKER")
+    _ = doc.add_paragraph("KN_UNIT_DOCX_MARKER")
     buf = BytesIO()
     doc.save(buf)
     raw = buf.getvalue()
@@ -103,13 +104,13 @@ async def test_file_reader_docx_bytes() -> None:
 
 
 @pytest.mark.asyncio
-async def test_file_reader_pdf_bytes(tmp_path) -> None:
-    doc = fitz.open()  # pyright: ignore[reportCallIssue]
-    page = doc.new_page()
-    page.insert_text((72, 72), "KN_UNIT_PDF_MARKER")
+async def test_file_reader_pdf_bytes(tmp_path: Path) -> None:
+    doc = fitz.open()  # pyright: ignore[reportCallIssue, reportUnknownVariableType]
+    page = doc.new_page()  # pyright: ignore[reportUnknownMemberType, reportUnknownVariableType]
+    page.insert_text((72, 72), "KN_UNIT_PDF_MARKER")  # pyright: ignore[reportUnknownMemberType]
     out = tmp_path / "u.pdf"
-    doc.save(out)
-    doc.close()
+    doc.save(out)  # pyright: ignore[reportUnknownMemberType]
+    doc.close()  # pyright: ignore[reportUnknownMemberType]
     raw = out.read_bytes()
 
     reader = FileReader()

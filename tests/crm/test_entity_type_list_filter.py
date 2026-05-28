@@ -29,13 +29,13 @@ def test_deep_non_note_chain() -> None:
 def test_cycle_raises() -> None:
     m = {"a": "b", "b": "a"}
     with pytest.raises(ValueError, match="cycle"):
-        resolve_list_entity_query_pair("a", m)
+        _ = resolve_list_entity_query_pair("a", m)
 
 
 def test_leaf_missing_from_map_raises() -> None:
     m = {"note": None}
     with pytest.raises(ValueError, match="not in parent map"):
-        resolve_list_entity_query_pair("call", m)
+        _ = resolve_list_entity_query_pair("call", m)
 
 
 def test_call_under_note_when_root_row_present() -> None:

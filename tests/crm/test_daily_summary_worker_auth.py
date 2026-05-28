@@ -6,26 +6,33 @@ from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
 import pytest
+from pytest import MonkeyPatch
 
 pytestmark = pytest.mark.no_crm_http
 
 
 @pytest.mark.asyncio
-async def test_build_auth_token_ignores_crm_worker_placeholder(monkeypatch):
+async def test_build_auth_token_ignores_crm_worker_placeholder(
+    monkeypatch: MonkeyPatch,
+) -> None:
     import apps.crm_worker.tasks.daily_summary_tasks as dst
 
     company = SimpleNamespace(owner_user_id="owner-1", members=None)
     user = SimpleNamespace(companies={"comp-x": ["member"]})
 
     class Container:
-        company_repository = SimpleNamespace(get=AsyncMock(return_value=company))
-        user_repository = SimpleNamespace(get=AsyncMock(return_value=user))
+        company_repository: SimpleNamespace
+        user_repository: SimpleNamespace
+
+        def __init__(self) -> None:
+            self.company_repository = SimpleNamespace(get=AsyncMock(return_value=company))
+            self.user_repository = SimpleNamespace(get=AsyncMock(return_value=user))
 
     monkeypatch.setattr(dst, "get_crm_container", lambda: Container())
 
     captured: list[dict[str, object]] = []
 
-    def create_token(**kwargs):
+    def create_token(**kwargs: object) -> str:
         captured.append(dict(kwargs))
         return "jwt-test"
 

@@ -232,7 +232,7 @@
   ],
   "variables": {
     "search_mode": "quick",
-    "search_result_limit": 10,
+    "search_result_limit": 12,
     "search_suggestion_limit": 6,
     "search_language": "ru",
     "search_region": "ru",
@@ -252,7 +252,7 @@
       "permission": [],
       "variables": {
         "search_mode": "quick",
-        "search_result_limit": 8,
+        "search_result_limit": 12,
         "search_suggestion_limit": 5,
         "search_provider_strategy": "first_available"
       }
@@ -267,7 +267,7 @@
       "permission": [],
       "variables": {
         "search_mode": "deep",
-        "search_result_limit": 12,
+        "search_result_limit": 16,
         "search_suggestion_limit": 7,
         "search_provider_strategy": "merge"
       }
@@ -282,7 +282,7 @@
       "permission": [],
       "variables": {
         "search_mode": "research",
-        "search_result_limit": 16,
+        "search_result_limit": 20,
         "search_suggestion_limit": 8,
         "search_provider_strategy": "merge"
       }

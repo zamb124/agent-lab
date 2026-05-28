@@ -4,16 +4,31 @@ from __future__ import annotations
 
 import uuid
 from datetime import datetime, timezone
+from typing import cast
 
 import pytest
-from httpx import AsyncClient
+from httpx import AsyncClient, Response
 
+from apps.crm.container import CRMContainer
 from apps.crm.db.models import CRMTask
 from core.context import clear_context, set_context
 from core.models.context_models import Context
 from core.models.identity_models import Company, User
+from tests.crm.e2e._json_helpers import json_object, object_str, optional_object_dict
 
 pytestmark = pytest.mark.timeout(20, func_only=True)
+
+
+def _http_json(response: Response) -> dict[str, object]:
+    return json_object(cast(object, response.json()))
+
+
+def _type_id_list(value: object) -> list[str]:
+    if value is None:
+        return []
+    if not isinstance(value, list):
+        raise AssertionError("expected list of type ids")
+    return [object_str(item, field="type_id") for item in cast(list[object], value)]
 
 
 @pytest.mark.asyncio
@@ -29,7 +44,7 @@ async def test_lara_namespace_summary_zeros(
         headers=auth_headers_system,
     )
     assert response.status_code == 200, response.text
-    body = response.json()
+    body = _http_json(response)
     assert body["namespace"] == ns
     assert body["knowledge_imports_awaiting_review"] == 0
     assert body["knowledge_imports_in_progress"] == 0
@@ -39,7 +54,7 @@ async def test_lara_namespace_summary_zeros(
 @pytest.mark.asyncio
 async def test_lara_namespace_summary_import_awaiting_review(
     crm_client: AsyncClient,
-    crm_container,
+    crm_container: CRMContainer,
     auth_headers_system: dict[str, str],
     unique_id: str,
     system_user_id: str,
@@ -79,7 +94,7 @@ async def test_lara_namespace_summary_import_awaiting_review(
     )
     set_context(ctx)
     try:
-        await crm_container.task_repository.create(row)
+        _ = await crm_container.task_repository.create(row)
     finally:
         clear_context()
 
@@ -89,7 +104,7 @@ async def test_lara_namespace_summary_import_awaiting_review(
         headers=auth_headers_system,
     )
     assert response.status_code == 200, response.text
-    assert response.json()["knowledge_imports_awaiting_review"] == 1
+    assert _http_json(response)["knowledge_imports_awaiting_review"] == 1
 
 
 @pytest.mark.asyncio
@@ -114,7 +129,8 @@ async def test_lara_namespace_summary_note_draft_not_applied(
         headers=auth_headers_system,
     )
     assert editability_resp.status_code == 200, editability_resp.text
-    current_allowed = editability_resp.json().get("current_allowed_type_ids") or []
+    editability_body = _http_json(editability_resp)
+    current_allowed = _type_id_list(editability_body.get("current_allowed_type_ids"))
     target_allowed = sorted({*current_allowed, "note"})
     update_ns = await crm_client.put(
         f"/crm/api/v1/namespaces/{ns}",
@@ -134,14 +150,15 @@ async def test_lara_namespace_summary_note_draft_not_applied(
         headers=auth_headers_system,
     )
     assert create.status_code in (200, 201), create.text
-    entity_id = create.json()["entity_id"]
+    entity_id = object_str(_http_json(create)["entity_id"], field="entity_id")
 
     get_ent = await crm_client.get(
         f"/crm/api/v1/entities/{entity_id}",
         headers=auth_headers_system,
     )
     assert get_ent.status_code == 200, get_ent.text
-    prev_attrs = dict(get_ent.json().get("attributes") or {})
+    get_body = _http_json(get_ent)
+    prev_attrs = dict(optional_object_dict(get_body.get("attributes")))
     prev_attrs["ai_analysis_draft"] = {"draft_version": 1, "entities": []}
 
     put = await crm_client.put(
@@ -157,4 +174,4 @@ async def test_lara_namespace_summary_note_draft_not_applied(
         headers=auth_headers_system,
     )
     assert response.status_code == 200, response.text
-    assert response.json()["notes_with_analysis_draft_not_applied"] == 1
+    assert _http_json(response)["notes_with_analysis_draft_not_applied"] == 1

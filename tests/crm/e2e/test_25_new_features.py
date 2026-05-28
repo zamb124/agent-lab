@@ -15,6 +15,8 @@ from httpx import AsyncClient, Response
 
 from tests.crm.e2e._json_helpers import json_object, object_dict, object_list, object_str
 
+pytestmark = pytest.mark.timeout(120, func_only=True)
+
 
 def _http_json(response: Response) -> dict[str, object]:
     return json_object(cast(object, response.json()))
@@ -86,7 +88,7 @@ def _facet_counts(facets: dict[str, object]) -> dict[str, int]:
 
 
 def _export_json_items(text: str) -> list[dict[str, object]]:
-    return object_list(json.loads(text))
+    return object_list(cast(object, json.loads(text)))
 
 
 def _detail_text(response: Response) -> str:
@@ -378,6 +380,7 @@ class TestBulkOperations:
         auth_headers_system: dict[str, str],
     ) -> None:
         """422 при превышении лимита 200 элементов."""
+        _ = unique_id
         items = [
             {"entity_type": "note", "name": f"Item {i}"}
             for i in range(201)
@@ -576,15 +579,15 @@ class TestExport:
         auth_headers_system: dict[str, str],
     ) -> None:
         """Content-Disposition содержит filename."""
+        _ = unique_id
         resp = await crm_client.get(
             "/crm/api/v1/entities/export",
             params={"format": "json"},
             headers=auth_headers_system,
         )
         assert resp.status_code == 200
-        content_disposition = resp.headers.get("content-disposition", "")
-        if not isinstance(content_disposition, str):
-            content_disposition = ""
+        raw_disposition = cast(object, resp.headers.get("content-disposition"))
+        content_disposition = raw_disposition if isinstance(raw_disposition, str) else ""
         assert "filename=" in content_disposition
 
 

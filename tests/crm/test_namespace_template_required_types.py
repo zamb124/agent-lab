@@ -3,26 +3,32 @@
 from apps.crm.system_templates import (
     NAMESPACE_TEMPLATE_SEEDS,
     REQUIRED_NAMESPACE_TEMPLATE_TYPE_IDS,
+    NamespaceTemplateSeed,
 )
 
 
 def test_every_namespace_template_seed_has_note_and_task() -> None:
     for seed in NAMESPACE_TEMPLATE_SEEDS:
-        tid = seed.get("template_id")
-        types_list = seed.get("types")
-        assert isinstance(types_list, list), tid
-        ids = {t["type_id"] for t in types_list if isinstance(t, dict) and "type_id" in t}
-        missing = REQUIRED_NAMESPACE_TEMPLATE_TYPE_IDS - ids
-        assert not missing, f"template {tid} missing types: {sorted(missing)}"
+        template_id = seed["template_id"]
+        type_ids = {type_spec["type_id"] for type_spec in seed["types"]}
+        missing = REQUIRED_NAMESPACE_TEMPLATE_TYPE_IDS - type_ids
+        assert not missing, f"template {template_id} missing types: {sorted(missing)}"
 
 
 def test_namespace_template_seeds_exclude_retired_amocrm() -> None:
-    ids = {s["template_id"] for s in NAMESPACE_TEMPLATE_SEEDS if isinstance(s, dict)}
-    assert "amocrm" not in ids
+    template_ids = {seed["template_id"] for seed in NAMESPACE_TEMPLATE_SEEDS}
+    assert "amocrm" not in template_ids
 
 
 def test_sales_seed_includes_contact_and_task() -> None:
-    sales = next(s for s in NAMESPACE_TEMPLATE_SEEDS if s["template_id"] == "sales")
-    type_ids = {t["type_id"] for t in sales["types"] if isinstance(t, dict)}
+    sales = _seed_by_id("sales")
+    type_ids = {type_spec["type_id"] for type_spec in sales["types"]}
     assert "contact" in type_ids
     assert "task" in type_ids
+
+
+def _seed_by_id(template_id: str) -> NamespaceTemplateSeed:
+    for seed in NAMESPACE_TEMPLATE_SEEDS:
+        if seed["template_id"] == template_id:
+            return seed
+    raise AssertionError(f"seed {template_id!r} not registered")

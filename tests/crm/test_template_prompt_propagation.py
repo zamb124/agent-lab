@@ -21,46 +21,65 @@
 
 from __future__ import annotations
 
-from typing import Any, cast
+from typing import cast
 
 import pytest
+from httpx import AsyncClient, Response
 
 from apps.crm.constants_graph import TASK_ROOT_ENTITY_TYPE_ID
+from apps.crm.container import CRMContainer
 from apps.crm.system_templates import (
     NAMESPACE_TEMPLATE_SEEDS,
     SYSTEM_ENTITY_TYPE_TEMPLATES,
     SYSTEM_RELATIONSHIP_TYPE_TEMPLATES,
+    NamespaceTemplateSeed,
+    NamespaceTemplateTypeSpec,
 )
+from core.types import JsonObject
+from tests.crm.e2e._json_helpers import json_object, object_list, object_str
 
 _PROBE_SEED_IDS = ("sales", "marketing", "support", "hr", "education")
 
 
-def _seed_by_id(template_id: str) -> dict[str, Any]:  # pyright: ignore[reportReturnType]
+def _http_json(response: Response) -> dict[str, object]:
+    return json_object(cast(object, response.json()))
+
+
+def _seed_by_id(template_id: str) -> NamespaceTemplateSeed:
     for seed in NAMESPACE_TEMPLATE_SEEDS:
         if seed["template_id"] == template_id:
-            return cast(dict[str, Any], cast(object, seed))
+            return seed
     raise AssertionError(f"seed {template_id!r} not registered")
 
 
-def _pick_extractable_seed_type(seed: dict[str, Any]) -> dict[str, Any]:  # pyright: ignore[reportReturnType]
+def _pick_extractable_seed_type(seed: NamespaceTemplateSeed) -> NamespaceTemplateTypeSpec:
     """Тип шаблона с непустым prompt и хотя бы одним описанным полем."""
 
     for spec in seed["types"]:
-        if not isinstance(spec, dict):
-            continue
         if not spec.get("prompt"):
             continue
-        fields = (spec.get("required_fields") or {}) | (spec.get("optional_fields") or {})
-        if not fields:
+        required_fields = spec.get("required_fields") or {}
+        optional_fields = spec.get("optional_fields") or {}
+        if not required_fields and not optional_fields:
             continue
         return spec
     raise AssertionError(
-        f"seed {seed.get('template_id')!r}: ни один тип не подходит как extractable probe"
+        f"seed {seed['template_id']!r}: ни один тип не подходит как extractable probe"
     )
 
 
+def _type_spec_by_id(
+    seed: NamespaceTemplateSeed,
+    type_id: str,
+) -> NamespaceTemplateTypeSpec:
+    for spec in seed["types"]:
+        if spec["type_id"] == type_id:
+            return spec
+    raise AssertionError(f"type_id {type_id!r} not in seed {seed['template_id']!r}")
+
+
 async def _create_seed_namespace(
-    crm_client,
+    crm_client: AsyncClient,
     auth_headers: dict[str, str],
     template_id: str,
     suffix: str,
@@ -91,9 +110,9 @@ class TestSeedPromptsMaterializeIntoNamespace:
     @pytest.mark.parametrize("template_id", _PROBE_SEED_IDS)
     async def test_seed_extractable_type_persists_prompt_and_fields(
         self,
-        crm_client,
-        auth_headers_system,
-        unique_id,
+        crm_client: AsyncClient,
+        auth_headers_system: dict[str, str],
+        unique_id: str,
         template_id: str,
     ) -> None:
         seed = _seed_by_id(template_id)
@@ -112,9 +131,11 @@ class TestSeedPromptsMaterializeIntoNamespace:
             probe_spec["type_id"],
             get_resp.text,
         )
-        body = get_resp.json()
+        body = _http_json(get_resp)
+        probe_prompt = probe_spec.get("prompt")
+        assert probe_prompt is not None, (template_id, probe_spec["type_id"])
 
-        assert body["prompt"] == probe_spec["prompt"], (template_id, probe_spec["type_id"])
+        assert body["prompt"] == probe_prompt, (template_id, probe_spec["type_id"])
         assert body["description"] == probe_spec["description"], (
             template_id,
             probe_spec["type_id"],
@@ -148,8 +169,8 @@ class TestSeedPromptsMaterializeIntoNamespace:
     @pytest.mark.asyncio
     async def test_default_namespace_carries_system_relationship_prompts(
         self,
-        crm_client,
-        auth_headers_system,
+        crm_client: AsyncClient,
+        auth_headers_system: dict[str, str],
     ) -> None:
         listed = await crm_client.get(
             "/crm/api/v1/relationships/types/",
@@ -157,7 +178,11 @@ class TestSeedPromptsMaterializeIntoNamespace:
             headers=auth_headers_system,
         )
         assert listed.status_code == 200, listed.text
-        items = {row["type_id"]: row for row in listed.json().get("items") or []}
+        listed_body = _http_json(listed)
+        items_list = object_list(listed_body.get("items"))
+        items = {
+            object_str(row.get("type_id"), field="type_id"): row for row in items_list
+        }
 
         for spec in SYSTEM_RELATIONSHIP_TYPE_TEMPLATES:
             type_id = spec["type_id"]
@@ -177,9 +202,9 @@ class TestUserEditsPropagateToAnalyzePipeline:
     @pytest.mark.asyncio
     async def test_user_edit_of_entity_type_prompt_is_persisted_via_api(
         self,
-        crm_client,
-        auth_headers_system,
-        unique_id,
+        crm_client: AsyncClient,
+        auth_headers_system: dict[str, str],
+        unique_id: str,
     ) -> None:
         ns_name = await _create_seed_namespace(
             crm_client, auth_headers_system, "sales", unique_id
@@ -206,17 +231,17 @@ class TestUserEditsPropagateToAnalyzePipeline:
             headers=auth_headers_system,
         )
         assert refetched.status_code == 200, refetched.text
-        body = refetched.json()
+        body = _http_json(refetched)
         assert body["prompt"] == new_prompt
-        assert marker in body["prompt"]
+        assert marker in object_str(body["prompt"], field="prompt")
 
     @pytest.mark.asyncio
     async def test_load_all_entity_types_for_namespace_returns_user_prompt(
         self,
-        crm_client,
-        crm_container,
-        auth_headers_system,
-        unique_id,
+        crm_client: AsyncClient,
+        crm_container: CRMContainer,
+        auth_headers_system: dict[str, str],
+        unique_id: str,
     ) -> None:
         ns_name = await _create_seed_namespace(
             crm_client, auth_headers_system, "marketing", unique_id
@@ -236,21 +261,23 @@ class TestUserEditsPropagateToAnalyzePipeline:
         )
         assert update_resp.status_code == 200, update_resp.text
 
-        loaded = await crm_container.entity_service._load_all_entity_types_for_namespace(
+        loaded = await crm_container.entity_service._load_all_entity_types_for_namespace(  # pyright: ignore[reportPrivateUsage]
             ns_name
         )
-        loaded_by_id = {t.type_id: t for t in loaded}
+        loaded_by_id = {entity_type.type_id: entity_type for entity_type in loaded}
         assert type_id in loaded_by_id, sorted(loaded_by_id)
-        assert loaded_by_id[type_id].prompt == new_prompt
-        assert marker in loaded_by_id[type_id].prompt
+        loaded_prompt = loaded_by_id[type_id].prompt
+        assert loaded_prompt is not None
+        assert loaded_prompt == new_prompt
+        assert marker in loaded_prompt
 
     @pytest.mark.asyncio
     async def test_build_composite_prompt_includes_user_overridden_prompt(
         self,
-        crm_client,
-        crm_container,
-        auth_headers_system,
-        unique_id,
+        crm_client: AsyncClient,
+        crm_container: CRMContainer,
+        auth_headers_system: dict[str, str],
+        unique_id: str,
     ) -> None:
         ns_name = await _create_seed_namespace(
             crm_client, auth_headers_system, "support", unique_id
@@ -270,14 +297,14 @@ class TestUserEditsPropagateToAnalyzePipeline:
         )
         assert update_resp.status_code == 200, update_resp.text
 
-        entity_types = await crm_container.entity_service._load_all_entity_types_for_namespace(
+        entity_types = await crm_container.entity_service._load_all_entity_types_for_namespace(  # pyright: ignore[reportPrivateUsage]
             ns_name
         )
         relationship_types = (
             await crm_container.relationship_type_repository.get_with_prompts()
         )
 
-        composite = crm_container.entity_service._build_composite_prompt(
+        composite = crm_container.entity_service._build_composite_prompt(  # pyright: ignore[reportPrivateUsage]
             entity_types, relationship_types, None, None,
         )
         assert marker in composite, "Перетёртый prompt должен попасть в analyze prompt"
@@ -288,10 +315,10 @@ class TestUserEditsPropagateToAnalyzePipeline:
     @pytest.mark.asyncio
     async def test_build_composite_prompt_carries_field_labels_descriptions_and_enum_values(
         self,
-        crm_client,
-        crm_container,
-        auth_headers_system,
-        unique_id,
+        crm_client: AsyncClient,
+        crm_container: CRMContainer,
+        auth_headers_system: dict[str, str],
+        unique_id: str,
     ) -> None:
         ns_name = await _create_seed_namespace(
             crm_client, auth_headers_system, "hr", unique_id
@@ -302,7 +329,7 @@ class TestUserEditsPropagateToAnalyzePipeline:
             f"Точная стадия в рекрутинговой воронке (метка теста {unique_id})"
         )
         unique_value_id = f"qa_test_{unique_id}".replace("-", "_")
-        new_optional_fields = {
+        new_optional_fields: JsonObject = {
             "stage": {
                 "type": "enum",
                 "label": unique_label,
@@ -319,13 +346,13 @@ class TestUserEditsPropagateToAnalyzePipeline:
         )
         assert update_resp.status_code == 200, update_resp.text
 
-        entity_types = await crm_container.entity_service._load_all_entity_types_for_namespace(
+        entity_types = await crm_container.entity_service._load_all_entity_types_for_namespace(  # pyright: ignore[reportPrivateUsage]
             ns_name
         )
         relationship_types = (
             await crm_container.relationship_type_repository.get_with_prompts()
         )
-        composite = crm_container.entity_service._build_composite_prompt(
+        composite = crm_container.entity_service._build_composite_prompt(  # pyright: ignore[reportPrivateUsage]
             entity_types, relationship_types, None, None,
         )
 
@@ -340,16 +367,16 @@ class TestUserEditsPropagateToAnalyzePipeline:
     @pytest.mark.asyncio
     async def test_build_composite_prompt_filters_by_extract_entity_types(
         self,
-        crm_client,
-        crm_container,
-        auth_headers_system,
-        unique_id,
+        crm_client: AsyncClient,
+        crm_container: CRMContainer,
+        auth_headers_system: dict[str, str],
+        unique_id: str,
     ) -> None:
         ns_name = await _create_seed_namespace(
             crm_client, auth_headers_system, "sales", unique_id
         )
 
-        entity_types = await crm_container.entity_service._load_all_entity_types_for_namespace(
+        entity_types = await crm_container.entity_service._load_all_entity_types_for_namespace(  # pyright: ignore[reportPrivateUsage]
             ns_name
         )
         relationship_types = (
@@ -357,28 +384,30 @@ class TestUserEditsPropagateToAnalyzePipeline:
         )
 
         sales_seed = _seed_by_id("sales")
-        seed_lead = next(t for t in sales_seed["types"] if t.get("type_id") == "lead")
-        seed_deal = next(t for t in sales_seed["types"] if t.get("type_id") == "deal")
-        assert seed_lead["prompt"] and seed_deal["prompt"]
+        seed_lead = _type_spec_by_id(sales_seed, "lead")
+        seed_deal = _type_spec_by_id(sales_seed, "deal")
+        lead_prompt = seed_lead.get("prompt")
+        deal_prompt = seed_deal.get("prompt")
+        assert lead_prompt and deal_prompt
 
-        only_lead = crm_container.entity_service._build_composite_prompt(
+        only_lead = crm_container.entity_service._build_composite_prompt(  # pyright: ignore[reportPrivateUsage]
             entity_types,
             relationship_types,
             extract_entity_types=["lead"],
             extract_relationship_types=None,
         )
-        assert seed_lead["prompt"] in only_lead, "выбранный тип должен попасть в prompt"
-        assert seed_deal["prompt"] not in only_lead, (
+        assert lead_prompt in only_lead, "выбранный тип должен попасть в prompt"
+        assert deal_prompt not in only_lead, (
             "невыбранный тип не должен попадать в prompt при extract_entity_types"
         )
 
     @pytest.mark.asyncio
     async def test_user_edited_relationship_prompt_reaches_composite(
         self,
-        crm_client,
-        crm_container,
-        auth_headers_system,
-        unique_id,
+        crm_client: AsyncClient,
+        crm_container: CRMContainer,
+        auth_headers_system: dict[str, str],
+        unique_id: str,
     ) -> None:
         """
         Прямая правка `RelationshipType.prompt` через репозиторий — это
@@ -401,27 +430,30 @@ class TestUserEditsPropagateToAnalyzePipeline:
 
         repo = crm_container.relationship_type_repository
         all_types = await repo.list_by_company(include_system=True, limit=1000)
-        mentions_row = next((t for t in all_types if t.type_id == "mentions"), None)
+        mentions_row = next(
+            (relationship_type for relationship_type in all_types if relationship_type.type_id == "mentions"),
+            None,
+        )
         assert mentions_row is not None, "у компании system должен быть тип mentions"
         original_prompt = mentions_row.prompt
         try:
             mentions_row.prompt = new_prompt
-            await repo.update(mentions_row)
+            _ = await repo.update(mentions_row)
 
-            entity_types = await crm_container.entity_service._load_all_entity_types_for_namespace(
+            entity_types = await crm_container.entity_service._load_all_entity_types_for_namespace(  # pyright: ignore[reportPrivateUsage]
                 ns_name
             )
             relationship_types = (
                 await crm_container.relationship_type_repository.get_with_prompts()
             )
-            composite = crm_container.entity_service._build_composite_prompt(
+            composite = crm_container.entity_service._build_composite_prompt(  # pyright: ignore[reportPrivateUsage]
                 entity_types, relationship_types, None, None,
             )
 
             assert marker in composite, "правка relationship prompt должна попадать в analyze"
         finally:
             mentions_row.prompt = original_prompt
-            await repo.update(mentions_row)
+            _ = await repo.update(mentions_row)
 
 
 @pytest.mark.timeout(60)
@@ -431,10 +463,8 @@ class TestSystemTemplateRegistryConsistency:
     def test_all_seed_types_with_parent_reference_known_root_or_seed(self) -> None:
         system_ids = {item["type_id"] for item in SYSTEM_ENTITY_TYPE_TEMPLATES}
         for seed in NAMESPACE_TEMPLATE_SEEDS:
-            seed_ids = {t["type_id"] for t in seed["types"] if isinstance(t, dict)}
+            seed_ids = {spec["type_id"] for spec in seed["types"]}
             for spec in seed["types"]:
-                if not isinstance(spec, dict):
-                    continue
                 parent = spec.get("parent_type_id")
                 if not parent:
                     continue
@@ -447,8 +477,6 @@ class TestSystemTemplateRegistryConsistency:
     def test_seed_extractable_types_have_prompt(self) -> None:
         for seed in NAMESPACE_TEMPLATE_SEEDS:
             for spec in seed["types"]:
-                if not isinstance(spec, dict):
-                    continue
                 parent = spec.get("parent_type_id")
                 # Подтипы task — единственный сценарий, где prompt опционален
                 # (наследование от родителя).

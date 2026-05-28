@@ -6,6 +6,7 @@ from datetime import date, datetime, timezone
 
 import pytest
 
+from apps.crm.container import CRMContainer
 from apps.crm.db.models import CRMEntity
 from apps.crm.integrations.amocrm.mapping import AMO_PROVIDER_ID
 from apps.crm.integrations.amocrm.service import AmoCRMIntegrationService
@@ -19,31 +20,38 @@ pytestmark = pytest.mark.timeout(30, func_only=True)
 
 
 def test_note_date_from_amo_unix_int() -> None:
-    got = AmoCRMIntegrationService._note_date_from_amo_created_at(1_704_067_200)
+    got = AmoCRMIntegrationService._note_date_from_amo_created_at(  # pyright: ignore[reportPrivateUsage]
+        1_704_067_200
+    )
     assert got == date(2024, 1, 1)
 
 
 def test_note_date_from_amo_unix_string() -> None:
-    got = AmoCRMIntegrationService._note_date_from_amo_created_at("1704067200")
+    got = AmoCRMIntegrationService._note_date_from_amo_created_at(  # pyright: ignore[reportPrivateUsage]
+        "1704067200"
+    )
     assert got == date(2024, 1, 1)
 
 
 def test_note_date_from_amo_iso_z() -> None:
-    got = AmoCRMIntegrationService._note_date_from_amo_created_at(
+    got = AmoCRMIntegrationService._note_date_from_amo_created_at(  # pyright: ignore[reportPrivateUsage]
         "2024-06-15T12:00:00Z",
     )
     assert got == date(2024, 6, 15)
 
 
 def test_note_date_invalid_input_raises() -> None:
-    for value in ("not-a-date", None, []):
+    invalid_values: list[object] = ["not-a-date", None, []]
+    for value in invalid_values:
         with pytest.raises(ValueError):
-            AmoCRMIntegrationService._note_date_from_amo_created_at(value)
+            _ = AmoCRMIntegrationService._note_date_from_amo_created_at(  # pyright: ignore[reportPrivateUsage]
+                value
+            )
 
 
 @pytest.mark.asyncio
 async def test_upsert_note_without_note_date_sets_today(
-    crm_container,
+    crm_container: CRMContainer,
     unique_id: str,
     system_user_id: str,
 ) -> None:
@@ -78,12 +86,12 @@ async def test_upsert_note_without_note_date_sets_today(
 
 @pytest.mark.asyncio
 async def test_upsert_note_update_backfills_null_note_date(
-    crm_container,
+    crm_container: CRMContainer,
     unique_id: str,
     system_user_id: str,
 ) -> None:
     ns = f"amo_nd2_{unique_id}"
-    rid = f"nd2-{unique_id}"
+    record_id = f"nd2-{unique_id}"
     ctx = Context(
         user=User(user_id=system_user_id, name="Test"),
         active_company=Company(company_id="system", name="System"),
@@ -92,7 +100,7 @@ async def test_upsert_note_update_backfills_null_note_date(
     )
     set_context(ctx)
     try:
-        ref = external_ref_now(record_id=rid, account_key="sub_amocrm")
+        ref = external_ref_now(record_id=record_id, account_key="sub_amocrm")
         attrs = merge_external_refs({}, source_id=AMO_PROVIDER_ID, ref=ref)
         ent0 = CRMEntity(
             entity_id=f"manual_{unique_id}",
@@ -106,7 +114,7 @@ async def test_upsert_note_update_backfills_null_note_date(
             user_id=system_user_id,
             note_date=None,
         )
-        await crm_container.entity_repository.create(ent0)
+        _ = await crm_container.entity_repository.create(ent0)
 
         ent1, created1 = await upsert_canonical_by_external_ref(
             entity_repo=crm_container.entity_repository,
@@ -115,7 +123,7 @@ async def test_upsert_note_update_backfills_null_note_date(
             user_id=system_user_id,
             entity_type="note",
             source_id=AMO_PROVIDER_ID,
-            record_id=rid,
+            record_id=record_id,
             name="Patched name",
             patch_attributes={},
             account_key="sub_amocrm",

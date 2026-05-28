@@ -4,16 +4,84 @@
 User Story: Шаблоны заметок, кастомные типы для быстрого создания entities.
 """
 
+from typing import cast
+
 import pytest
+from httpx import AsyncClient, Response
+
+from tests.crm.e2e._json_helpers import json_object, object_dict, object_list, object_str
 
 pytestmark = pytest.mark.timeout(60)
+
+
+def _http_json(response: Response) -> dict[str, object]:
+    return json_object(cast(object, response.json()))
+
+
+def _type_id(response: Response) -> str:
+    return object_str(_http_json(response).get("type_id"), field="type_id")
+
+
+def _entity_type_items(response: Response) -> list[dict[str, object]]:
+    return object_list(_http_json(response).get("items"))
+
+
+def _type_ids_from_response(response: Response) -> list[str]:
+    return [
+        object_str(item.get("type_id"), field="type_id")
+        for item in _entity_type_items(response)
+    ]
+
+
+def _attributes(entity: dict[str, object]) -> dict[str, object]:
+    return object_dict(entity.get("attributes"), field="attributes")
+
+
+def _required_fields_dict(entity_type: dict[str, object]) -> dict[str, object]:
+    return object_dict(entity_type.get("required_fields"), field="required_fields")
+
+
+def _optional_fields_dict(entity_type: dict[str, object]) -> dict[str, object]:  # pyright: ignore[reportUnusedFunction]
+    return object_dict(entity_type.get("optional_fields"), field="optional_fields")
+
+
+def _string_list(value: object) -> list[str]:
+    if not isinstance(value, list):
+        return []
+    strings: list[str] = []
+    for item in cast(list[object], value):
+        if isinstance(item, str):
+            strings.append(item)
+    return strings
+
+
+def _bool_field(payload: dict[str, object], field: str) -> bool:
+    value = payload.get(field)
+    if not isinstance(value, bool):
+        raise AssertionError(f"{field} must be a bool")
+    return value
+
+
+def _int_field(payload: dict[str, object], field: str) -> int:
+    value = payload.get(field)
+    if not isinstance(value, int):
+        raise AssertionError(f"{field} must be an int")
+    return value
+
+
+def _schema_field_types(payload: dict[str, object]) -> list[dict[str, object]]:
+    return object_list(payload.get("field_types"))
 
 
 class TestEntityTypes:
     """Работа с типами entities и шаблонами"""
 
     @pytest.mark.asyncio
-    async def test_system_types_initialized(self, crm_client, auth_headers_system):
+    async def test_system_types_initialized(
+        self,
+        crm_client: AsyncClient,
+        auth_headers_system: dict[str, str],
+    ) -> None:
         """Системные типы минимального ядра (note, task) инициализированы"""
         response = await crm_client.get(
             "/crm/api/v1/entity-types/",
@@ -22,9 +90,8 @@ class TestEntityTypes:
         )
         assert response.status_code == 200
 
-        page = response.json()
-        types = page["items"]
-        type_ids = [t["type_id"] for t in types]
+        types = _entity_type_items(response)
+        type_ids = _type_ids_from_response(response)
 
         assert "note" in type_ids
         assert "task" in type_ids
@@ -33,7 +100,12 @@ class TestEntityTypes:
             assert entity_type["company_id"] is not None, "Все типы должны иметь company_id"
 
     @pytest.mark.asyncio
-    async def test_create_custom_entity_type(self, crm_client, unique_id, auth_headers_system):
+    async def test_create_custom_entity_type(
+        self,
+        crm_client: AsyncClient,
+        unique_id: str,
+        auth_headers_system: dict[str, str],
+    ) -> None:
         """Создание кастомного подтипа note (шаблон вебинара)"""
         response = await crm_client.post("/crm/api/v1/entity-types/", json={
             "type_id": f"webinar_{unique_id}",
@@ -47,16 +119,21 @@ class TestEntityTypes:
         }, headers=auth_headers_system)
         assert response.status_code == 200
 
-        entity_type = response.json()
-        assert entity_type["type_id"] == f"webinar_{unique_id}"
-        assert entity_type["parent_type_id"] == "note"
-        assert entity_type["icon"] == "🎥"
-        assert "topic" in entity_type["required_fields"]
+        entity_type = _http_json(response)
+        assert object_str(entity_type.get("type_id"), field="type_id") == f"webinar_{unique_id}"
+        assert object_str(entity_type.get("parent_type_id"), field="parent_type_id") == "note"
+        assert object_str(entity_type.get("icon"), field="icon") == "🎥"
+        assert "topic" in _required_fields_dict(entity_type)
 
     @pytest.mark.asyncio
-    async def test_create_entity_with_custom_type(self, crm_client, unique_id, auth_headers_system):
+    async def test_create_entity_with_custom_type(
+        self,
+        crm_client: AsyncClient,
+        unique_id: str,
+        auth_headers_system: dict[str, str],
+    ) -> None:
         """Создание entity с кастомным типом"""
-        await crm_client.post("/crm/api/v1/entity-types/", json={
+        _ = await crm_client.post("/crm/api/v1/entity-types/", json={
             "type_id": f"webinar_{unique_id}",
             "parent_type_id": "note",
             "name": "Вебинар",
@@ -73,16 +150,22 @@ class TestEntityTypes:
         }, headers=auth_headers_system)
         assert entity_resp.status_code == 200
 
-        entity = entity_resp.json()
-        assert entity["entity_subtype"] == f"webinar_{unique_id}"
-        assert entity["attributes"]["topic"] == "AI"
-        assert entity["attributes"]["attendees_count"] == 150
+        entity = _http_json(entity_resp)
+        assert object_str(entity.get("entity_subtype"), field="entity_subtype") == f"webinar_{unique_id}"
+        attributes = _attributes(entity)
+        assert object_str(attributes.get("topic"), field="topic") == "AI"
+        assert _int_field(attributes, "attendees_count") == 150
 
     @pytest.mark.asyncio
-    async def test_template_hierarchy(self, crm_client, unique_id, auth_headers_system):
+    async def test_template_hierarchy(
+        self,
+        crm_client: AsyncClient,
+        unique_id: str,
+        auth_headers_system: dict[str, str],
+    ) -> None:
         """Иерархия типов: parent → child"""
         type_id = f"workshop_{unique_id}"
-        await crm_client.post("/crm/api/v1/entity-types/", json={
+        _ = await crm_client.post("/crm/api/v1/entity-types/", json={
             "type_id": type_id,
             "parent_type_id": "note",
             "name": "Воркшоп",
@@ -97,12 +180,17 @@ class TestEntityTypes:
             params={"namespace": "default"},
         )
         assert resp.status_code == 200, resp.text
-        workshop = resp.json()
-        assert workshop["type_id"] == type_id
-        assert workshop["parent_type_id"] == "note"
+        workshop = _http_json(resp)
+        assert object_str(workshop.get("type_id"), field="type_id") == type_id
+        assert object_str(workshop.get("parent_type_id"), field="parent_type_id") == "note"
 
     @pytest.mark.asyncio
-    async def test_entity_type_with_prompt(self, crm_client, unique_id, auth_headers_system):
+    async def test_entity_type_with_prompt(
+        self,
+        crm_client: AsyncClient,
+        unique_id: str,
+        auth_headers_system: dict[str, str],
+    ) -> None:
         """Тип с промптом для AI извлечения"""
         response = await crm_client.post("/crm/api/v1/entity-types/", json={
             "type_id": f"client_meeting_{unique_id}",
@@ -114,19 +202,24 @@ class TestEntityTypes:
         }, headers=auth_headers_system)
         assert response.status_code == 200
 
-        entity_type = response.json()
-        assert "клиента" in entity_type["prompt"]
-        assert "client_name" in entity_type["required_fields"]
+        entity_type = _http_json(response)
+        assert "клиента" in object_str(entity_type.get("prompt"), field="prompt")
+        assert "client_name" in _required_fields_dict(entity_type)
 
     @pytest.mark.asyncio
-    async def test_get_entity_type_by_id(self, crm_client, unique_id, auth_headers_system):
+    async def test_get_entity_type_by_id(
+        self,
+        crm_client: AsyncClient,
+        unique_id: str,
+        auth_headers_system: dict[str, str],
+    ) -> None:
         """Получение типа по ID"""
         create_resp = await crm_client.post("/crm/api/v1/entity-types/", json={
             "type_id": f"custom_type_{unique_id}",
             "parent_type_id": "note",
             "name": "Кастомный тип"
         }, headers=auth_headers_system)
-        type_id = create_resp.json()["type_id"]
+        type_id = _type_id(create_resp)
 
         get_resp = await crm_client.get(
             f"/crm/api/v1/entity-types/{type_id}",
@@ -135,19 +228,24 @@ class TestEntityTypes:
         )
         assert get_resp.status_code == 200
 
-        entity_type = get_resp.json()
-        assert entity_type["type_id"] == type_id
-        assert entity_type["name"] == "Кастомный тип"
+        entity_type = _http_json(get_resp)
+        assert object_str(entity_type.get("type_id"), field="type_id") == type_id
+        assert object_str(entity_type.get("name"), field="name") == "Кастомный тип"
 
     @pytest.mark.asyncio
-    async def test_update_entity_type(self, crm_client, unique_id, auth_headers_system):
+    async def test_update_entity_type(
+        self,
+        crm_client: AsyncClient,
+        unique_id: str,
+        auth_headers_system: dict[str, str],
+    ) -> None:
         """Обновление типа"""
         create_resp = await crm_client.post("/crm/api/v1/entity-types/", json={
             "type_id": f"editable_type_{unique_id}",
             "parent_type_id": "note",
             "name": "Редактируемый"
         }, headers=auth_headers_system)
-        type_id = create_resp.json()["type_id"]
+        type_id = _type_id(create_resp)
 
         update_resp = await crm_client.put(
             f"/crm/api/v1/entity-types/{type_id}",
@@ -165,12 +263,17 @@ class TestEntityTypes:
             headers=auth_headers_system,
             params={"namespace": "default"},
         )
-        updated = get_resp.json()
-        assert updated["name"] == "Обновленное название"
-        assert updated["icon"] == "📝"
+        updated = _http_json(get_resp)
+        assert object_str(updated.get("name"), field="name") == "Обновленное название"
+        assert object_str(updated.get("icon"), field="icon") == "📝"
 
     @pytest.mark.asyncio
-    async def test_update_entity_type_is_context_anchor(self, crm_client, unique_id, auth_headers_system):
+    async def test_update_entity_type_is_context_anchor(
+        self,
+        crm_client: AsyncClient,
+        unique_id: str,
+        auth_headers_system: dict[str, str],
+    ) -> None:
         """Флаг якоря контекста на типе: запись и чтение."""
         type_id = f"anchor_flag_{unique_id}"
         create_resp = await crm_client.post(
@@ -184,7 +287,7 @@ class TestEntityTypes:
             headers=auth_headers_system,
         )
         assert create_resp.status_code == 200
-        assert create_resp.json().get("is_context_anchor") is False
+        assert _bool_field(_http_json(create_resp), "is_context_anchor") is False
 
         update_resp = await crm_client.put(
             f"/crm/api/v1/entity-types/{type_id}",
@@ -193,17 +296,22 @@ class TestEntityTypes:
             headers=auth_headers_system,
         )
         assert update_resp.status_code == 200
-        assert update_resp.json().get("is_context_anchor") is True
+        assert _bool_field(_http_json(update_resp), "is_context_anchor") is True
 
         get_resp = await crm_client.get(
             f"/crm/api/v1/entity-types/{type_id}",
             headers=auth_headers_system,
             params={"namespace": "default"},
         )
-        assert get_resp.json().get("is_context_anchor") is True
+        assert _bool_field(_http_json(get_resp), "is_context_anchor") is True
 
     @pytest.mark.asyncio
-    async def test_create_namespace_from_template(self, crm_client, unique_id, auth_headers_system):
+    async def test_create_namespace_from_template(
+        self,
+        crm_client: AsyncClient,
+        unique_id: str,
+        auth_headers_system: dict[str, str],
+    ) -> None:
         create_template_response = await crm_client.post("/crm/api/v1/namespaces/templates", json={
             "template_id": f"sales_{unique_id}",
             "name": "Sales template",
@@ -227,21 +335,24 @@ class TestEntityTypes:
             "template_id": f"sales_{unique_id}",
         }, headers=auth_headers_system)
         assert response.status_code == 201
-        namespace = response.json()
-        assert namespace["name"] == f"sales_{unique_id}"
+        namespace = _http_json(response)
+        assert object_str(namespace.get("name"), field="name") == f"sales_{unique_id}"
 
         namespace_types_response = await crm_client.get(
             f"/crm/api/v1/entity-types/by-namespace/sales_{unique_id}",
             headers=auth_headers_system,
         )
         assert namespace_types_response.status_code == 200
-        namespace_type_ids = {
-            item["type_id"] for item in namespace_types_response.json()["items"]
-        }
+        namespace_type_ids = set(_type_ids_from_response(namespace_types_response))
         assert "note" in namespace_type_ids
 
     @pytest.mark.asyncio
-    async def test_list_entity_types_by_namespace(self, crm_client, unique_id, auth_headers_system):
+    async def test_list_entity_types_by_namespace(
+        self,
+        crm_client: AsyncClient,
+        unique_id: str,
+        auth_headers_system: dict[str, str],
+    ) -> None:
         namespace_name = f"dev_{unique_id}"
         create_template_response = await crm_client.post("/crm/api/v1/namespaces/templates", json={
             "template_id": f"development_{unique_id}",
@@ -267,27 +378,41 @@ class TestEntityTypes:
 
         types_response = await crm_client.get(f"/crm/api/v1/entity-types/by-namespace/{namespace_name}", headers=auth_headers_system)
         assert types_response.status_code == 200
-        types = types_response.json()["items"]
+        types = _entity_type_items(types_response)
         assert isinstance(types, list)
         assert len(types) >= 1
 
     @pytest.mark.asyncio
-    async def test_template_schema_options_endpoint(self, crm_client, auth_headers_system):
+    async def test_template_schema_options_endpoint(
+        self,
+        crm_client: AsyncClient,
+        auth_headers_system: dict[str, str],
+    ) -> None:
         response = await crm_client.get("/crm/api/v1/namespaces/templates/schema/options", headers=auth_headers_system)
         assert response.status_code == 200
-        payload = response.json()
+        payload = _http_json(response)
 
-        assert isinstance(payload.get("field_types"), list)
-        assert isinstance(payload.get("enum_sets"), list)
-        assert isinstance(payload.get("operators"), list)
-        assert payload.get("defaults", {}).get("field_type") == "string"
-        assert payload.get("validation_limits", {}).get("max_fields_per_section") == 128
-        assert any(item.get("type_id") == "enum" for item in payload["field_types"])
-        assert any(item.get("type_id") == "external_refs" for item in payload["field_types"])
-        assert any(item.get("enum_set_id") == "priority" for item in payload["enum_sets"])
+        field_types = _schema_field_types(payload)
+        enum_sets = object_list(payload.get("enum_sets"))
+        operators = object_list(payload.get("operators"))
+        assert isinstance(field_types, list)
+        assert isinstance(enum_sets, list)
+        assert isinstance(operators, list)
+        defaults = object_dict(payload.get("defaults"), field="defaults")
+        validation_limits = object_dict(payload.get("validation_limits"), field="validation_limits")
+        assert object_str(defaults.get("field_type"), field="field_type") == "string"
+        assert _int_field(validation_limits, "max_fields_per_section") == 128
+        assert any(object_str(item.get("type_id"), field="type_id") == "enum" for item in field_types)
+        assert any(object_str(item.get("type_id"), field="type_id") == "external_refs" for item in field_types)
+        assert any(object_str(item.get("enum_set_id"), field="enum_set_id") == "priority" for item in enum_sets)
 
     @pytest.mark.asyncio
-    async def test_namespace_template_crud(self, crm_client, unique_id, auth_headers_system):
+    async def test_namespace_template_crud(
+        self,
+        crm_client: AsyncClient,
+        unique_id: str,
+        auth_headers_system: dict[str, str],
+    ) -> None:
         template_id = f"tmpl_{unique_id}"
         create_resp = await crm_client.post("/crm/api/v1/namespaces/templates", json={
             "template_id": template_id,
@@ -301,7 +426,7 @@ class TestEntityTypes:
             "description": "Updated description",
         }, headers=auth_headers_system)
         assert update_resp.status_code == 200
-        assert update_resp.json()["name"] == "Updated template"
+        assert object_str(_http_json(update_resp).get("name"), field="name") == "Updated template"
 
         type_resp = await crm_client.post(f"/crm/api/v1/namespaces/templates/{template_id}/types", json={
             "type_id": f"type_{unique_id}",
@@ -314,12 +439,20 @@ class TestEntityTypes:
 
         details_resp = await crm_client.get(f"/crm/api/v1/namespaces/templates/{template_id}", headers=auth_headers_system)
         assert details_resp.status_code == 200
-        details = details_resp.json()
-        assert details["template_id"] == template_id
-        assert any(item["type_id"] == f"type_{unique_id}" for item in details["types"])
+        details = _http_json(details_resp)
+        assert object_str(details.get("template_id"), field="template_id") == template_id
+        assert any(
+            object_str(item.get("type_id"), field="type_id") == f"type_{unique_id}"
+            for item in object_list(details.get("types"))
+        )
 
     @pytest.mark.asyncio
-    async def test_namespace_editability_and_update_when_empty(self, crm_client, unique_id, auth_headers_system):
+    async def test_namespace_editability_and_update_when_empty(
+        self,
+        crm_client: AsyncClient,
+        unique_id: str,
+        auth_headers_system: dict[str, str],
+    ) -> None:
         template_id = f"ops_{unique_id}"
         namespace_name = f"ops_ns_{unique_id}"
         type_alpha = f"incident_{unique_id}"
@@ -362,12 +495,13 @@ class TestEntityTypes:
             headers=auth_headers_system,
         )
         assert editability_resp.status_code == 200
-        editability = editability_resp.json()
-        assert editability["namespace"] == namespace_name
-        assert editability["entity_count"] == 0
-        assert editability["can_update_allowed_types"] is True
-        assert type_alpha in editability["current_allowed_type_ids"]
-        assert type_beta in editability["current_allowed_type_ids"]
+        editability = _http_json(editability_resp)
+        assert object_str(editability.get("namespace"), field="namespace") == namespace_name
+        assert _int_field(editability, "entity_count") == 0
+        assert _bool_field(editability, "can_update_allowed_types") is True
+        current_allowed_type_ids = _string_list(editability.get("current_allowed_type_ids"))
+        assert type_alpha in current_allowed_type_ids
+        assert type_beta in current_allowed_type_ids
 
         update_namespace_resp = await crm_client.put(
             f"/crm/api/v1/namespaces/{namespace_name}",
@@ -378,19 +512,24 @@ class TestEntityTypes:
             headers=auth_headers_system,
         )
         assert update_namespace_resp.status_code == 200
-        assert update_namespace_resp.json()["description"] == "Updated ops namespace"
+        assert object_str(_http_json(update_namespace_resp).get("description"), field="description") == "Updated ops namespace"
 
         types_by_namespace_resp = await crm_client.get(
             f"/crm/api/v1/entity-types/by-namespace/{namespace_name}",
             headers=auth_headers_system,
         )
         assert types_by_namespace_resp.status_code == 200
-        type_ids = [item["type_id"] for item in types_by_namespace_resp.json()["items"]]
+        type_ids = _type_ids_from_response(types_by_namespace_resp)
         assert type_alpha in type_ids
         assert type_beta not in type_ids
 
     @pytest.mark.asyncio
-    async def test_namespace_granular_editability_with_entities(self, crm_client, unique_id, auth_headers_system):
+    async def test_namespace_granular_editability_with_entities(
+        self,
+        crm_client: AsyncClient,
+        unique_id: str,
+        auth_headers_system: dict[str, str],
+    ) -> None:
         """Гранулярная editability: используемые типы залочены, неиспользуемые можно убрать, новые добавить"""
         template_id = f"sales_{unique_id}"
         namespace_name = f"sales_ns_{unique_id}"
@@ -434,12 +573,14 @@ class TestEntityTypes:
             headers=auth_headers_system,
         )
         assert editability_resp.status_code == 200
-        editability = editability_resp.json()
-        assert editability["entity_count"] >= 1
-        assert editability["can_add_types"] is True
-        assert type_lead in editability["locked_type_ids"]
-        assert type_deal in editability["removable_type_ids"]
-        assert type_lead not in editability["removable_type_ids"]
+        editability = _http_json(editability_resp)
+        assert _int_field(editability, "entity_count") >= 1
+        assert _bool_field(editability, "can_add_types") is True
+        locked_type_ids = _string_list(editability.get("locked_type_ids"))
+        removable_type_ids = _string_list(editability.get("removable_type_ids"))
+        assert type_lead in locked_type_ids
+        assert type_deal in removable_type_ids
+        assert type_lead not in removable_type_ids
 
         remove_locked_resp = await crm_client.put(
             f"/crm/api/v1/namespaces/{namespace_name}",
@@ -461,5 +602,4 @@ class TestEntityTypes:
             headers=auth_headers_system,
         )
         assert update_description_resp.status_code == 200
-        assert update_description_resp.json()["description"] == "Sales namespace updated"
-
+        assert object_str(_http_json(update_description_resp).get("description"), field="description") == "Sales namespace updated"

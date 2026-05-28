@@ -8,7 +8,7 @@
 - системные типы reports_to/manages/attended/owner_of присутствуют.
 """
 
-from typing import Any
+from __future__ import annotations
 
 import pytest
 
@@ -19,6 +19,16 @@ from apps.crm.system_templates import (
 
 _MIN_PROMPT_CHARS = 150
 
+_RELATIONSHIP_TYPES_WITH_PROMPT: list[RelationshipTypeTemplate] = [
+    spec
+    for spec in SYSTEM_RELATIONSHIP_TYPE_TEMPLATES
+    if spec.get("prompt") is not None
+]
+
+
+def _relationship_type_id(spec: RelationshipTypeTemplate) -> str:
+    return spec["type_id"]
+
 
 def _by_id() -> dict[str, RelationshipTypeTemplate]:
     return {spec["type_id"]: spec for spec in SYSTEM_RELATIONSHIP_TYPE_TEMPLATES}
@@ -27,21 +37,30 @@ def _by_id() -> dict[str, RelationshipTypeTemplate]:
 def test_relationship_type_ids_are_unique() -> None:
     seen: set[str] = set()
     for spec in SYSTEM_RELATIONSHIP_TYPE_TEMPLATES:
-        tid = spec["type_id"]
-        assert tid not in seen, tid
-        seen.add(tid)
+        type_id = spec["type_id"]
+        assert type_id not in seen, type_id
+        seen.add(type_id)
 
 
-@pytest.mark.parametrize("spec", SYSTEM_RELATIONSHIP_TYPE_TEMPLATES, ids=lambda s: s["type_id"])
-def test_relationship_type_has_name_and_description(spec: dict[str, Any]) -> None:
-    name = spec.get("name")
-    description = spec.get("description")
-    assert isinstance(name, str) and len(name.strip()) >= 2, spec["type_id"]
-    assert isinstance(description, str) and len(description.strip()) >= 20, spec["type_id"]
+@pytest.mark.parametrize(
+    "spec",
+    SYSTEM_RELATIONSHIP_TYPE_TEMPLATES,
+    ids=_relationship_type_id,
+)
+def test_relationship_type_has_name_and_description(spec: RelationshipTypeTemplate) -> None:
+    type_id = spec["type_id"]
+    name = spec["name"]
+    description = spec["description"]
+    assert len(name.strip()) >= 2, type_id
+    assert len(description.strip()) >= 20, type_id
 
 
-@pytest.mark.parametrize("spec", SYSTEM_RELATIONSHIP_TYPE_TEMPLATES, ids=lambda s: s["type_id"])
-def test_relationship_inverse_resolves(spec: dict[str, Any]) -> None:
+@pytest.mark.parametrize(
+    "spec",
+    SYSTEM_RELATIONSHIP_TYPE_TEMPLATES,
+    ids=_relationship_type_id,
+)
+def test_relationship_inverse_resolves(spec: RelationshipTypeTemplate) -> None:
     inverse = spec.get("inverse_type_id")
     if inverse is None:
         return
@@ -52,25 +71,26 @@ def test_relationship_inverse_resolves(spec: dict[str, Any]) -> None:
 
 @pytest.mark.parametrize(
     "spec",
-    [s for s in SYSTEM_RELATIONSHIP_TYPE_TEMPLATES if s.get("prompt") is not None],
-    ids=lambda s: s["type_id"],
+    _RELATIONSHIP_TYPES_WITH_PROMPT,
+    ids=_relationship_type_id,
 )
-def test_relationship_prompt_is_long_and_structured(spec: dict[str, Any]) -> None:
-    prompt = spec["prompt"]
-    assert isinstance(prompt, str), spec["type_id"]
+def test_relationship_prompt_is_long_and_structured(spec: RelationshipTypeTemplate) -> None:
+    prompt = spec.get("prompt")
+    type_id = spec["type_id"]
+    assert prompt is not None
     assert len(prompt) >= _MIN_PROMPT_CHARS, (
-        spec["type_id"],
+        type_id,
         f"prompt too short ({len(prompt)} < {_MIN_PROMPT_CHARS})",
     )
     lower = prompt.lower()
-    assert "когда использовать" in lower, spec["type_id"]
-    assert "пример" in lower, spec["type_id"]
-    assert "когда не" in lower, spec["type_id"]
+    assert "когда использовать" in lower, type_id
+    assert "пример" in lower, type_id
+    assert "когда не" in lower, type_id
 
 
 def test_required_system_relationship_types_present() -> None:
     by_id = _by_id()
-    for tid in (
+    for type_id in (
         "mentions",
         "linked",
         "related_to",
@@ -89,7 +109,7 @@ def test_required_system_relationship_types_present() -> None:
         "note_voice",
         "in_context",
     ):
-        assert tid in by_id, tid
+        assert type_id in by_id, type_id
 
 
 def test_directed_pairs_are_consistent() -> None:
@@ -100,8 +120,14 @@ def test_directed_pairs_are_consistent() -> None:
         ("blocks", "blocked_by"),
         ("reports_to", "manages"),
     )
-    for a, b in pairs:
-        assert by_id[a].get("inverse_type_id") == b, (a, b)
-        assert by_id[b].get("inverse_type_id") == a, (a, b)
-        assert by_id[a].get("is_directed") is True, a
-        assert by_id[b].get("is_directed") is True, b
+    for first_type_id, second_type_id in pairs:
+        assert by_id[first_type_id].get("inverse_type_id") == second_type_id, (
+            first_type_id,
+            second_type_id,
+        )
+        assert by_id[second_type_id].get("inverse_type_id") == first_type_id, (
+            first_type_id,
+            second_type_id,
+        )
+        assert by_id[first_type_id].get("is_directed") is True, first_type_id
+        assert by_id[second_type_id].get("is_directed") is True, second_type_id

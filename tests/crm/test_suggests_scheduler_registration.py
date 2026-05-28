@@ -1,7 +1,9 @@
 from __future__ import annotations
 
 import inspect
+from collections.abc import Callable
 from pathlib import Path
+from typing import cast
 
 from apps.crm.scheduled_integration_constants import (
     SCHEDULED_NAMESPACE_INTEGRATION_UNIFIED_SYNC_TASK_NAME,
@@ -26,21 +28,26 @@ CRM_SCHEDULER_TASK_NAMES = (
 )
 
 
+def _task_signature(task: object) -> inspect.Signature:
+    wrapped = cast(Callable[..., object], task)
+    unwrapped = cast(Callable[..., object], inspect.unwrap(wrapped))
+    return inspect.signature(unwrapped)
+
+
 def test_crm_scheduler_tasks_are_registered_for_scheduler() -> None:
     import apps.scheduler.scheduler as scheduler_module
 
     assert scheduler_module.scheduler is not None
+    required_names = scheduler_module._CRM_SCHEDULER_REQUIRED_TASK_NAMES  # pyright: ignore[reportPrivateUsage]
     for task_name in CRM_SCHEDULER_TASK_NAMES:
-        assert task_name in scheduler_module._CRM_SCHEDULER_REQUIRED_TASK_NAMES
+        assert task_name in required_names
 
 
 def test_crm_scheduled_tasks_accept_scheduler_payload() -> None:
-    suggest_sig = inspect.signature(inspect.unwrap(crm_generate_namespace_suggests_tick))
-    reconcile_sig = inspect.signature(inspect.unwrap(reconcile_daily_summary_task))
-    reembed_sig = inspect.signature(inspect.unwrap(crm_reembed_stale_documents_tick))
-    integration_sig = inspect.signature(
-        inspect.unwrap(scheduled_namespace_integration_unified_sync)
-    )
+    suggest_sig = _task_signature(crm_generate_namespace_suggests_tick)
+    reconcile_sig = _task_signature(reconcile_daily_summary_task)
+    reembed_sig = _task_signature(crm_reembed_stale_documents_tick)
+    integration_sig = _task_signature(scheduled_namespace_integration_unified_sync)
 
     assert "schedule_task_id" in suggest_sig.parameters
     assert "schedule_task_id" in reconcile_sig.parameters

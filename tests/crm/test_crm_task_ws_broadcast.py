@@ -5,22 +5,26 @@ from __future__ import annotations
 from datetime import datetime, timezone
 
 import pytest
+from pytest import MonkeyPatch
 
 from apps.crm.db.models import CRMTask
 from apps.crm.services import crm_task_ws_broadcast as broadcast_mod
+from tests.crm.e2e._json_helpers import object_dict
 
 
 @pytest.mark.asyncio
-async def test_broadcast_crm_task_updated_for_user_payload(monkeypatch):
+async def test_broadcast_crm_task_updated_for_user_payload(
+    monkeypatch: MonkeyPatch,
+) -> None:
     recorded: list[tuple[str, str, dict[str, object]]] = []
 
     async def _capture(**kwargs: object) -> None:
-        user_id = kwargs.get('user_id')
-        event_type = kwargs.get('type')
-        payload = kwargs.get('payload')
-        if not isinstance(user_id, str) or not isinstance(event_type, str) or not isinstance(payload, dict):
-            raise AssertionError('publish_ui_event_to_user mock: expected user_id, type, payload')
-        recorded.append((user_id, event_type, payload))
+        user_id = kwargs.get("user_id")
+        event_type = kwargs.get("type")
+        payload = kwargs.get("payload")
+        if not isinstance(user_id, str) or not isinstance(event_type, str):
+            raise AssertionError("publish_ui_event_to_user mock: expected user_id, type")
+        recorded.append((user_id, event_type, object_dict(payload, field="payload")))
 
     monkeypatch.setattr(broadcast_mod, "publish_ui_event_to_user", _capture)
 
@@ -49,12 +53,9 @@ async def test_broadcast_crm_task_updated_for_user_payload(monkeypatch):
     uid, event_type, payload = recorded[0]
     assert uid == "user_1"
     assert event_type == "crm/task/updated"
-    task_raw = payload.get("task")
-    assert isinstance(task_raw, dict)
-    task: dict[str, object] = task_raw
+    task = object_dict(payload.get("task"), field="task")
     assert task["task_id"] == "task_ws_test_1"
     assert task["task_type"] == "note_analyze"
     assert task["status"] == "running"
-    task_data = task["data"]
-    assert isinstance(task_data, dict)
+    task_data = object_dict(task.get("data"), field="data")
     assert task_data["note_id"] == "note_1"

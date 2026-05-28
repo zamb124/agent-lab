@@ -48,7 +48,7 @@ export class PublicSearchPage extends PlatformPage {
             }
 
             .topbar {
-                height: 72px;
+                height: 60px;
                 display: flex;
                 align-items: center;
                 justify-content: space-between;
@@ -116,15 +116,37 @@ export class PublicSearchPage extends PlatformPage {
                 gap: 18px;
             }
 
+            .search-head.is-active {
+                position: sticky;
+                top: 60px;
+                z-index: 16;
+                padding: 12px clamp(18px, 4vw, 56px);
+                background: linear-gradient(180deg, rgba(11, 11, 11, 0.90), rgba(11, 11, 11, 0.70));
+                border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+                backdrop-filter: blur(22px);
+            }
+
             .search-title {
                 margin: 0;
                 font-family: 'Fira Sans Condensed', sans-serif;
                 font-weight: 500;
-                font-size: clamp(42px, 9vw, 112px);
+                font-size: 92px;
                 line-height: 0.96;
                 letter-spacing: 0;
                 text-align: center;
                 color: rgba(245, 245, 243, 0.95);
+            }
+
+            .search-head.is-active .search-title {
+                position: absolute;
+                width: 1px;
+                height: 1px;
+                padding: 0;
+                margin: -1px;
+                overflow: hidden;
+                clip: rect(0 0 0 0);
+                white-space: nowrap;
+                border: 0;
             }
 
             .search-shell {
@@ -139,12 +161,24 @@ export class PublicSearchPage extends PlatformPage {
                 animation: searchEnter 340ms ease both;
             }
 
+            .search-head.is-active .search-shell {
+                width: min(980px, calc(100vw - 32px));
+                border-radius: 24px;
+                padding: 8px;
+                box-shadow: 0 18px 54px rgba(0, 0, 0, 0.36);
+            }
+
             .search-line {
                 min-height: 58px;
                 display: grid;
                 grid-template-columns: 44px minmax(0, 1fr) 44px;
                 align-items: center;
                 gap: 4px;
+            }
+
+            .search-head.is-active .search-line {
+                min-height: 46px;
+                grid-template-columns: 38px minmax(0, 1fr) 40px;
             }
 
             .search-icon {
@@ -162,6 +196,11 @@ export class PublicSearchPage extends PlatformPage {
                 color: #fff;
                 font: 500 20px/1.25 'Fira Sans', system-ui, sans-serif;
                 letter-spacing: 0;
+            }
+
+            .search-head.is-active input[type='search'] {
+                height: 42px;
+                font-size: 18px;
             }
 
             input[type='search']::placeholder {
@@ -186,6 +225,11 @@ export class PublicSearchPage extends PlatformPage {
             .icon-tool:hover {
                 background: #6877ff;
                 transform: translateY(-1px);
+            }
+
+            .search-head.is-active .send-button {
+                width: 40px;
+                height: 40px;
             }
 
             .send-button:disabled {
@@ -226,6 +270,13 @@ export class PublicSearchPage extends PlatformPage {
                 white-space: nowrap;
             }
 
+            .search-head.is-active .mode-chip {
+                height: 31px;
+                gap: 6px;
+                padding: 0 11px;
+                font-size: 13px;
+            }
+
             .mode-chip:hover {
                 background: rgba(255, 255, 255, 0.12);
                 color: #fff;
@@ -243,6 +294,11 @@ export class PublicSearchPage extends PlatformPage {
                 height: 36px;
                 color: rgba(245, 245, 243, 0.76);
                 background: rgba(255, 255, 255, 0.07);
+            }
+
+            .search-head.is-active .icon-tool {
+                width: 31px;
+                height: 31px;
             }
 
             .icon-tool[disabled] {
@@ -267,6 +323,10 @@ export class PublicSearchPage extends PlatformPage {
                 flex-wrap: wrap;
                 gap: 8px;
                 padding: 10px 2px 0;
+            }
+
+            .search-head.is-active .file-list {
+                padding-top: 8px;
             }
 
             .file-chip {
@@ -326,18 +386,18 @@ export class PublicSearchPage extends PlatformPage {
             }
 
             .results-wrap {
-                width: min(1180px, calc(100vw - 32px));
+                width: min(1280px, calc(100vw - 32px));
                 margin: 0 auto;
-                padding: 26px 0 72px;
+                padding: 16px 0 72px;
                 display: grid;
-                grid-template-columns: minmax(0, 1fr) minmax(320px, 390px);
-                gap: 18px;
+                grid-template-columns: minmax(0, 1fr) minmax(280px, 340px);
+                gap: 14px;
                 align-items: start;
             }
 
             .primary-column {
                 display: grid;
-                gap: 18px;
+                gap: 14px;
                 align-items: start;
             }
 
@@ -348,14 +408,14 @@ export class PublicSearchPage extends PlatformPage {
                 border: 1px solid rgba(255, 255, 255, 0.08);
                 background: rgba(22, 22, 22, 0.82);
                 backdrop-filter: blur(20px);
-                border-radius: var(--radius-2xl, 24px);
+                border-radius: 20px;
                 box-sizing: border-box;
                 overflow: hidden;
             }
 
             .answer-panel {
-                padding: 24px;
-                min-height: 168px;
+                padding: 18px;
+                min-height: 116px;
                 animation: resultIn 300ms ease both;
             }
 
@@ -363,20 +423,33 @@ export class PublicSearchPage extends PlatformPage {
                 display: flex;
                 align-items: center;
                 gap: 8px;
-                margin: 0 0 14px;
+                margin: 0 0 10px;
                 color: rgba(245, 245, 243, 0.58);
-                font-size: 13px;
+                font-size: 12px;
                 line-height: 1;
                 text-transform: uppercase;
                 letter-spacing: 0;
+            }
+
+            .panel-count {
+                min-height: 20px;
+                display: inline-flex;
+                align-items: center;
+                border-radius: 999px;
+                padding: 0 7px;
+                color: rgba(245, 245, 243, 0.68);
+                background: rgba(255, 255, 255, 0.07);
+                font-size: 12px;
+                line-height: 1;
+                text-transform: none;
             }
 
             .answer-text {
                 margin: 0;
                 overflow-wrap: anywhere;
                 color: rgba(255, 255, 255, 0.92);
-                font-size: 18px;
-                line-height: 1.62;
+                font-size: 16px;
+                line-height: 1.56;
             }
 
             .answer-text > :first-child,
@@ -412,7 +485,7 @@ export class PublicSearchPage extends PlatformPage {
 
             .answer-text h1,
             .answer-text h2 {
-                font-size: 24px;
+                font-size: 21px;
             }
 
             .answer-text h3,
@@ -489,7 +562,7 @@ export class PublicSearchPage extends PlatformPage {
             }
 
             .answer-placeholder {
-                min-height: 74px;
+                min-height: 54px;
                 display: grid;
                 align-items: center;
                 color: rgba(245, 245, 243, 0.48);
@@ -508,15 +581,15 @@ export class PublicSearchPage extends PlatformPage {
 
             .source-list {
                 display: grid;
-                gap: 10px;
-                margin-top: 12px;
+                gap: 8px;
+                margin-top: 10px;
             }
 
             .source-card {
                 display: grid;
-                gap: 9px;
-                padding: 16px;
-                border-radius: var(--radius-xl, 20px);
+                gap: 7px;
+                padding: 12px;
+                border-radius: 16px;
                 color: inherit;
                 text-decoration: none;
                 background: rgba(255, 255, 255, 0.045);
@@ -541,18 +614,18 @@ export class PublicSearchPage extends PlatformPage {
             .source-main {
                 min-width: 0;
                 display: grid;
-                gap: 9px;
+                gap: 6px;
             }
 
             .source-ai-button {
                 flex-shrink: 0;
-                min-height: 32px;
+                min-height: 30px;
                 border: 0;
                 border-radius: var(--radius-full, 999px);
                 display: inline-flex;
                 align-items: center;
                 gap: 7px;
-                padding: 0 11px;
+                padding: 0 10px;
                 color: #fff;
                 background: rgba(137, 149, 255, 0.20);
                 box-shadow: inset 0 0 0 1px rgba(137, 149, 255, 0.22);
@@ -574,8 +647,8 @@ export class PublicSearchPage extends PlatformPage {
 
             .source-ai-panel {
                 margin-top: 2px;
-                padding: 13px 14px;
-                border-radius: var(--radius-lg, 16px);
+                padding: 12px;
+                border-radius: 14px;
                 border: 1px solid rgba(137, 149, 255, 0.18);
                 background: rgba(87, 104, 254, 0.10);
                 color: rgba(245, 245, 243, 0.84);
@@ -602,9 +675,13 @@ export class PublicSearchPage extends PlatformPage {
             .source-title {
                 margin: 0;
                 color: #fff;
-                font-size: 17px;
-                line-height: 1.32;
+                font-size: 15px;
+                line-height: 1.28;
                 overflow-wrap: anywhere;
+                display: -webkit-box;
+                -webkit-line-clamp: 2;
+                -webkit-box-orient: vertical;
+                overflow: hidden;
             }
 
             a.source-title {
@@ -619,9 +696,12 @@ export class PublicSearchPage extends PlatformPage {
             .source-url {
                 margin: 0;
                 color: #9aa3ff;
-                font-size: 13px;
-                line-height: 1.35;
+                font-size: 12px;
+                line-height: 1.3;
                 overflow-wrap: anywhere;
+                white-space: nowrap;
+                overflow: hidden;
+                text-overflow: ellipsis;
             }
 
             .source-url a {
@@ -637,14 +717,19 @@ export class PublicSearchPage extends PlatformPage {
             .source-insight {
                 margin: 0;
                 color: rgba(245, 245, 243, 0.68);
-                font-size: 14px;
-                line-height: 1.48;
+                font-size: 13px;
+                line-height: 1.42;
+                display: -webkit-box;
+                -webkit-line-clamp: 2;
+                -webkit-box-orient: vertical;
+                overflow: hidden;
             }
 
             .source-insight {
-                padding-top: 8px;
+                padding-top: 6px;
                 border-top: 1px solid rgba(255, 255, 255, 0.07);
                 color: rgba(245, 245, 243, 0.78);
+                -webkit-line-clamp: 1;
             }
 
             .source-meta {
@@ -669,15 +754,15 @@ export class PublicSearchPage extends PlatformPage {
 
             .side-column {
                 display: grid;
-                gap: 12px;
+                gap: 10px;
                 position: sticky;
-                top: 92px;
+                top: 148px;
             }
 
             .provider-panel,
             .suggest-panel,
             .sources-panel {
-                padding: 16px;
+                padding: 14px;
             }
 
             .provider-list,
@@ -701,10 +786,15 @@ export class PublicSearchPage extends PlatformPage {
                 font: 500 13px/1 'Fira Sans', system-ui, sans-serif;
             }
 
+            .provider-count {
+                color: rgba(245, 245, 243, 0.48);
+            }
+
             .suggest-chip {
                 cursor: pointer;
                 transition: background 180ms ease, color 180ms ease, transform 180ms ease;
                 text-align: left;
+                line-height: 1.16;
             }
 
             .suggest-chip:hover {
@@ -769,6 +859,10 @@ export class PublicSearchPage extends PlatformPage {
             }
 
             @media (max-width: 980px) {
+                .search-title {
+                    font-size: 72px;
+                }
+
                 .results-wrap {
                     grid-template-columns: 1fr;
                 }
@@ -785,6 +879,11 @@ export class PublicSearchPage extends PlatformPage {
                     padding: 0 14px;
                 }
 
+                .search-head.is-active {
+                    top: 64px;
+                    padding: 10px 10px;
+                }
+
                 .brand-name {
                     font-size: 20px;
                 }
@@ -797,9 +896,17 @@ export class PublicSearchPage extends PlatformPage {
                     padding: 28px 14px 16px;
                 }
 
+                .search-title {
+                    font-size: 48px;
+                }
+
                 .search-shell {
                     border-radius: 24px;
                     padding: 8px;
+                }
+
+                .search-head.is-active .search-shell {
+                    border-radius: 20px;
                 }
 
                 .search-line {
@@ -831,6 +938,7 @@ export class PublicSearchPage extends PlatformPage {
 
                 .results-wrap {
                     width: calc(100vw - 20px);
+                    padding-top: 10px;
                     padding-bottom: 42px;
                 }
 
@@ -898,6 +1006,10 @@ export class PublicSearchPage extends PlatformPage {
 
     _isMode(value) {
         return value === 'quick' || value === 'deep' || value === 'research';
+    }
+
+    _isStreamActive(stream) {
+        return stream.phase !== 'idle' || this._search.busy || stream.results.length > 0;
     }
 
     _handleInput(event) {
@@ -1264,7 +1376,11 @@ export class PublicSearchPage extends PlatformPage {
         }
         return html`
             <section class="sources-panel">
-                <p class="panel-label"><platform-icon name="link" size="14"></platform-icon><span>${this.t('search_page.sources_label')}</span></p>
+                <p class="panel-label">
+                    <platform-icon name="link" size="14"></platform-icon>
+                    <span>${this.t('search_page.sources_label')}</span>
+                    <span class="panel-count">${stream.results.length}</span>
+                </p>
                 <div class="source-list">
                     ${stream.results.map((result, index) => this._renderSource(stream, result, index))}
                 </div>
@@ -1285,6 +1401,7 @@ export class PublicSearchPage extends PlatformPage {
                         <span class="provider-chip" data-ok=${status.ok ? 'true' : 'false'}>
                             <span class="provider-state"></span>
                             <span>${name}</span>
+                            <span class="provider-count">${status.results_count}</span>
                         </span>
                     `)}
                 </div>
@@ -1312,7 +1429,7 @@ export class PublicSearchPage extends PlatformPage {
     }
 
     _renderBody(stream) {
-        const active = stream.phase !== 'idle' || this._search.busy || stream.results.length > 0;
+        const active = this._isStreamActive(stream);
         if (!active) {
             return html`<div class="empty-shell">${this.t('search_page.empty_hint')}</div>`;
         }
@@ -1332,6 +1449,7 @@ export class PublicSearchPage extends PlatformPage {
 
     render() {
         const stream = this._search.state.stream;
+        const active = this._isStreamActive(stream);
         return html`
             <div class="page">
                 <header class="topbar">
@@ -1344,7 +1462,7 @@ export class PublicSearchPage extends PlatformPage {
                         <span class="back-label">${this.t('search_page.back')}</span>
                     </button>
                 </header>
-                <section class="search-head">
+                <section class=${active ? 'search-head is-active' : 'search-head'}>
                     <h1 class="search-title">${this.t('search_page.title')}</h1>
                     ${this._renderComposer()}
                 </section>
