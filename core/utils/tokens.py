@@ -64,7 +64,7 @@ class TokenService:
         """
         Создает JWT токен.
 
-        Args:
+        Аргументы:
             user_id: ID пользователя
             company_id: ID компании
             roles: Роли пользователя в компании
@@ -74,7 +74,7 @@ class TokenService:
             metadata: Дополнительные данные (provider, user_name и т.д.)
             email: Email пользователя
 
-        Returns:
+        Возвращает:
             JWT токен
         """
         if expires_in is None:
@@ -121,13 +121,13 @@ class TokenService:
         """
         Создает долгоживущий API токен для интеграций.
 
-        Args:
+        Аргументы:
             user_id: ID пользователя
             company_id: ID компании
             roles: Роли пользователя
             expires_in: Время жизни (по умолчанию 2 года)
 
-        Returns:
+        Возвращает:
             JWT токен
         """
         return self.create_token(
@@ -161,10 +161,10 @@ class TokenService:
         """
         Проверяет JWT токен и возвращает данные.
 
-        Args:
+        Аргументы:
             token: JWT токен для проверки
 
-        Returns:
+        Возвращает:
             Данные токена или None если недействителен
         """
         if not token:

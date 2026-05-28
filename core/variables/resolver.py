@@ -228,11 +228,11 @@ class VariableResolver:
         """
         Собирает все переменные с учетом приоритета.
 
-        Args:
+        Аргументы:
             local_vars: Локальные переменные (наивысший приоритет)
             include_system: Включать системные переменные
 
-        Returns:
+        Возвращает:
             Словарь всех переменных
         """
         variables: VariableDict = {}
@@ -315,11 +315,11 @@ class VariableResolver:
         """
         Резолвит значение переменной из словаря.
 
-        Args:
+        Аргументы:
             expr: Выражение переменной (может быть с точками для вложенных)
             variables: Словарь переменных
 
-        Returns:
+        Возвращает:
             (value, found) - значение и флаг найденности
         """
         parts = expr.split(".")
@@ -358,13 +358,13 @@ class VariableResolver:
         - ?variable - короткий формат опциональной (без скобок)
         - ?variable|default - короткий формат опциональной с default
 
-        Args:
+        Аргументы:
             template: Шаблон строки
             local_vars: Локальные переменные
             safe: Если True, не падает на отсутствующие переменные
             include_system: Включать системные переменные
 
-        Returns:
+        Возвращает:
             Строка с подставленными переменными
         """
         if not template:
@@ -700,7 +700,7 @@ def get_state() -> VariableDict | None:
     Получает state агента из контекста.
     Используется в тулах для доступа к store и другим данным state.
 
-    Returns:
+    Возвращает:
         State агента или None если не доступен
     """
     context = get_context()
@@ -717,7 +717,7 @@ def set_state_in_context(state: VariableDict) -> None:
     Устанавливает state в контекст.
     Вызывается автоматически при входе в агента.
 
-    Args:
+    Аргументы:
         state: State агента для установки в контекст
     """
     context = get_context()

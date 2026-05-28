@@ -47,7 +47,7 @@ class HTTPRepositoryProxy(Generic[T]):
         model_class: type[T],
     ) -> None:
         """
-        Args:
+        Аргументы:
             repository_class: Класс репозитория (для получения URL и prefix)
             model_class: Класс Pydantic модели
         """
@@ -171,7 +171,7 @@ class HTTPRepositoryProxy(Generic[T]):
     # Стандартные методы для обратной совместимости (оптимизированные пути)
 
     async def get(self, entity_id: str) -> T | None:
-        """GET /{entity_id}"""
+        """GET /{entity_id} — получение сущности"""
         try:
             data = await self._request("GET", f"/{entity_id}")
             if data is None:
@@ -183,13 +183,13 @@ class HTTPRepositoryProxy(Generic[T]):
             raise
 
     async def set(self, entity: T) -> bool:
-        """POST /"""
+        """POST / — создание или обновление"""
         entity_data = require_json_object(entity.model_dump(mode="json"), "repository.entity")
         _ = await self._request("POST", "", json_payload=entity_data)
         return True
 
     async def delete(self, entity_id: str) -> bool:
-        """DELETE /{entity_id}"""
+        """DELETE /{entity_id} — удаление"""
         try:
             _ = await self._request("DELETE", f"/{entity_id}")
             return True
@@ -199,7 +199,7 @@ class HTTPRepositoryProxy(Generic[T]):
             raise
 
     async def list(self, *, limit: int, offset: int = 0) -> list[T]:
-        """GET /?limit={limit}&offset={offset}"""
+        """GET /?limit=&offset= — список с пагинацией"""
         data = await self._request("GET", "", params={"limit": limit, "offset": offset})
         if data is None:
             return []
@@ -210,7 +210,7 @@ class HTTPRepositoryProxy(Generic[T]):
         ]
 
     async def get_many(self, entity_ids: list[str]) -> dict[str, T]:
-        """POST /many"""
+        """POST /many — пакетное получение"""
         if not entity_ids:
             return {}
         data = await self._request("POST", "/many", json_payload=entity_ids)

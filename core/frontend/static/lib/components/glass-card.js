@@ -1,6 +1,6 @@
 /**
- * Glass Card Component
- * Карточка с glass morphism эффектом
+ * Компонент Glass Card
+ * Карточка с glass morphism-эффектом
  */
 import { html, css } from 'lit';
 import { PlatformElement } from '../platform-element/index.js';

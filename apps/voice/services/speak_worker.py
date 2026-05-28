@@ -1,4 +1,4 @@
-"""Speak worker — потоковое озвучивание текста, приходящего в voice session.
+"""Speak worker — потоковое озвучивание текста, поступающего в voice session.
 
 Универсальный компонент: не знает про ``apps/flows``, A2A, agent-logic. Кормит
 ``session.synthesis_queue`` текстовыми чанками, прогоняет их через

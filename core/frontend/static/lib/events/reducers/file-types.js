@@ -1,5 +1,5 @@
 /**
- * FileTypes slice — реестр типов файлов платформы.
+ * Слайс fileTypes — реестр типов файлов платформы.
  *
  * state.fileTypes:
  *   loaded:     boolean

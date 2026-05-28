@@ -4,7 +4,7 @@
  * Принципы:
  *   - Никаких прямых сервис-вызовов: любое действие = `dispatch(type, payload)`.
  *   - Никакого setState / прямой записи в стор: чтение — только через `select()`.
- *   - Никаких произвольных CustomEvent для cross-component обмена: только bus.
+ *   - Никаких произвольных CustomEvent для межкомпонентного обмена: только bus.
  *   - Никаких импортов CoreEvents/I18nNs/контроллеров/resource-объектов
  *     в pages/modals — всё доступно как методы базового класса.
  *
@@ -116,7 +116,7 @@ export class PlatformElement extends LitElement {
 
     /**
      * Локальное DOM-событие для непосредственного родителя через slot/composed-boundary.
-     * Lit-паттерн child→parent. Запрещено для cross-component / cross-app обмена —
+     * Lit-паттерн child→parent. Запрещено для межкомпонентного / межприложенческого обмена —
      * для этого используй `dispatch(...)` (bus). check_ui_canon разрешает emit/CustomEvent
      * только внутри core/frontend/static/lib (presentational compositions).
      */
@@ -236,7 +236,7 @@ export class PlatformElement extends LitElement {
         let kind = null;
         let id = null;
         if (target === undefined || target === null) {
-            // pop topmost
+            // снять верхний элемент
         } else if (typeof target === 'string') {
             if (target.length === 0) {
                 throw new Error('PlatformElement.closeModal: kind must be non-empty string');
@@ -288,7 +288,7 @@ export class PlatformElement extends LitElement {
         let kind = null;
         let id = null;
         if (target === undefined || target === null) {
-            // pop topmost
+            // снять верхний элемент
         } else if (typeof target === 'string') {
             if (target.length === 0) {
                 throw new Error('PlatformElement.closeBottomSheet: kind must be non-empty string');

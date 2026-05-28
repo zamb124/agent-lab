@@ -34,7 +34,7 @@ _EDGE_ALLOWED_FIELDS = frozenset({"from_node", "to_node", "condition", "contribu
 
 
 def _edge_endpoint_ids(edge: JsonObject) -> tuple[str | None, str | None]:
-    """Return canonical edge endpoints."""
+    """Возвращает канонические концы ребра."""
     fn = edge.get("from_node")
     tn = edge.get("to_node")
     if not isinstance(fn, str) or fn == "":
@@ -119,14 +119,14 @@ class FlowValidator:
         """
         Валидирует конфигурацию flow.
 
-        Args:
+        Аргументы:
             nodes: Словарь нод {node_id: config}
             edges: Список edges [{from_node, to_node, condition}]
             entry: ID entry ноды
             variables: Переменные flow
             flow_id: ID flow (опционально, для контекста)
 
-        Returns:
+        Возвращает:
             FlowValidationResult с ошибками и предупреждениями
         """
         result = FlowValidationResult(valid=True)
@@ -167,7 +167,7 @@ class FlowValidator:
         """Валидация структуры графа."""
         node_ids = set(nodes.keys())
 
-        # Entry существует
+        # Точка входа существует
         if not entry:
             result.add_error(
                 code="missing_entry",
@@ -439,7 +439,7 @@ class FlowValidator:
                 self._validate_react_role_uniqueness(node_id, tools, result)
             for tool_ref in tools:
                 if isinstance(tool_ref, dict):
-                    # Inline tool - пропускаем
+                    # Inline tool — пропускаем проверку
                     continue
                 if not isinstance(tool_ref, str) or not tool_ref:
                     result.add_error(

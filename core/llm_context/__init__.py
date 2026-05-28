@@ -1,4 +1,4 @@
-"""Platform LLM context layer."""
+"""Платформенный слой LLM-контекста."""
 
 from core.llm_context.compiler import LLMContextBudgetError, LLMContextCompiler
 from core.llm_context.memory import (

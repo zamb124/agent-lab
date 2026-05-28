@@ -52,10 +52,10 @@ class SubdomainRepository(BaseRepository[SubdomainMapping]):
         """
         Получает company_id по subdomain.
 
-        Args:
+        Аргументы:
             subdomain: Поддомен
 
-        Returns:
+        Возвращает:
             company_id или None
         """
         mapping = await self.get(subdomain)
@@ -65,11 +65,11 @@ class SubdomainRepository(BaseRepository[SubdomainMapping]):
         """
         Устанавливает маппинг subdomain → company_id.
 
-        Args:
+        Аргументы:
             subdomain: Поддомен
             company_id: ID компании
 
-        Returns:
+        Возвращает:
             True если сохранение успешно
         """
         mapping = SubdomainMapping(subdomain=subdomain, company_id=company_id)

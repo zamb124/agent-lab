@@ -1,8 +1,7 @@
 """
-LLM client runtime composition root.
+Корневая композиция runtime LLM-клиента.
 
-Stream-first architecture: all runtime LLM calls go through ``get_llm`` and
-``LLMClient.stream``.
+Stream-first: все runtime-вызовы LLM идут через ``get_llm`` и ``LLMClient.stream``.
 """
 
 from __future__ import annotations
@@ -73,7 +72,7 @@ def should_use_platform_default_free_pool(
     folder_id: str | None,
     settings: BaseSettings,
 ) -> bool:
-    """Public predicate for callers that must decide billing before creating a client."""
+    """Публичный предикат для call-site, которым нужно решить биллинг до создания клиента."""
     return _should_use_platform_default_pool(
         model=model,
         provider=provider,
@@ -107,7 +106,7 @@ def get_llm(
     """
     Создает LLM клиент.
 
-    Args:
+    Аргументы:
         model_name: Имя модели
         temperature: Температура
         provider: Провайдер (openai, openrouter, bothub, yandex,
@@ -117,7 +116,7 @@ def get_llm(
         folder_id: Каталог Yandex Cloud (yandex); иначе из llm.yandex.folder_id
         max_tokens: Лимит токенов ответа (если None — из настроек модели / глобальных)
         state: ExecutionState для резолюции @var:
-        fallback_models: Ordered list of full LLMCallConfig fallback attempts.
+        fallback_models: Упорядоченный список полных конфигов fallback (LLMCallConfig).
         allow_platform_paid_fallback: Для платформенного default-route через free-pool
             разрешает последний платный fallback. Рантайм flows выключает его при
             неположительном балансе, чтобы бесплатные модели не блокировались pre-flight биллингом.

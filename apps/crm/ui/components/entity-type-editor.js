@@ -4,7 +4,7 @@
  * Используется и в `templates-page` (тип внутри шаблона), и в
  * `namespace-detail-page` (тип компании, привязанный к namespace).
  *
- * Props:
+ * Свойства:
  *   - typeDraft: { type_id, name, description, prompt, parent_type_id, icon,
  *                  color, is_event, check_duplicates, is_context_anchor,
  *                  is_voice_target, weight_coefficient, required_fields_rows,

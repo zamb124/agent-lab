@@ -1,4 +1,4 @@
-"""Helpers for generated Flows UI scenarios."""
+"""Хелперы для сгенерированных UI-сценариев Flows."""
 
 from __future__ import annotations
 
@@ -10,7 +10,7 @@ from playwright.async_api import Locator, Page, expect
 
 
 def flows_company_origin(origin: str, company_slug: str = "company2") -> str:
-    """Return the same test service origin on a company subdomain."""
+    """Возвращает тот же origin тестового сервиса на subdomain компании."""
     return origin.replace("://localhost", f"://{company_slug}.localhost")
 
 
@@ -164,7 +164,7 @@ async def flows_set_platform_field(field: Locator, value: str) -> None:
 
 
 async def flows_drop_llm_node(page: Page, *, x: int = 700, y: int = 330) -> None:
-    """Add an LLM node via UI drag-and-drop; fall back to the canvas method if Chromium DnD flakes."""
+    """Добавляет LLM-ноду через drag-and-drop в UI; при сбое DnD в Chromium использует метод canvas."""
     source = page.locator("flows-node-types-sidebar .node-item[data-node-type='llm_node']").first
     canvas_svg = page.locator("flows-flow-canvas svg.canvas-host").first
     await expect(source).to_be_visible(timeout=30_000)

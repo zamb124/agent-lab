@@ -85,7 +85,7 @@ class AgentsetRAGProvider(BaseRAGProvider):
         Создает namespace в Agentset.
         Если не указать embeddingConfig - используется managed модель Agentset.
 
-        Args:
+        Аргументы:
             name: Имя namespace (используется как slug если slug не передан)
             description: Описание namespace
         """

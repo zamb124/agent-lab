@@ -1,4 +1,4 @@
-"""Typed contracts for flows registry API and visual schema."""
+"""Типизированные контракты registry API flows и визуальной схемы."""
 
 from __future__ import annotations
 

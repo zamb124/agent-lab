@@ -126,7 +126,7 @@ class ScheduleService:
         """
         Создает периодическую задачу по cron расписанию.
 
-        Args:
+        Аргументы:
             flow_id: ID агента
             session_id: ID сессии
             user_id: ID пользователя
@@ -136,7 +136,7 @@ class ScheduleService:
             tool_args: Аргументы для tool_call
             description: Описание задачи
 
-        Returns:
+        Возвращает:
             ScheduledTaskInfo
         """
         task = await self._create_scheduler_task(
@@ -171,7 +171,7 @@ class ScheduleService:
         """
         Создает периодическую задачу с интервалом.
 
-        Args:
+        Аргументы:
             flow_id: ID агента
             session_id: ID сессии
             user_id: ID пользователя
@@ -181,7 +181,7 @@ class ScheduleService:
             tool_args: Аргументы для tool_call
             description: Описание задачи
 
-        Returns:
+        Возвращает:
             ScheduledTaskInfo
         """
         task = await self._create_scheduler_task(
@@ -216,7 +216,7 @@ class ScheduleService:
         """
         Создает одноразовую задачу на конкретное время.
 
-        Args:
+        Аргументы:
             flow_id: ID агента
             session_id: ID сессии
             user_id: ID пользователя
@@ -226,7 +226,7 @@ class ScheduleService:
             tool_args: Аргументы для tool_call
             description: Описание задачи
 
-        Returns:
+        Возвращает:
             ScheduledTaskInfo
         """
         task = await self._create_scheduler_task(
@@ -255,11 +255,11 @@ class ScheduleService:
         """
         Получает список задач для сессии.
 
-        Args:
+        Аргументы:
             session_id: ID сессии
             status: Фильтр по статусу
 
-        Returns:
+        Возвращает:
             Список ScheduledTaskInfo
         """
         if self._scheduler_service is not None:
@@ -298,10 +298,10 @@ class ScheduleService:
         """
         Отменяет задачу.
 
-        Args:
+        Аргументы:
             schedule_task_id: ID записи платформенного scheduler
 
-        Returns:
+        Возвращает:
             True если задача отменена
         """
         try:

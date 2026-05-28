@@ -1,4 +1,4 @@
-"""Tavily Search provider."""
+"""Search-провайдер Tavily."""
 
 from __future__ import annotations
 
@@ -14,7 +14,7 @@ from core.types import JsonObject, parse_json_object, require_json_object
 
 
 class TavilySearchProvider:
-    """Tavily adapter for LLM-oriented search results."""
+    """Адаптер Tavily для LLM-ориентированных результатов поиска."""
 
     provider_id: str = "tavily"
 

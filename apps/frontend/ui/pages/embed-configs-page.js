@@ -1,5 +1,5 @@
 /**
- * Embed configs page — список встраиваемых виджетов.
+ * Страница embed-конфигов — список встраиваемых виджетов.
  *
  * Колонки: name, embed_id, flow, branch, status, usage. Действия: get_code,
  * edit, delete. Edit открывает create-embed-modal с переданным embedConfig.

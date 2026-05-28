@@ -57,7 +57,7 @@ async def ensure_postgres_service_databases_async(
     Раньше использовалась отдельная БД postgres; на части pg_hba / кастомных кластеров к ней иначе пускают,
     из‑за чего миграции ломались при том же URL, с которым shared уже подключался.
 
-    Args:
+    Аргументы:
         reference_shared_url: если задан (например в pytest), подставляется вместо get_settings().database.shared_url.
     """
     postgres_config = load_migration_manifest().postgres

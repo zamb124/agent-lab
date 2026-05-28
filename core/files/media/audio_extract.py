@@ -8,11 +8,11 @@ from pathlib import Path
 def extract_audio_from_video(*, video_bytes: bytes, base_name: str) -> tuple[bytes, str]:
     """Извлекает аудио из видео в MP3 моно 16 kHz через ffmpeg.
 
-    Args:
+    Аргументы:
         video_bytes: байты видеофайла
         base_name: исходное имя файла (для формирования имени аудио)
 
-    Returns:
+    Возвращает:
         (audio_bytes, audio_file_name)
     """
     if not video_bytes:

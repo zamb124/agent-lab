@@ -164,6 +164,7 @@ class TestS3Integration:
             temp_path = Path(f.name)
 
         test_key = f"pytest-disk-{uuid.uuid4().hex[:8]}.txt"
+        download_path = temp_path.with_suffix('.downloaded.txt')
 
         try:
             # Загружаем файл
@@ -181,7 +182,6 @@ class TestS3Integration:
             assert exists
 
             # Скачиваем обратно на диск
-            download_path = temp_path.with_suffix('.downloaded.txt')
             download_success = await client.download_file(test_key, download_path)
             assert download_success
 
@@ -195,8 +195,7 @@ class TestS3Integration:
             # Очистка
             await client.delete_file(test_key)
             temp_path.unlink(missing_ok=True)
-            if 'download_path' in locals():
-                download_path.unlink(missing_ok=True)
+            download_path.unlink(missing_ok=True)
 
     @pytest.mark.asyncio
     async def test_list_objects(self, minio_bucket):

@@ -56,7 +56,7 @@ class BaseRepository(ABC, Generic[T]):
 
     def __init__(self, storage: Storage, model_class: type[T]):
         """
-        Args:
+        Аргументы:
             storage: Экземпляр Storage для работы с БД
             model_class: Класс Pydantic модели
         """
@@ -70,10 +70,10 @@ class BaseRepository(ABC, Generic[T]):
         Дефолтная реализация для обратной совместимости.
         Переопределите если нужна кастомная логика.
 
-        Args:
+        Аргументы:
             entity_id: Идентификатор сущности
 
-        Returns:
+        Возвращает:
             Базовый ключ (entity_id как есть)
         """
         return entity_id
@@ -85,7 +85,7 @@ class BaseRepository(ABC, Generic[T]):
         Дефолтная реализация для обратной совместимости.
         Переопределите если нужна кастомная логика.
 
-        Returns:
+        Возвращает:
             Пустой префикс
         """
         return ""
@@ -94,7 +94,7 @@ class BaseRepository(ABC, Generic[T]):
         """
         Возвращает имя таблицы БД для этого репозитория.
 
-        Returns:
+        Возвращает:
             Имя таблицы
         """
         return "storage"
@@ -103,7 +103,7 @@ class BaseRepository(ABC, Generic[T]):
         """
         Алиас для _get_table_name() для обратной совместимости.
 
-        Returns:
+        Возвращает:
             Имя таблицы
         """
         return self._get_table_name()
@@ -113,10 +113,10 @@ class BaseRepository(ABC, Generic[T]):
         """
         Извлекает ID из сущности.
 
-        Args:
+        Аргументы:
             entity: Сущность для извлечения ID
 
-        Returns:
+        Возвращает:
             ID сущности
         """
         pass
@@ -129,10 +129,10 @@ class BaseRepository(ABC, Generic[T]):
         - is_global=True → возвращает ключ как есть
         - is_global=False → добавляет префикс company:{subdomain}:
 
-        Args:
+        Аргументы:
             key: Базовый ключ
 
-        Returns:
+        Возвращает:
             Финальный ключ для хранения
         """
         if self.is_global:
@@ -155,7 +155,7 @@ class BaseRepository(ABC, Generic[T]):
 
         Используется для SQL LIKE запросов.
 
-        Returns:
+        Возвращает:
             Префикс с компанией или None если is_global=True
         """
         if self.is_global:
@@ -174,10 +174,10 @@ class BaseRepository(ABC, Generic[T]):
         """
         Получает сущность по ID.
 
-        Args:
+        Аргументы:
             entity_id: Идентификатор сущности
 
-        Returns:
+        Возвращает:
             Сущность или None если не найдена
         """
         base_key = self._get_key(entity_id)
@@ -194,10 +194,10 @@ class BaseRepository(ABC, Generic[T]):
         """
         Сохраняет сущность.
 
-        Args:
+        Аргументы:
             entity: Сущность для сохранения
 
-        Returns:
+        Возвращает:
             True если сохранение успешно
         """
         entity_id = self._extract_entity_id(entity)
@@ -212,10 +212,10 @@ class BaseRepository(ABC, Generic[T]):
         """
         Удаляет сущность по ID.
 
-        Args:
+        Аргументы:
             entity_id: Идентификатор
 
-        Returns:
+        Возвращает:
             True если удалено
         """
         base_key = self._get_key(entity_id)
@@ -227,7 +227,7 @@ class BaseRepository(ABC, Generic[T]):
         """
         Возвращает страницу сущностей.
 
-        Args:
+        Аргументы:
             limit: Максимальное количество результатов (обязательный)
             offset: Смещение для пагинации
         """
@@ -261,10 +261,10 @@ class BaseRepository(ABC, Generic[T]):
         """
         Получает несколько сущностей по списку ID.
 
-        Args:
+        Аргументы:
             entity_ids: Список идентификаторов
 
-        Returns:
+        Возвращает:
             Словарь {entity_id: entity}
         """
         if not entity_ids:

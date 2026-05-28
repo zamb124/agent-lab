@@ -1,4 +1,4 @@
-"""Flows service layer package.
+"""Пакет сервисного слоя flows.
 
-Import concrete services from their leaf modules.
+Импортируйте конкретные сервисы из leaf-модулей.
 """

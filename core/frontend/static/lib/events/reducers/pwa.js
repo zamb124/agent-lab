@@ -1,5 +1,5 @@
 /**
- * PWA slice.
+ * Слайс PWA.
  *
  * Поля state.pwa:
  *   pushPermission:    'default' | 'granted' | 'denied'

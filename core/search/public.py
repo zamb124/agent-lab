@@ -1,4 +1,4 @@
-"""Public search embed constants."""
+"""Константы public search embed."""
 
 from __future__ import annotations
 

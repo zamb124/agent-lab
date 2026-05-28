@@ -13,14 +13,14 @@
  * Поиск фильтрует все категории + ресурсы (по name / description / type),
  * категории без совпадений скрываются.
  *
- * Drag: dataTransfer `application/x-flow-node-type` для нод и
+ * Перетаскивание: dataTransfer `application/x-flow-node-type` для нод и
  * `application/x-flow-resource-type` для ресурсов.
  *
  * Тип ноды `resource` в палитре не показываем: нода-ресурс на канве создаётся
  * только перетаскиванием записи из секции «Ресурсы» (конкретный resource type),
  * иначе дублирует смысл и путает.
  *
- * UI-actions: «+» — новый триггер; карандаш/мусор в строке — редактирование / удаление.
+ * UI-действия: «+» — новый триггер; карандаш/мусор в строке — редактирование / удаление.
  */
 
 import { html, css } from 'lit';
@@ -66,7 +66,7 @@ export class FlowsNodeTypesSidebar extends PlatformElement {
                 overflow-y: auto;
             }
 
-            /* Triggers */
+            /* Триггеры */
             .triggers-section {
                 display: flex; flex-direction: column; gap: var(--space-2);
                 padding: 0 var(--space-2);
@@ -180,7 +180,7 @@ export class FlowsNodeTypesSidebar extends PlatformElement {
                 box-shadow: 0 0 0 1px color-mix(in oklab, var(--accent) 40%, transparent);
             }
 
-            /* Search */
+            /* Поиск */
             .search-box {
                 position: relative;
                 padding: 0 var(--space-2);
@@ -211,7 +211,7 @@ export class FlowsNodeTypesSidebar extends PlatformElement {
                 box-shadow: 0 0 0 2px var(--accent-subtle);
             }
 
-            /* Categories */
+            /* Категории */
             .category {
                 display: flex;
                 flex-direction: column;
@@ -237,7 +237,7 @@ export class FlowsNodeTypesSidebar extends PlatformElement {
                 gap: 2px;
             }
 
-            /* Node type card */
+            /* Карточка типа ноды */
             .node-item {
                 display: flex;
                 align-items: center;

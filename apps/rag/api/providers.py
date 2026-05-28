@@ -55,7 +55,7 @@ async def list_providers() -> ProvidersView:
     """
     Возвращает список доступных RAG провайдеров.
 
-    Returns:
+    Возвращает:
         Список провайдеров с их статусом и текущий активный провайдер
     """
     settings = get_rag_settings()

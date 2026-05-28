@@ -160,10 +160,10 @@ def create_scheduler(redis_url: str) -> TaskiqScheduler:
     """
     Создает TaskiqScheduler с RedisScheduleSource.
 
-    Args:
+    Аргументы:
         redis_url: URL Redis для schedule source
 
-    Returns:
+    Возвращает:
         TaskiqScheduler
     """
     source = get_schedule_source(redis_url)

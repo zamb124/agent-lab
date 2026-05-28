@@ -25,7 +25,7 @@ async def try_claim_onlyoffice_callback(
     url: str,
 ) -> bool:
     """
-    Returns:
+    Возвращает:
         True — первый приём, продолжать загрузку и запись в S3.
         False — дубликат callback, вернуть OnlyOffice error=0 без повторной записи.
     """

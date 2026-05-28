@@ -1,4 +1,4 @@
-"""Provider parsing helpers."""
+"""Хелперы парсинга providers."""
 
 from __future__ import annotations
 

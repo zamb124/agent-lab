@@ -227,10 +227,10 @@ class ToolRegistry:
         """
         Создает список tools из конфигов (CodeTool / нода как tool).
 
-        Args:
+        Аргументы:
             tool_refs: Список dict-конфигов или ToolReference
 
-        Returns:
+        Возвращает:
             Список BaseTool
         """
         tools: list[BaseTool] = []
@@ -249,7 +249,7 @@ class ToolRegistry:
         """
         Создает CodeTool из dict-конфига (поле code).
 
-        Args:
+        Аргументы:
             config: {
                 "tool_id": "my_tool",
                 "description": "...",
@@ -257,7 +257,7 @@ class ToolRegistry:
                 "code": "def run(args, state): ..."
             }
 
-        Returns:
+        Возвращает:
             CodeTool (только для списка ноды; в глобальный реестр не кладём, иначе
             тулы с тем же именем затеняют встроенные FunctionTool между тестами/flow).
         """
@@ -286,7 +286,7 @@ class ToolRegistry:
         """
         Создает MCPTool из конфига.
 
-        Args:
+        Аргументы:
             config: {
                 "tool_id": "mcp:server:tool",
                 "description": "...",
@@ -295,7 +295,7 @@ class ToolRegistry:
                 "mcp_tool_name": "tool_name"
             }
 
-        Returns:
+        Возвращает:
             MCPTool
         """
         tool_id = config.tool_id
@@ -327,7 +327,7 @@ class ToolRegistry:
         """
         Создает NodeAsToolWrapper из inline llm_node конфига.
 
-        Args:
+        Аргументы:
             config: {
                 "tool_id": "my_node",
                 "type": "llm_node",
@@ -336,7 +336,7 @@ class ToolRegistry:
                 ...
             }
 
-        Returns:
+        Возвращает:
             NodeAsToolWrapper
         """
         if self._node_tool_wrapper_cls is None:

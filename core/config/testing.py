@@ -17,7 +17,7 @@ def is_testing() -> bool:
     - os.environ.get("TESTING", "").lower() in ("true", "1", "yes")
     - os.getenv("TESTING") != "true"
 
-    Returns:
+    Возвращает:
         True если TESTING=true или PYTEST_CURRENT_TEST установлен
     """
     return (

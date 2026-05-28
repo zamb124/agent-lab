@@ -23,7 +23,7 @@ class ResourceRegistry(Generic[T]):
     3. Попытка получить несуществующий ресурс = ошибка
     4. Никаких неявных значений
 
-    Examples:
+    Примеры:
         >>> registry = NodeRegistry()
         >>> registry.register("llm_node", LlmNode)
         >>> node_class = registry.get("llm_node")
@@ -37,12 +37,12 @@ class ResourceRegistry(Generic[T]):
         """
         Регистрирует ресурс в реестре.
 
-        Args:
+        Аргументы:
             key: Уникальный ключ ресурса
             resource: Ресурс для регистрации
             metadata: Дополнительные метаданные (опционально)
 
-        Raises:
+        Исключения:
             ResourceAlreadyExistsError: Если ресурс уже зарегистрирован
         """
         if key in self._resources:
@@ -59,13 +59,13 @@ class ResourceRegistry(Generic[T]):
         """
         Получает ресурс из реестра.
 
-        Args:
+        Аргументы:
             key: Ключ ресурса
 
-        Returns:
+        Возвращает:
             Ресурс
 
-        Raises:
+        Исключения:
             ResourceNotFoundError: Если ресурс не найден
         """
         if key not in self._resources:
@@ -79,10 +79,10 @@ class ResourceRegistry(Generic[T]):
         """
         Проверяет наличие ресурса в реестре.
 
-        Args:
+        Аргументы:
             key: Ключ ресурса
 
-        Returns:
+        Возвращает:
             True если ресурс существует
         """
         return key in self._resources
@@ -91,8 +91,8 @@ class ResourceRegistry(Generic[T]):
         """
         Возвращает все зарегистрированные ресурсы.
 
-        Returns:
-            Dict[key, resource]
+        Возвращает:
+            Словарь {key: resource}
         """
         return dict(self._resources)
 
@@ -100,7 +100,7 @@ class ResourceRegistry(Generic[T]):
         """
         Возвращает список всех ключей.
 
-        Returns:
+        Возвращает:
             Список ключей ресурсов
         """
         return list(self._resources.keys())
@@ -109,10 +109,10 @@ class ResourceRegistry(Generic[T]):
         """
         Получает метаданные ресурса.
 
-        Args:
+        Аргументы:
             key: Ключ ресурса
 
-        Returns:
+        Возвращает:
             Метаданные или пустой dict
         """
         if key not in self._resources:
@@ -129,10 +129,10 @@ class ResourceRegistry(Generic[T]):
         """
         Удаляет ресурс из реестра.
 
-        Args:
+        Аргументы:
             key: Ключ ресурса
 
-        Raises:
+        Исключения:
             ResourceNotFoundError: Если ресурс не найден
         """
         if key not in self._resources:

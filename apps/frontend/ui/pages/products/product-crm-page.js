@@ -1,5 +1,5 @@
 /**
- * Product CRM Page - Страница продукта NetWorkle
+ * Страница продукта CRM — страница продукта NetWorkle
  */
 import { html, css } from 'lit';
 import { PlatformPage } from '@platform/lib/base/PlatformPage.js';

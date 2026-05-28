@@ -1,4 +1,4 @@
-"""Strict contracts for the first-class flows evaluation lab."""
+"""Строгие контракты first-class evaluation lab для flows."""
 
 from __future__ import annotations
 

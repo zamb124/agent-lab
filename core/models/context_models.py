@@ -32,8 +32,8 @@ class Context(StrictBaseModel):
     )
     host: str = Field(
         default="",
-        title="Host",
-        description="Host header из запроса (для построения URL)",
+        title="Хост",
+        description="Заголовок Host из запроса (для построения URL)",
     )
     session_id: str | None = Field(
         default=None,
@@ -92,7 +92,7 @@ class Context(StrictBaseModel):
     )
     state: JsonObject | None = Field(
         default=None,
-        title="Runtime state",
+        title="Runtime-состояние",
         description="Текущее runtime-состояние выполнения; не сериализуется между процессами.",
         exclude=True,
     )
@@ -112,8 +112,8 @@ class Context(StrictBaseModel):
         """
         Сериализует Context в dict для передачи через TaskIQ.
 
-        Returns:
-            Dict с данными контекста
+        Возвращает:
+            Словарь с данными контекста
         """
         return require_json_object(
             {
@@ -153,10 +153,10 @@ class Context(StrictBaseModel):
         """
         Восстанавливает Context из dict (после передачи через TaskIQ).
 
-        Args:
-            data: Dict с данными контекста
+        Аргументы:
+            data: словарь с данными контекста
 
-        Returns:
+        Возвращает:
             Восстановленный Context
         """
         if data.get("user") is None:

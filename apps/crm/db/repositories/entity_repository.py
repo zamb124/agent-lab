@@ -423,7 +423,7 @@ class EntityRepository(BaseCRMRepository[CRMEntity]):
         """
         Entities c SQL-фильтрами и cursor-пагинацией.
 
-        Returns:
+        Возвращает:
             (entities, next_cursor, has_more)
         """
         cid = company_id or self._get_company_id()

@@ -19,6 +19,7 @@ from core.clients.loki_client import (
     _parse_loki_response,
 )
 from core.config.models import LoggingConfig
+from core.types import JsonObject, parse_json_object
 
 # ---------------------------------------------------------------------------
 # Query builders
@@ -104,20 +105,42 @@ class TestParseEntry:
 # _parse_loki_response
 # ---------------------------------------------------------------------------
 
-_SAMPLE_LOKI_RESPONSE = {
-    "data": {
-        "resultType": "streams",
-        "result": [
-            {
-                "stream": {"service": "flows", "level": "info"},
-                "values": [
-                    ["1700000001000000000", json.dumps({"message": "first", "level": "info", "trace_id": "t1"})],
-                    ["1700000002000000000", json.dumps({"message": "second", "level": "debug", "trace_id": "t1"})],
+_SAMPLE_LOKI_RESPONSE: JsonObject = parse_json_object(
+    json.dumps(
+        {
+            "data": {
+                "resultType": "streams",
+                "result": [
+                    {
+                        "stream": {"service": "flows", "level": "info"},
+                        "values": [
+                            [
+                                "1700000001000000000",
+                                json.dumps(
+                                    {
+                                        "message": "first",
+                                        "level": "info",
+                                        "trace_id": "t1",
+                                    }
+                                ),
+                            ],
+                            [
+                                "1700000002000000000",
+                                json.dumps(
+                                    {
+                                        "message": "second",
+                                        "level": "debug",
+                                        "trace_id": "t1",
+                                    }
+                                ),
+                            ],
+                        ],
+                    }
                 ],
             }
-        ],
-    }
-}
+        }
+    )
+)
 
 
 class TestParseLokiResponse:

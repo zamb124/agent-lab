@@ -24,7 +24,7 @@ from __future__ import annotations
 import asyncio
 import json
 import time
-from typing import Any
+from typing import Any, cast
 
 import pytest
 
@@ -33,10 +33,10 @@ from apps.crm.system_templates import NAMESPACE_TEMPLATE_SEEDS
 _META = {"dates_mentioned": [], "places_mentioned": [], "key_topics": []}
 
 
-def _seed_by_id(template_id: str) -> dict[str, Any]:
+def _seed_by_id(template_id: str) -> dict[str, Any]:  # pyright: ignore[reportReturnType]
     for seed in NAMESPACE_TEMPLATE_SEEDS:
         if seed["template_id"] == template_id:
-            return seed
+            return cast(dict[str, Any], cast(object, seed))
     raise AssertionError(f"seed {template_id!r} not registered")
 
 

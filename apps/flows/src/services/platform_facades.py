@@ -1,4 +1,4 @@
-"""Узкие trusted-фасады для встроенных platform tools flows-сервиса."""
+"""Узкие trusted-фасады для встроенных platform tools сервиса flows."""
 
 from __future__ import annotations
 
@@ -79,7 +79,7 @@ def _speech_response_format(value: str | None) -> SpeechResponseFormat | None:
 def get_code_runner(
     language: str = "python",
 ) -> "RemoteCodeRunner":
-    """Remote code runner для trusted builtins, без передачи FlowContainer в пользовательский код."""
+    """Удалённый code runner для trusted builtins, без передачи FlowContainer в пользовательский код."""
     return require_current_container().get_code_runner(language=language)
 
 
@@ -154,7 +154,7 @@ async def transcribe_audio(
     компании → дефолт `settings.voice.stt`. Никаких прямых импортов
     конкретного клиента в коде агента/тула — всё через фасад.
 
-    Args:
+    Аргументы:
         file_id: идентификатор persisted-аудио в `FileRepository`.
         language: BCP-47 (например `ru-RU`); опционально — переопределяет
             `voice.stt.<provider>.language`.
@@ -163,7 +163,7 @@ async def transcribe_audio(
         model: явная модель для этого вызова (значение зависит от провайдера);
             опционально.
 
-    Returns:
+    Возвращает:
         Распознанный текст.
     """
     if file_id.strip() == "":
@@ -239,7 +239,7 @@ async def synthesize_speech(
     или передаёт каналу. Провайдер/модель/голос резолвит `voice_resolver`
     (override → company → deployment-default).
 
-    Args:
+    Аргументы:
         text: текст для озвучивания (обязателен, непустой).
         voice: явный голос для этого вызова (значение зависит от провайдера).
         language: BCP-47 для языка озвучивания.
@@ -250,7 +250,7 @@ async def synthesize_speech(
         file_name: явное имя сохраняемого файла; по умолчанию формируется как
             `tts_<random>.<ext>` по `response_format`.
 
-    Returns:
+    Возвращает:
         `file_id` сохранённого аудио в `FileRepository`.
     """
     if text.strip() == "":
@@ -307,11 +307,11 @@ async def get_google_oauth_token(state: "ExecutionState", service: str) -> str:
     на авторизацию Google. Flow ставится на паузу и автоматически
     продолжается после OAuth callback.
 
-    Args:
+    Аргументы:
         state: ExecutionState текущего flow
         service: идентификатор сервиса (docs, calendar, drive, ...)
 
-    Returns:
+    Возвращает:
         access_token (строка)
     """
     scopes = [

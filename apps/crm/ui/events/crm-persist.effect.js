@@ -1,5 +1,5 @@
 /**
- * CRM persist effect — связка локальных UI-slice с core storage-effect.
+ * Эффект persist CRM — связка локальных UI-slice с core storage-effect.
  *
  * На bootstrap (AUTH_USER_LOADED / AUTH_LOGIN_SUCCEEDED) диспатчит
  * `STORAGE_LOAD_REQUESTED` для всех ключей CRM. На `STORAGE_LOADED` от storage

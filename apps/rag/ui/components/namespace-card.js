@@ -2,7 +2,7 @@
  * NamespaceCard — карточка namespace в сетке `/rag`.
  *
  * Клик навигирует на страницу деталей `namespace_detail` через core-router.
- * Source of truth для имени — поле `name` из бэкенд-модели Namespace.
+ * Источник правды для имени — поле `name` из бэкенд-модели Namespace.
  */
 
 import { html, css } from 'lit';

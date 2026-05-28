@@ -1,4 +1,4 @@
-"""WebhookChannelHandler - отправка сообщений через HTTP callback/webhook."""
+"""WebhookChannelHandler — отправка сообщений через HTTP callback/webhook."""
 
 from typing import override
 
@@ -85,7 +85,7 @@ class WebhookChannelHandler(BaseChannelHandler):
         """
         Отправляет текстовое сообщение через HTTP.
 
-        Args:
+        Аргументы:
             recipient: URL для отправки (или берется из config.url)
             text: Текст сообщения
             config: Конфигурация (url, headers, method)
@@ -187,7 +187,7 @@ class WebhookChannelHandler(BaseChannelHandler):
         """
         Отправляет нотификацию в A2A формате.
 
-        Args:
+        Аргументы:
             recipient: URL callback
             event_type: Тип события (complete, error, artifact, etc)
             data: Данные события

@@ -1,5 +1,5 @@
 /**
- * Services status resource — health всех микросервисов платформы.
+ * Ресурс статуса сервисов — health всех микросервисов платформы.
  *
  * API: GET /frontend/api/services/status → { services: [{id, name, healthy, ...}] }
  */

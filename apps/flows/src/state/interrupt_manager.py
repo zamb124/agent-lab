@@ -40,7 +40,7 @@ class InterruptManager:
         """
         Сохраняет state вложенного вызова в родительский state.
 
-        Args:
+        Аргументы:
             parent_state: State родителя
             nested_id: ID вложенного вызова (flow_id, node_id, etc)
             nested_state: State вложенного вызова
@@ -61,11 +61,11 @@ class InterruptManager:
         """
         Загружает state вложенного вызова из родительского state.
 
-        Args:
+        Аргументы:
             parent_state: State родителя
             nested_id: ID вложенного вызова
 
-        Returns:
+        Возвращает:
             ExecutionState вложенного вызова
         """
         saved = parent_state.nested_states.get(nested_id)
@@ -100,7 +100,7 @@ class InterruptManager:
         добавляет себя. При resume мы идём сверху вниз, поэтому внешние
         уровни должны быть в начале списка.
 
-        Args:
+        Аргументы:
             state: Текущий ExecutionState
             call_info: Информация о вызове
         """
@@ -111,10 +111,10 @@ class InterruptManager:
         """
         Извлекает последний элемент из пути interrupt.
 
-        Args:
+        Аргументы:
             state: Текущий ExecutionState
 
-        Returns:
+        Возвращает:
             InterruptPathItem или None
         """
         if state.interrupt_path:
@@ -181,11 +181,11 @@ class InterruptManager:
         """
         Проверяет нужно ли resume передать в вложенный вызов.
 
-        Args:
+        Аргументы:
             state: Текущий ExecutionState
             nested_id: ID вложенного вызова
 
-        Returns:
+        Возвращает:
             True если первый элемент пути соответствует nested_id
         """
         if state.interrupt_path and len(state.interrupt_path) > 0:
@@ -199,12 +199,12 @@ class InterruptManager:
         """
         Подготавливает state для resume вложенного вызова.
 
-        Args:
+        Аргументы:
             parent_state: State родителя
             nested_id: ID вложенного вызова
             user_answer: Ответ пользователя
 
-        Returns:
+        Возвращает:
             ExecutionState для вложенного вызова с добавленным ответом
         """
         nested_state = InterruptManager.load_nested_state(parent_state, nested_id)

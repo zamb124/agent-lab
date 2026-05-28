@@ -14,11 +14,11 @@
  * `showContextMenu` slice'а `sync/messages_store`. Сама модалка — отдельный
  * компонент `<sync-message-context-menu>`.
  *
- * Selection mode: chat_ui.selectionMode=true → показ чекбокса, клик
+ * Режим выделения: chat_ui.selectionMode=true → показ чекбокса, клик
  * переключает выделение через chat_ui.toggleMessageSelection.
  *
- * Flash: syncMessagesStore.flashMessageId/flashSeq → анимация подсветки.
- * Deletion: chat_ui.deletingMessageIds.includes(message_id) → fade-out.
+ * Подсветка (flash): syncMessagesStore.flashMessageId/flashSeq → анимация подсветки.
+ * Удаление: chat_ui.deletingMessageIds.includes(message_id) → fade-out.
  */
 
 import { html, css } from 'lit';

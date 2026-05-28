@@ -67,16 +67,16 @@ class URN(BaseModel):
         """
         Парсит строку URN в объект.
 
-        Args:
+        Аргументы:
             urn_string: Строка вида 'urn:iman:node:summarizer'
 
-        Returns:
+        Возвращает:
             URN объект
 
-        Raises:
+        Исключения:
             ValueError: Если формат URN невалиден
 
-        Examples:
+        Примеры:
             >>> URN.parse("urn:iman:node:summarizer")
             URN(namespace='iman', resource_type='node', resource_id='summarizer')
         """
@@ -109,13 +109,13 @@ class URN(BaseModel):
         """
         Конвертирует строку или URN объект в URN.
 
-        Args:
+        Аргументы:
             value: Строка URN или URN объект
 
-        Returns:
+        Возвращает:
             URN объект
 
-        Examples:
+        Примеры:
             >>> URN.from_string_or_urn("urn:iman:node:test")
             URN(...)
             >>> URN.from_string_or_urn(URN(resource_type="node", resource_id="test"))
@@ -168,13 +168,13 @@ class FlowURN(URN):
         """
         Создаёт FlowURN из flow_id.
 
-        Args:
+        Аргументы:
             flow_id: ID flow
 
-        Returns:
+        Возвращает:
             FlowURN объект
 
-        Examples:
+        Примеры:
             >>> FlowURN.create("customer_service")
             FlowURN('urn:iman:flow:customer_service')
         """
@@ -203,13 +203,13 @@ class NodeURN(URN):
         """
         Создаёт NodeURN из ID.
 
-        Args:
+        Аргументы:
             node_id: ID ноды
 
-        Returns:
+        Возвращает:
             NodeURN объект
 
-        Examples:
+        Примеры:
             >>> NodeURN.create("summarizer")
             NodeURN('urn:iman:node:summarizer')
         """
@@ -238,13 +238,13 @@ class ToolURN(URN):
         """
         Создаёт ToolURN из ID.
 
-        Args:
+        Аргументы:
             tool_id: ID инструмента
 
-        Returns:
+        Возвращает:
             ToolURN объект
 
-        Examples:
+        Примеры:
             >>> ToolURN.create("calculator")
             ToolURN('urn:iman:tool:calculator')
         """
@@ -273,13 +273,13 @@ class BranchURN(URN):
         """
         Создаёт BranchURN из ID.
 
-        Args:
+        Аргументы:
             branch_id: ID ветки
 
-        Returns:
+        Возвращает:
             BranchURN объект
 
-        Examples:
+        Примеры:
             >>> BranchURN.create("refund_processing")
             BranchURN('urn:iman:branch:refund_processing')
         """
@@ -308,13 +308,13 @@ class VariableURN(URN):
         """
         Создаёт VariableURN из имени.
 
-        Args:
+        Аргументы:
             variable_name: Имя переменной
 
-        Returns:
+        Возвращает:
             VariableURN объект
 
-        Examples:
+        Примеры:
             >>> VariableURN.create("api_key")
             VariableURN('urn:iman:variable:api_key')
         """
@@ -330,13 +330,13 @@ def is_urn(value: str) -> bool:
     """
     Проверяет является ли строка валидным URN.
 
-    Args:
+    Аргументы:
         value: Строка для проверки
 
-    Returns:
+    Возвращает:
         True если строка - валидный URN
 
-    Examples:
+    Примеры:
         >>> is_urn("urn:iman:node:test")
         True
         >>> is_urn("just_an_id")
@@ -353,13 +353,13 @@ def extract_resource_id(value: str | URN) -> str:
     """
     Извлекает resource_id из URN или возвращает строку как есть.
 
-    Args:
+    Аргументы:
         value: URN или строка
 
-    Returns:
+    Возвращает:
         resource_id
 
-    Examples:
+    Примеры:
         >>> extract_resource_id("urn:iman:node:summarizer")
         'summarizer'
         >>> extract_resource_id("just_id")
@@ -380,14 +380,14 @@ def normalize_to_urn(value: str | URN, default_resource_type: URNResourceType) -
 
     Если передана строка без URN формата - добавляет тип по умолчанию.
 
-    Args:
+    Аргументы:
         value: Строка или URN
         default_resource_type: Тип по умолчанию если value - простая строка
 
-    Returns:
+    Возвращает:
         URN объект
 
-    Examples:
+    Примеры:
         >>> normalize_to_urn("urn:iman:node:test", "flow")
         URN('urn:iman:node:test')
         >>> normalize_to_urn("test", "node")

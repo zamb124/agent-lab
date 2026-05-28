@@ -265,7 +265,7 @@ class OAuthService:
         """
         Обменивает authorization code на токены и сохраняет credential.
 
-        Returns:
+        Возвращает:
             (credential, return_path, flow_context, post_auth_redirect_origin)
             flow_context — None если OAuth инициирован без привязки к flow.
             post_auth_redirect_origin — origin для финального редиректа или None.
@@ -560,10 +560,10 @@ class OAuthService:
         """
         Получает credential из БД. Если expired — auto-refresh.
 
-        Returns:
+        Возвращает:
             IntegrationCredential с актуальным access_token или None если нет записи.
 
-        Raises:
+        Исключения:
             OAuthTokenRefreshError: при отозванном refresh_token (credential удалён).
         """
         credential = await self._repository.get_by_user_provider_service(

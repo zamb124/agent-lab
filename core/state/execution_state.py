@@ -127,7 +127,7 @@ class ExecutionExceptionRecord(FlexibleBaseModel):
 
 
 class PendingUIEvent(StrictBaseModel):
-    """UI event, queued in ExecutionState until the runtime emits it to the A2A stream."""
+    """UI-событие в очереди ExecutionState до отправки runtime в A2A stream."""
 
     event_id: str = Field(..., description="ID события")
     event_type: str = Field(..., description="Тип события")
@@ -230,7 +230,7 @@ class ExecutionState(FlexibleBaseModel):
     - Явные типы для системных полей
     - Нет магии, все через свойства
 
-    Examples:
+    Примеры:
         >>> state = ExecutionState.create(
         ...     task_id="task-123",
         ...     context_id="ctx-456",
@@ -496,7 +496,7 @@ class ExecutionState(FlexibleBaseModel):
     files: list[FileRef] = Field(default_factory=list, description="Прикреплённые файлы")
 
     # ========================================================================
-    # Interrupt (ask_user)
+    # Прерывание (ask_user)
     # ========================================================================
 
     interrupt: InterruptData | None = Field(default=None, description="Данные прерывания")
@@ -624,7 +624,7 @@ class ExecutionState(FlexibleBaseModel):
         return result
 
     # ========================================================================
-    # Reasoning (tool reason)
+    # Reasoning (рассуждение tool)
     # ========================================================================
 
     reasoning_history: list[JsonObject] = Field(
@@ -754,7 +754,7 @@ class ExecutionState(FlexibleBaseModel):
         """
         Создаёт новое состояние выполнения.
 
-        Args:
+        Аргументы:
             task_id: ID задачи
             context_id: ID контекста
             user_id: ID пользователя
@@ -763,7 +763,7 @@ class ExecutionState(FlexibleBaseModel):
             branch_id: ID skill
             **kwargs: Дополнительные поля
 
-        Returns:
+        Возвращает:
             ExecutionState
         """
         return cls(

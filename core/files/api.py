@@ -100,7 +100,7 @@ def build_file_api_router(
     """
     Строит полный файловый APIRouter для сервиса.
 
-    Args:
+    Аргументы:
         get_file_repo: Callable, возвращающий FileRepository (core, shared DB).
                        Вызывается при каждом запросе (lazy).
         service_api_prefix: Префикс API сервиса, например "/sync/api/v1".

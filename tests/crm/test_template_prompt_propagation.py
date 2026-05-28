@@ -21,7 +21,7 @@
 
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, cast
 
 import pytest
 
@@ -35,14 +35,14 @@ from apps.crm.system_templates import (
 _PROBE_SEED_IDS = ("sales", "marketing", "support", "hr", "education")
 
 
-def _seed_by_id(template_id: str) -> dict[str, Any]:
+def _seed_by_id(template_id: str) -> dict[str, Any]:  # pyright: ignore[reportReturnType]
     for seed in NAMESPACE_TEMPLATE_SEEDS:
         if seed["template_id"] == template_id:
-            return seed
+            return cast(dict[str, Any], cast(object, seed))
     raise AssertionError(f"seed {template_id!r} not registered")
 
 
-def _pick_extractable_seed_type(seed: dict[str, Any]) -> dict[str, Any]:
+def _pick_extractable_seed_type(seed: dict[str, Any]) -> dict[str, Any]:  # pyright: ignore[reportReturnType]
     """Тип шаблона с непустым prompt и хотя бы одним описанным полем."""
 
     for spec in seed["types"]:

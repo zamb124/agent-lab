@@ -1,5 +1,5 @@
 /**
- * Calendar slice.
+ * Слайс calendar.
  *
  * state.calendar:
  *   events:       Array

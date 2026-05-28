@@ -1,5 +1,5 @@
 /**
- * UI slice — sidebar (mobile/collapse), namespace selection, documents reload счётчик.
+ * Слайс UI — sidebar (mobile/collapse), namespace selection, documents reload счётчик.
  *
  * state.ui:
  *   sidebar:   { mobileOpen: boolean, collapsed: boolean }

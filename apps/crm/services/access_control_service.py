@@ -87,7 +87,7 @@ class AccessControlService:
             if user_ns is not None and user_ns == entity.namespace:
                 return True
 
-        # Grants с ролью editor/admin
+        # Гранты с ролью editor/admin
         grants = await self._grant_repo.find_by_resource(
             "entity", entity.entity_id, entity.company_id
         )
@@ -126,7 +126,7 @@ class AccessControlService:
         # Если есть хоть один public grant
         for grant in entity_grants + namespace_grants:
             if grant.grant_type == "public":
-                # Expired?
+                # Истёк?
                 if grant.expires_at and grant.expires_at < datetime.now(UTC):
                     continue
                 return await self._filter_public_fields(entity)
@@ -190,7 +190,7 @@ class AccessControlService:
             if grant.grant_type == "public":
                 continue
 
-            # User/Company гранты с ролью viewer+
+            # Гранты user/company с ролью viewer+
             if grant.role in ["viewer", "editor", "admin"]:
                 if await self._check_grant(grant, user_id, company_id):
                     return True
@@ -205,19 +205,19 @@ class AccessControlService:
     ) -> bool:
         """Проверить конкретный grant"""
 
-        # Expired?
+        # Истёк?
         if grant.expires_at and grant.expires_at < datetime.now(UTC):
             return False
 
-        # Public
+        # Публичный
         if grant.grant_type == "public":
             return True
 
-        # User
+        # Пользователь
         if grant.grant_type == "user" and user_id:
             return user_id == grant.target_user_id
 
-        # Company
+        # Компания
         if grant.grant_type == "company" and company_id:
             return company_id == grant.target_company_id
 
@@ -322,7 +322,7 @@ class AccessControlService:
         query_namespace: str | None = None,
     ) -> list[CRMEntity]:
         """
-        Batch фильтрация сущностей по правам доступа с проставлением access_level.
+        Пакетная фильтрация сущностей по правам доступа с проставлением access_level.
         Один SQL-запрос для всех грантов вместо 2*N запросов.
 
         access_level = "owner" | "shared" | "public"

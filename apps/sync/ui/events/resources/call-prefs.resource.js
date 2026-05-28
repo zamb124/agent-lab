@@ -1,5 +1,5 @@
 /**
- * Sync Call Prefs — пользовательские настройки звонка (slice-only).
+ * Настройки звонка Sync — пользовательские настройки звонка (slice-only).
  *
  * Хранит:
  *   - cameraEnabled: bool — последнее состояние камеры (восстанавливается при подключении).
@@ -9,7 +9,7 @@
  *     при следующем звонке сразу взять те же mic/cam/speaker (при наличии в системе).
  *   - hydrated: bool — флаг гидратации из localStorage через STORAGE_LOADED.
  *
- * Persist реализован в bridge-effect [apps/sync/ui/events/sync-call-prefs.effect.js],
+ * Сохранение реализовано в bridge-effect [apps/sync/ui/events/sync-call-prefs.effect.js],
  * слушает actions slice'а и шлёт `STORAGE_PERSIST_REQUESTED`.
  */
 

@@ -73,4 +73,4 @@ async def test_browser_use_stub_raises_capability() -> None:
 @pytest.mark.asyncio
 async def test_agent_browser_stub_stop_is_noop() -> None:
     ad = AgentBrowserAdapter()
-    await ad.stop(object())
+    await ad.stop(object())  # pyright: ignore[reportArgumentType]

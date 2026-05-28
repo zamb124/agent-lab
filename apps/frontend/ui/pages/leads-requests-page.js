@@ -1,5 +1,5 @@
 /**
- * Leads requests page (system) — список заявок с лендинга.
+ * Страница заявок leads (system) — список заявок с лендинга.
  *
  * API: GET /frontend/api/lead-requests (доступно только для company=system).
  * 403 → terminal `forbidden`, прочие ошибки → error state.

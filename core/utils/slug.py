@@ -22,17 +22,17 @@ def generate_slug(
     - Не содержит двойных дефисов
     - Длина меньше 48 символов
 
-    Args:
+    Аргументы:
         name: Строка для преобразования в slug
         max_length: Максимальная длина slug
         min_length: Минимальная длина slug
         add_hash: Добавить хэш для гарантии уникальности
         hash_length: Длина хэша
 
-    Returns:
+    Возвращает:
         Валидный slug
 
-    Examples:
+    Примеры:
         >>> generate_slug("My Company Name")
         'my-company-name'
         >>> generate_slug("My Company", add_hash=True)

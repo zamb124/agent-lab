@@ -56,7 +56,7 @@ class FlowDiscoveryService:
         """
         Регистрирует внешний flow по A2A base URL.
 
-        Raises:
+        Исключения:
             ValueError: endpoint недоступен или дубликат URL
         """
         url = url.rstrip("/")

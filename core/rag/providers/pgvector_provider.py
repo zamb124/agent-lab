@@ -293,7 +293,7 @@ class PgVectorProvider(BaseRAGProvider):
             )
         return out
 
-    # -- Namespaces --
+    # — Пространства имён —
 
     @override
     async def create_namespace(
@@ -366,7 +366,7 @@ class PgVectorProvider(BaseRAGProvider):
         logger.info(f"Удален namespace {namespace_id}: {deleted} записей")
         return deleted > 0
 
-    # -- Document Upload --
+    # — Загрузка документов —
 
     @override
     async def upload_document_from_file(
@@ -604,7 +604,7 @@ class PgVectorProvider(BaseRAGProvider):
             metadata=metadata,
         )
 
-    # -- Document CRUD --
+    # — CRUD документов —
 
     @override
     async def get_document(self, namespace_id: str, document_id: str) -> RAGDocument | None:
@@ -987,7 +987,7 @@ class PgVectorProvider(BaseRAGProvider):
             await session.commit()
         return get_rowcount(del_result)
 
-    # -- Search --
+    # — Поиск —
 
     @override
     async def search(

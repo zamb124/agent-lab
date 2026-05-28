@@ -1,5 +1,5 @@
 /**
- * Platform Notification Manager — индикатор inbox-уведомлений в хедере.
+ * Менеджер уведомлений платформы — индикатор inbox-уведомлений в хедере.
  *
  * Полностью event-driven: список приходит из state.notifications.list. WS-канал
  * уведомлений уже обслуживает core/lib/events/effects/ws.effect.js — этот

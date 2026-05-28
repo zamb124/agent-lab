@@ -1,4 +1,4 @@
-"""TTS Text-Shaping Pipeline.
+"""Конвейер формирования текста для TTS.
 
 ``TtsTextPipeline.transform`` — единственное место, где применяются правила
 произношения. Вызывается из ``PronunciationAwareTTSClient.synthesize`` ПОСЛЕ
@@ -179,7 +179,7 @@ class TtsTextPipeline:
     ) -> str:
         """Применяет все стадии text-shaping и возвращает преобразованный текст.
 
-        Args:
+        Аргументы:
             text: Входной текст (уже прошедший ``sanitize_text_for_speech_backend``).
             pronunciation: Скомпилированный набор правил.
             provider: Имя TTS-провайдера (влияет на фильтрацию правил).

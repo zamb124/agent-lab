@@ -117,12 +117,12 @@ class FlowFactory:
         Загружает flow из БД и создаёт Flow.
         Применяет skill overrides если указан branch_id.
 
-        Args:
+        Аргументы:
             flow_id: ID flow
             branch_id: ID skill (по умолчанию "default")
             config_version: версия из flows_versions; None = последняя запись в flows
 
-        Returns:
+        Возвращает:
             Flow или None
         """
         config = await self.get_flow_config_snapshot(flow_id, config_version)
@@ -145,7 +145,7 @@ class FlowFactory:
         """
         Ресурсы уровня flow и skill из БД (без inline state.flow_config).
 
-        Returns:
+        Возвращает:
             (flow_resources, skill_resources или None)
         """
         config = await self.get_flow_config_snapshot(flow_id, config_version)
@@ -216,11 +216,11 @@ class FlowFactory:
 
         Zero-Guess: валидация графа через GraphCompiler перед созданием flow.
 
-        Args:
+        Аргументы:
             config: FlowConfig из БД
             branch_id: ID skill для применения
 
-        Returns:
+        Возвращает:
             Flow
         """
         effective = self.apply_branch(config, branch_id)
@@ -272,11 +272,11 @@ class FlowFactory:
         """
         Применяет ветку (branch) к конфигу flow.
 
-        Args:
+        Аргументы:
             config: FlowConfig
             branch_id: ID ветки
 
-        Returns:
+        Возвращает:
             Dict с effective конфигом (entry, nodes, edges, variables)
         """
         # Извлекаем значения из FlowVariableConfig объектов
@@ -300,25 +300,25 @@ class FlowFactory:
                 logger.warning(f"Branch '{branch_id}' не найдена во flow '{config.flow_id}'")
             return result
 
-        # Entry (всегда replace)
+        # Точка входа (всегда replace)
         if branch.entry:
             result["entry"] = branch.entry
 
-        # Nodes
+        # Ноды
         if branch.nodes is not None:
             if branch.nodes_mode == MergeMode.MERGE:
                 self._merge_nodes(result["nodes"], branch.nodes)
             else:
                 result["nodes"] = copy.deepcopy(branch.nodes)
 
-        # Edges
+        # Рёбра
         if branch.edges is not None:
             if branch.edges_mode == MergeMode.MERGE:
                 self._merge_edges(result["edges"], branch.edges)
             else:
                 result["edges"] = list(branch.edges)
 
-        # Variables
+        # Переменные
         if branch.variables:
             branch_vars: JsonObject = {}
             for key, value in branch.variables.items():
@@ -365,10 +365,10 @@ class FlowFactory:
 
         Если company variable не существует — значение становится None.
 
-        Args:
+        Аргументы:
             variables: Словарь FlowVariableConfig объектов
 
-        Returns:
+        Возвращает:
             Словарь с резолвнутыми значениями (только values, без метаданных)
         """
         company_variables = await self.variables_service.get_company_variables_map()
@@ -428,11 +428,11 @@ class FlowFactory:
         """
         Сохраняет FlowConfig в БД и создаёт Flow.
 
-        Args:
+        Аргументы:
             config: FlowConfig
             branch_id: ID skill (по умолчанию "default")
 
-        Returns:
+        Возвращает:
             Flow
         """
         _ = await self.flow_repository.set(config)
@@ -448,9 +448,9 @@ class FlowFactory:
         Возвращает ветки flow.
         Если branches не заданы — возвращает default-ветку.
 
-        Args:
+        Аргументы:
             flow_id: ID flow
-        Returns:
+        Возвращает:
             Dict branch_id -> BranchConfig
         """
         config = await self.flow_repository.get(flow_id)
@@ -477,12 +477,12 @@ class FlowFactory:
         """
         Рекурсивно получает структуру flow: tools и вложенные flow (как tools).
 
-        Args:
+        Аргументы:
             tools_list: Список tools / вложенных flow
             max_depth: Максимальная глубина рекурсии
             visited: Множество уже посещённых flow_id (защита от циклов)
 
-        Returns:
+        Возвращает:
             (tools, subflows) — списки tool_id и вложенных flow с их структурой
         """
         if visited is None:
@@ -531,10 +531,10 @@ class FlowFactory:
         """
         Возвращает схему flow для всех веток (для визуализации).
 
-        Args:
+        Аргументы:
             flow_id: ID flow
 
-        Returns:
+        Возвращает:
             Dict с метаданными flow и схемами для каждой ветки
         """
         config = await self.flow_repository.get(flow_id)

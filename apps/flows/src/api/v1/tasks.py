@@ -115,7 +115,7 @@ async def submit_task(request: TaskSubmitRequest, container: ContainerDep) -> Ta
     task_state = TaskState(task_result.task_state)
     response_text = task_result.response
 
-    # Breakpoint или interrupt - оба используют input_required
+    # Breakpoint или interrupt — оба используют input_required
     if task_result.breakpoint_hit is not None:
         response_text = f"Breakpoint at node '{task_result.breakpoint_hit}'"
         task_state = TaskState.input_required
@@ -151,7 +151,7 @@ async def submit_task(request: TaskSubmitRequest, container: ContainerDep) -> Ta
 
 
 class StateUpdateRequest(StrictBaseModel):
-    """Manual state patch request for an existing durable workflow session."""
+    """Запрос ручного patch state для существующей durable workflow session."""
 
     state: ExecutionState
 
@@ -208,12 +208,12 @@ async def get_state(
     """
     Получает state по session_id или context_id+flow_id.
 
-    Args:
+    Аргументы:
         session_id: ID сессии (альтернатива context_id+flow_id)
         context_id: ID контекста A2A
         flow_id: ID агента
 
-    Returns:
+    Возвращает:
         Снимок ExecutionState или, если записи нет, минимальный объект для UI чата:
         ``{"messages": [], "task_id": None}``.
     """
@@ -246,13 +246,13 @@ async def update_state(
     """
     Применяет manual patch к существующей durable workflow-сессии.
 
-    Args:
+    Аргументы:
         request: Тело запроса с целевой projection state
         session_id: ID сессии (альтернатива context_id+flow_id)
         context_id: ID контекста A2A для вычисления session_id
         flow_id: ID flow для вычисления session_id
 
-    Returns:
+    Возвращает:
         Обновленный state
     """
 

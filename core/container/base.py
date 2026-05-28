@@ -161,7 +161,7 @@ class BaseContainer:
         shared_db_url: str | None = None,
     ) -> None:
         """
-        Args:
+        Аргументы:
             db_url: URL service БД
             shared_db_url: URL shared БД для User, Company, Session
         """
@@ -196,7 +196,7 @@ class BaseContainer:
             raise ValueError("database service url is required for service repositories")
         return self.db_url
 
-    # === Storage ===
+    # === Хранилище ===
 
     @lazy
     def storage(self) -> Storage:
@@ -290,7 +290,7 @@ class BaseContainer:
 
     @lazy
     def llm_context_memory_store(self) -> RAGLLMContextMemoryStore:
-        """Company-scoped episodic memory store for the generic LLM context layer."""
+        """Хранилище эпизодической памяти в scope компании для generic LLM context layer."""
         return RAGLLMContextMemoryStore(
             repository=self.rag_repository,
             namespace_repository=self.namespace_repository,
@@ -300,7 +300,7 @@ class BaseContainer:
 
     @lazy
     def text_transform_service(self) -> TextTransformService:
-        """Generic LLM-backed text transforms used by platform services."""
+        """Generic текстовые трансформации на LLM для сервисов платформы."""
         return TextTransformService()
 
     @lazy
@@ -444,7 +444,7 @@ class BaseContainer:
         """
         Регистрирует CRUD роутер для репозитория.
 
-        Args:
+        Аргументы:
             repository_name: Имя репозитория (например, "flow_repository")
             repository: Экземпляр репозитория
             prefix: Префикс пути (например, "/flows")
@@ -467,7 +467,7 @@ class BaseContainer:
         """
         Возвращает список всех зарегистрированных CRUD роутеров.
 
-        Returns:
+        Возвращает:
             Список APIRouter
         """
         return list(self._crud_routers.values())

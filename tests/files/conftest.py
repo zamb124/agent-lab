@@ -17,6 +17,6 @@ async def file_db_clean(sync_app):
     from apps.sync.container import get_sync_container
     container = get_sync_container()
     storage = container.shared_storage
-    async with storage._engine.begin() as conn:
+    async with storage._engine.begin() as conn:  # pyright: ignore[reportAttributeAccessIssue]
         await conn.execute(text("DELETE FROM storage WHERE key LIKE 'file:%'"))
     yield

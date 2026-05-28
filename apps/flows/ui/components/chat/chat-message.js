@@ -1,5 +1,5 @@
 /**
- * App-host adapter over the shared flows-chat message surface.
+ * Адаптер хоста приложения поверх общей поверхности сообщений flows-chat.
  */
 import { html, nothing } from 'lit';
 import { PlatformElement } from '@platform/lib/platform-element/index.js';

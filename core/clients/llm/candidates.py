@@ -1,4 +1,4 @@
-"""Candidate filtering helpers for LLM fallback routing."""
+"""Хелперы фильтрации кандидатов для fallback-маршрутизации LLM."""
 
 from __future__ import annotations
 

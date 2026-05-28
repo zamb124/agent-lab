@@ -1,13 +1,13 @@
 /**
- * Sync Threads — треды канала.
+ * Треды Sync — треды канала.
  *
  * REST-зеркало: `apps/sync/api/threads.py`. WS-команда `sync/threads/create_requested`
  * → handler `threads.create`.
  *
- * Slice добавляет UI-state `selectedThreadId` (открытый thread-drawer) и
+ * Slice добавляет UI-состояние `selectedThreadId` (открытый thread-drawer) и
  * `byChannelId` (сводка тредов по каналу).
  *
- * UI-actions: openThread(threadId), closeThread().
+ * UI-действия: openThread(threadId), closeThread().
  */
 
 import { createResourceCollection } from '@platform/lib/events/index.js';

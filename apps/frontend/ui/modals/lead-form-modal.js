@@ -1,5 +1,5 @@
 /**
- * Lead form modal — заявка с лендинга.
+ * Модалка формы заявки — заявка с лендинга.
  *
  * Открывается через openModal(FrontendLeadFormModal). Submit вызывает
  * leadSubmitOp; HTTP и тосты живут в фабрике, модалка только закрывается.

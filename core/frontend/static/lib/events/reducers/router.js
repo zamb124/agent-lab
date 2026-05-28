@@ -1,5 +1,5 @@
 /**
- * Router slice.
+ * Слайс router.
  *
  * Поля state.router:
  *   routeKey:  string|null

@@ -25,7 +25,7 @@ class NodeRegistry(ResourceRegistry[type[BaseNode]]):
 
     Zero-Guess: попытка получить незарегистрированный тип = ошибка.
 
-    Examples:
+    Примеры:
         >>> registry = NodeRegistry()
         >>> registry.register(NodeType.LLM_NODE, LlmNode)
         >>> node_class = registry.get(NodeType.LLM_NODE)
@@ -45,12 +45,12 @@ class NodeRegistry(ResourceRegistry[type[BaseNode]]):
         """
         Регистрирует класс ноды.
 
-        Args:
+        Аргументы:
             node_type: Тип ноды (NodeType Enum)
             node_class: Класс ноды (наследник BaseNode)
             metadata: Дополнительные метаданные
 
-        Raises:
+        Исключения:
             ResourceAlreadyExistsError: Если тип уже зарегистрирован
         """
         super().register(self._node_key(key), resource, metadata)
@@ -60,13 +60,13 @@ class NodeRegistry(ResourceRegistry[type[BaseNode]]):
         """
         Получает класс ноды по типу.
 
-        Args:
+        Аргументы:
             node_type: Тип ноды (NodeType Enum)
 
-        Returns:
+        Возвращает:
             Класс ноды
 
-        Raises:
+        Исключения:
             ResourceNotFoundError: Если тип не зарегистрирован
         """
         return super().get(self._node_key(key))
@@ -75,10 +75,10 @@ class NodeRegistry(ResourceRegistry[type[BaseNode]]):
         """
         Проверяет зарегистрирован ли тип ноды.
 
-        Args:
+        Аргументы:
             node_type: Тип ноды
 
-        Returns:
+        Возвращает:
             True если зарегистрирован
         """
         return self.has(node_type.value)
@@ -90,7 +90,7 @@ def create_default_node_registry() -> NodeRegistry:
 
     Вызывается при startup приложения.
 
-    Returns:
+    Возвращает:
         NodeRegistry со всеми типами нод
     """
     registry = NodeRegistry()
@@ -104,7 +104,7 @@ def create_default_node_registry() -> NodeRegistry:
         NodeType.MCP: "MCP tool",
         NodeType.CHANNEL: "Отправка в канал (Telegram, Email, Webhook)",
         NodeType.HITL_NODE: "Оператор очереди (пауза до специалиста)",
-        NodeType.REFLECTION: "Typed critic / test-time compute gate",
+        NodeType.REFLECTION: "Типизированный critic / test-time compute gate",
         NodeType.RESOURCE: "Нода-ресурс на графе (pass-through)",
     }
     for node_type, node_class in RUNTIME_NODE_CLASSES.items():

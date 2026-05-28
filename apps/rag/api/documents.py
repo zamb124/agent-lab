@@ -38,7 +38,7 @@ logger = get_logger(__name__)
 router = APIRouter(tags=["documents"])
 
 
-# DocumentListResponse is replaced by OffsetPage[RAGDocument]
+# DocumentListResponse заменён на OffsetPage[RAGDocument]
 
 
 class DocumentUploadResponse(StrictBaseModel):

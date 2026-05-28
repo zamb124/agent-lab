@@ -1,7 +1,7 @@
 """
 API для работы с графами связей.
 
-Endpoints:
+Эндпоинты:
 - /entities/{entity_id}/influence-graph - построение графа влияния
 - /entities/{entity_id}/related - прямо связанные entities
 """
@@ -23,9 +23,9 @@ router = APIRouter(prefix="/entities", tags=["Graph"])
 
 
 class OverviewGraphRequest(BaseModel):
-    entity_ids: list[str] = Field(description="Список seed entity ID")
+    entity_ids: list[str] = Field(description="Список ID seed-сущностей")
     max_depth: int = Field(default=3, ge=1, le=5)
-    relationship_types: str | None = Field(default=None, description="Comma-separated типы связей")
+    relationship_types: str | None = Field(default=None, description="Типы связей через запятую")
     created_at_from: datetime | None = None
     created_at_to: datetime | None = None
     namespace: str | None = Field(
@@ -85,7 +85,7 @@ async def get_influence_graph(
     container: ContainerDep,
     max_depth: Annotated[int, Query(ge=1, le=5, description="Максимальная глубина обхода")] = 3,
     relationship_types: Annotated[
-        str | None, Query(description="Comma-separated типы связей")
+        str | None, Query(description="Типы связей через запятую")
     ] = None,
     created_at_from: Annotated[
         datetime | None, Query(description="Фильтр created_at >= value")
@@ -121,15 +121,15 @@ async def get_influence_graph(
     единым контрактом задаёт пространство и сущностей, и связей.
     Поля directed / source_id / target_id в ответе сохраняют семантику типа связи.
 
-    Args:
+    Аргументы:
         entity_id: ID корневой entity
         max_depth: Глубина обхода (1-5)
         relationship_types: Фильтр по типам связей (например: "manages,works_on")
 
-    Returns:
+    Возвращает:
         Граф с nodes и edges
 
-    Raises:
+    Исключения:
         404: Entity не найдена
         403: Нет доступа к корневой entity
     """
@@ -192,15 +192,15 @@ async def get_related_entities(
     """
     Получить прямо связанные entities (1 уровень).
 
-    Args:
+    Аргументы:
         entity_id: ID центральной entity
         direction: "incoming" | "outgoing" | "both"
         relationship_type: Фильтр по типу связи
 
-    Returns:
+    Возвращает:
         Связанные entities разделенные по направлению
 
-    Raises:
+    Исключения:
         404: Entity не найдена
     """
     try:

@@ -60,7 +60,7 @@ export function readSidebarNavTreeExpanded(scope) {
 }
 
 /**
- * Persist only collapsed groups (id -> false). Other keys из expandedById игнорируются.
+ * Сохранять только свёрнутые группы (id -> false). Остальные ключи из expandedById игнорируются.
  *
  * @param {string} scope
  * @param {Record<string, boolean>} expandedById

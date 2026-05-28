@@ -158,6 +158,7 @@ def test_xlsx_table_text_and_both_http_images(
     assert len(media) >= 2, f"ожидались минимум 2 в xl/media/, получено {media}"
     wb = load_workbook(BytesIO(result.data), read_only=True, data_only=True)
     ws = wb.active
+    assert ws is not None
     flat = " ".join(
         str(c.value)
         for row in ws.iter_rows()

@@ -36,11 +36,11 @@ class BaseAuthProvider(ABC):
         """
         Формирует URL для перенаправления пользователя на авторизацию.
 
-        Args:
+        Аргументы:
             state: Уникальная строка для защиты от CSRF
             redirect_uri: URI для возврата после авторизации
 
-        Returns:
+        Возвращает:
             URL для авторизации
         """
         pass
@@ -50,11 +50,11 @@ class BaseAuthProvider(ABC):
         """
         Обменивает код авторизации на токены доступа.
 
-        Args:
+        Аргументы:
             code: Код авторизации от провайдера
             redirect_uri: URI который использовался при авторизации
 
-        Returns:
+        Возвращает:
             Tuple[access_token, refresh_token]
         """
         pass
@@ -66,11 +66,11 @@ class BaseAuthProvider(ABC):
         """
         Получает информацию о пользователе по токену доступа.
 
-        Args:
+        Аргументы:
             access_token: Токен доступа (у Apple — id_token)
             first_login_user_json: Apple: JSON из параметра user при первой авторизации
 
-        Returns:
+        Возвращает:
             Информация о пользователе
         """
         pass
@@ -79,10 +79,10 @@ class BaseAuthProvider(ABC):
         """
         Обновляет токен доступа используя refresh token.
 
-        Args:
+        Аргументы:
             refresh_token: Токен обновления
 
-        Returns:
+        Возвращает:
             Tuple[new_access_token, new_refresh_token]
         """
         if not refresh_token:

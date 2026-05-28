@@ -1,10 +1,10 @@
-"""Integration coverage for LLMClient candidate fallback.
+"""Интеграционное покрытие fallback кандидатов LLMClient.
 
-These tests deliberately exercise the real httpx/OpenAI-compatible path. The
-local server below is a tiny deterministic endpoint, not a patched client.
+Эти тесты намеренно проходят через реальный путь httpx/OpenAI-compatible.
+Локальный сервер ниже — маленький детерминированный endpoint, а не патченный клиент.
 
-Tight first-token timeouts (10–50 ms) делают тесты чувствительными к CPU
-старvation: на одном xdist-worker'е они стабильны, при параллельном запуске
+Короткие таймауты первого токена (10–50 ms) делают тесты чувствительными к CPU
+starvation: на одном xdist-worker'е они стабильны, при параллельном запуске
 рядом с другими тяжёлыми тестами таймеры срываются. Группируем модуль на
 один worker через ``xdist_group``.
 """

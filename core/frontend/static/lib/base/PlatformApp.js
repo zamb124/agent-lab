@@ -17,14 +17,14 @@
  *   - static defaultI18nNamespace     — namespace по умолчанию для this.t(...)
  *     во всех компонентах сервиса. Приземляется через setDefaultI18nNamespace.
  *   - static bottomNavItems = []      — конфигурация мобильной первичной навигации
- *     (mobile shell 2026). Видна только на <= 767px. Каждый item:
+ *     (mobile shell 2026). Видна только на <= 767px. Каждый элемент:
  *       { key, routeKey, params?, sheet?, sheetProps?, icon, labelKey, badge? }
  *     Пустой массив = bottom-nav скрыт (публичные/landing страницы).
  *   - static bottomNavHideOnRoutes = []  — список routeKeys, на которых bottom-nav
  *     дополнительно скрывается (полноэкранные редакторы: flow_editor, document_editor).
  *   - static topBarEnabled = false    — рендерит <platform-top-bar> сверху на мобиле.
  *     По умолчанию false — сервисы, у которых страницы уже рендерят `<page-header>` со sticky-mobile,
- *     могут адоптировать постепенно. Включи `true` при отказе от per-page sticky-header.
+ *     могут адаптировать постепенно. Включи `true` при отказе от sticky-header на каждой странице.
  *   - static topBarHideOnRoutes = []  — список routeKeys, на которых top-bar скрыт.
  *   - static routeMotionEnabled = true — route changes используют View Transition API,
  *     если браузер поддерживает document.startViewTransition и не включён reduced motion.

@@ -1,4 +1,4 @@
-"""Add calendar tables
+"""Добавление таблиц календаря
 
 Revision ID: shared_0002
 Revises: shared_0001

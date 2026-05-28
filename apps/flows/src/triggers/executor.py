@@ -45,14 +45,14 @@ class TriggerExecutor:
         """
         Запускает агента с данными из триггера.
 
-        Args:
+        Аргументы:
             flow_id: ID агента
             trigger: Конфигурация триггера
             payload: Входящие данные триггера
             user_id: ID пользователя (опционально)
             metadata: Дополнительные метаданные
 
-        Returns:
+        Возвращает:
             Результат выполнения агента
         """
         trigger_id = trigger.trigger_id
@@ -79,7 +79,7 @@ class TriggerExecutor:
         context_id = str(uuid.uuid4())
         session_id = f"{flow_id}:{context_id}"
 
-        # User ID из payload или дефолтный
+        # user_id из payload или дефолтный
         effective_user_id = user_id or self._extract_user_id(trigger_type, payload)
 
         # Получаем существующий context или создаем минимальный
@@ -168,7 +168,7 @@ class TriggerExecutor:
                 return f"tg:{user_id}"
 
         if trigger_type == "email":
-            # Email: from адрес
+            # Email: адрес отправителя
             from_addr = payload.get("from")
             if isinstance(from_addr, str) and from_addr:
                 return f"email:{from_addr}"

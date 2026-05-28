@@ -1,1 +1,1 @@
-"""Sync Worker - обработка realtime команд (TaskIQ worker)."""
+"""Sync worker — обработка realtime-команд (TaskIQ worker)."""

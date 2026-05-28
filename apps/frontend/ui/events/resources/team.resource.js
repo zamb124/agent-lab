@@ -1,5 +1,5 @@
 /**
- * Team resources — участники компании и генерация invite-ссылок.
+ * Ресурсы команды — участники компании и генерация invite-ссылок.
  *
  * Coverage:
  *   - teamMembersResource (createResourceCollection): список участников,
@@ -8,7 +8,7 @@
  *   - inviteGenerateOp (createAsyncOp, silent): генерация invite-ссылки;
  *     slice `links: { [role]: link }` кэширует ссылку для повторного копирования.
  *
- * Backend:
+ * Бэкенд:
  *   GET    /frontend/api/team/members           → { items: TeamMember[] }
  *   PATCH  /frontend/api/team/members/{user_id} → { success, user_id, roles }
  *   DELETE /frontend/api/team/members/{user_id} → { success, message }

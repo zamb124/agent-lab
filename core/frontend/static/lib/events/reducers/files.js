@@ -1,5 +1,5 @@
 /**
- * Files slice — мета-инфо загруженных файлов и upload-операций.
+ * Слайс files — мета-инфо загруженных файлов и upload-операций.
  *
  * state.files:
  *   byId:    { [fileId]: object }
@@ -65,7 +65,7 @@ export function filesReducer(state = initialFilesState, event) {
 
 export const filesSlice = { reducer: filesReducer, initial: initialFilesState };
 
-/** Pure helper: URL для скачивания файла. */
+/** Чистый helper: URL для скачивания файла. */
 export function buildFileDownloadUrl(baseUrl, fileId) {
     if (typeof fileId !== 'string' || fileId === '') {
         throw new Error('buildFileDownloadUrl: fileId required');

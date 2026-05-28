@@ -1,5 +1,5 @@
 /**
- * Admin tracing page (system) — поиск spans с typeahead-подсказками
+ * Страница admin tracing (system) — поиск spans с typeahead-подсказками
  * по 6 фасетам и просмотр дерева одного трейса в выезжающем drawer.
  *
  * Доступно только при активной компании system. 503 → unavailable state.

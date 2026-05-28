@@ -1,5 +1,5 @@
 /**
- * Sync Namespaces — фабрики для платформенного namespace в UI Sync.
+ * Namespace Sync — фабрики для платформенного namespace в UI Sync.
  *
  * Источник правды списка — `core/db/repositories/namespace_repository.py`
  * (shared KV `namespaces`); в UI достаётся через REST `apps/sync/api/namespaces.py`

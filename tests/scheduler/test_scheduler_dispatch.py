@@ -1,4 +1,4 @@
-"""Scheduler dispatch coverage."""
+"""Покрытие dispatch scheduler."""
 
 from __future__ import annotations
 

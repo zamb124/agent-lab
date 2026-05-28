@@ -74,8 +74,8 @@ const OFFICE_ROUTES = [
 ];
 
 /**
- * Mobile bottom-nav (mobile shell 2026): Documents, Catalogs, Profile.
- * Editor — fullscreen-маршрут с iframe OnlyOffice, капсула там скрывается.
+ * Нижняя навигация (mobile shell 2026): Documents, Catalogs, Profile.
+ * Редактор — fullscreen-маршрут с iframe OnlyOffice, капсула там скрывается.
  */
 const OFFICE_BOTTOM_NAV_ITEMS = [
     { key: 'documents', routeKey: 'documents_list',     icon: 'doc-detail', labelKey: 'bottom_nav.documents' },

@@ -30,7 +30,7 @@ def register_service(
     """
     Регистрирует сервис в реестре.
 
-    Args:
+    Аргументы:
         name: Имя сервиса (shared, agents, crm, sync, rag)
         get_db_url: Функция, возвращающая URL БД из конфига сервиса
         models_module: Путь к модулю с моделями
@@ -59,7 +59,7 @@ def get_unique_db_urls() -> dict[str, list[str]]:
     """
     Возвращает уникальные URL БД с именами сервисов.
 
-    Returns:
+    Возвращает:
         dict: {db_url: [service_names]}
     """
     urls: dict[str, list[str]] = {}

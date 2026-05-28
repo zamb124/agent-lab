@@ -179,7 +179,7 @@ class GuestJoinRequest(BaseModel):
 
 
 class JoinResponse(BaseModel):
-    """Ответ при входе в звонок (registered или guest)."""
+    """Ответ при входе в звонок (зарегистрированный пользователь или гость)."""
     call_id: str
     call_type: CallType
     livekit_token: str

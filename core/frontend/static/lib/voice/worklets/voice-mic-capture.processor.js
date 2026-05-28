@@ -1,6 +1,6 @@
 /**
  * Пакетирует вход микрофона в Float32 блоки (~4096 кадров) и шлёт в main thread через MessagePort.
- * Работает на audio rendering thread — надёжнее чем deprecated ScriptProcessorNode.
+ * Работает на audio rendering thread — надёжнее чем устаревший ScriptProcessorNode.
  */
 const VOICE_MIC_CAPTURE_BATCH_SAMPLES = 4096;
 

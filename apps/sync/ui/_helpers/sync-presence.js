@@ -1,5 +1,5 @@
 /**
- * Sync presence helpers — отображение online/last_seen.
+ * Хелперы presence Sync — отображение online/last_seen.
  *
  * Чистые функции. `t` (translator) передаётся аргументом, чтобы helpers
  * оставались UI-нейтральными и тестируемыми.

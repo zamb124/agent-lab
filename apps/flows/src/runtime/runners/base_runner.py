@@ -30,7 +30,7 @@ logger = get_logger(__name__)
 
 
 class LlmNodeRunnerHost(Protocol):
-    """Structural contract the runner needs from its owning LlmNode."""
+    """Структурный контракт, который runner ожидает от владеющего LlmNode."""
 
     messages_filter: Literal["all", "own"] | list[str]
 
@@ -126,11 +126,11 @@ class BaseLlmNodeRunner(ABC):
         """
         Выполняет LlmNode.
 
-        Args:
+        Аргументы:
             input_data: Входные данные (messages, etc)
             state: ExecutionState
 
-        Returns:
+        Возвращает:
             Результат выполнения
         """
         raise NotImplementedError

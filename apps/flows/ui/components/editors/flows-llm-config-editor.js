@@ -15,11 +15,11 @@
  *   и пустом ключе база выводится в рантайме (`infer_unique_llm_resource_key_from_merged_maps`).
  *   Поле `llm_resource_key` в этой форме не редактируется.
  *
- * Property API:
+ * Свойства (API):
  *   - config: object  // текущее значение
  *   - readOnly: boolean  // только просмотр (без запросов списков и change)
  *
- * Events (emit):
+ * События (emit):
  *   - 'change' { config }  // полный объект (мерж с предыдущим)
  */
 

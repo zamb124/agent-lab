@@ -1,4 +1,4 @@
-"""Build and apply domain-aware ExecutionState deltas."""
+"""Сборка и применение доменных delta для ExecutionState."""
 
 from __future__ import annotations
 
@@ -50,7 +50,7 @@ def build_state_delta(
     before: ExecutionState | None,
     after: ExecutionState,
 ) -> ExecutionStateDelta:
-    """Return a compact semantic delta from before to after."""
+    """Возвращает компактную семантическую delta от before к after."""
     after_json = _state_json(after)
     if before is None:
         fields_set = {
@@ -146,7 +146,7 @@ def apply_state_delta(
     state: ExecutionState | None,
     delta: ExecutionStateDelta,
 ) -> ExecutionState:
-    """Apply delta and return a validated ExecutionState projection."""
+    """Применяет delta и возвращает валидированную проекцию ExecutionState."""
     if state is None:
         data: JsonObject = {}
     else:

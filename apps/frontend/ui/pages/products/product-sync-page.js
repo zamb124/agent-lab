@@ -1,5 +1,5 @@
 /**
- * Product Sync Page - Страница продукта Sync
+ * Страница продукта Sync — страница продукта Sync
  */
 import { html, css } from 'lit';
 import { PlatformPage } from '@platform/lib/base/PlatformPage.js';

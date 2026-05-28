@@ -1,5 +1,5 @@
 /**
- * Create API key modal — открывается через `this.openModal(FrontendCreateApiKeyModal)`.
+ * Модалка создания API-ключа — открывается через `this.openModal(FrontendCreateApiKeyModal)`.
  *
  * Скоупы соответствуют backend whitelist VALID_SCOPES в apps/frontend/api/api_keys.py.
  * После create() модалка закрывается; секрет показывается на странице

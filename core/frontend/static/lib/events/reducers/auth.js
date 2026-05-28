@@ -1,5 +1,5 @@
 /**
- * Auth slice.
+ * Слайс auth.
  *
  * Поля state.auth:
  *   status:        'unknown' | 'validating' | 'authenticated' | 'unauthenticated' | 'error'

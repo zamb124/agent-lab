@@ -1,11 +1,14 @@
 """OpenRouter free model cache filtering/ranking."""
 
+import json
+
 from core.clients.llm.openrouter_free_models import (
     is_free_text_model,
     parse_openrouter_free_models,
     rank_openrouter_free_models,
     serialize_openrouter_free_models,
 )
+from core.types import JsonObject, parse_json_object
 
 
 def test_rank_openrouter_free_models_prefers_larger_models_and_keeps_router_last() -> None:
@@ -66,15 +69,19 @@ def test_rank_openrouter_free_models_prefers_larger_models_and_keeps_router_last
 
 
 def test_is_free_text_model_rejects_paid_expired_or_non_text_models() -> None:
-    base = {
-        "id": "vendor/model-80b:free",
-        "pricing": {"prompt": "0", "completion": "0", "request": "0"},
-        "architecture": {
-            "input_modalities": ["text"],
-            "output_modalities": ["text"],
-        },
-        "expiration_date": None,
-    }
+    base: JsonObject = parse_json_object(
+        json.dumps(
+            {
+                "id": "vendor/model-80b:free",
+                "pricing": {"prompt": "0", "completion": "0", "request": "0"},
+                "architecture": {
+                    "input_modalities": ["text"],
+                    "output_modalities": ["text"],
+                },
+                "expiration_date": None,
+            }
+        )
+    )
 
     assert is_free_text_model(base)
     assert is_free_text_model({**base, "pricing": {"prompt": "0", "completion": "0"}})

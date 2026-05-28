@@ -1,1 +1,1 @@
-"""Public search flow bundle."""
+"""Пакет flow public search."""

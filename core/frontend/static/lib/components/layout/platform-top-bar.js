@@ -9,7 +9,7 @@
  *              кастомизация через slot="center" (workspace pill, breadcrumbs)
  *   <right>  — actions страницы / уведомления; slot="right"
  *
- * Source of truth для title — `state.router.routes`:
+ * Источник правды для title — `state.router.routes`:
  *   { key, path, parent?, titleKey? }
  *
  * Если у текущего routeKey есть parent — отображается кнопка back (history.back()).
@@ -30,7 +30,7 @@ export class PlatformTopBar extends PlatformElement {
         titleKey: { type: String, attribute: 'title-key' },
         /** Прямой текст заголовка (если не нужен i18n). */
         titleText: { type: String, attribute: 'title-text' },
-        /** Имя namespace для t(titleKey) — по умолчанию default i18n namespace сервиса. */
+        /** Имя namespace для t(titleKey) — по умолчанию i18n namespace по умолчанию сервиса. */
         titleNamespace: { type: String, attribute: 'title-namespace' },
         /** Скрыть кнопку back (для root-страниц). По умолчанию авто-определение по parent. */
         hideBack: { type: Boolean, attribute: 'hide-back' },

@@ -69,10 +69,10 @@ async def download_audio_from_url(*, url: str) -> tuple[bytes, str, str]:
 
     Для прямых ссылок на медиафайлы использует httpx вместо yt-dlp.
 
-    Args:
+    Аргументы:
         url: URL видео или аудио
 
-    Returns:
+    Возвращает:
         (audio_bytes, file_name, mime_type)
     """
     if url == "" or url.strip() == "":

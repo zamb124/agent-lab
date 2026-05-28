@@ -19,14 +19,14 @@ from core.types import MigrationDatabaseUrlKey
 
 
 class MigrationPostgresConfig(StrictBaseModel):
-    """PostgreSQL bootstrap contract from migrations/services.json."""
+    """Контракт bootstrap PostgreSQL из migrations/services.json."""
 
     databases: list[str]
     vector_extensions: list[str] = Field(default_factory=list)
 
 
 class MigrationServiceEntry(StrictBaseModel):
-    """Alembic tree registration contract from migrations/services.json."""
+    """Контракт регистрации дерева Alembic из migrations/services.json."""
 
     model_config: ClassVar[ConfigDict] = ConfigDict(
         extra="forbid",
@@ -42,7 +42,7 @@ class MigrationServiceEntry(StrictBaseModel):
 
 
 class MigrationManifest(StrictBaseModel):
-    """Strict migration manifest loaded from migrations/services.json."""
+    """Строгий манифест миграций из migrations/services.json."""
 
     services: list[MigrationServiceEntry]
     postgres: MigrationPostgresConfig

@@ -161,7 +161,7 @@ class FcmPushService:
         extra: JsonObject | None = None,
     ) -> tuple[bool, bool]:
         """
-        Returns:
+        Возвращает:
             (доставлено, удалить_подписку_из_БД)
         """
         token = registration_token.strip()

@@ -36,11 +36,11 @@ class OfficeContainer(BaseContainer):
     @lazy
     def redis_client(self) -> RedisClient:
         """
-        Долгоживущий Redis-клиент сервиса: используется для distributed locks
+        Долгоживущий Redis-клиент сервиса: используется для распределённых блокировок
         (mutation lock на binding) и pub/sub-уведомлений о release.
 
-        Один экземпляр на процесс — без RedisClient() на каждый HTTP request,
-        иначе по 1+ TCP connect на запрос и накопление полузакрытых сокетов.
+        Один экземпляр на процесс — без RedisClient() на каждый HTTP-запрос,
+        иначе по 1+ TCP-подключению на запрос и накопление полузакрытых сокетов.
         """
         redis_url = get_settings().database.redis_url
         return RedisClient(redis_url)
@@ -83,7 +83,7 @@ set_office_container = _office_registry.set
 
 
 def reset_office_container() -> None:
-    # Office-specific: дополнительно сбрасываем singleton OfficeDatabase,
+    # Специфично для office: дополнительно сбрасываем singleton OfficeDatabase,
     # потому что её handle живёт в module-level кэше класса, а не внутри
     # контейнера. Это требование тестов, которые пересоздают БД.
     _office_registry.reset()

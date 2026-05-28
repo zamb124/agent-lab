@@ -2,7 +2,7 @@
  * OnlyOffice Integration Status — readonly статус наличия конфигурации DS,
  * JWT secret, callback URL.
  *
- * Backend: `GET /documents/api/v1/integration/status` →
+ * Бэкенд: `GET /documents/api/v1/integration/status` →
  * `OfficeIntegrationStatusResponse { configured, document_server_public_url,
  * jwt_secret_present, callback_public_base_url, ... }`.
  *

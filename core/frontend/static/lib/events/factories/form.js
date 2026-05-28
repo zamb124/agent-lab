@@ -9,7 +9,7 @@
  *
  * Контракт:
  *   - name: 'scope/form_name'
- *   - schema: { [field]: { required?: bool, minLength?, maxLength?, pattern?,
+ *   - schema: { [field]: { обязательный?: bool, minLength?, maxLength?, pattern?,
  *       validate?: (value, draft) => string|null, errorKey?: i18n }, ... }
  *   - initial: { [field]: value } — обязательно (zero-guess)
  *   - submitEvent: string — тип события, в которое передаём draft (или payload

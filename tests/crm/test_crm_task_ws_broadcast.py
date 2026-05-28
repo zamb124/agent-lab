@@ -12,7 +12,7 @@ from apps.crm.services import crm_task_ws_broadcast as broadcast_mod
 
 @pytest.mark.asyncio
 async def test_broadcast_crm_task_updated_for_user_payload(monkeypatch):
-    recorded: list[tuple[str, str, dict]] = []
+    recorded: list[tuple[str, str, dict[str, object]]] = []
 
     async def _capture(**kwargs: object) -> None:
         user_id = kwargs.get('user_id')
@@ -49,8 +49,12 @@ async def test_broadcast_crm_task_updated_for_user_payload(monkeypatch):
     uid, event_type, payload = recorded[0]
     assert uid == "user_1"
     assert event_type == "crm/task/updated"
-    task = payload["task"]
+    task_raw = payload.get("task")
+    assert isinstance(task_raw, dict)
+    task: dict[str, object] = task_raw
     assert task["task_id"] == "task_ws_test_1"
     assert task["task_type"] == "note_analyze"
     assert task["status"] == "running"
-    assert task["data"]["note_id"] == "note_1"
+    task_data = task["data"]
+    assert isinstance(task_data, dict)
+    assert task_data["note_id"] == "note_1"

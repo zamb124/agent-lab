@@ -1,8 +1,8 @@
 """
 Сервис для работы с entities.
 
-Единый сервис для всех типов entities (note, task, contact, organization, etc).
-Включает AI анализ с составными промптами и каскадное удаление через Saga.
+Единый сервис для всех типов entities (note, task, contact, organization и т. д.).
+Включает AI-анализ с составными промптами и каскадное удаление через Saga.
 """
 
 from __future__ import annotations
@@ -3187,7 +3187,7 @@ class EntityService:
         2. EntityType.prompt для подтипов (meeting, call)
         3. RelationshipType.prompt для связей (mentions, works_for)
 
-        Args:
+        Аргументы:
             request: Запрос на анализ
             check_duplicates: Проверять ли дубликаты (по умолчанию True)
             note_id: ID заметки для сохранения черновика
@@ -5412,12 +5412,12 @@ class EntityService:
         - Связанные entities
         - Attachments
 
-        Args:
+        Аргументы:
             entity_id: ID entity
             company_id: ID компании
 
-        Returns:
-            Dict с полной информацией о entity
+        Возвращает:
+            Словарь с полной информацией о entity
         """
 
         entity = await self._entity_repo.get(entity_id)
@@ -5467,7 +5467,7 @@ class EntityService:
         entity_ids: list[str],
     ) -> dict[str, JsonObject]:
         """
-        Batch-загрузка карточек для списка entity_id.
+        Пакетная загрузка карточек для списка entity_id.
 
         Вместо N запросов делает:
           - 1 запрос за всеми сущностями
@@ -5475,8 +5475,8 @@ class EntityService:
           - 1 запрос за всеми связанными сущностями
           - N параллельных запросов за attachments (по одному на entity)
 
-        Returns:
-            Dict {entity_id: card_dict}; отсутствующие entity_id не включаются в результат.
+        Возвращает:
+            Словарь {entity_id: card_dict}; отсутствующие entity_id не включаются в результат.
         """
         if not entity_ids:
             return {}

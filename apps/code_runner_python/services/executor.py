@@ -1,8 +1,8 @@
 """Python sandbox executor по контракту CodeExecutionRequest.
 
-Целевой runtime: code-runner-python держит long-lived worker pool.
-Worker компилирует source один раз по artifact-key и дальше исполняет cached
-code object в свежем sandbox namespace на каждый вызов.
+Целевой runtime: code-runner-python держит пул долгоживущих worker-ов.
+Worker компилирует исходный код один раз по artifact-key и дальше исполняет
+закэшированный code object в свежем sandbox namespace на каждый вызов.
 """
 
 from __future__ import annotations
@@ -35,7 +35,7 @@ WORKER_IPC_STREAM_LIMIT_BYTES = 64 * 1024 * 1024
 
 
 class _PythonWorker:
-    """Один persistent Python sandbox worker с JSON-lines IPC."""
+    """Один долгоживущий Python sandbox worker с JSON-lines IPC."""
 
     def __init__(self, *, worker_path: Path, gateway_url: str):
         self._worker_path: Path = worker_path
@@ -181,7 +181,7 @@ class _PythonWorker:
 
 
 class PythonSandboxExecutor:
-    """Исполняет Python user code через persistent sandbox worker pool."""
+    """Исполняет пользовательский Python-код через пул долгоживущих sandbox worker-ов."""
 
     def __init__(self) -> None:
         self._workers: list[_PythonWorker] = []

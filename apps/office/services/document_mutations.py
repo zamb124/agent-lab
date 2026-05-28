@@ -1,4 +1,4 @@
-"""Deterministic byte-level mutations for Office-backed files."""
+"""Детерминированные байтовые мутации для файлов Office."""
 
 from __future__ import annotations
 
@@ -15,7 +15,7 @@ from apps.office.models.api import SpreadsheetCellValue
 
 
 class DocumentMutationError(ValueError):
-    """Raised when a mutation is not supported or cannot be applied."""
+    """Выбрасывается, если мутация не поддерживается или не может быть применена."""
 
 
 def _ext(name: str) -> str:

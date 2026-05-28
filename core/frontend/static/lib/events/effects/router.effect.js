@@ -1,5 +1,5 @@
 /**
- * Router effect.
+ * Эффект router.
  *
  * Источник правды о текущем маршруте — state.router. Effect синхронизирует state
  * с реальным URL и наоборот:

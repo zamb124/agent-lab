@@ -215,7 +215,7 @@ def build_company_subdomain_absolute_url(
     Полный URL с тем же path/query и портом Host, на DNS-субдомене company_subdomain.
     Согласовано с core/frontend/static/lib/utils/company-url.js (buildCompanySubdomainUrl).
 
-    Raises:
+    Исключения:
         ValueError: пустой company_subdomain или базовый хост — IP (нет foo.<IP> в DNS).
     """
     if not company_subdomain or not str(company_subdomain).strip():
@@ -271,7 +271,7 @@ def get_cookie_domain(host: str) -> str | None:
         humanitec.ru → .humanitec.ru
         company.humanitec.ru → .humanitec.ru
 
-    Note:
+    Примечание:
         Для *.localhost задаём Domain=localhost, иначе кука host-only привязана к
         конкретному поддомену и после смены компании (редирект на другой slug)
         браузер не шлёт auth_token — повторный вход.
@@ -291,12 +291,12 @@ def build_url(host: str, path: str = "", subdomain: str | None = None) -> str:
     """
     Полный URL с учётом текущего домена.
 
-    Args:
+    Аргументы:
         host: Host header из запроса
         path: Путь (начинается с /)
         subdomain: Поддомен (опционально)
 
-    Returns:
+    Возвращает:
         Полный URL (http для локальной разработки, https для production)
     """
     protocol = get_protocol(host)

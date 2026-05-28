@@ -1,4 +1,4 @@
-"""Composable sources for platform LLM context blocks."""
+"""Компонуемые источники блоков контекста LLM платформы."""
 
 from __future__ import annotations
 
@@ -15,7 +15,7 @@ from core.types import JsonObject
 
 
 class LLMContextSourceRequest(StrictBaseModel):
-    """Input passed to each context source for one LLM call."""
+    """Входные данные, передаваемые каждому источнику контекста для одного LLM-вызова."""
 
     messages: list[JsonObject] = Field(default_factory=list)
     policy: LLMContextProfile = Field(default_factory=LLMContextProfile)
@@ -24,7 +24,7 @@ class LLMContextSourceRequest(StrictBaseModel):
 
 
 class LLMContextSource(Protocol):
-    """Source contract for retrieving candidate context blocks."""
+    """Контракт источника для получения кандидатов блоков контекста."""
 
     @property
     def name(self) -> str:
@@ -36,7 +36,7 @@ class LLMContextSource(Protocol):
 
 @dataclass(frozen=True)
 class StaticLLMContextSource:
-    """Concrete source for already materialized blocks."""
+    """Конкретный источник для уже материализованных блоков."""
 
     name: str
     blocks: tuple[LLMContextBlock, ...]
@@ -60,7 +60,7 @@ class StaticLLMContextSource:
 
 @dataclass(frozen=True)
 class LLMContextSourceRegistry:
-    """Ordered registry that collects context blocks from independent sources in parallel."""
+    """Упорядоченный реестр, собирающий блоки контекста из независимых источников параллельно."""
 
     sources: tuple[LLMContextSource, ...] = ()
 

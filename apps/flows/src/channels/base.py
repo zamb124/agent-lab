@@ -166,7 +166,7 @@ class BaseChannel(ABC):
         """
         Отправляет сообщение пользователю через канал.
 
-        Args:
+        Аргументы:
             content: Текст сообщения
             buttons: Кнопки быстрого ответа (опционально)
             attachments: Вложения (опционально)
@@ -183,7 +183,7 @@ class BaseChannel(ABC):
         """
         Генерирует task_id и context_id.
 
-        Returns:
+        Возвращает:
             Tuple (task_id, context_id)
         """
         if message:
@@ -198,10 +198,10 @@ class BaseChannel(ABC):
         """
         Извлекает группы пользователя из контекста.
 
-        Args:
+        Аргументы:
             context: контекст запроса (dict с user_groups или Context)
 
-        Returns:
+        Возвращает:
             Список групп пользователя
         """
         raw_groups: JsonValue | None = None
@@ -255,16 +255,16 @@ class BaseChannel(ABC):
         """
         Проверяет permissions на агента и ветку (branch).
 
-        Args:
+        Аргументы:
             user_groups: группы пользователя из JWT (grps claim)
             branch_id: ID ветки
 
-        Raises:
+        Исключения:
             PermissionDenied: если нет доступа к агенту или ветке
         """
         config = get_settings()
 
-        # Если проверка permissions отключена - пропускаем
+        # Если проверка прав доступа отключена — пропускаем
         if not config.auth.permissions_enabled:
             return
 
@@ -418,11 +418,11 @@ class BaseChannel(ABC):
             is_resume = False
         else:
             branch_id = state.branch_id
-            # Resume если есть interrupt ИЛИ breakpoint_hit
+            # Resume, если есть interrupt ИЛИ breakpoint_hit
             is_resume = bool(state.interrupt) or bool(state.breakpoint_hit)
             task_id = effective_stream_task_id_for_session(task_id, state)
 
-            # A2A input-required follow-up: при активном takeover
+            # A2A input-required, продолжение диалога: при активном operator takeover
             # реплика пользователя маршрутизируется в dialog_log,
             # flow НЕ возобновляется до complete_handoff оператором.
             if state.interrupt is not None:
@@ -567,7 +567,7 @@ class BaseChannel(ABC):
         STREAM-FIRST: Все события публикуются в Redis Pub/Sub через Emitter.
         API подписывается на канал и стримит события клиенту.
 
-        Returns:
+        Возвращает:
             Результат выполнения
         """
         if self.context is None:
@@ -1284,7 +1284,7 @@ class BaseChannel(ABC):
             return []
 
         effective = container.flow_factory.apply_branch(config, branch_id)
-        # Graph flow если есть реальные переходы между нодами (не только to: null)
+        # Граф flow, если есть реальные переходы между нодами (не только to: null)
         real_edges = [e for e in effective["edges"] if e.to_node is not None]
         is_graph_flow = len(real_edges) > 0
 
@@ -1313,7 +1313,7 @@ class BaseChannel(ABC):
                     if isinstance(tool_id, str) and tool_id:
                         tools_set.add(tool_id)
 
-            # Собираем inline tools из llm_node nodes
+            # Собираем inline tools из llm_node-нод
             elif node_type == NodeType.LLM_NODE.value:
                 tools_list = require_json_array(
                     node_config.get("tools", []), f"nodes.{node_id}.tools"
@@ -1565,7 +1565,7 @@ class BaseChannel(ABC):
         public_vars: JsonObject = {}
         flow_variables = config.variables or {}
         for var_name, var_config in flow_variables.items():
-            # FlowVariableConfig объект
+            # Объект FlowVariableConfig
             if var_config.public:
                 var_value = var_config.value
                 var_info: JsonObject = {}
@@ -1592,7 +1592,7 @@ class BaseChannel(ABC):
 
 
 # =============================================================================
-# BaseChannelHandler - для отправки сообщений в каналы (Telegram, Email, Webhook)
+# BaseChannelHandler — для отправки сообщений в каналы (Telegram, Email, Webhook)
 # =============================================================================
 
 
@@ -1622,14 +1622,14 @@ class BaseChannelHandler(ABC):
         """
         Отправляет текстовое сообщение.
 
-        Args:
+        Аргументы:
             recipient: Получатель (chat_id для Telegram, email для Email)
             text: Текст сообщения
             config: Конфигурация канала (bot_token, parse_mode, etc)
             variables: Переменные для резолвинга @var:
             **kwargs: Дополнительные параметры (reply_to_message_id, etc)
 
-        Returns:
+        Возвращает:
             Ответ от API канала
         """
         pass
@@ -1647,7 +1647,7 @@ class BaseChannelHandler(ABC):
         """
         Отправляет фото.
 
-        Args:
+        Аргументы:
             recipient: Получатель
             photo: URL или bytes фото
             config: Конфигурация канала
@@ -1670,7 +1670,7 @@ class BaseChannelHandler(ABC):
         """
         Отправляет документ/файл.
 
-        Args:
+        Аргументы:
             recipient: Получатель
             document: URL или bytes документа
             config: Конфигурация канала
@@ -1692,13 +1692,13 @@ class BaseChannelHandler(ABC):
 
         Вызывает соответствующий метод (send_message, send_photo, etc).
 
-        Args:
+        Аргументы:
             action: Название действия (send_message, send_photo, send_document)
             params: Параметры действия (recipient, text, photo, etc)
             config: Конфигурация канала
             variables: Переменные для резолвинга
 
-        Returns:
+        Возвращает:
             Результат выполнения действия
         """
         recipient = self._require_str_param(params, "recipient")

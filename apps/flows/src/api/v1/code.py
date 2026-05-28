@@ -126,27 +126,27 @@ def _capability_global(language: CapabilityLanguage) -> GlobalVariable:
     if language == "go":
         return GlobalVariable(
             name=namespace_names,
-            type="generated Go SDK namespaces",
-            doc="Generated namespaces from CapabilityManifest: tools.Calculator(...), files.Create(...), http.Request(...), flow_state.GetNested(...), channel.Send(...).",
+            type="сгенерированные Go SDK namespaces",
+            doc="Сгенерированные namespaces из CapabilityManifest: tools.Calculator(...), files.Create(...), http.Request(...), flow_state.GetNested(...), channel.Send(...).",
             perspective=["editor", "flow", "tool", "node"],
             tags=["capability", "sandbox"],
         )
     if language == "csharp":
         return GlobalVariable(
             name=namespace_names,
-            type="generated C# SDK namespace properties",
-            doc="Generated namespaces from CapabilityManifest: await tools.Calculator(...), await files.Create(...), await http.Request(...), await flow_state.GetNested(...), await channel.Send(...).",
+            type="сгенерированные C# SDK namespace properties",
+            doc="Сгенерированные namespaces из CapabilityManifest: await tools.Calculator(...), await files.Create(...), await http.Request(...), await flow_state.GetNested(...), await channel.Send(...).",
             perspective=["editor", "flow", "tool", "node"],
             tags=["capability", "sandbox"],
         )
     if language == "python":
-        type_name = "generated async SDK namespaces"
+        type_name = "сгенерированные async SDK namespaces"
     else:
-        type_name = "generated async SDK namespace proxies"
+        type_name = "сгенерированные async SDK namespace proxies"
     return GlobalVariable(
         name=namespace_names,
         type=type_name,
-        doc="Generated namespaces from CapabilityManifest: tools.calculator(...), files.create(...), http.request(...), flow_state.get_nested(...), channel.send(...).",
+        doc="Сгенерированные namespaces из CapabilityManifest: tools.calculator(...), files.create(...), http.request(...), flow_state.get_nested(...), channel.send(...).",
         perspective=["editor", "flow", "tool", "node"],
         tags=["capability", "sandbox"],
     )
@@ -156,22 +156,22 @@ def _runtime_globals() -> list[GlobalVariable]:
     return [
         GlobalVariable(
             name="args",
-            type="runtime entrypoint input",
-            doc="Arguments passed into the code entrypoint.",
+            type="входные данные runtime entrypoint",
+            doc="Аргументы, переданные в точку входа кода.",
             perspective=["editor", "flow", "tool", "node"],
             tags=["runtime", "entrypoint"],
         ),
         GlobalVariable(
             name="state",
-            type="mutable execution state",
-            doc="Flow execution state shared across nodes. User code may write node results here.",
+            type="изменяемый execution state",
+            doc="Execution state flow, общий для нод. Пользовательский код может записывать сюда результаты нод.",
             perspective=["editor", "flow", "tool", "node"],
             tags=["runtime", "state"],
         ),
         GlobalVariable(
             name="variables",
-            type="resolved flow variables",
-            doc="Resolved flow variables, equivalent to state.variables.",
+            type="резолвнутые переменные flow",
+            doc="Резолвнутые переменные flow, эквивалент state.variables.",
             perspective=["editor", "flow", "tool", "node"],
             tags=["runtime", "variables"],
         ),
@@ -180,25 +180,25 @@ def _runtime_globals() -> list[GlobalVariable]:
 
 def _execution_state_fields() -> list[StateField]:
     return [
-        StateField(name="content", type="string", description="Input message content."),
-        StateField(name="response", type="string", description="Agent response text."),
-        StateField(name="result", type="any", description="Last node or tool result."),
-        StateField(name="validation", type="object", description="Node validation payload."),
-        StateField(name="messages", type="array", description="Conversation message history."),
-        StateField(name="variables", type="object", description="Resolved flow variables."),
-        StateField(name="files", type="array", description="Attached files available to the flow."),
+        StateField(name="content", type="string", description="Содержимое входного сообщения."),
+        StateField(name="response", type="string", description="Текст ответа агента."),
+        StateField(name="result", type="any", description="Результат последней ноды или tool."),
+        StateField(name="validation", type="object", description="Payload валидации ноды."),
+        StateField(name="messages", type="array", description="История сообщений диалога."),
+        StateField(name="variables", type="object", description="Резолвнутые переменные flow."),
+        StateField(name="files", type="array", description="Прикреплённые файлы, доступные flow."),
         StateField(
-            name="triggers", type="object", description="Trigger runtime payloads by trigger id."
+            name="triggers", type="object", description="Runtime payload триггеров по trigger id."
         ),
-        StateField(name="tool_results", type="object", description="Results produced by tools."),
-        StateField(name="node_history", type="object", description="Runtime node call history."),
+        StateField(name="tool_results", type="object", description="Результаты, произведённые tools."),
+        StateField(name="node_history", type="object", description="История вызовов runtime-нод."),
         StateField(
-            name="current_nodes", type="array", description="Current graph nodes being executed."
+            name="current_nodes", type="array", description="Текущие ноды графа в исполнении."
         ),
-        StateField(name="branch_id", type="string", description="Current flow branch id."),
-        StateField(name="session_id", type="string", description="Runtime session id."),
+        StateField(name="branch_id", type="string", description="Текущий branch_id flow."),
+        StateField(name="session_id", type="string", description="Runtime session_id."),
         StateField(
-            name="flow_config_version", type="string", description="Flow config version snapshot."
+            name="flow_config_version", type="string", description="Снимок версии конфигурации flow."
         ),
     ]
 
@@ -410,7 +410,7 @@ def _capability_templates(language: CapabilityLanguage) -> list[CodeTemplate]:
     return [
         CodeTemplate(
             id=f"{language}-capability-call",
-            name="Capability call",
+            name="Вызов capability",
             description="Вызов platform capability из isolated code runner.",
             code=snippets[language],
             category="capabilities",
@@ -500,11 +500,11 @@ async def get_code_completions(
     """
     Возвращает данные для autocomplete в редакторе кода.
 
-    Args:
+    Аргументы:
         language: Язык программирования (`python`, `javascript`, `typescript`, `go`, `csharp`)
         perspective: Ракурс (editor, flow, tool, node)
 
-    Returns:
+    Возвращает:
         modules: доступные модули для import
         globals: глобальные переменные SDK capability
         builtins: встроенные функции
@@ -566,7 +566,7 @@ async def get_code_templates(
     """
     Возвращает список шаблонов кода с фильтрацией.
 
-    Args:
+    Аргументы:
         language: Язык программирования (`python`, `javascript`, `typescript`, `go`, `csharp`)
         category: Фильтр по категории (http, llm, interaction, data, files, state, logic, basic)
         node_type: Тип ноды (code, llm_node и др., см. документацию)

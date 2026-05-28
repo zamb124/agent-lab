@@ -1,4 +1,4 @@
-"""Runtime memory source wiring for the generic LLM context layer."""
+"""Подключение memory source для общего LLM context layer в runtime."""
 
 from __future__ import annotations
 
@@ -28,7 +28,7 @@ RuntimeMemoryCompaction = Literal["raw", "llm_summary"]
 
 
 class RuntimeMemoryEpisodePayload(StrictBaseModel):
-    """Deterministic memory episode payload stored in durable activity input."""
+    """Детерминированный payload эпизода памяти в durable activity input."""
 
     memory_id: str = Field(..., min_length=1)
     content: str = Field(..., min_length=1)
@@ -64,7 +64,7 @@ class RuntimeMemoryEpisodePayload(StrictBaseModel):
 
 
 class RuntimeMemoryCloseDecision(StrictBaseModel):
-    """Pure decision for closing the current LLM context memory window."""
+    """Чистое решение о закрытии текущего окна LLM context memory."""
 
     cursor_key: str = Field(..., min_length=1)
     cursor: int = Field(..., ge=0)
@@ -74,7 +74,7 @@ class RuntimeMemoryCloseDecision(StrictBaseModel):
 
 
 class RuntimeMemoryWriteCommand(StrictBaseModel):
-    """Durable command executed as exactly-once memory activity."""
+    """Durable-команда, исполняемая как exactly-once memory activity."""
 
     session_id: str = Field(..., min_length=1)
     execution_branch_id: str = Field(..., min_length=1)
@@ -88,7 +88,7 @@ class RuntimeMemoryWriteCommand(StrictBaseModel):
 
 
 class RuntimeMemoryWriteResult(StrictBaseModel):
-    """Typed memory activity result applied to runtime state projection."""
+    """Типизированный результат memory activity для проекции runtime state."""
 
     memory_id: str = Field(..., min_length=1)
     cursor_key: str = Field(..., min_length=1)
@@ -104,7 +104,7 @@ def resolve_memory_context_source_for_runtime(
     state: ExecutionState | None,
     node_id: str,
 ) -> LLMContextMemorySource | None:
-    """Create a memory source scoped to the current flow execution state."""
+    """Создаёт memory source в области текущего flow execution state."""
     if state is None:
         return None
     return LLMContextMemorySource(
@@ -125,7 +125,7 @@ def build_state_messages_memory_close_decision(
     messages: Sequence[Message | JsonObject | str],
     compaction: RuntimeMemoryCompaction = "llm_summary",
 ) -> RuntimeMemoryCloseDecision | None:
-    """Build a deterministic memory close decision without performing I/O."""
+    """Собирает детерминированное решение о закрытии памяти без I/O."""
     if policy is None:
         return None
     if policy.mode == "off" or policy.memory == "off" or policy.compaction == "off":
@@ -170,7 +170,7 @@ async def write_runtime_memory_episode(
     command: RuntimeMemoryWriteCommand,
     summarize_episode: Callable[[str], Awaitable[str]] | None,
 ) -> RuntimeMemoryWriteResult:
-    """Execute one typed memory write command. Caller owns durable activity journaling."""
+    """Выполняет одну типизированную memory write-команду. Журналирование activity — у вызывающего."""
     episode = command.episode.to_episode()
     if command.compaction == "llm_summary":
         if summarize_episode is None:
@@ -198,7 +198,7 @@ def apply_runtime_memory_cursor_advance(
     state: ExecutionState,
     decision: RuntimeMemoryCloseDecision,
 ) -> None:
-    """Apply a pure cursor-only close decision to state projection."""
+    """Применяет чистое решение о закрытии (только cursor) к проекции state."""
     cursor_map = dict(state.llm_context_memory_cursor)
     cursor_map[decision.cursor_key] = max(
         cursor_map.get(decision.cursor_key, 0),
@@ -211,7 +211,7 @@ def apply_runtime_memory_write_result(
     state: ExecutionState,
     result: RuntimeMemoryWriteResult,
 ) -> None:
-    """Apply completed memory write result to state projection."""
+    """Применяет завершённый результат memory write к проекции state."""
     cursor_map = dict(state.llm_context_memory_cursor)
     cursor_map[result.cursor_key] = max(
         cursor_map.get(result.cursor_key, 0),
@@ -222,10 +222,10 @@ def apply_runtime_memory_write_result(
 
 def prune_state_messages_to_memory_cursor_for_runtime(state: ExecutionState) -> int:
     """
-    Physically drop the message prefix already closed by every memory cursor.
+    Физически отбрасывает префикс сообщений, уже закрытый всеми memory cursor.
 
-    Cursor values are indexes into ``state.messages``. After pruning the shared prefix, all
-    cursors are rebased to the shorter runtime projection.
+    Значения cursor — индексы в ``state.messages``. После обрезки общего префикса все
+    cursor пересчитываются относительно укороченной runtime-проекции.
     """
     messages = list(state.messages)
     if len(messages) <= 1:

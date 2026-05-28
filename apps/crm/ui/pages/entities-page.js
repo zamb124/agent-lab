@@ -1,7 +1,7 @@
 /**
  * EntitiesPage — основной экран сущностей CRM.
  *
- * Layout: на десктопе — `cards-grid` слева + `crm-entity-detail-page` (embedded) справа;
+ * Раскладка: на десктопе — `cards-grid` слева + `crm-entity-detail-page` (embedded) справа;
  * высота колонок — на область island-content (`content-no-scroll` для `entities` и
  * `entity` в `crm-app`).
  * на мобильном — табы «Список / Карточка». Все доменные данные — через
@@ -19,7 +19,7 @@
  * (`openModal`, `toast`, `navigate`). Никаких прямых dispatch UI/ROUTER/AUTH,
  * httpRequest, fetch, services.* / store / features.
  *
- * Live-обновления:
+ * Живые обновления:
  *   - подписка на `CoreEvents.UI_NAMESPACE_CHANGED` — перезагрузка ленты и
  *     счётчиков.
  *   - подписка на `crm/entity/updated` (бэкенд публикует

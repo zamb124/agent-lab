@@ -1,5 +1,5 @@
 /**
- * Bottom sheets slice — нижние выезжающие панели для вторичной сложности (mobile shell 2026).
+ * Слайс bottom sheets — нижние выезжающие панели для вторичной сложности (mobile shell 2026).
  *
  * state.bottomSheets:
  *   stack: Array<{ id, kind, props, openedAt, closing?, closingAt? }>

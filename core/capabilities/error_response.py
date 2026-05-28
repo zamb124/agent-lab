@@ -1,4 +1,4 @@
-"""Helpers for language-neutral code execution error envelopes."""
+"""Хелперы для language-neutral envelope ошибок исполнения кода."""
 
 from __future__ import annotations
 
@@ -22,7 +22,7 @@ def code_execution_failed_response(
     stdout: str | None = None,
     stderr: str | None = None,
 ) -> CodeExecutionResponse:
-    """Build a failed CodeExecutionResponse preserving correlation fields."""
+    """Собирает failed CodeExecutionResponse с сохранением полей корреляции."""
     return CodeExecutionResponse(
         status="failed",
         state=request.state,
@@ -52,7 +52,7 @@ def code_validation_failed_response(
     stdout: str | None = None,
     stderr: str | None = None,
 ) -> CodeValidationResponse:
-    """Build a failed CodeValidationResponse preserving correlation fields."""
+    """Собирает failed CodeValidationResponse с сохранением полей корреляции."""
     return CodeValidationResponse(
         valid=False,
         error=CodeExecutionErrorEnvelope(

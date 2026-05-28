@@ -83,13 +83,13 @@ class EventSubscriber(BaseSubscriber):
         """
         Подписывается на события задачи.
 
-        Args:
+        Аргументы:
             task_id: ID задачи
             timeout: Таймаут ожидания в секундах
             ready_event: Event для сигнализации о готовности подписки
 
-        Yields:
-            A2A события (TaskStatusUpdateEvent или TaskArtifactUpdateEvent)
+        Генерирует:
+            A2A-события (TaskStatusUpdateEvent или TaskArtifactUpdateEvent)
         """
         channel = f"stream:{task_id}"
         logger.debug(f"[Subscriber] Subscribing to {channel}")
@@ -122,12 +122,12 @@ class EventSubscriber(BaseSubscriber):
         """
         Собирает все события до финального.
 
-        Args:
+        Аргументы:
             task_id: ID задачи
             timeout: Таймаут ожидания в секундах
             ready_event: Event для сигнализации о готовности подписки
 
-        Returns:
+        Возвращает:
             Список всех событий
         """
         events: list[StreamEvent] = []

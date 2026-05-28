@@ -28,7 +28,7 @@ def set_context(context: "Context") -> None:
     """
     Устанавливает контекст.
 
-    Args:
+    Аргументы:
         context: Контекст для установки
     """
     _ = _context.set(context)
@@ -38,7 +38,7 @@ def get_context() -> Context | None:
     """
     Получает текущий контекст.
 
-    Returns:
+    Возвращает:
         Текущий контекст или None
     """
     return _context.get()
@@ -101,7 +101,7 @@ def set_current_channel(channel: RuntimeChannel) -> None:
     """
     Устанавливает текущий канал коммуникации.
 
-    Args:
+    Аргументы:
         channel: Канал для установки (BaseChannel)
     """
     _ = _current_channel.set(channel)
@@ -111,7 +111,7 @@ def get_current_channel() -> RuntimeChannel | None:
     """
     Получает текущий канал коммуникации.
 
-    Returns:
+    Возвращает:
         Текущий канал или None
     """
     return _current_channel.get()

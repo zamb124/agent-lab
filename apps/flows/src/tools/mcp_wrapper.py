@@ -67,11 +67,11 @@ class MCPTool(BaseTool):
         """
         Вызывает MCP tool на удалённом сервере.
 
-        Args:
+        Аргументы:
             args: Аргументы для MCP tool
             state: ExecutionState агента
 
-        Returns:
+        Возвращает:
             Текстовый результат от MCP tool
         """
         variables = require_json_object(state.variables, "state.variables")

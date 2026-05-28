@@ -1,5 +1,5 @@
 /**
- * flows-flow-canvas — native SVG канвас flow editor.
+ * flows-flow-canvas — нативный SVG-канвас редактора flow.
  *
  * Слои (z по порядку): grid → sticky-notes → edges → guides → nodes → context-menu.
  *
@@ -147,7 +147,7 @@ export class FlowsFlowCanvas extends PlatformElement {
                 opacity: 0.4;
             }
 
-            /* Node */
+            /* Нода */
             g.node {
                 --node-accent: var(--accent);
                 --node-surface: color-mix(in oklab, var(--glass-solid-strong) 88%, var(--node-accent) 12%);
@@ -460,7 +460,7 @@ export class FlowsFlowCanvas extends PlatformElement {
                 color: var(--text-tertiary);
             }
 
-            /* Badges */
+            /* Бейджи */
             .badge-bp-circle {
                 fill: var(--warning);
                 stroke: var(--bg-primary);
@@ -470,7 +470,7 @@ export class FlowsFlowCanvas extends PlatformElement {
                 fill: var(--text-tertiary);
             }
 
-            /* Fan-in badge on input port (>=2 incoming edges) */
+            /* Бейдж fan-in на входном порту (>=2 входящих рёбер) */
             .badge-fanin-bg {
                 fill: var(--accent);
                 stroke: var(--bg-primary);
@@ -489,7 +489,7 @@ export class FlowsFlowCanvas extends PlatformElement {
                 pointer-events: none;
             }
 
-            /* Ports */
+            /* Порты */
             .port {
                 fill: var(--node-accent, var(--accent));
                 stroke: var(--glass-solid-strong);
@@ -517,7 +517,7 @@ export class FlowsFlowCanvas extends PlatformElement {
                 fill: var(--node-accent, var(--accent));
             }
 
-            /* Edges */
+            /* Рёбра */
             .edge {
                 fill: none;
                 stroke: color-mix(in oklab, var(--text-tertiary) 78%, var(--accent) 22%);
@@ -632,7 +632,7 @@ export class FlowsFlowCanvas extends PlatformElement {
                     drop-shadow(0 0 10px color-mix(in srgb, var(--accent) 22%, transparent));
             }
 
-            /* Selection rect */
+            /* Прямоугольник выделения */
             .selection-box {
                 fill: var(--accent-subtle);
                 stroke: var(--accent);
@@ -642,7 +642,7 @@ export class FlowsFlowCanvas extends PlatformElement {
                 pointer-events: none;
             }
 
-            /* Smart guides */
+            /* Умные направляющие */
             .smart-guide {
                 stroke: var(--accent-hover);
                 stroke-width: 1;
@@ -651,10 +651,10 @@ export class FlowsFlowCanvas extends PlatformElement {
                 pointer-events: none;
             }
 
-            /* Sticky note layer */
+            /* Слой стикеров */
             .sticky-host { width: 100%; height: 100%; }
 
-            /* Sticky → node attach line */
+            /* Линия привязки стикера к ноде */
             .sticky-attach-line {
                 fill: none;
                 stroke: color-mix(in oklab, var(--accent-secondary) 62%, var(--text-tertiary));
@@ -666,7 +666,7 @@ export class FlowsFlowCanvas extends PlatformElement {
                 vector-effect: non-scaling-stroke;
             }
 
-            /* Link mode: highlight all nodes as clickable */
+            /* Режим привязки: подсветка всех нод как кликабельных */
             svg.canvas-host[data-link-mode] g.node .node-card {
                 stroke: var(--accent);
                 stroke-dasharray: 4 3;
@@ -1286,7 +1286,7 @@ export class FlowsFlowCanvas extends PlatformElement {
         this._pointerDownAt = null;
     }
 
-    /* ===== Smart guides snap ===== */
+    /* ===== Привязка к умным направляющим ===== */
     _snapToGuides(x, y, draggedId, nodes) {
         let snappedX = x;
         let snappedY = y;

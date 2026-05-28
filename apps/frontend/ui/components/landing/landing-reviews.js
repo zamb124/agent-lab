@@ -1,5 +1,5 @@
 /**
- * Landing Reviews - Отзывы со слайдером
+ * Отзывы лендинга — отзывы со слайдером
  */
 import { html, css } from 'lit';
 import { classMap } from 'lit/directives/class-map.js';

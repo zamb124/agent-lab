@@ -23,7 +23,7 @@ async def test_build_auth_token_ignores_crm_worker_placeholder(monkeypatch):
 
     monkeypatch.setattr(dst, "get_crm_container", lambda: Container())
 
-    captured: list[dict] = []
+    captured: list[dict[str, object]] = []
 
     def create_token(**kwargs):
         captured.append(dict(kwargs))

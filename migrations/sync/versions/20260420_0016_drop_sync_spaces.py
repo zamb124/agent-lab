@@ -1,4 +1,4 @@
-"""Drop sync_spaces: каналы и записи звонков переезжают на строковое поле namespace.
+"""Удаление sync_spaces: каналы и записи звонков переезжают на строковое поле namespace.
 
 Sync space = platform namespace 1:1. Источник правды — `NamespaceRepository`
 из shared (`apps/crm/api/namespaces.py` создаёт/обновляет, sync только

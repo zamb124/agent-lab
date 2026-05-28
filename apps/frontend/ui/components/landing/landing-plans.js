@@ -1,5 +1,5 @@
 /**
- * Landing Plans - Тарифы
+ * Тарифы лендинга — тарифы
  */
 import { html, css } from 'lit';
 import { classMap } from 'lit/directives/class-map.js';

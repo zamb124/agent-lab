@@ -343,7 +343,7 @@ class PlatformTracer:
         method: str,
         trace_ctx: TraceContext | None = None,
     ) -> AsyncGenerator[Span, None]:
-        """Span для HTTP запроса (message/send, message/stream)."""
+        """Span для HTTP-запроса (message/send, message/stream)."""
         start_time = datetime.now(timezone.utc)
         attributes = self._base_attributes(trace_ctx)
         attributes["http.method"] = method
@@ -613,7 +613,7 @@ class PlatformTracer:
         """
         Записывает полный LLM request в span.
 
-        Args:
+        Аргументы:
             span: OpenTelemetry span
             messages: Список сообщений в формате OpenAI
             tools: Список tools schemas

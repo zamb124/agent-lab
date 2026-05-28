@@ -6,22 +6,27 @@ import pytest
 
 from core.config.models import PushConfig
 from core.push.fcm_credentials import resolve_fcm_credentials
+from core.types import JsonObject, parse_json_object
 
 
-def _push_config(fcm_credentials_json: str | dict[str, str] | None, fcm_project_id: str | None) -> PushConfig:
+def _push_config(fcm_credentials_json: str | JsonObject | None, fcm_project_id: str | None) -> PushConfig:
     return PushConfig(
         fcm_credentials_json=fcm_credentials_json,
         fcm_project_id=fcm_project_id,
     )
 
 
-_SERVICE_ACCOUNT = {
-    "type": "service_account",
-    "project_id": "humanitec-app",
-    "client_email": "firebase-adminsdk-x@humanitec-app.iam.gserviceaccount.com",
-    "private_key": "-----BEGIN PRIVATE KEY-----\nABC\n-----END PRIVATE KEY-----\n",
-    "token_uri": "https://oauth2.googleapis.com/token",
-}
+_SERVICE_ACCOUNT: JsonObject = parse_json_object(
+    json.dumps(
+        {
+            "type": "service_account",
+            "project_id": "humanitec-app",
+            "client_email": "firebase-adminsdk-x@humanitec-app.iam.gserviceaccount.com",
+            "private_key": "-----BEGIN PRIVATE KEY-----\nABC\n-----END PRIVATE KEY-----\n",
+            "token_uri": "https://oauth2.googleapis.com/token",
+        }
+    )
+)
 
 
 def test_returns_none_when_credentials_missing():

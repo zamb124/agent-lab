@@ -1,7 +1,7 @@
 /**
  * Team Search — typeahead подсказок users по имени/email внутри платформы.
  *
- * Backend: GET /crm/api/team/search?q=...&limit=...  → ListResponse[UserSearchResult]
+ * Бэкенд: GET /crm/api/team/search?q=...&limit=...  → ListResponse[UserSearchResult]
  *   item: { user_id, name, email?, avatar_url? }
  *
  * Используется share-modal для выбора получателя гранта.

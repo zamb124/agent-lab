@@ -1,4 +1,4 @@
-"""Shared constants and helpers for the public documentation assistant."""
+"""Общие константы и хелперы публичного ассистента документации."""
 
 from __future__ import annotations
 
@@ -28,7 +28,7 @@ DOCS_MANIFEST_STORAGE_KEY = "docs_assistant_manifest:v1"
 
 
 class DocsRagManifestPage(StrictBaseModel):
-    """Persisted RAG document metadata for a single documentation page."""
+    """Сохранённые метаданные RAG-документа для одной страницы документации."""
 
     content_hash: str
     provider_document_id: str
@@ -39,7 +39,7 @@ class DocsRagManifestPage(StrictBaseModel):
 
 
 class DocsRagManifest(StrictBaseModel):
-    """Persisted manifest for the public documentation assistant RAG index."""
+    """Сохранённый манифест RAG-индекса публичного ассистента документации."""
 
     build_hash: str | None = None
     updated_at: datetime | None = None

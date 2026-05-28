@@ -1,4 +1,4 @@
-"""Search provider adapters."""
+"""Адаптеры search providers."""
 
 from apps.search.providers.base import SearchProvider
 from apps.search.providers.linkup import LinkupSearchProvider, parse_linkup_results

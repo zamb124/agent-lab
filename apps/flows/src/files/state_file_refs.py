@@ -1,4 +1,4 @@
-"""Operations on canonical FileRef values stored in ExecutionState.files."""
+"""Операции над каноническими FileRef в ExecutionState.files."""
 
 from __future__ import annotations
 

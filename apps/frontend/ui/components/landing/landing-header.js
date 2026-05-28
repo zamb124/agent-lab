@@ -1,5 +1,5 @@
 /**
- * Landing Header - Шапка лендинга с навигацией
+ * Шапка лендинга — шапка лендинга с навигацией
  */
 import { html, css } from 'lit';
 import { classMap } from 'lit/directives/class-map.js';

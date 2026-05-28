@@ -239,7 +239,7 @@ async def request_with_strategy(
     """
     Программируемый HTTP клиент с настраиваемой стратегией прокси.
 
-    Args:
+    Аргументы:
         method: HTTP метод (GET, POST и т.д.)
         url: URL для запроса
         strategy: Стратегия использования прокси (`ProxyStrategy` или ее строковое значение)
@@ -250,10 +250,10 @@ async def request_with_strategy(
             для запроса (`json`, `data`, `files`, `content`, `extensions`) не передаются в
             конструктор `httpx.AsyncClient`.
 
-    Returns:
+    Возвращает:
         httpx.Response
 
-    Raises:
+    Исключения:
         httpx.ConnectError: Если все попытки подключения не удались
     """
     strategy = _require_proxy_strategy(strategy)
@@ -614,7 +614,7 @@ class SmartProxyClient:
 
 
 class _StreamContextManager:
-    """Context manager для streaming запросов с retry прокси"""
+    """Менеджер контекста для streaming-запросов с retry прокси"""
 
     def __init__(
         self,
@@ -831,14 +831,14 @@ def get_httpx_client(
     """
     Создает HTTP клиент с настраиваемой стратегией прокси.
 
-    Args:
+    Аргументы:
         timeout: Таймаут запросов
         strategy: Стратегия (direct_first, proxy_first, direct_only, proxy_only, smart)
         proxy_attempts: Количество попыток через прокси (для proxy_first)
         direct_attempts: Количество попыток прямого подключения (для direct_first)
         **kwargs: Дополнительные параметры для httpx.AsyncClient
 
-    Returns:
+    Возвращает:
         SmartProxyClient с настроенной стратегией
     """
     raw_kwargs = cast(Mapping[str, object], kwargs)

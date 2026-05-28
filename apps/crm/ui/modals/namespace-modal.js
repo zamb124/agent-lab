@@ -1,7 +1,7 @@
 /**
  * CRMNamespaceModal — единая модалка создания и редактирования namespace.
  *
- * Props:
+ * Свойства:
  *   - mode: 'create' | 'edit' — обязательный.
  *   - name?: string           — обязателен для mode='edit'.
  *
@@ -93,7 +93,7 @@ export class CRMNamespaceModal extends PlatformFormModal {
         css`
             .form-grid { display: grid; gap: var(--space-4); }
 
-            /* Layout-only row: avoids stacking .form-group pill chrome with inner .field-pill from platform-field. */
+            /* Строка только для раскладки: без наложения pill chrome .form-group и inner .field-pill из platform-field. */
             .crm-namespace-field-row {
                 display: flex;
                 flex-direction: column;

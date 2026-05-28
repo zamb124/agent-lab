@@ -1,4 +1,4 @@
-"""Canonical branch API contracts."""
+"""Канонические контракты branch API."""
 
 from __future__ import annotations
 
@@ -19,7 +19,7 @@ from .resource import ResourceReference
 
 
 class BranchPayload(StrictBaseModel):
-    """Canonical branch payload used by create/update APIs."""
+    """Канонический payload ветки для create/update API."""
 
     name: str = Field(..., min_length=1)
     description: str = ""
@@ -44,17 +44,17 @@ class BranchPayload(StrictBaseModel):
 
 
 class BranchCreateRequest(BranchPayload):
-    """Create branch request."""
+    """Запрос на создание ветки."""
 
     branch_id: str = Field(..., min_length=1)
 
 
 class BranchUpdateRequest(BranchPayload):
-    """Full branch replacement request."""
+    """Запрос на полную замену ветки."""
 
 
 class BranchSummaryResponse(StrictBaseModel):
-    """Branch list item."""
+    """Элемент списка веток."""
 
     id: str
     name: str
@@ -63,7 +63,7 @@ class BranchSummaryResponse(StrictBaseModel):
 
 
 class BranchDetailResponse(StrictBaseModel):
-    """Canonical branch read response."""
+    """Канонический ответ чтения ветки."""
 
     id: str
     name: str
@@ -83,7 +83,7 @@ class BranchDetailResponse(StrictBaseModel):
 
 
 class BranchMutationResponse(StrictBaseModel):
-    """Branch mutation result."""
+    """Результат мутации ветки."""
 
     status: str
     message: str
@@ -91,7 +91,7 @@ class BranchMutationResponse(StrictBaseModel):
 
 
 def branch_payload_to_config(payload: BranchPayload) -> BranchConfig:
-    """Convert canonical branch payload to stored branch config."""
+    """Преобразует канонический payload ветки в сохранённый branch config."""
     return BranchConfig(
         name=payload.name,
         description=payload.description,
@@ -111,7 +111,7 @@ def branch_payload_to_config(payload: BranchPayload) -> BranchConfig:
 
 
 def branch_summary_response(branch_id: str, branch_cfg: BranchConfig) -> BranchSummaryResponse:
-    """Build canonical branch list item."""
+    """Собирает канонический элемент списка веток."""
     return BranchSummaryResponse(
         id=branch_id,
         name=branch_cfg.name,
@@ -121,7 +121,7 @@ def branch_summary_response(branch_id: str, branch_cfg: BranchConfig) -> BranchS
 
 
 def branch_detail_response(branch_id: str, branch_cfg: BranchConfig) -> BranchDetailResponse:
-    """Build canonical branch read response."""
+    """Собирает канонический ответ чтения ветки."""
     return BranchDetailResponse(
         id=branch_id,
         name=branch_cfg.name,
@@ -142,5 +142,5 @@ def branch_detail_response(branch_id: str, branch_cfg: BranchConfig) -> BranchDe
 
 
 def branch_model_dump(model: StrictBaseModel) -> JsonObject:
-    """Dump branch DTO as a strict JSON object."""
+    """Сериализует branch DTO в строгий JSON object."""
     return require_json_object(model.model_dump(mode="json"), type(model).__name__)

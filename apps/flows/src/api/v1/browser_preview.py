@@ -1,4 +1,4 @@
-"""Interactive browser preview gateway for chat tool chips."""
+"""Интерактивный browser preview gateway для tool chips в чате."""
 
 from __future__ import annotations
 

@@ -1,5 +1,5 @@
 /**
- * CRM graph workspace — slice для canvas view (3d | mindmap), глубины, выбора, поиска.
+ * Workspace графа CRM — slice для canvas view (3d | mindmap), глубины, выбора, поиска.
  *
  * Панели overlay остаются в `crm/graph_ui`. Персист через crm-persist.effect.js,
  * ключ `crm.graph_view.state`.

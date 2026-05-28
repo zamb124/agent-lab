@@ -1,1 +1,1 @@
-"""Python code runner service."""
+"""Сервис Python code runner."""

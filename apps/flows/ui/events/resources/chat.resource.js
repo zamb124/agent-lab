@@ -617,7 +617,7 @@ export const chatSendOp = createAsyncOp({
     name: 'flows/chat_send',
     transport: 'http',
     silent: true,
-    // A2A JSON-RPC endpoint per-flow (см. apps/flows/src/api/a2a.py — мапит
+    // A2A JSON-RPC endpoint на flow (см. apps/flows/src/api/a2a.py — мапит
     // POST /flows/api/v1/{flow_id} в обработчик A2A-методов message/stream и
     // tasks/cancel). UI шлёт SSE-стрим, поэтому _consumeA2aStream вместо
     // httpRequest, но REST-зеркало одно и то же.

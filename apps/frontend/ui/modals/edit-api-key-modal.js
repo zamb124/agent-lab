@@ -1,8 +1,8 @@
 /**
- * Edit API key modal — переименование существующего ключа.
+ * Модалка редактирования API-ключа — переименование существующего ключа.
  *
  * Принимает `item: { key_id, name }` через props при `openModal(...)`.
- * Submit диспатчит `update(key_id, { name })` в ресурс `frontend/api_keys`,
+ * Отправка диспатчит `update(key_id, { name })` в ресурс `frontend/api_keys`,
  * что соответствует `PATCH /frontend/api/api-keys/{key_id}` на бэке.
  */
 import { html, css } from 'lit';

@@ -1,5 +1,5 @@
 /**
- * Documents (office) — точка входа Lit UI.
+ * Документы (office) — точка входа Lit UI.
  */
 
 import '@platform/lib/components/app-loader.js';

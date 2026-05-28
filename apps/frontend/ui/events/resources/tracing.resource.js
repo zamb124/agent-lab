@@ -1,5 +1,5 @@
 /**
- * Tracing resources — admin span list, фасеты и trace tree.
+ * Ресурсы tracing — admin span list, фасеты и trace tree.
  *
  * API:
  *   GET /frontend/api/platform-tracing/spans          (cursor pagination)

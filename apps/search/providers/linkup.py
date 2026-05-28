@@ -1,4 +1,4 @@
-"""Linkup Search provider."""
+"""Search-провайдер Linkup."""
 
 from __future__ import annotations
 
@@ -14,7 +14,7 @@ from core.types import JsonObject, parse_json_object, require_json_object
 
 
 class LinkupSearchProvider:
-    """Linkup adapter for raw searchResults output."""
+    """Linkup-адаптер для сырого вывода searchResults."""
 
     provider_id: str = "linkup"
 

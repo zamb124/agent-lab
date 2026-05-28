@@ -1,4 +1,4 @@
-"""Strict MCP 2025-11-25 JSON-RPC client."""
+"""Строгий MCP 2025-11-25 JSON-RPC клиент."""
 
 from __future__ import annotations
 
@@ -46,11 +46,11 @@ _TRACE_TEXT_LIMIT = 2000
 
 
 class MCPClientError(Exception):
-    """MCP client error."""
+    """Ошибка MCP-клиента."""
 
 
 class MCPClient:
-    """MCP Streamable HTTP client with strict 2025-11-25 contracts."""
+    """MCP Streamable HTTP клиент со строгими контрактами 2025-11-25."""
 
     def __init__(
         self,

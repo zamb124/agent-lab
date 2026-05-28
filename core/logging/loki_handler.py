@@ -53,9 +53,9 @@ class LokiHandler(logging.Handler):
     """
     Буферизующий handler: пишет JSON-логи в Loki push API.
 
-    Args:
+    Аргументы:
         loki_url: Полный URL Loki push endpoint
-                  (e.g. ``http://localhost:3100/loki/api/v1/push``).
+                  (например, ``http://localhost:3100/loki/api/v1/push``).
         service_name: Значение label ``service`` в Loki.
         flush_interval: Секунды между flush'ами.
     """
@@ -87,7 +87,7 @@ class LokiHandler(logging.Handler):
         self._thread.start()
         _LOKI_HANDLERS.append(self)
 
-    # ── Handler API ─────────────────────────────────────────────────────
+    # ── API обработчика ─────────────────────────────────────────────────
 
     @override
     def emit(self, record: logging.LogRecord) -> None:
@@ -100,7 +100,7 @@ class LokiHandler(logging.Handler):
         except Exception:
             self.handleError(record)
 
-    # ── Background flush ────────────────────────────────────────────────
+    # ── Фоновая отправка буфера ───────────────────────────────────────
 
     def _flush_loop(self) -> None:
         while not self._shutdown.is_set():

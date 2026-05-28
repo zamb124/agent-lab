@@ -88,7 +88,7 @@ class InviteTokenService:
         """
         Создаёт одноразовый инвайт-токен.
 
-        Returns:
+        Возвращает:
             (jwt_string, jti) — строка токена и его уникальный ID
         """
         if invited_by == "":
@@ -119,7 +119,7 @@ class InviteTokenService:
         """
         Проверяет подпись и содержимое инвайт-токена.
 
-        Raises:
+        Исключения:
             jwt.ExpiredSignatureError: токен истёк
             jwt.InvalidTokenError: неверная подпись или формат
             ValueError: неверный typ/aud или нет invited_by
@@ -144,7 +144,7 @@ async def burn_invite_token(jti: str, ttl_seconds: int) -> bool:
     """
     Атомарно «сжигает» инвайт-токен в Redis (SET NX).
 
-    Returns:
+    Возвращает:
         True — токен успешно записан (ещё не использовался)
         False — токен уже был использован ранее
     """

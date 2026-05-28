@@ -1,4 +1,4 @@
-"""Lightweight ReAct exit tool."""
+"""Лёгкий exit tool для ReAct."""
 
 from __future__ import annotations
 

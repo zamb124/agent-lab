@@ -48,11 +48,11 @@ class FileRepository(BaseRepository[FileRecord]):
         """
         Получает файл по S3 ключу.
 
-        Args:
+        Аргументы:
             provider: Провайдер S3
             file_id: ID файла
 
-        Returns:
+        Возвращает:
             FileRecord или None
         """
         key = f"s3:{provider}:{file_id}"
@@ -69,11 +69,11 @@ class FileRepository(BaseRepository[FileRecord]):
         """
         Сохраняет файл по S3 ключу.
 
-        Args:
+        Аргументы:
             provider: Провайдер S3
             file_record: Запись о файле
 
-        Returns:
+        Возвращает:
             True если сохранение успешно
         """
         key = f"s3:{provider}:{file_record.file_id}"

@@ -1,5 +1,5 @@
 /**
- * Glass Morphism - общие стили для glassmorphism эффектов
+ * Glass Morphism — общие стили для glassmorphism-эффектов
  * Используются во всех компонентах платформы
  */
 import { css } from '../../../assets/js/lit/lit.min.js';

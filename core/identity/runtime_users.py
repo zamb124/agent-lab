@@ -1,4 +1,4 @@
-"""Helpers for runtime identities that must survive service boundaries."""
+"""Хелперы для runtime-идентичностей, которые должны переживать границы сервисов."""
 
 from __future__ import annotations
 
@@ -32,11 +32,11 @@ async def ensure_persisted_runtime_user(
     email: str | None = None,
 ) -> User:
     """
-    Persist a restricted runtime user so cross-service tool execution can restore Context.
+    Сохраняет ограниченного runtime-пользователя, чтобы cross-service tool execution мог восстановить Context.
 
-    The flow runtime can carry in-memory identities, but capability/tool-runtime
-    boundaries intentionally rebuild Context from repositories. Runtime users
-    used across those boundaries must therefore exist in ``user_repository``.
+    Flow runtime может нести in-memory идентичности, но границы capability/tool-runtime
+    намеренно пересобирают Context из репозиториев. Runtime-пользователи,
+    используемые через эти границы, поэтому должны существовать в ``user_repository``.
     """
     clean_user_id = user_id.strip()
     clean_company_id = company_id.strip()

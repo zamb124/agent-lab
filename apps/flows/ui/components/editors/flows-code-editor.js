@@ -5,7 +5,7 @@
  * первом mount. Поддерживает языки раннеров, `json` и `text`. Тема
  * переключается по `select(s => s.theme.mode)`.
  *
- * Property API:
+ * Свойства (API):
  *   - value: string
  *   - language: 'python' | 'javascript' | 'typescript' | 'go' | 'csharp' | 'json' | 'text'
  *   - readonly: boolean

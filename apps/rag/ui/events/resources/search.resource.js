@@ -1,7 +1,7 @@
 /**
  * Search — семантический поиск в рамках одного namespace.
  *
- * Backend:
+ * Бэкенд:
  *   POST /rag/api/v1/namespaces/{namespace_id}/search (SearchRequest)
  *     → SearchResponse { results, query, namespace_id, provider }
  *

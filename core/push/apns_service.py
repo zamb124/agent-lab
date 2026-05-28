@@ -62,9 +62,9 @@ class ApnsPushService:
         self._base_url: str = APNS_SANDBOX_HOST if use_sandbox else APNS_PROD_HOST
         self._jwt_token: str | None = None
         self._jwt_expires_at: float = 0.0
-        # HTTP/2 клиент на жизнь сервиса: APNs построен на HTTP/2 c
-        # multiplexing'ом запросов в одно подключение — single TLS handshake
-        # per device-batch критичен для пропускной способности push.
+        # HTTP/2 клиент на жизнь сервиса: APNs построен на HTTP/2 с
+        # мультиплексированием запросов в одно подключение — один TLS handshake
+        # на пакет устройств критичен для пропускной способности push.
         self._http_client: httpx.AsyncClient | None = None
 
     def _get_http_client(self) -> httpx.AsyncClient:
@@ -113,7 +113,7 @@ class ApnsPushService:
         extra: JsonObject | None = None,
     ) -> tuple[bool, bool]:
         """
-        Returns:
+        Возвращает:
             (доставлено, удалить_подписку_из_БД)
         """
         token = device_token_hex.lower().replace(" ", "")

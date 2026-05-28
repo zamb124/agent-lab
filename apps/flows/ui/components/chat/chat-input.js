@@ -1,5 +1,5 @@
 /**
- * App adapter for the canonical flows chat composer.
+ * Адаптер приложения для каноничного композера чата flows.
  */
 import { html, css } from 'lit';
 import { PlatformElement } from '@platform/lib/platform-element/index.js';

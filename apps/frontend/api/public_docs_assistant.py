@@ -1,4 +1,4 @@
-"""Public session endpoint for the documentation assistant embed."""
+"""Публичный session-эндпоинт для embed documentation assistant."""
 
 from __future__ import annotations
 

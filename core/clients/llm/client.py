@@ -1,4 +1,4 @@
-"""OpenAI-compatible HTTP LLM client."""
+"""HTTP LLM-клиент, совместимый с OpenAI."""
 
 from __future__ import annotations
 
@@ -387,14 +387,14 @@ class LLMClient:
         llm_context_source_registry: LLMContextSourceRegistry | None = None,
         stream_cancel_poll: Callable[[], Awaitable[bool]] | None = None,
     ) -> AsyncGenerator[StreamEvent, None]:
-        """Stream-first LLM call with universal candidate fallback.
+        """Stream-first LLM-вызов с универсальным fallback по кандидатам.
 
-        Fallback is only allowed before the first event is yielded to callers.
-        Once any chunk/status has been emitted, the response belongs to that
-        concrete model and failures propagate normally.
+        Fallback допустим только до первого события, отданного вызывающему коду.
+        После любого chunk/status ответ принадлежит конкретной модели,
+        и сбои пробрасываются как обычно.
 
-        ``model`` is a per-call override: it uses this client's provider,
-        credentials and base URL without mutating ``self.model``.
+        ``model`` — per-call override: использует provider, credentials
+        и base URL этого клиента без изменения ``self.model``.
         """
         normalized_messages = _normalize_messages(messages)
         base_openai_messages = _messages_to_openai(normalized_messages)
@@ -745,7 +745,7 @@ class LLMClient:
         - Message с tool_calls если указаны tools (и нет response_model)
         - Message с текстом в остальных случаях
 
-        Args:
+        Аргументы:
             messages: Сообщения в любом формате:
                 - str: "Привет!"
                 - List[str]: ["Привет!", "Привет! Как дела?", "Отлично!"]
@@ -764,17 +764,17 @@ class LLMClient:
             llm_context_blocks: Уже извлеченные блоки памяти/RAG/tool summaries
             llm_context_source_registry: Registry backend-источников контекстных блоков
 
-        Returns:
+        Возвращает:
             Message или экземпляр response_model
 
-        Examples:
+        Примеры:
             # Простой чат
             msg = await llm.chat("Привет!")
 
             # С параметрами
             msg = await llm.chat("Расскажи историю", temperature=0.9, max_tokens=500)
 
-            # Structured output
+            # Структурированный вывод
             class User(BaseModel):
                 name: str
                 age: int

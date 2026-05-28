@@ -1,3 +1,3 @@
-"""No in-process resource wrappers for sandbox code."""
+"""Нет in-process resource wrappers для sandbox-кода."""
 
 __all__: list[str] = []

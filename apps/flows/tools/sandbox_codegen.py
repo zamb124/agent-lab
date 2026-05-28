@@ -1,4 +1,4 @@
-"""Multilingual codegen tool over isolated code runners and capability-gateway."""
+"""Мультиязычный инструмент генерации кода через изолированные code runner и capability-gateway."""
 
 from __future__ import annotations
 

@@ -1,5 +1,5 @@
 /**
- * PWA effect.
+ * Эффект PWA.
  *
  * Слушает:
  *   ui/app/bootstrap_started               — установить window-listeners (beforeinstallprompt, appinstalled), запустить polling deployment version, прочитать notification permission.

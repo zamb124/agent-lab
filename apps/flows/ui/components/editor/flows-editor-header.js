@@ -1,7 +1,7 @@
 /**
  * flows-editor-header — шапка редактора flow.
  *
- * Layout (3 секции):
+ * Раскладка (3 секции):
  *   left:  back / flow-name input / status-badge (Черновик|Опубликован)
  *   center: mode-toggle pill (edit | run | reload-bundle с update-индикатором)
  *   right: AI / Code / Publish (primary)
@@ -12,7 +12,7 @@
  *   - useOp('flows/editor').state.agentExecutionRunning — индикатор Run.
  *   - useResource('flows/flows') — для обновления флага has_bundle_update.
  *
- * Mutations через ops:
+ * Изменения через ops:
  *   - flows/flow_update — публикация (PATCH с актуальным flowConfig + skillsData);
  *   - flows/flow_reload_from_bundle — переинициализация из bundle.
  *

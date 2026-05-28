@@ -1,4 +1,4 @@
-"""Provider and runtime config resolution for LLM attempts."""
+"""Разрешение провайдера и runtime config для LLM-попыток."""
 
 from __future__ import annotations
 
@@ -165,7 +165,7 @@ def _resolve_llm_call_config(
     inherit_transport_from: LLMCallConfig | None = None,
     source: str | None = None,
 ) -> LLMCallConfig:
-    """Resolve one LLM config into a concrete runtime attempt."""
+    """Разрешает один LLM config в конкретную runtime-попытку."""
     if not config.model or not str(config.model).strip():
         raise ValueError("LLM model обязателен")
 

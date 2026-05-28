@@ -22,7 +22,7 @@ from core.logging import get_logger
 from core.types import JsonArray, JsonObject, parse_json_array, parse_json_object
 
 REDIS_PREFIX = "push_notification:"
-REDIS_TTL = 86400 * 7  # 7 days
+REDIS_TTL = 86400 * 7  # 7 суток
 
 logger = get_logger(__name__)
 # Singleton-экземпляр redis_client для core-задач

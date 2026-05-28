@@ -1,4 +1,4 @@
-"""Layered resolver for platform LLM context policies."""
+"""Послойный resolver политик контекста LLM платформы."""
 
 from __future__ import annotations
 
@@ -59,10 +59,10 @@ def resolve_llm_context_policy(
     call: LLMContextPatch | JsonObject | None = None,
 ) -> LLMContextProfile:
     """
-    Resolve context behavior in canonical platform order.
+    Разрешает поведение контекста в каноническом порядке платформы.
 
-    Order: platform default profile -> company -> resource -> node -> inline call.
-    Later layers are intentionally narrow patches over the resolved policy.
+    Порядок: platform default profile -> company -> resource -> node -> inline call.
+    Поздние слои — намеренно узкие patch поверх разрешённой политики.
     """
     effective_config = config or get_settings().llm_context
     base = effective_config.profiles[effective_config.default_profile]
@@ -75,7 +75,7 @@ def resolve_llm_context_policy(
 
 
 def resolve_company_llm_context_patch() -> LLMContextPatch | None:
-    """Read company-level context patch from active company metadata."""
+    """Читает patch контекста на уровне company из metadata активной компании."""
     ctx = get_context()
     if ctx is None or ctx.active_company is None:
         return None

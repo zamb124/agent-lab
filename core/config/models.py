@@ -306,7 +306,7 @@ class ServerConfig(BaseModel):
         """
         Возвращает URL сервиса.
 
-        Args:
+        Аргументы:
             service: Имя сервиса (flows, crm, office, …). Если None — URL текущего сервиса.
         """
         if service is None:
@@ -417,7 +417,7 @@ class CloudRuSTTConfig(BaseModel):
 # Один источник правды для voice/flows/eval/sync/CRM. Доступен в любом
 # сервисе через `get_settings().voice`. Конкретный клиент достаётся
 # через `core.clients.voice_resolver` с tier-резолвом
-# (override -> company -> deployment-default).
+# tier-резолв (override -> company -> deployment-default).
 # ---------------------------------------------------------------------------
 
 

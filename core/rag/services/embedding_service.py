@@ -50,7 +50,7 @@ MODEL_DIMENSIONS: dict[str, int] = {
     "sentence-transformers/paraphrase-minilm-l6-v2": 384,
     "sentence-transformers/all-minilm-l12-v2": 384,
     "sentence-transformers/all-minilm-l6-v2": 384,
-    # Large
+    # Большие модели
     "qwen/qwen3-embedding-0.6b": 1024,
     "google/gemini-embedding-001": 768,
 }
@@ -224,10 +224,10 @@ class EmbeddingService:
         """
         Генерирует embedding для одного текста.
 
-        Args:
+        Аргументы:
             text: Текст для embedding
 
-        Returns:
+        Возвращает:
             Вектор embedding
         """
         embeddings = await self.generate_embeddings([text])
@@ -238,10 +238,10 @@ class EmbeddingService:
         Генерирует embeddings для списка текстов (batch).
         Автоматически разбивает на батчи если текстов много.
 
-        Args:
+        Аргументы:
             texts: Список текстов
 
-        Returns:
+        Возвращает:
             Список векторов embedding
         """
         if not texts:

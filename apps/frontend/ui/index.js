@@ -1,5 +1,5 @@
 /**
- * Frontend Service UI — entry point.
+ * UI frontend — точка входа.
  *
  * Bootstrap корневого компонента; страницы/модалки/секции лендинга подключаются
  * транзитивно через `frontend-app.js`.

@@ -1,4 +1,4 @@
-"""Strict contracts for platform LLM context compilation."""
+"""Строгие контракты компиляции контекста LLM платформы."""
 
 from __future__ import annotations
 
@@ -127,7 +127,7 @@ def _default_profiles() -> dict[str, "LLMContextProfile"]:
 
 
 class LLMContextBudget(StrictBaseModel):
-    """Resolved token budget for one compiled LLM request."""
+    """Разрешённый token budget для одного скомпилированного LLM-запроса."""
 
     max_input_tokens: int = Field(default=128_000, gt=0)
     output_reserve_tokens: int = Field(default=4_000, ge=0)
@@ -151,7 +151,7 @@ class LLMContextBudget(StrictBaseModel):
 
 
 class LLMContextBudgetPatch(StrictBaseModel):
-    """Partial token budget overlay."""
+    """Частичное наложение token budget."""
 
     max_input_tokens: int | None = Field(default=None, gt=0)
     output_reserve_tokens: int | None = Field(default=None, ge=0)
@@ -164,7 +164,7 @@ class LLMContextBudgetPatch(StrictBaseModel):
 
 
 class LLMContextRetrievalPolicy(StrictBaseModel):
-    """Retrieval settings after layer resolution."""
+    """Настройки retrieval после разрешения слоёв."""
 
     mode: LLMContextRetrievalMode = "off"
     top_k: int = Field(default=8, ge=1, le=256)
@@ -179,7 +179,7 @@ class LLMContextRetrievalPolicy(StrictBaseModel):
 
 
 class LLMContextRetrievalPatch(StrictBaseModel):
-    """Partial retrieval overlay."""
+    """Частичное наложение retrieval."""
 
     mode: LLMContextRetrievalMode | None = None
     top_k: int | None = Field(default=None, ge=1, le=256)
@@ -188,7 +188,7 @@ class LLMContextRetrievalPatch(StrictBaseModel):
 
 
 class LLMContextProfile(StrictBaseModel):
-    """Fully resolved behavior profile used by the compiler."""
+    """Полностью разрешённый профиль поведения, используемый компилятором."""
 
     mode: LLMContextMode = "smart"
     budget: LLMContextBudget = Field(default_factory=LLMContextBudget)
@@ -199,7 +199,7 @@ class LLMContextProfile(StrictBaseModel):
 
 
 class LLMContextPatch(StrictBaseModel):
-    """Partial overlay accepted from company/resource/node/inline layers."""
+    """Частичное наложение, принимаемое от слоёв company/resource/node/inline."""
 
     profile: str | None = Field(default=None, min_length=1)
     mode: LLMContextMode | None = None
@@ -220,7 +220,7 @@ class LLMContextPatch(StrictBaseModel):
 
 
 class LLMContextConfig(StrictBaseModel):
-    """Platform-level context profiles and named budgets."""
+    """Профили контекста и именованные budget на уровне платформы."""
 
     default_profile: str = Field(default="off", min_length=1)
     budgets: dict[str, LLMContextBudget] = Field(default_factory=_default_budgets)
@@ -252,7 +252,7 @@ class LLMContextConfig(StrictBaseModel):
 
 
 class LLMContextBlock(StrictBaseModel):
-    """Candidate context block before compiler packing."""
+    """Кандидат блока контекста до упаковки компилятором."""
 
     kind: LLMContextBlockKind
     budget_scope: LLMContextBlockBudgetScope = "custom"
@@ -267,7 +267,7 @@ class LLMContextBlock(StrictBaseModel):
 
 
 class LLMContextCompileRequest(StrictBaseModel):
-    """Input to the platform context compiler."""
+    """Входные данные для компилятора контекста платформы."""
 
     messages: list[JsonObject] = Field(default_factory=list)
     candidate_blocks: list[LLMContextBlock] = Field(default_factory=list)
@@ -279,7 +279,7 @@ class LLMContextCompileRequest(StrictBaseModel):
 
 
 class LLMContextUsage(StrictBaseModel):
-    """Compiler token accounting for tracing and tests."""
+    """Учёт токенов компилятора для tracing и тестов."""
 
     max_input_tokens: int
     policy_max_input_tokens: int | None = None
@@ -296,7 +296,7 @@ class LLMContextUsage(StrictBaseModel):
 
 
 class CompiledLLMContext(StrictBaseModel):
-    """Final messages and debug data after context compilation."""
+    """Итоговые messages и отладочные данные после компиляции контекста."""
 
     messages: list[JsonObject]
     selected_blocks: list[LLMContextBlock] = Field(default_factory=list)

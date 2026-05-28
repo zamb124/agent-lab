@@ -141,13 +141,11 @@ class NotificationManager:
         self._disconnect_hooks: list[ConnectionHook] = []
 
     def register_connect_hook(self, hook: ConnectionHook) -> None:
-        """Hook вида `async def hook(user_id: str, company_id: str | None,
-        was_first_connection: bool) -> None`."""
+        """Hook вида ``async def hook(user_id: str, company_id: str | None, was_first_connection: bool) -> None``."""
         self._connect_hooks.append(hook)
 
     def register_disconnect_hook(self, hook: ConnectionHook) -> None:
-        """Hook вида `async def hook(user_id: str, company_id: str | None,
-        was_last_connection: bool) -> None`."""
+        """Hook вида ``async def hook(user_id: str, company_id: str | None, was_last_connection: bool) -> None``."""
         self._disconnect_hooks.append(hook)
 
     async def connect(

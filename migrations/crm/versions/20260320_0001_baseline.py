@@ -1,4 +1,4 @@
-"""Baseline crm DB
+"""Базовая миграция crm DB
 
 Revision ID: crm_0001
 Revises:

@@ -1,5 +1,5 @@
 /**
- * flows-durable-history-modal — durable workflow ledger, branches and time-travel commands.
+ * flows-durable-history-modal — ledger durable workflow, ветки и команды time-travel.
  */
 
 import { html, css, nothing } from 'lit';

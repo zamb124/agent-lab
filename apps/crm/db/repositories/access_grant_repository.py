@@ -31,10 +31,10 @@ class AccessGrantRepository(BaseCRMRepository[AccessGrant]):
         self, resource_type: str, resource_id: str, resource_company_id: str | None = None
     ) -> list[AccessGrant]:
         """
-        Найти все grants для ресурса.
+        Найти все гранты для ресурса.
 
-        Args:
-            resource_company_id: Company ID ресурса (не запрашивающего пользователя!)
+        Аргументы:
+            resource_company_id: ID компании ресурса (не запрашивающего пользователя!)
                                 Если None, ищет во всех компаниях
         """
         async with self._db.session() as session:
@@ -122,8 +122,8 @@ class AccessGrantRepository(BaseCRMRepository[AccessGrant]):
         resource_keys: list[tuple[str, str]],
     ) -> dict[tuple[str, str], list[AccessGrant]]:
         """
-        Batch загрузка грантов для набора (resource_type, resource_id).
-        Возвращает dict {(resource_type, resource_id): [grants]}.
+        Пакетная загрузка грантов для набора (resource_type, resource_id).
+        Возвращает словарь {(resource_type, resource_id): [grants]}.
         """
         if not resource_keys:
             return {}

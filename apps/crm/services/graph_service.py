@@ -903,7 +903,7 @@ class GraphService:
             if current_depth >= max_depth:
                 continue
 
-            # Prefetch: загрузить ребра текущей вершины + ближайших из кучи
+            # Предзагрузка: загрузить ребра текущей вершины + ближайших из кучи
             if current_id not in edges_cache:
                 prefetch_ids = {current_id}
                 for _, nid, _ in heap:
@@ -920,7 +920,7 @@ class GraphService:
 
             relationships = edges_cache.get(current_id, [])
 
-            # Batch-загрузка неизвестных соседей
+            # Пакетная загрузка неизвестных соседей
             unknown_neighbors: set[str] = set()
             traversable: list[tuple[Relationship, str]] = []
 

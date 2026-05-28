@@ -73,11 +73,11 @@ async def create_namespace(
     """
     Создает новый namespace для текущей компании.
 
-    Args:
+    Аргументы:
         request: Данные для создания namespace
         provider: Имя провайдера (опционально)
 
-    Returns:
+    Возвращает:
         Созданный namespace
     """
     try:
@@ -121,11 +121,11 @@ async def delete_namespace(
     """
     Удаляет namespace и все его документы.
 
-    Args:
+    Аргументы:
         namespace_id: ID namespace для удаления
         provider: Имя провайдера (опционально)
 
-    Returns:
+    Возвращает:
         Результат операции
     """
     try:

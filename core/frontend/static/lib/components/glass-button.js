@@ -1,6 +1,6 @@
 /**
  * Компонент Glass Button
- * Кнопка с glass morphism эффектом
+ * Кнопка с glass morphism-эффектом
  */
 import { html, css } from '../../assets/js/lit/lit.min.js';
 import { PlatformElement } from '../platform-element/index.js';

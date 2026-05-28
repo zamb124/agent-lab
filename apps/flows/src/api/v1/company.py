@@ -38,10 +38,10 @@ async def init_company(container: ContainerDep, request: InitCompanyRequest) -> 
     - Public агенты со всеми зависимостями (из кода)
     - Public тулы (из кода)
 
-    Args:
+    Аргументы:
         request: company_id и company_name
 
-    Returns:
+    Возвращает:
         task_id для отслеживания выполнения
     """
     _ = container

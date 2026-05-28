@@ -1,5 +1,5 @@
 /**
- * Create / edit embed modal — полный wizard конфигурации виджета.
+ * Модалка создания / редактирования embed — полный wizard конфигурации виджета.
  *
  * Если передан `embedConfig` — режим редактирования (PATCH /configs/{embed_id}).
  * Без него — режим создания (POST /configs).

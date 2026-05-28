@@ -8,7 +8,7 @@
 анализировать в едином агрегаторе.
 """
 
-# Service / deployment
+# Сервис / окружение
 LOG_SERVICE_NAME = "service.name"
 LOG_SERVICE_VERSION = "service.version"
 LOG_DEPLOYMENT_ENVIRONMENT = "deployment.environment"
@@ -41,7 +41,7 @@ LOG_WS_PATH = "ws.path"
 LOG_WS_COMMAND = "ws.command"
 LOG_WS_REQUEST_ID = "ws.request_id"
 
-# TaskIQ task
+# Задача TaskIQ
 LOG_TASK_ID = "task.id"
 LOG_TASK_NAME = "task.name"
 LOG_TASK_QUEUE = "task.queue"
@@ -67,12 +67,12 @@ LOG_LLM_HAS_TOOL_CALLS = "llm.has_tool_calls"
 LOG_LLM_STREAM = "llm.stream"
 LOG_LLM_URL = "llm.url"
 
-# Files
+# Файлы
 LOG_FILE_ID = "file.id"
 LOG_FILE_SIZE = "file.size"
 LOG_FILE_MIME = "file.mime"
 
-# Exception
+# Исключение
 LOG_EXCEPTION_TYPE = "exception.type"
 LOG_EXCEPTION_MESSAGE = "exception.message"
 LOG_EXCEPTION_STACKTRACE = "exception.stacktrace"

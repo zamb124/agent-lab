@@ -1,4 +1,4 @@
-"""ChannelFactory - создание каналов по имени."""
+"""ChannelFactory — создание каналов по имени."""
 
 from __future__ import annotations
 
@@ -60,15 +60,15 @@ def get_channel(
     """
     Получить канал по имени.
 
-    Args:
+    Аргументы:
         name: Имя канала ("a2a", "telegram", "whatsapp")
         flow_id: ID агента для канала
         context: Context с данными пользователя (опционально)
 
-    Returns:
+    Возвращает:
         Экземпляр канала
 
-    Raises:
+    Исключения:
         ValueError: Если канал не зарегистрирован
     """
     if name not in _CHANNEL_REGISTRY:

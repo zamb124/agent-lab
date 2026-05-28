@@ -38,7 +38,7 @@ class ContextFactory:
         """
         Создает Context для запроса.
 
-        Args:
+        Аргументы:
             request: FastAPI Request
             context_type: Тип контекста (frontend, api, webhook, anonymous)
             company: Компания (может быть None для select-company)
@@ -235,21 +235,21 @@ class ContextFactory:
 
     def _detect_language(self, request: Request) -> Language:
         """Определяет язык пользователя"""
-        # 1. HTMX header Accept-Language (высший приоритет)
+        # 1. Заголовок HTMX Accept-Language (высший приоритет)
         htmx_lang = (request.headers.get("Accept-Language") or "").lower()
         if htmx_lang:
             for lang in Language:
                 if lang.value == htmx_lang:
                     return lang
 
-        # 2. Cookie language
+        # 2. Язык из cookie
         language_cookie = (request.cookies.get("language") or "").lower()
         if language_cookie:
             for lang in Language:
                 if lang.value == language_cookie:
                     return lang
 
-        # 3. Browser Accept-Language header
+        # 3. Язык из заголовка Accept-Language браузера
         accept_lang = (request.headers.get("accept-language") or "").lower()
         if accept_lang:
             languages = [

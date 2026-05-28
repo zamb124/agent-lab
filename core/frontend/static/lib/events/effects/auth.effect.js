@@ -1,5 +1,5 @@
 /**
- * Auth effect.
+ * Эффект auth.
  *
  * Слушает (полный набор):
  *   auth/user/load_requested              → GET  /api/auth/me                     → AUTH_USER_LOADED|_FAILED

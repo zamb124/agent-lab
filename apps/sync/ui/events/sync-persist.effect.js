@@ -1,5 +1,5 @@
 /**
- * Sync persist effect — связка локального state с core storage-effect.
+ * Эффект persist Sync — связка локального state с core storage-effect.
  *
  * Подписывается на UI-actions фабрик (selectChannel, sidebarSectionOpen) и
  * диспатчит `STORAGE_PERSIST_REQUESTED`. На bootstrap диспатчит

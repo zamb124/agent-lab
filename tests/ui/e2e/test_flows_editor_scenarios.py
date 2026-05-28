@@ -1,4 +1,4 @@
-"""Generated documentation scenarios for the Flows editor."""
+"""Сгенерированные сценарии документации для редактора Flows."""
 
 from __future__ import annotations
 

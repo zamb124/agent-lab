@@ -1,4 +1,4 @@
-"""Strict company-aware LLM config resolution for flows runtime."""
+"""Строгое company-aware разрешение LLM config для flows runtime."""
 
 from __future__ import annotations
 
@@ -31,7 +31,7 @@ _COMPANY_CONTROLLED_FIELDS = {
 
 @dataclass(frozen=True)
 class EffectiveLLMConfig:
-    """Final LLM config plus billing metadata used by flows runtime."""
+    """Итоговый LLM config и billing metadata, используемые flows runtime."""
 
     config: NodeLLMConfig
     capability: AICapability
@@ -152,12 +152,12 @@ def _fallback_models_billing_resource(
 def resolve_effective_llm_config_for_node(
     node_config: NodeConfig | None,
 ) -> EffectiveLLMConfig:
-    """Resolve the only LLM config that flows runtime is allowed to execute.
+    """Разрешает единственный LLM config, который flows runtime может исполнять.
 
-    Company capability override always wins. Flow/node/resource provider/model and
-    fallback_models never override company settings. Without company override,
-    the authored primary provider/model must be explicit and node fallback_models
-    are rejected fail-closed.
+    Company capability override всегда побеждает. provider/model и fallback_models
+    из flow/node/resource никогда не перекрывают company settings. Без company
+    override authored primary provider/model должны быть заданы явно, а node
+    fallback_models отклоняются fail-closed.
     """
     capability = llm_capability_from_node_config(node_config)
     base = _base_config(node_config)

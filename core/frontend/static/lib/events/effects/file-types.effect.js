@@ -1,5 +1,5 @@
 /**
- * FileTypes effect — единоразовая загрузка реестра типов файлов на bootstrap.
+ * Эффект fileTypes — единоразовая загрузка реестра типов файлов на bootstrap.
  */
 
 import { CoreEvents } from '../contract.js';

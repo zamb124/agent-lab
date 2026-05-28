@@ -1,7 +1,7 @@
 /**
  * Публичный каталог демо-агентов лендинга (без авторизации).
  *
- * Backend:
+ * Бэкенд:
  *   GET  /frontend/api/public/landing-agents
  *   POST /frontend/api/public/landing-agents/session
  */

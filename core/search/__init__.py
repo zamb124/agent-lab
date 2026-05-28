@@ -1,4 +1,4 @@
-"""Shared search contracts."""
+"""Общие контракты search."""
 
 from core.search.models import (
     MetaSearchProviderStatus,

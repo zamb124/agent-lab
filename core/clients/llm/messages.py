@@ -49,7 +49,7 @@ def extract_content_parts(parts: Sequence[Part | JsonObject]) -> tuple[list[Json
     """
     Извлекает content parts из списка A2A parts.
 
-    Returns:
+    Возвращает:
         Tuple (content_parts, has_files) где:
         - content_parts: список OpenAI content parts
         - has_files: True если есть файлы (нужен multimodal формат)

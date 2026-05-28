@@ -1,4 +1,4 @@
-"""Token counters used by the LLM context compiler."""
+"""Счётчики токенов, используемые компилятором контекста LLM."""
 
 from __future__ import annotations
 
@@ -20,7 +20,7 @@ class TokenCounter(Protocol):
 
 
 class SimpleTokenCounter:
-    """Deterministic token estimator for tests and dependency-light runtimes."""
+    """Детерминированная оценка токенов для тестов и runtime без лишних зависимостей."""
 
     _token_re: re.Pattern[str] = re.compile(r"\S+", flags=re.UNICODE)
 
@@ -45,7 +45,7 @@ class SimpleTokenCounter:
 
 
 class TiktokenTokenCounter(SimpleTokenCounter):
-    """cl100k_base token counter."""
+    """Счётчик токенов cl100k_base."""
 
     def __init__(self) -> None:
         self._encoding: tiktoken.Encoding = tiktoken.get_encoding("cl100k_base")

@@ -1,5 +1,5 @@
 /**
- * Factory registry — singleton lookup factory by name.
+ * Реестр фабрик — singleton lookup фабрики по имени.
  *
  * Назначение: страница/модалка достаёт фабрику (resource-collection / async-op /
  * form / cursor-list / facets / slice) по строковому имени без явного импорта

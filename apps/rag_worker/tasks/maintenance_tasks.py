@@ -32,10 +32,10 @@ async def cleanup_namespace_task(namespace_id: str) -> RAGCleanupNamespaceTaskRe
     """
     Очистка namespace -- удаление всех документов.
 
-    Args:
+    Аргументы:
         namespace_id: ID namespace для очистки
 
-    Returns:
+    Возвращает:
         Результат очистки
     """
     logger.info(f"RAG Worker: очистка namespace {namespace_id}")
@@ -57,10 +57,10 @@ async def list_documents_task(namespace_id: str) -> list[RAGListedDocumentTaskIt
     """
     Получить список всех документов в namespace.
 
-    Args:
+    Аргументы:
         namespace_id: ID namespace
 
-    Returns:
+    Возвращает:
         Список документов с метаданными
     """
     logger.info(f"RAG Worker: получение списка документов в namespace {namespace_id}")
@@ -91,7 +91,7 @@ async def reindex_document_task(
     """
     Переиндексация документа (удаление + загрузка заново).
 
-    Args:
+    Аргументы:
         context_data: Сериализованный Context (``get_context().to_dict()`` на стороне постановки задачи)
         namespace_id: ID namespace
         document_id: ID документа для удаления
@@ -99,7 +99,7 @@ async def reindex_document_task(
         document_name: Имя файла
         metadata: Метаданные
 
-    Returns:
+    Возвращает:
         Результат переиндексации
     """
     context = Context.from_dict(context_data)

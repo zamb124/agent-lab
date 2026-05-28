@@ -1,5 +1,5 @@
 /**
- * Sync Calls — звонки, ссылки, токены, запись.
+ * Звонки Sync — звонки, ссылки, токены, запись.
  *
  * Все операции через WS (single canonical path), кроме UI-state в
  * `createSlice('sync/call_ui')`. Каждая фабрика задаёт явный `commandType`
@@ -32,7 +32,7 @@ function _syncOpToastOnFailure(ctx, err, event) {
 }
 
 // ============================================================================
-// Read-операции звонков
+// Операции чтения звонков
 // ============================================================================
 
 export const callTokenOp = createAsyncOp({
@@ -161,7 +161,7 @@ export const callSignalOp = createAsyncOp({
 });
 
 // ============================================================================
-// Ad-hoc встреча: канал создаётся через `sync/channels/create_requested` (WS).
+// Ad-hoc-встреча: канал создаётся через `sync/channels/create_requested` (WS).
 // Сразу после создания UI вызывает `sync/calls_invite` и открывает оверлей
 // (`sync-sidebar._startAdhocCallSession`), как кнопка звонка в шапке чата.
 // ============================================================================
@@ -221,13 +221,13 @@ export const callLinkRemoveOp = createAsyncOp({
 });
 
 // ============================================================================
-// UI-state звонков (slice activeCall, incomingCall, recordingStatus и пр.)
+// UI-состояние звонков (slice activeCall, incomingCall, recordingStatus и пр.)
 //
 // Чистая `createSlice` фабрика без HTTP/WS — slice реагирует на push-события
 // `sync/call/*` (server -> client через `platform:ui_events`) и локальные
-// UI-actions overlay/incoming.
+// UI-действия overlay/incoming.
 //
-// Components используют `this.useSlice('sync/call_ui')` -> читают `.value`
+// Компоненты используют `this.useSlice('sync/call_ui')` -> читают `.value`
 // и вызывают actions: openOverlay, minimizeOverlay, expandOverlay,
 // closeOverlay, dismissIncoming, setRecordingStatus.
 // ============================================================================

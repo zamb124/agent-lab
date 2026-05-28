@@ -313,7 +313,7 @@ async def _get_flow_config(
     """
     Получает конфигурацию агента.
 
-    Args:
+    Аргументы:
         flow_id: ID агента
         container: DI-контейнер
         version: Версия агента (опционально). Если не указана - возвращает latest.
@@ -337,7 +337,7 @@ async def get_agent_card_well_known(
     """
     Agent Card по well-known URL.
 
-    Query params:
+    Параметры query:
         v: версия агента (опционально)
     """
     config = await _get_flow_config(flow_id, container, version=v)
@@ -368,7 +368,7 @@ async def get_agent_card(
     """
     Agent Card по A2A спецификации - GET на URL агента.
 
-    Query params:
+    Параметры query:
         v: версия агента (опционально)
     """
     config = await _get_flow_config(flow_id, container, version=v)
@@ -572,8 +572,8 @@ async def _json_rpc_handler_internal(
         container=as_flow_runtime_container(container),
     )
 
-    # Группы пользователя для проверки permissions
-    # 1. Из metadata (для тестов и internal calls)
+    # Группы пользователя для проверки прав доступа
+    # 1. Из metadata (для тестов и внутренних вызовов)
     # 2. Из request.state.user (из JWT через middleware)
     user_groups_raw = metadata.get("__user_groups__")
     if user_groups_raw is None:
@@ -588,7 +588,7 @@ async def _json_rpc_handler_internal(
         }
     channel_context: JsonObject = {"user_groups": user_groups}
 
-    # Добавляем groups в metadata для передачи в worker (для проверки permissions на tools)
+    # Добавляем groups в metadata для передачи в worker (для проверки прав доступа к tools)
     params_dict["metadata"] = metadata
     metadata["__user_groups__"] = user_groups
 

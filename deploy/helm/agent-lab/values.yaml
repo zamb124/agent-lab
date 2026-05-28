@@ -100,10 +100,6 @@ applications:
       - /flows/demo_cards
       - --static-path-mount
       - apps/flows/static/demo_cards
-      - --static-path-route
-      - /documentation
-      - --static-path-mount
-      - apps/flows/site
     resources:
       requests:
         cpu: 200m

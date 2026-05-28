@@ -16,7 +16,7 @@ def extract_json_from_response(text: str) -> JsonValue | None:
     - JSON в markdown блоке ```json ... ```
     - Прямой JSON объект или массив
 
-    Returns:
+    Возвращает:
         Распарсенный JSON или None если JSON не найден.
     """
     if not text:

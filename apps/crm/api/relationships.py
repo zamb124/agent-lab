@@ -211,22 +211,22 @@ async def find_shortest_path(
     Кратчайший путь между entities с учетом весов.
 
     Использует:
-    - Алгоритм: Bidirectional Weighted Dijkstra
+    - Алгоритм: двунаправленный взвешенный Dijkstra
     - Учитывает weight из Relationship
     - Возвращает два расчета: directed и undirected
 
     При непустом ``namespace`` обход видит только связи с тем же
     ``Relationship.namespace`` (если не передан ``include_all_namespaces``).
 
-    Args:
+    Аргументы:
         from_entity_id: Начальная entity
         to_entity_id: Конечная entity
         max_depth: Максимальная глубина поиска (1-20)
 
-    Returns:
+    Возвращает:
         Кратчайший путь с edges и total_distance
 
-    Raises:
+    Исключения:
         404: Entity не найдена
         403: Нет доступа к entity
     """

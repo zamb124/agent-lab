@@ -125,7 +125,7 @@ logger = get_logger(__name__)
 
 
 SYNC_OPERATIONS: dict[str, RegisteredOperation] = {
-    # channels
+    # каналы
     "sync/channels/list_requested": Operation(
         canonical_type="sync/channels/list_requested",
         payload_model=ChannelsListPayload,
@@ -166,7 +166,7 @@ SYNC_OPERATIONS: dict[str, RegisteredOperation] = {
         payload_model=ChannelsListMembersPayload,
         fn=op_channels_list_members,
     ),
-    # threads
+    # треды
     "sync/threads/list_requested": Operation(
         canonical_type="sync/threads/list_requested",
         payload_model=ThreadsListPayload,
@@ -182,7 +182,7 @@ SYNC_OPERATIONS: dict[str, RegisteredOperation] = {
         payload_model=ThreadsCreatePayload,
         fn=op_threads_create,
     ),
-    # messages
+    # сообщения
     "sync/messages/list_requested": Operation(
         canonical_type="sync/messages/list_requested",
         payload_model=MessagesListPayload,
@@ -238,7 +238,7 @@ SYNC_OPERATIONS: dict[str, RegisteredOperation] = {
         payload_model=MessagesTranscribeCallPayload,
         fn=op_messages_transcribe_call,
     ),
-    # git
+    # git-ресурсы
     "sync/git_resources/upsert_requested": Operation(
         canonical_type="sync/git_resources/upsert_requested",
         payload_model=GitResourcesUpsertPayload,
@@ -249,7 +249,7 @@ SYNC_OPERATIONS: dict[str, RegisteredOperation] = {
         payload_model=GitResourcesGetPayload,
         fn=op_git_resources_get,
     ),
-    # calls (mutating)
+    # звонки (изменяющие)
     "sync/calls/invite_requested": Operation(
         canonical_type="sync/calls/invite_requested",
         payload_model=CallsInvitePayload,
@@ -290,7 +290,7 @@ SYNC_OPERATIONS: dict[str, RegisteredOperation] = {
         payload_model=CallsSignalPayload,
         fn=op_calls_signal,
     ),
-    # calls (чтение + ссылки + join)
+    # звонки (чтение + ссылки + join)
     "sync/calls/get_requested": Operation(
         canonical_type="sync/calls/get_requested",
         payload_model=CallsGetPayload,
@@ -341,7 +341,7 @@ SYNC_OPERATIONS: dict[str, RegisteredOperation] = {
         payload_model=CallsJoinAcceptPayload,
         fn=op_calls_join_accept,
     ),
-    # company
+    # компания
     "sync/company_members/list_requested": Operation(
         canonical_type="sync/company_members/list_requested",
         payload_model=CompanyMembersListPayload,
@@ -352,7 +352,7 @@ SYNC_OPERATIONS: dict[str, RegisteredOperation] = {
         payload_model=CompanySharedChannelsListPayload,
         fn=op_company_shared_channels_list,
     ),
-    # files (метаданные после REST upload)
+    # файлы (метаданные после REST upload)
     "sync/files/upload_completed_requested": Operation(
         canonical_type="sync/files/upload_completed_requested",
         payload_model=FilesUploadCompletedPayload,

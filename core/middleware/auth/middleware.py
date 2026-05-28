@@ -215,7 +215,7 @@ class AuthMiddleware(BaseHTTPMiddleware):
                 rule.context_type,
             )
 
-        # Webhook обработка
+        # Обработка webhook
         if rule.context_type == "webhook" and rule.channel:
             return await self._handle_webhook(request, rule, container, context_factory, trace_id)
 
@@ -414,7 +414,7 @@ class AuthMiddleware(BaseHTTPMiddleware):
 
         company = await handler.extract_company_from_webhook_path(request.url.path, platform)
 
-        # GET для WhatsApp верификации - анонимный контекст
+        # GET для верификации WhatsApp — анонимный контекст
         if platform == "whatsapp" and request.method == "GET":
             return await context_factory.create(request, "anonymous", company, trace_id=trace_id)
 
@@ -440,7 +440,7 @@ class AuthMiddleware(BaseHTTPMiddleware):
         """
         Извлекает и валидирует токен из запроса.
 
-        Returns:
+        Возвращает:
             tuple: (token_data, raw_token) - данные токена и сам токен для межсервисных запросов
         """
         token = request.cookies.get("auth_token")

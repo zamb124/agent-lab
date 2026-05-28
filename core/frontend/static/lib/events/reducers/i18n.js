@@ -1,5 +1,5 @@
 /**
- * I18n slice.
+ * Слайс i18n.
  *
  * Поля state.i18n:
  *   locale:           string  - активная локаль (ru/en/...)

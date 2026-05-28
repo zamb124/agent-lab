@@ -1,5 +1,5 @@
 /**
- * Sync Files — загрузка файлов в чат.
+ * Файлы Sync — загрузка файлов в чат.
  *
  * Загрузка бинарного потока — REST-only (multipart, до сотен МБ). После
  * upload UI шлёт WS-команду `sync/files/upload_completed_requested` чтобы

@@ -1,5 +1,5 @@
 /**
- * Glass Spinner Component
+ * Компонент Glass Spinner
  * Индикатор загрузки
  */
 import { html, css } from 'lit';

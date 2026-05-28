@@ -395,12 +395,12 @@ class AccessGrant(Base):
 
     # Для grant_type="user"
     target_user_id: Mapped[str | None] = mapped_column(
-        String(100), nullable=True, index=True, comment="User ID (может быть из любой компании)"
+        String(100), nullable=True, index=True, comment="ID пользователя (может быть из любой компании)"
     )
 
     # Для grant_type="company"
     target_company_id: Mapped[str | None] = mapped_column(
-        String(100), nullable=True, index=True, comment="Company ID"
+        String(100), nullable=True, index=True, comment="ID компании"
     )
 
     # Права
@@ -453,7 +453,7 @@ class AccessRequest(Base):
     message: Mapped[str | None] = mapped_column(Text, nullable=True)
     status: Mapped[str] = mapped_column(String(20), default="pending", nullable=False)
 
-    # Deep copy опции
+    # Опции полного копирования
     include_dependencies: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
     max_depth: Mapped[int] = mapped_column(Integer, default=1, nullable=False)
 

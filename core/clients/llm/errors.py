@@ -1,14 +1,14 @@
-"""LLM client errors and stream timing constants."""
+"""Ошибки LLM-клиента и константы таймингов stream."""
 
 from __future__ import annotations
 
 
 class LLMStreamUserCancelledError(Exception):
-    """Flow cancellation was detected while reading an LLM stream."""
+    """Отмена flow обнаружена при чтении LLM stream."""
 
 
 class LLMStreamIdleTimeoutError(Exception):
-    """SSE stream produced no chunks for longer than the configured idle limit."""
+    """SSE stream не отдавал чанки дольше настроенного idle-лимита."""
 
     def __init__(self, idle_seconds: float, chunks_received: int):
         self.idle_seconds: float = idle_seconds

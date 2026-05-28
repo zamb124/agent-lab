@@ -99,7 +99,7 @@ class FrontendCompanyVoiceProvidersPage extends PlatformPage {
         css`
             :host { display: block; }
 
-            /* Tabs */
+            /* Вкладки */
             .tabs {
                 display: flex;
                 gap: 0;
@@ -132,7 +132,7 @@ class FrontendCompanyVoiceProvidersPage extends PlatformPage {
                 font-weight: var(--font-semibold);
             }
 
-            /* Voice provider cards */
+            /* Карточки voice-провайдеров */
             .grid {
                 display: grid;
                 grid-template-columns: 1fr 1fr;
@@ -163,7 +163,7 @@ class FrontendCompanyVoiceProvidersPage extends PlatformPage {
                 justify-content: flex-end;
             }
 
-            /* Pronunciation */
+            /* Произношение */
             .pron-card {
                 background: var(--glass-solid-strong);
                 border: 1px solid var(--glass-border-subtle);
@@ -206,7 +206,7 @@ class FrontendCompanyVoiceProvidersPage extends PlatformPage {
 
             .actions-row { display: flex; gap: var(--space-2); }
 
-            /* Rules list */
+            /* Список правил */
             .rules-list { display: flex; flex-direction: column; gap: var(--space-2); }
 
             .rule-item {
@@ -279,7 +279,7 @@ class FrontendCompanyVoiceProvidersPage extends PlatformPage {
                 font-size: var(--text-sm);
             }
 
-            /* Test section */
+            /* Секция тестирования */
             .test-result {
                 margin-top: var(--space-4);
                 padding: var(--space-4);
@@ -326,12 +326,12 @@ class FrontendCompanyVoiceProvidersPage extends PlatformPage {
     ];
 
     static properties = {
-        // shared
+        // общие
         _activeTab: { state: true },
-        // drafts
+        // черновики
         _drafts: { state: true },
         _credEditedByKind: { state: true },
-        // pronunciation
+        // произношение
         _ruleDraft: { state: true },
         _ruleEditId: { state: true },
         _testText: { state: true },

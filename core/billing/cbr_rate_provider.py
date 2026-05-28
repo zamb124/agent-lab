@@ -117,7 +117,7 @@ class _CbrParseError(Exception):
 def _parse_usd_rate(xml_text: str) -> tuple[float, date]:
     """Парсит XML-ответ ЦБ и возвращает (rate, effective_date).
 
-    Raises:
+    Исключения:
         _CbrParseError: если структура XML не совпадает с ожидаемой.
     """
     try:

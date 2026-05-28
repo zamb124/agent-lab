@@ -104,7 +104,7 @@ async def test_file_reader_docx_bytes() -> None:
 
 @pytest.mark.asyncio
 async def test_file_reader_pdf_bytes(tmp_path) -> None:
-    doc = fitz.open()
+    doc = fitz.open()  # pyright: ignore[reportCallIssue]
     page = doc.new_page()
     page.insert_text((72, 72), "KN_UNIT_PDF_MARKER")
     out = tmp_path / "u.pdf"

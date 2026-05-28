@@ -85,6 +85,6 @@ async def test_close_page_raises_when_page_close_fails(monkeypatch: pytest.Monke
     browser = _FakeBrowser()
     sig = _sig()
     with pytest.raises(RuntimeError, match="close failed"):
-        ctx = await factory.new_context(browser, "chromium", sig, None)
+        ctx = await factory.new_context(browser, "chromium", sig, None)  # pyright: ignore[reportArgumentType]
         page = await factory.new_page(ctx)
         await factory.close_page(page)

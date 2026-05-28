@@ -1,11 +1,11 @@
-"""Normalize persisted namespace JSON to strict contracts.
+"""Нормализация сохранённого JSON namespace к строгим контрактам.
 
 Revision ID: shared_0013
 Revises: shared_0012
 Create Date: 2026-05-26
 
-Runtime namespace models are strict. This migration rewrites persisted JSON
-created by older UI contracts:
+Runtime-модели namespace строгие. Эта миграция переписывает сохранённый JSON,
+созданный старыми UI-контрактами:
 - CRM board stages: `stage_id` -> `id`
 - Sidebar navigation entries: `id` -> `nav_id`
 """

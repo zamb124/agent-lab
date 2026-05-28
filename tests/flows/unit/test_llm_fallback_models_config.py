@@ -1,4 +1,4 @@
-"""Pure model validation for LLM fallback model settings."""
+"""Чистая валидация моделей для настроек fallback LLM."""
 
 from __future__ import annotations
 

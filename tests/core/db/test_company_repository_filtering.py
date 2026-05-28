@@ -18,7 +18,7 @@ class _FakeStorage:
 
 @pytest.mark.asyncio
 async def test_company_repository_list_skips_nested_company_prefix_entities() -> None:
-    repo = CompanyRepository(storage=_FakeStorage())  # type: ignore[arg-type]
+    repo = CompanyRepository(storage=_FakeStorage())  # pyright: ignore[reportArgumentType]
 
     companies = await repo.list(limit=100, offset=0)
 

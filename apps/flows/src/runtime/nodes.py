@@ -286,7 +286,7 @@ def _config_resource_refs(config: JsonObject, field_name: str = "resources") -> 
 
 
 class NodeRunMethod:
-    """Callable wrapper для node.run() с поддержкой .kiq()"""
+    """Callable-обёртка для node.run() с поддержкой .kiq()"""
 
     def __init__(self, node: BaseNode):
         self._node: BaseNode = node
@@ -296,7 +296,7 @@ class NodeRunMethod:
         return await self._node.execute(state)
 
     async def kiq(self, state: ExecutionState) -> ExecutionState:
-        """TaskIQ dispatch lives at the task/API boundary, not inside runtime nodes."""
+        """Диспетчеризация TaskIQ живёт на границе task/API, не внутри runtime-нод."""
         _ = state
         raise RuntimeError("node.run.kiq() is not part of runtime; use execute_node task at the boundary")
 
@@ -550,7 +550,7 @@ class BaseNode(ABC):
         """
         Единообразный резолвинг input_mapping для всех типов нод.
 
-        Returns:
+        Возвращает:
             Dict с резолвнутыми значениями из input_mapping
         """
         if not self.input_mapping:
@@ -767,11 +767,11 @@ class BaseNode(ABC):
         """
         Конкретная логика ноды.
 
-        Args:
+        Аргументы:
             state: ExecutionState для чтения/записи
             inputs: Резолвнутые данные из input_mapping
 
-        Returns:
+        Возвращает:
             Результат (dict - поля записываются в state через output_mapping)
         """
         pass
@@ -946,7 +946,7 @@ class LlmNode(BaseNode):
         runner_state = self._prepare_llm_runner_state(state, inputs)
 
         # structured_output_result используется как одноразовый канал передачи
-        # JSON-ответа structured ноды в output_mapping. Его нельзя переносить
+        # JSON-ответа structured-ноды в output_mapping. Его нельзя переносить
         # между нодами — иначе следующая нода "наследует" результат и будет
         # выглядеть как будто вернула structured output, даже если это не так.
         runner_state.clear_structured_output_result()
@@ -1267,12 +1267,12 @@ class LlmNode(BaseNode):
         Хук вызывается ДО рендеринга промпта.
         Переопределите для модификации промпта и переменных.
 
-        Args:
+        Аргументы:
             prompt_template: Исходный шаблон промпта
             state: Текущее state
             variables: Переменные для рендеринга
 
-        Returns:
+        Возвращает:
             (modified_prompt_template, modified_variables)
         """
         _ = state
@@ -1285,11 +1285,11 @@ class LlmNode(BaseNode):
         Хук вызывается ПОСЛЕ рендеринга промпта.
         Переопределите для модификации финального промпта.
 
-        Args:
+        Аргументы:
             rendered_prompt: Рендеренный промпт
             state: Текущий state
 
-        Returns:
+        Возвращает:
             Модифицированный промпт
         """
         _ = state
@@ -2283,7 +2283,7 @@ class ChannelNode(BaseNode):
             "channel.all_variables",
         )
 
-        # Merge channel_config с inputs
+        # Слияние channel_config с inputs
         config = {**self.channel_config}
         config = VarResolver.resolve_deep(config, all_variables)
         params = inputs
@@ -2533,7 +2533,7 @@ class HitlNode(BaseNode):
 
 
 class ReflectionNode(BaseNode):
-    """Typed critic / test-time compute gate with no state writes inside the activity."""
+    """Типизированный critic / test-time compute gate без записи state внутри activity."""
 
     name: ClassVar[str] = "reflection"
     node_type: ClassVar[NodeType | None] = NodeType.REFLECTION

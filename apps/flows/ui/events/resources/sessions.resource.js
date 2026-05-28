@@ -1,5 +1,5 @@
 /**
- * Sessions — сессии чата (history по flow).
+ * Сессии — сессии чата (history по flow).
  * REST: `apps/flows/src/api/v1/sessions.py`.
  * Канон префикса: `FLOWS_PUBLIC_API_PREFIX` в `apps/flows/config.py` (`/flows/api/v1`).
  */

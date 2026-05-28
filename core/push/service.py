@@ -48,7 +48,7 @@ class WebPushService:
         """
         Отправить push-уведомление на устройство
 
-        Returns:
+        Возвращает:
             True если успешно, False если ошибка или подписка истекла
         """
         if not self._initialized:
@@ -85,11 +85,11 @@ class WebPushService:
 
         except WebPushException as e:
             if e.response and e.response.status_code == 410:
-                # Gone - подписка истекла, нужно удалить
+                # 410 Gone — подписка истекла, нужно удалить
                 logger.info(f"Push подписка истекла: {subscription.endpoint[:50]}...")
                 return False
             elif e.response and e.response.status_code == 404:
-                # Not Found - подписка не существует
+                # 404 Not Found — подписка не существует
                 logger.info(f"Push подписка не найдена: {subscription.endpoint[:50]}...")
                 return False
             else:
@@ -109,7 +109,7 @@ class WebPushService:
         """
         Отправить push на все устройства пользователя
 
-        Returns:
+        Возвращает:
             Список endpoints с истекшими подписками (для удаления)
         """
         expired_endpoints: list[str] = []

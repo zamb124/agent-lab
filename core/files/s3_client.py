@@ -62,7 +62,7 @@ class S3Client:
         """
         Инициализация S3 клиента.
 
-        Args:
+        Аргументы:
             bucket_name: Физическое имя bucket в S3 (для вызовов API)
             access_key_id: Ключ доступа
             secret_access_key: Секретный ключ
@@ -233,7 +233,7 @@ class S3Client:
         """
         Загружает файл в S3.
 
-        Args:
+        Аргументы:
             file_path: Путь к файлу для загрузки
             key: Ключ объекта в S3
             bucket: Имя bucket (если не указан, используется дефолтный)
@@ -241,7 +241,7 @@ class S3Client:
             content_type: MIME тип файла
             public: Сделать файл публичным (ACL: public-read)
 
-        Returns:
+        Возвращает:
             True если загрузка успешна
         """
         target_bucket = self.bucket_name if bucket is None else bucket
@@ -283,7 +283,7 @@ class S3Client:
         """
         Загружает данные из памяти в S3.
 
-        Args:
+        Аргументы:
             data: Данные для загрузки
             key: Ключ объекта в S3
             bucket: Имя bucket (если не указан, используется дефолтный)
@@ -291,7 +291,7 @@ class S3Client:
             content_type: MIME тип
             public: Сделать файл публичным
 
-        Returns:
+        Возвращает:
             True если загрузка успешна
         """
         target_bucket = self.bucket_name if bucket is None else bucket
@@ -329,12 +329,12 @@ class S3Client:
         """
         Скачивает файл из S3.
 
-        Args:
+        Аргументы:
             key: Ключ объекта в S3
             file_path: Путь для сохранения файла
             bucket: Имя bucket (если не указан, используется дефолтный)
 
-        Returns:
+        Возвращает:
             True если скачивание успешно
         """
         target_bucket = self.bucket_name if bucket is None else bucket
@@ -356,11 +356,11 @@ class S3Client:
         """
         Скачивает данные из S3 в память.
 
-        Args:
+        Аргументы:
             key: Ключ объекта в S3
             bucket: Имя bucket (если не указан, используется дефолтный)
 
-        Returns:
+        Возвращает:
             Данные файла
         """
         target_bucket = self.bucket_name if bucket is None else bucket
@@ -400,11 +400,11 @@ class S3Client:
         """
         Удаляет файл из S3.
 
-        Args:
+        Аргументы:
             key: Ключ объекта в S3
             bucket: Имя bucket (если не указан, используется дефолтный)
 
-        Returns:
+        Возвращает:
             True если удаление успешно
         """
         target_bucket = self.bucket_name if bucket is None else bucket
@@ -426,11 +426,11 @@ class S3Client:
         """
         Проверяет существование файла в S3.
 
-        Args:
+        Аргументы:
             key: Ключ объекта в S3
             bucket: Имя bucket (если не указан, используется дефолтный)
 
-        Returns:
+        Возвращает:
             True если файл существует
         """
         target_bucket = self.bucket_name if bucket is None else bucket
@@ -450,11 +450,11 @@ class S3Client:
         """
         Получает метаданные объекта из S3.
 
-        Args:
+        Аргументы:
             key: Ключ объекта в S3
             bucket: Имя bucket (если не указан, используется дефолтный)
 
-        Returns:
+        Возвращает:
             Метаданные объекта
         """
         target_bucket = self.bucket_name if bucket is None else bucket
@@ -482,12 +482,12 @@ class S3Client:
         """
         Генерирует временный URL для доступа к файлу.
 
-        Args:
+        Аргументы:
             key: Ключ объекта в S3
             bucket: Имя bucket (если не указан, используется дефолтный)
             expiration: Время жизни URL в секундах
 
-        Returns:
+        Возвращает:
             Временный URL
         """
         target_bucket = self.bucket_name if bucket is None else bucket
@@ -513,11 +513,11 @@ class S3Client:
         """
         Генерирует публичный URL для файла.
 
-        Args:
+        Аргументы:
             key: Ключ объекта в S3
             bucket: Имя bucket (если не указан, используется дефолтный)
 
-        Returns:
+        Возвращает:
             Публичный URL
         """
         target_bucket = self.bucket_name if bucket is None else bucket
@@ -538,13 +538,13 @@ class S3Client:
         """
         Список объектов в bucket с указанным префиксом.
 
-        Args:
+        Аргументы:
             prefix: Префикс для фильтрации объектов
             max_keys: Максимальное количество объектов
             bucket: Имя bucket (если не указан, используется дефолтный)
             start_after: S3 StartAfter — только ключи лексикографически после этого (инкрементальный обход)
 
-        Returns:
+        Возвращает:
             Список объектов с ключами и метаданными
         """
         target_bucket = self.bucket_name if bucket is None else bucket
@@ -591,13 +591,13 @@ class S3Client:
         """
         Копирует объект в S3.
 
-        Args:
+        Аргументы:
             source_key: Ключ исходного объекта
             dest_key: Ключ целевого объекта
             source_bucket: Имя исходного bucket (если не указан, используется дефолтный)
             dest_bucket: Имя целевого bucket (если не указан, используется дефолтный)
 
-        Returns:
+        Возвращает:
             True если копирование успешно
         """
         target_source_bucket = self.bucket_name if source_bucket is None else source_bucket
@@ -629,13 +629,13 @@ class S3Client:
         """
         Генерирует presigned URL с указанным методом.
 
-        Args:
+        Аргументы:
             key: Ключ объекта в S3
             bucket: Имя bucket (если не указан, используется дефолтный)
             expiration: Время жизни URL в секундах
             method: HTTP метод ('get_object', 'put_object')
 
-        Returns:
+        Возвращает:
             Временный URL
         """
         target_bucket = self.bucket_name if bucket is None else bucket
@@ -666,12 +666,12 @@ class S3ClientFactory:
         """
         Создает S3 клиент из конфигурации.
 
-        Args:
+        Аргументы:
             bucket_config: Конфигурация bucket
             physical_bucket_name: Имя bucket в S3 (put_object/get_object)
             bucket_config_key: Ключ в settings.s3.buckets — пишется в FileRecord.s3_bucket
 
-        Returns:
+        Возвращает:
             Настроенный S3Client
         """
         if not bucket_config.enabled:
@@ -700,10 +700,10 @@ class S3ClientFactory:
         """
         Создает S3 клиент для указанного bucket из settings.
 
-        Args:
+        Аргументы:
             bucket_name: Ключ bucket в конфигурации (не обязательно реальное имя bucket)
 
-        Returns:
+        Возвращает:
             Настроенный S3Client
         """
         settings = get_settings()
@@ -729,7 +729,7 @@ class S3ClientFactory:
         """
         Создает S3 клиент для дефолтного bucket из settings.
 
-        Returns:
+        Возвращает:
             Настроенный S3Client
         """
         settings = get_settings()
@@ -746,11 +746,11 @@ def build_s3_key_for_company(company_slug: str, relative_path: str) -> str:
     """
     Строит S3 ключ с префиксом компании.
 
-    Args:
+    Аргументы:
         company_slug: Slug компании (subdomain или company_id)
         relative_path: Относительный путь (например "rag/namespace/file.pdf")
 
-    Returns:
+    Возвращает:
         Полный ключ: "company_slug/relative_path"
 
     Example:
@@ -765,13 +765,13 @@ def build_s3_key_from_context(relative_path: str) -> str:
 
     Автоматически определяет company_slug из активной компании в контексте.
 
-    Args:
+    Аргументы:
         relative_path: Относительный путь
 
-    Returns:
+    Возвращает:
         Полный ключ с префиксом компании из контекста
 
-    Raises:
+    Исключения:
         ValueError: Если контекст или компания не найдены
 
     Example:

@@ -1,4 +1,4 @@
-"""Episodic memory source for the platform LLM context layer."""
+"""Источник эпизодической памяти для слоя контекста LLM платформы."""
 
 from __future__ import annotations
 
@@ -16,7 +16,7 @@ from core.types import JsonObject
 
 
 class LLMContextMemoryEpisode(StrictBaseModel):
-    """Closed memory episode ready for persistence and later retrieval."""
+    """Закрытый эпизод памяти, готовый к сохранению и последующему retrieval."""
 
     memory_id: str = Field(..., min_length=1)
     content: str = Field(..., min_length=1)
@@ -50,7 +50,7 @@ class LLMContextMemoryEpisode(StrictBaseModel):
 
 
 class LLMContextMemoryRecallRequest(StrictBaseModel):
-    """Query passed to a memory store for one LLM context compilation."""
+    """Запрос, передаваемый в memory store для одной компиляции контекста LLM."""
 
     query: str = Field(..., min_length=1)
     scope: LLMContextMemoryScope
@@ -72,7 +72,7 @@ class LLMContextMemoryRecallRequest(StrictBaseModel):
 
 
 class LLMContextMemoryRecord(StrictBaseModel):
-    """Memory record returned by a store before compiler packing."""
+    """Запись памяти, возвращаемая store до упаковки компилятором."""
 
     memory_id: str = Field(..., min_length=1)
     content: str = Field(..., min_length=1)
@@ -90,7 +90,7 @@ class LLMContextMemoryRecord(StrictBaseModel):
 
 
 class LLMContextMemoryStore(Protocol):
-    """Persistence boundary used by ``LLMContextMemorySource``."""
+    """Граница персистентности, используемая ``LLMContextMemorySource``."""
 
     async def write_episode(self, episode: LLMContextMemoryEpisode) -> str:
         ...  # pragma: no cover
@@ -100,7 +100,7 @@ class LLMContextMemoryStore(Protocol):
 
 
 class LLMContextMemorySource:
-    """Collect persisted episodic memory as compiler candidate blocks."""
+    """Собирает сохранённую эпизодическую память как кандидатов блоков для компилятора."""
 
     def __init__(
         self,

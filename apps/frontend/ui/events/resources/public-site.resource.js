@@ -1,7 +1,7 @@
 /**
  * Публичный контент сайта: реквизиты, маркетинг, статьи блога.
  *
- * Backend:
+ * Бэкенд:
  *   GET /frontend/api/public/site-bundle
  *   GET /frontend/api/public/blog
  *   GET /frontend/api/public/blog/post?slug=

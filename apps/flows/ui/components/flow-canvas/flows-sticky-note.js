@@ -1,7 +1,7 @@
 /**
  * flows-sticky-note — заметка-стикер на канвасе.
  *
- * Layout: header (drag-grip + collapse/link/delete) + body (textarea) +
+ * Раскладка: header (drag-grip + collapse/link/delete) + body (textarea) +
  * resize-handle. Body и handle скрываются при `collapsed`.
  *
  * События в родительский canvas:

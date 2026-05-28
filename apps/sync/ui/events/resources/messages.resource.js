@@ -1,5 +1,5 @@
 /**
- * Sync Messages — фабрики команд + единый slice истории чатов.
+ * Сообщения Sync — фабрики команд + единый slice истории чатов.
  *
  * Канон `ui_factories.mdc`: одна `createAsyncOp` = одна WS-команда. Поэтому
  * на каждую mutating-операцию (send/edit/delete/forward/react/pin/transcribe*)
@@ -28,7 +28,7 @@
  *     `sync/messages_store/history_newer_loaded`;
  *   - success загрузок: `sync/messages/succeeded` (первичная страница).
  *
- * Slice (zero-fallback canon, `frontend.mdc`):
+ * Slice (канон zero-fallback, `frontend.mdc`):
  *   {
  *     byChannelId: { [channelId]: ChannelData },
  *     replyToMessageId: string | null,

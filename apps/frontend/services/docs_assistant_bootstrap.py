@@ -1,4 +1,4 @@
-"""Startup bootstrap for the public documentation assistant."""
+"""Bootstrap при старте публичного documentation assistant."""
 
 from __future__ import annotations
 
@@ -87,7 +87,7 @@ async def _set_system_context(container: "FrontendContainer", *, session_id: str
 
 
 async def ensure_docs_assistant_embed_config(container: "FrontendContainer") -> EmbedConfig:
-    """Create or update the fixed public docs assistant embed in company system."""
+    """Создаёт или обновляет фиксированный public docs assistant embed в company system."""
     _ = await _set_system_context(container, session_id="docs_assistant_embed_bootstrap")
     try:
         repo = container.embed_config_repository

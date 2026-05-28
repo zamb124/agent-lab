@@ -3,7 +3,7 @@
  *
  * Подписан на state.modals.stack. Для каждого элемента стека создаёт компонент
  * по реестру kind -> tagName, проставляет _modalId, _modalKind, props и open=true.
- * Закрытие двухфазное: reducer помечает item как closing, компонент доигрывает
+ * Закрытие двухфазное: reducer помечает элемент как closing, компонент доигрывает
  * CSS exit-motion, затем stack диспатчит UI_MODAL_CLOSED и только тогда снимает DOM.
  *
  * Light DOM (createRenderRoot=this), чтобы внутренние модалки могли портироваться

@@ -1,5 +1,5 @@
-"""Runtime package.
+"""Пакет runtime.
 
-Import runtime leaf modules directly, for example
-``apps.flows.src.runtime.flow`` or ``apps.flows.src.runtime.nodes``.
+Импортируйте leaf-модули runtime напрямую, например
+``apps.flows.src.runtime.flow`` или ``apps.flows.src.runtime.nodes``.
 """

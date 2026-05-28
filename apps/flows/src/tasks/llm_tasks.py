@@ -37,7 +37,7 @@ async def invoke_llm(
     """
     Вызывает LLM и возвращает результат.
 
-    Args:
+    Аргументы:
         messages: Список сообщений в OpenAI формате [{"role": "...", "content": "..."}]
         tools: Опциональный список tools
         task_id: ID задачи для трейсинга
@@ -46,7 +46,7 @@ async def invoke_llm(
         llm_context: Опциональный patch контекстного слоя
         llm_context_blocks: Уже извлеченные memory/RAG/tool blocks для generic context layer
 
-    Returns:
+    Возвращает:
         {"content": "...", "reasoning": "...", "tool_calls": [...]}
     """
     previous_context = None

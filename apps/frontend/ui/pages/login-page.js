@@ -1,5 +1,5 @@
 /**
- * Login page — public-маршрут /login.
+ * Страница login — public-маршрут /login.
  *
  * Открывает auth-modal через openModal helper; модалка отрисовывается
  * глобальным platform-modal-stack поверх пустой страницы.

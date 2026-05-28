@@ -1,4 +1,4 @@
-"""Typed contracts for flows durable execution."""
+"""Типизированные контракты durable execution для flows."""
 
 from __future__ import annotations
 
@@ -15,7 +15,7 @@ from core.types import JsonArray, JsonObject, JsonValue, require_json_object
 
 
 class DurableStrictBaseModel(StrictBaseModel):
-    """Strict durable contract that keeps enums typed inside Python."""
+    """Строгий durable-контракт с типизированными enum внутри Python."""
 
     model_config: ClassVar[ConfigDict] = ConfigDict(
         extra="forbid",
@@ -89,7 +89,7 @@ class SideEffectPolicy(StrEnum):
 
 
 class ExecutionStateDelta(DurableStrictBaseModel):
-    """Domain-aware delta for ExecutionState projection."""
+    """Доменная delta для проекции ExecutionState."""
 
     messages_append: JsonArray = Field(default_factory=list)
     variables_set: JsonObject = Field(default_factory=dict)
@@ -120,7 +120,7 @@ class ExecutionStateDelta(DurableStrictBaseModel):
 
 
 class WorkflowExecutionPosition(DurableStrictBaseModel):
-    """Active durable head used to derive deterministic command keys."""
+    """Активный durable head для детерминированных command keys."""
 
     execution_branch_id: str = Field(..., min_length=1)
     head_sequence: int = Field(..., ge=0)
@@ -128,7 +128,7 @@ class WorkflowExecutionPosition(DurableStrictBaseModel):
 
 
 class EmptyWorkflowEventPayload(DurableStrictBaseModel):
-    """Payload for events whose fact is fully described by event_type."""
+    """Payload для событий, факт которых полностью описан event_type."""
 
 
 class RunStartedPayload(DurableStrictBaseModel):

@@ -34,7 +34,7 @@ async def process_flow_task(
 
     Делегирует выполнение в соответствующий канал (BaseChannel.process_task).
 
-    Args:
+    Аргументы:
         flow_id: ID агента
         session_id: ID сессии
         user_id: ID пользователя
@@ -49,7 +49,7 @@ async def process_flow_task(
         context_data: Сериализованный Context из middleware (всегда должен быть)
         trace_context: Сериализованный TraceContext для трейсинга
 
-    Returns:
+    Возвращает:
         Результат выполнения
     """
     if context_data is None:

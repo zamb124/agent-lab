@@ -12,12 +12,15 @@ from typing import Any
 
 import pytest
 
-from apps.crm.system_templates import SYSTEM_RELATIONSHIP_TYPE_TEMPLATES
+from apps.crm.system_templates import (
+    SYSTEM_RELATIONSHIP_TYPE_TEMPLATES,
+    RelationshipTypeTemplate,
+)
 
 _MIN_PROMPT_CHARS = 150
 
 
-def _by_id() -> dict[str, dict[str, Any]]:
+def _by_id() -> dict[str, RelationshipTypeTemplate]:
     return {spec["type_id"]: spec for spec in SYSTEM_RELATIONSHIP_TYPE_TEMPLATES}
 
 

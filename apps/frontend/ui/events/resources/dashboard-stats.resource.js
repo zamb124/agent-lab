@@ -1,5 +1,5 @@
 /**
- * Dashboard stats — лёгкие счётчики по сервисам для витрины /dashboard.
+ * Статистика dashboard — лёгкие счётчики по сервисам для витрины /dashboard.
  *
  * Каждый op запрашивает первую страницу соответствующего list-эндпоинта
  * (limit=1) и возвращает только `{ total }`. Никаких новых backend-контрактов:
@@ -10,7 +10,7 @@
  * silent: ошибка попадает в slice.error через FAILED-событие фабрики,
  * карточка покажет «—» без поломки всей страницы.
  *
- * restMirror с `service: '<target>'` — это cross-service вызов из frontend
+ * restMirror с `service: '<target>'` — это межсервисный вызов из frontend
  * в другой сервис. Скрипт `check_command_rest_mirror.py` распознаёт
  * `service:` и не верифицирует path против локальных routes frontend (и не
  * даёт WARN/ERROR в strict).

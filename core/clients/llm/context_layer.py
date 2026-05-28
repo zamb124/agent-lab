@@ -1,4 +1,4 @@
-"""Adapter between LLMClient messages and the platform LLM context compiler."""
+"""Адаптер между messages LLMClient и компилятором контекста LLM платформы."""
 
 from __future__ import annotations
 
@@ -38,7 +38,7 @@ _ANTHROPIC_CACHE_CONTROL_FIELD = "cache_control"
 
 @dataclass(frozen=True)
 class PreparedLLMContextMessages:
-    """Messages prepared for one LLM transport call."""
+    """Messages, подготовленные для одного LLM transport-вызова."""
 
     messages: list[Message]
     openai_messages: list[JsonObject]
@@ -58,10 +58,10 @@ async def prepare_messages_for_context_layer(
     compiler: LLMContextCompiler | None = None,
 ) -> PreparedLLMContextMessages:
     """
-    Compile text messages through the generic context layer when explicitly requested.
+    Компилирует текстовые messages через generic context layer при явном запросе.
 
-    Multimodal prompts keep the original message objects for now: the compiler is text-first and
-    must not drop image/file parts while trimming context.
+    Мультимодальные prompt пока сохраняют исходные message objects: компилятор
+    text-first и не должен отбрасывать image/file parts при обрезке контекста.
     """
     openai_messages = messages_to_openai(messages)
     has_sources = bool(
@@ -122,7 +122,7 @@ def merge_provider_cache_hints(
     provider_hints: JsonObject | None,
     model: str | None = None,
 ) -> JsonObject | None:
-    """Merge safe provider-native cache controls into an OpenAI-compatible body."""
+    """Сливает безопасные provider-native cache controls в OpenAI-compatible body."""
     stable_prefix_hash = str((provider_hints or {}).get("stable_prefix_hash") or "").strip()
     if not stable_prefix_hash:
         return dict(extra_body) if extra_body else None
@@ -146,7 +146,7 @@ def _is_openrouter_anthropic_model(model: str | None) -> bool:
 def llm_context_trace_metadata(
     compiled_context: CompiledLLMContext | None,
 ) -> JsonObject | None:
-    """Compact, content-free context-layer metadata for traces and LLM status events."""
+    """Компактные metadata context layer без содержимого для traces и LLM status events."""
     if compiled_context is None:
         return None
     return {
@@ -169,7 +169,7 @@ def llm_context_trace_metadata(
 
 
 def openai_messages_to_a2a_messages(messages: list[JsonObject]) -> list[Message]:
-    """Convert compiled OpenAI-compatible messages back to A2A messages for transport."""
+    """Конвертирует скомпилированные OpenAI-compatible messages обратно в A2A messages для transport."""
     converted: list[Message] = []
     for message in messages:
         role_raw = str(message.get("role", "user"))

@@ -93,10 +93,10 @@ class CompiledGraph(StrictBaseModel):
 
         Проверяет что output схема ноды A совместима с input схемой ноды B.
 
-        Raises:
+        Исключения:
             SchemaMismatchError: Если схемы несовместимы
         """
-        # TODO: Реализовать JSON Schema валидацию
+        # TODO: реализовать JSON Schema валидацию
         pass
 
 
@@ -110,7 +110,7 @@ class GraphCompiler:
     3. Проверка циклов и достижимости
     4. Конфликты skills обнаруживаются до запуска
 
-    Examples:
+    Примеры:
         >>> compiler = GraphCompiler()
         >>> graph = compiler.compile(flow_config, branch_config=None)
         >>> # Граф валиден и готов к исполнению
@@ -136,7 +136,7 @@ class GraphCompiler:
         4. Нет циклов без выхода
         5. Ветки не конфликтуют с базовым графом
 
-        Args:
+        Аргументы:
             flow_id: ID flow
             entry: Стартовая нода effective-графа
             nodes: Ноды effective-графа
@@ -144,10 +144,10 @@ class GraphCompiler:
             branch_id: ID применённой ветки
             variables: Предрезолвнутые переменные
 
-        Returns:
+        Возвращает:
             CompiledGraph - неизменяемый граф
 
-        Raises:
+        Исключения:
             ConfigError: Если конфиг невалиден
             CyclicDependencyError: Если есть циклы
             NodeConflictError: Если ветка конфликтует
@@ -215,7 +215,7 @@ class GraphCompiler:
         """
         Проверяет что entry нода существует в графе.
 
-        Raises:
+        Исключения:
             InvalidGraphError: Если entry нода не найдена
         """
         if entry not in nodes:
@@ -232,7 +232,7 @@ class GraphCompiler:
         """
         Проверяет что все ноды в edges существуют.
 
-        Raises:
+        Исключения:
             InvalidGraphError: Если нода в edge не найдена
         """
         for edge in edges:
@@ -267,7 +267,7 @@ class GraphCompiler:
 
         Использует DFS для обнаружения циклов.
 
-        Raises:
+        Исключения:
             CyclicDependencyError: Если обнаружен цикл без выхода
         """
         graph = self._build_adjacency(edges)
@@ -306,12 +306,12 @@ class GraphCompiler:
         """
         Проверяет что все ноды достижимы от entry ноды.
 
-        Raises:
+        Исключения:
             InvalidGraphError: Если есть недостижимые ноды
         """
         graph = self._build_adjacency(edges)
 
-        # BFS от entry ноды
+        # BFS от entry-ноды
         reachable: set[str] = set()
         queue = [entry]
 
@@ -347,10 +347,10 @@ class GraphCompiler:
         """
         Вычисляет checksum конфигурации для кеширования.
 
-        Args:
+        Аргументы:
             config: Effective конфигурация
 
-        Returns:
+        Возвращает:
             SHA256 хеш конфигурации
         """
         edge_payloads: list[JsonObject] = [

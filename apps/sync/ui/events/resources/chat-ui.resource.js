@@ -1,5 +1,5 @@
 /**
- * Sync Chat UI — UI-only state без HTTP/WS.
+ * UI чата Sync — UI-only state без HTTP/WS.
  *
  * Хранит локальное состояние интерфейса чата:
  *   - selectionMode / selectedMessageIds — режим выбора нескольких сообщений

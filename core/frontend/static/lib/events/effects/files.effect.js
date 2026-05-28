@@ -1,5 +1,5 @@
 /**
- * Files effect — загрузка/получение файлов через /api/v1/files/.
+ * Эффект files — загрузка/получение файлов через /api/v1/files/.
  */
 
 import { httpRequest } from '../http.js';

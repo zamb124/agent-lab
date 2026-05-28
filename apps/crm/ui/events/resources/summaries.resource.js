@@ -1,7 +1,7 @@
 /**
  * Summaries — daily/period AI-сводки заметок CRM.
  *
- * Backend:
+ * Бэкенд:
  *   POST /crm/api/v1/entities/daily-summary  → { summary, entities, entity_links, generated_at, revalidating }
  *   POST /crm/api/v1/entities/period-summary → то же + period_truncated/period_summary_max_days
  *

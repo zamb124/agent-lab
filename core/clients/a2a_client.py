@@ -83,14 +83,14 @@ class A2AClient:
         """
         Получает agent-card.json от внешнего агента.
 
-        Args:
+        Аргументы:
             base_url: Базовый URL агента
             headers: Дополнительные HTTP-заголовки
 
-        Returns:
+        Возвращает:
             AgentCard как dict
 
-        Raises:
+        Исключения:
             A2AClientError: При ошибке запроса
         """
         url = f"{base_url.rstrip('/')}/.well-known/agent-card.json"
@@ -123,7 +123,7 @@ class A2AClient:
         """
         Отправляет задачу внешнему агенту.
 
-        Args:
+        Аргументы:
             base_url: Базовый URL агента
             content: Текст сообщения
             session_id: ID сессии (опционально)
@@ -132,13 +132,13 @@ class A2AClient:
             headers: Дополнительные HTTP-заголовки (до слияния с контекстом)
             timeout: Переопределение таймаута HTTP для этого запроса (секунды).
 
-        Returns:
+        Возвращает:
             Ответ агента
 
-        Raises:
+        Исключения:
             A2AClientError: При ошибке запроса
         """
-        # A2A endpoint без trailing slash
+        # A2A endpoint без завершающего слэша
         url = base_url.rstrip("/")
         task_id = str(uuid.uuid4())
         session_id = session_id or str(uuid.uuid4())
@@ -204,7 +204,7 @@ class A2AClient:
 
                 logger.debug(f"A2A response from {base_url}: {result}")
 
-                # Нормализуем ответ - парсим artifacts в response
+                # Нормализуем ответ — парсим artifacts в response
                 return self._parse_a2a_response(result)
         except httpx.HTTPError as e:
             error_str = str(e) or type(e).__name__
@@ -216,10 +216,10 @@ class A2AClient:
         """
         Парсит A2A JSONRPC ответ и извлекает response из artifacts.
 
-        Args:
+        Аргументы:
             raw_response: Raw JSONRPC response
 
-        Returns:
+        Возвращает:
             Нормализованный ответ с полями response и status
         """
         task_result_value = raw_response.get("result")
@@ -283,11 +283,11 @@ class A2AClient:
         """
         Проверяет доступность агента.
 
-        Args:
+        Аргументы:
             base_url: Базовый URL агента
             headers: Дополнительные HTTP-заголовки
 
-        Returns:
+        Возвращает:
             True если агент доступен
         """
         try:
@@ -296,6 +296,6 @@ class A2AClient:
         except (A2AClientError, httpx.HTTPError, ValueError):
             return False
         except Exception as e:
-            # Логируем неожиданные ошибки, но не даем им упасть
+            # Логируем неожиданные ошибки, но не даём им упасть
             logger.warning(f"Unexpected error checking health of {base_url}: {e}")
             return False

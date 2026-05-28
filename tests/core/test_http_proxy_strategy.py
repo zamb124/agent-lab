@@ -287,7 +287,7 @@ class TestProxyStrategy:
     @pytest.mark.asyncio
     async def test_get_httpx_client_rejects_proxy_kwarg(self):
         with pytest.raises(ValueError, match="unsupported keyword 'proxy'"):
-            get_httpx_client(proxy=True)
+            get_httpx_client(proxy=True)  # pyright: ignore[reportCallIssue]
 
     @pytest.mark.asyncio
     async def test_smart_direct_200_no_proxy_rotation(self):

@@ -96,7 +96,7 @@ def load_service_settings(
     Вызов set_settings(settings) — ответственность create_service_app после
     setup_logging.
 
-    Returns:
+    Возвращает:
         (settings, project_root)
     """
     project_root = get_project_root()
@@ -140,7 +140,7 @@ def create_service_app(
     """
     Создает FastAPI приложение для сервиса.
 
-    Args:
+    Аргументы:
         service_name: Имя сервиса (например, "flows")
         settings_class: Класс настроек (наследник BaseSettings)
         get_container: Функция получения контейнера
@@ -165,7 +165,7 @@ def create_service_app(
         services_spa_index: Путь к ``index.html`` SPA; если файл существует, регистрируются
             ``GET /{public_segment}/services`` и ``GET /{public_segment}/services/`` с тем же HTML.
 
-    Returns:
+    Возвращает:
         Настроенное FastAPI приложение
     """
 
@@ -196,7 +196,7 @@ def create_service_app(
         logger.info("service.starting", service=service_name)
 
         # Инициализация трейсинга отделена от полного platform lifecycle: lightweight
-        # sandbox services должны писать spans, но не поднимать Redis/billing/push.
+        # Лёгкие sandbox-сервисы должны писать spans, но не поднимать Redis/billing/push.
         if tracing_lifecycle_enabled and settings.tracing.enabled:
             setup_tracing(settings.tracing)
             if settings.tracing.postgres_enabled:
@@ -220,7 +220,7 @@ def create_service_app(
 
             # Инициализация курса USD/RUB от ЦБ РФ: один запрос при старте,
             # затем фоновое обновление каждые 5 минут.
-            # Fallback при недоступности ЦБ — billing.usd_to_rub_rate из конфига.
+            # Резерв при недоступности ЦБ — billing.usd_to_rub_rate из конфига.
             _cbr_fallback = settings.billing.usd_to_rub_rate
             if is_testing():
                 logger.info(
@@ -355,7 +355,7 @@ def create_service_app(
         cors_allow_origin_regex.strip() if cors_allow_origin_regex and cors_allow_origin_regex.strip() else None
     )
 
-    # Proxy headers
+    # Заголовки прокси
     app.add_middleware(ProxyHeadersMiddleware, trusted_hosts=["*"])
 
     # Auth middleware (внутренний слой: bind user/company/session, set_context)
@@ -509,7 +509,7 @@ def create_service_app(
             services_spa_index,
         )
 
-    # Health-endpoints
+    # Health-эндпоинты
     @app.get("/health")
     @app.get(f"/{service_name}/health")
     async def health() -> dict[str, str]:

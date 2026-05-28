@@ -1,1 +1,1 @@
-"""Search API routers."""
+"""Роутеры Search API."""

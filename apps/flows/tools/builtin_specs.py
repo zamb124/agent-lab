@@ -1,4 +1,4 @@
-"""Builtin tool import specs used by runtime registries."""
+"""Спеки импорта builtin tools для runtime registries."""
 
 from __future__ import annotations
 
@@ -65,7 +65,7 @@ BUILTIN_TOOL_SPECS: tuple[tuple[str, str], ...] = (
 
 @lru_cache(maxsize=1)
 def builtin_tool_ids() -> frozenset[str]:
-    """Return canonical ids reserved for trusted platform tools."""
+    """Возвращает канонические id, зарезервированные для доверенных platform tools."""
     ids: list[str] = []
     for module_name, attr_name in BUILTIN_TOOL_SPECS:
         module = importlib.import_module(module_name)

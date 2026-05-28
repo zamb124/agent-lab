@@ -1,6 +1,6 @@
 /**
  * Общие стили модалок
- * Apple Liquid Glass Design (iOS 26 / WWDC 2025)
+ * Дизайн Apple Liquid Glass (iOS 26 / WWDC 2025)
  * Поддержка темной и светлой темы
  */
 import { css } from '../../../assets/js/lit/lit.min.js';

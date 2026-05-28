@@ -1,7 +1,7 @@
 /**
  * Per-company правила произношения TTS.
  *
- * Backend:
+ * Бэкенд:
  *   GET    /frontend/api/companies/{company_id}/pronunciation-rules       → { company_id, items[] }
  *   POST   /frontend/api/companies/{company_id}/pronunciation-rules       → item (201)
  *   PUT    /frontend/api/companies/{company_id}/pronunciation-rules/{id}  → item

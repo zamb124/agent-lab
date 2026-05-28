@@ -1,5 +1,5 @@
 /**
- * Landing Abilities - Возможности платформы
+ * Возможности лендинга — возможности платформы
  */
 import { html, css } from 'lit';
 import { PlatformElement } from '@platform/lib/platform-element/index.js';

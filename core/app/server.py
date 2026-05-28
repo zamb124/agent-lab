@@ -51,7 +51,7 @@ def _resolve_int_env(name: str, default: int) -> int:
 def _resolve_workers() -> int:
     # workers=1 для ASGI: каждый worker — отдельный event loop с отдельным ASGI
     # lifespan; пулы asyncpg/sqlalchemy/httpx/redis локальны к loop и не шарятся
-    # между workers. Scaling — replicas: в k8s.
+    # между workers. Масштабирование — replicas в k8s.
     return _resolve_int_env("GRANIAN_WORKERS", 1)
 
 

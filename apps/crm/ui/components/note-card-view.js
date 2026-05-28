@@ -446,7 +446,7 @@ export class CRMNoteCardView extends PlatformElement {
                 opacity: 0;
                 pointer-events: none;
             }
-            /* round buttons (44x44) */
+            /* Круглые кнопки (44×44) */
             .round-btn {
                 width: 44px;
                 height: 44px;
@@ -476,7 +476,7 @@ export class CRMNoteCardView extends PlatformElement {
                 cursor: not-allowed;
             }
 
-            /* primary pill button (Edit / Save) */
+            /* Основная pill-кнопка (Редактировать / Сохранить) */
             .pill-btn {
                 display: inline-flex;
                 align-items: center;
@@ -748,7 +748,7 @@ export class CRMNoteCardView extends PlatformElement {
                 gap: var(--space-2);
             }
 
-            /* AI summary card */
+            /* Карточка AI-сводки */
             .summary-card {
                 background: var(--crm-note-summary-bg);
             }
@@ -884,7 +884,7 @@ export class CRMNoteCardView extends PlatformElement {
                 filter: brightness(1.12);
             }
 
-            /* Tasks card */
+            /* Карточка задач */
             .tasks-card {
                 background: var(--crm-note-tasks-bg);
             }
@@ -1277,7 +1277,7 @@ export class CRMNoteCardView extends PlatformElement {
                 font-size: 14px;
             }
 
-            /* mention popover (existing semantics) */
+            /* Popover упоминаний (существующая семантика) */
             .mention-popover {
                 position: absolute;
                 z-index: 30;

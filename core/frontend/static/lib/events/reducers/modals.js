@@ -1,5 +1,5 @@
 /**
- * Modals slice.
+ * Слайс modals.
  *
  * Поля state.modals:
  *   stack: Array<{ id, kind, props, openedAt, closing?, closingAt? }>

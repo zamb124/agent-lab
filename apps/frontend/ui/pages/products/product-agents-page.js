@@ -1,5 +1,5 @@
 /**
- * Product Agents Page - Страница продукта AI Studio
+ * Страница продукта Agents — страница продукта AI Studio
  */
 import { html, css } from 'lit';
 import { PlatformPage } from '@platform/lib/base/PlatformPage.js';

@@ -1,5 +1,5 @@
 /**
- * OfficeIntegrationBanner — баннер «integration not configured».
+ * OfficeIntegrationBanner — баннер «интеграция не настроена».
  *
  * Читает `useOp('office/integration_status')` (autoload в connectedCallback).
  * Если бэк ответил `configured: false`, показывает подсказку из i18n

@@ -1,4 +1,4 @@
-"""Canonical JSON Schema helpers for tool/function parameters."""
+"""Канонические JSON Schema helpers для параметров tool/function."""
 
 from __future__ import annotations
 

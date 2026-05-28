@@ -1,5 +1,5 @@
 /**
- * Companies effect — список компаний пользователя, проверка slug, создание.
+ * Эффект companies — список компаний пользователя, проверка slug, создание.
  */
 
 import { httpRequest } from '../http.js';

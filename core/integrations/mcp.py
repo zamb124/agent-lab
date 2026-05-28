@@ -1,4 +1,4 @@
-"""Strict platform contracts for Model Context Protocol tool discovery."""
+"""Строгие платформенные контракты для discovery MCP tools."""
 
 from __future__ import annotations
 
@@ -53,7 +53,7 @@ def validate_mcp_output_schema(output_schema: JsonObject, label: str) -> JsonObj
 
 
 class MCPInitializeResult(StrictBaseModel):
-    """Strict initialize result for MCP protocol 2025-11-25."""
+    """Строгий результат initialize для MCP protocol 2025-11-25."""
 
     model_config: ClassVar[ConfigDict] = ConfigDict(
         extra="forbid",
@@ -93,10 +93,10 @@ class MCPInitializeResult(StrictBaseModel):
 
 
 class MCPToolDefinition(StrictBaseModel):
-    """MCP wire tool definition.
+    """Wire-определение MCP tool.
 
-    Python code uses ``parameters_schema``. JSON-RPC MCP uses ``inputSchema`` on
-    the wire, and that alias is accepted only through ``from_wire``.
+    Python-код использует ``parameters_schema``. JSON-RPC MCP на wire использует
+    ``inputSchema``, и этот alias принимается только через ``from_wire``.
     """
 
     model_config: ClassVar[ConfigDict] = ConfigDict(
@@ -179,7 +179,7 @@ class MCPToolDefinition(StrictBaseModel):
 
 
 class MCPDiscoveredTool(StrictBaseModel):
-    """Internal platform contract for a discovered MCP tool."""
+    """Внутренний платформенный контракт для обнаруженного MCP tool."""
 
     server_id: str = Field(..., min_length=1)
     tool_name: str = Field(..., min_length=1)

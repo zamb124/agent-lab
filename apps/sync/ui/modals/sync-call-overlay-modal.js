@@ -11,15 +11,15 @@
  *
  * Что внутри:
  *   - полноэкранная чёрная stage (position: fixed inset 0).
- *   - Header: status-dot + duration / "Подключение…", REC-badge, participants
- *     count, copy-link, minimize.
- *   - Video-grid: tiles per participant (one/two/many layout), avatar для
- *     placeholder, screen-share как отдельный tile, при демонстрации экрана
+ *   - Header: status-dot + duration / «Подключение…», REC-badge, количество
+ *     участников, copy-link, minimize.
+ *   - Video-grid: плитки по участникам (раскладка one/two/many), avatar для
+ *     placeholder, screen-share как отдельная плитка; при демонстрации экрана
  *     камера может оставаться включённой; плавающая панель с превью камеры и
  *     кнопками; при поддержке Chromium — Document Picture-in-Picture (отдельное
  *     окно поверх других приложений, видно при смене вкладки / шаринге не браузера),
- *     иначе панель внутри оверлея. fullscreen-tile-кнопка,
- *     per-tile admin-menu (transfer admin) для meeting admin.
+ *     иначе панель внутри оверлея. Кнопка fullscreen на плитке,
+ *     per-tile admin-menu (transfer admin) для админа встречи.
  *   - Controls bar (3 слота): [Devices menu] | [mic/cam/screen/recording/
  *     hangup] | [chat-toggle/more-menu (audio quality NS/EC/AGC)].
  *   - Chat panel (правый сайдбар): сообщения текущего канала из
@@ -1101,7 +1101,7 @@ export class SyncCallOverlayModal extends PlatformModal {
         } else {
             this.removeAttribute('data-minimized');
         }
-        // Attach LiveKit tracks к видеоэлементам после Lit-render.
+        // Подключение треков LiveKit к video-элементам после Lit-render.
         if (!this._room || !this._lk) return;
         const tileEls = this.renderRoot.querySelectorAll('.tile');
         this._tiles.forEach((tile, i) => {
@@ -1124,7 +1124,7 @@ export class SyncCallOverlayModal extends PlatformModal {
                 videoEl._lkTrack = tile.track;
             }
         });
-        // Audio tracks remote — attach глобально.
+        // Удалённые аудиотреки — подключение глобально.
         this._room.remoteParticipants.forEach((p) => {
             for (const pub of p.audioTrackPublications.values()) {
                 if (pub.isSubscribed && pub.track && !pub.track._lkAttached) {
@@ -1716,7 +1716,7 @@ export class SyncCallOverlayModal extends PlatformModal {
         const sliceState = this._callUiSel.value;
         const status = sliceState ? sliceState.recordingStatus : 'idle';
         if (status === 'recording') {
-            // stop: admin or starter
+            // stop: админ или инициатор записи
             const recordings = this._messagesStore && undefined;
             void recordings;
             // backend сейчас не публикует started_by в slice, поэтому позволим админу.

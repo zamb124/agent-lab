@@ -1,4 +1,4 @@
-"""Registry API - совместимость с platformweb."""
+"""Registry API — совместимость с platformweb."""
 
 from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import HTMLResponse
@@ -119,7 +119,7 @@ def build_flow_card(
     Собирает AgentCard из FlowConfig.
     Формат совместим с A2A протоколом и platformweb.
 
-    Args:
+    Аргументы:
         config: FlowConfig
         base_url: Базовый URL сервера
         branches: Словарь веток (если не передан, берётся из config или генерируется default)
@@ -228,7 +228,7 @@ async def get_models_values(container: ContainerDep, provider: str | None = None
     """
     Список доступных моделей.
 
-    Args:
+    Аргументы:
         provider: Провайдер (bothub, openrouter, openai, yandex, humanitec_llm).
                   Если не указан - используется текущий из конфига.
     """
@@ -248,7 +248,7 @@ async def sync_models(container: ContainerDep, provider: str | None = None) -> J
     """
     Синхронизация моделей от провайдеров.
 
-    Args:
+    Аргументы:
         provider: Провайдер для синхронизации.
                   Если не указан - синхронизируются ВСЕ настроенные провайдеры.
     """

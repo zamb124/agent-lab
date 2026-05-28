@@ -1,5 +1,5 @@
 /**
- * UI effect — побочные эффекты для sidebar / namespace / documents.
+ * Эффект UI — побочные эффекты для sidebar / namespace / documents.
  *
  * Зона ответственности:
  *   - UI_NAMESPACE_SELECT_REQUESTED: персистим выбор в localStorage и эмитим

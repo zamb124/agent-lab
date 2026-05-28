@@ -109,7 +109,7 @@ def enter_request_scope(
     """
     Перевести логирование в request-скоуп и забиндить обязательные поля.
 
-    Args:
+    Аргументы:
         request_id: непустой идентификатор запроса (E2E между сервисами).
         trace_id: непустой OTel trace_id или платформенная альтернатива.
         service_name: имя сервиса, обслуживающего этот scope (для проверки).
@@ -118,7 +118,7 @@ def enter_request_scope(
         requires_user: если True, запись без user_id/company_id считается нарушением.
         **extra: дополнительные поля к bind_log_context.
 
-    Raises:
+    Исключения:
         ValueError: при пустом request_id/trace_id/service_name или при
             requires_user=True и отсутствии user_id/company_id.
     """

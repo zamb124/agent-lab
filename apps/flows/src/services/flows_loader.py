@@ -45,7 +45,7 @@ from core.types import (
 logger = get_logger(__name__)
 
 def _function_tool_template_code(tool_instance: FunctionTool) -> str:
-    """Platform builtin marker used by ToolRegistry to materialize FunctionTool."""
+    """Маркер platform builtin для материализации FunctionTool в ToolRegistry."""
     tool_name = tool_instance.name
     return (
         f"# platform:tool-capability:{tool_name}\n"
@@ -95,7 +95,7 @@ class FlowsLoader:
         """
         Загружает flows из ``registry.yaml`` (секция ``flows``) и связанные nodes в БД.
 
-        Returns:
+        Возвращает:
             Кортеж (список загруженных flow_id, список загруженных node_id)
         """
         self._target_company_id = "system"
@@ -577,7 +577,7 @@ class FlowsLoader:
             "code": cached_node.code,
         }
 
-        # Tools из cached_node (exclude_none чтобы не было code=None)
+        # Tools из cached_node (exclude_none, чтобы не было code=None)
         if cached_node.tools:
             merged["tools"] = [
                 require_json_object(
@@ -745,7 +745,7 @@ class FlowsLoader:
         """
         Рекурсивно резолвит список tools.
 
-        Args:
+        Аргументы:
             tools: Список tools (строки или dict)
             context: Контекст для логирования
             depth: Глубина рекурсии (защита от бесконечной рекурсии)
@@ -794,7 +794,7 @@ class FlowsLoader:
             if exec_kind == "llm_node" or tool_payload.get("prompt"):
                 return self._inline_llm_node_tool(tool_payload, context, depth)
 
-            # Tool с tool_id без code - ищем в caches
+            # Tool с tool_id без code — ищем в caches
             # Полностью определённые inline tools (не требуют поиска в кэшах)
             inline_node_types = {
                 "channel",
@@ -933,11 +933,11 @@ class FlowsLoader:
         """
         Валидирует что в llm_node только 1 reasoning и только 1 exit tool.
 
-        Args:
+        Аргументы:
             node_id: ID ноды для сообщения об ошибке
             tools: Список инлайненных tools
 
-        Raises:
+        Исключения:
             ValueError: Если найдено более 1 reasoning или exit tool
         """
         tool_objects = [require_json_object(t, f"nodes.{node_id}.tools[]") for t in tools]
@@ -984,11 +984,11 @@ class FlowsLoader:
             - Загружает ТОЛЬКО PUBLIC агенты со ВСЕМИ зависимостями
             - Загружает ТОЛЬКО PUBLIC тулы
 
-        Args:
+        Аргументы:
             company_id: "system" или ID компании
             filter_public: Фильтровать ли по public флагу
 
-        Returns:
+        Возвращает:
             {"flows": count, "tools": count, "nodes": count}
         """
         self._target_company_id = company_id
@@ -1089,7 +1089,7 @@ async def load_flows_to_db(
     Для каждого id из registry читается ``{bundles_dir}/{bundle_id}/flow.json`` (и nodes),
     tools подтягиваются из ``tool_repository`` и инлайнятся в конфиг.
 
-    Args:
+    Аргументы:
         flow_repository: сохранение FlowConfig
         node_repository: сохранение NodeConfig из nodes.json
         tool_repository: чтение tools для инлайнинга
@@ -1097,7 +1097,7 @@ async def load_flows_to_db(
             По умолчанию: ``apps/flows/bundles``, реестр: ``apps/flows/registry.yaml``.
             Если ``bundles_dir`` задан явно: реестр ``{bundles_dir}/registry.yaml``.
 
-    Returns:
+    Возвращает:
         (список загруженных flow_id, список загруженных node_id)
     """
     if bundles_dir is None:
@@ -1125,11 +1125,11 @@ async def load_tools_to_db(
     Поддерживает:
     - FunctionTool (созданные через @tool декоратор) - сохраняет schema/metadata без source-кода
 
-    Args:
+    Аргументы:
         tool_repository: ToolRepository для сохранения
         modules: Список модулей для загрузки
 
-    Returns:
+    Возвращает:
         Список загруженных tool_id
     """
     tool_attrs: list[tuple[str, str, FunctionTool]] = []
@@ -1185,10 +1185,10 @@ async def get_all_flows(flow_repository: FlowRepository) -> dict[str, FlowConfig
     """
     Все flow из БД.
 
-    Args:
+    Аргументы:
         flow_repository: FlowRepository для чтения
 
-    Returns:
+    Возвращает:
         Словарь {flow_id: FlowConfig}
     """
     rows = await flow_repository.list(limit=10000)

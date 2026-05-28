@@ -269,7 +269,7 @@ export class FlowCard extends PlatformElement {
                 text-align: center;
             }
 
-            /* Collapsed mode */
+            /* Свёрнутый режим */
             :host([collapsed]) .flow-info,
             :host([collapsed]) .flow-actions,
             :host([collapsed]) .expand-icon,

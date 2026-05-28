@@ -1,5 +1,5 @@
 /**
- * Evaluation Lab — фабрики UI-домена.
+ * Лаборатория Evaluation — фабрики UI-домена.
  *
  * Компоненты Evaluation Lab не ходят в HTTP напрямую. Все CRUD/command/read
  * операции идут через эти createAsyncOp-фабрики, а выбранные сущности держатся

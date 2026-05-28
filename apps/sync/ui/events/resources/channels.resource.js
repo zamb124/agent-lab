@@ -1,5 +1,5 @@
 /**
- * Sync Channels — каналы (direct/group/topic).
+ * Каналы Sync — каналы (direct/group/topic).
  *
  * Базовая фабрика — CRUD через WS. Дополнительные операции (mark_read,
  * typing, addMember, notifications, members list) — отдельные `createAsyncOp`

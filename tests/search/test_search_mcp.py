@@ -34,7 +34,7 @@ async def test_meta_search_reports_missing_serper_key(provider_state_store) -> N
     assert response.providers["serper"].error == "serper api key is not configured"
 
 
-async def _post_mcp(client: AsyncClient, payload: dict, *, protocol_header: bool = True):
+async def _post_mcp(client: AsyncClient, payload: dict[str, object], *, protocol_header: bool = True):
     headers = {}
     if protocol_header:
         headers["MCP-Protocol-Version"] = MCP_PROTOCOL_VERSION

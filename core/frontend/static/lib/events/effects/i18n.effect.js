@@ -1,5 +1,5 @@
 /**
- * I18n effect.
+ * Эффект i18n.
  *
  * Загружает бандл переводов с /api/i18n/<locale>, проставляет cookie и
  * document.documentElement.lang. Эмитит I18N_LOCALE_LOADED и _CHANGED.

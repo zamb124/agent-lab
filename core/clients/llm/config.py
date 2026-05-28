@@ -1,8 +1,8 @@
-"""Typed per-call LLM configuration.
+"""Типизированная per-call конфигурация LLM.
 
-The same model is used for the primary LLM attempt and every fallback attempt.
-It is intentionally independent from service-specific models so apps can import
-it from core without creating a core -> apps dependency.
+Та же модель используется для основной LLM-попытки и каждой fallback-попытки.
+Намеренно независима от сервисных моделей, чтобы apps могли импортировать её
+из core без зависимости core -> apps.
 """
 
 from __future__ import annotations
@@ -20,10 +20,10 @@ ReasoningEffort = Literal["none", "minimal", "low", "medium", "high", "xhigh"]
 
 
 class LLMCallConfig(StrictBaseModel):
-    """One concrete LLM attempt config.
+    """Конфиг одной конкретной LLM-попытки.
 
-    `provider` and `model` may be partial at authoring time for primary node
-    overrides; by the time the HTTP client attempts a call, both are resolved.
+    ``provider`` и ``model`` могут быть частичными на этапе authoring для primary
+    override ноды; к моменту HTTP-вызова клиентом оба разрешены.
     """
 
     provider: str | None = Field(default=None)

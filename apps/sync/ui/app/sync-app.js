@@ -65,7 +65,7 @@ const SYNC_ROUTES = [
 ];
 
 /**
- * Mobile bottom-nav (mobile shell 2026): Channels (home), Calls scheduled, Profile.
+ * Нижняя навигация (mobile shell 2026): Channels (home), Calls scheduled, Profile.
  * Видна только на ≤767px. Скрыта на полноэкранных экранах: `call_join` (гость),
  * `channel` (открытый чат — назад через шапку).
  */
@@ -112,7 +112,7 @@ export class SyncApp extends PlatformApp {
     }
 
     _onNamespaceChanged() {
-        // No-op: list уже загружен; фильтрация на UI. Если backend в будущем
+        // Пустая операция: list уже загружен; фильтрация на UI. Если backend в будущем
         // начнёт фильтровать по namespace, здесь можно перезапросить
         // `channelsResource.events.LIST_REQUESTED`.
     }
@@ -176,7 +176,7 @@ export class SyncApp extends PlatformApp {
 
     _onWsConnected() {
         // Перезапрос ws-фабрик Sync на каждом connect (включая первый).
-        // Initial autoload-LIST_REQUESTED фабрик улетают раньше готовности
+        // Начальный autoload LIST_REQUESTED фабрик улетают раньше готовности
         // WS и падают с `ws_disconnected`; redis pub/sub не хранит истории
         // push-событий, поэтому при reconnect списки тоже надо обновить.
         // namespaces — HTTP-ресурс, его LIST_REQUESTED шлёт `httpRequest`

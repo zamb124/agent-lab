@@ -74,11 +74,11 @@ async def check_slug(
     """
     Проверка доступности slug для субдомена
 
-    Args:
+    Аргументы:
         request: Запрос с slug
         container: DI контейнер
 
-    Returns:
+    Возвращает:
         Информация о доступности slug
     """
     slug = request.slug.lower().strip()
@@ -100,12 +100,12 @@ async def create_company(
     """
     Создание новой компании
 
-    Args:
+    Аргументы:
         request_data: Данные компании
         request: FastAPI request
         container: DI контейнер
 
-    Returns:
+    Возвращает:
         Информация о созданной компании и URL для редиректа
     """
     settings = get_settings()

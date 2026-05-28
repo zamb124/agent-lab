@@ -1,4 +1,4 @@
-"""Runtime facade for durable workflow state projection."""
+"""Runtime-фасад для проекции состояния durable workflow."""
 
 from __future__ import annotations
 
@@ -52,7 +52,7 @@ def create_initial_state(
     content: str | None = None,
     branch_id: str = "default",
 ) -> ExecutionState:
-    """Create a new ExecutionState projection for a workflow session."""
+    """Создаёт новую проекцию ExecutionState для сессии workflow."""
     return ExecutionState(
         task_id=task_id,
         context_id=context_id,
@@ -81,7 +81,7 @@ class _CachedWorkflowHead:
 
 
 class DurableWorkflowRuntime:
-    """State projection runtime backed by append-only workflow events."""
+    """Runtime проекции состояния на append-only workflow events."""
 
     def __init__(
         self,
@@ -225,7 +225,7 @@ class DurableWorkflowRuntime:
     async def get_active_execution_position(
         self, session_id: str
     ) -> WorkflowExecutionPosition | None:
-        """Return active branch/head metadata for durable command keys."""
+        """Возвращает метаданные активной ветки/head для durable command keys."""
         company_id = self._company_id()
         cached = await self._get_cached_head(company_id=company_id, session_id=session_id)
         if cached is not None:
@@ -254,10 +254,10 @@ class DurableWorkflowRuntime:
         payload: WorkflowEventPayload,
     ) -> WorkflowAppendResult:
         """
-        Append a workflow lifecycle fact without changing the current projection.
+        Добавляет факт lifecycle workflow без изменения текущей проекции.
 
-        Use this for command/history events such as child-workflow lifecycle. The
-        event advances the durable sequence, but its state_delta is empty.
+        Используется для command/history-событий, например lifecycle дочернего workflow.
+        Событие продвигает durable sequence, но state_delta остаётся пустым.
         """
         company_id = self._company_id()
         for attempt_index in range(5):

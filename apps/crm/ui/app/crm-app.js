@@ -186,7 +186,7 @@ const CRM_ROUTES = [
 ];
 
 /**
- * Mobile bottom-nav (mobile shell 2026): 4 первичных вкладки сервиса + профиль (service-switcher).
+ * Нижняя навигация (mobile shell 2026): 4 первичных вкладки сервиса + профиль (service-switcher).
  * Видна только на ≤767px. На fullscreen-маршрутах (нет таких в CRM сегодня) скрывается через bottomNavHideOnRoutes.
  */
 const CRM_BOTTOM_NAV_ITEMS = [

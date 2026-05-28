@@ -114,7 +114,7 @@ class AccessRequestService:
 
         # Копируем entity
         if access_request.include_dependencies:
-            # Deep copy с relationships
+            # Полное копирование с relationships
             copy = await self._copy_with_dependencies(
                 original=original,
                 target_company_id=access_request.requester_company_id,
@@ -122,7 +122,7 @@ class AccessRequestService:
                 max_depth=access_request.max_depth,
             )
         else:
-            # Shallow copy с metadata
+            # Поверхностное копирование с metadata
             copy = await self._copy_shallow(
                 original=original,
                 target_company_id=access_request.requester_company_id,
@@ -166,7 +166,7 @@ class AccessRequestService:
         target_company_id: str,
         target_user_id: str,
     ) -> CRMEntity:
-        """Shallow copy - entity + metadata relationships"""
+        """Поверхностное копирование — entity и metadata relationships"""
 
         # Получаем relationships оригинала
         relationships = await self._relationship_repo.get_by_entity(original.entity_id)
@@ -226,7 +226,7 @@ class AccessRequestService:
         _current_depth: int = 0,
         _copied_map: dict[str, str] | None = None,
     ) -> CRMEntity:
-        """Deep copy - рекурсивное копирование с relationships"""
+        """Полное копирование — рекурсивное копирование с relationships"""
 
         if _copied_map is None:
             _copied_map = {}  # original_id -> copy_id

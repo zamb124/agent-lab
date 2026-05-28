@@ -1,7 +1,7 @@
-"""Compatibility imports for LLM client construction.
+"""Совместимые импорты для создания LLM-клиента.
 
-New code should prefer ``core.clients.llm`` for public imports.  This module is
-kept because project rules and older callers reference ``factory.get_llm``.
+Новый код должен предпочитать ``core.clients.llm`` для публичных импортов.
+Модуль сохранён, потому что правила проекта и старые вызовы ссылаются на ``factory.get_llm``.
 """
 
 from __future__ import annotations

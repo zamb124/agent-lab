@@ -1,5 +1,5 @@
 /**
- * Variables — глобальные переменные company-уровня (KV).
+ * Переменные — глобальные переменные company-уровня (KV).
  * REST: `apps/flows/src/api/v1/variables.py`.
  *
  * `baseUrl` с завершающим `/` совпадает с каноничным POST/GET коллекции в тестах

@@ -10,8 +10,8 @@
  *   - `core/frontend/static/lib/flows-chat/flows-chat-message.js` — assistant/user.
  *
  * Contract:
- *   - `text` (string, required);
- *   - `voice-base-url` (string, optional) — origin сервиса voice без финального "/" (напр. `https://host/voice`); если задан, POST `/api/v1/synthesize` + Blob в `<audio>`;
+ *   - `text` (string, обязательный);
+ *   - `voice-base-url` (string, необязательный) — origin сервиса voice без финального "/" (напр. `https://host/voice`); если задан, POST `/api/v1/synthesize` + Blob в `<audio>`;
  *   - `get-headers` (function, optional);
  *   - `credentials` ('omit'|'include', default 'omit');
  *   - `show-edit` (boolean) — показать кнопку редактирования текста композера;

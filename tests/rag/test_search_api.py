@@ -407,7 +407,7 @@ async def test_search_filter_operators_via_api_matrix(
         )
         assert response.status_code == 200
 
-    async def _search(filters: dict) -> set[str]:
+    async def _search(filters: dict[str, object]) -> set[str]:
         response = await rag_client.post(
             f"/rag/api/v1/namespaces/{namespace_id}/search",
             json={"query": "api-r", "limit": 20, "filters": filters},

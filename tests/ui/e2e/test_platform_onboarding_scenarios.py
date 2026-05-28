@@ -1,4 +1,4 @@
-"""Generated documentation scenarios for basic platform onboarding."""
+"""Сгенерированные сценарии документации для базового onboarding платформы."""
 
 from __future__ import annotations
 

@@ -1,4 +1,4 @@
-"""Baseline sync DB
+"""Базовая миграция sync DB
 
 Revision ID: sync_0001
 Revises:

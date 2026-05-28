@@ -36,7 +36,7 @@ class InputMapper:
         """
         Применяет маппинг к payload.
 
-        Returns:
+        Возвращает:
             { "triggers": { trigger_id: { "payload", "context" } }, "content": str }
         """
         if not trigger_id or not str(trigger_id).strip():

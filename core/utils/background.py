@@ -58,7 +58,7 @@ def run_with_log_context(
     """
     Запустить фоновую задачу, наследовав текущий лог-контекст.
 
-    Args:
+    Аргументы:
         coro: ожидаемая корутина (НЕ функция; уже вызванная — `do()`).
         name: стабильное имя задачи (видно в логах как background_task_name).
         background_kind: короткий префикс для генерации request_id, если
@@ -67,11 +67,11 @@ def run_with_log_context(
             ``cron``. Обязательно для системных запусков.
         extra: дополнительные поля для bind на время задачи.
 
-    Returns:
+    Возвращает:
         asyncio.Task. Результат корутины не возвращается; вызывающий код
         обязан забрать его сам, если нужен (через await task).
 
-    Raises:
+    Исключения:
         ValueError: если name пустой или нет background_kind вне request scope.
     """
     if not name.strip():

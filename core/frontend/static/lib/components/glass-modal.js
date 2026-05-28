@@ -1,6 +1,6 @@
 /**
  * GlassModal - Базовый компонент модального окна
- * Apple Liquid Glass Design
+ * Дизайн Apple Liquid Glass
  * Поддержка темной и светлой темы
  *
  * При открытии хост переносится в document.body: иначе предки с backdrop-filter

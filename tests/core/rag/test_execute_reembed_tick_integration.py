@@ -273,7 +273,8 @@ async def test_execute_reembed_tick_full_run_embeds_chunk(
     assert result["reembedded"] >= 1
     assert isinstance(result.get("by_company_written"), dict)
     assert result["by_company_written"].get(cid, 0) >= 1
-    target = result["target_embedding_model"]
+    target = result.get("target_embedding_model")
+    assert target is not None
     model, has_emb, _ = await _chunk_state(sf, chunk_id)
     assert model == target
     assert has_emb is True

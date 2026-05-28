@@ -116,7 +116,7 @@ class SessionLockMiddleware(TaskiqMiddleware):
         """
         Ожидание и захват lock с экспоненциальной задержкой.
 
-        Returns:
+        Возвращает:
             True если lock получен, False если таймаут
         """
         delay_ms = LOCK_WAIT_INITIAL_MS

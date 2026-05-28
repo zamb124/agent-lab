@@ -58,7 +58,7 @@ def encode_cursor(created_at: datetime, entity_id: str) -> str:
 def decode_cursor(cursor: str) -> tuple[datetime, str]:
     """Декодирует cursor обратно в (created_at, entity_id).
 
-    Raises:
+    Исключения:
         ValueError: если cursor повреждён или имеет неверный формат.
     """
     try:

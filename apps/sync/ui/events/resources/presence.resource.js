@@ -1,5 +1,5 @@
 /**
- * Sync Presence — typing-индикатор и user.presence (online/last_seen).
+ * Presence Sync — typing-индикатор и user.presence (online/last_seen).
  *
  * Чистый `createSlice` без HTTP/WS: состояние derived из push-событий
  * `sync/channel/typing` и `sync/presence/changed` (через `extraReducer`).

@@ -403,13 +403,13 @@ class TranslationManager:
                 module_name = "misc"
                 relative_key = key
             elif parts[0] == "models":
-                # models.agent.fields.name -> models/agent.json, key: fields.name
+                # models.agent.fields.name -> models/agent.json, ключ: fields.name
                 if len(parts) < 2:
                     continue
                 module_name = f"models/{parts[1]}"
                 relative_key = ".".join(parts[2:]) if len(parts) > 2 else parts[1]
             else:
-                # common.save -> common.json, key: save
+                # common.save -> common.json, ключ: save
                 module_name = parts[0]
                 relative_key = ".".join(parts[1:])
 
@@ -523,12 +523,12 @@ class TranslationManager:
         """
         Основная функция перевода
 
-        Args:
+        Аргументы:
             key: Ключ перевода
             language: Язык (если не указан, берется из контекста)
             **kwargs: Параметры для подстановки в строку
 
-        Returns:
+        Возвращает:
             Переведенная строка
         """
         # Определяем язык

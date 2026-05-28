@@ -60,7 +60,7 @@ class AuthService:
         storage: Storage,
     ) -> None:
         """
-        Args:
+        Аргументы:
             user_repository: Репозиторий для работы с пользователями
             company_repository: Репозиторий для работы с компаниями
             auth_session_repository: Репозиторий для работы с сессиями
@@ -127,12 +127,12 @@ class AuthService:
         """
         Начинает процесс авторизации.
 
-        Args:
+        Аргументы:
             provider_name: Имя провайдера
             redirect_uri: URI для возврата после авторизации (на базовом домене)
             original_host: Оригинальный хост пользователя (для редиректа после авторизации)
 
-        Returns:
+        Возвращает:
             URL для перенаправления пользователя
         """
         provider = self.get_provider(provider_name)
@@ -154,10 +154,10 @@ class AuthService:
         """
         Завершает процесс авторизации.
 
-        Args:
+        Аргументы:
             auth_request: Данные авторизации от провайдера
 
-        Returns:
+        Возвращает:
             Результат авторизации
         """
         code_key = f"oauth_code:{auth_request.provider.value}:{auth_request.code}"
@@ -449,7 +449,7 @@ class AuthService:
         """
         Связывает нового провайдера с существующим пользователем.
 
-        Returns:
+        Возвращает:
             True если провайдер успешно связан
         """
         user = await self.get_user(user_id)

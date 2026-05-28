@@ -1,4 +1,4 @@
-"""Baseline rag DB
+"""Базовая миграция rag DB
 
 Revision ID: rag_0001
 Revises:

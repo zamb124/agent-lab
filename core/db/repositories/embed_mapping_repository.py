@@ -45,10 +45,10 @@ class EmbedMappingRepository(BaseRepository[EmbedMapping]):
         """
         Получение company_id по embed_id.
 
-        Args:
+        Аргументы:
             embed_id: ID виджета
 
-        Returns:
+        Возвращает:
             company_id или None если маппинг не найден
         """
         mapping = await self.get(embed_id)
@@ -63,10 +63,10 @@ class EmbedMappingRepository(BaseRepository[EmbedMapping]):
         """
         Удаление маппинга по embed_id.
 
-        Args:
+        Аргументы:
             embed_id: ID виджета
 
-        Returns:
+        Возвращает:
             True если удален, False если не найден
         """
         mapping = await self.get(embed_id)

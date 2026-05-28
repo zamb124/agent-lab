@@ -1,4 +1,4 @@
-"""Baseline shared DB
+"""Базовая миграция shared DB
 
 Revision ID: shared_0001
 Revises:

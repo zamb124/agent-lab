@@ -2,7 +2,7 @@ import { html, css, nothing } from 'lit';
 import { PlatformElement } from '../../platform-element/index.js';
 
 /**
- * Enum — `platform-field` type `enum`.
+ * Перечисление — type `enum` у `platform-field`.
  *
  * `config.values`: строки `['active', ...]` или `{ value, label }[]`.
  * Пустой string как value только через `{ value: '', label: '...' }`.

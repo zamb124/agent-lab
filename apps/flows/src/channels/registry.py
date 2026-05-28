@@ -37,7 +37,7 @@ class ChannelRegistry:
         """
         Регистрирует handler для канала.
 
-        Args:
+        Аргументы:
             channel_type: Тип канала
             handler_class: Класс handler'а
         """
@@ -48,13 +48,13 @@ class ChannelRegistry:
         """
         Возвращает handler для канала.
 
-        Args:
+        Аргументы:
             channel_type: Тип канала (enum или строка, например \"telegram\")
 
-        Returns:
+        Возвращает:
             Экземпляр handler'а (singleton per channel type)
 
-        Raises:
+        Исключения:
             ValueError: Если канал не зарегистрирован
         """
         if not isinstance(channel_type, ChannelType):

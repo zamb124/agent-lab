@@ -1,5 +1,5 @@
 /**
- * Base styles для PlatformElement
+ * Базовые стили для PlatformElement
  */
 import { css } from '../../assets/js/lit/lit.min.js';
 

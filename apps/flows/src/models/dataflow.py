@@ -1,4 +1,4 @@
-"""Pydantic contracts for static flow data-flow inspection."""
+"""Pydantic-контракты для статической инспекции data-flow flow."""
 
 from __future__ import annotations
 

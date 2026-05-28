@@ -1,4 +1,4 @@
-"""Runtime resolution for LLM context resources."""
+"""Разрешение LLM context resources в runtime."""
 
 from __future__ import annotations
 
@@ -34,10 +34,10 @@ async def infer_unique_llm_context_resource_key_from_merged_maps(
     repository: ResourceRepository | None,
 ) -> str | None:
     """
-    Infer a context resource only when the merged flow/skill/node map has exactly one.
+    Выводит context resource только если в объединённой карте flow/skill/node ровно один.
 
-    This mirrors LLM resource inference: zero or multiple context resources means "no implicit
-    choice"; authors can disambiguate with ``llm_context_resource_key``.
+    Аналогично выводу LLM resource: ноль или несколько context resources — «нет неявного
+    выбора»; авторы уточняют через ``llm_context_resource_key``.
     """
     merged = merge_flow_skill_node_resource_maps(
         flow_resources, skill_resources, node_resources_raw
@@ -70,7 +70,7 @@ async def resolve_llm_context_resource_patch(
     node_resources_raw: Mapping[str, ResourceReferenceInput],
     repository: ResourceRepository | None,
 ) -> LLMContextPatch | None:
-    """Resolve the resource layer patch for the platform context hierarchy."""
+    """Разрешает patch слоя resource для иерархии platform context."""
     key = str(llm_context_resource_key or "").strip()
     if not key:
         inferred = await infer_unique_llm_context_resource_key_from_merged_maps(
@@ -133,7 +133,7 @@ async def resolve_llm_context_policy_for_runtime(
     company: LLMContextPatch | JsonObject | None = None,
     config: LLMContextConfig | None = None,
 ) -> LLMContextProfile:
-    """Resolve platform -> company -> resource -> node -> inline call for flow runtime."""
+    """Разрешает platform -> company -> resource -> node -> inline call для flow runtime."""
     resource = await resolve_llm_context_resource_patch(
         llm_context_resource_key=llm_context_resource_key,
         flow_resources=flow_resources,

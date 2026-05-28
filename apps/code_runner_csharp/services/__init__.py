@@ -1,1 +1,1 @@
-"""Services for code-runner-csharp."""
+"""Сервисы code-runner-csharp."""

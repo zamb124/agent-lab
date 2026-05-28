@@ -1,5 +1,5 @@
 /**
- * Slice темы.
+ * Слайс темы.
  *
  * Поля state.theme:
  *   mode:   'dark' | 'light'

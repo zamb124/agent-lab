@@ -215,7 +215,7 @@ class TestWebPushService:
         # Мокаем 410 Gone
         mock_response = MagicMock()
         mock_response.status_code = 410
-        mock_webpush.side_effect = WebPushException("Gone", response=mock_response)
+        mock_webpush.side_effect = WebPushException("Gone", response=mock_response)  # pyright: ignore[reportCallIssue]
 
         service = WebPushService(
             vapid_private_key=vapid_keys["private_key"],

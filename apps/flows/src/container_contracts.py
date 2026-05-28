@@ -1,4 +1,4 @@
-"""Structural contracts for flows runtime dependencies."""
+"""Структурные контракты runtime-зависимостей flows."""
 
 from __future__ import annotations
 

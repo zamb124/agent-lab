@@ -1,4 +1,4 @@
-"""Runtime RAG sources for the generic LLM context layer."""
+"""Runtime RAG-источники для generic LLM context layer."""
 
 from __future__ import annotations
 
@@ -33,7 +33,7 @@ async def resolve_rag_context_source_registry_for_runtime(
     rag_repository: RAGRepository,
     state: ExecutionState | None = None,
 ) -> LLMContextSourceRegistry | None:
-    """Build context sources from every merged ``type: rag`` resource available to the node."""
+    """Собирает context sources из каждого merged ``type: rag`` resource, доступного ноде."""
     binds = await resolve_rag_resource_binds_for_runtime(
         flow_resources=flow_resources,
         skill_resources=skill_resources,
@@ -63,7 +63,7 @@ async def resolve_rag_resource_binds_for_runtime(
     repository: ResourceRepository | None,
     state: ExecutionState | None = None,
 ) -> dict[str, RagResourceBindParams]:
-    """Resolve merged flow/skill/node RAG resource references to typed bind params."""
+    """Разрешает merged flow/skill/node RAG resource references в typed bind params."""
     merged = merge_flow_skill_node_resource_maps(
         flow_resources, skill_resources, node_resources_raw
     )

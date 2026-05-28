@@ -12,7 +12,7 @@
  *   - useOp('crm/note_analyze_start')   — старт AI-анализа заметки
  *   - useOp('crm/entity_cards_bulk')    — batch-загрузка карточек связанных entity
  *
- * Realtime: подписка на WS-события `crm/note/updated`, `crm/daily_summary/updated`,
+ * В реальном времени: подписка на WS-события `crm/note/updated`, `crm/daily_summary/updated`,
  * `crm/period_summary/updated`, `crm/task/updated` (прогресс `note_analyze` в slice
  * `crm/tasks` без поллинга). Backend публикует через `core/ui_events/dispatcher.py`.
  * Изменение namespace приходит как `ui/namespace/changed` (CoreEvents.UI_NAMESPACE_CHANGED) —

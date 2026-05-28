@@ -1,4 +1,4 @@
-"""Tools that attach existing flow files to the Documents editor."""
+"""Tools для привязки существующих файлов flow к редактору Documents."""
 
 from __future__ import annotations
 

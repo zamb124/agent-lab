@@ -1,7 +1,7 @@
 """
-Deep merge для переопределения flow-конфигов.
+Глубокое слияние для переопределения flow-конфигов.
 
-Используется для merge базового конфига из БД с inline переопределениями из flow.json.
+Используется для слияния базового конфига из БД с inline-переопределениями из flow.json.
 """
 
 import copy
@@ -25,12 +25,12 @@ def deep_merge(
     - Scalar заменяется
     - None в override НЕ перезаписывает (пропускается)
 
-    Args:
+    Аргументы:
         base: Базовый конфиг (из БД)
         override: Переопределения (inline из flow.json или API)
         exclude: Ключи которые не переопределяются (node_id, tool_id, flow_id)
 
-    Returns:
+    Возвращает:
         Новый dict с объединенным конфигом
     """
     excluded_keys = _DEFAULT_EXCLUDED_KEYS if exclude is None else exclude

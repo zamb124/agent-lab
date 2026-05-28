@@ -7,7 +7,7 @@
  *     this.setLocale(...), this.openModal(...)
  *   - смена компании: dispatch AUTH_COMPANY_SWITCH_REQUESTED → AUTH_COMPANY_SWITCHED
  *     (auth-company-navigation.effect: редирект на subdomain).
- *     Cross-tab: localStorage 'platform:company-switch' + storage listener.
+ *     Между вкладками: localStorage 'platform:company-switch' + storage listener.
  *   - меню: пункт Apps (модалка `platform.services`), затем Профиль
  *     (открывает `platform.user_info` модалку с формой профиля),
  *     Компания (если есть хотя бы одна в списке; «Создать компанию» — только
@@ -16,7 +16,7 @@
  *   - в свернутом sidebar: `platform-service-sidebar[collapsed]` или
  *     `platform-sidebar[collapsed]` (вторая недоступна из slot=footer без вложения);
  *     меню в `position: fixed` через `--user-menu-fixed-*` (`_syncCollapsedMenuPosition`).
- *   - z-index панели при открытии: `nextModalLayerZIndex()` (modal-z-stack.js), inline на `.user-menu`.
+ *   - z-index панели при открытии: `nextModalLayerZIndex()` (modal-z-stack.js), inline-стилем на `.user-menu`.
  *
  * i18n namespace: 'platform' (см. core/i18n/translations/{ru,en}/platform.json).
  */

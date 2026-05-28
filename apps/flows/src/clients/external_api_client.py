@@ -1,4 +1,4 @@
-"""ExternalAPIClient - HTTP клиент для вызова внешних API."""
+"""ExternalAPIClient — HTTP клиент для вызова внешних API."""
 
 from urllib.parse import urlparse
 
@@ -46,13 +46,13 @@ class ExternalAPIClient:
 
         Логика прокси: сначала без прокси, при 401/403 пробуем с прокси.
 
-        Args:
+        Аргументы:
             config: Конфигурация API
             args: Результат input_mapping (подстановка {key} в url, merge в JSON body)
             variables: state.variables
             state: ExecutionState для резолва body_template (@state: / @var: в JSON)
 
-        Returns:
+        Возвращает:
             Результат в формате:
             {
                 "status": "completed" | "waiting_input" | "error",

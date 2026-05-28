@@ -1,5 +1,5 @@
 /**
- * Sync Call Prefs persist effect — bridge между slice `sync/call_prefs`
+ * Эффект persist настроек звонка Sync — bridge между slice `sync/call_prefs`
  * и платформенным storage-effect.
  *
  * - На AUTH_USER_LOADED / AUTH_LOGIN_SUCCEEDED единожды диспатчит

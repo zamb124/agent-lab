@@ -21,10 +21,10 @@ def _transliterate(text: str) -> str:
     """
     Транслитерация кириллицы в латиницу
 
-    Args:
+    Аргументы:
         text: Текст с кириллицей
 
-    Returns:
+    Возвращает:
         Транслитерированный текст
     """
     result: list[str] = []
@@ -43,13 +43,13 @@ def slugify(text: str) -> str:
     - Удаление множественных дефисов
     - Валидация длины (минимум 3, максимум 63 символа)
 
-    Args:
+    Аргументы:
         text: Исходный текст (например, название компании)
 
-    Returns:
+    Возвращает:
         Валидный slug для использования в субдомене
 
-    Examples:
+    Примеры:
         >>> slugify("Моя Компания")
         'moya-kompaniya'
         >>> slugify("ABC Inc.")
@@ -80,27 +80,27 @@ def build_subdomain_url(subdomain: str, path: str = "/", env: str = "production"
     """
     Формирует полный URL с субдоменом
 
-    Args:
+    Аргументы:
         subdomain: Субдомен компании
         path: Путь (например /dashboard)
         env: Окружение (production для https, иначе http)
         port: Порт для non-production (по умолчанию 8002)
 
-    Returns:
+    Возвращает:
         Полный URL с субдоменом
 
-    Examples:
+    Примеры:
         >>> build_subdomain_url("mycompany", "/dashboard", "development")
         'http://mycompany.lvh.me:8002/dashboard'
         >>> build_subdomain_url("mycompany", "/dashboard", "production")
         'https://mycompany.humanitec.ru/dashboard'
 
-    Note:
+    Примечание:
         Для dev используем lvh.me вместо localhost, так как браузеры не поддерживают
         куки на .localhost с субдоменами. lvh.me автоматически резолвится в 127.0.0.1.
     """
     if env == "production":
-        # Production: https + humanitec.ru
+        # Прод: https + humanitec.ru
         return f"https://{subdomain}.humanitec.ru{path}"
     else:
         # Development/local: http + lvh.me с портом (lvh.me резолвится в 127.0.0.1)
@@ -111,13 +111,13 @@ def validate_slug(slug: str) -> tuple[bool, str | None]:
     """
     Валидирует slug для использования в субдомене
 
-    Args:
+    Аргументы:
         slug: Проверяемый slug
 
-    Returns:
+    Возвращает:
         Кортеж (валидность, сообщение об ошибке)
 
-    Examples:
+    Примеры:
         >>> validate_slug("mycompany")
         (True, None)
         >>> validate_slug("ab")

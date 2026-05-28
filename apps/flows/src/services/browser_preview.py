@@ -1,4 +1,4 @@
-"""Browser preview UI events and signed viewer URLs for flows chat."""
+"""UI-события browser preview и подписанные viewer URL для flows chat."""
 
 from __future__ import annotations
 
@@ -162,7 +162,7 @@ async def emit_browser_preview_mcp_event(
     result: MCPCallResult | None = None,
     error: str | None = None,
 ) -> None:
-    """Emit best-effort browser preview event without changing MCP behavior."""
+    """Отправляет browser preview event best-effort, не меняя поведение MCP."""
     try:
         await _emit_browser_preview_mcp_event(
             config=config,
@@ -172,7 +172,7 @@ async def emit_browser_preview_mcp_event(
             result=result,
             error=error,
         )
-    except Exception as exc:  # pragma: no cover - preview must not break tools
+    except Exception as exc:  # pragma: no cover — preview не должен ломать tools
         logger.warning(
             "browser_preview.event_emit_failed",
             event_type=f"{BROWSER_PREVIEW_EVENT_PREFIX}{phase}",

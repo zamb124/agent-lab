@@ -181,11 +181,11 @@ async def delete_document_task(
     """
     Удаление документа из vector_documents.
 
-    Args:
+    Аргументы:
         namespace_id: ID namespace
         document_id: ID документа для удаления
 
-    Returns:
+    Возвращает:
         Результат удаления
     """
     logger.info(f"RAG Worker: удаление документа {document_id} из namespace {namespace_id}")

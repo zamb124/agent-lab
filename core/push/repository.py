@@ -34,7 +34,7 @@ class PushSubscriptionRepository:
 
     def __init__(self, db_url: str) -> None:
         """
-        Args:
+        Аргументы:
             db_url: URL базы данных (shared БД)
         """
         self._db_url: str = db_url
@@ -50,10 +50,10 @@ class PushSubscriptionRepository:
         """
         Получить все подписки пользователя.
 
-        Args:
+        Аргументы:
             user_id: ID пользователя
 
-        Returns:
+        Возвращает:
             Список подписок
         """
         session_factory = await self._get_session_factory()
@@ -79,14 +79,14 @@ class PushSubscriptionRepository:
         Если подписка с таким endpoint существует - обновляет.
         Иначе создает новую.
 
-        Args:
+        Аргументы:
             user_id: ID пользователя
             endpoint: Push endpoint URL
             keys: VAPID keys (p256dh, auth)
             platform: Платформа (desktop, ios, android)
             user_agent: User-Agent браузера
 
-        Returns:
+        Возвращает:
             Созданная или обновленная подписка
         """
         session_factory = await self._get_session_factory()
@@ -130,11 +130,11 @@ class PushSubscriptionRepository:
         """
         Удалить подписку.
 
-        Args:
+        Аргументы:
             user_id: ID пользователя
             endpoint: Push endpoint URL
 
-        Returns:
+        Возвращает:
             True если удалено, False если не найдено
         """
         session_factory = await self._get_session_factory()
@@ -156,10 +156,10 @@ class PushSubscriptionRepository:
         """
         Удалить подписку по endpoint (для expired подписок).
 
-        Args:
+        Аргументы:
             endpoint: Push endpoint URL
 
-        Returns:
+        Возвращает:
             True если удалено
         """
         session_factory = await self._get_session_factory()
@@ -179,7 +179,7 @@ class PushSubscriptionRepository:
         """
         Обновить last_used_at для подписки.
 
-        Args:
+        Аргументы:
             endpoint: Push endpoint URL
         """
         session_factory = await self._get_session_factory()

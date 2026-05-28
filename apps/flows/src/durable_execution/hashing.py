@@ -1,4 +1,4 @@
-"""Deterministic hashing for workflow projections."""
+"""Детерминированное хеширование для workflow-проекций."""
 
 from __future__ import annotations
 

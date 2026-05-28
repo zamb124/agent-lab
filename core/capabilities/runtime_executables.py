@@ -1,4 +1,4 @@
-"""Resolution of managed runtime executables for sandbox runners."""
+"""Разрешение managed runtime executables для sandbox runners."""
 
 from __future__ import annotations
 

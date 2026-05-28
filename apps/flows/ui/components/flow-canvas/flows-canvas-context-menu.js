@@ -3,10 +3,10 @@
  *
  * Меню зависит от target:
  *   - `node`: открыть / переключить entry / переключить breakpoint / дублировать / удалить /
- *     advanced (incoming-policy);
+ *     расширенное (incoming-policy);
  *   - `edge`: редактировать условие / удалить связь;
- *   - `background`: add sticky note / fit view / reset zoom / select all /
- *     show shortcuts.
+ *   - `background`: добавить стикер / fit view / сброс zoom / выделить всё /
+ *     показать горячие клавиши.
  *
  * Все действия — это `this.emit('action', { kind, ... })` на родителя.
  * Закрытие — `this.emit('close')`.

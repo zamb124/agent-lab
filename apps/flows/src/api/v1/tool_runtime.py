@@ -1,4 +1,4 @@
-"""Trusted runtime endpoint for executing platform tools through capability-gateway."""
+"""Доверенный runtime-эндпоинт для исполнения platform tools через capability-gateway."""
 
 from __future__ import annotations
 
@@ -105,7 +105,7 @@ async def _with_system_context_if_missing(container: ContainerDep) -> tuple[Cont
 
 @router.get("/manifest", response_model=CapabilityManifest)
 async def get_tool_runtime_manifest(container: ContainerDep) -> CapabilityManifest:
-    """Return every platform tool as a first-class `tools.<tool_id>` capability."""
+    """Возвращает каждый platform tool как first-class capability ``tools.<tool_id>``."""
     previous_context, installed_context = await _with_system_context_if_missing(container)
     try:
         registry = container.tool_registry
@@ -151,7 +151,7 @@ async def call_tool_runtime(
     container: ContainerDep,
     request: ToolRuntimeCallRequest,
 ) -> CapabilityCallResponse:
-    """Execute any registered platform tool by id using signed capability context."""
+    """Исполняет любой зарегистрированный platform tool по id с подписанным capability context."""
     verify_execution_context(request.context)
     runtime_context = await _build_context(container, request.context)
     previous_context = get_context()

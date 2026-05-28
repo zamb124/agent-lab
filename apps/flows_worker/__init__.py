@@ -1,8 +1,8 @@
-"""
-Platform flows worker package.
+""""
+Пакет platform flows worker.
 """
 
-# Не импортируем здесь worker app - это вызывает циклический импорт.
-# Producers/tasks import broker primitives from apps.flows_worker.broker_core.
+# Не импортируем здесь worker app — это вызывает циклический импорт.
+# Producers/tasks импортируют примитивы broker из apps.flows_worker.broker_core.
 
 __all__ = []

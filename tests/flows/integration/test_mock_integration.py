@@ -10,7 +10,7 @@ import pytest
 from httpx import AsyncClient
 
 
-def make_message(text: str) -> dict:
+def make_message(text: str) -> dict[str, object]:
     """Создаёт A2A message с обязательным messageId."""
     return {
         "messageId": str(uuid.uuid4()),

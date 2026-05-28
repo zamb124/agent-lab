@@ -1,5 +1,5 @@
 /**
- * Landing Footer - Подвал лендинга
+ * Подвал лендинга — подвал лендинга
  */
 import { html, css } from 'lit';
 import { PlatformElement } from '@platform/lib/platform-element/index.js';

@@ -1,5 +1,5 @@
 /**
- * Scheduler tasks page — расписания платформенного scheduler.
+ * Страница задач scheduler — расписания платформенного scheduler.
  *
  * Фильтры: status, target_service, task_name. Колонки: schedule_task_id, service, task,
  * schedule, status, next_run, actions. Действия: run-now, pause/resume,

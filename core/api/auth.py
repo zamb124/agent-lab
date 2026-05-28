@@ -223,12 +223,12 @@ async def start_auth(
     """
     Начинает процесс авторизации с выбранным провайдером.
 
-    Args:
+    Аргументы:
         request: FastAPI request для определения redirect_uri
         provider_name: Имя провайдера (yandex, google, etc.)
         redirect_uri: URI для возврата после авторизации (опционально)
 
-    Returns:
+    Возвращает:
         JSON с auth_url для редиректа на стороне клиента
     """
     try:
@@ -610,7 +610,7 @@ async def get_service_attrs(
     """
     Получает service-specific атрибуты для текущего пользователя.
 
-    Args:
+    Аргументы:
         service: Имя сервиса (crm, agents, rag)
     """
     token_data = _require_token_data(request)
@@ -633,7 +633,7 @@ async def update_service_attrs(
     """
     Обновляет service-specific атрибуты для текущего пользователя (merge).
 
-    Args:
+    Аргументы:
         service: Имя сервиса (crm, agents, rag)
         attrs: Атрибуты для обновления (merge с существующими)
     """

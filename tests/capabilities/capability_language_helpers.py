@@ -1,4 +1,4 @@
-"""Shared real-service capability checks for every sandbox language."""
+"""Общие проверки capability против реальных сервисов для каждого языка sandbox."""
 
 from __future__ import annotations
 

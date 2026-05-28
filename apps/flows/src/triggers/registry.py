@@ -49,7 +49,7 @@ class TriggerRegistry:
 
     def __init__(self, base_url: str, *, container: FlowRuntimeContainer):
         """
-        Args:
+        Аргументы:
             base_url: Базовый URL сервиса для webhook URLs
         """
         self.base_url: str = base_url
@@ -64,7 +64,7 @@ class TriggerRegistry:
         """
         Регистрирует handler для типа триггера.
 
-        Args:
+        Аргументы:
             trigger_type: Тип триггера
             handler_class: Класс handler
         """
@@ -76,10 +76,10 @@ class TriggerRegistry:
         """
         Получает handler по типу триггера.
 
-        Args:
+        Аргументы:
             trigger_type: Тип триггера
 
-        Returns:
+        Возвращает:
             Handler или None
         """
         return self._handlers.get(trigger_type)
@@ -96,12 +96,12 @@ class TriggerRegistry:
         Находит diff между старыми и новыми триггерами и вызывает
         register/unregister для каждого изменения.
 
-        Args:
+        Аргументы:
             flow_id: ID агента
             old_config: Предыдущий конфиг (None если новый агент)
             new_config: Новый конфиг
 
-        Returns:
+        Возвращает:
             Обновленный new_config с runtime данными триггеров
         """
         old_triggers = old_config.triggers if old_config else {}
@@ -119,12 +119,12 @@ class TriggerRegistry:
         # Триггеры которые могли измениться
         common_ids = old_ids & new_ids
 
-        # Unregister удаленных
+        # Снятие с регистрации удалённых
         for trigger_id in removed_ids:
             trigger = old_triggers[trigger_id]
             await self._unregister_trigger(flow_id, trigger)
 
-        # Register новых
+        # Регистрация новых
         for trigger_id in added_ids:
             trigger = new_triggers[trigger_id]
             if trigger.enabled:
@@ -143,7 +143,7 @@ class TriggerRegistry:
                     updated_trigger = await self._register_trigger(flow_id, new_trigger)
                     new_triggers[trigger_id] = updated_trigger
                 else:
-                    # Disabled - обновляем статус
+                    # Отключён — обновляем статус
                     new_trigger.status = TriggerStatus.INACTIVE
                     new_triggers[trigger_id] = new_trigger
 
@@ -157,11 +157,11 @@ class TriggerRegistry:
 
         Используется при старте сервиса для восстановления триггеров.
 
-        Args:
+        Аргументы:
             flow_id: ID агента
             config: Конфигурация агента
 
-        Returns:
+        Возвращает:
             Обновленный конфиг
         """
         for trigger_id, trigger in config.triggers.items():
@@ -177,7 +177,7 @@ class TriggerRegistry:
 
         Используется при удалении агента.
 
-        Args:
+        Аргументы:
             flow_id: ID агента
             config: Конфигурация агента
         """
@@ -211,11 +211,11 @@ class TriggerRegistry:
         """
         Регистрирует один триггер.
 
-        Args:
+        Аргументы:
             flow_id: ID агента
             trigger: Конфигурация триггера
 
-        Returns:
+        Возвращает:
             Обновленный trigger с runtime данными
         """
         handler = self.get_handler(trigger.type)
@@ -255,7 +255,7 @@ class TriggerRegistry:
         """
         Снимает один триггер.
 
-        Args:
+        Аргументы:
             flow_id: ID агента
             trigger: Конфигурация триггера
         """

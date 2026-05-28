@@ -1,6 +1,6 @@
 /**
- * App Loader Component
- * Универсальный loader с AI-мозгом для полноэкранной и inline загрузки
+ * Компонент загрузчика приложения
+ * Универсальный загрузчик с AI-мозгом для полноэкранной и встроенной загрузки
  */
 import '../utils/viewport-app-vh.js';
 import '../utils/platform-deeplink-init.js';

@@ -196,7 +196,7 @@ const DOCUMENT_META_SKIP = new Set([
 ]);
 
 /**
- * Mobile bottom-nav (mobile shell 2026): консоль панели управления.
+ * Нижняя навигация (mobile shell 2026): консоль панели управления.
  * Скрыта на всех public-маршрутах (landing, login, blog и т.п.) — туда mobile shell
  * платформы не подключается, лендинг рендерит свой собственный layout.
  */

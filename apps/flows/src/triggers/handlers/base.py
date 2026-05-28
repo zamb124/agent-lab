@@ -30,7 +30,7 @@ class BaseTriggerHandler(ABC):
 
     def __init__(self, base_url: str, *, container: FlowRuntimeContainer) -> None:
         """
-        Args:
+        Аргументы:
             base_url: Базовый URL сервиса для формирования webhook URL
         """
         self.base_url: str = base_url
@@ -51,15 +51,15 @@ class BaseTriggerHandler(ABC):
         - Webhook: регистрация endpoint
         - Email: создание cron job для polling
 
-        Args:
+        Аргументы:
             flow_id: ID агента
             trigger: Конфигурация триггера
 
-        Returns:
+        Возвращает:
             Обновленный TriggerConfig с runtime данными
             (webhook_url, schedule_id, status)
 
-        Raises:
+        Исключения:
             TriggerRegistrationError: При ошибке регистрации
         """
         raise NotImplementedError
@@ -79,7 +79,7 @@ class BaseTriggerHandler(ABC):
         - Webhook: удаление endpoint
         - Email: удаление cron job
 
-        Args:
+        Аргументы:
             flow_id: ID агента
             trigger: Конфигурация триггера
         """
@@ -99,12 +99,12 @@ class BaseTriggerHandler(ABC):
         2. Применяет input_mapping для формирования initial state
         3. Запускает агента через TriggerExecutor
 
-        Args:
+        Аргументы:
             flow_id: ID агента
             trigger_id: ID триггера
             payload: Входящие данные (Telegram Update, webhook body, etc.)
 
-        Returns:
+        Возвращает:
             Результат выполнения агента
         """
         raise NotImplementedError
@@ -113,11 +113,11 @@ class BaseTriggerHandler(ABC):
         """
         Генерирует URL для webhook.
 
-        Args:
+        Аргументы:
             flow_id: ID агента
             trigger_id: ID триггера
 
-        Returns:
+        Возвращает:
             Полный URL webhook
         """
         trigger_type = self.trigger_type.value

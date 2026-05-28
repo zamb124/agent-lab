@@ -1,7 +1,7 @@
 /**
- * flows-floating-panel — chrome для property/resource панелей.
+ * flows-floating-panel — оболочка для property/resource панелей.
  *
- * Glass-карточка, прибита к правому краю редактор-shell. Поддерживает:
+ * Glass-карточка, прибита к правому краю оболочки редактора. Поддерживает:
  *   - slideIn-анимацию при mount;
  *   - режим `expanded`: разворачивается на 94vw × 94vh с backdrop;
  *   - подсветка `lara-glow` при push-событии `flows/lara/node_updated` (3.2s).

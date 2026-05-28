@@ -1,5 +1,5 @@
 /**
- * Legal page — отображает Privacy Policy или Terms of Service по атрибуту kind.
+ * Страница legal — отображает Privacy Policy или Terms of Service по атрибуту kind.
  *
  * Контент берется из i18n-бандлов:
  *   privacy.json (namespace 'privacy')

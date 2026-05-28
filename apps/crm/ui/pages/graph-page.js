@@ -1,5 +1,5 @@
 /**
- * GraphPage — маршрут единого graph workspace (3D и mind map).
+ * GraphPage — маршрут единого workspace графа (3D и mind map).
  *
  * Host растягивается на весь слот `platform-island` (flex column, height:100%),
  * иначе на мобильном workspace схлопывается до `min-height` своих внутренних блоков.

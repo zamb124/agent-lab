@@ -26,9 +26,9 @@ def _should_register_tasks() -> bool:
 
 
 if _should_register_tasks():
-    # TaskIQ starts receivers from the broker module before worker startup hooks.
-    # Keep task registration attached to the worker broker itself, while producer
-    # processes can import this broker without pulling runtime task modules.
+    # TaskIQ запускает receivers из модуля broker до startup-хуков worker.
+    # Регистрация задач остаётся на worker-broker; producer
+    # может импортировать broker без подтягивания runtime-модулей задач.
     import apps.flows.src.tasks.company_init_tasks as _company_init_tasks
     import apps.flows.src.tasks.flow_tasks as _flow_tasks
     import apps.flows.src.tasks.llm_tasks as _llm_tasks

@@ -37,10 +37,10 @@ def get_billing_service() -> BillingService:
     """
     Получает глобальный BillingService.
 
-    Returns:
+    Возвращает:
         BillingService
 
-    Raises:
+    Исключения:
         RuntimeError: если сервис не инициализирован
     """
     if _billing_service is None:

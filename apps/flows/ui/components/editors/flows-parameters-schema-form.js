@@ -1,15 +1,15 @@
 /**
  * flows-parameters-schema-form — форма по parameters_schema.properties.
  *
- * Schema: { key: { type, description?, default?, required?, enum?, items?, properties? } }
+ * Схема: { key: { type, description?, default?, required?, enum?, items?, properties? } }
  * Типы: string | number | integer | boolean | object | array | <enum>.
  *
- * Property API:
+ * Свойства (API):
  *   - schema: object
  *   - values: object
  *   - readonly: boolean
  *
- * Events (emit):
+ * События (emit):
  *   - 'change' { values }
  */
 

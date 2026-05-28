@@ -63,15 +63,15 @@ class RelationshipRepository(BaseCRMRepository[Relationship]):
         """
         Получает relationships для graph traversal.
 
-        Args:
+        Аргументы:
             entity_id: ID entity
-            cross_company: Если True - игнорирует company_id фильтр
+            cross_company: если True — игнорирует фильтр по company_id
                           (для cross-company графов через grants)
             relationship_namespace: Если задан непустой — оставляем только связи
                 с `Relationship.namespace == relationship_namespace`.
 
-        Returns:
-            List relationships где entity_id участвует (source или target)
+        Возвращает:
+            Список relationships, где entity_id участвует (source или target)
         """
         async with self._db.session() as session:
             stmt = select(Relationship).where(
@@ -203,19 +203,19 @@ class RelationshipRepository(BaseCRMRepository[Relationship]):
         relationship_namespace: str | None = None,
     ) -> dict[str, list[Relationship]]:
         """
-        Batch получение соседей для списка entities.
+        Пакетное получение соседей для списка entities.
 
-        Args:
+        Аргументы:
             entity_ids: Список ID entities
             relationship_types: Фильтр по типам связей (опционально)
-            cross_company: Если True — без фильтра по company_id (для cross-company графов)
+            cross_company: если True — без фильтра по company_id (для cross-company графов)
             relationship_namespace: Если задан непустой — оставляем только связи
                 с `Relationship.namespace == relationship_namespace`. Без него
                 возвращаются связи всех пространств — нужно для UI «связи сущности»,
                 не привязанного к одному namespace.
 
-        Returns:
-            Dict где ключ - entity_id, значение - список relationships
+        Возвращает:
+            Словарь: ключ — entity_id, значение — список relationships
         """
         if not entity_ids:
             return {}
@@ -261,7 +261,7 @@ class RelationshipRepository(BaseCRMRepository[Relationship]):
         """
         Relationships компании с cursor-пагинацией для безопасного обхода.
 
-        Returns:
+        Возвращает:
             (relationships, next_cursor, has_more)
         """
         company_id = self._get_company_id()

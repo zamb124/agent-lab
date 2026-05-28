@@ -139,7 +139,7 @@ async def on_startup(_app: FastAPI, container: FlowContainer, settings: FlowSett
         await sync_landing_public_demo_flows_from_bundles(container, settings)
 
     # Загрузка tools + постановка init_company в worker не должны блокировать lifespan:
-    # иначе Uvicorn не слушает порт, пока не отработают БД и TaskIQ (Docker health → unhealthy).
+    # иначе HTTP-сервер не слушает порт, пока не отработают БД и TaskIQ (Docker health → unhealthy).
     if is_testing():
         system_context = Context(
             user=User(user_id="system", name="System", groups=["admin"]),

@@ -4,7 +4,7 @@
  * Бандлы хранятся в core/i18n/translations/<locale>/<namespace>.json. Сервис
  * выбирает свой namespace по своему URL-префиксу: '/crm' -> 'crm', '/sync' -> 'sync'.
  *
- * Application-level default namespace задаётся через `static defaultI18nNamespace`
+ * Уровня приложения default namespace задаётся через `static defaultI18nNamespace`
  * на подклассе `PlatformApp`; PlatformApp при boot'е приземляет его в
  * `setDefaultI18nNamespace`, после чего все компоненты сервиса получают его
  * автоматически в `this.t(...)` без объявления `static i18nNamespace =`.

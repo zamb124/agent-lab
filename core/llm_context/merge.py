@@ -1,4 +1,4 @@
-"""Merge helpers for LLM context profile overlays."""
+"""Хелперы слияния наложений профиля контекста LLM."""
 
 from __future__ import annotations
 
@@ -6,7 +6,7 @@ from core.types import JsonObject, require_json_object
 
 
 def deep_merge_dict(base: JsonObject, override: JsonObject) -> JsonObject:
-    """Recursively merge JSON-like dictionaries; override wins."""
+    """Рекурсивно сливает JSON-подобные словари; override побеждает."""
     out: JsonObject = dict(base)
     for key, value in override.items():
         existing = out.get(key)
@@ -21,7 +21,7 @@ def deep_merge_dict(base: JsonObject, override: JsonObject) -> JsonObject:
 
 
 def merge_dict_layers(*layers: JsonObject | None) -> JsonObject:
-    """Merge optional dict layers in order."""
+    """Сливает опциональные слои словарей по порядку."""
     merged: JsonObject = {}
     for layer in layers:
         if layer is None:

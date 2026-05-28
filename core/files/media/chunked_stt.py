@@ -172,7 +172,7 @@ def split_audio_for_stt_chunks(
 ) -> list[tuple[str, bytes, str]]:
     """Разбивает аудиофайл на чанки через ffmpeg для порционной STT-транскрипции.
 
-    Returns:
+    Возвращает:
         Список кортежей (file_name, bytes, content_type) по одному на чанк.
     """
     if not audio_bytes:
@@ -271,7 +271,7 @@ async def transcribe_audio_with_chunking(
     Сначала пробует одним запросом. Если файл слишком большой (413) или формат
     не распознан, разбивает на чанки через ffmpeg и транскрибирует каждый.
 
-    Args:
+    Аргументы:
         job_id: идентификатор задачи для логирования
         company_id: идентификатор компании для tier-резолва STT
         audio_bytes: байты аудиофайла
@@ -281,7 +281,7 @@ async def transcribe_audio_with_chunking(
         speech_override: необязательный per-call override провайдера/модели
         stt_client: инъекция клиента для тестов (если None — ``get_stt_client``)
 
-    Returns:
+    Возвращает:
         Кортеж (полный текст, идентификатор провайдера из последнего ответа STT).
     """
     if company_id == "":

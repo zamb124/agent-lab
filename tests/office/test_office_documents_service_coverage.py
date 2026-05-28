@@ -19,9 +19,20 @@ from apps.office.services.onlyoffice_jwt import encode_download_token
 pytestmark = [pytest.mark.timeout(120)]
 
 
-def _decode_editor_config_token(token: str) -> dict:
+def _decode_editor_config_token(token: str) -> dict[str, object]:
     secret = get_office_settings().office.jwt_secret
-    return jwt.decode(token, secret, algorithms=["HS256"])
+    payload: dict[str, object] = jwt.decode(token, secret, algorithms=["HS256"])  # pyright: ignore[reportAssignmentType]
+    return payload
+
+
+def _editor_document_file_type(cfg: dict[str, object]) -> str:
+    document_raw = cfg["document"]
+    if not isinstance(document_raw, dict):
+        raise AssertionError("document must be object")
+    file_type = document_raw.get("fileType")
+    if not isinstance(file_type, str):
+        raise AssertionError("document.fileType must be str")
+    return file_type
 
 
 async def _first_accessible_catalog_id(office_client, headers: dict[str, str]) -> str:
@@ -724,7 +735,7 @@ async def test_editor_config_jwt_matches_uploaded_xlsx(
     assert er.status_code == 200
     cfg = _decode_editor_config_token(er.json()["token"])
     assert cfg["documentType"] == "cell"
-    assert cfg["document"]["fileType"] == "xlsx"
+    assert _editor_document_file_type(cfg) == "xlsx"
 
 
 @pytest.mark.asyncio
@@ -763,7 +774,7 @@ async def test_editor_config_jwt_matches_uploaded_pptx(
     assert er.status_code == 200
     cfg = _decode_editor_config_token(er.json()["token"])
     assert cfg["documentType"] == "slide"
-    assert cfg["document"]["fileType"] == "pptx"
+    assert _editor_document_file_type(cfg) == "pptx"
 
 
 @pytest.mark.asyncio
@@ -795,7 +806,7 @@ async def test_editor_config_jwt_matches_uploaded_csv(
     assert er.status_code == 200
     cfg = _decode_editor_config_token(er.json()["token"])
     assert cfg["documentType"] == "cell"
-    assert cfg["document"]["fileType"] == "csv"
+    assert _editor_document_file_type(cfg) == "csv"
 
 
 @pytest.mark.asyncio
@@ -833,4 +844,4 @@ async def test_upload_filename_blob_spreadsheet_mime_stores_cell_and_editor_cell
     )
     cfg = _decode_editor_config_token(er.json()["token"])
     assert cfg["documentType"] == "cell"
-    assert cfg["document"]["fileType"] == "xlsx"
+    assert _editor_document_file_type(cfg) == "xlsx"

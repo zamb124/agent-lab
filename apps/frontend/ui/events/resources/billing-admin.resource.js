@@ -1,5 +1,5 @@
 /**
- * Admin billing resources — компании, цены, settlement rules, usage report,
+ * Ресурсы admin billing — компании, цены, settlement rules, usage report,
  * системный доступ к компаниям. Только для активной компании system.
  *
  * API:

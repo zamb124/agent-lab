@@ -23,12 +23,12 @@ _INVITE_ACCEPT_PATHS = frozenset({
     "/frontend/api/invites/accept",
 })
 
-# In-process TTL cache для горячих lookup'ов auth middleware.
+# In-process TTL-кэш для горячих lookup auth middleware.
 # Каждый HTTP-запрос ранее тащил 3 DB-запроса: subdomain->company_id, company,
 # user (для membership). На production это десятки тысяч запросов в секунду,
 # поэтому стоит небольшой process-local cache (30 секунд TTL).
 #
-# Cross-instance согласованность сейчас держится только на TTL: при изменении
+# Межинстансная согласованность сейчас держится только на TTL: при изменении
 # company/user.companies значение может быть устаревшим до 30 секунд. Для
 # critical mutating endpoints это приемлемо: rebind session + правка members
 # делаются редко, а каждая mutating операция перепроверяет access на бизнес-
@@ -38,9 +38,9 @@ _COMPANY_RESOLVER_CACHE_TTL_SECONDS = 30
 
 class _TtlCache[K, V]:
     """
-    Process-local TTL cache `K -> V` для горячих lookup'ов CompanyResolver.
+    Process-local TTL-кэш ``K -> V`` для горячих lookup CompanyResolver.
 
-    Намеренно простой: без LRU eviction (auth-горячая память невелика — кол-во
+    Намеренно простой: без LRU eviction (auth-горячая память невелика — число
     активных subdomain'ов / company_id / (user, company) пар на одном узле
     ограничено). `time.monotonic` устойчив к перескокам wall clock.
     """
@@ -307,12 +307,12 @@ def build_service_base_url(request: Request, *, include_default_port: bool = Fal
     - `X-Forwarded-Proto` (`http`/`https`) перекрывает `request.url.scheme`.
     - `X-Forwarded-Host` перекрывает `Host`-header и `request.url.netloc`.
 
-    Args:
+    Аргументы:
         request: FastAPI/Starlette Request.
         include_default_port: если True, для host без порта добавит
             `:80`/`:443` исходя из scheme.
 
-    Raises:
+    Исключения:
         ValueError: scheme не `http`/`https` или host пуст.
     """
     forwarded_proto = (request.headers.get("x-forwarded-proto") or "").split(",", 1)[0].strip().lower()

@@ -1,4 +1,4 @@
-"""Typed contracts for web meta-search."""
+"""Типизированные контракты веб meta-search."""
 
 from __future__ import annotations
 

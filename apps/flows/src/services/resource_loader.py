@@ -64,13 +64,13 @@ class ResourceLoader:
         """
         Загружает FlowConfig из БД.
 
-        Args:
+        Аргументы:
             flow_id: ID flow или URN
 
-        Returns:
+        Возвращает:
             FlowConfig
 
-        Raises:
+        Исключения:
             ResourceNotFoundError: если flow не найден
         """
         resolved_flow_id = extract_resource_id(flow_id)
@@ -88,13 +88,13 @@ class ResourceLoader:
         """
         Загружает и инстанцирует ноду.
 
-        Args:
+        Аргументы:
             node_id: ID ноды или URN
 
-        Returns:
+        Возвращает:
             BaseNode экземпляр
 
-        Raises:
+        Исключения:
             ResourceNotFoundError: Если нода не найдена
         """
         resolved_node_id = extract_resource_id(node_id)
@@ -113,13 +113,13 @@ class ResourceLoader:
         """
         Загружает tool.
 
-        Args:
+        Аргументы:
             tool_id: ID tool или URN
 
-        Returns:
+        Возвращает:
             BaseTool экземпляр
 
-        Raises:
+        Исключения:
             ResourceNotFoundError: Если tool не найден
         """
         resolved_tool_id = extract_resource_id(tool_id)
@@ -137,11 +137,11 @@ class ResourceLoader:
         """
         Создаёт экземпляр ноды из класса и конфига.
 
-        Args:
+        Аргументы:
             node_class: Класс ноды (из Registry)
             config: NodeConfig из БД
 
-        Returns:
+        Возвращает:
             BaseNode экземпляр
         """
         node_config = parse_json_object(config.model_dump_json(), "NodeConfig")

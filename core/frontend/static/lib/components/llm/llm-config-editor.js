@@ -10,7 +10,7 @@
  *      бейдж cost_origin; кнопка очистки override; никаких advanced полей).
  *   - 'flow_node' / 'flow_resource' — TODO: миграция flows-llm-config-editor сюда.
  *
- * Property API:
+ * API свойств:
  *   .config           = { provider, api_key, base_url, folder_id, extra_request_headers, model, ... }
  *                       — текущее значение, эмитится через 'change' { config }.
  *   .mode             = 'company_capability' | 'flow_node' | 'flow_resource' (см. выше).

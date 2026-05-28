@@ -1,4 +1,4 @@
-"""Sync space namespace: NOT NULL + UNIQUE per company.
+"""Sync space namespace: NOT NULL + UNIQUE на компанию.
 
 Жёсткое 1:1 между sync_spaces и платформенным namespace (shared KV
 `namespaces`). Backfill для существующих spaces без `namespace`: генерируем

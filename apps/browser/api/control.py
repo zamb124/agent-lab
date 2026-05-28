@@ -1,5 +1,5 @@
-"""
-Browser Control HTTP API (§17.3): сессии, navigate, observe, action.
+""""
+HTTP API Browser Control (§17.3): сессии, navigate, observe, action.
 """
 
 from __future__ import annotations
@@ -625,7 +625,7 @@ async def control_observe(
         }
         payload["snapshot"] = snapshot
         runtime.observe_store.update_refs(session_id, refs)
-        # if body.include_snapshot_refs:
+        # if body.include_snapshot_refs:  # отключено
         snapshot["refs"] = refs
 
         event_path = _write_session_event(

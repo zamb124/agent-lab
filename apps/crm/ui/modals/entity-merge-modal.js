@@ -1,7 +1,7 @@
 /**
  * CRMEntityMergeModal — слияние двух сущностей в одну.
  *
- * Props:
+ * Свойства:
  *   - entityIdA: string — первая сущность (обязательно).
  *   - entityIdB: string — вторая сущность (обязательно, != entityIdA).
  *

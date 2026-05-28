@@ -1,5 +1,5 @@
 /**
- * Product RAG Page - Страница продукта Knowledge Base
+ * Страница продукта RAG — страница продукта Knowledge Base
  */
 import { html, css } from 'lit';
 import { PlatformPage } from '@platform/lib/base/PlatformPage.js';

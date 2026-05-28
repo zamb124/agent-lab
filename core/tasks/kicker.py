@@ -56,7 +56,7 @@ def build_log_labels(
     ``startup``). Это допустимо только для системных triggerов; HTTP/WS
     handlers всегда работают внутри request scope, где request_id уже есть.
 
-    Raises:
+    Исключения:
         ValueError: если override_request_id/override_trace_id явно пустые
             строки (а не None).
     """

@@ -71,7 +71,7 @@ class FileProcessor:
 
     def __init__(self, file_repository: FileRepository, bucket_name: str | None = None):
         """
-        Args:
+        Аргументы:
             file_repository: FileRepository для работы с записями о файлах
             bucket_name: Имя S3 бакета (если не указан, используется дефолтный)
         """
@@ -119,7 +119,7 @@ class FileProcessor:
         """
         Обрабатывает файл из данных в памяти.
 
-        Args:
+        Аргументы:
             data: Данные файла
             original_name: Оригинальное имя файла
             content_type: MIME тип
@@ -128,7 +128,7 @@ class FileProcessor:
             tags: Теги файла
             public: Сделать файл публичным
 
-        Returns:
+        Возвращает:
             Метаданные файла
         """
         file_id = f"file_{uuid.uuid4().hex[:12]}"
@@ -274,10 +274,10 @@ class FileProcessor:
         """
         Получает запись о файле.
 
-        Args:
+        Аргументы:
             file_id: ID файла
 
-        Returns:
+        Возвращает:
             Запись о файле или None
         """
         return await self.file_repository.get(file_id)
@@ -286,10 +286,10 @@ class FileProcessor:
         """
         Удаляет файл из S3 и БД.
 
-        Args:
+        Аргументы:
             file_id: ID файла
 
-        Returns:
+        Возвращает:
             True если удаление успешно
         """
         file_record = await self.get_file_record(file_id)
@@ -312,10 +312,10 @@ class FileProcessor:
         """
         Форматирует сообщение о файле для агента.
 
-        Args:
+        Аргументы:
             file_record: Запись о файле
 
-        Returns:
+        Возвращает:
             Отформатированное сообщение в формате [FILE] ... [/FILE]
         """
         size_mb = file_record.file_size / (1024 * 1024)
@@ -340,10 +340,10 @@ class FileProcessor:
         """
         Извлекает информацию о файлах из текста сообщения.
 
-        Args:
+        Аргументы:
             message_content: Текст сообщения
 
-        Returns:
+        Возвращает:
             Список словарей с информацией о файлах (ключи: original_name, file_id, url, content_type, file_size)
         """
         file_info_list: list[JsonObject] = []
@@ -479,7 +479,7 @@ def initialize_default_processors(file_repository: FileRepository) -> None:
     Инициализирует дефолтные процессоры с заданным file_repository.
     Вызывается при старте приложения в lifespan.
 
-    Args:
+    Аргументы:
         file_repository: FileRepository из контейнера приложения
     """
     global _default_file_repository

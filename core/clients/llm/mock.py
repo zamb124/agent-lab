@@ -355,7 +355,7 @@ class MockLLM:
                     "tool_calls": None,
                 }
             elif mock_response.get("type") == "structured_output":
-                # Structured output возвращает JSON как content
+                # Структурированный вывод возвращает JSON как content
                 structured_payload = mock_response.get("data", {})
                 content = (
                     json.dumps(structured_payload, ensure_ascii=False)
@@ -614,7 +614,7 @@ class MockLLM:
         llm_context_blocks: list[LLMContextBlock] | None = None,
         llm_context_source_registry: LLMContextSourceRegistry | None = None,
     ) -> str | JsonObject:
-        """Non-streaming вызов (vision/OCR и др.), совместим с ``LLMClient.invoke``."""
+        """Нестreaming-вызов (vision/OCR и др.), совместим с ``LLMClient.invoke``."""
         del max_tokens, extra_body, extra_headers
         normalized_messages = _normalize_messages(messages)
         prepared_context = await prepare_messages_for_context_layer(

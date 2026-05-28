@@ -65,7 +65,7 @@ class MediaTranscriber:
     ) -> TranscriptionResult:
         """Транскрибирует аудиофайл в текст (с чанкованием при необходимости).
 
-        Args:
+        Аргументы:
             audio_bytes: байты аудиофайла
             file_name: имя файла
             content_type: платформенный MIME-тип файла (например, ``audio/wav``)
@@ -104,7 +104,7 @@ class MediaTranscriber:
     ) -> TranscriptionResult:
         """Транскрибирует видеофайл: извлекает аудиодорожку через ffmpeg, затем STT.
 
-        Args:
+        Аргументы:
             video_bytes: байты видеофайла
             file_name: имя файла
             language: язык (None — из tier-резолва)
@@ -134,7 +134,7 @@ class MediaTranscriber:
     ) -> TranscriptionResult:
         """Скачивает аудио по URL (в т.ч. YouTube) и транскрибирует.
 
-        Args:
+        Аргументы:
             url: URL видео/аудио (YouTube, прямая ссылка)
             language: язык (None — из tier-резолва)
         """

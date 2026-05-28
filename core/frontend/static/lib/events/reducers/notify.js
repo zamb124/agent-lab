@@ -1,5 +1,5 @@
 /**
- * Notify slice (toast-уведомления).
+ * Слайс notify (toast-уведомления).
  *
  * Поля state.notify:
  *   toasts: Array<{ id, type, message, duration, ts }>

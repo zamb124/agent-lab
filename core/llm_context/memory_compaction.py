@@ -1,4 +1,4 @@
-"""Write closed conversation windows into LLM context memory."""
+"""Запись закрытых окон диалога в память контекста LLM."""
 
 from __future__ import annotations
 
@@ -33,7 +33,7 @@ async def close_llm_context_memory_window(
     user_id: str | None = None,
     token_counter: TokenCounter | None = None,
 ) -> int:
-    """Persist the message prefix that no longer belongs to the active window."""
+    """Сохраняет префикс messages, который больше не входит в active window."""
     episode, next_cursor = build_llm_context_memory_episode(
         messages=messages,
         policy=policy,
@@ -63,7 +63,7 @@ def build_llm_context_memory_episode(
     user_id: str | None = None,
     token_counter: TokenCounter | None = None,
 ) -> tuple[LLMContextMemoryEpisode | None, int]:
-    """Build one closed memory episode without performing I/O."""
+    """Собирает один закрытый эпизод памяти без выполнения I/O."""
     if not _compaction_enabled(policy):
         return None, cursor
 
@@ -123,7 +123,7 @@ def compact_llm_context_memory_episode(
     summary: str,
     token_counter: TokenCounter | None = None,
 ) -> LLMContextMemoryEpisode:
-    """Replace a raw closed window with a compact summary before persistence."""
+    """Заменяет сырое закрытое окно компактным summary перед сохранением."""
     compact_summary = summary.strip()
     if not compact_summary:
         raise ValueError("LLM context memory summary is empty")
@@ -151,7 +151,7 @@ def llm_context_memory_cursor_key(
     flow_id: str | None = None,
     node_id: str | None = None,
 ) -> str:
-    """Cursor key for a runtime state that writes memory for one resolved scope."""
+    """Ключ cursor для runtime state, записывающего память для одного разрешённого scope."""
     if scope == "session":
         return f"session:{session_id or ''}"
     if scope == "node":

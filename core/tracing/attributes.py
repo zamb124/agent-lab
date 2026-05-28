@@ -28,13 +28,13 @@ ATTR_CONTEXT_ID = "platform.context_id"
 ATTR_CHANNEL = "platform.channel"
 ATTR_IS_RESUME = "platform.is_resume"
 
-# Agent
+# Агент
 ATTR_FLOW_ID = "platform.flow_id"
 ATTR_FLOW_ENTRY = "platform.flow.entry_node"
 ATTR_FLOW_VARIABLES_COUNT = "platform.flow.variables_count"
 ATTR_BRANCH_ID = "platform.branch_id"
 
-# Node
+# Нода
 ATTR_NODE_ID = "platform.node_id"
 ATTR_NODE_TYPE = "platform.node_type"
 ATTR_NODE_ITERATION = "platform.node.iteration"
@@ -50,14 +50,14 @@ ATTR_HITL_CORRELATION_ID = "platform.hitl.correlation_id"
 ATTR_HITL_QUEUE_SLUG = "platform.hitl.queue_slug"
 ATTR_HITL_OPERATOR_TASK_ID = "platform.hitl.operator_task_id"
 
-# Memory
+# Память
 ATTR_MEMORY_CURSOR_KEY = "platform.memory.cursor_key"
 ATTR_MEMORY_CURSOR_START = "platform.memory.cursor_start"
 ATTR_MEMORY_CURSOR_END = "platform.memory.cursor_end"
 ATTR_MEMORY_SCOPE = "platform.memory.scope"
 ATTR_MEMORY_COMPACTION = "platform.memory.compaction"
 
-# Reflection
+# Рефлексия
 ATTR_REFLECTION_POLICY_ID = "platform.reflection.policy_id"
 ATTR_REFLECTION_GATE = "platform.reflection.gate"
 ATTR_REFLECTION_TARGET = "platform.reflection.target"
@@ -77,7 +77,7 @@ ATTR_MCP_RESPONSE_SHA256 = "platform.mcp.response_sha256"
 ATTR_MCP_RESPONSE_PREVIEW = "platform.mcp.response_preview"
 ATTR_MCP_RESPONSE_SESSION_ID = "platform.mcp.response_session_id"
 
-# Agent
+# Агент
 ATTR_AGENT_NAME = "platform.agent.name"
 ATTR_AGENT_ID = "platform.agent.id"
 ATTR_AGENT_PROMPT_LENGTH = "platform.agent.prompt_length"
@@ -94,7 +94,7 @@ ATTR_LLM_REQUESTED_MODEL = "platform.llm.requested_model"
 ATTR_LLM_CANDIDATE_SOURCE = "platform.llm.candidate_source"
 # Стоимость из ответа провайдера (OpenRouter: usage.cost в USD; расширения OpenAI-совместимых API)
 ATTR_LLM_PROVIDER_REPORTED_COST = "platform.llm.provider_reported_cost"
-# OpenRouter BYOK: usage.cost_details.upstream_inference_cost
+# OpenRouter BYOK: поле usage.cost_details.upstream_inference_cost
 ATTR_LLM_PROVIDER_UPSTREAM_INFERENCE_COST = "platform.llm.provider_upstream_inference_cost"
 ATTR_LLM_INPUT_TOKENS = "platform.llm.input_tokens"
 ATTR_LLM_OUTPUT_TOKENS = "platform.llm.output_tokens"
@@ -112,7 +112,7 @@ ATTR_LLM_CONTEXT_TOTAL_INPUT_TOKENS = "platform.llm.context.total_input_tokens"
 ATTR_LLM_CONTEXT_MAX_INPUT_TOKENS = "platform.llm.context.max_input_tokens"
 ATTR_LLM_CONTEXT_MODEL_CONTEXT_LENGTH = "platform.llm.context.model_context_length"
 
-# Tool
+# Инструмент (tool)
 ATTR_TOOL_NAME = "platform.tool.name"
 ATTR_TOOL_CALL_ID = "platform.tool.call_id"
 ATTR_TOOL_ARGS = "platform.tool.args"
@@ -121,20 +121,20 @@ ATTR_TOOL_DURATION_MS = "platform.tool.duration_ms"
 ATTR_TOOL_IS_AGENT = "platform.tool.is_agent"
 ATTR_TOOL_ERROR = "platform.tool.error"
 
-# Interrupt
+# Прерывание (interrupt)
 ATTR_INTERRUPT_QUESTION = "platform.interrupt.question"
 ATTR_INTERRUPT_TOOL = "platform.interrupt.tool"
 ATTR_INTERRUPT_PATH_DEPTH = "platform.interrupt.path_depth"
 
-# Status
+# Статус
 ATTR_STATUS = "platform.status"
 ATTR_ERROR_MESSAGE = "platform.error.message"
 ATTR_ERROR_TYPE = "platform.error.type"
 
-# Files
+# Файлы
 ATTR_FILES_COUNT = "platform.files.count"
 
-# State
+# Состояние
 ATTR_STATE_SNAPSHOT = "platform.state.snapshot"
 
 # Биллинг / SaaS (связь с UsageType и resource_name в metadata usage)
@@ -157,7 +157,7 @@ ATTR_EMBED_TEXT_COUNT = "platform.embed.text_count"
 ATTR_RAG_DOCUMENT_ID = "platform.rag.document_id"
 ATTR_RAG_STAGE = "platform.rag.stage"
 
-# Sync / STT / calls
+# Sync / STT / звонки
 ATTR_SYNC_COMMAND_TYPE = "platform.sync.command_type"
 ATTR_STT_PROVIDER = "platform.stt.provider"
 ATTR_STT_AUDIO_BYTES = "platform.stt.audio_bytes"

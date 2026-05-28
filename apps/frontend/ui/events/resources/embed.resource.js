@@ -1,5 +1,5 @@
 /**
- * Embed resources — встраиваемые виджеты и загрузка их HTML/JS-кода.
+ * Ресурсы embed — встраиваемые виджеты и загрузка их HTML/JS-кода.
  *
  * Coverage:
  *   - embedConfigsResource (createResourceCollection): CRUD списка виджетов.

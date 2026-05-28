@@ -1,5 +1,5 @@
 /**
- * Scheduler resources — расписания платформенного scheduler (cron / interval / one-time)
+ * Ресурсы scheduler — расписания платформенного scheduler (cron / interval / one-time)
  * через прокси `/frontend/api/scheduler/*`.
  *
  * Состав:

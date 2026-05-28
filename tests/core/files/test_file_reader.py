@@ -38,7 +38,7 @@ async def test_read_path_text_stable_checksum(tmp_path) -> None:
 
 @pytest.mark.asyncio
 async def test_read_pdf_with_fitz(tmp_path) -> None:
-    doc = fitz.open()
+    doc = fitz.open()  # pyright: ignore[reportCallIssue]
     page = doc.new_page()
     page.insert_text((72, 72), "MarkerPDF123")
     out = tmp_path / "t.pdf"

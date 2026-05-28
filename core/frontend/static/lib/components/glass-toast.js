@@ -1,5 +1,5 @@
 /**
- * Glass Toast Component
+ * Компонент Glass Toast
  * Всплывающее уведомление
  */
 import { html, css } from '../../assets/js/lit/lit.min.js';

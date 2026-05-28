@@ -94,7 +94,7 @@ export class SyncMessageContextMenu extends PlatformElement {
         document.addEventListener('keydown', this._boundOnKey);
         // Перенос хоста в body: гарантирует, что position: fixed работает
         // от viewport, без containing-block эффектов от ancestor с
-        // backdrop-filter / will-change / transform / contain.
+        // backdrop-filter / will-change / transform / contain — свойства предков,
         if (this.parentNode !== document.body) {
             document.body.appendChild(this);
         }

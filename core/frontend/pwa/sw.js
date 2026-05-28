@@ -1,5 +1,5 @@
 /**
- * Humanitec Service Worker
+ * Service Worker Humanitec
  * Обеспечивает офлайн-работу, кэширование и push-уведомления
  */
 
@@ -24,7 +24,7 @@ const STATIC_ASSETS = [
   '/static/core/pwa/icons/icon-512x512.png',
 ];
 
-// Install: кэшируем offline-минимум, но не блокируем установку при частичной сетевой ошибке.
+// Установка: кэшируем offline-минимум, но не блокируем установку при частичной сетевой ошибке.
 self.addEventListener('install', (event) => {
   console.log('[SW] Installing...');
 
@@ -40,7 +40,7 @@ self.addEventListener('install', (event) => {
   );
 });
 
-// Activate: очистка старых кэшей
+// Активация: очистка старых кэшей
 self.addEventListener('activate', (event) => {
   console.log('[SW] Activating...');
 
@@ -327,7 +327,7 @@ self.addEventListener('fetch', (event) => {
     return;
   }
 
-  // Mutable ESM/CSS/HTML статика: сеть первая, Cache Storage только как offline fallback.
+  // Изменяемая ESM/CSS/HTML-статика: сеть первая, Cache Storage только как offline fallback.
   if (url.pathname.startsWith('/static/')) {
     event.respondWith(networkFirstStatic(request));
     return;
@@ -404,7 +404,7 @@ async function networkFirstWithOffline(request) {
   }
 }
 
-// Push Notifications
+// Push-уведомления
 self.addEventListener('push', (event) => {
   console.log('[SW] Push received');
   

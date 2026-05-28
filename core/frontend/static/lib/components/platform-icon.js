@@ -1,5 +1,5 @@
 /**
- * Platform Icon Component.
+ * Компонент platform-icon.
  *
  * Загружает SVG через events:
  *   icon/ui_asset/load_requested   { name }       → уж в state.icon.uiCache[name]

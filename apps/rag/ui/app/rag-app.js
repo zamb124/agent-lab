@@ -47,7 +47,7 @@ const RAG_ROUTES = [
 ];
 
 /**
- * Mobile bottom-nav (mobile shell 2026): базы знаний, поиск, настройки, профиль.
+ * Нижняя навигация (mobile shell 2026): базы знаний, поиск, настройки, профиль.
  */
 const RAG_BOTTOM_NAV_ITEMS = [
     { key: 'namespaces', routeKey: 'namespaces', icon: 'box',      labelKey: 'bottom_nav.namespaces' },

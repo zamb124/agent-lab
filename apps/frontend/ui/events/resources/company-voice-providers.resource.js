@@ -1,7 +1,7 @@
 /**
  * Per-company override провайдеров речи (`company_voice_providers`).
  *
- * Backend:
+ * Бэкенд:
  *   GET    /frontend/api/companies/{company_id}/voice-providers        → { company_id, items[] }
  *   PUT    /frontend/api/companies/{company_id}/voice-providers/{kind} → item
  *   DELETE /frontend/api/companies/{company_id}/voice-providers/{kind} → { deleted }

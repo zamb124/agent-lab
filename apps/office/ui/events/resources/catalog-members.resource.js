@@ -6,7 +6,7 @@
  *   POST   /                          → OfficeCatalogMembersResponse (add)
  *   DELETE /{member_user_id}          → 204
  *
- * Sub-resource по `catalogId` — реализован как `createAsyncOp` со slice
+ * Подресурс по `catalogId` — реализован как `createAsyncOp` со slice
  * `{ items, loadedCatalogId }`. Add/remove ops после успеха перезапускают
  * `catalogMembersOp` для перезагрузки списка.
  */

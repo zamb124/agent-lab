@@ -381,7 +381,7 @@ export function createResourceCollection(options) {
 
     async function _doRequest(opSpec, event, ctx) {
         if (transport === 'ws') {
-            // Backend canonical reply типы выводятся из commandType (`<...>_requested`):
+            // Канонический бэкенд reply типы выводятся из commandType (`<...>_requested`):
             //   succeeded -> `<...>_succeeded`, failed -> `<...>_failed`.
             // Внутренние события фабрики (`events.LIST_LOADED`, `events.CREATED`, ...) —
             // отдельное имя, на которое подписан reducer; диспатчится после успешного

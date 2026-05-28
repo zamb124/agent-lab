@@ -7,7 +7,7 @@
 
 /**
  * @param {string} seed
- * @returns {number} unsigned 32-bit hash
+ * @returns {number} беззнаковый 32-битный хеш
  */
 export function hashString31(seed) {
     if (typeof seed !== 'string' || seed.length === 0) {
@@ -51,7 +51,7 @@ export function initialsFromName(name) {
 /**
  * Стабильный индекс 0..modulo-1 по seed (для PNG-коллекций аватаров).
  * @param {string} seed
- * @param {number} modulo  positive integer
+ * @param {number} modulo  положительное целое
  * @returns {number}
  */
 export function indexFromSeed(seed, modulo) {

@@ -1,4 +1,4 @@
-"""Lara tools for the public documentation assistant."""
+"""Tools Lara для публичного documentation assistant."""
 
 from __future__ import annotations
 
@@ -61,7 +61,7 @@ class DocsSearchArgs(BaseModel):
 
 
 class DocsPrepareContextArgs(DocsSearchArgs):
-    """Arguments for deterministic docs lookup before the answer LLM call."""
+    """Аргументы детерминированного поиска по docs перед LLM-вызовом ответа."""
 
 
 def _state_variables(state: "ExecutionState") -> JsonObject:

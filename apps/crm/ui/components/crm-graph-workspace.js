@@ -32,7 +32,7 @@
  * (`openModal`, `toast`, `navigate`). Никаких прямых dispatch UI/ROUTER/AUTH,
  * без httpRequest, fetch, services.* / store / features.
  *
- * Live-обновления — полный набор push-событий для обоих canvas-view.
+ * Живые обновления — полный набор push-событий для обоих canvas-view.
  */
 
 import { html, css, nothing } from 'lit';

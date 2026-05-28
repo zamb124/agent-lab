@@ -46,4 +46,7 @@ def test_build_apple_client_secret_jwt_claims_and_signature(es256_pem_keypair: t
     assert decoded["sub"] == "app.example.service"
     assert decoded["aud"] == "https://appleid.apple.com"
     assert "iat" in decoded and "exp" in decoded
-    assert decoded["exp"] - decoded["iat"] == 600
+    iat = decoded["iat"]
+    exp = decoded["exp"]
+    assert isinstance(iat, int) and isinstance(exp, int)
+    assert exp - iat == 600

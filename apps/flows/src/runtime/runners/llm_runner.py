@@ -465,7 +465,7 @@ class LlmNodeRunner(BaseLlmNodeRunner):
         """
         Выполняет ReAct цикл.
 
-        Args:
+        Аргументы:
             input_data: Входные данные
             state: ExecutionState агента
             emitter: Emitter для публикации событий (BaseEmitter или его наследники)
@@ -1099,7 +1099,7 @@ class LlmNodeRunner(BaseLlmNodeRunner):
                                 await self._checkpoint_state(state)
                                 continue
 
-                            # Structured Output - всегда завершаем после первого ответа
+                            # Структурированный вывод — всегда завершаем после первого ответа
                             if structured_output and output_schema:
                                 try:
                                     parsed_output = require_json_value(
@@ -1268,7 +1268,7 @@ class LlmNodeRunner(BaseLlmNodeRunner):
                 yield event
             return
 
-        for attempt in range(1, self.MAX_STREAM_IDLE_RETRIES + 2):  # +2: 1 original + N retries
+        for attempt in range(1, self.MAX_STREAM_IDLE_RETRIES + 2):  # +2: 1 исходная + N повторов
             input_payload = require_json_object(
                 {
                     "node_id": self._source_node_id(),
@@ -1437,7 +1437,7 @@ class LlmNodeRunner(BaseLlmNodeRunner):
             new_messages = state_copy.messages[original_msg_count:]
             state.messages.extend(new_messages)
 
-            # tool_results - мержим (не перезаписываем!)
+            # tool_results — мержим (не перезаписываем!)
             state.tool_results.update(state_copy.tool_results)
 
             new_reasoning_entries = state_copy.reasoning_history[original_reasoning_count:]

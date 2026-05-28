@@ -1,4 +1,4 @@
-"""Deterministic context compiler for platform LLM calls."""
+"""Детерминированный компилятор контекста для LLM-вызовов платформы."""
 
 from __future__ import annotations
 
@@ -19,7 +19,7 @@ from core.types import JsonObject, JsonValue
 
 
 class LLMContextBudgetError(ValueError):
-    """Raised when mandatory context cannot fit into the resolved token budget."""
+    """Возникает, когда обязательный контекст не помещается в разрешённый token budget."""
 
 
 _BLOCK_OUTPUT_ORDER = {
@@ -40,7 +40,7 @@ class _ToolCompactionStats(TypedDict):
 
 
 class LLMContextCompiler:
-    """Compile messages + candidate blocks into a bounded, provider-neutral prompt."""
+    """Собирает messages и кандидатов блоков в ограниченный, provider-neutral prompt."""
 
     def __init__(self, token_counter: TokenCounter | None = None) -> None:
         self._token_counter: TokenCounter = token_counter or TiktokenTokenCounter()

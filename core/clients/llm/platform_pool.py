@@ -1,4 +1,4 @@
-"""Runtime candidate resolver for the platform OpenRouter free-pool."""
+"""Runtime resolver кандидатов для platform OpenRouter free-pool."""
 
 from __future__ import annotations
 

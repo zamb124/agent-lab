@@ -31,7 +31,7 @@ async def list_sessions(
     """
     Получает список сессий с фильтрами.
 
-    Args:
+    Аргументы:
         user_id: Фильтр по пользователю
         flow_id: Фильтр по агенту
         date_from: Начало периода
@@ -40,7 +40,7 @@ async def list_sessions(
         offset: Смещение
         container: Контейнер платформы
 
-    Returns:
+    Возвращает:
         Список сессий с пагинацией
     """
     sessions, total = await container.workflow_runtime.search_sessions(
@@ -69,11 +69,11 @@ async def delete_session(
     """
     Удаляет сессию по ID.
 
-    Args:
+    Аргументы:
         session_id: ID сессии
         container: Контейнер платформы
 
-    Returns:
+    Возвращает:
         Результат удаления
     """
     deleted = await container.workflow_runtime.delete_state(session_id)

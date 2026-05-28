@@ -1,4 +1,4 @@
-"""WebSocket endpoint voice-сессии — универсальный media gateway.
+"""WebSocket-эндпоинт voice-сессии — универсальный media gateway.
 
 Сервис ``apps/voice`` **не знает** про ``apps/flows``, A2A и агентскую
 логику. Он принимает аудио с клиента, делает STT/VAD, по команде клиента

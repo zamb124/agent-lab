@@ -1,10 +1,10 @@
 """
-Core scheduler module.
+Модуль core scheduler.
 
 Предоставляет модели, репозиторий и сервис для scheduled tasks.
 RedisScheduleSource — через get_schedule_source.
 
-Note: create_scheduler перенесён в apps/scheduler/dispatch.py
+Примечание: create_scheduler перенесён в apps/scheduler/dispatch.py
 (зависит от apps/ брокеров, не может жить в core/).
 """
 

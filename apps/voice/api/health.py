@@ -1,4 +1,4 @@
-"""Health endpoint voice-сервиса.
+"""Health-эндпоинт voice-сервиса.
 
 Возвращает быстрый snapshot deployment-default провайдеров речи. Реальные
 клиенты создаются per-session через ``voice_resolver``, поэтому

@@ -26,7 +26,7 @@ class ImanBaseError(Exception):
         payload: JsonObject | None = None,
     ) -> None:
         """
-        Args:
+        Аргументы:
             message: Человекочитаемое описание ошибки
             code: Код ошибки для программной обработки
             payload: Дополнительные данные об ошибке
@@ -40,7 +40,7 @@ class ImanBaseError(Exception):
         """
         Конвертирует исключение в A2A error format.
 
-        Returns:
+        Возвращает:
             Dict с полями error согласно a2a-sdk спецификации
         """
         return {
@@ -53,7 +53,7 @@ class ImanBaseError(Exception):
         """
         Конвертирует исключение в dict для логирования.
 
-        Returns:
+        Возвращает:
             Dict с информацией об ошибке
         """
         return {

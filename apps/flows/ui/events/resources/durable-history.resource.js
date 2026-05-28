@@ -1,5 +1,5 @@
 /**
- * Durable workflow history/time-travel operations.
+ * Операции durable workflow: history и time-travel.
  * REST: `apps/flows/src/api/v1/tasks.py`.
  */
 

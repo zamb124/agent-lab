@@ -45,12 +45,12 @@ async def search_in_namespace(
     """
     Выполняет семантический поиск в namespace.
 
-    Args:
+    Аргументы:
         namespace_id: ID namespace
         request: Параметры поиска
         provider: Имя провайдера (опционально)
 
-    Returns:
+    Возвращает:
         Результаты поиска
     """
     await require_registered_rag_namespace(namespace_id, container)
@@ -115,14 +115,14 @@ async def global_search(
     """
     Выполняет поиск по нескольким namespace текущей компании.
 
-    Args:
+    Аргументы:
         request: Параметры поиска
         provider: Имя провайдера (опционально)
 
-    Returns:
+    Возвращает:
         Результаты поиска по каждому namespace
     """
-    # Провайдер сам добавит company_id через контекст, просто передаем namespace names
+    # Провайдер сам добавит company_id через контекст, просто передаём имена namespace
     valid_namespace_ids = request.namespace_ids
 
     if not valid_namespace_ids:

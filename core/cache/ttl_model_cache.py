@@ -1,4 +1,4 @@
-"""Small async TTL cache for Pydantic models backed by Redis."""
+"""Небольшой async TTL-кэш Pydantic-моделей на Redis."""
 
 from __future__ import annotations
 
@@ -24,7 +24,7 @@ TModel = TypeVar("TModel", bound=BaseModel)
 
 
 class TtlModelCache(Generic[TModel]):
-    """Process memory cache with Redis as a shared backing store."""
+    """Кэш в памяти процесса с Redis как общим backing store."""
 
     def __init__(
         self,

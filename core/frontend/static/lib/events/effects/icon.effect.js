@@ -1,5 +1,5 @@
 /**
- * Icon effect — загрузка SVG-иконок (UI и файловых) с CDN-статики.
+ * Эффект icon — загрузка SVG-иконок (UI и файловых) с CDN-статики.
  *
  * Слушает:
  *   icon/ui_asset/load_requested   { name }

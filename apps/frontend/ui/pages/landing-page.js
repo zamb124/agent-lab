@@ -1,5 +1,5 @@
 /**
- * Landing Page — главная страница.
+ * Страница лендинга — главная страница.
  *
  * Auth-модалка живёт глобально в platform-modal-stack — открывается через
  * helper openModal из landing-header, landing-hero, landing-plans.

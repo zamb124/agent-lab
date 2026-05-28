@@ -6,10 +6,10 @@
  * Группировка: по дням (sync-day-grouping helper) + по отправителю
  * (window 120s) — `position` прокидывается в каждый bubble.
  *
- * Sticky-bottom: при добавлении новых сообщений лента скроллится вниз,
+ * Прилипание к низу: при добавлении новых сообщений лента скроллится вниз,
  * если пользователь не отскроллил вверх вручную.
  *
- * Infinite scroll up: при scrollTop <= 60 → useOp('sync/messages_load_older')
+ * Бесконечная прокрутка вверх: при scrollTop <= 60 → useOp('sync/messages_load_older')
  * + slice action `loadedOlder` для merge в slice. Компенсация scroll.
  *
  * Скрытое API для родителя: scrollToMessageId(id, { flash }) — листает

@@ -51,7 +51,7 @@ _MIME_TO_DTYPE_AND_EXT: dict[str, tuple[str, str]] = {
 
 def onlyoffice_document_type_and_file_type(filename: str) -> tuple[str, str]:
     """
-    Returns:
+    Возвращает:
         (documentType, fileType) — например ("word", "docx").
     """
     ext = Path(filename).suffix.lower().lstrip(".")

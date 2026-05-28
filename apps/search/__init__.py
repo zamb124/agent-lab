@@ -1,1 +1,1 @@
-"""Search service."""
+"""Search-сервис."""

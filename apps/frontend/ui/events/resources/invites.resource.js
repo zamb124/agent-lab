@@ -1,5 +1,5 @@
 /**
- * Invites resource — приём инвайта по короткой ссылке.
+ * Ресурс инвайтов — приём инвайта по короткой ссылке.
  *
  * API: POST /frontend/api/invites/accept { short_code }
  *      → { company_id, company_name, role, already_member, subdomain }

@@ -1,4 +1,4 @@
-"""Repository for first-class evaluation suites, cases, runs and events."""
+"""Репозиторий first-class evaluation suites, cases, runs и events."""
 
 from __future__ import annotations
 
@@ -87,7 +87,7 @@ def _int_scalar(value: EvaluationLabRowValue, field_name: str) -> int:
 
 
 class EvaluationLabRepository:
-    """SQL repository for the target evaluation domain."""
+    """SQL-репозиторий целевого evaluation-домена."""
 
     def __init__(self, storage: Storage):
         self._storage: Storage = storage

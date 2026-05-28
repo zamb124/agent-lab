@@ -1,4 +1,4 @@
-"""Search service configuration."""
+"""Конфигурация search-сервиса."""
 
 from __future__ import annotations
 
@@ -13,7 +13,7 @@ SearchProviderId = Literal["tinyfish", "linkup", "serper", "tavily"]
 
 
 class SearchTinyFishConfig(BaseModel):
-    """TinyFish Search API settings."""
+    """Настройки TinyFish Search API."""
 
     model_config: ClassVar[ConfigDict] = ConfigDict(extra="forbid")
 
@@ -24,7 +24,7 @@ class SearchTinyFishConfig(BaseModel):
 
 
 class SearchLinkupConfig(BaseModel):
-    """Linkup Search API settings."""
+    """Настройки Linkup Search API."""
 
     model_config: ClassVar[ConfigDict] = ConfigDict(extra="forbid")
 
@@ -37,7 +37,7 @@ class SearchLinkupConfig(BaseModel):
 
 
 class SearchSerperConfig(BaseModel):
-    """Serper.dev Google Search API settings."""
+    """Настройки Serper.dev Google Search API."""
 
     model_config: ClassVar[ConfigDict] = ConfigDict(extra="forbid")
 
@@ -48,7 +48,7 @@ class SearchSerperConfig(BaseModel):
 
 
 class SearchTavilyConfig(BaseModel):
-    """Tavily Search API settings."""
+    """Настройки Tavily Search API."""
 
     model_config: ClassVar[ConfigDict] = ConfigDict(extra="forbid")
 
@@ -62,7 +62,7 @@ class SearchTavilyConfig(BaseModel):
 
 
 class SearchIntegrationConfig(BaseModel):
-    """Search provider settings."""
+    """Настройки search providers."""
 
     model_config: ClassVar[ConfigDict] = ConfigDict(extra="forbid")
 
@@ -93,7 +93,7 @@ class SearchIntegrationConfig(BaseModel):
 
 
 class SearchSettings(BaseSettings):
-    """Root settings for search service."""
+    """Корневые настройки search-сервиса."""
 
     search: SearchIntegrationConfig = Field(default_factory=SearchIntegrationConfig)
 

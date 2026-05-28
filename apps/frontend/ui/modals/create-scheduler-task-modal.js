@@ -1,14 +1,14 @@
 /**
- * Create scheduler task modal — конструктор PlatformScheduleCreateRequest.
+ * Модалка создания задачи scheduler — конструктор PlatformScheduleCreateRequest.
  *
  * Поля API (core/scheduler/models.py):
  *   target_service: str (required)
  *   task_name:      str (required)
  *   queue_name:     str | null
  *   schedule_type:  cron | interval | one_time
- *   cron:           str (when type=cron)
- *   interval_seconds: int (when type=interval)
- *   run_at:         ISO datetime (when type=one_time)
+ *   cron:           str (при type=cron)
+ *   interval_seconds: int (при type=interval)
+ *   run_at:         ISO datetime (при type=one_time)
  *   timezone:       str (default UTC)
  *   payload:        Dict[str, Any] (kwargs для taskiq task)
  */

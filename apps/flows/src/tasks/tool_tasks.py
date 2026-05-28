@@ -34,13 +34,13 @@ async def execute_tool(
     """
     Выполняет tool через TaskIQ.
 
-    Args:
+    Аргументы:
         tool_config: Inline tool config, ToolReference или NodeConfig
         args: Аргументы вызова
         state_dict: Сериализованный ExecutionState (граница TaskIQ)
         context_data: Сериализованный Context (как у process_flow_task) для репозиториев с company_id
 
-    Returns:
+    Возвращает:
         Dict с результатом (сериализуется обратно для TaskIQ)
     """
     previous_context = None

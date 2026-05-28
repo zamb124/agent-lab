@@ -1,4 +1,4 @@
-"""Scheduling tool state identifiers."""
+"""Идентификаторы state для scheduling tools."""
 
 from __future__ import annotations
 

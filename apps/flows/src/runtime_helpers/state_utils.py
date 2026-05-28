@@ -1,4 +1,4 @@
-"""Runtime helpers for flow tools."""
+"""Runtime-хелперы для flow tools."""
 
 from __future__ import annotations
 

@@ -1,4 +1,4 @@
-"""Typed contracts for FastAPI application and request state."""
+"""Типизированные контракты состояния FastAPI-приложения и запроса."""
 
 from __future__ import annotations
 

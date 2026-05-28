@@ -35,7 +35,7 @@ def _tracing_resource(service_name: str) -> Resource:
 
 
 def ensure_tracer_provider(service_name: str = "platform") -> TracerProvider:
-    """Returns an SDK TracerProvider for platform spans, even without exporters."""
+    """Возвращает SDK TracerProvider для platform spans, даже без экспортёров."""
     global _tracer_provider
 
     if _tracer_provider is None:
@@ -48,7 +48,7 @@ def setup_tracing(config: "TracingConfig") -> None:
     """
     Инициализирует OpenTelemetry трейсинг.
 
-    Args:
+    Аргументы:
         config: Конфигурация трейсинга
     """
     global _initialized, _shutdown_registered, _otlp_configured

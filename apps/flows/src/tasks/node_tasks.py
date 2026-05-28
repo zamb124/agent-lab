@@ -36,12 +36,12 @@ async def execute_node(
     """
     Выполняет ноду в воркере.
 
-    Args:
+    Аргументы:
         node_id: ID ноды
         node_config: Конфигурация ноды
         state_dict: Сериализованный ExecutionState (граница TaskIQ)
 
-    Returns:
+    Возвращает:
         Сериализованный ExecutionState
     """
     container = get_container()

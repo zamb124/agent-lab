@@ -103,7 +103,7 @@ async def schedule_cron_task(
     """
     Создает периодическую задачу по cron.
 
-    Args:
+    Аргументы:
         cron: Cron выражение
         content_type: "message" или "tool_call"
         content: Текст сообщения или имя tool
@@ -150,7 +150,7 @@ async def schedule_interval_task(
     """
     Создает периодическую задачу с интервалом.
 
-    Args:
+    Аргументы:
         interval_minutes: Интервал в минутах
         content_type: "message" или "tool_call"
         content: Текст сообщения или имя tool
@@ -200,7 +200,7 @@ async def schedule_one_time_task(
     """
     Создает одноразовую задачу.
 
-    Args:
+    Аргументы:
         run_at: Время запуска в формате ISO 8601
         content_type: "message" или "tool_call"
         content: Текст сообщения или имя tool
@@ -243,7 +243,7 @@ async def list_scheduled_tasks(
     """
     Получает список scheduled tasks.
 
-    Args:
+    Аргументы:
         state: Состояние агента
     """
     service = get_schedule_service()
@@ -293,7 +293,7 @@ async def cancel_scheduled_task(
     """
     Отменяет задачу.
 
-    Args:
+    Аргументы:
         schedule_task_id: ID записи платформенного scheduler
         state: Состояние агента
     """

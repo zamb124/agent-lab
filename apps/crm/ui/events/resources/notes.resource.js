@@ -5,7 +5,7 @@
  * Лента (`entity_type: 'note'` в query) подхватывает и старые строки, где в колонке
  * `entity_type` ошибочно лежал только листовой type_id.
  *
- * Backend:
+ * Бэкенд:
  *   PATCH /crm/api/v1/entities/notes/{note_id}/analysis-draft → AIAnalysisDraftStored
  *   DELETE /crm/api/v1/entities/notes/{note_id}/analysis-draft → сброс черновика
  *   DELETE /crm/api/v1/entities/notes/{note_id}/analysis-error → сброс только ошибки apply

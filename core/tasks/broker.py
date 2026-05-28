@@ -80,14 +80,14 @@ def create_broker(
     """
     Создает TaskIQ broker с общими настройками.
 
-    Args:
+    Аргументы:
         queue_name: Имя очереди (Redis Stream). Если None, использует "taskiq" (default).
         service_name: Имя сервиса-инициатора (для service.name в логах задач).
             Если None — берётся из settings.server.name. Используется
             только в качестве дефолта; kiq() обязан передавать
             service_name явно через core.tasks.kicker.with_log_labels().
 
-    Returns:
+    Возвращает:
         Настроенный RedisStreamBroker с result_backend и middlewares
     """
     settings = get_settings()
@@ -137,10 +137,10 @@ def create_scheduler(broker: RedisStreamBroker) -> TaskiqScheduler:
     """
     Создает scheduler для broker.
 
-    Args:
+    Аргументы:
         broker: TaskIQ broker
 
-    Returns:
+    Возвращает:
         TaskiqScheduler с Redis source
     """
     settings = get_settings()
@@ -156,10 +156,10 @@ def create_stale_tasks_recovery(queue_name: str = "taskiq") -> Callable[[], Awai
     """
     Возвращает функцию для восстановления зависших задач.
 
-    Args:
+    Аргументы:
         queue_name: Имя очереди (Redis Stream) для recovery
 
-    Returns:
+    Возвращает:
         Async функция для использования в @broker.on_event("startup")
     """
     async def recover_stale_pending_tasks() -> None:
@@ -244,7 +244,7 @@ def register_worker_events(
     в pre-startup хуке — до пользовательского startup_handler, чтобы
     первая же запись несла service.name.
 
-    Args:
+    Аргументы:
         broker: TaskIQ broker
         startup_handler: Async функция (state: TaskiqState) -> None
         shutdown_handler: Async функция (state: TaskiqState) -> None

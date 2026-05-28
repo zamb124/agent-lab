@@ -34,7 +34,6 @@ def _sig() -> ContextSignature:
         user_agent=None,
         page_mode="crawl",
         permissions_fingerprint="p",
-        emulate_locale_timezone_via_cdp=False,
     )
 
 

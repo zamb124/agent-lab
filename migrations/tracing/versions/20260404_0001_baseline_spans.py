@@ -1,4 +1,4 @@
-"""Baseline platform_tracing: spans
+"""Базовая миграция platform_tracing: spans
 
 Revision ID: tracing_0001
 Revises:

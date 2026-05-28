@@ -1,4 +1,4 @@
-"""RAG-backed source for the platform LLM context layer."""
+"""RAG-источник для платформенного LLM context layer."""
 
 from __future__ import annotations
 
@@ -14,7 +14,7 @@ from core.types import JsonObject, JsonValue, require_json_object
 
 
 class RAGLLMContextSource:
-    """Collect RAG search hits as candidate ``LLMContextBlock`` objects."""
+    """Собирает результаты RAG-поиска как candidate-блоки ``LLMContextBlock``."""
 
     def __init__(
         self,

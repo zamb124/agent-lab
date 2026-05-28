@@ -1,4 +1,4 @@
-"""Deterministic search enrichment for public search flows."""
+"""Детерминированное обогащение поиска для public search flows."""
 
 from __future__ import annotations
 
@@ -65,7 +65,7 @@ def _score_by_position(position: int) -> float:
 
 
 class SearchSuggestionService:
-    """Builds typed suggestions for the search UI and the public_search flow."""
+    """Собирает типизированные подсказки для search UI и public_search flow."""
 
     def suggest(self, request: SearchSuggestRequest) -> SearchSuggestResponse:
         suggestions = self._suggestions(request)
@@ -116,7 +116,7 @@ class SearchSuggestionService:
 
 
 class SearchResultInsightService:
-    """Builds deterministic per-result relevance hints and UI actions."""
+    """Собирает детерминированные подсказки релевантности и UI-действия по каждому результату."""
 
     def insights(self, request: SearchResultInsightsRequest) -> SearchResultInsightsResponse:
         query_terms = _query_tokens(request.query)

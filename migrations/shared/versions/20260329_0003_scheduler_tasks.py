@@ -1,4 +1,4 @@
-"""Add scheduler tasks table
+"""Добавление таблицы scheduler tasks
 
 Revision ID: shared_0003
 Revises: shared_0002

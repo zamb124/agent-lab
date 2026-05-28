@@ -1,5 +1,5 @@
 /**
- * Admin billing page (system): company scope, price catalog, settlement rules, usage.
+ * Страница admin billing (system): scope компании, каталог цен, правила settlement, usage.
  */
 import { html, css } from 'lit';
 import { PlatformPage } from '@platform/lib/base/PlatformPage.js';

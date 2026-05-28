@@ -45,12 +45,12 @@ async def init_company_resources(
         Загружает ТОЛЬКО PUBLIC агенты и тулы из кода в company namespace
         (запускается при создании компании)
 
-    Args:
+    Аргументы:
         company_id: "system" или ID компании
         company_name: Название компании (для логов)
         subdomain: Subdomain компании (slug)
 
-    Returns:
+    Возвращает:
         {"flows": count, "tools": count, "nodes": count, "status": "completed"}
     """
     is_system = (company_id == "system")

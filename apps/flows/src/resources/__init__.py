@@ -1,7 +1,7 @@
-"""Flow resource helpers.
+"""Хелперы flow resources.
 
-Runtime code no longer receives resources as in-process namespace objects.
-Resource maps are declarative inputs for LLM resource selection/merge.
+Runtime-код больше не получает resources как in-process namespace objects.
+Карты resources — декларативный вход для выбора/merge LLM resources.
 """
 
 __all__: list[str] = []

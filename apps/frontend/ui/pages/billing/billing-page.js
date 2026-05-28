@@ -1,5 +1,5 @@
 /**
- * Billing page — подписка, usage и история транзакций.
+ * Страница billing — подписка, usage и история транзакций.
  *
  * Источники (apps/frontend/api/billing.py):
  *   - subscription: BillingSubscription (plan, balance, monthly_budget, current_month_spent, billing_period_start)

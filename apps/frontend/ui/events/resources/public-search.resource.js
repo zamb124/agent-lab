@@ -1,10 +1,10 @@
 /**
- * Public Humanitec Search run.
+ * Публичный запуск Humanitec Search.
  *
- * Execution stays in Flows A2A/SSE:
- *   1. frontend issues a short-lived embed-session token;
- *   2. flow public_search streams `ui_event` artifacts;
- *   3. this factory reduces those events into a SERP state for the UI.
+ * Исполнение остаётся в Flows A2A/SSE:
+ *   1. frontend выдаёт short-lived embed-session token;
+ *   2. flow public_search стримит артефакты `ui_event`;
+ *   3. эта фабрика сводит события в SERP-state для UI.
  */
 import { createAsyncOp } from '@platform/lib/events/index.js';
 import { httpRequest, HttpError } from '@platform/lib/events/http.js';

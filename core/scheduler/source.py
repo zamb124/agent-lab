@@ -1,5 +1,5 @@
 """
-Schedule source для TaskIQ.
+Источник расписаний для TaskIQ.
 
 Использует ListRedisScheduleSource для хранения scheduled tasks.
 """
@@ -18,10 +18,10 @@ def get_schedule_source(redis_url: str) -> ListRedisScheduleSource:
     """
     Получает или создает RedisScheduleSource.
 
-    Args:
+    Аргументы:
         redis_url: URL Redis
 
-    Returns:
+    Возвращает:
         ListRedisScheduleSource
     """
     global _schedule_source

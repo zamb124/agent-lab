@@ -1,7 +1,7 @@
 /**
- * Attachments — файлы, прикреплённые к сущностям CRM.
+ * Вложения — файлы, прикреплённые к сущностям CRM.
  *
- * Backend:
+ * Бэкенд:
  *   GET    /crm/api/v1/entities/{entity_id}/attachments               → list
  *   POST   /crm/api/v1/entities/{entity_id}/attachments               → upload (multipart/form-data)
  *   DELETE /crm/api/v1/entities/{entity_id}/attachments/{attachment_id} → 204

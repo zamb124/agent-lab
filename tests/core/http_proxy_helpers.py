@@ -5,12 +5,13 @@ from __future__ import annotations
 from collections.abc import Callable
 
 import httpx
+import pytest
 
 _ORIGINAL_ASYNC_CLIENT = httpx.AsyncClient
 
 
 def install_mock_httpx_client(
-    monkeypatch: object,
+    monkeypatch: pytest.MonkeyPatch,
     handler: Callable[[httpx.Request], httpx.Response],
 ) -> None:
     """

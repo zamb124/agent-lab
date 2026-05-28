@@ -31,12 +31,12 @@ class BaseCodeRunner(ABC):
         """
         Выполняет код.
 
-        Args:
+        Аргументы:
             code: Исходный код
             state: ExecutionState
             func_name: Имя функции для вызова; None = первая функция в source
 
-        Returns:
+        Возвращает:
             JSON-совместимый результат выполнения
         """
         pass
@@ -52,13 +52,13 @@ class BaseCodeRunner(ABC):
         """
         Выполняет код tool.
 
-        Args:
+        Аргументы:
             code: Исходный код tool
             args: Аргументы вызова
             state: ExecutionState (опционально)
             entrypoint: Имя функции-точки входа; None = первая функция в source
 
-        Returns:
+        Возвращает:
             JSON-совместимый результат выполнения
         """
         pass
@@ -68,10 +68,10 @@ class BaseCodeRunner(ABC):
         """
         Валидирует код.
 
-        Args:
+        Аргументы:
             code: Исходный код
 
-        Returns:
-            Tuple[bool, Optional[str]] - (valid, error_message)
+        Возвращает:
+            Tuple[bool, Optional[str]] — (valid, error_message)
         """
         pass

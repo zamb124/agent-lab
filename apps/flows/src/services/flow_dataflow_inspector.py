@@ -1,7 +1,7 @@
-"""Static data-flow inspector for the flows editor.
+"""Статический data-flow inspector для редактора flows.
 
-The inspector is intentionally conservative: it never executes user code or
-remote calls, it only reads node configuration and known runtime contracts.
+Inspector намеренно консервативен: не исполняет пользовательский код и
+удалённые вызовы, только читает конфигурацию нод и известные runtime-контракты.
 """
 
 from __future__ import annotations

@@ -55,7 +55,7 @@ class ServiceClient:
         """
         Собирает заголовки из текущего контекста.
 
-        Args:
+        Аргументы:
             include_content_type: Включать ли Content-Type: application/json
                                  (False для multipart/form-data запросов)
         """
@@ -105,24 +105,24 @@ class ServiceClient:
         """
         Выполняет HTTP запрос к сервису.
 
-        Args:
+        Аргументы:
             service: Имя сервиса (flows, crm, frontend)
             method: HTTP метод (GET, POST, PUT, DELETE)
             path: Путь запроса (без базового URL)
             timeout: Таймаут запроса
             **kwargs: Дополнительные параметры для httpx
 
-        Returns:
+        Возвращает:
             Ответ сервиса (JSON)
 
-        Raises:
+        Исключения:
             ServiceClientError: если запрос не удался
         """
 
         base_url = self._get_service_url(service)
         url = f"{base_url}{path}"
 
-        # Не устанавливаем Content-Type: application/json если передаются files
+        # Не устанавливаем Content-Type: application/json, если передаются files
         # (httpx сам установит multipart/form-data)
         include_content_type = "files" not in kwargs
         headers = self._build_headers(include_content_type=include_content_type)

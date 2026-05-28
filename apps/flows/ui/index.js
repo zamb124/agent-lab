@@ -1,5 +1,5 @@
 /**
- * Bootstrap Flows UI: импорт <flows-app> + страниц + компонентов.
+ * Bootstrap UI Flows: импорт <flows-app> + страниц + компонентов.
  *
  * Доменные операции — фабрики в `events/resources/*.resource.js`. Транспорт —
  * единый platform WS `/flows/api/ws/notifications` для команд чата/operator
@@ -70,7 +70,7 @@ import './components/resources/flows-llm-resource-editor.js';
 import './components/resources/flows-code-resource-editor.js';
 import './components/resources/flows-files-resource-editor.js';
 
-// Editor shell
+// Оболочка редактора
 import './components/editor/flows-editor-header.js';
 import './components/editor/flows-bottom-toolbar.js';
 import './components/editor/flows-node-types-sidebar.js';
@@ -81,7 +81,7 @@ import './components/editor/flows-branches-tabs.js';
 import './components/editor/flows-execution-panel.js';
 import './components/flow-canvas/flows-flow-canvas.js';
 
-// Editor-related modals
+// Модалки редактора
 import './modals/flows-edge-condition-modal.js';
 import './modals/flows-incoming-policy-modal.js';
 import './modals/flows-library-picker-modal.js';

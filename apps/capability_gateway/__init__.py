@@ -1,1 +1,1 @@
-"""Capability gateway service."""
+"""Сервис capability gateway."""

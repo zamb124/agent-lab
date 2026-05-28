@@ -1,4 +1,4 @@
-"""Strict sandbox security contract tests."""
+"""Строгие тесты контракта безопасности sandbox."""
 
 from __future__ import annotations
 

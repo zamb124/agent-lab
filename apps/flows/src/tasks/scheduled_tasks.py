@@ -44,7 +44,7 @@ async def execute_scheduled_task(
     - Помечает задачу как FAILED
     - Удаляет schedule из Redis (чтобы не повторялась)
 
-    Args:
+    Аргументы:
         schedule_task_id: ID записи платформенного scheduler
         flow_id: ID flow
         session_id: ID сессии
@@ -54,7 +54,7 @@ async def execute_scheduled_task(
         tool_args: Аргументы для tool_call
         description: Описание задачи
 
-    Returns:
+    Возвращает:
         Результат выполнения
     """
     logger.info(
@@ -75,7 +75,7 @@ async def execute_scheduled_task(
 
     scheduler_repo = container.scheduler_task_repository
 
-    # Source of truth — платформенная таблица scheduler_tasks (shared БД).
+    # Источник правды — платформенная таблица scheduler_tasks (shared БД).
     task_info = await scheduler_repo.get(
         company_id=company_id, schedule_task_id=schedule_task_id
     )

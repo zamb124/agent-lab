@@ -39,7 +39,7 @@ def sniff_ios_incompatible_audio_magic(data: bytes) -> str | None:
     """
     Определяет WebM (EBML) или Ogg по сигнатуре, если Content-Type неверен.
 
-    Returns:
+    Возвращает:
         Суффикс для ffmpeg: ".webm" или ".ogg", либо None.
     """
     if len(data) < 4:
@@ -143,7 +143,7 @@ async def transcode_audio_bytes_to_m4a_aac(data: bytes, source_suffix: str) -> b
     """
     Перекодирует вход в AAC внутри контейнера M4A (совместимо с iOS Safari и WKWebView).
 
-    Raises:
+    Исключения:
         RuntimeError: нет ffmpeg или сбой ffmpeg.
         ValueError: пустой вход.
     """

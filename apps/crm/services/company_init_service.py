@@ -70,10 +70,10 @@ class CompanyInitService:
         """
         Инициализирует компанию: копирует системные типы с company_id.
 
-        Args:
+        Аргументы:
             company_id: ID компании для инициализации
 
-        Returns:
+        Возвращает:
             Статистика: сколько типов создано
         """
         logger.info(f"Initializing company: {company_id}")
@@ -266,10 +266,10 @@ class CompanyInitService:
         """
         Проверяет существующие типы для компании (прямой запрос к БД).
 
-        Args:
+        Аргументы:
             company_id: ID компании
 
-        Returns:
+        Возвращает:
             Список существующих типов компании
         """
         return await self._entity_type_repo.list_by_company(company_id=company_id, limit=10000)

@@ -1,5 +1,5 @@
 /**
- * Flow editor — единый slice состояния редактора.
+ * Редактор flow — единый slice состояния редактора.
  *
  * Содержит:
  *   - доменное состояние flow и черновик ветки (`branchData`);
@@ -224,7 +224,7 @@ export const editorResource = createAsyncOp({
     name: 'flows/editor',
     silent: true,
     transport: 'http',
-    // UI-only фабрика: held state редактора flows, без реальных HTTP-вызовов
+    // UI-only фабрика: удерживаемое состояние редактора flows, без реальных HTTP-вызовов
     // (см. ниже extraInitial и расширенный extraReducer). `.run()` запрещён;
     // данные мутируются через actions (loadFlow / setBranch / setActiveTool / ...).
     // restMirror с `service: 'ui-only'` явно декларирует отсутствие REST-зеркала
@@ -836,7 +836,7 @@ export const editorResource = createAsyncOp({
 });
 
 /**
- * Bulk delete нод и связанных рёбер.
+ * Массовое удаление нод и связанных рёбер.
  *
  * REST-зеркало: POST /flows/api/v1/flows/{flow_id}/nodes/bulk_delete
  * Транспорт http; success триггерит reducer для очистки multiSelection и
@@ -866,7 +866,7 @@ export const editorBulkDeleteOp = createAsyncOp({
 });
 
 /**
- * Persist sticky notes — PATCH metadata flow.config.metadata.sticky_notes.
+ * Сохранение стикеров — PATCH metadata flow.config.metadata.sticky_notes.
  */
 export const stickyNoteUpsertOp = createAsyncOp({
     name: 'flows/sticky_note_upsert',

@@ -10,7 +10,7 @@ from core.models.billing_models import DEFAULT_TARIFF_PRICES
 from core.models.identity_models import Company
 
 
-def _minimal_base_prices() -> dict:
+def _minimal_base_prices() -> dict[str, dict[str, float]]:
     return {"llm": {"*": 1.0}}
 
 

@@ -1,4 +1,4 @@
-"""Baseline flows DB
+"""Baseline БД flows.
 
 Revision ID: agents_0001
 Revises:

@@ -1,7 +1,7 @@
 /**
  * PlatformSidebar — унифицированный desktop-сайдбар сервиса.
  *
- * Поддержка collapsed mode (только иконки). Transparent design — использует slots для кастомизации.
+ * Поддержка collapsed mode (только иконки). Прозрачный design — использует slots для кастомизации.
  *
  * Mobile shell 2026: на ширине <= 767px хост скрыт (`display: none` в sidebar.styles.js).
  * Первичная навигация на мобиле — <platform-bottom-nav> + <platform-top-bar>,

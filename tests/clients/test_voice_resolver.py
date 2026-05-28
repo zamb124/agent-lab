@@ -26,6 +26,7 @@ from core.clients.voice_resolver import (
     resolve_stt_settings,
 )
 from core.config import get_settings
+from core.db.repositories.company_voice_provider_repository import VoiceKind
 from core.logging.scope import SystemLogScope
 
 pytestmark = pytest.mark.timeout(15)
@@ -77,7 +78,7 @@ def _find_voice_resolver_caplog_record(
     raise AssertionError(f"Нет log record voice_resolver с событием {event_name!r}")
 
 
-def _stub_company_cache(company_id: str, *, kind: str, row: _CompanyOverrideRow | None) -> None:
+def _stub_company_cache(company_id: str, *, kind: VoiceKind, row: _CompanyOverrideRow | None) -> None:
     """Положить готовое значение в TTL-кэш, чтобы не ходить в БД."""
     _company_cache[(company_id, kind)] = (time.monotonic() + 3600, row)
 

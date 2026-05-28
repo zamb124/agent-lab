@@ -1,4 +1,4 @@
-"""Shared documentation response models."""
+"""Общие модели ответов документации."""
 
 from core.docs.models import (
     CodeTemplate,

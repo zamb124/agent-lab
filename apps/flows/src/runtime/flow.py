@@ -400,10 +400,10 @@ class Flow:
         - Resume: если есть state.interrupt и state.content (ответ пользователя)
         - Start: новый запуск с entry ноды
 
-        Args:
+        Аргументы:
             state: ExecutionState
 
-        Returns:
+        Возвращает:
             Финальный ExecutionState
         """
         await self._require_workflow_instance(state)
@@ -418,7 +418,7 @@ class Flow:
                 state.hitl_handoff_correlation_id = str(ir.correlation_id)
             state.interrupt = None
         elif not state.current_nodes:
-            # Start: новый запуск
+            # Старт: новый запуск
             state.current_nodes = [self.entry]
 
         state.variables = {**self.variables, **state.variables}
@@ -797,7 +797,7 @@ class Flow:
         original_exc_count = len(original_state.execution_exceptions)
 
         for result in results:
-            # messages - добавляем новые
+            # messages — добавляем новые
             new_messages = result.messages[original_msg_count:]
             merged.messages.extend(new_messages)
 
@@ -805,7 +805,7 @@ class Flow:
                 new_excs = result.execution_exceptions[original_exc_count:]
                 merged.execution_exceptions.extend(new_excs)
 
-            # nested_states - мержим напрямую (без сериализации)
+            # nested_states — мержим напрямую (без сериализации)
             if result.nested_states:
                 merged.nested_states.update(result.nested_states)
 
@@ -970,13 +970,13 @@ class Flow:
         """
         Проверяет breakpoint и останавливает выполнение если активен.
 
-        Args:
+        Аргументы:
             state: Текущий ExecutionState
             node_id: ID текущей ноды
             node_type: Тип ноды
             emitter: Emitter для публикации событий
 
-        Returns:
+        Возвращает:
             True если breakpoint сработал и выполнение остановлено
         """
         logger.info(f"Flow {self.flow_id}: _check_breakpoint node='{node_id}', breakpoint_hit='{state.breakpoint_hit}', breakpoints={state.breakpoints}")
@@ -1290,11 +1290,11 @@ class Flow:
         """
         Создаёт flow из FlowConfig.
 
-        Args:
+        Аргументы:
             config: FlowConfig (model_dump() или dict)
             variables: Опционально - pre-resolved переменные выполнения.
 
-        Returns:
+        Возвращает:
             Экземпляр Flow
         """
         config_json = require_json_object(config, "flow_config")
@@ -1317,7 +1317,7 @@ class Flow:
                 container=container,
             )
 
-        # variables: pre-resolved runtime payload > persisted resolved_variables > authored variables.
+        # variables: pre-resolved runtime payload > persisted resolved_variables > authored variables из конфига (по приоритету).
         raw_variables = variables
         if raw_variables is None:
             raw_variables = config_json.get("resolved_variables")

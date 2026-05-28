@@ -298,7 +298,7 @@ class A2AChannel(BaseChannel):
         self,
         prepared: PreparedTaskParams,
     ) -> AsyncGenerator[TaskStatusUpdateEvent, None]:
-        """A2A Section 3.4.3: follow-up при input-required с operator takeover.
+        """A2A Section 3.4.3: продолжение диалога при input-required с operator takeover.
 
         Маршрутизирует текст пользователя в dialog_log без запуска flow.
         Возвращает status-update input-required (задача остаётся в ожидании оператора).
@@ -469,7 +469,7 @@ class A2AChannel(BaseChannel):
         ВАЖНО: подписка на канал ПЕРЕД киком задачи, иначе race condition -
         события могут быть опубликованы до подписки и потеряны.
 
-        Args:
+        Аргументы:
             params: параметры сообщения
             context: контекст с user_groups для проверки permissions
         """
@@ -481,7 +481,7 @@ class A2AChannel(BaseChannel):
 
         prepared = await self._prepare_a2a_params(params, metadata)
 
-        # A2A Section 3.4.3: follow-up при активном operator takeover
+        # A2A Section 3.4.3: продолжение диалога при активном operator takeover
         if prepared.is_takeover_user_reply:
             events: list[StreamEvent] = [
                 event async for event in self._handle_takeover_user_reply(prepared)
@@ -545,17 +545,17 @@ class A2AChannel(BaseChannel):
         self, params: MessageSendParams, context: ChannelRequestContext = None
     ) -> AsyncGenerator[Message | Task | TaskStatusUpdateEvent | TaskArtifactUpdateEvent, None]:
         """
-        Streaming выполнение - yield'ит события по мере генерации через Redis Pub/Sub.
+        Streaming выполнение — генерирует события по мере генерации через Redis Pub/Sub.
 
         ВАЖНО: подписка на канал ПЕРЕД киком задачи, иначе race condition.
 
-        A2A input-required follow-up (Section 3.4.3):
+        A2A input-required, продолжение диалога (Section 3.4.3):
         при активном operator takeover реплика пользователя маршрутизируется в dialog_log
         без запуска flow; SSE отдаёт единственный status-update input-required.
 
-        Args:
+        Аргументы:
             params: параметры сообщения
-            context: контекст с user_groups для проверки permissions
+            context: контекст с user_groups для проверки прав доступа
         """
         set_current_channel(self)
 
@@ -565,7 +565,7 @@ class A2AChannel(BaseChannel):
 
         prepared = await self._prepare_a2a_params(params, metadata)
 
-        # A2A Section 3.4.3: follow-up при активном operator takeover
+        # A2A Section 3.4.3: продолжение диалога при активном operator takeover
         if prepared.is_takeover_user_reply:
             async for event in self._handle_takeover_user_reply(prepared):
                 yield event

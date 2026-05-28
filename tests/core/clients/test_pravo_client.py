@@ -2,9 +2,12 @@
 Тесты core.clients.pravo (без сети: только нормализация и разбор ответов).
 """
 
+import json
+
 import pytest
 
 from core.clients.pravo import PravoCatalogHit, PravoClient, PravoClientError
+from core.types import parse_json_object
 
 H64 = "007c57b8a5c11e0eb8e77ae8e75586909c5a0e5fb9ab0d295b8acc3344ac4ccf"
 
@@ -53,17 +56,21 @@ def test_coerce_ips_search_limit() -> None:
 
 
 def test_hits_from_search_json_docs() -> None:
-    body = {
-        "page": 1,
-        "pageSize": 10,
-        "docs": [
+    body = parse_json_object(
+        json.dumps(
             {
-                "hash": H64,
-                "name": "Тестовое название",
-                "adoption": "Федеральный закон …",
-            },
-        ],
-    }
+                "page": 1,
+                "pageSize": 10,
+                "docs": [
+                    {
+                        "hash": H64,
+                        "name": "Тестовое название",
+                        "adoption": "Федеральный закон …",
+                    },
+                ],
+            }
+        )
+    )
     hits = PravoClient._hits_from_search_json(body)
     assert len(hits) == 1
     assert hits[0].document_hash == H64

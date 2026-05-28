@@ -8,7 +8,7 @@ Permissions основаны на группах пользователя из J
 # Группа с полным доступом
 ADMIN_GROUP = "admin"
 
-# Secure default permission если permission не указан.
+# Безопасное право по умолчанию, если permission не указан.
 DEFAULT_PERMISSION: tuple[str, ...] = (ADMIN_GROUP,)
 
 

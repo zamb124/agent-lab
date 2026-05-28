@@ -1,4 +1,4 @@
-"""Image generation клиент через platform LLM capability."""
+"""Клиент генерации изображений через platform LLM capability."""
 
 import base64
 import re
@@ -36,7 +36,7 @@ class NanoBananaClient:
         storage: "Storage",
     ) -> None:
         """
-        Args:
+        Аргументы:
             storage: Storage для работы с БД
         """
         self._storage: Storage = storage
@@ -74,13 +74,13 @@ class NanoBananaClient:
         """
         Генерирует изображения через LLM с multimodal output.
 
-        Args:
+        Аргументы:
             prompt: Текстовое описание для генерации
             reference_file_ids: ID файлов-референсов
             num_images: Количество изображений
             is_editing: Режим редактирования
 
-        Returns:
+        Возвращает:
             Список file_id сгенерированных изображений
         """
         logger.info(f"Генерация {num_images} изображений через LLM: {prompt[:50]}...")

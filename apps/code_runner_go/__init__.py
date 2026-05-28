@@ -1,1 +1,1 @@
-"""Go code runner service."""
+"""Сервис Go code runner."""

@@ -1,7 +1,7 @@
 /**
  * sync-direct-member-row — строка участника компании в DM-секции sidebar.
  *
- * Click: ищет direct в списке; если есть — navigate и закрытие моб. сайдбара;
+ * Клик: ищет direct в списке; если есть — navigate и закрытие моб. сайдбара;
  * иначе create; после sync/channels/created с тем же peer — navigate.
  * Дубликаты direct на сервере не создаются (идемпотентный create).
  *

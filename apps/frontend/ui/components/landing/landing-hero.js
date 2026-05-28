@@ -1,5 +1,5 @@
 /**
- * Landing Hero - Главная секция лендинга
+ * Hero лендинга — главная секция лендинга
  */
 import { html, css, nothing } from 'lit';
 import { unsafeHTML } from 'lit/directives/unsafe-html.js';

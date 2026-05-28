@@ -1,5 +1,5 @@
 /**
- * Settings resources — настройки компании.
+ * Ресурсы настроек — настройки компании.
  *
  * API:
  *   GET   /frontend/api/settings/company         → profile (name/subdomain/budget/metadata)

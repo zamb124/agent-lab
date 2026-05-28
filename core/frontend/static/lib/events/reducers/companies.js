@@ -1,5 +1,5 @@
 /**
- * Companies slice.
+ * Слайс companies.
  *
  * state.companies:
  *   list:        Array - my companies

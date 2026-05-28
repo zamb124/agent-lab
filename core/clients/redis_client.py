@@ -141,12 +141,12 @@ class _RedisSdkConnection:
 
 class RedisClient:
     """
-    Redis клиент для кэширования токенов и сессий с auto-reconnect.
+    Redis-клиент для кэширования токенов и сессий с auto-reconnect.
     """
 
     def __init__(self, redis_url: str, max_retries: int = 3):
         """
-        Args:
+        Аргументы:
             redis_url: URL подключения к Redis (например, redis://localhost:6379/0)
             max_retries: Максимальное количество попыток переподключения
         """
@@ -186,7 +186,7 @@ class RedisClient:
             logger.info("RedisClient: соединение закрыто")
 
     async def _ensure_connected(self) -> bool:
-        """Автоматическое переподключение с retry и exponential backoff"""
+        """Автоматическое переподключение с retry и экспоненциальной задержкой"""
         async with self._connection_lock:
             if self._client:
                 try:
@@ -223,7 +223,7 @@ class RedisClient:
 
     async def get(self, key: str) -> str | None:
         """
-        Read-path: возвращает `None` если ключ отсутствует ИЛИ Redis недоступен.
+        Путь чтения: возвращает ``None``, если ключ отсутствует или Redis недоступен.
 
         Это сознательный fallback для cache-read сценариев. Caller, который
         не может пережить недоступность Redis (lock NX, ledger), использует
@@ -275,7 +275,7 @@ class RedisClient:
         raise RedisOperationError(f"getdel({key}) lua вернул non-string: {type(lua_result).__name__}")
 
     async def set(self, key: str, value: str, ttl: int | None = None) -> bool:
-        """Устанавливает значение по ключу с auto-reconnect; True при успехе."""
+        """Устанавливает значение по ключу с auto-reconnect; ``True`` при успехе."""
         if not await self._ensure_connected():
             return False
 
@@ -296,7 +296,7 @@ class RedisClient:
         `SET key value NX EX ttl`. True только если ключ раньше отсутствовал.
 
         Атомарная команда: при Redis-ошибке поднимает `RedisOperationError`.
-        Caller (distributed lock, idempotency guard, dedupe) не может
+        Вызывающий код (distributed lock, idempotency guard, dedupe) не может
         интерпретировать "Redis недоступен" как "лок взят/не взят" — это
         прямой путь к double-execution.
         """
@@ -359,8 +359,8 @@ class RedisClient:
         """
         Добавляет значения в конец списка (RPUSH).
 
-        Write-операция в ledger — поднимает `RedisOperationError`, чтобы
-        caller не считал что событие записано когда Redis не достучали.
+        Операция записи в ledger поднимает ``RedisOperationError``, чтобы
+        вызывающий код не считал, что событие записано, когда Redis недоступен.
         """
         if not await self._ensure_connected():
             raise RedisOperationError(f"rpush({key}): Redis недоступен после retry")
@@ -407,11 +407,11 @@ class RedisClient:
         return client.pubsub()
 
     async def publish(self, channel: str, message: str) -> int:
-        """Публикует сообщение в канал Pub/Sub с auto-reconnect и retry"""
+        """Публикует сообщение в канал Pub/Sub с auto-reconnect и повтором"""
         if not await self._ensure_connected():
             raise RuntimeError("Redis client not connected after retries")
 
-        # Попытка публикации с одним retry
+        # Одна повторная попытка публикации
         for attempt in range(2):
             try:
                 client = self._require_client()
@@ -433,18 +433,18 @@ class RedisClient:
         ready_event: asyncio.Event | None = None,
     ) -> AsyncIterator[str]:
         """
-        Подписывается на канал и yield'ит сообщения с auto-reconnect.
+        Подписывается на канал и отдаёт сообщения через yield с auto-reconnect.
 
         Idle-timeout: сбрасывается при каждом полученном сообщении.
         Max-timeout: абсолютный предел жизни подписки (защита от утечек).
 
-        Args:
+        Аргументы:
             channel: Имя канала
             timeout: Idle-таймаут в секундах (сбрасывается при каждом сообщении)
             max_timeout: Абсолютный потолок жизни подписки
             ready_event: Event для сигнализации о готовности подписки
 
-        Yields:
+        Генерирует:
             Сообщения из канала
         """
         if not await self._ensure_connected():

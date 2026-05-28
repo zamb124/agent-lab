@@ -46,7 +46,7 @@ logger = get_logger(__name__)
 
 
 class MergedJsonConfigSettingsSource(PydanticBaseSettingsSource):
-    """Pydantic settings source backed by merged project JSON config."""
+    """Источник Pydantic Settings на основе объединённого JSON-конфига проекта."""
 
     @override
     def get_field_value(

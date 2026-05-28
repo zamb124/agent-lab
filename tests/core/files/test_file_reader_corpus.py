@@ -67,13 +67,19 @@ async def test_corpus_file_reads_correctly(
     )
 
     # 2) полное чтение
-    read_kwargs: dict = {}
+    transcription_company_id: str | None = None
+    vision_prompt: str | None = None
     if _is_audio(entry):
-        read_kwargs["transcription_company_id"] = corpus_stt_company_id(unique_id)
+        transcription_company_id = corpus_stt_company_id(unique_id)
     if _is_vision(entry):
-        read_kwargs["vision_prompt"] = "Опиши содержимое изображения."
+        vision_prompt = "Опиши содержимое изображения."
 
-    result = await reader.read(raw, file_name=entry.path.name, **read_kwargs)
+    result = await reader.read(
+        raw,
+        file_name=entry.path.name,
+        transcription_company_id=transcription_company_id,
+        vision_prompt=vision_prompt,
+    )
 
     # 3) kind совпадает
     assert result.detected_kind == entry.expected_kind, (

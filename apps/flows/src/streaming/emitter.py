@@ -25,17 +25,17 @@ class Emitter(BaseEmitter):
     - trace_id (из OpenTelemetry контекста)
     - span_id (из OpenTelemetry контекста)
 
-    Examples:
+    Примеры:
         >>> emitter = Emitter(redis, state)
-        >>> await emitter.emit_text("Hello")
-        >>> await emitter.emit_complete("Done")
+        >>> await emitter.emit_text("Привет")
+        >>> await emitter.emit_complete("Готово")
     """
 
     redis: RedisClient
 
     def __init__(self, redis_client: RedisClient, state: ExecutionState):
         """
-        Args:
+        Аргументы:
             redis_client: Redis клиент для pub/sub
             state: ExecutionState с task_id, context_id
         """
@@ -47,7 +47,7 @@ class Emitter(BaseEmitter):
         """
         Публикует событие в Redis с автоматическим добавлением trace контекста.
 
-        Args:
+        Аргументы:
             event: A2A событие
         """
         event_dict = parse_json_object(event.model_dump_json(), "StreamEvent")

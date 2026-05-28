@@ -1,5 +1,5 @@
 /**
- * Team slice.
+ * Слайс team.
  *
  * state.team:
  *   members:     Array

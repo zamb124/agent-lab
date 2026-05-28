@@ -1,4 +1,4 @@
-"""Search provider contracts."""
+"""Контракты search-провайдеров."""
 
 from __future__ import annotations
 
@@ -8,7 +8,7 @@ from core.search import MetaSearchProviderStatus, MetaSearchRequest, WebSearchRe
 
 
 class SearchProvider(Protocol):
-    """Typed adapter contract for external search providers."""
+    """Типизированный контракт адаптера для внешних search-провайдеров."""
 
     provider_id: str
 

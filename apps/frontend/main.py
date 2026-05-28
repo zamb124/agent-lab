@@ -1,5 +1,5 @@
-"""
-Frontend Service - FastAPI приложение для управления платформой
+""""
+Сервис frontend — FastAPI-приложение для управления платформой
 """
 
 from datetime import UTC, datetime

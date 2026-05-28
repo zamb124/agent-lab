@@ -1,4 +1,4 @@
-"""Scheduler bootstrap coverage for LLM background schedules."""
+"""Покрытие bootstrap scheduler для фоновых LLM-расписаний."""
 
 from __future__ import annotations
 

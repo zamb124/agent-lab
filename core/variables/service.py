@@ -25,7 +25,7 @@ class VariablesService:
 
     def __init__(self, variable_repository: VariableRepository):
         """
-        Args:
+        Аргументы:
             variable_repository: Репозиторий для работы с переменными
         """
         self._variable_repository: VariableRepository = variable_repository
@@ -41,14 +41,14 @@ class VariablesService:
         """
         Сохраняет переменную компании.
 
-        Args:
+        Аргументы:
             key: Ключ переменной
             value: Значение
             is_secret: Помечает как секрет (для UI)
             groups: Список групп/тегов для организации переменных
             description: Описание переменной
 
-        Returns:
+        Возвращает:
             True если сохранено
         """
         variable = Variable(
@@ -67,9 +67,9 @@ class VariablesService:
         """
         Получает переменную компании.
 
-        Args:
+        Аргументы:
             key: Ключ переменной
-        Returns:
+        Возвращает:
             Значение или None
         """
         variable = await self._variable_repository.get(key)
@@ -102,11 +102,11 @@ class VariablesService:
         """
         Резолвит @var:key ссылки в тексте.
 
-        Args:
+        Аргументы:
             text: Текст с возможными ссылками @var:key
             context_vars: Дополнительные переменные из контекста
 
-        Returns:
+        Возвращает:
             Текст с подставленными значениями
         """
         if not text:
@@ -121,7 +121,7 @@ class VariablesService:
         """
         Получает все переменные компании с разрешенными ссылками.
 
-        Returns:
+        Возвращает:
             Словарь {key: resolved_value}
         """
         all_vars = await self.list_vars()
@@ -151,7 +151,7 @@ class VariablesService:
         - обычное значение → возвращает как есть
         - dict/list → рекурсивно резолвит все строки внутри
 
-        Returns:
+        Возвращает:
             Резолвнутое значение
         """
         variables_map = await self.get_company_variables_map()
@@ -166,10 +166,10 @@ class VariablesService:
         """
         Извлекает все ключи переменных из значения.
 
-        Args:
+        Аргументы:
             value: Значение (str, dict, list)
 
-        Returns:
+        Возвращает:
             Множество ключей переменных
         """
         keys: set[str] = set()
@@ -196,11 +196,11 @@ class VariablesService:
         """
         Добавляет тег к переменной (если переменная существует).
 
-        Args:
+        Аргументы:
             var_key: Ключ переменной
             tag: Тег для добавления
 
-        Returns:
+        Возвращает:
             True если тег добавлен
         """
         variable = await self._variable_repository.get(var_key)
@@ -226,11 +226,11 @@ class VariablesService:
         """
         Добавляет теги к переменным используемым в сущности (агент/flow).
 
-        Args:
+        Аргументы:
             entity_name: Название сущности (имя агента или flow)
             data_sources: Список источников данных для поиска @var: ссылок
 
-        Returns:
+        Возвращает:
             Количество переменных с добавленными тегами
         """
         all_var_keys: set[str] = set()

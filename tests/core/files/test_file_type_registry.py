@@ -53,7 +53,7 @@ class TestRegistryInvariants:
         for entry in FILE_TYPE_REGISTRY:
             assert isinstance(entry, FileTypeEntry)
             with pytest.raises(AttributeError):
-                entry.extension = ".changed"
+                entry.extension = ".changed"  # pyright: ignore[reportAttributeAccessIssue]
 
     def test_all_categories_in_all_categories_tuple(self) -> None:
         for cat in FileCategory:

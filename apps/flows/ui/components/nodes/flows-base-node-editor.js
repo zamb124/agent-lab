@@ -78,14 +78,14 @@ export class FlowsBaseNodeEditor extends PlatformElement {
                 overflow: auto;
             }
 
-            /* Compact layout: stacked */
+            /* Компактная раскладка: столбец */
             .compact {
                 display: flex;
                 flex-direction: column;
                 gap: var(--space-4);
             }
 
-            /* Expanded layout: master-detail */
+            /* Развёрнутая раскладка: master-detail */
             .panel-layout {
                 display: grid;
                 grid-template-columns: 320px 1fr;
@@ -112,7 +112,7 @@ export class FlowsBaseNodeEditor extends PlatformElement {
                 min-width: 0;
             }
 
-            /* Sections */
+            /* Секции */
             .section {
                 display: flex;
                 flex-direction: column;
@@ -186,7 +186,7 @@ export class FlowsBaseNodeEditor extends PlatformElement {
                 flex-shrink: 0;
             }
 
-            /* File and resource lists */
+            /* Списки файлов и ресурсов */
             .item-list {
                 display: flex; flex-direction: column; gap: var(--space-1);
             }

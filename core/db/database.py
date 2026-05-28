@@ -85,7 +85,7 @@ async def get_engine(db_url: str | None = None) -> AsyncEngine:
     """
     Лениво создает engine для текущего event loop и URL БД.
 
-    Args:
+    Аргументы:
         db_url: URL БД (если не указан — shared_url)
     """
     loop_id = _get_loop_id()
@@ -137,7 +137,7 @@ async def get_session_factory(db_url: str | None = None) -> async_sessionmaker[A
     """
     Лениво создает session factory для текущего event loop и URL БД.
 
-    Args:
+    Аргументы:
         db_url: URL БД (если не указан — shared_url)
     """
     loop_id = _get_loop_id()
@@ -165,10 +165,10 @@ async def session(db_url: str | None = None) -> AsyncGenerator[AsyncSession, Non
     """
     Алиас для get_session_factory() - создает контекстный менеджер сессии.
 
-    Args:
+    Аргументы:
         db_url: URL БД (если не указан — shared_url)
 
-    Usage:
+    Использование:
         async for s in session():
             await s.execute(...)
             break
@@ -180,9 +180,9 @@ async def session(db_url: str | None = None) -> AsyncGenerator[AsyncSession, Non
 
 async def get_db(db_url: str | None = None) -> AsyncGenerator[AsyncSession, None]:
     """
-    Dependency для получения сессии БД в FastAPI.
+    Зависимость FastAPI для получения сессии БД.
 
-    Args:
+    Аргументы:
         db_url: URL БД (если не указан — shared_url)
     """
     session_factory = await get_session_factory(db_url)
@@ -201,7 +201,7 @@ async def wait_for_db(
     Ожидает готовности БД с повторными попытками.
     Если БД недоступна после всех попыток - бросает исключение.
 
-    Args:
+    Аргументы:
         max_retries: Максимальное количество попыток
         retry_interval: Интервал между попытками
         db_url: URL БД (если не указан — shared_url)

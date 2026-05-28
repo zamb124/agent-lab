@@ -1,4 +1,4 @@
-"""Bootstrap fixed public search embeds in company system."""
+"""Bootstrap фиксированных public search embed в company system."""
 
 from __future__ import annotations
 
@@ -105,7 +105,7 @@ async def _set_system_context(container: "FrontendContainer", *, session_id: str
 async def ensure_public_search_embed_configs(
     container: "FrontendContainer",
 ) -> dict[PublicSearchMode, EmbedConfig]:
-    """Create or update the fixed public search embed configs."""
+    """Создаёт или обновляет фиксированные embed-конфигурации public search."""
     _ = await _set_system_context(container, session_id="public_search_embed_bootstrap")
     try:
         cfg_repo = container.embed_config_repository

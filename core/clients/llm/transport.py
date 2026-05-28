@@ -1,4 +1,4 @@
-"""OpenAI-compatible HTTP transport for LLMClient."""
+"""HTTP transport, совместимый с OpenAI, для LLMClient."""
 
 from __future__ import annotations
 
@@ -66,7 +66,7 @@ logger = get_logger(__name__)
 
 
 class LLMTransportClient(Protocol):
-    """Attribute contract consumed by the OpenAI-compatible transport."""
+    """Контракт атрибутов, используемый OpenAI-compatible transport."""
 
     model: str
     api_key: str
@@ -104,7 +104,7 @@ async def stream_once(
 
     Принимает A2A Message, возвращает A2A события.
 
-    Args:
+    Аргументы:
         messages: Список сообщений
         tools: Список tools для function calling
         response_format: Формат ответа (json_schema для structured output)
@@ -262,7 +262,7 @@ async def stream_once(
 
                 cancelled_evt = asyncio.Event()
                 idle_timeout_evt = asyncio.Event()
-                # Shared mutable: watchdog обновляет/читает last_chunk_time
+                # Общая мутабельная переменная: watchdog обновляет/читает last_chunk_time
                 last_chunk_time = time.monotonic()
                 chunks_received = 0
                 idle_watch_task: asyncio.Task[None] | None = None
@@ -300,7 +300,7 @@ async def stream_once(
                     except asyncio.CancelledError:
                         raise
 
-                # Watchdog запускается ВСЕГДА (не только при stream_cancel_poll)
+                # Watchdog запускается всегда (не только при stream_cancel_poll)
                 idle_watch_task = run_with_log_context(
                     _watch_idle_and_cancel(),
                     name=f"llm.stream_idle_watch.{client.model}",
@@ -663,14 +663,14 @@ async def invoke_once(
 
     Удобен для vision/OCR запросов где не нужен streaming.
 
-    Args:
+    Аргументы:
         messages: Список A2A сообщений (может содержать FilePart)
         json_output: Запросить JSON формат ответа
         max_tokens: Максимальное количество токенов
         extra_body: Доп. поля JSON-тела; мержатся последними
         extra_headers: Доп. HTTP заголовки; мерж последним
 
-    Returns:
+    Возвращает:
         Строка или dict (при json_output=True)
     """
     openai_messages = _messages_to_openai(messages)

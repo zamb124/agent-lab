@@ -1,5 +1,5 @@
 /**
- * API Keys page — управление API ключами компании.
+ * Страница API Keys — управление API ключами компании.
  *
  * Источник данных — ресурс 'frontend/api_keys' (createResourceCollection),
  * подключённый через `this.useResource(...)`. Страница не знает про httpRequest,

@@ -1,5 +1,5 @@
 /**
- * flows-resolvers — pure helpers для нормализации данных в UI flows.
+ * flows-resolvers — чистые хелперы для нормализации данных в UI flows.
  *
  * Канон: дефолты живут только в фабриках (initialSlice). Эти helpers — для случаев,
  * когда нужен явный выбор-источника или приведение типа на стороне рендера.
@@ -150,7 +150,7 @@ export function getNodeType(node) {
 }
 
 /**
- * Sticky note size с дефолтом из аргументов.
+ * Размер стикера с дефолтом из аргументов.
  */
 export function getStickyNoteSize(note, defaultW, defaultH) {
     if (typeof defaultW !== 'number' || typeof defaultH !== 'number') {
@@ -166,7 +166,7 @@ export function getStickyNoteSize(note, defaultW, defaultH) {
 }
 
 /**
- * Resolve flow id из state редактора.
+ * Получение flow_id из state редактора.
  */
 export function resolveFlowId(state) {
     if (!isPlainObject(state)) return null;

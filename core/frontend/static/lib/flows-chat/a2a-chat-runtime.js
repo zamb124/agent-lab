@@ -1,8 +1,8 @@
 /**
- * Pure A2A chat runtime.
+ * Чистый A2A chat runtime.
  *
  * One JSON-RPC/SSE frame in, normalized chat/runtime events out. No DOM, no
- * EventBus, no fetch, no app imports.
+ * EventBus, без fetch, без импортов app.
  */
 
 export const A2A_CHAT_MESSAGE_METHODS = Object.freeze(['message/send', 'message/stream']);

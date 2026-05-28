@@ -1,6 +1,6 @@
 /**
  * Общие стили кнопок
- * Humanitec UI Kit — violet primary, orange accent, pill shape
+ * Humanitec UI Kit — фиолетовый primary, оранжевый accent, форма pill
  * Поддержка темной и светлой темы
  */
 import { css } from '../../../assets/js/lit/lit.min.js';

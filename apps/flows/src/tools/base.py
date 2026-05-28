@@ -107,10 +107,10 @@ class BaseTool(ABC):
         """
         Извлекает группы пользователя из state.
 
-        Args:
+        Аргументы:
             state: ExecutionState агента
 
-        Returns:
+        Возвращает:
             Список групп пользователя
         """
         if state.user_groups:
@@ -130,10 +130,10 @@ class BaseTool(ABC):
         """
         Проверяет permission на tool.
 
-        Args:
+        Аргументы:
             state: ExecutionState агента с информацией о пользователе
 
-        Returns:
+        Возвращает:
             None если есть доступ, иначе сообщение об ошибке для агента
         """
         config = get_settings()
@@ -161,11 +161,11 @@ class BaseTool(ABC):
         Наследники переопределяют этот метод.
         Для стандартных проверок permissions вызывайте _check_before_run().
 
-        Args:
+        Аргументы:
             args: Аргументы вызова
             state: ExecutionState агента
 
-        Returns:
+        Возвращает:
             Результат выполнения
         """
         check_result = await self._check_before_run(args, state)
@@ -183,7 +183,7 @@ class BaseTool(ABC):
         """
         Проверки перед выполнением: permissions.
 
-        Returns:
+        Возвращает:
             Результат если нужно вернуть permission error, None если продолжить
         """
         _ = args
@@ -201,11 +201,11 @@ class BaseTool(ABC):
 
         Наследники реализуют логику тула здесь.
 
-        Args:
+        Аргументы:
             args: Аргументы вызова
             state: ExecutionState агента
 
-        Returns:
+        Возвращает:
             Результат выполнения
         """
         pass
@@ -214,8 +214,8 @@ class BaseTool(ABC):
         """
         Возвращает схему инструмента для OpenAI.
 
-        Returns:
-            OpenAI tool schema
+        Возвращает:
+            схема tool OpenAI
         """
         schema: OpenAIToolSchema = {
             "type": "function",

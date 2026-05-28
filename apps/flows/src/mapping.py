@@ -63,11 +63,11 @@ class MappingResolver:
         """
         Резолвит значение из маппинга.
 
-        Args:
+        Аргументы:
             source: Источник значения (@state:path, @var:name или константа)
             state: ExecutionState или Dict (для тестов)
 
-        Returns:
+        Возвращает:
             Значение из state по пути, из переменных или константа
         """
         if not isinstance(source, str):
@@ -90,11 +90,11 @@ class MappingResolver:
 
         Работает с ExecutionState (через атрибуты) и с dict (через ключи).
 
-        Args:
+        Аргументы:
             data: Объект (ExecutionState, dict, или любой другой)
             path: Путь вида "user.profile.name"
 
-        Returns:
+        Возвращает:
             Значение по пути или None если путь не найден
         """
         if not path:
@@ -118,11 +118,11 @@ class MappingResolver:
 
         Поддерживает вложенные пути: @var:config.api_key
 
-        Args:
+        Аргументы:
             value: Строка с возможными @var: выражениями
             variables: Словарь переменных
 
-        Returns:
+        Возвращает:
             Строка с подставленными значениями
         """
         if not isinstance(value, str):
@@ -139,11 +139,11 @@ class MappingResolver:
         """
         Строит новый Dict на основе маппинга.
 
-        Args:
+        Аргументы:
             mapping: Маппинг {target_field: source}
             state: ExecutionState или Dict (для тестов)
 
-        Returns:
+        Возвращает:
             Новый Dict с замапленными полями
         """
         result: dict[str, object] = {}

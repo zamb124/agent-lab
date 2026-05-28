@@ -1,5 +1,5 @@
 /**
- * Storage effect.
+ * Эффект storage.
  *
  * Реагирует на STORAGE_PERSIST_REQUESTED и STORAGE_LOAD_REQUESTED, работает с
  * localStorage. Эмитит STORAGE_LOADED при успешной загрузке.

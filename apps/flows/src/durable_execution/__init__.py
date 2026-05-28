@@ -1,4 +1,4 @@
-"""Durable execution ledger for flows."""
+"""Durable execution ledger для flows."""
 
 from .hashing import hash_state_json
 from .manager import DurableWorkflowRuntime, WorkflowStateEventSpec, create_initial_state

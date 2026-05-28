@@ -27,7 +27,7 @@
  *     владельца компании).
  *   - Сохранение ролей → useResource('frontend/team_members').update(userId, { roles }).
  *   - Футер: Save roles (если admin и роли изменены), Message in Sync,
- *     Open in Team, Close.
+ *     Открыть в Team, Close.
  *   - Копирование user id: иконка в шапке слева от Save.
  *
  * Режим Other (member не найден):

@@ -1,5 +1,5 @@
 /**
- * Icon slice — кэш загруженных SVG.
+ * Слайс icon — кэш загруженных SVG.
  *
  * state.icon:
  *   uiCache:   { [name: string]: string } — UI иконки

@@ -22,7 +22,7 @@
  *     `_pending`) обрабатываются как push-события (с предупреждением в
  *     консоли при невалидном `type`).
  *
- * No-fallback: если истёк timeout — request падает с `WsTransportError`
+ * Без fallback: если истёк timeout — request падает с `WsTransportError`
  * (`ws_timeout`). На HTTP не переключается.
  *
  * Pre-connect queue: если `request()` вызван до `WS_CONNECTED` (типичный

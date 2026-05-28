@@ -1,5 +1,5 @@
 /**
- * Calendar effect — события, интеграции, синхронизация.
+ * Эффект calendar — события, интеграции, синхронизация.
  */
 
 import { httpRequest } from '../http.js';

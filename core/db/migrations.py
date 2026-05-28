@@ -58,7 +58,7 @@ async def run_migrations_async(service: str | None = None) -> None:
     """
     Применяет upgrade head.
 
-    Args:
+    Аргументы:
         service: если задано — только это дерево; иначе все сервисы из реестра.
     """
     _assert_full_registry()

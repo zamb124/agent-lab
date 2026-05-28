@@ -1,5 +1,5 @@
 /**
- * Sync typing helpers — построение строки typing-индикатора.
+ * Хелперы typing Sync — построение строки typing-индикатора.
  *
  * Вход: typingByChannel (slice presence), channelId, threadId,
  * myUserId (исключаем себя), members (для отображения имён), t.

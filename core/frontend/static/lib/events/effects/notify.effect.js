@@ -1,5 +1,5 @@
 /**
- * Notify effect.
+ * Эффект notify.
  *
  * При каждом UI_TOAST_SHOW ставит таймер на UI_TOAST_DISMISS по истечении duration.
  * Время жизни хранится в самом payload события — никаких локальных карт.

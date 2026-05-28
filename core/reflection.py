@@ -1,4 +1,4 @@
-"""Typed reflection and critic contracts for agent test-time compute."""
+"""Типизированные контракты рефлексии и критика для test-time compute агента."""
 
 from __future__ import annotations
 
@@ -16,7 +16,7 @@ ReflectionTargetKind = Literal["response", "result", "validation", "state_path"]
 
 
 class ReflectionTarget(StrictBaseModel):
-    """State projection slice reviewed by a critic."""
+    """Срез проекции state, который проверяет критик."""
 
     kind: ReflectionTargetKind
     state_path: str | None = Field(default=None, min_length=1)
@@ -31,7 +31,7 @@ class ReflectionTarget(StrictBaseModel):
 
 
 class CriticCriterion(StrictBaseModel):
-    """One explicit criterion the critic must evaluate."""
+    """Один явный критерий, который критик обязан оценить."""
 
     criterion_id: str = Field(..., min_length=1)
     description: str = Field(..., min_length=1)
@@ -39,7 +39,7 @@ class CriticCriterion(StrictBaseModel):
 
 
 class CriticPolicy(StrictBaseModel):
-    """Strict policy controlling when reflection approves or blocks a gate."""
+    """Строгая политика: когда рефлексия одобряет или блокирует gate."""
 
     policy_id: str = Field(..., min_length=1)
     gate: ReflectionGate
@@ -60,14 +60,14 @@ class CriticPolicy(StrictBaseModel):
 
 
 class ReflectionTargetSnapshot(StrictBaseModel):
-    """Resolved review target captured in durable activity input."""
+    """Разрешённая цель проверки, зафиксированная во входе durable activity."""
 
     target: ReflectionTarget
     value: JsonValue
 
 
 class ReflectionCritiqueIssue(StrictBaseModel):
-    """One concrete issue found by the critic."""
+    """Одна конкретная проблема, найденная критиком."""
 
     criterion_id: str = Field(..., min_length=1)
     severity: CriticSeverity
@@ -77,7 +77,7 @@ class ReflectionCritiqueIssue(StrictBaseModel):
 
 
 class ReflectionCritiqueResult(StrictBaseModel):
-    """Structured critic output returned by the model."""
+    """Структурированный ответ критика от модели."""
 
     decision: CriticDecision
     confidence: float = Field(..., ge=0.0, le=1.0)
@@ -86,7 +86,7 @@ class ReflectionCritiqueResult(StrictBaseModel):
 
 
 class ReflectionGateResult(StrictBaseModel):
-    """Deterministic gate result applied to workflow state."""
+    """Детерминированный результат gate, применённый к workflow state."""
 
     policy_id: str = Field(..., min_length=1)
     gate: ReflectionGate
@@ -97,7 +97,7 @@ class ReflectionGateResult(StrictBaseModel):
 
 
 class ReflectionRecord(StrictBaseModel):
-    """State history record for a completed reflection gate."""
+    """Запись истории state для завершённого reflection gate."""
 
     node_id: str = Field(..., min_length=1)
     execution_branch_id: str = Field(..., min_length=1)
@@ -110,7 +110,7 @@ def evaluate_reflection_gate(
     policy: CriticPolicy,
     critique: ReflectionCritiqueResult,
 ) -> ReflectionGateResult:
-    """Apply deterministic gate rules to a structured critic result."""
+    """Применяет детерминированные правила gate к структурированному ответу критика."""
     blocked_reasons: list[str] = []
     if critique.decision != "approved":
         blocked_reasons.append(f"decision:{critique.decision}")

@@ -36,7 +36,7 @@ function _toDate(input) {
 /**
  * @param {Date|string|number} input
  * @param {string} locale  'ru' | 'en'
- * @param {Intl.DateTimeFormatOptions} [options]  default — short date
+ * @param {Intl.DateTimeFormatOptions} [options]  по умолчанию — короткая дата
  * @returns {string}
  */
 export function formatPlatformDate(input, locale, options = { day: '2-digit', month: '2-digit', year: 'numeric' }) {

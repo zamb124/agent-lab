@@ -1,7 +1,7 @@
 /**
  * flows-flow-edit-modal — редактирование метаданных flow (name, description, обложка).
  *
- * Update — `PUT /flows/api/v1/flows/{flow_id}`. Загрузка файла — `flows/file_upload` (POST `/flows/api/v1/files/`).
+ * Обновление — `PUT /flows/api/v1/flows/{flow_id}`. Загрузка файла — `flows/file_upload` (POST `/flows/api/v1/files/`).
  */
 
 import { html, css } from 'lit';

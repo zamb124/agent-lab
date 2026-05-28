@@ -1,5 +1,5 @@
 /**
- * Landing Advantages - Преимущества с плывущими badges
+ * Преимущества лендинга — преимущества с плывущими badges
  */
 import { html, css } from 'lit';
 import { PlatformElement } from '@platform/lib/platform-element/index.js';
