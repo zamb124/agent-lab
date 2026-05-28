@@ -118,13 +118,7 @@ spec:
                   name: {{ .Values.platformSecretName }}
                   key: hf-token
                   optional: true
-            {{- include "agentlab.appEnv" . | nindent 12 }}
-            # GPU image = Python 3.14 GIL build (Dockerfile.gpu). agentlab.appEnv задаёт
-            # PYTHON_GIL=0 для free-threaded платформы — на GIL-build это fatal:
-            # "Disabling the GIL is not supported by this build". Duplicate env name:
-            # последний entry в container spec побеждает.
-            - name: PYTHON_GIL
-              value: "1"
+            {{- include "agentlab.appEnvGilBuild" . | nindent 12 }}
           ports:
             - name: http
               containerPort: {{ .Values.litserve.port }}

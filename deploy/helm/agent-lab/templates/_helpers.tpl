@@ -19,10 +19,12 @@
 {{/*
 Платформенные ENV для всех app/worker подов: URL баз, секреты, OAuth, LLM, S3, push, OnlyOffice, OTLP.
 Секреты — из Secret platformSecretName. URL баз — через ClusterIP postgres / redis.
+
+PYTHON_GIL задаётся отдельно в appEnv (0) и appEnvGilBuild (1) — нельзя дублировать имя
+env в одном container spec: Kubernetes strategic-merge patch падает с
+"doesn't match $setElementOrder list".
 */}}
-{{- define "agentlab.appEnv" -}}
-- name: PYTHON_GIL
-  value: "0"
+{{- define "agentlab.appEnvShared" -}}
 # GRANIAN_WORKERS=1: для async-ASGI workers>1 запускают N независимых event loops,
 # каждый отдельно вызывает ASGI lifespan startup → дублирующая инициализация
 # global state (SQLAlchemy/asyncpg pools на разных loops → "got Future attached
@@ -454,6 +456,21 @@
   value: http://alloy:4317
 - name: LOGGING__LOKI_QUERY_URL
   value: http://loki:3100
+{{- end -}}
+
+{{- define "agentlab.appEnv" -}}
+- name: PYTHON_GIL
+  value: "0"
+{{- include "agentlab.appEnvShared" . -}}
+{{- end -}}
+
+{{/*
+provider-litserve: GPU image на Python 3.14 GIL build (Dockerfile.gpu). PYTHON_GIL=0 fatal.
+*/}}
+{{- define "agentlab.appEnvGilBuild" -}}
+- name: PYTHON_GIL
+  value: "1"
+{{- include "agentlab.appEnvShared" . -}}
 {{- end -}}
 
 {{/*
