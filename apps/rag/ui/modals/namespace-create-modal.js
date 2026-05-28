@@ -2,7 +2,7 @@
  * RagNamespaceCreateModal — создание нового namespace.
  *
  * Form: `rag/namespace_create_form` (createForm) — draft, валидация, submit.
- * Submit прокидывает payload в `namespacesResource.events.CREATE_REQUESTED`,
+ * Отправка прокидывает payload в `namespacesResource.events.CREATE_REQUESTED`,
  * фабрика делает POST `/rag/api/v1/namespaces` и эмитит CREATED/CREATE_FAILED.
  *
  * После CREATED модалка закрывается через `closeAfterSave()` —

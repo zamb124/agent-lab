@@ -2,10 +2,10 @@
  * Tasks — фоновые задачи CRM (knowledge_import, note_analyze, daily_summary,
  * period_summary).
  *
- * Realtime: WebSocket ``crm/task/updated`` (payload ``{ task: TaskResponse }``)
+ * В реальном времени: WebSocket ``crm/task/updated`` (payload ``{ task: TaskResponse }``)
  * мержится в slice без поллинга.
  *
- * Backend (`/crm/api/v1/tasks`):
+ * Бэкенд (`/crm/api/v1/tasks`):
  *   GET  /                                → OffsetPage[TaskResponse]
  *   GET  /{task_id}                       → TaskResponse (`taskGetOp`)
  *   GET  /{task_id}/created-entities      → TaskCreatedEntitiesResponse

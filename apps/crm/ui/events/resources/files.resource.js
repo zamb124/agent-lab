@@ -1,7 +1,7 @@
 /**
  * Files — общий аплоад файла в платформенный файловый API.
  *
- * Backend (`POST /crm/api/v1/files/`, multipart/form-data, поле `file`):
+ * Бэкенд (`POST /crm/api/v1/files/`, multipart/form-data, поле `file`):
  *   200 → FileResponse { file_id, original_name, content_type, size_bytes,
  *                        download_url, ... }
  *

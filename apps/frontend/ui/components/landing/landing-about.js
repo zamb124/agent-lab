@@ -1,5 +1,5 @@
 /**
- * Landing About - О нас и статистика
+ * О нас на лендинге — о нас и статистика
  */
 import { html, css } from 'lit';
 import { unsafeHTML } from 'lit/directives/unsafe-html.js';

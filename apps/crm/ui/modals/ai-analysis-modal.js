@@ -1,7 +1,7 @@
 /**
  * CRMAiAnalysisModal — модалка AI-анализа заметки.
  *
- * Props:
+ * Свойства:
  *   - noteId: string — обязательный, id заметки.
  *
  * Поток:

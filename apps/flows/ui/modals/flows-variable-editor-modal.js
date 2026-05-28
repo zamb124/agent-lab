@@ -3,7 +3,7 @@
  *
  * Контракт переменной симметричен для обоих scope: { key, value, secret }.
  *
- * Submit ветвится по `scope`:
+ * Отправка ветвится по `scope`:
  *   - 'company' — useResource('flows/variables').create({ key, value, secret })
  *                 (REST POST /flows/api/v1/variables идемпотентен по key).
  *   - 'flow'    — обновление черновика skillsData.variables через editor op

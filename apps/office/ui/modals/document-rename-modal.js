@@ -3,7 +3,7 @@
  *
  * props: { bindingId, currentTitle, catalogIds }.
  * `useForm('office/document_rename_form')` openForm с props в willUpdate.
- * Submit диспатчит `documentRenameOp.events.REQUESTED`. После SUCCEEDED —
+ * Отправка диспатчит `documentRenameOp.events.REQUESTED`. После SUCCEEDED —
  * closeAfterSave; список документов перезагружается фабрикой
  * (`onSuccess` в documentRenameOp).
  */

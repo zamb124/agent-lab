@@ -3,7 +3,7 @@
  *
  * BFF проксирует запрос в CRM (`POST /documents/api/v1/namespaces`).
  * Шаблоны загружаются через `useOp('office/namespace_templates')` (autoload).
- * Submit идёт в `namespacesResource.events.CREATE_REQUESTED` через
+ * Отправка идёт в `namespacesResource.events.CREATE_REQUESTED` через
  * `useForm('office/namespace_create_form')`. После успеха — выбираем новый
  * namespace в platform-namespace selection и закрываем модалку.
  */

@@ -1,7 +1,7 @@
 /**
  * Graph — граф влияния, связей и кратчайших путей между сущностями.
  *
- * Backend (`/crm/api/v1/entities`):
+ * Бэкенд (`/crm/api/v1/entities`):
  *   GET  /person-entity/self                    → EntityResponse (сущность текущего пользователя)
  *   POST /overview-graph                       → InfluenceGraphResponse
  *   GET  /{entity_id}/influence-graph          → InfluenceGraphResponse

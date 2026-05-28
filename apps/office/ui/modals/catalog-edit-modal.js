@@ -3,7 +3,7 @@
  *
  * props (`UI_MODAL_OPEN.payload.props`): { catalogId, title, isPublic }.
  * `useForm('office/catalog_edit_form')` openForm с props в connectedCallback.
- * Submit диспатчит `catalogsResource.events.UPDATE_REQUESTED`.
+ * Отправка диспатчит `catalogsResource.events.UPDATE_REQUESTED`.
  * После UPDATED — closeAfterSave.
  */
 

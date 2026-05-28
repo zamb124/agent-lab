@@ -5,7 +5,7 @@
  *   - language (CodeLanguage: python | javascript | typescript | go | csharp)
  *   - code (str)
  *
- * UI — `flows-code-workbench` в режиме resource (тот же chrome, что у code-ноды).
+ * UI — `flows-code-workbench` в режиме resource (та же оболочка, что у code-ноды).
  */
 
 import { html, css } from 'lit';

@@ -1,7 +1,7 @@
 /**
  * CRMEntityDeleteModal — единое подтверждение удаления любой CRM-entity.
  *
- * Props:
+ * Свойства:
  *   - entityId: string                     — обязательный, id сущности.
  *   - redirectRoute?: string = 'entities'  — куда `navigate` после успешного
  *     удаления. Для note передаётся 'notes'.

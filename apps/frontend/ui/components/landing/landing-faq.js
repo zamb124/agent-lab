@@ -1,5 +1,5 @@
 /**
- * Landing FAQ - Вопросы и ответы с аккордеоном
+ * FAQ лендинга — вопросы и ответы с аккордеоном
  */
 import { html, css } from 'lit';
 import { classMap } from 'lit/directives/class-map.js';
