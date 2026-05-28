@@ -1,6 +1,20 @@
-# Базовый образ с core-зависимостями и тяжёлыми общими библиотеками
-# Сборка и публикация (мультиплатформенная):
-#   docker buildx build --platform linux/amd64,linux/arm64 -f Dockerfile.base -t zambas/agent-lab-base:latest --push .
+# Базовый образ платформы: Python 3.14t, free-threaded venv, apt-runtime, всё
+# тяжёлое (torch CPU + ML stack: sentence-transformers, transformers,
+# pyannote-audio, silero, nvidia-cu*, tiktoken). Главный Dockerfile стартует
+# `FROM ghcr.io/<owner>/agent-lab-base:latest` и поверх делает только COPY кода →
+# CI build за минуты вместо часа.
+#
+# Источник правды для production — GHA workflow `.github/workflows/build-base.yml`:
+#   - Триггер: push в master с изменением pyproject.toml / uv.lock / Dockerfile.base
+#   - Триггер: workflow_dispatch (Actions UI → Build Base Image → Run workflow)
+#   - Push в ghcr.io/<owner>/agent-lab-base:latest + :<sha>
+#
+# Локальный fallback для отладки (Docker Hub):
+#   make base
+#
+# Когда пересобирать: при изменении ЛЮБОЙ зависимости в группах core / agents /
+# worker-base / rag-worker / crm / rag / sync / browser в pyproject.toml.
+# Группа `dev` в base НЕ ставится (нужна только для test runner).
 
 FROM ghcr.io/astral-sh/uv:bookworm-slim
 
@@ -15,7 +29,7 @@ ENV UV_PYTHON_INSTALL_DIR=/opt/uv-python
 ENV UV_PYTHON_PREFERENCE=only-managed
 ENV PYTHON_GIL=0
 
-RUN apt-get update && apt-get install -y \
+RUN apt-get update && apt-get install -y --no-install-recommends \
     curl \
     ca-certificates \
     gnupg \
@@ -23,11 +37,13 @@ RUN apt-get update && apt-get install -y \
     pkg-config \
     libcairo2-dev \
     libpq-dev \
-    poppler-utils \
+    ffmpeg \
     tesseract-ocr \
     tesseract-ocr-rus \
+    poppler-utils \
     libgl1 \
     libglib2.0-0 \
+    antiword \
     xz-utils \
     && rm -rf /var/lib/apt/lists/*
 
@@ -74,15 +90,26 @@ ENV PATH="/opt/venv/bin:${PATH}"
 ENV UV_HTTP_TIMEOUT=600
 RUN uv venv --python 3.14t "${VIRTUAL_ENV}"
 
-# Torch только для CPU (экономит ~2-3 GB по сравнению с CUDA версией)
+# Torch только для CPU (экономит ~2-3 GB по сравнению с CUDA-вариантом).
+# Ставим ДО основных deps чтобы транзитивный CUDA-torch из ML-deps его не перетёр.
 RUN --mount=type=cache,target=/root/.cache/uv \
     uv pip install --python "${VIRTUAL_ENV}/bin/python" torch torchvision \
     --index-url https://download.pytorch.org/whl/cpu
 
-# Core + worker-base зависимости (строго по uv.lock)
+# Все production deps платформы (строго по uv.lock), без `dev`. После сборки
+# venv `/opt/venv` содержит весь Python-стек: FastAPI, Granian, asyncpg, redis,
+# taskiq, sentence-transformers, transformers, pyannote-audio, silero, livekit,
+# playwright и т.д. Main Dockerfile уже ничего не доставляет — только COPY кода.
 RUN --mount=type=cache,target=/root/.cache/uv \
     uv export --frozen --no-dev --no-default-groups \
-        --group core --group worker-base \
+        --group core \
+        --group agents \
+        --group worker-base \
+        --group rag-worker \
+        --group crm \
+        --group rag \
+        --group sync \
+        --group browser \
         --no-annotate --no-header --no-emit-project \
         -o /tmp/requirements.txt && \
     uv pip install --python "${VIRTUAL_ENV}/bin/python" -r /tmp/requirements.txt

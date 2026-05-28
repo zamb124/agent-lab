@@ -1,96 +1,24 @@
-# Python 3.14t (free-threaded, PEP 779) — единая версия для всех окружений (dev/test/prod).
+# Python 3.14t (free-threaded, PEP 779) + Granian. Единая версия для всех окружений
+# (dev/test/prod). Всё тяжёлое (apt-runtime, Node/Go/.NET, /opt/venv с torch + ML
+# deps + FastAPI + Granian) предсобрано в `ghcr.io/zamb124/agent-lab-base:latest`
+# через workflow `.github/workflows/build-base.yml`. Сам main Dockerfile делает
+# только COPY кода — CI build за минуты, не за час.
+#
+# Когда пересобирается base: автоматически в CI при изменении pyproject.toml /
+# uv.lock / Dockerfile.base в master, либо вручную через Actions UI.
 
 # ============================================
-# Этап 1: базовый образ Python 3.14t (no-GIL)
+# Этап 1: базовый образ (предсобранный, содержит весь Python-стек)
 # ============================================
-FROM ghcr.io/astral-sh/uv:bookworm-slim AS base-with-core
+ARG BASE_IMAGE=ghcr.io/zamb124/agent-lab-base:latest
+FROM ${BASE_IMAGE} AS base-with-core
 
-ARG NODE_MAJOR=24
-ARG GO_VERSION=1.26.1
-ARG DOTNET_CHANNEL=10.0
-
-ENV UV_PYTHON_INSTALL_DIR=/opt/uv-python
-ENV UV_PYTHON_PREFERENCE=only-managed
-ENV PYTHON_GIL=0
 ENV PYTHONUNBUFFERED=1
 ENV PYTHONDONTWRITEBYTECODE=1
-
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    curl \
-    ca-certificates \
-    gnupg \
-    build-essential \
-    pkg-config \
-    libcairo2-dev \
-    libpq-dev \
-    ffmpeg \
-    tesseract-ocr \
-    poppler-utils \
-    libgl1 \
-    libglib2.0-0 \
-    antiword \
-    xz-utils \
-    && rm -rf /var/lib/apt/lists/*
-
-RUN uv python install 3.14t && uv python pin 3.14t
-
-RUN mkdir -p /etc/apt/keyrings && \
-    curl -fsSL https://deb.nodesource.com/gpgkey/nodesource-repo.gpg.key \
-      | gpg --dearmor -o /etc/apt/keyrings/nodesource.gpg && \
-    echo "deb [signed-by=/etc/apt/keyrings/nodesource.gpg] https://deb.nodesource.com/node_${NODE_MAJOR}.x nodistro main" \
-      > /etc/apt/sources.list.d/nodesource.list && \
-    apt-get update && apt-get install -y --no-install-recommends nodejs && \
-    rm -rf /var/lib/apt/lists/*
-
-RUN set -eux; \
-    arch="$(dpkg --print-architecture)"; \
-    case "$arch" in \
-      amd64) go_arch="amd64" ;; \
-      arm64) go_arch="arm64" ;; \
-      *) echo "Unsupported architecture for Go: $arch" >&2; exit 1 ;; \
-    esac; \
-    curl -fsSL "https://go.dev/dl/go${GO_VERSION}.linux-${go_arch}.tar.gz" -o /tmp/go.tgz; \
-    rm -rf /usr/local/go; \
-    tar -C /usr/local -xzf /tmp/go.tgz; \
-    ln -sf /usr/local/go/bin/go /usr/local/bin/go; \
-    ln -sf /usr/local/go/bin/gofmt /usr/local/bin/gofmt; \
-    rm -f /tmp/go.tgz; \
-    node --version; \
-    go version
-
-ENV DOTNET_ROOT=/usr/share/dotnet
-ENV PATH="${DOTNET_ROOT}:${PATH}"
-RUN curl -fsSL https://dot.net/v1/dotnet-install.sh -o /tmp/dotnet-install.sh && \
-    bash /tmp/dotnet-install.sh --channel "${DOTNET_CHANNEL}" --quality ga --install-dir "${DOTNET_ROOT}" && \
-    ln -sf "${DOTNET_ROOT}/dotnet" /usr/local/bin/dotnet && \
-    rm -f /tmp/dotnet-install.sh && \
-    dotnet --version
-
 WORKDIR /app
 
-# ============================================
-# Этап 2: сборщик - установка ВСЕХ зависимостей
-# ============================================
+# Алиас стадии для совместимости с историческими ссылками (base-final FROM builder-all).
 FROM base-with-core AS builder-all
-COPY pyproject.toml uv.lock README.md ./
-ENV VIRTUAL_ENV=/opt/venv
-ENV PATH="/opt/venv/bin:${PATH}"
-# UV_HTTP_TIMEOUT по дефолту 30s, мало для тяжёлых NVIDIA CUDA wheels (>500MB).
-ENV UV_HTTP_TIMEOUT=600
-RUN --mount=type=cache,target=/root/.cache/uv \
-    uv venv --python 3.14t "${VIRTUAL_ENV}" && \
-    uv export --frozen --no-dev --no-default-groups \
-        --group core \
-        --group agents \
-        --group worker-base \
-        --group rag-worker \
-        --group crm \
-        --group rag \
-        --group sync \
-        --group browser \
-        --no-annotate --no-header --no-emit-project \
-        -o /tmp/requirements.txt && \
-    uv pip install --python "${VIRTUAL_ENV}/bin/python" -r /tmp/requirements.txt
 
 # ============================================
 # Этап 3: сборщик документации (статический сайт Zensical)

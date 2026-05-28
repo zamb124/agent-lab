@@ -4,15 +4,54 @@
 Покрывает новый функционал и регрессию: создание заметки без полей voice/context по-прежнему допустимо.
 """
 
+from typing import cast
+
 import pytest
+from httpx import AsyncClient, Response
+
+from tests.crm.e2e._json_helpers import json_object, object_dict, object_list, object_str
 
 
-def _find_outgoing(rels: list[object], *, source_id: str, rel_type: str) -> dict[str, object] | None:
-    for rel_raw in rels:
-        if not isinstance(rel_raw, dict):
-            continue
-        rel: dict[str, object] = rel_raw
-        if rel.get("source_entity_id") == source_id and rel.get("relationship_type") == rel_type:
+def _http_json(response: Response) -> dict[str, object]:
+    return json_object(cast(object, response.json()))
+
+
+def _entity_id(response: Response) -> str:
+    return object_str(_http_json(response).get("entity_id"), field="entity_id")
+
+
+def _relationship_rows(response: Response) -> list[dict[str, object]]:
+    return object_list(_http_json(response).get("relationships"))
+
+
+def _relationship_type_ids(response: Response) -> set[str]:
+    type_ids: set[str] = set()
+    for row in object_list(_http_json(response).get("items")):
+        type_id = row.get("type_id")
+        if isinstance(type_id, str):
+            type_ids.add(type_id)
+    return type_ids
+
+
+def _namespace_items(response: Response) -> list[dict[str, object]]:
+    return object_list(_http_json(response).get("items"))
+
+
+def _crm_settings(body: dict[str, object]) -> dict[str, object]:
+    return object_dict(body.get("crm_settings"), field="crm_settings")
+
+
+def _find_outgoing(
+    rels: list[dict[str, object]],
+    *,
+    source_id: str,
+    rel_type: str,
+) -> dict[str, object] | None:
+    for rel in rels:
+        if (
+            object_str(rel.get("source_entity_id"), field="source_entity_id") == source_id
+            and object_str(rel.get("relationship_type"), field="relationship_type") == rel_type
+        ):
             return rel
     return None
 
@@ -23,21 +62,27 @@ class TestNoteVoiceAndContext:
 
     @pytest.mark.asyncio
     async def test_relationship_types_include_note_voice_and_in_context(
-        self, crm_client, auth_headers_system
-    ):
+        self,
+        crm_client: AsyncClient,
+        auth_headers_system: dict[str, str],
+    ) -> None:
         resp = await crm_client.get(
             "/crm/api/v1/relationships/types/",
             headers=auth_headers_system,
         )
         assert resp.status_code == 200
-        types = resp.json()["items"]
-        ids = {t["type_id"] for t in types if isinstance(t, dict) and "type_id" in t}
-        assert "note_voice" in ids
-        assert "in_context" in ids
+        type_ids = _relationship_type_ids(resp)
+        assert "note_voice" in type_ids
+        assert "in_context" in type_ids
 
     @pytest.mark.asyncio
-    async def test_person_entity_self_returns_member(self, crm_client, auth_headers_system, unique_id):
-        await crm_client.put(
+    async def test_person_entity_self_returns_member(
+        self,
+        crm_client: AsyncClient,
+        auth_headers_system: dict[str, str],
+        unique_id: str,
+    ) -> None:
+        _ = await crm_client.put(
             "/crm/api/auth/me",
             json={
                 "first_name": "Персона",
@@ -50,16 +95,19 @@ class TestNoteVoiceAndContext:
             headers=auth_headers_system,
         )
         assert resp.status_code == 200
-        body = resp.json()
-        assert body["entity_type"] == "member"
+        body = _http_json(resp)
+        assert object_str(body.get("entity_type"), field="entity_type") == "member"
         assert "entity_id" in body
-        assert body["namespace"] == "default"
+        assert object_str(body.get("namespace"), field="namespace") == "default"
 
     @pytest.mark.asyncio
     async def test_create_note_with_voice_and_context_edges(
-        self, crm_client, auth_headers_system, unique_id
-    ):
-        await crm_client.put(
+        self,
+        crm_client: AsyncClient,
+        auth_headers_system: dict[str, str],
+        unique_id: str,
+    ) -> None:
+        _ = await crm_client.put(
             "/crm/api/auth/me",
             json={
                 "first_name": "Автор",
@@ -91,7 +139,7 @@ class TestNoteVoiceAndContext:
             headers=auth_headers_system,
         )
         assert voice_resp.status_code == 200
-        voice_id = voice_resp.json()["entity_id"]
+        voice_id = _entity_id(voice_resp)
 
         anchor_resp = await crm_client.post(
             "/crm/api/v1/entities/",
@@ -103,7 +151,7 @@ class TestNoteVoiceAndContext:
             headers=auth_headers_system,
         )
         assert anchor_resp.status_code == 200
-        anchor_id = anchor_resp.json()["entity_id"]
+        anchor_id = _entity_id(anchor_resp)
 
         note_resp = await crm_client.post(
             "/crm/api/v1/entities/",
@@ -117,25 +165,30 @@ class TestNoteVoiceAndContext:
             headers=auth_headers_system,
         )
         assert note_resp.status_code == 200
-        note_id = note_resp.json()["entity_id"]
+        note_id = _entity_id(note_resp)
 
         rel_resp = await crm_client.get(
             f"/crm/api/v1/entities/{note_id}/relationships",
             headers=auth_headers_system,
         )
         assert rel_resp.status_code == 200
-        rels = rel_resp.json().get("relationships") or []
+        rels = _relationship_rows(rel_resp)
 
-        v = _find_outgoing(rels, source_id=note_id, rel_type="note_voice")
-        assert v is not None
-        assert v["target_entity_id"] == voice_id
+        voice_rel = _find_outgoing(rels, source_id=note_id, rel_type="note_voice")
+        assert voice_rel is not None
+        assert object_str(voice_rel.get("target_entity_id"), field="target_entity_id") == voice_id
 
-        c = _find_outgoing(rels, source_id=note_id, rel_type="in_context")
-        assert c is not None
-        assert c["target_entity_id"] == anchor_id
+        context_rel = _find_outgoing(rels, source_id=note_id, rel_type="in_context")
+        assert context_rel is not None
+        assert object_str(context_rel.get("target_entity_id"), field="target_entity_id") == anchor_id
 
     @pytest.mark.asyncio
-    async def test_voice_rejects_non_voice_target_type(self, crm_client, auth_headers_system, unique_id):
+    async def test_voice_rejects_non_voice_target_type(
+        self,
+        crm_client: AsyncClient,
+        auth_headers_system: dict[str, str],
+        unique_id: str,
+    ) -> None:
         """note не имеет is_voice_target=True, поэтому не может быть голосом."""
         wrong = await crm_client.post(
             "/crm/api/v1/entities/",
@@ -147,7 +200,7 @@ class TestNoteVoiceAndContext:
             headers=auth_headers_system,
         )
         assert wrong.status_code == 200
-        wrong_id = wrong.json()["entity_id"]
+        wrong_id = _entity_id(wrong)
 
         note_resp = await crm_client.post(
             "/crm/api/v1/entities/",
@@ -163,8 +216,11 @@ class TestNoteVoiceAndContext:
 
     @pytest.mark.asyncio
     async def test_context_must_be_anchor_type(
-        self, crm_client, auth_headers_system, unique_id
-    ):
+        self,
+        crm_client: AsyncClient,
+        auth_headers_system: dict[str, str],
+        unique_id: str,
+    ) -> None:
         plain = await crm_client.post(
             "/crm/api/v1/entities/",
             json={
@@ -175,7 +231,7 @@ class TestNoteVoiceAndContext:
             headers=auth_headers_system,
         )
         assert plain.status_code == 200
-        plain_id = plain.json()["entity_id"]
+        plain_id = _entity_id(plain)
 
         note_resp = await crm_client.post(
             "/crm/api/v1/entities/",
@@ -191,8 +247,11 @@ class TestNoteVoiceAndContext:
 
     @pytest.mark.asyncio
     async def test_note_minimal_create_succeeds(
-        self, crm_client, auth_headers_system, unique_id
-    ):
+        self,
+        crm_client: AsyncClient,
+        auth_headers_system: dict[str, str],
+        unique_id: str,
+    ) -> None:
         """Регрессия: минимальное создание заметки (как test_01) без полей voice/context."""
         resp = await crm_client.post(
             "/crm/api/v1/entities/",
@@ -205,12 +264,17 @@ class TestNoteVoiceAndContext:
             headers=auth_headers_system,
         )
         assert resp.status_code == 200
-        body = resp.json()
-        assert body["entity_type"] == "note"
+        body = _http_json(resp)
+        assert object_str(body.get("entity_type"), field="entity_type") == "note"
         assert "entity_id" in body
 
     @pytest.mark.asyncio
-    async def test_namespace_crm_settings_roundtrip(self, crm_client, auth_headers_system, unique_id):
+    async def test_namespace_crm_settings_roundtrip(
+        self,
+        crm_client: AsyncClient,
+        auth_headers_system: dict[str, str],
+        unique_id: str,
+    ) -> None:
         template_id = f"tmpl_crmset_{unique_id}"
         r = await crm_client.post(
             "/crm/api/v1/namespaces/templates",
@@ -259,34 +323,42 @@ class TestNoteVoiceAndContext:
             headers=auth_headers_system,
         )
         assert r.status_code == 200
-        body = r.json()
-        assert body.get("crm_settings") is not None
-        cs = body["crm_settings"]
-        assert cs["show_note_voice_ui"] is False
-        assert cs["default_note_voice"] == "none"
+        body = _http_json(r)
+        cs = _crm_settings(body)
+        show_ui = cs.get("show_note_voice_ui")
+        if not isinstance(show_ui, bool):
+            raise AssertionError("show_note_voice_ui must be a bool")
+        assert show_ui is False
+        assert object_str(cs.get("default_note_voice"), field="default_note_voice") == "none"
 
         listed = await crm_client.get(
             "/crm/api/v1/namespaces",
             headers=auth_headers_system,
         )
         assert listed.status_code == 200
-        namespaces = listed.json().get("items") or []
-        match = next((n for n in namespaces if n.get("name") == ns_name), None)
+        match: dict[str, object] | None = None
+        for namespace in _namespace_items(listed):
+            if object_str(namespace.get("name"), field="name") == ns_name:
+                match = namespace
+                break
         assert match is not None
-        assert match.get("crm_settings") is not None
-        assert match["crm_settings"]["default_note_voice"] == "none"
+        listed_cs = _crm_settings(match)
+        assert object_str(listed_cs.get("default_note_voice"), field="default_note_voice") == "none"
 
     @pytest.mark.asyncio
     async def test_note_in_namespace_with_default_voice_none_has_no_note_voice_edge(
-        self, crm_client, auth_headers_system, unique_id
-    ):
+        self,
+        crm_client: AsyncClient,
+        auth_headers_system: dict[str, str],
+        unique_id: str,
+    ) -> None:
         template_id = f"tmpl_nonvoice_{unique_id}"
-        await crm_client.post(
+        _ = await crm_client.post(
             "/crm/api/v1/namespaces/templates",
             json={"template_id": template_id, "name": f"T{unique_id}"},
             headers=auth_headers_system,
         )
-        await crm_client.post(
+        _ = await crm_client.post(
             f"/crm/api/v1/namespaces/templates/{template_id}/types",
             json={
                 "type_id": f"lead_nv_{unique_id}",
@@ -334,23 +406,25 @@ class TestNoteVoiceAndContext:
             headers=auth_headers_system,
         )
         assert note_resp.status_code == 200
-        note_id = note_resp.json()["entity_id"]
+        note_id = _entity_id(note_resp)
 
         rel_resp = await crm_client.get(
             f"/crm/api/v1/entities/{note_id}/relationships",
             headers=auth_headers_system,
         )
         assert rel_resp.status_code == 200
-        rels = rel_resp.json().get("relationships") or []
-        v = _find_outgoing(rels, source_id=note_id, rel_type="note_voice")
-        assert v is None
+        voice_rel = _find_outgoing(_relationship_rows(rel_resp), source_id=note_id, rel_type="note_voice")
+        assert voice_rel is None
 
     @pytest.mark.asyncio
     async def test_update_note_clears_context_when_null_in_payload(
-        self, crm_client, auth_headers_system, unique_id
-    ):
+        self,
+        crm_client: AsyncClient,
+        auth_headers_system: dict[str, str],
+        unique_id: str,
+    ) -> None:
         anchor_type_id = f"anchor_upd_{unique_id}"
-        await crm_client.post(
+        _ = await crm_client.post(
             "/crm/api/v1/entity-types/",
             json={
                 "type_id": anchor_type_id,
@@ -369,7 +443,7 @@ class TestNoteVoiceAndContext:
             },
             headers=auth_headers_system,
         )
-        anchor_id = anchor_resp.json()["entity_id"]
+        anchor_id = _entity_id(anchor_resp)
 
         note_resp = await crm_client.post(
             "/crm/api/v1/entities/",
@@ -382,14 +456,13 @@ class TestNoteVoiceAndContext:
             headers=auth_headers_system,
         )
         assert note_resp.status_code == 200
-        note_id = note_resp.json()["entity_id"]
+        note_id = _entity_id(note_resp)
 
         rel1 = await crm_client.get(
             f"/crm/api/v1/entities/{note_id}/relationships",
             headers=auth_headers_system,
         )
-        rels1 = rel1.json().get("relationships") or []
-        assert _find_outgoing(rels1, source_id=note_id, rel_type="in_context") is not None
+        assert _find_outgoing(_relationship_rows(rel1), source_id=note_id, rel_type="in_context") is not None
 
         upd = await crm_client.put(
             f"/crm/api/v1/entities/{note_id}",
@@ -404,5 +477,4 @@ class TestNoteVoiceAndContext:
             f"/crm/api/v1/entities/{note_id}/relationships",
             headers=auth_headers_system,
         )
-        rels2 = rel2.json().get("relationships") or []
-        assert _find_outgoing(rels2, source_id=note_id, rel_type="in_context") is None
+        assert _find_outgoing(_relationship_rows(rel2), source_id=note_id, rel_type="in_context") is None

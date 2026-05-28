@@ -185,9 +185,13 @@ build-i18n:
 # Базовый образ (используется при изменении core зависимостей в Dockerfile.base)
 # ============================================================================
 
+# Базовый образ собирается автоматически в CI (.github/workflows/build-base.yml)
+# при изменении pyproject.toml / uv.lock / Dockerfile.base в master, либо вручную
+# из Actions UI. Этот target — для локальной отладки Dockerfile.base (Docker Hub
+# fallback). Production-источник — ghcr.io/<owner>/agent-lab-base:latest.
 base:
-	@echo "Сборка и пуш базового образа zambas/agent-lab-base:latest..."
-	docker buildx build --platform linux/amd64,linux/arm64 -f Dockerfile.base -t zambas/agent-lab-base:latest --push .
+	@echo "[local fallback] Сборка zambas/agent-lab-base:latest. Production: GHA workflow build-base.yml."
+	docker buildx build --platform linux/amd64 -f Dockerfile.base -t zambas/agent-lab-base:latest --push .
 
 # ============================================================================
 # Kubernetes / Helm: деплой и операции
