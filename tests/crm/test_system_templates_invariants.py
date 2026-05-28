@@ -13,7 +13,9 @@ import pytest
 
 from apps.crm.system_templates import (
     COMMON_NAMESPACE_ANCHOR_TYPES,
+    EntityTypeTemplate,
     NAMESPACE_TEMPLATE_SEEDS,
+    NamespaceTemplateTypeSpec,
     SYSTEM_ENTITY_TYPE_TEMPLATES,
 )
 
@@ -36,7 +38,7 @@ _FIELD_TYPES_ALLOWED = {
 }
 
 
-def _all_entity_type_specs() -> Iterable[tuple[str, dict[str, Any]]]:
+def _all_entity_type_specs() -> Iterable[tuple[str, EntityTypeTemplate | NamespaceTemplateTypeSpec]]:
     """Возвращает (метка_контекста, spec) по всем системным типам платформы."""
     for spec in SYSTEM_ENTITY_TYPE_TEMPLATES:
         yield (f"system:{spec['type_id']}", spec)
@@ -47,7 +49,7 @@ def _all_entity_type_specs() -> Iterable[tuple[str, dict[str, Any]]]:
             yield (f"seed:{seed['template_id']}:{spec['type_id']}", spec)
 
 
-def _is_extractable(spec: dict[str, Any]) -> bool:
+def _is_extractable(spec: EntityTypeTemplate | NamespaceTemplateTypeSpec) -> bool:
     return bool(spec.get("extractable", True))
 
 
@@ -56,7 +58,7 @@ def _is_extractable(spec: dict[str, Any]) -> bool:
     list(_all_entity_type_specs()),
     ids=lambda v: v if isinstance(v, str) else "",
 )
-def test_entity_type_has_name_and_description(ctx: str, spec: dict[str, Any]) -> None:
+def test_entity_type_has_name_and_description(ctx: str, spec: EntityTypeTemplate | NamespaceTemplateTypeSpec) -> None:
     name = spec.get("name")
     assert isinstance(name, str) and len(name.strip()) >= 2, ctx
     description = spec.get("description")
@@ -72,7 +74,9 @@ def test_entity_type_has_name_and_description(ctx: str, spec: dict[str, Any]) ->
     [pair for pair in _all_entity_type_specs() if _is_extractable(pair[1])],
     ids=lambda v: v if isinstance(v, str) else "",
 )
-def test_extractable_entity_type_has_useful_prompt(ctx: str, spec: dict[str, Any]) -> None:
+def test_extractable_entity_type_has_useful_prompt(
+    ctx: str, spec: EntityTypeTemplate | NamespaceTemplateTypeSpec
+) -> None:
     prompt = spec.get("prompt")
     assert isinstance(prompt, str) and len(prompt.strip()) >= _MIN_PROMPT_CHARS, (
         ctx,
@@ -86,13 +90,15 @@ def test_extractable_entity_type_has_useful_prompt(ctx: str, spec: dict[str, Any
     ids=lambda v: v if isinstance(v, str) else "",
 )
 def test_non_extractable_entity_type_has_no_required_prompt(
-    ctx: str, spec: dict[str, Any]
+    ctx: str, spec: EntityTypeTemplate | NamespaceTemplateTypeSpec
 ) -> None:
     prompt = spec.get("prompt")
     assert prompt is None or isinstance(prompt, str), ctx
 
 
-def _all_fields(spec: dict[str, Any]) -> Iterable[tuple[str, str, dict[str, Any]]]:
+def _all_fields(
+    spec: EntityTypeTemplate | NamespaceTemplateTypeSpec,
+) -> Iterable[tuple[str, str, dict[str, Any]]]:
     for section in ("required_fields", "optional_fields"):
         bag = spec.get(section) or {}
         if not isinstance(bag, dict):
@@ -106,7 +112,9 @@ def _all_fields(spec: dict[str, Any]) -> Iterable[tuple[str, str, dict[str, Any]
     list(_all_entity_type_specs()),
     ids=lambda v: v if isinstance(v, str) else "",
 )
-def test_entity_type_fields_have_label_and_description(ctx: str, spec: dict[str, Any]) -> None:
+def test_entity_type_fields_have_label_and_description(
+    ctx: str, spec: EntityTypeTemplate | NamespaceTemplateTypeSpec
+) -> None:
     for section, field_name, field_spec in _all_fields(spec):
         where = f"{ctx}.{section}[{field_name}]"
         assert isinstance(field_spec, dict), where
@@ -128,7 +136,7 @@ def test_entity_type_fields_have_label_and_description(ctx: str, spec: dict[str,
     ids=lambda v: v if isinstance(v, str) else "",
 )
 def test_enum_fields_have_values_and_per_value_description(
-    ctx: str, spec: dict[str, Any]
+    ctx: str, spec: EntityTypeTemplate | NamespaceTemplateTypeSpec
 ) -> None:
     for section, field_name, field_spec in _all_fields(spec):
         if field_spec.get("type") != "enum":

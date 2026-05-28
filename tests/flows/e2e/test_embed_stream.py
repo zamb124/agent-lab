@@ -9,7 +9,7 @@ from core.models.identity_models import Company
 from core.utils.tokens import get_token_service
 
 
-async def _create_embed(frontend_client: AsyncClient, auth_headers: dict, flow_id: str) -> str:
+async def _create_embed(frontend_client: AsyncClient, auth_headers: dict[str, str], flow_id: str) -> str:
     response = await frontend_client.post(
         "/frontend/api/embed/configs",
         headers=auth_headers,
@@ -357,7 +357,7 @@ async def test_embed_session_token_rejects_company_mismatch(
         Company(
             company_id=other_company_id,
             name="Other Embed Company",
-            owner_id=f"other_owner_{unique_id}",
+            owner_user_id=f"other_owner_{unique_id}",
         )
     )
     embed_token = get_token_service().create_embed_session_token(

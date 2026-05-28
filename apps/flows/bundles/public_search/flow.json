@@ -17,7 +17,7 @@
       "name": "Prepare Search Inputs",
       "language": "python",
       "entrypoint": "run",
-      "code": "import re\n\nFILE_BLOCK_RE = re.compile(r\"\\n?\\[FILE\\]\\n.*?\\n\\[/FILE\\]\", re.DOTALL)\n\n\ndef _require_string(value, label):\n    if not isinstance(value, str):\n        raise TypeError(f\"public_search inputs: {label} must be string\")\n    return value\n\n\ndef _clean_user_query(content):\n    text = FILE_BLOCK_RE.sub(\"\", content)\n    text = re.sub(r\"\\n{3,}\", \"\\n\\n\", text).strip()\n    if text == \"\":\n        return \"проанализировать приложенные файлы\"\n    return text\n\n\nasync def run(args, state):\n    content = _require_string(state[\"content\"], \"state.content\")\n    files = state[\"files\"]\n    if not isinstance(files, list):\n        raise TypeError(\"public_search inputs: state.files must be array\")\n\n    file_names = []\n    for index, item in enumerate(files):\n        if not isinstance(item, dict):\n            raise TypeError(f\"public_search inputs: state.files[{index}] must be object\")\n        original_name = item[\"original_name\"]\n        if not isinstance(original_name, str) or original_name.strip() == \"\":\n            raise TypeError(f\"public_search inputs: state.files[{index}].original_name must be non-empty string\")\n        file_names.append(original_name.strip())\n\n    user_query = _clean_user_query(content)\n    return {\n        \"search_user_query\": user_query,\n        \"search_effective_query\": user_query,\n        \"search_has_files\": len(file_names) > 0,\n        \"search_file_names\": file_names,\n        \"search_file_context\": \"\",\n    }\n",
+      "code": "import re\n\nFILE_BLOCK_PATTERN = r\"\\n?\\[FILE\\]\\n.*?\\n\\[/FILE\\]\"\n\n\ndef _require_string(value, label):\n    if not isinstance(value, str):\n        raise TypeError(f\"public_search inputs: {label} must be string\")\n    return value\n\n\ndef _clean_user_query(content):\n    text = re.sub(FILE_BLOCK_PATTERN, \"\", content, flags=re.DOTALL)\n    text = re.sub(r\"\\n{3,}\", \"\\n\\n\", text).strip()\n    if text == \"\":\n        return \"проанализировать приложенные файлы\"\n    return text\n\n\nasync def run(args, state):\n    content = _require_string(state[\"content\"], \"state.content\")\n    files = state[\"files\"]\n    if not isinstance(files, list):\n        raise TypeError(\"public_search inputs: state.files must be array\")\n\n    file_names = []\n    for index, item in enumerate(files):\n        if not isinstance(item, dict):\n            raise TypeError(f\"public_search inputs: state.files[{index}] must be object\")\n        original_name = item[\"original_name\"]\n        if not isinstance(original_name, str) or original_name.strip() == \"\":\n            raise TypeError(f\"public_search inputs: state.files[{index}].original_name must be non-empty string\")\n        file_names.append(original_name.strip())\n\n    user_query = _clean_user_query(content)\n    return {\n        \"search_user_query\": user_query,\n        \"search_effective_query\": user_query,\n        \"search_has_files\": len(file_names) > 0,\n        \"search_file_names\": file_names,\n        \"search_file_context\": \"\",\n    }\n",
       "node_timeout_seconds": 10
     },
     "summarize_attached_files": {
@@ -27,7 +27,9 @@
       "tools": [
         "read_file"
       ],
-      "output_key": "search_file_context",
+      "output_mapping": {
+        "response": "search_file_context"
+      },
       "llm": {
         "provider": "humanitec_llm",
         "model": "auto",
@@ -147,7 +149,6 @@
       "tools": [
         "create_file"
       ],
-      "output_key": "response",
       "llm": {
         "provider": "humanitec_llm",
         "model": "auto",

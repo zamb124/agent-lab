@@ -1,5 +1,7 @@
 """Фикстуры для тестов voice сервиса."""
 
+from collections.abc import AsyncGenerator
+
 import pytest
 import pytest_asyncio
 
@@ -52,7 +54,7 @@ def barge_in_controller() -> BargeInController:
 
 
 @pytest_asyncio.fixture
-async def voice_session(unique_id: str) -> VoiceSession:
+async def voice_session(unique_id: str) -> AsyncGenerator[VoiceSession, None]:
     """Реальная VoiceSession с уникальным session_id."""
     session = VoiceSession(session_id=f"test-session-{unique_id}")
     yield session

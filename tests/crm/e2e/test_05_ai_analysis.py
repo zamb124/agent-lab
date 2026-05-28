@@ -4,59 +4,82 @@
 User Story: AI автоматически анализирует текст, выделяет проекты, людей, задачи и суммаризирует.
 """
 
+import asyncio
 import json
+import time
+from collections.abc import Awaitable, Callable
 
 import pytest
+from httpx import AsyncClient
+
+from tests.crm.e2e._json_helpers import json_object, object_dict, object_list, object_str
+
+MockLlmRedisFactory = Callable[[list[object]], Awaitable[None]]
+
+
+class _DraftResponse:
+    status_code: int
+
+    def __init__(self, status_code: int, draft: dict[str, object]) -> None:
+        self.status_code = status_code
+        self._draft = draft
+
+    def json(self) -> dict[str, object]:
+        return self._draft
+
+
+def _json_object(response_payload: object) -> dict[str, object]:
+    return json_object(response_payload)
 
 
 async def _analyze_note(
-    crm_client,
-    headers: dict,
+    crm_client: AsyncClient,
+    headers: dict[str, str],
     note_id: str,
-    **extra,
-):
+    **extra: object,
+) -> tuple[dict[str, object], _DraftResponse]:
     """Запускает анализ заметки через POST /tasks/note-analyze и ждёт завершения.
 
     Возвращает (task_row, ai_analysis_draft).
     """
-    import asyncio
-    import time
-    body = {
+    body: dict[str, object] = {
         "note_id": note_id,
         "check_duplicates": False,
         "include_attachments": False,
-        **extra,
     }
+    body.update(extra)
     start = await crm_client.post(
         "/crm/api/v1/tasks/note-analyze",
         json=body,
         headers=headers,
     )
     assert start.status_code == 202, start.text
-    task_id = start.json()["task_id"]
+    start_payload = _json_object(start.json())
+    task_id_raw = start_payload.get("task_id")
+    assert isinstance(task_id_raw, str)
+    task_id = task_id_raw
     deadline = time.monotonic() + 60.0
-    last = {}
+    last: dict[str, object] = {}
     while time.monotonic() < deadline:
         tr = await crm_client.get(f"/crm/api/v1/tasks/{task_id}", headers=headers)
         assert tr.status_code == 200, tr.text
-        last = tr.json()
-        if last.get("status") in ("completed", "failed", "cancelled"):
+        last = _json_object(tr.json())
+        status_raw = last.get("status")
+        if status_raw in ("completed", "failed", "cancelled"):
             break
         await asyncio.sleep(0.4)
     assert last.get("status") == "completed", f"task failed: {last.get('error_message')}"
     nr = await crm_client.get(f"/crm/api/v1/entities/{note_id}", headers=headers)
-    draft = nr.json().get("attributes", {}).get("ai_analysis_draft") or {}
+    note_payload = _json_object(nr.json())
+    attributes_raw = note_payload.get("attributes")
+    attributes = attributes_raw if isinstance(attributes_raw, dict) else {}
+    draft_raw = attributes.get("ai_analysis_draft")
+    draft: dict[str, object] = draft_raw if isinstance(draft_raw, dict) else {}
 
-    class _R:
-        status_code = nr.status_code
-        def json(self) -> dict:
-            return draft
-
-    return last, _R()
-
+    return last, _DraftResponse(nr.status_code, draft)
 
 
-_META = {"dates_mentioned": [], "places_mentioned": [], "key_topics": []}
+_META: dict[str, object] = {"dates_mentioned": [], "places_mentioned": [], "key_topics": []}
 
 
 @pytest.mark.real_taskiq
@@ -64,7 +87,13 @@ class TestAIAnalysis:
     """AI извлечение entities, relationships и задач"""
 
     @pytest.mark.asyncio
-    async def test_ai_extract_note_with_entities(self, crm_client, mock_llm_redis, unique_id, auth_headers_system):
+    async def test_ai_extract_note_with_entities(
+        self,
+        crm_client: AsyncClient,
+        mock_llm_redis: MockLlmRedisFactory,
+        unique_id: str,
+        auth_headers_system: dict[str, str],
+    ):
         """AI извлекает note + entities + relationships из текста"""
         note_title = "Встреча с Иваном"
         await mock_llm_redis([{
@@ -125,30 +154,34 @@ class TestAIAnalysis:
             "description": "Сегодня встретился с Иваном. Обсудили проект X. Иван предложил нанять Петра.",
             "namespace": "default",
         }, headers=auth_headers_system)
-        note_id = note_resp.json()["entity_id"]
+        note_payload = _json_object(note_resp.json())
+        note_id = object_str(note_payload.get("entity_id"), field="entity_id")
 
         _, response = await _analyze_note(crm_client, auth_headers_system, note_id)
 
         assert response.status_code == 200
         result = response.json()
 
-        assert result["note"] is not None
-        assert result["note"]["entity_type"] == "note"
-        assert result["note"]["entity_subtype"] is None
+        note = object_dict(result.get("note"), field="note")
+        assert note["entity_type"] == "note"
+        assert note.get("entity_subtype") is None
 
-        assert len(result["entities"]) == 2
-        entity_types = [e["entity_type"] for e in result["entities"]]
+        entities = object_list(result.get("entities"))
+        assert len(entities) == 2
+        entity_types = [object_str(entity.get("entity_type"), field="entity_type") for entity in entities]
         assert "task" in entity_types
 
-        assert len(result["relationships"]) >= 2
-        for rel in result["relationships"]:
+        relationships = object_list(result.get("relationships"))
+        assert len(relationships) >= 2
+        for rel in relationships:
             assert rel.get("draft_relationship_id")
             assert rel.get("source_draft_entity_id")
             assert rel.get("target_draft_entity_id")
             assert "confidence" in rel
 
     @pytest.mark.asyncio
-    async def test_ai_extract_tasks(self, crm_client, mock_llm_redis, unique_id, auth_headers_system):
+    async def test_ai_extract_tasks(self, crm_client: AsyncClient, mock_llm_redis: MockLlmRedisFactory, unique_id: str, auth_headers_system: dict[str, str],
+    ):
         """AI извлекает задачи с дедлайнами и приоритетами"""
         await mock_llm_redis([{
             "type": "text",
@@ -202,23 +235,30 @@ class TestAIAnalysis:
             "description": "Нужно подготовить отчет к 10 января (срочно, Иван). Также созвониться с клиентом до 8 января. Обновить документацию к 15 числу.",
             "namespace": "default",
         }, headers=auth_headers_system)
-        note_id = note_resp.json()["entity_id"]
+        note_id = object_str(_json_object(note_resp.json()).get("entity_id"), field="entity_id")
 
         _, response = await _analyze_note(crm_client, auth_headers_system, note_id)
 
         assert response.status_code == 200
         result = response.json()
 
-        tasks = [e for e in result["entities"] if e["entity_type"] == "task"]
+        tasks = [
+            entity
+            for entity in object_list(result.get("entities"))
+            if entity.get("entity_type") == "task"
+        ]
         assert len(tasks) == 3
 
-        urgent_task = next((t for t in tasks if t["priority"] == "urgent"), None)
+        urgent_task = next((task for task in tasks if task.get("priority") == "urgent"), None)
         assert urgent_task is not None
-        assert urgent_task["due_date"] == "2024-01-10"
-        assert "ivan" in urgent_task["assignees"]
+        assert urgent_task.get("due_date") == "2024-01-10"
+        assignees_raw = urgent_task.get("assignees")
+        assert isinstance(assignees_raw, list)
+        assert "ivan" in assignees_raw
 
     @pytest.mark.asyncio
-    async def test_ai_summarize_text(self, crm_client, mock_llm_redis, unique_id, auth_headers_system):
+    async def test_ai_summarize_text(self, crm_client: AsyncClient, mock_llm_redis: MockLlmRedisFactory, unique_id: str, auth_headers_system: dict[str, str],
+    ):
         """AI суммаризирует длинный текст"""
         long_text = """Сегодня была продуктивная встреча с командой.
         Мы обсудили текущий прогресс по проекту X, который находится на 75% готовности.
@@ -255,21 +295,22 @@ class TestAIAnalysis:
             "description": long_text,
             "namespace": "default",
         }, headers=auth_headers_system)
-        note_id = note_resp.json()["entity_id"]
+        note_id = object_str(_json_object(note_resp.json()).get("entity_id"), field="entity_id")
 
         _, response = await _analyze_note(crm_client, auth_headers_system, note_id)
 
         assert response.status_code == 200
         result = response.json()
 
-        note = result["note"]
-        assert note is not None
-        assert len(note["description"]) < len(long_text)
-        description_lower = note["description"].lower()
+        note = object_dict(result.get("note"), field="note")
+        description = object_str(note.get("description"), field="note.description")
+        assert len(description) < len(long_text)
+        description_lower = description.lower()
         assert "проект x" in description_lower or "проекта x" in description_lower
 
     @pytest.mark.asyncio
-    async def test_ai_extract_with_mentioned_entities(self, crm_client, mock_llm_redis, unique_id, auth_headers_system):
+    async def test_ai_extract_with_mentioned_entities(self, crm_client: AsyncClient, mock_llm_redis: MockLlmRedisFactory, unique_id: str, auth_headers_system: dict[str, str],
+    ):
         """AI учитывает явно упомянутые entities через @"""
         existing_name = f"Существующая задача {unique_id}"
         existing_entity_resp = await crm_client.post("/crm/api/v1/entities/", json={
@@ -321,17 +362,19 @@ class TestAIAnalysis:
         assert response.status_code == 200
         result = response.json()
 
-        relationships = result["relationships"]
+        relationships = object_list(result.get("relationships"))
         if relationships:
             rel0 = relationships[0]
-            assert rel0["relationship_type"] == "mentions"
+            assert rel0.get("relationship_type") == "mentions"
             assert rel0.get("target_draft_entity_id")
         else:
-            known_map = result.get("known_entity_id_map") or {}
+            known_map_raw = result.get("known_entity_id_map")
+            known_map = known_map_raw if isinstance(known_map_raw, dict) else {}
             assert existing_id in known_map.values(), f"Expected mentioned entity mapping, got: {result}"
 
     @pytest.mark.asyncio
-    async def test_ai_extract_specific_entity_types(self, crm_client, mock_llm_redis, unique_id, auth_headers_system):
+    async def test_ai_extract_specific_entity_types(self, crm_client: AsyncClient, mock_llm_redis: MockLlmRedisFactory, unique_id: str, auth_headers_system: dict[str, str],
+    ):
         """AI извлекает только указанные типы entities"""
         await mock_llm_redis([{
             "type": "text",
@@ -366,11 +409,12 @@ class TestAIAnalysis:
         assert response.status_code == 200
         result = response.json()
 
-        all_tasks = all(e["entity_type"] == "task" for e in result["entities"])
-        assert all_tasks
+        entities = object_list(result.get("entities"))
+        assert all(entity.get("entity_type") == "task" for entity in entities)
 
     @pytest.mark.asyncio
-    async def test_ai_extract_custom_relationship_types(self, crm_client, mock_llm_redis, unique_id, auth_headers_system):
+    async def test_ai_extract_custom_relationship_types(self, crm_client: AsyncClient, mock_llm_redis: MockLlmRedisFactory, unique_id: str, auth_headers_system: dict[str, str],
+    ):
         """AI извлекает кастомные типы связей"""
         await crm_client.post("/crm/api/v1/relationships/types/", json={
             "type_id": f"works_on_{unique_id}",
@@ -423,14 +467,21 @@ class TestAIAnalysis:
         )
         result = response.json()
 
+        relationships = object_list(result.get("relationships"))
         custom_rel = next(
-            (r for r in result["relationships"] if r["relationship_type"] == f"works_on_{unique_id}"),
-            None
+            (
+                rel
+                for rel in relationships
+                if rel.get("relationship_type") == f"works_on_{unique_id}"
+            ),
+            None,
         )
         assert custom_rel is not None
 
     @pytest.mark.asyncio
-    async def test_entity_creation_rejects_missing_namespace(self, crm_client, auth_headers_system):
+    async def test_entity_creation_rejects_missing_namespace(
+        self, crm_client: AsyncClient, auth_headers_system: dict[str, str]
+    ):
         """422 при попытке создать entity в несуществующем namespace."""
         note_resp = await crm_client.post("/crm/api/v1/entities/", json={
             "entity_type": "note",

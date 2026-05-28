@@ -58,19 +58,19 @@ def _policy(
 
 def test_episode_requires_scope_identity() -> None:
     with pytest.raises(ValueError, match="session_id"):
-        LLMContextMemoryEpisode(memory_id="m1", content="hello", scope="session")
+        _ = LLMContextMemoryEpisode(memory_id="m1", content="hello", scope="session")
 
     with pytest.raises(ValueError, match="flow_id and node_id"):
-        LLMContextMemoryEpisode(memory_id="m1", content="hello", scope="node", flow_id="f")
+        _ = LLMContextMemoryEpisode(memory_id="m1", content="hello", scope="node", flow_id="f")
 
     with pytest.raises(ValueError, match="cannot be 'off'"):
-        LLMContextMemoryEpisode(memory_id="m1", content="hello", scope="off")
+        _ = LLMContextMemoryEpisode(memory_id="m1", content="hello", scope="off")
 
     with pytest.raises(ValueError, match="flow_id"):
-        LLMContextMemoryEpisode(memory_id="m1", content="hello", scope="flow")
+        _ = LLMContextMemoryEpisode(memory_id="m1", content="hello", scope="flow")
 
     with pytest.raises(ValueError, match="recall scope"):
-        LLMContextMemoryRecallRequest(query="hello", scope="off")
+        _ = LLMContextMemoryRecallRequest(query="hello", scope="off")
 
 
 @pytest.mark.asyncio

@@ -13,7 +13,7 @@ pytestmark = pytest.mark.timeout(30, func_only=True)
 @pytest.mark.asyncio
 async def test_amocrm_sync_returns_202(
     crm_client: AsyncClient,
-    auth_headers_system: dict,
+    auth_headers_system: dict[str, str],
     unique_id: str,
 ) -> None:
     ns = f"g_{unique_id}"
@@ -33,7 +33,7 @@ async def test_amocrm_sync_returns_202(
 @pytest.mark.asyncio
 async def test_amocrm_custom_fields_sync_returns_202(
     crm_client: AsyncClient,
-    auth_headers_system: dict,
+    auth_headers_system: dict[str, str],
     unique_id: str,
 ) -> None:
     ns = f"g_{unique_id}"
@@ -53,7 +53,7 @@ async def test_amocrm_custom_fields_sync_returns_202(
 async def test_amocrm_sync_active_conflict(
     crm_client: AsyncClient,
     crm_container,
-    auth_headers_system: dict,
+    auth_headers_system: dict[str, str],
     unique_id: str,
     system_user_id: str,
 ) -> None:

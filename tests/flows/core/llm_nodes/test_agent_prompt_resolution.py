@@ -16,6 +16,7 @@ import pytest
 
 from apps.flows.src.container import get_container
 from apps.flows.src.models.node_config import NodeConfig, NodeLLMConfig
+from apps.flows.src.models.enums import NodeType
 from apps.flows.src.runtime.runners.llm_runner import LlmNodeRunner
 from core.context import Context, User, clear_context, set_context
 from core.state import ExecutionState
@@ -26,7 +27,7 @@ def flow_config():
     """Базовый конфиг агента."""
     return NodeConfig(
         node_id="test_agent",
-        type="llm_node",
+        type=NodeType.LLM_NODE,
         name="Test Agent",
         description="Agent for testing prompt resolution",
         prompt="",
@@ -42,7 +43,7 @@ def runner(flow_config):
         tools=[],
         llm=None,
         prompt="",
-        container=get_container(),
+        container=get_container(),  # pyright: ignore[reportArgumentType]
     )
 
 

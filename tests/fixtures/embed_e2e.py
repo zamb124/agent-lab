@@ -12,17 +12,21 @@ from core.utils.tokens import get_token_service
 @pytest_asyncio.fixture
 async def embed_test_auth(frontend_container, unique_id):
     from apps.flows.src.container import get_container
-    from apps.flows.src.models.flow_config import FlowConfig
+    from apps.flows.src.models.flow_config import Edge, FlowConfig
 
     company_id = f"test_company_{unique_id}"
-    company = Company(company_id=company_id, name="Test Company", owner_id="test_user")
+    company = Company(
+        company_id=company_id,
+        name="Test Company",
+        owner_user_id="test_user",
+    )
     await frontend_container.company_repository.set(company)
 
     user_id = f"test_user_{unique_id}"
     user = User(
         user_id=user_id,
         name="Test User",
-        email=f"{user_id}@test.com",
+        emails=[f"{user_id}@test.com"],
         companies={company_id: ["admin"]},
         active_company_id=company_id,
     )
@@ -55,7 +59,7 @@ async def embed_test_auth(frontend_container, unique_id):
                 ),
             }
         },
-        edges=[{"from_node": "main", "to_node": None}],
+        edges=[Edge(from_node="main", to_node=None)],
     )
     await flows_container.flow_repository.set(agent)
     clear_context()

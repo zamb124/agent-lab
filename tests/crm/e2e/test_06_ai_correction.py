@@ -4,54 +4,78 @@
 User Story: Возможность править результаты AI и дополнять данные по entities.
 """
 
+import asyncio
 import json
+import time
+from collections.abc import Awaitable, Callable
 
 import pytest
+from httpx import AsyncClient
+
+from tests.crm.e2e._json_helpers import json_object, object_dict, object_list, object_str
+
+MockLlmRedisFactory = Callable[[list[object]], Awaitable[None]]
+
+
+class _DraftResponse:
+    status_code: int
+
+    def __init__(self, status_code: int, draft: dict[str, object]) -> None:
+        self.status_code = status_code
+        self._draft = draft
+
+    def json(self) -> dict[str, object]:
+        return self._draft
+
+
+def _json_object(response_payload: object) -> dict[str, object]:
+    return json_object(response_payload)
 
 
 async def _analyze_note(
-    crm_client,
-    headers: dict,
+    crm_client: AsyncClient,
+    headers: dict[str, str],
     note_id: str,
-    **extra,
-):
+    **extra: object,
+) -> tuple[dict[str, object], _DraftResponse]:
     """Запускает анализ заметки через POST /tasks/note-analyze и ждёт завершения.
 
     Возвращает (task_row, ai_analysis_draft).
     """
-    import asyncio
-    import time
-    body = {"note_id": note_id, **extra}
+    body: dict[str, object] = {"note_id": note_id}
+    body.update(extra)
     start = await crm_client.post(
         "/crm/api/v1/tasks/note-analyze",
         json=body,
         headers=headers,
     )
     assert start.status_code == 202, start.text
-    task_id = start.json()["task_id"]
+    start_payload = _json_object(start.json())
+    task_id_raw = start_payload.get("task_id")
+    assert isinstance(task_id_raw, str)
+    task_id = task_id_raw
     deadline = time.monotonic() + 60.0
-    last = {}
+    last: dict[str, object] = {}
     while time.monotonic() < deadline:
         tr = await crm_client.get(f"/crm/api/v1/tasks/{task_id}", headers=headers)
         assert tr.status_code == 200, tr.text
-        last = tr.json()
-        if last.get("status") in ("completed", "failed", "cancelled"):
+        last = _json_object(tr.json())
+        status_raw = last.get("status")
+        if status_raw in ("completed", "failed", "cancelled"):
             break
         await asyncio.sleep(0.4)
     assert last.get("status") == "completed", f"task failed: {last.get('error_message')}"
     nr = await crm_client.get(f"/crm/api/v1/entities/{note_id}", headers=headers)
-    draft = nr.json().get("attributes", {}).get("ai_analysis_draft") or {}
+    note_payload = _json_object(nr.json())
+    attributes_raw = note_payload.get("attributes")
+    attributes = attributes_raw if isinstance(attributes_raw, dict) else {}
+    draft_raw = attributes.get("ai_analysis_draft")
+    draft: dict[str, object] = draft_raw if isinstance(draft_raw, dict) else {}
 
-    class _R:
-        status_code = nr.status_code
-        def json(self) -> dict:
-            return draft
-
-    return last, _R()
-
+    return last, _DraftResponse(nr.status_code, draft)
 
 
-_META = {"dates_mentioned": [], "places_mentioned": [], "key_topics": []}
+_META: dict[str, object] = {"dates_mentioned": [], "places_mentioned": [], "key_topics": []}
 
 
 @pytest.mark.real_taskiq
@@ -59,7 +83,8 @@ class TestAICorrection:
     """Корректировка извлеченных AI данных"""
 
     @pytest.mark.asyncio
-    async def test_correct_extracted_entity(self, crm_client, mock_llm_redis, unique_id, auth_headers_system):
+    async def test_correct_extracted_entity(self, crm_client: AsyncClient, mock_llm_redis: MockLlmRedisFactory, unique_id: str, auth_headers_system: dict[str, str],
+    ):
         """Пользователь правит entity после AI анализа"""
         await mock_llm_redis([{
             "type": "text",
@@ -90,7 +115,7 @@ class TestAICorrection:
         note_id = note_resp.json()["entity_id"]
 
         _, analyze_resp = await _analyze_note(crm_client, auth_headers_system, note_id)
-        entities = analyze_resp.json().get("entities") or []
+        entities = object_list(analyze_resp.json().get("entities"))
         extracted_entity = entities[0] if entities else {
             "entity_type": "contact",
             "name": "Иван",
@@ -121,7 +146,8 @@ class TestAICorrection:
         assert "email" in corrected["attributes"]
 
     @pytest.mark.asyncio
-    async def test_add_missing_relationship(self, crm_client, unique_id, auth_headers_system):
+    async def test_add_missing_relationship(self, crm_client: AsyncClient, unique_id: str, auth_headers_system: dict[str, str],
+    ):
         """Добавление связи, которую AI не нашел"""
         entity1_resp = await crm_client.post("/crm/api/v1/entities/", json={
             "entity_type": "contact",
@@ -147,7 +173,8 @@ class TestAICorrection:
         assert relationship["target_entity_id"] == entity2_id
 
     @pytest.mark.asyncio
-    async def test_delete_incorrect_entity(self, crm_client, mock_llm_redis, unique_id, auth_headers_system):
+    async def test_delete_incorrect_entity(self, crm_client: AsyncClient, mock_llm_redis: MockLlmRedisFactory, unique_id: str, auth_headers_system: dict[str, str],
+    ):
         """Удаление ошибочно извлеченной entity"""
         await mock_llm_redis([{
             "type": "text",
@@ -187,16 +214,17 @@ class TestAICorrection:
         _, analyze_resp = await _analyze_note(
             crm_client, auth_headers_system, note_id, check_duplicates=False
         )
-        entities = analyze_resp.json()["entities"]
+        entities = object_list(analyze_resp.json().get("entities"))
 
         incorrect_entity_id = None
         for entity_data in entities:
+            entity_name = object_str(entity_data.get("name"), field="entity.name")
             create_resp = await crm_client.post("/crm/api/v1/entities/", json={
-                "entity_type": entity_data["entity_type"],
-                "name": entity_data["name"]
+                "entity_type": entity_data.get("entity_type"),
+                "name": entity_name,
             }, headers=auth_headers_system)
             assert create_resp.status_code == 200
-            if "Ошибочный" in entity_data["name"]:
+            if "Ошибочный" in entity_name:
                 incorrect_entity_id = create_resp.json()["entity_id"]
 
         if incorrect_entity_id is None:
@@ -208,7 +236,8 @@ class TestAICorrection:
         assert get_resp.status_code == 404
 
     @pytest.mark.asyncio
-    async def test_merge_duplicate_entities(self, crm_client, unique_id, auth_headers_system):
+    async def test_merge_duplicate_entities(self, crm_client: AsyncClient, unique_id: str, auth_headers_system: dict[str, str],
+    ):
         """Объединение дублирующихся entities"""
         entity1_resp = await crm_client.post("/crm/api/v1/entities/", json={
             "entity_type": "contact",
@@ -240,7 +269,8 @@ class TestAICorrection:
         assert "phone" in merged["attributes"]
 
     @pytest.mark.asyncio
-    async def test_update_note_after_ai_analysis(self, crm_client, mock_llm_redis, unique_id, auth_headers_system):
+    async def test_update_note_after_ai_analysis(self, crm_client: AsyncClient, mock_llm_redis: MockLlmRedisFactory, unique_id: str, auth_headers_system: dict[str, str],
+    ):
         """Корректировка самой заметки после AI анализа"""
         await mock_llm_redis([{
             "type": "text",
@@ -265,14 +295,14 @@ class TestAICorrection:
         note_id = note_resp.json()["entity_id"]
 
         _, analyze_resp = await _analyze_note(crm_client, auth_headers_system, note_id)
-        note_data = analyze_resp.json()["note"]
+        note_data = object_dict(analyze_resp.json().get("note"), field="note")
 
         # Создаём note на основе AI анализа
         create_resp = await crm_client.post("/crm/api/v1/entities/", json={
-            "entity_type": note_data["entity_type"],
+            "entity_type": note_data.get("entity_type"),
             "entity_subtype": note_data.get("entity_subtype"),
-            "name": note_data["name"],
-            "description": note_data.get("description")
+            "name": note_data.get("name"),
+            "description": note_data.get("description"),
         }, headers=auth_headers_system)
         note_id = create_resp.json()["entity_id"]
 

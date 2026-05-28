@@ -18,7 +18,7 @@ pytestmark = pytest.mark.timeout(20, func_only=True)
 @pytest.mark.asyncio
 async def test_suggests_list_empty(
     crm_client: AsyncClient,
-    auth_headers_system: dict,
+    auth_headers_system: dict[str, str],
     unique_id: str,
 ) -> None:
     ns = f"g_{unique_id}"
@@ -34,7 +34,7 @@ async def test_suggests_list_empty(
 async def test_suggests_lifecycle(
     crm_client: AsyncClient,
     crm_container,
-    auth_headers_system: dict,
+    auth_headers_system: dict[str, str],
     unique_id: str,
     system_user_id: str,
 ) -> None:
@@ -130,7 +130,7 @@ async def test_suggests_lifecycle(
 async def test_suggests_dismiss(
     crm_client: AsyncClient,
     crm_container,
-    auth_headers_system: dict,
+    auth_headers_system: dict[str, str],
     unique_id: str,
     system_user_id: str,
 ) -> None:

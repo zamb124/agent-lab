@@ -4,6 +4,7 @@ import pytest
 
 from apps.flows.src.models.enums import NodeType
 from apps.flows.src.models.node_config import NodeConfig
+from core.llm_context import LLMContextPatch
 
 
 def test_llm_node_context_config_is_a_simple_strict_patch() -> None:
@@ -12,7 +13,7 @@ def test_llm_node_context_config_is_a_simple_strict_patch() -> None:
         type=NodeType.LLM_NODE,
         name="Agent",
         prompt="Answer briefly",
-        llm_context={"profile": "agent", "memory": "node"},
+        llm_context=LLMContextPatch(profile="agent", memory="node"),
         llm_context_resource_key="ctx",
     )
 
@@ -32,5 +33,5 @@ def test_resource_node_rejects_llm_context_surface() -> None:
             node_id="resource",
             type=NodeType.RESOURCE,
             name="Resource",
-            llm_context={"profile": "compact"},
+            llm_context=LLMContextPatch(profile="compact"),
         )

@@ -26,6 +26,7 @@ def _docx_bytes(*paragraphs: str) -> bytes:
 def _xlsx_bytes() -> bytes:
     wb = Workbook()
     ws = wb.active
+    assert ws is not None
     ws.title = "Data"
     ws["A1"] = "hello old"
     ws["B2"] = 10
@@ -84,9 +85,13 @@ def test_replace_and_update_xlsx_roundtrip():
     ws = wb["Data"]
 
     assert count == 1
-    assert ws["A1"].value == "hello new"
-    assert ws["B2"].value == 20
-    assert ws["C3"].value == "done"
+    a1_value = ws["A1"].value
+    b2_value = ws["B2"].value
+    assert a1_value == "hello new"
+    assert b2_value == 20
+    c3_value = ws["C3"].value
+    assert isinstance(c3_value, str)
+    assert c3_value == "done"
 
 
 def test_update_csv_expands_rows_and_columns():
@@ -102,4 +107,4 @@ def test_update_csv_expands_rows_and_columns():
 
 def test_unsupported_extension_is_rejected():
     with pytest.raises(DocumentMutationError):
-        append_text_to_document(data=b"abc", original_name="archive.zip", text="x")
+        _ = append_text_to_document(data=b"abc", original_name="archive.zip", text="x")

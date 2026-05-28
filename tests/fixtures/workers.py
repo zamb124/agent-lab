@@ -501,7 +501,7 @@ class SessionWorkerManager:
 # ============================================================================
 
 @pytest.fixture(scope="session")
-def taskiq_worker():
+def taskiq_worker(sandbox_services):
     """
     Запускает TaskIQ worker для тестов.
 
@@ -513,6 +513,11 @@ def taskiq_worker():
     При pytest-xdist используется filelock для синхронизации -
     первый worker запускает TaskIQ worker, остальные ждут и переиспользуют его.
     """
+    # Worker исполняет code nodes через реальные sandbox-сервисы. Держим их
+    # как явную зависимость, чтобы code runner endpoints не закрылись раньше
+    # завершения фоновой TaskIQ-задачи.
+    _ = sandbox_services
+
     # Используем SessionWorkerManager для управления worker
     manager = SessionWorkerManager(
         name="TaskIQ",

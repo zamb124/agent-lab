@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from collections.abc import Generator
+
 import pytest
 import pytest_asyncio
 
@@ -39,7 +41,7 @@ async def _ensure_company_for_realtime(
 
 
 @pytest.fixture(autouse=True)
-def _handler_company_context(company_id: str) -> None:
+def _handler_company_context(company_id: str) -> Generator[None, None, None]:
     company = Company(
         company_id=company_id,
         name="Test company",

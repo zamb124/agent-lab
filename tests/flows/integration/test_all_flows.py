@@ -225,7 +225,7 @@ class TestAllFlowConfigs:
             ],
         }
 
-        flow = await Flow.from_config(config_dict, container=container)
+        flow = await Flow.from_config(config_dict, container=container)  # pyright: ignore[reportArgumentType]
         assert flow.flow_id == config.flow_id
         assert flow.name == config.name
 
@@ -282,7 +282,7 @@ class TestAllFlowsExecution:
             content="Тестовый запрос",
             messages=[],
         )
-        result = await run_flow(container=container, flow=flow, state=state)
+        result = await run_flow(container=container, flow=flow, state=state)  # pyright: ignore[reportArgumentType]
 
         # Проверяем что flow завершился
         assert result is not None

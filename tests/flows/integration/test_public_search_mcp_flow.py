@@ -1,3 +1,4 @@
+import base64
 import json
 from typing import Any
 
@@ -196,6 +197,103 @@ async def test_public_search_flow_calls_search_mcp_without_monkeypatches(
     assert ui_payloads["search/serp/insights_ready"]["result_insights"]
     assert ui_payloads["search/serp/completed"]["kind"] == "public_search_serp"
     assert ui_payloads["search/serp/completed"]["answer"] == "SEARCH_FLOW_STREAM_OK"
+
+
+@pytest.mark.asyncio
+@pytest.mark.real_taskiq
+@pytest.mark.timeout(180, func_only=True)
+async def test_public_search_with_file_reads_file_before_search(
+    search_service,
+    client,
+    mock_llm_redis,
+    mock_llm_capture,
+    unique_id,
+) -> None:
+    _ = search_service
+    query = f"Найди официальные условия договора {unique_id}"
+    file_name = f"contract-search-{unique_id}.txt"
+    file_text = (
+        "Договор бронирования. Ракурс Вальдштейн. "
+        "Ключевые условия: депозит, отмена бронирования, ответственность сторон."
+    )
+    summary = (
+        "- Файл про договор бронирования Ракурс Вальдштейн.\n"
+        "- Важны депозит, отмена бронирования и ответственность сторон.\n"
+        "Ключевые термины: договор бронирования, депозит, отмена, ответственность."
+    )
+    await mock_llm_redis(
+        [
+            {
+                "type": "tool_call",
+                "tool": "read_file",
+                "args": {"file_name": file_name},
+            },
+            {
+                "type": "text",
+                "content": summary,
+            },
+            {
+                "type": "text",
+                "content": "SEARCH_WITH_FILE_OK",
+            },
+        ]
+    )
+
+    stream_response = await client.post(
+        "/flows/api/v1/public_search",
+        json={
+            "jsonrpc": "2.0",
+            "id": f"public-search-file-{unique_id}",
+            "method": "message/stream",
+            "params": {
+                "message": {
+                    "messageId": f"public-search-file-message-{unique_id}",
+                    "role": "user",
+                    "parts": [
+                        {"kind": "text", "text": query},
+                        {
+                            "kind": "file",
+                            "file": {
+                                "bytes": base64.b64encode(file_text.encode("utf-8")).decode("utf-8"),
+                                "name": file_name,
+                                "mimeType": "text/plain",
+                            },
+                        },
+                    ],
+                },
+                "metadata": {"branch": "quick"},
+            },
+        },
+    )
+
+    assert stream_response.status_code == 200, stream_response.text
+    events = _parse_sse_results(stream_response.text)
+    completed_payload: dict[str, Any] | None = None
+    for event in events:
+        if event.get("kind") != "artifact-update":
+            continue
+        artifact = event.get("artifact")
+        if not isinstance(artifact, dict) or artifact.get("name") != "ui_event":
+            continue
+        data = _artifact_data_part(artifact)
+        if data.get("type") == "search/serp/completed":
+            payload = data.get("payload")
+            assert isinstance(payload, dict)
+            completed_payload = payload
+
+    assert completed_payload is not None, stream_response.text
+    assert completed_payload["query"] == query
+    assert "[FILE]" not in completed_payload["query"]
+    assert completed_payload["answer"] == "SEARCH_WITH_FILE_OK"
+    assert completed_payload["file_context"] == summary
+    assert "Краткий контекст приложенных файлов" in completed_payload["effective_query"]
+    assert "Ключевые термины" in completed_payload["effective_query"]
+
+    calls = await mock_llm_capture()
+    assert "read_file" in _captured_tool_names(calls)
+    prompt_text = "\n".join(_captured_text(call) for call in calls)
+    assert file_name in prompt_text
+    assert "[FILE]" not in completed_payload["effective_query"]
 
 
 @pytest.mark.asyncio

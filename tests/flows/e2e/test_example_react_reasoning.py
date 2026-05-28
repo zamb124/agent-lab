@@ -5,21 +5,21 @@ E2E тесты для example_react с reasoning mode.
 """
 
 import uuid as uuid_lib
-from typing import Any, Dict
+from typing import Any
 
 import pytest
 
 pytestmark = pytest.mark.asyncio
 
 
-def get_task_state(data: Dict[str, Any]) -> str:
+def get_task_state(data: dict[str, Any]) -> str:
     """Извлекает state из A2A Task ответа."""
     if "result" in data:
         return data["result"]["status"]["state"]
     return data.get("status", {}).get("state", "")
 
 
-def get_task_response(data: Dict[str, Any]) -> str:
+def get_task_response(data: dict[str, Any]) -> str:
     """Извлекает текст ответа из A2A Task."""
     if "result" in data:
         msg = data["result"]["status"].get("message")
@@ -30,11 +30,19 @@ def get_task_response(data: Dict[str, Any]) -> str:
     return ""
 
 
-def get_artifacts(data: Dict[str, Any]) -> list:
+def get_artifacts(data: dict[str, Any]) -> list[dict[str, Any]]:
     """Извлекает artifacts из ответа."""
     if "result" in data:
-        return data["result"].get("artifacts", [])
-    return data.get("artifacts", [])
+        raw = data["result"].get("artifacts", [])
+    else:
+        raw = data.get("artifacts", [])
+    if not isinstance(raw, list):
+        return []
+    artifacts: list[dict[str, Any]] = []
+    for item in raw:
+        if isinstance(item, dict):
+            artifacts.append(item)
+    return artifacts
 
 
 async def send_a2a_message(
@@ -42,8 +50,8 @@ async def send_a2a_message(
     flow_id: str,
     content: str,
     branch_id: str = "default",
-    session_id: str = None,
-) -> Dict[str, Any]:
+    session_id: str | None = None,
+) -> dict[str, Any]:
     """Отправляет сообщение через A2A API."""
     if session_id is None:
         session_id = f"{flow_id}:test-{uuid_lib.uuid4()}"

@@ -78,7 +78,7 @@ class _DummyNode(BaseNode):
 
 def test_apply_output_mapping_rejects_frozen_key(app) -> None:
     _ = app
-    node = _DummyNode("n1", config={"type": "test_dummy"}, container=get_container())
+    node = _DummyNode("n1", config={"type": "test_dummy"}, container=get_container())  # pyright: ignore[reportArgumentType]
     state = _minimal_state()
     with pytest.raises(FrozenStateFieldError):
         node.apply_output_mapping_for_test(state, {"session_id": "x:y"})
@@ -86,7 +86,7 @@ def test_apply_output_mapping_rejects_frozen_key(app) -> None:
 
 def test_copy_state_back_preserves_target_identity_when_not_full_trust(app) -> None:
     _ = app
-    node = _DummyNode("n1", config={"type": "test_dummy"}, container=get_container())
+    node = _DummyNode("n1", config={"type": "test_dummy"}, container=get_container())  # pyright: ignore[reportArgumentType]
     tgt = _minimal_state()
     src_dict = tgt.model_dump(exclude_none=False)
     src_dict["task_id"] = "forged"

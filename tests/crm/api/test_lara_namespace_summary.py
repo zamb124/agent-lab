@@ -19,7 +19,7 @@ pytestmark = pytest.mark.timeout(20, func_only=True)
 @pytest.mark.asyncio
 async def test_lara_namespace_summary_zeros(
     crm_client: AsyncClient,
-    auth_headers_system: dict,
+    auth_headers_system: dict[str, str],
     unique_id: str,
 ) -> None:
     ns = f"g_{unique_id}"
@@ -40,7 +40,7 @@ async def test_lara_namespace_summary_zeros(
 async def test_lara_namespace_summary_import_awaiting_review(
     crm_client: AsyncClient,
     crm_container,
-    auth_headers_system: dict,
+    auth_headers_system: dict[str, str],
     unique_id: str,
     system_user_id: str,
 ) -> None:
@@ -95,7 +95,7 @@ async def test_lara_namespace_summary_import_awaiting_review(
 @pytest.mark.asyncio
 async def test_lara_namespace_summary_note_draft_not_applied(
     crm_client: AsyncClient,
-    auth_headers_system: dict,
+    auth_headers_system: dict[str, str],
     unique_id: str,
 ) -> None:
     ns = f"g_{unique_id}"

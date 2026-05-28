@@ -7,12 +7,13 @@
 import pytest
 
 
-def _find_outgoing(rels: list, *, source_id: str, rel_type: str) -> dict | None:
-    for r in rels:
-        if not isinstance(r, dict):
+def _find_outgoing(rels: list[object], *, source_id: str, rel_type: str) -> dict[str, object] | None:
+    for rel_raw in rels:
+        if not isinstance(rel_raw, dict):
             continue
-        if r.get("source_entity_id") == source_id and r.get("relationship_type") == rel_type:
-            return r
+        rel: dict[str, object] = rel_raw
+        if rel.get("source_entity_id") == source_id and rel.get("relationship_type") == rel_type:
+            return rel
     return None
 
 

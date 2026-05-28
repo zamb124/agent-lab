@@ -11,7 +11,7 @@ def test_settings_to_runtime_view_requires_cdp() -> None:
     cfg = BrowserRuntimeIntegrationConfig(cdp_url="", cdp_endpoints={})
     fake = SimpleNamespace(browser=cfg)
     with pytest.raises(ValueError, match="CDP endpoint"):
-        settings_to_runtime_view(fake)
+        settings_to_runtime_view(fake)  # pyright: ignore[reportArgumentType]  # pyright: ignore[reportArgumentType]
 
 
 def test_settings_to_runtime_view_from_cdp_url() -> None:
@@ -20,7 +20,7 @@ def test_settings_to_runtime_view_from_cdp_url() -> None:
         cdp_url="http://127.0.0.1:9222",
     )
     fake = SimpleNamespace(browser=cfg)
-    view = settings_to_runtime_view(fake)
+    view = settings_to_runtime_view(fake)  # pyright: ignore[reportArgumentType]
     assert view.cdp_urls_by_endpoint["default"] == "http://127.0.0.1:9222"
     assert view.control_backend == "playwright"
 
@@ -33,4 +33,4 @@ def test_settings_to_runtime_view_requires_default_endpoint_key_in_map() -> None
     )
     fake = SimpleNamespace(browser=cfg)
     with pytest.raises(ValueError, match="default_endpoint_key"):
-        settings_to_runtime_view(fake)
+        settings_to_runtime_view(fake)  # pyright: ignore[reportArgumentType]

@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from typing import cast
+from collections.abc import Callable
 from unittest.mock import AsyncMock, MagicMock, PropertyMock
 
 import httpx
@@ -43,7 +45,10 @@ async def test_request_direct_burst_all_fail_reraises_last_connect_error(
     def handler(request: httpx.Request) -> None:
         raise httpx.ConnectError("burst", request=request)
 
-    install_mock_httpx_client(monkeypatch, handler)
+    install_mock_httpx_client(
+        monkeypatch,
+        cast(Callable[[httpx.Request], httpx.Response], handler),
+    )
     with pytest.raises(httpx.ConnectError, match="burst"):
         await _request_direct_burst("GET", "https://burst.example/x", timeout=1.0, attempts=2)
 
@@ -68,7 +73,10 @@ async def test_smart_connect_failure_raises_when_proxy_disabled(monkeypatch: pyt
     def handler(request: httpx.Request) -> None:
         raise httpx.ConnectError("x", request=request)
 
-    install_mock_httpx_client(monkeypatch, handler)
+    install_mock_httpx_client(
+        monkeypatch,
+        cast(Callable[[httpx.Request], httpx.Response], handler),
+    )
     monkeypatch.setattr("core.http.client.egress_prefer_proxy_get", AsyncMock(return_value=False))
     monkeypatch.setattr("core.http.client._platform_proxy_active", lambda: False)
     with pytest.raises(httpx.ConnectError):
@@ -138,7 +146,10 @@ async def test_http_method_shortcuts(monkeypatch: pytest.MonkeyPatch) -> None:
         methods.append(request.method)
         return httpx.Response(200)
 
-    install_mock_httpx_client(monkeypatch, handler)
+    install_mock_httpx_client(
+        monkeypatch,
+        cast(Callable[[httpx.Request], httpx.Response], handler),
+    )
     monkeypatch.setattr("core.http.client.egress_prefer_proxy_get", AsyncMock(return_value=False))
     async with get_httpx_client(timeout=5.0, strategy=ProxyStrategy.SMART) as client:
         await client.get("https://m.example/g")
@@ -762,7 +773,10 @@ async def test_request_public_oauth_proxy_after_direct_failures(monkeypatch: pyt
             raise httpx.ConnectError("d", request=request)
         return httpx.Response(200, text="via")
 
-    install_mock_httpx_client(monkeypatch, handler)
+    install_mock_httpx_client(
+        monkeypatch,
+        cast(Callable[[httpx.Request], httpx.Response], handler),
+    )
     monkeypatch.setattr("core.http.client._platform_proxy_active", lambda: True)
     _proxy_settings(monkeypatch)
     r = await request_public_oauth("GET", "https://oauth.example/p", timeout=5.0, httpx_client_kwargs={})
@@ -780,7 +794,10 @@ async def test_request_public_oauth_proxy_fail_then_direct_burst(monkeypatch: py
             raise httpx.ConnectError("x", request=request)
         return httpx.Response(200, text="final")
 
-    install_mock_httpx_client(monkeypatch, handler)
+    install_mock_httpx_client(
+        monkeypatch,
+        cast(Callable[[httpx.Request], httpx.Response], handler),
+    )
     monkeypatch.setattr("core.http.client._platform_proxy_active", lambda: True)
     _proxy_settings(monkeypatch)
     r = await request_public_oauth("GET", "https://oauth.example/both", timeout=5.0, httpx_client_kwargs={})
@@ -822,7 +839,10 @@ async def test_stream_proxy_only_rotates(monkeypatch: pytest.MonkeyPatch) -> Non
 
     class FakeAsyncClient:
         def __init__(self, *args: object, **kwargs: object) -> None:
-            self._outer: FailTwiceThenOk = kwargs.pop("_outer")
+            outer_raw = kwargs.pop("_outer")
+            if not isinstance(outer_raw, FailTwiceThenOk):
+                raise TypeError("_outer must be FailTwiceThenOk")
+            self._outer = outer_raw
 
         async def __aenter__(self) -> FakeAsyncClient:
             return self

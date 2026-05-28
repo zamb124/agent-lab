@@ -8,10 +8,12 @@ from core.llm_context import (
     LLMContextBudgetError,
     LLMContextCompiler,
     LLMContextCompileRequest,
+    LLMContextMode,
     LLMContextProfile,
     LLMContextRetrievalPolicy,
     SimpleTokenCounter,
 )
+from core.types import JsonObject, require_json_object
 
 
 def _compiler() -> LLMContextCompiler:
@@ -20,7 +22,7 @@ def _compiler() -> LLMContextCompiler:
 
 def _policy(
     *,
-    mode: str = "smart",
+    mode: LLMContextMode = "smart",
     max_input_tokens: int = 40,
     active_window_tokens: int = 10,
     memory_tokens: int = 6,
@@ -47,9 +49,9 @@ def _policy(
 
 
 def test_mode_off_returns_messages_without_context_blocks() -> None:
-    messages = [
-        {"role": "system", "content": "static instruction"},
-        {"role": "user", "content": "hello"},
+    messages: list[JsonObject] = [
+        require_json_object({"role": "system", "content": "static instruction"}),
+        require_json_object({"role": "user", "content": "hello"}),
     ]
     compiled = _compiler().compile(
         LLMContextCompileRequest(
@@ -562,7 +564,9 @@ def test_tool_result_compaction_keeps_large_tool_result_inside_budget() -> None:
     )
 
     assert compiled.messages[-1]["role"] == "tool"
-    assert "tool result compacted" in compiled.messages[-1]["content"]
+    tool_content = compiled.messages[-1]["content"]
+    assert isinstance(tool_content, str)
+    assert "tool result compacted" in tool_content
     assert compiled.messages[-1]["tool_call_id"] == "call-1"
     assert compiled.usage.tool_result_original_tokens > compiled.usage.tool_result_compacted_tokens
     assert compiled.usage.tool_result_saved_tokens > 0
