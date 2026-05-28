@@ -19,6 +19,8 @@ metadata:
   namespace: {{ .Values.namespace }}
   annotations:
     traefik.ingress.kubernetes.io/router.priority: "10"
+    # gzip+brotli compression для UI bundles (см. compression-middleware.yaml)
+    traefik.ingress.kubernetes.io/router.middlewares: {{ .Values.namespace }}-compress@kubernetescrd
 spec:
   ingressClassName: {{ .Values.ingress.className }}
   tls:
@@ -121,6 +123,7 @@ metadata:
   namespace: {{ .Values.namespace }}
   annotations:
     traefik.ingress.kubernetes.io/router.priority: "-100"
+    traefik.ingress.kubernetes.io/router.middlewares: {{ .Values.namespace }}-compress@kubernetescrd
 spec:
   ingressClassName: {{ .Values.ingress.className }}
   tls:

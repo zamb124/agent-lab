@@ -1,4 +1,4 @@
-"""OpenRouter free model cache filtering/ranking."""
+"""Кэш бесплатных моделей OpenRouter: фильтрация и ранжирование."""
 
 import json
 

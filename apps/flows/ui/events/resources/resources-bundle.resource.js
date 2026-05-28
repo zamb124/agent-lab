@@ -27,7 +27,7 @@ export const resourcesBundleResource = createResourceCollection({
     },
 });
 
-// Backend требует PUT.
+// Бэкенд требует PUT.
 export const resourceUpdateOp = createAsyncOp({
     name: 'flows/resource_update',
     successToastKey: 'flows:toast.resource_updated',

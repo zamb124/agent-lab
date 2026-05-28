@@ -30,7 +30,7 @@ export const flowsResource = createResourceCollection({
     },
 });
 
-// Backend требует PUT (а не PATCH, как у дефолтного `createResourceCollection.update`),
+// Бэкенд требует PUT (а не PATCH, как у дефолтного `createResourceCollection.update`),
 // поэтому update вынесен в отдельный AsyncOp.
 export const flowUpdateOp = createAsyncOp({
     name: 'flows/flow_update',

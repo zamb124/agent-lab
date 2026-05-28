@@ -58,7 +58,7 @@ async def test_two_ws_clients_receive_message_created(
 
     uri = "ws://127.0.0.1:9005/sync/api/ws/notifications"
 
-    async def _wait_message_created(ws, expect_channel_id: str) -> dict:
+    async def _wait_message_created(ws, expect_channel_id: str) -> dict[str, object]:
         for _ in range(80):
             raw = await asyncio.wait_for(ws.recv(), timeout=2.0)
             parsed = json.loads(raw)

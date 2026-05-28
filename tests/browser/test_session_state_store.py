@@ -49,8 +49,8 @@ async def test_session_state_store_put_get_delete_and_unknown_key_raises() -> No
     page = _FakePage(url="https://example.com/a", session_storage_dump={"k": "v"})
 
     key = await store.capture_from(
-        ctx,
-        page,
+        ctx,  # pyright: ignore[reportArgumentType]
+        page,  # pyright: ignore[reportArgumentType]
         shared_storage_key="bucket-test",
         context_signature=sig,
         last_snapshot_ref=None,

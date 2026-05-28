@@ -151,7 +151,7 @@ async def test_ws_two_commands_sequential(
     ) as ws:
         await ws.send(json.dumps(f1))
         await ws.send(json.dumps(f2))
-        got: dict[str, dict] = {}
+        got: dict[str, dict[str, object]] = {}
         for _ in range(40):
             raw = await ws.recv()
             parsed = json.loads(raw)
@@ -160,7 +160,13 @@ async def test_ws_two_commands_sequential(
                 got[rid] = parsed
             if len(got) == 2:
                 break
-        assert got[id1]["type"] == "sync/channels/create_succeeded"
-        assert got[id1]["payload"]["name"] == "WsA"
-        assert got[id2]["type"] == "sync/channels/create_succeeded"
-        assert got[id2]["payload"]["name"] == "WsB"
+        reply1 = got[id1]
+        payload1 = reply1.get("payload")
+        assert isinstance(payload1, dict)
+        assert reply1.get("type") == "sync/channels/create_succeeded"
+        assert payload1.get("name") == "WsA"
+        reply2 = got[id2]
+        payload2 = reply2.get("payload")
+        assert isinstance(payload2, dict)
+        assert reply2.get("type") == "sync/channels/create_succeeded"
+        assert payload2.get("name") == "WsB"

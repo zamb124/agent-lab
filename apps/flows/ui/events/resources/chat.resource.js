@@ -664,7 +664,7 @@ export const chatCancelOp = createAsyncOp({
     name: 'flows/chat_cancel',
     transport: 'http',
     silent: true,
-    // Тот же A2A endpoint per-flow: tasks/cancel JSON-RPC method.
+    // Тот же A2A endpoint на flow: tasks/cancel JSON-RPC method.
     restMirror: { method: 'POST', path: '/flows/api/v1/:flow_id' },
     request: async ({ payload }) => {
         if (!payload || typeof payload !== 'object') {

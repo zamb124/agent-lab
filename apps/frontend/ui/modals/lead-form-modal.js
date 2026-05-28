@@ -1,7 +1,7 @@
 /**
  * Модалка формы заявки — заявка с лендинга.
  *
- * Открывается через openModal(FrontendLeadFormModal). Submit вызывает
+ * Открывается через openModal(FrontendLeadFormModal). Отправка вызывает
  * leadSubmitOp; HTTP и тосты живут в фабрике, модалка только закрывается.
  */
 import { html, css } from 'lit';

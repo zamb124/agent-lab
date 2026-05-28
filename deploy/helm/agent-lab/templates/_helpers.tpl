@@ -33,6 +33,20 @@
   value: "1"
 - name: GRANIAN_RUNTIME_THREADS
   value: "2"
+# Static cache: expires=0 отключает Cache-Control max-age, браузер всегда
+# revalidate. Granian отвечает 304 Not Modified по Last-Modified — клиент
+# платит ~200 bytes headers вместо full body. Изменения файла видны мгновенно
+# после deploy без stale-кэша. Compression (gzip/br) на Traefik снижает
+# full transfer на 70%, HTTP/2 multiplexing убирает round-trip latency.
+- name: GRANIAN_STATIC_PATH_EXPIRES
+  value: "0"
+# Prometheus метрики Granian на :9090/metrics: granian_static_requests_handled,
+# requests_handled, py_wait_cumulative (на free-threaded build = 0 — наш
+# sentinel что GIL реально выключен).
+- name: GRANIAN_METRICS_ENABLED
+  value: "true"
+- name: GRANIAN_METRICS_ADDRESS
+  value: "0.0.0.0"
 - name: POSTGRES_PASSWORD
   valueFrom:
     secretKeyRef:

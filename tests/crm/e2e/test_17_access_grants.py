@@ -98,6 +98,8 @@ async def test_02_entity_user_grant(crm_client: AsyncClient, auth_headers_system
     token_service = get_token_service()
     token_company2 = auth_headers_company2["Authorization"].replace("Bearer ", "")
     payload_company2 = token_service.validate_token(token_company2)
+    if payload_company2 is None:
+        raise AssertionError("auth_headers_company2: невалидный JWT")
     user_b_id = payload_company2.user_id
 
     # 1. System user создает entity

@@ -394,6 +394,9 @@ function _clearActiveSearchRun(runId, controller) {
 
 function _applySearchUiEvent(stream, event) {
     const eventType = _requireNonEmptyString(event.type, 'ui_event.type');
+    if (eventType.startsWith('files.')) {
+        return;
+    }
     const payload = _requireObject(event.payload, 'ui_event.payload');
     if (eventType === 'search/serp/results_ready') {
         stream.phase = 'results';
@@ -456,6 +459,9 @@ function _applyRuntimeEvents(stream, events) {
             const payload = _requireObject(runtimeEvent.payload, 'ui_event.payload');
             const uiEvent = _requireObject(payload.event, 'ui_event.payload.event');
             _applySearchUiEvent(stream, uiEvent);
+            continue;
+        }
+        if (runtimeEvent.type === 'files_event') {
             continue;
         }
         if (runtimeEvent.type === 'failed') {

@@ -1,7 +1,7 @@
 /**
  * Лаборатория Evaluation — фабрики UI-домена.
  *
- * Компоненты Evaluation Lab не ходят в HTTP напрямую. Все CRUD/command/read
+ * Компоненты лаборатории Evaluation не ходят в HTTP напрямую. Все операции CRUD/command/read
  * операции идут через эти createAsyncOp-фабрики, а выбранные сущности держатся
  * в typed slice `flows/evaluation_ui`.
  */

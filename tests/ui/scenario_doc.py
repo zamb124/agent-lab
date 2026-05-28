@@ -297,6 +297,7 @@ class ScenarioRecorder:
 
         if not title:
             title = node.name.replace("test_", "").replace("_", " ").strip().title() or node.name
+        resolved_title: str = str(title)
 
         raw_doc_slug = m.kwargs.get("doc_slug")
         if raw_doc_slug is not None:
@@ -306,7 +307,7 @@ class ScenarioRecorder:
         out_dir = _DOCS_SCENARIOS / service / tag / slug
 
         return cls(
-            title=title,
+            title=resolved_title,
             description=description,
             title_en=title_en,
             description_en=description_en,

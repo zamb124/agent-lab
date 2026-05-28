@@ -47,7 +47,7 @@ def _ws_url(session_id: str) -> str:
     return f"/voice/api/ws/session/{session_id}?company_id=test-company"
 
 
-def _find_text_frame(ws, predicate, *, max_frames: int = 80) -> dict | None:
+def _find_text_frame(ws, predicate, *, max_frames: int = 80) -> dict[str, object] | None:
     """Читает фреймы и возвращает первый text-JSON, удовлетворяющий predicate."""
     for _ in range(max_frames):
         msg = ws.receive()
@@ -84,16 +84,18 @@ def test_voice_ws_full_text_frame_contract(voice_app, unique_id: str) -> None:
         with _websocket_session(client, _ws_url(sid)) as ws:
             media_cfg = _find_text_frame(ws, lambda f: f.get("type") == "media_config")
             assert media_cfg is not None
-            assert isinstance(media_cfg["mime"], str) and media_cfg["mime"] != ""
-            assert (
-                isinstance(media_cfg["sample_rate"], int)
-                and media_cfg["sample_rate"] > 0
-            )
-            assert media_cfg.get("channels", 1) >= 1
-            uplink = media_cfg["uplink"]
-            assert uplink["encoding"] == "pcm_s16le"
-            assert uplink["sample_rate"] == 16000
-            assert uplink["channels"] == 1
+            mime = media_cfg.get("mime")
+            assert isinstance(mime, str) and mime != ""
+            sample_rate = media_cfg.get("sample_rate")
+            assert isinstance(sample_rate, int) and sample_rate > 0
+            channels_raw = media_cfg.get("channels", 1)
+            channels = channels_raw if isinstance(channels_raw, int) else 1
+            assert channels >= 1
+            uplink_raw = media_cfg.get("uplink")
+            assert isinstance(uplink_raw, dict)
+            assert uplink_raw.get("encoding") == "pcm_s16le"
+            assert uplink_raw.get("sample_rate") == 16000
+            assert uplink_raw.get("channels") == 1
 
             ws.send_text(json.dumps({"type": "this_is_not_a_real_command"}))
             unknown_err = _find_text_frame(

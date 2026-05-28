@@ -12,6 +12,7 @@ priority, action_url, created_at, service, kind}}`.
 import asyncio
 import json
 import time
+from typing import cast
 
 import pytest
 import websockets
@@ -19,11 +20,27 @@ import websockets
 from core.websocket.publisher import Notification, NotificationType, notify_user
 
 
-def _expected_event_type(service: str, notification_type: NotificationType) -> str:
-    return f"notify/{service}/{notification_type.value}_received"
+def _parse_ws_event(message: str | bytes) -> dict[str, object]:
+    if isinstance(message, bytes):
+        message = message.decode()
+    return cast(dict[str, object], json.loads(message))
 
 
-async def _recv_event_by_type(ws, expected_type: str, timeout: float = 5.0) -> dict:
+def _event_payload(event: dict[str, object]) -> dict[str, object]:
+    payload_raw = event.get("payload")
+    if not isinstance(payload_raw, dict):
+        raise AssertionError("WS event payload must be an object")
+    return cast(dict[str, object], payload_raw)
+
+
+def _payload_data(payload: dict[str, object]) -> dict[str, object]:
+    data_raw = payload.get("data")
+    if not isinstance(data_raw, dict):
+        raise AssertionError("notification payload.data must be an object")
+    return cast(dict[str, object], data_raw)
+
+
+async def _recv_event_by_type(ws, expected_type: str, timeout: float = 5.0) -> dict[str, object]:
     """Ждать UIEvent с конкретным `type` (отбрасывает чужие push'и из канала)."""
     deadline = time.monotonic() + timeout
     while True:
@@ -31,22 +48,27 @@ async def _recv_event_by_type(ws, expected_type: str, timeout: float = 5.0) -> d
         if remaining <= 0:
             raise AssertionError(f"Не получено ожидаемое событие type={expected_type}")
         message = await asyncio.wait_for(ws.recv(), timeout=remaining)
-        event = json.loads(message)
+        event = _parse_ws_event(message)
         if event.get("type") == expected_type:
             return event
 
 
-async def _recv_event_by_payload_title(ws, expected_title: str, timeout: float = 5.0) -> dict:
+async def _recv_event_by_payload_title(ws, expected_title: str, timeout: float = 5.0) -> dict[str, object]:
     deadline = time.monotonic() + timeout
     while True:
         remaining = deadline - time.monotonic()
         if remaining <= 0:
             raise AssertionError(f"Не получено ожидаемое уведомление: {expected_title}")
         message = await asyncio.wait_for(ws.recv(), timeout=remaining)
-        event = json.loads(message)
-        payload = event.get("payload") or {}
+        event = _parse_ws_event(message)
+        payload_raw = event.get("payload")
+        payload = payload_raw if isinstance(payload_raw, dict) else {}
         if payload.get("title") == expected_title:
             return event
+
+
+def _expected_event_type(service: str, notification_type: NotificationType) -> str:
+    return f"notify/{service}/{notification_type.value}_received"
 
 
 @pytest.mark.asyncio
@@ -70,7 +92,7 @@ async def test_single_websocket_notification(crm_client, ws_cookie_system, syste
 
         event = await _recv_event_by_type(ws, expected_type, timeout=5)
         assert event["type"] == expected_type
-        payload = event["payload"]
+        payload = _event_payload(event)
         assert payload["title"] == "Тестовое уведомление"
         assert payload["service"] == "test"
         assert payload["kind"] == NotificationType.SYSTEM.value
@@ -102,7 +124,10 @@ async def test_multiple_tabs_same_user(crm_client, ws_cookie_system, system_user
                 ev3 = await _recv_event_by_type(ws3, expected_type, timeout=5)
 
                 assert ev1["type"] == ev2["type"] == ev3["type"] == expected_type
-                assert ev1["payload"]["title"] == ev2["payload"]["title"] == ev3["payload"]["title"]
+                p1 = _event_payload(ev1)
+                p2 = _event_payload(ev2)
+                p3 = _event_payload(ev3)
+                assert p1["title"] == p2["title"] == p3["title"]
 
 
 @pytest.mark.asyncio
@@ -133,10 +158,11 @@ async def test_access_request_notification_flow(crm_client, unique_id, auth_head
         access_request_id = request_resp.json()["access_request_id"]
 
         event = await _recv_event_by_type(ws_owner, expected_type, timeout=5)
-        payload = event["payload"]
+        payload = _event_payload(event)
+        data = _payload_data(payload)
         assert payload["title"] == "Новый запрос доступа"
-        assert entity_id in payload["data"]["entity_id"]
-        assert payload["data"]["access_request_id"] == access_request_id
+        assert entity_id in data["entity_id"]
+        assert data["access_request_id"] == access_request_id
 
 
 @pytest.mark.asyncio
@@ -179,7 +205,7 @@ async def test_websocket_reconnection(crm_client, ws_cookie_system, system_user_
         )
 
         event = await _recv_event_by_type(ws2, expected_type, timeout=5)
-        assert event["payload"]["title"] == "После переподключения"
+        assert _event_payload(event)["title"] == "После переподключения"
 
 
 @pytest.mark.asyncio
@@ -207,8 +233,9 @@ async def test_notification_priority_levels(crm_client, ws_cookie_system, system
 
             event = await _recv_event_by_payload_title(ws, expected_title, timeout=5)
             assert event["type"] == expected_type
-            assert event["payload"]["priority"] == priority
-            assert event["payload"]["title"] == expected_title
+            payload = _event_payload(event)
+            assert payload["priority"] == priority
+            assert payload["title"] == expected_title
 
 
 @pytest.mark.asyncio
@@ -232,9 +259,9 @@ async def test_notification_with_action_url(crm_client, ws_cookie_system, system
         )
 
         event = await _recv_event_by_type(ws, expected_type, timeout=5)
-        payload = event["payload"]
+        payload = _event_payload(event)
         assert payload["action_url"] == "/crm/tasks/task_123"
-        assert payload["data"]["task_id"] == "task_123"
+        assert _payload_data(payload)["task_id"] == "task_123"
 
 
 @pytest.mark.asyncio
@@ -267,7 +294,7 @@ async def test_notification_types_coverage(crm_client, ws_cookie_system, system_
             expected_type = _expected_event_type("test", notif_type)
             event = await _recv_event_by_type(ws, expected_type, timeout=5)
             assert event["type"] == expected_type
-            assert event["payload"]["kind"] == notif_type.value
+            assert _event_payload(event)["kind"] == notif_type.value
 
 
 @pytest.mark.asyncio

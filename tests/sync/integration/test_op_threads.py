@@ -131,7 +131,7 @@ async def test_op_threads_list_in_channel(
         user=op_user,
         container=op_container,
     )
-    titles = sorted(t.title for t in result.items)
+    titles = sorted(title for t in result.items if (title := t.title) is not None)
     assert titles == ["t1", "t2"]
 
 

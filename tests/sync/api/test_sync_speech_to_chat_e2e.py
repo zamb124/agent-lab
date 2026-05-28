@@ -92,7 +92,7 @@ async def test_speech_to_chat_posts_audio_segment_to_channel_feed(
     )
 
     deadline = asyncio.get_event_loop().time() + 90.0
-    speech_message: dict | None = None
+    speech_message: dict[str, object] | None = None
     async with httpx.AsyncClient(
         base_url="http://127.0.0.1:9005",
         timeout=10.0,
@@ -133,10 +133,24 @@ async def test_speech_to_chat_posts_audio_segment_to_channel_feed(
         f"room={call['livekit_room_name']}, channel={channel_id})."
     )
 
-    audio = next(c for c in speech_message["contents"] if c["type"] == "file/audio")
-    assert audio["data"]["source_speech_to_chat"] is True
-    assert audio["data"].get("file_id"), "speech-to-chat сегмент должен иметь file_id"
-    assert speech_message["sender"]["user_id"] == pub_identity, (
+    contents_raw = speech_message.get("contents")
+    assert isinstance(contents_raw, list)
+    audio: dict[str, object] | None = None
+    for content in contents_raw:
+        if not isinstance(content, dict):
+            continue
+        if content.get("type") != "file/audio":
+            continue
+        audio = content
+        break
+    assert audio is not None
+    audio_data = audio.get("data")
+    assert isinstance(audio_data, dict)
+    assert audio_data.get("source_speech_to_chat") is True
+    assert audio_data.get("file_id"), "speech-to-chat сегмент должен иметь file_id"
+    sender_raw = speech_message.get("sender")
+    assert isinstance(sender_raw, dict)
+    assert sender_raw.get("user_id") == pub_identity, (
         "Сообщение публикуется от лица participant_identity (publisher)."
     )
 

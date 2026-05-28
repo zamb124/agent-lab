@@ -54,7 +54,7 @@ async def test_humanitec_llm_models_are_virtual_and_not_read_from_repository():
         async def list_by_provider(self, provider):
             raise AssertionError(f"unexpected repository call for {provider}")
 
-    service = LLMModelsService(Repo(), AsyncMock())
+    service = LLMModelsService(Repo(), AsyncMock())  # pyright: ignore[reportArgumentType]
     assert await service.get_models_by_provider(HUMANITEC_LLM_PROVIDER) == [
         HUMANITEC_LLM_AUTO_MODEL
     ]

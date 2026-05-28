@@ -21,6 +21,7 @@ import socket
 
 import pytest
 from aiohttp import web
+from granian.constants import Interfaces
 from granian.server.embed import Server as GranianEmbedServer
 
 from tests.fixtures.aiohttp_ephemeral import tcp_site_assigned_port
@@ -34,7 +35,9 @@ async def external_api_server():
         s.bind(("127.0.0.1", 0))
         port = s.getsockname()[1]
 
-    server = GranianEmbedServer(external_api_app, interface="asgi", address="127.0.0.1", port=port)
+    server = GranianEmbedServer(
+        external_api_app, interface=Interfaces.ASGI, address="127.0.0.1", port=port
+    )
     server_task = asyncio.create_task(server.serve())
 
     for _ in range(50):
@@ -109,7 +112,7 @@ async def remote_flow_server():
     await runner.cleanup()
 
 
-def assert_execute_response(data, expected_success: bool, expected_error: str = None):
+def assert_execute_response(data, expected_success: bool, expected_error: str | None = None):
     """Строгие проверки для execute response."""
     assert "success" in data
     assert data["success"] == expected_success

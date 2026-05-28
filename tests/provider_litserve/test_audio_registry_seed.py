@@ -141,7 +141,7 @@ def test_unknown_kind_in_create_or_replace_raises(tmp_path, unique_id):
     with pytest.raises(sqlite3.IntegrityError):
         create_or_replace_model(
             cfg,
-            kind="audio",  # type: ignore[arg-type]
+            kind="audio",  # pyright: ignore[reportArgumentType]
             hf_model_id="x/y",
             api_model_id=f"x-{unique_id}",
         )

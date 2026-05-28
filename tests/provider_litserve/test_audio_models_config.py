@@ -134,7 +134,7 @@ def test_unknown_stt_backend_raises_validation_error(unique_id):
         ProviderLitserveSTTModelEntry(
             api_model_id=f"x-{unique_id}",
             hf_model_id="x/y",
-            backend="not_a_real_backend",  # type: ignore[arg-type]
+            backend="not_a_real_backend",  # pyright: ignore[reportArgumentType]
         )
 
 

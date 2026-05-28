@@ -59,6 +59,9 @@ class TestAuthMeFrontend:
     async def test_auth_me_expired_token(self, frontend_client):
         """Истекший токен возвращает 401"""
         settings = get_settings()
+        jwt_secret_key = settings.auth.jwt_secret_key
+        if jwt_secret_key is None:
+            raise RuntimeError("auth.jwt_secret_key обязателен для тестов auth/me")
 
         expired_token = jwt.encode(
             {
@@ -67,7 +70,7 @@ class TestAuthMeFrontend:
                 "roles": ["user"],
                 "exp": int(time.time()) - 3600
             },
-            settings.auth.jwt_secret_key,
+            jwt_secret_key,
             algorithm="HS256"
         )
 

@@ -170,7 +170,7 @@ async def _temporary_settings(updated: dict[str, Any]) -> AsyncIterator[None]:
     original = get_settings()
     snapshot = original.model_dump()
 
-    def _apply(target: dict, dotted: str, value: Any) -> None:
+    def _apply(target: dict[str, object], dotted: str, value: object) -> None:
         parts = dotted.split(".")
         cursor: Any = target
         for key in parts[:-1]:

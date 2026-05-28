@@ -2,6 +2,7 @@ import asyncio
 
 import pytest
 from fastapi import FastAPI, Request, Response
+from granian.constants import Interfaces
 from granian.server.embed import Server as GranianEmbedServer
 
 from apps.search.config import (
@@ -53,7 +54,7 @@ async def serper_stub_url(unused_tcp_port_factory):
             return Response("serper failed", status_code=app.state.status_code)
         return app.state.payload
 
-    server = GranianEmbedServer(app, interface="asgi", address="127.0.0.1", port=port)
+    server = GranianEmbedServer(app, interface=Interfaces.ASGI, address="127.0.0.1", port=port)
     task = asyncio.create_task(server.serve())
     try:
         await _wait_tcp_ready("127.0.0.1", port)
@@ -162,7 +163,7 @@ async def provider_stub_url(unused_tcp_port_factory):
             ]
         }
 
-    server = GranianEmbedServer(app, interface="asgi", address="127.0.0.1", port=port)
+    server = GranianEmbedServer(app, interface=Interfaces.ASGI, address="127.0.0.1", port=port)
     task = asyncio.create_task(server.serve())
     try:
         await _wait_tcp_ready("127.0.0.1", port)

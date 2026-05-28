@@ -40,7 +40,7 @@ async def test_build_my_companies_response_returns_items_list_response() -> None
     user = User(
         user_id="user-1",
         name="Test User",
-        email="user-1@example.com",
+        emails=["user-1@example.com"],
         companies={"company-1": ["owner"]},
         active_company_id="company-1",
     )
@@ -53,7 +53,7 @@ async def test_build_my_companies_response_returns_items_list_response() -> None
     )
     response = await build_my_companies_response(
         user=user,
-        company_repository=_CompanyRepositoryStub(company),
+        company_repository=_CompanyRepositoryStub(company),  # pyright: ignore[reportArgumentType]
     )
     assert isinstance(response.items, list)
     assert response.items == [

@@ -19,7 +19,7 @@ export const nodesCatalogResource = createResourceCollection({
     },
 });
 
-// Backend требует PUT.
+// Бэкенд требует PUT.
 export const nodeCatalogUpdateOp = createAsyncOp({
     name: 'flows/nodes_catalog_update',
     successToastKey: 'flows:toast.custom_node_updated',

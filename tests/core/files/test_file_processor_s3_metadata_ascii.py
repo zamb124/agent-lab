@@ -6,6 +6,7 @@ import pytest
 
 import core.files.s3_client as s3_client_module
 from core.files.processors import FileProcessor
+from core.types import JsonObject
 
 
 class _FakeFileRepository:
@@ -46,8 +47,8 @@ async def test_process_file_from_bytes_encodes_unicode_metadata_for_s3(monkeypat
     monkeypatch.setattr(s3_client_module.S3ClientFactory, "create_default_client", lambda: s3)
     monkeypatch.setattr(s3_client_module.S3ClientFactory, "create_client_for_bucket", lambda _bucket: s3)
 
-    processor = FileProcessor(file_repository=repo)
-    metadata = {"query": "лучшие статьи о кошках"}
+    processor = FileProcessor(file_repository=repo)  # pyright: ignore[reportArgumentType]
+    metadata: JsonObject = {"query": "лучшие статьи о кошках"}
     record = await processor.process_file_from_bytes(
         data=b"<html></html>",
         original_name="snapshot.html",
@@ -58,4 +59,6 @@ async def test_process_file_from_bytes_encodes_unicode_metadata_for_s3(monkeypat
 
     assert record.metadata == metadata
     assert s3.last_metadata is not None
-    assert s3.last_metadata["query"] == quote(metadata["query"], safe="")
+    query = metadata["query"]
+    assert isinstance(query, str)
+    assert s3.last_metadata["query"] == quote(query, safe="")

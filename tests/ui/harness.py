@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from typing import Literal
+
 from playwright.async_api import Page, expect
 
 from tests.ui.apps import ServiceUiSpec
@@ -32,7 +34,7 @@ class AppUI:
             raise ValueError(f"spa_path must start with /: {path!r}")
         return f"{self.origin}{path}"
 
-    async def open(self, page: Page, *, wait_until: str = "domcontentloaded") -> None:
+    async def open(self, page: Page, *, wait_until: Literal["commit", "domcontentloaded", "load", "networkidle"] = "domcontentloaded") -> None:
         await page.goto(self.spa_url(), wait_until=wait_until)
 
     async def expect_shell(self, page: Page, *, timeout_ms: int = 30_000) -> None:

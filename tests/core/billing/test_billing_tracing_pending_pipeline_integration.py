@@ -17,6 +17,7 @@ from core.billing.settlement_rules import (
     SettlementRulesDocument,
 )
 from core.billing.span_billing_settlement import SpanBillingSettlement
+from core.models.billing_models import UsageType
 from core.tracing.models import TraceSpanWrite
 
 pytestmark = pytest.mark.xdist_group("billing_global_resource_base_prices_json")
@@ -121,7 +122,7 @@ async def test_save_pending_span_list_then_rule_settle_creates_usage(
             SettlementRule(
                 rule_id=f"pipe_rule_{unique_id}",
                 resource_name="llm:*",
-                usage_type="llm_request",
+                usage_type=UsageType.LLM_REQUEST,
                 quantity_from=f"attr:{trace_attr.ATTR_BILLING_QUANTITY}",
                 match=SettlementRuleMatch(operation_name_prefix=f"bill.pipe.{unique_id}"),
             )
@@ -228,7 +229,7 @@ async def test_pending_span_rules_engine_quantity_from_attr(
                 rule_id=f"tok_rule_{unique_id}",
                 priority=1,
                 resource_name="llm:*",
-                usage_type="llm_request",
+                usage_type=UsageType.LLM_REQUEST,
                 quantity_from=f"attr:{tok_key}",
                 match=SettlementRuleMatch(operation_name_prefix=f"qty.{unique_id}."),
             ),

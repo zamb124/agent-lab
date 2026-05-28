@@ -102,7 +102,9 @@ class TestFlowRepository:
 
         assert loaded is not None
         assert loaded.flow_id == "test_flow_repo"
-        assert "main" in loaded.nodes
+        nodes = loaded.nodes
+        assert nodes is not None
+        assert "main" in nodes
 
         await repo.delete("test_flow_repo")
 

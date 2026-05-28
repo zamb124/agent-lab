@@ -8,6 +8,11 @@ metadata:
   namespace: {{ $.Values.namespace }}
   labels:
     app: {{ $app.serviceName }}
+  annotations:
+    # h2c: Traefik ходит HTTP/2 cleartext на Granian backend (multiplexing
+    # concurrent статики на одном TCP, без round-trip latency на каждый chunk).
+    # Granian слушает HTTP/2 нативно через `--http auto`.
+    traefik.ingress.kubernetes.io/service.serversscheme: h2c
 spec:
   type: ClusterIP
   selector:

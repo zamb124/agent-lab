@@ -87,7 +87,7 @@ class _CountingStateWriteNode(BaseNode):
         container: FlowRuntimeContainer,
         calls: list[str],
     ) -> None:
-        super().__init__(node_id, config, container=container)
+        super().__init__(node_id, config, container=container)  # pyright: ignore[reportArgumentType]
         self.calls = calls
 
     @override
@@ -138,7 +138,7 @@ class _DurableCountingActivityNode(BaseNode):
         *,
         container: FlowRuntimeContainer | None = None,
     ) -> None:
-        super().__init__(node_id, config, container=container)
+        super().__init__(node_id, config, container=container)  # pyright: ignore[reportArgumentType]
         self.side_effect_runs: int = 0
 
     @override

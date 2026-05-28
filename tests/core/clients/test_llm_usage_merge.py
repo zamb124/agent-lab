@@ -1,10 +1,11 @@
 """Парсинг usage из OpenAI-совместимых ответов (в т.ч. OpenRouter)."""
 
 from core.clients.llm.factory import _merge_openai_compatible_usage_into_usage_data
+from core.types import JsonObject
 
 
 def test_merge_tokens_only() -> None:
-    target: dict = {"input_tokens": 0, "output_tokens": 0, "total_tokens": 0}
+    target: JsonObject = {"input_tokens": 0, "output_tokens": 0, "total_tokens": 0}
     _merge_openai_compatible_usage_into_usage_data(
         {"prompt_tokens": 3, "completion_tokens": 7, "total_tokens": 10},
         target,
@@ -16,7 +17,7 @@ def test_merge_tokens_only() -> None:
 
 
 def test_merge_openrouter_cost_and_upstream() -> None:
-    target: dict = {"input_tokens": 0, "output_tokens": 0, "total_tokens": 0}
+    target: JsonObject = {"input_tokens": 0, "output_tokens": 0, "total_tokens": 0}
     _merge_openai_compatible_usage_into_usage_data(
         {
             "prompt_tokens": 1,

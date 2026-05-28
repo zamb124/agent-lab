@@ -19,7 +19,7 @@ class InMemoryEmitter(BaseEmitter):
     Используется для внешних агентов, которые не требуют Redis Pub/Sub.
     События можно получить через свойство `events`.
 
-    Examples:
+    Примеры:
         >>> emitter = InMemoryEmitter(state)
         >>> await emitter.emit_text("Hello")
         >>> print(emitter.events)  # [TaskArtifactUpdateEvent(...)]

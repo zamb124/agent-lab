@@ -26,8 +26,8 @@ def test_server_config_resolves_search_service_url() -> None:
 
 
 def test_meta_search_request_normalizes_providers() -> None:
-    assert MetaSearchRequest(query="q", providers=None).providers == ["auto"]
-    assert MetaSearchRequest(query="q", providers=" Google ").providers == ["google"]
+    assert MetaSearchRequest.model_validate({"query": "q", "providers": None}).providers == ["auto"]
+    assert MetaSearchRequest.model_validate({"query": "q", "providers": " Google "}).providers == ["google"]
     assert MetaSearchRequest(query="q", providers=["", "Serper", "serper"]).providers == ["serper"]
 
     with pytest.raises(ValidationError, match="providers must be a string or an array"):

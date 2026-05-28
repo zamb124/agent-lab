@@ -26,7 +26,7 @@ class StrictBaseModel(BaseModel):
     Если конфиг содержит неизвестное поле - это либо опечатка,
     либо устаревший конфиг. Система не должна молчать об этом.
 
-    Examples:
+    Примеры:
         >>> class UserConfig(StrictBaseModel):
         ...     name: str
         ...     age: int

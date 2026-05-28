@@ -15,7 +15,7 @@ from typing import Any, Dict
 import pytest
 
 
-def _msg(text: str, context_id: str = None) -> Dict[str, Any]:
+def _msg(text: str, context_id: str | None = None) -> Dict[str, Any]:
     """Создаёт A2A Message."""
     m = {"messageId": str(uuid.uuid4()), "role": "user", "parts": [{"kind": "text", "text": text}]}
     if context_id:

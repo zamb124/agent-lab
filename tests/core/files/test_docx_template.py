@@ -155,7 +155,7 @@ async def test_jinja_syntax_error_wraps(tmp_path: Path) -> None:
 def test_normalize_rejects_callable() -> None:
     with pytest.raises(DocxTemplateContextError):
         normalize_template_context(
-            {"fn": lambda: 1},
+            {"fn": lambda: 1},  # pyright: ignore[reportArgumentType]
             date_iso=True,
         )
 
@@ -204,7 +204,7 @@ async def test_fill_accepts_file_record(monkeypatch: pytest.MonkeyPatch) -> None
         file_size=len(tpl),
         status=FileStatus.READY,
     )
-    out = await _t().fill(record, {"name": "World"})
+    out = await _t().fill(record, {"name": "World"})  # pyright: ignore[reportArgumentType]
     assert _read_first_paragraph(out) == "Hello World"
 
 

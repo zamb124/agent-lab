@@ -9,8 +9,10 @@ from core.llm_context import (
     LLMContextMemoryEpisode,
     LLMContextMemoryRecallRequest,
     LLMContextMemoryRecord,
+    LLMContextMemoryScope,
     LLMContextMemorySource,
     LLMContextProfile,
+    LLMContextRetrievalMode,
     LLMContextRetrievalPolicy,
     LLMContextSourceRequest,
 )
@@ -34,8 +36,8 @@ class InMemoryStore:
 
 def _policy(
     *,
-    memory: str = "session",
-    retrieval: str = "hybrid",
+    memory: LLMContextMemoryScope = "session",
+    retrieval: LLMContextRetrievalMode = "hybrid",
     top_k: int = 4,
     min_score: float | None = None,
 ) -> LLMContextProfile:

@@ -19,6 +19,7 @@ from core.llm_context.resolver import (
     resolve_company_llm_context_patch,
     resolve_llm_context_policy,
 )
+from core.types import JsonObject
 
 
 def _config() -> LLMContextConfig:
@@ -153,7 +154,7 @@ def test_merge_layers_and_token_counters_are_concrete_implementations() -> None:
 
 def test_company_metadata_can_store_context_patch_without_affecting_llm_capabilities() -> None:
     providers = CompanyAIProviders(llm_context=LLMContextPatch(profile="agent", memory="company"))
-    metadata = {METADATA_KEY: providers.to_metadata_dict()}
+    metadata: JsonObject = {METADATA_KEY: providers.to_metadata_dict()}
 
     restored = CompanyAIProviders.from_metadata(metadata)
 
@@ -199,7 +200,7 @@ def test_company_context_patch_reader_handles_absent_and_invalid_metadata() -> N
         company.metadata = {METADATA_KEY: {}}
         assert resolve_company_llm_context_patch() is None
 
-        company.metadata = "invalid"  # type: ignore[assignment]
+        object.__setattr__(company, "metadata", "invalid")
         with pytest.raises(ValueError, match="metadata"):
             resolve_company_llm_context_patch()
 

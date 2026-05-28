@@ -1,1 +1,1 @@
-"""Push notifications tests"""
+"""Тесты push-уведомлений."""

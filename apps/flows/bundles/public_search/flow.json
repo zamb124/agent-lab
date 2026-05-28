@@ -10,15 +10,56 @@
     "ai"
   ],
   "permission": [],
-  "entry": "primary_search",
+  "entry": "prepare_search_inputs",
   "nodes": {
+    "prepare_search_inputs": {
+      "type": "code",
+      "name": "Prepare Search Inputs",
+      "language": "python",
+      "entrypoint": "run",
+      "code": "import re\n\nFILE_BLOCK_RE = re.compile(r\"\\n?\\[FILE\\]\\n.*?\\n\\[/FILE\\]\", re.DOTALL)\n\n\ndef _require_string(value, label):\n    if not isinstance(value, str):\n        raise TypeError(f\"public_search inputs: {label} must be string\")\n    return value\n\n\ndef _clean_user_query(content):\n    text = FILE_BLOCK_RE.sub(\"\", content)\n    text = re.sub(r\"\\n{3,}\", \"\\n\\n\", text).strip()\n    if text == \"\":\n        return \"проанализировать приложенные файлы\"\n    return text\n\n\nasync def run(args, state):\n    content = _require_string(state[\"content\"], \"state.content\")\n    files = state[\"files\"]\n    if not isinstance(files, list):\n        raise TypeError(\"public_search inputs: state.files must be array\")\n\n    file_names = []\n    for index, item in enumerate(files):\n        if not isinstance(item, dict):\n            raise TypeError(f\"public_search inputs: state.files[{index}] must be object\")\n        original_name = item[\"original_name\"]\n        if not isinstance(original_name, str) or original_name.strip() == \"\":\n            raise TypeError(f\"public_search inputs: state.files[{index}].original_name must be non-empty string\")\n        file_names.append(original_name.strip())\n\n    user_query = _clean_user_query(content)\n    return {\n        \"search_user_query\": user_query,\n        \"search_effective_query\": user_query,\n        \"search_has_files\": len(file_names) > 0,\n        \"search_file_names\": file_names,\n        \"search_file_context\": \"\",\n    }\n",
+      "node_timeout_seconds": 10
+    },
+    "summarize_attached_files": {
+      "type": "llm_node",
+      "name": "Summarize Attached Files For Search",
+      "prompt": "Ты — подготовительный агент Humanitec Search.\n\nПользователь приложил файлы перед поиском. Сначала нужно прочитать файлы и сделать очень краткий контекст для web search.\n\nЧистый запрос пользователя:\n{search_user_query}\n\nИмена файлов:\n{search_file_names}\n\nПравила:\n1) Обязательно прочитай каждый файл через read_file. Для каждого имени из списка вызови read_file с file_name.\n2) Верни только краткую markdown-сводку на русском: 4-8 коротких bullet points и строку \"Ключевые термины:\".\n3) Сводка нужна только для формирования поискового запроса. Не отвечай пользователю финально и не делай web search.\n4) Если файл не удалось прочитать, кратко укажи имя файла и ошибку из read_file.",
+      "tools": [
+        "read_file"
+      ],
+      "output_key": "search_file_context",
+      "llm": {
+        "provider": "humanitec_llm",
+        "model": "auto",
+        "temperature": 0.05
+      },
+      "llm_context": {
+        "profile": "compact",
+        "budget": {
+          "max_input_tokens": 32000,
+          "output_reserve_tokens": 1200,
+          "reasoning_reserve_tokens": 0,
+          "safety_buffer_tokens": 800,
+          "active_window_tokens": 14000,
+          "tool_result_tokens": 12000
+        }
+      }
+    },
+    "build_search_query": {
+      "type": "code",
+      "name": "Build Effective Search Query",
+      "language": "python",
+      "entrypoint": "run",
+      "code": "MAX_FILE_CONTEXT_CHARS = 2500\n\n\ndef _require_non_empty_string(value, label):\n    if not isinstance(value, str):\n        raise TypeError(f\"public_search query: {label} must be string\")\n    text = value.strip()\n    if text == \"\":\n        raise ValueError(f\"public_search query: {label} must be non-empty\")\n    return text\n\n\ndef _require_string(value, label):\n    if not isinstance(value, str):\n        raise TypeError(f\"public_search query: {label} must be string\")\n    return value\n\n\nasync def run(args, state):\n    user_query = _require_non_empty_string(state[\"search_user_query\"], \"state.search_user_query\")\n    file_context = _require_string(state[\"search_file_context\"], \"state.search_file_context\").strip()\n    if file_context == \"\":\n        return {\"search_effective_query\": user_query}\n\n    clipped_context = file_context[:MAX_FILE_CONTEXT_CHARS].strip()\n    effective_query = (\n        f\"{user_query}\\n\\n\"\n        \"Краткий контекст приложенных файлов для поиска:\\n\"\n        f\"{clipped_context}\"\n    )\n    return {\"search_effective_query\": effective_query}\n",
+      "node_timeout_seconds": 10
+    },
     "primary_search": {
       "type": "mcp",
       "name": "Primary Search",
       "server_id": "search",
       "tool_name": "meta_web_search",
       "input_mapping": {
-        "query": "@state:content",
+        "query": "@state:search_effective_query",
         "limit": "@var:search_result_limit",
         "language": "@var:search_language",
         "region": "@var:search_region",
@@ -27,7 +68,7 @@
         "mode": "@var:search_mode"
       },
       "output_mapping": {
-        "query": "search_query",
+        "query": "search_provider_query",
         "results": "search_results",
         "providers": "search_providers_status"
       },
@@ -38,7 +79,7 @@
       "name": "Emit Search Results SSE Event",
       "language": "python",
       "entrypoint": "run",
-      "code": "VALID_SEARCH_MODES = {\"quick\", \"deep\", \"research\"}\n\n\ndef _mode(state):\n    variables = state[\"variables\"]\n    if not isinstance(variables, dict):\n        raise TypeError(\"public_search results event: state.variables must be object\")\n    mode = variables[\"search_mode\"]\n    if mode not in VALID_SEARCH_MODES:\n        raise ValueError(\"public_search results event: variables.search_mode is invalid\")\n    return mode\n\n\nasync def run(args, state):\n    payload = {\n        \"kind\": \"public_search_serp_update\",\n        \"version\": 1,\n        \"flow_id\": \"public_search\",\n        \"phase\": \"results\",\n        \"mode\": _mode(state),\n        \"query\": state[\"search_query\"],\n        \"results\": state[\"search_results\"],\n        \"providers\": state[\"search_providers_status\"],\n    }\n    await capability(\n        \"state.push_ui_event\",\n        event_type=\"search/serp/results_ready\",\n        payload=payload,\n        source=\"public_search\",\n    )\n    return {}\n",
+      "code": "VALID_SEARCH_MODES = {\"quick\", \"deep\", \"research\"}\n\n\ndef _mode(state):\n    variables = state[\"variables\"]\n    if not isinstance(variables, dict):\n        raise TypeError(\"public_search results event: state.variables must be object\")\n    mode = variables[\"search_mode\"]\n    if mode not in VALID_SEARCH_MODES:\n        raise ValueError(\"public_search results event: variables.search_mode is invalid\")\n    return mode\n\n\nasync def run(args, state):\n    payload = {\n        \"kind\": \"public_search_serp_update\",\n        \"version\": 1,\n        \"flow_id\": \"public_search\",\n        \"phase\": \"results\",\n        \"mode\": _mode(state),\n        \"query\": state[\"search_user_query\"],\n        \"results\": state[\"search_results\"],\n        \"providers\": state[\"search_providers_status\"],\n    }\n    await capability(\n        \"state.push_ui_event\",\n        event_type=\"search/serp/results_ready\",\n        payload=payload,\n        source=\"public_search\",\n    )\n    return {}\n",
       "node_timeout_seconds": 20
     },
     "search_suggestions": {
@@ -47,7 +88,7 @@
       "server_id": "search",
       "tool_name": "search_suggest",
       "input_mapping": {
-        "query": "@state:search_query",
+        "query": "@state:search_user_query",
         "results": "@state:search_results",
         "mode": "@var:search_mode",
         "language": "@var:search_language",
@@ -64,7 +105,7 @@
       "name": "Emit Search Suggestions SSE Event",
       "language": "python",
       "entrypoint": "run",
-      "code": "VALID_SEARCH_MODES = {\"quick\", \"deep\", \"research\"}\n\n\ndef _mode(state):\n    variables = state[\"variables\"]\n    if not isinstance(variables, dict):\n        raise TypeError(\"public_search suggestions event: state.variables must be object\")\n    mode = variables[\"search_mode\"]\n    if mode not in VALID_SEARCH_MODES:\n        raise ValueError(\"public_search suggestions event: variables.search_mode is invalid\")\n    return mode\n\n\nasync def run(args, state):\n    payload = {\n        \"kind\": \"public_search_serp_update\",\n        \"version\": 1,\n        \"flow_id\": \"public_search\",\n        \"phase\": \"suggestions\",\n        \"mode\": _mode(state),\n        \"query\": state[\"search_query\"],\n        \"suggestions\": state[\"search_suggestions\"],\n        \"followups\": state[\"search_followups\"],\n    }\n    await capability(\n        \"state.push_ui_event\",\n        event_type=\"search/serp/suggestions_ready\",\n        payload=payload,\n        source=\"public_search\",\n    )\n    return {}\n",
+      "code": "VALID_SEARCH_MODES = {\"quick\", \"deep\", \"research\"}\n\n\ndef _mode(state):\n    variables = state[\"variables\"]\n    if not isinstance(variables, dict):\n        raise TypeError(\"public_search suggestions event: state.variables must be object\")\n    mode = variables[\"search_mode\"]\n    if mode not in VALID_SEARCH_MODES:\n        raise ValueError(\"public_search suggestions event: variables.search_mode is invalid\")\n    return mode\n\n\nasync def run(args, state):\n    payload = {\n        \"kind\": \"public_search_serp_update\",\n        \"version\": 1,\n        \"flow_id\": \"public_search\",\n        \"phase\": \"suggestions\",\n        \"mode\": _mode(state),\n        \"query\": state[\"search_user_query\"],\n        \"suggestions\": state[\"search_suggestions\"],\n        \"followups\": state[\"search_followups\"],\n    }\n    await capability(\n        \"state.push_ui_event\",\n        event_type=\"search/serp/suggestions_ready\",\n        payload=payload,\n        source=\"public_search\",\n    )\n    return {}\n",
       "node_timeout_seconds": 20
     },
     "search_result_insights": {
@@ -73,7 +114,7 @@
       "server_id": "search",
       "tool_name": "search_result_insights",
       "input_mapping": {
-        "query": "@state:search_query",
+        "query": "@state:search_effective_query",
         "results": "@state:search_results",
         "mode": "@var:search_mode",
         "limit": "@var:search_result_limit"
@@ -88,7 +129,7 @@
       "name": "Emit Search Insights SSE Event",
       "language": "python",
       "entrypoint": "run",
-      "code": "VALID_SEARCH_MODES = {\"quick\", \"deep\", \"research\"}\n\n\ndef _mode(state):\n    variables = state[\"variables\"]\n    if not isinstance(variables, dict):\n        raise TypeError(\"public_search insights event: state.variables must be object\")\n    mode = variables[\"search_mode\"]\n    if mode not in VALID_SEARCH_MODES:\n        raise ValueError(\"public_search insights event: variables.search_mode is invalid\")\n    return mode\n\n\nasync def run(args, state):\n    payload = {\n        \"kind\": \"public_search_serp_update\",\n        \"version\": 1,\n        \"flow_id\": \"public_search\",\n        \"phase\": \"insights\",\n        \"mode\": _mode(state),\n        \"query\": state[\"search_query\"],\n        \"result_insights\": state[\"search_result_insights\"],\n    }\n    await capability(\n        \"state.push_ui_event\",\n        event_type=\"search/serp/insights_ready\",\n        payload=payload,\n        source=\"public_search\",\n    )\n    return {}\n",
+      "code": "VALID_SEARCH_MODES = {\"quick\", \"deep\", \"research\"}\n\n\ndef _mode(state):\n    variables = state[\"variables\"]\n    if not isinstance(variables, dict):\n        raise TypeError(\"public_search insights event: state.variables must be object\")\n    mode = variables[\"search_mode\"]\n    if mode not in VALID_SEARCH_MODES:\n        raise ValueError(\"public_search insights event: variables.search_mode is invalid\")\n    return mode\n\n\nasync def run(args, state):\n    payload = {\n        \"kind\": \"public_search_serp_update\",\n        \"version\": 1,\n        \"flow_id\": \"public_search\",\n        \"phase\": \"insights\",\n        \"mode\": _mode(state),\n        \"query\": state[\"search_user_query\"],\n        \"result_insights\": state[\"search_result_insights\"],\n    }\n    await capability(\n        \"state.push_ui_event\",\n        event_type=\"search/serp/insights_ready\",\n        payload=payload,\n        source=\"public_search\",\n    )\n    return {}\n",
       "node_timeout_seconds": 20
     },
     "prepare_search_prompt": {
@@ -96,15 +137,14 @@
       "name": "Prepare Search Prompt Context",
       "language": "python",
       "entrypoint": "run",
-      "code": "import json\n\nVALID_SEARCH_MODES = {\"quick\", \"deep\", \"research\"}\n\n\nasync def run(args, state):\n    raw_variables = state[\"variables\"]\n    if not isinstance(raw_variables, dict):\n        raise TypeError(\"public_search prompt: state.variables must be object\")\n    variables = dict(raw_variables)\n    mode = variables[\"search_mode\"]\n    if mode not in VALID_SEARCH_MODES:\n        raise ValueError(\"public_search prompt: variables.search_mode is invalid\")\n\n    variables[\"search_query\"] = state[\"search_query\"]\n    variables[\"search_results\"] = json.dumps(state[\"search_results\"], ensure_ascii=False, indent=2)\n    variables[\"search_providers_status\"] = json.dumps(state[\"search_providers_status\"], ensure_ascii=False, indent=2)\n    variables[\"search_suggestions\"] = json.dumps(state[\"search_suggestions\"], ensure_ascii=False, indent=2)\n    variables[\"search_followups\"] = json.dumps(state[\"search_followups\"], ensure_ascii=False, indent=2)\n    variables[\"search_result_insights\"] = json.dumps(state[\"search_result_insights\"], ensure_ascii=False, indent=2)\n    return {\"variables\": variables}\n",
+      "code": "import json\n\nVALID_SEARCH_MODES = {\"quick\", \"deep\", \"research\"}\n\n\nasync def run(args, state):\n    raw_variables = state[\"variables\"]\n    if not isinstance(raw_variables, dict):\n        raise TypeError(\"public_search prompt: state.variables must be object\")\n    variables = dict(raw_variables)\n    mode = variables[\"search_mode\"]\n    if mode not in VALID_SEARCH_MODES:\n        raise ValueError(\"public_search prompt: variables.search_mode is invalid\")\n\n    variables[\"search_query\"] = state[\"search_user_query\"]\n    variables[\"search_effective_query\"] = state[\"search_effective_query\"]\n    variables[\"search_file_context\"] = state[\"search_file_context\"]\n    variables[\"search_results\"] = json.dumps(state[\"search_results\"], ensure_ascii=False, indent=2)\n    variables[\"search_providers_status\"] = json.dumps(state[\"search_providers_status\"], ensure_ascii=False, indent=2)\n    variables[\"search_suggestions\"] = json.dumps(state[\"search_suggestions\"], ensure_ascii=False, indent=2)\n    variables[\"search_followups\"] = json.dumps(state[\"search_followups\"], ensure_ascii=False, indent=2)\n    variables[\"search_result_insights\"] = json.dumps(state[\"search_result_insights\"], ensure_ascii=False, indent=2)\n    return {\"variables\": variables}\n",
       "node_timeout_seconds": 10
     },
     "search_answer": {
       "type": "llm_node",
       "name": "Public Search Agent",
-      "prompt": "Ты — поисковый агент Humanitec.\n\nSearch MCP уже выполнил первичный web search, подсказки и per-result insights. Используй только данные ниже.\n\nРежим поиска:\n{search_mode}\n\nЗапрос пользователя:\n{search_query}\n\nНормализованная выдача:\n{search_results}\n\nСтатусы провайдеров:\n{search_providers_status}\n\nПодсказки для уточнения:\n{search_suggestions}\n\nFollow-up вопросы:\n{search_followups}\n\nИнсайты по результатам:\n{search_result_insights}\n\nПравила:\n1) Если search_results пустой — честно скажи, что первичная выдача сейчас недоступна. Если в search_providers_status есть error, кратко укажи его.\n2) Если результаты есть — дай короткий ответ по title/snippet результатов и используй search_result_insights только как вспомогательные признаки релевантности.\n3) Если пользователь приложил файл или изображение и спрашивает о нем — используй read_file. Для изображений передавай vision_prompt с конкретной задачей пользователя.\n4) create_file используй только по явной просьбе сформировать отчет, таблицу, PDF, Markdown или другой файл.\n5) В конце добавь раздел «Источники» со ссылками: title + url.\n6) После источников добавь 2-3 «Что уточнить дальше» на основе search_followups.\n7) Не утверждай, что ты прочитал страницы целиком: на этом этапе доступна первичная выдача и поисковые инсайты.",
+      "prompt": "Ты — поисковый агент Humanitec.\n\nSearch MCP уже выполнил первичный web search, подсказки и per-result insights. Используй только данные ниже.\n\nРежим поиска:\n{search_mode}\n\nИсходный запрос пользователя:\n{search_query}\n\nКраткий контекст приложенных файлов, если они были:\n{search_file_context}\n\nФактический поисковый запрос для провайдеров:\n{search_effective_query}\n\nНормализованная выдача:\n{search_results}\n\nСтатусы провайдеров:\n{search_providers_status}\n\nПодсказки для уточнения:\n{search_suggestions}\n\nFollow-up вопросы:\n{search_followups}\n\nИнсайты по результатам:\n{search_result_insights}\n\nПравила:\n1) Если search_results пустой — честно скажи, что первичная выдача сейчас недоступна. Если в search_providers_status есть error, кратко укажи его.\n2) Если результаты есть — дай короткий ответ по title/snippet результатов и учитывай search_file_context как контекст запроса, а не как внешний источник.\n3) Не вызывай read_file повторно: приложенные файлы уже прочитаны и кратко суммаризированы до web search.\n4) create_file используй только по явной просьбе сформировать отчет, таблицу, PDF, Markdown или другой файл.\n5) В конце добавь раздел «Источники» со ссылками: title + url.\n6) После источников добавь 2-3 «Что уточнить дальше» на основе search_followups.\n7) Не утверждай, что ты прочитал страницы целиком: на этом этапе доступна первичная выдача, поисковые инсайты и краткий контекст файлов.",
       "tools": [
-        "read_file",
         "create_file"
       ],
       "output_key": "response",
@@ -119,11 +159,39 @@
       "name": "Build Public Search SERP Artifact",
       "language": "python",
       "entrypoint": "run",
-      "code": "import json\n\nVALID_SEARCH_MODES = {\"quick\", \"deep\", \"research\"}\n\n\ndef _require_dict(state, key):\n    if key not in state:\n        raise ValueError(f\"public_search artifact: state.{key} is required\")\n    value = state[key]\n    if not isinstance(value, dict):\n        raise TypeError(f\"public_search artifact: state.{key} must be object\")\n    return value\n\n\ndef _require_list(state, key):\n    if key not in state:\n        raise ValueError(f\"public_search artifact: state.{key} is required\")\n    value = state[key]\n    if not isinstance(value, list):\n        raise TypeError(f\"public_search artifact: state.{key} must be array\")\n    return value\n\n\ndef _require_str(state, key):\n    if key not in state:\n        raise ValueError(f\"public_search artifact: state.{key} is required\")\n    value = state[key]\n    if not isinstance(value, str):\n        raise TypeError(f\"public_search artifact: state.{key} must be string\")\n    text = value.strip()\n    if text == \"\":\n        raise ValueError(f\"public_search artifact: state.{key} must be non-empty\")\n    return text\n\n\nasync def run(args, state):\n    variables = _require_dict(state, \"variables\")\n    if \"search_mode\" not in variables:\n        raise ValueError(\"public_search artifact: variables.search_mode is required\")\n    mode = variables[\"search_mode\"]\n    if mode not in VALID_SEARCH_MODES:\n        raise ValueError(\"public_search artifact: variables.search_mode is invalid\")\n\n    artifact = {\n        \"kind\": \"public_search_serp\",\n        \"version\": 1,\n        \"flow_id\": \"public_search\",\n        \"mode\": mode,\n        \"query\": _require_str(state, \"search_query\"),\n        \"answer\": _require_str(state, \"response\"),\n        \"results\": _require_list(state, \"search_results\"),\n        \"providers\": _require_dict(state, \"search_providers_status\"),\n        \"suggestions\": _require_list(state, \"search_suggestions\"),\n        \"followups\": _require_list(state, \"search_followups\"),\n        \"result_insights\": _require_list(state, \"search_result_insights\"),\n    }\n    await capability(\n        \"state.push_ui_event\",\n        event_type=\"search/serp/completed\",\n        payload=artifact,\n        source=\"public_search\",\n    )\n    response = json.dumps(artifact, ensure_ascii=False, separators=(\",\", \":\"))\n    return {\"response\": response}\n",
+      "code": "import json\n\nVALID_SEARCH_MODES = {\"quick\", \"deep\", \"research\"}\n\n\ndef _require_dict(state, key):\n    if key not in state:\n        raise ValueError(f\"public_search artifact: state.{key} is required\")\n    value = state[key]\n    if not isinstance(value, dict):\n        raise TypeError(f\"public_search artifact: state.{key} must be object\")\n    return value\n\n\ndef _require_list(state, key):\n    if key not in state:\n        raise ValueError(f\"public_search artifact: state.{key} is required\")\n    value = state[key]\n    if not isinstance(value, list):\n        raise TypeError(f\"public_search artifact: state.{key} must be array\")\n    return value\n\n\ndef _require_bool(state, key):\n    if key not in state:\n        raise ValueError(f\"public_search artifact: state.{key} is required\")\n    value = state[key]\n    if not isinstance(value, bool):\n        raise TypeError(f\"public_search artifact: state.{key} must be boolean\")\n    return value\n\n\ndef _require_string(state, key):\n    if key not in state:\n        raise ValueError(f\"public_search artifact: state.{key} is required\")\n    value = state[key]\n    if not isinstance(value, str):\n        raise TypeError(f\"public_search artifact: state.{key} must be string\")\n    return value.strip()\n\n\ndef _require_str(state, key):\n    text = _require_string(state, key)\n    if text == \"\":\n        raise ValueError(f\"public_search artifact: state.{key} must be non-empty\")\n    return text\n\n\nasync def run(args, state):\n    variables = _require_dict(state, \"variables\")\n    if \"search_mode\" not in variables:\n        raise ValueError(\"public_search artifact: variables.search_mode is required\")\n    mode = variables[\"search_mode\"]\n    if mode not in VALID_SEARCH_MODES:\n        raise ValueError(\"public_search artifact: variables.search_mode is invalid\")\n    has_files = _require_bool(state, \"search_has_files\")\n\n    artifact = {\n        \"kind\": \"public_search_serp\",\n        \"version\": 1,\n        \"flow_id\": \"public_search\",\n        \"mode\": mode,\n        \"query\": _require_str(state, \"search_user_query\"),\n        \"effective_query\": _require_str(state, \"search_effective_query\"),\n        \"file_context\": _require_string(state, \"search_file_context\") if has_files else \"\",\n        \"answer\": _require_str(state, \"response\"),\n        \"results\": _require_list(state, \"search_results\"),\n        \"providers\": _require_dict(state, \"search_providers_status\"),\n        \"suggestions\": _require_list(state, \"search_suggestions\"),\n        \"followups\": _require_list(state, \"search_followups\"),\n        \"result_insights\": _require_list(state, \"search_result_insights\"),\n    }\n    await capability(\n        \"state.push_ui_event\",\n        event_type=\"search/serp/completed\",\n        payload=artifact,\n        source=\"public_search\",\n    )\n    response = json.dumps(artifact, ensure_ascii=False, separators=(\",\", \":\"))\n    return {\"response\": response}\n",
       "node_timeout_seconds": 20
     }
   },
   "edges": [
+    {
+      "from_node": "prepare_search_inputs",
+      "to_node": "summarize_attached_files",
+      "condition": {
+        "type": "simple",
+        "variable": "search_has_files",
+        "operator": "==",
+        "value": true
+      }
+    },
+    {
+      "from_node": "prepare_search_inputs",
+      "to_node": "build_search_query",
+      "condition": {
+        "type": "simple",
+        "variable": "search_has_files",
+        "operator": "==",
+        "value": false
+      }
+    },
+    {
+      "from_node": "summarize_attached_files",
+      "to_node": "build_search_query"
+    },
+    {
+      "from_node": "build_search_query",
+      "to_node": "primary_search"
+    },
     {
       "from_node": "primary_search",
       "to_node": "emit_search_results"

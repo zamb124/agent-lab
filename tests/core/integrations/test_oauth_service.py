@@ -117,7 +117,10 @@ class FakeStorage:
 def credential_repository(app) -> IntegrationCredentialRepository:
     from core.config import get_settings
     settings = get_settings()
-    return IntegrationCredentialRepository(db_url=settings.database.shared_url)
+    shared_url = settings.database.shared_url
+    if shared_url is None:
+        raise RuntimeError("DATABASE__SHARED_URL обязателен для тестов OAuth")
+    return IntegrationCredentialRepository(db_url=shared_url)
 
 
 @pytest.fixture()
@@ -189,6 +192,7 @@ class TestIntegrationCredentialRepository:
             provider=IntegrationProvider.GOOGLE,
             service="calendar",
         )
+        assert loaded is not None
         assert loaded.access_token == "new-token"
 
     @pytest.mark.asyncio

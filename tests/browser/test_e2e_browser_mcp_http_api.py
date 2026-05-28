@@ -18,12 +18,14 @@ from pathlib import Path
 import pytest
 from httpx import ASGITransport, AsyncClient
 
+from fastapi import FastAPI
+
 from tests.browser.e2e_step_metrics import e2e_lightpanda_cdp_url, e2e_lightpanda_enabled
 
 pytestmark = pytest.mark.xdist_group("browser_cdp")
 
 
-def _build_browser_app(*, cdp_url: str, artifacts_dir: str) -> object:
+def _build_browser_app(*, cdp_url: str, artifacts_dir: str) -> FastAPI:
     os.environ["BROWSER__CDP_URL"] = cdp_url
     os.environ["BROWSER__ARTIFACTS_DIR"] = artifacts_dir
 

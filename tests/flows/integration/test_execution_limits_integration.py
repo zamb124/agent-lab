@@ -204,6 +204,8 @@ async def test_apply_flow_wall_clock_deadline_clamps_to_settings_cap(
 
 def test_flow_config_rejects_timeout_above_service_cap(app, unique_id: str) -> None:
     cap = get_flow_execution_wall_time_cap_seconds()
+    from apps.flows.src.models.flow_config import Edge
+
     with pytest.raises(ValueError, match="timeout: максимум"):
         FlowConfig(
             flow_id=f"fx_{unique_id}",
@@ -211,7 +213,7 @@ def test_flow_config_rejects_timeout_above_service_cap(app, unique_id: str) -> N
             type=FlowType.LOCAL,
             entry="a",
             nodes={"a": {"type": "code", "code": "async def run(s):\n    return s", "name": "a"}},
-            edges=[{"from_node": "a", "to_node": None}],
+            edges=[Edge(from_node="a", to_node=None)],
             timeout=cap + 1,
         )
 

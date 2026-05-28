@@ -10,6 +10,7 @@ import pytest_asyncio
 from apps.flows.src.container import get_container
 from apps.flows.tools.lara_crm import crm_create_note
 from core.state import ExecutionState
+from core.state.execution_state_records import ToolResult
 
 pytestmark = [
     pytest.mark.timeout(120, func_only=True),
@@ -60,7 +61,15 @@ async def test_apply_pending_http_creates_note(
         {"name": f"HTTP apply {unique_id}", "description": "body", "mode": "propose"},
         state,
     )
-    proposed = json.loads(propose_raw)
+    if isinstance(propose_raw, ToolResult):
+        if propose_raw.content is None:
+            raise AssertionError("crm_create_note propose: пустой content")
+        propose_text = propose_raw.content
+    elif isinstance(propose_raw, str):
+        propose_text = propose_raw
+    else:
+        raise AssertionError(f"crm_create_note propose: неожиданный тип {type(propose_raw).__name__}")
+    proposed = json.loads(propose_text)
     pid = proposed["pending_action_id"]
     facade = get_container().lara_facade
     applied = await facade.apply_pending_action_from_http(

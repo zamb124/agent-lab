@@ -287,6 +287,6 @@ async def test_streaming_vad_rejects_non_streaming_client(unique_id: str) -> Non
 
     with pytest.raises(ValueError, match="supports_streaming"):
         StreamingVADProvider(
-            vad_client=_NonStreamingVAD(),  # type: ignore[arg-type]
+            vad_client=_NonStreamingVAD(),  # pyright: ignore[reportArgumentType]
             sample_rate=16000,
         )

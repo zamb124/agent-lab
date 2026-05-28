@@ -66,7 +66,7 @@ async def test_dispatch_forwards_canonical_schedule_task_kwargs(
     source = _FakeScheduleSource()
     scheduler = object.__new__(scheduler_dispatch.QueueAwareTaskiqScheduler)
     await scheduler.on_ready(
-        source,
+        source,  # pyright: ignore[reportArgumentType]
         _scheduled_task(
             {
                 "schedule_task_id": "schedule-id",
@@ -111,7 +111,7 @@ async def test_dispatch_does_not_rewrite_task_kwargs(
     source = _FakeScheduleSource()
     scheduler = object.__new__(scheduler_dispatch.QueueAwareTaskiqScheduler)
     await scheduler.on_ready(
-        source,
+        source,  # pyright: ignore[reportArgumentType]
         _scheduled_task(
             {
                 "schedule_task_id": "canonical-schedule-id",

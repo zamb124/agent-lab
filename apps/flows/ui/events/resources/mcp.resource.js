@@ -19,7 +19,7 @@ export const mcpServersResource = createResourceCollection({
     },
 });
 
-// Backend требует PUT (а не PATCH).
+// Бэкенд требует PUT (а не PATCH).
 export const mcpServerUpdateOp = createAsyncOp({
     name: 'flows/mcp_server_update',
     successToastKey: 'flows:toast.mcp_server_updated',

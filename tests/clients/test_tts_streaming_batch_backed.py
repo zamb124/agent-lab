@@ -1,4 +1,4 @@
-"""BatchBackedTTSStreamer: отсутствие тихого пустого PCM."""
+"""BatchBackedTTSStreamer: нет тихого пустого PCM."""
 
 from __future__ import annotations
 

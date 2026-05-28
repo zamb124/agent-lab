@@ -66,10 +66,12 @@ async def test_tool_call_save_html_to_s3_returns_s3_path_and_links() -> None:
     result = await _tool_call(
         tool_name="browser_save_html_to_s3",
         arguments={"session_id": "sess-1", "links_limit": 5},
-        container=container,
+        container=container,  # pyright: ignore[reportArgumentType]
     )
     assert result.isError is False
-    payload = json.loads(result.content[0]["text"])
+    text_raw = result.content[0].get("text")
+    assert isinstance(text_raw, str)
+    payload = json.loads(text_raw)
     assert payload["file_id"] == "file_test_1"
     assert payload["s3_path"] == "s3://files/files/file_test_1.html"
     assert payload["links"] == [
