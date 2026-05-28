@@ -24,25 +24,48 @@ from __future__ import annotations
 import asyncio
 import json
 import time
-from typing import Any, cast
+from collections.abc import Awaitable, Callable
+from typing import cast
 
 import pytest
+from httpx import AsyncClient, Response
 
-from apps.crm.system_templates import NAMESPACE_TEMPLATE_SEEDS
+from apps.crm.container import CRMContainer
+from apps.crm.system_templates import (
+    NAMESPACE_TEMPLATE_SEEDS,
+    NamespaceTemplateSeed,
+    NamespaceTemplateTypeSpec,
+)
+from core.types import JsonObject
+from tests.crm.e2e._json_helpers import json_object, object_dict, object_list, object_str
 
-_META = {"dates_mentioned": [], "places_mentioned": [], "key_topics": []}
+MockLlmRedisFactory = Callable[[list[object]], Awaitable[None]]
+MockLlmCaptureFactory = Callable[[], Awaitable[list[JsonObject]]]
+
+_META: dict[str, object] = {"dates_mentioned": [], "places_mentioned": [], "key_topics": []}
 
 
-def _seed_by_id(template_id: str) -> dict[str, Any]:  # pyright: ignore[reportReturnType]
+def _http_json(response: Response) -> dict[str, object]:
+    return json_object(cast(object, response.json()))
+
+
+def _entity_id(response: Response) -> str:
+    return object_str(_http_json(response).get("entity_id"), field="entity_id")
+
+
+def _task_id(response: Response) -> str:
+    return object_str(_http_json(response).get("task_id"), field="task_id")
+
+
+def _seed_by_id(template_id: str) -> NamespaceTemplateSeed:
     for seed in NAMESPACE_TEMPLATE_SEEDS:
         if seed["template_id"] == template_id:
-            return cast(dict[str, Any], cast(object, seed))
+            return seed
     raise AssertionError(f"seed {template_id!r} not registered")
 
 
-def _empty_analyze_response_for(note_title: str) -> dict[str, Any]:
+def _empty_analyze_response_for(note_title: str) -> dict[str, object]:
     """Возвращает пустой, но валидный по схеме analyze ответ — `note` есть, всё остальное пусто."""
-
     return {
         "type": "text",
         "content": json.dumps(
@@ -65,17 +88,20 @@ def _empty_analyze_response_for(note_title: str) -> dict[str, Any]:
     }
 
 
-def _analyze_mock_redis_queue(note_title: str) -> list[dict[str, Any]]:
+def _analyze_mock_redis_queue(note_title: str) -> list[object]:
     """
     Два одинаковых ответа в очереди MockLLM: при полном прогоне с TaskIQ возможен лишний
     pop из mock_llm:responses до analyze; второй слот гарантирует валидный JSON для analyze.
     """
-    one = _empty_analyze_response_for(note_title)
+    one: object = _empty_analyze_response_for(note_title)
     return [one, one]
 
 
 async def _create_namespace_from_template(
-    crm_client, auth_headers, template_id: str, suffix: str
+    crm_client: AsyncClient,
+    auth_headers: dict[str, str],
+    template_id: str,
+    suffix: str,
 ) -> str:
     namespace_name = f"e2e_prompt_{template_id}_{suffix}"
     response = await crm_client.post(
@@ -91,96 +117,109 @@ async def _create_namespace_from_template(
     return namespace_name
 
 
-async def _wait_until_task_completes(crm_client, headers, task_id: str) -> dict[str, Any]:
+async def _wait_until_task_completes(
+    crm_client: AsyncClient,
+    headers: dict[str, str],
+    task_id: str,
+) -> dict[str, object]:
     deadline = time.monotonic() + 60.0
-    last: dict[str, Any] = {}
+    last: dict[str, object] = {}
     while time.monotonic() < deadline:
         response = await crm_client.get(
-            f"/crm/api/v1/tasks/{task_id}", headers=headers
+            f"/crm/api/v1/tasks/{task_id}",
+            headers=headers,
         )
         assert response.status_code == 200, response.text
-        last = response.json()
-        if last.get("status") in ("completed", "failed", "cancelled"):
+        last = _http_json(response)
+        status = last.get("status")
+        if status in ("completed", "failed", "cancelled"):
             break
         await asyncio.sleep(0.4)
     assert last.get("status") == "completed", last
     return last
 
 
-def _all_messages_text(call: dict[str, Any]) -> str:
-    """Склейка текстов всех сообщений вызова — для подстрочного поиска маркеров."""
-
-    messages = call.get("messages") or []
+def _message_text(message: dict[str, object]) -> str:
+    text = message.get("text")
+    if isinstance(text, str) and text:
+        return text
     chunks: list[str] = []
-    for m in messages:
-        if not isinstance(m, dict):
-            continue
-        t = m.get("text")
-        if isinstance(t, str) and t:
-            chunks.append(t)
-            continue
-        for p in m.get("parts") or []:
-            if not isinstance(p, dict):
-                continue
-            if p.get("type") == "text" and isinstance(p.get("text"), str):
-                chunks.append(p["text"])
+    for part_raw in object_list(message.get("parts")):
+        if part_raw.get("type") == "text":
+            part_text = part_raw.get("text")
+            if isinstance(part_text, str):
+                chunks.append(part_text)
+    return "\n".join(chunks)
+
+
+def _all_messages_text(call: dict[str, object]) -> str:
+    """Склейка текстов всех сообщений вызова — для подстрочного поиска маркеров."""
+    messages = object_list(call.get("messages"))
+    chunks: list[str] = []
+    for message in messages:
+        message_text = _message_text(message)
+        if message_text:
+            chunks.append(message_text)
     return "\n\n".join(chunks)
 
 
-def _call_matches_crm_analyze_schema(call: dict[str, Any]) -> bool:
+def _call_matches_crm_analyze_schema(call: dict[str, object]) -> bool:
     """Вызов CRM analyze (structured output) несёт json_schema с полями note/entities/metadata/attachment_summaries."""
-    rf = call.get("response_format")
-    if not isinstance(rf, dict):
-        return False
-    js = rf.get("json_schema")
-    if not isinstance(js, dict):
-        return False
-    schema = js.get("schema")
-    if not isinstance(schema, dict):
-        return False
-    req = schema.get("required")
-    if isinstance(req, list) and (
-        "note" in req
-        and "entities" in req
-        and "attachment_summaries" in req
-        and "metadata" in req
-    ):
+    response_format = object_dict(call.get("response_format"), field="response_format")
+    json_schema = object_dict(response_format.get("json_schema"), field="json_schema")
+    schema = object_dict(json_schema.get("schema"), field="schema")
+    required = schema.get("required")
+    if isinstance(required, list):
+        required_fields: set[str] = set()
+        for required_item in cast(list[object], required):
+            if isinstance(required_item, str):
+                required_fields.add(required_item)
+        if (
+            "note" in required_fields
+            and "entities" in required_fields
+            and "attachment_summaries" in required_fields
+            and "metadata" in required_fields
+        ):
+            return True
+    properties = object_dict(schema.get("properties"), field="properties")
+    return (
+        "note" in properties
+        and "entities" in properties
+        and "attachment_summaries" in properties
+        and "metadata" in properties
+    )
+
+
+def _matches_analyze_prompt(text: str) -> bool:
+    if "# CRM Text Analyzer" in text or "CRM Text Analyzer" in text:
         return True
-    props = schema.get("properties")
-    if isinstance(props, dict):
-        return (
-            "note" in props
-            and "entities" in props
-            and "attachment_summaries" in props
-            and "metadata" in props
-        )
+    if "ТИПЫ ENTITIES" in text and "ТИПЫ RELATIONSHIPS" in text:
+        return True
+    if "РАЗРЕШЁННЫЕ ИДЕНТИФИКАТОРЫ СУЩНОСТЕЙ" in text:
+        return True
     return False
 
 
-def _find_analyze_call(calls: list[dict[str, Any]]) -> dict[str, Any]:
+def _find_analyze_call(calls: list[JsonObject]) -> dict[str, object]:
     """Ищет в журнале вызов analyze: текст prompts/analyze.md или structured output CRM analyze."""
-
-    def _matches_analyze_prompt(text: str) -> bool:
-        if "# CRM Text Analyzer" in text or "CRM Text Analyzer" in text:
-            return True
-        if "ТИПЫ ENTITIES" in text and "ТИПЫ RELATIONSHIPS" in text:
-            return True
-        if "РАЗРЕШЁННЫЕ ИДЕНТИФИКАТОРЫ СУЩНОСТЕЙ" in text:
-            return True
-        if "РАЗРЕШЕННЫЕ ИДЕНТИФИКАТОРЫ СУЩНОСТЕЙ" in text:
-            return True
-        return False
-
     for call in calls:
-        if _call_matches_crm_analyze_schema(call):
-            return call
-        text = _all_messages_text(call)
-        if _matches_analyze_prompt(text):
-            return call
+        call_object = object_dict(call, field="call")
+        if _call_matches_crm_analyze_schema(call_object):
+            return call_object
+        if _matches_analyze_prompt(_all_messages_text(call_object)):
+            return call_object
+    first_call: object = calls[0] if calls else None
     raise AssertionError(
-        f"в журнале MockLLM нет analyze-вызова (всего вызовов: {len(calls)}); "
-        f"первая запись: {calls[0] if calls else None!r}"
+        "в журнале MockLLM нет analyze-вызова "
+        + f"(всего вызовов: {len(calls)}); первая запись: {first_call!r}"
     )
+
+
+def _ticket_type_spec(seed: NamespaceTemplateSeed) -> NamespaceTemplateTypeSpec:
+    for type_spec in seed["types"]:
+        if type_spec.get("type_id") == "ticket":
+            return type_spec
+    raise AssertionError("support seed must contain ticket type")
 
 
 @pytest.mark.real_taskiq
@@ -191,11 +230,11 @@ class TestTemplatePromptReachesLLM:
     @pytest.mark.asyncio
     async def test_user_edited_entity_type_prompt_reaches_llm(
         self,
-        crm_client,
-        mock_llm_redis,
-        mock_llm_capture,
-        unique_id,
-        auth_headers_system,
+        crm_client: AsyncClient,
+        mock_llm_redis: MockLlmRedisFactory,
+        mock_llm_capture: MockLlmCaptureFactory,
+        unique_id: str,
+        auth_headers_system: dict[str, str],
     ) -> None:
         ns_name = await _create_namespace_from_template(
             crm_client, auth_headers_system, "marketing", unique_id
@@ -231,7 +270,7 @@ class TestTemplatePromptReachesLLM:
             headers=auth_headers_system,
         )
         assert note_resp.status_code == 200, note_resp.text
-        note_id = note_resp.json()["entity_id"]
+        note_id = _entity_id(note_resp)
 
         start = await crm_client.post(
             "/crm/api/v1/tasks/note-analyze",
@@ -243,27 +282,26 @@ class TestTemplatePromptReachesLLM:
             headers=auth_headers_system,
         )
         assert start.status_code == 202, start.text
-        await _wait_until_task_completes(
-            crm_client, auth_headers_system, start.json()["task_id"]
+        _ = await _wait_until_task_completes(
+            crm_client, auth_headers_system, _task_id(start)
         )
 
         calls = await mock_llm_capture()
         analyze_call = _find_analyze_call(calls)
         prompt_text = _all_messages_text(analyze_call)
         assert marker in prompt_text, (
-            "обновлённый EntityType.prompt должен попадать в финальный "
-            "rendered prompt analyze"
+            "обновлённый EntityType.prompt должен попадать в финальный rendered prompt analyze"
         )
         assert "Извлекай только performance-кампании" in prompt_text
 
     @pytest.mark.asyncio
     async def test_user_edited_field_label_and_enum_values_reach_llm(
         self,
-        crm_client,
-        mock_llm_redis,
-        mock_llm_capture,
-        unique_id,
-        auth_headers_system,
+        crm_client: AsyncClient,
+        mock_llm_redis: MockLlmRedisFactory,
+        mock_llm_capture: MockLlmCaptureFactory,
+        unique_id: str,
+        auth_headers_system: dict[str, str],
     ) -> None:
         ns_name = await _create_namespace_from_template(
             crm_client, auth_headers_system, "support", unique_id
@@ -282,8 +320,8 @@ class TestTemplatePromptReachesLLM:
                         "label": unique_label,
                         "description": unique_description,
                         "values": [unique_value_id, "sev1", "sev2"],
-                    }
-                }
+                    },
+                },
             },
             headers=auth_headers_system,
         )
@@ -306,7 +344,7 @@ class TestTemplatePromptReachesLLM:
             headers=auth_headers_system,
         )
         assert note_resp.status_code == 200, note_resp.text
-        note_id = note_resp.json()["entity_id"]
+        note_id = _entity_id(note_resp)
 
         start = await crm_client.post(
             "/crm/api/v1/tasks/note-analyze",
@@ -318,8 +356,8 @@ class TestTemplatePromptReachesLLM:
             headers=auth_headers_system,
         )
         assert start.status_code == 202, start.text
-        await _wait_until_task_completes(
-            crm_client, auth_headers_system, start.json()["task_id"]
+        _ = await _wait_until_task_completes(
+            crm_client, auth_headers_system, _task_id(start)
         )
 
         calls = await mock_llm_capture()
@@ -339,12 +377,12 @@ class TestTemplatePromptReachesLLM:
     @pytest.mark.asyncio
     async def test_user_edited_relationship_type_prompt_reaches_llm(
         self,
-        crm_client,
-        crm_container,
-        mock_llm_redis,
-        mock_llm_capture,
-        unique_id,
-        auth_headers_system,
+        crm_client: AsyncClient,
+        crm_container: CRMContainer,
+        mock_llm_redis: MockLlmRedisFactory,
+        mock_llm_capture: MockLlmCaptureFactory,
+        unique_id: str,
+        auth_headers_system: dict[str, str],
     ) -> None:
         """
         Прямая правка системного `RelationshipType.prompt` через репозиторий
@@ -364,12 +402,12 @@ class TestTemplatePromptReachesLLM:
 
         repo = crm_container.relationship_type_repository
         all_types = await repo.list_by_company(include_system=True, limit=1000)
-        mentions_row = next((t for t in all_types if t.type_id == "mentions"), None)
+        mentions_row = next((row for row in all_types if row.type_id == "mentions"), None)
         assert mentions_row is not None, "у компании system должен быть тип mentions"
         original_prompt = mentions_row.prompt
         try:
             mentions_row.prompt = new_prompt
-            await repo.update(mentions_row)
+            _ = await repo.update(mentions_row)
 
             note_title = f"Звонок probe {unique_id}"
             await mock_llm_redis(_analyze_mock_redis_queue(note_title))
@@ -387,7 +425,7 @@ class TestTemplatePromptReachesLLM:
                 headers=auth_headers_system,
             )
             assert note_resp.status_code == 200, note_resp.text
-            note_id = note_resp.json()["entity_id"]
+            note_id = _entity_id(note_resp)
 
             start = await crm_client.post(
                 "/crm/api/v1/tasks/note-analyze",
@@ -399,8 +437,8 @@ class TestTemplatePromptReachesLLM:
                 headers=auth_headers_system,
             )
             assert start.status_code == 202, start.text
-            await _wait_until_task_completes(
-                crm_client, auth_headers_system, start.json()["task_id"]
+            _ = await _wait_until_task_completes(
+                crm_client, auth_headers_system, _task_id(start)
             )
 
             calls = await mock_llm_capture()
@@ -411,27 +449,26 @@ class TestTemplatePromptReachesLLM:
             )
         finally:
             mentions_row.prompt = original_prompt
-            await repo.update(mentions_row)
+            _ = await repo.update(mentions_row)
 
     @pytest.mark.asyncio
     async def test_seed_specific_type_prompt_visible_in_llm_for_that_namespace(
         self,
-        crm_client,
-        mock_llm_redis,
-        mock_llm_capture,
-        unique_id,
-        auth_headers_system,
+        crm_client: AsyncClient,
+        mock_llm_redis: MockLlmRedisFactory,
+        mock_llm_capture: MockLlmCaptureFactory,
+        unique_id: str,
+        auth_headers_system: dict[str, str],
     ) -> None:
         """
         Без правок: prompt из шаблона `support` (например `ticket`) уходит
         в LLM ровно в формулировке seed'а — никакой подмены.
         """
         seed = _seed_by_id("support")
-        ticket_spec = next(
-            t for t in seed["types"] if isinstance(t, dict) and t.get("type_id") == "ticket"
-        )
-        assert ticket_spec.get("prompt"), "для тикета в support seed обязан быть prompt"
-        prompt_marker = ticket_spec["prompt"].splitlines()[0].strip()
+        ticket_spec = _ticket_type_spec(seed)
+        prompt_raw = ticket_spec.get("prompt")
+        assert isinstance(prompt_raw, str) and prompt_raw, "для тикета в support seed обязан быть prompt"
+        prompt_marker = prompt_raw.splitlines()[0].strip()
         assert prompt_marker, "у seed prompt-а должна быть непустая первая строка"
 
         ns_name = await _create_namespace_from_template(
@@ -455,7 +492,7 @@ class TestTemplatePromptReachesLLM:
             headers=auth_headers_system,
         )
         assert note_resp.status_code == 200, note_resp.text
-        note_id = note_resp.json()["entity_id"]
+        note_id = _entity_id(note_resp)
 
         start = await crm_client.post(
             "/crm/api/v1/tasks/note-analyze",
@@ -467,14 +504,14 @@ class TestTemplatePromptReachesLLM:
             headers=auth_headers_system,
         )
         assert start.status_code == 202, start.text
-        await _wait_until_task_completes(
-            crm_client, auth_headers_system, start.json()["task_id"]
+        _ = await _wait_until_task_completes(
+            crm_client, auth_headers_system, _task_id(start)
         )
 
         calls = await mock_llm_capture()
         analyze_call = _find_analyze_call(calls)
         prompt_text = _all_messages_text(analyze_call)
         assert prompt_marker in prompt_text, (
-            f"prompt из seed support/ticket должен попадать в rendered analyze prompt; "
-            f"искали маркер: {prompt_marker!r}"
+            "prompt из seed support/ticket должен попадать в rendered analyze prompt; "
+            + f"искали маркер: {prompt_marker!r}"
         )

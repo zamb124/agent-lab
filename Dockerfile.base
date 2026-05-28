@@ -5,7 +5,7 @@
 # CI build за минуты вместо часа.
 #
 # Источник правды для production — GHA workflow `.github/workflows/build-base.yml`:
-#   - Триггер: push в master с изменением pyproject.toml / uv.lock / Dockerfile.base
+#   - Триггер: push в main с изменением pyproject.toml / uv.lock / Dockerfile.base
 #   - Триггер: workflow_dispatch (Actions UI → Build Base Image → Run workflow)
 #   - Push в ghcr.io/<owner>/agent-lab-base:latest + :<sha>
 #

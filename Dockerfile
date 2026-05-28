@@ -5,7 +5,7 @@
 # только COPY кода — CI build за минуты, не за час.
 #
 # Когда пересобирается base: автоматически в CI при изменении pyproject.toml /
-# uv.lock / Dockerfile.base в master, либо вручную через Actions UI.
+# uv.lock / Dockerfile.base в main, либо вручную через Actions UI.
 
 # ============================================
 # Этап 1: базовый образ (предсобранный, содержит весь Python-стек)

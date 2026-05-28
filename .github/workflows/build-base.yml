@@ -6,7 +6,7 @@ name: Build Base Image
 # только COPY кода — CI билд за минуты, не за час.
 #
 # Триггеры:
-#   - auto: push в master с изменениями pyproject.toml / uv.lock / Dockerfile.base
+#   - auto: push в main с изменениями pyproject.toml / uv.lock / Dockerfile.base
 #   - manual: workflow_dispatch из UI (Actions → Build Base Image → Run workflow)
 #
 # Платформа: linux/amd64 (наш k8s кластер целиком amd64 — master + gpu-worker).
@@ -19,7 +19,7 @@ concurrency:
 on:
   workflow_dispatch:
   push:
-    branches: [master]
+    branches: [main]
     paths:
       - 'pyproject.toml'
       - 'uv.lock'
