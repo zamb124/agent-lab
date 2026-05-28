@@ -49,8 +49,10 @@ def _resolve_int_env(name: str, default: int) -> int:
 
 
 def _resolve_workers() -> int:
-    cpu = os.cpu_count() or 1
-    return _resolve_int_env("GRANIAN_WORKERS", max(1, cpu))
+    # workers=1 для ASGI: каждый worker — отдельный event loop с отдельным ASGI
+    # lifespan; пулы asyncpg/sqlalchemy/httpx/redis локальны к loop и не шарятся
+    # между workers. Scaling — replicas: в k8s.
+    return _resolve_int_env("GRANIAN_WORKERS", 1)
 
 
 def _resolve_runtime_threads() -> int:

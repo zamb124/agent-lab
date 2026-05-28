@@ -23,11 +23,14 @@
 {{- define "agentlab.appEnv" -}}
 - name: PYTHON_GIL
   value: "0"
+# GRANIAN_WORKERS=1: для async-ASGI workers>1 запускают N независимых event loops,
+# каждый отдельно вызывает ASGI lifespan startup → дублирующая инициализация
+# global state (SQLAlchemy/asyncpg pools на разных loops → "got Future attached
+# to a different loop", Redis listener "already running"). Scaling между подами —
+# `replicas:`. Free-threaded даёт shared interpreter без fork-копирования (lower
+# memory), но не множит workers внутри пода для ASGI.
 - name: GRANIAN_WORKERS
-  valueFrom:
-    resourceFieldRef:
-      resource: limits.cpu
-      divisor: "1"
+  value: "1"
 - name: GRANIAN_RUNTIME_THREADS
   value: "2"
 - name: POSTGRES_PASSWORD

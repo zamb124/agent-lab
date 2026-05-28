@@ -56,13 +56,13 @@ files/                          # ConfigMap источники (loki, tempo, all
 
 Все HTTP-сервисы запускаются через **Granian** (Rust ASGI поверх Hyper/Tokio), `--interface asgi --http auto --ws`. Один free-threaded Python-процесс на pod (shared interpreter), внутри — `GRANIAN_WORKERS` потоков-воркеров (каждый со своим asyncio loop) + `GRANIAN_RUNTIME_THREADS` Rust IO-потоков. Scaling между подами — `replicas:`. `import uvicorn` в `core/` и `apps/` запрещён — проверяется **`make check-no-uvicorn`** (входит в `make check-events-canon`).
 
-**Топология воркеров (k8s Downward API):**
-- `GRANIAN_WORKERS = resources.limits.cpu` (через `valueFrom.resourceFieldRef`, см. `agentlab.appEnv` в `_helpers.tpl`) — pod автоматически масштабирует число потоков под выделенный CPU-лимит, округление вверх. Меняешь `resources.limits.cpu` — workers едут следом без правок command.
-- `GRANIAN_RUNTIME_THREADS = 2` (Rust IO threads per worker; для HTTP/2 и большого числа WebSocket'ов).
+**Топология воркеров:**
+- `GRANIAN_WORKERS = 1` (фиксированно через `agentlab.appEnv` в `_helpers.tpl`). Для async-ASGI workers>1 запускают N независимых event loops, каждый отдельно вызывает ASGI lifespan startup → дублирующая инициализация global state (asyncpg/SQLAlchemy/Redis pools локальны к loop) → `RuntimeError: got Future attached to a different loop`. Scaling между подами — `replicas:`.
+- `GRANIAN_RUNTIME_THREADS = 2` (Rust IO threads per worker; для HTTP/2 и WebSocket).
 - Granian CLI читает эти ENV нативно, в `command` Helm/Docker `--workers` НЕ передаётся.
-- В `core/app/server.py` (программный запуск из `apps/<svc>/main.py`) — `_resolve_workers()` читает `GRANIAN_WORKERS` ENV, при отсутствии — `os.cpu_count()`.
+- В `core/app/server.py` (программный запуск из `apps/<svc>/main.py`) — `_resolve_workers()` читает `GRANIAN_WORKERS` ENV, при отсутствии — 1.
 
-В **free-threaded build** (наш) workers = треды в едином интерпретаторе с shared memory. В GIL-build (если случайно соберётся cp314 вместо cp314t) workers = forked процессы. Granian сам отказывается стартовать на GIL-enabled cp314t — это наш sanity check.
+Free-threaded build (cp314t) даёт shared interpreter без fork-копирования (lower memory footprint) и параллельное исполнение background threads (`asyncio.to_thread`, ThreadPoolExecutor). Multi-worker внутри одного пода для ASGI **не подходит** даже на free-threaded — каждый worker всё равно = независимый event loop с локальными connection pools.
 
 Базовый docker-образ — `ghcr.io/astral-sh/uv:bookworm-slim` + `uv python install 3.14t` + `uv python pin 3.14t` + `ENV PYTHON_GIL=0`. Версия CPython — **3.14 free-threaded (PEP 779, cp314t ABI)**. Локальный `__main__` каждого `apps/<svc>/main.py` использует `core.app.server.serve(<service>, "apps.<svc>.main:app", settings)`, который сам поднимает `granian.Granian(...)` и пишет `service.python_runtime` (с `gil_enabled`) + `service.granian_topology` (с `workers`/`runtime_threads`/`cpu_count`) на старте.
 
