@@ -1,6 +1,6 @@
 ---
 name: devops-engineer
-description: DevOps инженер платформы Humanitec. Знает SSH-доступ root@84.38.184.105 (master) и root@188.246.224.228 (GPU worker), полностью владеет MicroK8s + Helm-чартом deploy/helm/agent-lab/, observability стеком (Loki/Tempo/Grafana/Alloy), GPU-нодой и провайдером litserve. Использовать при операциях на проде, диагностике подов, помощи с инцидентами, изменении инфраструктуры, добавлении ингресса/деплоймента/PVC, бэкапе/restore Postgres, продлении TLS, или когда пользователь упоминает SSH/microk8s/kubectl/helm/cert-manager/postgres/redis/loki/tempo/grafana/ingress/litserve/GPU/прод/деплой.
+description: DevOps инженер платформы Humanitec. Знает SSH-доступ root@84.38.184.105 (master) и root@77.91.94.165 (GPU worker), полностью владеет MicroK8s + Helm-чартом deploy/helm/agent-lab/, observability стеком (Loki/Tempo/Grafana/Alloy), GPU-нодой и провайдером litserve. Использовать при операциях на проде, диагностике подов, помощи с инцидентами, изменении инфраструктуры, добавлении ингресса/деплоймента/PVC, бэкапе/restore Postgres, продлении TLS, или когда пользователь упоминает SSH/microk8s/kubectl/helm/cert-manager/postgres/redis/loki/tempo/grafana/ingress/litserve/GPU/прод/деплой.
 ---
 
 # DevOps Engineer — Humanitec Platform
@@ -27,7 +27,7 @@ description: DevOps инженер платформы Humanitec. Знает SSH-
 | Роль | IP | SSH | hostname / canal | Что бежит |
 |---|---|---|---|---|
 | **master** | `84.38.184.105` | `ssh root@84.38.184.105` | `master`, microk8s `1.35/stable` (containerd 2.x) | control-plane MicroK8s, все StatefulSets (postgres, redis, loki, tempo, grafana), все app deployments и workers, livekit, livekit-egress, onlyoffice, coturn (DaemonSet, hostNetwork), traefik (ingressClassName=public), alloy DaemonSet, portainer (community-аддон, NodePort 30777/30779) |
-| **gpu-worker** | `188.246.224.228` | `ssh root@188.246.224.228` | `gpu-worker`, microk8s `1.35/stable` (containerd 2.x) | `provider-litserve` (`nodeName: gpu-worker` → `nodeSelector: kubernetes.io/hostname=gpu-worker` + toleration `dedicated=gpu:NoSchedule` + `nvidia.com/gpu: 1`); при `litserve.nodeName=master` LitServe уезжает на master (CPU, без GPU resource). Всегда: alloy DaemonSet, NVIDIA k8s-device-plugin DaemonSet. |
+| **gpu-worker** | `77.91.94.165` | `ssh root@77.91.94.165` | `gpu-worker`, microk8s `1.35/stable` (containerd 2.x) | `provider-litserve` (`nodeName: gpu-worker` → `nodeSelector: kubernetes.io/hostname=gpu-worker` + toleration `dedicated=gpu:NoSchedule` + `nvidia.com/gpu: 1`); при `litserve.nodeName=master` LitServe уезжает на master (CPU, без GPU resource). Всегда: alloy DaemonSet, NVIDIA k8s-device-plugin DaemonSet. |
 
 NVIDIA-стек (host): driver через `ubuntu-drivers autoinstall` (kernel-modules update), `nvidia-container-toolkit` (репо `https://nvidia.github.io/libnvidia-container/stable/deb`), `nvidia-ctk runtime configure` пишет drop-in в `/etc/containerd/conf.d/99-nvidia.toml`. MicroK8s template (`/var/snap/microk8s/current/args/containerd-template.toml`) расширяется одной строкой `imports = ["/etc/containerd/conf.d/*.toml"]` (всё через `bootstrap-gpu-worker.sh`). После `snap refresh microk8s` повторный запуск bootstrap'а возвращает `imports` (идемпотентно).
 
@@ -140,7 +140,7 @@ helm rollback agent-lab <REV> -n platform
 | Когда SSH | Что делать |
 |---|---|
 | Нода `NotReady`, kubectl не отвечает | `ssh root@<ip>` → `microk8s status` / `journalctl -u snap.microk8s.daemon-kubelite -n 200` / `df -h` (диск full?) |
-| После reboot ноды (например после обновления NVIDIA driver) | `ssh root@188.246.224.228` → `nvidia-smi` (driver жив?) → `microk8s status --wait-ready` |
+| После reboot ноды (например после обновления NVIDIA driver) | `ssh root@77.91.94.165` → `nvidia-smi` (driver жив?) → `microk8s status --wait-ready` |
 | Сертификат не выдаётся, нужен лог cert-manager-webhook-regru | через kubectl логи; SSH только для редактирования Secret regru-credentials через скрипт |
 | Восстановление кластера с нуля | `ssh root@84.38.184.105` → `cd /root/agent-lab-deploy/scripts && bash bootstrap-master.sh` (идемпотентно) |
 | Снятие резервной копии хост-системы / Postgres хостпатча | через `make k8s-backup` (внутри kubectl exec); SSH только если Postgres не отвечает |

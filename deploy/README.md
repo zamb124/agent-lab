@@ -23,7 +23,7 @@ MicroK8s cluster
 │   ├── alloy DaemonSet (на каждой ноде)
 │   ├── traefik (ingressClassName=public) + cert-manager + portainer (community-аддон, NodePort 30777/30779)
 │   └── 4 Ingress: platform, livekit, onlyoffice, grafana
-└── gpu-worker (188.246.224.228)   accelerator=nvidia-gpu
+└── gpu-worker (77.91.94.165)   accelerator=nvidia-gpu
     ├── provider-litserve Deployment (по умолчанию: nodeSelector GPU + `nvidia.com/gpu: 1`)
     ├── nvidia-device-plugin DaemonSet (публикует nvidia.com/gpu в Allocatable)
     └── alloy DaemonSet

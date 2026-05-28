@@ -14,7 +14,7 @@
 | DNS A `onlyoffice.humanitec.ru` → `84.38.184.105` | reg.ru панель | один раз |
 | DNS A `grafana.humanitec.ru` → `84.38.184.105` | reg.ru панель | один раз |
 | Ubuntu 22.04+ на обеих нодах | сервер | один раз |
-| SSH ключ для root@84.38.184.105 и root@188.246.224.228 | локально | один раз |
+| SSH ключ для root@84.38.184.105 и root@77.91.94.165 | локально | один раз |
 
 ## 1. Master нода (84.38.184.105)
 
@@ -30,10 +30,10 @@ bash deploy/scripts/bootstrap-master.sh
 
 **Idempotent.** Повторный запуск: всё `[SKIP]`.
 
-## 2. GPU worker нода (188.246.224.228)
+## 2. GPU worker нода (77.91.94.165)
 
 ```bash
-ssh root@188.246.224.228
+ssh root@77.91.94.165
 git clone https://github.com/<owner>/agent-lab.git /root/agent-lab-deploy && cd /root/agent-lab-deploy
 bash deploy/scripts/bootstrap-gpu-worker.sh
 ```

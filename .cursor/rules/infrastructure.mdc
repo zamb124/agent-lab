@@ -11,7 +11,7 @@ alwaysApply: false
 | Роль | IP | Лейблы | Что бежит |
 |---|---|---|---|
 | Master | `84.38.184.105` | `kubernetes.io/hostname=master` | Postgres, Redis, Loki, Tempo, Grafana, все приложения и воркеры, LiveKit, Coturn, OnlyOffice, ingress-nginx |
-| GPU Worker | `188.246.224.228` | `accelerator=nvidia-gpu` | `provider_litserve` (через `nodeSelector`) |
+| GPU Worker | `77.91.94.165` | `accelerator=nvidia-gpu` | `provider_litserve` (через `nodeSelector`) |
 
 Связь между нодами — через Calico/Flannel CNI. Postgres и Redis доступны из любой ноды по ClusterIP `postgres.platform.svc.cluster.local:5432` / `redis.platform.svc.cluster.local:6379` — без проброса портов на хост и `ufw allow`.
 

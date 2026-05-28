@@ -200,7 +200,7 @@ GPU_NODE_LABEL_VALUE="${GPU_NODE_LABEL_VALUE:-nvidia-gpu}"
 
 # IP-адреса нод (для join и SSH). Можно переопределить ENV.
 MASTER_HOST_IP="${MASTER_HOST_IP:-84.38.184.105}"
-GPU_HOST_IP="${GPU_HOST_IP:-188.246.224.228}"
+GPU_HOST_IP="${GPU_HOST_IP:-77.91.94.165}"
 SSH_USER="${SSH_USER:-root}"
 
 # disable_host_firewall — идемпотентно отключает UFW; сетевые политики держим в CNI.

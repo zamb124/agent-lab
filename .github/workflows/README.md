@@ -30,7 +30,7 @@ MicroK8s cluster
 ├── master (84.38.184.105)         hostname=master
 │   └── Postgres, Redis, all apps + workers, observability, ingress
 │       (и provider-litserve при litserve_node=cpu)
-└── gpu-worker (188.246.224.228)   accelerator=nvidia-gpu
+└── gpu-worker (77.91.94.165)   accelerator=nvidia-gpu
     └── provider-litserve при litserve_node=gpu (nodeSelector + nvidia.com/gpu: 1)
 ```
 

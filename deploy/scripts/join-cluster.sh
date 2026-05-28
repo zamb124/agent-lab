@@ -5,7 +5,7 @@
 # nvidia-device-plugin DaemonSet ставит Helm-чарт agent-lab.
 #
 # ENV:
-#   GPU_WORKER_HOST = root@188.246.224.228 (по умолчанию SSH_USER@GPU_HOST_IP из _common.sh)
+#   GPU_WORKER_HOST = root@77.91.94.165 (по умолчанию SSH_USER@GPU_HOST_IP из _common.sh)
 #   GPU_NODE_NAME / GPU_NODE_LABEL_* / JOIN_TIMEOUT
 
 set -uo pipefail

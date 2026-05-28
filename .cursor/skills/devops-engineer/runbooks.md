@@ -15,7 +15,7 @@ git clone https://github.com/<owner>/agent-lab.git /root/agent-lab-deploy && cd 
 bash deploy/scripts/bootstrap-master.sh
 
 # 3. На gpu-worker:
-ssh root@188.246.224.228
+ssh root@77.91.94.165
 git clone https://github.com/<owner>/agent-lab.git /root/agent-lab-deploy && cd /root/agent-lab-deploy
 bash deploy/scripts/bootstrap-gpu-worker.sh
 # Если exit 10 — reboot и повторить
@@ -140,7 +140,7 @@ kubectl logs -n cert-manager deployment/cert-manager-webhook-regru -f
 kubectl -n platform scale deployment provider-litserve --replicas=0
 
 # 2. SSH на gpu-worker:
-ssh root@188.246.224.228
+ssh root@77.91.94.165
 cd /root/agent-lab-deploy
 git pull   # получить актуальный bootstrap скрипт
 
@@ -312,7 +312,7 @@ microk8s kubectl version --short
 # 3. Drain noдev (kubectl drain не работает в MicroK8s так же — лучше snap refresh с маленьким channel-bump)
 ssh root@84.38.184.105 'snap refresh microk8s --channel=1.31/stable'
 # Подождать рестарта, потом то же на gpu-worker:
-ssh root@188.246.224.228 'snap refresh microk8s --channel=1.31/stable'
+ssh root@77.91.94.165 'snap refresh microk8s --channel=1.31/stable'
 
 # 4. После обновления:
 make k8s-health
