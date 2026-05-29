@@ -36,7 +36,7 @@ export class AboutPage extends PlatformPage {
                 font-family: 'Fira Sans', sans-serif;
                 font-size: 18px;
                 line-height: 1.65;
-                color: rgba(232, 232, 232, 0.85);
+                color: var(--landing-text-soft, rgba(232, 232, 232, 0.85));
                 margin: 0 0 36px;
             }
             h2 {
@@ -49,7 +49,7 @@ export class AboutPage extends PlatformPage {
                 font-family: 'Fira Sans', sans-serif;
                 font-size: 16px;
                 line-height: 1.65;
-                color: rgba(232, 232, 232, 0.78);
+                color: var(--landing-text-soft, rgba(232, 232, 232, 0.78));
                 margin: 0 0 16px;
             }
             .cta-btn {

@@ -44,6 +44,26 @@ class TestSettingsAPI:
         assert summarize["kind"] == "llm"
         assert "llm_summarize" in body["catalog"]
         prov_items = body["catalog"]["llm_summarize"]
+        from core.clients.llm.model_routing import (
+            HUMANITEC_LLM_PROVIDER,
+            HUMANITEC_LLMS_DISPLAY_LABEL,
+            PLATFORM_LLM_PROVIDER_ORDER,
+        )
+
+        provider_values = [item["value"] for item in prov_items]
+        assert provider_values[: len(PLATFORM_LLM_PROVIDER_ORDER)] == list(
+            PLATFORM_LLM_PROVIDER_ORDER
+        )
+        humanitec_item = next(
+            item for item in prov_items if item["value"] == HUMANITEC_LLM_PROVIDER
+        )
+        assert humanitec_item["kind"] == "virtual"
+        assert humanitec_item["label"] == HUMANITEC_LLMS_DISPLAY_LABEL
+        assert humanitec_item["models"][0] == {
+            "value": "auto",
+            "label": "auto",
+            "kind": "auto",
+        }
         assert any(p.get("kind") == "platform" for p in prov_items)
         assert body["llm_context"]["configured"] is False
         assert body["llm_context"]["config"] == {}

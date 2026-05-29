@@ -19,7 +19,8 @@
 
 LLM-моделей и Markdown endpoint в `provider_litserve` нет. Markdown форматируется общим `TextTransformService` через company capability `llm_format_markdown` и платформенный `get_llm()`.
 
-- **GET** `/health` — встроенный LitServe: текст **`ok`** / **`not ready`** (пока воркеры не готовы).
+- **GET** `/health` — базовая доступность ASGI-процесса.
+- **GET** `/health/inference` — готовность LitServe runtime и CUDA, если `accelerator`/`embedding_accelerator`/`rerank_accelerator` требуют GPU. Именно этот endpoint используется Kubernetes readiness/startup probe.
 
 Контракты HTTP для OpenAPI и интеграционных тестов (in-process ASGI, те же `EmbeddingLitAPI` / `RerankerLitAPI`, без воркеров): [`provider_litserve_asgi.py`](provider_litserve_asgi.py), схемы ответов — [`provider_litserve_http_schemas.py`](provider_litserve_http_schemas.py); тела запросов POST — [`openai_server_contracts.py`](openai_server_contracts.py).
 

@@ -114,7 +114,7 @@ register_worker_events(
 import apps.idle_worker.tasks.calendar_sync_tasks as _calendar_sync_tasks  # noqa: E402
 import apps.idle_worker.tasks.company_init_tasks as _company_init_tasks  # noqa: E402
 import apps.idle_worker.tasks.llm_models_tasks as _llm_models_tasks  # noqa: E402
-import apps.idle_worker.tasks.openrouter_free_models_tasks as _openrouter_free_models_tasks  # noqa: E402
+import apps.idle_worker.tasks.platform_free_models_tasks as _platform_free_models_tasks  # noqa: E402
 import apps.idle_worker.tasks.payment_sync_tasks as _payment_sync_tasks  # noqa: E402
 import apps.idle_worker.tasks.push_notification_tasks as _push_notification_tasks  # noqa: E402
 import apps.idle_worker.tasks.span_billing_settlement_tasks as _span_billing_settlement_tasks  # noqa: E402
@@ -123,7 +123,7 @@ _TASK_REGISTRATION_MODULES = (
     _calendar_sync_tasks,
     _company_init_tasks,
     _llm_models_tasks,
-    _openrouter_free_models_tasks,
+    _platform_free_models_tasks,
     _payment_sync_tasks,
     _push_notification_tasks,
     _span_billing_settlement_tasks,

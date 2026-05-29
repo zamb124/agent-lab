@@ -33,6 +33,9 @@ from apps.frontend.api.invites import router as invites_router
 from apps.frontend.api.leads import lead_requests_router, leads_router
 from apps.frontend.api.payments_webhook import router as payments_webhook_router
 from apps.frontend.api.platform_billing import router as platform_billing_router
+from apps.frontend.api.platform_llm_model_scores import (
+    router as platform_llm_model_scores_router,
+)
 from apps.frontend.api.platform_pronunciation_rules import (
     router as platform_pronunciation_rules_router,
 )
@@ -245,6 +248,27 @@ async def _seed_platform_pronunciation_rules(container: FrontendContainer) -> No
     logger.info("frontend.pronunciation_seed_applied")
 
 
+async def _seed_llm_model_scores(container: FrontendContainer) -> None:
+    """Засевает shared скоринг LLM-моделей из конфигурации."""
+    scoring = get_settings().llm.model_scoring
+    if not scoring.seed_enabled or len(scoring.items) == 0:
+        return
+    result = await container.llm_model_score_repository.seed_many(
+        (
+            item.model_dump(mode="json", exclude_none=True)
+            for item in scoring.items
+        ),
+        force_refresh=scoring.force_seed_refresh,
+    )
+    logger.info(
+        "frontend.llm_model_scores_seed_applied",
+        created=result["created"],
+        updated=result["updated"],
+        skipped=result["skipped"],
+        force_seed_refresh=scoring.force_seed_refresh,
+    )
+
+
 async def on_startup(app: FastAPI, container: FrontendContainer, settings: FrontendSettings) -> None:
     _ = settings
     if is_testing():
@@ -260,6 +284,7 @@ async def on_startup(app: FastAPI, container: FrontendContainer, settings: Front
         subdomain_repository=container.subdomain_repository,
     )
     await _seed_platform_pronunciation_rules(container)
+    await _seed_llm_model_scores(container)
     n = await container.billing_service.ensure_settlement_rules_materialized_for_all_companies()
     logger.info("Биллинг: правила settlement проверены/записаны для компаний: %s", n)
 
@@ -313,6 +338,7 @@ app = create_service_app(
         lead_requests_router,
         platform_tracing_router,
         platform_billing_router,
+        platform_llm_model_scores_router,
         payments_webhook_router,
         yoomoney_oauth_router,
     ],

@@ -36,9 +36,9 @@ export class LandingHeader extends PlatformElement {
                 max-width: 100%;
                 box-sizing: border-box;
                 overflow-x: clip;
-                background: rgba(15, 15, 15, 0.9);
+                background: var(--landing-header-bg, rgba(15, 15, 15, 0.9));
                 backdrop-filter: blur(10px);
-                border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+                border-bottom: 1px solid var(--landing-panel-border, rgba(255, 255, 255, 0.1));
             }
             
             .header-container {
@@ -149,15 +149,15 @@ export class LandingHeader extends PlatformElement {
                 transform: translateX(-50%);
                 margin-top: 16px;
                 min-width: 220px;
-                background: rgba(30, 30, 30, 0.98);
+                background: var(--landing-dropdown-bg, rgba(30, 30, 30, 0.98));
                 backdrop-filter: blur(20px);
-                border: 1px solid rgba(255, 255, 255, 0.1);
+                border: 1px solid var(--landing-panel-border, rgba(255, 255, 255, 0.1));
                 border-radius: 12px;
                 padding: 12px;
                 display: none;
                 flex-direction: column;
                 gap: 4px;
-                box-shadow: 0 20px 40px rgba(0, 0, 0, 0.4);
+                box-shadow: var(--landing-elevated-shadow, 0 20px 40px rgba(0, 0, 0, 0.4));
             }
             
             .nav-dropdown.open .nav-dropdown-menu {
@@ -207,7 +207,7 @@ export class LandingHeader extends PlatformElement {
             .nav-dropdown-item-desc {
                 font-family: 'Fira Sans', sans-serif;
                 font-size: 12px;
-                color: rgba(232, 232, 232, 0.6);
+                color: var(--landing-text-subtle, rgba(232, 232, 232, 0.6));
             }
             
             .header-actions {
@@ -227,12 +227,15 @@ export class LandingHeader extends PlatformElement {
                 color: var(--landing-secondary);
                 font-family: 'Fira Sans', sans-serif;
                 font-size: 14px;
-                cursor: pointer;
             }
             
             .lang-option {
+                border: 0;
+                background: transparent;
                 padding: 4px 8px;
-                color: rgba(232, 232, 232, 0.6);
+                color: var(--landing-text-subtle, rgba(232, 232, 232, 0.6));
+                font: inherit;
+                cursor: pointer;
                 transition: color 0.3s;
             }
             
@@ -245,7 +248,26 @@ export class LandingHeader extends PlatformElement {
             }
             
             .lang-separator {
-                color: rgba(232, 232, 232, 0.3);
+                color: var(--landing-text-faint, rgba(232, 232, 232, 0.3));
+            }
+
+            .theme-toggle {
+                width: 34px;
+                height: 34px;
+                border: 1px solid var(--landing-panel-border, rgba(255, 255, 255, 0.12));
+                border-radius: 50%;
+                display: grid;
+                place-items: center;
+                color: var(--landing-secondary, #E8E8E8);
+                background: var(--landing-panel-bg, rgba(255, 255, 255, 0.05));
+                cursor: pointer;
+                transition: var(--motion-transition-interactive);
+            }
+
+            .theme-toggle:hover {
+                color: var(--landing-primary, #5768FE);
+                border-color: var(--landing-primary, #5768FE);
+                transform: translateY(-1px);
             }
             
             .login-btn {
@@ -254,7 +276,7 @@ export class LandingHeader extends PlatformElement {
                 background: var(--landing-primary);
                 border: none;
                 border-radius: 24px;
-                color: var(--landing-secondary);
+                color: var(--landing-on-primary, #FFFFFF);
                 font-family: 'Fira Sans', sans-serif;
                 font-size: 14px;
                 font-weight: 500;
@@ -285,7 +307,7 @@ export class LandingHeader extends PlatformElement {
             
             .dashboard-btn:hover {
                 background: var(--landing-primary);
-                color: var(--landing-secondary);
+                color: var(--landing-on-primary, #FFFFFF);
             }
             
             .burger {
@@ -328,7 +350,7 @@ export class LandingHeader extends PlatformElement {
                 align-items: stretch;
                 gap: clamp(12px, 3vw, 20px);
                 z-index: 10000;
-                background: #0f0f0f;
+                background: var(--landing-mobile-menu-bg, #0f0f0f);
                 overflow-y: auto;
                 -webkit-overflow-scrolling: touch;
                 min-height: calc(100vh - 71px);
@@ -484,13 +506,13 @@ export class LandingHeader extends PlatformElement {
                 width: 100%;
                 box-sizing: border-box;
                 padding-top: 4px;
-                border-top: 1px solid rgba(255, 255, 255, 0.08);
+                border-top: 1px solid var(--landing-panel-border, rgba(255, 255, 255, 0.08));
             }
             
             .mobile-products-title {
                 font-family: 'Fira Sans', sans-serif;
                 font-size: 12px;
-                color: rgba(232, 232, 232, 0.5);
+                color: var(--landing-text-faint, rgba(232, 232, 232, 0.5));
                 text-transform: uppercase;
                 letter-spacing: 0.08em;
                 padding: 12px 0 8px;
@@ -537,7 +559,7 @@ export class LandingHeader extends PlatformElement {
                 width: 100%;
                 box-sizing: border-box;
                 padding-top: 4px;
-                border-top: 1px solid rgba(255, 255, 255, 0.08);
+                border-top: 1px solid var(--landing-panel-border, rgba(255, 255, 255, 0.08));
             }
         `
     ];
@@ -553,6 +575,7 @@ export class LandingHeader extends PlatformElement {
         this.productsDropdownOpen = false;
         this._authSel = this.select((s) => ({ status: s.auth.status, user: s.auth.user }));
         this._localeSel = this.select((s) => s.i18n.locale);
+        this._themeSel = this.select((s) => s.theme.mode);
     }
 
     get isAuthenticated() {
@@ -596,10 +619,21 @@ export class LandingHeader extends PlatformElement {
     }
 
     _setLang(lang) {
+        if (lang !== 'ru' && lang !== 'en') {
+            throw new Error(`LandingHeader._setLang: invalid locale "${lang}"`);
+        }
         if (this._localeSel.value === lang) {
             return;
         }
         this.setLocale(lang);
+    }
+
+    _toggleTheme() {
+        const mode = this._themeSel.value;
+        if (mode !== 'dark' && mode !== 'light') {
+            throw new Error(`LandingHeader._toggleTheme: invalid theme "${mode}"`);
+        }
+        this.setTheme(mode === 'dark' ? 'light' : 'dark');
     }
 
     _navigateRoute(routeKey) {
@@ -687,6 +721,10 @@ export class LandingHeader extends PlatformElement {
 
     render() {
         const uiLocale = this._localeSel.value;
+        const themeMode = this._themeSel.value;
+        if (themeMode !== 'dark' && themeMode !== 'light') {
+            throw new Error(`LandingHeader.render: invalid theme "${themeMode}"`);
+        }
         const h = (sub) => this._lt(`header.${sub}`);
         return html`
             <header class="header-container" @click=${this._onHeaderBarClick}>
@@ -762,16 +800,28 @@ export class LandingHeader extends PlatformElement {
                 
                 <div class="header-actions">
                     <div class="lang-switcher">
-                        <span 
+                        <button
+                            type="button"
                             class=${classMap({ 'lang-option': true, active: uiLocale === 'en' })}
                             @click=${() => void this._setLang('en')}
-                        >en</span>
+                        >en</button>
                         <span class="lang-separator">|</span>
-                        <span 
+                        <button
+                            type="button"
                             class=${classMap({ 'lang-option': true, active: uiLocale === 'ru' })}
                             @click=${() => void this._setLang('ru')}
-                        >ru</span>
+                        >ru</button>
                     </div>
+
+                    <button
+                        class="theme-toggle"
+                        type="button"
+                        title=${themeMode === 'dark' ? h('theme_light') : h('theme_dark')}
+                        aria-label=${themeMode === 'dark' ? h('theme_light') : h('theme_dark')}
+                        @click=${this._toggleTheme}
+                    >
+                        <platform-icon name=${themeMode === 'dark' ? 'sun' : 'moon'} size="17"></platform-icon>
+                    </button>
                     
                     ${this.isAuthenticated
                         ? html`<a href="/dashboard" class="dashboard-btn" @click=${this._handleNavClick}>${h('dashboard')}</a>`

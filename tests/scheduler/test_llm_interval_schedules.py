@@ -8,8 +8,8 @@ from typing import Any
 import pytest
 
 from apps.scheduler.main import (
-    OPENROUTER_FREE_MODELS_SYNC_PAYLOAD_MARKER,
-    OPENROUTER_FREE_MODELS_SYNC_TASK_NAME,
+    PLATFORM_FREE_MODELS_SYNC_PAYLOAD_MARKER,
+    PLATFORM_FREE_MODELS_SYNC_TASK_NAME,
     SYSTEM_SCHEDULER_COMPANY_ID,
     _ensure_idle_interval_schedule,
 )
@@ -166,7 +166,7 @@ def _task(
     *,
     status: ScheduledTaskStatus,
     interval_seconds: int,
-    task_name: str = OPENROUTER_FREE_MODELS_SYNC_TASK_NAME,
+    task_name: str = PLATFORM_FREE_MODELS_SYNC_TASK_NAME,
     payload: dict[str, Any] | None = None,
 ) -> PlatformScheduledTask:
     return PlatformScheduledTask(
@@ -193,10 +193,10 @@ async def test_ensure_idle_interval_schedule_creates_idle_schedule_and_kicks_it(
     await _ensure_idle_interval_schedule(
         container=container,
         config_enabled=True,
-        task_name=OPENROUTER_FREE_MODELS_SYNC_TASK_NAME,
+        task_name=PLATFORM_FREE_MODELS_SYNC_TASK_NAME,
         interval_seconds=3300,
-        payload={"system_task": OPENROUTER_FREE_MODELS_SYNC_PAYLOAD_MARKER},
-        log_label="OpenRouter free-pool sync",
+        payload={"system_task": PLATFORM_FREE_MODELS_SYNC_PAYLOAD_MARKER},
+        log_label="Platform free-pool sync",
         run_now_on_start=True,
     )
 
@@ -206,7 +206,7 @@ async def test_ensure_idle_interval_schedule_creates_idle_schedule_and_kicks_it(
     assert request.queue_name == "idle"
     assert request.schedule_type == PlatformScheduleType.INTERVAL
     assert request.interval_seconds == 3300
-    assert request.payload == {"system_task": OPENROUTER_FREE_MODELS_SYNC_PAYLOAD_MARKER}
+    assert request.payload == {"system_task": PLATFORM_FREE_MODELS_SYNC_PAYLOAD_MARKER}
     assert request.run_at is not None and request.run_at.tzinfo is not None
     assert service.run_now_ids == ["created-1"]
 
@@ -227,10 +227,10 @@ async def test_ensure_idle_interval_schedule_resumes_compatible_paused_schedule(
     await _ensure_idle_interval_schedule(
         container=container,
         config_enabled=True,
-        task_name=OPENROUTER_FREE_MODELS_SYNC_TASK_NAME,
+        task_name=PLATFORM_FREE_MODELS_SYNC_TASK_NAME,
         interval_seconds=3300,
-        payload={"system_task": OPENROUTER_FREE_MODELS_SYNC_PAYLOAD_MARKER},
-        log_label="OpenRouter free-pool sync",
+        payload={"system_task": PLATFORM_FREE_MODELS_SYNC_PAYLOAD_MARKER},
+        log_label="Platform free-pool sync",
         run_now_on_start=True,
     )
 
@@ -256,10 +256,10 @@ async def test_ensure_idle_interval_schedule_leaves_incompatible_pending_and_cre
     await _ensure_idle_interval_schedule(
         container=container,
         config_enabled=True,
-        task_name=OPENROUTER_FREE_MODELS_SYNC_TASK_NAME,
+        task_name=PLATFORM_FREE_MODELS_SYNC_TASK_NAME,
         interval_seconds=3300,
-        payload={"system_task": OPENROUTER_FREE_MODELS_SYNC_PAYLOAD_MARKER},
-        log_label="OpenRouter free-pool sync",
+        payload={"system_task": PLATFORM_FREE_MODELS_SYNC_PAYLOAD_MARKER},
+        log_label="Platform free-pool sync",
         run_now_on_start=True,
     )
 
@@ -270,7 +270,7 @@ async def test_ensure_idle_interval_schedule_leaves_incompatible_pending_and_cre
 
 
 @pytest.mark.asyncio
-async def test_ensure_idle_interval_schedule_reconciles_legacy_payload_without_task_fallback() -> None:
+async def test_ensure_idle_interval_schedule_reconciles_payload_without_task_fallback() -> None:
     service = _InMemorySchedulerService(
         [
             _task(
@@ -278,7 +278,7 @@ async def test_ensure_idle_interval_schedule_reconciles_legacy_payload_without_t
                 status=ScheduledTaskStatus.PENDING,
                 interval_seconds=3300,
                 payload={
-                    "system_task": OPENROUTER_FREE_MODELS_SYNC_PAYLOAD_MARKER,
+                    "system_task": PLATFORM_FREE_MODELS_SYNC_PAYLOAD_MARKER,
                     "scheduler_task_id": "old-interval",
                     "company_id": SYSTEM_SCHEDULER_COMPANY_ID,
                 },
@@ -290,10 +290,10 @@ async def test_ensure_idle_interval_schedule_reconciles_legacy_payload_without_t
     await _ensure_idle_interval_schedule(
         container=container,
         config_enabled=True,
-        task_name=OPENROUTER_FREE_MODELS_SYNC_TASK_NAME,
+        task_name=PLATFORM_FREE_MODELS_SYNC_TASK_NAME,
         interval_seconds=3300,
-        payload={"system_task": OPENROUTER_FREE_MODELS_SYNC_PAYLOAD_MARKER},
-        log_label="OpenRouter free-pool sync",
+        payload={"system_task": PLATFORM_FREE_MODELS_SYNC_PAYLOAD_MARKER},
+        log_label="Platform free-pool sync",
         run_now_on_start=True,
     )
 
@@ -301,7 +301,7 @@ async def test_ensure_idle_interval_schedule_reconciles_legacy_payload_without_t
     assert service.reconciled_ids == ["old-interval"]
     assert service.run_now_ids == ["old-interval"]
     assert service.tasks[0].payload == {
-        "system_task": OPENROUTER_FREE_MODELS_SYNC_PAYLOAD_MARKER,
+        "system_task": PLATFORM_FREE_MODELS_SYNC_PAYLOAD_MARKER,
         "schedule_task_id": "old-interval",
         "company_id": SYSTEM_SCHEDULER_COMPANY_ID,
     }

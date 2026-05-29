@@ -689,6 +689,7 @@ class TestAnalyzeBlockedByEmptyAttachment:
             crm_client,
             auth_headers_system,
             note_id,
+            fail_on_failed=False,
             include_attachments=True,
             check_duplicates=False,
         )

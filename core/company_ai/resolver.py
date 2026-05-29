@@ -170,16 +170,13 @@ def _resolve_llm_fallback_models(
     """
     if not fallback_models:
         return None
-    if primary.provider == HUMANITEC_LLM_PROVIDER:
-        raise ValueError(
-            f"capability {capability.value}: humanitec_llm не поддерживает fallback_models"
-        )
-
     resolved_items: list[LLMCallConfig] = []
     for idx, fallback in enumerate(fallback_models):
-        if fallback.provider == HUMANITEC_LLM_PROVIDER:
+        if primary.provider == HUMANITEC_LLM_PROVIDER and fallback.provider is None:
             raise ValueError(
-                f"capability {capability.value}: fallback_models[{idx}] не может быть humanitec_llm"
+                f"capability {capability.value}: fallback_models[{idx}] для provider=humanitec_llm "
+                + "должен явно задавать provider, потому что virtual provider не имеет "
+                + "одного наследуемого транспорта"
             )
         if (
             primary.cost_origin == COST_ORIGIN_COMPANY

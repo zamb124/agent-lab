@@ -33,7 +33,7 @@ export class LandingAdvantages extends PlatformElement {
                 position: absolute;
                 width: 1000px;
                 height: 400px;
-                background: rgba(255, 255, 255, 0.2);
+                background: var(--landing-panel-border-strong, rgba(255, 255, 255, 0.2));
                 filter: blur(100px);
                 top: 40%;
                 right: -300px;
@@ -70,8 +70,8 @@ export class LandingAdvantages extends PlatformElement {
             
             .advantage-badge {
                 padding: 20px 32px;
-                background: rgba(255, 255, 255, 0.05);
-                border: 1px solid rgba(255, 255, 255, 0.2);
+                background: var(--landing-panel-bg, rgba(255, 255, 255, 0.05));
+                border: 1px solid var(--landing-panel-border-strong, rgba(255, 255, 255, 0.2));
                 border-radius: 30px;
                 font-family: 'Fira Sans', sans-serif;
                 font-size: 16px;
@@ -297,4 +297,3 @@ export class LandingAdvantages extends PlatformElement {
 }
 
 customElements.define('landing-advantages', LandingAdvantages);
-

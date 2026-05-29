@@ -34,14 +34,14 @@ export class RoadmapPage extends PlatformPage {
             .sub {
                 margin: 0 0 36px;
                 font-size: 17px;
-                color: rgba(232, 232, 232, 0.72);
+                color: var(--landing-text-subtle, rgba(232, 232, 232, 0.72));
             }
             section {
                 margin-bottom: 32px;
                 padding: 22px 24px;
                 border-radius: 16px;
-                border: 1px solid rgba(255, 255, 255, 0.12);
-                background: rgba(255, 255, 255, 0.03);
+                border: 1px solid var(--landing-panel-border, rgba(255, 255, 255, 0.12));
+                background: var(--landing-panel-bg, rgba(255, 255, 255, 0.03));
             }
             h2 {
                 font-family: 'Fira Sans Condensed', sans-serif;
@@ -55,7 +55,7 @@ export class RoadmapPage extends PlatformPage {
                 font-family: 'Fira Sans', sans-serif;
                 font-size: 15px;
                 line-height: 1.55;
-                color: rgba(232, 232, 232, 0.82);
+                color: var(--landing-text-soft, rgba(232, 232, 232, 0.82));
             }
             li {
                 margin-bottom: 8px;
@@ -63,7 +63,7 @@ export class RoadmapPage extends PlatformPage {
             .note {
                 margin-top: 24px;
                 font-size: 14px;
-                color: rgba(232, 232, 232, 0.62);
+                color: var(--landing-text-subtle, rgba(232, 232, 232, 0.62));
                 line-height: 1.55;
             }
         `,

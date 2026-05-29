@@ -164,6 +164,20 @@ class TestDetectProvider:
         result = _detect_provider("https://llm.api.cloud.yandex.net/v1")
         assert result == "yandex"
 
+    @pytest.mark.parametrize(
+        ("url", "provider"),
+        [
+            ("https://api.groq.com/openai/v1", "groq"),
+            ("https://generativelanguage.googleapis.com/v1beta/openai", "google"),
+            ("https://models.github.ai/inference", "github"),
+            ("https://router.huggingface.co/v1", "huggingface"),
+            ("https://api.deepinfra.com/v1/openai", "deepinfra"),
+        ],
+    )
+    def test_detect_provider_external_openai_compatible(self, url: str, provider: str):
+        result = _detect_provider(url)
+        assert result == provider
+
     def test_detect_provider_none_for_unknown(self):
         """None для неизвестного URL."""
         result = _detect_provider("https://custom.llm.provider/v1")
@@ -459,7 +473,7 @@ class TestLLMModelsServiceSchedulerIdempotency:
                 }
             )
         )
-        service = LLMModelsService(repository, scheduler_client)
+        service = LLMModelsService(repository, scheduler_client, AsyncMock())
 
         await service.start_background_sync(interval=60)
 
@@ -520,7 +534,7 @@ class TestLLMModelsServiceSchedulerIdempotency:
                 "error_message": None,
             }
         )
-        service = LLMModelsService(repository, scheduler_client)
+        service = LLMModelsService(repository, scheduler_client, AsyncMock())
 
         await service.start_background_sync(interval=60)
 
@@ -581,7 +595,7 @@ class TestLLMModelsServiceSchedulerIdempotency:
                 }
             ),
         )
-        service = LLMModelsService(repository, scheduler_client)
+        service = LLMModelsService(repository, scheduler_client, AsyncMock())
 
         with pytest.raises(ValueError, match="multiple LLM sync schedules"):
             await service.start_background_sync(interval=60)
@@ -615,7 +629,7 @@ class TestLLMModelsServiceSchedulerIdempotency:
                 "error_message": None,
             }
         )
-        service = LLMModelsService(repository, scheduler_client)
+        service = LLMModelsService(repository, scheduler_client, AsyncMock())
         service._sync_schedule_task_id = "existing-task"
 
         await service.stop_background_sync()
@@ -646,7 +660,7 @@ class TestLLMModelsServiceRealAPI:
         )
 
         mock_repo = MagicMock(spec=LLMModelRepository)
-        service = LLMModelsService(mock_repo, AsyncMock())
+        service = LLMModelsService(mock_repo, AsyncMock(), AsyncMock())
 
         try:
             models = await service._fetch_bothub_models()
@@ -685,7 +699,7 @@ class TestLLMModelsServiceRealAPI:
         )
 
         mock_repo = MagicMock(spec=LLMModelRepository)
-        service = LLMModelsService(mock_repo, AsyncMock())
+        service = LLMModelsService(mock_repo, AsyncMock(), AsyncMock())
 
         models = await service._fetch_openrouter_models()
 
@@ -723,7 +737,7 @@ class TestLLMModelsServiceRealAPI:
             pytest.skip("OpenAI не настроен: в LLMConfig нет openai или api_key")
 
         mock_repo = MagicMock(spec=LLMModelRepository)
-        service = LLMModelsService(mock_repo, AsyncMock())
+        service = LLMModelsService(mock_repo, AsyncMock(), AsyncMock())
 
         models = await service._fetch_openai_models()
 
@@ -774,7 +788,7 @@ class TestLLMModelsServiceRealAPI:
         # Storage использует PostgreSQL напрямую из settings
         storage = Storage()
         repo = LLMModelRepository(storage)
-        service = LLMModelsService(repo, AsyncMock())
+        service = LLMModelsService(repo, AsyncMock(), AsyncMock())
 
         # Синхронизируем
         count = await service.sync_models()
@@ -816,7 +830,7 @@ class TestLLMModelsServiceRealAPI:
 
         storage = Storage()
         repo = LLMModelRepository(storage)
-        service = LLMModelsService(repo, AsyncMock())
+        service = LLMModelsService(repo, AsyncMock(), AsyncMock())
 
         # Синхронизируем ВСЕ провайдеры
         results = await service.sync_all_providers()
@@ -1047,6 +1061,22 @@ class TestGetDefaultBaseUrl:
         mock_settings.llm.yandex = MagicMock(base_url="https://llm.api.cloud.yandex.net/v1")
         result = _get_default_base_url("yandex", mock_settings)
         assert result == "https://llm.api.cloud.yandex.net/v1"
+
+    @pytest.mark.parametrize(
+        ("provider", "url"),
+        [
+            ("groq", "https://api.groq.com/openai/v1"),
+            ("google", "https://generativelanguage.googleapis.com/v1beta/openai"),
+            ("github", "https://models.github.ai/inference"),
+            ("huggingface", "https://router.huggingface.co/v1"),
+            ("deepinfra", "https://api.deepinfra.com/v1/openai"),
+        ],
+    )
+    def test_get_default_base_url_external_provider(self, provider: str, url: str):
+        mock_settings = MagicMock()
+        setattr(mock_settings.llm, provider, MagicMock(base_url=url))
+        result = _get_default_base_url(provider, mock_settings)
+        assert result == url
 
     def test_get_default_base_url_unknown_provider_raises(self):
         """Неизвестный провайдер не подменяется OpenAI."""

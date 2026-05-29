@@ -10,7 +10,7 @@ def candidate_key(candidate: LLMCallConfig) -> str:
 
 
 def candidate_capability_metadata_is_strict(candidate: LLMCallConfig) -> bool:
-    return candidate.source == "openrouter_free"
+    return candidate.capability_metadata_verified or candidate.source == "platform_free"
 
 
 def candidate_supports_request(
@@ -20,9 +20,9 @@ def candidate_supports_request(
     has_tools: bool,
     has_response_format: bool,
 ) -> bool:
-    # Пустые metadata означают "unknown" для explicit-моделей. Записи free-pool OpenRouter
-    # являются результатом discovery, поэтому отсутствие capability там трактуется
-    # как отсутствие поддержки request-shaping возможностей.
+    # Пустые metadata означают "unknown" для explicit-моделей. Verified free-pool
+    # записи являются результатом provider discovery, поэтому отсутствие capability
+    # там трактуется как отсутствие поддержки request-shaping возможностей.
     strict_metadata = candidate_capability_metadata_is_strict(candidate)
     if has_files and candidate.input_modalities and not (
         "image" in candidate.input_modalities or "file" in candidate.input_modalities

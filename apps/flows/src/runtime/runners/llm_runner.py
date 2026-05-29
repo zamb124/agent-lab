@@ -11,7 +11,7 @@ import asyncio
 import hashlib
 import json
 import time
-from collections.abc import AsyncGenerator
+from collections.abc import AsyncGenerator, Sequence
 from datetime import datetime, timezone
 from typing import ClassVar, cast, override
 
@@ -123,6 +123,12 @@ from .base_runner import BaseLlmNodeRunner, LlmNodeRunnerHost
 
 logger = get_logger(__name__)
 
+def _runtime_message(value: Message | JsonObject) -> Message:
+    if isinstance(value, Message):
+        return value
+    return Message.model_validate(value)
+
+
 def _get_trace_ctx_from_state() -> TraceContext | None:
     """Получает TraceContext из ContextVar worker'а."""
     trace_data = get_current_trace_context()
@@ -131,9 +137,9 @@ def _get_trace_ctx_from_state() -> TraceContext | None:
     return None
 
 
-def _get_message_metadata(msg: Message) -> JsonObject:
+def _get_message_metadata(msg: Message | JsonObject) -> JsonObject:
     """Получает metadata из Message."""
-    raw_metadata = msg.metadata
+    raw_metadata = _runtime_message(msg).metadata
     if raw_metadata is None:
         return {}
     return require_json_object(raw_metadata, "message.metadata")
@@ -157,6 +163,9 @@ def _copy_state_projection(target: ExecutionState, source: ExecutionState) -> No
     data = source.model_dump(mode="python", exclude_none=False)
     for field_name in ExecutionState.model_fields:
         if field_name in data:
+            if field_name == "messages":
+                target.messages = [_runtime_message(msg) for msg in source.messages]
+                continue
             target[field_name] = data[field_name]
     extras = require_json_object(source.__pydantic_extra__ or {}, "state.extra")
     for key, value in extras.items():
@@ -452,8 +461,8 @@ class LlmNodeRunner(BaseLlmNodeRunner):
 
     def _messages_for_llm_context(self, state: ExecutionState) -> list[Message]:
         if self.llm_node is not None:
-            return self.llm_node.get_filtered_messages(state)
-        return list(state.messages)
+            return [_runtime_message(msg) for msg in self.llm_node.get_filtered_messages(state)]
+        return [_runtime_message(msg) for msg in state.messages]
 
     @override
     async def run(
@@ -506,10 +515,13 @@ class LlmNodeRunner(BaseLlmNodeRunner):
         ):
             yield event
 
-    def _messages_to_dict(self, messages: list[Message]) -> list[JsonObject]:
+    def _messages_to_dict(self, messages: Sequence[Message | JsonObject]) -> list[JsonObject]:
         """Конвертирует Message объекты в dict для трейсинга."""
         result: list[JsonObject] = []
         for msg in messages:
+            if isinstance(msg, dict):
+                result.append(require_json_object(msg, "llm.message"))
+                continue
             result.append(require_json_object(msg.model_dump(mode="json"), "llm.message"))
         return result
 
@@ -540,7 +552,7 @@ class LlmNodeRunner(BaseLlmNodeRunner):
         return None
 
     def _find_tool_call_in_messages(
-        self, messages: list[Message], tool_name: str
+        self, messages: Sequence[Message | JsonObject], tool_name: str
     ) -> LLMToolCall | None:
         """Ищет tool_call по имени в последнем assistant сообщении."""
         for msg in reversed(messages):

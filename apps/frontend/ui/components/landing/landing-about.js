@@ -38,7 +38,7 @@ export class LandingAbout extends PlatformElement {
                 font-family: 'Fira Sans', sans-serif;
                 font-size: 16px;
                 line-height: 1.6;
-                color: rgba(232, 232, 232, 0.8);
+                color: var(--landing-text-soft, rgba(232, 232, 232, 0.8));
                 max-width: 800px;
                 margin: 0 auto;
             }
@@ -52,7 +52,7 @@ export class LandingAbout extends PlatformElement {
             
             .stat-card {
                 background: radial-gradient(circle at top left, rgba(87, 104, 254, 0.1), transparent);
-                border: 1px solid rgba(255, 255, 255, 0.1);
+                border: 1px solid var(--landing-panel-border, rgba(255, 255, 255, 0.1));
                 border-radius: 20px;
                 padding: 30px;
                 backdrop-filter: blur(10px);
@@ -106,8 +106,8 @@ export class LandingAbout extends PlatformElement {
             
             .integration-badge {
                 padding: 12px 20px;
-                background: rgba(255, 255, 255, 0.05);
-                border: 1px solid rgba(255, 255, 255, 0.15);
+                background: var(--landing-panel-bg, rgba(255, 255, 255, 0.05));
+                border: 1px solid var(--landing-panel-border-strong, rgba(255, 255, 255, 0.15));
                 border-radius: 24px;
                 font-size: 14px;
                 color: var(--landing-secondary);
@@ -321,4 +321,3 @@ export class LandingAbout extends PlatformElement {
 }
 
 customElements.define('landing-about', LandingAbout);
-

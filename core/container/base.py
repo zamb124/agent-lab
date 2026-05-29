@@ -42,6 +42,7 @@ from core.db.repositories.api_key_repository import ApiKeyRepository
 from core.db.repositories.auth_session_repository import AuthSessionRepository
 from core.db.repositories.company_repository import CompanyRepository
 from core.db.repositories.company_voice_provider_repository import CompanyVoiceProviderRepository
+from core.db.repositories.llm_model_score_repository import LLMModelScoreRepository
 from core.db.repositories.namespace_repository import NamespaceRepository
 from core.db.repositories.pronunciation_rule_repository import (
     CompanyPronunciationRuleRepository,
@@ -267,6 +268,11 @@ class BaseContainer:
     def company_pronunciation_rule_repository(self) -> CompanyPronunciationRuleRepository:
         """Per-company правила произношения TTS, shared БД."""
         return CompanyPronunciationRuleRepository(db_url=self.required_shared_db_url)
+
+    @lazy
+    def llm_model_score_repository(self) -> LLMModelScoreRepository:
+        """Платформенный скоринг LLM-моделей, shared БД."""
+        return LLMModelScoreRepository(db_url=self.required_shared_db_url)
 
     @lazy
     def file_repository(self) -> FileRepository:

@@ -39,7 +39,16 @@ from core.clients.llm.openai_compat import (
 from core.clients.llm.openai_compat import (
     merge_openai_compatible_usage_into_usage_data as _merge_openai_compatible_usage_into_usage_data,
 )
-from core.clients.llm.platform_pool import _make_platform_default_candidate_resolver
+from core.clients.llm.platform_free_models import (
+    PLATFORM_FREE_MODEL_SOURCE,
+    PLATFORM_PAID_FALLBACK_SOURCE,
+)
+from core.clients.llm.platform_pool import (
+    _make_humanitec_llms_candidate_chain_resolver,
+    _make_platform_default_candidate_resolver,
+    bootstrap_humanitec_llms_config,
+    candidate_chain_uses_humanitec_llms,
+)
 from core.clients.llm.provider_resolution import (
     _detect_provider,
     _get_default_base_url,
@@ -109,8 +118,8 @@ def get_llm(
     Аргументы:
         model_name: Имя модели
         temperature: Температура
-        provider: Провайдер (openai, openrouter, bothub, yandex,
-            humanitec_llm)
+        provider: Провайдер (openai, openrouter, bothub, yandex, groq, google,
+            github, huggingface, deepinfra, humanitec_llm)
         api_key: API ключ (напрямую или @var:my_key)
         base_url: Base URL провайдера (напрямую или @var:my_url)
         folder_id: Каталог Yandex Cloud (yandex); иначе из llm.yandex.folder_id
@@ -133,9 +142,7 @@ def get_llm(
         model = settings.llm.default_model or HUMANITEC_LLM_AUTO_MODEL
     if _is_humanitec_llm_provider(provider):
         humanitec_model = model or settings.llm.default_model or HUMANITEC_LLM_AUTO_MODEL
-        if str(humanitec_model).strip() != HUMANITEC_LLM_AUTO_MODEL:
-            raise ValueError("humanitec_llm поддерживает только model='auto'")
-        model = HUMANITEC_LLM_AUTO_MODEL
+        model = str(humanitec_model).strip() or HUMANITEC_LLM_AUTO_MODEL
 
     if _should_use_platform_default_pool(
         model=model,
@@ -145,13 +152,29 @@ def get_llm(
         folder_id=folder_id,
         settings=settings,
     ) and not testing:
-        paid_fallback_model = settings.llm.openrouter_free_pool.fallback_model.strip()
+        free_pool_config = settings.llm.platform_free_pool
+        paid_fallback = free_pool_config.paid_fallback
         resolved_temperature = temperature if temperature is not None else settings.llm.temperature
         resolved_max_tokens = max_tokens if max_tokens is not None else settings.llm.max_tokens
+        primary_config = LLMCallConfig(
+            provider=HUMANITEC_LLM_PROVIDER if _is_humanitec_llm_provider(provider) else None,
+            model=HUMANITEC_LLM_AUTO_MODEL,
+            temperature=resolved_temperature,
+            max_tokens=resolved_max_tokens,
+            top_p=top_p,
+            top_k=top_k,
+            frequency_penalty=frequency_penalty,
+            presence_penalty=presence_penalty,
+            seed=seed,
+            reasoning_effort=reasoning_effort,
+            extra_request_body=extra_request_body,
+            extra_request_headers=extra_request_headers,
+            source=PLATFORM_PAID_FALLBACK_SOURCE,
+        )
         primary_candidate = _resolve_llm_call_config(
             LLMCallConfig(
-                provider="openrouter",
-                model=paid_fallback_model or settings.llm.default_model,
+                provider=paid_fallback.provider,
+                model=paid_fallback.model,
                 temperature=resolved_temperature,
                 max_tokens=resolved_max_tokens,
                 top_p=top_p,
@@ -162,11 +185,25 @@ def get_llm(
                 reasoning_effort=reasoning_effort,
                 extra_request_body=extra_request_body,
                 extra_request_headers=extra_request_headers,
-                source="platform_paid_fallback",
+                source=PLATFORM_PAID_FALLBACK_SOURCE,
             ),
             settings=settings,
             state=state,
-            source="platform_paid_fallback",
+            source=PLATFORM_PAID_FALLBACK_SOURCE,
+        )
+        candidate_resolver = (
+            _make_humanitec_llms_candidate_chain_resolver(
+                primary_config,
+                fallback_models,
+                settings=settings,
+                state=state,
+                include_paid_fallback=allow_platform_paid_fallback,
+            )
+            if _is_humanitec_llm_provider(provider)
+            else _make_platform_default_candidate_resolver(
+                settings,
+                include_paid_fallback=allow_platform_paid_fallback,
+            )
         )
         return LLMClient(
             model=str(primary_candidate.model),
@@ -178,12 +215,9 @@ def get_llm(
             default_headers=dict(primary_candidate.default_headers),
             llm_provider=primary_candidate.provider,
             candidates=[primary_candidate] if allow_platform_paid_fallback else [],
-            candidate_resolver=_make_platform_default_candidate_resolver(
-                settings,
-                include_paid_fallback=allow_platform_paid_fallback,
-            ),
-            first_token_timeout=settings.llm.openrouter_free_pool.first_token_timeout_seconds,
-            candidate_cooldown_seconds=settings.llm.openrouter_free_pool.candidate_cooldown_seconds,
+            candidate_resolver=candidate_resolver,
+            first_token_timeout=free_pool_config.first_token_timeout_seconds,
+            candidate_cooldown_seconds=free_pool_config.candidate_cooldown_seconds,
             platform_default_free_pool=True,
             platform_paid_fallback_enabled=allow_platform_paid_fallback,
             top_p=top_p,
@@ -212,9 +246,62 @@ def get_llm(
             )
         if not _platform_default_pool_is_configured(settings):
             raise ValueError(
-                "humanitec_llm недоступен: включите llm.openrouter_free_pool и настройте "
-                + "llm.openrouter.api_key"
+                "humanitec_llm недоступен: включите llm.platform_free_pool и настройте "
+                + "хотя бы одного провайдера из llm.platform_free_pool.providers"
             )
+        resolved_temperature = temperature if temperature is not None else settings.llm.temperature
+        resolved_max_tokens = max_tokens if max_tokens is not None else settings.llm.max_tokens
+        primary_config = LLMCallConfig(
+            provider=HUMANITEC_LLM_PROVIDER,
+            model=model,
+            temperature=resolved_temperature,
+            max_tokens=resolved_max_tokens,
+            top_p=top_p,
+            top_k=top_k,
+            frequency_penalty=frequency_penalty,
+            presence_penalty=presence_penalty,
+            seed=seed,
+            reasoning_effort=reasoning_effort,
+            extra_request_body=extra_request_body,
+            extra_request_headers=extra_request_headers,
+            source=PLATFORM_FREE_MODEL_SOURCE,
+        )
+        primary_candidate = bootstrap_humanitec_llms_config(
+            primary_config,
+            settings=settings,
+            state=state,
+        )
+        return LLMClient(
+            model=str(primary_candidate.model),
+            api_key=str(primary_candidate.api_key),
+            base_url=primary_candidate.base_url,
+            temperature=resolved_temperature,
+            max_tokens=resolved_max_tokens,
+            timeout=settings.llm.timeout,
+            default_headers=dict(primary_candidate.default_headers),
+            llm_provider=primary_candidate.provider,
+            candidates=[primary_candidate],
+            candidate_resolver=_make_humanitec_llms_candidate_chain_resolver(
+                primary_config,
+                fallback_models,
+                settings=settings,
+                state=state,
+                include_paid_fallback=allow_platform_paid_fallback,
+            ),
+            first_token_timeout=settings.llm.platform_free_pool.first_token_timeout_seconds,
+            candidate_cooldown_seconds=settings.llm.platform_free_pool.candidate_cooldown_seconds,
+            platform_default_free_pool=True,
+            platform_paid_fallback_enabled=allow_platform_paid_fallback,
+            top_p=top_p,
+            top_k=top_k,
+            frequency_penalty=frequency_penalty,
+            presence_penalty=presence_penalty,
+            seed=seed,
+            reasoning_effort=reasoning_effort,
+            extra_request_body=extra_request_body,
+            extra_request_headers=_resolve_headers_vars(extra_request_headers, state),
+            context_length=primary_candidate.context_length,
+        )
 
     model = model or settings.llm.default_model
     if testing and model and not model.startswith("mock-"):
@@ -256,12 +343,30 @@ def get_llm(
         context_length=model_config.context_length if model_config else None,
         source="explicit",
     )
-    candidates = _resolved_llm_configs(
-        primary_config,
-        fallback_models,
-        settings=settings,
-        state=state,
-    )
+    if candidate_chain_uses_humanitec_llms(primary_config, fallback_models):
+        candidates = [
+            _resolve_llm_call_config(
+                primary_config,
+                settings=settings,
+                state=state,
+                source=primary_config.source,
+            )
+        ]
+        candidate_resolver = _make_humanitec_llms_candidate_chain_resolver(
+            primary_config,
+            fallback_models,
+            settings=settings,
+            state=state,
+            include_paid_fallback=allow_platform_paid_fallback,
+        )
+    else:
+        candidates = _resolved_llm_configs(
+            primary_config,
+            fallback_models,
+            settings=settings,
+            state=state,
+        )
+        candidate_resolver = None
     primary_candidate = candidates[0]
 
     if primary_config.api_key:
@@ -281,8 +386,9 @@ def get_llm(
         default_headers=dict(primary_candidate.default_headers),
         llm_provider=primary_candidate.provider,
         candidates=candidates,
-        first_token_timeout=settings.llm.openrouter_free_pool.first_token_timeout_seconds,
-        candidate_cooldown_seconds=settings.llm.openrouter_free_pool.candidate_cooldown_seconds,
+        candidate_resolver=candidate_resolver,
+        first_token_timeout=settings.llm.platform_free_pool.first_token_timeout_seconds,
+        candidate_cooldown_seconds=settings.llm.platform_free_pool.candidate_cooldown_seconds,
         top_p=top_p,
         top_k=top_k,
         frequency_penalty=frequency_penalty,

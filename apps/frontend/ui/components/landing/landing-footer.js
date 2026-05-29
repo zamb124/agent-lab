@@ -13,8 +13,8 @@ export class LandingFooter extends PlatformElement {
             :host {
                 display: block;
                 padding: 60px 20px;
-                background: linear-gradient(180deg, #0F0F0F 0%, #0a0a0a 100%);
-                border-top: 1px solid rgba(255, 255, 255, 0.1);
+                background: var(--landing-footer-bg, linear-gradient(180deg, #0F0F0F 0%, #0a0a0a 100%));
+                border-top: 1px solid var(--landing-panel-border, rgba(255, 255, 255, 0.1));
             }
             
             .footer-container {
@@ -76,7 +76,7 @@ export class LandingFooter extends PlatformElement {
                 font-family: 'Fira Sans', sans-serif;
                 font-size: 14px;
                 line-height: 1.55;
-                color: rgba(232, 232, 232, 0.72);
+                color: var(--landing-text-subtle, rgba(232, 232, 232, 0.72));
                 margin: 0 0 8px;
             }
             
@@ -100,7 +100,7 @@ export class LandingFooter extends PlatformElement {
             
             .footer-bottom {
                 padding-top: 32px;
-                border-top: 1px solid rgba(255, 255, 255, 0.1);
+                border-top: 1px solid var(--landing-panel-border, rgba(255, 255, 255, 0.1));
                 display: flex;
                 flex-direction: column;
                 gap: 16px;
@@ -109,7 +109,7 @@ export class LandingFooter extends PlatformElement {
             .footer-copy {
                 font-family: 'Fira Sans Condensed', sans-serif;
                 font-size: 16px;
-                color: rgba(232, 232, 232, 0.6);
+                color: var(--landing-text-subtle, rgba(232, 232, 232, 0.6));
                 margin: 0;
             }
             

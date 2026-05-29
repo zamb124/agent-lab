@@ -469,6 +469,8 @@
     "field_max_tokens": "Макс. токенов",
     "provider": "Провайдер",
     "model": "Модель",
+    "humanitec_llms_provider_tooltip": "Humanitec LLMs — виртуальный провайдер платформы: он маршрутизирует запросы в бесплатные модели из общего verified free-pool.",
+    "humanitec_llms_auto_tooltip": "auto — стратегия отбора бесплатной модели по параметрам запроса: tools, structured output, файлы/картинки, контекст и скоринг моделей.",
     "fallback_models": "Fallback-модели",
     "fallback_add": "Добавить fallback",
     "fallback_empty": "Fallback-модели не настроены",

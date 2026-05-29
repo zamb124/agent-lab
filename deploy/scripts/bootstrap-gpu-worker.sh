@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Идемпотентный bootstrap GPU worker ноды (188.246.224.228). Запускать под root.
+# Идемпотентный bootstrap GPU worker ноды (77.91.94.165). Запускать под root.
 # Шаги: hostname=gpu-worker, NVIDIA driver, nvidia-container-toolkit, snap microk8s,
 # nvidia-ctk drop-in /etc/containerd/conf.d/99-nvidia.toml + imports в containerd-template.
 # Join к кластеру делает join-cluster.sh; nvidia-device-plugin DaemonSet ставит Helm-чарт.

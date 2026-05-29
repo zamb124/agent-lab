@@ -38,7 +38,7 @@ export class LandingFaq extends PlatformElement {
             }
             
             .faq-item {
-                border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+                border-bottom: 1px solid var(--landing-panel-border, rgba(255, 255, 255, 0.1));
                 padding: 24px 0;
                 cursor: pointer;
                 transition: var(--motion-transition-interactive);
@@ -94,7 +94,7 @@ export class LandingFaq extends PlatformElement {
                 font-family: 'Fira Sans', sans-serif;
                 font-size: 16px;
                 line-height: 1.7;
-                color: rgba(232, 232, 232, 0.8);
+                color: var(--landing-text-soft, rgba(232, 232, 232, 0.8));
                 margin: 0;
             }
             

@@ -7,10 +7,29 @@
 :root {
     /* Цвета лендинга */
     --landing-primary: #5768FE;
-    --landing-secondary: #E8E8E8;
     --landing-bg: #0F0F0F;
     --landing-text: #FFFFFF;
+    --landing-secondary: #E8E8E8;
     --landing-text-muted: #A0A0A0;
+    --landing-text-soft: rgba(232, 232, 232, 0.82);
+    --landing-text-subtle: rgba(232, 232, 232, 0.66);
+    --landing-text-faint: rgba(232, 232, 232, 0.48);
+    --landing-on-primary: #FFFFFF;
+    --landing-header-bg: rgba(15, 15, 15, 0.9);
+    --landing-dropdown-bg: rgba(30, 30, 30, 0.98);
+    --landing-mobile-menu-bg: #0F0F0F;
+    --landing-panel-bg: rgba(255, 255, 255, 0.04);
+    --landing-panel-bg-strong: rgba(255, 255, 255, 0.07);
+    --landing-panel-border: rgba(255, 255, 255, 0.12);
+    --landing-panel-border-strong: rgba(255, 255, 255, 0.18);
+    --landing-hero-bg: #0F0F0F;
+    --landing-hero-image-filter: drop-shadow(0 0 60px rgba(87, 104, 254, 0.4));
+    --landing-search-bg: rgba(29, 29, 29, 0.9);
+    --landing-search-shadow: 0 26px 90px rgba(0, 0, 0, 0.44);
+    --landing-elevated-shadow: 0 20px 56px rgba(0, 0, 0, 0.35);
+    --landing-footer-bg: linear-gradient(180deg, #0F0F0F 0%, #0a0a0a 100%);
+    --landing-section-gradient: linear-gradient(180deg, #0F0F0F 0%, #1a1a2e 50%, #0F0F0F 100%);
+    --landing-reviews-gradient: linear-gradient(180deg, #0F0F0F 0%, #16213e 100%);
     
     /* Шрифты */
     --font-condensed: 'Fira Sans Condensed', sans-serif;
@@ -40,6 +59,35 @@
     /* Transitions */
     --transition-default: all 0.3s ease;
     --transition-smooth: all 0.5s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+[data-theme="light"] {
+    --landing-primary: #5768FE;
+    --landing-bg: #F7F8FC;
+    --landing-text: #12131A;
+    --landing-secondary: #1E2230;
+    --landing-text-muted: #646B7E;
+    --landing-text-soft: rgba(30, 34, 48, 0.82);
+    --landing-text-subtle: rgba(30, 34, 48, 0.64);
+    --landing-text-faint: rgba(30, 34, 48, 0.46);
+    --landing-on-primary: #FFFFFF;
+    --landing-header-bg: rgba(247, 248, 252, 0.86);
+    --landing-dropdown-bg: rgba(255, 255, 255, 0.96);
+    --landing-mobile-menu-bg: #F7F8FC;
+    --landing-panel-bg: rgba(255, 255, 255, 0.74);
+    --landing-panel-bg-strong: rgba(255, 255, 255, 0.88);
+    --landing-panel-border: rgba(16, 20, 34, 0.12);
+    --landing-panel-border-strong: rgba(16, 20, 34, 0.18);
+    --landing-hero-bg:
+        radial-gradient(circle at 50% 18%, rgba(87, 104, 254, 0.16), transparent 36%),
+        linear-gradient(180deg, #FFFFFF 0%, #F7F8FC 56%, #EEF1FA 100%);
+    --landing-hero-image-filter: drop-shadow(0 24px 60px rgba(87, 104, 254, 0.22));
+    --landing-search-bg: rgba(255, 255, 255, 0.84);
+    --landing-search-shadow: 0 24px 70px rgba(35, 43, 82, 0.16);
+    --landing-elevated-shadow: 0 20px 56px rgba(35, 43, 82, 0.12);
+    --landing-footer-bg: linear-gradient(180deg, #F7F8FC 0%, #ECEFF8 100%);
+    --landing-section-gradient: linear-gradient(180deg, #F7F8FC 0%, #EEF1FF 50%, #F7F8FC 100%);
+    --landing-reviews-gradient: linear-gradient(180deg, #F7F8FC 0%, #E9EDFF 100%);
 }
 
 /* Tablet */
@@ -353,4 +401,3 @@ html.frontend-landing-public body::-webkit-scrollbar {
     width: 0;
     height: 0;
 }
-

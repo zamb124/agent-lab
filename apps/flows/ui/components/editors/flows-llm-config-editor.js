@@ -38,8 +38,13 @@ const HUMANITEC_LLM_AUTO_MODEL = 'auto';
 /** Синхронно с `core/clients/llm/model_routing.LLM_ROUTING_PROVIDER_SLUGS` */
 const LLM_ROUTING_PROVIDER_SLUGS = new Set([
     'openrouter',
-    'openai',
     'bothub',
+    'groq',
+    'google',
+    'github',
+    'huggingface',
+    'deepinfra',
+    'openai',
     'yandex',
     HUMANITEC_LLM_PROVIDER,
 ]);
@@ -564,7 +569,6 @@ export class FlowsLlmConfigEditor extends PlatformElement {
                 'api_key',
                 'base_url',
                 'folder_id',
-                'fallback_models',
                 'extra_request_body',
                 'extra_request_headers',
             ]) {
@@ -654,17 +658,32 @@ export class FlowsLlmConfigEditor extends PlatformElement {
         return [];
     }
 
+    _providerHint(provider) {
+        if (provider === HUMANITEC_LLM_PROVIDER) {
+            return this.t('llm_config_editor.humanitec_llms_provider_tooltip');
+        }
+        return '';
+    }
+
+    _modelHint(provider, model) {
+        if (provider === HUMANITEC_LLM_PROVIDER && (!model || model === HUMANITEC_LLM_AUTO_MODEL)) {
+            return this.t('llm_config_editor.humanitec_llms_auto_tooltip');
+        }
+        return '';
+    }
+
     render() {
         const fieldMode = this.readOnly ? 'view' : 'edit';
         const cfg = this.config && typeof this.config === 'object' ? this.config : {};
         const provider = this._readString('provider');
-        const model = this._readString('model');
+        const rawModel = this._readString('model');
         const fallbackModels = this._fallbackModels();
         const apiKey = this._readString('api_key');
         const folderId = this._readString('folder_id');
         const baseUrl = this._readString('base_url');
         const reasoning = this._readString('reasoning_effort');
         const humanitecLlm = this._isHumanitecLlmProvider(provider);
+        const model = humanitecLlm && rawModel.length === 0 ? HUMANITEC_LLM_AUTO_MODEL : rawModel;
         const extraJson = cfg.extra_request_body && typeof cfg.extra_request_body === 'object'
             ? JSON.stringify(cfg.extra_request_body, null, 2)
             : '{}';
@@ -699,18 +718,12 @@ export class FlowsLlmConfigEditor extends PlatformElement {
         const reasoningEnumValues = REASONING_LEVELS.map((lv) => (lv === ''
             ? { value: '', label: '—' }
             : { value: lv, label: lv }));
-        const modelField = humanitecLlm
+        const modelField = this.readOnly
             ? html`<platform-field
                 type="string"
                 mode="view"
                 .label=${this.t('llm_config_editor.model')}
-                .value=${HUMANITEC_LLM_AUTO_MODEL}
-            ></platform-field>`
-            : this.readOnly
-            ? html`<platform-field
-                type="string"
-                mode="view"
-                .label=${this.t('llm_config_editor.model')}
+                .hint=${this._modelHint(provider, model)}
                 .value=${model}
             ></platform-field>`
             : (models.length > 0
@@ -718,6 +731,7 @@ export class FlowsLlmConfigEditor extends PlatformElement {
                     type="enum"
                     mode="edit"
                     .label=${this.t('llm_config_editor.model')}
+                    .hint=${this._modelHint(provider, model)}
                     .value=${model}
                     .config=${{ values: modelEnumValues }}
                     @change=${(e) => this._onString('model', typeof e.detail.value === 'string' ? e.detail.value : '')}
@@ -726,6 +740,7 @@ export class FlowsLlmConfigEditor extends PlatformElement {
                     type="string"
                     mode="edit"
                     .label=${this.t('llm_config_editor.model')}
+                    .hint=${this._modelHint(provider, model)}
                     .placeholder=${this.t('llm_config_editor.placeholder_model')}
                     .value=${model}
                     @change=${(e) => this._onString('model', typeof e.detail.value === 'string' ? e.detail.value : '')}
@@ -738,6 +753,7 @@ export class FlowsLlmConfigEditor extends PlatformElement {
                             type="enum"
                             mode=${fieldMode}
                             .label=${this.t('llm_config_editor.provider')}
+                            .hint=${this._providerHint(provider)}
                             .value=${provider}
                             .config=${this.readOnly
                                 ? { values: providerViewValues }
@@ -784,7 +800,7 @@ export class FlowsLlmConfigEditor extends PlatformElement {
                     >
                         <summary class="advanced-summary">${this.t('llm_config_editor.advanced')}</summary>
                         <div class="grid">
-                            ${this.allowFallbacks && !humanitecLlm
+                            ${this.allowFallbacks
                                 ? html`
                                       <div class="field full">
                                           <div class="fallbacks">

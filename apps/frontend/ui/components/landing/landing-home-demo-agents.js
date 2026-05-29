@@ -47,7 +47,7 @@ export class LandingHomeDemoAgents extends PlatformElement {
                 font-family: 'Fira Sans', sans-serif;
                 font-size: var(--text-md);
                 line-height: 1.6;
-                color: rgba(255, 255, 255, 0.72);
+                color: var(--landing-text-subtle, rgba(255, 255, 255, 0.72));
                 max-width: 40rem;
                 margin: 0 auto;
             }
@@ -67,7 +67,7 @@ export class LandingHomeDemoAgents extends PlatformElement {
                 object-fit: cover;
                 border-radius: var(--radius-md);
                 display: block;
-                background: rgba(255, 255, 255, 0.06);
+                background: var(--landing-panel-bg, rgba(255, 255, 255, 0.06));
             }
             .card-body {
                 padding: var(--space-4) 0 0;
@@ -83,7 +83,7 @@ export class LandingHomeDemoAgents extends PlatformElement {
             }
             .card-desc {
                 font-size: var(--text-sm);
-                color: rgba(255, 255, 255, 0.65);
+                color: var(--landing-text-subtle, rgba(255, 255, 255, 0.65));
                 margin: 0;
                 line-height: 1.5;
                 flex: 1;
@@ -102,7 +102,7 @@ export class LandingHomeDemoAgents extends PlatformElement {
                 gap: var(--space-4);
                 min-height: 160px;
                 font-family: 'Fira Sans', sans-serif;
-                color: rgba(255, 255, 255, 0.7);
+                color: var(--landing-text-subtle, rgba(255, 255, 255, 0.7));
             }
             .err {
                 color: #f87171;

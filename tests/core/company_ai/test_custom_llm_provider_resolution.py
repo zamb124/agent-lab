@@ -88,6 +88,35 @@ def test_resolve_humanitec_llm_company_override_is_platform_virtual_provider():
     assert resolved.cost_origin == "platform"
 
 
+def test_resolve_humanitec_llms_concrete_free_model_and_fallback_policy():
+    company = Company(
+        company_id="c2",
+        name="Company 2",
+        metadata={
+            METADATA_KEY: CompanyAIProviders(
+                llm_chat=CompanyLLMOverride(
+                    provider=HUMANITEC_LLM_PROVIDER,
+                    model="openrouter:qwen/qwen3-coder:free",
+                    fallback_models=[
+                        {"provider": HUMANITEC_LLM_PROVIDER, "model": HUMANITEC_LLM_AUTO_MODEL},
+                    ],
+                )
+            ).to_metadata_dict()
+        },
+    )
+    user = User(user_id="u2", name="User 2", active_company_id="c2")
+    set_context(Context(user=user, active_company=company, channel="test"))
+
+    resolved = resolve_llm_for_capability(AICapability.LLM_CHAT)
+
+    assert resolved is not None
+    assert resolved.provider == HUMANITEC_LLM_PROVIDER
+    assert resolved.model == "openrouter:qwen/qwen3-coder:free"
+    assert resolved.fallback_models is not None
+    assert resolved.fallback_models[0].provider == HUMANITEC_LLM_PROVIDER
+    assert resolved.fallback_models[0].model == HUMANITEC_LLM_AUTO_MODEL
+
+
 def test_resolve_llm_platform_default_is_humanitec_auto():
     resolved = resolve_llm_for_capability(
         AICapability.LLM_VISION,

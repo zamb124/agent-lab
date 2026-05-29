@@ -34,7 +34,7 @@ export class BlogListPage extends PlatformPage {
             .sub {
                 margin: 0 0 40px;
                 font-size: 17px;
-                color: rgba(232, 232, 232, 0.72);
+                color: var(--landing-text-subtle, rgba(232, 232, 232, 0.72));
             }
             ul {
                 list-style: none;
@@ -45,10 +45,10 @@ export class BlogListPage extends PlatformPage {
                 gap: 16px;
             }
             li {
-                border: 1px solid rgba(255, 255, 255, 0.12);
+                border: 1px solid var(--landing-panel-border, rgba(255, 255, 255, 0.12));
                 border-radius: 16px;
                 padding: 20px 22px;
-                background: rgba(255, 255, 255, 0.03);
+                background: var(--landing-panel-bg, rgba(255, 255, 255, 0.03));
             }
             .title {
                 font-family: 'Fira Sans Condensed', sans-serif;
@@ -60,7 +60,7 @@ export class BlogListPage extends PlatformPage {
                 margin: 0 0 14px;
                 font-size: 15px;
                 line-height: 1.55;
-                color: rgba(232, 232, 232, 0.78);
+                color: var(--landing-text-soft, rgba(232, 232, 232, 0.78));
             }
             button.linkish {
                 background: transparent;
@@ -78,7 +78,7 @@ export class BlogListPage extends PlatformPage {
                 font-size: 15px;
             }
             .empty {
-                color: rgba(232, 232, 232, 0.65);
+                color: var(--landing-text-subtle, rgba(232, 232, 232, 0.65));
                 font-size: 16px;
             }
         `,

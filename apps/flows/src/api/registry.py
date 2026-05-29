@@ -15,7 +15,7 @@ from apps.flows.src.models.registry_contracts import (
     RegistrySchemaSubflow,
 )
 from apps.flows.src.services.flows_loader import get_all_flows
-from core.clients.llm.model_routing import HUMANITEC_LLM_PROVIDER
+from core.clients.llm.model_routing import HUMANITEC_LLM_PROVIDER, HUMANITEC_LLMS_DISPLAY_LABEL
 from core.company_ai import CUSTOM_PROVIDER_REF_PREFIX, AICapability, CompanyAIProviders
 from core.context import get_context
 from core.frontend.viewport import PLATFORM_MOBILE_VIEWPORT_CONTENT
@@ -67,7 +67,7 @@ def _platform_provider_options(providers: list[str]) -> list[str | RegistryProvi
             out.append(
                 RegistryProviderOption(
                     value=HUMANITEC_LLM_PROVIDER,
-                    label="Humanitec LLM",
+                    label=HUMANITEC_LLMS_DISPLAY_LABEL,
                     kind="virtual",
                 )
             )
@@ -224,12 +224,15 @@ async def get_providers_values(container: ContainerDep) -> list[str | RegistryPr
 
 
 @router.get("/models/values")
-async def get_models_values(container: ContainerDep, provider: str | None = None) -> list[str]:
+async def get_models_values(
+    container: ContainerDep,
+    provider: str | None = None,
+) -> list[str | JsonObject]:
     """
     Список доступных моделей.
 
     Аргументы:
-        provider: Провайдер (bothub, openrouter, openai, yandex, humanitec_llm).
+        provider: Провайдер из platform LLM provider registry.
                   Если не указан - используется текущий из конфига.
     """
 
@@ -240,7 +243,9 @@ async def get_models_values(container: ContainerDep, provider: str | None = None
     else:
         models = await container.llm_models_service.get_models()
 
-    return models
+    result: list[str | JsonObject] = []
+    result.extend(models)
+    return result
 
 
 @router.post("/models/sync")

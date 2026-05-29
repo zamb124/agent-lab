@@ -23,7 +23,7 @@ MicroK8s cluster
 │   ├── alloy DaemonSet (на каждой ноде)
 │   ├── traefik (ingressClassName=public) + cert-manager + portainer (community-аддон, NodePort 30777/30779)
 │   └── 4 Ingress: platform, livekit, onlyoffice, grafana
-└── gpu-worker (188.246.224.228)   accelerator=nvidia-gpu
+└── gpu-worker (77.91.94.165)      accelerator=nvidia-gpu
     ├── provider-litserve Deployment (по умолчанию: nodeSelector GPU + `nvidia.com/gpu: 1`)
     ├── nvidia-device-plugin DaemonSet (публикует nvidia.com/gpu в Allocatable)
     └── alloy DaemonSet
@@ -150,8 +150,9 @@ kubectl delete secret platform-secrets -n platform
 | `TURN_SECRET` | static-auth-secret для coturn |
 | `ONLYOFFICE_JWT_SECRET` | OnlyOffice DocumentServer JWT |
 | `GRAFANA_ADMIN_PASSWORD` | пароль admin@grafana |
-| `LLM_BOTHUB_API_KEY` | (опционально) LLM провайдер |
-| `LLM_OPENROUTER_API_KEY` | (опционально) OpenRouter |
+| `LLM__OPENROUTER__API_KEY` / `LLM__BOTHUB__API_KEY` | (опционально) LLM провайдеры zero-price catalog |
+| `LLM__GROQ__API_KEY` / `LLM__GOOGLE__API_KEY` / `LLM__GITHUB__API_KEY` | (опционально) LLM провайдеры |
+| `LLM__HUGGINGFACE__API_KEY` / `LLM__DEEPINFRA__API_KEY` / `LLM__YANDEX__API_KEY` | (опционально) LLM провайдеры |
 | `STT_CLOUD_RU_API_KEY` | (опционально) GitHub → `STT__CLOUD_RU__API_KEY` → Secret `stt-cloud-ru-api-key` → Pod env `VOICE__STT__CLOUD_RU__API_KEY` |
 | `RAG_EMBEDDING_API_KEY` | (опционально) RAG embeddings (если отличается от LLM) |
 | `SEARCH__TINYFISH__API_KEY` / `SEARCH__LINKUP__API_KEY` / `SEARCH__SERPER__API_KEY` / `SEARCH__TAVILY__API_KEY` | (опционально) ключи провайдеров Search MCP |

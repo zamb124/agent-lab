@@ -138,14 +138,14 @@ spec:
             failureThreshold: 5
           readinessProbe:
             httpGet:
-              path: /health
+              path: /health/inference
               port: {{ .Values.litserve.port }}
             initialDelaySeconds: 60
             periodSeconds: 10
             timeoutSeconds: 5
           startupProbe:
             httpGet:
-              path: /health
+              path: /health/inference
               port: {{ .Values.litserve.port }}
             failureThreshold: 60
             periodSeconds: 10

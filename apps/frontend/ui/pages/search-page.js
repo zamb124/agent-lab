@@ -9,6 +9,7 @@ import {
     filesToPublicSearchA2aParts,
     takePendingPublicSearchFiles,
 } from '../utils/public-search-files.js';
+import { takePublicSearchLandingTransition } from '../utils/public-search-transition.js';
 import '@platform/lib/components/platform-icon.js';
 
 const SEARCH_MODES = Object.freeze([
@@ -16,6 +17,9 @@ const SEARCH_MODES = Object.freeze([
     { key: 'deep', icon: 'layers', label: 'search_page.mode_deep' },
     { key: 'research', icon: 'sparkle', label: 'search_page.mode_research' },
 ]);
+const SEARCH_CHROME_HIDE_DELTA_PX = 50;
+const SEARCH_CHROME_SHOW_DELTA_PX = 14;
+const SEARCH_CHROME_TOP_VISIBLE_PX = 24;
 
 export class PublicSearchPage extends PlatformPage {
     static i18nNamespace = 'landing';
@@ -25,6 +29,8 @@ export class PublicSearchPage extends PlatformPage {
         _mode: { state: true },
         _selectedFiles: { state: true },
         _preparingFiles: { state: true },
+        _searchChromeHidden: { state: true },
+        _entryAnimation: { state: true },
     };
 
     static styles = [
@@ -45,6 +51,7 @@ export class PublicSearchPage extends PlatformPage {
                 min-height: var(--app-vh, 100vh);
                 display: flex;
                 flex-direction: column;
+                position: relative;
             }
 
             .topbar {
@@ -63,7 +70,9 @@ export class PublicSearchPage extends PlatformPage {
             }
 
             .brand,
-            .back-link {
+            .back-link,
+            .locale-option,
+            .theme-toggle {
                 display: inline-flex;
                 align-items: center;
                 gap: 10px;
@@ -73,6 +82,13 @@ export class PublicSearchPage extends PlatformPage {
                 font: inherit;
                 cursor: pointer;
                 padding: 0;
+            }
+
+            .top-actions {
+                display: inline-flex;
+                align-items: center;
+                gap: 10px;
+                min-width: 0;
             }
 
             .brand-mark {
@@ -109,6 +125,50 @@ export class PublicSearchPage extends PlatformPage {
                 transform: translateY(-1px);
             }
 
+            .locale-switch {
+                min-height: 36px;
+                display: inline-flex;
+                align-items: center;
+                gap: 2px;
+                padding: 3px;
+                border-radius: 999px;
+                background: rgba(255, 255, 255, 0.06);
+                border: 1px solid rgba(255, 255, 255, 0.08);
+            }
+
+            .locale-option {
+                min-width: 34px;
+                min-height: 28px;
+                justify-content: center;
+                border-radius: 999px;
+                color: rgba(245, 245, 243, 0.58);
+                font-size: 13px;
+                line-height: 1;
+                transition: background 180ms ease, color 180ms ease;
+            }
+
+            .locale-option[aria-pressed='true'] {
+                color: #fff;
+                background: rgba(87, 104, 254, 0.36);
+            }
+
+            .theme-toggle {
+                width: 38px;
+                height: 38px;
+                justify-content: center;
+                border-radius: 50%;
+                color: rgba(245, 245, 243, 0.74);
+                background: rgba(255, 255, 255, 0.06);
+                transition: background 180ms ease, color 180ms ease, transform 180ms ease;
+            }
+
+            .theme-toggle:hover,
+            .locale-option:hover {
+                color: #fff;
+                background: rgba(255, 255, 255, 0.12);
+                transform: translateY(-1px);
+            }
+
             .search-head {
                 padding: clamp(34px, 7vw, 86px) clamp(18px, 4vw, 56px) 22px;
                 display: grid;
@@ -121,9 +181,10 @@ export class PublicSearchPage extends PlatformPage {
                 top: 60px;
                 z-index: 16;
                 padding: 12px clamp(18px, 4vw, 56px);
-                background: linear-gradient(180deg, rgba(11, 11, 11, 0.90), rgba(11, 11, 11, 0.70));
-                border-bottom: 1px solid rgba(255, 255, 255, 0.06);
-                backdrop-filter: blur(22px);
+                background: transparent;
+                border-bottom: 0;
+                backdrop-filter: none;
+                pointer-events: none;
             }
 
             .search-title {
@@ -158,6 +219,17 @@ export class PublicSearchPage extends PlatformPage {
                 backdrop-filter: blur(28px);
                 padding: 10px;
                 box-sizing: border-box;
+                opacity: 1;
+                transform: translateY(0) scale(1);
+                transition:
+                    opacity 360ms ease,
+                    transform 440ms cubic-bezier(0.16, 1, 0.3, 1),
+                    filter 420ms ease,
+                    box-shadow 360ms ease;
+                will-change: opacity, transform, filter;
+            }
+
+            .search-head:not(.is-active) .search-shell {
                 animation: searchEnter 340ms ease both;
             }
 
@@ -166,6 +238,28 @@ export class PublicSearchPage extends PlatformPage {
                 border-radius: 24px;
                 padding: 8px;
                 box-shadow: 0 18px 54px rgba(0, 0, 0, 0.36);
+                pointer-events: auto;
+            }
+
+            .page[data-entry='landing'] .topbar {
+                animation: topbarEnter 430ms cubic-bezier(0.2, 0.8, 0.2, 1) both;
+            }
+
+            .page[data-entry='landing'] .search-head.is-active .search-shell {
+                animation: searchLandingHandoff 680ms cubic-bezier(0.18, 0.86, 0.24, 1) both;
+            }
+
+            .page[data-entry='landing'] .results-wrap {
+                animation: resultsLandingEnter 720ms cubic-bezier(0.18, 0.86, 0.24, 1) 120ms both;
+            }
+
+            .search-head.is-active.is-chrome-hidden .search-shell,
+            .page[data-entry='landing'] .search-head.is-active.is-chrome-hidden .search-shell {
+                opacity: 0;
+                transform: translateY(-14px) scale(0.992);
+                filter: blur(4px);
+                pointer-events: none;
+                animation: none;
             }
 
             .search-line {
@@ -244,6 +338,11 @@ export class PublicSearchPage extends PlatformPage {
                 justify-content: space-between;
                 gap: 10px;
                 padding: 4px 2px 0;
+            }
+
+            .search-head.is-active .tool-row {
+                justify-content: flex-start;
+                padding: 7px 0 0 1px;
             }
 
             .mode-group,
@@ -327,6 +426,7 @@ export class PublicSearchPage extends PlatformPage {
 
             .search-head.is-active .file-list {
                 padding-top: 8px;
+                padding-left: 1px;
             }
 
             .file-chip {
@@ -417,6 +517,13 @@ export class PublicSearchPage extends PlatformPage {
                 padding: 18px;
                 min-height: 116px;
                 animation: resultIn 300ms ease both;
+            }
+
+            .answer-panel[data-state='error'] {
+                border-color: rgba(255, 132, 132, 0.20);
+                background:
+                    linear-gradient(135deg, rgba(255, 132, 132, 0.10), rgba(22, 22, 22, 0.82) 48%),
+                    rgba(22, 22, 22, 0.82);
             }
 
             .panel-label {
@@ -559,6 +666,92 @@ export class PublicSearchPage extends PlatformPage {
 
             .answer-text[data-error='true'] {
                 color: #ffb8b8;
+            }
+
+            .answer-error {
+                display: grid;
+                gap: 12px;
+                color: rgba(245, 245, 243, 0.84);
+            }
+
+            .answer-error-main {
+                display: grid;
+                grid-template-columns: 34px minmax(0, 1fr);
+                gap: 12px;
+                align-items: start;
+            }
+
+            .answer-error-icon {
+                width: 34px;
+                height: 34px;
+                display: grid;
+                place-items: center;
+                border-radius: 50%;
+                color: #ffb8b8;
+                background: rgba(255, 132, 132, 0.12);
+                box-shadow: inset 0 0 0 1px rgba(255, 132, 132, 0.20);
+            }
+
+            .answer-error-copy {
+                min-width: 0;
+                display: grid;
+                gap: 6px;
+            }
+
+            .answer-error-title {
+                margin: 0;
+                color: rgba(255, 255, 255, 0.94);
+                font-family: 'Fira Sans Condensed', sans-serif;
+                font-size: 22px;
+                font-weight: 600;
+                line-height: 1.18;
+                letter-spacing: 0;
+            }
+
+            .answer-error-text {
+                margin: 0;
+                color: rgba(245, 245, 243, 0.66);
+                font-size: 15px;
+                line-height: 1.48;
+            }
+
+            .answer-error-action {
+                width: fit-content;
+                min-height: 34px;
+                border: 0;
+                border-radius: 999px;
+                padding: 0 14px;
+                color: #fff;
+                background: rgba(137, 149, 255, 0.28);
+                box-shadow: inset 0 0 0 1px rgba(137, 149, 255, 0.28);
+                font: 600 13px/1 'Fira Sans', system-ui, sans-serif;
+                cursor: pointer;
+                transition: transform 180ms ease, background 180ms ease;
+            }
+
+            .answer-error-action:hover {
+                transform: translateY(-1px);
+                background: rgba(137, 149, 255, 0.38);
+            }
+
+            .answer-error-details {
+                margin: 2px 0 0 46px;
+                color: rgba(245, 245, 243, 0.52);
+                font-size: 13px;
+                line-height: 1.45;
+            }
+
+            .answer-error-details summary {
+                width: fit-content;
+                cursor: pointer;
+            }
+
+            .answer-error-code {
+                margin: 8px 0 0;
+                white-space: pre-wrap;
+                overflow-wrap: anywhere;
+                color: rgba(245, 245, 243, 0.62);
+                font: 12px/1.45 var(--font-mono, ui-monospace, SFMono-Regular, Menlo, monospace);
             }
 
             .answer-placeholder {
@@ -843,6 +1036,49 @@ export class PublicSearchPage extends PlatformPage {
                 to { opacity: 1; transform: translateY(0) scale(1); }
             }
 
+            @keyframes searchLandingHandoff {
+                0% {
+                    opacity: 0;
+                    transform: translateY(42vh) scale(1.045);
+                    filter: blur(10px);
+                    box-shadow: 0 38px 120px rgba(0, 0, 0, 0.54);
+                }
+                58% {
+                    opacity: 1;
+                    transform: translateY(-8px) scale(1.005);
+                    filter: blur(0);
+                }
+                100% {
+                    opacity: 1;
+                    transform: translateY(0) scale(1);
+                    filter: blur(0);
+                }
+            }
+
+            @keyframes resultsLandingEnter {
+                from {
+                    opacity: 0;
+                    transform: translateY(34px);
+                    filter: blur(8px);
+                }
+                to {
+                    opacity: 1;
+                    transform: translateY(0);
+                    filter: blur(0);
+                }
+            }
+
+            @keyframes topbarEnter {
+                from {
+                    opacity: 0;
+                    transform: translateY(-14px);
+                }
+                to {
+                    opacity: 1;
+                    transform: translateY(0);
+                }
+            }
+
             @keyframes resultIn {
                 from { opacity: 0; transform: translateY(12px); }
                 to { opacity: 1; transform: translateY(0); }
@@ -856,6 +1092,202 @@ export class PublicSearchPage extends PlatformPage {
             @keyframes skeleton {
                 0% { background-position: 120% 0; }
                 100% { background-position: -120% 0; }
+            }
+
+            :host-context([data-theme="light"]) {
+                color: #12131a;
+                background:
+                    linear-gradient(180deg, rgba(247, 248, 252, 0.88) 0%, #f7f8fc 42%, #eef1fa 100%),
+                    url('/static/frontend/assets/images/main_img.png') center 18% / min(980px, 74vw) auto no-repeat,
+                    #f7f8fc;
+            }
+
+            :host-context([data-theme="light"]) .topbar {
+                background: rgba(247, 248, 252, 0.78);
+                border-color: rgba(16, 20, 34, 0.10);
+            }
+
+            :host-context([data-theme="light"]) .brand,
+            :host-context([data-theme="light"]) .search-title {
+                color: rgba(18, 19, 26, 0.94);
+            }
+
+            :host-context([data-theme="light"]) .back-link,
+            :host-context([data-theme="light"]) .theme-toggle,
+            :host-context([data-theme="light"]) .locale-switch {
+                color: rgba(30, 34, 48, 0.70);
+                background: rgba(255, 255, 255, 0.72);
+                border-color: rgba(16, 20, 34, 0.10);
+            }
+
+            :host-context([data-theme="light"]) .back-link:hover,
+            :host-context([data-theme="light"]) .theme-toggle:hover,
+            :host-context([data-theme="light"]) .locale-option:hover {
+                color: #12131a;
+                background: rgba(255, 255, 255, 0.92);
+            }
+
+            :host-context([data-theme="light"]) .locale-option {
+                color: rgba(30, 34, 48, 0.58);
+            }
+
+            :host-context([data-theme="light"]) .locale-option[aria-pressed='true'] {
+                color: #fff;
+                background: rgba(87, 104, 254, 0.84);
+            }
+
+            :host-context([data-theme="light"]) .search-shell {
+                background: rgba(255, 255, 255, 0.86);
+                border-color: rgba(16, 20, 34, 0.12);
+                box-shadow: 0 24px 70px rgba(35, 43, 82, 0.14);
+            }
+
+            :host-context([data-theme="light"]) .search-head.is-active .search-shell {
+                box-shadow: 0 18px 54px rgba(35, 43, 82, 0.14);
+            }
+
+            :host-context([data-theme="light"]) .search-icon,
+            :host-context([data-theme="light"]) .icon-tool {
+                color: rgba(30, 34, 48, 0.56);
+            }
+
+            :host-context([data-theme="light"]) input[type='search'] {
+                color: #12131a;
+            }
+
+            :host-context([data-theme="light"]) input[type='search']::placeholder {
+                color: rgba(30, 34, 48, 0.46);
+            }
+
+            :host-context([data-theme="light"]) .mode-chip,
+            :host-context([data-theme="light"]) .provider-chip,
+            :host-context([data-theme="light"]) .suggest-chip,
+            :host-context([data-theme="light"]) .rank-badge,
+            :host-context([data-theme="light"]) .provider-badge,
+            :host-context([data-theme="light"]) .panel-count,
+            :host-context([data-theme="light"]) .file-chip {
+                color: rgba(30, 34, 48, 0.72);
+                background: rgba(16, 20, 34, 0.06);
+                border-color: rgba(16, 20, 34, 0.08);
+            }
+
+            :host-context([data-theme="light"]) .mode-chip:hover,
+            :host-context([data-theme="light"]) .suggest-chip:hover {
+                color: #12131a;
+                background: rgba(87, 104, 254, 0.14);
+            }
+
+            :host-context([data-theme="light"]) .mode-chip[aria-pressed='true'] {
+                color: #fff;
+                background: rgba(87, 104, 254, 0.86);
+                box-shadow: inset 0 0 0 1px rgba(87, 104, 254, 0.24);
+            }
+
+            :host-context([data-theme="light"]) .answer-panel,
+            :host-context([data-theme="light"]) .sources-panel,
+            :host-context([data-theme="light"]) .suggest-panel,
+            :host-context([data-theme="light"]) .provider-panel {
+                background: rgba(255, 255, 255, 0.78);
+                border-color: rgba(16, 20, 34, 0.10);
+            }
+
+            :host-context([data-theme="light"]) .answer-panel[data-state='error'] {
+                border-color: rgba(210, 67, 67, 0.18);
+                background:
+                    linear-gradient(135deg, rgba(210, 67, 67, 0.08), rgba(255, 255, 255, 0.80) 48%),
+                    rgba(255, 255, 255, 0.78);
+            }
+
+            :host-context([data-theme="light"]) .answer-error-icon {
+                color: #b33a3a;
+                background: rgba(210, 67, 67, 0.10);
+                box-shadow: inset 0 0 0 1px rgba(210, 67, 67, 0.16);
+            }
+
+            :host-context([data-theme="light"]) .answer-error-title {
+                color: rgba(18, 19, 26, 0.94);
+            }
+
+            :host-context([data-theme="light"]) .answer-error-text {
+                color: rgba(30, 34, 48, 0.66);
+            }
+
+            :host-context([data-theme="light"]) .answer-error-action {
+                color: #fff;
+                background: rgba(87, 104, 254, 0.86);
+                box-shadow: inset 0 0 0 1px rgba(87, 104, 254, 0.24);
+            }
+
+            :host-context([data-theme="light"]) .answer-error-action:hover {
+                background: rgba(74, 90, 232, 0.92);
+            }
+
+            :host-context([data-theme="light"]) .answer-error-details,
+            :host-context([data-theme="light"]) .answer-error-code {
+                color: rgba(30, 34, 48, 0.54);
+            }
+
+            :host-context([data-theme="light"]) .source-card {
+                background: rgba(255, 255, 255, 0.72);
+                border-color: rgba(16, 20, 34, 0.10);
+            }
+
+            :host-context([data-theme="light"]) .source-card:hover {
+                background: rgba(255, 255, 255, 0.92);
+                border-color: rgba(87, 104, 254, 0.30);
+            }
+
+            :host-context([data-theme="light"]) .panel-label,
+            :host-context([data-theme="light"]) .answer-placeholder,
+            :host-context([data-theme="light"]) .provider-count {
+                color: rgba(30, 34, 48, 0.54);
+            }
+
+            :host-context([data-theme="light"]) .answer-text,
+            :host-context([data-theme="light"]) .source-title,
+            :host-context([data-theme="light"]) .source-ai-markdown {
+                color: rgba(18, 19, 26, 0.92);
+            }
+
+            :host-context([data-theme="light"]) .source-snippet,
+            :host-context([data-theme="light"]) .source-insight {
+                color: rgba(30, 34, 48, 0.70);
+            }
+
+            :host-context([data-theme="light"]) .source-url,
+            :host-context([data-theme="light"]) .answer-text a,
+            :host-context([data-theme="light"]) .source-ai-markdown a,
+            :host-context([data-theme="light"]) a.source-title {
+                color: #4E5DE8;
+            }
+
+            :host-context([data-theme="light"]) .source-ai-button {
+                color: #3f49d7;
+                background: rgba(87, 104, 254, 0.16);
+                box-shadow:
+                    inset 0 0 0 1px rgba(87, 104, 254, 0.26),
+                    0 8px 20px rgba(87, 104, 254, 0.10);
+            }
+
+            :host-context([data-theme="light"]) .source-ai-button:hover {
+                color: #fff;
+                background: rgba(87, 104, 254, 0.86);
+                box-shadow:
+                    inset 0 0 0 1px rgba(87, 104, 254, 0.30),
+                    0 10px 24px rgba(87, 104, 254, 0.18);
+            }
+
+            :host-context([data-theme="light"]) .source-ai-button:disabled {
+                color: rgba(63, 73, 215, 0.78);
+                background: rgba(87, 104, 254, 0.14);
+                box-shadow: inset 0 0 0 1px rgba(87, 104, 254, 0.22);
+                opacity: 0.86;
+            }
+
+            :host-context([data-theme="light"]) .source-ai-panel {
+                color: rgba(18, 19, 26, 0.84);
+                background: rgba(87, 104, 254, 0.10);
+                border-color: rgba(87, 104, 254, 0.22);
             }
 
             @media (max-width: 980px) {
@@ -877,6 +1309,29 @@ export class PublicSearchPage extends PlatformPage {
                 .topbar {
                     height: 64px;
                     padding: 0 14px;
+                }
+
+                .top-actions {
+                    gap: 6px;
+                }
+
+                .locale-switch {
+                    min-height: 34px;
+                }
+
+                .locale-option {
+                    min-width: 30px;
+                    min-height: 26px;
+                    padding: 0 7px;
+                }
+
+                .theme-toggle,
+                .back-link {
+                    width: 36px;
+                    height: 36px;
+                    min-height: 36px;
+                    padding: 0;
+                    justify-content: center;
                 }
 
                 .search-head.is-active {
@@ -907,6 +1362,7 @@ export class PublicSearchPage extends PlatformPage {
 
                 .search-head.is-active .search-shell {
                     border-radius: 20px;
+                    padding: 8px;
                 }
 
                 .search-line {
@@ -921,6 +1377,13 @@ export class PublicSearchPage extends PlatformPage {
                 .tool-row {
                     align-items: stretch;
                     flex-direction: column;
+                }
+
+                .search-head.is-active .tool-row {
+                    align-items: center;
+                    flex-direction: row;
+                    overflow-x: auto;
+                    padding-top: 8px;
                 }
 
                 .mode-group {
@@ -958,16 +1421,28 @@ export class PublicSearchPage extends PlatformPage {
         this._search = this.useOp('frontend/public_search_run');
         this._sourceDescribe = this.useOp('frontend/public_search_source_describe');
         this._route = this.select((state) => state.router);
+        this._localeSel = this.select((state) => state.i18n.locale);
+        this._themeSel = this.select((state) => state.theme.mode);
         this._query = '';
         this._mode = 'quick';
         this._selectedFiles = [];
         this._preparingFiles = false;
+        this._searchChromeHidden = false;
+        this._entryAnimation = 'direct';
         this._lastRouteSig = '';
         this._runSeq = 0;
+        this._lastScrollY = 0;
+        this._scrollAnchorY = 0;
+        this._scrollDirection = 'still';
+        this._scrollFrame = 0;
+        this._handleWindowScroll = this._handleWindowScroll.bind(this);
     }
 
     connectedCallback() {
         super.connectedCallback();
+        this._lastScrollY = window.scrollY;
+        this._scrollAnchorY = this._lastScrollY;
+        window.addEventListener('scroll', this._handleWindowScroll, { passive: true });
         const pendingFiles = takePendingPublicSearchFiles();
         if (pendingFiles.length > 0) {
             this._selectedFiles = pendingFiles;
@@ -975,8 +1450,60 @@ export class PublicSearchPage extends PlatformPage {
         this._syncFromRoute();
     }
 
+    disconnectedCallback() {
+        super.disconnectedCallback();
+        window.removeEventListener('scroll', this._handleWindowScroll);
+        if (this._scrollFrame !== 0) {
+            window.cancelAnimationFrame(this._scrollFrame);
+            this._scrollFrame = 0;
+        }
+    }
+
     updated() {
         this._syncFromRoute();
+    }
+
+    _handleWindowScroll() {
+        if (this._scrollFrame !== 0) {
+            return;
+        }
+        this._scrollFrame = window.requestAnimationFrame(() => {
+            this._scrollFrame = 0;
+            this._syncSearchChromeForScroll();
+        });
+    }
+
+    _syncSearchChromeForScroll() {
+        const stream = this._search.state.stream;
+        const scrollY = Math.max(0, window.scrollY);
+        if (!this._isStreamActive(stream) || scrollY <= SEARCH_CHROME_TOP_VISIBLE_PX) {
+            this._lastScrollY = scrollY;
+            this._scrollAnchorY = scrollY;
+            this._scrollDirection = 'still';
+            if (this._searchChromeHidden) {
+                this._searchChromeHidden = false;
+            }
+            return;
+        }
+
+        const delta = scrollY - this._lastScrollY;
+        if (delta === 0) {
+            return;
+        }
+        const direction = delta > 0 ? 'down' : 'up';
+        if (direction !== this._scrollDirection) {
+            this._scrollDirection = direction;
+            this._scrollAnchorY = this._lastScrollY;
+        }
+
+        const travel = Math.abs(scrollY - this._scrollAnchorY);
+        if (direction === 'down' && travel >= SEARCH_CHROME_HIDE_DELTA_PX && !this._searchChromeHidden) {
+            this._searchChromeHidden = true;
+        }
+        if (direction === 'up' && travel >= SEARCH_CHROME_SHOW_DELTA_PX && this._searchChromeHidden) {
+            this._searchChromeHidden = false;
+        }
+        this._lastScrollY = scrollY;
     }
 
     _syncFromRoute() {
@@ -997,9 +1524,15 @@ export class PublicSearchPage extends PlatformPage {
         this._lastRouteSig = sig;
         this._query = query;
         this._mode = mode;
+        this._searchChromeHidden = false;
+        this._lastScrollY = Math.max(0, window.scrollY);
+        this._scrollAnchorY = this._lastScrollY;
+        this._scrollDirection = 'still';
         if (query !== '') {
+            this._entryAnimation = takePublicSearchLandingTransition(query, mode) ? 'landing' : 'direct';
             void this._runSearch(query, mode);
         } else {
+            this._entryAnimation = 'direct';
             this._search.reset(null);
         }
     }
@@ -1053,6 +1586,10 @@ export class PublicSearchPage extends PlatformPage {
         if (this._preparingFiles) {
             return;
         }
+        this._searchChromeHidden = false;
+        this._lastScrollY = Math.max(0, window.scrollY);
+        this._scrollAnchorY = this._lastScrollY;
+        this._scrollDirection = 'still';
         this._runSeq += 1;
         const runId = `public_search_${Date.now().toString(36)}_${this._runSeq.toString(36)}`;
         this._preparingFiles = true;
@@ -1071,6 +1608,24 @@ export class PublicSearchPage extends PlatformPage {
 
     _goHome() {
         this.navigate('landing');
+    }
+
+    _setLocale(locale) {
+        if (locale !== 'ru' && locale !== 'en') {
+            throw new Error(`PublicSearchPage._setLocale: invalid locale "${locale}"`);
+        }
+        if (this._localeSel.value === locale) {
+            return;
+        }
+        this.setLocale(locale);
+    }
+
+    _toggleTheme() {
+        const mode = this._themeSel.value;
+        if (mode !== 'dark' && mode !== 'light') {
+            throw new Error(`PublicSearchPage._toggleTheme: invalid theme "${mode}"`);
+        }
+        this.setTheme(mode === 'dark' ? 'light' : 'dark');
     }
 
     _fileErrorMessage(error) {
@@ -1248,18 +1803,104 @@ export class PublicSearchPage extends PlatformPage {
         `;
     }
 
+    _normalizeSearchErrorKind(kind) {
+        if (
+            kind === 'search_timeout'
+            || kind === 'search_service_unavailable'
+            || kind === 'search_stream_incomplete'
+            || kind === 'search_failed'
+        ) {
+            return kind;
+        }
+        return 'search_failed';
+    }
+
+    _searchErrorTitleKey(kind) {
+        const errorKind = this._normalizeSearchErrorKind(kind);
+        if (errorKind === 'search_timeout') {
+            return 'search_page.error_timeout_title';
+        }
+        if (errorKind === 'search_service_unavailable') {
+            return 'search_page.error_service_title';
+        }
+        if (errorKind === 'search_stream_incomplete') {
+            return 'search_page.error_stream_title';
+        }
+        return 'search_page.error_generic_title';
+    }
+
+    _searchErrorTextKey(kind) {
+        const errorKind = this._normalizeSearchErrorKind(kind);
+        if (errorKind === 'search_timeout') {
+            return 'search_page.error_timeout_text';
+        }
+        if (errorKind === 'search_service_unavailable') {
+            return 'search_page.error_service_text';
+        }
+        if (errorKind === 'search_stream_incomplete') {
+            return 'search_page.error_stream_text';
+        }
+        return 'search_page.error_generic_text';
+    }
+
+    _searchErrorDetail() {
+        const detail = this._search.state.error_detail;
+        if (typeof detail !== 'string') {
+            throw new Error('PublicSearchPage: search error_detail must be string');
+        }
+        return detail;
+    }
+
+    _retrySearch() {
+        if (this._preparingFiles) {
+            return;
+        }
+        const query = this._query.trim();
+        if (query === '') {
+            return;
+        }
+        void this._runSearch(query, this._mode);
+    }
+
+    _renderSearchError() {
+        const kind = this._normalizeSearchErrorKind(this._search.state.error_kind);
+        const detail = this._searchErrorDetail();
+        return html`
+            <section class="answer-panel" data-state="error">
+                <p class="panel-label">
+                    <platform-icon name="notification-error" size="14"></platform-icon>
+                    <span>${this.t('search_page.answer_label')}</span>
+                </p>
+                <div class="answer-error">
+                    <div class="answer-error-main">
+                        <span class="answer-error-icon">
+                            <platform-icon name="notification-warning" size="18"></platform-icon>
+                        </span>
+                        <div class="answer-error-copy">
+                            <h2 class="answer-error-title">${this.t(this._searchErrorTitleKey(kind))}</h2>
+                            <p class="answer-error-text">${this.t(this._searchErrorTextKey(kind))}</p>
+                            <button class="answer-error-action" type="button" @click=${this._retrySearch}>
+                                ${this.t('search_page.error_retry')}
+                            </button>
+                        </div>
+                    </div>
+                    ${detail !== ''
+                        ? html`
+                            <details class="answer-error-details">
+                                <summary>${this.t('search_page.error_details')}</summary>
+                                <pre class="answer-error-code">${detail}</pre>
+                            </details>
+                        `
+                        : nothing}
+                </div>
+            </section>
+        `;
+    }
+
     _renderAnswer(stream) {
         const error = this._search.error;
         if (typeof error === 'string' && error !== '') {
-            return html`
-                <section class="answer-panel">
-                    <p class="panel-label">
-                        <platform-icon name="notification-error" size="14"></platform-icon>
-                        <span>${this.t('search_page.answer_label')}</span>
-                    </p>
-                    <p class="answer-text" data-error="true">${error}</p>
-                </section>
-            `;
+            return this._renderSearchError();
         }
         const hasAnswer = stream.answer.trim() !== '';
         return html`
@@ -1450,19 +2091,55 @@ export class PublicSearchPage extends PlatformPage {
     render() {
         const stream = this._search.state.stream;
         const active = this._isStreamActive(stream);
+        const locale = this._localeSel.value;
+        const themeMode = this._themeSel.value;
+        if (locale !== 'ru' && locale !== 'en') {
+            throw new Error(`PublicSearchPage.render: invalid locale "${locale}"`);
+        }
+        if (themeMode !== 'dark' && themeMode !== 'light') {
+            throw new Error(`PublicSearchPage.render: invalid theme "${themeMode}"`);
+        }
+        const searchHeadClass = active
+            ? `search-head is-active${this._searchChromeHidden ? ' is-chrome-hidden' : ''}`
+            : 'search-head';
         return html`
-            <div class="page">
+            <div class="page" data-entry=${this._entryAnimation}>
                 <header class="topbar">
                     <button class="brand" type="button" @click=${this._goHome} aria-label=${this.t('search_page.home')}>
                         <span class="brand-mark">H</span>
                         <span class="brand-name">Humanitec</span>
                     </button>
-                    <button class="back-link" type="button" @click=${this._goHome}>
-                        <platform-icon name="arrow-left" size="16"></platform-icon>
-                        <span class="back-label">${this.t('search_page.back')}</span>
-                    </button>
+                    <div class="top-actions">
+                        <div class="locale-switch" role="group" aria-label=${this.t('search_page.language_group')}>
+                            <button
+                                class="locale-option"
+                                type="button"
+                                aria-pressed=${locale === 'en' ? 'true' : 'false'}
+                                @click=${() => this._setLocale('en')}
+                            >en</button>
+                            <button
+                                class="locale-option"
+                                type="button"
+                                aria-pressed=${locale === 'ru' ? 'true' : 'false'}
+                                @click=${() => this._setLocale('ru')}
+                            >ru</button>
+                        </div>
+                        <button
+                            class="theme-toggle"
+                            type="button"
+                            title=${themeMode === 'dark' ? this.t('search_page.theme_light') : this.t('search_page.theme_dark')}
+                            aria-label=${themeMode === 'dark' ? this.t('search_page.theme_light') : this.t('search_page.theme_dark')}
+                            @click=${this._toggleTheme}
+                        >
+                            <platform-icon name=${themeMode === 'dark' ? 'sun' : 'moon'} size="17"></platform-icon>
+                        </button>
+                        <button class="back-link" type="button" @click=${this._goHome}>
+                            <platform-icon name="arrow-left" size="16"></platform-icon>
+                            <span class="back-label">${this.t('search_page.back')}</span>
+                        </button>
+                    </div>
                 </header>
-                <section class=${active ? 'search-head is-active' : 'search-head'}>
+                <section class=${searchHeadClass}>
                     <h1 class="search-title">${this.t('search_page.title')}</h1>
                     ${this._renderComposer()}
                 </section>

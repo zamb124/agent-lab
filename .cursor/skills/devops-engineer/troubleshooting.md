@@ -93,7 +93,7 @@ kubectl get pods -n kube-system -l app.kubernetes.io/name=nvidia-device-plugin
 kubectl logs -n kube-system daemonset/nvidia-device-plugin-daemonset --tail=200
 
 # На gpu-worker:
-ssh root@188.246.224.228
+ssh root@77.91.94.165
 nvidia-smi
 microk8s ctr --address /var/snap/microk8s/common/run/containerd.sock plugins ls | grep cri
 ```

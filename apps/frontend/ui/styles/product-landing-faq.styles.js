@@ -26,10 +26,10 @@ export const productLandingFaqStyles = css`
     }
 
     details.faq-item {
-        border: 1px solid rgba(255, 255, 255, 0.12);
+        border: 1px solid var(--landing-panel-border, rgba(255, 255, 255, 0.12));
         border-radius: 16px;
         padding: 0 20px;
-        background: rgba(255, 255, 255, 0.03);
+        background: var(--landing-panel-bg, rgba(255, 255, 255, 0.03));
     }
 
     details.faq-item summary {
@@ -50,7 +50,7 @@ export const productLandingFaqStyles = css`
         font-family: 'Fira Sans', sans-serif;
         font-size: 15px;
         line-height: 1.65;
-        color: rgba(232, 232, 232, 0.78);
+        color: var(--landing-text-soft, rgba(232, 232, 232, 0.78));
         padding: 0 0 18px;
         margin: 0;
     }

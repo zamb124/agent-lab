@@ -249,6 +249,8 @@ ROUTE_RULES: list[RouteRule] = [
     RouteRule("/*/api/companies/*/pronunciation-rules/*", context_type="api", auth_required=True),
     RouteRule("/frontend/api/platform/pronunciation-rules", context_type="api", auth_required=True),
     RouteRule("/frontend/api/platform/pronunciation-rules/*", context_type="api", auth_required=True),
+    RouteRule("/frontend/api/platform/llm-model-scores", context_type="api", auth_required=True),
+    RouteRule("/frontend/api/platform/llm-model-scores/*", context_type="api", auth_required=True),
 
     # API фронтенда для управления конфигурациями виджетов
     RouteRule("/frontend/api/embed/configs/*", context_type="api", auth_required=True),

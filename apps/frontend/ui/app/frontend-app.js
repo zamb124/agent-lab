@@ -12,8 +12,6 @@
 import { html, css } from 'lit';
 import { PlatformApp } from '@platform/lib/base/PlatformApp.js';
 import { createRouterEffect } from '@platform/lib/events/effects/router.effect.js';
-import { syncPlatformThemeDom } from '@platform/lib/events/effects/theme.effect.js';
-import { getPlatformBus, hasPlatformBus } from '@platform/lib/events/bus-singleton.js';
 import { CoreAuthEvents } from '@platform/lib/events/effects/auth.effect.js';
 import { applyCompanyHostRedirectIfNeeded } from '@platform/lib/utils/company-host-guard.js';
 import { COMPANIES_EVENTS } from '@platform/lib/events/reducers/companies.js';
@@ -85,6 +83,12 @@ import {
     systemAccessEnterOp,
     systemAccessLeaveOp,
 } from '../events/resources/billing-admin.resource.js';
+import {
+    llmModelScoresLoadOp,
+    llmModelScoreUpsertOp,
+    llmModelScoreDeleteOp,
+    llmModelScoresRefreshCacheOp,
+} from '../events/resources/llm-model-scores.resource.js';
 import { acceptInviteOp, previewInviteOp } from '../events/resources/invites.resource.js';
 import { servicesStatusLoadOp } from '../events/resources/services-status.resource.js';
 import {
@@ -282,6 +286,10 @@ export class FrontendApp extends PlatformApp {
         balanceGrantOp,
         systemAccessEnterOp,
         systemAccessLeaveOp,
+        llmModelScoresLoadOp,
+        llmModelScoreUpsertOp,
+        llmModelScoreDeleteOp,
+        llmModelScoresRefreshCacheOp,
         acceptInviteOp,
         previewInviteOp,
         servicesStatusLoadOp,
@@ -420,21 +428,9 @@ export class FrontendApp extends PlatformApp {
         }
 
         const landingPublic = !!routeKey && LANDING_ROUTE_KEYS.has(routeKey);
-        const publicThemeLock = !!routeKey && PUBLIC_ROUTE_KEYS.has(routeKey);
         this.toggleAttribute('landing', landingPublic);
         if (typeof document !== 'undefined' && document.documentElement) {
             document.documentElement.classList.toggle('frontend-landing-public', landingPublic);
-            if (publicThemeLock) {
-                document.documentElement.setAttribute('data-platform-theme-lock', 'dark');
-            } else {
-                document.documentElement.removeAttribute('data-platform-theme-lock');
-            }
-            if (hasPlatformBus()) {
-                const theme = getPlatformBus().getState().theme;
-                if (theme && (theme.mode === 'dark' || theme.mode === 'light')) {
-                    syncPlatformThemeDom(theme.mode);
-                }
-            }
         }
 
         if (
@@ -474,7 +470,6 @@ export class FrontendApp extends PlatformApp {
         super.disconnectedCallback();
         if (typeof document !== 'undefined' && document.documentElement) {
             document.documentElement.classList.remove('frontend-landing-public');
-            document.documentElement.removeAttribute('data-platform-theme-lock');
         }
     }
 

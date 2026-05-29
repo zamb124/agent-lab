@@ -124,7 +124,14 @@ def split_parsed_document(parsed: ParsedDocument, split_config: IndexProfileSpli
                 + "(dependency-groups rag-worker). Установите зависимости и повторите индексацию."
             )
             raise ValueError(message) from exc
-        return _chunker_to_texts(chunker, raw)
+        try:
+            return _chunker_to_texts(chunker, raw)
+        except (TypeError, UnboundLocalError):
+            return split_plain_text_fixed_tokens(
+                raw,
+                split_config.chunk_size,
+                split_config.chunk_overlap,
+            )
 
     if strategy == "table":
         chunker = TableChunker(tokenizer="row", chunk_size=split_config.chunk_size)

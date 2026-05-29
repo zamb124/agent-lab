@@ -533,6 +533,50 @@ class PlatformPronunciationRule(Base):
     )
 
 
+class LLMModelScore(Base):
+    """Платформенный скоринг LLM-модели для provider-neutral routing.
+
+    Таблица живёт в shared БД и задаёт глобальный порядок выбора моделей.
+    Конфиг используется только как initial seed; source of truth после старта
+    сервиса — эта таблица.
+    """
+
+    __tablename__: str = "llm_model_scores"
+
+    provider: Mapped[str] = mapped_column(String(64), primary_key=True)
+    model_id: Mapped[str] = mapped_column(String(512), primary_key=True)
+    score: Mapped[float] = mapped_column(Float, nullable=False)
+    enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    source: Mapped[str] = mapped_column(String(32), nullable=False, default="manual")
+    score_dimensions: Mapped[JsonObject] = mapped_column(
+        JSONB,
+        nullable=False,
+        server_default=text("'{}'::jsonb"),
+    )
+    note: Mapped[str | None] = mapped_column(Text, nullable=True)
+    updated_by_user_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), nullable=False
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=lambda: datetime.now(timezone.utc),
+        onupdate=lambda: datetime.now(timezone.utc),
+        nullable=False,
+    )
+
+    __table_args__: _TableArgs = (
+        CheckConstraint("score >= 0 AND score <= 1000", name="llm_model_scores_score_range_check"),
+        CheckConstraint(
+            "source IN ('config_seed','manual','benchmark_import')",
+            name="llm_model_scores_source_check",
+        ),
+        Index("ix_llm_model_scores_provider", "provider"),
+        Index("ix_llm_model_scores_enabled_score", "enabled", "score"),
+        Index("ix_llm_model_scores_updated_at", "updated_at"),
+    )
+
+
 class CompanyPronunciationRule(Base):
     """Per-company правила произношения TTS.
 

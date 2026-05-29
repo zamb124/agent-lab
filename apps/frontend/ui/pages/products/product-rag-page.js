@@ -306,6 +306,41 @@ export class ProductRagPage extends PlatformPage {
             .back-link:hover {
                 color: #2ECC71;
             }
+
+            :host-context([data-theme="light"]) .hero-title {
+                background: linear-gradient(135deg, #12131a 0%, #626a7d 100%);
+                -webkit-background-clip: text;
+                -webkit-text-fill-color: transparent;
+                background-clip: text;
+            }
+
+            :host-context([data-theme="light"]) .hero-shot {
+                border-color: var(--landing-panel-border, rgba(16, 20, 34, 0.12));
+                box-shadow: var(--landing-elevated-shadow, 0 20px 56px rgba(35, 43, 82, 0.12));
+            }
+
+            :host-context([data-theme="light"]) .feature-card,
+            :host-context([data-theme="light"]) .use-case-item {
+                background: var(--landing-panel-bg, rgba(255, 255, 255, 0.74));
+                border-color: var(--landing-panel-border, rgba(16, 20, 34, 0.12));
+            }
+
+            :host-context([data-theme="light"]) .feature-title,
+            :host-context([data-theme="light"]) .benefits-title,
+            :host-context([data-theme="light"]) .benefit-content h3,
+            :host-context([data-theme="light"]) .use-cases-title,
+            :host-context([data-theme="light"]) .cta-title {
+                color: var(--landing-secondary, #1E2230);
+            }
+
+            :host-context([data-theme="light"]) .hero-description,
+            :host-context([data-theme="light"]) .feature-description,
+            :host-context([data-theme="light"]) .benefit-content p,
+            :host-context([data-theme="light"]) .use-case-text,
+            :host-context([data-theme="light"]) .cta-subtitle,
+            :host-context([data-theme="light"]) .back-link {
+                color: var(--landing-text-soft, rgba(30, 34, 48, 0.82));
+            }
             
             @media (min-width: 768px) {
                 .hero {

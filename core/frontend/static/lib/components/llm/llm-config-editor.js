@@ -15,7 +15,7 @@
  *                       — текущее значение, эмитится через 'change' { config }.
  *   .mode             = 'company_capability' | 'flow_node' | 'flow_resource' (см. выше).
  *   .capability       = строка (для mode=company_capability).
- *   .providerCatalog  = [{ value, label, kind: 'platform'|'custom'|'policy', custom_id? }].
+ *   .providerCatalog  = [{ value, label, kind, custom_id?, models?, tooltip_key? }].
  *   .platformModel    = string | null   — платформенная модель только для чтения.
  *   .costOrigin       = 'platform' | 'company' | null.
  *   .keyMasked        = string | null   — текущий замаскированный ключ ('**** abcd').
@@ -93,9 +93,6 @@ export class PlatformLlmConfigEditor extends PlatformElement {
     }
 
     _supportsModelOverride() {
-        if (this._isHumanitecLlmProvider((this.config && this.config.provider) || '')) {
-            return false;
-        }
         return (
             typeof this.capability === 'string'
             && (
@@ -112,7 +109,7 @@ export class PlatformLlmConfigEditor extends PlatformElement {
         return (
             this.mode === 'company_capability'
             && (this.capability || '').startsWith('llm_')
-            && !this._isHumanitecLlmProvider(provider)
+            && provider.length > 0
         );
     }
 
@@ -138,8 +135,7 @@ export class PlatformLlmConfigEditor extends PlatformElement {
             patch.base_url = null;
             patch.folder_id = null;
             patch.extra_request_headers = null;
-            patch.model = null;
-            patch.fallback_models = null;
+            patch.model = 'auto';
         }
         this._emitChange(patch);
     }
@@ -192,6 +188,54 @@ export class PlatformLlmConfigEditor extends PlatformElement {
         return { values: items };
     }
 
+    _selectedProviderCatalogItem() {
+        const provider = (this.config && this.config.provider) || '';
+        return (this.providerCatalog || []).find((p) => p && p.value === provider) || null;
+    }
+
+    _selectedProviderModels() {
+        const selected = this._selectedProviderCatalogItem();
+        return Array.isArray(selected?.models) ? selected.models : [];
+    }
+
+    _modelEnumConfig() {
+        const values = this._selectedProviderModels()
+            .map((item) => {
+                if (typeof item === 'string') {
+                    return { value: item, label: item };
+                }
+                if (!item || typeof item !== 'object') {
+                    return null;
+                }
+                const value = typeof item.value === 'string' && item.value.length > 0
+                    ? item.value
+                    : (typeof item.id === 'string' ? item.id : '');
+                if (!value) {
+                    return null;
+                }
+                const label = typeof item.label === 'string' && item.label.length > 0
+                    ? item.label
+                    : value;
+                return { value, label };
+            })
+            .filter(Boolean);
+        return { values };
+    }
+
+    _providerHint(provider) {
+        if (this._isHumanitecLlmProvider(provider)) {
+            return this.t('settings_page.ai_providers.humanitec_llms_provider_tooltip');
+        }
+        return '';
+    }
+
+    _modelHint(provider, model) {
+        if (this._isHumanitecLlmProvider(provider) && (!model || model === 'auto')) {
+            return this.t('settings_page.ai_providers.humanitec_llms_auto_tooltip');
+        }
+        return this.t('settings_page.ai_providers.model_override_help');
+    }
+
     render() {
         const provider = (this.config && this.config.provider) || '';
         const isCustom = this._isCustomProvider(provider);
@@ -199,6 +243,10 @@ export class PlatformLlmConfigEditor extends PlatformElement {
         const showByok = !isCustom && !isHumanitecLlm && this.mode === 'company_capability';
         const showModelOverride = this._supportsModelOverride();
         const showFallbackPolicy = this._supportsFallbackPolicy();
+        const rawModelValue = (this.config && this.config.model) || '';
+        const modelValue = isHumanitecLlm && !rawModelValue ? 'auto' : rawModelValue;
+        const providerModels = this._selectedProviderModels();
+        const modelFieldType = providerModels.length > 0 ? 'enum' : 'string';
         const costOriginBadge = this.costOrigin
             ? html`<span class="badge" data-kind=${this.costOrigin}>${
                   this.costOrigin === 'company'
@@ -226,6 +274,7 @@ export class PlatformLlmConfigEditor extends PlatformElement {
                     type="enum"
                     mode="edit"
                     label=${this.t('settings_page.ai_providers.provider_label')}
+                    .hint=${this._providerHint(provider)}
                     ?disabled=${this.readOnly}
                     .value=${provider}
                     .config=${this._providerEnumConfig()}
@@ -245,14 +294,18 @@ export class PlatformLlmConfigEditor extends PlatformElement {
                 ${showModelOverride
                     ? html`
                           <platform-field
-                              type="string"
+                              type=${modelFieldType}
                               mode="edit"
                               label=${this.t('settings_page.ai_providers.model_override_label')}
-                              .value=${(this.config && this.config.model) || ''}
+                              .hint=${this._modelHint(provider, modelValue)}
+                              .value=${modelValue}
+                              .config=${this._modelEnumConfig()}
                               ?disabled=${this.readOnly}
                               @change=${this._onModelChange}
                           ></platform-field>
-                          <small class="help">${this.t('settings_page.ai_providers.model_override_help')}</small>
+                          ${modelFieldType === 'string'
+                              ? html`<small class="help">${this.t('settings_page.ai_providers.model_override_help')}</small>`
+                              : ''}
                       `
                     : ''}
                 ${showByok

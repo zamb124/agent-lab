@@ -18,7 +18,17 @@ from pydantic import (
 )
 
 from core.config.openai_v1_base_url import normalize_openai_v1_base_url
-from core.llm_model_routing import HUMANITEC_LLM_AUTO_MODEL, HUMANITEC_LLM_PROVIDER
+from core.llm_model_routing import (
+    GITHUB_MODELS_API_VERSION,
+    HUMANITEC_LLM_AUTO_MODEL,
+    HUMANITEC_LLM_PROVIDER,
+    LLM_PROVIDER_DEFAULT_BASE_URLS,
+    LLM_PROVIDER_DEFAULT_MODELS_URLS,
+    LLM_PROVIDER_SMOKE_MODELS,
+    OPENAI_COMPATIBLE_LLM_PROVIDER_ORDER,
+    OPENAI_COMPATIBLE_LLM_PROVIDER_SLUGS,
+    PLATFORM_LLM_PROVIDER_ORDER,
+)
 from core.models.billing_models import DEFAULT_TARIFF_PRICES
 from core.rag_indexing_schema import IndexProfileConfig
 from core.types import JsonObject, JsonValue, SpeechProvider, VadProvider
@@ -1483,22 +1493,74 @@ class OpenAIProviderConfig(BaseModel):
 
     api_key: str | None = Field(default=None)
     base_url: str | None = Field(default=None)
+    models_url: str | None = Field(default=None)
+    smoke_model: str | None = Field(default=None)
 
 
 class OpenRouterProviderConfig(BaseModel):
     """Конфигурация OpenRouter провайдера"""
 
     api_key: str | None = Field(default=None)
-    base_url: str = Field(default="https://openrouter.ai/api/v1")
+    base_url: str = Field(default=LLM_PROVIDER_DEFAULT_BASE_URLS["openrouter"])
+    models_url: str = Field(default=LLM_PROVIDER_DEFAULT_MODELS_URLS["openrouter"])
     site_url: str = Field(default="https://platform.local")
     site_name: str = Field(default="platform")
+    smoke_model: str | None = Field(default=None)
 
 
 class BothubProviderConfig(BaseModel):
     """Конфигурация Bothub провайдера"""
 
     api_key: str | None = Field(default=None)
-    base_url: str = Field(default="https://bothub.chat/api/v2/openai/v1")
+    base_url: str = Field(default=LLM_PROVIDER_DEFAULT_BASE_URLS["bothub"])
+    models_url: str = Field(default=LLM_PROVIDER_DEFAULT_MODELS_URLS["bothub"])
+    smoke_model: str | None = Field(default=None)
+
+
+class GroqProviderConfig(BaseModel):
+    """OpenAI-compatible Groq Cloud provider."""
+
+    api_key: str | None = Field(default=None)
+    base_url: str = Field(default=LLM_PROVIDER_DEFAULT_BASE_URLS["groq"])
+    models_url: str = Field(default=LLM_PROVIDER_DEFAULT_MODELS_URLS["groq"])
+    smoke_model: str = Field(default=LLM_PROVIDER_SMOKE_MODELS["groq"])
+
+
+class GoogleLLMProviderConfig(BaseModel):
+    """Google Gemini API через OpenAI-compatible chat endpoint и native models catalog."""
+
+    api_key: str | None = Field(default=None)
+    base_url: str = Field(default=LLM_PROVIDER_DEFAULT_BASE_URLS["google"])
+    models_url: str = Field(default=LLM_PROVIDER_DEFAULT_MODELS_URLS["google"])
+    smoke_model: str = Field(default=LLM_PROVIDER_SMOKE_MODELS["google"])
+
+
+class GitHubModelsProviderConfig(BaseModel):
+    """GitHub Models REST API provider."""
+
+    api_key: str | None = Field(default=None)
+    base_url: str = Field(default=LLM_PROVIDER_DEFAULT_BASE_URLS["github"])
+    models_url: str = Field(default=LLM_PROVIDER_DEFAULT_MODELS_URLS["github"])
+    smoke_model: str = Field(default=LLM_PROVIDER_SMOKE_MODELS["github"])
+    api_version: str = Field(default=GITHUB_MODELS_API_VERSION)
+
+
+class HuggingFaceProviderConfig(BaseModel):
+    """Hugging Face Inference Providers OpenAI-compatible router."""
+
+    api_key: str | None = Field(default=None)
+    base_url: str = Field(default=LLM_PROVIDER_DEFAULT_BASE_URLS["huggingface"])
+    models_url: str = Field(default=LLM_PROVIDER_DEFAULT_MODELS_URLS["huggingface"])
+    smoke_model: str = Field(default=LLM_PROVIDER_SMOKE_MODELS["huggingface"])
+
+
+class DeepInfraProviderConfig(BaseModel):
+    """DeepInfra OpenAI-compatible provider."""
+
+    api_key: str | None = Field(default=None)
+    base_url: str = Field(default=LLM_PROVIDER_DEFAULT_BASE_URLS["deepinfra"])
+    models_url: str = Field(default=LLM_PROVIDER_DEFAULT_MODELS_URLS["deepinfra"])
+    smoke_model: str = Field(default=LLM_PROVIDER_SMOKE_MODELS["deepinfra"])
 
 
 class YandexLLMProviderConfig(BaseModel):
@@ -1510,6 +1572,8 @@ class YandexLLMProviderConfig(BaseModel):
         description="Идентификатор каталога Yandex Cloud (заголовок x-folder-id)",
     )
     base_url: str = Field(default="https://llm.api.cloud.yandex.net/v1")
+    models_url: str = Field(default=LLM_PROVIDER_DEFAULT_MODELS_URLS["yandex"])
+    smoke_model: str | None = Field(default=None)
 
 
 class ModelConfig(BaseModel):
@@ -1520,42 +1584,132 @@ class ModelConfig(BaseModel):
     context_length: int | None = Field(default=None, gt=0)
 
 
-class OpenRouterFreePoolConfig(BaseModel):
-    """Платформенный default-route через бесплатные модели OpenRouter."""
+class LLMModelScoreSeedItem(BaseModel):
+    """Initial seed row for shared ``llm_model_scores``."""
+
+    provider: str
+    model_id: str
+    score: float = Field(ge=0, le=1000)
+    enabled: bool = True
+    score_dimensions: dict[str, float] = Field(default_factory=dict)
+    note: str | None = None
+
+    @field_validator("provider")
+    @classmethod
+    def _provider_must_be_platform_llm_provider(cls, value: str) -> str:
+        provider = value.strip()
+        if provider not in PLATFORM_LLM_PROVIDER_ORDER:
+            allowed = ", ".join(PLATFORM_LLM_PROVIDER_ORDER)
+            raise ValueError(f"provider должен быть одним из: {allowed}")
+        return provider
+
+    @field_validator("model_id")
+    @classmethod
+    def _model_id_must_be_non_empty(cls, value: str) -> str:
+        model_id = value.strip()
+        if model_id == "":
+            raise ValueError("model_id не может быть пустым")
+        return model_id
+
+
+class LLMModelScoringConfig(BaseModel):
+    """Config seed for shared LLM model scoring table.
+
+    ``force_seed_refresh=false`` means config creates only missing rows.
+    Manual edits in DB remain authoritative.
+    """
+
+    seed_enabled: bool = True
+    force_seed_refresh: bool = False
+    items: tuple[LLMModelScoreSeedItem, ...] = Field(default_factory=tuple)
+
+
+class PlatformFreePoolPaidFallbackConfig(BaseModel):
+    """Paid reserve route used only after verified free candidates are unavailable."""
+
+    provider: str = Field(default="openrouter")
+    model: str = Field(default="qwen/qwen-2.5-7b-instruct")
+
+    @field_validator("provider", "model", mode="before")
+    @classmethod
+    def _strip_required_string(cls, value: JsonValue) -> str:
+        if not isinstance(value, str) or not value.strip():
+            raise ValueError("provider/model должны быть непустыми строками")
+        return value.strip()
+
+    @field_validator("provider")
+    @classmethod
+    def _provider_must_be_platform_llm_provider(cls, value: str) -> str:
+        if value not in OPENAI_COMPATIBLE_LLM_PROVIDER_SLUGS:
+            allowed = ", ".join(OPENAI_COMPATIBLE_LLM_PROVIDER_ORDER)
+            raise ValueError(f"provider должен быть одним из: {allowed}")
+        return value
+
+
+class PlatformFreePoolConfig(BaseModel):
+    """Platform default-route via provider-neutral verified free model catalog."""
 
     enabled: bool = Field(default=True)
+    providers: tuple[str, ...] = Field(default=OPENAI_COMPATIBLE_LLM_PROVIDER_ORDER)
     cache_ttl_seconds: int = Field(
         default=3540,
         ge=60,
-        description="TTL Redis-кэша free-моделей OpenRouter (3540 с = 59 минут).",
+        description="TTL Redis-кэша verified free-моделей.",
     )
     refresh_interval_seconds: int = Field(
         default=3300,
         ge=60,
-        description="Интервал scheduler-задачи обновления free-моделей (3300 с = 55 минут).",
+        description="Интервал scheduler-задачи обновления verified free-моделей.",
     )
     first_token_timeout_seconds: float = Field(
         default=20.0,
         ge=1.0,
-        description="Сколько ждать первый полезный stream event до перехода к следующему кандидату.",
+        description="Сколько ждать первый полезный stream event до следующего кандидата.",
     )
     candidate_cooldown_seconds: float = Field(
         default=60.0,
         ge=0.0,
         description="Per-process cooldown модели после отказа до первого чанка.",
     )
-    fallback_model: str = Field(default="qwen/qwen-2.5-7b-instruct")
-    max_candidates: int = Field(default=20, ge=1, le=100)
-    include_router_as_last_free_fallback: bool = Field(default=True)
+    paid_fallback: PlatformFreePoolPaidFallbackConfig = Field(
+        default_factory=PlatformFreePoolPaidFallbackConfig
+    )
+    max_candidates_per_provider: int = Field(default=20, ge=1, le=100)
+    max_candidates_total: int = Field(default=50, ge=1, le=200)
+    include_provider_router_as_last_free_fallback: bool = Field(default=True)
+
+    @field_validator("providers", mode="before")
+    @classmethod
+    def _normalize_providers(cls, value: JsonValue) -> tuple[str, ...]:
+        if value is None:
+            return OPENAI_COMPATIBLE_LLM_PROVIDER_ORDER
+        if isinstance(value, str):
+            raw_values: list[object] = [value]
+        elif isinstance(value, (list, tuple)):
+            raw_values = list(value)
+        else:
+            raise ValueError("platform_free_pool.providers должен быть массивом строк")
+        providers: list[str] = []
+        for raw_provider in raw_values:
+            if not isinstance(raw_provider, str):
+                raise ValueError("platform_free_pool.providers должен содержать только строки")
+            provider = raw_provider.strip()
+            if provider and provider not in OPENAI_COMPATIBLE_LLM_PROVIDER_SLUGS:
+                allowed = ", ".join(OPENAI_COMPATIBLE_LLM_PROVIDER_ORDER)
+                raise ValueError(f"platform_free_pool.providers содержит неизвестный provider={provider!r}; разрешены: {allowed}")
+            if provider and provider not in providers:
+                providers.append(provider)
+        if not providers:
+            raise ValueError("platform_free_pool.providers не может быть пустым")
+        return tuple(providers)
 
     @model_validator(mode="after")
     def _ttl_covers_refresh_interval(self) -> Self:
         if self.cache_ttl_seconds <= self.refresh_interval_seconds:
             raise ValueError(
-                "llm.openrouter_free_pool.cache_ttl_seconds должен быть больше refresh_interval_seconds"
+                "llm.platform_free_pool.cache_ttl_seconds должен быть больше refresh_interval_seconds"
             )
         return self
-
 
 class LLMConfig(BaseModel):
     """Конфигурация LLM с поддержкой нескольких провайдеров"""
@@ -1564,7 +1718,7 @@ class LLMConfig(BaseModel):
         default=HUMANITEC_LLM_PROVIDER,
         description=(
             "Провайдер: humanitec_llm, openai, openrouter, bothub, "
-            "yandex"
+            "yandex, groq, google, github, huggingface, deepinfra"
         ),
     )
     default_model: str = Field(default=HUMANITEC_LLM_AUTO_MODEL)
@@ -1579,16 +1733,22 @@ class LLMConfig(BaseModel):
     openrouter: OpenRouterProviderConfig | None = Field(default=None)
     bothub: BothubProviderConfig | None = Field(default=None)
     yandex: YandexLLMProviderConfig | None = Field(default=None)
+    groq: GroqProviderConfig | None = Field(default=None)
+    google: GoogleLLMProviderConfig | None = Field(default=None)
+    github: GitHubModelsProviderConfig | None = Field(default=None)
+    huggingface: HuggingFaceProviderConfig | None = Field(default=None)
+    deepinfra: DeepInfraProviderConfig | None = Field(default=None)
     models: dict[str, ModelConfig] = Field(default_factory=dict)
-    default_strategy: Literal["configured", "openrouter_free_pool"] = Field(
-        default="openrouter_free_pool",
+    default_strategy: Literal["configured", "platform_free_pool"] = Field(
+        default="platform_free_pool",
         description=(
             "Как выбирать модель при get_llm() без model/provider: configured — "
-            "settings.llm.default_model; openrouter_free_pool — Redis-кэш бесплатных "
-            "OpenRouter моделей + fallback_model."
+            "settings.llm.default_model; platform_free_pool — Redis-кэш verified free "
+            "моделей провайдеров + paid_fallback."
         ),
     )
-    openrouter_free_pool: OpenRouterFreePoolConfig = Field(default_factory=OpenRouterFreePoolConfig)
+    platform_free_pool: PlatformFreePoolConfig = Field(default_factory=PlatformFreePoolConfig)
+    model_scoring: LLMModelScoringConfig = Field(default_factory=LLMModelScoringConfig)
 
 
 class S3BucketConfig(BaseModel):

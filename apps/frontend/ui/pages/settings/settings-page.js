@@ -5,6 +5,7 @@
  *   - Профиль компании (имя, monthly_budget, metadata JSON).
  *   - AI providers (capabilities + custom OpenAI-compatible providers) — рендерится
  *     поверх единого core-компонента <platform-llm-config-editor>.
+ *   - Platform LLM model scoring — только active company system.
  *
  * Все взаимодействие с AI-настройками — через resource-операции
  * apps/frontend/ui/events/resources/settings.resource.js.
@@ -220,6 +221,66 @@ export class FrontendSettingsPage extends PlatformPage {
             .custom-provider-card .caps-line { color: var(--text-tertiary); }
             .custom-provider-card .key-line { color: var(--text-secondary); }
             .custom-provider-card .actions { display: flex; flex-wrap: wrap; gap: var(--space-1); justify-content: flex-end; }
+
+            .scores-toolbar {
+                display: flex;
+                align-items: center;
+                justify-content: space-between;
+                gap: var(--space-2);
+                flex-wrap: wrap;
+                margin-bottom: var(--space-2);
+            }
+            .scores-table-wrap {
+                overflow-x: auto;
+                border: 1px solid var(--glass-border-subtle);
+                border-radius: var(--radius-md);
+            }
+            .scores-table {
+                width: 100%;
+                border-collapse: collapse;
+                min-width: 920px;
+                font-size: var(--text-xs);
+            }
+            .scores-table th,
+            .scores-table td {
+                padding: var(--space-2);
+                border-bottom: 1px solid var(--glass-border-subtle);
+                vertical-align: top;
+            }
+            .scores-table th {
+                color: var(--text-tertiary);
+                text-align: left;
+                font-weight: var(--font-semibold);
+                background: var(--glass-solid-subtle);
+            }
+            .scores-table tr:last-child td { border-bottom: 0; }
+            .score-model {
+                font-family: var(--font-mono);
+                color: var(--text-primary);
+                word-break: break-all;
+            }
+            .score-provider,
+            .score-source {
+                font-family: var(--font-mono);
+                color: var(--text-secondary);
+                white-space: nowrap;
+            }
+            .score-actions {
+                display: flex;
+                gap: var(--space-1);
+                justify-content: flex-end;
+                align-items: center;
+                white-space: nowrap;
+            }
+            .score-form {
+                display: grid;
+                grid-template-columns: minmax(120px, 180px) minmax(220px, 1fr) minmax(100px, 140px) minmax(220px, 1fr) auto;
+                gap: var(--space-2);
+                align-items: end;
+            }
+            @container (max-width: 960px) {
+                .score-form { grid-template-columns: 1fr; }
+            }
         `,
         frontendIslandPageBodyStyles,
     ];
@@ -232,6 +293,8 @@ export class FrontendSettingsPage extends PlatformPage {
         _metadataError: { state: true },
         _capabilityDrafts: { state: true },
         _llmContextDraft: { state: true },
+        _modelScoreDrafts: { state: true },
+        _modelScoreNew: { state: true },
     };
 
     constructor() {
@@ -245,8 +308,13 @@ export class FrontendSettingsPage extends PlatformPage {
         this._contextDelete = this.useOp('frontend/ai_provider_llm_context_delete');
         this._customCreate = this.useOp('frontend/ai_custom_provider_create');
         this._customDelete = this.useOp('frontend/ai_custom_provider_delete');
+        this._scoreLoad = this.useOp('frontend/llm_model_scores_load');
+        this._scoreUpsert = this.useOp('frontend/llm_model_score_upsert');
+        this._scoreDelete = this.useOp('frontend/llm_model_score_delete');
+        this._scoreRefreshCache = this.useOp('frontend/llm_model_scores_refresh_cache');
         this._loaded = false;
         this._aiLoaded = false;
+        this._scoresLoaded = false;
         this._lastSeededCompanyRef = null;
         this._lastSeededAiRef = null;
         this._activeTab = 'company';
@@ -256,6 +324,8 @@ export class FrontendSettingsPage extends PlatformPage {
         this._metadataError = '';
         this._capabilityDrafts = {};
         this._llmContextDraft = {};
+        this._modelScoreDrafts = {};
+        this._modelScoreNew = { provider: 'openrouter', model_id: '', score: 0, enabled: true, note: '' };
     }
 
     updated() {
@@ -268,6 +338,13 @@ export class FrontendSettingsPage extends PlatformPage {
             this._aiLoad.run();
         }
         const company = this._load.lastResult;
+        if (company && company.company_id === 'system' && !this._scoresLoaded) {
+            this._scoresLoaded = true;
+            this._scoreLoad.run();
+        }
+        if (company && company.company_id !== 'system' && this._activeTab === 'model_scoring') {
+            this._activeTab = 'company';
+        }
         if (company && company !== this._lastSeededCompanyRef) {
             this._lastSeededCompanyRef = company;
             this._seedDraft(company);
@@ -326,9 +403,12 @@ export class FrontendSettingsPage extends PlatformPage {
     }
 
     _renderTabs() {
+        const company = this._load.lastResult;
+        const isSystem = company && company.company_id === 'system';
         const tabs = [
             { id: 'company', label: this.t('settings_page.tab_company') },
             { id: 'ai_providers', label: this.t('settings_page.tab_ai_providers') },
+            ...(isSystem ? [{ id: 'model_scoring', label: this.t('settings_page.tab_model_scoring') }] : []),
             { id: 'security', label: this.t('settings_page.tab_security') },
             { id: 'integrations', label: this.t('settings_page.tab_integrations') },
         ];
@@ -686,6 +766,240 @@ export class FrontendSettingsPage extends PlatformPage {
         `;
     }
 
+    _modelScoreKey(row) {
+        return `${row.provider}\n${row.model_id}`;
+    }
+
+    _modelScoreDraft(row) {
+        const key = this._modelScoreKey(row);
+        return this._modelScoreDrafts[key] || {
+            provider: row.provider,
+            model_id: row.model_id,
+            score: Number(row.score || 0),
+            enabled: row.enabled !== false,
+            note: row.note || '',
+            score_dimensions: row.score_dimensions && typeof row.score_dimensions === 'object'
+                ? row.score_dimensions
+                : {},
+        };
+    }
+
+    _setModelScoreDraft(row, patch) {
+        const key = this._modelScoreKey(row);
+        this._modelScoreDrafts = {
+            ...this._modelScoreDrafts,
+            [key]: {
+                ...this._modelScoreDraft(row),
+                ...patch,
+            },
+        };
+    }
+
+    _saveModelScore(row) {
+        const draft = this._modelScoreDraft(row);
+        this._scoreUpsert.run({
+            provider: draft.provider,
+            model_id: draft.model_id,
+            score: Number(draft.score || 0),
+            enabled: draft.enabled !== false,
+            note: draft.note || null,
+            score_dimensions: draft.score_dimensions || {},
+        });
+    }
+
+    _deleteModelScore(row) {
+        this._scoreDelete.run({ provider: row.provider, model_id: row.model_id });
+    }
+
+    _createModelScore() {
+        const draft = this._modelScoreNew;
+        const provider = String(draft.provider || '').trim();
+        const modelId = String(draft.model_id || '').trim();
+        if (!provider || !modelId) {
+            return;
+        }
+        this._scoreUpsert.run({
+            provider,
+            model_id: modelId,
+            score: Number(draft.score || 0),
+            enabled: draft.enabled !== false,
+            note: draft.note ? String(draft.note) : null,
+            score_dimensions: {},
+        });
+        this._modelScoreNew = { provider: 'openrouter', model_id: '', score: 0, enabled: true, note: '' };
+    }
+
+    _renderModelScoringTab() {
+        const result = this._scoreLoad.lastResult;
+        if (!result) {
+            return html`<div class="empty"><glass-spinner></glass-spinner></div>`;
+        }
+        const items = Array.isArray(result.items) ? result.items : [];
+        return html`
+            <section>
+                <div class="scores-toolbar">
+                    <div>
+                        <h3>${this.t('settings_page.model_scoring.title')}</h3>
+                        <div class="section-help">${this.t('settings_page.model_scoring.help')}</div>
+                    </div>
+                    <glass-button
+                        size="sm"
+                        variant="ghost"
+                        ?disabled=${this._scoreRefreshCache.busy}
+                        @click=${() => this._scoreRefreshCache.run()}
+                    >${this.t('settings_page.model_scoring.refresh_cache')}</glass-button>
+                </div>
+                ${items.length === 0
+                    ? html`<div class="empty">${this.t('settings_page.model_scoring.empty')}</div>`
+                    : html`
+                        <div class="scores-table-wrap">
+                            <table class="scores-table">
+                                <thead>
+                                    <tr>
+                                        <th>${this.t('settings_page.model_scoring.col_provider')}</th>
+                                        <th>${this.t('settings_page.model_scoring.col_model')}</th>
+                                        <th>${this.t('settings_page.model_scoring.col_score')}</th>
+                                        <th>${this.t('settings_page.model_scoring.col_enabled')}</th>
+                                        <th>${this.t('settings_page.model_scoring.col_source')}</th>
+                                        <th>${this.t('settings_page.model_scoring.col_note')}</th>
+                                        <th>${this.t('settings_page.model_scoring.col_actions')}</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    ${items.map((row) => {
+                                        const draft = this._modelScoreDraft(row);
+                                        return html`
+                                            <tr>
+                                                <td class="score-provider">${row.provider}</td>
+                                                <td class="score-model">${row.model_id}</td>
+                                                <td>
+                                                    <platform-field
+                                                        type="number"
+                                                        mode="edit"
+                                                        label=""
+                                                        .value=${draft.score}
+                                                        @change=${(e) => {
+                                                            if (!e.detail || typeof e.detail.value !== 'number') {
+                                                                throw new Error('model scoring: score expects numeric detail.value');
+                                                            }
+                                                            this._setModelScoreDraft(row, { score: e.detail.value });
+                                                        }}
+                                                    ></platform-field>
+                                                </td>
+                                                <td>
+                                                    <platform-field
+                                                        type="boolean"
+                                                        mode="edit"
+                                                        label=""
+                                                        .value=${draft.enabled}
+                                                        @change=${(e) => {
+                                                            if (!e.detail || typeof e.detail.value !== 'boolean') {
+                                                                throw new Error('model scoring: enabled expects boolean detail.value');
+                                                            }
+                                                            this._setModelScoreDraft(row, { enabled: e.detail.value });
+                                                        }}
+                                                    ></platform-field>
+                                                </td>
+                                                <td class="score-source">${row.source}</td>
+                                                <td>
+                                                    <platform-field
+                                                        type="string"
+                                                        mode="edit"
+                                                        label=""
+                                                        .value=${draft.note}
+                                                        @change=${(e) => {
+                                                            if (!e.detail || typeof e.detail.value !== 'string') {
+                                                                throw new Error('model scoring: note expects string detail.value');
+                                                            }
+                                                            this._setModelScoreDraft(row, { note: e.detail.value });
+                                                        }}
+                                                    ></platform-field>
+                                                </td>
+                                                <td>
+                                                    <div class="score-actions">
+                                                        <glass-button
+                                                            size="sm"
+                                                            ?disabled=${this._scoreUpsert.busy}
+                                                            @click=${() => this._saveModelScore(row)}
+                                                        >${this.t('settings_page.model_scoring.save')}</glass-button>
+                                                        <glass-button
+                                                            size="sm"
+                                                            variant="danger"
+                                                            ?disabled=${this._scoreDelete.busy}
+                                                            @click=${() => this._deleteModelScore(row)}
+                                                        >${this.t('settings_page.model_scoring.delete')}</glass-button>
+                                                    </div>
+                                                </td>
+                                            </tr>
+                                        `;
+                                    })}
+                                </tbody>
+                            </table>
+                        </div>
+                    `}
+            </section>
+
+            <section>
+                <h3>${this.t('settings_page.model_scoring.add_title')}</h3>
+                <div class="score-form">
+                    <platform-field
+                        type="string"
+                        mode="edit"
+                        label=${this.t('settings_page.model_scoring.col_provider')}
+                        .value=${this._modelScoreNew.provider}
+                        @change=${(e) => {
+                            if (!e.detail || typeof e.detail.value !== 'string') {
+                                throw new Error('model scoring: provider expects string detail.value');
+                            }
+                            this._modelScoreNew = { ...this._modelScoreNew, provider: e.detail.value };
+                        }}
+                    ></platform-field>
+                    <platform-field
+                        type="string"
+                        mode="edit"
+                        label=${this.t('settings_page.model_scoring.col_model')}
+                        .value=${this._modelScoreNew.model_id}
+                        @change=${(e) => {
+                            if (!e.detail || typeof e.detail.value !== 'string') {
+                                throw new Error('model scoring: model_id expects string detail.value');
+                            }
+                            this._modelScoreNew = { ...this._modelScoreNew, model_id: e.detail.value };
+                        }}
+                    ></platform-field>
+                    <platform-field
+                        type="number"
+                        mode="edit"
+                        label=${this.t('settings_page.model_scoring.col_score')}
+                        .value=${this._modelScoreNew.score}
+                        @change=${(e) => {
+                            if (!e.detail || typeof e.detail.value !== 'number') {
+                                throw new Error('model scoring: new score expects numeric detail.value');
+                            }
+                            this._modelScoreNew = { ...this._modelScoreNew, score: e.detail.value };
+                        }}
+                    ></platform-field>
+                    <platform-field
+                        type="string"
+                        mode="edit"
+                        label=${this.t('settings_page.model_scoring.col_note')}
+                        .value=${this._modelScoreNew.note}
+                        @change=${(e) => {
+                            if (!e.detail || typeof e.detail.value !== 'string') {
+                                throw new Error('model scoring: new note expects string detail.value');
+                            }
+                            this._modelScoreNew = { ...this._modelScoreNew, note: e.detail.value };
+                        }}
+                    ></platform-field>
+                    <glass-button
+                        size="sm"
+                        ?disabled=${this._scoreUpsert.busy}
+                        @click=${() => this._createModelScore()}
+                    >${this.t('settings_page.model_scoring.add')}</glass-button>
+                </div>
+            </section>
+        `;
+    }
+
     _renderSecurityTab() {
         return html`
             <div class="two-col">
@@ -739,6 +1053,7 @@ export class FrontendSettingsPage extends PlatformPage {
             ${this._renderTabs()}
             ${this._activeTab === 'company' ? this._renderCompanyTab(company) : ''}
             ${this._activeTab === 'ai_providers' ? this._renderAiProvidersTab() : ''}
+            ${this._activeTab === 'model_scoring' ? this._renderModelScoringTab() : ''}
             ${this._activeTab === 'security' ? this._renderSecurityTab() : ''}
             ${this._activeTab === 'integrations' ? this._renderIntegrationsTab() : ''}
             </div>

@@ -71,13 +71,11 @@ ENV PATH="/opt/venv/bin:${PATH}"
 ENV UV_HTTP_TIMEOUT=600
 RUN uv venv --python 3.14 "${VIRTUAL_ENV}"
 
-# Torch CPU (~2-3 GB меньше чем CUDA). GPU inference у нас идёт через
-# nvidia-runtime + cuda-libraries прокидываемые с хоста (см. bootstrap-gpu-worker.sh
-# и `litserve` resource nvidia.com/gpu). Если позже понадобится bundled CUDA-torch
-# — заменить index-url на cu124 / соответствующий.
+# CUDA-enabled Torch. Host driver/container runtime только прокидывают GPU в Pod;
+# PyTorch wheel всё равно должен быть собран с CUDA, иначе torch.cuda.is_available()
+# останется False даже при nvidia.com/gpu: 1.
 RUN --mount=type=cache,target=/root/.cache/uv \
-    uv pip install --python "${VIRTUAL_ENV}/bin/python" torch torchvision torchaudio \
-    --index-url https://download.pytorch.org/whl/cpu
+    uv pip install --python "${VIRTUAL_ENV}/bin/python" torch torchvision torchaudio
 
 # Production deps платформы для GPU/ML-стороны: core + rag (litserve, silero,
 # silero-vad, pyannote-audio, sentence-transformers, transformers, flagembedding,

@@ -37,8 +37,9 @@ from core.config.models import (
     LLMConfig,
     ModelConfig,
     OpenAIProviderConfig,
-    OpenRouterFreePoolConfig,
     OpenRouterProviderConfig,
+    PlatformFreePoolConfig,
+    PlatformFreePoolPaidFallbackConfig,
 )
 from core.llm_context import LLMContextBudget, LLMContextProfile, LLMContextRetrievalPolicy
 
@@ -617,7 +618,7 @@ async def test_stream_skips_candidate_that_cannot_handle_tools() -> None:
 
 
 @pytest.mark.asyncio
-async def test_openrouter_free_candidate_requires_explicit_tool_support() -> None:
+async def test_platform_free_candidate_requires_explicit_tool_support() -> None:
     server = _OpenAICompatibleTestServer(
         {
             "free-no-metadata": lambda writer: _write_sse_text(writer, "unexpected"),
@@ -633,13 +634,13 @@ async def test_openrouter_free_candidate_requires_explicit_tool_support() -> Non
                     "free-no-metadata",
                     base_url=server.base_url,
                     supported_parameters=frozenset(),
-                    source="openrouter_free",
+                    source="platform_free",
                 ),
                 _candidate(
                     "free-with-tools",
                     base_url=server.base_url,
                     supported_parameters=frozenset({"tools"}),
-                    source="openrouter_free",
+                    source="platform_free",
                 ),
             ],
         )
@@ -665,7 +666,7 @@ async def test_openrouter_free_candidate_requires_explicit_tool_support() -> Non
 
 
 @pytest.mark.asyncio
-async def test_openrouter_free_pool_raises_when_no_candidate_supports_tools() -> None:
+async def test_platform_free_pool_raises_when_no_candidate_supports_tools() -> None:
     server = _OpenAICompatibleTestServer(
         {
             "free-no-tools": lambda writer: _write_sse_text(writer, "unexpected"),
@@ -677,7 +678,7 @@ async def test_openrouter_free_pool_raises_when_no_candidate_supports_tools() ->
             "free-no-tools",
             base_url=server.base_url,
             supported_parameters=frozenset({"temperature"}),
-            source="openrouter_free",
+            source="platform_free",
         )
         client = LLMClient(
             model=str(candidate.model),
@@ -770,7 +771,7 @@ def test_get_llm_builds_explicit_fallback_candidates_from_real_settings() -> Non
                 api_key="sk-openai",
                 base_url="https://api.openai.example/v1",
             ),
-            openrouter_free_pool=OpenRouterFreePoolConfig(
+            platform_free_pool=PlatformFreePoolConfig(
                 enabled=True,
                 first_token_timeout_seconds=12.0,
                 candidate_cooldown_seconds=3.0,
@@ -830,7 +831,7 @@ def test_get_llm_without_model_uses_platform_default_pool_in_same_client() -> No
         testing=False,
         llm=LLMConfig(
             provider="openrouter",
-            default_strategy="openrouter_free_pool",
+            default_strategy="platform_free_pool",
             default_model="configured/default",
             temperature=0.2,
             timeout=10.0,
@@ -840,9 +841,12 @@ def test_get_llm_without_model_uses_platform_default_pool_in_same_client() -> No
                 site_url="https://platform.example",
                 site_name="Platform Test",
             ),
-            openrouter_free_pool=OpenRouterFreePoolConfig(
+            platform_free_pool=PlatformFreePoolConfig(
                 enabled=True,
-                fallback_model="qwen/qwen-2.5-7b-instruct",
+                paid_fallback=PlatformFreePoolPaidFallbackConfig(
+                    provider="openrouter",
+                    model="qwen/qwen-2.5-7b-instruct",
+                ),
                 first_token_timeout_seconds=9.0,
                 candidate_cooldown_seconds=4.0,
             ),
@@ -873,7 +877,7 @@ def test_get_llm_default_pool_can_disable_paid_fallback_for_empty_balance() -> N
         testing=False,
         llm=LLMConfig(
             provider="openrouter",
-            default_strategy="openrouter_free_pool",
+            default_strategy="platform_free_pool",
             default_model="configured/default",
             temperature=0.2,
             timeout=10.0,
@@ -883,9 +887,12 @@ def test_get_llm_default_pool_can_disable_paid_fallback_for_empty_balance() -> N
                 site_url="https://platform.example",
                 site_name="Platform Test",
             ),
-            openrouter_free_pool=OpenRouterFreePoolConfig(
+            platform_free_pool=PlatformFreePoolConfig(
                 enabled=True,
-                fallback_model="qwen/qwen-2.5-7b-instruct",
+                paid_fallback=PlatformFreePoolPaidFallbackConfig(
+                    provider="openrouter",
+                    model="qwen/qwen-2.5-7b-instruct",
+                ),
             ),
         ),
     )
@@ -918,9 +925,12 @@ def test_humanitec_llm_provider_uses_dynamic_pool_independent_of_default_strateg
                 site_url="https://platform.example",
                 site_name="Platform Test",
             ),
-            openrouter_free_pool=OpenRouterFreePoolConfig(
+            platform_free_pool=PlatformFreePoolConfig(
                 enabled=True,
-                fallback_model="qwen/qwen-2.5-7b-instruct",
+                paid_fallback=PlatformFreePoolPaidFallbackConfig(
+                    provider="openrouter",
+                    model="qwen/qwen-2.5-7b-instruct",
+                ),
             ),
         ),
     )
@@ -966,9 +976,12 @@ def test_get_llm_uses_humanitec_default_provider_as_platform_route() -> None:
                 site_url="https://platform.example",
                 site_name="Platform Test",
             ),
-            openrouter_free_pool=OpenRouterFreePoolConfig(
+            platform_free_pool=PlatformFreePoolConfig(
                 enabled=True,
-                fallback_model="qwen/qwen-2.5-7b-instruct",
+                paid_fallback=PlatformFreePoolPaidFallbackConfig(
+                    provider="openrouter",
+                    model="qwen/qwen-2.5-7b-instruct",
+                ),
             ),
         ),
     )
@@ -986,7 +999,7 @@ def test_get_llm_uses_humanitec_default_provider_as_platform_route() -> None:
     assert client._static_candidates == []
 
 
-def test_humanitec_llm_rejects_concrete_model() -> None:
+def test_humanitec_llm_accepts_concrete_free_pool_model() -> None:
     old_settings = get_settings()
     settings = BaseSettings(
         testing=False,
@@ -998,12 +1011,60 @@ def test_humanitec_llm_rejects_concrete_model() -> None:
                 api_key="sk-openrouter",
                 base_url="https://openrouter.ai/api/v1",
             ),
-            openrouter_free_pool=OpenRouterFreePoolConfig(enabled=True),
+            platform_free_pool=PlatformFreePoolConfig(enabled=True),
         ),
     )
     try:
         set_settings(settings)
-        with _production_llm_env(), pytest.raises(ValueError, match="model='auto'"):
-            get_llm(provider=HUMANITEC_LLM_PROVIDER, model_name="openai/gpt-4o-mini")
+        with _production_llm_env():
+            client = get_llm(
+                provider=HUMANITEC_LLM_PROVIDER,
+                model_name="openrouter:qwen/qwen3-coder:free",
+                allow_platform_paid_fallback=False,
+            )
     finally:
         set_settings(old_settings)
+
+    assert isinstance(client, LLMClient)
+    assert client.llm_provider == "openrouter"
+    assert client.model == "qwen/qwen3-coder:free"
+    assert client.platform_default_free_pool is True
+    assert client.platform_paid_fallback_enabled is False
+    assert client._candidate_resolver is not None
+
+
+def test_explicit_platform_provider_accepts_humanitec_llms_fallback() -> None:
+    old_settings = get_settings()
+    settings = BaseSettings(
+        testing=False,
+        llm=LLMConfig(
+            provider="openrouter",
+            default_strategy="configured",
+            default_model="configured/default",
+            openrouter=OpenRouterProviderConfig(
+                api_key="sk-openrouter",
+                base_url="https://openrouter.ai/api/v1",
+            ),
+            platform_free_pool=PlatformFreePoolConfig(enabled=True),
+        ),
+    )
+    try:
+        set_settings(settings)
+        with _production_llm_env():
+            client = get_llm(
+                provider="openrouter",
+                model_name="primary/model",
+                fallback_models=[
+                    LLMCallConfig(
+                        provider=HUMANITEC_LLM_PROVIDER,
+                        model=HUMANITEC_LLM_AUTO_MODEL,
+                    )
+                ],
+            )
+    finally:
+        set_settings(old_settings)
+
+    assert isinstance(client, LLMClient)
+    assert client.llm_provider == "openrouter"
+    assert client.model == "primary/model"
+    assert client._candidate_resolver is not None

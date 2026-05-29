@@ -12,8 +12,7 @@
 ``provider="custom:<id>"``.
 
 Список платформенных провайдеров — единственный источник правды:
-``core.clients.llm.model_routing.LLM_ROUTING_PROVIDER_SLUGS`` (минус ``custom_openai_compatible``,
-который не применим как «платформенный» провайдер компании).
+``core.clients.llm.model_routing.PLATFORM_LLM_PROVIDER_ORDER``.
 """
 
 from __future__ import annotations
@@ -27,7 +26,8 @@ from core.clients.llm.config import LLMCallConfig, validate_fallback_model_confi
 from core.clients.llm.model_routing import (
     HUMANITEC_LLM_AUTO_MODEL,
     HUMANITEC_LLM_PROVIDER,
-    LLM_ROUTING_PROVIDER_SLUGS,
+    PLATFORM_LLM_PROVIDER_ORDER,
+    split_humanitec_llms_model_ref,
 )
 from core.llm_context.models import LLMContextPatch
 from core.types import JsonObject, require_json_object
@@ -54,10 +54,8 @@ class AICapability(str, Enum):
 # Платформенные slug-и LLM-провайдеров компании (без custom_openai_compatible — он внутренний
 # и не выбирается компанией напрямую, только через custom:<id>). Источник правды — model_routing.
 CUSTOM_PROVIDER_SLUG = "custom_openai_compatible"
-PLATFORM_LLM_PROVIDERS: tuple[str, ...] = tuple(
-    sorted(slug for slug in LLM_ROUTING_PROVIDER_SLUGS if slug != CUSTOM_PROVIDER_SLUG)
-)
-"""Дублирование запрещено: меняйте только ``LLM_ROUTING_PROVIDER_SLUGS``."""
+PLATFORM_LLM_PROVIDERS: tuple[str, ...] = PLATFORM_LLM_PROVIDER_ORDER
+"""Дублирование запрещено: меняйте только ``PLATFORM_LLM_PROVIDER_ORDER``."""
 
 CUSTOM_PROVIDER_REF_PREFIX = "custom:"
 
@@ -131,9 +129,8 @@ class CompanyLLMOverride(BaseModel):
     fallback_models: list[LLMCallConfig] | None = Field(
         default=None,
         description=(
-            "Явная company-level fallback policy для capability. Допускается только "
-            "для не-humanitec primary provider; транспортные секреты внутри fallback "
-            "запрещены, используйте custom:<id> для BYOK fallback."
+            "Явная company-level fallback policy для capability. Транспортные секреты "
+            "внутри fallback запрещены, используйте custom:<id> для BYOK fallback."
         ),
     )
 
@@ -173,19 +170,24 @@ class CompanyLLMOverride(BaseModel):
                     "provider=humanitec_llm — виртуальный платформенный провайдер; "
                     + "api_key_encrypted/base_url/folder_id/extra_request_headers не задаются"
                 )
-            if self.model and self.model != HUMANITEC_LLM_AUTO_MODEL:
-                raise ValueError("provider=humanitec_llm поддерживает только model='auto' или пусто")
-            if self.fallback_models:
+            if (
+                self.model
+                and self.model != HUMANITEC_LLM_AUTO_MODEL
+                and split_humanitec_llms_model_ref(self.model) is None
+            ):
                 raise ValueError(
-                    "provider=humanitec_llm не поддерживает fallback_models: "
-                    + "Humanitec LLM сам выбирает бесплатную модель через виртуальный маршрут"
+                    "provider=humanitec_llm поддерживает model='auto' или "
+                    + "provider-prefixed free-pool модель '<provider>:<model_id>'"
                 )
         self.fallback_models = validate_fallback_model_configs(self.fallback_models)
         for idx, fallback in enumerate(self.fallback_models or []):
-            if fallback.provider == HUMANITEC_LLM_PROVIDER:
+            if fallback.provider == HUMANITEC_LLM_PROVIDER and (
+                fallback.model != HUMANITEC_LLM_AUTO_MODEL
+                and split_humanitec_llms_model_ref(fallback.model) is None
+            ):
                 raise ValueError(
-                    f"fallback_models[{idx}]: humanitec_llm нельзя использовать как fallback; "
-                    + "настройте Humanitec LLM как primary provider capability"
+                    f"fallback_models[{idx}]: provider=humanitec_llm поддерживает "
+                    + "model='auto' или provider-prefixed free-pool модель '<provider>:<model_id>'"
                 )
             if fallback.provider is not None:
                 _ = _validate_provider_ref(fallback.provider, allow_custom=True)

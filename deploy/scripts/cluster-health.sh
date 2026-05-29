@@ -191,21 +191,25 @@ else
   log_info "Пропуск public-проверок (CHECK_PUBLIC=0 или нет curl)"
 fi
 
-# 14. Provider Litserve audio (in-cluster: STT/TTS/VAD)
-log_section "14) Provider Litserve (audio: STT/TTS/VAD)"
+# 14. Provider Litserve (in-cluster: runtime + embedding smoke)
+log_section "14) Provider Litserve (runtime + embedding smoke)"
 LITSERVE_POD=$($K get pod -n "$PLATFORM_NS" -l app=provider-litserve \
   -o jsonpath='{.items[0].metadata.name}' 2>/dev/null || true)
 if [ -z "$LITSERVE_POD" ]; then
   log_warn "под provider-litserve не найден — секция пропущена"
 else
-  for endpoint in "/v1/models" "/v1/audio/transcriptions" "/v1/audio/speech" "/v1/audio/vad"; do
-    # Образ full (provider-litserve) ставит curl, wget в slim-слое не гарантирован — см. Dockerfile base-with-core.
-    check_step \
-      "litserve GET $endpoint returns HTTP status (in-cluster)" \
-      "$K exec -n $PLATFORM_NS $LITSERVE_POD -- \
-        curl -sS --max-time 15 -o /dev/null -w '%{http_code}' http://127.0.0.1:8014$endpoint \
-        | grep -qE '^[0-9]{3}$'"
-  done
+  # Образ full (provider-litserve) ставит curl и python.
+  check_step_with_output \
+    "litserve GET /health/inference is healthy (in-cluster)" \
+    "$K exec -n $PLATFORM_NS $LITSERVE_POD -- \
+      curl -fsS --max-time 15 http://127.0.0.1:8014/health/inference >/dev/null"
+  check_step_with_output \
+    "litserve GET /v1/models is healthy (in-cluster)" \
+    "$K exec -n $PLATFORM_NS $LITSERVE_POD -- \
+      curl -fsS --max-time 15 http://127.0.0.1:8014/v1/models >/dev/null"
+  check_step_with_output \
+    "litserve POST /v1/embeddings returns an embedding (in-cluster)" \
+    "$K exec -n $PLATFORM_NS $LITSERVE_POD -- sh -lc 'MODEL=\$(python -c \"from apps.provider_litserve.config import get_provider_litserve_settings as g; print(g().provider_litserve.infra.embedding_openai_model_id)\"); curl -fsS --max-time 300 -H \"Content-Type: application/json\" -d \"{\\\"model\\\":\\\"\${MODEL}\\\",\\\"input\\\":\\\"litserve healthcheck\\\"}\" http://127.0.0.1:8014/v1/embeddings | python -c \"import json, sys; body=json.load(sys.stdin); vec=body[\\\"data\\\"][0][\\\"embedding\\\"]; assert isinstance(vec, list) and len(vec) > 0\"'"
 fi
 
 # Итог

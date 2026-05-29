@@ -10,6 +10,7 @@ import {
     fileListToPublicSearchFiles,
     setPendingPublicSearchFiles,
 } from '../../utils/public-search-files.js';
+import { markPublicSearchLandingTransition } from '../../utils/public-search-transition.js';
 import '@platform/lib/components/platform-icon.js';
 
 const SEARCH_MODES = Object.freeze([
@@ -38,7 +39,7 @@ export class LandingHero extends PlatformElement {
                 min-height: var(--app-vh, 100vh);
                 position: relative;
                 overflow: hidden;
-                background: #0F0F0F;
+                background: var(--landing-hero-bg, #0F0F0F);
             }
             
             .hero-container {
@@ -89,7 +90,7 @@ export class LandingHero extends PlatformElement {
                 width: 100%;
                 height: auto;
                 object-fit: contain;
-                filter: drop-shadow(0 0 60px rgba(87, 104, 254, 0.4));
+                filter: var(--landing-hero-image-filter, drop-shadow(0 0 60px rgba(87, 104, 254, 0.4)));
             }
 
             .hero-search {
@@ -103,9 +104,9 @@ export class LandingHero extends PlatformElement {
                 border-radius: 30px;
                 padding: 10px;
                 box-sizing: border-box;
-                background: rgba(29, 29, 29, 0.9);
-                border: 1px solid rgba(255, 255, 255, 0.11);
-                box-shadow: 0 26px 90px rgba(0, 0, 0, 0.44);
+                background: var(--landing-search-bg, rgba(29, 29, 29, 0.9));
+                border: 1px solid var(--landing-panel-border, rgba(255, 255, 255, 0.11));
+                box-shadow: var(--landing-search-shadow, 0 26px 90px rgba(0, 0, 0, 0.44));
                 backdrop-filter: blur(28px);
             }
 
@@ -120,7 +121,7 @@ export class LandingHero extends PlatformElement {
             .hero-search-icon {
                 display: grid;
                 place-items: center;
-                color: rgba(232, 232, 232, 0.66);
+                color: var(--landing-text-subtle, rgba(232, 232, 232, 0.66));
             }
 
             input[type='search'] {
@@ -129,7 +130,7 @@ export class LandingHero extends PlatformElement {
                 border: 0;
                 outline: none;
                 background: transparent;
-                color: #fff;
+                color: var(--landing-text, #fff);
                 font-family: 'Fira Sans', sans-serif;
                 font-weight: 500;
                 font-size: 20px;
@@ -138,7 +139,7 @@ export class LandingHero extends PlatformElement {
             }
 
             input[type='search']::placeholder {
-                color: rgba(232, 232, 232, 0.48);
+                color: var(--landing-text-faint, rgba(232, 232, 232, 0.48));
             }
 
             .hero-search-submit,
@@ -149,7 +150,7 @@ export class LandingHero extends PlatformElement {
                 border-radius: 50%;
                 display: grid;
                 place-items: center;
-                color: #fff;
+                color: var(--landing-on-primary, #fff);
                 background: var(--landing-primary, #5768FE);
                 cursor: pointer;
                 transition: transform 180ms ease, background 180ms ease, opacity 180ms ease;
@@ -192,8 +193,8 @@ export class LandingHero extends PlatformElement {
                 align-items: center;
                 gap: 8px;
                 padding: 0 13px;
-                color: rgba(232, 232, 232, 0.74);
-                background: rgba(255, 255, 255, 0.07);
+                color: var(--landing-text-subtle, rgba(232, 232, 232, 0.74));
+                background: var(--landing-panel-bg-strong, rgba(255, 255, 255, 0.07));
                 font-family: 'Fira Sans', sans-serif;
                 font-weight: 500;
                 font-size: 14px;
@@ -204,13 +205,13 @@ export class LandingHero extends PlatformElement {
             }
 
             .hero-mode-chip:hover {
-                color: #fff;
-                background: rgba(255, 255, 255, 0.13);
+                color: var(--landing-text, #fff);
+                background: var(--landing-panel-border-strong, rgba(255, 255, 255, 0.13));
                 transform: translateY(-1px);
             }
 
             .hero-mode-chip[aria-pressed='true'] {
-                color: #fff;
+                color: var(--landing-on-primary, #fff);
                 background: rgba(87, 104, 254, 0.36);
                 box-shadow: inset 0 0 0 1px rgba(137, 149, 255, 0.36);
             }
@@ -218,8 +219,8 @@ export class LandingHero extends PlatformElement {
             .hero-tool-icon {
                 width: 36px;
                 height: 36px;
-                background: rgba(255, 255, 255, 0.08);
-                color: rgba(232, 232, 232, 0.76);
+                background: var(--landing-panel-bg-strong, rgba(255, 255, 255, 0.08));
+                color: var(--landing-text-subtle, rgba(232, 232, 232, 0.76));
             }
 
             .hero-file-input {
@@ -252,9 +253,9 @@ export class LandingHero extends PlatformElement {
                 gap: 8px;
                 padding: 0 7px 0 10px;
                 border-radius: 999px;
-                color: rgba(245, 245, 243, 0.86);
-                background: rgba(255, 255, 255, 0.075);
-                border: 1px solid rgba(255, 255, 255, 0.08);
+                color: var(--landing-text-soft, rgba(245, 245, 243, 0.86));
+                background: var(--landing-panel-bg-strong, rgba(255, 255, 255, 0.075));
+                border: 1px solid var(--landing-panel-border, rgba(255, 255, 255, 0.08));
                 box-sizing: border-box;
             }
 
@@ -276,7 +277,7 @@ export class LandingHero extends PlatformElement {
 
             .hero-file-size {
                 flex-shrink: 0;
-                color: rgba(245, 245, 243, 0.48);
+                color: var(--landing-text-faint, rgba(245, 245, 243, 0.48));
                 font-size: 12px;
                 line-height: 1;
             }
@@ -288,15 +289,15 @@ export class LandingHero extends PlatformElement {
                 border-radius: 50%;
                 display: grid;
                 place-items: center;
-                color: rgba(245, 245, 243, 0.58);
+                color: var(--landing-text-subtle, rgba(245, 245, 243, 0.58));
                 background: transparent;
                 cursor: pointer;
                 transition: color 160ms ease, background 160ms ease;
             }
 
             .hero-file-remove:hover {
-                color: #fff;
-                background: rgba(255, 255, 255, 0.10);
+                color: var(--landing-text, #fff);
+                background: var(--landing-panel-border, rgba(255, 255, 255, 0.10));
             }
             
             .hero-text-left {
@@ -331,7 +332,7 @@ export class LandingHero extends PlatformElement {
                 transform: translateX(-50%);
                 padding: 12px 24px;
                 background: var(--landing-primary, #5768FE);
-                color: var(--landing-secondary, #E8E8E8);
+                color: var(--landing-on-primary, #FFFFFF);
                 border: none;
                 border-radius: 40px;
                 font-family: 'Fira Sans', sans-serif;
@@ -626,6 +627,7 @@ export class LandingHero extends PlatformElement {
         if (this._selectedFiles.length > 0) {
             setPendingPublicSearchFiles(this._selectedFiles);
         }
+        markPublicSearchLandingTransition(query, mode);
         this.navigate('search', {}, {
             search: `?q=${encodeURIComponent(query)}&mode=${encodeURIComponent(mode)}`,
         });

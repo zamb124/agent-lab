@@ -21,7 +21,7 @@ export class LandingAbilities extends PlatformElement {
             :host {
                 display: block;
                 padding: 80px 20px;
-                background: linear-gradient(180deg, #0F0F0F 0%, #1a1a2e 50%, #0F0F0F 100%);
+                background: var(--landing-section-gradient, linear-gradient(180deg, #0F0F0F 0%, #1a1a2e 50%, #0F0F0F 100%));
             }
             
             .abilities-container {
@@ -52,12 +52,12 @@ export class LandingAbilities extends PlatformElement {
             .ability-image {
                 width: 100%;
                 aspect-ratio: 16 / 9;
-                background: rgba(20, 22, 34, 0.6);
-                border: 1px solid rgba(255, 255, 255, 0.1);
+                background: var(--landing-panel-bg-strong, rgba(20, 22, 34, 0.6));
+                border: 1px solid var(--landing-panel-border, rgba(255, 255, 255, 0.1));
                 border-radius: 20px;
                 overflow: hidden;
                 order: -1;
-                box-shadow: 0 20px 56px rgba(0, 0, 0, 0.35);
+                box-shadow: var(--landing-elevated-shadow, 0 20px 56px rgba(0, 0, 0, 0.35));
             }
 
             .ability-image img {
@@ -97,7 +97,7 @@ export class LandingAbilities extends PlatformElement {
                 font-family: 'Fira Sans', sans-serif;
                 font-size: 16px;
                 line-height: 1.6;
-                color: rgba(232, 232, 232, 0.8);
+                color: var(--landing-text-soft, rgba(232, 232, 232, 0.8));
                 margin: 0 0 20px 0;
             }
             

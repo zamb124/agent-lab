@@ -42,6 +42,28 @@
   "llm": {
     "openrouter": {
       "api_key": "YOUR_OPENROUTER_API_KEY"
+    },
+    "bothub": {
+      "api_key": "YOUR_BOTHUB_API_KEY"
+    },
+    "groq": {
+      "api_key": "YOUR_GROQ_API_KEY"
+    },
+    "google": {
+      "api_key": "YOUR_GOOGLE_LLM_API_KEY"
+    },
+    "github": {
+      "api_key": "YOUR_GITHUB_MODELS_API_KEY"
+    },
+    "huggingface": {
+      "api_key": "YOUR_HUGGINGFACE_API_KEY"
+    },
+    "deepinfra": {
+      "api_key": "YOUR_DEEPINFRA_API_KEY"
+    },
+    "model_scoring": {
+      "seed_enabled": true,
+      "force_seed_refresh": false
     }
   },
   "s3": {

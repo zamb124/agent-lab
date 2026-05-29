@@ -41,7 +41,7 @@ export class BlogPostPage extends PlatformPage {
                 font-family: 'Fira Sans', sans-serif;
                 font-size: 17px;
                 line-height: 1.65;
-                color: rgba(232, 232, 232, 0.88);
+                color: var(--landing-text-soft, rgba(232, 232, 232, 0.88));
             }
             .body :is(p, ul, ol) {
                 margin: 0 0 16px;
@@ -71,7 +71,7 @@ export class BlogPostPage extends PlatformPage {
             .cta-row {
                 margin-top: 40px;
                 padding-top: 28px;
-                border-top: 1px solid rgba(255, 255, 255, 0.12);
+                border-top: 1px solid var(--landing-panel-border, rgba(255, 255, 255, 0.12));
             }
             .cta-btn {
                 padding: 14px 28px;

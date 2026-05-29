@@ -34,14 +34,14 @@ CALENDAR_SYNC_MEETING_REMINDER_TASK_NAME = "calendar_sync_meeting_reminder_tick"
 SPAN_BILLING_SETTLEMENT_TASK_NAME = "span_billing_settlement_tick"
 PAYMENT_SYNC_TASK_NAME = "payment_sync_tick"
 LLM_MODELS_SYNC_TASK_NAME = "sync_llm_models_task"
-OPENROUTER_FREE_MODELS_SYNC_TASK_NAME = "refresh_openrouter_free_models_task"
+PLATFORM_FREE_MODELS_SYNC_TASK_NAME = "refresh_platform_free_models_task"
 RAG_CLEANUP_EXPIRED_DOCUMENTS_TASK_NAME = "rag_cleanup_expired_documents_tick"
 RAG_REEMBED_STALE_DOCUMENTS_TASK_NAME = "rag_reembed_stale_documents_tick"
 RAG_CLEANUP_ORPHAN_COMPANY_CHUNKS_TASK_NAME = "rag_cleanup_orphan_company_chunks_tick"
 CRM_RECONCILE_DAILY_SUMMARY_CRON = "0 * * * *"
 SYSTEM_SCHEDULER_COMPANY_ID = "system"
 LLM_MODELS_SYNC_PAYLOAD_MARKER = "llm_models_background_sync"
-OPENROUTER_FREE_MODELS_SYNC_PAYLOAD_MARKER = "openrouter_free_models_background_sync"
+PLATFORM_FREE_MODELS_SYNC_PAYLOAD_MARKER = "platform_free_models_background_sync"
 
 
 def _canonical_system_payload(schedule_task_id: str, payload: JsonObject) -> JsonObject:
@@ -426,11 +426,11 @@ async def on_startup(app: FastAPI, container: SchedulerContainer, settings: Sche
     )
     await _ensure_idle_interval_schedule(
         container=container,
-        config_enabled=(not is_testing()) and settings.llm.openrouter_free_pool.enabled,
-        task_name=OPENROUTER_FREE_MODELS_SYNC_TASK_NAME,
-        interval_seconds=settings.llm.openrouter_free_pool.refresh_interval_seconds,
-        payload={"system_task": OPENROUTER_FREE_MODELS_SYNC_PAYLOAD_MARKER},
-        log_label="OpenRouter free-pool sync",
+        config_enabled=(not is_testing()) and settings.llm.platform_free_pool.enabled,
+        task_name=PLATFORM_FREE_MODELS_SYNC_TASK_NAME,
+        interval_seconds=settings.llm.platform_free_pool.refresh_interval_seconds,
+        payload={"system_task": PLATFORM_FREE_MODELS_SYNC_PAYLOAD_MARKER},
+        log_label="Platform free-pool sync",
         run_now_on_start=True,
     )
     cfg = settings.rag.ttl

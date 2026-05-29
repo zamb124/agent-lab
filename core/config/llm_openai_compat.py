@@ -8,6 +8,11 @@ from __future__ import annotations
 
 from core.config.models import (
     BothubProviderConfig,
+    DeepInfraProviderConfig,
+    GitHubModelsProviderConfig,
+    GoogleLLMProviderConfig,
+    GroqProviderConfig,
+    HuggingFaceProviderConfig,
     LLMConfig,
     OpenAIProviderConfig,
     OpenRouterProviderConfig,
@@ -22,6 +27,11 @@ _LLM_KEY_PLACEHOLDERS: frozenset[str] = frozenset(
         "YOUR_OPENAI_API_KEY",
         "YOUR_BOTHUB_API_KEY",
         "YOUR_YANDEX_API_KEY",
+        "YOUR_GROQ_API_KEY",
+        "YOUR_GOOGLE_LLM_API_KEY",
+        "YOUR_GITHUB_MODELS_API_KEY",
+        "YOUR_HUGGINGFACE_API_KEY",
+        "YOUR_DEEPINFRA_API_KEY",
     }
 )
 
@@ -43,19 +53,34 @@ def _active_llm_provider_block(
     | OpenRouterProviderConfig
     | BothubProviderConfig
     | YandexLLMProviderConfig
+    | GroqProviderConfig
+    | GoogleLLMProviderConfig
+    | GitHubModelsProviderConfig
+    | HuggingFaceProviderConfig
+    | DeepInfraProviderConfig
     | None,
-]:
+    ]:
     p = (llm.provider or "").strip().lower()
+    if p == "openai":
+        return p, llm.openai
     if p == "openrouter":
         return p, llm.openrouter
     if p == "bothub":
         return p, llm.bothub
-    if p == "openai":
-        return p, llm.openai
     if p == "yandex":
         return p, llm.yandex
+    if p == "groq":
+        return p, llm.groq
+    if p == "google":
+        return p, llm.google
+    if p == "github":
+        return p, llm.github
+    if p == "huggingface":
+        return p, llm.huggingface
+    if p == "deepinfra":
+        return p, llm.deepinfra
     raise ValueError(
-        f"llm.provider={p!r} не поддержан для OpenAI-совместимого API; нужен openrouter, bothub, openai или yandex."
+        f"llm.provider={p!r} не поддержан для OpenAI-совместимого API."
     )
 
 
@@ -117,6 +142,9 @@ def resolve_llm_openai_v1_base_url(llm: LLMConfig) -> str:
         if not isinstance(cfg, YandexLLMProviderConfig):
             raise ValueError("llm.yandex не задан")
         return yandex_llm_openai_root_from_provider_cfg(cfg)
-    if not isinstance(cfg, OpenRouterProviderConfig | BothubProviderConfig):
-        raise ValueError(f"Конфиг провайдера не задан для llm.provider={p!r}")
-    return normalize_openai_v1_base_url(cfg.base_url)
+    raw = cfg.base_url
+    if raw is None or not str(raw).strip():
+        raise ValueError(f"Нужен непустой base_url для llm.provider={p!r}")
+    if p in {"groq", "google", "github", "huggingface", "deepinfra"}:
+        return str(raw).strip().rstrip("/")
+    return normalize_openai_v1_base_url(str(raw).strip())

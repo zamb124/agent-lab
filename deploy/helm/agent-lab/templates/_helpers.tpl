@@ -286,6 +286,36 @@ env в одном container spec: Kubernetes strategic-merge patch падает 
       name: {{ .Values.platformSecretName }}
       key: llm-openrouter-api-key
       optional: true
+- name: LLM__GROQ__API_KEY
+  valueFrom:
+    secretKeyRef:
+      name: {{ .Values.platformSecretName }}
+      key: llm-groq-api-key
+      optional: true
+- name: LLM__GOOGLE__API_KEY
+  valueFrom:
+    secretKeyRef:
+      name: {{ .Values.platformSecretName }}
+      key: llm-google-api-key
+      optional: true
+- name: LLM__GITHUB__API_KEY
+  valueFrom:
+    secretKeyRef:
+      name: {{ .Values.platformSecretName }}
+      key: llm-github-api-key
+      optional: true
+- name: LLM__HUGGINGFACE__API_KEY
+  valueFrom:
+    secretKeyRef:
+      name: {{ .Values.platformSecretName }}
+      key: llm-huggingface-api-key
+      optional: true
+- name: LLM__DEEPINFRA__API_KEY
+  valueFrom:
+    secretKeyRef:
+      name: {{ .Values.platformSecretName }}
+      key: llm-deepinfra-api-key
+      optional: true
 - name: LLM__YANDEX__API_KEY
   valueFrom:
     secretKeyRef:

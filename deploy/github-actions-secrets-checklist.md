@@ -66,7 +66,9 @@ bash deploy/scripts/kubeconfig-for-github-actions.sh
 | `PUSH__VAPID_PUBLIC_KEY` / `PUSH__VAPID_PRIVATE_KEY` |
 | `PUSH__APNS_PRIVATE_KEY` |
 | `PUSH__FCM_CREDENTIALS_JSON` / `PUSH__FCM_PROJECT_ID` |
-| `LLM_BOTHUB_API_KEY` / `LLM_OPENROUTER_API_KEY` |
+| `LLM__OPENROUTER__API_KEY` / `LLM__BOTHUB__API_KEY` |
+| `LLM__GROQ__API_KEY` / `LLM__GOOGLE__API_KEY` / `LLM__GITHUB__API_KEY` |
+| `LLM__HUGGINGFACE__API_KEY` / `LLM__DEEPINFRA__API_KEY` / `LLM__YANDEX__API_KEY` / `LLM__YANDEX__FOLDER_ID` |
 | `STT__CLOUD_RU__API_KEY` |
 | `VOICE__STT__YANDEX__API_KEY` / `VOICE__STT__YANDEX__FOLDER_ID` |
 | `VOICE__STT__SBER__CLIENT_ID` / `VOICE__STT__SBER__CLIENT_SECRET` |
@@ -80,6 +82,6 @@ bash deploy/scripts/kubeconfig-for-github-actions.sh
 
 **Voice/Speech:** `STT__CLOUD_RU__API_KEY` попадает в Kubernetes Secret `platform-secrets` как `stt-cloud-ru-api-key`; в Pod env проброшен как **`VOICE__STT__CLOUD_RU__API_KEY`** (`settings.voice.stt.cloud_ru.api_key`). Остальные ключи `VOICE__STT__*` / `VOICE__TTS__*` маппятся через `helm_platform_secrets_json.sh` в `platformSecrets.{stt,tts}{Yandex,Sber,CloudRu}{ApiKey,FolderId,ClientId,ClientSecret}`, оттуда в `platform-secrets` (ключи `stt-yandex-api-key` и т.п.).
 
-В **`helm_platform_secrets_json.sh`** ключ embedding в платформенный Secret попадает только из **`RAG_EMBEDDING_API_KEY`**; подстановки из **`LLM_OPENROUTER_API_KEY`** нет.
+В **`helm_platform_secrets_json.sh`** ключ embedding в платформенный Secret попадает только из **`RAG_EMBEDDING_API_KEY`**; подстановки из **`LLM__OPENROUTER__API_KEY`** нет.
 
 Полное описание назначения — в [`deploy/README.md`](README.md).

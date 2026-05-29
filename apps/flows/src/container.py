@@ -251,6 +251,7 @@ class FlowContainer(BaseContainer):
         return LLMModelsService(
             repository=self.llm_model_repository,
             scheduler_client=self.scheduler_client,
+            redis_client=self.redis_client,
         )
 
     @lazy

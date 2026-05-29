@@ -10,12 +10,14 @@ from core.company_ai import (
     COST_ORIGIN_COMPANY,
     COST_ORIGIN_PLATFORM,
     CUSTOM_PROVIDER_REF_PREFIX,
+    HUMANITEC_LLM_AUTO_MODEL,
     HUMANITEC_LLM_PROVIDER,
     AICapability,
     ResolvedLLM,
     resolve_custom_llm_provider_ref,
     resolve_llm_for_capability,
 )
+from core.llm_model_routing import split_humanitec_llms_model_ref
 
 _COMPANY_CONTROLLED_FIELDS = {
     "provider",
@@ -126,9 +128,13 @@ def _validate_explicit_primary(
     capability: AICapability,
 ) -> None:
     if base.provider == HUMANITEC_LLM_PROVIDER:
-        if base.model not in (None, "auto"):
+        if (
+            base.model not in (None, HUMANITEC_LLM_AUTO_MODEL)
+            and split_humanitec_llms_model_ref(base.model) is None
+        ):
             raise ValueError(
-                f"capability {capability.value}: provider=humanitec_llm поддерживает только model='auto'"
+                f"capability {capability.value}: provider=humanitec_llm поддерживает "
+                + "model='auto' или provider-prefixed free-pool модель '<provider>:<model_id>'"
             )
         return
     if base.provider is None or base.model is None:

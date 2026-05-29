@@ -13,7 +13,7 @@ export class LandingReviews extends PlatformElement {
             :host {
                 display: block;
                 padding: 80px 20px;
-                background: linear-gradient(180deg, #0F0F0F 0%, #16213e 100%);
+                background: var(--landing-reviews-gradient, linear-gradient(180deg, #0F0F0F 0%, #16213e 100%));
             }
             
             .reviews-container {
@@ -32,8 +32,8 @@ export class LandingReviews extends PlatformElement {
             }
             
             .review-card {
-                background: radial-gradient(circle at top left, rgba(87, 104, 254, 0.15), rgba(255, 255, 255, 0.03));
-                border: 1px solid rgba(255, 255, 255, 0.1);
+                background: radial-gradient(circle at top left, rgba(87, 104, 254, 0.15), var(--landing-panel-bg, rgba(255, 255, 255, 0.03)));
+                border: 1px solid var(--landing-panel-border, rgba(255, 255, 255, 0.1));
                 border-radius: 24px;
                 padding: 40px;
                 backdrop-filter: blur(20px);
@@ -90,7 +90,7 @@ export class LandingReviews extends PlatformElement {
             .review-position {
                 font-family: 'Fira Sans', sans-serif;
                 font-size: 14px;
-                color: rgba(232, 232, 232, 0.6);
+                color: var(--landing-text-subtle, rgba(232, 232, 232, 0.6));
                 margin: 0;
             }
             
@@ -98,7 +98,7 @@ export class LandingReviews extends PlatformElement {
                 font-family: 'Fira Sans', sans-serif;
                 font-size: 16px;
                 line-height: 1.7;
-                color: rgba(232, 232, 232, 0.9);
+                color: var(--landing-text-soft, rgba(232, 232, 232, 0.9));
                 margin: 0;
                 flex: 1;
             }
@@ -287,4 +287,3 @@ export class LandingReviews extends PlatformElement {
 }
 
 customElements.define('landing-reviews', LandingReviews);
-

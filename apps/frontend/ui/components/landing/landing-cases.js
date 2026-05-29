@@ -29,7 +29,7 @@ export class LandingCases extends PlatformElement {
                 text-align: center;
                 margin: 0 0 48px;
                 font-size: 16px;
-                color: rgba(232, 232, 232, 0.72);
+                color: var(--landing-text-subtle, rgba(232, 232, 232, 0.72));
             }
             .grid {
                 display: grid;
@@ -44,8 +44,8 @@ export class LandingCases extends PlatformElement {
             article {
                 padding: 24px;
                 border-radius: 20px;
-                border: 1px solid rgba(255, 255, 255, 0.1);
-                background: rgba(255, 255, 255, 0.04);
+                border: 1px solid var(--landing-panel-border, rgba(255, 255, 255, 0.1));
+                background: var(--landing-panel-bg, rgba(255, 255, 255, 0.04));
             }
             .metric {
                 font-family: 'Fira Sans Condensed', sans-serif;
@@ -64,7 +64,7 @@ export class LandingCases extends PlatformElement {
                 margin: 0;
                 font-size: 15px;
                 line-height: 1.55;
-                color: rgba(232, 232, 232, 0.82);
+                color: var(--landing-text-soft, rgba(232, 232, 232, 0.82));
             }
         `,
     ];

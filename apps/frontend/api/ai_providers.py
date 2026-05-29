@@ -28,7 +28,8 @@ from apps.frontend.models import (
     CustomProviderCreate,
     CustomProviderUpdate,
 )
-from core.clients.llm.model_routing import HUMANITEC_LLM_PROVIDER
+from core.clients.llm.model_routing import HUMANITEC_LLM_PROVIDER, HUMANITEC_LLMS_DISPLAY_LABEL
+from core.clients.llm.platform_free_models import read_humanitec_llms_model_options
 from core.company_ai import (
     METADATA_KEY,
     PLATFORM_LLM_PROVIDERS,
@@ -251,7 +252,11 @@ def _voice_override_for_capability(
     raise TypeError(f"{capability.value} ожидает CompanyVoiceOverride")
 
 
-def _provider_catalog(aip: CompanyAIProviders) -> JsonObject:
+def _provider_catalog(
+    aip: CompanyAIProviders,
+    *,
+    humanitec_llms_models: list[JsonObject],
+) -> JsonObject:
     """Каталог провайдеров для UI селектора (per capability)."""
     catalog: JsonObject = {}
     for cap in _LLM_CAPABILITIES:
@@ -262,8 +267,18 @@ def _provider_catalog(aip: CompanyAIProviders) -> JsonObject:
             items.append(
                 {
                     "value": p,
-                    "label": "Humanitec LLM" if p == HUMANITEC_LLM_PROVIDER else p,
+                    "label": HUMANITEC_LLMS_DISPLAY_LABEL if p == HUMANITEC_LLM_PROVIDER else p,
                     "kind": "virtual" if p == HUMANITEC_LLM_PROVIDER else "platform",
+                    **(
+                        {
+                            "models": humanitec_llms_models,
+                            "tooltip_key": (
+                                "settings_page.ai_providers.humanitec_llms_provider_tooltip"
+                            ),
+                        }
+                        if p == HUMANITEC_LLM_PROVIDER
+                        else {}
+                    ),
                 }
             )
         for cp in aip.custom_providers:
@@ -409,13 +424,14 @@ def _validated_ai_providers(aip: CompanyAIProviders) -> CompanyAIProviders:
 
 
 @router.get("")
-async def get_ai_providers() -> JsonObject:
+async def get_ai_providers(container: ContainerDep) -> JsonObject:
     _, company = _require_admin()
     aip = _load_aip(company)
+    humanitec_llms_models = await read_humanitec_llms_model_options(container.redis_client)
     return {
         "capabilities": _public_capabilities(aip),
         "custom_providers": [_custom_provider_to_public(p) for p in aip.custom_providers],
-        "catalog": _provider_catalog(aip),
+        "catalog": _provider_catalog(aip, humanitec_llms_models=humanitec_llms_models),
         "llm_context": _public_llm_context(aip),
     }
 

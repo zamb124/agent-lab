@@ -13,6 +13,12 @@ import { mapA2aResultToChatRuntimeEvents } from '@platform/lib/flows-chat/a2a-ch
 
 const SEARCH_RUN_MODES = Object.freeze(new Set(['quick', 'deep', 'research']));
 const PUBLIC_SEARCH_SESSION_MODES = Object.freeze(new Set(['quick', 'deep', 'research', 'source']));
+const PUBLIC_SEARCH_ERROR_KINDS = Object.freeze(new Set([
+    'search_timeout',
+    'search_service_unavailable',
+    'search_stream_incomplete',
+    'search_failed',
+]));
 const PUBLIC_SEARCH_STREAM_EVENT = 'frontend/public_search_run/stream_event';
 const PUBLIC_SEARCH_SOURCE_STREAM_EVENT = 'frontend/public_search_source_describe/stream_event';
 const RUN_ID_PATTERN = /^[A-Za-z0-9_-]+$/;
@@ -37,6 +43,7 @@ function _emptyStream() {
         followups: [],
         result_insights: [],
         answer: '',
+        markdown_sources: '',
         completed: false,
     };
 }
@@ -126,6 +133,14 @@ function _requirePublicSearchSessionMode(value, label) {
         throw new Error(`${label} is invalid`);
     }
     return mode;
+}
+
+function _requirePublicSearchErrorKind(value, label) {
+    const kind = _requireNonEmptyString(value, label);
+    if (!PUBLIC_SEARCH_ERROR_KINDS.has(kind)) {
+        throw new Error(`${label} is invalid`);
+    }
+    return kind;
 }
 
 function _normalizeFilePart(value, index) {
@@ -228,10 +243,14 @@ function _normalizeRunPayload(payload) {
     return { run_id: runId, query, mode, files };
 }
 
-function _normalizeFailedRunId(event) {
+function _normalizeFailedRunPayload(event) {
     const payload = _requireObject(event.payload, 'failed payload');
     const body = _requireObject(payload.body, 'failed payload body');
-    return _requireNonEmptyString(body.run_id, 'failed payload body.run_id');
+    return {
+        run_id: _requireNonEmptyString(body.run_id, 'failed payload body.run_id'),
+        error_kind: _requirePublicSearchErrorKind(body.error_kind, 'failed payload body.error_kind'),
+        detail: _requireString(body.detail, 'failed payload body.detail'),
+    };
 }
 
 function _normalizeSourceDescribePayload(payload) {
@@ -298,6 +317,7 @@ function _normalizeStreamPayload(value) {
         followups: _normalizeSuggestions(stream.followups, 'followups'),
         result_insights: _normalizeInsights(stream.result_insights),
         answer: _requireString(stream.answer, 'stream.answer'),
+        markdown_sources: _requireString(stream.markdown_sources, 'stream.markdown_sources'),
         completed: _requireBoolean(stream.completed, 'stream.completed'),
     };
 }
@@ -420,6 +440,7 @@ function _applySearchUiEvent(stream, event) {
         stream.mode = _requireSearchRunMode(payload.mode, 'completed.mode');
         stream.query = _requireNonEmptyString(payload.query, 'completed.query');
         stream.answer = _requireNonEmptyString(payload.answer, 'completed.answer');
+        stream.markdown_sources = _requireNonEmptyString(payload.markdown_sources, 'completed.markdown_sources');
         stream.results = _normalizeResults(payload.results);
         stream.providers = _normalizeProviders(payload.providers);
         stream.suggestions = _normalizeSuggestions(payload.suggestions, 'suggestions');
@@ -517,6 +538,37 @@ function _errorMessage(error) {
         return error.message;
     }
     return String(error);
+}
+
+function _publicSearchErrorKind(detail, transportStatus) {
+    const message = _requireString(detail, 'public search error detail');
+    if (message.startsWith("Нода '") && message.includes('превышен лимит времени выполнения')) {
+        return 'search_timeout';
+    }
+    if (message === 'All connection attempts failed') {
+        return 'search_service_unavailable';
+    }
+    if (message === 'A2A stream finished before search/serp/completed') {
+        return 'search_stream_incomplete';
+    }
+    if (transportStatus === 502 || transportStatus === 503) {
+        return 'search_service_unavailable';
+    }
+    return 'search_failed';
+}
+
+function _publicSearchErrorStatus(kind, transportStatus) {
+    const errorKind = _requirePublicSearchErrorKind(kind, 'public search error kind');
+    if (errorKind === 'search_timeout') {
+        return 504;
+    }
+    if (errorKind === 'search_service_unavailable') {
+        return 503;
+    }
+    if (typeof transportStatus !== 'number' || !Number.isFinite(transportStatus)) {
+        throw new Error('public search transport status must be finite number');
+    }
+    return transportStatus;
 }
 
 async function _issuePublicSearchSession(mode) {
@@ -712,16 +764,30 @@ export const publicSearchRunOp = createAsyncOp({
     name: 'frontend/public_search_run',
     silent: true,
     restMirror: { method: 'POST', path: '/frontend/api/public/search/session' },
-    extraInitial: { stream: _emptyStream(), active_run_id: '' },
+    extraInitial: { stream: _emptyStream(), active_run_id: '', error_kind: '', error_detail: '' },
     extraEvents: { STREAM_EVENT: 'stream_event' },
     actions: { reset: 'reset' },
     extraReducer: (state, event, events) => {
         if (event.type === events.RESET) {
-            return { ...state, stream: _emptyStream(), active_run_id: '', lastResult: null, error: null };
+            return {
+                ...state,
+                stream: _emptyStream(),
+                active_run_id: '',
+                error_kind: '',
+                error_detail: '',
+                lastResult: null,
+                error: null,
+            };
         }
         if (event.type === events.REQUESTED) {
             const request = _normalizeRunPayload(event.payload);
-            return { ...state, active_run_id: request.run_id, stream: _streamFromRunPayload(request) };
+            return {
+                ...state,
+                active_run_id: request.run_id,
+                stream: _streamFromRunPayload(request),
+                error_kind: '',
+                error_detail: '',
+            };
         }
         if (event.type === events.STREAM_EVENT) {
             const payload = _requireObject(event.payload, 'stream event payload');
@@ -741,18 +807,23 @@ export const publicSearchRunOp = createAsyncOp({
                     error: null,
                 };
             }
-            return { ...state, active_run_id: '', stream };
+            return { ...state, active_run_id: '', stream, error_kind: '', error_detail: '' };
         }
         if (event.type === events.FAILED) {
-            const runId = _normalizeFailedRunId(event);
-            if (runId !== state.active_run_id) {
+            const failed = _normalizeFailedRunPayload(event);
+            if (failed.run_id !== state.active_run_id) {
                 return {
                     ...state,
                     busy: state.active_run_id !== '',
                     error: null,
                 };
             }
-            return { ...state, active_run_id: '' };
+            return {
+                ...state,
+                active_run_id: '',
+                error_kind: failed.error_kind,
+                error_detail: failed.detail,
+            };
         }
         return state;
     },
@@ -761,9 +832,15 @@ export const publicSearchRunOp = createAsyncOp({
         try {
             return await _runPublicSearch({ ...args, payload: request });
         } catch (error) {
-            const message = _errorMessage(error);
-            const status = error instanceof HttpError ? error.status : 502;
-            throw new HttpError(message, status, { detail: message, run_id: request.run_id });
+            const detail = _errorMessage(error);
+            const transportStatus = error instanceof HttpError ? error.status : 502;
+            const errorKind = _publicSearchErrorKind(detail, transportStatus);
+            const status = _publicSearchErrorStatus(errorKind, transportStatus);
+            throw new HttpError(errorKind, status, {
+                detail,
+                error_kind: errorKind,
+                run_id: request.run_id,
+            });
         }
     },
 });

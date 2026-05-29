@@ -469,6 +469,8 @@
     "field_max_tokens": "Max tokens",
     "provider": "Provider",
     "model": "Model",
+    "humanitec_llms_provider_tooltip": "Humanitec LLMs is the platform virtual provider: it routes requests to free models from the shared verified free pool.",
+    "humanitec_llms_auto_tooltip": "auto selects a free model from request requirements: tools, structured output, files/images, context, and model scoring.",
     "fallback_models": "Fallback models",
     "fallback_add": "Add fallback",
     "fallback_empty": "No fallback models configured",

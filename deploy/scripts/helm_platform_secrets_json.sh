@@ -41,10 +41,15 @@ jq -n \
   --arg turnSecret "${TURN_SECRET:-}" \
   --arg onlyofficeJwtSecret "${ONLYOFFICE_JWT_SECRET:-}" \
   --arg grafanaAdminPassword "${GRAFANA_ADMIN_PASSWORD:-}" \
-  --arg llmBothubApiKey "${LLM_BOTHUB_API_KEY:-}" \
-  --arg llmOpenrouterApiKey "${LLM_OPENROUTER_API_KEY:-}" \
-  --arg llmYandexApiKey "${LLM_YANDEX_API_KEY:-}" \
-  --arg llmYandexFolderId "${LLM_YANDEX_FOLDER_ID:-}" \
+  --arg llmOpenrouterApiKey "${LLM__OPENROUTER__API_KEY:-}" \
+  --arg llmBothubApiKey "${LLM__BOTHUB__API_KEY:-}" \
+  --arg llmGroqApiKey "${LLM__GROQ__API_KEY:-}" \
+  --arg llmGoogleApiKey "${LLM__GOOGLE__API_KEY:-}" \
+  --arg llmGithubApiKey "${LLM__GITHUB__API_KEY:-}" \
+  --arg llmHuggingfaceApiKey "${LLM__HUGGINGFACE__API_KEY:-}" \
+  --arg llmDeepinfraApiKey "${LLM__DEEPINFRA__API_KEY:-}" \
+  --arg llmYandexApiKey "${LLM__YANDEX__API_KEY:-}" \
+  --arg llmYandexFolderId "${LLM__YANDEX__FOLDER_ID:-}" \
   --arg sttCloudRuApiKey "${STT_CLOUD_RU_API_KEY:-}" \
   --arg sttYandexApiKey "${STT_YANDEX_API_KEY:-}" \
   --arg sttYandexFolderId "${STT_YANDEX_FOLDER_ID:-}" \
@@ -94,8 +99,13 @@ jq -n \
     turnSecret: $turnSecret,
     onlyofficeJwtSecret: $onlyofficeJwtSecret,
     grafanaAdminPassword: $grafanaAdminPassword,
-    llmBothubApiKey: $llmBothubApiKey,
     llmOpenrouterApiKey: $llmOpenrouterApiKey,
+    llmBothubApiKey: $llmBothubApiKey,
+    llmGroqApiKey: $llmGroqApiKey,
+    llmGoogleApiKey: $llmGoogleApiKey,
+    llmGithubApiKey: $llmGithubApiKey,
+    llmHuggingfaceApiKey: $llmHuggingfaceApiKey,
+    llmDeepinfraApiKey: $llmDeepinfraApiKey,
     llmYandexApiKey: $llmYandexApiKey,
     llmYandexFolderId: $llmYandexFolderId,
     sttCloudRuApiKey: $sttCloudRuApiKey,

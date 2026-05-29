@@ -62,12 +62,12 @@ def test_record_llm_response_updates_span_model_and_source(tracer: PlatformTrace
             1.0,
             llm_provider="openrouter",
             llm_model="qwen/qwen3-coder:free",
-            candidate_source="openrouter_free",
+            candidate_source="platform_free",
         )
 
         assert span_attr(span, attr.ATTR_LLM_MODEL) == "qwen/qwen3-coder:free"
         assert span_attr(span, attr.ATTR_LLM_PROVIDER) == "openrouter"
-        assert span_attr(span, attr.ATTR_LLM_CANDIDATE_SOURCE) == "openrouter_free"
+        assert span_attr(span, attr.ATTR_LLM_CANDIDATE_SOURCE) == "platform_free"
         assert (
             span_attr(span, attr.ATTR_BILLING_RESOURCE_NAME)
             == "llm:qwen/qwen3-coder:free"

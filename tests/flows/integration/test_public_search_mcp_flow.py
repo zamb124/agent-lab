@@ -123,6 +123,11 @@ async def test_public_search_flow_calls_search_mcp_without_monkeypatches(
     assert search_artifact["query"] == f"Tavily Search API official documentation {unique_id}"
     assert search_artifact["answer"] == "SEARCH_FLOW_OK"
     assert search_artifact["results"]
+    markdown_sources = search_artifact["markdown_sources"]
+    first_result = search_artifact["results"][0]
+    first_url = first_result["url"].replace(" ", "%20").replace("(", "%28").replace(")", "%29")
+    assert markdown_sources.startswith("1. [")
+    assert f"]({first_url})" in markdown_sources
     assert search_artifact["providers"]["tavily"]["ok"] is True
     assert search_artifact["suggestions"]
     assert search_artifact["followups"]
@@ -143,6 +148,9 @@ async def test_public_search_flow_calls_search_mcp_without_monkeypatches(
     assert "Подсказки для уточнения" in prompt_text
     assert "Follow-up вопросы" in prompt_text
     assert "Инсайты по результатам" in prompt_text
+    assert "Markdown-источники для финального ответа" in prompt_text
+    assert "URL допустим только внутри Markdown-ссылки" in prompt_text
+    assert markdown_sources in prompt_text
     assert '"actions"' in prompt_text
 
     await mock_llm_redis(
@@ -197,6 +205,7 @@ async def test_public_search_flow_calls_search_mcp_without_monkeypatches(
     assert ui_payloads["search/serp/insights_ready"]["result_insights"]
     assert ui_payloads["search/serp/completed"]["kind"] == "public_search_serp"
     assert ui_payloads["search/serp/completed"]["answer"] == "SEARCH_FLOW_STREAM_OK"
+    assert ui_payloads["search/serp/completed"]["markdown_sources"].startswith("1. [")
 
 
 @pytest.mark.asyncio

@@ -39,7 +39,7 @@ export class LandingCta extends PlatformElement {
                 position: absolute;
                 width: 1200px;
                 height: 400px;
-                background: rgba(255, 255, 255, 0.2);
+                background: var(--landing-panel-border-strong, rgba(255, 255, 255, 0.2));
                 filter: blur(100px);
                 bottom: 0;
                 right: -300px;
@@ -60,7 +60,7 @@ export class LandingCta extends PlatformElement {
                 font-size: 40px;
                 font-weight: 500;
                 line-height: 1.2;
-                color: var(--landing-secondary);
+                color: var(--landing-on-primary, #FFFFFF);
                 margin: 0 0 32px 0;
             }
 

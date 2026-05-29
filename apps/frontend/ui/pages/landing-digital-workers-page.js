@@ -53,7 +53,7 @@ export class LandingDigitalWorkersPage extends PlatformPage {
                 font-family: 'Fira Sans', sans-serif;
                 font-size: var(--text-lg);
                 line-height: 1.6;
-                color: rgba(255, 255, 255, 0.72);
+                color: var(--landing-text-subtle, rgba(255, 255, 255, 0.72));
                 max-width: 42rem;
                 margin: 0 auto;
             }
@@ -61,13 +61,13 @@ export class LandingDigitalWorkersPage extends PlatformPage {
                 font-family: 'Fira Sans', sans-serif;
                 font-size: var(--text-sm);
                 line-height: 1.6;
-                color: rgba(255, 255, 255, 0.55);
+                color: var(--landing-text-faint, rgba(255, 255, 255, 0.55));
                 max-width: 48rem;
                 margin: 0 auto var(--space-10);
                 padding: var(--space-4);
                 border-radius: var(--radius-md);
-                border: 1px solid rgba(255, 255, 255, 0.12);
-                background: rgba(255, 255, 255, 0.04);
+                border: 1px solid var(--landing-panel-border, rgba(255, 255, 255, 0.12));
+                background: var(--landing-panel-bg, rgba(255, 255, 255, 0.04));
             }
             .grid {
                 display: grid;
@@ -80,7 +80,7 @@ export class LandingDigitalWorkersPage extends PlatformPage {
                 object-fit: cover;
                 border-radius: var(--radius-md);
                 display: block;
-                background: rgba(255, 255, 255, 0.06);
+                background: var(--landing-panel-bg-strong, rgba(255, 255, 255, 0.06));
             }
             .card-body {
                 padding: var(--space-4) 0 0;
@@ -96,7 +96,7 @@ export class LandingDigitalWorkersPage extends PlatformPage {
             }
             .card-desc {
                 font-size: var(--text-sm);
-                color: rgba(255, 255, 255, 0.65);
+                color: var(--landing-text-subtle, rgba(255, 255, 255, 0.65));
                 margin: 0;
                 line-height: 1.5;
                 flex: 1;
@@ -115,7 +115,7 @@ export class LandingDigitalWorkersPage extends PlatformPage {
                 gap: var(--space-4);
                 min-height: 200px;
                 font-family: 'Fira Sans', sans-serif;
-                color: rgba(255, 255, 255, 0.7);
+                color: var(--landing-text-subtle, rgba(255, 255, 255, 0.7));
             }
             .err {
                 color: #f87171;

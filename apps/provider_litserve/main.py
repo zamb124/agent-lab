@@ -10,6 +10,7 @@ import time
 from pathlib import Path
 
 import litserve as ls
+import torch
 from fastapi import APIRouter, Depends, FastAPI
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.routing import APIRoute
@@ -70,6 +71,51 @@ def _ui_health_handler() -> JSONResponse:
     return JSONResponse(build_health_payload(settings))
 
 
+def _cuda_required_for_inference() -> bool:
+    cfg = get_provider_litserve_settings().provider_litserve.infra
+    if cfg.accelerator == "cuda":
+        return True
+    if cfg.embedding_accelerator == "cuda" or cfg.rerank_accelerator == "cuda":
+        return True
+    return False
+
+
+def _inference_health_handler() -> JSONResponse:
+    settings = get_provider_litserve_settings()
+    cfg = settings.provider_litserve.infra
+    response_task = _provider_litserve_response_task
+    runtime_started = _provider_litserve_manager is not None and response_task is not None and not response_task.done()
+    cuda_required = _cuda_required_for_inference()
+    cuda_available = torch.cuda.is_available()
+    device_count = torch.cuda.device_count() if cuda_available else 0
+    devices: list[dict[str, int | str | float]] = []
+    if cuda_available:
+        for i in range(device_count):
+            props = torch.cuda.get_device_properties(i)
+            devices.append(
+                {
+                    "index": i,
+                    "name": props.name,
+                    "total_memory_gb": round(props.total_memory / 1024**3, 2),
+                }
+            )
+    ok = runtime_started and (not cuda_required or cuda_available)
+    payload = {
+        "status": "ok" if ok else "unhealthy",
+        "litserve_runtime_started": runtime_started,
+        "accelerator": cfg.accelerator,
+        "embedding_accelerator": cfg.embedding_accelerator,
+        "rerank_accelerator": cfg.rerank_accelerator,
+        "cuda_required": cuda_required,
+        "cuda_available": cuda_available,
+        "torch_version": torch.__version__,
+        "torch_cuda_version": torch.version.cuda,
+        "cuda_device_count": device_count,
+        "cuda_devices": devices,
+    }
+    return JSONResponse(payload, status_code=200 if ok else 503)
+
+
 def _register_ui_routes(app: FastAPI) -> None:
     if not UI_INDEX_PATH.exists():
         raise RuntimeError(f"UI entrypoint not found: {UI_INDEX_PATH}")
@@ -88,6 +134,7 @@ def _register_ui_routes(app: FastAPI) -> None:
         dependencies=[Depends(system_auth_dependency)],
     )
     router.add_api_route(f"{UI_PREFIX}/health", _ui_health_handler, methods=["GET"])
+    router.add_api_route("/health/inference", _inference_health_handler, methods=["GET"])
     app.include_router(router)
 
 

@@ -4,6 +4,7 @@
 Реальный сервис, flows загружаются из agents/.
 """
 
+from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
 import pytest
@@ -14,7 +15,17 @@ from apps.flows.src.api.registry import (
     _platform_provider_options,
 )
 from apps.flows.src.services.llm_models_service import LLMModelsService
-from core.clients.llm.model_routing import HUMANITEC_LLM_AUTO_MODEL, HUMANITEC_LLM_PROVIDER
+from core.clients.llm.model_routing import (
+    ACCOUNT_FREE_TIER_LLM_PROVIDER_SLUGS,
+    HUMANITEC_LLM_AUTO_MODEL,
+    HUMANITEC_LLM_PROVIDER,
+    HUMANITEC_LLMS_DISPLAY_LABEL,
+    OPENAI_COMPATIBLE_LLM_PROVIDER_ORDER,
+)
+from core.clients.llm.platform_free_models import (
+    PlatformFreeModelRecord,
+    serialize_platform_free_models,
+)
 from core.company_ai import CompanyAIProviders, CompanyCustomOpenAICompatibleProvider
 
 
@@ -43,7 +54,7 @@ def test_registry_platform_provider_options_labels_humanitec_llm():
     assert not isinstance(options[1], str)
     assert options[1].model_dump(mode="json", exclude_none=True) == {
         "value": HUMANITEC_LLM_PROVIDER,
-        "label": "Humanitec LLM",
+        "label": HUMANITEC_LLMS_DISPLAY_LABEL,
         "kind": "virtual",
     }
 
@@ -54,9 +65,95 @@ async def test_humanitec_llm_models_are_virtual_and_not_read_from_repository():
         async def list_by_provider(self, provider):
             raise AssertionError(f"unexpected repository call for {provider}")
 
-    service = LLMModelsService(Repo(), AsyncMock())  # pyright: ignore[reportArgumentType]
+    redis = AsyncMock()
+    redis.get.return_value = serialize_platform_free_models(
+        [
+            PlatformFreeModelRecord(
+                provider="openrouter",
+                id="qwen/qwen3-coder:free",
+                score=96,
+                context_length=262144,
+                supported_parameters=("tools", "response_format"),
+                input_modalities=("text",),
+                output_modalities=("text",),
+            )
+        ]
+    )
+    service = LLMModelsService(Repo(), AsyncMock(), redis)  # pyright: ignore[reportArgumentType]
     assert await service.get_models_by_provider(HUMANITEC_LLM_PROVIDER) == [
-        HUMANITEC_LLM_AUTO_MODEL
+        {
+            "value": HUMANITEC_LLM_AUTO_MODEL,
+            "label": HUMANITEC_LLM_AUTO_MODEL,
+            "kind": "auto",
+        },
+        {
+            "value": "openrouter:qwen/qwen3-coder:free",
+            "label": "openrouter / qwen/qwen3-coder:free",
+            "kind": "free_model",
+            "provider": "openrouter",
+            "model_id": "qwen/qwen3-coder:free",
+            "score": 96,
+            "context_length": 262144,
+            "max_tokens": None,
+            "supported_parameters": ["tools", "response_format"],
+            "input_modalities": ["text"],
+            "output_modalities": ["text"],
+            "free_reason": "verified_zero_price",
+        },
+    ]
+
+
+def test_configured_providers_follow_canonical_provider_order(monkeypatch):
+    provider_configs = {
+        provider: SimpleNamespace(api_key="test-key")
+        for provider in OPENAI_COMPATIBLE_LLM_PROVIDER_ORDER
+    }
+    for provider in ACCOUNT_FREE_TIER_LLM_PROVIDER_SLUGS:
+        provider_configs[provider] = SimpleNamespace(
+            api_key="test-key",
+            smoke_model=f"{provider}/smoke",
+        )
+    provider_configs["yandex"] = SimpleNamespace(api_key="test-key", folder_id="folder")
+    settings = SimpleNamespace(
+        llm=SimpleNamespace(
+            **provider_configs,
+            platform_free_pool=SimpleNamespace(
+                enabled=True,
+                providers=OPENAI_COMPATIBLE_LLM_PROVIDER_ORDER,
+            ),
+        )
+    )
+    monkeypatch.setattr("apps.flows.src.services.llm_models_service.get_settings", lambda: settings)
+
+    assert LLMModelsService.get_configured_providers() == [
+        HUMANITEC_LLM_PROVIDER,
+        *OPENAI_COMPATIBLE_LLM_PROVIDER_ORDER,
+    ]
+
+
+def test_humanitec_llm_available_with_account_free_tier_provider(monkeypatch):
+    settings = SimpleNamespace(
+        llm=SimpleNamespace(
+            openrouter=None,
+            bothub=None,
+            groq=SimpleNamespace(api_key="test-key", smoke_model="llama-3.1-8b-instant"),
+            google=None,
+            github=None,
+            huggingface=None,
+            deepinfra=None,
+            openai=None,
+            yandex=None,
+            platform_free_pool=SimpleNamespace(
+                enabled=True,
+                providers=OPENAI_COMPATIBLE_LLM_PROVIDER_ORDER,
+            ),
+        )
+    )
+    monkeypatch.setattr("apps.flows.src.services.llm_models_service.get_settings", lambda: settings)
+
+    assert LLMModelsService.get_configured_providers() == [
+        HUMANITEC_LLM_PROVIDER,
+        "groq",
     ]
 
 

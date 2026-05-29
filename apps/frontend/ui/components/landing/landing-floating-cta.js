@@ -33,13 +33,13 @@ export class LandingFloatingCta extends PlatformElement {
                 margin-left: auto;
                 padding: 14px 16px;
                 border-radius: 16px;
-                border: 1px solid rgba(255, 255, 255, 0.14);
-                background: rgba(15, 15, 15, 0.92);
+                border: 1px solid var(--landing-panel-border-strong, rgba(255, 255, 255, 0.14));
+                background: var(--landing-dropdown-bg, rgba(15, 15, 15, 0.92));
                 backdrop-filter: blur(12px);
                 display: flex;
                 flex-direction: column;
                 gap: 10px;
-                box-shadow: 0 12px 40px rgba(0, 0, 0, 0.45);
+                box-shadow: var(--landing-elevated-shadow, 0 12px 40px rgba(0, 0, 0, 0.45));
             }
             .row {
                 display: flex;
@@ -76,7 +76,7 @@ export class LandingFloatingCta extends PlatformElement {
             button.dismiss {
                 border: none;
                 background: transparent;
-                color: rgba(232, 232, 232, 0.65);
+                color: var(--landing-text-subtle, rgba(232, 232, 232, 0.65));
                 font-family: 'Fira Sans', sans-serif;
                 font-size: 13px;
                 cursor: pointer;

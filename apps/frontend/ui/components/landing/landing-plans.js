@@ -38,8 +38,8 @@ export class LandingPlans extends PlatformElement {
             }
             
             .plan-card {
-                background: rgba(255, 255, 255, 0.03);
-                border: 1px solid rgba(255, 255, 255, 0.1);
+                background: var(--landing-panel-bg, rgba(255, 255, 255, 0.03));
+                border: 1px solid var(--landing-panel-border, rgba(255, 255, 255, 0.1));
                 border-radius: 24px;
                 padding: 40px;
                 backdrop-filter: blur(10px);
@@ -52,7 +52,7 @@ export class LandingPlans extends PlatformElement {
             }
             
             .plan-card.premium {
-                background: radial-gradient(circle at top right, rgba(87, 104, 254, 0.2), rgba(255, 255, 255, 0.03));
+                background: radial-gradient(circle at top right, rgba(87, 104, 254, 0.2), var(--landing-panel-bg, rgba(255, 255, 255, 0.03)));
                 border-color: var(--landing-primary);
                 position: relative;
                 overflow: hidden;
@@ -106,7 +106,7 @@ export class LandingPlans extends PlatformElement {
                 font-family: 'Fira Sans', sans-serif;
                 font-size: 16px;
                 line-height: 1.6;
-                color: rgba(232, 232, 232, 0.8);
+                color: var(--landing-text-soft, rgba(232, 232, 232, 0.8));
                 margin: 0 0 32px 0;
             }
             
@@ -138,10 +138,10 @@ export class LandingPlans extends PlatformElement {
             .plan-target {
                 font-family: 'Fira Sans', sans-serif;
                 font-size: 14px;
-                color: rgba(232, 232, 232, 0.6);
+                color: var(--landing-text-subtle, rgba(232, 232, 232, 0.6));
                 margin: 0 0 24px 0;
                 padding-top: 24px;
-                border-top: 1px solid rgba(255, 255, 255, 0.1);
+                border-top: 1px solid var(--landing-panel-border, rgba(255, 255, 255, 0.1));
             }
             
             .plan-cta {
@@ -159,7 +159,7 @@ export class LandingPlans extends PlatformElement {
             .plan-cta.transparent {
                 background: transparent;
                 border: 1px solid var(--landing-secondary);
-                color: var(--landing-secondary);
+                color: var(--landing-on-primary, #FFFFFF);
             }
             
             .plan-cta.transparent:hover {
@@ -373,4 +373,3 @@ export class LandingPlans extends PlatformElement {
 }
 
 customElements.define('landing-plans', LandingPlans);
-

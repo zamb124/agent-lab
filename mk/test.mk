@@ -114,10 +114,13 @@ test:
 	if [ $$phase1_rc -ne 0 ]; then \
 		echo ""; \
 		echo "=== 2/3 Перезапуск упавших тестов (без параллелизации) ==="; \
-		uv run python -c "import subprocess,sys; r=subprocess.run(sys.argv[1:], timeout=$(PYTEST_COMMAND_TIMEOUT_SECONDS)); raise SystemExit(r.returncode)" uv run pytest tests/ --lf -n 1 --max-worker-restart=$(PYTEST_MAX_WORKER_RESTART) \
-			$(_PYTEST_IGNORE_UI) \
-			-m "not integration" -v; \
+			uv run python scripts/run_pytest_lastfailed.py --timeout $(PYTEST_COMMAND_TIMEOUT_SECONDS) -- -n 1 --max-worker-restart=$(PYTEST_MAX_WORKER_RESTART) \
+				$(_PYTEST_IGNORE_UI) \
+				-m "not integration" -v; \
 		phase2_rc=$$?; \
+		if [ $$phase2_rc -eq 0 ]; then \
+			phase1_rc=0; \
+		fi; \
 	else \
 		echo ""; \
 		echo "=== 2/3 Перезапуск упавших тестов пропущен: первая фаза зелёная ==="; \
@@ -148,9 +151,12 @@ test-all:
 	if [ $$phase1_rc -ne 0 ]; then \
 		echo ""; \
 		echo "=== 2/3 Перезапуск упавших тестов (без параллелизации) ==="; \
-		uv run python -c "import subprocess,sys; r=subprocess.run(sys.argv[1:], timeout=$(PYTEST_COMMAND_TIMEOUT_SECONDS)); raise SystemExit(r.returncode)" uv run pytest tests/ --lf -n 1 --max-worker-restart=$(PYTEST_MAX_WORKER_RESTART) \
-			$(_PYTEST_IGNORE_UI) -v; \
+			uv run python scripts/run_pytest_lastfailed.py --timeout $(PYTEST_COMMAND_TIMEOUT_SECONDS) -- -n 1 --max-worker-restart=$(PYTEST_MAX_WORKER_RESTART) \
+				$(_PYTEST_IGNORE_UI) -v; \
 		phase2_rc=$$?; \
+		if [ $$phase2_rc -eq 0 ]; then \
+			phase1_rc=0; \
+		fi; \
 	else \
 		echo ""; \
 		echo "=== 2/3 Перезапуск упавших тестов пропущен: первая фаза зелёная ==="; \

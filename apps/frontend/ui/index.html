@@ -3,26 +3,9 @@
 <head>
     <script>
         (function () {
-            var p = location.pathname.replace(/\/+$/, '') || '/';
-            var pub =
-                p === '/' ||
-                p === '/login' ||
-                p === '/join' ||
-                p === '/select-company' ||
-                p === '/policy' ||
-                p === '/terms' ||
-                p === '/support' ||
-                p === '/blog' ||
-                p.indexOf('/blog/') === 0 ||
-                p === '/about' ||
-                p === '/roadmap' ||
-                p === '/search' ||
-                p.indexOf('/demo/digital-workers') === 0 ||
-                p.indexOf('/products/') === 0;
-            if (pub) {
-                document.documentElement.setAttribute('data-platform-theme-lock', 'dark');
-                document.documentElement.setAttribute('data-theme', 'dark');
-            }
+            var stored = localStorage.getItem('platform_theme');
+            var mode = stored === 'light' || stored === 'dark' ? stored : 'dark';
+            document.documentElement.setAttribute('data-theme', mode);
         })();
     </script>
     <meta charset="UTF-8">
@@ -124,7 +107,7 @@
         body {
             margin: 0;
             padding: 0;
-            background: var(--bg-gradient, linear-gradient(135deg, #1a1a2e 0%, #16213e 25%, #0f3460 50%, #1a1a2e 75%, #16213e 100%));
+            background: var(--landing-bg, var(--bg-gradient, linear-gradient(135deg, #1a1a2e 0%, #16213e 25%, #0f3460 50%, #1a1a2e 75%, #16213e 100%)));
             min-height: 100vh;
         }
         

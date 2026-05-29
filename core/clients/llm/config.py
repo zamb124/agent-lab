@@ -49,6 +49,7 @@ class LLMCallConfig(StrictBaseModel):
     input_modalities: frozenset[str] = Field(default_factory=frozenset, exclude=True)
     output_modalities: frozenset[str] = Field(default_factory=frozenset, exclude=True)
     context_length: int | None = Field(default=None, exclude=True)
+    capability_metadata_verified: bool = Field(default=False, exclude=True)
 
     @field_validator("provider", "model", "api_key", "folder_id", "base_url", mode="before")
     @classmethod

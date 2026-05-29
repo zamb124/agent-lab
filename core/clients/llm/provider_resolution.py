@@ -3,13 +3,36 @@
 from __future__ import annotations
 
 from collections.abc import Sequence
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, cast
 
 from core.clients.llm.config import LLMCallConfig
-from core.clients.llm.model_routing import HUMANITEC_LLM_PROVIDER, LLM_ROUTING_PROVIDER_SLUGS
+from core.clients.llm.model_routing import (
+    HUMANITEC_LLM_AUTO_MODEL,
+    HUMANITEC_LLM_PROVIDER,
+    LLM_ROUTING_PROVIDER_SLUGS,
+)
 from core.config.base import BaseSettings
 from core.config.llm_openai_compat import yandex_llm_openai_root_from_provider_cfg
+from core.config.models import (
+    BothubProviderConfig,
+    DeepInfraProviderConfig,
+    GitHubModelsProviderConfig,
+    GoogleLLMProviderConfig,
+    GroqProviderConfig,
+    HuggingFaceProviderConfig,
+    OpenAIProviderConfig,
+    OpenRouterProviderConfig,
+    YandexLLMProviderConfig,
+)
 from core.config.openai_v1_base_url import normalize_openai_v1_base_url
+from core.llm_model_routing import (
+    ACCOUNT_FREE_TIER_LLM_PROVIDER_SLUGS,
+    GITHUB_MODELS_API_VERSION,
+    LLM_PROVIDER_DEFAULT_BASE_URLS,
+    LLM_PROVIDER_DETECTION_HOSTS,
+    OPENAI_COMPATIBLE_LLM_PROVIDER_SLUGS,
+    PLATFORM_FREE_MODEL_CANDIDATE_PROVIDER_SLUGS,
+)
 from core.types import JsonObject
 from core.variables import VariableResolutionError, VarResolver
 
@@ -17,6 +40,42 @@ if TYPE_CHECKING:
     from core.state import ExecutionState
 
 _YANDEX_MODEL_URI_PREFIXES = ("gpt://", "emb://")
+_OpenAICompatibleProviderConfig = (
+    OpenAIProviderConfig
+    | OpenRouterProviderConfig
+    | BothubProviderConfig
+    | YandexLLMProviderConfig
+    | GroqProviderConfig
+    | GoogleLLMProviderConfig
+    | GitHubModelsProviderConfig
+    | HuggingFaceProviderConfig
+    | DeepInfraProviderConfig
+)
+
+
+def _configured_provider_config(
+    settings: BaseSettings,
+    provider: str,
+) -> _OpenAICompatibleProviderConfig | None:
+    if provider == "openai":
+        return settings.llm.openai
+    if provider == "openrouter":
+        return settings.llm.openrouter
+    if provider == "bothub":
+        return settings.llm.bothub
+    if provider == "yandex":
+        return settings.llm.yandex
+    if provider == "groq":
+        return settings.llm.groq
+    if provider == "google":
+        return settings.llm.google
+    if provider == "github":
+        return settings.llm.github
+    if provider == "huggingface":
+        return settings.llm.huggingface
+    if provider == "deepinfra":
+        return settings.llm.deepinfra
+    return None
 
 
 def _yandex_openai_root(settings: BaseSettings) -> str:
@@ -92,14 +151,10 @@ def _detect_provider(base_url: str | None) -> str | None:
     """Определяет провайдера по base_url."""
     if not base_url:
         return None
-    if "openrouter.ai" in base_url:
-        return "openrouter"
-    if "bothub.chat" in base_url:
-        return "bothub"
-    if "api.openai.com" in base_url:
-        return "openai"
-    if "llm.api.cloud.yandex.net" in base_url:
-        return "yandex"
+    normalized_base_url = base_url.lower()
+    for provider, hosts in LLM_PROVIDER_DETECTION_HOSTS.items():
+        if any(host in normalized_base_url for host in hosts):
+            return provider
     return None
 
 
@@ -114,29 +169,54 @@ def _ensure_known_provider(provider: str) -> None:
 
 def _get_default_base_url(provider: str, settings: BaseSettings) -> str:
     """Возвращает base_url по умолчанию для провайдера."""
-    if provider == "openrouter":
-        return (
-            settings.llm.openrouter.base_url or "https://openrouter.ai/api/v1"
-            if settings.llm.openrouter
-            else "https://openrouter.ai/api/v1"
-        )
-    if provider == "bothub":
-        return (
-            settings.llm.bothub.base_url or "https://bothub.chat/api/v2/openai/v1"
-            if settings.llm.bothub
-            else "https://bothub.chat/api/v2/openai/v1"
-        )
-    if provider == "openai":
-        return (
-            settings.llm.openai.base_url or "https://api.openai.com/v1"
-            if settings.llm.openai
-            else "https://api.openai.com/v1"
-        )
     if provider == "yandex":
         return _yandex_openai_root(settings)
+    if provider in LLM_PROVIDER_DEFAULT_BASE_URLS:
+        provider_config = _configured_provider_config(settings, provider)
+        configured_base_url = provider_config.base_url if provider_config is not None else None
+        if isinstance(configured_base_url, str) and configured_base_url.strip():
+            return configured_base_url.strip().rstrip("/")
+        return LLM_PROVIDER_DEFAULT_BASE_URLS[provider]
     if provider == "custom_openai_compatible":
         raise ValueError("custom_openai_compatible LLM требует явный base_url")
     raise ValueError(f"Неизвестный LLM провайдер: {provider}")
+
+
+def _github_default_headers(settings: BaseSettings) -> dict[str, str]:
+    provider_config = settings.llm.github
+    api_version = (
+        provider_config.api_version
+        if provider_config and provider_config.api_version and provider_config.api_version.strip()
+        else GITHUB_MODELS_API_VERSION
+    )
+    return {
+        "Accept": "application/vnd.github+json",
+        "X-GitHub-Api-Version": api_version.strip(),
+    }
+
+
+def _provider_display_name(provider: str) -> str:
+    return {
+        "bothub": "Bothub",
+        "deepinfra": "DeepInfra",
+        "github": "GitHub Models",
+        "google": "Google LLM",
+        "groq": "Groq",
+        "huggingface": "Hugging Face",
+        "openai": "OpenAI",
+        "openrouter": "OpenRouter",
+        "yandex": "Yandex LLM",
+    }.get(provider, provider)
+
+
+def _configured_openai_compatible_provider(
+    settings: BaseSettings,
+    provider: str,
+) -> _OpenAICompatibleProviderConfig:
+    provider_config = _configured_provider_config(settings, provider)
+    if provider_config is None or not provider_config.api_key:
+        raise ValueError(f"{_provider_display_name(provider)} API key не настроен")
+    return provider_config
 
 
 def _resolve_default_base_url(
@@ -227,6 +307,8 @@ def _resolve_llm_call_config(
                 "HTTP-Referer": settings.llm.openrouter.site_url,
                 "X-Title": settings.llm.openrouter.site_name,
             }
+        if resolved_provider == "github":
+            default_headers = _github_default_headers(settings)
         if resolved_provider == "yandex":
             yandex_config = settings.llm.yandex
             platform_folder_id = (
@@ -270,31 +352,26 @@ def _resolve_llm_call_config(
         )
 
     provider_config = None
-    if resolved_provider == "openrouter":
-        provider_config = settings.llm.openrouter
-        if not provider_config or not provider_config.api_key:
-            raise ValueError("OpenRouter API key не настроен")
-        default_headers = {
-            "HTTP-Referer": provider_config.site_url,
-            "X-Title": provider_config.site_name,
-        }
-    elif resolved_provider == "bothub":
-        provider_config = settings.llm.bothub
-        if not provider_config or not provider_config.api_key:
-            raise ValueError("Bothub API key не настроен")
-    elif resolved_provider == "openai":
-        provider_config = settings.llm.openai
-        if not provider_config or not provider_config.api_key:
-            raise ValueError("OpenAI API key не настроен")
-    elif resolved_provider == "yandex":
-        provider_config = settings.llm.yandex
-        if not provider_config or not provider_config.api_key:
-            raise ValueError("Yandex LLM API key не настроен")
-        if not provider_config.folder_id or not str(provider_config.folder_id).strip():
-            raise ValueError("Yandex LLM folder_id не настроен")
-        folder_id = str(provider_config.folder_id).strip()
-        candidate_model = normalize_yandex_resource_model_uri(candidate_model, folder_id)
-        default_headers = _yandex_auth_headers(api_key=str(provider_config.api_key), folder_id=folder_id)
+    if resolved_provider in OPENAI_COMPATIBLE_LLM_PROVIDER_SLUGS:
+        provider_config = _configured_openai_compatible_provider(settings, resolved_provider)
+        if resolved_provider == "openrouter":
+            openrouter_config = cast(OpenRouterProviderConfig, provider_config)
+            default_headers = {
+                "HTTP-Referer": openrouter_config.site_url,
+                "X-Title": openrouter_config.site_name,
+            }
+        elif resolved_provider == "github":
+            default_headers = _github_default_headers(settings)
+        elif resolved_provider == "yandex":
+            yandex_config = cast(YandexLLMProviderConfig, provider_config)
+            if not yandex_config.folder_id or not str(yandex_config.folder_id).strip():
+                raise ValueError("Yandex LLM folder_id не настроен")
+            folder_id = str(yandex_config.folder_id).strip()
+            candidate_model = normalize_yandex_resource_model_uri(candidate_model, folder_id)
+            default_headers = _yandex_auth_headers(
+                api_key=str(yandex_config.api_key),
+                folder_id=folder_id,
+            )
     elif resolved_provider == "custom_openai_compatible":
         raise ValueError(
             "custom_openai_compatible LLM требует явный api_key и base_url; "
@@ -356,11 +433,26 @@ def _resolved_llm_configs(
     return resolved_configs
 
 
+def _platform_free_pool_provider_is_configured(
+    settings: BaseSettings,
+    provider: str,
+) -> bool:
+    if provider not in PLATFORM_FREE_MODEL_CANDIDATE_PROVIDER_SLUGS:
+        return False
+    provider_config = _configured_provider_config(settings, provider)
+    if provider_config is None or not provider_config.api_key:
+        return False
+    if provider in ACCOUNT_FREE_TIER_LLM_PROVIDER_SLUGS:
+        smoke_model = provider_config.smoke_model
+        return isinstance(smoke_model, str) and bool(smoke_model.strip())
+    return True
+
+
 def _platform_default_pool_is_configured(settings: BaseSettings) -> bool:
-    return (
-        settings.llm.openrouter_free_pool.enabled
-        and settings.llm.openrouter is not None
-        and bool(settings.llm.openrouter.api_key)
+    free_pool_config = settings.llm.platform_free_pool
+    return free_pool_config.enabled and any(
+        _platform_free_pool_provider_is_configured(settings, provider)
+        for provider in free_pool_config.providers
     )
 
 
@@ -378,15 +470,18 @@ def _should_use_platform_default_pool(
         for value in (api_key, base_url, folder_id)
     )
     explicit_humanitec_llm = _is_humanitec_llm_provider(provider)
+    explicit_humanitec_auto = explicit_humanitec_llm and (
+        model is None or str(model).strip() == HUMANITEC_LLM_AUTO_MODEL
+    )
     implicit_default_route = (
         model is None
         and provider is None
-        and settings.llm.default_strategy == "openrouter_free_pool"
+        and settings.llm.default_strategy == "platform_free_pool"
     )
     return (
         not has_explicit_transport
         and _platform_default_pool_is_configured(settings)
-        and (explicit_humanitec_llm or implicit_default_route)
+        and (explicit_humanitec_auto or implicit_default_route)
     )
 
 
