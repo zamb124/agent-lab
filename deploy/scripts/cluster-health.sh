@@ -200,9 +200,9 @@ if [ -z "$LITSERVE_POD" ]; then
 else
   # Образ full (provider-litserve) ставит curl и python.
   check_step_with_output \
-    "litserve GET /health/inference is healthy (in-cluster)" \
+    "litserve GET /v1/health/inference is healthy (in-cluster)" \
     "$K exec -n $PLATFORM_NS $LITSERVE_POD -- \
-      curl -fsS --max-time 15 http://127.0.0.1:8014/health/inference >/dev/null"
+      curl -fsS --max-time 15 http://127.0.0.1:8014/v1/health/inference >/dev/null"
   check_step_with_output \
     "litserve GET /v1/models is healthy (in-cluster)" \
     "$K exec -n $PLATFORM_NS $LITSERVE_POD -- \

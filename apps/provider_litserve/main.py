@@ -173,6 +173,14 @@ def _register_v1_models_route(server: ls.LitServer) -> None:
     )
 
 
+def _register_v1_inference_health_route(server: ls.LitServer) -> None:
+    server.app.add_api_route(
+        "/v1/health/inference",
+        _inference_health_handler,
+        methods=["GET"],
+    )
+
+
 def _merge_litserver_v1_routes(app: FastAPI, lit_app: FastAPI) -> None:
     known = {
         (route.path, tuple(sorted(route.methods or [])))
@@ -210,6 +218,7 @@ def _register_litserver_v1(app: FastAPI) -> None:
         fast_queue=cfg.fast_queue,
     )
     _register_v1_models_route(lit_server)
+    _register_v1_inference_health_route(lit_server)
     _merge_litserver_v1_routes(app, lit_server.app)
     _provider_litserve_server = lit_server
 
