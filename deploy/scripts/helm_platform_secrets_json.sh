@@ -41,8 +41,8 @@ jq -n \
   --arg turnSecret "${TURN_SECRET:-}" \
   --arg onlyofficeJwtSecret "${ONLYOFFICE_JWT_SECRET:-}" \
   --arg grafanaAdminPassword "${GRAFANA_ADMIN_PASSWORD:-}" \
-  --arg llmOpenrouterApiKey "${LLM__OPENROUTER__API_KEY:-}" \
-  --arg llmBothubApiKey "${LLM__BOTHUB__API_KEY:-}" \
+  --arg llmOpenrouterApiKey "${LLM__OPENROUTER__API_KEY:-${LLM_OPENROUTER_API_KEY:-}}" \
+  --arg llmBothubApiKey "${LLM__BOTHUB__API_KEY:-${LLM_BOTHUB_API_KEY:-}}" \
   --arg llmGroqApiKey "${LLM__GROQ__API_KEY:-}" \
   --arg llmGoogleApiKey "${LLM__GOOGLE__API_KEY:-}" \
   --arg llmGithubApiKey "${LLM__GITHUB__API_KEY:-}" \

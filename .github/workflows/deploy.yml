@@ -320,6 +320,8 @@ jobs:
           GRAFANA_ADMIN_PASSWORD: ${{ secrets.GRAFANA_ADMIN_PASSWORD }}
           LLM__OPENROUTER__API_KEY: ${{ secrets.LLM__OPENROUTER__API_KEY }}
           LLM__BOTHUB__API_KEY: ${{ secrets.LLM__BOTHUB__API_KEY }}
+          LLM_OPENROUTER_API_KEY: ${{ secrets.LLM_OPENROUTER_API_KEY }}
+          LLM_BOTHUB_API_KEY: ${{ secrets.LLM_BOTHUB_API_KEY }}
           LLM__GROQ__API_KEY: ${{ secrets.LLM__GROQ__API_KEY }}
           LLM__GOOGLE__API_KEY: ${{ secrets.LLM__GOOGLE__API_KEY }}
           LLM__GITHUB__API_KEY: ${{ secrets.LLM__GITHUB__API_KEY }}
