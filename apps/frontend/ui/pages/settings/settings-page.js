@@ -610,6 +610,7 @@ export class FrontendSettingsPage extends PlatformPage {
     _renderCapabilityCard(cap, catalog) {
         const draft = this._capabilityDraft(cap);
         const providerCatalog = catalog[cap.capability] || [];
+        const platformModel = this._platformModelForCapability(cap, draft);
         return html`
             <div class="capability-card">
                 <div class="header">
@@ -621,7 +622,7 @@ export class FrontendSettingsPage extends PlatformPage {
                     .capability=${cap.capability}
                     .config=${draft}
                     .providerCatalog=${providerCatalog}
-                    .platformModel=${cap.platform_default_model || ''}
+                    .platformModel=${platformModel}
                     .costOrigin=${cap.configured ? (draft.api_key || draft.base_url || (draft.provider || '').startsWith('custom:') ? 'company' : 'platform') : null}
                     .keyMasked=${cap.key_masked || null}
                     .clearable=${cap.configured}
@@ -635,6 +636,25 @@ export class FrontendSettingsPage extends PlatformPage {
                 </div>
             </div>
         `;
+    }
+
+    _platformModelForCapability(cap, draft) {
+        const platformModel = cap.platform_default_model || '';
+        if (!platformModel) {
+            return '';
+        }
+        const provider = (draft && draft.provider) || '';
+        if (provider !== (cap.platform_default_provider || '')) {
+            return '';
+        }
+        if (provider !== 'humanitec_llm') {
+            return platformModel;
+        }
+        const companyModel = (draft && draft.model) || 'auto';
+        if (companyModel === platformModel) {
+            return '';
+        }
+        return platformModel;
     }
 
     _normalizeCustomProviderRow(raw) {

@@ -17,9 +17,21 @@ class TestSettingsAPI:
         self,
         frontend_client: AsyncClient,
         auth_headers,
-        frontend_container
+        frontend_container,
+        unique_id: str,
     ):
         """Получение профиля компании и снимка AI-провайдеров (раздельные роутеры)."""
+        from apps.flows.src.models import LLMModel
+
+        openrouter_model_id = f"unit/openrouter-settings-{unique_id}"
+        groq_model_id = f"unit-groq-settings-{unique_id}"
+        await frontend_container.flows_llm_model_repository.set(
+            LLMModel(model_id=openrouter_model_id, provider="openrouter")
+        )
+        await frontend_container.flows_llm_model_repository.set(
+            LLMModel(model_id=groq_model_id, provider="groq")
+        )
+
         response = await frontend_client.get(
             "/frontend/api/settings/company",
             headers=auth_headers
@@ -64,6 +76,10 @@ class TestSettingsAPI:
             "label": "auto",
             "kind": "auto",
         }
+        openrouter_item = next(item for item in prov_items if item["value"] == "openrouter")
+        assert {"value": openrouter_model_id, "label": openrouter_model_id, "kind": "provider_model"} in openrouter_item["models"]
+        groq_item = next(item for item in prov_items if item["value"] == "groq")
+        assert {"value": groq_model_id, "label": groq_model_id, "kind": "provider_model"} in groq_item["models"]
         assert any(p.get("kind") == "platform" for p in prov_items)
         assert body["llm_context"]["configured"] is False
         assert body["llm_context"]["config"] == {}
@@ -146,6 +162,21 @@ class TestSettingsAPI:
 
         assert response.status_code == 400
         assert "missing-profile" in response.json()["detail"]
+
+    async def test_ai_provider_platform_llm_requires_explicit_model(
+        self,
+        frontend_client: AsyncClient,
+        auth_headers,
+    ):
+        """Обычный provider не принимает implicit auto: auto живёт только в Humanitec LLMs."""
+        response = await frontend_client.put(
+            "/frontend/api/settings/ai-providers/llm_chat",
+            headers=auth_headers,
+            json={"provider": "openrouter"},
+        )
+
+        assert response.status_code == 400
+        assert "model обязателен" in response.json()["detail"]
 
     async def test_ai_providers_accept_user_company_admin_role_when_company_members_stale(
         self,

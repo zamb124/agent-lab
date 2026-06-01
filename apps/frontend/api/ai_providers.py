@@ -28,9 +28,14 @@ from apps.frontend.models import (
     CustomProviderCreate,
     CustomProviderUpdate,
 )
-from core.clients.llm.model_routing import HUMANITEC_LLM_PROVIDER, HUMANITEC_LLMS_DISPLAY_LABEL
+from core.clients.llm.model_routing import (
+    HUMANITEC_LLM_PROVIDER,
+    HUMANITEC_LLMS_DISPLAY_LABEL,
+    OPENAI_COMPATIBLE_LLM_PROVIDER_ORDER,
+)
 from core.clients.llm.platform_free_models import read_humanitec_llms_model_options
 from core.company_ai import (
+    CUSTOM_PROVIDER_REF_PREFIX,
     METADATA_KEY,
     PLATFORM_LLM_PROVIDERS,
     AICapability,
@@ -256,6 +261,7 @@ def _provider_catalog(
     aip: CompanyAIProviders,
     *,
     humanitec_llms_models: list[JsonObject],
+    provider_models: dict[str, list[JsonObject]],
 ) -> JsonObject:
     """Каталог провайдеров для UI селектора (per capability)."""
     catalog: JsonObject = {}
@@ -277,7 +283,11 @@ def _provider_catalog(
                             ),
                         }
                         if p == HUMANITEC_LLM_PROVIDER
-                        else {}
+                        else (
+                            {"models": provider_models[p]}
+                            if p in provider_models and provider_models[p]
+                            else {}
+                        )
                     ),
                 }
             )
@@ -329,6 +339,24 @@ def _provider_catalog(
     return catalog
 
 
+async def _provider_model_options(container: "FrontendContainer") -> dict[str, list[JsonObject]]:
+    options: dict[str, list[JsonObject]] = {}
+    for provider in OPENAI_COMPATIBLE_LLM_PROVIDER_ORDER:
+        rows = await container.flows_llm_model_repository.list_by_provider(provider)
+        model_ids = sorted({row.model_id.strip() for row in rows if row.model_id.strip()})
+        if not model_ids:
+            continue
+        options[provider] = [
+            {
+                "value": model_id,
+                "label": model_id,
+                "kind": "provider_model",
+            }
+            for model_id in model_ids
+        ]
+    return options
+
+
 def _build_llm_override(capability: AICapability, payload: AIProvidersCapabilityUpdate) -> CompanyLLMOverride:
     provider = payload.provider.strip()
     if provider == HUMANITEC_LLM_PROVIDER and capability not in _HUMANITEC_LLM_CAPABILITIES:
@@ -336,6 +364,15 @@ def _build_llm_override(capability: AICapability, payload: AIProvidersCapability
             status_code=400,
             detail=f"provider=humanitec_llm не поддерживает capability {capability.value}",
         )
+    if provider != HUMANITEC_LLM_PROVIDER and not provider.startswith(CUSTOM_PROVIDER_REF_PREFIX):
+        if payload.model is None or not payload.model.strip():
+            raise HTTPException(
+                status_code=400,
+                detail=(
+                    f"capability {capability.value}: model обязателен для provider={provider!r}; "
+                    + "auto доступен только через Humanitec LLMs"
+                ),
+            )
     encrypted = encrypt_secret(payload.api_key) if payload.api_key else None
     return CompanyLLMOverride(
         provider=provider,
@@ -428,10 +465,15 @@ async def get_ai_providers(container: ContainerDep) -> JsonObject:
     _, company = _require_admin()
     aip = _load_aip(company)
     humanitec_llms_models = await read_humanitec_llms_model_options(container.redis_client)
+    provider_models = await _provider_model_options(container)
     return {
         "capabilities": _public_capabilities(aip),
         "custom_providers": [_custom_provider_to_public(p) for p in aip.custom_providers],
-        "catalog": _provider_catalog(aip, humanitec_llms_models=humanitec_llms_models),
+        "catalog": _provider_catalog(
+            aip,
+            humanitec_llms_models=humanitec_llms_models,
+            provider_models=provider_models,
+        ),
         "llm_context": _public_llm_context(aip),
     }
 

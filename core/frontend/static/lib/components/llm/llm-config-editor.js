@@ -124,6 +124,7 @@ export class PlatformLlmConfigEditor extends PlatformElement {
             throw new Error('platform-llm-config-editor: provider change expects detail.value string');
         }
         const value = e.detail.value;
+        const currentProvider = (this.config && this.config.provider) || '';
         const patch = { provider: value };
         if (this._isCustomProvider(value)) {
             patch.api_key = null;
@@ -136,6 +137,9 @@ export class PlatformLlmConfigEditor extends PlatformElement {
             patch.folder_id = null;
             patch.extra_request_headers = null;
             patch.model = 'auto';
+        }
+        if (!this._isHumanitecLlmProvider(value) && value !== currentProvider) {
+            patch.model = null;
         }
         this._emitChange(patch);
     }
@@ -233,6 +237,9 @@ export class PlatformLlmConfigEditor extends PlatformElement {
         if (this._isHumanitecLlmProvider(provider) && (!model || model === 'auto')) {
             return this.t('settings_page.ai_providers.humanitec_llms_auto_tooltip');
         }
+        if (!this._isHumanitecLlmProvider(provider) && !this._isCustomProvider(provider)) {
+            return this.t('settings_page.ai_providers.model_required_help');
+        }
         return this.t('settings_page.ai_providers.model_override_help');
     }
 
@@ -304,7 +311,7 @@ export class PlatformLlmConfigEditor extends PlatformElement {
                               @change=${this._onModelChange}
                           ></platform-field>
                           ${modelFieldType === 'string'
-                              ? html`<small class="help">${this.t('settings_page.ai_providers.model_override_help')}</small>`
+                              ? html`<small class="help">${this._modelHint(provider, modelValue)}</small>`
                               : ''}
                       `
                     : ''}
