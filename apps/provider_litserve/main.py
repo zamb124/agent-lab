@@ -8,6 +8,7 @@ import argparse
 import asyncio
 import time
 from pathlib import Path
+from typing import Protocol, cast
 
 import litserve as ls
 import torch
@@ -57,6 +58,19 @@ _provider_litserve_manager: ls.LitServerManager | None = None
 _provider_litserve_response_task: asyncio.Task[None] | None = None
 
 
+class _CudaDeviceProperties(Protocol):
+    name: str
+    total_memory: int
+
+
+class _CudaRuntime(Protocol):
+    def is_available(self) -> bool: ...
+
+    def device_count(self) -> int: ...
+
+    def get_device_properties(self, device: int) -> _CudaDeviceProperties: ...
+
+
 class ProviderLitserveArgNamespace(argparse.Namespace):
     host: str | None = None
     port: int | None = None
@@ -80,18 +94,27 @@ def _cuda_required_for_inference() -> bool:
     return False
 
 
+def _as_object(value: object) -> object:
+    return value
+
+
+def _cuda_runtime() -> _CudaRuntime:
+    return cast(_CudaRuntime, _as_object(torch.cuda))
+
+
 def _inference_health_handler() -> JSONResponse:
     settings = get_provider_litserve_settings()
     cfg = settings.provider_litserve.infra
     response_task = _provider_litserve_response_task
     runtime_started = _provider_litserve_manager is not None and response_task is not None and not response_task.done()
     cuda_required = _cuda_required_for_inference()
-    cuda_available = torch.cuda.is_available()
-    device_count = torch.cuda.device_count() if cuda_available else 0
+    cuda_runtime = _cuda_runtime()
+    cuda_available = cuda_runtime.is_available()
+    device_count = cuda_runtime.device_count() if cuda_available else 0
     devices: list[dict[str, int | str | float]] = []
     if cuda_available:
         for i in range(device_count):
-            props = torch.cuda.get_device_properties(i)
+            props = cuda_runtime.get_device_properties(i)
             devices.append(
                 {
                     "index": i,
