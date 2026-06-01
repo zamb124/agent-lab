@@ -198,7 +198,7 @@ LITSERVE_POD=$($K get pod -n "$PLATFORM_NS" -l app=provider-litserve \
 if [ -z "$LITSERVE_POD" ]; then
   log_warn "под provider-litserve не найден — секция пропущена"
 else
-  # Образ full (provider-litserve) ставит curl и python.
+  # GPU-образ provider-litserve кладёт runtime Python в venv, но не создаёт /usr/bin/python.
   check_step_with_output \
     "litserve GET /v1/health/inference is healthy (in-cluster)" \
     "$K exec -n $PLATFORM_NS $LITSERVE_POD -- \
@@ -209,7 +209,7 @@ else
       curl -fsS --max-time 15 http://127.0.0.1:8014/v1/models >/dev/null"
   check_step_with_output \
     "litserve POST /v1/embeddings returns an embedding (in-cluster)" \
-    "$K exec -n $PLATFORM_NS $LITSERVE_POD -- sh -lc 'MODEL=\$(python -c \"from apps.provider_litserve.config import get_provider_litserve_settings as g; print(g().provider_litserve.infra.embedding_openai_model_id)\"); curl -fsS --max-time 300 -H \"Content-Type: application/json\" -d \"{\\\"model\\\":\\\"\${MODEL}\\\",\\\"input\\\":\\\"litserve healthcheck\\\"}\" http://127.0.0.1:8014/v1/embeddings | python -c \"import json, sys; body=json.load(sys.stdin); vec=body[\\\"data\\\"][0][\\\"embedding\\\"]; assert isinstance(vec, list) and len(vec) > 0\"'"
+    "$K exec -n $PLATFORM_NS $LITSERVE_POD -- sh -lc 'PY=/opt/venv/bin/python; MODEL=\$(\"\$PY\" -c \"from apps.provider_litserve.config import get_provider_litserve_settings as g; print(g().provider_litserve.infra.embedding_openai_model_id)\"); curl -fsS --max-time 300 -H \"Content-Type: application/json\" -d \"{\\\"model\\\":\\\"\${MODEL}\\\",\\\"input\\\":\\\"litserve healthcheck\\\"}\" http://127.0.0.1:8014/v1/embeddings | \"\$PY\" -c \"import json, sys; body=json.load(sys.stdin); vec=body[\\\"data\\\"][0][\\\"embedding\\\"]; assert isinstance(vec, list) and len(vec) > 0\"'"
 fi
 
 # Итог
