@@ -12,7 +12,7 @@ from typing import ClassVar
 
 import httpx
 import tiktoken
-from pydantic import Field, ValidationError
+from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
 import core.tracing.attributes as trace_attributes
 from core.billing import get_billing_service
@@ -20,7 +20,6 @@ from core.billing.service import BALANCE_BLOCK_OPERATION_EMBEDDING
 from core.context import get_context
 from core.http import ProxyStrategy, get_httpx_client
 from core.logging import get_logger
-from core.models import StrictBaseModel
 from core.models.billing_models import UsageType
 from core.tracing.operation_span import traced_operation
 from core.types import JsonObject, OtelAttributeValue
@@ -56,11 +55,15 @@ MODEL_DIMENSIONS: dict[str, int] = {
 }
 
 
-class EmbeddingResponseItem(StrictBaseModel):
+class EmbeddingResponseItem(BaseModel):
+    model_config: ClassVar[ConfigDict] = ConfigDict(extra="ignore")
+
     embedding: list[float] = Field(min_length=1)
 
 
-class EmbeddingResponsePayload(StrictBaseModel):
+class EmbeddingResponsePayload(BaseModel):
+    model_config: ClassVar[ConfigDict] = ConfigDict(extra="ignore")
+
     data: list[EmbeddingResponseItem]
 
 
