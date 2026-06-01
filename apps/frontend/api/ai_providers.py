@@ -28,9 +28,15 @@ from apps.frontend.models import (
     CustomProviderCreate,
     CustomProviderUpdate,
 )
+from core.ai_provider_catalog import (
+    LLM_CAPABILITIES,
+    VOICE_CAPABILITIES,
+    AICapability,
+    platform_provider_specs_for_capability,
+    validate_platform_provider_for_capability,
+)
 from core.clients.llm.model_routing import (
     HUMANITEC_LLM_PROVIDER,
-    HUMANITEC_LLMS_DISPLAY_LABEL,
     OPENAI_COMPATIBLE_LLM_PROVIDER_ORDER,
 )
 from core.clients.llm.platform_free_models import read_humanitec_llms_model_options
@@ -38,7 +44,6 @@ from core.company_ai import (
     CUSTOM_PROVIDER_REF_PREFIX,
     METADATA_KEY,
     PLATFORM_LLM_PROVIDERS,
-    AICapability,
     CompanyAIProviders,
     CompanyCustomOpenAICompatibleProvider,
     CompanyEmbeddingOverride,
@@ -70,29 +75,8 @@ logger = get_logger(__name__)
 router = APIRouter(prefix="/api/settings/ai-providers", tags=["settings", "ai-providers"])
 
 
-_LLM_CAPABILITIES: tuple[AICapability, ...] = (
-    AICapability.LLM_CHAT,
-    AICapability.LLM_SUMMARIZE,
-    AICapability.LLM_FORMAT_MARKDOWN,
-    AICapability.LLM_CODEGEN,
-    AICapability.LLM_VISION,
-    AICapability.IMAGE_GEN,
-)
-_HUMANITEC_LLM_CAPABILITIES: frozenset[AICapability] = frozenset(
-    {
-        AICapability.LLM_CHAT,
-        AICapability.LLM_SUMMARIZE,
-        AICapability.LLM_FORMAT_MARKDOWN,
-        AICapability.LLM_CODEGEN,
-        AICapability.LLM_VISION,
-        AICapability.IMAGE_GEN,
-    }
-)
-_VOICE_CAPABILITIES: tuple[AICapability, ...] = (
-    AICapability.VOICE_STT,
-    AICapability.VOICE_TTS,
-    AICapability.VOICE_VAD,
-)
+_LLM_CAPABILITIES: tuple[AICapability, ...] = LLM_CAPABILITIES
+_VOICE_CAPABILITIES: tuple[AICapability, ...] = VOICE_CAPABILITIES
 
 
 def _require_admin() -> tuple[User, Company]:
@@ -201,10 +185,14 @@ def _embedding_override_to_public(ov: CompanyEmbeddingOverride | None) -> JsonOb
         "kind": "embedding",
         "configured": ov is not None,
         "provider": ov.provider if ov else None,
+        "model": ov.model if ov else None,
+        "dimension": ov.dimension if ov else None,
+        "mrl_output_dimension": ov.mrl_output_dimension if ov else None,
         "base_url": ov.base_url if ov else None,
         "extra_request_headers": (ov.extra_request_headers or {}) if ov else {},
         "key_masked": mask_encrypted_secret(ov.api_key_encrypted) if ov and ov.api_key_encrypted else None,
         "platform_default_provider": platform_default_provider_for_capability(AICapability.EMBEDDING),
+        "platform_default_model": get_settings().rag.embedding.api.model,
     }
 
 
@@ -262,19 +250,33 @@ def _provider_catalog(
     *,
     humanitec_llms_models: list[JsonObject],
     provider_models: dict[str, list[JsonObject]],
+    embedding_models: dict[str, list[JsonObject]],
 ) -> JsonObject:
     """Каталог провайдеров для UI селектора (per capability)."""
     catalog: JsonObject = {}
-    for cap in _LLM_CAPABILITIES:
+    for cap in (
+        *_LLM_CAPABILITIES,
+        AICapability.EMBEDDING,
+        AICapability.RERANK,
+        *_VOICE_CAPABILITIES,
+    ):
         items: list[JsonObject] = []
-        for p in PLATFORM_LLM_PROVIDERS:
-            if p == HUMANITEC_LLM_PROVIDER and cap not in _HUMANITEC_LLM_CAPABILITIES:
+        for spec in platform_provider_specs_for_capability(
+            cap,
+            include_policies=cap == AICapability.RERANK,
+        ):
+            p = spec.provider
+            if (
+                cap == AICapability.EMBEDDING
+                and spec.kind == "platform"
+                and p not in embedding_models
+            ):
                 continue
             items.append(
                 {
                     "value": p,
-                    "label": HUMANITEC_LLMS_DISPLAY_LABEL if p == HUMANITEC_LLM_PROVIDER else p,
-                    "kind": "virtual" if p == HUMANITEC_LLM_PROVIDER else "platform",
+                    "label": spec.label,
+                    "kind": spec.kind,
                     **(
                         {
                             "models": humanitec_llms_models,
@@ -285,14 +287,22 @@ def _provider_catalog(
                         if p == HUMANITEC_LLM_PROVIDER
                         else (
                             {"models": provider_models[p]}
-                            if p in provider_models and provider_models[p]
-                            else {}
+                            if cap in _LLM_CAPABILITIES and p in provider_models and provider_models[p]
+                            else (
+                                {"models": embedding_models[p]}
+                                if cap == AICapability.EMBEDDING
+                                and p in embedding_models
+                                and embedding_models[p]
+                                else {}
+                            )
                         )
                     ),
                 }
             )
         for cp in aip.custom_providers:
-            if cap.value in cp.capabilities:
+            if cap.value in cp.capabilities and (
+                cap != AICapability.RERANK or cp.rerank_path
+            ):
                 items.append(
                     {
                         "value": f"custom:{cp.id}",
@@ -303,46 +313,16 @@ def _provider_catalog(
                 )
         catalog[cap.value] = items
 
-    embedding_items: list[JsonObject] = [
-        {"value": "openrouter", "label": "openrouter", "kind": "platform"},
-        {"value": "provider_litserve", "label": "provider_litserve", "kind": "platform"},
-    ]
-    for cp in aip.custom_providers:
-        if "embedding" in cp.capabilities:
-            embedding_items.append(
-                {
-                    "value": f"custom:{cp.id}",
-                    "label": cp.label,
-                    "kind": "custom",
-                    "custom_id": cp.id,
-                }
-            )
-    catalog[AICapability.EMBEDDING.value] = embedding_items
-
-    rerank_items: list[JsonObject] = [
-        {"value": "inherit", "label": "inherit", "kind": "policy"},
-        {"value": "none", "label": "none", "kind": "policy"},
-        {"value": "provider_litserve", "label": "provider_litserve", "kind": "platform"},
-    ]
-    for cp in aip.custom_providers:
-        if "rerank" in cp.capabilities and cp.rerank_path:
-            rerank_items.append(
-                {
-                    "value": f"custom:{cp.id}",
-                    "label": cp.label,
-                    "kind": "custom",
-                    "custom_id": cp.id,
-                }
-            )
-    catalog[AICapability.RERANK.value] = rerank_items
-
     return catalog
 
 
 async def _provider_model_options(container: "FrontendContainer") -> dict[str, list[JsonObject]]:
     options: dict[str, list[JsonObject]] = {}
     for provider in OPENAI_COMPATIBLE_LLM_PROVIDER_ORDER:
-        rows = await container.flows_llm_model_repository.list_by_provider(provider)
+        rows = await container.flows_llm_model_repository.list_by_provider_capability(
+            provider,
+            AICapability.LLM_CHAT,
+        )
         model_ids = sorted({row.model_id.strip() for row in rows if row.model_id.strip()})
         if not model_ids:
             continue
@@ -357,13 +337,41 @@ async def _provider_model_options(container: "FrontendContainer") -> dict[str, l
     return options
 
 
+async def _embedding_model_options(container: "FrontendContainer") -> dict[str, list[JsonObject]]:
+    settings = get_settings()
+    storage_dimension = settings.rag.embedding.api.dimension
+    options: dict[str, list[JsonObject]] = {}
+    for spec in platform_provider_specs_for_capability(AICapability.EMBEDDING):
+        provider_options: list[JsonObject] = []
+        rows = await container.flows_llm_model_repository.list_by_provider_capability(
+            spec.provider,
+            AICapability.EMBEDDING,
+        )
+        for model in rows:
+            if model.storage_dimension != storage_dimension:
+                continue
+            provider_options.append(
+                {
+                    "value": model.model_id,
+                    "label": model.model_id,
+                    "kind": "embedding_model",
+                    "native_dimension": model.native_dimension,
+                    "dimension": model.storage_dimension,
+                    "mrl_output_dimension": model.mrl_output_dimension,
+                    "metadata_status": model.metadata_status,
+                    "source": "provider_catalog",
+                }
+            )
+        if provider_options:
+            options[spec.provider] = sorted(
+                provider_options,
+                key=lambda item: str(item["value"]),
+            )
+    return options
+
+
 def _build_llm_override(capability: AICapability, payload: AIProvidersCapabilityUpdate) -> CompanyLLMOverride:
     provider = payload.provider.strip()
-    if provider == HUMANITEC_LLM_PROVIDER and capability not in _HUMANITEC_LLM_CAPABILITIES:
-        raise HTTPException(
-            status_code=400,
-            detail=f"provider=humanitec_llm не поддерживает capability {capability.value}",
-        )
     if provider != HUMANITEC_LLM_PROVIDER and not provider.startswith(CUSTOM_PROVIDER_REF_PREFIX):
         if payload.model is None or not payload.model.strip():
             raise HTTPException(
@@ -385,13 +393,81 @@ def _build_llm_override(capability: AICapability, payload: AIProvidersCapability
     )
 
 
-def _build_embedding_override(payload: AIProvidersCapabilityUpdate) -> CompanyEmbeddingOverride:
+async def _build_embedding_override(
+    payload: AIProvidersCapabilityUpdate,
+    container: "FrontendContainer",
+) -> CompanyEmbeddingOverride:
+    provider = payload.provider.strip()
+    if not provider.startswith(CUSTOM_PROVIDER_REF_PREFIX):
+        _ = validate_platform_provider_for_capability(provider, AICapability.EMBEDDING)
+    model = (payload.model or "").strip()
+    if not model:
+        raise HTTPException(status_code=400, detail="capability embedding: model обязателен")
+
+    storage_dimension = get_settings().rag.embedding.api.dimension
+    if provider.startswith(CUSTOM_PROVIDER_REF_PREFIX):
+        if payload.dimension is None:
+            raise HTTPException(
+                status_code=400,
+                detail="capability embedding: dimension обязателен для custom provider",
+            )
+        dimension = payload.dimension
+        mrl_output_dimension = payload.mrl_output_dimension
+    else:
+        catalog_model = await container.flows_llm_model_repository.get_provider_model(
+            provider,
+            model,
+        )
+        if catalog_model is None or AICapability.EMBEDDING not in catalog_model.capabilities:
+            raise HTTPException(
+                status_code=400,
+                detail=f"capability embedding: модель {provider}:{model} отсутствует в provider model catalog",
+            )
+        catalog_storage_dimension = catalog_model.storage_dimension
+        if catalog_storage_dimension != storage_dimension:
+            raise HTTPException(
+                status_code=400,
+                detail=(
+                    f"capability embedding: модель {provider}:{model} не подтверждена "
+                    + f"для storage dimension={storage_dimension}"
+                ),
+            )
+        if catalog_storage_dimension is None:
+            raise HTTPException(
+                status_code=400,
+                detail=f"capability embedding: модель {provider}:{model} не имеет verified storage dimension",
+            )
+        dimension = catalog_storage_dimension
+        mrl_output_dimension = catalog_model.mrl_output_dimension
+        if payload.dimension is not None and payload.dimension != dimension:
+            raise HTTPException(
+                status_code=400,
+                detail=(
+                    f"capability embedding: dimension={payload.dimension} не совпадает "
+                    + f"с catalog dimension={dimension} для {provider}:{model}"
+                ),
+            )
+        if (
+            payload.mrl_output_dimension is not None
+            and payload.mrl_output_dimension != mrl_output_dimension
+        ):
+            raise HTTPException(
+                status_code=400,
+                detail=(
+                    "capability embedding: mrl_output_dimension не совпадает "
+                    + f"с catalog value={mrl_output_dimension} для {provider}:{model}"
+                ),
+            )
+
     encrypted = encrypt_secret(payload.api_key) if payload.api_key else None
     return CompanyEmbeddingOverride(
-        provider=payload.provider.strip(),
+        provider=provider,
         api_key_encrypted=encrypted,
         base_url=payload.base_url,
         extra_request_headers=payload.extra_request_headers,
+        model=model,
+        dimension=dimension,
+        mrl_output_dimension=mrl_output_dimension,
     )
 
 
@@ -466,6 +542,7 @@ async def get_ai_providers(container: ContainerDep) -> JsonObject:
     aip = _load_aip(company)
     humanitec_llms_models = await read_humanitec_llms_model_options(container.redis_client)
     provider_models = await _provider_model_options(container)
+    embedding_models = await _embedding_model_options(container)
     return {
         "capabilities": _public_capabilities(aip),
         "custom_providers": [_custom_provider_to_public(p) for p in aip.custom_providers],
@@ -473,6 +550,7 @@ async def get_ai_providers(container: ContainerDep) -> JsonObject:
             aip,
             humanitec_llms_models=humanitec_llms_models,
             provider_models=provider_models,
+            embedding_models=embedding_models,
         ),
         "llm_context": _public_llm_context(aip),
     }
@@ -539,7 +617,7 @@ async def put_capability(
                 | CompanyVoiceOverride
             ) = _build_llm_override(cap, payload)
         elif cap == AICapability.EMBEDDING:
-            updated_override = _build_embedding_override(payload)
+            updated_override = await _build_embedding_override(payload, container)
         elif cap == AICapability.RERANK:
             updated_override = _build_rerank_override(payload)
         elif cap in _VOICE_CAPABILITIES:
@@ -754,6 +832,9 @@ async def get_resolved() -> JsonObject:
                 "capability": AICapability.EMBEDDING.value,
                 "resolved": re is not None,
                 "provider": re.provider if re else None,
+                "model": re.model if re else None,
+                "dimension": re.dimension if re else None,
+                "mrl_output_dimension": re.mrl_output_dimension if re else None,
                 "base_url": re.base_url if re else None,
                 "cost_origin": re.cost_origin if re else "platform",
                 "custom_provider_id": re.custom_provider_id if re else None,

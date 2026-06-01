@@ -82,7 +82,8 @@
             "embedding": "embeddings",
             "vision": "image processing",
             "livekit_room": "call room",
-            "livekit_egress": "call recording"
+            "livekit_egress": "call recording",
+            "search": "web search"
         }
     }
 }

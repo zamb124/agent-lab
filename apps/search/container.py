@@ -36,6 +36,7 @@ class SearchContainer(BaseContainer):
         return MetaSearchService(
             get_search_settings().search,
             self.provider_availability_store,
+            self.billing_service,
         )
 
     @lazy

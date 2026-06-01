@@ -22,6 +22,7 @@ from core.app_state import PlatformAppState
 from core.container import BaseContainer
 from core.context import clear_context, set_context
 from core.identity.runtime_users import ensure_persisted_runtime_user
+from core.internal_context_headers import parse_internal_context_headers
 from core.logging import bind_log_context, get_logger
 from core.logging.attributes import (
     LOG_COMPANY_ID,
@@ -215,6 +216,16 @@ class AuthMiddleware(BaseHTTPMiddleware):
                 rule.context_type,
             )
 
+        internal_context = await self._create_internal_platform_context(
+            request,
+            rule,
+            container,
+            context_factory,
+            trace_id,
+        )
+        if internal_context is not None:
+            return internal_context
+
         # Обработка webhook
         if rule.context_type == "webhook" and rule.channel:
             return await self._handle_webhook(request, rule, container, context_factory, trace_id)
@@ -391,6 +402,48 @@ class AuthMiddleware(BaseHTTPMiddleware):
         return await context_factory.create(
             request,
             context_type,
+            company,
+            user,
+            token_data=None,
+            auth_token=None,
+            trace_id=trace_id,
+        )
+
+    async def _create_internal_platform_context(
+        self,
+        request: Request,
+        rule: RouteRule,
+        container: BaseContainer,
+        context_factory: ContextFactory,
+        trace_id: str,
+    ) -> Context | None:
+        if rule.context_type != "anonymous":
+            return None
+        path = request.url.path
+        if not path.startswith(("/search/api/v1/mcp", "/browser/api/v1/mcp")):
+            return None
+        try:
+            internal = parse_internal_context_headers(request.headers)
+        except ValueError as exc:
+            raise HTTPException(status_code=401, detail=str(exc)) from exc
+        if internal is None:
+            return None
+        company = await container.company_repository.get(internal.company_id)
+        if company is None:
+            raise HTTPException(status_code=403, detail=f"Company {internal.company_id} not found")
+        user = await container.user_repository.get(internal.user_id)
+        if user is None:
+            user = await ensure_persisted_runtime_user(
+                container,
+                user_id=internal.user_id,
+                company_id=company.company_id,
+                name="Platform Runtime User",
+                roles=["guest"],
+                attributes={"kind": "internal_platform_context"},
+            )
+        return await context_factory.create(
+            request,
+            "api",
             company,
             user,
             token_data=None,

@@ -82,7 +82,8 @@
             "embedding": "эмбеддинги",
             "vision": "обработка изображений",
             "livekit_room": "комната звонка",
-            "livekit_egress": "запись звонка"
+            "livekit_egress": "запись звонка",
+            "search": "веб-поиск"
         }
     }
 }

@@ -17,11 +17,17 @@
 
 from __future__ import annotations
 
-from enum import Enum
 from typing import Annotated, ClassVar, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
+from core.ai_provider_catalog import (
+    PROVIDER_LITSERVE,
+    RERANK_POLICY_INHERIT,
+    RERANK_POLICY_NONE,
+    AICapability,
+    validate_platform_provider_for_capability,
+)
 from core.clients.llm.config import LLMCallConfig, validate_fallback_model_configs
 from core.clients.llm.model_routing import (
     HUMANITEC_LLM_AUTO_MODEL,
@@ -33,22 +39,6 @@ from core.llm_context.models import LLMContextPatch
 from core.types import JsonObject, require_json_object
 
 METADATA_KEY = "ai_providers"
-
-
-class AICapability(str, Enum):
-    """Capability — функциональная роль LLM/RAG/voice в платформе."""
-
-    LLM_CHAT = "llm_chat"
-    LLM_SUMMARIZE = "llm_summarize"
-    LLM_FORMAT_MARKDOWN = "llm_format_markdown"
-    LLM_CODEGEN = "llm_codegen"
-    LLM_VISION = "llm_vision"
-    EMBEDDING = "embedding"
-    RERANK = "rerank"
-    IMAGE_GEN = "image_gen"
-    VOICE_STT = "voice_stt"
-    VOICE_TTS = "voice_tts"
-    VOICE_VAD = "voice_vad"
 
 
 # Платформенные slug-и LLM-провайдеров компании (без custom_openai_compatible — он внутренний
@@ -209,7 +199,7 @@ class CompanyLLMOverride(BaseModel):
 
 
 class CompanyEmbeddingOverride(BaseModel):
-    """Override embedding-провайдера компании. Модель — платформенная или alias custom-провайдера."""
+    """Override embedding-провайдера компании с явной моделью и storage dimension."""
 
     model_config: ClassVar[ConfigDict] = ConfigDict(extra="forbid")
 
@@ -217,16 +207,32 @@ class CompanyEmbeddingOverride(BaseModel):
     api_key_encrypted: str | None = None
     base_url: str | None = None
     extra_request_headers: dict[str, str] | None = None
+    model: str
+    dimension: int = Field(gt=0)
+    mrl_output_dimension: int | None = Field(default=None, gt=0)
 
     @field_validator("provider")
     @classmethod
     def _v_provider(cls, v: str) -> str:
-        return _validate_provider_ref(v, allow_custom=True)
+        s = v.strip()
+        if _is_custom_ref(s):
+            return _validate_provider_ref(s, allow_custom=True)
+        return validate_platform_provider_for_capability(s, AICapability.EMBEDDING)
+
+    @field_validator("model")
+    @classmethod
+    def _v_model(cls, v: str) -> str:
+        s = v.strip()
+        if not s:
+            raise ValueError("embedding.model не может быть пустым")
+        return s
 
     @model_validator(mode="after")
     def _v_byok_only_for_platform(self) -> "CompanyEmbeddingOverride":
         if self.provider == HUMANITEC_LLM_PROVIDER:
             raise ValueError("provider=humanitec_llm не поддерживает embedding")
+        if self.mrl_output_dimension is not None and self.mrl_output_dimension > self.dimension:
+            raise ValueError("embedding.mrl_output_dimension не может превышать embedding.dimension")
         if _is_custom_ref(self.provider):
             if self.api_key_encrypted or self.base_url or self.extra_request_headers:
                 raise ValueError(
@@ -254,12 +260,14 @@ class CompanyRerankOverride(BaseModel):
     @classmethod
     def _v_policy(cls, v: str) -> str:
         s = v.strip()
-        if s in ("inherit", "none", "provider_litserve"):
+        if s in (RERANK_POLICY_INHERIT, RERANK_POLICY_NONE):
             return s
         if _is_custom_ref(s):
             return _validate_provider_ref(s, allow_custom=True)
+        if s == PROVIDER_LITSERVE:
+            return validate_platform_provider_for_capability(s, AICapability.RERANK)
         raise ValueError(
-            f"rerank.policy {v!r}: ожидается inherit | none | provider_litserve | custom:<id>"
+            f"rerank.policy {v!r}: ожидается inherit | none | {PROVIDER_LITSERVE} | custom:<id>"
         )
 
 
@@ -421,6 +429,7 @@ class CompanyAIProviders(BaseModel):
         custom_index: dict[str, CompanyCustomOpenAICompatibleProvider],
     ) -> None:
         if not _is_custom_ref(ref):
+            _ = validate_platform_provider_for_capability(ref, AICapability(capability))
             return
         cid = _custom_ref_id(ref)
         if cid not in custom_index:

@@ -64,6 +64,10 @@ import {
     aiCustomProviderCreateOp,
     aiCustomProviderUpdateOp,
     aiCustomProviderDeleteOp,
+    searchProvidersLoadOp,
+    searchProviderPutOp,
+    searchProviderOrderPutOp,
+    searchProviderDeleteOp,
 } from '../events/resources/settings.resource.js';
 import { leadSubmitOp, leadRequestsList } from '../events/resources/leads.resource.js';
 import { tracingSpansList, tracingFacets, tracingTraceLoadOp } from '../events/resources/tracing.resource.js';
@@ -267,6 +271,10 @@ export class FrontendApp extends PlatformApp {
         aiCustomProviderCreateOp,
         aiCustomProviderUpdateOp,
         aiCustomProviderDeleteOp,
+        searchProvidersLoadOp,
+        searchProviderPutOp,
+        searchProviderOrderPutOp,
+        searchProviderDeleteOp,
         leadSubmitOp,
         leadRequestsList,
         tracingSpansList,

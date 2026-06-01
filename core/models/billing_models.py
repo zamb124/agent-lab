@@ -66,24 +66,28 @@ DEFAULT_TARIFF_PRICES: dict[TariffPlan, dict[str, dict[str, float]]] = {
         "llm": {"*": 1.5},
         "embedding": {"*": 1.5},
         "livekit": {"*": 1.5},
+        "search": {"*": 1.5},
         "billing": {"*": 1.0},
     },
     TariffPlan.BASIC: {
         "llm": {"*": 1.25},
         "embedding": {"*": 1.25},
         "livekit": {"*": 1.25},
+        "search": {"*": 1.25},
         "billing": {"*": 1.0},
     },
     TariffPlan.PREMIUM: {
         "llm": {"*": 1.1},
         "embedding": {"*": 1.1},
         "livekit": {"*": 1.1},
+        "search": {"*": 1.1},
         "billing": {"*": 1.0},
     },
     TariffPlan.ENTERPRISE: {
         "llm": {"*": 1.1},
         "embedding": {"*": 1.1},
         "livekit": {"*": 1.1},
+        "search": {"*": 1.1},
         "billing": {"*": 1.0},
     },
 }

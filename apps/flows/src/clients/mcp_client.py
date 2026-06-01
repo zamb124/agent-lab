@@ -20,6 +20,7 @@ from apps.flows.src.models.mcp import (
 from apps.flows.src.services.browser_preview import emit_browser_preview_mcp_event
 from core.http import ProxyStrategy, get_httpx_client
 from core.integrations.mcp import MCP_PROTOCOL_VERSION
+from core.internal_context_headers import build_internal_context_headers
 from core.logging import get_logger
 from core.tracing.attributes import (
     ATTR_MCP_HAS_SESSION,
@@ -94,7 +95,27 @@ class MCPClient:
 
         for key, value in self.config.headers.items():
             headers[key] = VarResolver.resolve_text(value, self._variables)
+        if self.config.propagate_platform_context:
+            company_id = self._platform_context_variable("company_id")
+            user_id = self._platform_context_variable("user_id")
+            if company_id is not None or user_id is not None:
+                if company_id is None or user_id is None:
+                    raise MCPClientError(
+                        "MCP platform context propagation requires both company_id and user_id"
+                    )
+                headers.update(
+                    build_internal_context_headers(company_id=company_id, user_id=user_id)
+                )
         return headers
+
+    def _platform_context_variable(self, key: str) -> str | None:
+        value = self._variables.get(key)
+        if value is None:
+            return None
+        if not isinstance(value, str):
+            raise MCPClientError(f"MCP platform context variable {key!r} must be a string")
+        stripped = value.strip()
+        return stripped if stripped else None
 
     @staticmethod
     def _jsonrpc_envelope_from_body(text: str) -> JsonObject | None:

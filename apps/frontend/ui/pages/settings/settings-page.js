@@ -168,6 +168,195 @@ export class FrontendSettingsPage extends PlatformPage {
             .capability-card .desc { color: var(--text-tertiary); font-size: var(--text-xs); }
             .capability-card .actions { display: flex; justify-content: flex-end; gap: var(--space-2); }
 
+            .search-provider-hero {
+                display: grid;
+                grid-template-columns: 1fr;
+                gap: var(--space-3);
+                padding: var(--space-4);
+                margin-bottom: var(--space-3);
+                border: 1px solid var(--glass-border-subtle);
+                border-radius: var(--radius-md);
+                background:
+                    linear-gradient(135deg, color-mix(in srgb, var(--accent) 16%, transparent), transparent 52%),
+                    var(--glass-solid-subtle);
+            }
+            @container (min-width: 880px) {
+                .search-provider-hero { grid-template-columns: minmax(0, 1.4fr) minmax(260px, 0.6fr); }
+            }
+            .search-provider-hero h3 {
+                margin: 0 0 var(--space-1);
+                color: var(--text-primary);
+                font-size: var(--text-lg);
+                font-weight: var(--font-semibold);
+            }
+            .search-provider-hero p {
+                margin: 0;
+                color: var(--text-secondary);
+                font-size: var(--text-sm);
+                line-height: 1.55;
+            }
+            .billing-note {
+                display: grid;
+                gap: var(--space-1);
+                align-self: start;
+                padding: var(--space-3);
+                border: 1px solid var(--glass-border-subtle);
+                border-radius: var(--radius-md);
+                background: color-mix(in srgb, var(--glass-solid-subtle) 80%, transparent);
+                color: var(--text-secondary);
+                font-size: var(--text-xs);
+            }
+            .billing-note strong { color: var(--text-primary); font-size: var(--text-sm); }
+
+            .search-provider-grid {
+                display: grid;
+                grid-template-columns: 1fr;
+                gap: var(--space-3);
+            }
+            @container (min-width: 1040px) {
+                .search-provider-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+            }
+            .search-provider-card {
+                min-width: 0;
+                padding: var(--space-3);
+                border: 1px solid var(--glass-border-subtle);
+                border-radius: var(--radius-md);
+                background: var(--glass-solid-subtle);
+                display: flex;
+                flex-direction: column;
+                gap: var(--space-3);
+            }
+            .search-provider-card[data-source="company"] {
+                border-color: color-mix(in srgb, var(--accent) 42%, var(--glass-border-subtle));
+                box-shadow: 0 0 0 1px color-mix(in srgb, var(--accent) 14%, transparent);
+            }
+            .provider-card-head {
+                display: grid;
+                grid-template-columns: auto minmax(0, 1fr) auto;
+                gap: var(--space-2);
+                align-items: start;
+            }
+            .provider-logo {
+                width: 44px;
+                height: 44px;
+                border-radius: var(--radius-md);
+                display: grid;
+                place-items: center;
+                font-weight: var(--font-semibold);
+                color: white;
+                letter-spacing: 0;
+                box-shadow: inset 0 0 0 1px rgba(255,255,255,.16);
+            }
+            .provider-logo[data-tone="cyan"] { background: linear-gradient(135deg, #00a6ff, #00d6a3); }
+            .provider-logo[data-tone="green"] { background: linear-gradient(135deg, #16a34a, #84cc16); }
+            .provider-logo[data-tone="blue"] { background: linear-gradient(135deg, #2563eb, #60a5fa); }
+            .provider-logo[data-tone="violet"] { background: linear-gradient(135deg, #6366f1, #a855f7); }
+            .provider-title {
+                min-width: 0;
+                display: flex;
+                flex-direction: column;
+                gap: var(--space-1);
+            }
+            .provider-title-row {
+                display: flex;
+                align-items: center;
+                gap: var(--space-1);
+                min-width: 0;
+            }
+            .provider-title-row h4 {
+                margin: 0;
+                color: var(--text-primary);
+                font-size: var(--text-md);
+                font-weight: var(--font-semibold);
+            }
+            .provider-description {
+                color: var(--text-tertiary);
+                font-size: var(--text-xs);
+                line-height: 1.45;
+            }
+            .info-dot {
+                width: 22px;
+                height: 22px;
+                border: 1px solid var(--glass-border-subtle);
+                border-radius: var(--radius-full);
+                background: transparent;
+                color: var(--text-tertiary);
+                cursor: help;
+                font-size: var(--text-xs);
+                display: inline-flex;
+                align-items: center;
+                justify-content: center;
+            }
+            .provider-status {
+                display: flex;
+                gap: var(--space-1);
+                flex-wrap: wrap;
+                justify-content: flex-end;
+            }
+            .provider-pill {
+                display: inline-flex;
+                align-items: center;
+                gap: 6px;
+                padding: 5px 9px;
+                border-radius: var(--radius-full);
+                background: color-mix(in srgb, var(--glass-solid-subtle) 78%, transparent);
+                color: var(--text-secondary);
+                font-size: var(--text-xs);
+                font-weight: var(--font-medium);
+                border: 1px solid var(--glass-border-subtle);
+            }
+            .provider-pill[data-ok="true"]::before {
+                content: "";
+                width: 7px;
+                height: 7px;
+                border-radius: var(--radius-full);
+                background: #63d58a;
+            }
+            .provider-form {
+                display: grid;
+                grid-template-columns: 1fr;
+                gap: var(--space-2);
+            }
+            @container (min-width: 720px) {
+                .provider-form.two { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+            }
+            .credential-switch {
+                display: inline-flex;
+                padding: 4px;
+                border-radius: var(--radius-md);
+                border: 1px solid var(--glass-border-subtle);
+                background: color-mix(in srgb, var(--glass-solid-subtle) 80%, transparent);
+                gap: 4px;
+                width: fit-content;
+            }
+            .credential-switch button {
+                border: 0;
+                border-radius: calc(var(--radius-md) - 3px);
+                padding: 7px 11px;
+                background: transparent;
+                color: var(--text-secondary);
+                font-size: var(--text-xs);
+                font-weight: var(--font-semibold);
+                cursor: pointer;
+            }
+            .credential-switch button[data-active="true"] {
+                background: var(--accent);
+                color: white;
+            }
+            .provider-actions {
+                display: flex;
+                align-items: center;
+                justify-content: space-between;
+                gap: var(--space-2);
+                flex-wrap: wrap;
+                padding-top: var(--space-1);
+                border-top: 1px solid var(--glass-border-subtle);
+            }
+            .order-controls {
+                display: inline-flex;
+                gap: var(--space-1);
+            }
+
             .context-card {
                 padding: var(--space-3);
                 background: var(--glass-solid-subtle);
@@ -293,6 +482,8 @@ export class FrontendSettingsPage extends PlatformPage {
         _metadataError: { state: true },
         _capabilityDrafts: { state: true },
         _llmContextDraft: { state: true },
+        _searchProviderDrafts: { state: true },
+        _searchProviderOrder: { state: true },
         _modelScoreDrafts: { state: true },
         _modelScoreNew: { state: true },
     };
@@ -308,15 +499,21 @@ export class FrontendSettingsPage extends PlatformPage {
         this._contextDelete = this.useOp('frontend/ai_provider_llm_context_delete');
         this._customCreate = this.useOp('frontend/ai_custom_provider_create');
         this._customDelete = this.useOp('frontend/ai_custom_provider_delete');
+        this._searchLoad = this.useOp('frontend/search_providers_load');
+        this._searchProviderPut = this.useOp('frontend/search_provider_put');
+        this._searchProviderOrderPut = this.useOp('frontend/search_provider_order_put');
+        this._searchProviderDelete = this.useOp('frontend/search_provider_delete');
         this._scoreLoad = this.useOp('frontend/llm_model_scores_load');
         this._scoreUpsert = this.useOp('frontend/llm_model_score_upsert');
         this._scoreDelete = this.useOp('frontend/llm_model_score_delete');
         this._scoreRefreshCache = this.useOp('frontend/llm_model_scores_refresh_cache');
         this._loaded = false;
         this._aiLoaded = false;
+        this._searchLoaded = false;
         this._scoresLoaded = false;
         this._lastSeededCompanyRef = null;
         this._lastSeededAiRef = null;
+        this._lastSeededSearchRef = null;
         this._activeTab = 'company';
         this._name = '';
         this._monthlyBudget = 0;
@@ -324,6 +521,8 @@ export class FrontendSettingsPage extends PlatformPage {
         this._metadataError = '';
         this._capabilityDrafts = {};
         this._llmContextDraft = {};
+        this._searchProviderDrafts = {};
+        this._searchProviderOrder = [];
         this._modelScoreDrafts = {};
         this._modelScoreNew = { provider: 'openrouter', model_id: '', score: 0, enabled: true, note: '' };
     }
@@ -336,6 +535,10 @@ export class FrontendSettingsPage extends PlatformPage {
         if (!this._aiLoaded) {
             this._aiLoaded = true;
             this._aiLoad.run();
+        }
+        if (!this._searchLoaded) {
+            this._searchLoaded = true;
+            this._searchLoad.run();
         }
         const company = this._load.lastResult;
         if (company && company.company_id === 'system' && !this._scoresLoaded) {
@@ -354,6 +557,11 @@ export class FrontendSettingsPage extends PlatformPage {
             this._lastSeededAiRef = ai;
             this._seedAiDraft(ai);
         }
+        const search = this._searchLoad.lastResult;
+        if (search && search !== this._lastSeededSearchRef) {
+            this._lastSeededSearchRef = search;
+            this._seedSearchDraft(search);
+        }
     }
 
     _seedDraft(company) {
@@ -370,6 +578,32 @@ export class FrontendSettingsPage extends PlatformPage {
         this._llmContextDraft = ctx.config && typeof ctx.config === 'object' && !Array.isArray(ctx.config)
             ? { ...ctx.config }
             : {};
+    }
+
+    _seedSearchDraft(data) {
+        const providers = Array.isArray(data.providers) ? data.providers : [];
+        const drafts = {};
+        for (const provider of providers) {
+            if (!provider || typeof provider !== 'object' || typeof provider.id !== 'string') {
+                continue;
+            }
+            drafts[provider.id] = {
+                provider_id: provider.id,
+                enabled: provider.enabled === true,
+                credential_source: provider.credential_source === 'company' ? 'company' : 'platform',
+                api_key: '',
+                base_url: typeof provider.base_url === 'string' ? provider.base_url : '',
+                timeout_seconds: typeof provider.timeout_seconds === 'number' ? provider.timeout_seconds : null,
+                depth: typeof provider.depth === 'string' ? provider.depth : '',
+                search_depth: typeof provider.search_depth === 'string' ? provider.search_depth : '',
+                topic: typeof provider.topic === 'string' ? provider.topic : '',
+                include_answer: typeof provider.include_answer === 'boolean' ? provider.include_answer : null,
+            };
+        }
+        this._searchProviderDrafts = drafts;
+        this._searchProviderOrder = Array.isArray(data.provider_order)
+            ? data.provider_order.map((id) => String(id))
+            : [];
     }
 
     _setTab(tab) {
@@ -408,6 +642,7 @@ export class FrontendSettingsPage extends PlatformPage {
         const tabs = [
             { id: 'company', label: this.t('settings_page.tab_company') },
             { id: 'ai_providers', label: this.t('settings_page.tab_ai_providers') },
+            { id: 'search_providers', label: this.t('settings_page.tab_search_providers') },
             ...(isSystem ? [{ id: 'model_scoring', label: this.t('settings_page.tab_model_scoring') }] : []),
             { id: 'security', label: this.t('settings_page.tab_security') },
             { id: 'integrations', label: this.t('settings_page.tab_integrations') },
@@ -510,6 +745,8 @@ export class FrontendSettingsPage extends PlatformPage {
             api_key: '',
             base_url: cap.base_url || '',
             model: cap.model || '',
+            dimension: cap.dimension || null,
+            mrl_output_dimension: cap.mrl_output_dimension || null,
         };
     }
 
@@ -530,6 +767,8 @@ export class FrontendSettingsPage extends PlatformPage {
         if (draft.api_key) body.api_key = draft.api_key;
         if (draft.base_url) body.base_url = draft.base_url;
         if (draft.model) body.model = draft.model;
+        if (draft.dimension) body.dimension = draft.dimension;
+        if (draft.mrl_output_dimension) body.mrl_output_dimension = draft.mrl_output_dimension;
         if (draft.folder_id) body.folder_id = draft.folder_id;
         if (draft.extra_request_headers) body.extra_request_headers = draft.extra_request_headers;
         if (Array.isArray(draft.fallback_models) && draft.fallback_models.length > 0) {
@@ -781,6 +1020,348 @@ export class FrontendSettingsPage extends PlatformPage {
                 <div class="section-help">${this.t('settings_page.ai_providers.section_capabilities_help')}</div>
                 <div class="two-col">
                     ${capabilities.map((cap) => this._renderCapabilityCard(cap, catalog))}
+                </div>
+            </section>
+        `;
+    }
+
+    _searchCatalogById(data) {
+        const catalog = Array.isArray(data.catalog) ? data.catalog : [];
+        const out = {};
+        for (const item of catalog) {
+            if (item && typeof item === 'object' && typeof item.id === 'string') {
+                out[item.id] = item;
+            }
+        }
+        return out;
+    }
+
+    _searchProviderDraft(provider) {
+        const draft = this._searchProviderDrafts[provider.id];
+        if (draft && typeof draft === 'object') {
+            return draft;
+        }
+        return {
+            provider_id: provider.id,
+            enabled: provider.enabled === true,
+            credential_source: provider.credential_source === 'company' ? 'company' : 'platform',
+            api_key: '',
+            base_url: typeof provider.base_url === 'string' ? provider.base_url : '',
+            timeout_seconds: typeof provider.timeout_seconds === 'number' ? provider.timeout_seconds : null,
+            depth: typeof provider.depth === 'string' ? provider.depth : '',
+            search_depth: typeof provider.search_depth === 'string' ? provider.search_depth : '',
+            topic: typeof provider.topic === 'string' ? provider.topic : '',
+            include_answer: typeof provider.include_answer === 'boolean' ? provider.include_answer : null,
+        };
+    }
+
+    _setSearchProviderDraft(providerId, patch) {
+        const current = this._searchProviderDrafts[providerId];
+        if (!current || typeof current !== 'object') {
+            throw new Error(`search provider draft missing: ${providerId}`);
+        }
+        this._searchProviderDrafts = {
+            ...this._searchProviderDrafts,
+            [providerId]: {
+                ...current,
+                ...patch,
+            },
+        };
+    }
+
+    _saveSearchProvider(providerId) {
+        const draft = this._searchProviderDrafts[providerId];
+        if (!draft || typeof draft !== 'object') {
+            return;
+        }
+        const body = {
+            provider_id: providerId,
+            enabled: draft.enabled === true,
+            credential_source: draft.credential_source === 'company' ? 'company' : 'platform',
+            base_url: draft.base_url ? String(draft.base_url) : null,
+            timeout_seconds: typeof draft.timeout_seconds === 'number' ? draft.timeout_seconds : null,
+            depth: draft.depth ? String(draft.depth) : null,
+            search_depth: draft.search_depth ? String(draft.search_depth) : null,
+            topic: draft.topic ? String(draft.topic) : null,
+            include_answer: typeof draft.include_answer === 'boolean' ? draft.include_answer : null,
+        };
+        if (draft.credential_source === 'company' && draft.api_key && String(draft.api_key).trim()) {
+            body.api_key = String(draft.api_key).trim();
+        }
+        this._searchProviderPut.run(body);
+    }
+
+    _resetSearchProvider(providerId) {
+        this._searchProviderDelete.run({ provider_id: providerId });
+    }
+
+    _moveSearchProvider(providerId, delta) {
+        const current = Array.isArray(this._searchProviderOrder) ? this._searchProviderOrder.slice() : [];
+        const index = current.indexOf(providerId);
+        if (index < 0) {
+            return;
+        }
+        const target = index + delta;
+        if (target < 0 || target >= current.length) {
+            return;
+        }
+        const next = current.slice();
+        const item = next[index];
+        next.splice(index, 1);
+        next.splice(target, 0, item);
+        this._searchProviderOrder = next;
+        this._searchProviderOrderPut.run({ provider_order: next });
+    }
+
+    _renderSearchProviderSpecificFields(provider, draft) {
+        if (provider.id === 'linkup') {
+            return html`
+                <platform-field
+                    type="enum"
+                    mode="edit"
+                    label=${this.t('settings_page.search_providers.depth')}
+                    .value=${draft.depth}
+                    .config=${{ values: [
+                        { value: '', label: this.t('settings_page.search_providers.platform_default') },
+                        { value: 'fast', label: 'fast' },
+                        { value: 'standard', label: 'standard' },
+                        { value: 'deep', label: 'deep' },
+                    ] }}
+                    @change=${(e) => {
+                        if (!e.detail || typeof e.detail.value !== 'string') {
+                            throw new Error('search provider depth expects string detail.value');
+                        }
+                        this._setSearchProviderDraft(provider.id, { depth: e.detail.value });
+                    }}
+                ></platform-field>
+            `;
+        }
+        if (provider.id === 'tavily') {
+            return html`
+                <platform-field
+                    type="enum"
+                    mode="edit"
+                    label=${this.t('settings_page.search_providers.search_depth')}
+                    .value=${draft.search_depth}
+                    .config=${{ values: [
+                        { value: '', label: this.t('settings_page.search_providers.platform_default') },
+                        { value: 'basic', label: 'basic' },
+                        { value: 'advanced', label: 'advanced' },
+                    ] }}
+                    @change=${(e) => {
+                        if (!e.detail || typeof e.detail.value !== 'string') {
+                            throw new Error('search provider search_depth expects string detail.value');
+                        }
+                        this._setSearchProviderDraft(provider.id, { search_depth: e.detail.value });
+                    }}
+                ></platform-field>
+                <platform-field
+                    type="enum"
+                    mode="edit"
+                    label=${this.t('settings_page.search_providers.topic')}
+                    .value=${draft.topic}
+                    .config=${{ values: [
+                        { value: '', label: this.t('settings_page.search_providers.platform_default') },
+                        { value: 'general', label: 'general' },
+                        { value: 'news', label: 'news' },
+                        { value: 'finance', label: 'finance' },
+                    ] }}
+                    @change=${(e) => {
+                        if (!e.detail || typeof e.detail.value !== 'string') {
+                            throw new Error('search provider topic expects string detail.value');
+                        }
+                        this._setSearchProviderDraft(provider.id, { topic: e.detail.value });
+                    }}
+                ></platform-field>
+                <platform-field
+                    type="boolean"
+                    mode="edit"
+                    label=${this.t('settings_page.search_providers.include_answer')}
+                    .value=${draft.include_answer === true}
+                    @change=${(e) => {
+                        if (!e.detail || typeof e.detail.value !== 'boolean') {
+                            throw new Error('search provider include_answer expects boolean detail.value');
+                        }
+                        this._setSearchProviderDraft(provider.id, { include_answer: e.detail.value });
+                    }}
+                ></platform-field>
+            `;
+        }
+        return '';
+    }
+
+    _renderSearchProviderCard(provider, catalog) {
+        const draft = this._searchProviderDraft(provider);
+        const meta = catalog[provider.id] && typeof catalog[provider.id] === 'object'
+            ? catalog[provider.id]
+            : {};
+        const label = typeof meta.label === 'string' ? meta.label : provider.id;
+        const logo = typeof meta.logo === 'string' ? meta.logo : provider.id.slice(0, 2).toUpperCase();
+        const tone = typeof meta.tone === 'string' ? meta.tone : 'blue';
+        const description = typeof meta.description === 'string' ? meta.description : '';
+        const tooltip = typeof meta.tooltip === 'string' ? meta.tooltip : '';
+        const isCompany = draft.credential_source === 'company';
+        return html`
+            <article class="search-provider-card" data-source=${isCompany ? 'company' : 'platform'}>
+                <div class="provider-card-head">
+                    <div class="provider-logo" data-tone=${tone}>${logo}</div>
+                    <div class="provider-title">
+                        <div class="provider-title-row">
+                            <h4>${label}</h4>
+                            <button class="info-dot" type="button" title=${tooltip} aria-label=${tooltip}>?</button>
+                        </div>
+                        <div class="provider-description">${description}</div>
+                    </div>
+                    <div class="provider-status">
+                        <span class="provider-pill" data-ok=${provider.platform_enabled === true ? 'true' : 'false'}>
+                            ${provider.platform_key_configured === true
+                                ? this.t('settings_page.search_providers.platform_key_ready')
+                                : this.t('settings_page.search_providers.platform_key_missing')}
+                        </span>
+                        ${provider.key_masked
+                            ? html`<span class="provider-pill" data-ok="true">${provider.key_masked}</span>`
+                            : ''}
+                    </div>
+                </div>
+
+                <div class="credential-switch" role="group" aria-label=${this.t('settings_page.search_providers.credential_source')}>
+                    <button
+                        type="button"
+                        data-active=${isCompany ? 'false' : 'true'}
+                        @click=${() => this._setSearchProviderDraft(provider.id, { credential_source: 'platform' })}
+                    >${this.t('settings_page.search_providers.source_platform')}</button>
+                    <button
+                        type="button"
+                        data-active=${isCompany ? 'true' : 'false'}
+                        @click=${() => this._setSearchProviderDraft(provider.id, { credential_source: 'company' })}
+                    >${this.t('settings_page.search_providers.source_company')}</button>
+                </div>
+
+                <div class="provider-form two">
+                    <platform-field
+                        type="boolean"
+                        mode="edit"
+                        label=${this.t('settings_page.search_providers.enabled')}
+                        .value=${draft.enabled === true}
+                        @change=${(e) => {
+                            if (!e.detail || typeof e.detail.value !== 'boolean') {
+                                throw new Error('search provider enabled expects boolean detail.value');
+                            }
+                            this._setSearchProviderDraft(provider.id, { enabled: e.detail.value });
+                        }}
+                    ></platform-field>
+                    <platform-field
+                        type="number"
+                        mode="edit"
+                        label=${this.t('settings_page.search_providers.timeout')}
+                        .value=${draft.timeout_seconds}
+                        placeholder=${this.t('settings_page.search_providers.platform_default')}
+                        @change=${(e) => {
+                            if (!e.detail || (e.detail.value !== null && typeof e.detail.value !== 'number')) {
+                                throw new Error('search provider timeout expects numeric detail.value');
+                            }
+                            this._setSearchProviderDraft(provider.id, { timeout_seconds: e.detail.value });
+                        }}
+                    ></platform-field>
+                    <platform-field
+                        type="string"
+                        mode="edit"
+                        label=${this.t('settings_page.search_providers.base_url')}
+                        .value=${draft.base_url}
+                        placeholder=${provider.platform_base_url}
+                        @change=${(e) => {
+                            if (!e.detail || typeof e.detail.value !== 'string') {
+                                throw new Error('search provider base_url expects string detail.value');
+                            }
+                            this._setSearchProviderDraft(provider.id, { base_url: e.detail.value });
+                        }}
+                    ></platform-field>
+                    ${isCompany
+                        ? html`
+                            <platform-field
+                                type="string"
+                                mode="edit"
+                                input-type="password"
+                                label=${this.t('settings_page.search_providers.api_key')}
+                                .value=${draft.api_key}
+                                placeholder=${provider.key_masked
+                                    ? this.t('settings_page.search_providers.keep_existing_key')
+                                    : 'sk-...'}
+                                @change=${(e) => {
+                                    if (!e.detail || typeof e.detail.value !== 'string') {
+                                        throw new Error('search provider api_key expects string detail.value');
+                                    }
+                                    this._setSearchProviderDraft(provider.id, { api_key: e.detail.value });
+                                }}
+                            ></platform-field>
+                        `
+                        : ''}
+                    ${this._renderSearchProviderSpecificFields(provider, draft)}
+                </div>
+
+                <div class="provider-actions">
+                    <div class="order-controls">
+                        <glass-button
+                            size="sm"
+                            variant="ghost"
+                            @click=${() => this._moveSearchProvider(provider.id, -1)}
+                        >${this.t('settings_page.search_providers.move_up')}</glass-button>
+                        <glass-button
+                            size="sm"
+                            variant="ghost"
+                            @click=${() => this._moveSearchProvider(provider.id, 1)}
+                        >${this.t('settings_page.search_providers.move_down')}</glass-button>
+                    </div>
+                    <div class="order-controls">
+                        <glass-button
+                            size="sm"
+                            variant="ghost"
+                            ?disabled=${this._searchProviderDelete.busy}
+                            @click=${() => this._resetSearchProvider(provider.id)}
+                        >${this.t('settings_page.search_providers.reset')}</glass-button>
+                        <glass-button
+                            size="sm"
+                            ?disabled=${this._searchProviderPut.busy}
+                            @click=${() => this._saveSearchProvider(provider.id)}
+                        >${this.t('settings_page.search_providers.save')}</glass-button>
+                    </div>
+                </div>
+            </article>
+        `;
+    }
+
+    _renderSearchProvidersTab() {
+        const data = this._searchLoad.lastResult;
+        if (!data) {
+            return html`<div class="empty"><glass-spinner></glass-spinner></div>`;
+        }
+        const providers = Array.isArray(data.providers) ? data.providers : [];
+        const catalog = this._searchCatalogById(data);
+        const order = Array.isArray(this._searchProviderOrder) ? this._searchProviderOrder : [];
+        const orderedProviders = order
+            .map((id) => providers.find((provider) => provider && provider.id === id))
+            .filter((provider) => provider && typeof provider === 'object');
+        for (const provider of providers) {
+            if (provider && typeof provider.id === 'string' && !order.includes(provider.id)) {
+                orderedProviders.push(provider);
+            }
+        }
+        return html`
+            <section class="search-provider-hero">
+                <div>
+                    <h3>${this.t('settings_page.search_providers.title')}</h3>
+                    <p>${this.t('settings_page.search_providers.subtitle')}</p>
+                </div>
+                <div class="billing-note">
+                    <strong>${this.t('settings_page.search_providers.billing_title')}</strong>
+                    <span>${this.t('settings_page.search_providers.billing_platform')}</span>
+                    <span>${this.t('settings_page.search_providers.billing_company')}</span>
+                    <span>${this.t('settings_page.search_providers.billing_system')}</span>
+                </div>
+            </section>
+            <section>
+                <div class="search-provider-grid">
+                    ${orderedProviders.map((provider) => this._renderSearchProviderCard(provider, catalog))}
                 </div>
             </section>
         `;
@@ -1073,6 +1654,7 @@ export class FrontendSettingsPage extends PlatformPage {
             ${this._renderTabs()}
             ${this._activeTab === 'company' ? this._renderCompanyTab(company) : ''}
             ${this._activeTab === 'ai_providers' ? this._renderAiProvidersTab() : ''}
+            ${this._activeTab === 'search_providers' ? this._renderSearchProvidersTab() : ''}
             ${this._activeTab === 'model_scoring' ? this._renderModelScoringTab() : ''}
             ${this._activeTab === 'security' ? this._renderSecurityTab() : ''}
             ${this._activeTab === 'integrations' ? this._renderIntegrationsTab() : ''}

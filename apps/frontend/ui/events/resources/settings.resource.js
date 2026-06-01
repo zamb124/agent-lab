@@ -13,6 +13,10 @@
  *   PATCH /frontend/api/settings/ai-providers/custom/:id          ← CustomProviderUpdate
  *   DELETE /frontend/api/settings/ai-providers/custom/:id
  *   GET   /frontend/api/settings/ai-providers/resolved
+ *   GET   /frontend/api/settings/search-providers
+ *   PUT   /frontend/api/settings/search-providers/order
+ *   PUT   /frontend/api/settings/search-providers/:provider_id
+ *   DELETE /frontend/api/settings/search-providers/:provider_id
  */
 
 import { createAsyncOp } from '@platform/lib/events/index.js';
@@ -181,5 +185,75 @@ export const aiCustomProviderDeleteOp = createAsyncOp({
     },
     onSuccess: (ctx) => {
         ctx.dispatch(aiProvidersLoadOp.events.REQUESTED, null, { source: 'local' });
+    },
+});
+
+// === Search providers ===
+
+export const searchProvidersLoadOp = createAsyncOp({
+    name: 'frontend/search_providers_load',
+    silent: true,
+    restMirror: { method: 'GET', path: '/frontend/api/settings/search-providers' },
+    request: async () => await httpRequest({
+        method: 'GET',
+        url: `${BASE}/search-providers`,
+    }),
+});
+
+export const searchProviderPutOp = createAsyncOp({
+    name: 'frontend/search_provider_put',
+    successToastKey: 'frontend:settings_page.search_providers.toast_saved',
+    errorToastKey: 'frontend:settings_page.search_providers.toast_failed',
+    restMirror: { method: 'PUT', path: '/frontend/api/settings/search-providers/:provider_id' },
+    request: async ({ payload }) => {
+        if (!payload || typeof payload !== 'object') {
+            throw new Error('search_provider_put: payload required');
+        }
+        const { provider_id, ...body } = payload;
+        if (!provider_id || typeof provider_id !== 'string') {
+            throw new Error('search_provider_put: provider_id required');
+        }
+        return await httpRequest({
+            method: 'PUT',
+            url: `${BASE}/search-providers/${encodeURIComponent(provider_id)}`,
+            body,
+        });
+    },
+    onSuccess: (ctx) => {
+        ctx.dispatch(searchProvidersLoadOp.events.REQUESTED, null, { source: 'local' });
+    },
+});
+
+export const searchProviderOrderPutOp = createAsyncOp({
+    name: 'frontend/search_provider_order_put',
+    successToastKey: 'frontend:settings_page.search_providers.toast_order_saved',
+    errorToastKey: 'frontend:settings_page.search_providers.toast_failed',
+    restMirror: { method: 'PUT', path: '/frontend/api/settings/search-providers/order' },
+    request: async ({ payload }) => await httpRequest({
+        method: 'PUT',
+        url: `${BASE}/search-providers/order`,
+        body: payload && typeof payload === 'object' ? payload : {},
+    }),
+    onSuccess: (ctx) => {
+        ctx.dispatch(searchProvidersLoadOp.events.REQUESTED, null, { source: 'local' });
+    },
+});
+
+export const searchProviderDeleteOp = createAsyncOp({
+    name: 'frontend/search_provider_delete',
+    successToastKey: 'frontend:settings_page.search_providers.toast_reset',
+    errorToastKey: 'frontend:settings_page.search_providers.toast_failed',
+    restMirror: { method: 'DELETE', path: '/frontend/api/settings/search-providers/:provider_id' },
+    request: async ({ payload }) => {
+        if (!payload || !payload.provider_id) {
+            throw new Error('search_provider_delete: provider_id required');
+        }
+        return await httpRequest({
+            method: 'DELETE',
+            url: `${BASE}/search-providers/${encodeURIComponent(payload.provider_id)}`,
+        });
+    },
+    onSuccess: (ctx) => {
+        ctx.dispatch(searchProvidersLoadOp.events.REQUESTED, null, { source: 'local' });
     },
 });

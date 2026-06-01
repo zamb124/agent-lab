@@ -85,6 +85,9 @@ LLM_PROVIDER_DEFAULT_MODELS_URLS: dict[str, str] = {
 }
 
 LLM_PROVIDER_SMOKE_MODELS: dict[str, str] = {
+    "openrouter": "openrouter/free",
+    "bothub": "gpt-4o-mini",
+    "openai": "gpt-4o-mini",
     "groq": "llama-3.1-8b-instant",
     "google": "gemini-2.5-flash-lite",
     "github": "openai/gpt-4o-mini",

@@ -19,6 +19,19 @@ from core.config.models import (
     YandexLLMProviderConfig,
 )
 from core.config.openai_v1_base_url import normalize_openai_v1_base_url
+from core.llm_model_routing import LLM_PROVIDER_DEFAULT_BASE_URLS
+
+_LLMProviderConfig = (
+    OpenAIProviderConfig
+    | OpenRouterProviderConfig
+    | BothubProviderConfig
+    | YandexLLMProviderConfig
+    | GroqProviderConfig
+    | GoogleLLMProviderConfig
+    | GitHubModelsProviderConfig
+    | HuggingFaceProviderConfig
+    | DeepInfraProviderConfig
+)
 
 _LLM_KEY_PLACEHOLDERS: frozenset[str] = frozenset(
     {
@@ -47,19 +60,7 @@ def _norm_api_key(raw: str | None) -> str:
 
 def _active_llm_provider_block(
     llm: LLMConfig,
-) -> tuple[
-    str,
-    OpenAIProviderConfig
-    | OpenRouterProviderConfig
-    | BothubProviderConfig
-    | YandexLLMProviderConfig
-    | GroqProviderConfig
-    | GoogleLLMProviderConfig
-    | GitHubModelsProviderConfig
-    | HuggingFaceProviderConfig
-    | DeepInfraProviderConfig
-    | None,
-    ]:
+) -> tuple[str, _LLMProviderConfig | None]:
     p = (llm.provider or "").strip().lower()
     if p == "openai":
         return p, llm.openai
@@ -84,6 +85,33 @@ def _active_llm_provider_block(
     )
 
 
+def llm_provider_block(
+    llm: LLMConfig,
+    provider: str,
+) -> _LLMProviderConfig | None:
+    """Provider sub-config by explicit slug, independent of active ``llm.provider``."""
+    p = provider.strip().lower()
+    if p == "openai":
+        return llm.openai
+    if p == "openrouter":
+        return llm.openrouter
+    if p == "bothub":
+        return llm.bothub
+    if p == "yandex":
+        return llm.yandex
+    if p == "groq":
+        return llm.groq
+    if p == "google":
+        return llm.google
+    if p == "github":
+        return llm.github
+    if p == "huggingface":
+        return llm.huggingface
+    if p == "deepinfra":
+        return llm.deepinfra
+    raise ValueError(f"provider={p!r} не поддержан для OpenAI-совместимого API.")
+
+
 def resolve_llm_api_key_for_openai_compatible_calls(llm: LLMConfig) -> str:
     """Ключ для ``POST .../embeddings`` при привязке эмбеддингов к активному ``llm``."""
     p, cfg = _active_llm_provider_block(llm)
@@ -92,6 +120,18 @@ def resolve_llm_api_key_for_openai_compatible_calls(llm: LLMConfig) -> str:
     k = _norm_api_key(cfg.api_key)
     if not k:
         raise ValueError(f"Нужен непустой api_key для llm.provider={p!r} (эмбеддинги).")
+    return k
+
+
+def resolve_provider_api_key_for_openai_compatible_calls(llm: LLMConfig, provider: str) -> str:
+    """API key for an explicit OpenAI-compatible provider slug."""
+    p = provider.strip().lower()
+    cfg = llm_provider_block(llm, p)
+    if cfg is None:
+        raise ValueError(f"Конфиг провайдера не задан для provider={p!r}")
+    k = _norm_api_key(cfg.api_key)
+    if not k:
+        raise ValueError(f"Нужен непустой api_key для provider={p!r}.")
     return k
 
 
@@ -131,20 +171,38 @@ def yandex_llm_http_headers(llm: LLMConfig) -> dict[str, str]:
 def resolve_llm_openai_v1_base_url(llm: LLMConfig) -> str:
     """Корень OpenAI-совместимого API (суффикс ``/v1``) для эмбеддингов."""
     p, cfg = _active_llm_provider_block(llm)
+    return _provider_openai_v1_base_url(p, cfg)
+
+
+def _provider_openai_v1_base_url(
+    provider: str,
+    cfg: _LLMProviderConfig | None,
+) -> str:
     if cfg is None:
-        raise ValueError(f"Конфиг провайдера не задан для llm.provider={p!r}")
-    if p == "openai":
+        default_base_url = LLM_PROVIDER_DEFAULT_BASE_URLS.get(provider)
+        if default_base_url is not None and provider != "yandex":
+            if provider in {"groq", "google", "github", "huggingface", "deepinfra"}:
+                return default_base_url.rstrip("/")
+            return normalize_openai_v1_base_url(default_base_url)
+        raise ValueError(f"Конфиг провайдера не задан для provider={provider!r}")
+    if provider == "openai":
         raw = cfg.base_url
         if raw is None or not raw.strip():
             return normalize_openai_v1_base_url("https://api.openai.com/v1")
         return normalize_openai_v1_base_url(raw.strip())
-    if p == "yandex":
+    if provider == "yandex":
         if not isinstance(cfg, YandexLLMProviderConfig):
             raise ValueError("llm.yandex не задан")
         return yandex_llm_openai_root_from_provider_cfg(cfg)
     raw = cfg.base_url
     if raw is None or not str(raw).strip():
-        raise ValueError(f"Нужен непустой base_url для llm.provider={p!r}")
-    if p in {"groq", "google", "github", "huggingface", "deepinfra"}:
+        raise ValueError(f"Нужен непустой base_url для provider={provider!r}")
+    if provider in {"groq", "google", "github", "huggingface", "deepinfra"}:
         return str(raw).strip().rstrip("/")
     return normalize_openai_v1_base_url(str(raw).strip())
+
+
+def resolve_provider_openai_v1_base_url(llm: LLMConfig, provider: str) -> str:
+    """OpenAI-compatible ``.../v1`` root for an explicit provider slug."""
+    p = provider.strip().lower()
+    return _provider_openai_v1_base_url(p, llm_provider_block(llm, p))

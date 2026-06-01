@@ -25,34 +25,6 @@ from core.tracing.operation_span import traced_operation
 from core.types import JsonObject, OtelAttributeValue
 
 logger = get_logger(__name__)
-# Размерности известных моделей
-MODEL_DIMENSIONS: dict[str, int] = {
-    # 1536
-    "openai/text-embedding-3-small": 1536,
-    "openai/text-embedding-3-large": 3072,
-    "openai/text-embedding-ada-002": 1536,
-    "mistralai/codestral-embed-2505": 1536,
-    # 1024
-    "mistralai/mistral-embed-2312": 1024,
-    "baai/bge-m3": 1024,
-    "intfloat/multilingual-e5-large": 1024,
-    "thenlper/gte-large": 1024,
-    "intfloat/e5-large-v2": 1024,
-    "baai/bge-large-en-v1.5": 1024,
-    # 768
-    "thenlper/gte-base": 768,
-    "intfloat/e5-base-v2": 768,
-    "baai/bge-base-en-v1.5": 768,
-    "sentence-transformers/multi-qa-mpnet-base-dot-v1": 768,
-    "sentence-transformers/all-mpnet-base-v2": 768,
-    # 384
-    "sentence-transformers/paraphrase-minilm-l6-v2": 384,
-    "sentence-transformers/all-minilm-l12-v2": 384,
-    "sentence-transformers/all-minilm-l6-v2": 384,
-    # Большие модели
-    "qwen/qwen3-embedding-0.6b": 1024,
-    "google/gemini-embedding-001": 768,
-}
 
 
 class EmbeddingResponseItem(BaseModel):
@@ -127,16 +99,6 @@ class EmbeddingService:
         ``dimension`` и ``mrl_output_dimension`` задают размер в pgvector, не длину ответа.
         """
         if self.mrl_output_dimension is not None:
-            native_expected = MODEL_DIMENSIONS.get(model)
-            if native_expected is not None and actual_dim != native_expected:
-                logger.warning(
-                    "embedding.model_dimension_mismatch",
-                    model=model,
-                    actual_dimension=actual_dim,
-                    expected_dimension=native_expected,
-                    mode="mrl_native",
-                )
-                return False
             if actual_dim < self.mrl_output_dimension:
                 logger.warning(
                     "embedding.model_dimension_too_short",
@@ -369,10 +331,8 @@ class EmbeddingService:
             return self.dimension
         if self._response_dimension is not None:
             return self._response_dimension
-        if self.model_name in MODEL_DIMENSIONS:
-            return MODEL_DIMENSIONS[self.model_name]
         raise ValueError(
-            "Не задана размерность embedding: укажите dimension в конфиге или используйте модель из MODEL_DIMENSIONS"
+            "Не задана размерность embedding: укажите dimension в конфиге или сохраните verified metadata в model catalog"
         )
 
     def get_active_model(self) -> str | None:

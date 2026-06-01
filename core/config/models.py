@@ -17,6 +17,7 @@ from pydantic import (
     model_validator,
 )
 
+from core.ai_provider_catalog import AICapability, validate_platform_provider_for_capability
 from core.config.openai_v1_base_url import normalize_openai_v1_base_url
 from core.llm_model_routing import (
     GITHUB_MODELS_API_VERSION,
@@ -865,8 +866,13 @@ class EmbeddingConfig(BaseModel):
 
     model_config: ClassVar[ConfigDict] = ConfigDict(extra="forbid")
 
-    provider: Literal["openrouter", "provider_litserve"] = "provider_litserve"
+    provider: str = "provider_litserve"
     api: EmbeddingApiConfig = Field(default_factory=EmbeddingApiConfig)
+
+    @field_validator("provider")
+    @classmethod
+    def _provider_supports_embedding(cls, value: str) -> str:
+        return validate_platform_provider_for_capability(value, AICapability.EMBEDDING)
 
 class RAGProviderConfig(BaseModel):
     """Конфигурация одного RAG провайдера"""
@@ -1494,7 +1500,7 @@ class OpenAIProviderConfig(BaseModel):
     api_key: str | None = Field(default=None)
     base_url: str | None = Field(default=None)
     models_url: str | None = Field(default=None)
-    smoke_model: str | None = Field(default=None)
+    smoke_model: str | None = Field(default=LLM_PROVIDER_SMOKE_MODELS["openai"])
 
 
 class OpenRouterProviderConfig(BaseModel):
@@ -1505,7 +1511,7 @@ class OpenRouterProviderConfig(BaseModel):
     models_url: str = Field(default=LLM_PROVIDER_DEFAULT_MODELS_URLS["openrouter"])
     site_url: str = Field(default="https://platform.local")
     site_name: str = Field(default="platform")
-    smoke_model: str | None = Field(default=None)
+    smoke_model: str | None = Field(default=LLM_PROVIDER_SMOKE_MODELS["openrouter"])
 
 
 class BothubProviderConfig(BaseModel):
@@ -1514,7 +1520,7 @@ class BothubProviderConfig(BaseModel):
     api_key: str | None = Field(default=None)
     base_url: str = Field(default=LLM_PROVIDER_DEFAULT_BASE_URLS["bothub"])
     models_url: str = Field(default=LLM_PROVIDER_DEFAULT_MODELS_URLS["bothub"])
-    smoke_model: str | None = Field(default=None)
+    smoke_model: str | None = Field(default=LLM_PROVIDER_SMOKE_MODELS["bothub"])
 
 
 class GroqProviderConfig(BaseModel):
@@ -1952,6 +1958,7 @@ def default_billing_resource_base_prices() -> dict[str, dict[str, float]]:
     - billing:rub — единица = 1 ₽; quantity из platform.billing.settlement_quantity_rub (OpenRouter USD×usd_to_rub_rate).
     - livekit: поминутное списание — room_minute, egress_composite_minute, egress_segmented_minute
       (см. core/calls/livekit_usage_spans.py); "*" — прочие livekit:*.
+    - search: внешние Search provider calls из search.provider.* spans.
 
     Категория tool в биллинге не используется (тулы flows бесплатны в учёте).
     Подробнее: conf.json → billing._docs_ru, configuration.mdc, billing.mdc.
@@ -1961,6 +1968,13 @@ def default_billing_resource_base_prices() -> dict[str, dict[str, float]]:
         "embedding": {"*": 0.00005},
         "billing": {"rub": 1.0},
         "voice": {"session_minute": 0.01, "*": 0.0},
+        "search": {
+            "tinyfish": 0.005,
+            "linkup": 0.005,
+            "serper": 0.01,
+            "tavily": 0.05,
+            "*": 0.01,
+        },
         "livekit": {
             "room_minute": 0.01,
             "egress_composite_minute": 0.05,

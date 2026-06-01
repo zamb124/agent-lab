@@ -19,6 +19,7 @@ from core.billing.settlement_rules import (
 from core.config.models import default_billing_resource_base_prices
 from core.models.billing_models import DEFAULT_TARIFF_PRICES, TariffPlan, UsageType
 from core.models.identity_models import Company
+from core.tracing import attributes as trace_attr
 from core.tracing.models import BillingSettlementSpan
 
 pytestmark = pytest.mark.xdist_group("billing_global_resource_base_prices_json")
@@ -55,6 +56,13 @@ PRODUCTION_LIKE_BASE: dict[str, dict[str, float]] = {
         "egress_segmented_minute": 0.02,
         "*": 0.0,
     },
+    "search": {
+        "tinyfish": 0.005,
+        "linkup": 0.005,
+        "serper": 0.01,
+        "tavily": 0.05,
+        "*": 0.01,
+    },
 }
 
 
@@ -68,6 +76,10 @@ def _free_livekit_mult() -> float:
 
 def _free_embedding_mult() -> float:
     return float(DEFAULT_TARIFF_PRICES[TariffPlan.FREE]["embedding"]["*"])
+
+
+def _free_search_mult() -> float:
+    return float(DEFAULT_TARIFF_PRICES[TariffPlan.FREE]["search"]["*"])
 
 
 @pytest.mark.asyncio
@@ -90,6 +102,79 @@ async def test_tool_category_not_billed(frontend_container, system_user_id) -> N
     company = await frontend_container.company_repository.get("system")
     assert company is not None
     assert await billing.get_resource_cost_for_company(company, "tool:any_id") == 0.0
+
+
+@pytest.mark.asyncio
+async def test_search_provider_category_uses_search_tariff_bucket(
+    frontend_container,
+    unique_id,
+    system_user_id,
+) -> None:
+    billing = frontend_container.billing_service
+    cid = f"search_{unique_id}"
+    company = Company(
+        company_id=cid,
+        name="Search co",
+        owner_user_id=system_user_id,
+        members={system_user_id: ["owner"]},
+        balance=1000.0,
+    )
+    await frontend_container.company_repository.set(company)
+    fresh = await frontend_container.company_repository.get(cid)
+    assert fresh is not None
+    assert await billing.get_resource_cost_for_company(fresh, "search:tavily") == pytest.approx(
+        0.05 * _free_search_mult()
+    )
+    assert await billing.get_resource_cost_for_company(fresh, "search:unknown") == pytest.approx(
+        0.01 * _free_search_mult()
+    )
+
+
+@pytest.mark.asyncio
+async def test_search_provider_company_origin_records_zero_cost_usage(
+    frontend_container,
+    unique_id,
+    system_user_id,
+) -> None:
+    from core.billing.default_settlement_rules import default_settlement_rules_document
+    from core.billing.span_billing_settlement import SpanBillingSettlement
+
+    cid = f"search_byok_{unique_id}"
+    company = Company(
+        company_id=cid,
+        name="Search BYOK",
+        owner_user_id=system_user_id,
+        members={system_user_id: ["owner"]},
+        balance=1000.0,
+        current_month_spent=0.0,
+    )
+    await frontend_container.company_repository.set(company)
+    span = _settlement_span(
+        span_id=f"sp_search_byok_{unique_id}",
+        trace_id=str(uuid.uuid4()),
+        operation_name="search.provider.serper",
+        company_id=cid,
+        user_id=system_user_id,
+        attributes={trace_attr.ATTR_BILLING_COST_ORIGIN: "company"},
+    )
+
+    billing = frontend_container.billing_service
+    n = await billing.settle_pending_span_in_job(
+        span=span,
+        settlement=SpanBillingSettlement(frontend_container.shared_storage),
+        rules_doc=default_settlement_rules_document(),
+    )
+
+    assert n == 1
+    recs = await frontend_container.usage_repository.admin_search_usage_records(company_id=cid, limit=20)
+    row = next(r for r in recs if r.metadata.get("span_id") == span.span_id)
+    assert row.resource_name == "search:serper"
+    assert row.cost == 0.0
+    assert row.metadata.get("cost_origin") == "company"
+    fresh = await frontend_container.company_repository.get(cid)
+    assert fresh is not None
+    assert fresh.balance == pytest.approx(1000.0)
+    assert fresh.current_month_spent == pytest.approx(0.0)
 
 
 @pytest.mark.asyncio

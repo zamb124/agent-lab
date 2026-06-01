@@ -14,13 +14,23 @@ from apps.search.providers import (
     TavilySearchProvider,
     TinyFishSearchProvider,
 )
+from apps.search.services.company_config import (
+    ResolvedSearchConfig,
+    resolve_search_config_for_company,
+)
 from apps.search.services.provider_availability import ProviderAvailabilityStore
+from core.billing.exceptions import BillingBalanceBlockedError
+from core.billing.service import BALANCE_BLOCK_OPERATION_SEARCH, BillingService
+from core.models.billing_models import UsageType
+from core.models.identity_models import Company
 from core.search import (
     MetaSearchProviderStatus,
     MetaSearchRequest,
     MetaSearchResponse,
     WebSearchResult,
 )
+from core.tracing import attributes as trace_attr
+from core.tracing.operation_span import traced_operation
 
 _PROVIDER_ALIASES: dict[str, str] = {
     "auto": "auto",
@@ -90,48 +100,93 @@ class MetaSearchService:
         self,
         search_config: SearchIntegrationConfig,
         availability_store: ProviderAvailabilityStore,
+        billing_service: BillingService,
     ) -> None:
         self._config: SearchIntegrationConfig = search_config
         self._availability_store: ProviderAvailabilityStore = availability_store
-        self._providers: dict[str, SearchProvider] = {
-            "tinyfish": TinyFishSearchProvider(search_config.tinyfish),
-            "linkup": LinkupSearchProvider(search_config.linkup),
-            "serper": SerperSearchProvider(search_config.serper),
-            "tavily": TavilySearchProvider(search_config.tavily),
-        }
+        self._billing_service: BillingService = billing_service
 
-    async def search(self, request: MetaSearchRequest) -> MetaSearchResponse:
-        provider_ids = self._resolve_provider_sequence(request.providers)
+    async def search(
+        self,
+        request: MetaSearchRequest,
+        *,
+        company: Company | None = None,
+        user_id: str | None = None,
+    ) -> MetaSearchResponse:
+        resolved = resolve_search_config_for_company(
+            platform_config=self._config,
+            company=company,
+        )
+        providers = self._providers(resolved.config)
+        provider_ids = self._resolve_provider_sequence(request.providers, resolved.config)
+        scope_id = self._availability_scope(company)
         if request.provider_strategy == "first_available":
-            return await self._search_first_available(request, provider_ids)
-        return await self._search_merge(request, provider_ids)
+            return await self._search_first_available(
+                request,
+                provider_ids,
+                providers,
+                resolved,
+                scope_id,
+                company,
+                user_id,
+            )
+        return await self._search_merge(
+            request,
+            provider_ids,
+            providers,
+            resolved,
+            scope_id,
+            company,
+            user_id,
+        )
 
     async def _search_first_available(
         self,
         request: MetaSearchRequest,
         provider_ids: list[str],
+        providers: dict[str, SearchProvider],
+        resolved: ResolvedSearchConfig,
+        scope_id: str,
+        company: Company | None,
+        user_id: str | None,
     ) -> MetaSearchResponse:
         statuses: dict[str, MetaSearchProviderStatus] = {}
         for provider_id in provider_ids:
-            if provider_id not in self._providers:
+            if provider_id not in providers:
                 statuses[provider_id] = self._unsupported_status(provider_id)
                 continue
-            unavailable_status = await self._unavailable_skip_status(provider_id)
+            unavailable_status = await self._unavailable_skip_status(provider_id, scope_id, resolved)
             if unavailable_status is not None:
                 statuses[provider_id] = unavailable_status
                 continue
 
-            provider = self._providers[provider_id]
-            results, status = await provider.search(request)
+            provider = providers[provider_id]
+            balance_status = await self._billable_operation_status(
+                provider_id,
+                resolved,
+                company,
+                user_id,
+            )
+            if balance_status is not None:
+                statuses[provider_id] = balance_status
+                continue
+            results, status = await self._search_provider(
+                provider_id,
+                provider,
+                request,
+                resolved,
+                company,
+            )
             status = status.model_copy(update={"selected": True})
             statuses[provider_id] = status
             if status.ok:
-                _ = await self._availability_store.mark_available(provider_id)
+                _ = await self._availability_store.mark_available(provider_id, scope_id=scope_id)
                 ranked = self._collect_ranked([(provider_id, results)], request.limit)
                 return MetaSearchResponse(query=request.query, results=ranked, providers=statuses)
             _ = await self._availability_store.mark_unavailable(
                 provider_id,
                 status.error or "unknown error",
+                scope_id=scope_id,
             )
 
         return MetaSearchResponse(query=request.query, results=[], providers=statuses)
@@ -140,19 +195,33 @@ class MetaSearchService:
         self,
         request: MetaSearchRequest,
         provider_ids: list[str],
+        providers: dict[str, SearchProvider],
+        resolved: ResolvedSearchConfig,
+        scope_id: str,
+        company: Company | None,
+        user_id: str | None,
     ) -> MetaSearchResponse:
         statuses: dict[str, MetaSearchProviderStatus] = {}
         tasks: list[tuple[str, Awaitable[ProviderSearchOutcome]]] = []
         for provider_id in provider_ids:
-            if provider_id not in self._providers:
+            if provider_id not in providers:
                 statuses[provider_id] = self._unsupported_status(provider_id)
                 continue
-            unavailable_status = await self._unavailable_skip_status(provider_id)
+            unavailable_status = await self._unavailable_skip_status(provider_id, scope_id, resolved)
             if unavailable_status is not None:
                 statuses[provider_id] = unavailable_status
                 continue
-            provider = self._providers[provider_id]
-            tasks.append((provider_id, provider.search(request)))
+            balance_status = await self._billable_operation_status(
+                provider_id,
+                resolved,
+                company,
+                user_id,
+            )
+            if balance_status is not None:
+                statuses[provider_id] = balance_status
+                continue
+            provider = providers[provider_id]
+            tasks.append((provider_id, self._search_provider(provider_id, provider, request, resolved, company)))
 
         provider_results: list[tuple[str, list[WebSearchResult]]] = []
         if tasks:
@@ -161,19 +230,25 @@ class MetaSearchService:
                 selected_status = status.model_copy(update={"selected": True})
                 statuses[provider_id] = selected_status
                 if selected_status.ok:
-                    _ = await self._availability_store.mark_available(provider_id)
+                    _ = await self._availability_store.mark_available(provider_id, scope_id=scope_id)
                     provider_results.append((provider_id, results))
                 else:
                     _ = await self._availability_store.mark_unavailable(
                         provider_id,
                         selected_status.error or "unknown error",
+                        scope_id=scope_id,
                     )
 
         ranked = self._collect_ranked(provider_results, request.limit)
         return MetaSearchResponse(query=request.query, results=ranked, providers=statuses)
 
-    async def _unavailable_skip_status(self, provider_id: str) -> MetaSearchProviderStatus | None:
-        record = await self._availability_store.get(provider_id)
+    async def _unavailable_skip_status(
+        self,
+        provider_id: str,
+        scope_id: str,
+        resolved: ResolvedSearchConfig,
+    ) -> MetaSearchProviderStatus | None:
+        record = await self._availability_store.get(provider_id, scope_id=scope_id)
         if record is None or record.available:
             return None
         return MetaSearchProviderStatus(
@@ -181,7 +256,95 @@ class MetaSearchService:
             error=record.last_error,
             skipped=True,
             skip_reason="provider marked unavailable in redis",
+            credential_source=resolved.credential_source(provider_id),
+            billing_resource_name=f"search:{provider_id}",
         )
+
+    async def _billable_operation_status(
+        self,
+        provider_id: str,
+        resolved: ResolvedSearchConfig,
+        company: Company | None,
+        user_id: str | None,
+    ) -> MetaSearchProviderStatus | None:
+        if company is None or company.company_id == "system":
+            return None
+        credential_source = resolved.credential_source(provider_id)
+        if credential_source == "company":
+            return None
+        if user_id is None or not user_id.strip():
+            return MetaSearchProviderStatus(
+                ok=False,
+                error="user_id is required for platform-billed search",
+                skipped=True,
+                skip_reason="billing context is incomplete",
+                credential_source=credential_source,
+                billing_resource_name=f"search:{provider_id}",
+            )
+        try:
+            await self._billing_service.require_balance_for_billable_operation(
+                company.company_id,
+                user_id,
+                operation_code=BALANCE_BLOCK_OPERATION_SEARCH,
+                notification_service="frontend",
+                cost_origin="platform",
+            )
+        except BillingBalanceBlockedError as exc:
+            return MetaSearchProviderStatus(
+                ok=False,
+                error=str(exc),
+                skipped=True,
+                skip_reason="billing balance blocked",
+                credential_source=credential_source,
+                billing_resource_name=f"search:{provider_id}",
+            )
+        return None
+
+    async def _search_provider(
+        self,
+        provider_id: str,
+        provider: SearchProvider,
+        request: MetaSearchRequest,
+        resolved: ResolvedSearchConfig,
+        company: Company | None,
+    ) -> ProviderSearchOutcome:
+        credential_source = resolved.credential_source(provider_id)
+        billing_resource_name = f"search:{provider_id}"
+        async with traced_operation(
+            f"search.provider.{provider_id}",
+            event_type="search.provider.call",
+            operation_category="search",
+            billing_resource_name=billing_resource_name,
+            billing_quantity=1,
+            billing_cost_origin=credential_source,
+            extra_attributes={
+                "platform.search.provider_id": provider_id,
+                "platform.search.credential_source": credential_source,
+            },
+        ) as span:
+            results, status = await provider.search(request)
+            status = status.model_copy(
+                update={
+                    "credential_source": credential_source,
+                    "billing_resource_name": billing_resource_name,
+                }
+            )
+            span.set_attribute("platform.search.result_count", status.results_count)
+            span.set_attribute("platform.search.ok", status.ok)
+            if status.error:
+                span.set_attribute("platform.search.error", status.error[:500])
+            if status.ok and company is not None and company.company_id != "system":
+                span.set_attribute(trace_attr.ATTR_BILLING_USAGE_TYPE, UsageType.TOOL_CALL.value)
+                span.set_attribute(trace_attr.ATTR_BILLING_PENDING_SETTLEMENT, True)
+            return results, status
+
+    def _providers(self, config: SearchIntegrationConfig) -> dict[str, SearchProvider]:
+        return {
+            "tinyfish": TinyFishSearchProvider(config.tinyfish),
+            "linkup": LinkupSearchProvider(config.linkup),
+            "serper": SerperSearchProvider(config.serper),
+            "tavily": TavilySearchProvider(config.tavily),
+        }
 
     def _collect_ranked(
         self,
@@ -204,12 +367,16 @@ class MetaSearchService:
                     candidates[key] = result
         return _rank_results(candidates, scores, limit)
 
-    def _resolve_provider_sequence(self, raw: list[str]) -> list[str]:
+    def _resolve_provider_sequence(
+        self,
+        raw: list[str],
+        config: SearchIntegrationConfig,
+    ) -> list[str]:
         provider_ids = self._normalize_provider_ids(raw)
         if "auto" not in provider_ids:
             return provider_ids
         out: list[str] = []
-        for provider_id in self._config.provider_order:
+        for provider_id in config.provider_order:
             if provider_id and provider_id not in out:
                 out.append(provider_id)
         for provider_id in provider_ids:
@@ -234,4 +401,10 @@ class MetaSearchService:
         return MetaSearchProviderStatus(
             ok=False,
             error=f"unsupported search provider: {provider_id}",
+            billing_resource_name=f"search:{provider_id}",
         )
+
+    def _availability_scope(self, company: Company | None) -> str:
+        if company is None or not company.company_id.strip():
+            return "platform"
+        return f"company_{company.company_id.strip()}"

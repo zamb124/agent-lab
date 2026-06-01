@@ -45,6 +45,7 @@ from apps.frontend.api.public_landing_agents import router as public_landing_age
 from apps.frontend.api.public_search import router as public_search_router
 from apps.frontend.api.public_site import router as public_site_router
 from apps.frontend.api.scheduler import router as scheduler_router
+from apps.frontend.api.search_providers import router as search_providers_router
 from apps.frontend.api.services import router as services_router
 from apps.frontend.api.settings import router as settings_router
 from apps.frontend.api.team import router as team_router
@@ -332,6 +333,7 @@ app = create_service_app(
         billing_router,
         settings_router,
         ai_providers_router,
+        search_providers_router,
         services_router,
         scheduler_router,
         leads_router,

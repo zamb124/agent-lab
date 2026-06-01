@@ -36,9 +36,14 @@ from sqlalchemy.ext.asyncio import (
 )
 from sqlalchemy.sql.elements import ColumnElement
 
+from core.ai_provider_catalog import PROVIDER_LITSERVE
 from core.config import get_settings
-from core.config.llm_openai_compat import yandex_provider_http_headers
-from core.config.models import RAGProviderConfig
+from core.config.llm_openai_compat import (
+    llm_provider_block,
+    resolve_provider_api_key_for_openai_compatible_calls,
+    yandex_provider_http_headers,
+)
+from core.config.models import RAGProviderConfig, YandexLLMProviderConfig
 from core.config.testing import is_testing
 from core.db.models import VectorDocument
 from core.db.utils import get_rowcount
@@ -110,34 +115,30 @@ def _normalize_embedding_api_key(raw: str | None) -> str:
     return s
 
 
-def _resolve_pgvector_embedding_api_key(config: RAGProviderConfig) -> str:
+def _resolve_pgvector_embedding_api_key(
+    config: RAGProviderConfig,
+    embedding_runtime: RagEmbeddingRuntime,
+) -> str:
     key = _normalize_embedding_api_key(config.embedding_api_key)
     if key:
         return key
 
     settings = get_settings()
-    if settings.rag.embedding.provider == "provider_litserve":
+    if embedding_runtime.provider == PROVIDER_LITSERVE:
         return PROVIDER_LITSERVE_PLACEHOLDER_BEARER
-    if settings.llm.provider == "openrouter":
-        or_conf = settings.llm.openrouter
-        if or_conf is not None:
-            llm_key = _normalize_embedding_api_key(or_conf.api_key)
-            if llm_key:
-                logger.info(
-                    "pgvector: для embeddings используется llm.openrouter.api_key (rag.providers.pgvector.embedding_api_key пустой или плейсхолдер)"
-                )
-                return llm_key
-    if settings.llm.provider == "yandex":
-        yc = settings.llm.yandex
-        if yc is not None:
-            llm_key = _normalize_embedding_api_key(yc.api_key)
-            if llm_key:
-                logger.info(
-                    "pgvector: для embeddings используется llm.yandex.api_key (rag.providers.pgvector.embedding_api_key пустой или плейсхолдер)"
-                )
-                return llm_key
+    provider = embedding_runtime.provider
+    llm_key = resolve_provider_api_key_for_openai_compatible_calls(settings.llm, provider)
+    if llm_key:
+        logger.info(
+            "pgvector: для embeddings используется llm.%s.api_key "
+            + "(rag.providers.pgvector.embedding_api_key пустой или плейсхолдер)",
+            provider,
+        )
+        return llm_key
     raise ValueError(
-        "Нужен rag.providers.pgvector.embedding_api_key (OpenRouter sk-or-...) или llm.openrouter.api_key при llm.provider=openrouter, или llm.yandex.api_key при llm.provider=yandex. При rag.embedding.provider=provider_litserve ключ из pgvector не обязателен. Плейсхолдеры YOUR_* из conf.json не считаются ключом. ENV: RAG__PROVIDERS__PGVECTOR__EMBEDDING_API_KEY, LLM__OPENROUTER__API_KEY"
+        "Нужен rag.providers.pgvector.embedding_api_key или ключ выбранного "
+        + f"embedding provider={provider!r}. При provider_litserve ключ из pgvector не обязателен. "
+        + "Плейсхолдеры YOUR_* из conf.json не считаются ключом."
     )
 
 
@@ -176,12 +177,12 @@ class PgVectorProvider(BaseRAGProvider):
             expire_on_commit=False,
         )
 
-        api_key = _resolve_pgvector_embedding_api_key(config)
+        if embedding_runtime is None:
+            raise ValueError("embedding runtime обязателен для pgvector")
+        api_key = _resolve_pgvector_embedding_api_key(config, embedding_runtime)
 
         timeout = config.timeout
 
-        if embedding_runtime is None:
-            raise ValueError("embedding runtime обязателен для pgvector")
         model = embedding_runtime.model
         dimension = embedding_runtime.dimension
         embedding_base_url = embedding_runtime.base_url
@@ -192,15 +193,19 @@ class PgVectorProvider(BaseRAGProvider):
         if not dimension:
             raise ValueError("embedding.dimension обязателен в конфигурации")
 
-        embedding_extra_headers = None
+        embedding_extra_headers = dict(embedding_runtime.extra_request_headers or {})
         root_for_yandex_check = (embedding_base_url or "").strip()
-        if "llm.api.cloud.yandex.net" in root_for_yandex_check:
-            yc = get_settings().llm.yandex
-            if yc is None:
+        if embedding_runtime.provider == "yandex" or "llm.api.cloud.yandex.net" in root_for_yandex_check:
+            yc_raw = llm_provider_block(get_settings().llm, "yandex")
+            if not isinstance(yc_raw, YandexLLMProviderConfig):
                 raise ValueError(
-                    "Embedding base_url указывает на llm.api.cloud.yandex.net: задайте блок llm.yandex (api_key, folder_id)."
+                    "Embedding provider/base_url указывает на Yandex: задайте блок llm.yandex "
+                    + "(api_key, folder_id)."
                 )
-            embedding_extra_headers = yandex_provider_http_headers(yc)
+            embedding_extra_headers = {
+                **yandex_provider_http_headers(yc_raw),
+                **embedding_extra_headers,
+            }
 
         use_deterministic_embeddings = (
             is_testing()
@@ -218,7 +223,7 @@ class PgVectorProvider(BaseRAGProvider):
             timeout=timeout,
             dimension=dimension,
             mrl_output_dimension=mrl_output_dimension,
-            extra_headers=embedding_extra_headers,
+            extra_headers=embedding_extra_headers or None,
         )
         if use_deterministic_embeddings:
             logger.info("PgVector провайдер: mock embeddings для тестов")

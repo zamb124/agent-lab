@@ -268,6 +268,8 @@ class AIProvidersCapabilityUpdate(BaseModel):
     folder_id: str | None = None
     extra_request_headers: dict[str, str] | None = None
     model: str | None = None
+    dimension: int | None = Field(default=None, gt=0)
+    mrl_output_dimension: int | None = Field(default=None, gt=0)
     fallback_models: list[LLMCallConfig] | None = None
     voice: str | None = None
     language: str | None = None

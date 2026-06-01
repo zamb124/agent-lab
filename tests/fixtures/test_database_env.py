@@ -46,8 +46,9 @@ _TEST_SERVICE_ENV: dict[str, str] = {
     "RAG__ENABLED": "true",
     "RAG__DEFAULT_PROVIDER": "pgvector",
     "RAG__PROVIDERS__PGVECTOR__ENABLED": "true",
-    # См. tests/conftest.py: OpenRouter + Qwen model id без локального LitServe в subprocess.
-    "RAG__EMBEDDING__PROVIDER": "openrouter",
+    # См. tests/conftest.py: тестовый pgvector использует deterministic embeddings;
+    # provider_litserve остаётся каноничным embedding provider без внешнего API key.
+    "RAG__EMBEDDING__PROVIDER": "provider_litserve",
     "RAG__EMBEDDING__API__MODEL": "qwen/qwen3-embedding-0.6b",
     "RAG__EMBEDDING__API__DIMENSION": "1024",
     "RAG__EMBEDDING__API__MRL_OUTPUT_DIMENSION": "1024",

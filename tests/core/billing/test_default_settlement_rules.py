@@ -24,7 +24,7 @@ def _span(operation_name: str, attrs: JsonObject | None = None) -> BillingSettle
 def test_default_document_first_win_single_rule_per_family() -> None:
     doc = default_settlement_rules_document()
     assert doc.application_mode.value == "first_win"
-    assert len(doc.rules) == 10
+    assert len(doc.rules) == 14
 
 
 def test_matches_llm_tracer_with_total_tokens() -> None:
@@ -127,6 +127,15 @@ def test_matches_livekit_egress_segmented_usage_minutes() -> None:
     matched = resolve_matched_rules(doc, span)
     assert len(matched) == 1
     assert matched[0].rule_id == "livekit_egress_segmented_minutes"
+
+
+def test_matches_search_provider_call() -> None:
+    doc = default_settlement_rules_document()
+    span = _span("search.provider.tavily", {})
+    matched = resolve_matched_rules(doc, span)
+    assert len(matched) == 1
+    assert matched[0].rule_id == "search_tavily_call"
+    assert matched[0].resource_name == "search:tavily"
 
 
 def test_no_rule_for_sync_stt_observability_only() -> None:

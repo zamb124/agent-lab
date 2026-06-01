@@ -43,11 +43,11 @@ class ProviderAvailabilityStore:
         self._available_ttl_seconds = available_ttl_seconds
         self._unavailable_ttl_seconds = unavailable_ttl_seconds
 
-    async def get(self, provider_id: str) -> ProviderAvailabilityRecord | None:
+    async def get(self, provider_id: str, *, scope_id: str = "platform") -> ProviderAvailabilityRecord | None:
         raw = await self._redis.eval(
             "return redis.call('GET', KEYS[1])",
             1,
-            self._key(provider_id),
+            self._key(scope_id, provider_id),
         )
         if raw is None:
             return None
@@ -57,18 +57,29 @@ class ProviderAvailabilityStore:
             )
         return ProviderAvailabilityRecord.model_validate_json(raw)
 
-    async def mark_available(self, provider_id: str) -> ProviderAvailabilityRecord:
+    async def mark_available(
+        self,
+        provider_id: str,
+        *,
+        scope_id: str = "platform",
+    ) -> ProviderAvailabilityRecord:
         record = ProviderAvailabilityRecord(
             provider_id=provider_id,
             available=True,
             checked_at=self._now(),
             consecutive_failures=0,
         )
-        await self._set(record, ttl_seconds=self._available_ttl_seconds)
+        await self._set(scope_id, record, ttl_seconds=self._available_ttl_seconds)
         return record
 
-    async def mark_unavailable(self, provider_id: str, error: str) -> ProviderAvailabilityRecord:
-        existing = await self.get(provider_id)
+    async def mark_unavailable(
+        self,
+        provider_id: str,
+        error: str,
+        *,
+        scope_id: str = "platform",
+    ) -> ProviderAvailabilityRecord:
+        existing = await self.get(provider_id, scope_id=scope_id)
         consecutive_failures = 1
         if existing is not None:
             consecutive_failures = existing.consecutive_failures + 1
@@ -79,18 +90,27 @@ class ProviderAvailabilityStore:
             consecutive_failures=consecutive_failures,
             last_error=error[:500],
         )
-        await self._set(record, ttl_seconds=self._unavailable_ttl_seconds)
+        await self._set(scope_id, record, ttl_seconds=self._unavailable_ttl_seconds)
         return record
 
-    async def clear(self, provider_id: str) -> None:
-        _ = await self._redis.delete(self._key(provider_id))
+    async def clear(self, provider_id: str, *, scope_id: str = "platform") -> None:
+        _ = await self._redis.delete(self._key(scope_id, provider_id))
 
-    def _key(self, provider_id: str) -> str:
-        return f"{self._key_prefix}:{provider_id}"
+    def _key(self, scope_id: str, provider_id: str) -> str:
+        clean_scope = scope_id.strip().replace(":", "_")
+        if not clean_scope:
+            raise ValueError("provider availability scope_id is required")
+        return f"{self._key_prefix}:{clean_scope}:{provider_id}"
 
-    async def _set(self, record: ProviderAvailabilityRecord, *, ttl_seconds: int) -> None:
+    async def _set(
+        self,
+        scope_id: str,
+        record: ProviderAvailabilityRecord,
+        *,
+        ttl_seconds: int,
+    ) -> None:
         ok = await self._redis.set(
-            self._key(record.provider_id),
+            self._key(scope_id, record.provider_id),
             record.model_dump_json(),
             ttl=ttl_seconds,
         )

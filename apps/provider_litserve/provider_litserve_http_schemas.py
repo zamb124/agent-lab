@@ -78,6 +78,10 @@ class V1ModelItemSchema(BaseModel):
     per_request_limits: None = None
     object: Literal["model"] = "model"
     owned_by: str
+    capabilities: list[str] | None = None
+    native_dimension: int | None = None
+    storage_dimension: int | None = None
+    supported_parameters: list[str] | None = None
 
 
 class V1ModelsResponseBody(BaseModel):

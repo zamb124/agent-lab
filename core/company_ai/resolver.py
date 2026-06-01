@@ -424,7 +424,7 @@ def resolve_embedding_for_company() -> ResolvedEmbedding | None:
 
     if ov.provider.startswith(CUSTOM_PROVIDER_REF_PREFIX):
         custom = _resolve_custom_provider(aip, ov.provider)
-        model = custom.model_by_capability.get(AICapability.EMBEDDING.value)
+        model = ov.model or custom.model_by_capability.get(AICapability.EMBEDDING.value)
         if not model:
             raise ValueError(
                 f"capability=embedding: custom_provider {custom.id!r} не задал model_by_capability['embedding']"
@@ -437,6 +437,8 @@ def resolve_embedding_for_company() -> ResolvedEmbedding | None:
             extra_request_headers=dict(custom.extra_request_headers or {}) or None,
             cost_origin=COST_ORIGIN_COMPANY,
             custom_provider_id=custom.id,
+            dimension=ov.dimension,
+            mrl_output_dimension=ov.mrl_output_dimension,
         )
 
     api_key = _decrypt_or_none(ov.api_key_encrypted)
@@ -445,12 +447,14 @@ def resolve_embedding_for_company() -> ResolvedEmbedding | None:
 
     return ResolvedEmbedding(
         provider=ov.provider,
-        model="",
+        model=ov.model,
         base_url=ov.base_url or "",
         api_key=api_key,
         extra_request_headers=dict(ov.extra_request_headers or {}) or None,
         cost_origin=cost_origin,
         custom_provider_id=None,
+        dimension=ov.dimension,
+        mrl_output_dimension=ov.mrl_output_dimension,
     )
 
 

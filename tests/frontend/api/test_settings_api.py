@@ -22,14 +22,28 @@ class TestSettingsAPI:
     ):
         """Получение профиля компании и снимка AI-провайдеров (раздельные роутеры)."""
         from apps.flows.src.models import LLMModel
+        from core.ai_provider_catalog import AICapability
 
         openrouter_model_id = f"unit/openrouter-settings-{unique_id}"
         groq_model_id = f"unit-groq-settings-{unique_id}"
+        embedding_model_id = f"unit/embedding-settings-{unique_id}"
         await frontend_container.flows_llm_model_repository.set(
             LLMModel(model_id=openrouter_model_id, provider="openrouter")
         )
         await frontend_container.flows_llm_model_repository.set(
             LLMModel(model_id=groq_model_id, provider="groq")
+        )
+        await frontend_container.flows_llm_model_repository.set(
+            LLMModel(
+                model_id=embedding_model_id,
+                provider="provider_litserve",
+                capabilities=(AICapability.EMBEDDING,),
+                input_modalities=("text",),
+                output_modalities=("embeddings",),
+                native_dimension=1024,
+                storage_dimension=1024,
+                metadata_status="verified",
+            )
         )
 
         response = await frontend_client.get(
@@ -55,6 +69,7 @@ class TestSettingsAPI:
         summarize = caps["llm_summarize"]
         assert summarize["kind"] == "llm"
         assert "llm_summarize" in body["catalog"]
+        assert "embedding" in body["catalog"]
         prov_items = body["catalog"]["llm_summarize"]
         from core.clients.llm.model_routing import (
             HUMANITEC_LLM_PROVIDER,
@@ -81,6 +96,22 @@ class TestSettingsAPI:
         groq_item = next(item for item in prov_items if item["value"] == "groq")
         assert {"value": groq_model_id, "label": groq_model_id, "kind": "provider_model"} in groq_item["models"]
         assert any(p.get("kind") == "platform" for p in prov_items)
+        embedding_providers = body["catalog"]["embedding"]
+        embedding_provider_values = {item["value"] for item in embedding_providers}
+        assert "provider_litserve" in embedding_provider_values
+        embedding_litserve = next(
+            item for item in embedding_providers if item["value"] == "provider_litserve"
+        )
+        assert {
+            "value": embedding_model_id,
+            "label": embedding_model_id,
+            "kind": "embedding_model",
+            "native_dimension": 1024,
+            "dimension": 1024,
+            "mrl_output_dimension": None,
+            "metadata_status": "verified",
+            "source": "provider_catalog",
+        } in embedding_litserve["models"]
         assert body["llm_context"]["configured"] is False
         assert body["llm_context"]["config"] == {}
         assert body["llm_context"]["resolved"]["profile"] == "off"
@@ -178,6 +209,86 @@ class TestSettingsAPI:
         assert response.status_code == 400
         assert "model обязателен" in response.json()["detail"]
 
+    async def test_ai_provider_embedding_saves_catalog_model_with_dimension(
+        self,
+        frontend_client: AsyncClient,
+        auth_headers,
+        frontend_container,
+    ):
+        """Embedding override stores provider, model and storage dimension from the shared catalog."""
+        from apps.flows.src.models import LLMModel
+        from core.ai_provider_catalog import AICapability
+        from core.company_ai import CompanyAIProviders
+        from core.utils.tokens import get_token_service
+
+        token_service = get_token_service()
+        token_data = token_service.validate_token(auth_headers["Authorization"].replace("Bearer ", ""))
+        company_id = token_data.company_id
+        model_id = "qwen/qwen3-embedding-0.6b"
+        await frontend_container.flows_llm_model_repository.set(
+            LLMModel(
+                model_id=model_id,
+                provider="provider_litserve",
+                capabilities=(AICapability.EMBEDDING,),
+                native_dimension=1024,
+                storage_dimension=1024,
+                metadata_status="verified",
+            )
+        )
+
+        response = await frontend_client.put(
+            "/frontend/api/settings/ai-providers/embedding",
+            headers=auth_headers,
+            json={
+                "provider": "provider_litserve",
+                "model": model_id,
+                "dimension": 1024,
+            },
+        )
+
+        assert response.status_code == 200
+        company = await frontend_container.company_repository.get(company_id)
+        aip = CompanyAIProviders.from_metadata(company.metadata or {})
+        assert aip.embedding is not None
+        assert aip.embedding.provider == "provider_litserve"
+        assert aip.embedding.model == model_id
+        assert aip.embedding.dimension == 1024
+        assert aip.embedding.mrl_output_dimension is None
+
+    async def test_ai_provider_embedding_rejects_dimension_mismatch(
+        self,
+        frontend_client: AsyncClient,
+        auth_headers,
+        frontend_container,
+    ):
+        """Embedding models cannot be saved with dimensions that differ from pgvector storage policy."""
+        from apps.flows.src.models import LLMModel
+        from core.ai_provider_catalog import AICapability
+
+        model_id = "qwen/qwen3-embedding-0.6b"
+        await frontend_container.flows_llm_model_repository.set(
+            LLMModel(
+                model_id=model_id,
+                provider="provider_litserve",
+                capabilities=(AICapability.EMBEDDING,),
+                native_dimension=1024,
+                storage_dimension=1024,
+                metadata_status="verified",
+            )
+        )
+        response = await frontend_client.put(
+            "/frontend/api/settings/ai-providers/embedding",
+            headers=auth_headers,
+            json={
+                "provider": "provider_litserve",
+                "model": model_id,
+                "dimension": 768,
+            },
+        )
+
+        assert response.status_code == 400
+        assert "dimension=768" in response.json()["detail"]
+
     async def test_ai_providers_accept_user_company_admin_role_when_company_members_stale(
         self,
         frontend_client: AsyncClient,
@@ -222,6 +333,108 @@ class TestSettingsAPI:
             json={"profile": "standard"},
         )
         assert updated.status_code == 200
+
+    async def test_search_providers_company_key_crud(
+        self,
+        frontend_client: AsyncClient,
+        auth_headers,
+        frontend_container,
+    ):
+        """Search provider BYOK сохраняется за компанией, шифруется и отдаётся в UI только маской."""
+        from core.company_ai import decrypt_secret
+        from core.company_search import COMPANY_SEARCH_METADATA_KEY, CompanySearchProviders
+        from core.utils.tokens import get_token_service
+
+        token_service = get_token_service()
+        token_data = token_service.validate_token(auth_headers["Authorization"].replace("Bearer ", ""))
+        company_id = token_data.company_id
+
+        snapshot = await frontend_client.get(
+            "/frontend/api/settings/search-providers",
+            headers=auth_headers,
+        )
+        assert snapshot.status_code == 200
+        body = snapshot.json()
+        assert body["provider_order"] == ["tinyfish", "linkup", "serper", "tavily"]
+        assert [item["id"] for item in body["providers"]] == ["tinyfish", "linkup", "serper", "tavily"]
+
+        response = await frontend_client.put(
+            "/frontend/api/settings/search-providers/tavily",
+            headers=auth_headers,
+            json={
+                "enabled": True,
+                "credential_source": "company",
+                "api_key": "tvly-company-secret",
+                "base_url": "https://api.tavily.com",
+                "timeout_seconds": 14,
+                "search_depth": "advanced",
+                "topic": "news",
+                "include_answer": True,
+            },
+        )
+        assert response.status_code == 200
+
+        company = await frontend_container.company_repository.get(company_id)
+        assert company is not None
+        settings = CompanySearchProviders.from_metadata(company.metadata)
+        assert settings.tavily.credential_source == "company"
+        assert settings.tavily.api_key_encrypted is not None
+        assert decrypt_secret(settings.tavily.api_key_encrypted) == "tvly-company-secret"
+        assert settings.tavily.search_depth == "advanced"
+        assert settings.tavily.topic == "news"
+        assert settings.tavily.include_answer is True
+
+        changed = await frontend_client.get(
+            "/frontend/api/settings/search-providers",
+            headers=auth_headers,
+        )
+        assert changed.status_code == 200
+        tavily = next(item for item in changed.json()["providers"] if item["id"] == "tavily")
+        assert tavily["credential_source"] == "company"
+        assert tavily["configured"] is True
+        assert tavily["key_masked"] == "**** cret"
+
+        reset = await frontend_client.delete(
+            "/frontend/api/settings/search-providers/tavily",
+            headers=auth_headers,
+        )
+        assert reset.status_code == 200
+        company = await frontend_container.company_repository.get(company_id)
+        assert company is not None
+        assert COMPANY_SEARCH_METADATA_KEY not in company.metadata
+
+    async def test_search_provider_order_is_company_scoped(
+        self,
+        frontend_client: AsyncClient,
+        auth_headers,
+        frontend_container,
+    ):
+        """Порядок Search providers хранится в metadata активной компании."""
+        from core.company_search import CompanySearchProviders
+        from core.utils.tokens import get_token_service
+
+        token_service = get_token_service()
+        token_data = token_service.validate_token(auth_headers["Authorization"].replace("Bearer ", ""))
+        company_id = token_data.company_id
+
+        response = await frontend_client.put(
+            "/frontend/api/settings/search-providers/order",
+            headers=auth_headers,
+            json={"provider_order": ["tavily", "serper"]},
+        )
+        assert response.status_code == 200
+
+        company = await frontend_container.company_repository.get(company_id)
+        assert company is not None
+        settings = CompanySearchProviders.from_metadata(company.metadata)
+        assert settings.provider_order == ["tavily", "serper", "tinyfish", "linkup"]
+
+        snapshot = await frontend_client.get(
+            "/frontend/api/settings/search-providers",
+            headers=auth_headers,
+        )
+        assert snapshot.status_code == 200
+        assert snapshot.json()["provider_order"] == ["tavily", "serper", "tinyfish", "linkup"]
 
     async def test_get_company_settings_unauthorized(self, frontend_client: AsyncClient):
         """Попытка получить настройки без авторизации"""

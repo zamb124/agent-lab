@@ -52,6 +52,7 @@ BALANCE_BLOCK_OPERATION_EMBEDDING = "embedding"
 BALANCE_BLOCK_OPERATION_VISION = "vision"
 BALANCE_BLOCK_OPERATION_LIVEKIT_ROOM = "livekit_room"
 BALANCE_BLOCK_OPERATION_LIVEKIT_EGRESS = "livekit_egress"
+BALANCE_BLOCK_OPERATION_SEARCH = "search"
 
 COST_ORIGIN_PLATFORM: BillingCostOrigin = "platform"
 COST_ORIGIN_COMPANY: BillingCostOrigin = "company"
@@ -62,6 +63,7 @@ _BALANCE_BLOCK_OPERATION_I18N_KEYS: dict[str, str] = {
     BALANCE_BLOCK_OPERATION_VISION: "billing.notifications.blocked_operation.vision",
     BALANCE_BLOCK_OPERATION_LIVEKIT_ROOM: "billing.notifications.blocked_operation.livekit_room",
     BALANCE_BLOCK_OPERATION_LIVEKIT_EGRESS: "billing.notifications.blocked_operation.livekit_egress",
+    BALANCE_BLOCK_OPERATION_SEARCH: "billing.notifications.blocked_operation.search",
 }
 
 def company_resource_prices_storage_key(company_id: str) -> str:

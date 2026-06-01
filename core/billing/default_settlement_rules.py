@@ -15,6 +15,8 @@
   — core/calls/livekit_client.py observability без pending_settlement (списание только через *usage выше)
 - sync.calls.* | sync.stt.* (без pending_settlement) — apps/sync/realtime/tasks.py, только трейсинг
 - flows.external_api.call | flows.mcp.call_tool | flows.channel.execute_action — без pending_settlement, только трейсинг
+- search.provider.* — Search MCP provider calls; BYOK/company credentials create
+  zero-cost usage via platform.billing.cost_origin=company, system/public main search is not marked pending
 
 Категория биллинга tool не используется: вызовы инструментов не тарифицируются.
 
@@ -132,6 +134,38 @@ def default_settlement_rules_document() -> SettlementRulesDocument:
                 usage_type=UsageType.TOOL_CALL,
                 quantity_from="const:1",
                 match=SettlementRuleMatch(operation_name_prefix="livekit."),
+            ),
+            SettlementRule(
+                rule_id="search_tinyfish_call",
+                priority=35,
+                resource_name="search:tinyfish",
+                usage_type=UsageType.TOOL_CALL,
+                quantity_from="const:1",
+                match=SettlementRuleMatch(operation_name_equals="search.provider.tinyfish"),
+            ),
+            SettlementRule(
+                rule_id="search_linkup_call",
+                priority=36,
+                resource_name="search:linkup",
+                usage_type=UsageType.TOOL_CALL,
+                quantity_from="const:1",
+                match=SettlementRuleMatch(operation_name_equals="search.provider.linkup"),
+            ),
+            SettlementRule(
+                rule_id="search_serper_call",
+                priority=37,
+                resource_name="search:serper",
+                usage_type=UsageType.TOOL_CALL,
+                quantity_from="const:1",
+                match=SettlementRuleMatch(operation_name_equals="search.provider.serper"),
+            ),
+            SettlementRule(
+                rule_id="search_tavily_call",
+                priority=38,
+                resource_name="search:tavily",
+                usage_type=UsageType.TOOL_CALL,
+                quantity_from="const:1",
+                match=SettlementRuleMatch(operation_name_equals="search.provider.tavily"),
             ),
         ],
     )

@@ -92,11 +92,16 @@ export class PlatformLlmConfigEditor extends PlatformElement {
         return value === _HUMANITEC_LLM_PROVIDER;
     }
 
+    _isEmbeddingCapability() {
+        return this.capability === 'embedding';
+    }
+
     _supportsModelOverride() {
         return (
             typeof this.capability === 'string'
             && (
                 this.capability.startsWith('llm_')
+                || this._isEmbeddingCapability()
                 || this.capability === 'image_gen'
                 || this.capability === 'voice_stt'
                 || this.capability === 'voice_tts'
@@ -140,6 +145,8 @@ export class PlatformLlmConfigEditor extends PlatformElement {
         }
         if (!this._isHumanitecLlmProvider(value) && value !== currentProvider) {
             patch.model = null;
+            patch.dimension = null;
+            patch.mrl_output_dimension = null;
         }
         this._emitChange(patch);
     }
@@ -162,7 +169,33 @@ export class PlatformLlmConfigEditor extends PlatformElement {
         if (!e.detail || typeof e.detail.value !== 'string') {
             throw new Error('platform-llm-config-editor: model change expects detail.value string');
         }
-        this._emitChange({ model: e.detail.value || null });
+        const value = e.detail.value || null;
+        const patch = { model: value };
+        if (this._isEmbeddingCapability()) {
+            const selected = this._selectedProviderModels()
+                .find((item) => item && typeof item === 'object' && item.value === value);
+            if (selected) {
+                patch.dimension = Number.isFinite(selected.dimension) ? selected.dimension : null;
+                patch.mrl_output_dimension = Number.isFinite(selected.mrl_output_dimension)
+                    ? selected.mrl_output_dimension
+                    : null;
+            }
+        }
+        this._emitChange(patch);
+    }
+
+    _onDimensionChange(e) {
+        if (!e.detail || (e.detail.value !== null && typeof e.detail.value !== 'number')) {
+            throw new Error('platform-llm-config-editor: embedding dimension expects numeric detail.value');
+        }
+        this._emitChange({ dimension: e.detail.value || null });
+    }
+
+    _onMrlOutputDimensionChange(e) {
+        if (!e.detail || (e.detail.value !== null && typeof e.detail.value !== 'number')) {
+            throw new Error('platform-llm-config-editor: embedding mrl_output_dimension expects numeric detail.value');
+        }
+        this._emitChange({ mrl_output_dimension: e.detail.value || null });
     }
 
     _onFallbackModelsChange(e) {
@@ -243,6 +276,14 @@ export class PlatformLlmConfigEditor extends PlatformElement {
         return this.t('settings_page.ai_providers.model_override_help');
     }
 
+    _selectedEmbeddingModelOption(model) {
+        if (!this._isEmbeddingCapability() || !model) {
+            return null;
+        }
+        return this._selectedProviderModels()
+            .find((item) => item && typeof item === 'object' && item.value === model) || null;
+    }
+
     render() {
         const provider = (this.config && this.config.provider) || '';
         const isCustom = this._isCustomProvider(provider);
@@ -254,6 +295,17 @@ export class PlatformLlmConfigEditor extends PlatformElement {
         const modelValue = isHumanitecLlm && !rawModelValue ? 'auto' : rawModelValue;
         const providerModels = this._selectedProviderModels();
         const modelFieldType = providerModels.length > 0 ? 'enum' : 'string';
+        const embeddingModelOption = this._selectedEmbeddingModelOption(modelValue);
+        const embeddingDimension = this.config && Number.isFinite(this.config.dimension)
+            ? this.config.dimension
+            : (embeddingModelOption && Number.isFinite(embeddingModelOption.dimension)
+                ? embeddingModelOption.dimension
+                : null);
+        const embeddingMrlDimension = this.config && Number.isFinite(this.config.mrl_output_dimension)
+            ? this.config.mrl_output_dimension
+            : (embeddingModelOption && Number.isFinite(embeddingModelOption.mrl_output_dimension)
+                ? embeddingModelOption.mrl_output_dimension
+                : null);
         const costOriginBadge = this.costOrigin
             ? html`<span class="badge" data-kind=${this.costOrigin}>${
                   this.costOrigin === 'company'
@@ -310,9 +362,30 @@ export class PlatformLlmConfigEditor extends PlatformElement {
                               ?disabled=${this.readOnly}
                               @change=${this._onModelChange}
                           ></platform-field>
-                          ${modelFieldType === 'string'
-                              ? html`<small class="help">${this._modelHint(provider, modelValue)}</small>`
-                              : ''}
+	                          ${modelFieldType === 'string'
+	                              ? html`<small class="help">${this._modelHint(provider, modelValue)}</small>`
+	                              : ''}
+	                      `
+	                    : ''}
+                ${this._isEmbeddingCapability()
+                    ? html`
+                          <platform-field
+                              type="number"
+                              mode=${modelFieldType === 'enum' ? 'view' : 'edit'}
+                              label=${this.t('settings_page.ai_providers.embedding_dimension_label')}
+                              .value=${embeddingDimension}
+                              ?disabled=${this.readOnly || modelFieldType === 'enum'}
+                              @change=${this._onDimensionChange}
+                          ></platform-field>
+                          <platform-field
+                              type="number"
+                              mode=${modelFieldType === 'enum' ? 'view' : 'edit'}
+                              label=${this.t('settings_page.ai_providers.embedding_mrl_dimension_label')}
+                              .value=${embeddingMrlDimension}
+                              ?disabled=${this.readOnly || modelFieldType === 'enum'}
+                              @change=${this._onMrlOutputDimensionChange}
+                          ></platform-field>
+                          <small class="help">${this.t('settings_page.ai_providers.embedding_dimension_help')}</small>
                       `
                     : ''}
                 ${showByok

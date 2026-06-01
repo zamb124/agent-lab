@@ -11,7 +11,9 @@ from pydantic import BaseModel, ConfigDict
 
 from apps.search.container import SearchContainer
 from apps.search.dependencies import ContainerDep
+from core.context import get_context
 from core.integrations.mcp import MCP_PROTOCOL_VERSION, MCPToolDefinition
+from core.models.identity_models import Company
 from core.search import (
     MetaSearchRequest,
     MetaSearchResponse,
@@ -146,10 +148,16 @@ async def _tool_call(
     tool_name: str,
     arguments: JsonObject,
     container: SearchContainer,
+    company: Company | None,
+    user_id: str | None,
 ) -> McpToolCallResult:
     if tool_name == "meta_web_search":
         request = MetaSearchRequest.model_validate(arguments)
-        response = await container.meta_search_service.search(request)
+        response = await container.meta_search_service.search(
+            request,
+            company=company,
+            user_id=user_id,
+        )
         payload = require_json_object(response.model_dump(mode="json"), "MetaSearchResponse")
         return McpToolCallResult(
             content=_json_text_content(require_json_value(payload, "meta_web_search result")),
@@ -233,6 +241,9 @@ async def mcp_jsonrpc(
             return _jsonrpc_payload(JsonRpcResponse(id=req_id, error=err))
         arguments_obj = require_json_object(arguments, "tools/call.params.arguments")
         try:
+            context = get_context()
+            company = context.active_company if context is not None else None
+            user_id = context.user.user_id if context is not None else None
             async with traced_operation(
                 "search.mcp.tool_call",
                 event_type="mcp.tool_call",
@@ -247,6 +258,8 @@ async def mcp_jsonrpc(
                     tool_name=name,
                     arguments=arguments_obj,
                     container=container,
+                    company=company,
+                    user_id=user_id,
                 )
                 span.set_attribute("platform.mcp.tool_result_is_error", bool(call_res.isError))
         except Exception as exc:

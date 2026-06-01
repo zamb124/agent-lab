@@ -49,6 +49,8 @@ class MetaSearchProviderStatus(BaseModel):
     selected: bool = False
     skipped: bool = False
     skip_reason: str | None = None
+    credential_source: Literal["platform", "company"] = "platform"
+    billing_resource_name: str | None = None
 
 
 class MetaSearchRequest(BaseModel):

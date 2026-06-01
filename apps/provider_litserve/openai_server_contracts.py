@@ -30,6 +30,10 @@ def _openrouter_like_model_object(
     context_length: int,
     output_modalities: list[str],
     input_modalities: list[str] | None = None,
+    capabilities: list[str] | None = None,
+    native_dimension: int | None = None,
+    storage_dimension: int | None = None,
+    supported_parameters: list[str] | None = None,
 ) -> V1ModelItemSchema:
     """Один элемент ``data[]`` для GET ``/v1/models`` (форма как у OpenRouter)."""
     ins = input_modalities if input_modalities is not None else ["text"]
@@ -57,6 +61,10 @@ def _openrouter_like_model_object(
         ),
         per_request_limits=None,
         owned_by="humanitec-rag-gateway",
+        capabilities=capabilities,
+        native_dimension=native_dimension,
+        storage_dimension=storage_dimension,
+        supported_parameters=supported_parameters,
     )
 
 
@@ -112,6 +120,9 @@ def build_provider_litserve_v1_models_response(
                 created=created,
                 context_length=embedding_context_length,
                 output_modalities=["embeddings"],
+                capabilities=["embedding"],
+                native_dimension=embedding_dimension,
+                storage_dimension=embedding_dimension,
             )
         )
 
@@ -128,6 +139,7 @@ def build_provider_litserve_v1_models_response(
                 created=created,
                 context_length=rerank_context_length,
                 output_modalities=["text"],
+                capabilities=["rerank"],
             )
         )
 
@@ -144,6 +156,7 @@ def build_provider_litserve_v1_models_response(
                 context_length=0,
                 input_modalities=["audio"],
                 output_modalities=["text"],
+                capabilities=["voice_stt"],
             )
         )
 
@@ -159,6 +172,7 @@ def build_provider_litserve_v1_models_response(
                 context_length=0,
                 input_modalities=["text"],
                 output_modalities=["audio"],
+                capabilities=["voice_tts"],
             )
         )
 
@@ -174,6 +188,7 @@ def build_provider_litserve_v1_models_response(
                 context_length=0,
                 input_modalities=["audio"],
                 output_modalities=["text"],
+                capabilities=["voice_vad"],
             )
         )
 

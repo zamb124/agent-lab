@@ -19,7 +19,15 @@ async def test_build_job_context_signs_jwt_for_member(frontend_container, unique
         name="JobCtx",
         owner_user_id=uid,
         members={uid: ["owner"]},
-        metadata={"ai_providers": {"embedding": {"provider": "openrouter"}}},
+        metadata={
+            "ai_providers": {
+                "embedding": {
+                    "provider": "openrouter",
+                    "model": "qwen/qwen3-embedding-0.6b",
+                    "dimension": 1024,
+                }
+            }
+        },
         balance=5.0,
     )
     await frontend_container.user_repository.set(user)

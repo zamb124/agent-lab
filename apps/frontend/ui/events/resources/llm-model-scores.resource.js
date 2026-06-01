@@ -47,7 +47,7 @@ export const llmModelScoreDeleteOp = createAsyncOp({
     name: 'frontend/llm_model_score_delete',
     successToastKey: 'frontend:settings_page.model_scoring.toast_deleted',
     errorToastKey: 'frontend:settings_page.model_scoring.toast_failed',
-    restMirror: { method: 'DELETE', path: '/frontend/api/platform/llm-model-scores/:provider/:model_id' },
+    restMirror: { method: 'DELETE', path: '/frontend/api/platform/llm-model-scores/{provider}/{model_id:path}' },
     request: async ({ payload }) => {
         if (!payload || typeof payload !== 'object') {
             throw new Error('llm_model_score_delete: payload required');

@@ -60,6 +60,13 @@ class MCPServerConfig(BaseModel):
         default_factory=dict,
         description="HTTP headers, поддерживает @var: ссылки"
     )
+    propagate_platform_context: bool = Field(
+        default=False,
+        description=(
+            "Для platform MCP серверов: добавить подписанные X-Platform-Context-* headers "
+            "из state.variables company_id/user_id."
+        ),
+    )
     is_active: bool = Field(default=True, description="Активен ли сервер")
     cached_tools: list[str] = Field(
         default_factory=list,

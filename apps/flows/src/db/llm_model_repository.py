@@ -6,6 +6,7 @@
 from typing import ClassVar, override
 
 from apps.flows.src.models import LLMModel
+from core.ai_provider_catalog import AICapability
 from core.db import BaseRepository, Storage
 
 
@@ -51,6 +52,19 @@ class LLMModelRepository(BaseRepository[LLMModel]):
             limit=1_000_000,
         )
         return [LLMModel.model_validate_json(value) for value in raw_rows.values()]
+
+    async def list_by_provider_capability(
+        self,
+        provider: str,
+        capability: AICapability,
+    ) -> list[LLMModel]:
+        """Возвращает модели провайдера, поддерживающие capability."""
+        rows = await self.list_by_provider(provider)
+        return [row for row in rows if capability in row.capabilities]
+
+    async def get_provider_model(self, provider: str, model_id: str) -> LLMModel | None:
+        """Получает запись по каноническому ключу provider:model_id."""
+        return await self.get(f"{provider}:{model_id}")
 
     async def delete_by_provider(self, provider: str) -> int:
         """Удаляет все модели указанного провайдера."""

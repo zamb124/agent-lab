@@ -61,6 +61,7 @@
       "llm — запросы к моделям (трейсы llm.*, flows.llm_resource.*, flows.llm.*). «*»: типично цена за 1 токен; можно добавить отдельные ключи под конкретные модели.",
       "embedding — пакетные эмбеддинги RAG (rag.embed.*); единица обычно из атрибута span (токены/батч) по правилу settlement.",
       "livekit — аудио/видео: room_minute / egress_composite_minute / egress_segmented_minute — единица 1 минута использования (см. livekit_usage_spans); «*» — прочие livekit:*.",
+      "search — внешние Search provider calls через search.provider.*; при company/BYOK ключе cost_origin=company и баланс не списывается, system не ставит pending settlement.",
       "Вызовы инструментов flows (категория tool в resource_name) в этом каталоге не задаются — для биллинга считаются бесплатно.",
       "billing:rub — 1 ₽ за единицу quantity; quantity = platform.billing.settlement_quantity_rub (OpenRouter: USD из ответа × актуальный курс ЦБ РФ, округление).",
       "usd_to_rub_rate — FALLBACK-курс USD/RUB, используется только если ЦБ РФ недоступен. При старте сервиса платформа запрашивает актуальный курс с cbr.ru и обновляет его каждые 5 минут; это значение подставляется только при ошибке или до первого успешного ответа ЦБ.",
@@ -85,6 +86,13 @@
         "egress_composite_minute": 0.05,
         "egress_segmented_minute": 0.02,
         "*": 0.0
+      },
+      "search": {
+        "tinyfish": 0.005,
+        "linkup": 0.005,
+        "serper": 0.01,
+        "tavily": 0.05,
+        "*": 0.01
       },
       "stt": {
         "litserve": 0.0,
