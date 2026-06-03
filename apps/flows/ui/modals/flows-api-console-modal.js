@@ -741,14 +741,26 @@ export class FlowsApiConsoleModal extends PlatformModal {
                 overflow-wrap: anywhere;
             }
             .api-json-editor {
+                height: 260px;
                 min-height: 240px;
                 background: var(--bg-elevated);
             }
             .api-json-editor.compact {
+                height: 180px;
                 min-height: 180px;
             }
             .api-json-editor.tall {
+                height: min(520px, 52vh);
                 min-height: 420px;
+            }
+            .api-code-editor {
+                height: 420px;
+                min-height: 360px;
+                background: var(--bg-elevated);
+            }
+            .api-code-editor.short {
+                height: 220px;
+                min-height: 220px;
             }
             .response-inspector {
                 min-width: 0;
@@ -1259,6 +1271,16 @@ ${jsRequest}${asyncJsSuffix}`,
         return examples[this._language];
     }
 
+    _currentExampleLanguage() {
+        if (this._language === 'python') {
+            return 'python';
+        }
+        if (this._language === 'javascript') {
+            return 'javascript';
+        }
+        return 'text';
+    }
+
     async _copy(text) {
         if (typeof text !== 'string') {
             throw new Error('flows-api-console-modal: copy text required');
@@ -1470,6 +1492,7 @@ ${jsRequest}${asyncJsSuffix}`,
 
     _renderExamples() {
         const example = this._currentExample();
+        const body = this._sampleBody();
         return html`
             ${this._renderHero()}
             <div class="section">
@@ -1489,19 +1512,44 @@ ${jsRequest}${asyncJsSuffix}`,
                         ${this.t('api_console.copy')}
                     </button>
                 </div>
-                <pre><code>${example}</code></pre>
+                <flows-code-editor
+                    class="api-code-editor"
+                    language=${this._currentExampleLanguage()}
+                    .value=${example}
+                    .readonly=${true}
+                    .showToolbar=${false}
+                    .fillParent=${true}
+                ></flows-code-editor>
+            </div>
+            <div class="section">
+                <h3 class="section-title"><platform-icon name="file-json" size="16"></platform-icon>${this.t('api_console.request_body_title')}</h3>
+                <flows-code-editor
+                    class="api-json-editor"
+                    language="json"
+                    .value=${_jsonPretty(body)}
+                    .readonly=${true}
+                    .showToolbar=${false}
+                    .fillParent=${true}
+                ></flows-code-editor>
             </div>
             <div class="section">
                 <h3 class="section-title"><platform-icon name="file" size="16"></platform-icon>${this.t('api_console.file_example_title')}</h3>
                 <p class="section-copy">${this.t('api_console.file_example_text')}</p>
-                <pre><code>${_jsonPretty({
+                <flows-code-editor
+                    class="api-code-editor short"
+                    language="json"
+                    .value=${_jsonPretty({
                     kind: 'file',
                     file: {
                         name: 'invoice.pdf',
                         mimeType: 'application/pdf',
                         uri: 'https://example.com/invoice.pdf',
                     },
-                })}</code></pre>
+                })}
+                    .readonly=${true}
+                    .showToolbar=${false}
+                    .fillParent=${true}
+                ></flows-code-editor>
             </div>
         `;
     }
@@ -1622,6 +1670,7 @@ ${jsRequest}${asyncJsSuffix}`,
                             .value=${this._variablesText}
                             .readonly=${false}
                             .showToolbar=${false}
+                            .fillParent=${true}
                             @change=${(e) => {
                                 this._variablesText = typeof e.detail.value === 'string' ? e.detail.value : '';
                             }}
@@ -1680,6 +1729,7 @@ ${jsRequest}${asyncJsSuffix}`,
                         .value=${_jsonPretty(this._sampleBody())}
                         .readonly=${true}
                         .showToolbar=${false}
+                        .fillParent=${true}
                     ></flows-code-editor>
                 </div>
             </div>
@@ -1868,6 +1918,7 @@ ${jsRequest}${asyncJsSuffix}`,
                         .value=${editorValue}
                         .readonly=${true}
                         .showToolbar=${false}
+                        .fillParent=${true}
                     ></flows-code-editor>
                 </div>
             </div>

@@ -517,6 +517,7 @@
             "model_override_label": "Model",
             "model_override_help": "Leave empty to use the platform model; set a value to make it the company default for this capability.",
             "model_required_help": "A model is required for the selected provider. Use Humanitec LLMs / auto for automatic free-model routing.",
+            "voice_model_help": "Leave empty to use the platform speech model; pick a model to make it the company default for this capability.",
             "embedding_dimension_label": "Vector dimension",
             "embedding_mrl_dimension_label": "MRL output dimension",
             "embedding_dimension_help": "Embedding models are filtered by the current pgvector storage dimension; incompatible dimensions cannot be saved.",

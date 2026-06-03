@@ -168,6 +168,7 @@ export class PlatformLlmConfigEditor extends PlatformElement {
                         || this.capability === 'rerank'
                         || this.capability === 'voice_stt'
                         || this.capability === 'voice_tts'
+                        || this.capability === 'voice_vad'
                     )
                 )
             )
@@ -460,6 +461,9 @@ export class PlatformLlmConfigEditor extends PlatformElement {
         if (this._isHumanitecLlmProvider(provider) && (!model || model === 'auto')) {
             return this.t('settings_page.ai_providers.humanitec_llms_auto_tooltip');
         }
+        if (this.capability === 'voice_stt' || this.capability === 'voice_tts' || this.capability === 'voice_vad') {
+            return this.t('settings_page.ai_providers.voice_model_help');
+        }
         if (!this._isHumanitecLlmProvider(provider) && !this._isCustomProvider(provider)) {
             return this.t('settings_page.ai_providers.model_required_help');
         }
@@ -478,7 +482,9 @@ export class PlatformLlmConfigEditor extends PlatformElement {
         const provider = (this.config && this.config.provider) || '';
         const isCustom = this._isCustomProvider(provider);
         const isHumanitecLlm = this._isHumanitecLlmProvider(provider);
-        const showByok = !isCustom && !isHumanitecLlm && this.mode === 'company_capability';
+        const selectedProvider = this._selectedProviderCatalogItem();
+        const byokAllowed = selectedProvider ? selectedProvider.byok_allowed !== false : true;
+        const showByok = byokAllowed && !isCustom && !isHumanitecLlm && this.mode === 'company_capability';
         const showModelOverride = this._supportsModelOverride();
         const showFallbackPolicy = this._supportsFallbackPolicy();
         const rawModelValue = (this.config && this.config.model) || '';

@@ -162,20 +162,6 @@ PLATFORM_PROVIDER_SPECS: tuple[PlatformProviderSpec, ...] = (
         kind="platform",
         capabilities=frozenset({AICapability.VOICE_STT, AICapability.VOICE_TTS}),
     ),
-    PlatformProviderSpec(
-        provider="silero_local",
-        label="silero_local",
-        kind="platform",
-        capabilities=frozenset({AICapability.VOICE_VAD}),
-        byok_allowed=False,
-    ),
-    PlatformProviderSpec(
-        provider="mock",
-        label="mock",
-        kind="platform",
-        capabilities=frozenset(VOICE_CAPABILITIES),
-        byok_allowed=False,
-    ),
 )
 
 _PLATFORM_PROVIDER_BY_SLUG: dict[str, PlatformProviderSpec] = {

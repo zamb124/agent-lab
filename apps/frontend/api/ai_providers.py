@@ -49,6 +49,7 @@ from core.ai.providers import (
     LLM_CAPABILITIES,
     VOICE_CAPABILITIES,
     AICapability,
+    platform_provider_spec,
     platform_provider_specs_for_capability,
     validate_platform_provider_for_capability,
 )
@@ -60,6 +61,7 @@ from core.llm_context.resolver import resolve_llm_context_policy
 from core.logging import get_logger
 from core.models.context_models import Context
 from core.models.identity_models import Company, User
+from core.models.voice_providers_catalog import build_voice_providers_catalog_dto
 from core.types import JsonObject, require_json_object
 
 if TYPE_CHECKING:
@@ -208,6 +210,9 @@ def _rerank_override_to_public(ov: CompanyRerankOverride | None) -> JsonObject:
 def _voice_override_to_public(
     capability: AICapability, ov: CompanyVoiceOverride | None
 ) -> JsonObject:
+    platform_default_provider = platform_default_provider_for_capability(capability)
+    if capability == AICapability.VOICE_VAD and platform_default_provider in {"silero_local", "mock"}:
+        platform_default_provider = "litserve"
     return {
         "capability": capability.value,
         "kind": "voice",
@@ -220,7 +225,7 @@ def _voice_override_to_public(
         "base_url": ov.base_url if ov else None,
         "extra_request_headers": (ov.extra_request_headers or {}) if ov else {},
         "key_masked": mask_encrypted_secret(ov.api_key_encrypted) if ov and ov.api_key_encrypted else None,
-        "platform_default_provider": platform_default_provider_for_capability(capability),
+        "platform_default_provider": platform_default_provider,
     }
 
 
@@ -250,6 +255,7 @@ def _provider_catalog(
     humanitec_llms_models: list[JsonObject],
     provider_models: dict[str, dict[str, list[JsonObject]]],
     embedding_models: dict[str, list[JsonObject]],
+    voice_models: dict[str, dict[str, list[JsonObject]]],
 ) -> JsonObject:
     """Каталог провайдеров для UI селектора (per capability)."""
     catalog: JsonObject = {}
@@ -273,6 +279,7 @@ def _provider_catalog(
                     "value": p,
                     "label": spec.label,
                     "kind": spec.kind,
+                    "byok_allowed": spec.byok_allowed,
                     **(
                         {
                             "models": humanitec_llms_models,
@@ -292,7 +299,14 @@ def _provider_catalog(
                                 if cap == AICapability.EMBEDDING
                                 and p in embedding_models
                                 and embedding_models[p]
-                                else {}
+                                else (
+                                    {"models": voice_models[cap.value][p]}
+                                    if cap in _VOICE_CAPABILITIES
+                                    and cap.value in voice_models
+                                    and p in voice_models[cap.value]
+                                    and voice_models[cap.value][p]
+                                    else {}
+                                )
                             )
                         )
                     ),
@@ -386,6 +400,41 @@ async def _embedding_model_options(container: "FrontendContainer") -> dict[str, 
                 key=lambda item: str(item["value"]),
             )
     return options
+
+
+def _model_options(values: list[str], *, kind: str = "provider_model") -> list[JsonObject]:
+    return [
+        {
+            "value": value,
+            "label": value,
+            "kind": kind,
+        }
+        for value in values
+        if value.strip()
+    ]
+
+
+def _voice_model_options() -> dict[str, dict[str, list[JsonObject]]]:
+    settings = get_settings()
+    catalog = build_voice_providers_catalog_dto(settings.provider_litserve)
+    vad_models = [entry.api_model_id for entry in settings.provider_litserve.infra.vad_models]
+    return {
+        AICapability.VOICE_STT.value: {
+            "litserve": _model_options(catalog.stt_litserve_models, kind="voice_model"),
+            "cloud_ru": _model_options(catalog.cloud_ru_stt_models, kind="voice_model"),
+            "yandex": _model_options(catalog.yandex_speech_models, kind="voice_model"),
+            "sber": _model_options(catalog.sber_speech_models, kind="voice_model"),
+        },
+        AICapability.VOICE_TTS.value: {
+            "litserve": _model_options(catalog.tts_litserve_models, kind="voice_model"),
+            "cloud_ru": _model_options(catalog.cloud_ru_tts_models, kind="voice_model"),
+            "yandex": _model_options(catalog.yandex_speech_models, kind="voice_model"),
+            "sber": _model_options(catalog.sber_speech_models, kind="voice_model"),
+        },
+        AICapability.VOICE_VAD.value: {
+            "litserve": _model_options(vad_models, kind="voice_model"),
+        },
+    }
 
 
 def _build_llm_override(capability: AICapability, payload: AIProvidersCapabilityUpdate) -> CompanyLLMOverride:
@@ -530,12 +579,43 @@ async def _build_rerank_override(
     )
 
 
-def _build_voice_override(payload: AIProvidersCapabilityUpdate) -> CompanyVoiceOverride:
+def _build_voice_override(
+    capability: AICapability,
+    payload: AIProvidersCapabilityUpdate,
+) -> CompanyVoiceOverride:
     if payload.provider is None:
         raise HTTPException(status_code=400, detail="capability voice: provider обязателен")
+    provider = validate_platform_provider_for_capability(payload.provider.strip(), capability)
+    spec = platform_provider_spec(provider)
+    if spec is None:
+        raise HTTPException(status_code=400, detail=f"capability voice: provider {provider!r} неизвестен")
+    if not spec.byok_allowed and (
+        payload.api_key
+        or payload.base_url
+        or payload.folder_id
+        or payload.extra_request_headers
+    ):
+        raise HTTPException(
+            status_code=400,
+            detail=f"capability {capability.value}: provider {provider!r} не принимает BYOK/base_url",
+        )
+    if payload.model:
+        allowed_models: set[str] = set()
+        for item in _voice_model_options().get(capability.value, {}).get(provider, []):
+            value = item.get("value")
+            if isinstance(value, str):
+                allowed_models.add(value)
+        if allowed_models and payload.model not in allowed_models:
+            raise HTTPException(
+                status_code=400,
+                detail=(
+                    f"capability {capability.value}: model допустимо только одно из: "
+                    + ", ".join(sorted(allowed_models))
+                ),
+            )
     encrypted = encrypt_secret(payload.api_key) if payload.api_key else None
     return CompanyVoiceOverride(
-        provider=payload.provider.strip(),
+        provider=provider,
         api_key_encrypted=encrypted,
         base_url=payload.base_url,
         folder_id=payload.folder_id,
@@ -600,6 +680,7 @@ async def get_ai_providers(container: ContainerDep) -> JsonObject:
     humanitec_llms_models = await read_humanitec_llms_model_options(container.redis_client)
     provider_models = await _provider_model_options(container)
     embedding_models = await _embedding_model_options(container)
+    voice_models = _voice_model_options()
     return {
         "capabilities": _public_capabilities(aip),
         "custom_providers": [_custom_provider_to_public(p) for p in aip.custom_providers],
@@ -608,6 +689,7 @@ async def get_ai_providers(container: ContainerDep) -> JsonObject:
             humanitec_llms_models=humanitec_llms_models,
             provider_models=provider_models,
             embedding_models=embedding_models,
+            voice_models=voice_models,
         ),
         "llm_context": _public_llm_context(aip),
     }
@@ -678,7 +760,7 @@ async def put_capability(
         elif cap == AICapability.RERANK:
             updated_override = await _build_rerank_override(payload, container)
         elif cap in _VOICE_CAPABILITIES:
-            updated_override = _build_voice_override(payload)
+            updated_override = _build_voice_override(cap, payload)
         else:
             raise HTTPException(status_code=400, detail=f"Capability {capability} не поддерживается")
         updated_aip = aip.model_copy(update={cap.value: updated_override})

@@ -172,6 +172,38 @@ class TestSettingsAPI:
             "metadata_status": "verified",
             "source": "provider_catalog",
         } in embedding_litserve["models"]
+        from core.config import get_settings
+
+        settings = get_settings()
+        voice_tts = body["catalog"]["voice_tts"]
+        voice_tts_values = {item["value"] for item in voice_tts}
+        assert "litserve" in voice_tts_values
+        assert "cloud_ru" in voice_tts_values
+        humanitec_voice_tts = next(item for item in voice_tts if item["value"] == "litserve")
+        assert humanitec_voice_tts["label"] == "Humanitec Voice"
+        assert humanitec_voice_tts["byok_allowed"] is False
+        assert {
+            "value": settings.provider_litserve.infra.tts_default_api_model_id,
+            "label": settings.provider_litserve.infra.tts_default_api_model_id,
+            "kind": "voice_model",
+        } in humanitec_voice_tts["models"]
+        cloud_ru_tts = next(item for item in voice_tts if item["value"] == "cloud_ru")
+        assert {
+            "value": "openai/tts-1",
+            "label": "openai/tts-1",
+            "kind": "voice_model",
+        } in cloud_ru_tts["models"]
+
+        voice_vad = body["catalog"]["voice_vad"]
+        assert [item["value"] for item in voice_vad] == ["litserve"]
+        humanitec_voice_vad = voice_vad[0]
+        assert humanitec_voice_vad["label"] == "Humanitec Voice"
+        assert humanitec_voice_vad["byok_allowed"] is False
+        assert {
+            "value": settings.provider_litserve.infra.vad_default_api_model_id,
+            "label": settings.provider_litserve.infra.vad_default_api_model_id,
+            "kind": "voice_model",
+        } in humanitec_voice_vad["models"]
         assert body["llm_context"]["configured"] is False
         assert body["llm_context"]["config"] == {}
         assert body["llm_context"]["resolved"]["profile"] == "off"

@@ -517,6 +517,7 @@
             "model_override_label": "Модель",
             "model_override_help": "Пустое значение использует платформенную модель; указанное значение становится дефолтом компании для этой capability.",
             "model_required_help": "Для выбранного провайдера модель обязательна. Для автоматического выбора бесплатной модели используйте Humanitec LLMs / auto.",
+            "voice_model_help": "Пустое значение использует платформенную модель речи; выберите модель, чтобы сделать её дефолтом компании для этой capability.",
             "embedding_dimension_label": "Размерность вектора",
             "embedding_mrl_dimension_label": "MRL output dimension",
             "embedding_dimension_help": "Embedding-модели фильтруются по текущей размерности pgvector; несовместимую размерность сохранить нельзя.",

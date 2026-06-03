@@ -41,6 +41,14 @@ def test_internal_litserve_providers_have_humanitec_public_labels() -> None:
     assert voice_spec.label == "Humanitec Voice"
 
 
+def test_voice_vad_catalog_exposes_humanitec_voice_not_internal_backends() -> None:
+    providers = {
+        spec.provider
+        for spec in platform_provider_specs_for_capability(AICapability.VOICE_VAD)
+    }
+    assert providers == {"litserve"}
+
+
 def test_openrouter_is_rerank_provider() -> None:
     providers = {
         spec.provider

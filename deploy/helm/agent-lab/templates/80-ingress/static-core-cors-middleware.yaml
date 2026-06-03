@@ -1,0 +1,26 @@
+{{- if and .Values.ingress.enabled .Values.applications.frontend.enabled }}
+{{- /*
+  CORS для публичной статики /static/core.
+
+  В production /static/core отдаётся granian через --static-path-route и не
+  проходит через ASGI/FastAPI middleware. Поэтому CORS для embed-модулей
+  добавляется на ingress-слое.
+*/}}
+---
+apiVersion: traefik.io/v1alpha1
+kind: Middleware
+metadata:
+  name: static-core-cors
+  namespace: {{ .Values.namespace }}
+spec:
+  headers:
+    accessControlAllowMethods:
+      - GET
+      - HEAD
+      - OPTIONS
+    accessControlAllowHeaders:
+      - "*"
+    accessControlAllowOriginList:
+      - "*"
+    accessControlMaxAge: 86400
+{{- end }}

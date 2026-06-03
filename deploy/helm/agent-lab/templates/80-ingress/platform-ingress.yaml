@@ -11,6 +11,38 @@
   platform-frontend: priority=-100 — иначе Traefik отдаёт wildcard *.humanitec.ru выше
   точного host (grafana.humanitec.ru и т.д.), см. traefik/traefik#4161.
 */}}
+{{- if .Values.applications.frontend.enabled }}
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: platform-static-core
+  namespace: {{ .Values.namespace }}
+  annotations:
+    traefik.ingress.kubernetes.io/router.priority: "20"
+    # /static/core отдаётся granian static-path до ASGI, поэтому CORS нужен на ingress.
+    traefik.ingress.kubernetes.io/router.middlewares: "{{ .Values.namespace }}-static-core-cors@kubernetescrd,{{ .Values.namespace }}-compress@kubernetescrd"
+spec:
+  ingressClassName: {{ .Values.ingress.className }}
+  tls:
+    - hosts:
+        - {{ .Values.ingress.apexHost | quote }}
+        - {{ .Values.ingress.wildcardHost | quote }}
+      secretName: platform-tls
+  rules:
+    {{- range $host := list .Values.ingress.apexHost .Values.ingress.wildcardHost }}
+    - host: {{ $host | quote }}
+      http:
+        paths:
+          - path: /static/core
+            pathType: Prefix
+            backend:
+              service:
+                name: {{ $.Values.applications.frontend.serviceName }}
+                port:
+                  number: {{ $.Values.applications.frontend.port }}
+    {{- end }}
+{{- end }}
 ---
 apiVersion: networking.k8s.io/v1
 kind: Ingress
