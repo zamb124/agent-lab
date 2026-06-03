@@ -57,7 +57,6 @@ from apps.flows.src.models.operator_schemas import OperatorInterruptSnapshot, Op
 from apps.flows.src.runtime.effective_llm_config import resolve_effective_llm_config_for_node
 from apps.flows.src.runtime.exception_policy import node_exception_policy, should_absorb_exception
 from apps.flows.src.runtime.exceptions import BreakpointInterrupt, FlowInterrupt
-from apps.flows.src.runtime.llm_config_params import client_kwargs_from_llm_config
 from apps.flows.src.runtime.llm_context_memory import resolve_memory_context_source_for_runtime
 from apps.flows.src.runtime.llm_context_rag import resolve_rag_context_source_registry_for_runtime
 from apps.flows.src.runtime.llm_context_resource import resolve_llm_context_policy_for_runtime
@@ -75,7 +74,7 @@ from apps.flows.src.state.interrupt_manager import InterruptManager
 from apps.flows.src.tools.base import BaseTool
 from apps.flows.src.tools.registry import ToolMaterializeInput
 from apps.flows.src.variables import VariableResolver, VarResolver
-from core.clients.llm import get_llm
+from core.ai.runtime import create_llm_client_from_call_config
 from core.context import get_context as get_request_context
 from core.errors import NodeWallClockTimeoutError
 from core.integrations.mcp import mcp_tool_reference_id
@@ -1036,8 +1035,6 @@ class LlmNode(BaseNode):
         """
         base = self._node_config or self._create_default_config()
         effective = resolve_effective_llm_config_for_node(base)
-        client_kwargs = client_kwargs_from_llm_config(effective.config, state)
-        _ = client_kwargs.setdefault("extra_request_headers", None)
         logger.info(
             "[_get_llm] node_id=%s provider=%s model=%s source=%s",
             self.node_id,
@@ -1045,7 +1042,11 @@ class LlmNode(BaseNode):
             effective.config.model,
             effective.source,
         )
-        return get_llm(state=state, **client_kwargs)
+        return create_llm_client_from_call_config(
+            effective.config,
+            state=state,
+            fallback_models=effective.config.fallback_models,
+        )
 
     async def _resolve_effective_node_config(
         self, base: NodeConfig, state: ExecutionState | None
@@ -2709,24 +2710,11 @@ class ReflectionNode(BaseNode):
         state: ExecutionState,
     ) -> ReflectionCritiqueResult:
         llm_cfg = self.llm_config
-        llm = get_llm(
-            model_name=llm_cfg.model,
-            provider=llm_cfg.provider,
-            temperature=llm_cfg.temperature,
-            api_key=llm_cfg.api_key,
-            base_url=llm_cfg.base_url,
-            folder_id=llm_cfg.folder_id,
-            max_tokens=llm_cfg.max_tokens,
+        llm = create_llm_client_from_call_config(
+            llm_cfg,
             state=state,
+            fallback_models=llm_cfg.fallback_models,
             allow_platform_paid_fallback=False,
-            top_p=llm_cfg.top_p,
-            top_k=llm_cfg.top_k,
-            frequency_penalty=llm_cfg.frequency_penalty,
-            presence_penalty=llm_cfg.presence_penalty,
-            seed=llm_cfg.seed,
-            reasoning_effort=llm_cfg.reasoning_effort,
-            extra_request_body=llm_cfg.extra_request_body,
-            extra_request_headers=llm_cfg.extra_request_headers,
         )
         message_id = "reflection-" + hash_state_json(input_payload)
         prompt = self._critic_prompt(target_snapshot)

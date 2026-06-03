@@ -5,17 +5,19 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 from apps.flows.src.models.node_config import NodeConfig, NodeLLMConfig
-from core.clients.llm.config import LLMCallConfig
-from core.company_ai import (
+from core.ai.resolver import (
     COST_ORIGIN_COMPANY,
     COST_ORIGIN_PLATFORM,
-    CUSTOM_PROVIDER_REF_PREFIX,
-    HUMANITEC_LLM_AUTO_MODEL,
-    HUMANITEC_LLM_PROVIDER,
     AICapability,
     ResolvedLLM,
     resolve_custom_llm_provider_ref,
     resolve_llm_for_capability,
+)
+from core.clients.llm.config import LLMCallConfig
+from core.company_ai import (
+    CUSTOM_PROVIDER_REF_PREFIX,
+    HUMANITEC_LLM_AUTO_MODEL,
+    HUMANITEC_LLM_PROVIDER,
 )
 from core.llm_model_routing import split_humanitec_llms_model_ref
 

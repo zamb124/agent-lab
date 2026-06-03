@@ -7,7 +7,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
-from core.ai_provider_catalog import (
+from core.ai.providers import (
     PROVIDER_LITSERVE,
     AICapability,
     validate_platform_provider_for_capability,

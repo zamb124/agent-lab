@@ -54,6 +54,7 @@ os.environ["SERVER__OFFICE_SERVICE_URL"] = "http://localhost:9008"
 os.environ["SERVER__SEARCH_SERVICE_URL"] = "http://localhost:9010"
 os.environ["SERVER__VOICE_SERVICE_URL"] = "http://localhost:9015"
 os.environ["SERVER__CAPABILITY_GATEWAY_SERVICE_URL"] = "http://localhost:9016"
+os.environ["SERVER__PROVIDER_LITSERVE_SERVICE_URL"] = "http://localhost:9014"
 os.environ["SERVER__CODE_RUNNER_PYTHON_SERVICE_URL"] = "http://localhost:9017"
 os.environ["SERVER__CODE_RUNNER_NODE_SERVICE_URL"] = "http://localhost:9018"
 os.environ["SERVER__CODE_RUNNER_GO_SERVICE_URL"] = "http://localhost:9019"
@@ -76,6 +77,7 @@ os.environ.setdefault("RAG__EMBEDDING__PROVIDER", "provider_litserve")
 os.environ.setdefault("RAG__EMBEDDING__API__MODEL", "qwen/qwen3-embedding-0.6b")
 os.environ.setdefault("RAG__EMBEDDING__API__DIMENSION", "1024")
 os.environ.setdefault("RAG__EMBEDDING__API__MRL_OUTPUT_DIMENSION", "1024")
+os.environ["PROVIDER_LITSERVE__API__BASE_URL"] = "http://localhost:9014/v1"
 os.environ.setdefault("RAG__DOCUMENT_INDEXING__SEARCH_DEFAULTS__RERANKER__ENABLED", "false")
 os.environ.setdefault("LLM__OPENROUTER__API_KEY", "sk-test-key")
 import core.config.base  # noqa: E402
@@ -517,6 +519,9 @@ _TEST_SERVER_MARKERS = (
     "/tmp/platform_test_voice_server.pid",
     "/tmp/platform_test_voice_server.pid.ref_count",
     "/tmp/platform_test_voice_server.pid.envsig",
+    "/tmp/platform_test_provider_litserve_server.pid",
+    "/tmp/platform_test_provider_litserve_server.pid.ref_count",
+    "/tmp/platform_test_provider_litserve_server.pid.envsig",
     "/tmp/platform_test_capability_gateway_server.pid",
     "/tmp/platform_test_capability_gateway_server.pid.ref_count",
     "/tmp/platform_test_capability_gateway_server.pid.envsig",

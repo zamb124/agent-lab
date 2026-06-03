@@ -13,8 +13,8 @@ import json
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
-from core.ai_provider_catalog import PROVIDER_LITSERVE
-from core.company_ai.resolver import ResolvedEmbedding, resolve_embedding_for_company
+from core.ai.providers import PROVIDER_LITSERVE
+from core.ai.resolver import ResolvedEmbedding, resolve_embedding_for_company
 from core.company_ai.schema import CUSTOM_PROVIDER_SLUG
 from core.config.base import BaseSettings, get_settings
 from core.config.models import RAGProviderConfig

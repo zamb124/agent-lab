@@ -14,14 +14,19 @@ from typing import cast as type_cast
 import httpx
 import tiktoken
 
-from core.billing import get_billing_service
-from core.company_ai.resolver import (
+from core.ai.providers import PROVIDER_LITSERVE
+from core.ai.resolver import (
     COST_ORIGIN_COMPANY,
     COST_ORIGIN_PLATFORM,
     CostOrigin,
     resolve_rerank_for_company,
 )
+from core.billing import get_billing_service
 from core.config.base import BaseSettings
+from core.config.llm_openai_compat import (
+    resolve_provider_api_key_for_openai_compatible_calls,
+    resolve_provider_openai_v1_base_url,
+)
 from core.context import get_context
 from core.http import ProxyStrategy, get_httpx_client
 from core.logging import get_logger
@@ -68,6 +73,7 @@ class RerankerHTTPClient:
         billing_resource_id: str = "rerank",
         billing_service: BillingService | None = None,
         cost_origin: CostOrigin = COST_ORIGIN_PLATFORM,
+        model: str | None = None,
         api_key: str | None = None,
         extra_request_headers: dict[str, str] | None = None,
     ) -> None:
@@ -77,6 +83,7 @@ class RerankerHTTPClient:
         self.billing_resource_id: str = billing_resource_id
         self.billing_service: BillingService | None = billing_service
         self.cost_origin: CostOrigin = cost_origin
+        self.model: str | None = model.strip() if model is not None and model.strip() else None
         self.api_key: str | None = api_key
         self.extra_request_headers: dict[str, str] | None = dict(extra_request_headers or {}) or None
         self._tokenizer: tiktoken.Encoding = tiktoken.get_encoding("cl100k_base")
@@ -156,6 +163,8 @@ class RerankerHTTPClient:
         token_count = self.count_tokens(query, passages)
 
         payload = {"query": query, "passages": passages}
+        if self.model is not None:
+            payload["model"] = self.model
 
         headers = {
             "Content-Type": "application/json",
@@ -263,6 +272,8 @@ class RerankResolution:
     """Итог резолва rerank: enabled/url/cost_origin/api_key/headers."""
 
     enabled: bool
+    provider: str | None
+    model: str | None
     url: str | None
     max_candidates: int | None
     cost_origin: CostOrigin
@@ -287,17 +298,23 @@ def rerank_options(
     else:
         enabled = True
 
+    rr = settings.rag.reranker
+    if rr.provider == "none" and request_rerank is None and prof is None:
+        enabled = False
+
     url: str | None = None
     if prof is not None and prof.url and (u := prof.url.strip()):
         url = u
     if url is None:
-        rr = settings.rag.reranker
         if rr.base_url and (u := rr.base_url.strip()):
             url = u
         elif rr.provider == "provider_litserve":
             url = provider_litserve_rerank_http_url(
                 settings.provider_litserve.resolve_openai_v1_base_url()
             )
+        elif rr.provider != "none":
+            provider_base_url = resolve_provider_openai_v1_base_url(settings.llm, rr.provider)
+            url = f"{provider_base_url.rstrip('/')}/rerank"
 
     max_candidates = prof.max_candidates if prof is not None else None
 
@@ -306,6 +323,8 @@ def rerank_options(
         if not company_resolved.enabled:
             return RerankResolution(
                 enabled=False,
+                provider=company_resolved.provider,
+                model=company_resolved.model,
                 url=None,
                 max_candidates=max_candidates,
                 cost_origin=company_resolved.cost_origin,
@@ -313,28 +332,60 @@ def rerank_options(
         if company_resolved.url:
             return RerankResolution(
                 enabled=True,
+                provider=company_resolved.provider,
+                model=company_resolved.model,
                 url=company_resolved.url,
                 max_candidates=max_candidates,
                 cost_origin=company_resolved.cost_origin,
                 api_key=company_resolved.api_key,
                 extra_request_headers=company_resolved.extra_request_headers,
             )
-        # provider_litserve без явного URL — конструируем из настроек платформы
-        lit_url = provider_litserve_rerank_http_url(
-            settings.provider_litserve.resolve_openai_v1_base_url()
-        )
+        provider = company_resolved.provider
+        if provider == PROVIDER_LITSERVE:
+            resolved_url = provider_litserve_rerank_http_url(
+                settings.provider_litserve.resolve_openai_v1_base_url()
+            )
+            api_key = company_resolved.api_key
+        elif provider:
+            provider_base_url = resolve_provider_openai_v1_base_url(settings.llm, provider)
+            resolved_url = f"{provider_base_url.rstrip('/')}/rerank"
+            provider_api_key = resolve_provider_api_key_for_openai_compatible_calls(
+                settings.llm,
+                provider,
+            )
+            api_key = company_resolved.api_key or provider_api_key
+        else:
+            resolved_url = None
+            api_key = company_resolved.api_key
         return RerankResolution(
             enabled=True,
-            url=lit_url,
+            provider=provider,
+            model=company_resolved.model,
+            url=resolved_url,
             max_candidates=max_candidates,
             cost_origin=company_resolved.cost_origin,
+            api_key=api_key,
+            extra_request_headers=company_resolved.extra_request_headers,
         )
 
+    default_api_key = (
+        None
+        if rr.provider in ("none", PROVIDER_LITSERVE)
+        else resolve_provider_api_key_for_openai_compatible_calls(settings.llm, rr.provider)
+    )
+    default_model = (
+        None
+        if rr.provider == PROVIDER_LITSERVE and rr.billing_model_id == "rerank"
+        else rr.billing_model_id
+    )
     return RerankResolution(
         enabled=enabled,
+        provider=rr.provider,
+        model=default_model,
         url=url,
         max_candidates=max_candidates,
         cost_origin=COST_ORIGIN_PLATFORM,
+        api_key=default_api_key,
     )
 
 
@@ -370,6 +421,7 @@ async def apply_rerank_after_retrieve(
         platform_markup=rr.platform_markup,
         billing_resource_id=rr.billing_model_id,
         cost_origin=resolution.cost_origin,
+        model=resolution.model,
         api_key=resolution.api_key,
         extra_request_headers=resolution.extra_request_headers,
     )

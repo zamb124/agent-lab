@@ -35,8 +35,7 @@ from apps.flows.src.container import FlowContainer, get_container  # noqa: E402
 from core.billing import set_billing_service  # noqa: E402
 from core.billing.cbr_rate_provider import refresh_loop_coro as _cbr_loop_coro  # noqa: E402
 from core.billing.cbr_rate_provider import refresh_rate_once as _cbr_refresh_once  # noqa: E402
-from core.clients.llm.factory import get_llm  # noqa: E402
-from core.clients.llm.mock import configure_mock_llm_redis  # noqa: E402
+from core.clients.llm.mock import configure_mock_llm_redis, get_or_create_global_mock_llm  # noqa: E402
 from core.config import set_settings as set_core_settings  # noqa: E402
 from core.config.testing import is_testing  # noqa: E402
 from core.files.processors import initialize_default_processors  # noqa: E402
@@ -120,7 +119,7 @@ async def _initialize_worker_state(state: TaskiqState, service_name: str) -> Non
         logger.info("worker.tracing_initialized", service=service_name)
 
     if is_testing():
-        _ = get_llm("mock-gpt-4")
+        _ = get_or_create_global_mock_llm("mock-gpt-4")
         _ = configure_mock_llm_redis(container.redis_client)
         logger.info("worker.mock_llm_configured", service=service_name)
 

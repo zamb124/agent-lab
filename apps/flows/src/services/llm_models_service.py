@@ -4,13 +4,14 @@ import asyncio
 import re
 from datetime import datetime, timezone
 from typing import cast
+from urllib.parse import quote
 
 import httpx
 
 from apps.flows.config import get_settings
 from apps.flows.src.db import LLMModelRepository
 from apps.flows.src.models import LLMModel
-from core.ai_provider_catalog import (
+from core.ai.providers import (
     LLM_CAPABILITIES,
     PROVIDER_LITSERVE,
     AICapability,
@@ -77,6 +78,13 @@ _EMBEDDING_MODEL_ID_MARKERS = (
     "gte/",
 )
 _RERANK_MODEL_ID_MARKERS = ("rerank", "reranker")
+_OPENROUTER_EMBEDDING_MODELS_URL = "https://openrouter.ai/api/v1/embeddings/models"
+_OPENROUTER_RERANK_MODELS_URL = "https://openrouter.ai/api/v1/models?output_modalities=rerank"
+_HUGGINGFACE_FEATURE_EXTRACTION_MODELS_URL = (
+    "https://huggingface.co/api/models"
+    "?inference_provider=hf-inference&pipeline_tag=feature-extraction&limit=40"
+)
+_MAX_EMBEDDING_PROBES_PER_PROVIDER = 5
 
 _LLM_SYNC_TASK_NAME = "sync_llm_models_task"
 _LLM_SYNC_TARGET_SERVICE = "flows"
@@ -170,6 +178,21 @@ class LLMModelsService:
                 if cleaned:
                     values.append(cleaned)
         return tuple(sorted(set(values)))
+
+    @staticmethod
+    def _merge_string_tuples(
+        left: tuple[str, ...],
+        right: tuple[str, ...],
+    ) -> tuple[str, ...]:
+        return tuple(sorted({*left, *right}))
+
+    @staticmethod
+    def _merge_capability_tuples(
+        left: tuple[AICapability, ...],
+        right: tuple[AICapability, ...],
+    ) -> tuple[AICapability, ...]:
+        values = {*left, *right}
+        return tuple(cap for cap in AICapability if cap in values)
 
     @staticmethod
     def _json_object(value: JsonValue | None) -> JsonObject:
@@ -293,6 +316,9 @@ class LLMModelsService:
         provider: str,
         primary_key: str,
         fallback_key: str | None = None,
+        forced_capabilities: tuple[AICapability, ...] = (),
+        forced_input_modalities: tuple[str, ...] = (),
+        forced_output_modalities: tuple[str, ...] = (),
     ) -> LLMModel | None:
         model_id = cls._model_id_from_object(
             item,
@@ -306,6 +332,16 @@ class LLMModelsService:
         architecture = cls._json_object(item.get("architecture"))
         input_modalities = cls._json_string_tuple(architecture.get("input_modalities"))
         output_modalities = cls._json_string_tuple(architecture.get("output_modalities"))
+        if forced_input_modalities:
+            input_modalities = cls._merge_string_tuples(
+                input_modalities,
+                forced_input_modalities,
+            )
+        if forced_output_modalities:
+            output_modalities = cls._merge_string_tuples(
+                output_modalities,
+                forced_output_modalities,
+            )
         supported_parameters = cls._json_string_tuple(item.get("supported_parameters"))
         supported_generation_methods = cls._json_string_tuple(item.get("supportedGenerationMethods"))
         if not supported_generation_methods:
@@ -317,16 +353,17 @@ class LLMModelsService:
                 explicit_capabilities.append(AICapability(raw_capability))
             except ValueError:
                 continue
-        capabilities = (
-            tuple(explicit_capabilities)
-            if explicit_capabilities
-            else cls._capabilities_from_model_item(
+        if forced_capabilities:
+            capabilities = forced_capabilities
+        elif explicit_capabilities:
+            capabilities = tuple(explicit_capabilities)
+        else:
+            capabilities = cls._capabilities_from_model_item(
                 model_id=model_id,
                 input_modalities=input_modalities,
                 output_modalities=output_modalities,
                 supported_generation_methods=supported_generation_methods,
             )
-        )
         native_dimension = cls._dimension_from_item(item) if AICapability.EMBEDDING in capabilities else None
         storage_dimension = cls._storage_dimension_for_embedding(native_dimension)
         mrl_output_dimension = cls._json_int(item.get("mrl_output_dimension"))
@@ -384,6 +421,9 @@ class LLMModelsService:
         provider: str,
         primary_key: str,
         fallback_key: str | None = None,
+        forced_capabilities: tuple[AICapability, ...] = (),
+        forced_input_modalities: tuple[str, ...] = (),
+        forced_output_modalities: tuple[str, ...] = (),
     ) -> list[LLMModel]:
         records: list[LLMModel] = []
         for idx, raw_item in enumerate(items):
@@ -393,6 +433,9 @@ class LLMModelsService:
                 provider=provider,
                 primary_key=primary_key,
                 fallback_key=fallback_key,
+                forced_capabilities=forced_capabilities,
+                forced_input_modalities=forced_input_modalities,
+                forced_output_modalities=forced_output_modalities,
             )
             if record is not None:
                 records.append(record)
@@ -442,6 +485,52 @@ class LLMModelsService:
         return cls._records_from_array(models_raw, provider="google", primary_key="name")
 
     @classmethod
+    def _extract_openrouter_embedding_model_records(cls, payload: JsonValue) -> list[LLMModel]:
+        payload_object = require_json_object(payload, "openrouter.embedding_models.response")
+        data = payload_object.get("data")
+        if not isinstance(data, list):
+            raise ValueError("openrouter embedding models response: data must be an array")
+        return cls._records_from_array(
+            data,
+            provider="openrouter",
+            primary_key="id",
+            forced_capabilities=(AICapability.EMBEDDING,),
+            forced_input_modalities=("text",),
+            forced_output_modalities=("embeddings",),
+        )
+
+    @classmethod
+    def _extract_openrouter_rerank_model_records(cls, payload: JsonValue) -> list[LLMModel]:
+        payload_object = require_json_object(payload, "openrouter.rerank_models.response")
+        data = payload_object.get("data")
+        if not isinstance(data, list):
+            raise ValueError("openrouter rerank models response: data must be an array")
+        return cls._records_from_array(
+            data,
+            provider="openrouter",
+            primary_key="id",
+            forced_capabilities=(AICapability.RERANK,),
+            forced_input_modalities=("text",),
+            forced_output_modalities=("scores",),
+        )
+
+    @classmethod
+    def _extract_huggingface_feature_extraction_model_records(
+        cls,
+        payload: JsonValue,
+    ) -> list[LLMModel]:
+        if not isinstance(payload, list):
+            raise ValueError("huggingface feature-extraction models response must be an array")
+        return cls._records_from_array(
+            payload,
+            provider="huggingface",
+            primary_key="id",
+            forced_capabilities=(AICapability.EMBEDDING,),
+            forced_input_modalities=("text",),
+            forced_output_modalities=("embeddings",),
+        )
+
+    @classmethod
     def _extract_provider_model_records(cls, payload: JsonValue, provider: str) -> list[LLMModel]:
         if provider == "bothub":
             return cls._extract_bothub_model_records(payload)
@@ -451,6 +540,65 @@ class LLMModelsService:
             return cls._extract_google_model_records(payload)
         payload_object = require_json_object(payload, f"{provider}.models.response")
         return cls._extract_openai_compatible_model_records(payload_object, provider)
+
+    @classmethod
+    def _merge_model_records(cls, records: list[LLMModel]) -> list[LLMModel]:
+        merged: dict[str, LLMModel] = {}
+        for record in records:
+            existing = merged.get(record.model_id)
+            if existing is None:
+                merged[record.model_id] = record
+                continue
+            is_free: bool | None
+            if existing.is_free is True or record.is_free is True:
+                is_free = True
+            elif existing.is_free is None and record.is_free is None:
+                is_free = None
+            else:
+                is_free = False
+            raw: JsonObject
+            if existing.raw == record.raw:
+                raw = existing.raw
+            else:
+                raw = {"sources": [existing.raw, record.raw]}
+            merged[record.model_id] = existing.model_copy(
+                update={
+                    "capabilities": cls._merge_capability_tuples(
+                        existing.capabilities,
+                        record.capabilities,
+                    ),
+                    "input_modalities": cls._merge_string_tuples(
+                        existing.input_modalities,
+                        record.input_modalities,
+                    ),
+                    "output_modalities": cls._merge_string_tuples(
+                        existing.output_modalities,
+                        record.output_modalities,
+                    ),
+                    "supported_parameters": cls._merge_string_tuples(
+                        existing.supported_parameters,
+                        record.supported_parameters,
+                    ),
+                    "context_length": record.context_length or existing.context_length,
+                    "created": existing.created or record.created,
+                    "native_dimension": record.native_dimension or existing.native_dimension,
+                    "storage_dimension": record.storage_dimension or existing.storage_dimension,
+                    "mrl_output_dimension": record.mrl_output_dimension or existing.mrl_output_dimension,
+                    "supports_tools": existing.supports_tools or record.supports_tools,
+                    "supports_structured_output": (
+                        existing.supports_structured_output or record.supports_structured_output
+                    ),
+                    "is_free": is_free,
+                    "free_reason": existing.free_reason or record.free_reason,
+                    "metadata_status": (
+                        "verified"
+                        if existing.metadata_status == "verified" or record.metadata_status == "verified"
+                        else "discovered"
+                    ),
+                    "raw": raw,
+                }
+            )
+        return list(merged.values())
 
     async def _fetch_bothub_models(self) -> list[str]:
         """Запрос моделей BotHub через общий provider registry."""
@@ -549,31 +697,14 @@ class LLMModelsService:
             "Content-Type": "application/json",
         }
 
-    async def _fetch_configured_provider_model_records(
-        self,
-        provider: str,
+    @staticmethod
+    async def _fetch_provider_catalog_payload(
         *,
-        probe_embeddings: bool,
-    ) -> list[LLMModel]:
-        """Запрос и нормализация models catalog для configured provider."""
-        if provider != PROVIDER_LITSERVE and provider not in OPENAI_COMPATIBLE_LLM_PROVIDER_SLUGS:
-            logger.warning("Неизвестный провайдер: %s", provider)
-            return []
-
-        if not self._provider_is_configured(provider):
-            logger.warning("%s model provider не настроен", provider)
-            return []
-
-        cfg = self._configured_llm_provider(provider)
-        if provider == PROVIDER_LITSERVE:
-            url = self._provider_litserve_models_url()
-            headers = self._provider_litserve_model_list_headers()
-        else:
-            if cfg is None:
-                raise ValueError(f"{provider} provider config не настроен")
-            url = self._provider_models_url(provider, cfg)
-            headers = self._provider_model_list_headers(provider, cfg)
-
+        provider: str,
+        url: str,
+        headers: dict[str, str],
+        response_label: str,
+    ) -> JsonValue:
         response: httpx.Response | None = None
         for attempt_index in range(3):
             response = await request_with_strategy(
@@ -596,7 +727,119 @@ class LLMModelsService:
         if response is None:
             raise RuntimeError(f"{provider} models response не получен")
         _ = response.raise_for_status()
-        payload = parse_json_value(response.content, f"{provider}.models.response")
+        return parse_json_value(response.content, response_label)
+
+    async def _fetch_openrouter_model_records(
+        self,
+        cfg: OpenRouterProviderConfig,
+        *,
+        probe_embeddings: bool,
+    ) -> list[LLMModel]:
+        headers = self._provider_model_list_headers("openrouter", cfg)
+        payload = await self._fetch_provider_catalog_payload(
+            provider="openrouter",
+            url=self._provider_models_url("openrouter", cfg),
+            headers=headers,
+            response_label="openrouter.models.response",
+        )
+        records = self._extract_provider_model_records(payload, "openrouter")
+
+        embedding_payload = await self._fetch_provider_catalog_payload(
+            provider="openrouter",
+            url=_OPENROUTER_EMBEDDING_MODELS_URL,
+            headers=headers,
+            response_label="openrouter.embedding_models.response",
+        )
+        records.extend(self._extract_openrouter_embedding_model_records(embedding_payload))
+
+        rerank_payload = await self._fetch_provider_catalog_payload(
+            provider="openrouter",
+            url=_OPENROUTER_RERANK_MODELS_URL,
+            headers=headers,
+            response_label="openrouter.rerank_models.response",
+        )
+        records.extend(self._extract_openrouter_rerank_model_records(rerank_payload))
+
+        merged_records = self._merge_model_records(records)
+        if probe_embeddings:
+            merged_records = await self._probe_embedding_dimensions("openrouter", merged_records)
+        return merged_records
+
+    async def _fetch_huggingface_model_records(
+        self,
+        cfg: HuggingFaceProviderConfig,
+        *,
+        probe_embeddings: bool,
+    ) -> list[LLMModel]:
+        headers = self._provider_model_list_headers("huggingface", cfg)
+        payload = await self._fetch_provider_catalog_payload(
+            provider="huggingface",
+            url=self._provider_models_url("huggingface", cfg),
+            headers=headers,
+            response_label="huggingface.models.response",
+        )
+        records = self._extract_provider_model_records(payload, "huggingface")
+
+        feature_payload = await self._fetch_provider_catalog_payload(
+            provider="huggingface",
+            url=_HUGGINGFACE_FEATURE_EXTRACTION_MODELS_URL,
+            headers=headers,
+            response_label="huggingface.feature_extraction_models.response",
+        )
+        records.extend(
+            self._extract_huggingface_feature_extraction_model_records(feature_payload)
+        )
+
+        merged_records = self._merge_model_records(records)
+        if probe_embeddings:
+            merged_records = await self._probe_embedding_dimensions("huggingface", merged_records)
+        return merged_records
+
+    async def _fetch_configured_provider_model_records(
+        self,
+        provider: str,
+        *,
+        probe_embeddings: bool,
+    ) -> list[LLMModel]:
+        """Запрос и нормализация models catalog для configured provider."""
+        if provider != PROVIDER_LITSERVE and provider not in OPENAI_COMPATIBLE_LLM_PROVIDER_SLUGS:
+            logger.warning("Неизвестный провайдер: %s", provider)
+            return []
+
+        if not self._provider_is_configured(provider):
+            logger.warning("%s model provider не настроен", provider)
+            return []
+
+        cfg = self._configured_llm_provider(provider)
+        if provider == "openrouter":
+            if cfg is None:
+                raise ValueError("openrouter provider config не настроен")
+            return await self._fetch_openrouter_model_records(
+                cast(OpenRouterProviderConfig, cfg),
+                probe_embeddings=probe_embeddings,
+            )
+        if provider == "huggingface":
+            if cfg is None:
+                raise ValueError("huggingface provider config не настроен")
+            return await self._fetch_huggingface_model_records(
+                cast(HuggingFaceProviderConfig, cfg),
+                probe_embeddings=probe_embeddings,
+            )
+        if provider == PROVIDER_LITSERVE:
+            url = self._provider_litserve_models_url()
+            headers = self._provider_litserve_model_list_headers()
+        else:
+            if cfg is None:
+                raise ValueError(f"{provider} provider config не настроен")
+            url = self._provider_models_url(provider, cfg)
+            headers = self._provider_model_list_headers(provider, cfg)
+
+        payload = await self._fetch_provider_catalog_payload(
+            provider=provider,
+            url=url,
+            headers=headers,
+            response_label=f"{provider}.models.response",
+        )
         records = self._extract_provider_model_records(payload, provider)
         if probe_embeddings:
             records = await self._probe_embedding_dimensions(provider, records)
@@ -634,8 +877,66 @@ class LLMModelsService:
             }
         return LLMModelsService._provider_model_list_headers(provider, cfg)
 
+    @staticmethod
+    def _huggingface_feature_extraction_probe_url(model_id: str) -> str:
+        model_path = quote(model_id, safe="")
+        return (
+            "https://router.huggingface.co/hf-inference/models/"
+            f"{model_path}/pipeline/feature-extraction"
+        )
+
+    @classmethod
+    def _dimension_from_embedding_payload(cls, value: JsonValue) -> int | None:
+        if not isinstance(value, list) or not value:
+            return None
+        if all(
+            isinstance(item, (int, float)) and not isinstance(item, bool)
+            for item in value
+        ):
+            return len(value)
+        first = value[0]
+        if isinstance(first, list):
+            return cls._dimension_from_embedding_payload(first)
+        return None
+
+    async def _probe_huggingface_embedding_dimension(self, model_id: str) -> int | None:
+        try:
+            response = await request_with_strategy(
+                "POST",
+                self._huggingface_feature_extraction_probe_url(model_id),
+                headers=self._embedding_probe_headers("huggingface"),
+                json={"inputs": "dimension probe"},
+                timeout=30.0,
+                strategy=ProxyStrategy.DIRECT_FIRST,
+                direct_attempts=1,
+                proxy_attempts=1,
+            )
+        except (httpx.HTTPError, OSError, ValueError) as exc:
+            logger.info(
+                "model_catalog.embedding_probe_failed",
+                provider="huggingface",
+                model_id=model_id,
+                error=str(exc),
+            )
+            return None
+        if response.status_code != 200:
+            logger.info(
+                "model_catalog.embedding_probe_rejected",
+                provider="huggingface",
+                model_id=model_id,
+                status_code=response.status_code,
+            )
+            return None
+        payload = parse_json_value(
+            response.content,
+            "huggingface.embedding_probe.response",
+        )
+        return self._dimension_from_embedding_payload(payload)
+
     async def _probe_embedding_dimension(self, provider: str, model_id: str) -> int | None:
         """Проверяет реальную размерность embedding маленьким OpenAI-compatible запросом."""
+        if provider == "huggingface":
+            return await self._probe_huggingface_embedding_dimension(model_id)
         try:
             response = await request_with_strategy(
                 "POST",
@@ -689,10 +990,15 @@ class LLMModelsService:
         records: list[LLMModel],
     ) -> list[LLMModel]:
         updated: list[LLMModel] = []
+        probe_count = 0
         for record in records:
             if AICapability.EMBEDDING not in record.capabilities or record.native_dimension is not None:
                 updated.append(record)
                 continue
+            if probe_count >= _MAX_EMBEDDING_PROBES_PER_PROVIDER:
+                updated.append(record)
+                continue
+            probe_count += 1
             dimension = await self._probe_embedding_dimension(provider, record.model_id)
             if dimension is None:
                 updated.append(record)

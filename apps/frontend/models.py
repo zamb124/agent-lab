@@ -255,8 +255,8 @@ class LandingDemoSpec(BaseModel):
 class AIProvidersCapabilityUpdate(BaseModel):
     """PUT /api/settings/ai-providers/{capability}: задать override capability компании.
 
-    - ``provider`` платформенный из ``PLATFORM_LLM_PROVIDER_ORDER``
-      или ``custom:<id>``; для rerank допустимы ``inherit|none|provider_litserve|custom:<id>``;
+    - ``provider`` платформенный provider capability, ``none`` для отключения rerank
+      или ``custom:<id>``;
       для voice — литералы провайдеров речи или ``custom:<id>`` (кроме VAD).
     - ``api_key`` (plaintext) шифруется на сервере; для ``custom:<id>`` не используется
       (ключ в custom-провайдере).

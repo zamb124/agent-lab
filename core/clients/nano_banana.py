@@ -8,8 +8,8 @@ from typing import TYPE_CHECKING, Protocol
 from a2a.types import FilePart, FileWithBytes, Message, Part, Role, TextPart
 from a2a.utils.message import get_message_text
 
-from core.clients.llm.factory import get_llm
-from core.company_ai import AICapability, resolve_llm_for_capability
+from core.ai.resolver import AICapability, resolve_llm_for_capability
+from core.ai.runtime import create_llm_client
 from core.config import get_settings
 from core.files.models import FileRecord
 from core.files.s3_client import S3ClientFactory
@@ -50,14 +50,7 @@ class NanoBananaClient:
                 include_platform_default=True,
             )
             if resolved is not None:
-                self._llm = get_llm(
-                    model_name=resolved.model,
-                    provider=resolved.provider,
-                    api_key=resolved.api_key,
-                    base_url=resolved.base_url,
-                    folder_id=resolved.folder_id,
-                    fallback_models=list(resolved.fallback_models or ()) or None,
-                )
+                self._llm = create_llm_client(resolved)
             else:
                 raise ValueError(
                     "NanoBananaClient: platform default для capability=image_gen не настроен"

@@ -375,7 +375,7 @@ def _resolve_llm_call_config(
     elif resolved_provider == "custom_openai_compatible":
         raise ValueError(
             "custom_openai_compatible LLM требует явный api_key и base_url; "
-            + "вызывайте через core.company_ai.resolve_llm_for_capability(...)"
+            + "вызывайте через core.ai.resolver/core.ai.runtime"
         )
 
     if provider_config is not None:

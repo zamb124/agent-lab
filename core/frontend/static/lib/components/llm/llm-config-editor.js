@@ -34,6 +34,7 @@ import '@platform/lib/components/glass-button.js';
 
 const _CUSTOM_REF_PREFIX = 'custom:';
 const _HUMANITEC_LLM_PROVIDER = 'humanitec_llm';
+const _NONE_PROVIDER = 'none';
 
 export class PlatformLlmConfigEditor extends PlatformElement {
     static i18nNamespace = 'frontend';
@@ -92,6 +93,10 @@ export class PlatformLlmConfigEditor extends PlatformElement {
         return value === _HUMANITEC_LLM_PROVIDER;
     }
 
+    _isNoneProvider(value) {
+        return value === _NONE_PROVIDER;
+    }
+
     _isEmbeddingCapability() {
         return this.capability === 'embedding';
     }
@@ -100,11 +105,17 @@ export class PlatformLlmConfigEditor extends PlatformElement {
         return (
             typeof this.capability === 'string'
             && (
-                this.capability.startsWith('llm_')
-                || this._isEmbeddingCapability()
-                || this.capability === 'image_gen'
-                || this.capability === 'voice_stt'
-                || this.capability === 'voice_tts'
+                (
+                    (
+                        this.capability.startsWith('llm_')
+                        || this._isEmbeddingCapability()
+                        || this.capability === 'image_gen'
+                        || this.capability === 'rerank'
+                        || this.capability === 'voice_stt'
+                        || this.capability === 'voice_tts'
+                    )
+                    && !this._isNoneProvider((this.config && this.config.provider) || '')
+                )
             )
         );
     }
@@ -113,8 +124,9 @@ export class PlatformLlmConfigEditor extends PlatformElement {
         const provider = (this.config && this.config.provider) || '';
         return (
             this.mode === 'company_capability'
-            && (this.capability || '').startsWith('llm_')
+            && ((this.capability || '').startsWith('llm_') || this.capability === 'image_gen')
             && provider.length > 0
+            && !this._isNoneProvider(provider)
         );
     }
 
@@ -147,6 +159,14 @@ export class PlatformLlmConfigEditor extends PlatformElement {
             patch.model = null;
             patch.dimension = null;
             patch.mrl_output_dimension = null;
+        }
+        if (this._isNoneProvider(value)) {
+            patch.model = null;
+            patch.api_key = null;
+            patch.base_url = null;
+            patch.folder_id = null;
+            patch.extra_request_headers = null;
+            patch.fallback_models = null;
         }
         this._emitChange(patch);
     }
@@ -288,7 +308,8 @@ export class PlatformLlmConfigEditor extends PlatformElement {
         const provider = (this.config && this.config.provider) || '';
         const isCustom = this._isCustomProvider(provider);
         const isHumanitecLlm = this._isHumanitecLlmProvider(provider);
-        const showByok = !isCustom && !isHumanitecLlm && this.mode === 'company_capability';
+        const isNoneProvider = this._isNoneProvider(provider);
+        const showByok = !isCustom && !isHumanitecLlm && !isNoneProvider && this.mode === 'company_capability';
         const showModelOverride = this._supportsModelOverride();
         const showFallbackPolicy = this._supportsFallbackPolicy();
         const rawModelValue = (this.config && this.config.model) || '';

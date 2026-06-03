@@ -9,7 +9,7 @@ from typing import Literal
 
 from pydantic import BaseModel, Field
 
-from core.ai_provider_catalog import LLM_CAPABILITIES, AICapability
+from core.ai.providers import LLM_CAPABILITIES, AICapability
 from core.types import JsonObject
 
 ModelMetadataStatus = Literal["discovered", "verified"]

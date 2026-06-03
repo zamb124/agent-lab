@@ -3,7 +3,7 @@
 """
 
 from core.clients.a2a_client import A2AClient, A2AClientError
-from core.clients.llm import LLMClient, MockLLM, get_llm
+from core.clients.llm import LLMClient, MockLLM
 from core.clients.redis_client import RedisClient
 from core.errors import ExternalAPIError
 
@@ -16,7 +16,6 @@ __all__ = [
     "RedisClient",
     "LLMClient",
     "MockLLM",
-    "get_llm",
     "ExternalAPIClient",
     "ExternalAPIError",
     "MCPClient",

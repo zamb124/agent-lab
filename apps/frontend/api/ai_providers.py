@@ -28,16 +28,21 @@ from apps.frontend.models import (
     CustomProviderCreate,
     CustomProviderUpdate,
 )
-from core.ai_provider_catalog import (
+from core.ai.providers import (
     LLM_CAPABILITIES,
     VOICE_CAPABILITIES,
     AICapability,
     platform_provider_specs_for_capability,
     validate_platform_provider_for_capability,
 )
+from core.ai.resolver import (
+    resolve_embedding_for_company,
+    resolve_llm_for_capability,
+    resolve_rerank_for_company,
+    resolve_voice_for_company,
+)
 from core.clients.llm.model_routing import (
     HUMANITEC_LLM_PROVIDER,
-    OPENAI_COMPATIBLE_LLM_PROVIDER_ORDER,
 )
 from core.clients.llm.platform_free_models import read_humanitec_llms_model_options
 from core.company_ai import (
@@ -54,10 +59,6 @@ from core.company_ai import (
     mask_encrypted_secret,
     platform_default_model,
     platform_default_provider_for_capability,
-    resolve_embedding_for_company,
-    resolve_llm_for_capability,
-    resolve_rerank_for_company,
-    resolve_voice_for_company,
 )
 from core.config import get_settings
 from core.context import clear_context, require_context, set_context
@@ -201,7 +202,11 @@ def _rerank_override_to_public(ov: CompanyRerankOverride | None) -> JsonObject:
         "capability": AICapability.RERANK.value,
         "kind": "rerank",
         "configured": ov is not None,
-        "policy": ov.policy if ov else "inherit",
+        "provider": ov.provider if ov else None,
+        "model": ov.model if ov else None,
+        "base_url": ov.base_url if ov else None,
+        "extra_request_headers": (ov.extra_request_headers or {}) if ov else {},
+        "key_masked": mask_encrypted_secret(ov.api_key_encrypted) if ov and ov.api_key_encrypted else None,
         "platform_default_provider": platform_default_provider_for_capability(AICapability.RERANK),
     }
 
@@ -249,7 +254,7 @@ def _provider_catalog(
     aip: CompanyAIProviders,
     *,
     humanitec_llms_models: list[JsonObject],
-    provider_models: dict[str, list[JsonObject]],
+    provider_models: dict[str, dict[str, list[JsonObject]]],
     embedding_models: dict[str, list[JsonObject]],
 ) -> JsonObject:
     """Каталог провайдеров для UI селектора (per capability)."""
@@ -286,8 +291,11 @@ def _provider_catalog(
                         }
                         if p == HUMANITEC_LLM_PROVIDER
                         else (
-                            {"models": provider_models[p]}
-                            if cap in _LLM_CAPABILITIES and p in provider_models and provider_models[p]
+                            {"models": provider_models[cap.value][p]}
+                            if cap in (*_LLM_CAPABILITIES, AICapability.RERANK)
+                            and cap.value in provider_models
+                            and p in provider_models[cap.value]
+                            and provider_models[cap.value][p]
                             else (
                                 {"models": embedding_models[p]}
                                 if cap == AICapability.EMBEDDING
@@ -316,24 +324,29 @@ def _provider_catalog(
     return catalog
 
 
-async def _provider_model_options(container: "FrontendContainer") -> dict[str, list[JsonObject]]:
-    options: dict[str, list[JsonObject]] = {}
-    for provider in OPENAI_COMPATIBLE_LLM_PROVIDER_ORDER:
-        rows = await container.flows_llm_model_repository.list_by_provider_capability(
-            provider,
-            AICapability.LLM_CHAT,
-        )
-        model_ids = sorted({row.model_id.strip() for row in rows if row.model_id.strip()})
-        if not model_ids:
-            continue
-        options[provider] = [
-            {
-                "value": model_id,
-                "label": model_id,
-                "kind": "provider_model",
-            }
-            for model_id in model_ids
-        ]
+async def _provider_model_options(container: "FrontendContainer") -> dict[str, dict[str, list[JsonObject]]]:
+    options: dict[str, dict[str, list[JsonObject]]] = {}
+    for cap in (*_LLM_CAPABILITIES, AICapability.RERANK):
+        capability_options: dict[str, list[JsonObject]] = {}
+        for spec in platform_provider_specs_for_capability(cap):
+            if spec.kind != "platform":
+                continue
+            rows = await container.flows_llm_model_repository.list_by_provider_capability(
+                spec.provider,
+                cap,
+            )
+            model_ids = sorted({row.model_id.strip() for row in rows if row.model_id.strip()})
+            if not model_ids:
+                continue
+            capability_options[spec.provider] = [
+                {
+                    "value": model_id,
+                    "label": model_id,
+                    "kind": "provider_model",
+                }
+                for model_id in model_ids
+            ]
+        options[cap.value] = capability_options
     return options
 
 
@@ -471,8 +484,38 @@ async def _build_embedding_override(
     )
 
 
-def _build_rerank_override(payload: AIProvidersCapabilityUpdate) -> CompanyRerankOverride:
-    return CompanyRerankOverride(policy=payload.provider.strip())
+async def _build_rerank_override(
+    payload: AIProvidersCapabilityUpdate,
+    container: "FrontendContainer",
+) -> CompanyRerankOverride:
+    provider = payload.provider.strip()
+    model = (payload.model or "").strip()
+    if provider == "none":
+        return CompanyRerankOverride(provider=provider)
+    if not provider.startswith(CUSTOM_PROVIDER_REF_PREFIX):
+        _ = validate_platform_provider_for_capability(provider, AICapability.RERANK)
+        if not model:
+            raise HTTPException(status_code=400, detail="capability rerank: model обязателен")
+        catalog_model = await container.flows_llm_model_repository.get_provider_model(
+            provider,
+            model,
+        )
+        if catalog_model is None or AICapability.RERANK not in catalog_model.capabilities:
+            raise HTTPException(
+                status_code=400,
+                detail=f"capability rerank: модель {provider}:{model} отсутствует в provider model catalog",
+            )
+    elif not model:
+        raise HTTPException(status_code=400, detail="capability rerank: model обязателен для custom provider")
+
+    encrypted = encrypt_secret(payload.api_key) if payload.api_key else None
+    return CompanyRerankOverride(
+        provider=provider,
+        model=model,
+        api_key_encrypted=encrypted,
+        base_url=payload.base_url,
+        extra_request_headers=payload.extra_request_headers,
+    )
 
 
 def _build_voice_override(payload: AIProvidersCapabilityUpdate) -> CompanyVoiceOverride:
@@ -619,7 +662,7 @@ async def put_capability(
         elif cap == AICapability.EMBEDDING:
             updated_override = await _build_embedding_override(payload, container)
         elif cap == AICapability.RERANK:
-            updated_override = _build_rerank_override(payload)
+            updated_override = await _build_rerank_override(payload, container)
         elif cap in _VOICE_CAPABILITIES:
             updated_override = _build_voice_override(payload)
         else:
@@ -765,7 +808,7 @@ async def delete_custom_provider(
             used_in.append(cap.value)
     if aip.embedding is not None and aip.embedding.provider == ref:
         used_in.append(AICapability.EMBEDDING.value)
-    if aip.rerank is not None and aip.rerank.policy == ref:
+    if aip.rerank is not None and aip.rerank.provider == ref:
         used_in.append(AICapability.RERANK.value)
     for cap in (AICapability.VOICE_STT, AICapability.VOICE_TTS):
         ov = aip.get_capability_override(cap)
@@ -846,6 +889,8 @@ async def get_resolved() -> JsonObject:
                 "capability": AICapability.RERANK.value,
                 "resolved": rr is not None,
                 "enabled": rr.enabled if rr else None,
+                "provider": rr.provider if rr else None,
+                "model": rr.model if rr else None,
                 "url": rr.url if rr else None,
                 "cost_origin": rr.cost_origin if rr else "platform",
                 "custom_provider_id": rr.custom_provider_id if rr else None,

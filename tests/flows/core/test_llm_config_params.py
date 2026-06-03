@@ -1,11 +1,10 @@
-"""Параметры NodeLLMConfig для get_llm / stream."""
+"""Параметры NodeLLMConfig для billing / stream."""
 
 import pytest
 from pydantic import ValidationError
 
 from apps.flows.src.models.node_config import NodeLLMConfig
 from apps.flows.src.runtime.llm_config_params import (
-    client_kwargs_from_llm_config,
     resolve_llm_config_stream_kwargs,
     split_llm_config_for_client,
     stream_kwargs_from_llm_config,
@@ -93,28 +92,6 @@ def test_resolve_config_stream_kwargs_extra_headers_and_var():
     kw = resolve_llm_config_stream_kwargs(ov, state)
     assert kw["extra_headers"]["Authorization"] == "Bearer zz"
     assert kw["extra_headers"]["X-Custom"] == "plain"
-
-
-def test_client_kwargs_from_config_resolves_headers_for_client():
-    state = ExecutionState(
-        task_id="t1",
-        context_id="c1",
-        user_id="u1",
-        session_id="flow-a:c1",
-        variables={"tok": "Bearer zz"},
-    )
-    ov = NodeLLMConfig(
-        model="gpt-4o",
-        fallback_models=[{"model": "fallback", "extra_request_body": {"x": 1}}],
-        extra_request_headers={"Authorization": "@var:tok"},
-        extra_request_body={"route": "primary"},
-    )
-    kw = client_kwargs_from_llm_config(ov, state)
-    assert kw["model_name"] == "gpt-4o"
-    assert kw["extra_request_headers"] == {"Authorization": "Bearer zz"}
-    assert kw["extra_request_body"] == {"route": "primary"}
-    assert kw["fallback_models"][0].model == "fallback"
-    assert kw["fallback_models"][0].extra_request_body == {"x": 1}
 
 
 def test_node_llm_config_extra_headers_must_be_string_values():

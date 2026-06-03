@@ -18,6 +18,7 @@ from typing import ClassVar
 
 from pydantic import BaseModel, ConfigDict, computed_field
 
+from core.ai.providers import RERANK_POLICY_NONE
 from core.clients.llm.config import LLMCallConfig
 from core.company_ai.crypto import decrypt_secret
 from core.company_ai.platform_defaults import (
@@ -100,6 +101,8 @@ class ResolvedRerank(_FrozenModel):
     """Политика реранка после применения company override."""
 
     enabled: bool
+    provider: str | None = None
+    model: str | None = None
     url: str | None = None
     api_key: str | None = None
     extra_request_headers: dict[str, str] | None = None
@@ -463,49 +466,64 @@ def resolve_rerank_for_company() -> ResolvedRerank | None:
     Резолв rerank override.
 
     Возвращает None если ``CompanyRerankOverride`` не задан (использовать глобальные настройки),
-    либо ``ResolvedRerank(enabled=False)`` для policy=none, либо параметры HTTP-клиента.
+    либо ``ResolvedRerank(enabled=False)`` для provider=none, либо параметры HTTP-клиента.
     """
     aip = load_company_ai_providers()
     ov: CompanyRerankOverride | None = aip.rerank
     if ov is None:
         return None
 
-    pol = ov.policy
-    if pol == "inherit":
-        return None
-    if pol == "none":
+    provider = ov.provider
+    if provider == RERANK_POLICY_NONE:
         return ResolvedRerank(
             enabled=False,
+            provider=provider,
+            model=None,
             url=None,
             api_key=None,
             extra_request_headers=None,
             cost_origin=COST_ORIGIN_PLATFORM,
         )
-    if pol == "provider_litserve":
-        return ResolvedRerank(
-            enabled=True,
-            url=None,
-            api_key=None,
-            extra_request_headers=None,
-            cost_origin=COST_ORIGIN_PLATFORM,
-        )
-    if pol.startswith(CUSTOM_PROVIDER_REF_PREFIX):
-        custom = _resolve_custom_provider(aip, pol)
+    if provider.startswith(CUSTOM_PROVIDER_REF_PREFIX):
+        custom = _resolve_custom_provider(aip, provider)
         if not custom.rerank_path:
             raise ValueError(
                 f"rerank: custom_provider {custom.id!r} не задал rerank_path"
             )
+        model = ov.model or custom.model_by_capability.get(AICapability.RERANK.value)
+        if not model or not str(model).strip():
+            raise ValueError(
+                f"capability=rerank: custom_provider {custom.id!r} не задал model"
+            )
         url = custom.base_url.rstrip("/") + custom.rerank_path
         return ResolvedRerank(
             enabled=True,
+            provider=CUSTOM_PROVIDER_SLUG,
+            model=str(model).strip(),
             url=url,
             api_key=decrypt_secret(custom.api_key_encrypted),
             extra_request_headers=dict(custom.extra_request_headers or {}) or None,
             cost_origin=COST_ORIGIN_COMPANY,
-            billing_resource_id="rerank",
+            billing_resource_id=str(model).strip(),
             custom_provider_id=custom.id,
         )
-    raise ValueError(f"resolve_rerank_for_company: непредвиденный policy={pol!r}")
+    api_key = _decrypt_or_none(ov.api_key_encrypted)
+    has_byok = bool(api_key) or bool(ov.base_url)
+    cost_origin = COST_ORIGIN_COMPANY if has_byok else COST_ORIGIN_PLATFORM
+    model = ov.model
+    if not model or not str(model).strip():
+        raise ValueError(f"rerank: model обязателен для provider={provider!r}")
+    return ResolvedRerank(
+        enabled=True,
+        provider=provider,
+        model=str(model).strip(),
+        url=ov.base_url,
+        api_key=api_key,
+        extra_request_headers=dict(ov.extra_request_headers or {}) or None,
+        cost_origin=cost_origin,
+        billing_resource_id=str(model).strip(),
+        custom_provider_id=None,
+    )
 
 
 def resolve_voice_for_company(capability: AICapability) -> ResolvedVoice | None:

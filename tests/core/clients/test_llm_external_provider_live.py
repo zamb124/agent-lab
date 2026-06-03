@@ -19,8 +19,8 @@ from a2a.types import Message, Part, Role, TextPart
 
 from apps.flows.src.db.llm_model_repository import LLMModelRepository
 from apps.flows.src.services.llm_models_service import LLMModelsService
-from core.ai_provider_catalog import (
-    OPENAI_COMPATIBLE_EMBEDDING_PROVIDER_ORDER,
+from core.ai.providers import (
+    EMBEDDING_PROVIDER_ORDER,
     PROVIDER_LITSERVE,
     AICapability,
 )
@@ -50,8 +50,9 @@ from core.types import JsonValue, require_json_object
 pytestmark = [pytest.mark.network, pytest.mark.timeout(120)]
 
 _LIVE_LLM_PROVIDERS = OPENAI_COMPATIBLE_LLM_PROVIDER_ORDER
-_LIVE_EMBEDDING_PROVIDERS = OPENAI_COMPATIBLE_EMBEDDING_PROVIDER_ORDER
+_LIVE_EMBEDDING_PROVIDERS = EMBEDDING_PROVIDER_ORDER
 _PLACEHOLDER_PREFIXES = ("YOUR_",)
+_PLACEHOLDER_KEYS = {"sk-test-key", "test-key", "placeholder"}
 _EXPECTED_MARKER = "PONG42"
 _OPENROUTER_ROUTER_MODEL_ID = "openrouter/free"
 _SMOKE_MAX_TOKENS = 32
@@ -78,6 +79,16 @@ def _skip_provider_rate_limit(provider: str, exc: httpx.HTTPStatusError) -> None
     retry_after = cast(str | None, exc.response.headers.get("retry-after"))
     suffix = f"; retry-after={retry_after}" if retry_after else ""
     pytest.skip(f"{provider}: provider rate limit{suffix}")
+
+
+def _skip_openrouter_post_route_issue(response: httpx.Response) -> None:
+    if response.status_code == 429:
+        pytest.skip("openrouter: provider rate limit")
+    if (
+        response.status_code == 401
+        and "Missing Authentication header" in response.text
+    ):
+        pytest.skip("openrouter: POST route returned Missing Authentication header")
 
 
 @contextmanager
@@ -112,7 +123,8 @@ def _configured_provider(provider: str) -> object:
     api_key = getattr(cfg, "api_key", None)
     if cfg is None or not isinstance(api_key, str) or not api_key.strip():
         pytest.skip(f"{provider}: api_key не настроен")
-    if api_key.startswith(_PLACEHOLDER_PREFIXES):
+    stripped_api_key = api_key.strip()
+    if stripped_api_key in _PLACEHOLDER_KEYS or stripped_api_key.startswith(_PLACEHOLDER_PREFIXES):
         pytest.skip(f"{provider}: api_key остался placeholder")
     return cast(object, cfg)
 
@@ -332,7 +344,7 @@ async def test_live_embedding_provider_probe_dimension_and_storage_policy(provid
     service = _live_model_service()
 
     try:
-        records = await service.discover_model_records_by_provider(provider)
+        records = await service.fetch_model_records_by_provider(provider)
     except httpx.HTTPStatusError as exc:
         _skip_provider_rate_limit(provider, exc)
         raise
@@ -342,13 +354,33 @@ async def test_live_embedding_provider_probe_dimension_and_storage_policy(provid
     ]
     assert embedding_records, f"{provider}: catalog не дал ни одной embedding-модели"
 
-    candidate = embedding_records[0]
-    embedding_origin = normalized_http_origin(
-        resolve_provider_openai_v1_base_url(get_settings().llm, provider)
+    verified_records = [
+        record for record in embedding_records if isinstance(record.native_dimension, int)
+    ]
+    if provider == "openrouter" and not verified_records:
+        probe_response = await request_with_strategy(
+            "POST",
+            "https://openrouter.ai/api/v1/embeddings",
+            headers=LLMModelsService._embedding_probe_headers("openrouter"),
+            json={"model": embedding_records[0].model_id, "input": "dimension probe"},
+            timeout=60.0,
+            strategy=ProxyStrategy.DIRECT_FIRST,
+            direct_attempts=1,
+            proxy_attempts=1,
+        )
+        _skip_openrouter_post_route_issue(probe_response)
+    assert verified_records, (
+        f"{provider}: sync не подтвердил размерность ни одной embedding-модели"
     )
-    await egress_prefer_proxy_delete(embedding_origin)
+
+    candidate = verified_records[0]
+    if provider != "huggingface":
+        embedding_origin = normalized_http_origin(
+            resolve_provider_openai_v1_base_url(get_settings().llm, provider)
+        )
+        await egress_prefer_proxy_delete(embedding_origin)
     dimension = await service.probe_embedding_dimension(provider, candidate.model_id)
-    assert isinstance(dimension, int) and dimension > 0
+    assert dimension == candidate.native_dimension
 
     storage_dimension = get_settings().rag.embedding.api.dimension
     verified = candidate.model_copy(
@@ -364,7 +396,68 @@ async def test_live_embedding_provider_probe_dimension_and_storage_policy(provid
         assert verified.storage_dimension is None
 
 
-async def test_live_provider_litserve_catalog_embeddings_and_rerank_work() -> None:
+async def test_live_openrouter_rerank_catalog_and_request_work() -> None:
+    cfg = _configured_provider("openrouter")
+    service = _live_model_service()
+
+    try:
+        records = await service.discover_model_records_by_provider("openrouter")
+    except httpx.HTTPStatusError as exc:
+        _skip_provider_rate_limit("openrouter", exc)
+        raise
+
+    rerank_records = [
+        record for record in records if AICapability.RERANK in record.capabilities
+    ]
+    assert rerank_records, "openrouter: catalog не дал ни одной rerank-модели"
+
+    last_status: int | None = None
+    headers = LLMModelsService._provider_model_list_headers("openrouter", cfg)
+    for record in rerank_records:
+        response = await request_with_strategy(
+            "POST",
+            "https://openrouter.ai/api/v1/rerank",
+            headers=headers,
+            json={
+                "model": record.model_id,
+                "query": "capital of France",
+                "documents": [
+                    "Paris is the capital of France.",
+                    "Berlin is the capital of Germany.",
+                ],
+                "top_n": 2,
+            },
+            timeout=60.0,
+            strategy=ProxyStrategy.DIRECT_FIRST,
+            direct_attempts=1,
+            proxy_attempts=1,
+        )
+        last_status = response.status_code
+        _skip_openrouter_post_route_issue(response)
+        if response.status_code != 200:
+            continue
+        body = require_json_object(
+            cast(JsonValue, response.json()),
+            "openrouter.rerank.response",
+        )
+        results = body.get("results")
+        assert isinstance(results, list) and results
+        first = require_json_object(
+            cast(JsonValue, results[0]),
+            "openrouter.rerank.response.results[0]",
+        )
+        score = first.get("relevance_score")
+        assert isinstance(score, (int, float)) and not isinstance(score, bool)
+        return
+
+    pytest.fail(f"openrouter: ни одна catalog rerank-модель не выполнила запрос; last_status={last_status}")
+
+
+@pytest.mark.timeout(180)
+async def test_live_provider_litserve_catalog_embeddings_and_rerank_work(
+    provider_litserve_service,
+) -> None:
+    _ = provider_litserve_service
     _ = _provider_litserve_base_url()
     service = _live_model_service()
 

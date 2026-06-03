@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Канон company AI providers: запреты на хардкоды и reintroduction удалённых символов.
+Канон AI provider/runtime слоя: запреты на хардкоды и обход ``core.ai``.
 
 Запускается через ``make check-company-ai`` (см. также pre-commit).
 
@@ -14,12 +14,15 @@
    "provider_litserve" | "custom_openai_compatible"``) в Python вне whitelist.
 
 3. Прямой вызов ``get_llm(`` в ``apps/**`` (кроме whitelist) — fail; требовать
-   ``resolve_llm_for_capability(...)``.
+   ``core.ai.runtime``.
 
 4. Хардкод vendor base_url (regex) вне ``core/clients/llm/**`` и ``core/config/**``.
 
 5. Reintroduction символов из чёрного списка (``is_llm_byok_override``,
    ``_default_rag_provider``, …).
+
+6. Старый provider catalog entrypoint ``core.ai_provider_catalog`` и прямой импорт
+   ``core.company_ai.resolver`` вне ``core.ai``/``core.company_ai`` запрещены.
 """
 
 from __future__ import annotations
@@ -70,6 +73,17 @@ _PROVIDER_LITERALS_RE = re.compile(
 
 
 _GET_LLM_CALL_RE = re.compile(r"\bget_llm\s*\(")
+_OLD_AI_PROVIDER_CATALOG_RE = re.compile(r"\bcore\.ai_provider_catalog\b")
+_DIRECT_COMPANY_AI_RESOLVER_RE = re.compile(
+    r"^\s*(from\s+core\.company_ai\.resolver\s+import|import\s+core\.company_ai\.resolver\b)",
+    re.MULTILINE,
+)
+_DIRECT_COMPANY_AI_RUNTIME_EXPORT_RE = re.compile(
+    r"^\s*from\s+core\.company_ai\s+import\b[^\n]*(resolve_llm_for_capability|"
+    r"resolve_embedding_for_company|resolve_rerank_for_company|resolve_voice_for_company|"
+    r"resolve_custom_llm_provider_ref|ResolvedLLM|ResolvedEmbedding|ResolvedRerank|ResolvedVoice)",
+    re.MULTILINE,
+)
 
 
 METADATA_KEY_RE = re.compile(
@@ -80,6 +94,7 @@ METADATA_KEY_RE = re.compile(
 
 
 PROVIDER_WHITELIST_PATHS = (
+    "core/ai/",
     "core/clients/llm/",
     "core/clients/voice_resolver.py",
     "core/clients/voice_resolver/",
@@ -88,7 +103,6 @@ PROVIDER_WHITELIST_PATHS = (
     "core/clients/speech_override.py",
     "core/clients/speech_provider_catalog.py",
     "core/clients/tts_pronunciation/",
-    "core/ai_provider_catalog.py",
     "core/app/server.py",
     "core/config/",
     "core/company_ai/",
@@ -131,10 +145,8 @@ PROVIDER_WHITELIST_PATHS = (
 
 
 GET_LLM_WHITELIST_PATHS = (
-    "core/",
-    "apps/flows/",
-    "apps/flows_worker/",
-    "apps/idle_worker/",
+    "core/ai/",
+    "core/clients/llm/",
     "scripts/",
     "tests/",
 )
@@ -159,6 +171,7 @@ VENDOR_URL_WHITELIST_PATHS = (
 
 
 METADATA_WHITELIST_PATHS = (
+    "core/ai/",
     "core/company_ai/",
     "scripts/",
     "tests/",
@@ -208,7 +221,7 @@ def main() -> int:
             for _ in _GET_LLM_CALL_RE.finditer(text):
                 failures.append(
                     f"{rel}: direct get_llm( call outside whitelist; "
-                    "use core.company_ai.resolve_llm_for_capability instead"
+                    "use core.ai.runtime instead"
                 )
 
         # 4. vendor base_url outside whitelist
@@ -233,6 +246,30 @@ def main() -> int:
                     failures.append(
                         f"{rel}: forbidden reintroduction of legacy symbol {sym!r}"
                     )
+
+        if _OLD_AI_PROVIDER_CATALOG_RE.search(text) and rel != "scripts/check_company_ai_canon.py":
+            failures.append(f"{rel}: forbidden old core.ai_provider_catalog import path")
+
+        if _DIRECT_COMPANY_AI_RESOLVER_RE.search(text) and not (
+            rel.startswith("core/ai/")
+            or rel.startswith("core/company_ai/")
+            or rel.startswith("tests/core/company_ai/")
+            or rel == "scripts/check_company_ai_canon.py"
+        ):
+            failures.append(
+                f"{rel}: direct core.company_ai.resolver import outside storage layer; "
+                "use core.ai.resolver"
+            )
+
+        if _DIRECT_COMPANY_AI_RUNTIME_EXPORT_RE.search(text) and not (
+            rel.startswith("core/company_ai/")
+            or rel.startswith("tests/core/company_ai/")
+            or rel == "scripts/check_company_ai_canon.py"
+        ):
+            failures.append(
+                f"{rel}: runtime resolver import from core.company_ai is forbidden; "
+                "use core.ai.resolver/core.ai.runtime"
+            )
 
     if failures:
         print("FAIL: company AI canon violations:")

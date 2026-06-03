@@ -16,6 +16,7 @@
 - sync_service: Sync сервис (порт 9005)
 - office_service: Documents/Office сервис (порт 9008)
 - search_service: Search MCP сервис (порт 9010)
+- provider_litserve_service: локальный OpenAI-compatible provider_litserve (порт 9014)
 - capability_gateway_service: capability gateway (порт 9016)
 - code_runner_python_service: Python runner (порт 9017)
 - code_runner_node_service: Node.js runner (порт 9018)
@@ -52,6 +53,9 @@ _OFFICE_SERVER_PID = "/tmp/platform_test_office_server.pid"
 _SEARCH_SERVER_LOCK = "/tmp/platform_test_search_server.lock"
 _SEARCH_SERVER_PID = "/tmp/platform_test_search_server.pid"
 
+_PROVIDER_LITSERVE_SERVER_LOCK = "/tmp/platform_test_provider_litserve_server.lock"
+_PROVIDER_LITSERVE_SERVER_PID = "/tmp/platform_test_provider_litserve_server.pid"
+
 _CAPABILITY_GATEWAY_SERVER_LOCK = "/tmp/platform_test_capability_gateway_server.lock"
 _CAPABILITY_GATEWAY_SERVER_PID = "/tmp/platform_test_capability_gateway_server.pid"
 
@@ -83,6 +87,7 @@ _COMMON_TEST_ENV = {
     "SERVER__SYNC_SERVICE_URL": "http://localhost:9005",
     "SERVER__SEARCH_SERVICE_URL": "http://localhost:9010",
     "SERVER__VOICE_SERVICE_URL": "http://localhost:9015",
+    "SERVER__PROVIDER_LITSERVE_SERVICE_URL": "http://localhost:9014",
     "SERVER__CAPABILITY_GATEWAY_SERVICE_URL": "http://localhost:9016",
     "SERVER__CODE_RUNNER_PYTHON_SERVICE_URL": "http://localhost:9017",
     "SERVER__CODE_RUNNER_NODE_SERVICE_URL": "http://localhost:9018",
@@ -108,6 +113,11 @@ _COMMON_TEST_ENV = {
     "RAG__ENABLED": "true",
     "RAG__DEFAULT_PROVIDER": "pgvector",
     "RAG__PROVIDERS__PGVECTOR__ENABLED": "true",
+    "RAG__EMBEDDING__PROVIDER": "provider_litserve",
+    "RAG__EMBEDDING__API__MODEL": "qwen/qwen3-embedding-0.6b",
+    "RAG__EMBEDDING__API__DIMENSION": "1024",
+    "RAG__EMBEDDING__API__MRL_OUTPUT_DIMENSION": "1024",
+    "PROVIDER_LITSERVE__API__BASE_URL": "http://localhost:9014/v1",
     "LLM__OPENROUTER__API_KEY": "sk-test-key",
 }
 
@@ -250,7 +260,7 @@ def sandbox_services(
 
 
 @pytest.fixture(scope="session")
-def rag_service():
+def rag_service(provider_litserve_service):
     """
     RAG сервис как реальный HTTP сервер на порту 9002.
 
@@ -262,8 +272,10 @@ def rag_service():
     Зависимости:
     - PostgreSQL (порт 54322) — для document_processing_status, namespaces, pgvector embeddings
     - MinIO (порт 19002) — для хранения файлов
+    - provider_litserve (порт 9014) — для embeddings/rerank HTTP
     - RAGWorker (должен быть запущен отдельно)
     """
+    _ = provider_litserve_service
     manager = SessionServerManager(
         name="RAG",
         lock_file=_RAG_SERVER_LOCK,
@@ -272,6 +284,34 @@ def rag_service():
         port=9002,
         startup_wait=18.0,
         env=_with_mock_llm_lane(_COMMON_TEST_ENV, "rag"),
+    )
+
+    with manager.start():
+        yield
+
+
+@pytest.fixture(scope="session")
+def provider_litserve_service():
+    """provider_litserve как реальный HTTP-сервис на порту 9014."""
+    manager = SessionServerManager(
+        name="ProviderLitserve",
+        lock_file=_PROVIDER_LITSERVE_SERVER_LOCK,
+        pid_file=_PROVIDER_LITSERVE_SERVER_PID,
+        app_path="apps.provider_litserve.main:app",
+        port=9014,
+        startup_wait=180.0,
+        log_file="/tmp/provider_litserve_server_test.log",
+        err_file="/tmp/provider_litserve_server_test_err.log",
+        env={
+            **_COMMON_TEST_ENV,
+            "PROVIDER_LITSERVE__API__BASE_URL": "http://localhost:9014/v1",
+            "PROVIDER_LITSERVE__INFRA__BACKEND": "placeholder",
+            "PROVIDER_LITSERVE__INFRA__ACCELERATOR": "cpu",
+            "PROVIDER_LITSERVE__INFRA__EMBEDDING_ACCELERATOR": "cpu",
+            "PROVIDER_LITSERVE__INFRA__RERANK_ACCELERATOR": "cpu",
+            "PROVIDER_LITSERVE__INFRA__GATEWAY_PORT": "9014",
+            "PROVIDER_LITSERVE__INFRA__SQLITE_PATH": "/tmp/platform_test_provider_litserve_registry.db",
+        },
     )
 
     with manager.start():
@@ -453,6 +493,7 @@ def all_services(
     sync_service,
     office_service,
     search_service,
+    provider_litserve_service,
 ):
     """
     Запускает все сервисы платформы.
@@ -467,7 +508,9 @@ def all_services(
     5. Sync (9005) - зависит от PostgreSQL и Redis
     6. Office (9008) - зависит от PostgreSQL, Redis, MinIO и OnlyOffice Document Server
     7. Search (9010) — основной MCP-поиск
+    8. ProviderLitserve (9014) — локальные embedding/rerank/speech модели
     """
+    _ = provider_litserve_service
     return {
         "flows": "http://localhost:9001",
         "rag": "http://localhost:9002",
@@ -476,6 +519,7 @@ def all_services(
         "sync": "http://localhost:9005",
         "office": "http://localhost:9008",
         "search": "http://localhost:9010",
+        "provider_litserve": "http://localhost:9014",
         "capability_gateway": "http://localhost:9016",
         "code_runner_python": "http://localhost:9017",
         "code_runner_node": "http://localhost:9018",

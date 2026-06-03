@@ -6,6 +6,8 @@
 
 from __future__ import annotations
 
+from core.ai.providers import AICapability
+from core.ai.resolver import ResolvedLLM, resolve_llm_for_capability
 from core.clients.llm.client import LLMClient
 from core.clients.llm.errors import LLMStreamIdleTimeoutError, LLMStreamUserCancelledError
 from core.clients.llm.messages import MessageInput, StreamEvent
@@ -24,8 +26,6 @@ from core.clients.llm.runtime import (
     setup_mock_responses,
     should_use_platform_default_free_pool,
 )
-from core.company_ai.resolver import ResolvedLLM, resolve_llm_for_capability
-from core.company_ai.schema import AICapability
 from core.config import get_settings
 from core.config.testing import is_testing as _is_testing
 

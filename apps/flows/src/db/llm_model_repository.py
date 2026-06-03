@@ -6,7 +6,7 @@
 from typing import ClassVar, override
 
 from apps.flows.src.models import LLMModel
-from core.ai_provider_catalog import AICapability
+from core.ai.providers import AICapability
 from core.db import BaseRepository, Storage
 
 

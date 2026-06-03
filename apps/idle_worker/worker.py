@@ -23,8 +23,7 @@ from taskiq import TaskiqState  # noqa: E402
 from apps.flows.config import get_settings  # noqa: E402
 from apps.idle_worker.broker import broker as worker_app, recovery_handler  # noqa: E402
 from apps.idle_worker.container import IdleWorkerContainer, get_container  # noqa: E402
-from core.clients.llm.factory import get_llm  # noqa: E402
-from core.clients.llm.mock import configure_mock_llm_redis  # noqa: E402
+from core.clients.llm.mock import configure_mock_llm_redis, get_or_create_global_mock_llm  # noqa: E402
 from core.config.testing import is_testing  # noqa: E402
 from core.logging import get_logger  # noqa: E402
 from core.tasks.broker import register_worker_events  # noqa: E402
@@ -80,7 +79,7 @@ async def idle_worker_startup(state: TaskiqState) -> None:
         logger.info("worker.tracing_initialized", service="idle_worker")
 
     if is_testing():
-        _ = get_llm("mock-gpt-4")
+        _ = get_or_create_global_mock_llm("mock-gpt-4")
         _ = configure_mock_llm_redis(container.redis_client)
         logger.info("worker.mock_llm_configured", service="idle_worker")
 

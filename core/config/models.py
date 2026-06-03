@@ -17,7 +17,7 @@ from pydantic import (
     model_validator,
 )
 
-from core.ai_provider_catalog import AICapability, validate_platform_provider_for_capability
+from core.ai.providers import AICapability, validate_platform_provider_for_capability
 from core.config.openai_v1_base_url import normalize_openai_v1_base_url
 from core.llm_model_routing import (
     GITHUB_MODELS_API_VERSION,
@@ -917,7 +917,7 @@ class RerankerRuntimeConfig(BaseModel):
 
     model_config: ClassVar[ConfigDict] = ConfigDict(extra="forbid")
 
-    provider: Literal["none", "provider_litserve"] = "provider_litserve"
+    provider: Literal["none", "provider_litserve", "openrouter"] = "provider_litserve"
     api: RerankerApiRuntimeConfig | None = Field(default_factory=RerankerApiRuntimeConfig)
     # Биллинг (как у embedding в pgvector): оценка по tiktoken, запись через BillingService
     cost_per_1m_tokens: float = 5.0
@@ -932,7 +932,7 @@ class RerankerRuntimeConfig(BaseModel):
 
     @property
     def base_url(self) -> str | None:
-        if self.provider != "provider_litserve" or self.api is None:
+        if self.provider == "none" or self.api is None:
             return None
         u = self.api.base_url
         if u is None or not str(u).strip():
@@ -941,7 +941,7 @@ class RerankerRuntimeConfig(BaseModel):
 
     @property
     def timeout_seconds(self) -> float:
-        if self.provider == "provider_litserve" and self.api is not None:
+        if self.provider != "none" and self.api is not None:
             return float(self.api.timeout_seconds)
         return 60.0
 
@@ -1748,7 +1748,7 @@ class LLMConfig(BaseModel):
     default_strategy: Literal["configured", "platform_free_pool"] = Field(
         default="platform_free_pool",
         description=(
-            "Как выбирать модель при get_llm() без model/provider: configured — "
+            "Как выбирать модель при LLM-вызове без model/provider: configured — "
             "settings.llm.default_model; platform_free_pool — Redis-кэш verified free "
             "моделей провайдеров + paid_fallback."
         ),

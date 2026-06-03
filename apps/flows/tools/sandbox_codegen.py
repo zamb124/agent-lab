@@ -3,36 +3,24 @@
 from __future__ import annotations
 
 import json
-from dataclasses import dataclass
 from typing import ClassVar
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from apps.flows.src.services.platform_facades import get_code_runner
 from apps.flows.src.tools.decorator import tool
+from core.ai.resolver import AICapability, ResolvedLLM, resolve_llm_for_capability
+from core.ai.runtime import create_llm_client
 from core.capabilities import CAPABILITY_LANGUAGES, CapabilityLanguage
-from core.clients.llm import get_llm
-from core.clients.llm.config import LLMCallConfig
+from core.clients.llm.model_routing import split_provider_prefixed_model
 from core.clients.service_client import ServiceClient
-from core.company_ai import AICapability, resolve_llm_for_capability
+from core.config import get_settings
 from core.errors import CodeExecutionRuntimeError
 from core.state import ExecutionState
 from core.types import JsonObject, JsonValue, parse_json_object, require_json_object
 
 _CAPABILITY_DOCUMENTATION_PATH = "/capability-gateway/api/v1/capabilities/documentation"
 _LANGUAGES = CAPABILITY_LANGUAGES
-
-
-@dataclass(frozen=True, slots=True)
-class CodegenLLMSelection:
-    selected_model: str
-    provider: str | None = None
-    api_key: str | None = None
-    base_url: str | None = None
-    folder_id: str | None = None
-    extra_request_headers: dict[str, str] | None = None
-    extra_request_body: JsonObject | None = None
-    fallback_models: tuple[LLMCallConfig, ...] | None = None
 
 
 class GeneratedCode(BaseModel):
@@ -166,28 +154,26 @@ def _execution_state_for_codegen(
     return base
 
 
-def _resolve_codegen_llm_selection(model: str) -> CodegenLLMSelection:
+def _resolve_codegen_llm_selection(model: str) -> ResolvedLLM:
     resolved = resolve_llm_for_capability(
         AICapability.LLM_CODEGEN,
         include_platform_default=True,
     )
     if resolved is not None:
-        return CodegenLLMSelection(
-            selected_model=resolved.model,
-            provider=resolved.provider,
-            api_key=resolved.api_key,
-            base_url=resolved.base_url,
-            folder_id=resolved.folder_id,
-            extra_request_headers=resolved.extra_request_headers,
-            extra_request_body=resolved.extra_request_body,
-            fallback_models=resolved.fallback_models,
-        )
+        return resolved
     selected_model = model.strip() if model and model.strip() else ""
     if not selected_model:
         raise ValueError(
             "sandbox_codegen: platform default для capability=llm_codegen не настроен."
         )
-    return CodegenLLMSelection(selected_model=selected_model)
+    explicit_provider, explicit_model = split_provider_prefixed_model(None, selected_model)
+    resolved_model = str(explicit_model or selected_model).strip()
+    if not resolved_model:
+        raise ValueError("sandbox_codegen: model не удалось разобрать в непустую модель")
+    provider = explicit_provider or str(get_settings().llm.provider).strip()
+    if not provider:
+        raise ValueError("sandbox_codegen: settings.llm.provider обязателен для явной model")
+    return ResolvedLLM(provider=provider, model=resolved_model)
 
 
 def _state_json(state: ExecutionState) -> JsonObject:
@@ -224,18 +210,11 @@ async def sandbox_codegen(
         raise ValueError(f"Unsupported language: {language}")
     entrypoint_name = entrypoint.strip() if entrypoint is not None and entrypoint.strip() else None
     exec_state = _execution_state_for_codegen(state, run_variables)
-    llm_selection = _resolve_codegen_llm_selection(model)
+    resolved_llm = _resolve_codegen_llm_selection(model)
     docs = await _language_docs(capability_language, max_doc_chars)
-    llm = get_llm(
-        model_name=llm_selection.selected_model,
-        provider=llm_selection.provider,
-        api_key=llm_selection.api_key,
-        base_url=llm_selection.base_url,
-        folder_id=llm_selection.folder_id,
+    llm = create_llm_client(
+        resolved_llm,
         state=exec_state,
-        fallback_models=llm_selection.fallback_models,
-        extra_request_body=llm_selection.extra_request_body,
-        extra_request_headers=llm_selection.extra_request_headers,
     )
     runner = get_code_runner(language=capability_language)
     args: JsonObject = dict(run_args) if run_args is not None else {}
@@ -264,7 +243,7 @@ async def sandbox_codegen(
                 {"role": "user", "content": "\n\n".join(user_parts)},
             ],
             response_model=GeneratedCode,
-            model=llm_selection.selected_model,
+            model=resolved_llm.model,
         )
         last_code = generated.code.strip()
         try:

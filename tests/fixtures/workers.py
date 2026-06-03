@@ -290,7 +290,12 @@ class SessionWorkerManager:
             "DATABASE__FLOWS_URL",
             "SERVER__OFFICE_SERVICE_URL",
             "SERVER__SEARCH_SERVICE_URL",
+            "SERVER__PROVIDER_LITSERVE_SERVICE_URL",
             "SERVER__DOCUMENT_SERVER_DEV_UPSTREAM_URL",
+            "PROVIDER_LITSERVE__API__BASE_URL",
+            "RAG__EMBEDDING__PROVIDER",
+            "RAG__EMBEDDING__API__MODEL",
+            "RAG__EMBEDDING__API__DIMENSION",
             "MOCK_LLM_REDIS_KEY",
         )
         try:
@@ -553,7 +558,7 @@ def taskiq_worker(sandbox_services):
 
 
 @pytest.fixture(scope="session")
-def rag_worker():
+def rag_worker(provider_litserve_service):
     """
     Запускает RAGWorker для обработки RAG задач в тестах.
 
@@ -564,6 +569,7 @@ def rag_worker():
     При pytest-xdist используется filelock для синхронизации -
     первый worker запускает RAGWorker, остальные ждут и переиспользуют его.
     """
+    _ = provider_litserve_service
     manager = SessionWorkerManager(
         name="RAGWorker",
         lock_file=_RAG_WORKER_LOCK,
@@ -576,6 +582,12 @@ def rag_worker():
             "TASKS__BROKER_URL": "redis://localhost:63792/1",
             "AUTH__PERMISSIONS_ENABLED": "false",
             "MOCK_LLM_REDIS_KEY": "mock_llm:responses:rag",
+            "SERVER__PROVIDER_LITSERVE_SERVICE_URL": "http://localhost:9014",
+            "RAG__EMBEDDING__PROVIDER": "provider_litserve",
+            "RAG__EMBEDDING__API__MODEL": "qwen/qwen3-embedding-0.6b",
+            "RAG__EMBEDDING__API__DIMENSION": "1024",
+            "RAG__EMBEDDING__API__MRL_OUTPUT_DIMENSION": "1024",
+            "PROVIDER_LITSERVE__API__BASE_URL": "http://localhost:9014/v1",
             "S3__DEFAULT_BUCKET": "test-bucket",
             "S3__BUCKETS__TEST-BUCKET__ENDPOINT_URL": "http://localhost:19002",
         },

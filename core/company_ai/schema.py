@@ -4,15 +4,15 @@
 Единый источник правды для:
 - LLM (chat / summarize / format_markdown / codegen / vision / image_gen) — выбор провайдера и BYOK
 - Embedding (RAG) — выбор провайдера
-- Rerank (RAG) — политика
+- Rerank (RAG) — provider/model override
 - Voice STT / TTS / VAD — провайдер и секреты
 
 Кастомные OpenAI-совместимые провайдеры компании (vLLM / Ollama / прокси / шлюз) хранятся в
 ``custom_providers`` с уникальным slug-id; capability override может ссылаться на них как
 ``provider="custom:<id>"``.
 
-Список платформенных провайдеров — единственный источник правды:
-``core.clients.llm.model_routing.PLATFORM_LLM_PROVIDER_ORDER``.
+Список платформенных AI-провайдеров — единственный источник правды:
+``core.ai.providers``.
 """
 
 from __future__ import annotations
@@ -21,9 +21,7 @@ from typing import Annotated, ClassVar, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
-from core.ai_provider_catalog import (
-    PROVIDER_LITSERVE,
-    RERANK_POLICY_INHERIT,
+from core.ai.providers import (
     RERANK_POLICY_NONE,
     AICapability,
     validate_platform_provider_for_capability,
@@ -242,33 +240,58 @@ class CompanyEmbeddingOverride(BaseModel):
 
 
 class CompanyRerankOverride(BaseModel):
-    """Политика реранка компании.
-
-    ``policy``:
-
-    - ``inherit`` — использовать глобальный ``rag.reranker``.
-    - ``none`` — реранк выключен для запросов компании.
-    - ``provider_litserve`` — принудительно LitServe (URL берётся из ``provider_litserve.api.base_url``).
-    - ``custom:<id>`` — кастомный провайдер с заданным ``rerank_path``.
-    """
+    """Override rerank capability компании: provider + model + BYOK/custom."""
 
     model_config: ClassVar[ConfigDict] = ConfigDict(extra="forbid")
 
-    policy: str
+    provider: str
+    model: str | None = None
+    api_key_encrypted: str | None = None
+    base_url: str | None = None
+    extra_request_headers: dict[str, str] | None = None
 
-    @field_validator("policy")
+    @field_validator("provider")
     @classmethod
-    def _v_policy(cls, v: str) -> str:
+    def _v_provider(cls, v: str) -> str:
         s = v.strip()
-        if s in (RERANK_POLICY_INHERIT, RERANK_POLICY_NONE):
+        if s == RERANK_POLICY_NONE:
             return s
         if _is_custom_ref(s):
             return _validate_provider_ref(s, allow_custom=True)
-        if s == PROVIDER_LITSERVE:
-            return validate_platform_provider_for_capability(s, AICapability.RERANK)
-        raise ValueError(
-            f"rerank.policy {v!r}: ожидается inherit | none | {PROVIDER_LITSERVE} | custom:<id>"
-        )
+        return validate_platform_provider_for_capability(s, AICapability.RERANK)
+
+    @field_validator("model")
+    @classmethod
+    def _v_model(cls, v: str | None) -> str | None:
+        if v is None:
+            return None
+        s = v.strip()
+        return s or None
+
+    @field_validator("base_url")
+    @classmethod
+    def _v_base_url(cls, v: str | None) -> str | None:
+        if v is None:
+            return None
+        s = v.strip()
+        if not s:
+            return None
+        if not (s.startswith("http://") or s.startswith("https://")):
+            raise ValueError("rerank.base_url должен начинаться с http:// или https://")
+        return s
+
+    @model_validator(mode="after")
+    def _v_consistency(self) -> "CompanyRerankOverride":
+        if self.provider == RERANK_POLICY_NONE:
+            if self.model or self.api_key_encrypted or self.base_url or self.extra_request_headers:
+                raise ValueError("rerank provider=none не принимает model/api_key/base_url/headers")
+            return self
+        if not self.model:
+            raise ValueError("rerank.model обязателен для включённого provider")
+        if _is_custom_ref(self.provider):
+            if self.api_key_encrypted or self.base_url or self.extra_request_headers:
+                raise ValueError("Для rerank provider=custom:<id> поля BYOK не используются")
+        return self
 
 
 class CompanyVoiceOverride(BaseModel):
@@ -406,9 +429,9 @@ class CompanyAIProviders(BaseModel):
                 self.embedding.provider, capability="embedding", custom_index=custom_index
             )
         if self.rerank is not None:
-            pol = self.rerank.policy
-            if _is_custom_ref(pol):
-                self._check_provider_ref(pol, capability="rerank", custom_index=custom_index)
+            ref = self.rerank.provider
+            if _is_custom_ref(ref):
+                self._check_provider_ref(ref, capability="rerank", custom_index=custom_index)
         for cap, ov_v in (("voice_stt", self.voice_stt), ("voice_tts", self.voice_tts)):
             if ov_v is None:
                 continue

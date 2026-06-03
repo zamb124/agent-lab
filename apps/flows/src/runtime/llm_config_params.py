@@ -1,4 +1,4 @@
-"""Параметры вызова LLM из NodeLLMConfig для get_llm / LLMClient.stream."""
+"""Параметры вызова LLM из NodeLLMConfig для billing и LLMClient.stream."""
 
 from __future__ import annotations
 
@@ -24,25 +24,6 @@ class LLMStreamKwargs(TypedDict, total=False):
     extra_headers: dict[str, str]
 
 
-class LLMClientKwargs(TypedDict, total=False):
-    model_name: str | None
-    temperature: float | None
-    provider: str | None
-    api_key: str | None
-    base_url: str | None
-    folder_id: str | None
-    max_tokens: int | None
-    fallback_models: list[LLMCallConfig] | None
-    top_p: float | None
-    top_k: int | None
-    frequency_penalty: float | None
-    presence_penalty: float | None
-    seed: int | None
-    reasoning_effort: ReasoningEffort | None
-    extra_request_body: JsonObject | None
-    extra_request_headers: dict[str, str] | None
-
-
 def split_llm_config_for_client(
     config: NodeLLMConfig | None,
 ) -> tuple[
@@ -55,7 +36,7 @@ def split_llm_config_for_client(
     str | None,
     list[LLMCallConfig] | None,
 ]:
-    """Поля для get_llm / get_llm_for_state."""
+    """Поля для billing/free-pool inspection."""
     if not config:
         return None, None, None, None, None, None, None, None
     return (
@@ -96,41 +77,6 @@ def stream_kwargs_from_llm_config(config: NodeLLMConfig | None) -> LLMStreamKwar
             config.extra_request_body,
             "llm.extra_request_body",
         )
-    return out
-
-
-def client_kwargs_from_llm_config(
-    config: NodeLLMConfig | None,
-    state: ExecutionState | None,
-) -> LLMClientKwargs:
-    """Arguments for get_llm/get_llm_for_state from the full LLM config."""
-    if not config:
-        return {}
-    out: LLMClientKwargs = {
-        "model_name": config.model,
-        "temperature": config.temperature,
-        "provider": config.provider,
-        "api_key": config.api_key,
-        "base_url": config.base_url,
-        "folder_id": config.folder_id,
-        "max_tokens": config.max_tokens,
-        "fallback_models": config.fallback_models,
-        "top_p": config.top_p,
-        "top_k": config.top_k,
-        "frequency_penalty": config.frequency_penalty,
-        "presence_penalty": config.presence_penalty,
-        "seed": config.seed,
-        "reasoning_effort": config.reasoning_effort,
-        "extra_request_body": (
-            require_json_object(config.extra_request_body, "llm.extra_request_body")
-            if config.extra_request_body
-            else None
-        ),
-    }
-    if config.extra_request_headers:
-        out["extra_request_headers"] = {
-            k: _resolve_str_var(v, state) for k, v in config.extra_request_headers.items()
-        }
     return out
 
 

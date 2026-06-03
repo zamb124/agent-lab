@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
+from core.ai.providers import AICapability
 from core.clients.llm.model_routing import HUMANITEC_LLM_AUTO_MODEL, HUMANITEC_LLM_PROVIDER
-from core.company_ai.schema import AICapability
 from core.config import get_settings
 
 _LLM_CAPABILITIES: frozenset[AICapability] = frozenset(

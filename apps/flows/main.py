@@ -52,8 +52,10 @@ from apps.flows.src.tasks.flow_tasks import process_flow_task  # noqa: E402
 from apps.flows.src.triggers.dev_polling import start_dev_polling, stop_dev_polling  # noqa: E402
 from core.api.integrations import set_flow_resume_handler  # noqa: E402
 from core.app import create_service_app  # noqa: E402
-from core.clients.llm.factory import get_llm  # noqa: E402
-from core.clients.llm.mock import configure_mock_llm_redis  # noqa: E402
+from core.clients.llm.mock import (  # noqa: E402
+    configure_mock_llm_redis,
+    get_or_create_global_mock_llm,
+)
 from core.config.testing import is_testing  # noqa: E402
 from core.context import clear_context, set_context  # noqa: E402
 from core.files.writer import FileWriter  # noqa: E402
@@ -246,7 +248,7 @@ async def on_startup(_app: FastAPI, container: FlowContainer, settings: FlowSett
     if is_testing():
         logger.info("Пропускаем синхронизацию LLM моделей (TESTING)")
 
-        _ = get_llm("mock-gpt-4")
+        _ = get_or_create_global_mock_llm("mock-gpt-4")
         _ = configure_mock_llm_redis(container.redis_client)
         logger.info("MockLLM: очередь ответов из Redis (как в TaskIQ worker)")
 

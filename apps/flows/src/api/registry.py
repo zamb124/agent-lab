@@ -15,8 +15,9 @@ from apps.flows.src.models.registry_contracts import (
     RegistrySchemaSubflow,
 )
 from apps.flows.src.services.flows_loader import get_all_flows
+from core.ai.providers import AICapability
 from core.clients.llm.model_routing import HUMANITEC_LLM_PROVIDER, HUMANITEC_LLMS_DISPLAY_LABEL
-from core.company_ai import CUSTOM_PROVIDER_REF_PREFIX, AICapability, CompanyAIProviders
+from core.company_ai import CUSTOM_PROVIDER_REF_PREFIX, CompanyAIProviders
 from core.context import get_context
 from core.frontend.viewport import PLATFORM_MOBILE_VIEWPORT_CONTENT
 from core.logging import get_logger

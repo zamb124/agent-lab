@@ -51,10 +51,7 @@ from apps.flows.src.runtime.effective_llm_config import (
 )
 from apps.flows.src.runtime.exception_policy import should_absorb_exception
 from apps.flows.src.runtime.exceptions import FlowInterrupt
-from apps.flows.src.runtime.llm_config_params import (
-    client_kwargs_from_llm_config,
-    split_llm_config_for_client,
-)
+from apps.flows.src.runtime.llm_config_params import split_llm_config_for_client
 from apps.flows.src.runtime.llm_context_memory import (
     RuntimeMemoryWriteCommand,
     RuntimeMemoryWriteResult,
@@ -74,6 +71,8 @@ from apps.flows.src.streaming import BaseEmitter, Emitter
 from apps.flows.src.streaming.ui_events import emit_pending_ui_events
 from apps.flows.src.tools.base import BaseTool, OpenAIToolSchema, ToolArguments, sanitize_tool_name
 from apps.flows.src.variables import VariableResolver
+from core.ai.resolver import COST_ORIGIN_COMPANY
+from core.ai.runtime import create_llm_client_from_call_config
 from core.billing import get_cbr_usd_to_rub_rate
 from core.billing.service import BALANCE_BLOCK_OPERATION_LLM
 from core.clients.llm import (
@@ -83,10 +82,8 @@ from core.clients.llm import (
     LLMToolCall,
     MockLLM,
     StreamEvent,
-    get_llm_for_state,
     should_use_platform_default_free_pool,
 )
-from core.company_ai import COST_ORIGIN_COMPANY
 from core.config import get_settings
 from core.config.testing import is_testing
 from core.context import get_context
@@ -1231,10 +1228,10 @@ class LlmNodeRunner(BaseLlmNodeRunner):
     ) -> tuple[LLMClient | MockLLM, int | None]:
         llm_config = effective_llm.config
         max_tok = llm_config.max_tokens
-        client_kwargs = client_kwargs_from_llm_config(llm_config, state)
-        llm = get_llm_for_state(
-            state,
-            **client_kwargs,
+        llm = create_llm_client_from_call_config(
+            llm_config,
+            state=state,
+            fallback_models=llm_config.fallback_models,
             allow_platform_paid_fallback=allow_platform_paid_fallback,
         )
         return llm, max_tok

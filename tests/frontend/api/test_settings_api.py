@@ -22,16 +22,55 @@ class TestSettingsAPI:
     ):
         """Получение профиля компании и снимка AI-провайдеров (раздельные роутеры)."""
         from apps.flows.src.models import LLMModel
-        from core.ai_provider_catalog import AICapability
+        from core.ai.providers import AICapability
 
         openrouter_model_id = f"unit/openrouter-settings-{unique_id}"
         groq_model_id = f"unit-groq-settings-{unique_id}"
+        vision_model_id = f"unit/vision-settings-{unique_id}"
+        image_model_id = f"unit/image-settings-{unique_id}"
         embedding_model_id = f"unit/embedding-settings-{unique_id}"
+        rerank_model_id = f"unit/rerank-settings-{unique_id}"
         await frontend_container.flows_llm_model_repository.set(
-            LLMModel(model_id=openrouter_model_id, provider="openrouter")
+            LLMModel(
+                model_id=openrouter_model_id,
+                provider="openrouter",
+                capabilities=(
+                    AICapability.LLM_CHAT,
+                    AICapability.LLM_SUMMARIZE,
+                    AICapability.LLM_FORMAT_MARKDOWN,
+                    AICapability.LLM_CODEGEN,
+                ),
+            )
         )
         await frontend_container.flows_llm_model_repository.set(
-            LLMModel(model_id=groq_model_id, provider="groq")
+            LLMModel(
+                model_id=groq_model_id,
+                provider="groq",
+                capabilities=(
+                    AICapability.LLM_CHAT,
+                    AICapability.LLM_SUMMARIZE,
+                    AICapability.LLM_FORMAT_MARKDOWN,
+                    AICapability.LLM_CODEGEN,
+                ),
+            )
+        )
+        await frontend_container.flows_llm_model_repository.set(
+            LLMModel(
+                model_id=vision_model_id,
+                provider="openrouter",
+                capabilities=(AICapability.LLM_VISION,),
+                input_modalities=("text", "image"),
+                output_modalities=("text",),
+            )
+        )
+        await frontend_container.flows_llm_model_repository.set(
+            LLMModel(
+                model_id=image_model_id,
+                provider="openrouter",
+                capabilities=(AICapability.IMAGE_GEN,),
+                input_modalities=("text",),
+                output_modalities=("image",),
+            )
         )
         await frontend_container.flows_llm_model_repository.set(
             LLMModel(
@@ -43,6 +82,15 @@ class TestSettingsAPI:
                 native_dimension=1024,
                 storage_dimension=1024,
                 metadata_status="verified",
+            )
+        )
+        await frontend_container.flows_llm_model_repository.set(
+            LLMModel(
+                model_id=rerank_model_id,
+                provider="openrouter",
+                capabilities=(AICapability.RERANK,),
+                input_modalities=("text",),
+                output_modalities=("scores",),
             )
         )
 
@@ -93,9 +141,20 @@ class TestSettingsAPI:
         }
         openrouter_item = next(item for item in prov_items if item["value"] == "openrouter")
         assert {"value": openrouter_model_id, "label": openrouter_model_id, "kind": "provider_model"} in openrouter_item["models"]
+        assert {"value": vision_model_id, "label": vision_model_id, "kind": "provider_model"} not in openrouter_item["models"]
         groq_item = next(item for item in prov_items if item["value"] == "groq")
         assert {"value": groq_model_id, "label": groq_model_id, "kind": "provider_model"} in groq_item["models"]
         assert any(p.get("kind") == "platform" for p in prov_items)
+        vision_providers = body["catalog"]["llm_vision"]
+        vision_openrouter = next(item for item in vision_providers if item["value"] == "openrouter")
+        assert {"value": vision_model_id, "label": vision_model_id, "kind": "provider_model"} in vision_openrouter["models"]
+        assert {"value": openrouter_model_id, "label": openrouter_model_id, "kind": "provider_model"} not in vision_openrouter["models"]
+        image_providers = body["catalog"]["image_gen"]
+        image_openrouter = next(item for item in image_providers if item["value"] == "openrouter")
+        assert {"value": image_model_id, "label": image_model_id, "kind": "provider_model"} in image_openrouter["models"]
+        rerank_providers = body["catalog"]["rerank"]
+        rerank_openrouter = next(item for item in rerank_providers if item["value"] == "openrouter")
+        assert {"value": rerank_model_id, "label": rerank_model_id, "kind": "provider_model"} in rerank_openrouter["models"]
         embedding_providers = body["catalog"]["embedding"]
         embedding_provider_values = {item["value"] for item in embedding_providers}
         assert "provider_litserve" in embedding_provider_values
@@ -217,7 +276,7 @@ class TestSettingsAPI:
     ):
         """Embedding override stores provider, model and storage dimension from the shared catalog."""
         from apps.flows.src.models import LLMModel
-        from core.ai_provider_catalog import AICapability
+        from core.ai.providers import AICapability
         from core.company_ai import CompanyAIProviders
         from core.utils.tokens import get_token_service
 
@@ -263,7 +322,7 @@ class TestSettingsAPI:
     ):
         """Embedding models cannot be saved with dimensions that differ from pgvector storage policy."""
         from apps.flows.src.models import LLMModel
-        from core.ai_provider_catalog import AICapability
+        from core.ai.providers import AICapability
 
         model_id = "qwen/qwen3-embedding-0.6b"
         await frontend_container.flows_llm_model_repository.set(
@@ -288,6 +347,47 @@ class TestSettingsAPI:
 
         assert response.status_code == 400
         assert "dimension=768" in response.json()["detail"]
+
+    async def test_ai_provider_rerank_saves_provider_model_override(
+        self,
+        frontend_client: AsyncClient,
+        auth_headers,
+        frontend_container,
+    ):
+        """Rerank override is a provider/model capability override, not a policy string."""
+        from apps.flows.src.models import LLMModel
+        from core.ai.providers import AICapability
+        from core.company_ai import CompanyAIProviders
+        from core.utils.tokens import get_token_service
+
+        token_service = get_token_service()
+        token_data = token_service.validate_token(auth_headers["Authorization"].replace("Bearer ", ""))
+        company_id = token_data.company_id
+        model_id = "unit/rerank-model"
+        await frontend_container.flows_llm_model_repository.set(
+            LLMModel(
+                model_id=model_id,
+                provider="openrouter",
+                capabilities=(AICapability.RERANK,),
+                output_modalities=("scores",),
+            )
+        )
+
+        response = await frontend_client.put(
+            "/frontend/api/settings/ai-providers/rerank",
+            headers=auth_headers,
+            json={
+                "provider": "openrouter",
+                "model": model_id,
+            },
+        )
+
+        assert response.status_code == 200
+        company = await frontend_container.company_repository.get(company_id)
+        aip = CompanyAIProviders.from_metadata(company.metadata or {})
+        assert aip.rerank is not None
+        assert aip.rerank.provider == "openrouter"
+        assert aip.rerank.model == model_id
 
     async def test_ai_providers_accept_user_company_admin_role_when_company_members_stale(
         self,

@@ -35,10 +35,10 @@ from pptx import Presentation as raw_presentation
 from striprtf.striprtf import rtf_to_text
 from unstructured.partition.auto import partition as raw_partition
 
+from core.ai.resolver import COST_ORIGIN_COMPANY
 from core.billing import get_billing_service
 from core.billing.service import BALANCE_BLOCK_OPERATION_VISION
 from core.clients.llm.factory import create_vision_llm, resolve_vision_llm
-from core.company_ai import COST_ORIGIN_COMPANY
 from core.context import get_context
 from core.files.checksum import compute_content_checksum_sha256
 from core.files.file_ref import FileRef, FileRefSource, file_id_from_download_url

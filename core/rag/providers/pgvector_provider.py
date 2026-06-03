@@ -36,7 +36,7 @@ from sqlalchemy.ext.asyncio import (
 )
 from sqlalchemy.sql.elements import ColumnElement
 
-from core.ai_provider_catalog import PROVIDER_LITSERVE
+from core.ai.providers import PROVIDER_LITSERVE
 from core.config import get_settings
 from core.config.llm_openai_compat import (
     llm_provider_block,

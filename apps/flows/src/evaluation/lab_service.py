@@ -142,10 +142,10 @@ from apps.flows.src.models.node_config import NodeConfig
 from apps.flows.src.registry.nodes import NodeRegistry
 from apps.flows.src.services.flow_factory import FlowFactory
 from apps.flows.src.tasks.task_names import TASK_EXECUTE_EVALUATION_RUN
+from core.ai.resolver import COST_ORIGIN_COMPANY, AICapability, resolve_llm_for_capability
+from core.ai.runtime import create_llm_client
 from core.billing import get_billing_service
 from core.billing.service import BALANCE_BLOCK_OPERATION_LLM
-from core.clients.llm import get_llm
-from core.company_ai import COST_ORIGIN_COMPANY, AICapability, resolve_llm_for_capability
 from core.context import get_context, require_active_company
 from core.llm_context import LLMContextPatch
 from core.logging import get_logger
@@ -3883,15 +3883,7 @@ class EvaluationLabService:
             include_platform_default=True,
         )
         assert resolved is not None
-        llm = get_llm(
-            model_name=resolved.model,
-            provider=resolved.provider,
-            api_key=resolved.api_key,
-            base_url=resolved.base_url,
-            folder_id=resolved.folder_id,
-            extra_request_headers=resolved.extra_request_headers,
-            extra_request_body=resolved.extra_request_body,
-        )
+        llm = create_llm_client(resolved)
         if resolved.cost_origin != COST_ORIGIN_COMPANY:
             await get_billing_service().require_balance_for_billable_operation(
                 actx.active_company.company_id,
@@ -4084,15 +4076,7 @@ class EvaluationLabService:
             include_platform_default=True,
         )
         assert resolved is not None
-        llm = get_llm(
-            model_name=resolved.model,
-            provider=resolved.provider,
-            api_key=resolved.api_key,
-            base_url=resolved.base_url,
-            folder_id=resolved.folder_id,
-            extra_request_headers=resolved.extra_request_headers,
-            extra_request_body=resolved.extra_request_body,
-        )
+        llm = create_llm_client(resolved)
         if resolved.cost_origin != COST_ORIGIN_COMPANY:
             await get_billing_service().require_balance_for_billable_operation(
                 actx.active_company.company_id,
