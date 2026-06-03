@@ -10,6 +10,10 @@
 {% set ask_ai_title = config.extra.ask_ai_title | d("Ask AI", true) %}
 {% set ask_ai_aria_label = config.extra.ask_ai_aria_label | d(ask_ai_title, true) %}
 {% set llms_title = config.extra.llms_title | d("LLMs.txt", true) %}
+{% set nav_docs_title = config.extra.nav_docs_title | d("Documentation", true) %}
+{% set nav_quickstart_title = config.extra.nav_quickstart_title | d("Quickstart", true) %}
+{% set nav_api_title = config.extra.nav_api_title | d("API Reference", true) %}
+{% set nav_instructions_title = config.extra.nav_instructions_title | d("Instructions", true) %}
 <header class="{{ class }}" data-md-component="header">
   <nav class="md-header__inner md-grid" aria-label="{{ lang.t('header') }}">
     <a href="{{ docs_home | url }}" title="{{ config.site_name | e }}" class="md-header__button md-logo docs-brand-logo" aria-label="{{ config.site_name }}" data-md-component="logo">
@@ -48,10 +52,10 @@
       </div>
     </div>
     <nav class="docs-top-nav" aria-label="Documentation sections">
-      <a href="{{ docs_home | url }}">Documentation</a>
-      <a href="{{ 'quickstart/' | url }}">Quickstart</a>
-      <a href="{{ 'api/' | url }}">API Reference</a>
-      <a href="{{ 'scenarios/' | url }}">Scenarios</a>
+      <a href="{{ docs_home | url }}">{{ nav_docs_title }}</a>
+      <a href="{{ 'quickstart/' | url }}">{{ nav_quickstart_title }}</a>
+      <a href="{{ 'api/' | url }}">{{ nav_api_title }}</a>
+      <a href="{{ 'scenarios/' | url }}">{{ nav_instructions_title }}</a>
     </nav>
     {% if config.theme.palette %}
       {% if not config.theme.palette is mapping %}

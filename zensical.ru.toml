@@ -21,6 +21,10 @@ extra_javascript = [
 [project.extra]
 homepage = "/"
 platform_home_title = "На главную"
+nav_docs_title = "Документация"
+nav_quickstart_title = "Быстрый старт"
+nav_api_title = "API"
+nav_instructions_title = "Инструкции"
 ask_ai_title = "Ask AI"
 ask_ai_aria_label = "Открыть AI-помощника по документации"
 llms_title = "LLMs.txt"

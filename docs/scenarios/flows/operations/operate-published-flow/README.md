@@ -36,4 +36,4 @@
 
 ## Что было не покрыто раньше
 
-До этого в документации были сценарии создания flow, добавления LLM-ноды, редактирования и Evaluation Lab. Не хватало операционного сценария, который связывает publish, preview, triggers, observability, durable history и evaluation в один ежедневный рабочий цикл.
+До этого в документации были инструкции создания flow, добавления LLM-ноды, редактирования и Evaluation Lab. Не хватало операционной инструкции, которая связывает publish, preview, triggers, observability, durable history и evaluation в один ежедневный рабочий цикл.

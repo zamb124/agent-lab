@@ -382,6 +382,17 @@ title: {json.dumps("API" if lang == "en" else "API", ensure_ascii=False)}
             # Добавляем в индекс
             service_title = _brand_display_text(schema.get("info", {}).get("title", service_name.title()))
             service_description = _brand_display_text(" ".join(schema.get("info", {}).get("description", "").split()))
+            if service_name == "flows":
+                service_title = "Flows A2A API"
+                service_description = (
+                    "A2A интеграция с flows: token, авторизация, message/send, streaming, tasks, "
+                    "branches, variables и files."
+                    if lang == "ru"
+                    else (
+                        "A2A integration with flows: token, authorization, message/send, streaming, tasks, "
+                        "branches, variables, and files."
+                    )
+                )
             if not service_description:
                 service_description = (
                     "Автосгенерированная справка по публичным эндпоинтам сервиса."

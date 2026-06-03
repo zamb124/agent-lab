@@ -1,8 +1,8 @@
 ---
 title: Documentation (EN)
-description: Overview and scenario links.
+description: Overview and instruction links.
 ---
 
 Welcome to the Humanitec documentation in English.
 
-End-to-end UI scenarios in English: **[E2E scenarios](../scenarios/)** (only tests with `title_en` / `description_en`).
+End-to-end UI instructions in English: **[E2E instructions](../scenarios/)** (only tests with `title_en` / `description_en`).

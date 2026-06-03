@@ -1,8 +1,8 @@
-"""Post-process built documentation HTML.
+"""Post-process built documentation files.
 
 Zensical falls back to folder slugs for some intermediate navigation groups.
 Keep URLs stable (`/scenarios/crm/`) while exposing the product brand as
-NetWorkle in generated navigation.
+NetWorkle and product terms in generated navigation/search metadata.
 """
 
 from __future__ import annotations
@@ -13,12 +13,14 @@ REPLACEMENTS_RU = {
     "Crm settings hub": "NetWorkle: хаб настроек",
     "Crm shell": "NetWorkle: оболочка записной книжки",
     "Crm": "NetWorkle",
+    "Scenarios": "Инструкции",
 }
 
 REPLACEMENTS_EN = {
     "Crm settings hub": "NetWorkle: settings hub",
     "Crm shell": "NetWorkle: notebook shell",
     "Crm": "NetWorkle",
+    "Scenarios": "Instructions",
 }
 
 
@@ -38,8 +40,9 @@ def main() -> None:
     root = Path("documentation-dist")
     if not root.is_dir():
         return
-    changed = sum(1 for path in root.rglob("*.html") if _postprocess_html(path))
-    print(f"docs postprocess: updated {changed} html files")
+    paths = [*root.rglob("*.html"), *root.rglob("search.json")]
+    changed = sum(1 for path in paths if _postprocess_html(path))
+    print(f"docs postprocess: updated {changed} files")
 
 
 if __name__ == "__main__":

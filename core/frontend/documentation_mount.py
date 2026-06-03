@@ -23,15 +23,16 @@ def mount_documentation_static(
     """
     Регистрирует GET /documentation -> 307 на /documentation/ и mount StaticFiles на /documentation/.
     Если gateway_prefix задан (например \"frontend\" для ingress), дублирует на /{prefix}/documentation/.
-    Если каталога documentation-dist/ нет — ничего не монтирует (предупреждение в лог).
+    Если каталога documentation-dist/ ещё нет, route всё равно регистрируется: make doc пересоздаёт
+    этот каталог уже после старта dev-сервера.
     """
     dist = repo_root / DOCUMENTATION_DIST
     if not dist.is_dir():
         logger.warning(
-            "Каталог %s/ не найден (make doc: zensical.ru.toml + zensical.en.toml), URL /documentation недоступен",
+            "Каталог %s/ не найден (make doc: zensical.ru.toml + zensical.en.toml), "
+            "URL /documentation будет доступен после сборки документации",
             DOCUMENTATION_DIST,
         )
-        return
 
     async def redirect_documentation_trailing_slash() -> RedirectResponse:
         return RedirectResponse(url="/documentation/", status_code=307)
@@ -44,7 +45,7 @@ def mount_documentation_static(
     )
     app.mount(
         "/documentation/",
-        StaticFiles(directory=str(dist), html=True),
+        StaticFiles(directory=str(dist), html=True, check_dir=False),
         name="documentation-static",
     )
     logger.info("Документация: GET /documentation/ -> %s", dist)
@@ -67,7 +68,7 @@ def mount_documentation_static(
         )
         app.mount(
             f"{gw_base}/",
-            StaticFiles(directory=str(dist), html=True),
+            StaticFiles(directory=str(dist), html=True, check_dir=False),
             name=f"documentation-static-{prefix}-prefix",
         )
         logger.info("Документация: GET %s/ -> %s", gw_base, dist)

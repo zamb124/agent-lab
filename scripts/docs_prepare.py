@@ -101,11 +101,11 @@ def _service_label_en(name: str) -> str:
 
 
 def _service_intro_ru(service: str, title: str) -> str:
-    return _SERVICE_SCENARIO_INTRO_RU.get(service, f"Пошаговые сценарии интерфейса {title}.")
+    return _SERVICE_SCENARIO_INTRO_RU.get(service, f"Пошаговые инструкции интерфейса {title}.")
 
 
 def _service_intro_en(service: str) -> str:
-    return _SERVICE_SCENARIO_INTRO_EN.get(service, "Step-by-step UI scenarios with screenshots.")
+    return _SERVICE_SCENARIO_INTRO_EN.get(service, "Step-by-step UI instructions with screenshots.")
 
 
 def _tag_label(name: str) -> str:
@@ -141,7 +141,7 @@ def _ensure_scenario_readme_stubs(docs_dir: Path) -> None:
         svc_readme = service_dir / "README.md"
         if not svc_readme.is_file() and _service_has_scenario_slugs(service_dir):
             svc_readme.write_text(
-                f"# Сценарии {svc_label}\n\n"
+                f"# Инструкции {svc_label}\n\n"
                 f"Пошаговые инструкции по интерфейсу продукта {svc_label}, сгруппированные по темам ниже. "
                 f"Этот файл создан автоматически при подготовке документации (`make doc`); при необходимости замените текст.\n",
                 encoding="utf-8",
@@ -267,7 +267,7 @@ def _write_hub_index(
     intro: str,
     links: list[tuple[str, str]],
     *,
-    heading: str = "Сценарии",
+    heading: str = "Инструкции",
     hero_image: str | None = None,
     hero_alt: str | None = None,
 ) -> None:
@@ -312,8 +312,8 @@ def _write_ru_scenarios_root_index(scenarios_dst: Path) -> None:
 
     _write_hub_index(
         scenarios_dst / "index.md",
-        "Сценарии",
-        "Проверенные пользовательские сценарии с шагами и скриншотами интерфейса.",
+        "Инструкции",
+        "Проверенные пользовательские инструкции с шагами и скриншотами интерфейса.",
         links,
     )
 
@@ -368,7 +368,7 @@ def _write_ru_scenario_hub_indices(scenarios_dst: Path) -> None:
             if not links_t:
                 continue
             tag_title = _tag_label(tag_name)
-            intro_t = f"Сценарии в группе «{tag_title}» ({svc_label})."
+            intro_t = f"Инструкции в группе «{tag_title}» ({svc_label})."
             _write_hub_index(tag_dir / "index.md", tag_title, intro_t, links_t)
 
     _write_ru_scenarios_root_index(scenarios_dst)
@@ -541,8 +541,8 @@ def _build_en_scenarios_from_readmes(scenarios_src: Path, en_scenarios_out: Path
         return
     _write_hub_index(
         en_scenarios_out / "index.md",
-        "E2E scenarios",
-        "Step-by-step UI scenarios with screenshots generated from the same tests as the Russian documentation.",
+        "E2E instructions",
+        "Step-by-step UI instructions with screenshots generated from the same tests as the Russian documentation.",
         [(_service_label_en(svc), f"{svc}/") for svc in services],
         heading="Services",
     )
@@ -661,9 +661,9 @@ def _generate_llms_files(docs_root: Path, language: str, base_url: str) -> None:
 
     title = "Humanitec Documentation" if language == "en" else "Документация Humanitec"
     description = (
-        "Reference documentation for the Humanitec platform: quickstart, API, guides, and UI scenarios."
+        "Reference documentation for the Humanitec platform: quickstart, API, guides, and UI instructions."
         if language == "en"
-        else "Справочная документация платформы Humanitec: быстрый старт, API, руководства и UI-сценарии."
+        else "Справочная документация платформы Humanitec: быстрый старт, API, руководства и UI-инструкции."
     )
     pages = _iter_llms_pages(docs_root)
 
