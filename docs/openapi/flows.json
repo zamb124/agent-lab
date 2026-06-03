@@ -16,7 +16,7 @@
           "a2a"
         ],
         "summary": "Get Agent Card Well Known",
-        "description": "Agent Card по well-known URL.\n\nQuery params:\n    v: версия агента (опционально)",
+        "description": "Agent Card по well-known URL.\n\nПараметры query:\n    v: версия агента (опционально)",
         "operationId": "get_agent_card_well_known_flows_api_v1__flow_id___well_known_agent_card_json_get",
         "parameters": [
           {
@@ -82,7 +82,7 @@
           "a2a"
         ],
         "summary": "Get Agent Card",
-        "description": "Agent Card по A2A спецификации - GET на URL агента.\n\nQuery params:\n    v: версия агента (опционально)",
+        "description": "Agent Card по A2A спецификации - GET на URL агента.\n\nПараметры query:\n    v: версия агента (опционально)",
         "operationId": "get_agent_card_flows_api_v1__flow_id__get",
         "parameters": [
           {
@@ -828,7 +828,7 @@
           },
           "parts": {
             "items": {
-              "$ref": "#/components/schemas/Part-Output"
+              "$ref": "#/components/schemas/Part"
             },
             "type": "array",
             "title": "Parts"
@@ -886,7 +886,7 @@
         "properties": {
           "file": {
             "type": "string",
-            "format": "binary",
+            "contentMediaType": "application/octet-stream",
             "title": "File"
           },
           "public": {
@@ -969,7 +969,7 @@
             "anyOf": [
               {
                 "items": {
-                  "$ref": "#/components/schemas/Edge-Input"
+                  "$ref": "#/components/schemas/Edge"
                 },
                 "type": "array"
               },
@@ -1028,7 +1028,7 @@
           "branch_id"
         ],
         "title": "BranchCreateRequest",
-        "description": "Create branch request."
+        "description": "Запрос на создание ветки."
       },
       "BranchRequest": {
         "properties": {
@@ -1092,7 +1092,7 @@
             "anyOf": [
               {
                 "items": {
-                  "$ref": "#/components/schemas/Edge-Input"
+                  "$ref": "#/components/schemas/Edge"
                 },
                 "type": "array"
               },
@@ -1204,7 +1204,7 @@
             "anyOf": [
               {
                 "items": {
-                  "$ref": "#/components/schemas/Edge-Output"
+                  "$ref": "#/components/schemas/Edge"
                 },
                 "type": "array"
               },
@@ -1381,7 +1381,7 @@
             "anyOf": [
               {
                 "items": {
-                  "$ref": "#/components/schemas/Edge-Input"
+                  "$ref": "#/components/schemas/Edge"
                 },
                 "type": "array"
               },
@@ -1434,7 +1434,7 @@
           "name"
         ],
         "title": "BranchUpdateRequest",
-        "description": "Full branch replacement request."
+        "description": "Запрос на полную замену ветки."
       },
       "BreakpointHitPayload": {
         "properties": {
@@ -3844,68 +3844,7 @@
         "title": "DiffItem",
         "description": "Элемент diff"
       },
-      "Edge-Input": {
-        "properties": {
-          "from_node": {
-            "type": "string",
-            "title": "From Node",
-            "description": "ID исходной ноды"
-          },
-          "to_node": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "To Node",
-            "description": "ID целевой ноды (null = конец)"
-          },
-          "condition": {
-            "anyOf": [
-              {
-                "oneOf": [
-                  {
-                    "$ref": "#/components/schemas/SimpleEdgeCondition"
-                  },
-                  {
-                    "$ref": "#/components/schemas/CodeEdgeCondition"
-                  }
-                ],
-                "discriminator": {
-                  "propertyName": "type",
-                  "mapping": {
-                    "code": "#/components/schemas/CodeEdgeCondition",
-                    "simple": "#/components/schemas/SimpleEdgeCondition"
-                  }
-                }
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Condition",
-            "description": "Условие перехода: simple ({type, variable, operator, value}) или code ({type, language, code})."
-          },
-          "contributes_to_join": {
-            "type": "boolean",
-            "title": "Contributes To Join",
-            "description": "При incoming_policy=all у целевой ноды: ребро участвует в AND; false = переход без ожидания остальных входов",
-            "default": true
-          }
-        },
-        "additionalProperties": false,
-        "type": "object",
-        "required": [
-          "from_node",
-          "to_node"
-        ],
-        "title": "Edge",
-        "description": "Связь между нодами.\n\ncondition - типизированный объект для проверки (опционально).\nЕсли condition не указан - безусловный переход.\n\nДопустимые форматы condition:\n  - `{\"type\": \"simple\", \"variable\": str, \"operator\": str, \"value\": Any}`;\n  - `{\"type\": \"code\", \"language\": \"python|javascript|typescript|go|csharp\", \"code\": str}`."
-      },
-      "Edge-Output": {
+      "Edge": {
         "properties": {
           "from_node": {
             "type": "string",
@@ -3998,7 +3937,7 @@
         "additionalProperties": false,
         "type": "object",
         "title": "EmptyWorkflowEventPayload",
-        "description": "Payload for events whose fact is fully described by event_type."
+        "description": "Payload для событий, факт которых полностью описан event_type."
       },
       "EvaluationActiveMonitorCyclesRequest": {
         "properties": {
@@ -4494,7 +4433,7 @@
           },
           "turns": {
             "items": {
-              "$ref": "#/components/schemas/EvaluationTurn-Output"
+              "$ref": "#/components/schemas/EvaluationTurn"
             },
             "type": "array",
             "minItems": 1,
@@ -4616,7 +4555,7 @@
           },
           "turns": {
             "items": {
-              "$ref": "#/components/schemas/EvaluationTurn-Input"
+              "$ref": "#/components/schemas/EvaluationTurn"
             },
             "type": "array",
             "minItems": 1,
@@ -5153,7 +5092,7 @@
           },
           "turns": {
             "items": {
-              "$ref": "#/components/schemas/EvaluationTurn-Input"
+              "$ref": "#/components/schemas/EvaluationTurn"
             },
             "type": "array",
             "minItems": 1,
@@ -8827,92 +8766,7 @@
         ],
         "title": "EvaluationTraceWorkflowEvent"
       },
-      "EvaluationTurn-Input": {
-        "properties": {
-          "input": {
-            "oneOf": [
-              {
-                "$ref": "#/components/schemas/EvaluationInputText"
-              },
-              {
-                "$ref": "#/components/schemas/EvaluationInputInlineCode"
-              },
-              {
-                "$ref": "#/components/schemas/EvaluationInputNode"
-              }
-            ],
-            "title": "Input",
-            "discriminator": {
-              "propertyName": "type",
-              "mapping": {
-                "inline_code": "#/components/schemas/EvaluationInputInlineCode",
-                "node": "#/components/schemas/EvaluationInputNode",
-                "text": "#/components/schemas/EvaluationInputText"
-              }
-            }
-          },
-          "checks": {
-            "items": {
-              "oneOf": [
-                {
-                  "$ref": "#/components/schemas/EvaluationCheckContains"
-                },
-                {
-                  "$ref": "#/components/schemas/EvaluationCheckNotContains"
-                },
-                {
-                  "$ref": "#/components/schemas/EvaluationCheckRegex"
-                },
-                {
-                  "$ref": "#/components/schemas/EvaluationCheckLength"
-                },
-                {
-                  "$ref": "#/components/schemas/EvaluationCheckStatePath"
-                },
-                {
-                  "$ref": "#/components/schemas/EvaluationCheckJsonSchema"
-                },
-                {
-                  "$ref": "#/components/schemas/EvaluationCheckTraceAssertion"
-                },
-                {
-                  "$ref": "#/components/schemas/EvaluationCheckCode"
-                },
-                {
-                  "$ref": "#/components/schemas/EvaluationCheckLlmJudge"
-                },
-                {
-                  "$ref": "#/components/schemas/EvaluationCheckBuiltinMetric"
-                }
-              ],
-              "discriminator": {
-                "propertyName": "type",
-                "mapping": {
-                  "builtin_metric": "#/components/schemas/EvaluationCheckBuiltinMetric",
-                  "code": "#/components/schemas/EvaluationCheckCode",
-                  "contains": "#/components/schemas/EvaluationCheckContains",
-                  "json_schema": "#/components/schemas/EvaluationCheckJsonSchema",
-                  "length": "#/components/schemas/EvaluationCheckLength",
-                  "llm_judge": "#/components/schemas/EvaluationCheckLlmJudge",
-                  "not_contains": "#/components/schemas/EvaluationCheckNotContains",
-                  "regex": "#/components/schemas/EvaluationCheckRegex",
-                  "state_path": "#/components/schemas/EvaluationCheckStatePath",
-                  "trace_assertion": "#/components/schemas/EvaluationCheckTraceAssertion"
-                }
-              }
-            },
-            "type": "array",
-            "title": "Checks"
-          }
-        },
-        "additionalProperties": false,
-        "type": "object",
-        "required": [
-          "input"
-        ],
-        "title": "EvaluationTurn"
-      },
-      "EvaluationTurn-Output": {
+      "EvaluationTurn": {
         "properties": {
           "input": {
             "oneOf": [
@@ -9378,7 +9232,7 @@
           },
           "messages": {
             "items": {
-              "$ref": "#/components/schemas/Message-Input"
+              "$ref": "#/components/schemas/Message"
             },
             "type": "array",
             "title": "Messages",
@@ -9410,7 +9264,7 @@
           },
           "files": {
             "items": {
-              "$ref": "#/components/schemas/FileRef-Input"
+              "$ref": "#/components/schemas/FileRef"
             },
             "type": "array",
             "title": "Files",
@@ -9419,7 +9273,7 @@
           "interrupt": {
             "anyOf": [
               {
-                "$ref": "#/components/schemas/InterruptData-Input"
+                "$ref": "#/components/schemas/InterruptData"
               },
               {
                 "type": "null"
@@ -9429,7 +9283,7 @@
           },
           "interrupt_path": {
             "items": {
-              "$ref": "#/components/schemas/InterruptPathItem-Input"
+              "$ref": "#/components/schemas/InterruptPathItem"
             },
             "type": "array",
             "title": "Interrupt Path",
@@ -9503,7 +9357,7 @@
           },
           "reflection_history": {
             "items": {
-              "$ref": "#/components/schemas/ReflectionRecord-Input"
+              "$ref": "#/components/schemas/ReflectionRecord"
             },
             "type": "array",
             "title": "Reflection History",
@@ -9639,7 +9493,7 @@
           "session_id"
         ],
         "title": "ExecutionState",
-        "description": "Типизированное состояние выполнения агента.\n\nЗамена dict state с магическими __полями__.\nВсе системные поля явно типизированы и доступны через свойства.\n\nZero-Guess принципы:\n- FlexibleBaseModel (extra='allow') - для runtime данных\n- Явные типы для системных полей\n- Нет магии, все через свойства\n\nExamples:\n    >>> state = ExecutionState.create(\n    ...     task_id=\"task-123\",\n    ...     context_id=\"ctx-456\",\n    ...     user_id=\"user-789\",\n    ...     content=\"Hello\"\n    ... )\n    >>> state.task_id  # Типизированный доступ\n    'task-123'"
+        "description": "Типизированное состояние выполнения агента.\n\nЗамена dict state с магическими __полями__.\nВсе системные поля явно типизированы и доступны через свойства.\n\nZero-Guess принципы:\n- FlexibleBaseModel (extra='allow') - для runtime данных\n- Явные типы для системных полей\n- Нет магии, все через свойства\n\nПримеры:\n    >>> state = ExecutionState.create(\n    ...     task_id=\"task-123\",\n    ...     context_id=\"ctx-456\",\n    ...     user_id=\"user-789\",\n    ...     content=\"Hello\"\n    ... )\n    >>> state.task_id  # Типизированный доступ\n    'task-123'"
       },
       "ExecutionState-Output": {
         "properties": {
@@ -9767,7 +9621,7 @@
           },
           "messages": {
             "items": {
-              "$ref": "#/components/schemas/Message-Output"
+              "$ref": "#/components/schemas/Message"
             },
             "type": "array",
             "title": "Messages",
@@ -9799,7 +9653,7 @@
           },
           "files": {
             "items": {
-              "$ref": "#/components/schemas/FileRef-Output"
+              "$ref": "#/components/schemas/FileRef"
             },
             "type": "array",
             "title": "Files",
@@ -9808,7 +9662,7 @@
           "interrupt": {
             "anyOf": [
               {
-                "$ref": "#/components/schemas/InterruptData-Output"
+                "$ref": "#/components/schemas/InterruptData"
               },
               {
                 "type": "null"
@@ -9818,7 +9672,7 @@
           },
           "interrupt_path": {
             "items": {
-              "$ref": "#/components/schemas/InterruptPathItem-Output"
+              "$ref": "#/components/schemas/InterruptPathItem"
             },
             "type": "array",
             "title": "Interrupt Path",
@@ -9892,7 +9746,7 @@
           },
           "reflection_history": {
             "items": {
-              "$ref": "#/components/schemas/ReflectionRecord-Output"
+              "$ref": "#/components/schemas/ReflectionRecord"
             },
             "type": "array",
             "title": "Reflection History",
@@ -10031,7 +9885,7 @@
           "session_id"
         ],
         "title": "ExecutionState",
-        "description": "Типизированное состояние выполнения агента.\n\nЗамена dict state с магическими __полями__.\nВсе системные поля явно типизированы и доступны через свойства.\n\nZero-Guess принципы:\n- FlexibleBaseModel (extra='allow') - для runtime данных\n- Явные типы для системных полей\n- Нет магии, все через свойства\n\nExamples:\n    >>> state = ExecutionState.create(\n    ...     task_id=\"task-123\",\n    ...     context_id=\"ctx-456\",\n    ...     user_id=\"user-789\",\n    ...     content=\"Hello\"\n    ... )\n    >>> state.task_id  # Типизированный доступ\n    'task-123'"
+        "description": "Типизированное состояние выполнения агента.\n\nЗамена dict state с магическими __полями__.\nВсе системные поля явно типизированы и доступны через свойства.\n\nZero-Guess принципы:\n- FlexibleBaseModel (extra='allow') - для runtime данных\n- Явные типы для системных полей\n- Нет магии, все через свойства\n\nПримеры:\n    >>> state = ExecutionState.create(\n    ...     task_id=\"task-123\",\n    ...     context_id=\"ctx-456\",\n    ...     user_id=\"user-789\",\n    ...     content=\"Hello\"\n    ... )\n    >>> state.task_id  # Типизированный доступ\n    'task-123'"
       },
       "ExecutionStateDelta": {
         "properties": {
@@ -10116,7 +9970,7 @@
         "additionalProperties": false,
         "type": "object",
         "title": "ExecutionStateDelta",
-        "description": "Domain-aware delta for ExecutionState projection."
+        "description": "Доменная delta для проекции ExecutionState."
       },
       "ExternalAgentStatus": {
         "type": "string",
@@ -10313,85 +10167,7 @@
         "title": "FileReadPreviewResponse",
         "description": "Текстовое превью содержимого файла (извлечение без vision для изображений)."
       },
-      "FileRef-Input": {
-        "properties": {
-          "file_id": {
-            "anyOf": [
-              {
-                "type": "string",
-                "minLength": 1
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "File Id"
-          },
-          "original_name": {
-            "type": "string",
-            "minLength": 1,
-            "title": "Original Name"
-          },
-          "url": {
-            "anyOf": [
-              {
-                "type": "string",
-                "minLength": 1
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Url"
-          },
-          "content_type": {
-            "type": "string",
-            "minLength": 1,
-            "title": "Content Type"
-          },
-          "file_size": {
-            "type": "integer",
-            "minimum": 0.0,
-            "title": "File Size"
-          },
-          "checksum": {
-            "anyOf": [
-              {
-                "type": "string",
-                "minLength": 1
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Checksum"
-          },
-          "is_public": {
-            "anyOf": [
-              {
-                "type": "boolean"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Is Public"
-          },
-          "capabilities": {
-            "$ref": "#/components/schemas/FileCapabilities"
-          }
-        },
-        "additionalProperties": false,
-        "type": "object",
-        "required": [
-          "original_name",
-          "content_type",
-          "file_size"
-        ],
-        "title": "FileRef",
-        "description": "Канонический элемент `ExecutionState.files`."
-      },
-      "FileRef-Output": {
+      "FileRef": {
         "properties": {
           "file_id": {
             "anyOf": [
@@ -10631,7 +10407,7 @@
           },
           "edges": {
             "items": {
-              "$ref": "#/components/schemas/Edge-Input"
+              "$ref": "#/components/schemas/Edge"
             },
             "type": "array",
             "title": "Edges"
@@ -10659,7 +10435,7 @@
           },
           "triggers": {
             "additionalProperties": {
-              "$ref": "#/components/schemas/TriggerConfig-Input"
+              "$ref": "#/components/schemas/TriggerConfig"
             },
             "type": "object",
             "title": "Triggers"
@@ -10742,7 +10518,7 @@
           },
           "edges": {
             "items": {
-              "$ref": "#/components/schemas/Edge-Input"
+              "$ref": "#/components/schemas/Edge"
             },
             "type": "array",
             "title": "Edges"
@@ -10996,7 +10772,7 @@
             "anyOf": [
               {
                 "items": {
-                  "$ref": "#/components/schemas/Edge-Output"
+                  "$ref": "#/components/schemas/Edge"
                 },
                 "type": "array"
               },
@@ -11106,7 +10882,7 @@
           },
           "triggers": {
             "additionalProperties": {
-              "$ref": "#/components/schemas/TriggerConfig-Output"
+              "$ref": "#/components/schemas/TriggerConfig"
             },
             "type": "object",
             "title": "Triggers"
@@ -11452,7 +11228,7 @@
           },
           "edges": {
             "items": {
-              "$ref": "#/components/schemas/Edge-Input"
+              "$ref": "#/components/schemas/Edge"
             },
             "type": "array",
             "title": "Edges"
@@ -12181,7 +11957,7 @@
           },
           "files": {
             "items": {
-              "$ref": "#/components/schemas/FileRef-Input"
+              "$ref": "#/components/schemas/FileRef"
             },
             "type": "array",
             "title": "Files"
@@ -12624,7 +12400,7 @@
         "title": "InitCompanyResponse",
         "description": "Ответ инициализации компании"
       },
-      "InterruptData-Input": {
+      "InterruptData": {
         "properties": {
           "body": {
             "oneOf": [
@@ -12649,7 +12425,7 @@
             }
           },
           "system": {
-            "$ref": "#/components/schemas/InterruptSystemContext-Input"
+            "$ref": "#/components/schemas/InterruptSystemContext"
           },
           "correlation_id": {
             "anyOf": [
@@ -12672,136 +12448,7 @@
         "title": "InterruptData",
         "description": "Корневая модель прерывания в ExecutionState."
       },
-      "InterruptData-Output": {
-        "properties": {
-          "body": {
-            "oneOf": [
-              {
-                "$ref": "#/components/schemas/UserMessageInterrupt"
-              },
-              {
-                "$ref": "#/components/schemas/OperatorTaskInterrupt"
-              },
-              {
-                "$ref": "#/components/schemas/OAuthInterrupt"
-              }
-            ],
-            "title": "Body",
-            "discriminator": {
-              "propertyName": "kind",
-              "mapping": {
-                "oauth_required": "#/components/schemas/OAuthInterrupt",
-                "operator_task": "#/components/schemas/OperatorTaskInterrupt",
-                "user_message": "#/components/schemas/UserMessageInterrupt"
-              }
-            }
-          },
-          "system": {
-            "$ref": "#/components/schemas/InterruptSystemContext-Output"
-          },
-          "correlation_id": {
-            "anyOf": [
-              {
-                "type": "string",
-                "format": "uuid"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Correlation Id"
-          }
-        },
-        "additionalProperties": false,
-        "type": "object",
-        "required": [
-          "body"
-        ],
-        "title": "InterruptData",
-        "description": "Корневая модель прерывания в ExecutionState."
-      },
-      "InterruptPathItem-Input": {
-        "properties": {
-          "node_type": {
-            "type": "string",
-            "title": "Node Type",
-            "description": "Тип: tool, llm_node, flow"
-          },
-          "node_id": {
-            "type": "string",
-            "title": "Node Id",
-            "description": "ID ноды/tool"
-          },
-          "tool_call": {
-            "anyOf": [
-              {
-                "$ref": "#/components/schemas/LLMToolCall"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "description": "Данные tool_call"
-          },
-          "child_session_id": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Child Session Id",
-            "description": "Durable session_id child workflow для resume FlowNode"
-          },
-          "child_flow_id": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Child Flow Id",
-            "description": "ID child flow"
-          },
-          "child_flow_branch_id": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Child Flow Branch Id",
-            "description": "Branch child flow"
-          },
-          "child_execution_branch_id": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Child Execution Branch Id",
-            "description": "Durable execution branch id child workflow для resume FlowNode"
-          }
-        },
-        "additionalProperties": true,
-        "type": "object",
-        "required": [
-          "node_type",
-          "node_id"
-        ],
-        "title": "InterruptPathItem",
-        "description": "Элемент пути прерывания."
-      },
-      "InterruptPathItem-Output": {
+      "InterruptPathItem": {
         "properties": {
           "node_type": {
             "type": "string",
@@ -12919,57 +12566,7 @@
         ],
         "title": "InterruptRaisedPayload"
       },
-      "InterruptSystemContext-Input": {
-        "properties": {
-          "tool_call": {
-            "anyOf": [
-              {
-                "$ref": "#/components/schemas/LLMToolCall"
-              },
-              {
-                "type": "null"
-              }
-            ]
-          },
-          "path": {
-            "items": {
-              "additionalProperties": {
-                "$ref": "#/components/schemas/JsonValue"
-              },
-              "type": "object"
-            },
-            "type": "array",
-            "title": "Path"
-          },
-          "task_id": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Task Id"
-          },
-          "context_id": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Context Id"
-          }
-        },
-        "additionalProperties": false,
-        "type": "object",
-        "title": "InterruptSystemContext",
-        "description": "Служебные поля прерывания (путь, task_id, tool_call)."
-      },
-      "InterruptSystemContext-Output": {
+      "InterruptSystemContext": {
         "properties": {
           "tool_call": {
             "anyOf": [
@@ -13247,12 +12844,17 @@
               }
             ],
             "title": "Context Length"
+          },
+          "capability_metadata_verified": {
+            "type": "boolean",
+            "title": "Capability Metadata Verified",
+            "default": false
           }
         },
         "additionalProperties": false,
         "type": "object",
         "title": "LLMCallConfig",
-        "description": "One concrete LLM attempt config.\n\n`provider` and `model` may be partial at authoring time for primary node\noverrides; by the time the HTTP client attempts a call, both are resolved."
+        "description": "Config for one concrete LLM attempt.\n\nThe same typed payload is used for the primary and ordered secondary attempts.\nAuthoring-time configs may omit provider/model only where the resolver fills\nthem before execution."
       },
       "LLMCapability": {
         "type": "string",
@@ -13367,7 +12969,7 @@
         "additionalProperties": false,
         "type": "object",
         "title": "LLMContextBudgetPatch",
-        "description": "Partial token budget overlay."
+        "description": "Частичное наложение token budget."
       },
       "LLMContextPatch": {
         "properties": {
@@ -13495,7 +13097,7 @@
         "additionalProperties": false,
         "type": "object",
         "title": "LLMContextPatch",
-        "description": "Partial overlay accepted from company/resource/node/inline layers."
+        "description": "Частичное наложение, принимаемое от слоёв company/resource/node/inline."
       },
       "LLMContextRetrievalPatch": {
         "properties": {
@@ -13557,7 +13159,7 @@
         "additionalProperties": false,
         "type": "object",
         "title": "LLMContextRetrievalPatch",
-        "description": "Partial retrieval overlay."
+        "description": "Частичное наложение retrieval."
       },
       "LLMToolCall": {
         "properties": {
@@ -14538,7 +14140,7 @@
         "title": "MergeMode",
         "description": "Режимы применения skill к базовой конфигурации агента.\n\nZero-Guess: явно указываем как мержить - merge или replace."
       },
-      "Message-Input": {
+      "Message": {
         "properties": {
           "contextId": {
             "anyOf": [
@@ -14589,101 +14191,7 @@
           },
           "parts": {
             "items": {
-              "$ref": "#/components/schemas/Part-Input"
-            },
-            "type": "array",
-            "title": "Parts"
-          },
-          "referenceTaskIds": {
-            "anyOf": [
-              {
-                "items": {
-                  "type": "string"
-                },
-                "type": "array"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Referencetaskids"
-          },
-          "role": {
-            "$ref": "#/components/schemas/Role"
-          },
-          "taskId": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Taskid"
-          }
-        },
-        "type": "object",
-        "required": [
-          "messageId",
-          "parts",
-          "role"
-        ],
-        "title": "Message",
-        "description": "Represents a single message in the conversation between a user and an agent."
-      },
-      "Message-Output": {
-        "properties": {
-          "contextId": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Contextid"
-          },
-          "extensions": {
-            "anyOf": [
-              {
-                "items": {
-                  "type": "string"
-                },
-                "type": "array"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Extensions"
-          },
-          "kind": {
-            "type": "string",
-            "const": "message",
-            "title": "Kind",
-            "default": "message"
-          },
-          "messageId": {
-            "type": "string",
-            "title": "Messageid"
-          },
-          "metadata": {
-            "anyOf": [
-              {
-                "additionalProperties": true,
-                "type": "object"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Metadata"
-          },
-          "parts": {
-            "items": {
-              "$ref": "#/components/schemas/Part-Output"
+              "$ref": "#/components/schemas/Part"
             },
             "type": "array",
             "title": "Parts"
@@ -14754,7 +14262,7 @@
         "properties": {
           "messages": {
             "items": {
-              "$ref": "#/components/schemas/Message-Input"
+              "$ref": "#/components/schemas/Message"
             },
             "type": "array",
             "title": "Messages",
@@ -14762,7 +14270,7 @@
           },
           "interrupt_path": {
             "items": {
-              "$ref": "#/components/schemas/InterruptPathItem-Input"
+              "$ref": "#/components/schemas/InterruptPathItem"
             },
             "type": "array",
             "title": "Interrupt Path",
@@ -14786,7 +14294,7 @@
         "properties": {
           "messages": {
             "items": {
-              "$ref": "#/components/schemas/Message-Output"
+              "$ref": "#/components/schemas/Message"
             },
             "type": "array",
             "title": "Messages",
@@ -14794,7 +14302,7 @@
           },
           "interrupt_path": {
             "items": {
-              "$ref": "#/components/schemas/InterruptPathItem-Output"
+              "$ref": "#/components/schemas/InterruptPathItem"
             },
             "type": "array",
             "title": "Interrupt Path",
@@ -15221,6 +14729,11 @@
               }
             ],
             "title": "Context Length"
+          },
+          "capability_metadata_verified": {
+            "type": "boolean",
+            "title": "Capability Metadata Verified",
+            "default": false
           },
           "fallback_models": {
             "anyOf": [
@@ -16579,21 +16092,7 @@
         "title": "ParseSignatureResponse",
         "description": "Результат парсинга сигнатуры"
       },
-      "Part-Input": {
-        "anyOf": [
-          {
-            "$ref": "#/components/schemas/TextPart"
-          },
-          {
-            "$ref": "#/components/schemas/FilePart"
-          },
-          {
-            "$ref": "#/components/schemas/DataPart"
-          }
-        ],
-        "title": "Part"
-      },
-      "Part-Output": {
+      "Part": {
         "anyOf": [
           {
             "$ref": "#/components/schemas/TextPart"
@@ -16666,7 +16165,7 @@
           "source"
         ],
         "title": "PendingUIEvent",
-        "description": "UI event, queued in ExecutionState until the runtime emits it to the A2A stream."
+        "description": "UI-событие в очереди ExecutionState до отправки runtime в A2A stream."
       },
       "PlatformToolDoc": {
         "properties": {
@@ -16921,7 +16420,7 @@
           "required_action"
         ],
         "title": "ReflectionCritiqueIssue",
-        "description": "One concrete issue found by the critic."
+        "description": "Одна конкретная проблема, найденная критиком."
       },
       "ReflectionCritiqueResult": {
         "properties": {
@@ -16961,9 +16460,9 @@
           "summary"
         ],
         "title": "ReflectionCritiqueResult",
-        "description": "Structured critic output returned by the model."
+        "description": "Структурированный ответ критика от модели."
       },
-      "ReflectionGateResult-Input": {
+      "ReflectionGateResult": {
         "properties": {
           "policy_id": {
             "type": "string",
@@ -17008,56 +16507,9 @@
           "critique"
         ],
         "title": "ReflectionGateResult",
-        "description": "Deterministic gate result applied to workflow state."
+        "description": "Детерминированный результат gate, применённый к workflow state."
       },
-      "ReflectionGateResult-Output": {
-        "properties": {
-          "policy_id": {
-            "type": "string",
-            "minLength": 1,
-            "title": "Policy Id"
-          },
-          "gate": {
-            "type": "string",
-            "enum": [
-              "final_answer",
-              "transaction",
-              "quality"
-            ],
-            "title": "Gate"
-          },
-          "target": {
-            "$ref": "#/components/schemas/ReflectionTarget"
-          },
-          "approved": {
-            "type": "boolean",
-            "title": "Approved"
-          },
-          "blocked_reasons": {
-            "items": {
-              "type": "string"
-            },
-            "type": "array",
-            "title": "Blocked Reasons"
-          },
-          "critique": {
-            "$ref": "#/components/schemas/ReflectionCritiqueResult"
-          }
-        },
-        "additionalProperties": false,
-        "type": "object",
-        "required": [
-          "policy_id",
-          "gate",
-          "target",
-          "approved",
-          "blocked_reasons",
-          "critique"
-        ],
-        "title": "ReflectionGateResult",
-        "description": "Deterministic gate result applied to workflow state."
-      },
-      "ReflectionRecord-Input": {
+      "ReflectionRecord": {
         "properties": {
           "node_id": {
             "type": "string",
@@ -17075,7 +16527,7 @@
             "title": "Node Schedule Sequence"
           },
           "result": {
-            "$ref": "#/components/schemas/ReflectionGateResult-Input"
+            "$ref": "#/components/schemas/ReflectionGateResult"
           }
         },
         "additionalProperties": false,
@@ -17087,39 +16539,7 @@
           "result"
         ],
         "title": "ReflectionRecord",
-        "description": "State history record for a completed reflection gate."
-      },
-      "ReflectionRecord-Output": {
-        "properties": {
-          "node_id": {
-            "type": "string",
-            "minLength": 1,
-            "title": "Node Id"
-          },
-          "execution_branch_id": {
-            "type": "string",
-            "minLength": 1,
-            "title": "Execution Branch Id"
-          },
-          "node_schedule_sequence": {
-            "type": "integer",
-            "minimum": 0.0,
-            "title": "Node Schedule Sequence"
-          },
-          "result": {
-            "$ref": "#/components/schemas/ReflectionGateResult-Output"
-          }
-        },
-        "additionalProperties": false,
-        "type": "object",
-        "required": [
-          "node_id",
-          "execution_branch_id",
-          "node_schedule_sequence",
-          "result"
-        ],
-        "title": "ReflectionRecord",
-        "description": "State history record for a completed reflection gate."
+        "description": "Запись истории state для завершённого reflection gate."
       },
       "ReflectionTarget": {
         "properties": {
@@ -17152,7 +16572,7 @@
           "kind"
         ],
         "title": "ReflectionTarget",
-        "description": "State projection slice reviewed by a critic."
+        "description": "Срез проекции state, который проверяет критик."
       },
       "RegistryBranchInfo": {
         "properties": {
@@ -18243,7 +17663,7 @@
           "state"
         ],
         "title": "StateUpdateRequest",
-        "description": "Manual state patch request for an existing durable workflow session."
+        "description": "Запрос ручного patch state для существующей durable workflow session."
       },
       "SubscribeRequest": {
         "properties": {
@@ -18388,7 +17808,7 @@
             "anyOf": [
               {
                 "items": {
-                  "$ref": "#/components/schemas/Message-Output"
+                  "$ref": "#/components/schemas/Message"
                 },
                 "type": "array"
               },
@@ -18454,7 +17874,7 @@
           "message": {
             "anyOf": [
               {
-                "$ref": "#/components/schemas/Message-Output"
+                "$ref": "#/components/schemas/Message"
               },
               {
                 "type": "null"
@@ -19285,125 +18705,7 @@
         ],
         "title": "ToolRuntimeCallRequest"
       },
-      "TriggerConfig-Input": {
-        "properties": {
-          "trigger_id": {
-            "type": "string",
-            "title": "Trigger Id",
-            "description": "Уникальный ID триггера (без «.» в id)"
-          },
-          "name": {
-            "type": "string",
-            "title": "Name",
-            "description": "Название триггера"
-          },
-          "type": {
-            "$ref": "#/components/schemas/TriggerType",
-            "description": "Тип триггера"
-          },
-          "enabled": {
-            "type": "boolean",
-            "title": "Enabled",
-            "description": "Активен ли триггер",
-            "default": true
-          },
-          "config": {
-            "additionalProperties": {
-              "$ref": "#/components/schemas/JsonValue"
-            },
-            "type": "object",
-            "title": "Config",
-            "description": "Конфигурация триггера (bot_token, cron, etc.)"
-          },
-          "output_mapping": {
-            "additionalProperties": {
-              "type": "string"
-            },
-            "type": "object",
-            "title": "Output Mapping",
-            "description": "Маппинг payload path -> state path"
-          },
-          "input_mapping": {
-            "additionalProperties": {
-              "type": "string"
-            },
-            "type": "object",
-            "title": "Input Mapping",
-            "description": "DEPRECATED: используйте output_mapping"
-          },
-          "output_actions": {
-            "items": {
-              "$ref": "#/components/schemas/OutputAction"
-            },
-            "type": "array",
-            "title": "Output Actions",
-            "description": "Действия отправки ответа в канал после выполнения агента"
-          },
-          "post_flow_output_enabled": {
-            "type": "boolean",
-            "title": "Post Flow Output Enabled",
-            "description": "Выполнять output_actions после завершения flow (без interrupt)",
-            "default": true
-          },
-          "branch_id": {
-            "type": "string",
-            "title": "Branch Id",
-            "description": "ID ветки из FlowConfig.branches: какой сценарий запускать при срабатывании триггера",
-            "default": "default"
-          },
-          "webhook_url": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Webhook Url",
-            "description": "URL webhook (генерируется при регистрации)"
-          },
-          "schedule_id": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Schedule Id",
-            "description": "ID в TaskIQ scheduler (для cron)"
-          },
-          "status": {
-            "$ref": "#/components/schemas/TriggerStatus",
-            "description": "Текущий статус триггера",
-            "default": "inactive"
-          },
-          "last_error": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Last Error",
-            "description": "Последняя ошибка (если status=error)"
-          }
-        },
-        "additionalProperties": false,
-        "type": "object",
-        "required": [
-          "trigger_id",
-          "name",
-          "type"
-        ],
-        "title": "TriggerConfig",
-        "description": "Конфигурация триггера агента.\n\nPayload автоматически записывается в state.triggers.{trigger_id}.\noutput_mapping определяет какие данные куда положить в state.\n\nПример:\n{\n    \"trigger_id\": \"tg_support\",\n    \"name\": \"Telegram Support Bot\",\n    \"type\": \"telegram\",\n    \"enabled\": true,\n    \"config\": {\n        \"bot_token\": \"@var:telegram_bot_token\"\n    },\n    \"output_mapping\": {\n        \"content\": \"message.text\",\n        \"context.chat_id\": \"message.chat.id\"\n    }\n}\n\nФормат output_mapping: слева только content и/или context.*; variables.* запрещены."
-      },
-      "TriggerConfig-Output": {
+      "TriggerConfig": {
         "properties": {
           "trigger_id": {
             "type": "string",
@@ -20346,6 +19648,13 @@
           "type": {
             "type": "string",
             "title": "Error Type"
+          },
+          "input": {
+            "title": "Input"
+          },
+          "ctx": {
+            "type": "object",
+            "title": "Context"
           }
         },
         "type": "object",
@@ -20956,7 +20265,7 @@
           "head_sequence"
         ],
         "title": "WorkflowExecutionPosition",
-        "description": "Active durable head used to derive deterministic command keys."
+        "description": "Активный durable head для детерминированных command keys."
       },
       "WorkflowHistoryResponse": {
         "properties": {

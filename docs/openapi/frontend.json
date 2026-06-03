@@ -41,7 +41,7 @@
           "companies"
         ],
         "summary": "Check Slug",
-        "description": "Проверка доступности slug для субдомена\n\nArgs:\n    request: Запрос с slug\n    container: DI контейнер\n\nReturns:\n    Информация о доступности slug",
+        "description": "Проверка доступности slug для субдомена\n\nАргументы:\n    request: Запрос с slug\n    container: DI контейнер\n\nВозвращает:\n    Информация о доступности slug",
         "operationId": "check_slug_frontend_api_companies_check_slug_post",
         "requestBody": {
           "content": {
@@ -86,7 +86,7 @@
           "companies"
         ],
         "summary": "Create Company",
-        "description": "Создание новой компании\n\nArgs:\n    request_data: Данные компании\n    request: FastAPI request\n    container: DI контейнер\n\nReturns:\n    Информация о созданной компании и URL для редиректа",
+        "description": "Создание новой компании\n\nАргументы:\n    request_data: Данные компании\n    request: FastAPI request\n    container: DI контейнер\n\nВозвращает:\n    Информация о созданной компании и URL для редиректа",
         "operationId": "create_company_frontend_api_companies_post",
         "requestBody": {
           "content": {
@@ -221,11 +221,47 @@
   },
   "components": {
     "schemas": {
+      "AICapability": {
+        "type": "string",
+        "enum": [
+          "llm_chat",
+          "llm_summarize",
+          "llm_format_markdown",
+          "llm_codegen",
+          "llm_vision",
+          "embedding",
+          "rerank",
+          "image_gen",
+          "voice_stt",
+          "voice_tts",
+          "voice_vad"
+        ],
+        "title": "AICapability",
+        "description": "Capability is the functional AI role, not the transport provider."
+      },
       "AIProvidersCapabilityUpdate": {
         "properties": {
+          "enabled": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Enabled"
+          },
           "provider": {
-            "type": "string",
-            "minLength": 1,
+            "anyOf": [
+              {
+                "type": "string",
+                "minLength": 1
+              },
+              {
+                "type": "null"
+              }
+            ],
             "title": "Provider"
           },
           "api_key": {
@@ -286,6 +322,30 @@
             ],
             "title": "Model"
           },
+          "dimension": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "exclusiveMinimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Dimension"
+          },
+          "mrl_output_dimension": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "exclusiveMinimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Mrl Output Dimension"
+          },
           "fallback_models": {
             "anyOf": [
               {
@@ -335,11 +395,8 @@
           }
         },
         "type": "object",
-        "required": [
-          "provider"
-        ],
         "title": "AIProvidersCapabilityUpdate",
-        "description": "PUT /api/settings/ai-providers/{capability}: задать override capability компании.\n\n- ``provider`` платформенный (``openrouter|openai|bothub|yandex|humanitec_llm``)\n  или ``custom:<id>``; для rerank допустимы ``inherit|none|provider_litserve|custom:<id>``;\n  для voice — литералы провайдеров речи или ``custom:<id>`` (кроме VAD).\n- ``api_key`` (plaintext) шифруется на сервере; для ``custom:<id>`` не используется\n  (ключ в custom-провайдере)."
+        "description": "PUT /api/settings/ai-providers/{capability}: задать override capability компании.\n\n- ``enabled=false`` отключает rerank; включённые capability используют\n  платформенный provider capability или ``custom:<id>``;\n  для voice — литералы провайдеров речи или ``custom:<id>`` (кроме VAD).\n- ``api_key`` (plaintext) шифруется на сервере; для ``custom:<id>`` не используется\n  (ключ в custom-провайдере)."
       },
       "AcceptInviteRequest": {
         "properties": {
@@ -885,7 +942,7 @@
         "properties": {
           "file": {
             "type": "string",
-            "format": "binary",
+            "contentMediaType": "application/octet-stream",
             "title": "File"
           },
           "public": {
@@ -1911,7 +1968,7 @@
         },
         "type": "object",
         "title": "CompanySettingsUpdate",
-        "description": "Обновление базовых настроек компании.\n\nAI-провайдеры конфигурируются отдельным CRUD-роутером ``/ai-providers``\n(см. core.company_ai). Поля legacy (``rag_embedding`` / ``rag_rerank`` /\n``crm_summarize_provider``) удалены вместе с парсерами в ``core.company_ai``."
+        "description": "Обновление базовых настроек компании.\n\nAI-провайдеры конфигурируются отдельным CRUD-роутером ``/ai-providers``\n(см. core.ai.company_settings). Поля legacy (``rag_embedding`` / ``rag_rerank`` /\n``crm_summarize_provider``) удалены вместе с парсерами в ``core.ai.company_settings``."
       },
       "CompanySettingsUpdateResponse": {
         "properties": {
@@ -3523,12 +3580,17 @@
               }
             ],
             "title": "Context Length"
+          },
+          "capability_metadata_verified": {
+            "type": "boolean",
+            "title": "Capability Metadata Verified",
+            "default": false
           }
         },
         "additionalProperties": false,
         "type": "object",
         "title": "LLMCallConfig",
-        "description": "One concrete LLM attempt config.\n\n`provider` and `model` may be partial at authoring time for primary node\noverrides; by the time the HTTP client attempts a call, both are resolved."
+        "description": "Config for one concrete LLM attempt.\n\nThe same typed payload is used for the primary and ordered secondary attempts.\nAuthoring-time configs may omit provider/model only where the resolver fills\nthem before execution."
       },
       "LLMContextBudgetPatch": {
         "properties": {
@@ -3632,7 +3694,7 @@
         "additionalProperties": false,
         "type": "object",
         "title": "LLMContextBudgetPatch",
-        "description": "Partial token budget overlay."
+        "description": "Частичное наложение token budget."
       },
       "LLMContextPatch": {
         "properties": {
@@ -3760,7 +3822,7 @@
         "additionalProperties": false,
         "type": "object",
         "title": "LLMContextPatch",
-        "description": "Partial overlay accepted from company/resource/node/inline layers."
+        "description": "Частичное наложение, принимаемое от слоёв company/resource/node/inline."
       },
       "LLMContextRetrievalPatch": {
         "properties": {
@@ -3822,7 +3884,208 @@
         "additionalProperties": false,
         "type": "object",
         "title": "LLMContextRetrievalPatch",
-        "description": "Partial retrieval overlay."
+        "description": "Частичное наложение retrieval."
+      },
+      "LLMModelScoreDTO": {
+        "properties": {
+          "provider": {
+            "type": "string",
+            "title": "Provider"
+          },
+          "model_id": {
+            "type": "string",
+            "title": "Model Id"
+          },
+          "capability": {
+            "$ref": "#/components/schemas/AICapability"
+          },
+          "score": {
+            "type": "number",
+            "title": "Score"
+          },
+          "enabled": {
+            "type": "boolean",
+            "title": "Enabled"
+          },
+          "source": {
+            "type": "string",
+            "enum": [
+              "config_seed",
+              "manual",
+              "benchmark_import"
+            ],
+            "title": "Source"
+          },
+          "score_dimensions": {
+            "additionalProperties": {
+              "type": "number"
+            },
+            "type": "object",
+            "title": "Score Dimensions"
+          },
+          "note": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Note"
+          },
+          "updated_by_user_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Updated By User Id"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At"
+          },
+          "updated_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Updated At"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "provider",
+          "model_id",
+          "capability",
+          "score",
+          "enabled",
+          "source",
+          "created_at",
+          "updated_at"
+        ],
+        "title": "LLMModelScoreDTO"
+      },
+      "LLMModelScoreDeleteResponse": {
+        "properties": {
+          "deleted": {
+            "type": "boolean",
+            "title": "Deleted"
+          },
+          "cache_rescore": {
+            "additionalProperties": {
+              "$ref": "#/components/schemas/JsonValue"
+            },
+            "type": "object",
+            "title": "Cache Rescore"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "deleted",
+          "cache_rescore"
+        ],
+        "title": "LLMModelScoreDeleteResponse"
+      },
+      "LLMModelScoreListResponse": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/LLMModelScoreDTO"
+            },
+            "type": "array",
+            "title": "Items"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "items"
+        ],
+        "title": "LLMModelScoreListResponse"
+      },
+      "LLMModelScoreMutationResponse": {
+        "properties": {
+          "item": {
+            "$ref": "#/components/schemas/LLMModelScoreDTO"
+          },
+          "cache_rescore": {
+            "additionalProperties": {
+              "$ref": "#/components/schemas/JsonValue"
+            },
+            "type": "object",
+            "title": "Cache Rescore"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "item",
+          "cache_rescore"
+        ],
+        "title": "LLMModelScoreMutationResponse"
+      },
+      "LLMModelScoreUpsertRequest": {
+        "properties": {
+          "provider": {
+            "type": "string",
+            "maxLength": 64,
+            "minLength": 1,
+            "title": "Provider"
+          },
+          "model_id": {
+            "type": "string",
+            "maxLength": 512,
+            "minLength": 1,
+            "title": "Model Id"
+          },
+          "capability": {
+            "$ref": "#/components/schemas/AICapability"
+          },
+          "score": {
+            "type": "number",
+            "maximum": 1000.0,
+            "minimum": 0.0,
+            "title": "Score"
+          },
+          "enabled": {
+            "type": "boolean",
+            "title": "Enabled",
+            "default": true
+          },
+          "score_dimensions": {
+            "additionalProperties": {
+              "type": "number"
+            },
+            "type": "object",
+            "title": "Score Dimensions"
+          },
+          "note": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Note"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "provider",
+          "model_id",
+          "capability",
+          "score"
+        ],
+        "title": "LLMModelScoreUpsertRequest"
       },
       "LeadCreateBody": {
         "properties": {
@@ -4768,11 +5031,7 @@
       "PlatformBillingSettlementRulesResponse": {
         "properties": {
           "document": {
-            "additionalProperties": {
-              "$ref": "#/components/schemas/JsonValue"
-            },
-            "type": "object",
-            "title": "Document"
+            "$ref": "#/components/schemas/SettlementRulesDocument"
           }
         },
         "type": "object",
@@ -6950,6 +7209,130 @@
         "title": "ScheduledTaskStatus",
         "description": "Статус scheduled task."
       },
+      "SearchProviderOrderRequest": {
+        "properties": {
+          "provider_order": {
+            "items": {
+              "type": "string",
+              "enum": [
+                "tinyfish",
+                "linkup",
+                "serper",
+                "tavily"
+              ]
+            },
+            "type": "array",
+            "title": "Provider Order"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "provider_order"
+        ],
+        "title": "SearchProviderOrderRequest"
+      },
+      "SearchProviderUpdateRequest": {
+        "properties": {
+          "enabled": {
+            "type": "boolean",
+            "title": "Enabled",
+            "default": true
+          },
+          "credential_source": {
+            "type": "string",
+            "enum": [
+              "platform",
+              "company"
+            ],
+            "title": "Credential Source",
+            "default": "platform"
+          },
+          "api_key": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Api Key"
+          },
+          "base_url": {
+            "anyOf": [
+              {
+                "type": "string",
+                "minLength": 1
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Base Url"
+          },
+          "timeout_seconds": {
+            "anyOf": [
+              {
+                "type": "number",
+                "maximum": 60.0,
+                "minimum": 1.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Timeout Seconds"
+          },
+          "depth": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Depth"
+          },
+          "search_depth": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Search Depth"
+          },
+          "topic": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Topic"
+          },
+          "include_answer": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Include Answer"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "title": "SearchProviderUpdateRequest"
+      },
       "ServiceStatus": {
         "properties": {
           "name": {
@@ -6989,6 +7372,200 @@
         ],
         "title": "ServiceStatus",
         "description": "Статус микросервиса"
+      },
+      "SettlementApplicationMode": {
+        "type": "string",
+        "enum": [
+          "all_matching",
+          "first_win"
+        ],
+        "title": "SettlementApplicationMode",
+        "description": "Как применять несколько совпавших правил после учёта exclusive_group."
+      },
+      "SettlementRule": {
+        "properties": {
+          "rule_id": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Rule Id"
+          },
+          "enabled": {
+            "type": "boolean",
+            "title": "Enabled",
+            "default": true
+          },
+          "priority": {
+            "type": "integer",
+            "title": "Priority",
+            "default": 100
+          },
+          "exclusive_group": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Exclusive Group"
+          },
+          "resource_name": {
+            "type": "string",
+            "minLength": 3,
+            "title": "Resource Name"
+          },
+          "usage_type": {
+            "$ref": "#/components/schemas/UsageType"
+          },
+          "quantity_from": {
+            "type": "string",
+            "title": "Quantity From",
+            "default": "const:1"
+          },
+          "match": {
+            "$ref": "#/components/schemas/SettlementRuleMatch"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "rule_id",
+          "resource_name",
+          "usage_type"
+        ],
+        "title": "SettlementRule"
+      },
+      "SettlementRuleMatch": {
+        "properties": {
+          "operation_name_prefix": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Operation Name Prefix"
+          },
+          "operation_name_equals": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Operation Name Equals"
+          },
+          "operation_name_regex": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Operation Name Regex"
+          },
+          "service_name_equals": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Service Name Equals"
+          },
+          "service_name_regex": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Service Name Regex"
+          },
+          "event_type_equals": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Event Type Equals"
+          },
+          "event_type_regex": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Event Type Regex"
+          },
+          "attribute_equals": {
+            "additionalProperties": {
+              "$ref": "#/components/schemas/JsonValue"
+            },
+            "type": "object",
+            "title": "Attribute Equals"
+          },
+          "attribute_regex": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "type": "object",
+            "title": "Attribute Regex",
+            "description": "Все перечисленные attributes должны матчить regex через re.search(str(value))"
+          },
+          "attribute_keys_present": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Attribute Keys Present",
+            "description": "Все перечисленные ключи должны быть в attributes и не None"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "title": "SettlementRuleMatch",
+        "description": "Условия на поля span; заданные поля объединяются через AND."
+      },
+      "SettlementRulesDocument": {
+        "properties": {
+          "version": {
+            "type": "integer",
+            "title": "Version",
+            "default": 1
+          },
+          "application_mode": {
+            "$ref": "#/components/schemas/SettlementApplicationMode",
+            "default": "all_matching"
+          },
+          "rules": {
+            "items": {
+              "$ref": "#/components/schemas/SettlementRule"
+            },
+            "type": "array",
+            "title": "Rules"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "title": "SettlementRulesDocument"
       },
       "SubscribeRequest": {
         "properties": {
@@ -7649,6 +8226,21 @@
         "title": "UpdateEmbedConfigRequest",
         "description": "Запрос на обновление конфигурации виджета"
       },
+      "UsageType": {
+        "type": "string",
+        "enum": [
+          "tool_call",
+          "llm_request",
+          "embedding_request",
+          "rerank_request",
+          "agent_execution",
+          "flow_execution",
+          "file_upload",
+          "storage_usage"
+        ],
+        "title": "UsageType",
+        "description": "Типы использования ресурсов"
+      },
       "UserSearchResult": {
         "properties": {
           "user_id": {
@@ -7834,6 +8426,13 @@
           "type": {
             "type": "string",
             "title": "Error Type"
+          },
+          "input": {
+            "title": "Input"
+          },
+          "ctx": {
+            "type": "object",
+            "title": "Context"
           }
         },
         "type": "object",

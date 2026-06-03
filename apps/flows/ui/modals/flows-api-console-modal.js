@@ -5,6 +5,7 @@
 import { html, css, nothing } from 'lit';
 import { PlatformModal } from '@platform/lib/components/glass-modal.js';
 import { registerModalKind } from '@platform/lib/utils/modal-registry.js';
+import { buildScenarioDocumentationUrl } from '@platform/lib/utils/documentation-url.js';
 import '@platform/lib/components/platform-button.js';
 import '@platform/lib/components/platform-icon.js';
 import '@platform/lib/components/glass-spinner.js';
@@ -270,6 +271,17 @@ export class FlowsApiConsoleModal extends PlatformModal {
         css`
             :host {
                 --modal-width: min(1360px, calc(100vw - 24px));
+            }
+            .header-btn.docs-link {
+                width: auto;
+                min-width: 28px;
+                padding: 0 var(--space-2);
+                gap: var(--space-1);
+                border-radius: var(--radius-full);
+                text-decoration: none;
+                font-size: var(--text-xs);
+                font-weight: var(--font-medium);
+                box-sizing: border-box;
             }
             .modal.full .modal-content:has(.api-console-shell) {
                 display: flex;
@@ -889,6 +901,13 @@ export class FlowsApiConsoleModal extends PlatformModal {
                 }
             }
             @media (max-width: 760px) {
+                .header-btn.docs-link {
+                    width: 28px;
+                    padding: 0;
+                }
+                .header-btn.docs-link span {
+                    display: none;
+                }
                 .api-console-shell {
                     grid-template-columns: minmax(0, 1fr);
                 }
@@ -1024,6 +1043,10 @@ export class FlowsApiConsoleModal extends PlatformModal {
                 ? window.location.origin
                 : 'https://your-company.example.com';
         return `${origin}${this._endpointPath()}`;
+    }
+
+    _documentationUrl() {
+        return buildScenarioDocumentationUrl({ service: 'flows', slug: 'api-console' });
     }
 
     _metadataForMode(variables, mode) {
@@ -1332,6 +1355,17 @@ ${jsRequest}${asyncJsSuffix}`,
 
     renderHeaderActions() {
         return html`
+            <a
+                class="header-btn docs-link"
+                href=${this._documentationUrl()}
+                target="_blank"
+                rel="noopener noreferrer"
+                title=${this.t('api_console.instruction_title')}
+                aria-label=${this.t('api_console.instruction_title')}
+            >
+                <platform-icon name="book-open" size="16"></platform-icon>
+                <span>${this.t('api_console.instruction')}</span>
+            </a>
             <button
                 type="button"
                 class="header-btn"

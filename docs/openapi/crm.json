@@ -619,11 +619,11 @@
       },
       "BoardStage": {
         "properties": {
-          "stage_id": {
+          "id": {
             "type": "string",
             "minLength": 1,
             "pattern": "^[a-z][a-z0-9_]*$",
-            "title": "Stage Id",
+            "title": "Id",
             "description": "Стабильный идентификатор стадии (snake_case)"
           },
           "label": {
@@ -648,7 +648,7 @@
         "additionalProperties": false,
         "type": "object",
         "required": [
-          "stage_id",
+          "id",
           "label"
         ],
         "title": "BoardStage",
@@ -698,7 +698,7 @@
         "properties": {
           "file": {
             "type": "string",
-            "format": "binary",
+            "contentMediaType": "application/octet-stream",
             "title": "File"
           }
         },
@@ -712,7 +712,7 @@
         "properties": {
           "file": {
             "type": "string",
-            "format": "binary",
+            "contentMediaType": "application/octet-stream",
             "title": "File"
           },
           "public": {
@@ -737,7 +737,7 @@
         "properties": {
           "file": {
             "type": "string",
-            "format": "binary",
+            "contentMediaType": "application/octet-stream",
             "title": "File"
           }
         },
@@ -5320,7 +5320,7 @@
             },
             "type": "array",
             "title": "Entity Ids",
-            "description": "Список seed entity ID"
+            "description": "Список ID seed-сущностей"
           },
           "max_depth": {
             "type": "integer",
@@ -5339,7 +5339,7 @@
               }
             ],
             "title": "Relationship Types",
-            "description": "Comma-separated типы связей"
+            "description": "Типы связей через запятую"
           },
           "created_at_from": {
             "anyOf": [
@@ -7006,6 +7006,13 @@
           "type": {
             "type": "string",
             "title": "Error Type"
+          },
+          "input": {
+            "title": "Input"
+          },
+          "ctx": {
+            "type": "object",
+            "title": "Context"
           }
         },
         "type": "object",

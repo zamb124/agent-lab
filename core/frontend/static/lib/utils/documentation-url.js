@@ -32,16 +32,25 @@ export function getDocumentationScenarioServiceKey() {
 }
 
 /**
- * @param {{ service?: string, tag?: string | null }} options
+ * @param {{ service?: string, tag?: string | null, slug?: string | null }} options
  *   service — ключ из pytest scenario / docs/scenarios/<service>/; по умолчанию из URL.
- *   tag — необязательный сегмент пути (тег), docs/scenarios/<service>/<tag>/.
+ *   tag — необязательный сегмент пути для старых групповых ссылок.
+ *   slug — необязательный slug сценария. В сборке docs_prepare теги исходников
+ *   становятся внутренней группировкой, поэтому публичный путь сценария:
+ *   /scenarios/<service>/<slug>/.
  */
 export function buildScenarioDocumentationUrl(options = {}) {
     const service = options.service ?? getDocumentationScenarioServiceKey();
     const tag = options.tag;
+    const slug = options.slug;
     const base = getDocumentationBasePath();
     let path = `scenarios/${service}/`;
-    if (typeof tag === 'string' && tag.trim()) {
+    if (typeof slug === 'string' && slug.trim()) {
+        const seg = slug.trim().replace(/^\/+|\/+$/g, '');
+        if (seg) {
+            path = `scenarios/${service}/${seg}/`;
+        }
+    } else if (typeof tag === 'string' && tag.trim()) {
         const seg = tag.trim().replace(/^\/+|\/+$/g, '');
         if (seg) {
             path = `scenarios/${service}/${seg}/`;

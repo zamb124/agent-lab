@@ -153,7 +153,7 @@
         "properties": {
           "file": {
             "type": "string",
-            "format": "binary",
+            "contentMediaType": "application/octet-stream",
             "title": "File"
           },
           "public": {
@@ -2693,7 +2693,7 @@
           "mode"
         ],
         "title": "JoinResponse",
-        "description": "Ответ при входе в звонок (registered или guest)."
+        "description": "Ответ при входе в звонок (зарегистрированный пользователь или гость)."
       },
       "JsonValue": {},
       "ListResponse_CalendarIntegrationPublic_": {
@@ -2792,64 +2792,7 @@
         ],
         "title": "ListResponse[UserSearchResult]"
       },
-      "MessageContentModel-Input": {
-        "properties": {
-          "type": {
-            "$ref": "#/components/schemas/MessageContentType",
-            "description": "Тип блока контента."
-          },
-          "data": {
-            "anyOf": [
-              {
-                "$ref": "#/components/schemas/TextPlainContent"
-              },
-              {
-                "$ref": "#/components/schemas/CodeBlockContent"
-              },
-              {
-                "$ref": "#/components/schemas/FileAttachmentContent"
-              },
-              {
-                "$ref": "#/components/schemas/AudioAttachmentContent"
-              },
-              {
-                "$ref": "#/components/schemas/VideoAttachmentContent"
-              },
-              {
-                "$ref": "#/components/schemas/CallBoundaryContent"
-              },
-              {
-                "$ref": "#/components/schemas/CallTranscriptContent"
-              },
-              {
-                "$ref": "#/components/schemas/MockImageContent"
-              },
-              {
-                "$ref": "#/components/schemas/GitReferenceContent"
-              },
-              {
-                "$ref": "#/components/schemas/CustomToolResponseContent"
-              }
-            ],
-            "title": "Data",
-            "description": "Данные блока контента."
-          },
-          "order": {
-            "type": "integer",
-            "title": "Order",
-            "description": "Позиция блока в сообщении."
-          }
-        },
-        "type": "object",
-        "required": [
-          "type",
-          "data",
-          "order"
-        ],
-        "title": "MessageContentModel",
-        "description": "Полиморфный блок контента сообщения."
-      },
-      "MessageContentModel-Output": {
+      "MessageContentModel": {
         "properties": {
           "type": {
             "$ref": "#/components/schemas/MessageContentType",
@@ -2952,7 +2895,7 @@
           },
           "contents": {
             "items": {
-              "$ref": "#/components/schemas/MessageContentModel-Input"
+              "$ref": "#/components/schemas/MessageContentModel"
             },
             "type": "array",
             "title": "Contents",
@@ -3009,7 +2952,7 @@
         "properties": {
           "contents": {
             "items": {
-              "$ref": "#/components/schemas/MessageContentModel-Input"
+              "$ref": "#/components/schemas/MessageContentModel"
             },
             "type": "array",
             "title": "Contents",
@@ -3152,7 +3095,7 @@
           },
           "contents": {
             "items": {
-              "$ref": "#/components/schemas/MessageContentModel-Output"
+              "$ref": "#/components/schemas/MessageContentModel"
             },
             "type": "array",
             "title": "Contents",
@@ -4159,6 +4102,13 @@
           "type": {
             "type": "string",
             "title": "Error Type"
+          },
+          "input": {
+            "title": "Input"
+          },
+          "ctx": {
+            "type": "object",
+            "title": "Context"
           }
         },
         "type": "object",

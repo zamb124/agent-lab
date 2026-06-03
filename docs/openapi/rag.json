@@ -11,11 +11,11 @@
     "schemas": {
       "BoardStage": {
         "properties": {
-          "stage_id": {
+          "id": {
             "type": "string",
             "minLength": 1,
             "pattern": "^[a-z][a-z0-9_]*$",
-            "title": "Stage Id",
+            "title": "Id",
             "description": "Стабильный идентификатор стадии (snake_case)"
           },
           "label": {
@@ -40,7 +40,7 @@
         "additionalProperties": false,
         "type": "object",
         "required": [
-          "stage_id",
+          "id",
           "label"
         ],
         "title": "BoardStage",
@@ -90,7 +90,7 @@
         "properties": {
           "file": {
             "type": "string",
-            "format": "binary",
+            "contentMediaType": "application/octet-stream",
             "title": "File"
           },
           "metadata": {
@@ -109,7 +109,7 @@
         "properties": {
           "file": {
             "type": "string",
-            "format": "binary",
+            "contentMediaType": "application/octet-stream",
             "title": "File"
           },
           "public": {
@@ -2246,17 +2246,19 @@
         "properties": {
           "semantic": {
             "type": "boolean",
-            "title": "Semantic",
-            "default": true
+            "title": "Semantic"
           },
           "lexical": {
             "type": "boolean",
-            "title": "Lexical",
-            "default": true
+            "title": "Lexical"
           }
         },
         "additionalProperties": false,
         "type": "object",
+        "required": [
+          "semantic",
+          "lexical"
+        ],
         "title": "SearchChannelsDefaults"
       },
       "SearchResponse": {
@@ -2753,6 +2755,13 @@
           "type": {
             "type": "string",
             "title": "Error Type"
+          },
+          "input": {
+            "title": "Input"
+          },
+          "ctx": {
+            "type": "object",
+            "title": "Context"
           }
         },
         "type": "object",

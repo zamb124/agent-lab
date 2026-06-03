@@ -237,6 +237,8 @@ def _strip_optional(s: object | None) -> str | None:
 class _StepRecord:
     label: str
     label_en: str | None
+    details: str | None
+    details_en: str | None
     image_rel: str | None
 
 
@@ -339,6 +341,8 @@ class ScenarioRecorder:
         *,
         full_page: bool = True,
         label_en: str | None = None,
+        details: str | None = None,
+        details_en: str | None = None,
     ) -> None:
         """Фиксирует шаг; при переданном page ждёт готовность UI и делает скриншот."""
         rel: str | None = None
@@ -355,7 +359,15 @@ class ScenarioRecorder:
             )
             rel = f"screenshots/{fname}"
         le = _strip_optional(label_en)
-        self.steps.append(_StepRecord(label=label, label_en=le, image_rel=rel))
+        self.steps.append(
+            _StepRecord(
+                label=label,
+                label_en=le,
+                details=_strip_optional(details),
+                details_en=_strip_optional(details_en),
+                image_rel=rel,
+            )
+        )
 
     def finalize(self) -> None:
         if self.disabled():
@@ -370,6 +382,8 @@ class ScenarioRecorder:
         for i, s in enumerate(self.steps, start=1):
             lines.append(f"## Шаг {i}. {s.label}")
             lines.append("")
+            if s.details:
+                lines.extend([s.details.strip(), ""])
             if s.image_rel:
                 lines.append(f"![{s.label}]({s.image_rel})")
                 lines.append("")
@@ -388,6 +402,9 @@ class ScenarioRecorder:
             step_label = s.label_en if s.label_en is not None else s.label
             en_lines.append(f"## Step {i}. {step_label}")
             en_lines.append("")
+            step_details = s.details_en if s.details_en is not None else s.details
+            if step_details:
+                en_lines.extend([step_details.strip(), ""])
             if s.image_rel:
                 en_lines.append(f"![{step_label}]({s.image_rel})")
                 en_lines.append("")
