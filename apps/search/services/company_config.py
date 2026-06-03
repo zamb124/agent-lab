@@ -12,7 +12,7 @@ from apps.search.config import (
     SearchTavilyConfig,
     SearchTinyFishConfig,
 )
-from core.company_ai.crypto import decrypt_secret
+from core.ai.company_settings.crypto import decrypt_secret
 from core.company_search import (
     CompanyLinkupSearchProvider,
     CompanySearchProviderBase,

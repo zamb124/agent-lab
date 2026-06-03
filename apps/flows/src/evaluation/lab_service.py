@@ -142,8 +142,9 @@ from apps.flows.src.models.node_config import NodeConfig
 from apps.flows.src.registry.nodes import NodeRegistry
 from apps.flows.src.services.flow_factory import FlowFactory
 from apps.flows.src.tasks.task_names import TASK_EXECUTE_EVALUATION_RUN
-from core.ai.resolver import COST_ORIGIN_COMPANY, AICapability, resolve_llm_for_capability
-from core.ai.runtime import create_llm_client
+from core.ai.providers import AICapability
+from core.ai.resolver import COST_ORIGIN_COMPANY, resolve_ai_model
+from core.ai.runtime import create_llm_client_from_ai_model
 from core.billing import get_billing_service
 from core.billing.service import BALANCE_BLOCK_OPERATION_LLM
 from core.context import get_context, require_active_company
@@ -3878,12 +3879,12 @@ class EvaluationLabService:
         if not str(actx.user.user_id).strip():
             raise EvaluationLabValidationError("user context is required")
         uid = str(actx.user.user_id).strip()
-        resolved = resolve_llm_for_capability(
+        resolved = resolve_ai_model(
             AICapability.LLM_CHAT,
             include_platform_default=True,
         )
         assert resolved is not None
-        llm = create_llm_client(resolved)
+        llm = create_llm_client_from_ai_model(resolved)
         if resolved.cost_origin != COST_ORIGIN_COMPANY:
             await get_billing_service().require_balance_for_billable_operation(
                 actx.active_company.company_id,
@@ -4071,12 +4072,12 @@ class EvaluationLabService:
         if not str(actx.user.user_id).strip():
             raise EvaluationLabValidationError("user context is required")
         uid = str(actx.user.user_id).strip()
-        resolved = resolve_llm_for_capability(
+        resolved = resolve_ai_model(
             AICapability.LLM_CHAT,
             include_platform_default=True,
         )
         assert resolved is not None
-        llm = create_llm_client(resolved)
+        llm = create_llm_client_from_ai_model(resolved)
         if resolved.cost_origin != COST_ORIGIN_COMPANY:
             await get_billing_service().require_balance_for_billable_operation(
                 actx.active_company.company_id,

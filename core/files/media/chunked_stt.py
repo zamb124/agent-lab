@@ -7,9 +7,9 @@ from pathlib import Path
 
 import httpx
 
+from core.ai.runtime import create_voice_stt_client
 from core.clients.speech_override import SpeechOverride
 from core.clients.stt_client import BaseSTTClient, STTTranscriptionResult
-from core.clients.voice_resolver import get_stt_client
 from core.config import get_settings
 from core.files.models import AudioTranscriptionStatus
 from core.logging import get_logger
@@ -279,7 +279,7 @@ async def transcribe_audio_with_chunking(
         content_type: платформенный MIME-тип файла (``audio/wav`` и т.п.)
         language: язык (если None — см. tier-резолв и media_transcriber.default_language)
         speech_override: необязательный per-call override провайдера/модели
-        stt_client: инъекция клиента для тестов (если None — ``get_stt_client``)
+        stt_client: инъекция клиента для тестов (если None — ``core.ai.runtime``)
 
     Возвращает:
         Кортеж (полный текст, идентификатор провайдера из последнего ответа STT).
@@ -296,7 +296,7 @@ async def transcribe_audio_with_chunking(
     chunk_channels = mt.chunk_channels
 
     if stt_client is None:
-        stt_client = await get_stt_client(
+        stt_client = await create_voice_stt_client(
             company_id=company_id, override=speech_override
         )
 

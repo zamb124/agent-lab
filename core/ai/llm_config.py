@@ -1,9 +1,4 @@
-"""Типизированная per-call конфигурация LLM.
-
-Та же модель используется для основной LLM-попытки и каждой fallback-попытки.
-Намеренно независима от сервисных моделей, чтобы apps могли импортировать её
-из core без зависимости core -> apps.
-"""
+"""Typed per-call LLM configuration in the canonical AI contract."""
 
 from __future__ import annotations
 
@@ -12,7 +7,7 @@ from typing import Literal, cast
 
 from pydantic import Field, field_validator, model_validator
 
-from core.clients.llm.model_routing import split_provider_prefixed_model
+from core.ai.providers import split_provider_prefixed_model
 from core.models import StrictBaseModel
 from core.types import JsonObject, JsonValue, require_json_object
 
@@ -20,10 +15,11 @@ ReasoningEffort = Literal["none", "minimal", "low", "medium", "high", "xhigh"]
 
 
 class LLMCallConfig(StrictBaseModel):
-    """Конфиг одной конкретной LLM-попытки.
+    """Config for one concrete LLM attempt.
 
-    ``provider`` и ``model`` могут быть частичными на этапе authoring для primary
-    override ноды; к моменту HTTP-вызова клиентом оба разрешены.
+    The same typed payload is used for the primary and ordered secondary attempts.
+    Authoring-time configs may omit provider/model only where the resolver fills
+    them before execution.
     """
 
     provider: str | None = Field(default=None)
@@ -42,7 +38,6 @@ class LLMCallConfig(StrictBaseModel):
     extra_request_body: JsonObject | None = Field(default=None)
     extra_request_headers: dict[str, str] | None = Field(default=None)
 
-    # Runtime-метаданные, которые core LLM client использует для resolved attempts.
     default_headers: dict[str, str] = Field(default_factory=dict, exclude=True)
     source: str = Field(default="explicit", exclude=True)
     supported_parameters: frozenset[str] = Field(default_factory=frozenset, exclude=True)

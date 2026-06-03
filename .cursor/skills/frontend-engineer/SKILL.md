@@ -1,6 +1,6 @@
 ---
 name: frontend-engineer
-description: Frontend инженер платформы Humanitec. ZERO-FALLBACK, ZERO-IMPORT canon. Lit 3 + EventBus + фабрики (createAsyncOp / createResourceCollection / createCursorList / createFacets / createForm / createSlice). Использовать ВСЕГДА при правках в core/frontend/static/lib/**, apps/*/ui/**, добавлении страниц/модалок/компонентов/ресурсов/событий/i18n/маршрутов; при упоминании Lit, PlatformElement, PlatformPage, PlatformApp, PlatformModal, PlatformFormModal, useResource, useOp, useForm, useCursorList, useFacets, useSlice, dispatch, EventBus, slice, reducer, modal, sidebar, breadcrumbs, toast, навигации, темы, locale, фабрик, restMirror, transport='ws', WS request-reply, factory-registry, glass-modal, platform-modal-stack, platform-trace-viewer, platform-log-viewer, platform-user-chip; перед коммитом любых .js под frontend; при ошибках check_ui_canon / check_ui_factories / check_i18n / check_i18n_keys / check_core_frontend_canon / check_command_rest_mirror; и каждый раз когда задача уровня "изменить UI", "добавить страницу", "новый ресурс", "новая модалка", "i18n", "поменять стейт", "WS-команда", "слать событие".
+description: Frontend инженер платформы Humanitec. ZERO-FALLBACK, ZERO-IMPORT, ZERO-COSTYL, Design Standard canon. Lit 3 + EventBus + фабрики (createAsyncOp / createResourceCollection / createCursorList / createFacets / createForm / createSlice). Использовать ВСЕГДА при правках в core/frontend/static/lib/**, apps/*/ui/**, добавлении страниц/модалок/компонентов/ресурсов/событий/i18n/маршрутов/дизайна/CSS; при упоминании Lit, PlatformElement, PlatformPage, PlatformApp, PlatformModal, PlatformFormModal, useResource, useOp, useForm, useCursorList, useFacets, useSlice, dispatch, EventBus, slice, reducer, modal, sidebar, breadcrumbs, toast, навигации, темы, locale, фабрик, restMirror, transport='ws', WS request-reply, factory-registry, glass-modal, platform-modal-stack, platform-trace-viewer, platform-log-viewer, platform-user-chip, tokens.css, Figma, Networkle, layout, CSS; перед коммитом любых .js под frontend; при ошибках check_ui_canon / check_ui_factories / check_i18n / check_i18n_keys / check_core_frontend_canon / check_command_rest_mirror; и каждый раз когда задача уровня "изменить UI", "добавить страницу", "новый ресурс", "новая модалка", "i18n", "поменять стейт", "WS-команда", "слать событие", "поменять дизайн".
 ---
 
 # Frontend Engineer — Humanitec Platform
@@ -23,8 +23,9 @@ description: Frontend инженер платформы Humanitec. ZERO-FALLBACK
 Прежде чем тронуть `.js` под фронт, я обязан:
 
 1. Прочитать актуальные правила: [`frontend.mdc`](.cursor/rules/frontend.mdc), [`ui_events.mdc`](.cursor/rules/ui_events.mdc), [`ui_factories.mdc`](.cursor/rules/ui_factories.mdc), [`ui_components.mdc`](.cursor/rules/ui_components.mdc), [`architecture.mdc`](.cursor/rules/architecture.mdc) (REST-зеркало команд), и сервисное правило (`sync.mdc`/`crm.mdc`/`rag.mdc`/`flows.mdc`/`office.mdc`/`voice.mdc`).
-2. Понять, к какой из шести фабрик сводится моя задача (или это slice-only через `createSlice`).
-3. Перед declaration «готово» прогнать чек-лист из последнего раздела и убедиться, что **`make check-events-canon`** зелёный.
+2. Если есть визуальная правка — сверить раздел **Design Standard** ниже с [`tokens.css`](core/frontend/static/assets/css/tokens.css), shared styles и базовыми макетами Figma `Networkle / Макеты / node 30:556`.
+3. Понять, к какой из шести фабрик сводится моя задача (или это slice-only через `createSlice`).
+4. Перед declaration «готово» прогнать чек-лист из последнего раздела и убедиться, что **`make check-events-canon`** зелёный.
 
 ## Один поток данных (диаграмма)
 
@@ -342,6 +343,49 @@ async _createEntity(payload) {
 | `this.startOAuth(provider, opts?)` | `auth/oauth/start_requested` |
 
 Подписка `useEvent` на CoreEvents — допустима (например, страница хочет реагировать на `AUTH_COMPANY_SWITCHED`, `ROUTER_ROUTE_CHANGED`, `UI_DOCUMENTS_RELOAD_REQUESTED`). Запрет — на исходящий dispatch UI-семейств.
+
+## Design Standard — Figma → tokens.css
+
+Источник визуального стандарта: базовые макеты Figma `Networkle / Макеты / node 30:556`; текущий CSS-слепок — [`apps/crm/design/design.css`](apps/crm/design/design.css); runtime-канон — [`core/frontend/static/assets/css/tokens.css`](core/frontend/static/assets/css/tokens.css) + shared styles из [`core/frontend/static/lib/styles/shared/`](core/frontend/static/lib/styles/shared/) + core-компоненты.
+
+Главное правило: **Figma задаёт ритм и семантику, но код использует только токены и core-компоненты.** Копировать CSS-export из Figma в компонент запрещено. Если в макете есть повторяемый цвет/размер/поведение, которого нет в runtime-системе, сначала добавь семантический токен или core-компонент, потом используй его.
+
+### Продуктовый тон
+
+Humanitec/Networkle — рабочий SaaS-инструмент, не лендинг. Первый экран страницы — полезный workspace: списки, карточки, редактор, фильтры, таблицы, панель действий. Запрещены hero-композиции, декоративные блоки, маркетинговые карточные секции и пустые «объясняющие» экраны вместо реального workflow.
+
+### Layout grammar
+
+- Десктопный базовый макет Figma — `1440x1024`, вертикальный scroll, рабочая область с плотной сеткой. Типовой ритм: `gap/padding 8/12/16/20/24/32`; брать через `--space-*`, а не literal px, кроме разовых geometry constraints.
+- Основные рабочие панели: content + side panel. В Figma встречаются панели `324/400/461/508px`, gap `24px`, padding `20/24/32px`. В коде выражай это через `grid-template-columns: minmax(0, 1fr) minmax(320px, 400px)` / `minmax(360px, 508px)` и responsive collapse, не absolute-position.
+- Контролы: button/input/dropdown/date input — высота `44px`; строки списков/sidebar — `60px`; icon buttons — `28/32/36/44px`. Используй `--button-height`, `--input-height`, `--platform-button-icon-size`, `--field-pill-*`.
+- Радиусы: card/note/summary `--radius-lg` (`16px`), compact surfaces `--radius-md` (`12px`), buttons `--btn-radius` (`22px`), field pill `--field-pill-radius` (`18px`), modal/bottom sheet `--radius-2xl/3xl`.
+- Мобильный layout — один столбец, sticky top/bottom chrome через `<platform-top-bar>`, `<platform-bottom-nav>`, `<platform-bottom-sheet>` и safe-area tokens. Нельзя оставлять desktop grid с горизонтальным скроллом.
+
+### Token mapping
+
+- Фон/поверхности: `Light/background #FFFFFF` из Figma = light theme `--bg-surface`/`--bg-elevated`; dark = `--glass-solid-*`. Не использовать локальные `#fff`, `rgba(34,34,34,0.05)` в components.
+- Текст: `Light/font #222222` = `--text-primary`; muted `rgba(34,34,34,0.3)` = `--text-tertiary`; secondary = `--text-secondary`.
+- Акценты Figma: violet `#99A6F9`, yellow `#FAD17A`, orange `#FF885C`, cyan `#8CE6FD`, rose `#FFAAAB`. В runtime использовать `--accent`, `--accent-secondary`, `--accent-gradient`, `--crm-accent-*`, `--crm-summary-*`, `--crm-note-*`. Если нужен новый meaning — добавить `--<svc>-<domain>-<role>` в `tokens.css`.
+- Состояния: success/warning/error/info — только `--success`, `--warning`, `--error`, `--info` и их `*-bg/border`, без новых случайных цветов.
+
+### Component mapping
+
+| Figma / задача | Runtime-канон |
+|---|---|
+| Button / round button | `<platform-button>` или `buttonStyles`; варианты `primary`, `accent`, `secondary`, `danger`, `ghost`; icon-only через атрибут, не самописный pill. |
+| Text input / dropdown / date input | `<platform-field>` + `fieldPillStyles`; date через platform date picker; raw input только по whitelist Field canon. |
+| Modal | `PlatformModal` / `PlatformFormModal` + `platform-modal-stack`; размеры через `size` и modal tokens. |
+| Note / Daily summary / task list / repeated card | `glass-card`, `platform-island` или сервисный компонент на semantic tokens; для CRM сначала смотреть `--crm-summary-*`, `--crm-note-*`. |
+| Sidebar / navigation / header / breadcrumbs | `<platform-service-sidebar>`, `<platform-sidebar-nav-tree>`, `<platform-top-bar>`, `<page-header>`, `<platform-breadcrumbs>`. |
+| Tags / entity chips / user | `tag-input`, semantic chip на `--crm-note-related-*`, `<platform-user-chip>` для пользователя. |
+
+### CSS discipline
+
+- `static styles` в `apps/<svc>/ui/**` описывает только layout текущего компонента и composition. Общие button/input/modal/card/list/chip patterns — в `core/frontend/static/lib/**` или `tokens.css`.
+- Запрещены локальные hex/rgb/rgba для brand/accent/surface/text, локальные `box-shadow`/`backdrop-filter`/`border-radius` для shared primitives, копия классов из `apps/crm/design/design.css`.
+- Если локальный визуальный primitive повторился второй раз в сервисе — вынести в сервисные semantic tokens или компонент. Если нужен в двух сервисах — вынести в core UI Kit.
+- Перед закрытием визуальной задачи сделать минимум desktop sanity на `1440x1024`; если затронут shell/страница/модалка — ещё mobile `390x844` или `430x932`. Проверить отсутствие overlap, horizontal scroll, обрезанного текста и несоответствия Figma-ритму.
 
 ## Field canon (поля форм)
 
@@ -726,13 +770,16 @@ make test-frontend-core-browser
 11. Никаких локальных `escapeHtml` / `EMAIL_RE` / `_digitsOnly` / `hash*31` / `formatFileSize` циклов / `Intl.*('ru-RU', ...)` / `toLocale*('ru-RU')`. Используй `core/frontend/static/lib/utils/` (см. раздел «Utility canon»).
 12. Никакого своего multipart-upload `createAsyncOp` — только `createMultipartFileUploadOp({ name, url, extraFields? })` из [`@platform/lib/events/index.js`](core/frontend/static/lib/events/factories/_multipart-upload.js).
 13. Никаких свободных префиксов localStorage (`humanitec.*`, `<svc>:*`, `sync.chat.*`) — только `platformStorageKey('<scope>', '<key>')` из [`@platform/lib/utils/storage-keys.js`](core/frontend/static/lib/utils/storage-keys.js).
-14. В flows LLM editor fallback-модель настраивается тем же полным редактором, что основная LLM-модель. `fallback_models` — ordered array полноценных `LLMCallConfig`; `string[]` и урезанный UI запрещены.
+14. AI provider/model UI строится только из backend catalog (`core.ai`): никаких локальных provider allowlist, capability filters, raw fallback JSON textarea или `provider=none`.
+15. В flows LLM editor fallback-модель настраивается тем же полным редактором, что основная LLM-модель. `fallback_models` — ordered array полноценных `LLMCallConfig`; `string[]` и урезанный UI запрещены.
+16. Визуальная правка прошла Design Standard: Figma-ритм сопоставлен с `tokens.css`, нет копии CSS-export, нет локальных brand/surface/text hex/rgba, использованы core-компоненты для button/input/modal/sidebar/header/card.
+17. Для изменённой страницы/модалки сделан responsive sanity: desktop `1440x1024`, а для shell/page/modal ещё mobile `390x844` или `430x932`; нет overlap, horizontal scroll, обрезанного текста.
 
 Если что-то из этого нельзя выполнить — задача **не закрыта**. Возвращаюсь к канону, при необходимости — к правке `.cursor/rules/`.
 
 ## Анти-паттерны (краткая сводка)
 
-Полный каталог — [`anti-patterns.md`](.cursor/skills/frontend-engineer/anti-patterns.md). Топ-20 типовых костылей и единственно корректные ответы:
+Полный каталог — [`anti-patterns.md`](.cursor/skills/frontend-engineer/anti-patterns.md). Топ-22 типовых костылей и единственно корректные ответы:
 
 | # | Костыль | Корректно | Детектор |
 |---|---|---|---|
@@ -756,6 +803,8 @@ make test-frontend-core-browser
 | 18 | Локальный `EMAIL_RE` / `_digitsOnly` / ad-hoc email regex | `import { isValidEmail, digitsOnly, EMAIL_RE } from '@platform/lib/utils/validators.js'` | [`check_ui_canon.sh`](scripts/check_ui_canon.sh) п.19 |
 | 19 | Локальный hash-цикл `h * 31 + charCodeAt`, локальный `_formatBytes`/`_formatFileSize`, локальный `_formatDuration` (mm:ss) | `hashString31`/`hueFromString` из `@platform/lib/utils/hash-string.js`; `formatFileSize` из `@platform/lib/utils/format-file-size.js`; `formatDurationSeconds`/`formatDurationMs` из `@platform/lib/utils/format-duration.js` | [`check_ui_canon.sh`](scripts/check_ui_canon.sh) п.19 |
 | 20 | `Intl.NumberFormat('ru-RU', ...)`, `Intl.DateTimeFormat('ru-RU', ...)`, `toLocale*('ru-RU')` хардкод | `formatPlatformNumber`/`formatPlatformCurrencyRub`/`formatPlatformDate*` с локалью из `state.i18n.locale` | [`check_ui_canon.sh`](scripts/check_ui_canon.sh) п.19 |
+| 21 | Копия Figma CSS-export / локальные `#99A6F9`, `#FAD17A`, `#FF885C`, `rgba(34,34,34,...)` в компоненте | Design Standard: semantic tokens в `tokens.css` + `--crm-*`/`--<svc>-*`, core components | code-review; при повторении добавить detector |
+| 22 | Маркетинговый hero/card-section вместо рабочей страницы SaaS | Workspace-first layout: page-header/sidebar/filters/list/editor/action panel по Figma-ритму | code-review + Playwright screenshot sanity |
 
 ## Прогрессивные ссылки
 

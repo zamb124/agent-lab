@@ -13,7 +13,7 @@
     },
     "models": {
         "title": "Model registry",
-        "subtitle": "Local LitServe models (embedding, rerank)",
+        "subtitle": "Humanitec system models for embeddings and rerank",
         "kind": "Kind",
         "kind_embedding": "Embedding",
         "kind_rerank": "Rerank",

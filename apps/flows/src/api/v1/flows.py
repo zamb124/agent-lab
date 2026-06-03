@@ -43,9 +43,10 @@ from apps.flows.src.services.flow_speech_resolve import (
 )
 from apps.flows.src.services.flow_validator import FlowValidator
 from apps.flows.src.services.flows_loader import FlowsLoader, load_tools_to_db
-from core.clients.voice_resolver import resolve_effective_tts_voice_for_ws
+from core.ai.runtime import resolve_voice_tts_ws_voice
 from core.config import get_settings
 from core.context import get_context
+from core.identity.embed_guest_turns import EMBED_SESSION_ID_METADATA_KEY
 from core.identity.flow_preview_handoff import store_flow_preview_handoff
 from core.identity.runtime_users import ensure_persisted_runtime_user
 from core.logging import get_logger
@@ -1100,10 +1101,10 @@ async def get_flow_voice_session_query(
     """Собирает query для Voice WS: STT/TTS/VAD/language из effective_flow_speech_settings.
 
     Ключи опциональны (только явно заданные в профиле). Дополнительно для ``tts_voice``
-    выполняется тот же tier-резолв, что в ``resolve_effective_tts_voice_for_ws``, чтобы URL
-    совпадал с ``get_tts_streamer`` при частичном профиле. Остальные поля без значения в
+    выполняется тот же tier-резолв, что в ``resolve_voice_tts_ws_voice``, чтобы URL
+    совпадал с ``create_voice_tts_streamer`` при частичном профиле. Остальные поля без значения в
     профиле не заполняются — их на стороне ``apps/voice`` дозаполняет ``create_*_provider`` /
-    ``get_tts_streamer`` из company и ``settings.voice``.
+    ``core.ai.runtime`` из company и ``settings.voice``.
     """
     cfg = await container.flow_repository.get(flow_id)
     if cfg is None:
@@ -1113,7 +1114,7 @@ async def get_flow_voice_session_query(
     query = triple_to_voice_ws_query_dict(stt, tts, vad)
     ctx = get_context()
     company_id = ctx.active_company.company_id if ctx and ctx.active_company else None
-    resolved_voice = await resolve_effective_tts_voice_for_ws(
+    resolved_voice = await resolve_voice_tts_ws_voice(
         company_id=company_id,
         flow_tts=tts,
     )
@@ -1304,6 +1305,7 @@ async def create_flow_preview_share(
     _ = await container.embed_mapping_repository.set(mapping)
 
     guest_id = f"flow_preview_{uuid.uuid4().hex}"
+    embed_session_id = f"embsess_{uuid.uuid4().hex}"
     expires_at = datetime.now(timezone.utc) + timedelta(seconds=_FLOW_PREVIEW_SHARE_TTL_SECONDS)
     _ = await ensure_persisted_runtime_user(
         container,
@@ -1318,6 +1320,7 @@ async def create_flow_preview_share(
             "embed_branch_id": branch_id,
             "issued_by": "flows.preview_share",
             "token_expires_at": expires_at.isoformat(),
+            EMBED_SESSION_ID_METADATA_KEY: embed_session_id,
         },
     )
     token = get_token_service().create_embed_session_token(
@@ -1331,6 +1334,7 @@ async def create_flow_preview_share(
             "embed_branch_id": branch_id,
             "allowed_origin": "",
             "issued_by": "flows.preview_share",
+            EMBED_SESSION_ID_METADATA_KEY: embed_session_id,
         },
     )
 

@@ -87,6 +87,7 @@ API: `get`, `set`, `delete`, `list_all`, `get_many`. `EvaluationRepository`/`Sch
 | `EmbedConfigRepository` / `EmbedMappingRepository` | False | `storage` | `company:X:embed_config:` / `…:embed_mapping:` |
 | `NamespaceRepository` | False | `storage` | `company:X:namespace:` |
 | `PushSubscriptionRepository` | False | `push_subscriptions` | `company:X:push:` |
+| `AIModelCatalogRepository` | **True** | `storage` | `ai_model_catalog:{provider}:{model_id}` |
 
 ### Сервис flows (БД `platform_agents`)
 
@@ -98,13 +99,12 @@ API: `get`, `set`, `delete`, `list_all`, `get_many`. `EvaluationRepository`/`Sch
 | `DurableWorkflowRepository` | False | `workflow_events`, `workflow_snapshots`, `workflow_instances`, `execution_branches`, `activity_tasks` | ledger по `company_id + session_id` |
 | `ResourceRepository` | False | `resources` | `resource:{id}` |
 | `MCPServerRepository` | False | `mcp_servers` | `mcp_server:{id}` |
-| `LLMModelRepository` | **True** | `storage` | `llm_model:{provider}:{model_id}` (без company:) |
 | `EvaluationRepository` | — | `evaluation_results` | прямые INSERT/SELECT |
 | `ScheduledTaskRepository` | — | `scheduled_tasks` | SQL по `ScheduledTasks`, не наследует `BaseRepository` |
 
 ## `is_global`
 
-- **`is_global=True`** — глобальные сущности (User, Company, AuthSession, Subdomain, LLM models). Ключ без префикса `company:`.
+- **`is_global=True`** — глобальные сущности (User, Company, AuthSession, Subdomain, AI model catalog). Ключ без префикса `company:`.
 - **`is_global=False`** — изолированы по компании. `BaseRepository._build_final_key` сам добавляет `company:{id}:` к ключу.
 
 **Запрещено:**

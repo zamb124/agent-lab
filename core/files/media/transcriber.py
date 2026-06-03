@@ -4,9 +4,9 @@ import asyncio
 
 from pydantic import BaseModel, Field
 
+from core.ai.runtime import create_voice_stt_client
 from core.clients.speech_override import SpeechOverride
 from core.clients.stt_client import BaseSTTClient
-from core.clients.voice_resolver import get_stt_client
 from core.files.media.audio_extract import extract_audio_from_video
 from core.files.media.chunked_stt import transcribe_audio_with_chunking
 from core.files.media.youtube import download_audio_from_url
@@ -31,7 +31,7 @@ class MediaTranscriber:
     - видеофайлы (mp4, mkv, avi, mov, webm video) — извлекает аудиодорожку
     - YouTube URL — скачивает аудио через yt-dlp (см. core.files.media.youtube)
 
-    ``company_id`` обязателен — tier-резолв STT через ``voice_resolver``.
+    ``company_id`` обязателен — tier-резолв STT через ``core.ai.runtime``.
     """
 
     def __init__(
@@ -50,7 +50,7 @@ class MediaTranscriber:
     async def _get_stt_client(self) -> BaseSTTClient:
         if self._stt_client is not None:
             return self._stt_client
-        return await get_stt_client(
+        return await create_voice_stt_client(
             company_id=self._company_id,
             override=self._speech_override,
         )

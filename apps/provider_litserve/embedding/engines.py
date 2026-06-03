@@ -65,7 +65,7 @@ def parse_embedding_body(raw: BaseModel | JsonValue) -> OpenAIEmbeddingsRequest:
 
 
 class LocalEmbeddingEngine:
-    """SentenceTransformer; ответ совпадает с тем, что парсит ``EmbeddingService``."""
+    """SentenceTransformer; ответ совпадает с тем, что парсит ``AIEmbeddingClient``."""
 
     def __init__(self, cfg: ProviderLitserveInfraConfig) -> None:
         self._cfg: ProviderLitserveInfraConfig = cfg

@@ -1117,5 +1117,5 @@ async def test_write_reembed_chunk_embeddings_empty_input_is_noop(rag_provider_p
 
 @pytest.mark.asyncio
 async def test_embedding_model_name_matches_runtime_model(rag_provider_pgvector):
-    """Public ``embedding_model_name()`` совпадает с конфигом ``EmbeddingService.model``."""
-    assert rag_provider_pgvector.embedding_model_name() == rag_provider_pgvector.embedding_service.model
+    """Public ``embedding_model_name()`` совпадает с конфигом ``AIEmbeddingClient.model``."""
+    assert rag_provider_pgvector.embedding_model_name() == rag_provider_pgvector.embedding_client.model

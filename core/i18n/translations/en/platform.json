@@ -95,7 +95,7 @@
         "litserve": {
             "name": "Humanitec Models",
             "menu_description": "Local embeddings and rerank",
-            "description": "LitServe model registry: embeddings and rerank on your hardware for RAG and flows without external inference APIs"
+            "description": "Humanitec model registry: embeddings and rerank on platform infrastructure for RAG and flows without external inference APIs"
         },
         "grafana": {
             "name": "Grafana",

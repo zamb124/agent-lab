@@ -1,8 +1,8 @@
-"""
-LLM model routing constants and parser.
+"""Provider routing specs for the canonical AI layer.
 
-This module is intentionally independent from ``core.clients.llm`` so config
-models can import routing defaults without initializing LLM clients.
+This module is intentionally free from runtime clients and settings imports.
+Config models, UI DTO builders and provider adapters can import it without
+initializing LLM transports.
 """
 
 from __future__ import annotations
@@ -33,6 +33,11 @@ PLATFORM_FREE_MODEL_CANDIDATE_PROVIDER_SLUGS = frozenset(
         *ZERO_PRICE_LLM_PROVIDER_SLUGS,
         *ACCOUNT_FREE_TIER_LLM_PROVIDER_SLUGS,
     }
+)
+PLATFORM_FREE_MODEL_CANDIDATE_PROVIDER_ORDER: tuple[str, ...] = tuple(
+    provider
+    for provider in OPENAI_COMPATIBLE_LLM_PROVIDER_ORDER
+    if provider in PLATFORM_FREE_MODEL_CANDIDATE_PROVIDER_SLUGS
 )
 
 PLATFORM_LLM_PROVIDER_ORDER: tuple[str, ...] = (
@@ -154,3 +159,28 @@ def split_humanitec_llms_model_ref(model: str | None) -> tuple[str, str] | None:
     if provider not in PLATFORM_FREE_MODEL_CANDIDATE_PROVIDER_SLUGS:
         return None
     return provider, model_id.strip()
+
+
+__all__ = [
+    "ACCOUNT_FREE_TIER_LLM_PROVIDER_SLUGS",
+    "GITHUB_MODELS_API_VERSION",
+    "HUMANITEC_LLM_AUTO_MODEL",
+    "HUMANITEC_LLM_PROVIDER",
+    "HUMANITEC_LLMS_DISPLAY_LABEL",
+    "LLM_FREE_MODEL_DISCOVERY_POLICY_BY_PROVIDER",
+    "LLM_PROVIDER_DEFAULT_BASE_URLS",
+    "LLM_PROVIDER_DEFAULT_MODELS_URLS",
+    "LLM_PROVIDER_DETECTION_HOSTS",
+    "LLM_PROVIDER_SMOKE_MODELS",
+    "LLM_ROUTING_PROVIDER_SLUGS",
+    "OPENAI_COMPATIBLE_LLM_PROVIDER_ORDER",
+    "OPENAI_COMPATIBLE_LLM_PROVIDER_SLUGS",
+    "PLATFORM_FREE_MODEL_CANDIDATE_PROVIDER_SLUGS",
+    "PLATFORM_FREE_MODEL_CANDIDATE_PROVIDER_ORDER",
+    "PLATFORM_LLM_PROVIDER_ORDER",
+    "PLATFORM_LLM_PROVIDER_SLUGS",
+    "ZERO_PRICE_LLM_PROVIDER_SLUGS",
+    "humanitec_llms_model_ref",
+    "split_humanitec_llms_model_ref",
+    "split_provider_prefixed_model",
+]

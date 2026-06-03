@@ -5,11 +5,18 @@ from __future__ import annotations
 from collections.abc import Sequence
 from typing import TYPE_CHECKING, cast
 
-from core.clients.llm.config import LLMCallConfig
-from core.clients.llm.model_routing import (
+from core.ai.llm_config import LLMCallConfig
+from core.ai.providers import (
+    ACCOUNT_FREE_TIER_LLM_PROVIDER_SLUGS,
+    GITHUB_MODELS_API_VERSION,
     HUMANITEC_LLM_AUTO_MODEL,
     HUMANITEC_LLM_PROVIDER,
+    LLM_PROVIDER_DEFAULT_BASE_URLS,
+    LLM_PROVIDER_DETECTION_HOSTS,
     LLM_ROUTING_PROVIDER_SLUGS,
+    OPENAI_COMPATIBLE_LLM_PROVIDER_SLUGS,
+    PLATFORM_FREE_MODEL_CANDIDATE_PROVIDER_ORDER,
+    PLATFORM_FREE_MODEL_CANDIDATE_PROVIDER_SLUGS,
 )
 from core.config.base import BaseSettings
 from core.config.llm_openai_compat import yandex_llm_openai_root_from_provider_cfg
@@ -25,14 +32,6 @@ from core.config.models import (
     YandexLLMProviderConfig,
 )
 from core.config.openai_v1_base_url import normalize_openai_v1_base_url
-from core.llm_model_routing import (
-    ACCOUNT_FREE_TIER_LLM_PROVIDER_SLUGS,
-    GITHUB_MODELS_API_VERSION,
-    LLM_PROVIDER_DEFAULT_BASE_URLS,
-    LLM_PROVIDER_DETECTION_HOSTS,
-    OPENAI_COMPATIBLE_LLM_PROVIDER_SLUGS,
-    PLATFORM_FREE_MODEL_CANDIDATE_PROVIDER_SLUGS,
-)
 from core.types import JsonObject
 from core.variables import VariableResolutionError, VarResolver
 
@@ -452,7 +451,7 @@ def _platform_default_pool_is_configured(settings: BaseSettings) -> bool:
     free_pool_config = settings.llm.platform_free_pool
     return free_pool_config.enabled and any(
         _platform_free_pool_provider_is_configured(settings, provider)
-        for provider in free_pool_config.providers
+        for provider in PLATFORM_FREE_MODEL_CANDIDATE_PROVIDER_ORDER
     )
 
 

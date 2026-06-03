@@ -3,7 +3,6 @@ from core.db.repositories import VariableRepository
 
 from .evaluation_lab_repository import EvaluationLabRepository
 from .flow_repository import FlowRepository
-from .llm_model_repository import LLMModelRepository
 from .mcp_repository import MCPServerRepository
 from .models import (  # noqa: F401
     ActivityTasks,
@@ -33,7 +32,6 @@ __all__ = [
     "NodeRepository",
     "EvaluationLabRepository",
     "FlowRepository",
-    "LLMModelRepository",
     "ToolRepository",
     "VariableRepository",
     "MCPServerRepository",

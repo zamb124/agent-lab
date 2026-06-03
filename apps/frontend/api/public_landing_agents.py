@@ -4,15 +4,21 @@
 
 import uuid
 from datetime import datetime, timedelta, timezone
+from urllib.parse import urlparse
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel, Field
 
+from apps.frontend.api.public_session_security import (
+    enforce_public_session_issue_rate_limit,
+    new_embed_session_id,
+)
 from apps.frontend.dependencies import ContainerDep
 from apps.frontend.services.landing_demo_seed import (
     ensure_system_landing_demo_embeds,
     public_landing_demo_card_url,
 )
+from core.identity.embed_guest_turns import EMBED_SESSION_ID_METADATA_KEY
 from core.identity.landing_public_demo import LANDING_PUBLIC_EMBED_SESSION_ISSUER
 from core.identity.runtime_users import ensure_persisted_runtime_user
 from core.identity.system_bootstrap import SYSTEM_COMPANY_ID, SYSTEM_COMPANY_SUBDOMAIN
@@ -60,6 +66,23 @@ class PublicLandingSessionResponse(BaseModel):
     expires_at: datetime
     flow_id: str
     branch_id: str
+
+
+def _normalize_origin(raw: str) -> str:
+    value = raw.strip()
+    if not value:
+        return ""
+    parsed = urlparse(value)
+    if parsed.scheme not in {"http", "https"} or not parsed.netloc:
+        raise HTTPException(status_code=400, detail="origin должен быть HTTP(S) origin")
+    return f"{parsed.scheme}://{parsed.netloc}"
+
+
+def _origin_from_referer(referer: str) -> str:
+    parsed = urlparse(referer.strip())
+    if parsed.scheme in {"http", "https"} and parsed.netloc:
+        return f"{parsed.scheme}://{parsed.netloc}"
+    return ""
 
 
 async def _effective_landing_card_image_url(
@@ -140,6 +163,7 @@ async def list_public_landing_agents(container: ContainerDep) -> PublicLandingAg
 @router.post("/session", response_model=PublicLandingSessionResponse)
 async def issue_public_landing_session(
     body: PublicLandingSessionRequest,
+    request: Request,
     container: ContainerDep,
 ) -> PublicLandingSessionResponse:
     embed_id = body.embed_id.strip()
@@ -162,7 +186,23 @@ async def issue_public_landing_session(
     if not img:
         raise HTTPException(status_code=403, detail="Виджет не опубликован в каталоге")
 
+    origin = _normalize_origin(request.headers.get("origin", ""))
+    referer_origin = _origin_from_referer(request.headers.get("referer", ""))
+    if not origin and referer_origin:
+        origin = referer_origin
+    if origin and referer_origin and origin != referer_origin:
+        raise HTTPException(status_code=403, detail="origin не совпадает со страницей каталога")
+    if not origin:
+        raise HTTPException(status_code=403, detail="origin обязателен для публичной сессии")
+
+    await enforce_public_session_issue_rate_limit(
+        redis_client=container.redis_client,
+        request=request,
+        scope="public_landing_agents",
+    )
+
     guest_id = f"landing_guest_{uuid.uuid4().hex}"
+    embed_session_id = new_embed_session_id()
     expires_at = datetime.now(timezone.utc) + timedelta(seconds=body.expires_in_seconds)
     _ = await ensure_persisted_runtime_user(
         container,
@@ -177,6 +217,7 @@ async def issue_public_landing_session(
             "embed_branch_id": config.branch_id,
             "issued_by": LANDING_PUBLIC_EMBED_SESSION_ISSUER,
             "token_expires_at": expires_at.isoformat(),
+            EMBED_SESSION_ID_METADATA_KEY: embed_session_id,
         },
     )
     token = get_token_service().create_embed_session_token(
@@ -188,8 +229,9 @@ async def issue_public_landing_session(
             "embed_id": embed_id,
             "embed_flow_id": config.flow_id,
             "embed_branch_id": config.branch_id,
-            "allowed_origin": "",
+            "allowed_origin": origin,
             "issued_by": LANDING_PUBLIC_EMBED_SESSION_ISSUER,
+            EMBED_SESSION_ID_METADATA_KEY: embed_session_id,
         },
     )
     logger.info(

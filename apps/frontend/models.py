@@ -7,9 +7,9 @@ from typing import ClassVar, Literal, Self, override
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
+from core.ai.company_settings import CapabilityLiteral
+from core.ai.llm_config import LLMCallConfig
 from core.billing.settlement_rules import SettlementRulesDocument
-from core.clients.llm.config import LLMCallConfig
-from core.company_ai import CapabilityLiteral
 from core.config.models import LegalConfig, PublicSiteConfig
 from core.models.payment_models import TransactionResponse
 from core.tracing.models import TraceSpanRecord
@@ -72,8 +72,8 @@ class CompanySettingsUpdate(BaseModel):
     """Обновление базовых настроек компании.
 
     AI-провайдеры конфигурируются отдельным CRUD-роутером ``/ai-providers``
-    (см. core.company_ai). Поля legacy (``rag_embedding`` / ``rag_rerank`` /
-    ``crm_summarize_provider``) удалены вместе с парсерами в ``core.company_ai``.
+    (см. core.ai.company_settings). Поля legacy (``rag_embedding`` / ``rag_rerank`` /
+    ``crm_summarize_provider``) удалены вместе с парсерами в ``core.ai.company_settings``.
     """
 
     name: str | None = Field(default=None, description="Название компании")
@@ -255,14 +255,15 @@ class LandingDemoSpec(BaseModel):
 class AIProvidersCapabilityUpdate(BaseModel):
     """PUT /api/settings/ai-providers/{capability}: задать override capability компании.
 
-    - ``provider`` платформенный provider capability, ``none`` для отключения rerank
-      или ``custom:<id>``;
+    - ``enabled=false`` отключает rerank; включённые capability используют
+      платформенный provider capability или ``custom:<id>``;
       для voice — литералы провайдеров речи или ``custom:<id>`` (кроме VAD).
     - ``api_key`` (plaintext) шифруется на сервере; для ``custom:<id>`` не используется
       (ключ в custom-провайдере).
     """
 
-    provider: str = Field(min_length=1)
+    enabled: bool | None = None
+    provider: str | None = Field(default=None, min_length=1)
     api_key: str | None = None
     base_url: str | None = None
     folder_id: str | None = None

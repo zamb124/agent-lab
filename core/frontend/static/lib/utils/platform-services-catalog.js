@@ -73,7 +73,7 @@ export const PLATFORM_SERVICES = Object.freeze([
         brandFrom: '#8b5cf6',
         brandTo: '#d946ef',
         healthName: 'provider_litserve',
-        countOp: 'frontend/dashboard_litserve_models_count',
+        countOp: 'frontend/dashboard_humanitec_models_count',
         metricKey: 'console_home.stat_models_count',
     }),
     Object.freeze({

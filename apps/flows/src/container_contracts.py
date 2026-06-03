@@ -11,7 +11,6 @@ from core.types import JsonObject, JsonValue
 if TYPE_CHECKING:
     from apps.flows.src.db import (
         FlowRepository,
-        LLMModelRepository,
         NodeRepository,
         ResourceRepository,
         ToolRepository,
@@ -401,9 +400,6 @@ class FlowRuntimeContainer(Protocol):
 
     @property
     def graph_compiler(self) -> GraphCompiler: ...
-
-    @property
-    def llm_model_repository(self) -> LLMModelRepository: ...
 
     @property
     def llm_models_service(self) -> LLMModelsService: ...

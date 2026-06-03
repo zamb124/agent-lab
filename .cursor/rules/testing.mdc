@@ -14,7 +14,7 @@ alwaysApply: false
 2. **Только готовые фикстуры** — запрещено создавать свои клиенты, сервисы, worker'ы.
 3. **Изоляция через `unique_id`** — обязательна в каждом тесте для всех ID (`task_id`, `context_id`, `user_id`, `session_id`, …).
 4. **Реальные компоненты** — `FlowFactory`, `ToolRegistry`, `S3Client`, `DurableWorkflowRepository`/`DurableWorkflowRuntime`, репозитории не мокаются.
-5. **RAG эмбеддинги:** по умолчанию `PgVectorProvider` идёт в реальный HTTP эмбеддер. `PGVECTOR_TEST_MOCK_EMBEDDINGS=true` — детерминированные вектора без внешнего API (имя не под префиксом `RAG__`, иначе ломается разбор `rag.embedding` в Pydantic). Подмена методов `EmbeddingService` в конструкторе `PgVectorProvider` (не отдельный «тестовый» провайдер); прокинуть в subprocess `rag_worker` через `**TEST_DATABASE_ENV` (`tests/fixtures/test_database_env.py`).
+5. **RAG эмбеддинги:** по умолчанию `PgVectorProvider` идёт через реальный `core.ai.runtime` embedding path. `PGVECTOR_TEST_MOCK_EMBEDDINGS=true` — deterministic `core.ai.embedding_client` route без внешнего API (имя не под префиксом `RAG__`, иначе ломается разбор `rag.embedding` в Pydantic); прокинуть в subprocess `rag_worker` через `**TEST_DATABASE_ENV` (`tests/fixtures/test_database_env.py`).
 
 Запрещено мокать: `DurableWorkflowRepository`, `DurableWorkflowRuntime`, `FlowFactory`, `ToolRegistry`, `BaseChannel`, `S3Client`, любые внутренние компоненты.
 
@@ -151,7 +151,7 @@ async def test_integration(mock_llm_redis, flows_client, unique_id):
 
 `@pytest.mark.real_taskiq` отключает `sync_tools` — tools идут через реальный worker и Redis pub/sub.
 
-**Полный E2E flows** (webhook → `process_flow_task` → LLM из `mock_llm:responses` → channel HTTP): маркер `real_taskiq` **не** использовать. Оставляем `sync_tools`: `process_flow_task.kiq` выполняется in-process, очередь mock читается из Redis — в `apps/flows/main.py` при `TESTING=true` вызываются `get_llm("mock-gpt-4")` и `configure_mock_llm_redis(container.redis_client)` (та же схема, что в `apps/flows_worker/worker.py`).
+**Полный E2E flows** (webhook → `process_flow_task` → LLM из `mock_llm:responses` → channel HTTP): маркер `real_taskiq` **не** использовать. Оставляем `sync_tools`: `process_flow_task.kiq` выполняется in-process, очередь mock читается из Redis; `TESTING=true` должен идти через `core.ai.runtime` mock route и `configure_mock_llm_redis(container.redis_client)`.
 
 В `tests/fixtures/workers.py` worker запускается с **`-w 1`**, чтобы не было гонок за одним ключом `mock_llm:responses`.
 

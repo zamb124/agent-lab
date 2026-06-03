@@ -6,6 +6,7 @@ API-ключ и корень ``.../v1`` OpenAI-совместимого HTTP API
 
 from __future__ import annotations
 
+from core.ai.providers import LLM_PROVIDER_DEFAULT_BASE_URLS
 from core.config.models import (
     BothubProviderConfig,
     DeepInfraProviderConfig,
@@ -19,7 +20,6 @@ from core.config.models import (
     YandexLLMProviderConfig,
 )
 from core.config.openai_v1_base_url import normalize_openai_v1_base_url
-from core.llm_model_routing import LLM_PROVIDER_DEFAULT_BASE_URLS
 
 _LLMProviderConfig = (
     OpenAIProviderConfig

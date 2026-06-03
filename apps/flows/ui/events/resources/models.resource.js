@@ -1,5 +1,5 @@
 /**
- * Models — список доступных LLM-моделей (по провайдеру).
+ * Models — capability-specific список доступных LLM-моделей (по провайдеру).
  * REST: `apps/flows/src/api/registry.py` (`/api/v1/registry/models/values`).
  */
 
@@ -14,6 +14,9 @@ export const modelsListOp = createAsyncOp({
         const params = new URLSearchParams();
         if (payload && typeof payload === 'object' && typeof payload.provider === 'string' && payload.provider.length > 0) {
             params.append('provider', payload.provider);
+        }
+        if (payload && typeof payload === 'object' && typeof payload.capability === 'string' && payload.capability.length > 0) {
+            params.append('capability', payload.capability);
         }
         const qs = params.toString();
         return httpRequest({

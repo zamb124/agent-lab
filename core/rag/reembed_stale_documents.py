@@ -117,7 +117,7 @@ async def _run_reembed_round(
         groups[cid].append((doc_id, content))
 
     billing = get_billing_service()
-    embedding_service = provider.embedding_service
+    embedding_client = provider.embedding_client
     total_written = 0
     by_company_written: dict[str, int] = defaultdict(int)
 
@@ -164,7 +164,7 @@ async def _run_reembed_round(
         )
         set_context(ctx)
         try:
-            embeddings = await embedding_service.generate_embeddings(
+            embeddings = await embedding_client.generate_embeddings(
                 [p[1] for p in slice_pairs]
             )
             if len(embeddings) != len(slice_pairs):

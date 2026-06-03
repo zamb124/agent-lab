@@ -252,7 +252,7 @@ class TestSubagentMessagesIntegrity:
         Проверяем что tool result имеет role="tool", не "assistant".
         """
         from apps.flows.src.runtime.runners.llm_runner import new_tool_result_message
-        from core.clients.llm.factory import _message_to_openai
+        from core.clients.llm.messages import message_to_openai as _message_to_openai
 
         tool_result = new_tool_result_message(
             "call_test_123", "Test result", "test_node", context_id="ctx_test"

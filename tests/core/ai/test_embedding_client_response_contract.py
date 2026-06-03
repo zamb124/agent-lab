@@ -1,6 +1,6 @@
-"""Контракт ответа OpenAI-compatible embeddings для EmbeddingService."""
+"""Контракт ответа OpenAI-compatible embeddings для AIEmbeddingClient."""
 
-from core.rag.services.embedding_service import EmbeddingResponsePayload
+from core.ai.embedding_client import EmbeddingResponsePayload
 
 
 def test_embedding_response_payload_accepts_openai_compatible_fields() -> None:

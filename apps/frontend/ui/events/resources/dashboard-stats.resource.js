@@ -86,8 +86,8 @@ export const dashboardDocumentsFilesCountOp = createAsyncOp({
     },
 });
 
-export const dashboardLitserveModelsCountOp = createAsyncOp({
-    name: 'frontend/dashboard_litserve_models_count',
+export const dashboardHumanitecModelsCountOp = createAsyncOp({
+    name: 'frontend/dashboard_humanitec_models_count',
     silent: true,
     restMirror: { method: 'GET', path: '/litserve/api/models', service: 'provider_litserve' },
     request: async () => {

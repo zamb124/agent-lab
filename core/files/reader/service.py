@@ -36,9 +36,9 @@ from striprtf.striprtf import rtf_to_text
 from unstructured.partition.auto import partition as raw_partition
 
 from core.ai.resolver import COST_ORIGIN_COMPANY
+from core.ai.runtime import create_vision_llm_client, resolve_vision_ai_model
 from core.billing import get_billing_service
 from core.billing.service import BALANCE_BLOCK_OPERATION_VISION
-from core.clients.llm.factory import create_vision_llm, resolve_vision_llm
 from core.context import get_context
 from core.files.checksum import compute_content_checksum_sha256
 from core.files.file_ref import FileRef, FileRefSource, file_id_from_download_url
@@ -639,8 +639,8 @@ async def _read_image_impl(
             ),
         ],
     )
-    resolved_llm = resolve_vision_llm(opts.vision_model)
-    llm = create_vision_llm(resolved_llm)
+    resolved_llm = resolve_vision_ai_model(opts.vision_model)
+    llm = create_vision_llm_client(resolved_llm)
     actx = get_context()
     if actx is None or actx.active_company is None:
         raise ValueError("Контекст с active_company обязателен для vision-чтения изображения")

@@ -10,11 +10,16 @@ from urllib.parse import urlparse
 from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel, ConfigDict, Field
 
+from apps.frontend.api.public_session_security import (
+    enforce_public_session_issue_rate_limit,
+    new_embed_session_id,
+)
 from apps.frontend.dependencies import ContainerDep
 from apps.frontend.services.public_search_bootstrap import (
     PUBLIC_SEARCH_SPEC_BY_MODE,
     ensure_public_search_embed_configs,
 )
+from core.identity.embed_guest_turns import EMBED_SESSION_ID_METADATA_KEY
 from core.identity.runtime_users import ensure_persisted_runtime_user
 from core.identity.system_bootstrap import SYSTEM_COMPANY_ID, SYSTEM_COMPANY_SUBDOMAIN
 from core.logging import get_logger
@@ -65,7 +70,7 @@ def _origin_from_referer(referer: str) -> str:
 
 def _referer_path_allowed(referer: str) -> bool:
     if referer.strip() == "":
-        return True
+        return False
     path = urlparse(referer.strip()).path
     if path in {"", "/", "/frontend"}:
         return True
@@ -94,6 +99,14 @@ async def issue_public_search_session(
         origin = referer_origin
     if origin != "" and referer_origin != "" and origin != referer_origin:
         raise HTTPException(status_code=403, detail="origin не совпадает со страницей поиска")
+    if origin == "":
+        raise HTTPException(status_code=403, detail="origin обязателен для публичной сессии поиска")
+
+    await enforce_public_session_issue_rate_limit(
+        redis_client=container.redis_client,
+        request=request,
+        scope="public_search",
+    )
 
     mapping = await container.embed_mapping_repository.get(config.embed_id)
     if mapping is None or mapping.company_id != SYSTEM_COMPANY_ID:
@@ -113,6 +126,7 @@ async def issue_public_search_session(
         raise HTTPException(status_code=500, detail="Конфигурация ветки поиска повреждена")
 
     guest_id = f"search_guest_{uuid.uuid4().hex}"
+    embed_session_id = new_embed_session_id()
     expires_at = datetime.now(timezone.utc) + timedelta(seconds=body.expires_in_seconds)
     _ = await ensure_persisted_runtime_user(
         container,
@@ -127,6 +141,7 @@ async def issue_public_search_session(
             "embed_branch_id": persisted_config.branch_id,
             "issued_by": PUBLIC_SEARCH_SESSION_ISSUER,
             "token_expires_at": expires_at.isoformat(),
+            EMBED_SESSION_ID_METADATA_KEY: embed_session_id,
         },
     )
     token = get_token_service().create_embed_session_token(
@@ -140,6 +155,7 @@ async def issue_public_search_session(
             "embed_branch_id": persisted_config.branch_id,
             "allowed_origin": origin,
             "issued_by": PUBLIC_SEARCH_SESSION_ISSUER,
+            EMBED_SESSION_ID_METADATA_KEY: embed_session_id,
         },
     )
     logger.info(

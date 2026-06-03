@@ -1,7 +1,7 @@
 """
 Корневая композиция runtime LLM-клиента.
 
-Stream-first: все runtime-вызовы LLM идут через ``get_llm`` и ``LLMClient.stream``.
+Stream-first: all internal transport calls create ``LLMClient`` and use ``LLMClient.stream``.
 """
 
 from __future__ import annotations
@@ -9,8 +9,17 @@ from __future__ import annotations
 from collections.abc import Sequence
 from typing import TYPE_CHECKING
 
+from core.ai.free_pool import (
+    PLATFORM_FREE_MODEL_SOURCE,
+    PLATFORM_PAID_FALLBACK_SOURCE,
+)
+from core.ai.llm_config import LLMCallConfig, ReasoningEffort
+from core.ai.providers import (
+    HUMANITEC_LLM_AUTO_MODEL,
+    HUMANITEC_LLM_PROVIDER,
+    split_provider_prefixed_model,
+)
 from core.clients.llm.client import LLMClient
-from core.clients.llm.config import LLMCallConfig, ReasoningEffort
 from core.clients.llm.errors import LLMStreamIdleTimeoutError, LLMStreamUserCancelledError
 from core.clients.llm.messages import (
     MessageInput,
@@ -28,20 +37,11 @@ from core.clients.llm.mock import (
     get_global_mock_llm,
     get_or_create_global_mock_llm,
 )
-from core.clients.llm.model_routing import (
-    HUMANITEC_LLM_AUTO_MODEL,
-    HUMANITEC_LLM_PROVIDER,
-    split_provider_prefixed_model,
-)
 from core.clients.llm.openai_compat import (
     masked_headers as _masked_headers,
 )
 from core.clients.llm.openai_compat import (
     merge_openai_compatible_usage_into_usage_data as _merge_openai_compatible_usage_into_usage_data,
-)
-from core.clients.llm.platform_free_models import (
-    PLATFORM_FREE_MODEL_SOURCE,
-    PLATFORM_PAID_FALLBACK_SOURCE,
 )
 from core.clients.llm.platform_pool import (
     _make_humanitec_llms_candidate_chain_resolver,
@@ -92,7 +92,7 @@ def should_use_platform_default_free_pool(
     )
 
 
-def get_llm(
+def create_llm_transport_client(
     model_name: str | None = None,
     temperature: float | None = None,
     provider: str | None = None,
@@ -247,7 +247,7 @@ def get_llm(
         if not _platform_default_pool_is_configured(settings):
             raise ValueError(
                 "humanitec_llm недоступен: включите llm.platform_free_pool и настройте "
-                + "хотя бы одного провайдера из llm.platform_free_pool.providers"
+                + "credentials хотя бы одного free-pool провайдера из core.ai.providers"
             )
         resolved_temperature = temperature if temperature is not None else settings.llm.temperature
         resolved_max_tokens = max_tokens if max_tokens is not None else settings.llm.max_tokens
@@ -401,49 +401,6 @@ def get_llm(
     )
 
 
-def get_llm_for_state(
-    state: ExecutionState | None = None,
-    model_name: str | None = None,
-    temperature: float | None = None,
-    provider: str | None = None,
-    api_key: str | None = None,
-    base_url: str | None = None,
-    folder_id: str | None = None,
-    max_tokens: int | None = None,
-    fallback_models: Sequence[LLMCallConfig | JsonObject] | None = None,
-    allow_platform_paid_fallback: bool = True,
-    top_p: float | None = None,
-    top_k: int | None = None,
-    frequency_penalty: float | None = None,
-    presence_penalty: float | None = None,
-    seed: int | None = None,
-    reasoning_effort: ReasoningEffort | None = None,
-    extra_request_body: JsonObject | None = None,
-    extra_request_headers: dict[str, str] | None = None,
-) -> LLMClient | MockLLM:
-    """Создает LLM клиент, резолвя @var значения через ExecutionState."""
-    return get_llm(
-        model_name=model_name,
-        temperature=temperature,
-        provider=provider,
-        api_key=api_key,
-        base_url=base_url,
-        folder_id=folder_id,
-        max_tokens=max_tokens,
-        fallback_models=fallback_models,
-        allow_platform_paid_fallback=allow_platform_paid_fallback,
-        top_p=top_p,
-        top_k=top_k,
-        frequency_penalty=frequency_penalty,
-        presence_penalty=presence_penalty,
-        seed=seed,
-        reasoning_effort=reasoning_effort,
-        extra_request_body=extra_request_body,
-        extra_request_headers=extra_request_headers,
-        state=state,
-    )
-
-
 def setup_mock_responses(
     responses: dict[str, str] | None = None,
     tool_responses: dict[str, JsonObject] | None = None,
@@ -452,7 +409,7 @@ def setup_mock_responses(
     model_name: str = "mock-gpt-4",
 ) -> MockLLM:
     """Настройка mock ответов для тестов (локальная очередь)."""
-    _ = get_llm(model_name)
+    _ = create_llm_transport_client(model_name)
     mock_llm = get_global_mock_llm(model_name)
     if mock_llm is None:
         raise RuntimeError(f"Mock LLM не зарегистрирован: {model_name}")
@@ -475,8 +432,6 @@ __all__ = [
     "MessageInput",
     "MockLLM",
     "StreamEvent",
-    "get_llm",
-    "get_llm_for_state",
     "setup_mock_responses",
     "should_use_platform_default_free_pool",
     "_detect_provider",

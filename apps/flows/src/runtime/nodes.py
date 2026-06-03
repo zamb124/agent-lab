@@ -1027,7 +1027,7 @@ class LlmNode(BaseNode):
         """Устанавливает tools."""
         self._loaded_tools = tools
 
-    def _get_llm(self, state: ExecutionState | None = None):
+    def _create_llm_client(self, state: ExecutionState | None = None):
         """Возвращает company-aware LLM client для direct node вызовов.
 
         Основной runtime создаёт client внутри runner-а из той же effective config,
@@ -1036,7 +1036,7 @@ class LlmNode(BaseNode):
         base = self._node_config or self._create_default_config()
         effective = resolve_effective_llm_config_for_node(base)
         logger.info(
-            "[_get_llm] node_id=%s provider=%s model=%s source=%s",
+            "[create_llm_client] node_id=%s provider=%s model=%s source=%s",
             self.node_id,
             effective.config.provider,
             effective.config.model,

@@ -3,12 +3,12 @@ from __future__ import annotations
 import pytest
 from pydantic import ValidationError
 
+from core.ai.company_settings import CompanyAIProviders
 from core.ai.providers import (
     AICapability,
     platform_provider_specs_for_capability,
     provider_supports_capability,
 )
-from core.company_ai import CompanyAIProviders
 
 
 def test_embedding_catalog_is_provider_capability_registry_not_model_source() -> None:
@@ -29,6 +29,16 @@ def test_provider_litserve_is_embedding_and_rerank_provider_not_llm() -> None:
     assert provider_supports_capability("provider_litserve", AICapability.EMBEDDING)
     assert provider_supports_capability("provider_litserve", AICapability.RERANK)
     assert not provider_supports_capability("provider_litserve", AICapability.LLM_CHAT)
+
+
+def test_internal_litserve_providers_have_humanitec_public_labels() -> None:
+    embedding_specs = platform_provider_specs_for_capability(AICapability.EMBEDDING)
+    embedding_spec = next(spec for spec in embedding_specs if spec.provider == "provider_litserve")
+    assert embedding_spec.label == "Humanitec"
+
+    voice_specs = platform_provider_specs_for_capability(AICapability.VOICE_STT)
+    voice_spec = next(spec for spec in voice_specs if spec.provider == "litserve")
+    assert voice_spec.label == "Humanitec Voice"
 
 
 def test_openrouter_is_rerank_provider() -> None:

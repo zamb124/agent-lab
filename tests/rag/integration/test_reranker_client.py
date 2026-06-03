@@ -1,7 +1,8 @@
 """
-Интеграция HTTP-клиента реранкера с ASGI POST ``/v1/rerank`` (RAG-60): без тихого fallback при ошибках.
+Интеграция runtime rerank с ASGI POST ``/v1/rerank`` (RAG-60): без тихого fallback при ошибках.
 
-Трафик: ``RerankerHTTPClient`` -> ASGI-заглушка ``rerank_v1_rerank_stub``; ответ upstream подменяется через ``Depends``.
+Трафик: ``core.ai.runtime.rerank_scores`` -> ASGI-заглушка ``rerank_v1_rerank_stub``;
+ответ upstream подменяется через ``Depends``.
 """
 
 from unittest.mock import AsyncMock
@@ -11,12 +12,13 @@ import pytest
 from fastapi import FastAPI
 from httpx import ASGITransport
 
+from core.ai.rerank_client import AIRerankerClientError
+from core.ai.runtime import rerank_scores
 from core.context import clear_context, set_context
 from core.models.billing_models import UsageType
 from core.models.context_models import Context, Language
 from core.models.identity_models import Company, User
 from core.rag.models import RAGSearchResult
-from core.rag.post_retrieval_rerank import RerankerClientError, RerankerHTTPClient
 
 from .rerank_v1_rerank_stub import create_v1_rerank_stub_app, get_rerank_upstream
 
@@ -44,7 +46,7 @@ class _ASGIClientCM:
 
 def _install_gateway_client(monkeypatch: pytest.MonkeyPatch, app: FastAPI) -> None:
     monkeypatch.setattr(
-        "core.rag.post_retrieval_rerank.get_httpx_client",
+        "core.ai.rerank_client.get_httpx_client",
         lambda **kw: _ASGIClientCM(app),
     )
 
@@ -83,6 +85,7 @@ async def test_rerank_reorders_by_scores_gateway(monkeypatch: pytest.MonkeyPatch
     app = create_v1_rerank_stub_app()
     app.dependency_overrides[get_rerank_upstream] = lambda: _MockUpstream()
     _install_gateway_client(monkeypatch, app)
+    monkeypatch.setattr("core.ai.rerank_client.get_billing_service", lambda: AsyncMock())
 
     results = [
         RAGSearchResult(
@@ -104,17 +107,20 @@ async def test_rerank_reorders_by_scores_gateway(monkeypatch: pytest.MonkeyPatch
             provenance={"channel": "semantic"},
         ),
     ]
-    client = RerankerHTTPClient(timeout_seconds=30.0, billing_service=AsyncMock())
-    out = await client.rerank(GATEWAY_V1_RERANK, "alpha beta", results)
+    scores = await rerank_scores(
+        endpoint_url=GATEWAY_V1_RERANK,
+        query="alpha beta",
+        passages=[item.content for item in results],
+        timeout_seconds=30.0,
+    )
+    out = sorted(zip(scores, results), key=lambda item: item[0], reverse=True)
     assert {
         "len": len(out),
-        "first_content": out[0].content,
-        "rerank": out[0].provenance.get("rerank"),
-        "scores_desc": out[0].score > out[1].score,
+        "first_content": out[0][1].content,
+        "scores_desc": out[0][0] > out[1][0],
     } == {
         "len": 2,
         "first_content": "alpha beta gamma",
-        "rerank": True,
         "scores_desc": True,
     }
 
@@ -132,26 +138,26 @@ async def test_rerank_reorders_by_scores(monkeypatch: pytest.MonkeyPatch) -> Non
     _install_gateway_client(monkeypatch, app)
 
     billing = AsyncMock()
-    client = RerankerHTTPClient(timeout_seconds=5.0, billing_service=billing)
-    out = await client.rerank(
-        GATEWAY_V1_RERANK,
-        "q",
-        _sample_results(),
+    monkeypatch.setattr("core.ai.rerank_client.get_billing_service", lambda: billing)
+    scores = await rerank_scores(
+        endpoint_url=GATEWAY_V1_RERANK,
+        query="q",
+        passages=[item.content for item in _sample_results()],
+        timeout_seconds=5.0,
     )
     billing.record_usage.assert_awaited_once()
+    out = sorted(zip(scores, _sample_results()), key=lambda item: item[0], reverse=True)
     assert {
         "len": len(out),
-        "first_content": out[0].content,
-        "second_content": out[1].content,
-        "rerank": out[0].provenance.get("rerank"),
-    } == {"len": 2, "first_content": "b", "second_content": "a", "rerank": True}
-    assert out[0].score == pytest.approx(0.8)
-    assert out[0].provenance.get("rerank_score") == pytest.approx(0.8)
+        "first_content": out[0][1].content,
+        "second_content": out[1][1].content,
+    } == {"len": 2, "first_content": "b", "second_content": "a"}
+    assert out[0][0] == pytest.approx(0.8)
 
 
 @pytest.mark.asyncio
 async def test_rerank_503_raises(monkeypatch: pytest.MonkeyPatch) -> None:
-    """503 от upstream — RerankerClientError с status_code 503 и телом."""
+    """503 от upstream — AIRerankerClientError с status_code 503 и телом."""
 
     class _MockUpstream:
         async def post_predict(self, body: bytes, content_type: str) -> httpx.Response:
@@ -161,9 +167,13 @@ async def test_rerank_503_raises(monkeypatch: pytest.MonkeyPatch) -> None:
     app.dependency_overrides[get_rerank_upstream] = lambda: _MockUpstream()
     _install_gateway_client(monkeypatch, app)
 
-    client = RerankerHTTPClient(timeout_seconds=5.0, billing_service=AsyncMock())
-    with pytest.raises(RerankerClientError) as ei:
-        await client.rerank(GATEWAY_V1_RERANK, "q", _sample_results())
+    with pytest.raises(AIRerankerClientError) as ei:
+        await rerank_scores(
+            endpoint_url=GATEWAY_V1_RERANK,
+            query="q",
+            passages=[item.content for item in _sample_results()],
+            timeout_seconds=5.0,
+        )
     assert ei.value.status_code == 503
     assert ei.value.detail == {"reason": "overload"}
 
@@ -180,9 +190,13 @@ async def test_rerank_scores_length_mismatch(monkeypatch: pytest.MonkeyPatch) ->
     app.dependency_overrides[get_rerank_upstream] = lambda: _MockUpstream()
     _install_gateway_client(monkeypatch, app)
 
-    client = RerankerHTTPClient(timeout_seconds=5.0, billing_service=AsyncMock())
-    with pytest.raises(RerankerClientError) as ei:
-        await client.rerank(GATEWAY_V1_RERANK, "q", _sample_results())
+    with pytest.raises(AIRerankerClientError) as ei:
+        await rerank_scores(
+            endpoint_url=GATEWAY_V1_RERANK,
+            query="q",
+            passages=[item.content for item in _sample_results()],
+            timeout_seconds=5.0,
+        )
     assert {"status_code": ei.value.status_code, "reason": ei.value.detail.get("reason")} == {
         "status_code": 422,
         "reason": "scores_length_mismatch",
@@ -202,6 +216,7 @@ async def test_rerank_billing_usage_type_and_resource(monkeypatch: pytest.Monkey
     _install_gateway_client(monkeypatch, app)
 
     billing = AsyncMock()
+    monkeypatch.setattr("core.ai.rerank_client.get_billing_service", lambda: billing)
     user = User(user_id="u-rerank-bill", name="U", companies={"c1": ["admin"]}, active_company_id="c1")
     company = Company(company_id="c1", name="C")
     set_context(
@@ -214,14 +229,15 @@ async def test_rerank_billing_usage_type_and_resource(monkeypatch: pytest.Monkey
         )
     )
     try:
-        client = RerankerHTTPClient(
+        await rerank_scores(
+            endpoint_url=GATEWAY_V1_RERANK,
+            query="query text",
+            passages=[item.content for item in _sample_results()],
             timeout_seconds=5.0,
-            billing_service=billing,
             cost_per_1m_tokens=1.0,
             platform_markup=1.0,
             billing_resource_id="bge-test",
         )
-        await client.rerank(GATEWAY_V1_RERANK, "query text", _sample_results())
     finally:
         clear_context()
 

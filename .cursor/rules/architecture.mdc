@@ -125,7 +125,7 @@ async def list_items(container: ContainerDep):
 
 ### Известные нарушения `core/ → apps/`
 
-Требуют архитектурной проработки: `core/scheduler/scheduler.py` (импорт `apps.*_worker` брокеров), `core/api/integrations.py::_resume_flow` (импорт `process_flow_task` из flows), `core/clients/llm/factory.py::get_mock_for_llm` (тестовый путь).
+Требуют архитектурной проработки: `core/scheduler/scheduler.py` (импорт `apps.*_worker` брокеров), `core/api/integrations.py::_resume_flow` (импорт `process_flow_task` из flows).
 
 ## Межсервисный доступ к данным
 
@@ -157,19 +157,20 @@ config = await get_container().flow_repository.get(flow_id)
 
 ## LLM, мультимодал, NanoBanana
 
-LLM — только через `core/clients/llm/factory.py::get_llm()`. Прямые импорты LangChain/OpenAI моделей — запрещены.
+AI model access — только через `core.ai` (`ai_models.mdc`): provider/capability catalog, shared model catalog, resolver, runtime. Прямые импорты LangChain/OpenAI моделей, provider-specific clients и старый `get_llm(...)` service API запрещены.
 
 Контекстный слой LLM — общий платформенный слой, не часть `llm_node`: `core.llm_context` компилирует system/profile, active window, retrieved memory/RAG/tool blocks в лимит токенов; `core.clients.llm.context_layer` подключает его к `LLMClient.chat/stream/invoke`. Слои конфигурации: platform → company → `llm_context` resource → node → inline call.
 
 ```python
-from core.clients.llm import get_llm
-llm = get_llm()
-llm = get_llm("anthropic/claude-sonnet-4.5")
+from core.ai.providers import AICapability
+from core.ai.runtime import create_llm_client_for_capability
+
+llm = create_llm_client_for_capability(AICapability.LLM_CHAT)
 ```
 
-`ChatOpenAIWithBilling` обрабатывает файлы от LLM: изображения/аудио/файлы → `file_processor`/`audio_processor` → S3 (с STT для аудио).
+LLM transport internals обрабатывают файлы от LLM: изображения/аудио/файлы → `file_processor`/`audio_processor` → S3 (с STT для аудио).
 
-Генерация изображений — `core/clients/nano_banana/NanoBananaClientFactory.create()` (через OpenRouter): `client.generate_images(prompt, num_images, reference_file_ids?)`.
+Генерация изображений — capability `AICapability.IMAGE_GEN`; `NanoBananaClient` резолвит модель через `core.ai.resolver` и создаёт client через `core.ai.runtime`.
 
 ## Контекст выполнения
 

@@ -186,7 +186,10 @@ STRICT_DEBT_TEXT_RULES: tuple[tuple[str, re.Pattern[str], str], ...] = (
 DOMAIN_STRATEGY_TEXT_RULES: tuple[tuple[re.Pattern[str], str], ...] = (
     (
         re.compile(
-            r"fallback_models|fallback policy|LLM fallback|fallback.*model|fallback.*provider|fallback.*pool|platform_paid_fallback|OpenAI-compatible|custom_openai_compatible",
+            r"fallback_models|fallback policy|fallback chain|fallback_body|LLM fallback|"
+            r"BYOK fallback|fallback\.|append\(fallback\)|"
+            r"fallback.*model|fallback.*provider|fallback.*pool|platform_paid_fallback|"
+            r"OpenAI-compatible|custom_openai_compatible",
             re.IGNORECASE,
         ),
         "LLM provider routing and explicit fallback model policy",
@@ -302,7 +305,7 @@ def _classify_text_marker(path: Path, line: str) -> tuple[Decision, str, str]:
             return "strict_debt", "known wider-repo debt", message
     if (
         "core/clients/llm/" in rel
-        or "core/company_ai/" in rel
+        or "core/ai/company_settings/" in rel
         or rel
         in {
             "apps/flows/src/models/node_config.py",

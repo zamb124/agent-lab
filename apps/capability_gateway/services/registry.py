@@ -18,6 +18,7 @@ from a2a.types import Message, Part, Role, TextPart
 from apps.capability_gateway.services.context_service import CapabilityContextService
 from apps.capability_gateway.services.contracts import CapabilityGatewayContainerProtocol
 from apps.voice.services.voice_usage import record_stt_usage, record_tts_usage
+from core.ai.runtime import synthesize_speech_audio, transcribe_audio_bytes
 from core.capabilities import (
     CAPABILITY_LANGUAGES,
     CapabilityCallRequest,
@@ -37,7 +38,6 @@ from core.capabilities import (
 from core.clients.service_client import ServiceClientError
 from core.clients.speech_override import SpeechOverride, SpeechProviderName, SpeechResponseFormat
 from core.clients.speech_provider_catalog import STT_TTS_PROVIDER_IDS, VOICE_RESPONSE_FORMAT_IDS
-from core.clients.voice_resolver import get_stt_client, get_tts_client
 from core.files.audio_probe import probe_audio_duration_seconds_from_upload
 from core.files.models import FileResponse
 from core.files.reader import FileReader, FileReadError
@@ -1177,7 +1177,7 @@ class CapabilityRegistry:
                 name="voice.transcribe_audio",
                 title="Transcribe persisted audio",
                 description=(
-                    "Распознаёт persisted-аудио из FileRepository/S3 через voice_resolver "
+                    "Распознаёт persisted-аудио из FileRepository/S3 через core.ai.runtime "
                     "и записывает STT usage/billing."
                 ),
                 input_schema=_schema_object(
@@ -1204,7 +1204,7 @@ class CapabilityRegistry:
                 name="voice.synthesize_speech",
                 title="Synthesize speech",
                 description=(
-                    "Синтезирует речь через voice_resolver, сохраняет аудио в FileRepository/S3 "
+                    "Синтезирует речь через core.ai.runtime, сохраняет аудио в FileRepository/S3 "
                     "и записывает TTS usage/billing."
                 ),
                 input_schema=_schema_object(
@@ -1995,18 +1995,16 @@ class CapabilityRegistry:
             s3 = await self._container.file_processor.get_s3_client()
             audio_bytes = await s3.download_bytes(record.s3_key, bucket=record.s3_bucket)
 
-            stt = await get_stt_client(
+            result = await transcribe_audio_bytes(
                 company_id=company.company_id,
+                audio_bytes=audio_bytes,
+                file_name=record.original_name,
+                content_type=record.content_type,
                 override=SpeechOverride(
                     provider=_speech_provider(provider),
                     model=model,
                     language=language,
                 ),
-            )
-            result = await stt.transcribe_audio(
-                audio_bytes=audio_bytes,
-                file_name=record.original_name,
-                content_type=record.content_type,
                 language=language,
             )
 
@@ -2041,8 +2039,9 @@ class CapabilityRegistry:
         context = await self._context_service.build_context(request.context)
         company = _active_company(context)
         with self._context_service.activate(context):
-            tts = await get_tts_client(
+            result = await synthesize_speech_audio(
                 company_id=company.company_id,
+                text=text,
                 override=SpeechOverride(
                     provider=_speech_provider(provider),
                     model=model,
@@ -2051,7 +2050,6 @@ class CapabilityRegistry:
                     response_format=_speech_response_format(response_format),
                 ),
             )
-            result = await tts.synthesize(text=text)
 
             ext = result.response_format or "wav"
             original_name = file_name if file_name else f"tts_{uuid.uuid4().hex[:12]}.{ext}"

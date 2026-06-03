@@ -257,6 +257,16 @@ export class FlowsEditorHeader extends PlatformElement {
         this.openModal('flows.preview_share', { flowId: this.flowId, branchId: bid });
     }
 
+    _openApiConsole() {
+        if (typeof this.flowId !== 'string' || this.flowId.length === 0) {
+            return;
+        }
+        this.openModal('flows.api_console', {
+            flowId: this.flowId,
+            branchId: this.branchId,
+        });
+    }
+
     _openEvaluationLab() {
         if (typeof this.flowId !== 'string' || this.flowId.length === 0) {
             return;
@@ -334,6 +344,15 @@ export class FlowsEditorHeader extends PlatformElement {
                 </button>
                 <button class="header-btn icon-only" type="button" title=${this.t('editor_header.lara')} @click=${this._openLara}>
                     <platform-icon name="ai" size="16"></platform-icon>
+                </button>
+                <button
+                    class="header-btn"
+                    type="button"
+                    title=${this.t('editor_header.api_console')}
+                    @click=${this._openApiConsole}
+                >
+                    <platform-icon name="api" size="14"></platform-icon>
+                    ${this.t('editor_header.api')}
                 </button>
                 <button
                     class="header-btn"

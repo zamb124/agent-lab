@@ -39,42 +39,20 @@ def disable_testing_mode():
             os.environ["_PYTEST_RAISE"] = old_pytest_raise
 
 
-from core.clients.llm.factory import (  # noqa: E402
-    LLMClient,
+from core.clients.llm.client import LLMClient  # noqa: E402
+from core.clients.llm.provider_resolution import (  # noqa: E402
     _detect_provider,
     _get_default_base_url,
     _resolve_var,
-    get_llm,
+)
+from core.clients.llm.runtime import (  # noqa: E402
+    create_llm_transport_client as create_transport_llm_client,
 )
 from core.context import clear_context  # noqa: E402
 from core.pagination import OffsetPage  # noqa: E402
 from core.scheduler.models import PlatformScheduledTask  # noqa: E402
 from core.state import ExecutionState  # noqa: E402
 from core.variables import VariableResolutionError  # noqa: E402
-
-
-def _expected_get_llm_kwargs(**overrides: object) -> dict[str, object]:
-    expected: dict[str, object] = {
-        "model_name": None,
-        "temperature": None,
-        "provider": None,
-        "api_key": None,
-        "base_url": None,
-        "folder_id": None,
-        "max_tokens": None,
-        "state": None,
-        "top_p": None,
-        "top_k": None,
-        "frequency_penalty": None,
-        "presence_penalty": None,
-        "seed": None,
-        "reasoning_effort": None,
-        "extra_request_body": None,
-        "extra_request_headers": None,
-        "fallback_models": None,
-    }
-    expected.update(overrides)
-    return expected
 
 
 class TestResolveVar:
@@ -191,11 +169,11 @@ class TestDetectProvider:
         assert result is None
 
 
-class TestGetLLMWithCustomCredentials:
-    """Тесты get_llm с кастомными credentials."""
+class TestLLMTransportWithCustomCredentials:
+    """Тесты create_transport_llm_client с кастомными credentials."""
 
-    def test_get_llm_with_custom_api_key_creates_client(self):
-        """get_llm с кастомным api_key создает LLMClient с этим ключом."""
+    def test_llm_transport_with_custom_api_key_creates_client(self):
+        """create_transport_llm_client с кастомным api_key создает LLMClient с этим ключом."""
         with disable_testing_mode():
             with patch("core.clients.llm.runtime.get_settings") as mock_settings:
                 mock_settings.return_value.llm.default_model = "gpt-4"
@@ -210,7 +188,7 @@ class TestGetLLMWithCustomCredentials:
                     base_url="https://api.openai.com/v1"
                 )
 
-                client = get_llm(
+                client = create_transport_llm_client(
                     model_name="gpt-4",
                     api_key="sk-custom-user-key",
                     base_url="https://api.openai.com/v1",
@@ -221,8 +199,8 @@ class TestGetLLMWithCustomCredentials:
                 assert client.base_url == "https://api.openai.com/v1"
                 assert client.model == "gpt-4"
 
-    def test_get_llm_with_var_resolved_from_state(self):
-        """get_llm с @var: резолвит из state."""
+    def test_llm_transport_with_var_resolved_from_state(self):
+        """create_transport_llm_client с @var: резолвит из state."""
         state = ExecutionState(
             task_id="test-task",
             context_id="test-context",
@@ -248,7 +226,7 @@ class TestGetLLMWithCustomCredentials:
                 )
                 mock_settings.return_value.llm.openai = None
 
-                client = get_llm(
+                client = create_transport_llm_client(
                     model_name="gpt-4",
                     api_key="@var:user_api_key",
                     base_url="@var:user_base_url",
@@ -259,8 +237,8 @@ class TestGetLLMWithCustomCredentials:
                 assert client.api_key == "sk-from-variable"
                 assert client.base_url == "https://bothub.chat/api/v2/openai/v1"
 
-    def test_get_llm_detects_provider_from_base_url(self):
-        """get_llm определяет провайдера по base_url если не указан явно."""
+    def test_llm_transport_detects_provider_from_base_url(self):
+        """create_transport_llm_client определяет провайдера по base_url если не указан явно."""
         with disable_testing_mode():
             with patch("core.clients.llm.runtime.get_settings") as mock_settings:
                 mock_settings.return_value.llm.default_model = "gpt-4"
@@ -277,7 +255,7 @@ class TestGetLLMWithCustomCredentials:
                 mock_settings.return_value.llm.bothub = None
                 mock_settings.return_value.llm.openai = None
 
-                client = get_llm(
+                client = create_transport_llm_client(
                     model_name="gpt-4",
                     api_key="sk-openrouter-key",
                     base_url="https://openrouter.ai/api/v1",
@@ -287,7 +265,7 @@ class TestGetLLMWithCustomCredentials:
                 # Должны быть openrouter headers
                 assert "HTTP-Referer" in client.default_headers
 
-    def test_get_llm_explicit_provider_overrides_detection(self):
+    def test_llm_transport_explicit_provider_overrides_detection(self):
         """Явно указанный provider имеет приоритет над auto-detection."""
         with disable_testing_mode():
             with patch("core.clients.llm.runtime.get_settings") as mock_settings:
@@ -303,7 +281,7 @@ class TestGetLLMWithCustomCredentials:
                 )
                 mock_settings.return_value.llm.openai = None
 
-                client = get_llm(
+                client = create_transport_llm_client(
                     model_name="gpt-4",
                     api_key="sk-bothub-key",
                     base_url="https://bothub.chat/api/v2/openai/v1",
@@ -324,7 +302,7 @@ class TestLlmNodeLLMConfig:
         self,
         container: FlowRuntimeContainer,
     ):
-        """LlmNode передает llm config в get_llm."""
+        """LlmNode передает typed llm config в canonical AI runtime."""
         from apps.flows.src.models.node_config import NodeConfig, NodeLLMConfig, NodeType
         from apps.flows.src.runtime.nodes import LlmNode
 
@@ -356,31 +334,42 @@ class TestLlmNodeLLMConfig:
             session_id="test:session",
         )
 
-        with patch("apps.flows.src.runtime.nodes.get_llm") as mock_get_llm:
-            mock_get_llm.return_value = MagicMock()
+        with patch("apps.flows.src.runtime.nodes.create_llm_client_from_call_config") as mock_create_client:
+            mock_create_client.return_value = MagicMock()
 
             clear_context()
-            node._get_llm(state)
+            node._create_llm_client(state)
 
-            mock_get_llm.assert_called_once_with(
-                **_expected_get_llm_kwargs(
-                    model_name="gpt-4-turbo",
-                    temperature=0.5,
-                    provider="bothub",
-                    api_key="sk-node-api-key",
-                    base_url="https://bothub.chat/api/v2/openai/v1",
-                    folder_id=None,
-                    max_tokens=None,
-                    state=state,
-                )
-            )
+            mock_create_client.assert_called_once()
+            config_arg = mock_create_client.call_args.args[0]
+            assert {
+                "model": config_arg.model,
+                "temperature": config_arg.temperature,
+                "provider": config_arg.provider,
+                "api_key": config_arg.api_key,
+                "base_url": config_arg.base_url,
+                "folder_id": config_arg.folder_id,
+                "max_tokens": config_arg.max_tokens,
+                "state": mock_create_client.call_args.kwargs["state"],
+                "fallback_models": mock_create_client.call_args.kwargs["fallback_models"],
+            } == {
+                "model": "gpt-4-turbo",
+                "temperature": 0.5,
+                "provider": "bothub",
+                "api_key": "sk-node-api-key",
+                "base_url": "https://bothub.chat/api/v2/openai/v1",
+                "folder_id": None,
+                "max_tokens": None,
+                "state": state,
+                "fallback_models": None,
+            }
 
     @pytest.mark.asyncio
     async def test_llm_node_passes_llm_config_dict(
         self,
         container: FlowRuntimeContainer,
     ):
-        """LlmNode передает llm_config_dict в get_llm."""
+        """LlmNode передает llm_config_dict в canonical AI runtime."""
         from apps.flows.src.runtime.nodes import LlmNode
 
         llm_config = {
@@ -409,24 +398,35 @@ class TestLlmNodeLLMConfig:
             variables={"my_key": "sk-variable-key", "my_url": "https://openrouter.ai/api/v1"},
         )
 
-        with patch("apps.flows.src.runtime.nodes.get_llm") as mock_get_llm:
-            mock_get_llm.return_value = MagicMock()
+        with patch("apps.flows.src.runtime.nodes.create_llm_client_from_call_config") as mock_create_client:
+            mock_create_client.return_value = MagicMock()
 
             clear_context()
-            node._get_llm(state)
+            node._create_llm_client(state)
 
-            mock_get_llm.assert_called_once_with(
-                **_expected_get_llm_kwargs(
-                    model_name="claude-3",
-                    temperature=0.7,
-                    provider="openrouter",
-                    api_key="@var:my_key",
-                    base_url="@var:my_url",
-                    folder_id=None,
-                    max_tokens=None,
-                    state=state,
-                )
-            )
+            mock_create_client.assert_called_once()
+            config_arg = mock_create_client.call_args.args[0]
+            assert {
+                "model": config_arg.model,
+                "temperature": config_arg.temperature,
+                "provider": config_arg.provider,
+                "api_key": config_arg.api_key,
+                "base_url": config_arg.base_url,
+                "folder_id": config_arg.folder_id,
+                "max_tokens": config_arg.max_tokens,
+                "state": mock_create_client.call_args.kwargs["state"],
+                "fallback_models": mock_create_client.call_args.kwargs["fallback_models"],
+            } == {
+                "model": "claude-3",
+                "temperature": 0.7,
+                "provider": "openrouter",
+                "api_key": "@var:my_key",
+                "base_url": "@var:my_url",
+                "folder_id": None,
+                "max_tokens": None,
+                "state": state,
+                "fallback_models": None,
+            }
 
 
 class TestLLMModelsServiceSchedulerIdempotency:
@@ -651,19 +651,19 @@ class TestLLMModelsServiceRealAPI:
         Использует endpoint: https://bothub.chat/api/v2/model/list?children=1
         """
         from apps.flows.config import get_settings
-        from apps.flows.src.db.llm_model_repository import LLMModelRepository
         from apps.flows.src.services.llm_models_service import LLMModelsService
+        from core.ai.model_catalog_repository import AIModelCatalogRepository
 
         settings = get_settings()
         assert settings.llm.bothub and settings.llm.bothub.api_key, (
             "BotHub API key не настроен в конфиге"
         )
 
-        mock_repo = MagicMock(spec=LLMModelRepository)
+        mock_repo = MagicMock(spec=AIModelCatalogRepository)
         service = LLMModelsService(mock_repo, AsyncMock(), AsyncMock())
 
         try:
-            models = await service._fetch_bothub_models()
+            models = await service.fetch_models_by_provider("bothub")
         except httpx.HTTPStatusError as exc:
             if exc.response.status_code in (401, 403):
                 raise AssertionError(
@@ -690,18 +690,18 @@ class TestLLMModelsServiceRealAPI:
         Использует endpoint: {base_url}/models
         """
         from apps.flows.config import get_settings
-        from apps.flows.src.db.llm_model_repository import LLMModelRepository
         from apps.flows.src.services.llm_models_service import LLMModelsService
+        from core.ai.model_catalog_repository import AIModelCatalogRepository
 
         settings = get_settings()
         assert settings.llm.openrouter and settings.llm.openrouter.api_key, (
             "OpenRouter API key не настроен в конфиге"
         )
 
-        mock_repo = MagicMock(spec=LLMModelRepository)
+        mock_repo = MagicMock(spec=AIModelCatalogRepository)
         service = LLMModelsService(mock_repo, AsyncMock(), AsyncMock())
 
-        models = await service._fetch_openrouter_models()
+        models = await service.fetch_models_by_provider("openrouter")
 
         # OpenRouter должен вернуть список моделей
         assert isinstance(models, list)
@@ -729,17 +729,17 @@ class TestLLMModelsServiceRealAPI:
         Использует endpoint: {base_url}/models
         """
         from apps.flows.config import get_settings
-        from apps.flows.src.db.llm_model_repository import LLMModelRepository
         from apps.flows.src.services.llm_models_service import LLMModelsService
+        from core.ai.model_catalog_repository import AIModelCatalogRepository
 
         settings = get_settings()
         if not (settings.llm.openai and settings.llm.openai.api_key):
             pytest.skip("OpenAI не настроен: в LLMConfig нет openai или api_key")
 
-        mock_repo = MagicMock(spec=LLMModelRepository)
+        mock_repo = MagicMock(spec=AIModelCatalogRepository)
         service = LLMModelsService(mock_repo, AsyncMock(), AsyncMock())
 
-        models = await service._fetch_openai_models()
+        models = await service.fetch_models_by_provider("openai")
 
         # OpenAI должен вернуть список моделей
         assert isinstance(models, list)
@@ -770,8 +770,8 @@ class TestLLMModelsServiceRealAPI:
         Полный цикл синхронизации: fetch от реального API и сохранение в БД.
         """
         from apps.flows.config import get_settings
-        from apps.flows.src.db.llm_model_repository import LLMModelRepository
         from apps.flows.src.services.llm_models_service import LLMModelsService
+        from core.ai.model_catalog_repository import AIModelCatalogRepository
         from core.db import Storage
 
         settings = get_settings()
@@ -787,7 +787,7 @@ class TestLLMModelsServiceRealAPI:
 
         # Storage использует PostgreSQL напрямую из settings
         storage = Storage()
-        repo = LLMModelRepository(storage)
+        repo = AIModelCatalogRepository(storage)
         service = LLMModelsService(repo, AsyncMock(), AsyncMock())
 
         # Синхронизируем
@@ -813,8 +813,8 @@ class TestLLMModelsServiceRealAPI:
         Синхронизация моделей от ВСЕХ настроенных провайдеров.
         """
         from apps.flows.config import get_settings
-        from apps.flows.src.db.llm_model_repository import LLMModelRepository
         from apps.flows.src.services.llm_models_service import LLMModelsService
+        from core.ai.model_catalog_repository import AIModelCatalogRepository
         from core.db import Storage
 
         settings = get_settings()
@@ -829,7 +829,7 @@ class TestLLMModelsServiceRealAPI:
         )
 
         storage = Storage()
-        repo = LLMModelRepository(storage)
+        repo = AIModelCatalogRepository(storage)
         service = LLMModelsService(repo, AsyncMock(), AsyncMock())
 
         # Синхронизируем ВСЕ провайдеры
@@ -845,11 +845,14 @@ class TestLLMModelsServiceRealAPI:
         # Репозиторий только upsert; записи снятые с API не удаляются — в БД может быть больше строк.
         for provider, count in results.items():
             if count > 0:
-                models = await service.get_models_by_provider(provider)
+                models = await repo.list_by_provider(provider)
                 assert len(models) >= count, (
                     f"В БД должно быть не меньше моделей {provider}, чем синхронизировано"
                 )
-                print(f"  {provider}: {count} моделей, примеры: {models[:3]}")
+                print(
+                    f"  {provider}: {count} моделей, "
+                    f"примеры: {[model.model_id for model in models[:3]]}"
+                )
 
     @pytest.mark.asyncio
     async def test_bothub_models_response_structure(self):
@@ -864,44 +867,21 @@ class TestLLMModelsServiceRealAPI:
             "BotHub API key не настроен в конфиге"
         )
 
-        url = "https://bothub.chat/api/v2/model/list?children=1"
-        headers = {
-            "Content-Type": "application/json",
-            "Authorization": f"Bearer {settings.llm.bothub.api_key}",
-        }
+        from apps.flows.src.services.llm_models_service import LLMModelsService
+        from core.ai.model_catalog_repository import AIModelCatalogRepository
 
-        async with httpx.AsyncClient(timeout=30.0) as client:
-            response = await client.get(url, headers=headers)
-            if response.status_code in (401, 403):
-                pytest.fail(
-                    "BotHub API отклонил запрос (неверный или отозванный ключ, ограничение доступа)"
-                )
-            response.raise_for_status()
-            data = response.json()
+        mock_repo = MagicMock(spec=AIModelCatalogRepository)
+        service = LLMModelsService(mock_repo, AsyncMock(), AsyncMock())
+        records = await service.discover_model_records_by_provider("bothub")
 
-        # Логируем структуру для отладки
-        print(f"Response type: {type(data)}")
-        if isinstance(data, list):
-            print(f"Response is list with {len(data)} items")
-            if data:
-                print(f"First item structure: {data[0]}")
-        elif isinstance(data, dict):
-            print(f"Response keys: {data.keys()}")
-
-        # Проверяем что можем извлечь модели
-        models = []
-        items = data if isinstance(data, list) else data.get("data", [])
-        for item in items:
-            model_id = item.get("name") or item.get("id")
-            if model_id:
-                models.append(model_id)
-
-        assert len(models) > 0, "Должны извлечь хотя бы одну модель"
-        print(f"Извлечено {len(models)} моделей: {models[:10]}...")
+        assert records, "Должны извлечь хотя бы одну модель"
+        assert all(record.provider == "bothub" for record in records)
+        assert all(record.model_id.strip() for record in records)
+        print(f"Извлечено {len(records)} моделей: {[record.model_id for record in records[:10]]}...")
 
 
-class TestGetLLMYandex:
-    def test_get_llm_yandex_sets_api_key_headers(self):
+class TestLLMTransportYandex:
+    def test_llm_transport_yandex_sets_api_key_headers(self):
         with disable_testing_mode():
             with patch("core.clients.llm.runtime.get_settings") as mock_settings:
                 mock_settings.return_value.llm.default_model = "yandexgpt"
@@ -918,13 +898,13 @@ class TestGetLLMYandex:
                 mock_settings.return_value.llm.openrouter = None
                 mock_settings.return_value.llm.bothub = None
                 mock_settings.return_value.llm.openai = None
-                client = get_llm(model_name="yandexgpt")
+                client = create_transport_llm_client(model_name="yandexgpt")
                 assert isinstance(client, LLMClient)
                 assert client.default_headers["Authorization"] == "Api-Key AQVN-key"
                 assert client.default_headers["x-folder-id"] == "folder-1"
                 assert client.base_url == "https://llm.api.cloud.yandex.net/v1"
 
-    def test_get_llm_yandex_missing_folder_raises(self):
+    def test_llm_transport_yandex_missing_folder_raises(self):
         with disable_testing_mode():
             with patch("core.clients.llm.runtime.get_settings") as mock_settings:
                 mock_settings.return_value.llm.default_model = "m"
@@ -942,9 +922,9 @@ class TestGetLLMYandex:
                 mock_settings.return_value.llm.bothub = None
                 mock_settings.return_value.llm.openai = None
                 with pytest.raises(ValueError, match="folder_id"):
-                    get_llm(model_name="m")
+                    create_transport_llm_client(model_name="m")
 
-    def test_get_llm_yandex_custom_key_uses_override_folder_and_uri(self):
+    def test_llm_transport_yandex_custom_key_uses_override_folder_and_uri(self):
         with disable_testing_mode():
             with patch("core.clients.llm.runtime.get_settings") as mock_settings:
                 mock_settings.return_value.llm.default_model = "yandexgpt"
@@ -963,7 +943,7 @@ class TestGetLLMYandex:
                 mock_settings.return_value.llm.openai = MagicMock(
                     base_url="https://api.openai.com/v1"
                 )
-                client = get_llm(
+                client = create_transport_llm_client(
                     model_name="gpt://other/yandexgpt-5.1/latest",
                     api_key="user-key",
                     provider="yandex",
@@ -974,7 +954,7 @@ class TestGetLLMYandex:
                 assert client.default_headers["x-folder-id"] == "user-folder"
                 assert client.model == "gpt://user-folder/yandexgpt-5.1/latest"
 
-    def test_get_llm_yandex_custom_key_falls_back_platform_folder(self):
+    def test_llm_transport_yandex_custom_key_falls_back_platform_folder(self):
         with disable_testing_mode():
             with patch("core.clients.llm.runtime.get_settings") as mock_settings:
                 mock_settings.return_value.llm.default_model = "yandexgpt"
@@ -995,7 +975,7 @@ class TestGetLLMYandex:
                 )
                 client = cast(
                     LLMClient,
-                    get_llm(
+                    create_transport_llm_client(
                         model_name="gpt://stale/yandexgpt-5.1/latest",
                         api_key="user-key",
                         provider="yandex",
@@ -1005,7 +985,7 @@ class TestGetLLMYandex:
                 assert client.default_headers["x-folder-id"] == "platform-folder"
                 assert client.model == "gpt://platform-folder/yandexgpt-5.1/latest"
 
-    def test_get_llm_yandex_custom_key_without_any_folder_raises(self):
+    def test_llm_transport_yandex_custom_key_without_any_folder_raises(self):
         with disable_testing_mode():
             with patch("core.clients.llm.runtime.get_settings") as mock_settings:
                 mock_settings.return_value.llm.default_model = "yandexgpt"
@@ -1021,7 +1001,7 @@ class TestGetLLMYandex:
                     base_url="https://api.openai.com/v1"
                 )
                 with pytest.raises(ValueError, match="folder_id"):
-                    get_llm(
+                    create_transport_llm_client(
                         model_name="gpt://b1/x/y",
                         api_key="user-key",
                         provider="yandex",

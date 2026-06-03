@@ -1,5 +1,5 @@
 /**
- * LitserveApp — корневой компонент сервиса provider_litserve.
+ * HumanitecModelsApp — корневой компонент реестра системных моделей Humanitec.
  *
  * Полностью event-driven canon: домен описан фабриками в
  * `events/resources/*.resource.js` и регистрируется через `static factories`.
@@ -13,31 +13,31 @@ import { html, css } from 'lit';
 import { PlatformApp } from '@platform/lib/base/PlatformApp.js';
 import { createRouterEffect } from '@platform/lib/events/effects/router.effect.js';
 
-import { litserveModelsResource, litserveModelRetryOp } from '../events/resources/models.resource.js';
+import { humanitecModelsResource, humanitecModelRetryOp } from '../events/resources/models.resource.js';
 
 import '@platform/lib/components/layout/platform-island.js';
 import '../components/litserve-sidebar.js';
 import '../pages/litserve-models-page.js';
 
-const LITSERVE_ROUTES = [
+const HUMANITEC_MODELS_ROUTES = [
     { key: 'models', path: '', titleKey: 'routes.models' },
     { key: 'platform_services', path: 'services', parent: 'models', titleKey: 'routes.platform_services' },
 ];
 
 /** Mobile shell: реестр моделей + профиль/переключатель сервисов (как в RAG/Sync). */
-const LITSERVE_BOTTOM_NAV_ITEMS = [
+const HUMANITEC_MODELS_BOTTOM_NAV_ITEMS = [
     { key: 'models', routeKey: 'models', icon: 'database', labelKey: 'bottom_nav.models' },
     { key: 'profile', sheet: 'platform.service_switcher', icon: 'user', labelKey: 'bottom_nav.profile' },
 ];
 
-export class LitserveApp extends PlatformApp {
+export class HumanitecModelsApp extends PlatformApp {
     static defaultI18nNamespace = 'litserve';
-    static bottomNavItems = LITSERVE_BOTTOM_NAV_ITEMS;
+    static bottomNavItems = HUMANITEC_MODELS_BOTTOM_NAV_ITEMS;
     static bottomNavHideOnRoutes = [];
 
     static factories = [
-        litserveModelsResource,
-        litserveModelRetryOp,
+        humanitecModelsResource,
+        humanitecModelRetryOp,
     ];
 
     static styles = [
@@ -83,7 +83,7 @@ export class LitserveApp extends PlatformApp {
 
     getServiceEffects() {
         return [
-            createRouterEffect({ baseUrl: '/litserve', routes: LITSERVE_ROUTES }),
+            createRouterEffect({ baseUrl: '/litserve', routes: HUMANITEC_MODELS_ROUTES }),
         ];
     }
 
@@ -95,10 +95,10 @@ export class LitserveApp extends PlatformApp {
                 content = html`<platform-services-page></platform-services-page>`;
                 break;
             case 'models':
-                content = html`<litserve-models-page></litserve-models-page>`;
+                content = html`<humanitec-models-page></humanitec-models-page>`;
                 break;
             default:
-                content = html`<litserve-models-page></litserve-models-page>`;
+                content = html`<humanitec-models-page></humanitec-models-page>`;
                 break;
         }
         const useIslandFullBleed = _key === 'models';
@@ -114,4 +114,4 @@ export class LitserveApp extends PlatformApp {
     }
 }
 
-customElements.define('litserve-app', LitserveApp);
+customElements.define('litserve-app', HumanitecModelsApp);

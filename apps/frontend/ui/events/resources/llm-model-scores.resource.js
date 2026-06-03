@@ -4,7 +4,7 @@
  * API:
  *   GET    /frontend/api/platform/llm-model-scores
  *   PUT    /frontend/api/platform/llm-model-scores
- *   DELETE /frontend/api/platform/llm-model-scores/:provider/:model_id
+ *   DELETE /frontend/api/platform/llm-model-scores/:capability/:provider/:model_id
  *   POST   /frontend/api/platform/llm-model-scores/refresh-cache
  */
 
@@ -47,17 +47,17 @@ export const llmModelScoreDeleteOp = createAsyncOp({
     name: 'frontend/llm_model_score_delete',
     successToastKey: 'frontend:settings_page.model_scoring.toast_deleted',
     errorToastKey: 'frontend:settings_page.model_scoring.toast_failed',
-    restMirror: { method: 'DELETE', path: '/frontend/api/platform/llm-model-scores/{provider}/{model_id:path}' },
+    restMirror: { method: 'DELETE', path: '/frontend/api/platform/llm-model-scores/{capability}/{provider}/{model_id:path}' },
     request: async ({ payload }) => {
         if (!payload || typeof payload !== 'object') {
             throw new Error('llm_model_score_delete: payload required');
         }
-        if (!payload.provider || !payload.model_id) {
-            throw new Error('llm_model_score_delete: provider/model_id required');
+        if (!payload.capability || !payload.provider || !payload.model_id) {
+            throw new Error('llm_model_score_delete: capability/provider/model_id required');
         }
         return await httpRequest({
             method: 'DELETE',
-            url: `${BASE}/${encodeURIComponent(payload.provider)}/${encodeURIComponent(payload.model_id)}`,
+            url: `${BASE}/${encodeURIComponent(payload.capability)}/${encodeURIComponent(payload.provider)}/${encodeURIComponent(payload.model_id)}`,
         });
     },
     onSuccess: (ctx) => {

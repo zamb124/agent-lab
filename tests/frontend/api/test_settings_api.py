@@ -21,7 +21,7 @@ class TestSettingsAPI:
         unique_id: str,
     ):
         """Получение профиля компании и снимка AI-провайдеров (раздельные роутеры)."""
-        from apps.flows.src.models import LLMModel
+        from core.ai.models import AIModelRecord
         from core.ai.providers import AICapability
 
         openrouter_model_id = f"unit/openrouter-settings-{unique_id}"
@@ -30,8 +30,8 @@ class TestSettingsAPI:
         image_model_id = f"unit/image-settings-{unique_id}"
         embedding_model_id = f"unit/embedding-settings-{unique_id}"
         rerank_model_id = f"unit/rerank-settings-{unique_id}"
-        await frontend_container.flows_llm_model_repository.set(
-            LLMModel(
+        await frontend_container.ai_model_catalog_repository.set(
+            AIModelRecord(
                 model_id=openrouter_model_id,
                 provider="openrouter",
                 capabilities=(
@@ -42,8 +42,8 @@ class TestSettingsAPI:
                 ),
             )
         )
-        await frontend_container.flows_llm_model_repository.set(
-            LLMModel(
+        await frontend_container.ai_model_catalog_repository.set(
+            AIModelRecord(
                 model_id=groq_model_id,
                 provider="groq",
                 capabilities=(
@@ -54,8 +54,8 @@ class TestSettingsAPI:
                 ),
             )
         )
-        await frontend_container.flows_llm_model_repository.set(
-            LLMModel(
+        await frontend_container.ai_model_catalog_repository.set(
+            AIModelRecord(
                 model_id=vision_model_id,
                 provider="openrouter",
                 capabilities=(AICapability.LLM_VISION,),
@@ -63,8 +63,8 @@ class TestSettingsAPI:
                 output_modalities=("text",),
             )
         )
-        await frontend_container.flows_llm_model_repository.set(
-            LLMModel(
+        await frontend_container.ai_model_catalog_repository.set(
+            AIModelRecord(
                 model_id=image_model_id,
                 provider="openrouter",
                 capabilities=(AICapability.IMAGE_GEN,),
@@ -72,8 +72,8 @@ class TestSettingsAPI:
                 output_modalities=("image",),
             )
         )
-        await frontend_container.flows_llm_model_repository.set(
-            LLMModel(
+        await frontend_container.ai_model_catalog_repository.set(
+            AIModelRecord(
                 model_id=embedding_model_id,
                 provider="provider_litserve",
                 capabilities=(AICapability.EMBEDDING,),
@@ -84,8 +84,8 @@ class TestSettingsAPI:
                 metadata_status="verified",
             )
         )
-        await frontend_container.flows_llm_model_repository.set(
-            LLMModel(
+        await frontend_container.ai_model_catalog_repository.set(
+            AIModelRecord(
                 model_id=rerank_model_id,
                 provider="openrouter",
                 capabilities=(AICapability.RERANK,),
@@ -119,7 +119,7 @@ class TestSettingsAPI:
         assert "llm_summarize" in body["catalog"]
         assert "embedding" in body["catalog"]
         prov_items = body["catalog"]["llm_summarize"]
-        from core.clients.llm.model_routing import (
+        from core.ai.providers import (
             HUMANITEC_LLM_PROVIDER,
             HUMANITEC_LLMS_DISPLAY_LABEL,
             PLATFORM_LLM_PROVIDER_ORDER,
@@ -161,6 +161,7 @@ class TestSettingsAPI:
         embedding_litserve = next(
             item for item in embedding_providers if item["value"] == "provider_litserve"
         )
+        assert embedding_litserve["label"] == "Humanitec"
         assert {
             "value": embedding_model_id,
             "label": embedding_model_id,
@@ -187,7 +188,7 @@ class TestSettingsAPI:
         frontend_container
     ):
         """Company default контекстного слоя сохраняется в реальной БД и снимается DELETE."""
-        from core.company_ai import CompanyAIProviders
+        from core.ai.company_settings import CompanyAIProviders
         from core.utils.tokens import get_token_service
 
         token_service = get_token_service()
@@ -275,17 +276,17 @@ class TestSettingsAPI:
         frontend_container,
     ):
         """Embedding override stores provider, model and storage dimension from the shared catalog."""
-        from apps.flows.src.models import LLMModel
+        from core.ai.company_settings import CompanyAIProviders
+        from core.ai.models import AIModelRecord
         from core.ai.providers import AICapability
-        from core.company_ai import CompanyAIProviders
         from core.utils.tokens import get_token_service
 
         token_service = get_token_service()
         token_data = token_service.validate_token(auth_headers["Authorization"].replace("Bearer ", ""))
         company_id = token_data.company_id
         model_id = "qwen/qwen3-embedding-0.6b"
-        await frontend_container.flows_llm_model_repository.set(
-            LLMModel(
+        await frontend_container.ai_model_catalog_repository.set(
+            AIModelRecord(
                 model_id=model_id,
                 provider="provider_litserve",
                 capabilities=(AICapability.EMBEDDING,),
@@ -321,12 +322,12 @@ class TestSettingsAPI:
         frontend_container,
     ):
         """Embedding models cannot be saved with dimensions that differ from pgvector storage policy."""
-        from apps.flows.src.models import LLMModel
+        from core.ai.models import AIModelRecord
         from core.ai.providers import AICapability
 
         model_id = "qwen/qwen3-embedding-0.6b"
-        await frontend_container.flows_llm_model_repository.set(
-            LLMModel(
+        await frontend_container.ai_model_catalog_repository.set(
+            AIModelRecord(
                 model_id=model_id,
                 provider="provider_litserve",
                 capabilities=(AICapability.EMBEDDING,),
@@ -355,17 +356,17 @@ class TestSettingsAPI:
         frontend_container,
     ):
         """Rerank override is a provider/model capability override, not a policy string."""
-        from apps.flows.src.models import LLMModel
+        from core.ai.company_settings import CompanyAIProviders
+        from core.ai.models import AIModelRecord
         from core.ai.providers import AICapability
-        from core.company_ai import CompanyAIProviders
         from core.utils.tokens import get_token_service
 
         token_service = get_token_service()
         token_data = token_service.validate_token(auth_headers["Authorization"].replace("Bearer ", ""))
         company_id = token_data.company_id
         model_id = "unit/rerank-model"
-        await frontend_container.flows_llm_model_repository.set(
-            LLMModel(
+        await frontend_container.ai_model_catalog_repository.set(
+            AIModelRecord(
                 model_id=model_id,
                 provider="openrouter",
                 capabilities=(AICapability.RERANK,),
@@ -388,6 +389,42 @@ class TestSettingsAPI:
         assert aip.rerank is not None
         assert aip.rerank.provider == "openrouter"
         assert aip.rerank.model == model_id
+
+    async def test_ai_provider_catalog_exposes_custom_provider_model_options(
+        self,
+        frontend_client: AsyncClient,
+        auth_headers,
+        unique_id: str,
+    ):
+        """Custom provider model_by_capability is part of the same backend catalog payload."""
+        provider_id = f"custom_{unique_id}"
+        model_id = f"custom-model-{unique_id}"
+
+        created = await frontend_client.post(
+            "/frontend/api/settings/ai-providers/custom",
+            headers=auth_headers,
+            json={
+                "id": provider_id,
+                "label": "Custom Chat",
+                "base_url": "https://custom-ai.test/v1",
+                "api_key": "test-key",
+                "capabilities": ["llm_chat"],
+                "model_by_capability": {"llm_chat": model_id},
+            },
+        )
+        assert created.status_code == 200
+
+        snapshot = await frontend_client.get(
+            "/frontend/api/settings/ai-providers",
+            headers=auth_headers,
+        )
+        assert snapshot.status_code == 200
+        body = snapshot.json()
+        chat_catalog = body["catalog"]["llm_chat"]
+        custom_item = next(item for item in chat_catalog if item["value"] == f"custom:{provider_id}")
+        assert custom_item["models"] == [
+            {"value": model_id, "label": model_id, "kind": "custom_model"}
+        ]
 
     async def test_ai_providers_accept_user_company_admin_role_when_company_members_stale(
         self,
@@ -441,7 +478,7 @@ class TestSettingsAPI:
         frontend_container,
     ):
         """Search provider BYOK сохраняется за компанией, шифруется и отдаётся в UI только маской."""
-        from core.company_ai import decrypt_secret
+        from core.ai.company_settings import decrypt_secret
         from core.company_search import COMPANY_SEARCH_METADATA_KEY, CompanySearchProviders
         from core.utils.tokens import get_token_service
 

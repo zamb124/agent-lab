@@ -5,7 +5,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, TypedDict
 
 from apps.flows.src.models.node_config import NodeLLMConfig
-from core.clients.llm.config import LLMCallConfig, ReasoningEffort
+from core.ai.llm_config import LLMCallConfig, ReasoningEffort
 from core.types import JsonObject, require_json_object
 from core.variables import VariableResolutionError, VarResolver
 

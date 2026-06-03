@@ -1,10 +1,10 @@
 """Снимок параметров эмбеддинга для ``indexing_runtime``."""
 
-from core.rag.services.embedding_service import EmbeddingService
+from core.ai.embedding_client import AIEmbeddingClient
 
 
 def test_runtime_snapshot_uses_configured_model() -> None:
-    svc = EmbeddingService(
+    svc = AIEmbeddingClient(
         api_key="test-key",
         base_url="https://example.com/v1",
         model="openai/text-embedding-3-small",

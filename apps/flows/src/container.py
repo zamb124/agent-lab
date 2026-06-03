@@ -16,7 +16,6 @@ from apps.flows.src.container_state import (
 from apps.flows.src.db import (
     EvaluationLabRepository,
     FlowRepository,
-    LLMModelRepository,
     NodeRepository,
     ResourceRepository,
     ToolRepository,
@@ -243,13 +242,9 @@ class FlowContainer(BaseContainer):
         )
 
     @lazy
-    def llm_model_repository(self) -> LLMModelRepository:
-        return LLMModelRepository(storage=self.storage)
-
-    @lazy
     def llm_models_service(self) -> LLMModelsService:
         return LLMModelsService(
-            repository=self.llm_model_repository,
+            repository=self.ai_model_catalog_repository,
             scheduler_client=self.scheduler_client,
             redis_client=self.redis_client,
         )

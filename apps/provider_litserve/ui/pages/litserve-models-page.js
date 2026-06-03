@@ -1,8 +1,8 @@
 /**
- * LitserveModelsPage — реестр моделей сервиса provider_litserve.
+ * HumanitecModelsPage — реестр системных моделей Humanitec.
  *
- * Использует фабрику `provider_litserve/models` (createResourceCollection)
- * и операцию `provider_litserve/model_retry` (createAsyncOp). Доступ к
+ * Использует фабрику `humanitec_models/models` (createResourceCollection)
+ * и операцию `humanitec_models/model_retry` (createAsyncOp). Доступ к
  * фабрикам — только через helpers `PlatformPage`.
  */
 
@@ -16,7 +16,7 @@ import '@platform/lib/components/fields/platform-field.js';
 
 const KIND_ENUM_VALUES = ['embedding', 'rerank'];
 
-export class LitserveModelsPage extends PlatformPage {
+export class HumanitecModelsPage extends PlatformPage {
     static i18nNamespace = 'litserve';
 
     static styles = [
@@ -155,8 +155,8 @@ export class LitserveModelsPage extends PlatformPage {
         this._kind = 'embedding';
         this._hfModelId = '';
         this._apiModelId = '';
-        this._models = this.useResource('provider_litserve/models', { autoload: true });
-        this._retry = this.useOp('provider_litserve/model_retry');
+        this._models = this.useResource('humanitec_models/models', { autoload: true });
+        this._retry = this.useOp('humanitec_models/model_retry');
     }
 
     _kindEnumConfig() {
@@ -171,7 +171,7 @@ export class LitserveModelsPage extends PlatformPage {
     _onKindChange(event) {
         const v = event.detail && typeof event.detail.value === 'string' ? event.detail.value : '';
         if (!KIND_ENUM_VALUES.includes(v)) {
-            throw new Error(`LitserveModelsPage._onKindChange: invalid kind "${v}"`);
+            throw new Error(`HumanitecModelsPage._onKindChange: invalid kind "${v}"`);
         }
         this._kind = v;
     }
@@ -317,4 +317,4 @@ export class LitserveModelsPage extends PlatformPage {
     }
 }
 
-customElements.define('litserve-models-page', LitserveModelsPage);
+customElements.define('humanitec-models-page', HumanitecModelsPage);

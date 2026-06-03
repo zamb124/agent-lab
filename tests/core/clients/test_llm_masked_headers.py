@@ -1,6 +1,6 @@
 """Маскирование чувствительных HTTP-заголовков в логах LLM."""
 
-from core.clients.llm.factory import _masked_headers
+from core.clients.llm.openai_compat import masked_headers as _masked_headers
 
 
 def test_masked_headers_authorization_and_api_key() -> None:

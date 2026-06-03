@@ -50,7 +50,7 @@ def parse_rerank_body(raw: BaseModel | JsonValue) -> RerankQueryPassagesRequest:
 
 
 class LocalRerankerEngine:
-    """FlagLLMReranker или placeholder; ответ ``{scores}`` как у ``RerankerHTTPClient``."""
+    """FlagLLMReranker или placeholder; ответ ``{scores}`` как у ``AIRerankerHTTPClient``."""
 
     def __init__(self, cfg: ProviderLitserveInfraConfig) -> None:
         self._cfg: ProviderLitserveInfraConfig = cfg

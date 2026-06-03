@@ -60,7 +60,7 @@ import { promptRenderOp } from '../events/resources/prompts.resource.js';
 import { dataflowInspectOp } from '../events/resources/dataflow.resource.js';
 import { integrationsListOp, integrationsRemoveOp } from '../events/resources/integrations.resource.js';
 import { fileUploadOp } from '../events/resources/files.resource.js';
-import { chatResource, chatSendOp, chatCancelOp } from '../events/resources/chat.resource.js';
+import { chatResource, chatSendOp, chatCancelOp, apiConsoleRunOp } from '../events/resources/chat.resource.js';
 import { operatorQueuesResource, operatorQueueAddMemberOp, operatorQueueRemoveMemberOp,
          operatorTasksListOp, operatorTaskGetOp, operatorTaskClaimOp,
          operatorTaskPostMessageOp, operatorTaskCompleteOp } from '../events/resources/operator.resource.js';
@@ -224,6 +224,7 @@ export class FlowsApp extends PlatformApp {
         chatResource,
         chatSendOp,
         chatCancelOp,
+        apiConsoleRunOp,
         operatorQueuesResource,
         operatorQueueAddMemberOp,
         operatorQueueRemoveMemberOp,

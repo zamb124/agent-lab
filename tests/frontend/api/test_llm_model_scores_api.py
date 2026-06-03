@@ -35,6 +35,7 @@ async def test_llm_model_scores_api_upserts_lists_and_deletes_real_shared_row(
     payload = {
         "provider": provider,
         "model_id": model_id,
+        "capability": "llm_chat",
         "score": 77.5,
         "enabled": True,
         "score_dimensions": {"quality": 77.5},
@@ -51,12 +52,13 @@ async def test_llm_model_scores_api_upserts_lists_and_deletes_real_shared_row(
     body = upsert_response.json()
     assert body["item"]["provider"] == provider
     assert body["item"]["model_id"] == model_id
+    assert body["item"]["capability"] == "llm_chat"
     assert body["item"]["score"] == 77.5
     assert body["item"]["source"] == "manual"
     assert body["item"]["score_dimensions"] == {"quality": 77.5}
     assert "cache_rescore" in body
 
-    score_map = await frontend_container.llm_model_score_repository.list_enabled_score_map()
+    score_map = await frontend_container.llm_model_score_repository.list_enabled_score_map("llm_chat")
     assert score_map[(provider, model_id)] == 77.5
 
     list_response = await frontend_client.get(
@@ -65,12 +67,12 @@ async def test_llm_model_scores_api_upserts_lists_and_deletes_real_shared_row(
     )
     assert list_response.status_code == 200
     assert any(
-        row["provider"] == provider and row["model_id"] == model_id
+        row["provider"] == provider and row["model_id"] == model_id and row["capability"] == "llm_chat"
         for row in list_response.json()["items"]
     )
 
     delete_response = await frontend_client.delete(
-        f"/frontend/api/platform/llm-model-scores/{provider}/{model_id}",
+        f"/frontend/api/platform/llm-model-scores/llm_chat/{provider}/{model_id}",
         headers=auth_headers_system,
     )
     assert delete_response.status_code == 200
@@ -78,6 +80,7 @@ async def test_llm_model_scores_api_upserts_lists_and_deletes_real_shared_row(
     assert await frontend_container.llm_model_score_repository.get(
         provider=provider,
         model_id=model_id,
+        capability="llm_chat",
     ) is None
 
 
@@ -95,6 +98,7 @@ async def test_llm_model_score_seed_is_create_once_unless_forced(
             {
                 "provider": provider,
                 "model_id": model_id,
+                "capability": "llm_chat",
                 "score": 10,
                 "enabled": True,
                 "note": "initial",
@@ -109,6 +113,7 @@ async def test_llm_model_score_seed_is_create_once_unless_forced(
             {
                 "provider": provider,
                 "model_id": model_id,
+                "capability": "llm_chat",
                 "score": 99,
                 "enabled": True,
                 "note": "should not overwrite",
@@ -116,7 +121,7 @@ async def test_llm_model_score_seed_is_create_once_unless_forced(
         ],
         force_refresh=False,
     )
-    row = await repo.get(provider=provider, model_id=model_id)
+    row = await repo.get(provider=provider, model_id=model_id, capability="llm_chat")
     assert skipped == {"created": 0, "updated": 0, "skipped": 1}
     assert row is not None
     assert row.score == 10
@@ -126,6 +131,7 @@ async def test_llm_model_score_seed_is_create_once_unless_forced(
             {
                 "provider": provider,
                 "model_id": model_id,
+                "capability": "llm_chat",
                 "score": 99,
                 "enabled": False,
                 "note": "forced",
@@ -133,10 +139,10 @@ async def test_llm_model_score_seed_is_create_once_unless_forced(
         ],
         force_refresh=True,
     )
-    row = await repo.get(provider=provider, model_id=model_id)
+    row = await repo.get(provider=provider, model_id=model_id, capability="llm_chat")
     assert forced == {"created": 0, "updated": 1, "skipped": 0}
     assert row is not None
     assert row.score == 99
     assert row.enabled is False
 
-    _ = await repo.delete(provider=provider, model_id=model_id)
+    _ = await repo.delete(provider=provider, model_id=model_id, capability="llm_chat")

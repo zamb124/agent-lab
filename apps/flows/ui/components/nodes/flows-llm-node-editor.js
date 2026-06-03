@@ -851,6 +851,7 @@ export class FlowsLlmNodeEditor extends PlatformElement {
                     ` : ''}
                     <flows-llm-config-editor
                         .config=${llmForEditor}
+                        .capability=${this.nodeConfig?.llm_capability || 'llm_chat'}
                         ?readOnly=${pinned}
                         @change=${pinned ? nothing : this._onLlmConfigChange}
                     ></flows-llm-config-editor>

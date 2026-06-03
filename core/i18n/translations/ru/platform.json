@@ -95,7 +95,7 @@
         "litserve": {
             "name": "Humanitec Models",
             "menu_description": "Локальные эмбеддинги и реранк",
-            "description": "Реестр моделей LitServe: эмбеддинги и реранк на своём железе для RAG и сценариев без внешних API"
+            "description": "Реестр моделей Humanitec: эмбеддинги и реранк на инфраструктуре платформы для RAG и сценариев без внешних API"
         },
         "grafana": {
             "name": "Grafana",

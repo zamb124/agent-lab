@@ -545,6 +545,7 @@ class LLMModelScore(Base):
 
     provider: Mapped[str] = mapped_column(String(64), primary_key=True)
     model_id: Mapped[str] = mapped_column(String(512), primary_key=True)
+    capability: Mapped[str] = mapped_column(String(64), primary_key=True)
     score: Mapped[float] = mapped_column(Float, nullable=False)
     enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
     source: Mapped[str] = mapped_column(String(32), nullable=False, default="manual")
@@ -572,6 +573,7 @@ class LLMModelScore(Base):
             name="llm_model_scores_source_check",
         ),
         Index("ix_llm_model_scores_provider", "provider"),
+        Index("ix_llm_model_scores_capability", "capability"),
         Index("ix_llm_model_scores_enabled_score", "enabled", "score"),
         Index("ix_llm_model_scores_updated_at", "updated_at"),
     )

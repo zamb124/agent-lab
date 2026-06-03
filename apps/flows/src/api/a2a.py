@@ -3,6 +3,7 @@ HTTP и JSON-RPC эндпоинты A2A для flows (a2a-sdk).
 Полная реализация протокола; поддержаны все методы спецификации.
 """
 
+import hashlib
 import json
 from collections.abc import AsyncGenerator, Mapping
 from typing import cast
@@ -30,6 +31,7 @@ from core.context import get_context
 from core.identity.embed_guest_turns import (
     EMBED_GUEST_USER_TURNS_REDIS_PREFIX,
     EMBED_GUEST_USER_TURNS_TTL_SECONDS,
+    EMBED_SESSION_ID_METADATA_KEY,
 )
 from core.logging import get_logger
 from core.middleware.auth.company_resolver import build_service_base_url
@@ -160,10 +162,27 @@ def _a2a_message_context_id(params_dict: JsonObject) -> str:
     return ""
 
 
+def _embed_session_limit_subject(token_data: TokenData, params_dict: JsonObject) -> str:
+    raw_session_id = token_data.metadata.get(EMBED_SESSION_ID_METADATA_KEY)
+    if isinstance(raw_session_id, str) and raw_session_id.strip():
+        return f"sid:{raw_session_id.strip()}"
+    if token_data.user_id.strip():
+        return f"user:{token_data.user_id.strip()}"
+    ctx_id = _a2a_message_context_id(params_dict)
+    if ctx_id:
+        return f"ctx:{ctx_id}"
+    return ""
+
+
+def _turn_limit_key_part(value: str) -> str:
+    return hashlib.sha256(value.encode("utf-8")).hexdigest()[:32]
+
+
 async def _embed_session_guest_turn_limit_error(
     *,
     container: FlowContainer,
     embed_target: EmbedTarget | None,
+    token_data: TokenData,
     method: str | None,
     params_dict: JsonObject,
 ) -> JsonObject | None:
@@ -174,13 +193,16 @@ async def _embed_session_guest_turn_limit_error(
     max_n = embed_target.guest_max_user_messages
     if max_n is None or max_n < 1:
         return None
-    ctx_id = _a2a_message_context_id(params_dict)
-    if not ctx_id:
+    subject = _embed_session_limit_subject(token_data, params_dict)
+    if not subject:
         return {
             "code": -32000,
-            "message": "Лимит embed-session действует только при непустом contextId в сообщении.",
+            "message": "Invalid embed session token: stable session id is required",
         }
-    key = f"{EMBED_GUEST_USER_TURNS_REDIS_PREFIX}:{embed_target.embed_id.strip()}:{ctx_id}"
+    key = (
+        f"{EMBED_GUEST_USER_TURNS_REDIS_PREFIX}:"
+        f"{embed_target.embed_id.strip()}:{_turn_limit_key_part(subject)}"
+    )
     try:
         count_raw: JsonValue = await container.redis_client.eval(
             _EMBED_GUEST_TURN_LUA,
@@ -517,6 +539,7 @@ async def _json_rpc_handler_internal(
         lim_err = await _embed_session_guest_turn_limit_error(
             container=container,
             embed_target=embed_target,
+            token_data=token_data,
             method=method,
             params_dict=params_dict,
         )

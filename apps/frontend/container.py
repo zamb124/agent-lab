@@ -3,7 +3,6 @@ Dependency Injection контейнер для Frontend
 """
 
 from apps.flows.src.db.flow_repository import FlowRepository
-from apps.flows.src.db.llm_model_repository import LLMModelRepository
 from core.clients.redis_client import RedisClient
 from core.config import get_settings
 from core.container import BaseContainer, ContainerRegistry, lazy
@@ -61,11 +60,6 @@ class FrontendContainer(BaseContainer):
     def flows_flow_repository(self) -> FlowRepository:
         """Репозиторий flows из сервисной БД flows (read-only сценарии без HTTP к peers)."""
         return FlowRepository(storage=self.flows_storage)
-
-    @lazy
-    def flows_llm_model_repository(self) -> LLMModelRepository:
-        """Каталог LLM-моделей из БД flows для frontend settings без REST-прокси к flows."""
-        return LLMModelRepository(storage=self.flows_storage)
 
     @lazy
     def redis_client(self) -> RedisClient:

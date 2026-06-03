@@ -17,9 +17,7 @@ from pydantic import (
     model_validator,
 )
 
-from core.ai.providers import AICapability, validate_platform_provider_for_capability
-from core.config.openai_v1_base_url import normalize_openai_v1_base_url
-from core.llm_model_routing import (
+from core.ai.providers import (
     GITHUB_MODELS_API_VERSION,
     HUMANITEC_LLM_AUTO_MODEL,
     HUMANITEC_LLM_PROVIDER,
@@ -29,7 +27,10 @@ from core.llm_model_routing import (
     OPENAI_COMPATIBLE_LLM_PROVIDER_ORDER,
     OPENAI_COMPATIBLE_LLM_PROVIDER_SLUGS,
     PLATFORM_LLM_PROVIDER_ORDER,
+    AICapability,
+    validate_platform_provider_for_capability,
 )
+from core.config.openai_v1_base_url import normalize_openai_v1_base_url
 from core.models.billing_models import DEFAULT_TARIFF_PRICES
 from core.rag_indexing_schema import IndexProfileConfig
 from core.types import JsonObject, JsonValue, SpeechProvider, VadProvider
@@ -913,16 +914,22 @@ class RerankerApiRuntimeConfig(BaseModel):
 
 
 class RerankerRuntimeConfig(BaseModel):
-    """Реранкер: ``provider`` + ``api``."""
+    """Реранкер: explicit enabled flag plus provider/model runtime config."""
 
     model_config: ClassVar[ConfigDict] = ConfigDict(extra="forbid")
 
-    provider: Literal["none", "provider_litserve", "openrouter"] = "provider_litserve"
+    enabled: bool = True
+    provider: str = "provider_litserve"
     api: RerankerApiRuntimeConfig | None = Field(default_factory=RerankerApiRuntimeConfig)
     # Биллинг (как у embedding в pgvector): оценка по tiktoken, запись через BillingService
     cost_per_1m_tokens: float = 5.0
     platform_markup: float = 1.1
     billing_model_id: str = "rerank"
+
+    @field_validator("provider")
+    @classmethod
+    def _provider_supports_rerank(cls, value: str) -> str:
+        return validate_platform_provider_for_capability(value, AICapability.RERANK)
 
     @model_validator(mode="after")
     def _require_api_object_for_provider_litserve(self) -> Self:
@@ -932,7 +939,7 @@ class RerankerRuntimeConfig(BaseModel):
 
     @property
     def base_url(self) -> str | None:
-        if self.provider == "none" or self.api is None:
+        if not self.enabled or self.api is None:
             return None
         u = self.api.base_url
         if u is None or not str(u).strip():
@@ -941,7 +948,7 @@ class RerankerRuntimeConfig(BaseModel):
 
     @property
     def timeout_seconds(self) -> float:
-        if self.provider != "none" and self.api is not None:
+        if self.enabled and self.api is not None:
             return float(self.api.timeout_seconds)
         return 60.0
 
@@ -1595,6 +1602,7 @@ class LLMModelScoreSeedItem(BaseModel):
 
     provider: str
     model_id: str
+    capability: AICapability
     score: float = Field(ge=0, le=1000)
     enabled: bool = True
     score_dimensions: dict[str, float] = Field(default_factory=dict)
@@ -1655,8 +1663,9 @@ class PlatformFreePoolPaidFallbackConfig(BaseModel):
 class PlatformFreePoolConfig(BaseModel):
     """Platform default-route via provider-neutral verified free model catalog."""
 
+    model_config: ClassVar[ConfigDict] = ConfigDict(extra="forbid")
+
     enabled: bool = Field(default=True)
-    providers: tuple[str, ...] = Field(default=OPENAI_COMPATIBLE_LLM_PROVIDER_ORDER)
     cache_ttl_seconds: int = Field(
         default=3540,
         ge=60,
@@ -1683,31 +1692,6 @@ class PlatformFreePoolConfig(BaseModel):
     max_candidates_per_provider: int = Field(default=20, ge=1, le=100)
     max_candidates_total: int = Field(default=50, ge=1, le=200)
     include_provider_router_as_last_free_fallback: bool = Field(default=True)
-
-    @field_validator("providers", mode="before")
-    @classmethod
-    def _normalize_providers(cls, value: JsonValue) -> tuple[str, ...]:
-        if value is None:
-            return OPENAI_COMPATIBLE_LLM_PROVIDER_ORDER
-        if isinstance(value, str):
-            raw_values: list[object] = [value]
-        elif isinstance(value, (list, tuple)):
-            raw_values = list(value)
-        else:
-            raise ValueError("platform_free_pool.providers должен быть массивом строк")
-        providers: list[str] = []
-        for raw_provider in raw_values:
-            if not isinstance(raw_provider, str):
-                raise ValueError("platform_free_pool.providers должен содержать только строки")
-            provider = raw_provider.strip()
-            if provider and provider not in OPENAI_COMPATIBLE_LLM_PROVIDER_SLUGS:
-                allowed = ", ".join(OPENAI_COMPATIBLE_LLM_PROVIDER_ORDER)
-                raise ValueError(f"platform_free_pool.providers содержит неизвестный provider={provider!r}; разрешены: {allowed}")
-            if provider and provider not in providers:
-                providers.append(provider)
-        if not providers:
-            raise ValueError("platform_free_pool.providers не может быть пустым")
-        return tuple(providers)
 
     @model_validator(mode="after")
     def _ttl_covers_refresh_interval(self) -> Self:

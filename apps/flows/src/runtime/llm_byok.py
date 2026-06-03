@@ -10,7 +10,7 @@ from apps.flows.src.models.node_config import NodeLLMConfig
 def is_llm_byok_config(config: NodeLLMConfig | None) -> bool:
     """True если в LLM config заданы свой api_key, свой base_url или provider=custom_openai_compatible.
 
-    Канонический источник правды для cost_origin — ``core.company_ai.resolver.ResolvedLLM.cost_origin``,
+    Канонический источник правды для cost_origin — ``core.ai.models.ResolvedAIModel.cost_origin``,
     но раннер использует эту эвристику как быстрый проверочный путь по конфигу ноды.
     """
     if not config:

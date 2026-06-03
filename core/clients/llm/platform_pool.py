@@ -5,18 +5,18 @@ from __future__ import annotations
 from collections.abc import Awaitable, Callable, Sequence
 from typing import TYPE_CHECKING
 
-from core.clients.llm.config import LLMCallConfig
-from core.clients.llm.model_routing import (
-    HUMANITEC_LLM_AUTO_MODEL,
-    HUMANITEC_LLM_PROVIDER,
-    split_humanitec_llms_model_ref,
-)
-from core.clients.llm.platform_free_models import (
+from core.ai.free_pool import (
     PLATFORM_FREE_MODEL_SOURCE,
     PLATFORM_FREE_MODELS_CACHE_KEY,
     PLATFORM_PAID_FALLBACK_SOURCE,
     PlatformFreeModelRecord,
     parse_platform_free_models,
+)
+from core.ai.llm_config import LLMCallConfig
+from core.ai.providers import (
+    HUMANITEC_LLM_AUTO_MODEL,
+    HUMANITEC_LLM_PROVIDER,
+    split_humanitec_llms_model_ref,
 )
 from core.clients.llm.provider_resolution import _resolve_headers_vars, _resolve_llm_call_config
 from core.clients.redis_client import RedisClient

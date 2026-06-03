@@ -33,6 +33,33 @@ function _buildQuery(params) {
     return `?${qs}`;
 }
 
+function _headersObject(headers) {
+    const out = {};
+    headers.forEach((value, key) => {
+        out[key] = value;
+    });
+    return out;
+}
+
+function _parseResponseBody(raw, contentType) {
+    if (!raw || raw.trim() === '') return {};
+    if (contentType.includes('application/json')) return JSON.parse(raw);
+    if (contentType.includes('text/markdown') || contentType.includes('text/plain')) return raw;
+    const trimmed = raw.trim();
+    if (trimmed.startsWith('{') || trimmed.startsWith('[')) return JSON.parse(raw);
+    return raw;
+}
+
+function _responseEnvelope(response, raw, body) {
+    return {
+        status: response.status,
+        statusText: response.statusText,
+        headers: _headersObject(response.headers),
+        raw,
+        body,
+    };
+}
+
 /**
  * Извлекает поля платформы из JSON тела ошибки (request_id / trace_id / service / observability).
  */
@@ -129,17 +156,19 @@ export async function httpRequest(req) {
     }
 
     if (response.status === 204 || response.status === 205) {
+        if (req.returnMeta === true) {
+            return _responseEnvelope(response, '', {});
+        }
         return {};
     }
 
     const ct = response.headers.get('content-type') || '';
     const raw = await response.text();
-    if (!raw || raw.trim() === '') return {};
-    if (ct.includes('application/json')) return JSON.parse(raw);
-    if (ct.includes('text/markdown') || ct.includes('text/plain')) return raw;
-    const trimmed = raw.trim();
-    if (trimmed.startsWith('{') || trimmed.startsWith('[')) return JSON.parse(raw);
-    return raw;
+    const body = _parseResponseBody(raw, ct);
+    if (req.returnMeta === true) {
+        return _responseEnvelope(response, raw, body);
+    }
+    return body;
 }
 
 /**
@@ -166,18 +195,32 @@ export async function httpStream(req, onEvent) {
     const reader = response.body.getReader();
     const decoder = new TextDecoder();
     let buffer = '';
+    let raw = '';
     while (true) {
         const { done, value } = await reader.read();
         if (done) break;
-        buffer += decoder.decode(value, { stream: true });
+        const decoded = decoder.decode(value, { stream: true });
+        if (req.captureRaw === true) {
+            raw += decoded;
+        }
+        buffer += decoded;
         const lines = buffer.split('\n');
         buffer = lines.pop() || '';
         for (const line of lines) {
             if (line.startsWith('data: ')) {
                 const data = line.slice(6);
-                if (data === '[DONE]') return;
+                if (data === '[DONE]') {
+                    if (req.returnMeta === true) {
+                        return _responseEnvelope(response, raw, {});
+                    }
+                    return undefined;
+                }
                 onEvent(JSON.parse(data));
             }
         }
     }
+    if (req.returnMeta === true) {
+        return _responseEnvelope(response, raw, {});
+    }
+    return undefined;
 }

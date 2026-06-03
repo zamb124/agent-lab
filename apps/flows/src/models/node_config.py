@@ -17,7 +17,7 @@ from apps.flows.src.constants.execution_limits import (
     get_graph_max_iterations,
     get_node_execution_wall_time_cap_seconds,
 )
-from core.clients.llm.config import LLMCallConfig, validate_fallback_model_configs
+from core.ai.llm_config import LLMCallConfig, validate_fallback_model_configs
 from core.files.file_ref import FileRef
 from core.llm_context import LLMContextPatch
 from core.models import StrictBaseModel
@@ -234,7 +234,7 @@ class NodeConfig(StrictBaseModel):
             "Декларативная capability ноды для company AI overlay. "
             "Если None — считается llm_chat. Если у компании в metadata.ai_providers "
             "задан override этой capability, runtime подменяет provider/model/api_key "
-            "перед вызовом LLM. См. core/company_ai/resolver.py."
+            "перед вызовом LLM. См. core/ai/company_settings/resolver.py."
         ),
     )
     react: ReactConfig | None = Field(

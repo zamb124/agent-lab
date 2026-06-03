@@ -1,5 +1,9 @@
 """
-Резолвер per-company AI настроек: capability → конкретный provider/model/api_key/base_url/cost_origin.
+Internal company AI settings resolution for ``core.ai``.
+
+Capability selection is public only through ``core.ai.resolver.resolve_ai_model``.
+This module reads persisted company AI settings and expands secrets/custom
+providers into transport parameters for the canonical resolver.
 
 Источник правды — ``Company.metadata['ai_providers']`` (см. ``schema.py``). Если override
 отсутствует, вызывающий код может запросить platform default через ``platform_defaults``.
@@ -18,14 +22,12 @@ from typing import ClassVar
 
 from pydantic import BaseModel, ConfigDict, computed_field
 
-from core.ai.providers import RERANK_POLICY_NONE
-from core.clients.llm.config import LLMCallConfig
-from core.company_ai.crypto import decrypt_secret
-from core.company_ai.platform_defaults import (
+from core.ai.company_settings.crypto import decrypt_secret
+from core.ai.company_settings.platform_defaults import (
     platform_default_model,
     platform_default_provider_for_capability,
 )
-from core.company_ai.schema import (
+from core.ai.company_settings.schema import (
     CUSTOM_PROVIDER_REF_PREFIX,
     CUSTOM_PROVIDER_SLUG,
     HUMANITEC_LLM_AUTO_MODEL,
@@ -37,6 +39,7 @@ from core.company_ai.schema import (
     CompanyRerankOverride,
     CompanyVoiceOverride,
 )
+from core.ai.llm_config import LLMCallConfig
 from core.context import get_context
 from core.logging import get_logger
 from core.models.billing_models import BillingCostOrigin
@@ -54,8 +57,8 @@ class _FrozenModel(BaseModel):
     model_config: ClassVar[ConfigDict] = ConfigDict(frozen=True, extra="forbid")
 
 
-class ResolvedLLM(_FrozenModel):
-    """Финальные параметры для ``get_llm`` + биллинг-метаданные."""
+class CompanyResolvedLLM(_FrozenModel):
+    """Финальные параметры LLM route + биллинг-метаданные."""
 
     provider: str
     model: str
@@ -76,7 +79,7 @@ class ResolvedLLM(_FrozenModel):
         return f"llm:{self.model}"
 
 
-class ResolvedEmbedding(_FrozenModel):
+class CompanyResolvedEmbedding(_FrozenModel):
     """Финальные параметры embedding HTTP-клиента."""
 
     provider: str
@@ -97,7 +100,7 @@ class ResolvedEmbedding(_FrozenModel):
         return f"embedding:{self.model}"
 
 
-class ResolvedRerank(_FrozenModel):
+class CompanyResolvedRerank(_FrozenModel):
     """Политика реранка после применения company override."""
 
     enabled: bool
@@ -118,7 +121,7 @@ class ResolvedRerank(_FrozenModel):
         return f"rerank:{self.billing_resource_id}"
 
 
-class ResolvedVoice(_FrozenModel):
+class CompanyResolvedVoice(_FrozenModel):
     """Резолв провайдера речи (STT/TTS/VAD)."""
 
     provider: str
@@ -162,7 +165,7 @@ def _resolve_llm_fallback_models(
     aip: CompanyAIProviders,
     capability: AICapability,
     *,
-    primary: ResolvedLLM,
+    primary: CompanyResolvedLLM,
     fallback_models: list[LLMCallConfig] | None,
 ) -> tuple[LLMCallConfig, ...] | None:
     """Разворачивает company-level fallback policy в конкретные LLMCallConfig.
@@ -175,22 +178,16 @@ def _resolve_llm_fallback_models(
         return None
     resolved_items: list[LLMCallConfig] = []
     for idx, fallback in enumerate(fallback_models):
-        if primary.provider == HUMANITEC_LLM_PROVIDER and fallback.provider is None:
-            raise ValueError(
-                f"capability {capability.value}: fallback_models[{idx}] для provider=humanitec_llm "
-                + "должен явно задавать provider, потому что virtual provider не имеет "
-                + "одного наследуемого транспорта"
-            )
+        if fallback.provider is None:
+            raise ValueError(f"capability {capability.value}: fallback_models[{idx}].provider обязателен")
         if (
             primary.cost_origin == COST_ORIGIN_COMPANY
-            and fallback.provider is not None
             and not fallback.provider.startswith(CUSTOM_PROVIDER_REF_PREFIX)
         ):
             raise ValueError(
                 f"capability {capability.value}: fallback_models[{idx}] задаёт платформенный "
                 + f"provider={fallback.provider!r} после BYOK/custom primary. Это смешивает "
-                + "company-cost и platform-cost в одном failover; используйте custom:<id> "
-                + "или оставьте provider пустым для наследования primary transport."
+                + "company-cost и platform-cost в одном failover; используйте custom:<id>."
             )
         if fallback.provider and fallback.provider.startswith(CUSTOM_PROVIDER_REF_PREFIX):
             custom = _resolve_custom_provider(aip, fallback.provider)
@@ -231,9 +228,9 @@ def _with_company_fallbacks(
     aip: CompanyAIProviders,
     capability: AICapability,
     *,
-    resolved: ResolvedLLM,
+    resolved: CompanyResolvedLLM,
     override: CompanyLLMOverride,
-) -> ResolvedLLM:
+) -> CompanyResolvedLLM:
     fallback_models = _resolve_llm_fallback_models(
         aip,
         capability,
@@ -243,13 +240,13 @@ def _with_company_fallbacks(
     return resolved.model_copy(update={"fallback_models": fallback_models})
 
 
-def resolve_llm_for_capability(
+def resolve_company_llm(
     capability: AICapability,
     *,
     fallback_provider: str | None = None,
     fallback_model: str | None = None,
     include_platform_default: bool = False,
-) -> ResolvedLLM | None:
+) -> CompanyResolvedLLM | None:
     """
     Резолв LLM-капасити: company override, затем опциональный platform default.
     """
@@ -261,13 +258,13 @@ def resolve_llm_for_capability(
         AICapability.LLM_VISION,
         AICapability.IMAGE_GEN,
     }:
-        raise ValueError(f"resolve_llm_for_capability: capability {capability} не LLM-типа")
+        raise ValueError(f"resolve_company_llm: capability {capability} не LLM-типа")
 
     aip = load_company_ai_providers()
     override = aip.get_capability_override(capability)
     if override is None:
         if fallback_provider and fallback_model:
-            return ResolvedLLM(
+            return CompanyResolvedLLM(
                 provider=fallback_provider,
                 model=fallback_model,
                 cost_origin=COST_ORIGIN_PLATFORM,
@@ -280,7 +277,7 @@ def resolve_llm_for_capability(
                     f"capability {capability.value}: platform default model не настроен "
                     + f"для provider {default_provider!r}"
                 )
-            return ResolvedLLM(
+            return CompanyResolvedLLM(
                 provider=default_provider,
                 model=str(default_model).strip(),
                 cost_origin=COST_ORIGIN_PLATFORM,
@@ -299,7 +296,7 @@ def resolve_llm_for_capability(
             or platform_default_model(capability, override.provider)
             or HUMANITEC_LLM_AUTO_MODEL
         )
-        resolved = ResolvedLLM(
+        resolved = CompanyResolvedLLM(
             provider=HUMANITEC_LLM_PROVIDER,
             model=str(model).strip(),
             cost_origin=COST_ORIGIN_PLATFORM,
@@ -324,7 +321,7 @@ def resolve_llm_for_capability(
                 f"capability {capability.value}: для custom_provider {custom.id!r} не задана "
                 + f"модель (model_by_capability[{capability.value}] или override.model)"
             )
-        resolved = ResolvedLLM(
+        resolved = CompanyResolvedLLM(
             provider=CUSTOM_PROVIDER_SLUG,
             model=str(model).strip(),
             api_key=decrypt_secret(custom.api_key_encrypted),
@@ -352,7 +349,7 @@ def resolve_llm_for_capability(
             + f"для provider {override.provider!r} (нет в platform_defaults и override.model пуст)"
         )
 
-    resolved = ResolvedLLM(
+    resolved = CompanyResolvedLLM(
         provider=override.provider,
         model=str(model).strip(),
         api_key=api_key,
@@ -370,18 +367,18 @@ def resolve_llm_for_capability(
     )
 
 
-def resolve_custom_llm_provider_ref(
+def resolve_company_custom_llm_provider_ref(
     provider_ref: str,
     *,
     capability: AICapability = AICapability.LLM_CHAT,
     model: str | None = None,
-) -> ResolvedLLM:
+) -> CompanyResolvedLLM:
     """
-    Разворачивает прямой ``custom:<id>`` ref в параметры ``get_llm``.
+    Разворачивает прямой ``custom:<id>`` ref в параметры LLM route.
 
     Используется там, где пользователь явно выбрал custom provider в конфиге ноды,
     LLM-ресурса или sandbox capability. Это отличается от
-    ``resolve_llm_for_capability(...)``: здесь не требуется capability override, нужна
+    ``resolve_company_llm(...)``: здесь не требуется capability override, нужна
     только запись в ``custom_providers`` и поддержка указанной capability.
     """
     if capability not in {
@@ -392,7 +389,7 @@ def resolve_custom_llm_provider_ref(
         AICapability.LLM_VISION,
         AICapability.IMAGE_GEN,
     }:
-        raise ValueError(f"resolve_custom_llm_provider_ref: capability {capability} не LLM-типа")
+        raise ValueError(f"resolve_company_custom_llm_provider_ref: capability {capability} не LLM-типа")
     aip = load_company_ai_providers()
     custom = _resolve_custom_provider(aip, provider_ref)
     if capability.value not in custom.capabilities:
@@ -406,7 +403,7 @@ def resolve_custom_llm_provider_ref(
             f"capability {capability.value}: для custom_provider {custom.id!r} не задана "
             + f"модель (model_by_capability[{capability.value}] или явный model)"
         )
-    return ResolvedLLM(
+    return CompanyResolvedLLM(
         provider=CUSTOM_PROVIDER_SLUG,
         model=str(resolved_model).strip(),
         api_key=decrypt_secret(custom.api_key_encrypted),
@@ -418,7 +415,7 @@ def resolve_custom_llm_provider_ref(
     )
 
 
-def resolve_embedding_for_company() -> ResolvedEmbedding | None:
+def resolve_company_embedding() -> CompanyResolvedEmbedding | None:
     """Резолв embedding override (provider + опц. ключ + URL); None если override не задан."""
     aip = load_company_ai_providers()
     if aip.embedding is None:
@@ -432,7 +429,7 @@ def resolve_embedding_for_company() -> ResolvedEmbedding | None:
             raise ValueError(
                 f"capability=embedding: custom_provider {custom.id!r} не задал model_by_capability['embedding']"
             )
-        return ResolvedEmbedding(
+        return CompanyResolvedEmbedding(
             provider=CUSTOM_PROVIDER_SLUG,
             model=str(model).strip(),
             base_url=custom.base_url,
@@ -448,7 +445,7 @@ def resolve_embedding_for_company() -> ResolvedEmbedding | None:
     has_byok = bool(api_key) or bool(ov.base_url)
     cost_origin = COST_ORIGIN_COMPANY if has_byok else COST_ORIGIN_PLATFORM
 
-    return ResolvedEmbedding(
+    return CompanyResolvedEmbedding(
         provider=ov.provider,
         model=ov.model,
         base_url=ov.base_url or "",
@@ -461,29 +458,31 @@ def resolve_embedding_for_company() -> ResolvedEmbedding | None:
     )
 
 
-def resolve_rerank_for_company() -> ResolvedRerank | None:
+def resolve_company_rerank() -> CompanyResolvedRerank | None:
     """
     Резолв rerank override.
 
     Возвращает None если ``CompanyRerankOverride`` не задан (использовать глобальные настройки),
-    либо ``ResolvedRerank(enabled=False)`` для provider=none, либо параметры HTTP-клиента.
+    либо ``CompanyResolvedRerank(enabled=False)`` для явного отключения, либо параметры HTTP-клиента.
     """
     aip = load_company_ai_providers()
     ov: CompanyRerankOverride | None = aip.rerank
     if ov is None:
         return None
 
-    provider = ov.provider
-    if provider == RERANK_POLICY_NONE:
-        return ResolvedRerank(
+    if not ov.enabled:
+        return CompanyResolvedRerank(
             enabled=False,
-            provider=provider,
+            provider=None,
             model=None,
             url=None,
             api_key=None,
             extra_request_headers=None,
             cost_origin=COST_ORIGIN_PLATFORM,
         )
+    provider = ov.provider
+    if provider is None:
+        raise ValueError("rerank.provider обязателен при enabled=true")
     if provider.startswith(CUSTOM_PROVIDER_REF_PREFIX):
         custom = _resolve_custom_provider(aip, provider)
         if not custom.rerank_path:
@@ -496,7 +495,7 @@ def resolve_rerank_for_company() -> ResolvedRerank | None:
                 f"capability=rerank: custom_provider {custom.id!r} не задал model"
             )
         url = custom.base_url.rstrip("/") + custom.rerank_path
-        return ResolvedRerank(
+        return CompanyResolvedRerank(
             enabled=True,
             provider=CUSTOM_PROVIDER_SLUG,
             model=str(model).strip(),
@@ -513,7 +512,7 @@ def resolve_rerank_for_company() -> ResolvedRerank | None:
     model = ov.model
     if not model or not str(model).strip():
         raise ValueError(f"rerank: model обязателен для provider={provider!r}")
-    return ResolvedRerank(
+    return CompanyResolvedRerank(
         enabled=True,
         provider=provider,
         model=str(model).strip(),
@@ -526,23 +525,23 @@ def resolve_rerank_for_company() -> ResolvedRerank | None:
     )
 
 
-def resolve_voice_for_company(capability: AICapability) -> ResolvedVoice | None:
+def resolve_company_voice(capability: AICapability) -> CompanyResolvedVoice | None:
     """Резолв voice override (stt/tts/vad). None если override не задан."""
     if capability not in (AICapability.VOICE_STT, AICapability.VOICE_TTS, AICapability.VOICE_VAD):
-        raise ValueError(f"resolve_voice_for_company: capability {capability} не voice")
+        raise ValueError(f"resolve_company_voice: capability {capability} не voice")
     aip = load_company_ai_providers()
     ov_raw = aip.get_capability_override(capability)
     if ov_raw is None:
         return None
     if not isinstance(ov_raw, CompanyVoiceOverride):
-        raise TypeError(f"resolve_voice_for_company: override {capability.value} должен быть CompanyVoiceOverride")
+        raise TypeError(f"resolve_company_voice: override {capability.value} должен быть CompanyVoiceOverride")
     ov = ov_raw
     if ov.provider.startswith(CUSTOM_PROVIDER_REF_PREFIX):
         if capability == AICapability.VOICE_VAD:
             raise ValueError("voice_vad: custom провайдеры не поддерживаются")
         custom = _resolve_custom_provider(aip, ov.provider)
         model = ov.model or custom.model_by_capability.get(capability.value)
-        return ResolvedVoice(
+        return CompanyResolvedVoice(
             provider=CUSTOM_PROVIDER_SLUG,
             model=str(model).strip() if model else None,
             voice=ov.voice,
@@ -559,7 +558,7 @@ def resolve_voice_for_company(capability: AICapability) -> ResolvedVoice | None:
     api_key = _decrypt_or_none(ov.api_key_encrypted)
     has_byok = bool(api_key) or bool(ov.base_url)
     cost_origin = COST_ORIGIN_COMPANY if has_byok else COST_ORIGIN_PLATFORM
-    return ResolvedVoice(
+    return CompanyResolvedVoice(
         provider=ov.provider,
         model=ov.model,
         voice=ov.voice,
@@ -577,14 +576,14 @@ __all__ = [
     "COST_ORIGIN_COMPANY",
     "COST_ORIGIN_PLATFORM",
     "CostOrigin",
-    "ResolvedEmbedding",
-    "ResolvedLLM",
-    "ResolvedRerank",
-    "ResolvedVoice",
+    "CompanyResolvedEmbedding",
+    "CompanyResolvedLLM",
+    "CompanyResolvedRerank",
+    "CompanyResolvedVoice",
     "load_company_ai_providers",
-    "resolve_embedding_for_company",
-    "resolve_custom_llm_provider_ref",
-    "resolve_llm_for_capability",
-    "resolve_rerank_for_company",
-    "resolve_voice_for_company",
+    "resolve_company_embedding",
+    "resolve_company_custom_llm_provider_ref",
+    "resolve_company_llm",
+    "resolve_company_rerank",
+    "resolve_company_voice",
 ]

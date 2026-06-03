@@ -10,7 +10,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from core.company_ai import (
+from core.ai.company_settings import (
     METADATA_KEY,
     CompanyAIProviders,
     CompanyLLMOverride,

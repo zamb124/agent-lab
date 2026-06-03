@@ -34,26 +34,14 @@ import { asString } from '../../_helpers/flows-resolvers.js';
 const REASONING_LEVELS = Object.freeze(['', 'none', 'minimal', 'low', 'medium', 'high', 'xhigh']);
 const HUMANITEC_LLM_PROVIDER = 'humanitec_llm';
 const HUMANITEC_LLM_AUTO_MODEL = 'auto';
-
-/** Синхронно с `core/clients/llm/model_routing.LLM_ROUTING_PROVIDER_SLUGS` */
-const LLM_ROUTING_PROVIDER_SLUGS = new Set([
-    'openrouter',
-    'bothub',
-    'groq',
-    'google',
-    'github',
-    'huggingface',
-    'deepinfra',
-    'openai',
-    'yandex',
-    HUMANITEC_LLM_PROVIDER,
-]);
+const DEFAULT_LLM_CAPABILITY = 'llm_chat';
 
 export class FlowsLlmConfigEditor extends PlatformElement {
     static i18nNamespace = 'flows';
 
     static properties = {
         config: { type: Object },
+        capability: { type: String },
         readOnly: { type: Boolean },
         allowFallbacks: { type: Boolean, attribute: 'allow-fallbacks' },
         _showAdvanced: { state: true },
@@ -327,6 +315,7 @@ export class FlowsLlmConfigEditor extends PlatformElement {
     constructor() {
         super();
         this.config = null;
+        this.capability = DEFAULT_LLM_CAPABILITY;
         this.readOnly = false;
         this.allowFallbacks = true;
         this._showAdvanced = false;
@@ -335,8 +324,8 @@ export class FlowsLlmConfigEditor extends PlatformElement {
         this._models = this.useOp('flows/models_list');
         this._providers = this.useOp('flows/providers_list');
         this._loadedModelsKey = null;
+        this._loadedProvidersKey = null;
         this._compositeNormalizeConsumed = false;
-        this._providersLoaded = false;
     }
 
     connectedCallback() {
@@ -344,10 +333,7 @@ export class FlowsLlmConfigEditor extends PlatformElement {
         if (this.readOnly) {
             return;
         }
-        if (!this._providersLoaded) {
-            this._providersLoaded = true;
-            void this._providers.run(null);
-        }
+        this._loadProvidersForCapability();
     }
 
     willUpdate(changed) {
@@ -367,13 +353,28 @@ export class FlowsLlmConfigEditor extends PlatformElement {
         if (this.readOnly) {
             return;
         }
+        this._loadProvidersForCapability();
         const provider = this._readString('provider');
-        const modelsKey = provider.length > 0 ? provider : '__default__';
+        const capability = this._safeCapability();
+        const modelsKey = `${capability}:${provider.length > 0 ? provider : '__default__'}`;
         if (modelsKey !== this._loadedModelsKey) {
             this._loadedModelsKey = modelsKey;
-            void this._models.run(provider.length > 0 ? { provider } : {});
+            void this._models.run(provider.length > 0 ? { provider, capability } : { capability });
         }
         this._maybeNormalizeCompositeModel();
+    }
+
+    _safeCapability() {
+        return typeof this.capability === 'string' && this.capability.length > 0
+            ? this.capability
+            : DEFAULT_LLM_CAPABILITY;
+    }
+
+    _loadProvidersForCapability() {
+        const capability = this._safeCapability();
+        if (capability === this._loadedProvidersKey) return;
+        this._loadedProvidersKey = capability;
+        void this._providers.run({ capability });
     }
 
     _maybeNormalizeCompositeModel() {
@@ -384,7 +385,7 @@ export class FlowsLlmConfigEditor extends PlatformElement {
         if (idx <= 0) return;
         const head = model.slice(0, idx);
         const tail = model.slice(idx + 1);
-        if (!tail || !LLM_ROUTING_PROVIDER_SLUGS.has(head)) return;
+        if (!tail || !this._knownProviderSlugs().has(head)) return;
         this._compositeNormalizeConsumed = true;
         const base = this.config && typeof this.config === 'object' ? this.config : {};
         const next = { ...base, provider: head, model: tail };
@@ -658,6 +659,18 @@ export class FlowsLlmConfigEditor extends PlatformElement {
         return [];
     }
 
+    _knownProviderSlugs() {
+        const out = new Set();
+        for (const p of this._providersList()) {
+            if (p && typeof p === 'object') {
+                if (typeof p.value === 'string' && p.value.length > 0) out.add(p.value);
+                continue;
+            }
+            if (typeof p === 'string' && p.length > 0) out.add(p);
+        }
+        return out;
+    }
+
     _providerHint(provider) {
         if (provider === HUMANITEC_LLM_PROVIDER) {
             return this.t('llm_config_editor.humanitec_llms_provider_tooltip');
@@ -902,6 +915,7 @@ export class FlowsLlmConfigEditor extends PlatformElement {
                                                                         <div class="fallback-body">
                                                                             <flows-llm-config-editor
                                                                                 .config=${item}
+                                                                                .capability=${this._safeCapability()}
                                                                                 .readOnly=${this.readOnly}
                                                                                 .allowFallbacks=${false}
                                                                                 @change=${(e) => {

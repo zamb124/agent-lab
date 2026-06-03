@@ -207,7 +207,7 @@ async def test_reflection_node_blocks_final_answer_gate_and_records_typed_result
         ],
     )
     fake_llm = FakeCriticLLM(critique)
-    monkeypatch.setattr(runtime_nodes, "get_llm", lambda **_: fake_llm)
+    monkeypatch.setattr(runtime_nodes, "create_llm_client_from_call_config", lambda *_, **__: fake_llm)
     runtime = RecordingWorkflowRuntime()
     node = ReflectionNode("critic", _node_config(), container=_container(runtime))
     state = _state()
@@ -241,7 +241,7 @@ async def test_reflection_activity_replays_without_second_llm_call(
         issues=[],
     )
     fake_llm = FakeCriticLLM(critique)
-    monkeypatch.setattr(runtime_nodes, "get_llm", lambda **_: fake_llm)
+    monkeypatch.setattr(runtime_nodes, "create_llm_client_from_call_config", lambda *_, **__: fake_llm)
     runtime = RecordingWorkflowRuntime()
     node = await create_node("critic", _node_config(), container=_container(runtime))
     assert isinstance(node, ReflectionNode)

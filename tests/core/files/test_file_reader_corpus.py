@@ -2,7 +2,7 @@
 
 Полный путь reader.read() — никаких patchy внутренних функций.
 Единственные внешние замены:
-  - LLM/Vision: get_vision_llm() уже возвращает MockLLM в TESTING (правка фабрики).
+  - LLM/Vision: core.ai.runtime возвращает MockLLM в TESTING.
     Для vision-файлов тест настраивает очередь MockLLM на "MOCK_VISION".
   - STT: передаётся transcription_company_id без записи в company_voice_providers
     → tier резолвится в mock STT-провайдер из конфигурации тестового окружения.

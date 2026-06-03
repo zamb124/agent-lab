@@ -1,14 +1,15 @@
 """
-Сервис для генерации embeddings через OpenAI-совместимый POST .../embeddings
-(OpenRouter, локальный provider_litserve и др.).
+Canonical embeddings client for OpenAI-compatible POST .../embeddings providers.
 
 Биллинг: span'ы с billing_pending_settlement — фоновая джоба settlement.
 """
 
 from __future__ import annotations
 
+import hashlib
 import math
-from typing import ClassVar
+import re
+from typing import ClassVar, override
 
 import httpx
 import tiktoken
@@ -39,13 +40,9 @@ class EmbeddingResponsePayload(BaseModel):
     data: list[EmbeddingResponseItem]
 
 
-class EmbeddingService:
+class AIEmbeddingClient:
     """
-    Сервис для генерации embeddings.
-
-    Поддерживает:
-    - OpenRouter API (по умолчанию)
-    - Любой OpenAI-совместимый API
+    Canonical OpenAI-compatible embeddings transport.
     """
 
     OPENROUTER_URL: ClassVar[str] = "https://openrouter.ai/api/v1/embeddings"
@@ -62,9 +59,9 @@ class EmbeddingService:
         extra_headers: dict[str, str] | None = None,
     ) -> None:
         if not api_key:
-            raise ValueError("API key обязателен для EmbeddingService")
+            raise ValueError("API key обязателен для AIEmbeddingClient")
         if not model.strip():
-            raise ValueError("Embedding model обязателен для EmbeddingService")
+            raise ValueError("Embedding model обязателен для AIEmbeddingClient")
 
         self.api_key: str = api_key
         self.model_name: str = model.strip()
@@ -367,3 +364,32 @@ class EmbeddingService:
         if self.mrl_output_dimension is not None:
             snap["mrl_output_dimension"] = self.mrl_output_dimension
         return snap
+
+
+class DeterministicAIEmbeddingClient(AIEmbeddingClient):
+    """Deterministic embeddings client for tests and local mock mode."""
+
+    @override
+    async def generate_embeddings(self, texts: list[str]) -> list[list[float]]:
+        dim = self.get_embedding_dimension()
+        embeddings: list[list[float]] = []
+        for source_text in texts:
+            vector = [0.0] * dim
+            tokens = re.findall(r"[\w]+", source_text.lower(), flags=re.UNICODE)
+            if not tokens:
+                tokens = ["__empty__"]
+
+            def add_feature(feature: str, weight: float = 1.0) -> None:
+                digest = hashlib.sha256(feature.encode("utf-8")).digest()
+                idx = int.from_bytes(digest[:4], "big") % dim
+                sign = 1.0 if digest[4] % 2 == 0 else -1.0
+                vector[idx] += sign * weight
+
+            for token in tokens:
+                add_feature(token)
+            add_feature(f"__document__:{source_text}", weight=0.125)
+            norm = math.sqrt(sum(value * value for value in vector))
+            if norm == 0.0:
+                raise ValueError("Mock embedding norm is zero")
+            embeddings.append([value / norm for value in vector])
+        return embeddings

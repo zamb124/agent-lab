@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
-"""CI: единственная реализация пост-retrieval реранка в core/rag.
+"""CI: strict rerank boundaries.
 
-Определения клиента и функций rerank-after-retrieve только в одном модуле
-(см. константу ``_CANON`` ниже). Параллельные HTTP-клиенты реранка в ``apps/**``
-запрещены (сервер ``apps/provider_litserve`` — не клиент).
+HTTP-клиент реранка живёт только в ``core/ai/rerank_client.py``.
+RAG post-retrieval orchestration живёт только в ``core/rag/post_retrieval_rerank.py``.
+Параллельные HTTP-клиенты реранка в ``apps/**`` запрещены.
 
 Выход: 0 — ОК, 1 — нарушение.
 """
@@ -14,15 +14,16 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 
-_CANON = "core/rag/post_retrieval_rerank.py"
+_RAG_CANON = "core/rag/post_retrieval_rerank.py"
+_AI_CANON = "core/ai/rerank_client.py"
 _SELF = "scripts/check_rag_post_retrieval_rerank_single.py"
 
-_MARKERS = (
-    "class RerankerHTTPClient",
-    "class RerankerClientError",
-    "async def apply_rerank_after_retrieve(",
-    "async def apply_rerank_after_retrieve_grouped(",
-)
+_MARKER_ALLOWED_PATHS = {
+    "class AIRerankerHTTPClient": _AI_CANON,
+    "class AIRerankerClientError": _AI_CANON,
+    "async def apply_rerank_after_retrieve(": _RAG_CANON,
+    "async def apply_rerank_after_retrieve_grouped(": _RAG_CANON,
+}
 
 _SKIP_PREFIXES = (
     ".venv/",
@@ -45,20 +46,20 @@ def main() -> int:
         rel = py_file.relative_to(ROOT).as_posix()
         if _skip(rel):
             continue
-        if rel in (_CANON, _SELF):
+        if rel in (_AI_CANON, _RAG_CANON, _SELF):
             continue
         try:
             content = py_file.read_text(encoding="utf-8", errors="replace")
         except OSError:
             continue
-        for marker in _MARKERS:
+        for marker, allowed_path in _MARKER_ALLOWED_PATHS.items():
             if marker in content:
-                violations.append(f"  {rel}: найдено {marker!r} (разрешено только в {_CANON})")
+                violations.append(f"  {rel}: найдено {marker!r} (разрешено только в {allowed_path})")
 
     if violations:
         print("check_rag_post_retrieval_rerank_single: FAILED", file=sys.stderr)
         print(
-            "Пост-retrieval реранк — только core/rag/post_retrieval_rerank.py (см. rag.mdc).",
+            "Rerank HTTP — только core/ai/rerank_client.py; RAG orchestration — только core/rag/post_retrieval_rerank.py.",
             file=sys.stderr,
         )
         print("Нарушения:", file=sys.stderr)

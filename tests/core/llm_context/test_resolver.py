@@ -3,7 +3,7 @@ from __future__ import annotations
 import pytest
 from pydantic import ValidationError
 
-from core.company_ai import METADATA_KEY, CompanyAIProviders, LLMContextPatch
+from core.ai.company_settings import METADATA_KEY, CompanyAIProviders, LLMContextPatch
 from core.context import Company, Context, User, clear_context, set_context
 from core.llm_context import (
     LLMContextBudget,

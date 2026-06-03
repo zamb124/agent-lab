@@ -101,7 +101,7 @@ import {
     dashboardRagNamespacesCountOp,
     dashboardSyncSpacesCountOp,
     dashboardDocumentsFilesCountOp,
-    dashboardLitserveModelsCountOp,
+    dashboardHumanitecModelsCountOp,
 } from '../events/resources/dashboard-stats.resource.js';
 import {
     publicSiteBundleOp,
@@ -306,7 +306,7 @@ export class FrontendApp extends PlatformApp {
         dashboardRagNamespacesCountOp,
         dashboardSyncSpacesCountOp,
         dashboardDocumentsFilesCountOp,
-        dashboardLitserveModelsCountOp,
+        dashboardHumanitecModelsCountOp,
         publicSiteBundleOp,
         publicBlogListOp,
         publicBlogPostOp,

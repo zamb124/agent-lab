@@ -27,12 +27,12 @@ from apps.frontend.api.voice_providers_catalog_helpers import (
     secrets_dict_to_meta,
 )
 from apps.frontend.dependencies import ContainerDep, require_frontend_user
+from core.ai.runtime import invalidate_voice_company_overrides_cache
 from core.clients.speech_provider_catalog import (
     STT_TTS_PROVIDER_IDS,
     cloud_ru_stt_model_ids,
     cloud_ru_tts_model_ids,
 )
-from core.clients.voice_resolver import invalidate_company_overrides_cache
 from core.config import get_settings
 from core.db.company_voice_provider_secrets import (
     SecretsPatchValue,
@@ -201,7 +201,7 @@ def _validate_model_for_voice(
         allowed = frozenset(m.api_model_id for m in infra.tts_models)
 
     if model_value not in allowed:
-        raise HTTPException(status_code=400, detail=f"Неизвестная litserve модель: {model_value!r}")
+        raise HTTPException(status_code=400, detail=f"Неизвестная модель Humanitec Voice: {model_value!r}")
 
 
 def _item_kind(value: str) -> Literal["stt", "tts"]:
@@ -353,7 +353,7 @@ async def upsert_company_voice_provider(
         response_format=payload.response_format,
         secrets=secrets_arg,
     )
-    invalidate_company_overrides_cache(company_id=company_id)
+    invalidate_voice_company_overrides_cache(company_id=company_id)
     logger.info(
         "frontend.company_voice_provider_upserted",
         company_id=company_id,
@@ -378,7 +378,7 @@ async def delete_company_voice_provider(
     deleted = await container.company_voice_provider_repository.delete(
         company_id=company_id, kind=voice_kind
     )
-    invalidate_company_overrides_cache(company_id=company_id)
+    invalidate_voice_company_overrides_cache(company_id=company_id)
     logger.info(
         "frontend.company_voice_provider_deleted",
         company_id=company_id,

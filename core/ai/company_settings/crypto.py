@@ -36,7 +36,7 @@ def _derive_fernet_key() -> bytes:
             digest = hashlib.sha256(raw.strip().encode("utf-8")).digest()
             return base64.urlsafe_b64encode(digest)
     raise ValueError(
-        "core.company_ai.crypto: ни auth.jwt_secret_key, ни auth.secret_key не заданы; без секрета нельзя шифровать секреты company AI providers"
+        "core.ai.company_settings.crypto: ни auth.jwt_secret_key, ни auth.secret_key не заданы; без секрета нельзя шифровать секреты company AI providers"
     )
 
 

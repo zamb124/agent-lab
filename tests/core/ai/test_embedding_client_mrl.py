@@ -2,11 +2,11 @@
 
 import pytest
 
-from core.rag.services.embedding_service import EmbeddingService
+from core.ai.embedding_client import AIEmbeddingClient
 
 
 def test_mrl_pads_to_full_dimension_and_normalizes_prefix() -> None:
-    svc = EmbeddingService(
+    svc = AIEmbeddingClient(
         api_key="k",
         base_url="https://example.com/v1",
         model="qwen/qwen3-embedding-0.6b",
@@ -24,7 +24,7 @@ def test_mrl_pads_to_full_dimension_and_normalizes_prefix() -> None:
 
 
 def test_mrl_dense_vector_when_dimension_equals_prefix_length() -> None:
-    svc = EmbeddingService(
+    svc = AIEmbeddingClient(
         api_key="k",
         base_url="https://example.com/v1",
         model="qwen/qwen3-embedding-0.6b",
@@ -41,7 +41,7 @@ def test_mrl_dense_vector_when_dimension_equals_prefix_length() -> None:
 
 
 def test_get_embedding_dimension_returns_storage_column_size() -> None:
-    svc = EmbeddingService(
+    svc = AIEmbeddingClient(
         api_key="k",
         base_url="https://example.com/v1",
         model="qwen/qwen3-embedding-0.6b",
@@ -52,7 +52,7 @@ def test_get_embedding_dimension_returns_storage_column_size() -> None:
 
 
 def test_mrl_padding_when_dimension_exceeds_prefix() -> None:
-    svc = EmbeddingService(
+    svc = AIEmbeddingClient(
         api_key="k",
         base_url="https://example.com/v1",
         model="qwen/qwen3-embedding-0.6b",

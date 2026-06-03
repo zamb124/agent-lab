@@ -1,10 +1,11 @@
 from __future__ import annotations
 
 import pytest
+from pydantic import ValidationError
 
 from apps.flows.src.models.node_config import NodeConfig, NodeLLMConfig, NodeType
 from apps.flows.src.runtime.effective_llm_config import resolve_effective_llm_config_for_node
-from core.company_ai import (
+from core.ai.company_settings import (
     HUMANITEC_LLM_PROVIDER,
     METADATA_KEY,
     CompanyAIProviders,
@@ -102,6 +103,15 @@ def test_humanitec_company_override_accepts_configured_fallback_policy() -> None
     assert override.fallback_models is not None
     assert override.fallback_models[0].provider == "openrouter"
     assert override.fallback_models[0].model == "fallback"
+
+
+def test_company_fallback_models_require_explicit_provider() -> None:
+    with pytest.raises(ValidationError, match=r"fallback_models\[0\]\.provider"):
+        CompanyLLMOverride(
+            provider="openrouter",
+            model="company/primary",
+            fallback_models=[{"model": "company/fallback"}],
+        )
 
 
 def test_byok_company_primary_rejects_platform_cost_fallback() -> None:

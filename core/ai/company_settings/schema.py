@@ -21,17 +21,14 @@ from typing import Annotated, ClassVar, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
+from core.ai.llm_config import LLMCallConfig, validate_fallback_model_configs
 from core.ai.providers import (
-    RERANK_POLICY_NONE,
-    AICapability,
-    validate_platform_provider_for_capability,
-)
-from core.clients.llm.config import LLMCallConfig, validate_fallback_model_configs
-from core.clients.llm.model_routing import (
     HUMANITEC_LLM_AUTO_MODEL,
     HUMANITEC_LLM_PROVIDER,
     PLATFORM_LLM_PROVIDER_ORDER,
+    AICapability,
     split_humanitec_llms_model_ref,
+    validate_platform_provider_for_capability,
 )
 from core.llm_context.models import LLMContextPatch
 from core.types import JsonObject, require_json_object
@@ -169,6 +166,8 @@ class CompanyLLMOverride(BaseModel):
                 )
         self.fallback_models = validate_fallback_model_configs(self.fallback_models)
         for idx, fallback in enumerate(self.fallback_models or []):
+            if fallback.provider is None:
+                raise ValueError(f"fallback_models[{idx}].provider обязателен")
             if fallback.provider == HUMANITEC_LLM_PROVIDER and (
                 fallback.model != HUMANITEC_LLM_AUTO_MODEL
                 and split_humanitec_llms_model_ref(fallback.model) is None
@@ -177,8 +176,7 @@ class CompanyLLMOverride(BaseModel):
                     f"fallback_models[{idx}]: provider=humanitec_llm поддерживает "
                     + "model='auto' или provider-prefixed free-pool модель '<provider>:<model_id>'"
                 )
-            if fallback.provider is not None:
-                _ = _validate_provider_ref(fallback.provider, allow_custom=True)
+            _ = _validate_provider_ref(fallback.provider, allow_custom=True)
             secret_fields = {
                 "api_key": fallback.api_key,
                 "base_url": fallback.base_url,
@@ -240,11 +238,16 @@ class CompanyEmbeddingOverride(BaseModel):
 
 
 class CompanyRerankOverride(BaseModel):
-    """Override rerank capability компании: provider + model + BYOK/custom."""
+    """Override rerank capability компании.
+
+    ``enabled=false`` disables rerank explicitly. Enabled rerank is always a
+    real provider/model selection; no pseudo-provider is allowed.
+    """
 
     model_config: ClassVar[ConfigDict] = ConfigDict(extra="forbid")
 
-    provider: str
+    enabled: bool = True
+    provider: str | None = None
     model: str | None = None
     api_key_encrypted: str | None = None
     base_url: str | None = None
@@ -252,10 +255,10 @@ class CompanyRerankOverride(BaseModel):
 
     @field_validator("provider")
     @classmethod
-    def _v_provider(cls, v: str) -> str:
+    def _v_provider(cls, v: str | None) -> str | None:
+        if v is None:
+            return None
         s = v.strip()
-        if s == RERANK_POLICY_NONE:
-            return s
         if _is_custom_ref(s):
             return _validate_provider_ref(s, allow_custom=True)
         return validate_platform_provider_for_capability(s, AICapability.RERANK)
@@ -282,10 +285,14 @@ class CompanyRerankOverride(BaseModel):
 
     @model_validator(mode="after")
     def _v_consistency(self) -> "CompanyRerankOverride":
-        if self.provider == RERANK_POLICY_NONE:
+        if not self.enabled:
             if self.model or self.api_key_encrypted or self.base_url or self.extra_request_headers:
-                raise ValueError("rerank provider=none не принимает model/api_key/base_url/headers")
+                raise ValueError("rerank enabled=false не принимает model/api_key/base_url/headers")
+            if self.provider is not None:
+                raise ValueError("rerank enabled=false не принимает provider")
             return self
+        if self.provider is None:
+            raise ValueError("rerank.provider обязателен при enabled=true")
         if not self.model:
             raise ValueError("rerank.model обязателен для включённого provider")
         if _is_custom_ref(self.provider):
@@ -430,7 +437,7 @@ class CompanyAIProviders(BaseModel):
             )
         if self.rerank is not None:
             ref = self.rerank.provider
-            if _is_custom_ref(ref):
+            if ref is not None and _is_custom_ref(ref):
                 self._check_provider_ref(ref, capability="rerank", custom_index=custom_index)
         for cap, ov_v in (("voice_stt", self.voice_stt), ("voice_tts", self.voice_tts)):
             if ov_v is None:

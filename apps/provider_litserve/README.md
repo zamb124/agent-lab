@@ -17,7 +17,7 @@
 - **POST** `/v1/audio/speech` — локальный TTS для voice-контуров.
 - **POST** `/v1/audio/vad` — локальный VAD для voice-контуров.
 
-LLM-моделей и Markdown endpoint в `provider_litserve` нет. Markdown форматируется общим `TextTransformService` через company capability `llm_format_markdown` и платформенный `get_llm()`.
+LLM-моделей и Markdown endpoint в `provider_litserve` нет. Markdown форматируется общим `TextTransformService` через company capability `llm_format_markdown` и `core.ai.runtime`.
 
 - **GET** `/health` — базовая доступность ASGI-процесса.
 - **GET** `/v1/health/inference` — готовность LitServe runtime и CUDA, если `accelerator`/`embedding_accelerator`/`rerank_accelerator` требуют GPU. Именно этот endpoint используется Kubernetes readiness/startup probe.
@@ -26,7 +26,7 @@ LLM-моделей и Markdown endpoint в `provider_litserve` нет. Markdown 
 
 Общее: [`shared.py`](shared.py). Настройки: [`config.py`](config.py) — `get_provider_litserve_settings()` через `load_merged_config("provider_litserve")`.
 
-**`EmbeddingService`** — **`POST …/v1/embeddings`**; **`RerankerHTTPClient`** (**`core/rag/post_retrieval_rerank.py`**) — **`…/v1/rerank`**.
+**`AIEmbeddingClient`** — **`POST …/v1/embeddings`**; **`AIRerankerHTTPClient`** (**`core.ai.rerank_client`**) — **`…/v1/rerank`**.
 
 Клиенты платформы задают **`provider_litserve.api.base_url`** (корень **`…/v1`**). Порт слушателя — **`provider_litserve.infra.gateway_port`** (не путать с **`rag.reranker`** в доменном смысле).
 

@@ -203,9 +203,9 @@ client = ServiceClient()
 response = await client.get("flows", "/flows/api/v1/flows/")
 ```
 
-## LLM, Context, асинхронность
+## AI models, Context, асинхронность
 
-- LLM — только через `core/clients/llm/factory.py::get_llm()`. Прямые импорты LangChain — запрещены. Stream-First для runtime flows → **`streaming.mdc`**.
+- AI/LLM/embeddings/rerank/image model selection — только через **`core.ai`** (`ai_models.mdc`). Provider-specific клиенты, `get_llm(...)`, direct `AIEmbeddingClient(...)`/`AIRerankerHTTPClient(...)` в сервисах запрещены. Stream-First для runtime flows → **`streaming.mdc`**.
 - Generic context layer — `core/llm_context/**` + `core/clients/llm/context_layer.py`, не flow-only. `LLMClient.chat/stream/invoke` принимают `llm_context`, `llm_context_blocks`, `llm_context_source_registry`; в `apps/*` не собирать «умный большой prompt» вручную.
 - Иерархия policy: `settings.llm_context` → `CompanyAIProviders.llm_context` → `ResourceType.LLM_CONTEXT` → `NodeConfig.llm_context` → inline `llm.chat(llm_context=...)`. Поздний слой — patch поверх раннего, без fallback-угадываний.
 - First-class profile source — `IdentityLLMContextProfileSource`: явные user/company/runtime профили из `Context` становятся `kind=profile` stable-prefix блоком. Profile ≠ policy profile.
@@ -222,14 +222,14 @@ response = await client.get("flows", "/flows/api/v1/flows/")
 
 | Понятие | Каноническое имя | Запрет/исключение |
 |---|---|---|
-| ID модели провайдера | `model` | `model_name` допустим только в legacy/public API `get_llm(...)`, `get_llm_for_state(...)`, `setup_mock_responses(...)`, `MockLLM(...)`, `get_vision_llm(...)`; внутри реализации и helper/predicate API сразу нормализуется в `model`. |
+| ID модели провайдера | `model` | `model_name` допустим только внутри private transport bridge/tests; service-level API сразу нормализует в `model`. |
 | Slug провайдера | `provider` | `llm_provider` допустим только как runtime-атрибут `LLMClient`/`MockLLM` и tracing/metadata compatibility. |
 | Источник candidate/config | `source` | `llm_source` допустим только как runtime-атрибут `LLMClient` и metadata compatibility. |
 | Base URL / ключ / Yandex folder | `base_url`, `api_key`, `folder_id` | `url`, `key`, `fid` для этих смыслов запрещены. |
 | Provider/client headers | `default_headers` | Не смешивать с request overlays. |
-| Config-level HTTP body overlay | `extra_request_body` | Используется в `LLMCallConfig`, ресурсах, `get_llm(...)`. |
+| Config-level HTTP body overlay | `extra_request_body` | Используется в `LLMCallConfig`, ресурсах и `core.ai.runtime` bridge. |
 | Per-call HTTP body overlay | `extra_body` | Используется только в `LLMClient.stream/chat/invoke` и transport; не сохраняется в config/resource. |
-| Config-level HTTP headers overlay | `extra_request_headers` | Используется в `LLMCallConfig`, ресурсах, `get_llm(...)`; `@var:` резолвится до transport. |
+| Config-level HTTP headers overlay | `extra_request_headers` | Используется в `LLMCallConfig`, ресурсах и `core.ai.runtime` bridge; `@var:` резолвится до transport. |
 | Per-call HTTP headers overlay | `extra_headers` | Используется только в `LLMClient.stream/chat/invoke` и transport; мержится последним. |
 | Model context window | `context_length` | Runtime metadata resolved model window. Используется только для hard clamp context layer; не путать с `max_tokens`. |
 | Вход метода | `messages` | После нормализации — другое имя. |

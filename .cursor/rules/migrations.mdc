@@ -30,7 +30,7 @@ alwaysApply: false
 
 **Таблицы по БД** (важно для baseline и JOIN):
 
-- `platform_agents` — KV `flows`/`nodes`/`tools`/…, `storage` (префиксы `llm_model:`, embed, файлы), `mcp_servers`. Не путать с `storage` в `platform_shared`.
+- `platform_agents` — KV `flows`/`nodes`/`tools`/…, `storage` (flows/resources/embed/файлы), `mcp_servers`. AI model catalog живёт в `platform_shared.storage` с префиксом `ai_model_catalog:*`, не в `platform_agents`.
 - `platform_crm` — реляционные CRM-таблицы + `vector_documents` (pgvector) для JOIN при семантическом поиске; `crm_knowledge_imports` (журнал импорта). RAG-документы живут в `platform_rag` (не смешиваются).
 - `platform_rag` — `document_processing_status`, `vector_documents` пайплайна RAG.
 - `platform_office` — `office_document_bindings` (привязки к `company_id` + namespace).

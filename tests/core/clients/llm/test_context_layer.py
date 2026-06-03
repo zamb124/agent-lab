@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import pytest
 
+from core.ai.company_settings import METADATA_KEY
 from core.clients.llm.context_layer import (
     llm_context_trace_metadata,
     merge_provider_cache_hints,
@@ -9,7 +10,6 @@ from core.clients.llm.context_layer import (
     prepare_messages_for_context_layer,
 )
 from core.clients.llm.messages import messages_to_openai, normalize_messages
-from core.company_ai import METADATA_KEY
 from core.context import Company, Context, User, clear_context, set_context
 from core.llm_context import (
     LLM_CONTEXT_PROFILE_METADATA_KEY,

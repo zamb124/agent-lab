@@ -17,18 +17,20 @@ import httpx
 import pytest
 from a2a.types import Message, Part, Role, TextPart
 
-from apps.flows.src.db.llm_model_repository import LLMModelRepository
 from apps.flows.src.services.llm_models_service import LLMModelsService
+from core.ai.adapters import (
+    OpenRouterModelCatalogAdapter,
+    create_model_catalog_adapter_registry,
+)
+from core.ai.model_catalog_repository import AIModelCatalogRepository
 from core.ai.providers import (
     EMBEDDING_PROVIDER_ORDER,
+    OPENAI_COMPATIBLE_LLM_PROVIDER_ORDER,
     PROVIDER_LITSERVE,
     AICapability,
 )
-from core.clients.llm.factory import LLMClient, get_llm
-from core.clients.llm.model_routing import (
-    OPENAI_COMPATIBLE_LLM_PROVIDER_ORDER,
-)
-from core.clients.llm.platform_free_models import OpenRouterPlatformFreeModelAdapter
+from core.clients.llm.client import LLMClient
+from core.clients.llm.runtime import create_llm_transport_client as create_transport_llm_client
 from core.clients.redis_client import RedisClient
 from core.clients.scheduler_client import SchedulerClient
 from core.clients.service_client import ServiceClient
@@ -131,10 +133,10 @@ def _configured_provider(provider: str) -> object:
 
 def _live_model_service() -> LLMModelsService:
     settings = get_settings()
-    db_url = settings.database.flows_url or settings.database.shared_url
+    db_url = settings.database.shared_url
     if not db_url:
-        pytest.skip("database.flows_url/shared_url не настроен для real LLMModelRepository")
-    repository = LLMModelRepository(Storage(db_url=db_url))
+        pytest.skip("database.shared_url не настроен для real AIModelCatalogRepository")
+    repository = AIModelCatalogRepository(Storage(db_url=db_url))
     scheduler_client = SchedulerClient(ServiceClient())
     redis_client = RedisClient(settings.database.redis_url)
     return LLMModelsService(repository, scheduler_client, redis_client)
@@ -164,23 +166,20 @@ async def _live_smoke_model(provider: str, service: LLMModelsService) -> str:
 
 
 async def _openrouter_live_free_smoke_models() -> tuple[str, ...]:
-    adapter = OpenRouterPlatformFreeModelAdapter()
-    items = await adapter.fetch_model_items(get_settings())
-    records = adapter.records_from_items(
-        items,
-        max_candidates=0,
-        include_provider_router_as_last=False,
-    )
+    service = _live_model_service()
+    records = await service.discover_model_records_by_provider("openrouter")
     text_records = [
         record
         for record in records
-        if record.id != _OPENROUTER_ROUTER_MODEL_ID
+        if record.model_id != _OPENROUTER_ROUTER_MODEL_ID
+        and AICapability.LLM_CHAT in record.capabilities
+        and record.is_free is True
         and "text" in record.input_modalities
         and "text" in record.output_modalities
     ]
     if not text_records:
         pytest.fail("openrouter: live free-pool catalog не содержит конкретной text модели")
-    return tuple(record.id for record in text_records[:8])
+    return tuple(record.model_id for record in text_records[:8])
 
 
 async def _live_smoke_model_candidates(provider: str, service: LLMModelsService) -> tuple[str, ...]:
@@ -225,6 +224,13 @@ def _provider_litserve_base_url() -> str:
         return get_settings().provider_litserve.resolve_openai_v1_base_url()
     except ValueError as exc:
         pytest.skip(f"provider_litserve.api.base_url не настроен: {exc}")
+
+
+def _openrouter_catalog_adapter() -> OpenRouterModelCatalogAdapter:
+    adapter = create_model_catalog_adapter_registry(get_settings()).get("openrouter")
+    if not isinstance(adapter, OpenRouterModelCatalogAdapter):
+        pytest.fail("openrouter catalog adapter has unexpected type")
+    return adapter
 
 
 @pytest.mark.parametrize("provider", _LIVE_LLM_PROVIDERS)
@@ -277,7 +283,7 @@ async def test_live_provider_catalog_records_normalize_algorithm(provider: str) 
         if isinstance(pricing, dict):
             values = [
                 pricing.get(key)
-                for key in ("prompt", "completion", "request", "image")
+                for key in ("prompt", "completion", "input", "output", "request", "image")
                 if key in pricing
             ]
             comparable_values = [
@@ -304,7 +310,7 @@ async def test_live_provider_chat_completion_smoke(provider: str) -> None:
 
     for model in candidate_models:
         with _disable_testing_mode():
-            llm = get_llm(
+            llm = create_transport_llm_client(
                 model_name=model,
                 provider=provider,
                 temperature=0.0,
@@ -361,7 +367,7 @@ async def test_live_embedding_provider_probe_dimension_and_storage_policy(provid
         probe_response = await request_with_strategy(
             "POST",
             "https://openrouter.ai/api/v1/embeddings",
-            headers=LLMModelsService._embedding_probe_headers("openrouter"),
+            headers=_openrouter_catalog_adapter().embedding_probe_headers(),
             json={"model": embedding_records[0].model_id, "input": "dimension probe"},
             timeout=60.0,
             strategy=ProxyStrategy.DIRECT_FIRST,
@@ -412,7 +418,8 @@ async def test_live_openrouter_rerank_catalog_and_request_work() -> None:
     assert rerank_records, "openrouter: catalog не дал ни одной rerank-модели"
 
     last_status: int | None = None
-    headers = LLMModelsService._provider_model_list_headers("openrouter", cfg)
+    _ = cfg
+    headers = _openrouter_catalog_adapter().provider_model_list_headers()
     for record in rerank_records:
         response = await request_with_strategy(
             "POST",

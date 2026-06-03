@@ -63,11 +63,11 @@ from apps.frontend.services.flow_preview_guest_html import (
     build_flow_preview_guest_html,
     build_flow_preview_unavailable_html,
 )
+from core.ai.runtime import invalidate_voice_platform_pronunciation_cache
 from core.app.factory import create_service_app
 from core.app.health_payload import build_health_payload
 from core.app_state import get_request_correlation_ids
 from core.clients.payment import PaymentProviderFactory
-from core.clients.voice_resolver import invalidate_platform_pronunciation_cache
 from core.config import get_settings
 from core.config.testing import is_testing
 from core.identity.demo_bootstrap import ensure_demo_company_and_user
@@ -245,7 +245,7 @@ async def _seed_platform_pronunciation_rules(container: FrontendContainer) -> No
                 case_sensitive=False,
                 note="Платформенное правило (seed)",
             )
-    invalidate_platform_pronunciation_cache()
+    invalidate_voice_platform_pronunciation_cache()
     logger.info("frontend.pronunciation_seed_applied")
 
 
@@ -544,7 +544,7 @@ async def get_sitemap_xml(container: ContainerDep) -> Response:
 
 @app.get("/llms.txt")
 @app.get("/frontend/llms.txt")
-async def get_llms_txt(container: ContainerDep) -> PlainTextResponse:
+async def serve_llms_txt(container: ContainerDep) -> PlainTextResponse:
     _ = container
     base_url = get_frontend_public_base_url()
     return PlainTextResponse(content=_build_llms_txt(base_url=base_url))

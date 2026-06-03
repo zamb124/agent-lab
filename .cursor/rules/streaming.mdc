@@ -13,7 +13,7 @@ Worker (TaskIQ) → LlmNodeRunner → Emitter → Redis Pub/Sub → EventSubscri
                   ↑ llm.stream()           channel: stream:{task_id}
 ```
 
-`LLMClient.stream` (`core/clients/llm/factory.py`): после чанков при наличии `tool_calls` уходит `TaskStatusUpdateEvent` с `metadata.tool_calls`, затем второй `TaskStatusUpdateEvent` с финальным текстом и `metadata.usage` без `tool_calls`. В `LlmNodeRunner` поле `tool_calls` обновляется **только если** в `metadata` непустой `tool_calls` — иначе последнее событие затирало бы список вызовов.
+`LLMClient.stream` (client создан через `core.ai.runtime`): после чанков при наличии `tool_calls` уходит `TaskStatusUpdateEvent` с `metadata.tool_calls`, затем второй `TaskStatusUpdateEvent` с финальным текстом и `metadata.usage` без `tool_calls`. В `LlmNodeRunner` поле `tool_calls` обновляется **только если** в `metadata` непустой `tool_calls` — иначе последнее событие затирало бы список вызовов.
 
 ## Emitter
 

@@ -25,13 +25,13 @@ from a2a.types import (
 from a2a.utils.message import get_message_text
 from pydantic import BaseModel
 
+from core.ai.llm_config import LLMCallConfig, ReasoningEffort
 from core.clients.llm.candidates import (
     candidate_key as _candidate_key,
 )
 from core.clients.llm.candidates import (
     candidate_supports_request as _candidate_supports_request,
 )
-from core.clients.llm.config import LLMCallConfig, ReasoningEffort
 from core.clients.llm.context_layer import (
     LLMContextInput,
     llm_context_trace_metadata,

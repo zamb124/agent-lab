@@ -29,9 +29,11 @@ from a2a.types import (
 )
 from a2a.utils.message import get_message_text
 
-from core.clients.llm.config import LLMCallConfig
-from core.clients.llm.factory import LLMClient, get_llm, should_use_platform_default_free_pool
-from core.clients.llm.model_routing import HUMANITEC_LLM_AUTO_MODEL, HUMANITEC_LLM_PROVIDER
+from core.ai.llm_config import LLMCallConfig
+from core.ai.providers import HUMANITEC_LLM_AUTO_MODEL, HUMANITEC_LLM_PROVIDER
+from core.ai.runtime import should_use_platform_default_free_pool
+from core.clients.llm.client import LLMClient
+from core.clients.llm.runtime import create_llm_transport_client as create_transport_llm_client
 from core.config import BaseSettings, get_settings, set_settings
 from core.config.models import (
     LLMConfig,
@@ -747,7 +749,7 @@ async def test_invoke_uses_same_ordered_candidate_fallback() -> None:
         await server.close()
 
 
-def test_get_llm_builds_explicit_fallback_candidates_from_real_settings() -> None:
+def test_create_transport_llm_client_builds_explicit_fallback_candidates_from_real_settings() -> None:
     old_settings = get_settings()
     settings = BaseSettings(
         testing=False,
@@ -781,7 +783,7 @@ def test_get_llm_builds_explicit_fallback_candidates_from_real_settings() -> Non
     try:
         set_settings(settings)
         with _production_llm_env():
-            client = get_llm(
+            client = create_transport_llm_client(
                 model_name="openrouter/primary",
                 fallback_models=[
                     {
@@ -825,7 +827,7 @@ def test_get_llm_builds_explicit_fallback_candidates_from_real_settings() -> Non
     assert client.candidate_cooldown_seconds == 3.0
 
 
-def test_get_llm_without_model_uses_platform_default_pool_in_same_client() -> None:
+def test_create_transport_llm_client_without_model_uses_platform_default_pool_in_same_client() -> None:
     old_settings = get_settings()
     settings = BaseSettings(
         testing=False,
@@ -855,7 +857,7 @@ def test_get_llm_without_model_uses_platform_default_pool_in_same_client() -> No
     try:
         set_settings(settings)
         with _production_llm_env():
-            client = get_llm()
+            client = create_transport_llm_client()
     finally:
         set_settings(old_settings)
 
@@ -871,7 +873,7 @@ def test_get_llm_without_model_uses_platform_default_pool_in_same_client() -> No
     assert client.candidate_cooldown_seconds == 4.0
 
 
-def test_get_llm_default_pool_can_disable_paid_fallback_for_empty_balance() -> None:
+def test_create_transport_llm_client_default_pool_can_disable_paid_fallback_for_empty_balance() -> None:
     old_settings = get_settings()
     settings = BaseSettings(
         testing=False,
@@ -899,7 +901,7 @@ def test_get_llm_default_pool_can_disable_paid_fallback_for_empty_balance() -> N
     try:
         set_settings(settings)
         with _production_llm_env():
-            client = get_llm(allow_platform_paid_fallback=False)
+            client = create_transport_llm_client(allow_platform_paid_fallback=False)
     finally:
         set_settings(old_settings)
 
@@ -945,7 +947,7 @@ def test_humanitec_llm_provider_uses_dynamic_pool_independent_of_default_strateg
             settings=settings,
         ) is True
         with _production_llm_env():
-            client = get_llm(
+            client = create_transport_llm_client(
                 provider=HUMANITEC_LLM_PROVIDER,
                 model_name=HUMANITEC_LLM_AUTO_MODEL,
                 allow_platform_paid_fallback=False,
@@ -960,7 +962,7 @@ def test_humanitec_llm_provider_uses_dynamic_pool_independent_of_default_strateg
     assert client._static_candidates == []
 
 
-def test_get_llm_uses_humanitec_default_provider_as_platform_route() -> None:
+def test_create_transport_llm_client_uses_humanitec_default_provider_as_platform_route() -> None:
     old_settings = get_settings()
     settings = BaseSettings(
         testing=False,
@@ -988,7 +990,7 @@ def test_get_llm_uses_humanitec_default_provider_as_platform_route() -> None:
     try:
         set_settings(settings)
         with _production_llm_env():
-            client = get_llm(allow_platform_paid_fallback=False)
+            client = create_transport_llm_client(allow_platform_paid_fallback=False)
     finally:
         set_settings(old_settings)
 
@@ -1017,7 +1019,7 @@ def test_humanitec_llm_accepts_concrete_free_pool_model() -> None:
     try:
         set_settings(settings)
         with _production_llm_env():
-            client = get_llm(
+            client = create_transport_llm_client(
                 provider=HUMANITEC_LLM_PROVIDER,
                 model_name="openrouter:qwen/qwen3-coder:free",
                 allow_platform_paid_fallback=False,
@@ -1051,7 +1053,7 @@ def test_explicit_platform_provider_accepts_humanitec_llms_fallback() -> None:
     try:
         set_settings(settings)
         with _production_llm_env():
-            client = get_llm(
+            client = create_transport_llm_client(
                 provider="openrouter",
                 model_name="primary/model",
                 fallback_models=[

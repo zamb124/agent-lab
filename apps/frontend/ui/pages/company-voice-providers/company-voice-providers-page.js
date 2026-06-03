@@ -72,7 +72,7 @@ const KIND_OPTIONS = [
 ];
 
 const PROVIDER_OPTIONS = [
-    { value: 'litserve', label: 'Silero (litserve)' },
+    { value: 'litserve', label: 'Humanitec Voice' },
     { value: 'cloud_ru', label: 'Cloud.ru' },
     { value: 'yandex',   label: 'Yandex SpeechKit' },
     { value: 'sber',     label: 'Sber SmartSpeech' },

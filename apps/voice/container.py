@@ -1,12 +1,12 @@
 """DI контейнер voice сервиса.
 
 Не держит singleton'ов клиентов речи — клиенты создаются per-session
-через ``core.clients.voice_resolver`` (tier-резолв
+через ``core.ai.runtime`` (tier-резолв
 ``SpeechOverride`` -> per-company -> deployment-default).
 
 Контейнер хранит только настройки и фабрики session-specific VAD/STT
 провайдеров-адаптеров. Потоковый TTS для voice-сессии получается
-напрямую через ``voice_resolver.get_tts_streamer(...)`` и передаётся в
+через ``core.ai.runtime.create_voice_tts_streamer(...)`` и передаётся в
 ``speak_worker``: отдельной обёртки сверх batch-клиента не нужно.
 """
 
@@ -21,12 +21,12 @@ from apps.voice.providers.streaming_adapters import (
     StreamingSTTProvider,
     StreamingVADProvider,
 )
-from core.clients.speech_override import SpeechOverride
-from core.clients.voice_resolver import (
-    get_stt_client,
-    get_vad_client,
-    resolve_stt_settings,
+from core.ai.runtime import (
+    create_voice_stt_client,
+    create_voice_vad_client,
+    resolve_voice_stt_settings,
 )
+from core.clients.speech_override import SpeechOverride
 from core.container import ContainerRegistry
 from core.container.base import BaseContainer, lazy
 from core.logging import get_logger
@@ -38,8 +38,8 @@ class VoiceContainer(BaseContainer):
     """DI-контейнер voice сервиса.
 
     ``create_stt_provider`` / ``create_vad_provider`` — session-specific
-    фабрики streaming-адаптеров над batch-клиентами из ``voice_resolver``.
-    Для TTS в real-time сессии используйте ``get_tts_streamer`` напрямую.
+    фабрики streaming-адаптеров над batch-клиентами из ``core.ai.runtime``.
+    Для TTS в real-time сессии используйте ``create_voice_tts_streamer``.
     """
 
     @lazy
@@ -52,7 +52,7 @@ class VoiceContainer(BaseContainer):
         company_id: str,
         override: SpeechOverride | None = None,
     ) -> BaseVADProvider:
-        vad_client = await get_vad_client(company_id=company_id, override=override)
+        vad_client = await create_voice_vad_client(company_id=company_id, override=override)
         cfg = self.settings.voice.vad
         return StreamingVADProvider(
             vad_client=vad_client,
@@ -70,8 +70,8 @@ class VoiceContainer(BaseContainer):
         company_id: str,
         override: SpeechOverride | None = None,
     ) -> BaseSTTProvider:
-        resolved = await resolve_stt_settings(company_id=company_id, override=override)
-        stt_client = await get_stt_client(company_id=company_id, override=override)
+        resolved = await resolve_voice_stt_settings(company_id=company_id, override=override)
+        stt_client = await create_voice_stt_client(company_id=company_id, override=override)
         return StreamingSTTProvider(
             stt_client=stt_client,
             sample_rate=16000,

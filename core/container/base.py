@@ -29,6 +29,7 @@ from typing import (
 from fastapi import APIRouter
 from pydantic import BaseModel
 
+from core.ai.model_catalog_repository import AIModelCatalogRepository
 from core.api.crud_router import CRUDRouterGenerator
 from core.billing import BillingService
 from core.calendar.repositories import CalendarEventSqlRepository
@@ -273,6 +274,11 @@ class BaseContainer:
     def llm_model_score_repository(self) -> LLMModelScoreRepository:
         """Платформенный скоринг LLM-моделей, shared БД."""
         return LLMModelScoreRepository(db_url=self.required_shared_db_url)
+
+    @lazy
+    def ai_model_catalog_repository(self) -> AIModelCatalogRepository:
+        """Shared provider model catalog for LLM, embedding, rerank and image capabilities."""
+        return AIModelCatalogRepository(storage=self.shared_storage)
 
     @lazy
     def file_repository(self) -> FileRepository:

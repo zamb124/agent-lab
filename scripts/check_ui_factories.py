@@ -6,8 +6,9 @@ createFacets / createForm) во всех `apps/<svc>/ui/events/resources/**/*.js
 Проверки:
   1. Уникальность поля `name` среди всех фабрик платформы (имя — глобальный
      ключ в `factory-registry`, дубль => регистрация затрёт первую).
-  2. `name` имеет формат `<svc>/<entity>`, где `<svc>` совпадает с каталогом
-     сервиса (`apps/<svc>/ui/...`).
+  2. `name` имеет формат `<ui-domain>/<entity>`, где `<ui-domain>` совпадает
+     с каталогом сервиса (`apps/<svc>/ui/...`) или с явным публичным доменом
+     сервиса из `PUBLIC_FACTORY_DOMAIN_BY_SERVICE`.
   3. `baseUrl` начинается с `/` и содержит сервисный префикс
      (FastAPI: `/<svc>/api/...` или `/<svc>/api/v1/...`).
   4. Парность toast-i18n-ключей: каждое значение `successToastKey` /
@@ -44,6 +45,12 @@ FACTORY_KINDS = (
     "createForm",
     "createSlice",
 )
+
+PUBLIC_FACTORY_DOMAIN_BY_SERVICE = {
+    # UI не должен тащить внутреннее имя сервиса provider_litserve. Внешний
+    # продуктовый домен для реестра системных моделей — Humanitec Models.
+    "provider_litserve": "humanitec_models",
+}
 
 # Для `createSlice` проверяется дополнительно наличие `extraInitial`
 # (минимум один ключ) и `extraReducer` (обязателен). `transport` / `request`
@@ -248,10 +255,11 @@ def main() -> int:
                 )
             else:
                 svc_part, _, _ = name.partition("/")
-                if svc_part != svc_name:
+                expected_svc_part = PUBLIC_FACTORY_DOMAIN_BY_SERVICE.get(svc_name, svc_name)
+                if svc_part != expected_svc_part:
                     errors.append(
                         f"{prefix}: name '{name}' начинается с '{svc_part}/', "
-                        f"ожидается '{svc_name}/'"
+                        f"ожидается '{expected_svc_part}/'"
                     )
 
             base_url = rec["baseUrl"]

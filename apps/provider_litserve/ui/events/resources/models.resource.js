@@ -1,5 +1,5 @@
 /**
- * Ресурс провайдера LitServe: реестр моделей.
+ * Ресурс Humanitec Models: реестр моделей.
  *
  * CRUD по `/litserve/api/models` + отдельная операция retry для повторного
  * скачивания весов. Модель содержит поля model_id, kind, hf_model_id,
@@ -12,10 +12,10 @@ import { httpRequest } from '@platform/lib/events/http.js';
 
 function _normalizeModel(raw) {
     if (!raw || typeof raw !== 'object') {
-        throw new Error('provider_litserve/models: model item must be object');
+        throw new Error('humanitec_models/models: model item must be object');
     }
     if (typeof raw.model_id !== 'string' || raw.model_id.length === 0) {
-        throw new Error('provider_litserve/models: model_id required');
+        throw new Error('humanitec_models/models: model_id required');
     }
     return {
         model_id: raw.model_id,
@@ -29,8 +29,8 @@ function _normalizeModel(raw) {
     };
 }
 
-export const litserveModelsResource = createResourceCollection({
-    name: 'provider_litserve/models',
+export const humanitecModelsResource = createResourceCollection({
+    name: 'humanitec_models/models',
     baseUrl: '/litserve/api/models',
     idField: 'model_id',
     operations: ['list', 'create', 'remove'],
@@ -43,14 +43,14 @@ export const litserveModelsResource = createResourceCollection({
     mapItem: _normalizeModel,
 });
 
-export const litserveModelRetryOp = createAsyncOp({
-    name: 'provider_litserve/model_retry',
+export const humanitecModelRetryOp = createAsyncOp({
+    name: 'humanitec_models/model_retry',
     successToastKey: 'litserve:toast.model_retry_started',
     errorToastKey: 'litserve:toast.model_retry_error',
     restMirror: { method: 'POST', path: '/litserve/api/models/:model_id/retry' },
     request: async ({ payload }) => {
         if (!payload || typeof payload.model_id !== 'string' || payload.model_id.length === 0) {
-            throw new Error('provider_litserve/model_retry: payload.model_id required');
+            throw new Error('humanitec_models/model_retry: payload.model_id required');
         }
         return httpRequest({
             method: 'POST',
@@ -58,6 +58,6 @@ export const litserveModelRetryOp = createAsyncOp({
         });
     },
     onSuccess: (ctx, _result, event) => {
-        ctx.dispatch(litserveModelsResource.events.LIST_REQUESTED, null, { causation_id: event.id });
+        ctx.dispatch(humanitecModelsResource.events.LIST_REQUESTED, null, { causation_id: event.id });
     },
 });

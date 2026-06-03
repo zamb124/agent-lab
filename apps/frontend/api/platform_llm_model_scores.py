@@ -3,7 +3,7 @@
 Routes:
     GET    /api/platform/llm-model-scores
     PUT    /api/platform/llm-model-scores
-    DELETE /api/platform/llm-model-scores/{provider}/{model_id:path}
+    DELETE /api/platform/llm-model-scores/{capability}/{provider}/{model_id:path}
     POST   /api/platform/llm-model-scores/refresh-cache
 """
 
@@ -16,10 +16,11 @@ from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, ConfigDict, Field
 
 from apps.frontend.dependencies import ContainerDep, require_frontend_context
-from core.clients.llm.platform_free_models import (
+from core.ai.free_pool import (
     refresh_platform_free_models_cache,
     rescore_cached_platform_free_models,
 )
+from core.ai.providers import AICapability
 from core.config import get_settings
 from core.db.models.platform import LLMModelScore
 from core.identity.system_bootstrap import SYSTEM_COMPANY_ID
@@ -41,6 +42,7 @@ class LLMModelScoreDTO(BaseModel):
 
     provider: str
     model_id: str
+    capability: AICapability
     score: float
     enabled: bool
     source: LLMModelScoreSource
@@ -62,6 +64,7 @@ class LLMModelScoreUpsertRequest(BaseModel):
 
     provider: str = Field(min_length=1, max_length=64)
     model_id: str = Field(min_length=1, max_length=512)
+    capability: AICapability
     score: float = Field(ge=0, le=1000)
     enabled: bool = True
     score_dimensions: dict[str, float] = Field(default_factory=dict)
@@ -106,6 +109,7 @@ def _row_to_dto(row: LLMModelScore) -> LLMModelScoreDTO:
     return LLMModelScoreDTO(
         provider=row.provider,
         model_id=row.model_id,
+        capability=AICapability(row.capability),
         score=float(row.score),
         enabled=bool(row.enabled),
         source=source,
@@ -156,6 +160,7 @@ async def upsert_llm_model_score(
     result = await container.llm_model_score_repository.upsert(
         provider=payload.provider,
         model_id=payload.model_id,
+        capability=payload.capability,
         score=payload.score,
         enabled=payload.enabled,
         source="manual",
@@ -178,8 +183,9 @@ async def upsert_llm_model_score(
     )
 
 
-@router.delete("/{provider}/{model_id:path}", response_model=LLMModelScoreDeleteResponse)
+@router.delete("/{capability}/{provider}/{model_id:path}", response_model=LLMModelScoreDeleteResponse)
 async def delete_llm_model_score(
+    capability: AICapability,
     provider: str,
     model_id: str,
     container: ContainerDep,
@@ -188,12 +194,14 @@ async def delete_llm_model_score(
     deleted = await container.llm_model_score_repository.delete(
         provider=provider,
         model_id=model_id,
+        capability=capability,
     )
     cache_rescore = await _rescore_cache(container)
     logger.info(
         "frontend.llm_model_score_deleted",
         provider=provider,
         model_id=model_id,
+        capability=capability.value,
         deleted=deleted,
         actor_user_id=user.user_id,
     )
@@ -206,6 +214,7 @@ async def refresh_llm_model_scores_cache(container: ContainerDep) -> JsonObject:
     result = await refresh_platform_free_models_cache(
         container.redis_client,
         get_settings(),
+        container.ai_model_catalog_repository,
         model_score_provider=container.llm_model_score_repository,
     )
     logger.info(

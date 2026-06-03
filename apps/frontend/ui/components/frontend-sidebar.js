@@ -146,7 +146,7 @@ export class FrontendSidebar extends PlatformElement {
                     ${isSystem ? html`
                         <a class="service-link" href="/litserve">
                             <span class="nav-icon"><platform-icon name="database" size="18"></platform-icon></span>
-                            <span>${t('console_sidebar.litserve_service', 'LitServe')}</span>
+                            <span>${t('console_sidebar.litserve_service', 'Humanitec Models')}</span>
                         </a>
                     ` : ''}
                     <a class="service-link" href="/documentation">

@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from apps.search.config import SearchIntegrationConfig
 from apps.search.services.company_config import resolve_search_config_for_company
-from core.company_ai import encrypt_secret
+from core.ai.company_settings import encrypt_secret
 from core.company_search import COMPANY_SEARCH_METADATA_KEY, CompanySearchProviders
 from core.models.identity_models import Company
 

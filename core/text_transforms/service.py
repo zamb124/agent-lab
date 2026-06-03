@@ -7,21 +7,16 @@ import uuid
 from a2a.types import Message, Part, Role, TextPart
 from a2a.utils.message import get_message_text
 
-from core.ai.resolver import (
-    COST_ORIGIN_PLATFORM,
-    AICapability,
-    ResolvedLLM,
-    resolve_custom_llm_provider_ref,
-    resolve_llm_for_capability,
+from core.ai.models import ResolvedAIModel
+from core.ai.providers import AICapability, split_provider_prefixed_model
+from core.ai.requirements import AISelection
+from core.ai.resolver import COST_ORIGIN_PLATFORM, resolve_ai_model
+from core.ai.runtime import (
+    create_llm_client_from_ai_model,
+    should_use_platform_default_free_pool,
 )
-from core.ai.runtime import create_llm_client
 from core.billing import get_billing_service
 from core.billing.service import BALANCE_BLOCK_OPERATION_LLM
-from core.clients.llm.factory import should_use_platform_default_free_pool
-from core.clients.llm.model_routing import split_provider_prefixed_model
-from core.company_ai import (
-    CUSTOM_PROVIDER_REF_PREFIX,
-)
 from core.config import get_settings
 from core.context import get_context
 from core.text_transforms.chunking import split_text_into_markdown_chunks
@@ -70,7 +65,7 @@ class TextTransformService:
         allow_platform_paid_fallback = await self._prepare_llm_billing(
             resolved=resolved,
         )
-        llm = create_llm_client(
+        llm = create_llm_client_from_ai_model(
             resolved,
             max_tokens=max_output_tokens,
             allow_platform_paid_fallback=allow_platform_paid_fallback,
@@ -109,7 +104,7 @@ class TextTransformService:
         allow_platform_paid_fallback = await self._prepare_llm_billing(
             resolved=resolved,
         )
-        llm = create_llm_client(
+        llm = create_llm_client_from_ai_model(
             resolved,
             allow_platform_paid_fallback=allow_platform_paid_fallback,
         )
@@ -146,37 +141,43 @@ class TextTransformService:
         *,
         provider: str | None,
         model: str | None,
-    ) -> ResolvedLLM:
+    ) -> ResolvedAIModel:
         rp, rm = split_provider_prefixed_model(provider, model)
-        resolved = resolve_llm_for_capability(capability)
+        resolved = resolve_ai_model(capability, include_platform_default=False)
         if resolved is not None:
             return resolved
-        if rp and rp.startswith(CUSTOM_PROVIDER_REF_PREFIX):
-            return resolve_custom_llm_provider_ref(
-                rp,
-                capability=capability,
-                model=rm,
-            )
         if rp is None and rm is None:
-            resolved = resolve_llm_for_capability(capability, include_platform_default=True)
+            resolved = resolve_ai_model(capability, include_platform_default=True)
             if resolved is None:
                 raise ValueError(
                     f"TextTransformService: platform default для capability={capability.value} "
                     + "не настроен"
                 )
             return resolved
-        if rp is None or rm is None:
+        if rp is None:
             raise ValueError(
                 f"TextTransformService: для capability={capability.value} provider и model "
                 + "должны быть заданы вместе"
             )
-        return ResolvedLLM(provider=rp, model=rm, cost_origin=COST_ORIGIN_PLATFORM)
+        resolved = resolve_ai_model(
+            capability,
+            selection=AISelection(provider=rp, model=rm),
+            include_platform_default=False,
+        )
+        if resolved is None:
+            raise ValueError(
+                f"TextTransformService: explicit provider/model для capability={capability.value} "
+                + "не удалось разрешить"
+            )
+        return resolved
 
     async def _prepare_llm_billing(
         self,
         *,
-        resolved: ResolvedLLM,
+        resolved: ResolvedAIModel,
     ) -> bool:
+        if resolved.model is None:
+            raise ValueError("TextTransformService: resolved LLM model пуст")
         if resolved.cost_origin == COST_ORIGIN_PLATFORM and should_use_platform_default_free_pool(
             model=resolved.model,
             provider=resolved.provider,

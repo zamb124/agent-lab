@@ -9,8 +9,9 @@ from a2a.types import TaskArtifactUpdateEvent, TaskStatusUpdateEvent, TextPart
 import core.tracing.attributes as trace_attributes
 from apps.flows.src.tasks.task_names import TASK_INVOKE_LLM
 from apps.flows_worker.broker_core import broker
-from core.ai.resolver import COST_ORIGIN_COMPANY, AICapability, resolve_llm_for_capability
-from core.ai.runtime import create_llm_client
+from core.ai.providers import AICapability
+from core.ai.resolver import COST_ORIGIN_COMPANY, resolve_ai_model
+from core.ai.runtime import create_llm_client_from_ai_model
 from core.billing import get_billing_service
 from core.billing.service import BALANCE_BLOCK_OPERATION_LLM
 from core.context import clear_context, get_context, set_context
@@ -62,7 +63,7 @@ async def invoke_llm(
         if not str(actx.user.user_id).strip():
             raise ValueError("Контекст с user обязателен для invoke_llm (биллинг и уведомления)")
         uid = str(actx.user.user_id).strip()
-        resolved = resolve_llm_for_capability(
+        resolved = resolve_ai_model(
             AICapability.LLM_CHAT,
             include_platform_default=True,
         )
@@ -70,7 +71,7 @@ async def invoke_llm(
             raise ValueError(
                 "invoke_llm: platform default для capability=llm_chat не настроен"
             )
-        llm = create_llm_client(resolved)
+        llm = create_llm_client_from_ai_model(resolved)
         if resolved.cost_origin != COST_ORIGIN_COMPANY:
             await get_billing_service().require_balance_for_billable_operation(
                 actx.active_company.company_id,

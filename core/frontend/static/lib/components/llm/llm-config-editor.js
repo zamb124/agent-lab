@@ -31,10 +31,10 @@ import { html, css } from 'lit';
 import { PlatformElement } from '@platform/lib/platform-element/index.js';
 import '@platform/lib/components/fields/platform-field.js';
 import '@platform/lib/components/glass-button.js';
+import '@platform/lib/components/platform-icon.js';
 
 const _CUSTOM_REF_PREFIX = 'custom:';
 const _HUMANITEC_LLM_PROVIDER = 'humanitec_llm';
-const _NONE_PROVIDER = 'none';
 
 export class PlatformLlmConfigEditor extends PlatformElement {
     static i18nNamespace = 'frontend';
@@ -69,6 +69,65 @@ export class PlatformLlmConfigEditor extends PlatformElement {
             .badge[data-kind="company"] { color: var(--success-text, var(--text-primary)); border-color: var(--success-border, var(--glass-border-subtle)); }
             .actions { display: flex; gap: var(--space-2); align-items: center; }
             .help { color: var(--text-tertiary); font-size: var(--text-xs); }
+            .fallback-policy {
+                display: flex;
+                flex-direction: column;
+                gap: var(--space-3);
+                padding: var(--space-3);
+                border: 1px solid var(--glass-border-subtle);
+                border-radius: var(--radius-lg);
+                background: var(--glass-solid-subtle);
+                min-width: 0;
+            }
+            .fallback-head {
+                display: flex;
+                align-items: center;
+                justify-content: space-between;
+                gap: var(--space-3);
+                min-width: 0;
+            }
+            .fallback-title {
+                font-size: var(--text-xs);
+                font-weight: 700;
+                letter-spacing: 0;
+                text-transform: uppercase;
+                color: var(--text-secondary);
+            }
+            .fallback-list {
+                display: flex;
+                flex-direction: column;
+                gap: var(--space-3);
+                min-width: 0;
+            }
+            .fallback-item {
+                display: flex;
+                align-items: flex-start;
+                gap: var(--space-2);
+                min-width: 0;
+            }
+            .fallback-grid {
+                display: grid;
+                grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+                gap: var(--space-2);
+                flex: 1;
+                min-width: 0;
+            }
+            .fallback-actions {
+                display: flex;
+                align-items: center;
+                gap: var(--space-1);
+                flex-shrink: 0;
+                padding-top: 2px;
+            }
+            .fallback-empty {
+                color: var(--text-tertiary);
+                font-size: var(--text-sm);
+            }
+            @container (max-width: 560px) {
+                .fallback-item { flex-direction: column; }
+                .fallback-grid { grid-template-columns: 1fr; width: 100%; }
+                .fallback-actions { padding-top: 0; }
+            }
         `,
     ];
 
@@ -93,10 +152,6 @@ export class PlatformLlmConfigEditor extends PlatformElement {
         return value === _HUMANITEC_LLM_PROVIDER;
     }
 
-    _isNoneProvider(value) {
-        return value === _NONE_PROVIDER;
-    }
-
     _isEmbeddingCapability() {
         return this.capability === 'embedding';
     }
@@ -114,7 +169,6 @@ export class PlatformLlmConfigEditor extends PlatformElement {
                         || this.capability === 'voice_stt'
                         || this.capability === 'voice_tts'
                     )
-                    && !this._isNoneProvider((this.config && this.config.provider) || '')
                 )
             )
         );
@@ -126,7 +180,6 @@ export class PlatformLlmConfigEditor extends PlatformElement {
             this.mode === 'company_capability'
             && ((this.capability || '').startsWith('llm_') || this.capability === 'image_gen')
             && provider.length > 0
-            && !this._isNoneProvider(provider)
         );
     }
 
@@ -159,14 +212,6 @@ export class PlatformLlmConfigEditor extends PlatformElement {
             patch.model = null;
             patch.dimension = null;
             patch.mrl_output_dimension = null;
-        }
-        if (this._isNoneProvider(value)) {
-            patch.model = null;
-            patch.api_key = null;
-            patch.base_url = null;
-            patch.folder_id = null;
-            patch.extra_request_headers = null;
-            patch.fallback_models = null;
         }
         this._emitChange(patch);
     }
@@ -218,21 +263,6 @@ export class PlatformLlmConfigEditor extends PlatformElement {
         this._emitChange({ mrl_output_dimension: e.detail.value || null });
     }
 
-    _onFallbackModelsChange(e) {
-        if (!e.detail) {
-            return;
-        }
-        const value = e.detail.value;
-        if (value == null) {
-            this._emitChange({ fallback_models: null });
-            return;
-        }
-        if (!Array.isArray(value)) {
-            throw new Error('platform-llm-config-editor: fallback_models expects JSON array');
-        }
-        this._emitChange({ fallback_models: value.length > 0 ? value : null });
-    }
-
     _onClear() {
         this.dispatchEvent(new CustomEvent('clear-override', { detail: {}, bubbles: true, composed: true }));
     }
@@ -251,12 +281,16 @@ export class PlatformLlmConfigEditor extends PlatformElement {
     }
 
     _selectedProviderModels() {
-        const selected = this._selectedProviderCatalogItem();
+        return this._providerModelsFor((this.config && this.config.provider) || '');
+    }
+
+    _providerModelsFor(provider) {
+        const selected = (this.providerCatalog || []).find((p) => p && p.value === provider) || null;
         return Array.isArray(selected?.models) ? selected.models : [];
     }
 
-    _modelEnumConfig() {
-        const values = this._selectedProviderModels()
+    _modelOptionsForProvider(provider) {
+        return this._providerModelsFor(provider)
             .map((item) => {
                 if (typeof item === 'string') {
                     return { value: item, label: item };
@@ -276,7 +310,143 @@ export class PlatformLlmConfigEditor extends PlatformElement {
                 return { value, label };
             })
             .filter(Boolean);
+    }
+
+    _modelEnumConfig() {
+        const values = this._modelOptionsForProvider((this.config && this.config.provider) || '');
         return { values };
+    }
+
+    _fallbackModels() {
+        const raw = (this.config && Array.isArray(this.config.fallback_models))
+            ? this.config.fallback_models
+            : [];
+        return raw
+            .filter((item) => item && typeof item === 'object')
+            .map((item) => ({
+                provider: typeof item.provider === 'string' ? item.provider : '',
+                model: typeof item.model === 'string' ? item.model : '',
+            }))
+            .filter((item) => item.provider || item.model);
+    }
+
+    _updateFallbackModels(items) {
+        const next = (items || [])
+            .filter((item) => item && typeof item === 'object')
+            .map((item) => ({
+                provider: typeof item.provider === 'string' ? item.provider.trim() : '',
+                model: typeof item.model === 'string' ? item.model.trim() : '',
+            }))
+            .filter((item) => item.provider || item.model);
+        this._emitChange({ fallback_models: next.length > 0 ? next : null });
+    }
+
+    _fallbackProviderCatalog() {
+        const providers = (this.providerCatalog || []).filter((p) => {
+            if (!p || typeof p.value !== 'string' || p.value.length === 0) {
+                return false;
+            }
+            if (this.costOrigin === 'company') {
+                return p.kind === 'custom';
+            }
+            return true;
+        });
+        return providers;
+    }
+
+    _fallbackProviderEnumConfig() {
+        return {
+            values: this._fallbackProviderCatalog().map((p) => ({
+                value: p.value,
+                label: p.label || p.value,
+            })),
+        };
+    }
+
+    _fallbackDefaultProvider() {
+        const providers = this._fallbackProviderCatalog();
+        if (providers.length === 0) {
+            return '';
+        }
+        const currentProvider = (this.config && this.config.provider) || '';
+        if (providers.some((p) => p.value === currentProvider)) {
+            return currentProvider;
+        }
+        return providers[0].value;
+    }
+
+    _fallbackDefaultModel(provider) {
+        if (this._isHumanitecLlmProvider(provider)) {
+            return 'auto';
+        }
+        const first = this._modelOptionsForProvider(provider)[0];
+        return first ? first.value : '';
+    }
+
+    _fallbackModelEnumConfig(provider) {
+        return { values: this._modelOptionsForProvider(provider) };
+    }
+
+    _addFallbackModel() {
+        const provider = this._fallbackDefaultProvider();
+        if (!provider) {
+            return;
+        }
+        const next = [
+            ...this._fallbackModels(),
+            {
+                provider,
+                model: this._fallbackDefaultModel(provider),
+            },
+        ];
+        this._updateFallbackModels(next);
+    }
+
+    _removeFallbackModel(index) {
+        const next = this._fallbackModels();
+        next.splice(index, 1);
+        this._updateFallbackModels(next);
+    }
+
+    _moveFallbackModel(from, to) {
+        const next = this._fallbackModels();
+        if (from < 0 || from >= next.length || to < 0 || to >= next.length) {
+            return;
+        }
+        const [item] = next.splice(from, 1);
+        next.splice(to, 0, item);
+        this._updateFallbackModels(next);
+    }
+
+    _onFallbackProviderChange(index, e) {
+        if (!e.detail || typeof e.detail.value !== 'string') {
+            throw new Error('platform-llm-config-editor: fallback provider change expects detail.value string');
+        }
+        const provider = e.detail.value;
+        const next = this._fallbackModels();
+        if (!next[index]) {
+            return;
+        }
+        next[index] = {
+            provider,
+            model: this._fallbackDefaultModel(provider),
+        };
+        this._updateFallbackModels(next);
+    }
+
+    _onFallbackModelChange(index, e) {
+        if (!e.detail || typeof e.detail.value !== 'string') {
+            throw new Error('platform-llm-config-editor: fallback model change expects detail.value string');
+        }
+        const next = this._fallbackModels();
+        if (!next[index]) {
+            return;
+        }
+        next[index] = {
+            ...next[index],
+            model: e.detail.value,
+        };
+        this._updateFallbackModels(next);
     }
 
     _providerHint(provider) {
@@ -308,14 +478,15 @@ export class PlatformLlmConfigEditor extends PlatformElement {
         const provider = (this.config && this.config.provider) || '';
         const isCustom = this._isCustomProvider(provider);
         const isHumanitecLlm = this._isHumanitecLlmProvider(provider);
-        const isNoneProvider = this._isNoneProvider(provider);
-        const showByok = !isCustom && !isHumanitecLlm && !isNoneProvider && this.mode === 'company_capability';
+        const showByok = !isCustom && !isHumanitecLlm && this.mode === 'company_capability';
         const showModelOverride = this._supportsModelOverride();
         const showFallbackPolicy = this._supportsFallbackPolicy();
         const rawModelValue = (this.config && this.config.model) || '';
         const modelValue = isHumanitecLlm && !rawModelValue ? 'auto' : rawModelValue;
         const providerModels = this._selectedProviderModels();
         const modelFieldType = providerModels.length > 0 ? 'enum' : 'string';
+        const fallbackModels = this._fallbackModels();
+        const fallbackProviderOptions = this._fallbackProviderEnumConfig().values;
         const embeddingModelOption = this._selectedEmbeddingModelOption(modelValue);
         const embeddingDimension = this.config && Number.isFinite(this.config.dimension)
             ? this.config.dimension
@@ -383,11 +554,11 @@ export class PlatformLlmConfigEditor extends PlatformElement {
                               ?disabled=${this.readOnly}
                               @change=${this._onModelChange}
                           ></platform-field>
-	                          ${modelFieldType === 'string'
-	                              ? html`<small class="help">${this._modelHint(provider, modelValue)}</small>`
-	                              : ''}
-	                      `
-	                    : ''}
+                          ${modelFieldType === 'string'
+                              ? html`<small class="help">${this._modelHint(provider, modelValue)}</small>`
+                              : ''}
+                      `
+                    : ''}
                 ${this._isEmbeddingCapability()
                     ? html`
                           <platform-field
@@ -445,14 +616,89 @@ export class PlatformLlmConfigEditor extends PlatformElement {
                     : ''}
                 ${showFallbackPolicy
                     ? html`
-                          <platform-field
-                              type="object"
-                              mode="edit"
-                              label=${this.t('settings_page.ai_providers.fallback_models_label')}
-                              .value=${(this.config && this.config.fallback_models) || null}
-                              ?disabled=${this.readOnly}
-                              @change=${this._onFallbackModelsChange}
-                          ></platform-field>
+                          <div class="fallback-policy">
+                              <div class="fallback-head">
+                                  <div class="fallback-title">
+                                      ${this.t('settings_page.ai_providers.fallback_models_label')}
+                                  </div>
+                                  <glass-button
+                                      variant="ghost"
+                                      size="sm"
+                                      ?disabled=${this.readOnly || fallbackProviderOptions.length === 0}
+                                      @click=${this._addFallbackModel}
+                                  >
+                                      <platform-icon name="plus" size="14"></platform-icon>
+                                      ${this.t('settings_page.ai_providers.fallback_add')}
+                                  </glass-button>
+                              </div>
+                              ${fallbackModels.length === 0
+                                  ? html`
+                                        <div class="fallback-empty">
+                                            ${this.t('settings_page.ai_providers.fallback_empty')}
+                                        </div>
+                                    `
+                                  : html`
+                                        <div class="fallback-list">
+                                            ${fallbackModels.map((item, index) => {
+                                                const modelOptions = this._fallbackModelEnumConfig(item.provider).values;
+                                                const fallbackModelFieldType = modelOptions.length > 0 ? 'enum' : 'string';
+                                                return html`
+                                                    <div class="fallback-item">
+                                                        <div class="fallback-grid">
+                                                            <platform-field
+                                                                type="enum"
+                                                                mode="edit"
+                                                                label=${this.t('settings_page.ai_providers.fallback_provider_label')}
+                                                                .value=${item.provider}
+                                                                .config=${this._fallbackProviderEnumConfig()}
+                                                                ?disabled=${this.readOnly}
+                                                                @change=${(e) => this._onFallbackProviderChange(index, e)}
+                                                            ></platform-field>
+                                                            <platform-field
+                                                                type=${fallbackModelFieldType}
+                                                                mode="edit"
+                                                                label=${this.t('settings_page.ai_providers.fallback_model_label')}
+                                                                .value=${item.model}
+                                                                .config=${this._fallbackModelEnumConfig(item.provider)}
+                                                                ?disabled=${this.readOnly}
+                                                                @change=${(e) => this._onFallbackModelChange(index, e)}
+                                                            ></platform-field>
+                                                        </div>
+                                                        <div class="fallback-actions">
+                                                            <glass-button
+                                                                variant="ghost"
+                                                                size="sm"
+                                                                title=${this.t('settings_page.ai_providers.fallback_move_up')}
+                                                                ?disabled=${this.readOnly || index === 0}
+                                                                @click=${() => this._moveFallbackModel(index, index - 1)}
+                                                            >
+                                                                <platform-icon name="chevron-up" size="14"></platform-icon>
+                                                            </glass-button>
+                                                            <glass-button
+                                                                variant="ghost"
+                                                                size="sm"
+                                                                title=${this.t('settings_page.ai_providers.fallback_move_down')}
+                                                                ?disabled=${this.readOnly || index === fallbackModels.length - 1}
+                                                                @click=${() => this._moveFallbackModel(index, index + 1)}
+                                                            >
+                                                                <platform-icon name="chevron-down" size="14"></platform-icon>
+                                                            </glass-button>
+                                                            <glass-button
+                                                                variant="ghost"
+                                                                size="sm"
+                                                                title=${this.t('settings_page.ai_providers.fallback_remove')}
+                                                                ?disabled=${this.readOnly}
+                                                                @click=${() => this._removeFallbackModel(index)}
+                                                            >
+                                                                <platform-icon name="trash" size="14"></platform-icon>
+                                                            </glass-button>
+                                                        </div>
+                                                    </div>
+                                                `;
+                                            })}
+                                        </div>
+                                    `}
+                          </div>
                           <small class="help">${this.t('settings_page.ai_providers.fallback_models_help')}</small>
                       `
                     : ''}

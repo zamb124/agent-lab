@@ -7,7 +7,7 @@
     DELETE /api/companies/{company_id}/pronunciation-rules/{id}    — удалить (owner/admin)
     POST   /api/companies/{company_id}/pronunciation-rules/test    — dry-run preview (member)
 
-После любого мутирующего вызова сбрасываются TTL-кэши voice_resolver.
+После любого мутирующего вызова сбрасываются TTL-кэши voice runtime.
 """
 
 from __future__ import annotations
@@ -18,6 +18,7 @@ from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, ConfigDict, Field
 
 from apps.frontend.dependencies import ContainerDep, require_frontend_user
+from core.ai.runtime import invalidate_voice_company_overrides_cache
 from core.clients.tts_pronunciation.models import (
     CompiledPronunciation,
     NormalizationConfig,
@@ -26,7 +27,6 @@ from core.clients.tts_pronunciation.models import (
     PronunciationRuleSet,
 )
 from core.clients.tts_pronunciation.pipeline import get_tts_text_pipeline
-from core.clients.voice_resolver import invalidate_company_overrides_cache
 from core.db.models.platform import CompanyPronunciationRule
 from core.logging import get_logger
 from core.models.identity_models import User
@@ -203,7 +203,7 @@ async def create_company_pronunciation_rule(
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 
-    invalidate_company_overrides_cache(company_id=company_id)
+    invalidate_voice_company_overrides_cache(company_id=company_id)
     logger.info(
         "frontend.company_pronunciation_rule_created",
         company_id=company_id,
@@ -242,7 +242,7 @@ async def update_company_pronunciation_rule(
     if row is None:
         raise HTTPException(status_code=404, detail="Правило не найдено")
 
-    invalidate_company_overrides_cache(company_id=company_id)
+    invalidate_voice_company_overrides_cache(company_id=company_id)
     logger.info(
         "frontend.company_pronunciation_rule_updated",
         company_id=company_id,
@@ -266,7 +266,7 @@ async def delete_company_pronunciation_rule(
         company_id=company_id,
         rule_id=rule_id,
     )
-    invalidate_company_overrides_cache(company_id=company_id)
+    invalidate_voice_company_overrides_cache(company_id=company_id)
     logger.info(
         "frontend.company_pronunciation_rule_deleted",
         company_id=company_id,

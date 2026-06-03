@@ -3,10 +3,7 @@ RAG провайдер на базе pgvector (PostgreSQL).
 Хранит векторные документы в таблице vector_documents через SQLAlchemy 2+.
 """
 
-import hashlib
-import math
 import os
-import re
 import uuid
 from collections.abc import Sequence
 from typing import ClassVar, Literal, override
@@ -36,11 +33,11 @@ from sqlalchemy.ext.asyncio import (
 )
 from sqlalchemy.sql.elements import ColumnElement
 
-from core.ai.providers import PROVIDER_LITSERVE
+from core.ai.embedding_client import AIEmbeddingClient
+from core.ai.runtime import create_embedding_client_from_runtime
 from core.config import get_settings
 from core.config.llm_openai_compat import (
     llm_provider_block,
-    resolve_provider_api_key_for_openai_compatible_calls,
     yandex_provider_http_headers,
 )
 from core.config.models import RAGProviderConfig, YandexLLMProviderConfig
@@ -60,9 +57,7 @@ from core.rag.models import (
     RAGSearchOptions,
     RAGSearchResult,
 )
-from core.rag.openai_http_contracts import PROVIDER_LITSERVE_PLACEHOLDER_BEARER
 from core.rag.rrf import reciprocal_rank_fusion
-from core.rag.services.embedding_service import EmbeddingService
 from core.rag.ttl import ensure_ttl_seconds_in_metadata
 from core.rag.upload_profile_binding import UploadProfileBinding
 from core.types import JsonValue, require_json_object
@@ -77,35 +72,6 @@ _EMBEDDING_API_KEY_PLACEHOLDERS: frozenset[str] = frozenset(
 )
 
 
-class DeterministicEmbeddingService(EmbeddingService):
-    """Детерминированный embedding-сервис для тестов и локального mock-режима."""
-
-    @override
-    async def generate_embeddings(self, texts: list[str]) -> list[list[float]]:
-        dim = self.get_embedding_dimension()
-        embeddings: list[list[float]] = []
-        for source_text in texts:
-            vector = [0.0] * dim
-            tokens = re.findall(r"[\w]+", source_text.lower(), flags=re.UNICODE)
-            if not tokens:
-                tokens = ["__empty__"]
-
-            def add_feature(feature: str, weight: float = 1.0) -> None:
-                digest = hashlib.sha256(feature.encode("utf-8")).digest()
-                idx = int.from_bytes(digest[:4], "big") % dim
-                sign = 1.0 if digest[4] % 2 == 0 else -1.0
-                vector[idx] += sign * weight
-
-            for token in tokens:
-                add_feature(token)
-            add_feature(f"__document__:{source_text}", weight=0.125)
-            norm = math.sqrt(sum(value * value for value in vector))
-            if norm == 0.0:
-                raise ValueError("Mock embedding norm is zero")
-            embeddings.append([value / norm for value in vector])
-        return embeddings
-
-
 def _normalize_embedding_api_key(raw: str | None) -> str:
     if raw is None:
         return ""
@@ -113,33 +79,6 @@ def _normalize_embedding_api_key(raw: str | None) -> str:
     if not s or s in _EMBEDDING_API_KEY_PLACEHOLDERS:
         return ""
     return s
-
-
-def _resolve_pgvector_embedding_api_key(
-    config: RAGProviderConfig,
-    embedding_runtime: RagEmbeddingRuntime,
-) -> str:
-    key = _normalize_embedding_api_key(config.embedding_api_key)
-    if key:
-        return key
-
-    settings = get_settings()
-    if embedding_runtime.provider == PROVIDER_LITSERVE:
-        return PROVIDER_LITSERVE_PLACEHOLDER_BEARER
-    provider = embedding_runtime.provider
-    llm_key = resolve_provider_api_key_for_openai_compatible_calls(settings.llm, provider)
-    if llm_key:
-        logger.info(
-            "pgvector: для embeddings используется llm.%s.api_key "
-            + "(rag.providers.pgvector.embedding_api_key пустой или плейсхолдер)",
-            provider,
-        )
-        return llm_key
-    raise ValueError(
-        "Нужен rag.providers.pgvector.embedding_api_key или ключ выбранного "
-        + f"embedding provider={provider!r}. При provider_litserve ключ из pgvector не обязателен. "
-        + "Плейсхолдеры YOUR_* из conf.json не считаются ключом."
-    )
 
 
 class PgVectorProvider(BaseRAGProvider):
@@ -179,7 +118,7 @@ class PgVectorProvider(BaseRAGProvider):
 
         if embedding_runtime is None:
             raise ValueError("embedding runtime обязателен для pgvector")
-        api_key = _resolve_pgvector_embedding_api_key(config, embedding_runtime)
+        api_key = _normalize_embedding_api_key(config.embedding_api_key) or None
 
         timeout = config.timeout
 
@@ -212,18 +151,16 @@ class PgVectorProvider(BaseRAGProvider):
             or os.environ.get("RAG__EMBEDDING__MOCK") == "true"
             or os.environ.get("PGVECTOR_TEST_MOCK_EMBEDDINGS") == "true"
         )
-        embedding_service_cls = (
-            DeterministicEmbeddingService if use_deterministic_embeddings else EmbeddingService
-        )
-
-        self._embedding_service: EmbeddingService = embedding_service_cls(
-            api_key=api_key,
+        self._embedding_client: AIEmbeddingClient = create_embedding_client_from_runtime(
+            provider=embedding_runtime.provider,
             model=model,
             base_url=embedding_base_url or None,
+            api_key=api_key,
             timeout=timeout,
             dimension=dimension,
             mrl_output_dimension=mrl_output_dimension,
             extra_headers=embedding_extra_headers or None,
+            deterministic=use_deterministic_embeddings,
         )
         if use_deterministic_embeddings:
             logger.info("PgVector провайдер: mock embeddings для тестов")
@@ -245,13 +182,13 @@ class PgVectorProvider(BaseRAGProvider):
         await self._engine.dispose()
 
     @property
-    def embedding_service(self) -> EmbeddingService:
-        """Сервис эмбеддингов pgvector (для оркестраторов фоновых задач)."""
-        return self._embedding_service
+    def embedding_client(self) -> AIEmbeddingClient:
+        """Embedding client pgvector for background orchestrators."""
+        return self._embedding_client
 
     def embedding_model_name(self) -> str:
         """Идентификатор текущей модели эмбеддинга для записи в embedding_model."""
-        return self._embedding_service.model
+        return self._embedding_client.model
 
     # -- Чанкинг --
 
@@ -517,12 +454,12 @@ class PgVectorProvider(BaseRAGProvider):
         # crm_reembed_stale_documents_tick / rag_reembed_stale_documents_tick подберут их
         # когда сервис восстановится (ищут embedding_model IS NULL).
         try:
-            raw_embeddings = await self._embedding_service.generate_embeddings(chunks)
+            raw_embeddings = await self._embedding_client.generate_embeddings(chunks)
             embeddings: list[list[float] | None] = list(raw_embeddings)
-            embedding_tokens = self._embedding_service.count_tokens(chunks)
+            embedding_tokens = self._embedding_client.count_tokens(chunks)
             embedding_model: str | None = self.embedding_model_name()
             indexing_runtime["embedding"] = require_json_object(
-                self._embedding_service.runtime_snapshot(embedding_tokens=embedding_tokens),
+                self._embedding_client.runtime_snapshot(embedding_tokens=embedding_tokens),
                 "embedding runtime",
             )
         except Exception as exc:
@@ -1024,7 +961,7 @@ class PgVectorProvider(BaseRAGProvider):
                 per_channel_top_k=search_options.per_channel_top_k,
             )
 
-        query_embedding = await self._embedding_service.generate_embedding(query)
+        query_embedding = await self._embedding_client.generate_embedding(query)
 
         async with self._session_factory() as session:
             _ = await session.execute(text("SET hnsw.iterative_scan = relaxed_order"))
@@ -1060,7 +997,7 @@ class PgVectorProvider(BaseRAGProvider):
         per_channel_top_k: int | None = None,
     ) -> list[RAGSearchResult]:
         """Двухканальный поиск: семантический (cosine) + лексический (tsquery), слияние RRF."""
-        query_embedding = await self._embedding_service.generate_embedding(query)
+        query_embedding = await self._embedding_client.generate_embedding(query)
 
         rrf_k_int = 60 if rrf_k is None else int(rrf_k)
         per_channel = limit * 3 if per_channel_top_k is None else int(per_channel_top_k)

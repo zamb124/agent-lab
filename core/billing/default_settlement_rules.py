@@ -7,7 +7,7 @@
 - llm.{model} — core/tracing/tracer.py (record_llm_response на CLIENT span)
 - flows.llm_resource.complete | .chat | .chat_with_tools — apps/flows/src/resources/wrappers/llm_resource.py
 - flows.llm.invoke_task — apps/flows/src/tasks/llm_tasks.py
-- rag.embed.batch — core/rag/services/embedding_service.py
+- rag.embed.batch — core/rag/services/embedding_client.py
 - core.files.reader.image — core/files/reader/service.py
 - livekit.room.session_usage | livekit.egress.composite_usage | livekit.egress.segmented_usage
   — core/calls/livekit_usage_spans.py (поминутное списание после завершения сессии / записи / речи в ленту)

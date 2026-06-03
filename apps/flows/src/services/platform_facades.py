@@ -14,9 +14,9 @@ from apps.flows.src.services.flow_speech_resolve import (
     merge_explicit_over_flow_speech_layer,
 )
 from apps.voice.services.voice_usage import record_stt_usage, record_tts_usage
+from core.ai.runtime import synthesize_speech_audio, transcribe_audio_bytes
 from core.clients.speech_override import SpeechOverride, SpeechProviderName, SpeechResponseFormat
 from core.clients.speech_provider_catalog import STT_TTS_PROVIDER_IDS, VOICE_RESPONSE_FORMAT_IDS
-from core.clients.voice_resolver import get_stt_client, get_tts_client
 from core.context import get_context
 from core.files.audio_probe import probe_audio_duration_seconds_from_upload
 from core.files.s3_client import S3ClientFactory
@@ -149,7 +149,7 @@ async def transcribe_audio(
     """
     STT: распознаёт persisted-аудио по `file_id` и возвращает текст.
 
-    Провайдер/модель/язык резолвит платформенный `voice_resolver`:
+    Провайдер/модель/язык резолвит платформенный `core.ai.runtime`:
     `override` (этот вызов) → запись `company_voice_providers` для активной
     компании → дефолт `settings.voice.stt`. Никаких прямых импортов
     конкретного клиента в коде агента/тула — всё через фасад.
@@ -189,11 +189,12 @@ async def transcribe_audio(
     )
     stt_flow, _, _ = load_flow_speech_layers_from_context_metadata(ctx.metadata)
     override = merge_explicit_over_flow_speech_layer(override, stt_flow)
-    stt = await get_stt_client(company_id=company_id, override=override)
-    result = await stt.transcribe_audio(
+    result = await transcribe_audio_bytes(
+        company_id=company_id,
         audio_bytes=audio_bytes,
         file_name=record.original_name,
         content_type=record.content_type,
+        override=override,
         language=override.language,
     )
 
@@ -236,7 +237,7 @@ async def synthesize_speech(
     TTS: синтезирует речь и сохраняет результат в `FileRepository` + S3.
 
     Возвращает `file_id` сохранённого аудио — этот id агент кладёт в ответ
-    или передаёт каналу. Провайдер/модель/голос резолвит `voice_resolver`
+    или передаёт каналу. Провайдер/модель/голос резолвит `core.ai.runtime`
     (override → company → deployment-default).
 
     Аргументы:
@@ -271,8 +272,11 @@ async def synthesize_speech(
     )
     _, tts_flow, _ = load_flow_speech_layers_from_context_metadata(ctx.metadata)
     override = merge_explicit_over_flow_speech_layer(override, tts_flow)
-    tts = await get_tts_client(company_id=company_id, override=override)
-    result = await tts.synthesize(text=text)
+    result = await synthesize_speech_audio(
+        company_id=company_id,
+        text=text,
+        override=override,
+    )
 
     ext = result.response_format if result.response_format else "wav"
     name = file_name if file_name and file_name.strip() else f"tts_{uuid.uuid4().hex[:12]}.{ext}"

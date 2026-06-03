@@ -47,15 +47,12 @@ if TYPE_CHECKING:
     from .llm_context_source import RAGLLMContextSource
     from .parsed_document import BlockKind, ParsedBlock, ParsedDocument
     from .post_retrieval_rerank import (
-        RerankerClientError,
         apply_rerank_after_retrieve,
         apply_rerank_after_retrieve_grouped,
     )
     from .providers import AgentsetRAGProvider, PgVectorProvider
     from .rag_resource import RAGResource
     from .repository import RAGRepository
-    from .services import EmbeddingService
-
     type _LazyExportValue = (
         type[BaseRAGProvider]
         | type[BlockKind]
@@ -65,10 +62,8 @@ if TYPE_CHECKING:
         | type[RAGRepository]
         | type[RAGLLMContextSource]
         | type[RAGLLMContextMemoryStore]
-        | type[RerankerClientError]
         | type[AgentsetRAGProvider]
         | type[PgVectorProvider]
-        | type[EmbeddingService]
         | FunctionType
         | UnionType
     )
@@ -92,7 +87,6 @@ _LAZY_EXPORTS: dict[str, tuple[str, str]] = {
         "core.rag.llm_context_memory_store",
         "llm_context_memory_namespace_id",
     ),
-    "RerankerClientError": ("core.rag.post_retrieval_rerank", "RerankerClientError"),
     "apply_rerank_after_retrieve": (
         "core.rag.post_retrieval_rerank",
         "apply_rerank_after_retrieve",
@@ -103,7 +97,6 @@ _LAZY_EXPORTS: dict[str, tuple[str, str]] = {
     ),
     "AgentsetRAGProvider": ("core.rag.providers", "AgentsetRAGProvider"),
     "PgVectorProvider": ("core.rag.providers", "PgVectorProvider"),
-    "EmbeddingService": ("core.rag.services", "EmbeddingService"),
 }
 
 __all__ = [
@@ -140,12 +133,10 @@ __all__ = [
     "RAGLLMContextSource",
     "RAGLLMContextMemoryStore",
     "llm_context_memory_namespace_id",
-    "RerankerClientError",
     "apply_rerank_after_retrieve",
     "apply_rerank_after_retrieve_grouped",
     "AgentsetRAGProvider",
     "PgVectorProvider",
-    "EmbeddingService",
 ]
 
 

@@ -205,7 +205,7 @@ class OpenAIEmbeddingsRequest(BaseModel):
 
 
 class RerankQueryPassagesRequest(BaseModel):
-    """Тело POST ``/v1/rerank`` (совпадает с полезной нагрузкой ``RerankerHTTPClient``)."""
+    """Тело POST ``/v1/rerank`` (совпадает с полезной нагрузкой ``AIRerankerHTTPClient``)."""
 
     model_config: ClassVar[ConfigDict] = ConfigDict(extra="forbid")
 
@@ -219,7 +219,7 @@ def normalize_embedding_inputs(inp: str | list[str]) -> list[str]:
 
 
 def build_openai_embeddings_response(*, model_id: str, vectors: list[list[float]]) -> OpenAIEmbeddingsResponseBody:
-    """Ответ POST ``/v1/embeddings`` (поле ``model`` — канонический id, как в ``EmbeddingService``)."""
+    """Ответ POST ``/v1/embeddings`` (поле ``model`` — канонический id, как в ``AIEmbeddingClient``)."""
     data = [
         EmbeddingDataItem(
             embedding=row,

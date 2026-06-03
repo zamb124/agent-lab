@@ -6,7 +6,7 @@ DI контейнер idle worker.
 idle_worker исполняет фоновые задачи, которые принадлежат сразу нескольким
 доменам платформы:
 
-- LLM models sync — flow-specific (`LLMModelRepository` живёт в БД flows).
+- AI model catalog sync — shared (`core.ai.model_catalog_repository` живёт в shared БД).
 - Calendar / integrations sync — shared (`core/` репозитории).
 - Payment sync, span billing settlement — shared (`core/payments`, `core/billing`).
 - Push notifications — shared (`core/push`).

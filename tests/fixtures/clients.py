@@ -80,10 +80,10 @@ def patch_service_clients_asgi(
                 import core.config.base as config_base
                 from apps.voice.config import reset_voice_settings
                 from apps.voice.container import reset_voice_container
-                from core.clients.voice_resolver import reset_voice_resolver_for_tests
+                from core.ai.runtime import reset_voice_runtime_for_tests
 
                 monkeypatch.setattr(config_base, "_settings_instance", None)
-                reset_voice_resolver_for_tests()
+                reset_voice_runtime_for_tests()
                 reset_voice_settings()
                 reset_voice_container()
                 import importlib
@@ -340,10 +340,10 @@ def voice_app(monkeypatch: pytest.MonkeyPatch):
     import core.config.base as config_base
     from apps.voice.config import reset_voice_settings
     from apps.voice.container import reset_voice_container
-    from core.clients.voice_resolver import reset_voice_resolver_for_tests
+    from core.ai.runtime import reset_voice_runtime_for_tests
 
     monkeypatch.setattr(config_base, "_settings_instance", None)
-    reset_voice_resolver_for_tests()
+    reset_voice_runtime_for_tests()
     reset_voice_settings()
     reset_voice_container()
 
@@ -351,7 +351,7 @@ def voice_app(monkeypatch: pytest.MonkeyPatch):
 
     yield app
 
-    reset_voice_resolver_for_tests()
+    reset_voice_runtime_for_tests()
     reset_voice_container()
     reset_voice_settings()
 

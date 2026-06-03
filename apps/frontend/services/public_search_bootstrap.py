@@ -46,25 +46,25 @@ PUBLIC_SEARCH_EMBED_SPECS: tuple[PublicSearchEmbedSpec, ...] = (
         mode="quick",
         name="Humanitec Search",
         placeholder="Спросите Humanitec Search...",
-        guest_max_user_messages=40,
+        guest_max_user_messages=1,
     ),
     PublicSearchEmbedSpec(
         mode="deep",
         name="Humanitec Deep Search",
         placeholder="Запустить глубокий поиск...",
-        guest_max_user_messages=24,
+        guest_max_user_messages=1,
     ),
     PublicSearchEmbedSpec(
         mode="research",
         name="Humanitec Research",
         placeholder="Сформулируйте исследовательский запрос...",
-        guest_max_user_messages=12,
+        guest_max_user_messages=1,
     ),
     PublicSearchEmbedSpec(
         mode="source",
         name="Humanitec Source AI",
         placeholder="Заглянуть внутрь источника...",
-        guest_max_user_messages=30,
+        guest_max_user_messages=1,
     ),
 )
 

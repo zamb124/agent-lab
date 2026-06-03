@@ -11,7 +11,7 @@ from typing import ClassVar, Self, TypeAlias
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
-from core.clients.llm.config import (
+from core.ai.llm_config import (
     LLMCallConfig,
     ReasoningEffort,
     validate_fallback_model_configs,

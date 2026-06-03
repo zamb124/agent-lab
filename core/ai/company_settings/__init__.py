@@ -5,17 +5,17 @@ package owns only the persisted ``Company.metadata['ai_providers']`` contract,
 platform default metadata, and Fernet helpers used by API handlers.
 """
 
-from core.company_ai.crypto import (
+from core.ai.company_settings.crypto import (
     decrypt_secret,
     encrypt_secret,
     mask_encrypted_secret,
     mask_secret_plaintext,
 )
-from core.company_ai.platform_defaults import (
+from core.ai.company_settings.platform_defaults import (
     platform_default_model,
     platform_default_provider_for_capability,
 )
-from core.company_ai.schema import (
+from core.ai.company_settings.schema import (
     CUSTOM_PROVIDER_REF_PREFIX,
     CUSTOM_PROVIDER_SLUG,
     HUMANITEC_LLM_AUTO_MODEL,

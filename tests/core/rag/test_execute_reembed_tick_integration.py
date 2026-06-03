@@ -1,6 +1,6 @@
 """
 Интеграция: ``execute_reembed_tick`` и orphan-cleanup на живом стеке
-(Postgres+pgvector+EmbeddingService через ``rag_provider_pgvector``).
+(Postgres+pgvector+AIEmbeddingClient через ``rag_provider_pgvector``).
 """
 
 from __future__ import annotations

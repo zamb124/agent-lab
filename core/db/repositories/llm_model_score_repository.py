@@ -13,6 +13,7 @@ from typing import Literal, cast
 
 from sqlalchemy import delete, select
 
+from core.ai.providers import AICapability
 from core.db.database import get_session_factory
 from core.db.models.platform import LLMModelScore
 from core.db.utils import get_rowcount
@@ -41,6 +42,7 @@ class LLMModelScoreRepository:
         async with session_factory() as session:
             result = await session.execute(
                 select(LLMModelScore).order_by(
+                    LLMModelScore.capability,
                     LLMModelScore.score.desc(),
                     LLMModelScore.provider,
                     LLMModelScore.model_id,
@@ -48,7 +50,11 @@ class LLMModelScoreRepository:
             )
             return list(result.scalars().all())
 
-    async def list_enabled_score_map(self) -> dict[tuple[str, str], float]:
+    async def list_enabled_score_map(
+        self,
+        capability: AICapability | str,
+    ) -> dict[tuple[str, str], float]:
+        capability_value = _clean_capability(capability)
         session_factory = await get_session_factory(self._db_url)
         async with session_factory() as session:
             result = await session.execute(
@@ -56,7 +62,10 @@ class LLMModelScoreRepository:
                     LLMModelScore.provider,
                     LLMModelScore.model_id,
                     LLMModelScore.score,
-                ).where(LLMModelScore.enabled.is_(True))
+                ).where(
+                    LLMModelScore.enabled.is_(True),
+                    LLMModelScore.capability == capability_value,
+                )
             )
             rows = cast(Iterable[tuple[str, str, float]], result.all())
             return {
@@ -64,15 +73,23 @@ class LLMModelScoreRepository:
                 for provider, model_id, score in rows
             }
 
-    async def get(self, *, provider: str, model_id: str) -> LLMModelScore | None:
+    async def get(
+        self,
+        *,
+        provider: str,
+        model_id: str,
+        capability: AICapability | str,
+    ) -> LLMModelScore | None:
         provider = _clean_required(provider, "provider")
         model_id = _clean_required(model_id, "model_id")
+        capability_value = _clean_capability(capability)
         session_factory = await get_session_factory(self._db_url)
         async with session_factory() as session:
             result = await session.execute(
                 select(LLMModelScore).where(
                     LLMModelScore.provider == provider,
                     LLMModelScore.model_id == model_id,
+                    LLMModelScore.capability == capability_value,
                 )
             )
             return result.scalar_one_or_none()
@@ -82,6 +99,7 @@ class LLMModelScoreRepository:
         *,
         provider: str,
         model_id: str,
+        capability: AICapability | str,
         score: float,
         enabled: bool = True,
         source: LLMModelScoreSource | str = "manual",
@@ -92,6 +110,7 @@ class LLMModelScoreRepository:
     ) -> LLMModelScoreUpsertResult:
         provider = _clean_required(provider, "provider")
         model_id = _clean_required(model_id, "model_id")
+        capability_value = _clean_capability(capability)
         score = _validate_score(score)
         source = _validate_source(source)
         normalized_dimensions = _normalize_score_dimensions(score_dimensions)
@@ -103,6 +122,7 @@ class LLMModelScoreRepository:
                 select(LLMModelScore).where(
                     LLMModelScore.provider == provider,
                     LLMModelScore.model_id == model_id,
+                    LLMModelScore.capability == capability_value,
                 )
             )
             row = result.scalar_one_or_none()
@@ -110,6 +130,7 @@ class LLMModelScoreRepository:
                 row = LLMModelScore(
                     provider=provider,
                     model_id=model_id,
+                    capability=capability_value,
                     score=score,
                     enabled=enabled,
                     source=source,
@@ -152,6 +173,7 @@ class LLMModelScoreRepository:
             result = await self.upsert(
                 provider=_required_seed_text(item, "provider"),
                 model_id=_required_seed_text(item, "model_id"),
+                capability=_required_seed_capability(item),
                 score=_required_seed_score(item),
                 enabled=_optional_seed_enabled(item),
                 source="config_seed",
@@ -168,15 +190,23 @@ class LLMModelScoreRepository:
                 skipped += 1
         return {"created": created, "updated": updated, "skipped": skipped}
 
-    async def delete(self, *, provider: str, model_id: str) -> bool:
+    async def delete(
+        self,
+        *,
+        provider: str,
+        model_id: str,
+        capability: AICapability | str,
+    ) -> bool:
         provider = _clean_required(provider, "provider")
         model_id = _clean_required(model_id, "model_id")
+        capability_value = _clean_capability(capability)
         session_factory = await get_session_factory(self._db_url)
         async with session_factory() as session:
             result = await session.execute(
                 delete(LLMModelScore).where(
                     LLMModelScore.provider == provider,
                     LLMModelScore.model_id == model_id,
+                    LLMModelScore.capability == capability_value,
                 )
             )
             await session.commit()
@@ -194,6 +224,14 @@ def _validate_score(value: float) -> float:
     if value < 0 or value > 1000:
         raise ValueError("score должен быть в диапазоне 0..1000")
     return float(value)
+
+
+def _clean_capability(value: AICapability | str) -> str:
+    raw = value.value if isinstance(value, AICapability) else str(value)
+    cleaned = raw.strip()
+    if cleaned == "":
+        raise ValueError("capability не может быть пустым.")
+    return AICapability(cleaned).value
 
 
 def _validate_source(value: str) -> LLMModelScoreSource:
@@ -233,6 +271,13 @@ def _required_seed_score(item: Mapping[str, JsonValue]) -> float:
     if isinstance(raw, bool) or not isinstance(raw, (int, float)):
         raise ValueError("score должен быть числом")
     return _validate_score(float(raw))
+
+
+def _required_seed_capability(item: Mapping[str, JsonValue]) -> str:
+    raw = item.get("capability")
+    if not isinstance(raw, str) or raw.strip() == "":
+        raise ValueError("capability должен быть непустой строкой")
+    return _clean_capability(raw)
 
 
 def _optional_seed_enabled(item: Mapping[str, JsonValue]) -> bool:

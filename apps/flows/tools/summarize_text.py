@@ -1,4 +1,4 @@
-"""Тул суммаризации текста через ``get_text_transform_service`` (``get_llm`` внутри сервиса)."""
+"""Тул суммаризации текста через ``get_text_transform_service`` и canonical AI runtime."""
 
 from __future__ import annotations
 

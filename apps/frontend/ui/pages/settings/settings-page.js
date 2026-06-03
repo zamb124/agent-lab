@@ -524,7 +524,7 @@ export class FrontendSettingsPage extends PlatformPage {
         this._searchProviderDrafts = {};
         this._searchProviderOrder = [];
         this._modelScoreDrafts = {};
-        this._modelScoreNew = { provider: 'openrouter', model_id: '', score: 0, enabled: true, note: '' };
+        this._modelScoreNew = { capability: 'llm_chat', provider: 'openrouter', model_id: '', score: 0, enabled: true, note: '' };
     }
 
     updated() {
@@ -1368,7 +1368,7 @@ export class FrontendSettingsPage extends PlatformPage {
     }
 
     _modelScoreKey(row) {
-        return `${row.provider}\n${row.model_id}`;
+        return `${row.capability}\n${row.provider}\n${row.model_id}`;
     }
 
     _modelScoreDraft(row) {
@@ -1376,6 +1376,7 @@ export class FrontendSettingsPage extends PlatformPage {
         return this._modelScoreDrafts[key] || {
             provider: row.provider,
             model_id: row.model_id,
+            capability: row.capability,
             score: Number(row.score || 0),
             enabled: row.enabled !== false,
             note: row.note || '',
@@ -1401,6 +1402,7 @@ export class FrontendSettingsPage extends PlatformPage {
         this._scoreUpsert.run({
             provider: draft.provider,
             model_id: draft.model_id,
+            capability: draft.capability,
             score: Number(draft.score || 0),
             enabled: draft.enabled !== false,
             note: draft.note || null,
@@ -1409,17 +1411,19 @@ export class FrontendSettingsPage extends PlatformPage {
     }
 
     _deleteModelScore(row) {
-        this._scoreDelete.run({ provider: row.provider, model_id: row.model_id });
+        this._scoreDelete.run({ capability: row.capability, provider: row.provider, model_id: row.model_id });
     }
 
     _createModelScore() {
         const draft = this._modelScoreNew;
         const provider = String(draft.provider || '').trim();
         const modelId = String(draft.model_id || '').trim();
-        if (!provider || !modelId) {
+        const capability = String(draft.capability || '').trim();
+        if (!capability || !provider || !modelId) {
             return;
         }
         this._scoreUpsert.run({
+            capability,
             provider,
             model_id: modelId,
             score: Number(draft.score || 0),
@@ -1427,7 +1431,7 @@ export class FrontendSettingsPage extends PlatformPage {
             note: draft.note ? String(draft.note) : null,
             score_dimensions: {},
         });
-        this._modelScoreNew = { provider: 'openrouter', model_id: '', score: 0, enabled: true, note: '' };
+        this._modelScoreNew = { capability: 'llm_chat', provider: 'openrouter', model_id: '', score: 0, enabled: true, note: '' };
     }
 
     _renderModelScoringTab() {
@@ -1457,6 +1461,7 @@ export class FrontendSettingsPage extends PlatformPage {
                             <table class="scores-table">
                                 <thead>
                                     <tr>
+                                        <th>${this.t('settings_page.model_scoring.col_capability')}</th>
                                         <th>${this.t('settings_page.model_scoring.col_provider')}</th>
                                         <th>${this.t('settings_page.model_scoring.col_model')}</th>
                                         <th>${this.t('settings_page.model_scoring.col_score')}</th>
@@ -1471,6 +1476,7 @@ export class FrontendSettingsPage extends PlatformPage {
                                         const draft = this._modelScoreDraft(row);
                                         return html`
                                             <tr>
+                                                <td class="score-provider">${row.capability}</td>
                                                 <td class="score-provider">${row.provider}</td>
                                                 <td class="score-model">${row.model_id}</td>
                                                 <td>
@@ -1543,6 +1549,18 @@ export class FrontendSettingsPage extends PlatformPage {
             <section>
                 <h3>${this.t('settings_page.model_scoring.add_title')}</h3>
                 <div class="score-form">
+                    <platform-field
+                        type="string"
+                        mode="edit"
+                        label=${this.t('settings_page.model_scoring.col_capability')}
+                        .value=${this._modelScoreNew.capability}
+                        @change=${(e) => {
+                            if (!e.detail || typeof e.detail.value !== 'string') {
+                                throw new Error('model scoring: capability expects string detail.value');
+                            }
+                            this._modelScoreNew = { ...this._modelScoreNew, capability: e.detail.value };
+                        }}
+                    ></platform-field>
                     <platform-field
                         type="string"
                         mode="edit"

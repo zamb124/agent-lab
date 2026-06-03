@@ -117,7 +117,7 @@ async def test_synthesize_zero_audio_returns_502(
                 if piece == "\0":
                     yield b""
 
-    async def _fake_get_tts_streamer(
+    async def _fake_create_voice_tts_streamer(
         *, company_id: str, override: SpeechOverride | None = None
     ) -> _SilentStreamer:
         if company_id == "":
@@ -126,8 +126,8 @@ async def test_synthesize_zero_audio_returns_502(
         return _SilentStreamer()
 
     monkeypatch.setattr(
-        "apps.voice.api.synthesize.get_tts_streamer",
-        _fake_get_tts_streamer,
+        "apps.voice.api.synthesize.create_voice_tts_streamer",
+        _fake_create_voice_tts_streamer,
     )
 
     response = await voice_client.post(
@@ -185,7 +185,7 @@ async def test_synthesize_litserve_upstream_422_returns_same_detail(
                     url="http://127.0.0.1:8014/v1/audio/speech",
                 )
 
-    async def _fake_get_tts_streamer(
+    async def _fake_create_voice_tts_streamer(
         *, company_id: str, override: SpeechOverride | None = None
     ) -> _Litserve422Streamer:
         if company_id == "":
@@ -194,8 +194,8 @@ async def test_synthesize_litserve_upstream_422_returns_same_detail(
         return _Litserve422Streamer()
 
     monkeypatch.setattr(
-        "apps.voice.api.synthesize.get_tts_streamer",
-        _fake_get_tts_streamer,
+        "apps.voice.api.synthesize.create_voice_tts_streamer",
+        _fake_create_voice_tts_streamer,
     )
 
     response = await voice_client.post(
@@ -247,7 +247,7 @@ async def test_synthesize_upstream_connect_error_returns_503(
                     return
                 raise httpx.ConnectError("All connection attempts failed")
 
-    async def _fake_get_tts_streamer(
+    async def _fake_create_voice_tts_streamer(
         *, company_id: str, override: SpeechOverride | None = None
     ) -> _UnreachableStreamer:
         if company_id == "":
@@ -256,8 +256,8 @@ async def test_synthesize_upstream_connect_error_returns_503(
         return _UnreachableStreamer()
 
     monkeypatch.setattr(
-        "apps.voice.api.synthesize.get_tts_streamer",
-        _fake_get_tts_streamer,
+        "apps.voice.api.synthesize.create_voice_tts_streamer",
+        _fake_create_voice_tts_streamer,
     )
 
     response = await voice_client.post(
@@ -321,7 +321,7 @@ async def test_synthesize_merges_multi_wav_chunks_into_one_playable_file(
         return _MultiWavStreamer()
 
     monkeypatch.setattr(
-        "apps.voice.api.synthesize.get_tts_streamer",
+        "apps.voice.api.synthesize.create_voice_tts_streamer",
         _fake_get,
     )
 

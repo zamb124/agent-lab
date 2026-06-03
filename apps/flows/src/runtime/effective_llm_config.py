@@ -5,21 +5,20 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 from apps.flows.src.models.node_config import NodeConfig, NodeLLMConfig
-from core.ai.resolver import (
-    COST_ORIGIN_COMPANY,
-    COST_ORIGIN_PLATFORM,
-    AICapability,
-    ResolvedLLM,
-    resolve_custom_llm_provider_ref,
-    resolve_llm_for_capability,
-)
-from core.clients.llm.config import LLMCallConfig
-from core.company_ai import (
+from core.ai.company_settings import (
     CUSTOM_PROVIDER_REF_PREFIX,
     HUMANITEC_LLM_AUTO_MODEL,
     HUMANITEC_LLM_PROVIDER,
 )
-from core.llm_model_routing import split_humanitec_llms_model_ref
+from core.ai.llm_config import LLMCallConfig
+from core.ai.models import ResolvedAIModel
+from core.ai.providers import AICapability, split_humanitec_llms_model_ref
+from core.ai.requirements import AISelection
+from core.ai.resolver import (
+    COST_ORIGIN_COMPANY,
+    COST_ORIGIN_PLATFORM,
+    resolve_ai_model,
+)
 
 _COMPANY_CONTROLLED_FIELDS = {
     "provider",
@@ -67,8 +66,10 @@ def _base_config(node_config: NodeConfig | None) -> NodeLLMConfig:
 
 def _apply_resolved_company_llm(
     base: NodeLLMConfig,
-    resolved: ResolvedLLM,
+    resolved: ResolvedAIModel,
 ) -> NodeLLMConfig:
+    if resolved.model is None:
+        raise ValueError(f"capability {resolved.capability.value}: resolved LLM model пуст")
     data = base.model_dump(mode="python", exclude_none=True)
     for field in _COMPANY_CONTROLLED_FIELDS:
         data.pop(field, None)
@@ -79,13 +80,9 @@ def _apply_resolved_company_llm(
             "api_key": resolved.api_key,
             "base_url": resolved.base_url,
             "folder_id": resolved.folder_id,
-            "extra_request_headers": dict(resolved.extra_request_headers or {}) or None,
-            "extra_request_body": dict(resolved.extra_request_body or {}) or None,
-            "fallback_models": [
-                fallback.model_dump(mode="json", exclude_none=True)
-                for fallback in resolved.fallback_models or ()
-            ]
-            or None,
+            "extra_request_headers": dict(resolved.headers) or None,
+            "extra_request_body": dict(resolved.body) or None,
+            "fallback_models": list(resolved.fallback_models) or None,
         }
     )
     return NodeLLMConfig.model_validate(data)
@@ -93,8 +90,10 @@ def _apply_resolved_company_llm(
 
 def _apply_resolved_custom_llm(
     base: NodeLLMConfig,
-    resolved: ResolvedLLM,
+    resolved: ResolvedAIModel,
 ) -> NodeLLMConfig:
+    if resolved.model is None:
+        raise ValueError(f"capability {resolved.capability.value}: resolved custom LLM model пуст")
     data = base.model_dump(mode="python", exclude_none=True)
     data.update(
         {
@@ -103,8 +102,8 @@ def _apply_resolved_custom_llm(
             "api_key": resolved.api_key,
             "base_url": resolved.base_url,
             "folder_id": resolved.folder_id or base.folder_id,
-            "extra_request_headers": dict(resolved.extra_request_headers or {}) or None,
-            "extra_request_body": dict(resolved.extra_request_body or {}) or None,
+            "extra_request_headers": dict(resolved.headers) or None,
+            "extra_request_body": dict(resolved.body) or None,
         }
     )
     return NodeLLMConfig.model_validate(data)
@@ -170,7 +169,7 @@ def resolve_effective_llm_config_for_node(
     capability = llm_capability_from_node_config(node_config)
     base = _base_config(node_config)
 
-    resolved_company = resolve_llm_for_capability(capability)
+    resolved_company = resolve_ai_model(capability, include_platform_default=False)
     if resolved_company is not None:
         effective = _apply_resolved_company_llm(base, resolved_company)
         return EffectiveLLMConfig(
@@ -189,11 +188,15 @@ def resolve_effective_llm_config_for_node(
     _validate_explicit_primary(node_config, base, capability)
 
     if base.provider and base.provider.startswith(CUSTOM_PROVIDER_REF_PREFIX):
-        resolved_custom = resolve_custom_llm_provider_ref(
-            base.provider,
-            capability=capability,
-            model=base.model,
+        resolved_custom = resolve_ai_model(
+            capability,
+            selection=AISelection(provider=base.provider, model=base.model),
+            include_platform_default=False,
         )
+        if resolved_custom is None:
+            raise ValueError(
+                f"capability {capability.value}: custom provider {base.provider!r} не удалось разрешить"
+            )
         return EffectiveLLMConfig(
             config=_apply_resolved_custom_llm(base, resolved_custom),
             capability=capability,

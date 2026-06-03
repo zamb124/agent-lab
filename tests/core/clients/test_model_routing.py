@@ -1,12 +1,15 @@
 """Контракт split_provider_prefixed_model (префикс платформенного провайдера в model)."""
 
 import pytest
+from pydantic import ValidationError
 
-from core.clients.llm.model_routing import (
+from core.ai.company_settings import PLATFORM_LLM_PROVIDERS
+from core.ai.providers import (
     ACCOUNT_FREE_TIER_LLM_PROVIDER_SLUGS,
     HUMANITEC_LLM_PROVIDER,
     LLM_FREE_MODEL_DISCOVERY_POLICY_BY_PROVIDER,
     OPENAI_COMPATIBLE_LLM_PROVIDER_ORDER,
+    PLATFORM_FREE_MODEL_CANDIDATE_PROVIDER_ORDER,
     PLATFORM_FREE_MODEL_CANDIDATE_PROVIDER_SLUGS,
     PLATFORM_LLM_PROVIDER_ORDER,
     ZERO_PRICE_LLM_PROVIDER_SLUGS,
@@ -14,7 +17,6 @@ from core.clients.llm.model_routing import (
     split_humanitec_llms_model_ref,
     split_provider_prefixed_model,
 )
-from core.company_ai import PLATFORM_LLM_PROVIDERS
 from core.config.models import PlatformFreePoolConfig, PlatformFreePoolPaidFallbackConfig
 
 
@@ -72,14 +74,17 @@ def test_split_accepts_all_platform_slugs(slug: str):
     assert m == "x/y"
 
 
-def test_platform_free_pool_accepts_all_platform_provider_slugs():
-    cfg = PlatformFreePoolConfig(providers=OPENAI_COMPATIBLE_LLM_PROVIDER_ORDER)
-    assert cfg.providers == OPENAI_COMPATIBLE_LLM_PROVIDER_ORDER
+def test_platform_free_pool_has_no_configured_provider_list():
+    with pytest.raises(ValidationError):
+        PlatformFreePoolConfig(providers=OPENAI_COMPATIBLE_LLM_PROVIDER_ORDER)
 
 
-def test_platform_free_pool_default_none_uses_all_platform_provider_slugs():
-    cfg = PlatformFreePoolConfig(providers=None)
-    assert cfg.providers == OPENAI_COMPATIBLE_LLM_PROVIDER_ORDER
+def test_platform_free_pool_candidate_order_is_canonical():
+    assert PLATFORM_FREE_MODEL_CANDIDATE_PROVIDER_ORDER == tuple(
+        slug
+        for slug in OPENAI_COMPATIBLE_LLM_PROVIDER_ORDER
+        if slug in PLATFORM_FREE_MODEL_CANDIDATE_PROVIDER_SLUGS
+    )
 
 
 @pytest.mark.parametrize("slug", OPENAI_COMPATIBLE_LLM_PROVIDER_ORDER)

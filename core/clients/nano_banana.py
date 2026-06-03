@@ -8,8 +8,9 @@ from typing import TYPE_CHECKING, Protocol
 from a2a.types import FilePart, FileWithBytes, Message, Part, Role, TextPart
 from a2a.utils.message import get_message_text
 
-from core.ai.resolver import AICapability, resolve_llm_for_capability
-from core.ai.runtime import create_llm_client
+from core.ai.providers import AICapability
+from core.ai.resolver import resolve_ai_model
+from core.ai.runtime import create_llm_client_from_ai_model
 from core.config import get_settings
 from core.files.models import FileRecord
 from core.files.s3_client import S3ClientFactory
@@ -42,15 +43,15 @@ class NanoBananaClient:
         self._storage: Storage = storage
         self._llm: _ChatLLM | None = None
 
-    def _get_llm(self) -> _ChatLLM:
-        """Получает LLM для image generation."""
+    def _create_image_generation_client(self) -> _ChatLLM:
+        """Resolve and cache the image generation LLM client."""
         if self._llm is None:
-            resolved = resolve_llm_for_capability(
+            resolved = resolve_ai_model(
                 AICapability.IMAGE_GEN,
                 include_platform_default=True,
             )
             if resolved is not None:
-                self._llm = create_llm_client(resolved)
+                self._llm = create_llm_client_from_ai_model(resolved)
             else:
                 raise ValueError(
                     "NanoBananaClient: platform default для capability=image_gen не настроен"
@@ -130,7 +131,7 @@ class NanoBananaClient:
 
         parts.append(Part(root=TextPart(text=prompt)))
 
-        llm = self._get_llm()
+        llm = self._create_image_generation_client()
 
         response = await llm.chat([
             Message(

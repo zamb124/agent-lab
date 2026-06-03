@@ -15,18 +15,19 @@ from apps.flows.src.api.registry import (
     _platform_provider_options,
 )
 from apps.flows.src.services.llm_models_service import LLMModelsService
-from core.clients.llm.model_routing import (
+from core.ai.company_settings import CompanyAIProviders, CompanyCustomOpenAICompatibleProvider
+from core.ai.free_pool import (
+    PlatformFreeModelRecord,
+    serialize_platform_free_models,
+)
+from core.ai.providers import (
     ACCOUNT_FREE_TIER_LLM_PROVIDER_SLUGS,
     HUMANITEC_LLM_AUTO_MODEL,
     HUMANITEC_LLM_PROVIDER,
     HUMANITEC_LLMS_DISPLAY_LABEL,
     OPENAI_COMPATIBLE_LLM_PROVIDER_ORDER,
+    AICapability,
 )
-from core.clients.llm.platform_free_models import (
-    PlatformFreeModelRecord,
-    serialize_platform_free_models,
-)
-from core.company_ai import CompanyAIProviders, CompanyCustomOpenAICompatibleProvider
 
 
 def test_registry_custom_provider_options_use_label_and_custom_ref():
@@ -43,9 +44,10 @@ def test_registry_custom_provider_options_use_label_and_custom_ref():
         ]
     )
     assert [
-        item.model_dump(mode="json", exclude_none=True) for item in _custom_provider_options(aip)
+        item.model_dump(mode="json", exclude_none=True)
+        for item in _custom_provider_options(aip, AICapability.LLM_CHAT)
     ] == [{"value": "custom:corp", "label": "Corp LLM", "kind": "custom", "custom_id": "corp"}]
-    assert _custom_provider_models(aip, "custom:corp") == ["chat-model"]
+    assert _custom_provider_models(aip, "custom:corp", AICapability.LLM_CHAT) == ["chat-model"]
 
 
 def test_registry_platform_provider_options_labels_humanitec_llm():
@@ -80,7 +82,10 @@ async def test_humanitec_llm_models_are_virtual_and_not_read_from_repository():
         ]
     )
     service = LLMModelsService(Repo(), AsyncMock(), redis)  # pyright: ignore[reportArgumentType]
-    assert await service.get_models_by_provider(HUMANITEC_LLM_PROVIDER) == [
+    assert await service.get_model_ids_by_provider_capability(
+        HUMANITEC_LLM_PROVIDER,
+        AICapability.LLM_CHAT,
+    ) == [
         {
             "value": HUMANITEC_LLM_AUTO_MODEL,
             "label": HUMANITEC_LLM_AUTO_MODEL,

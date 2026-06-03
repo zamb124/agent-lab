@@ -1,5 +1,6 @@
 """
-Итоговый ``base_url`` эмбеддингов для PgVectorProvider / EmbeddingService из Pydantic-конфига.
+Итоговый ``base_url`` эмбеддингов для PgVectorProvider /
+``core.ai.embedding_client.AIEmbeddingClient`` из Pydantic-конфига.
 """
 
 from __future__ import annotations

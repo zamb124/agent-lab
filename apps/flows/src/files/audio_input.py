@@ -11,8 +11,8 @@ takeover), потому что embed/chat ходят через те же `/flow
   `content_type`, `file_size`, опционально `file_id`).
 - Для каждого item с категорией AUDIO достаются байты (через `file_processor`
   + S3, по `file_id`; URI без `file_id` пропускаются как «внешний ресурс,
-  который скачивать не наша работа»), вызывается `voice_resolver.get_stt_client(...)
-  .transcribe_audio(...)` и формируется блок текста для добавления в content.
+  который скачивать не наша работа»), вызывается `core.ai.runtime.transcribe_audio_bytes(...)`
+  и формируется блок текста для добавления в content.
 - Возвращается строка, готовая к конкатенации с пользовательским text-content
   (пустая, если транскрибировать нечего).
 
@@ -29,8 +29,8 @@ from apps.flows.src.services.flow_speech_resolve import (
     load_flow_speech_layers_from_context_metadata,
     merge_explicit_over_flow_speech_layer,
 )
+from core.ai.runtime import transcribe_audio_bytes
 from core.clients.speech_override import SpeechOverride
-from core.clients.voice_resolver import get_stt_client
 from core.context import get_context
 from core.files.file_ref import FileRef
 from core.files.types import FileCategory, ext_to_category, mime_to_category
@@ -106,8 +106,6 @@ async def transcribe_incoming_audio_files(
         merged = merged.model_copy(update={"language": language})
     elif ctx is not None and merged.language is None:
         merged = merged.model_copy(update={"language": ctx.language.value})
-    stt = await get_stt_client(company_id=company_id, override=merged)
-
     parts: list[str] = []
     for item in audio_items:
         if item.file_id is None:
@@ -121,10 +119,12 @@ async def transcribe_incoming_audio_files(
             container=container,
             file_id=item.file_id,
         )
-        result = await stt.transcribe_audio(
+        result = await transcribe_audio_bytes(
+            company_id=company_id,
             audio_bytes=audio_bytes,
             file_name=original_name,
             content_type=content_type,
+            override=merged,
             language=merged.language,
         )
         text = (result.text or "").strip()

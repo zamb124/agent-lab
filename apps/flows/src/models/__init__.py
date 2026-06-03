@@ -63,7 +63,6 @@ from .flow_speech_settings import (
     FlowSpeechTtsBlock,
     FlowSpeechVadBlock,
 )
-from .llm_model import LLMModel
 from .mcp import (
     MCPCallResult,
     MCPDiscoveredTool,
@@ -143,7 +142,6 @@ __all__ = [
     "NodeInputMapping",
     "NodeLLMConfig",
     "LLMConfig",
-    "LLMModel",
     "MergeMode",
     "OutputAction",
     "Permission",

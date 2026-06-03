@@ -1,5 +1,5 @@
 /**
- * LitserveSidebar — навигация сервиса provider_litserve.
+ * HumanitecModelsSidebar — навигация реестра системных моделей Humanitec.
  *
  * Активный маршрут берётся из `state.router.routeKey`. Переходы — через
  * `this.navigate(routeKey)`. У сервиса один экран — реестр моделей.
@@ -18,7 +18,7 @@ const NAV_ITEMS = [
     { route: 'models', icon: 'database', label_key: 'sidebar.models' },
 ];
 
-export class LitserveSidebar extends PlatformElement {
+export class HumanitecModelsSidebar extends PlatformElement {
     static i18nNamespace = 'litserve';
 
     static styles = [
@@ -139,4 +139,4 @@ export class LitserveSidebar extends PlatformElement {
     }
 }
 
-customElements.define('litserve-sidebar', LitserveSidebar);
+customElements.define('litserve-sidebar', HumanitecModelsSidebar);

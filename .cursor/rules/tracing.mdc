@@ -88,7 +88,7 @@ alwaysApply: false
 
 Вспомогательно: `record_llm_request`/`record_llm_response`, `record_tool_result`, `record_prompt_result`, `record_state_snapshot`, `set_error`.
 
-**LLM span (flows ReAct):** при наличии конфигурации провайдера в атрибутах span выставляется `platform.llm.provider` (`openrouter`, `bothub`, `openai`, `mock`, …). Если провайдер вернул расширенный `usage` (как у OpenRouter: `cost`, опц. `cost_details.upstream_inference_cost`), в span попадают `platform.llm.provider_reported_cost` и `platform.llm.provider_upstream_inference_cost` (только когда значения численные). Парсинг — `core/clients/llm/factory.py::_merge_openai_compatible_usage_into_usage_data`. Settlement по умолчанию — от `platform.billing.quantity` (токены × прайс), см. `billing.mdc`.
+**LLM span (flows ReAct):** при наличии конфигурации провайдера в атрибутах span выставляется `platform.llm.provider` (`openrouter`, `bothub`, `openai`, `mock`, …). Если провайдер вернул расширенный `usage` (как у OpenRouter: `cost`, опц. `cost_details.upstream_inference_cost`), в span попадают `platform.llm.provider_reported_cost` и `platform.llm.provider_upstream_inference_cost` (только когда значения численные). Парсинг — `core.clients.llm.openai_compat.merge_openai_compatible_usage_into_usage_data`. Settlement по умолчанию — от `platform.billing.quantity` (токены × прайс), см. `billing.mdc`.
 
 Кастомные поля — атрибуты на span; доменные ключи — через константы в `core/tracing/attributes.py` для совпадения с фильтрами репозитория.
 

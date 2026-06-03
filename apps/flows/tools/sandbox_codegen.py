@@ -9,10 +9,12 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from apps.flows.src.services.platform_facades import get_code_runner
 from apps.flows.src.tools.decorator import tool
-from core.ai.resolver import AICapability, ResolvedLLM, resolve_llm_for_capability
-from core.ai.runtime import create_llm_client
+from core.ai.models import ResolvedAIModel
+from core.ai.providers import AICapability, split_provider_prefixed_model
+from core.ai.requirements import AISelection
+from core.ai.resolver import resolve_ai_model
+from core.ai.runtime import create_llm_client_from_ai_model
 from core.capabilities import CAPABILITY_LANGUAGES, CapabilityLanguage
-from core.clients.llm.model_routing import split_provider_prefixed_model
 from core.clients.service_client import ServiceClient
 from core.config import get_settings
 from core.errors import CodeExecutionRuntimeError
@@ -154,8 +156,8 @@ def _execution_state_for_codegen(
     return base
 
 
-def _resolve_codegen_llm_selection(model: str) -> ResolvedLLM:
-    resolved = resolve_llm_for_capability(
+def _resolve_codegen_llm_selection(model: str) -> ResolvedAIModel:
+    resolved = resolve_ai_model(
         AICapability.LLM_CODEGEN,
         include_platform_default=True,
     )
@@ -173,7 +175,14 @@ def _resolve_codegen_llm_selection(model: str) -> ResolvedLLM:
     provider = explicit_provider or str(get_settings().llm.provider).strip()
     if not provider:
         raise ValueError("sandbox_codegen: settings.llm.provider обязателен для явной model")
-    return ResolvedLLM(provider=provider, model=resolved_model)
+    resolved = resolve_ai_model(
+        AICapability.LLM_CODEGEN,
+        selection=AISelection(provider=provider, model=resolved_model),
+        include_platform_default=False,
+    )
+    if resolved is None:
+        raise ValueError("sandbox_codegen: explicit provider/model не удалось разрешить")
+    return resolved
 
 
 def _state_json(state: ExecutionState) -> JsonObject:
@@ -212,7 +221,7 @@ async def sandbox_codegen(
     exec_state = _execution_state_for_codegen(state, run_variables)
     resolved_llm = _resolve_codegen_llm_selection(model)
     docs = await _language_docs(capability_language, max_doc_chars)
-    llm = create_llm_client(
+    llm = create_llm_client_from_ai_model(
         resolved_llm,
         state=exec_state,
     )

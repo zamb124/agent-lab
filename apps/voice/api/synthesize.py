@@ -1,7 +1,7 @@
 """HTTP TTS endpoint — batch с Transfer-Encoding: chunked.
 
 ``POST /voice/api/v1/synthesize`` — синтезировать ``text`` в аудио-поток
-через платформенного TTS-провайдера (``core.clients.voice_resolver``).
+через платформенного TTS-провайдера (``core.ai.runtime``).
 Для ``audio/wav`` внутри собирается один RIFF: потоковый TTS режет текст на
 фразы и каждая даёт **отдельный** WAV; сыря конкатенация байт ломает
 ``<audio>`` в браузере (слышна только первая фраза). Для иных MIME чанки
@@ -11,7 +11,7 @@
 ``user``); пустого текста и отсутствия ``company_id`` в контексте
 запроса не допускается (``Zero-Guess``). Если TTS не вернул ни одного
 ненулевого чанка — ``502`` и лог ``voice.synthesize.empty_audio_body``.
-HTTP ``4xx`` от ``provider_litserve`` (``TTSLitserveHttpError``) пробрасываются
+HTTP ``4xx`` от Humanitec Voice (``TTSLitserveHttpError``) пробрасываются
 клиенту с тем же кодом и ``detail``; ответы ``5xx`` апстрима — ``502``.
 Сетевые сбои до HTTP-ответа апстрима (``httpx.RequestError``, в т.ч. нет TCP) —
 ``503`` с пояснением, не ``500``.
@@ -27,6 +27,7 @@ from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 
 from apps.voice.services.voice_usage import record_tts_usage
+from core.ai.runtime import create_voice_tts_streamer
 from core.clients.speech_override import (
     SpeechOverride,
     SpeechProviderName,
@@ -34,7 +35,6 @@ from core.clients.speech_override import (
 )
 from core.clients.tts_client import TTSLitserveHttpError
 from core.clients.tts_streaming import BaseTTSStreamer
-from core.clients.voice_resolver import get_tts_streamer
 from core.context import require_context
 from core.files.media.wav_merge import merge_wav_s16le_mono_files
 from core.logging import get_logger
@@ -69,7 +69,7 @@ class SynthesizeRequest(BaseModel):
     summary="Синтезировать речь (streaming)",
     description=(
         "Принимает текст, возвращает аудио-поток. Для WAV — один корректный контейнер "
-        "после полного синтеза (склейка PCM из фразовых WAV). Провайдер — voice_resolver "
+        "после полного синтеза (склейка PCM из фразовых WAV). Провайдер — core.ai.runtime "
         "(override -> per-company -> deployment-default)."
     ),
     responses={
@@ -101,7 +101,7 @@ async def synthesize(body: SynthesizeRequest) -> StreamingResponse:
         response_format=body.response_format,
     )
 
-    tts_streamer = await get_tts_streamer(
+    tts_streamer = await create_voice_tts_streamer(
         company_id=company_id, override=override
     )
 

@@ -8,13 +8,13 @@ from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel
 
 from apps.rag.config import get_rag_settings
+from core.ai.rerank_client import AIRerankerClientError
 from core.billing.exceptions import BillingBalanceBlockedError
 from core.logging import get_logger
 from core.rag.base_provider import validate_metadata_filters
 from core.rag.factory import get_rag_provider
 from core.rag.models import RAGGlobalSearchRequest, RAGNamespaceSearchRequest, RAGSearchResult
 from core.rag.post_retrieval_rerank import (
-    RerankerClientError,
     apply_rerank_after_retrieve,
     apply_rerank_after_retrieve_grouped,
 )
@@ -90,7 +90,7 @@ async def search_in_namespace(
         )
     except BillingBalanceBlockedError:
         raise
-    except RerankerClientError as e:
+    except AIRerankerClientError as e:
         raise HTTPException(status_code=e.status_code, detail=e.detail)
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
@@ -171,7 +171,7 @@ async def global_search(
         )
     except BillingBalanceBlockedError:
         raise
-    except RerankerClientError as e:
+    except AIRerankerClientError as e:
         raise HTTPException(status_code=e.status_code, detail=e.detail)
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))

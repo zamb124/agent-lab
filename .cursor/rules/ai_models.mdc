@@ -1,0 +1,73 @@
+---
+description: "AI models/provider canon: core.ai catalog, resolver, runtime, shared model catalog, Humanitec LLMs"
+alwaysApply: true
+---
+# AI Models — единый канон
+
+Вся платформа использует один AI-layer:
+
+`core.ai` = provider/capability catalog + shared model catalog + company settings + resolver + runtime.
+
+## Public API
+
+- Capabilities: `core.ai.providers.AICapability`.
+- Provider specs: `core.ai.providers`.
+- One call config: `core.ai.llm_config.LLMCallConfig`.
+- Requirements/selection: `core.ai.requirements.AIRequestRequirements`, `AISelection`.
+- Resolution: `core.ai.resolver.resolve_ai_model(...)`.
+- Execution: `core.ai.runtime`.
+
+Сервисы не создают provider-specific клиенты и не знают эндпоинты OpenRouter/BotHub/Groq/HuggingFace/LitServe/etc.
+
+## Каталог моделей
+
+- Единственный каталог моделей — `core.ai.model_catalog_repository.AIModelCatalogRepository`.
+- Storage namespace — `ai_model_catalog:*`.
+- Record — `core.ai.models.AIModelRecord`: provider, model_id, capabilities, modalities, context, tools/json/vision/image, embedding dimensions, pricing/free policy, score metadata.
+- Модель — не строка. Строка допустима только как пользовательский выбор, который сразу резолвится в typed record/selection.
+
+Запрещены отдельные таблицы/namespace `llm_model:*`, `embedding_models`, `rerank_models`, `free_models` и flows-owned model repository/model.
+
+## Discovery
+
+- Provider-specific model discovery живёт только в `core.ai.adapters.*`.
+- `apps/flows/src/services/llm_models_service.py` — только orchestration: adapter registry → records → shared repository → scheduler.
+- Новый provider добавляется один раз в `core.ai.providers`; если discovery нестандартный — отдельный adapter в `core.ai.adapters`.
+- `conf.json` задаёт credentials/base_url/models_url/enabled-параметры, но не список существующих providers.
+
+## Resolve и runtime
+
+- Выбор модели идёт только через `resolve_ai_model(capability, requirements, selection)`.
+- Исполнение идёт только через `core.ai.runtime`: LLM chat/stream, vision, embeddings, rerank и capability bridges.
+- `get_llm(...)`, `core.clients.llm.factory`, прямой `AIEmbeddingClient(...)`, прямой `AIRerankerHTTPClient(...)`, прямые `httpx` к AI provider endpoints вне adapters/runtime запрещены.
+- Старые concrete resolver-ы (`resolve_llm_for_capability`, `resolve_embedding_for_company`, `resolve_rerank_for_company`) запрещены.
+
+## Humanitec LLMs
+
+`humanitec_llm` — virtual provider поверх free pool, не отдельный внешний provider.
+
+- Модели: `auto` и concrete refs вида `<provider>:<model_id>` из shared free catalog.
+- Free pool строится из `AIModelCatalogRepository` и canonical `core.ai.providers.PLATFORM_FREE_MODEL_CANDIDATE_PROVIDER_ORDER`.
+- `llm.platform_free_pool.providers` в конфиге запрещён.
+- `auto` выбирает по `AIRequestRequirements + scoring + availability`.
+
+## Embedding / Rerank / Fallback
+
+- Embedding selection dimension-aware: `storage_dimension` должен совпадать с активной pgvector dimension; иначе resolver/UI fail-closed.
+- Rerank — обычная capability `AICapability.RERANK` с provider/model override, не policy-string `none/provider_litserve/openrouter`.
+- Fallback — typed `fallback_models: list[LLMCallConfig]`; raw JSON textarea, `string[]` и урезанные модели запрещены.
+
+## UI
+
+- Settings UI получает providers/models/capabilities только из backend catalog.
+- UI не хранит provider allowlist и не дублирует capability filters.
+- Для каждой capability показываются только совместимые модели; несовместимость объясняется backend reason.
+
+## Gates
+
+Канон закреплён `scripts/check_company_ai_canon.py`. При изменении AI-layer запускать:
+
+```bash
+make test-static
+uv run pytest -q tests/core/clients/test_llm_external_provider_live.py --tb=short
+```

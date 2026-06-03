@@ -72,7 +72,10 @@ from apps.flows.src.streaming.ui_events import emit_pending_ui_events
 from apps.flows.src.tools.base import BaseTool, OpenAIToolSchema, ToolArguments, sanitize_tool_name
 from apps.flows.src.variables import VariableResolver
 from core.ai.resolver import COST_ORIGIN_COMPANY
-from core.ai.runtime import create_llm_client_from_call_config
+from core.ai.runtime import (
+    create_llm_client_from_call_config,
+    should_use_platform_default_free_pool,
+)
 from core.billing import get_cbr_usd_to_rub_rate
 from core.billing.service import BALANCE_BLOCK_OPERATION_LLM
 from core.clients.llm import (
@@ -82,7 +85,6 @@ from core.clients.llm import (
     LLMToolCall,
     MockLLM,
     StreamEvent,
-    should_use_platform_default_free_pool,
 )
 from core.config import get_settings
 from core.config.testing import is_testing

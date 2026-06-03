@@ -2,7 +2,7 @@
 
 REST-зеркало: POST /voice/api/v1/transcribe (audio/* multipart/form-data,
 поле `file`). Используется CRM/Sync для batch-сценариев. Клиент
-выбирается через `core.clients.voice_resolver.get_stt_client(*, company_id,
+выбирается через `core.ai.runtime.transcribe_audio_bytes(*, company_id,
 override)` — один и тот же tier-резолв, что и для real-time WS.
 """
 
@@ -14,8 +14,8 @@ from fastapi import APIRouter, Form, HTTPException, UploadFile, status
 from pydantic import BaseModel
 
 from apps.voice.services.voice_usage import record_stt_usage
+from core.ai.runtime import transcribe_audio_bytes
 from core.clients.speech_override import SpeechOverride, SpeechProviderName
-from core.clients.voice_resolver import get_stt_client
 from core.context import require_context
 from core.files.audio_probe import probe_audio_duration_seconds_from_upload
 from core.logging import get_logger
@@ -38,7 +38,7 @@ class TranscribeResponse(BaseModel):
         "Принимает аудиофайл (multipart/form-data, поле `file`), "
         "возвращает распознанный текст. Используется для batch-транскрипции "
         "из CRM и других сервисов платформы. Выбор провайдера — через "
-        "voice_resolver (tier-резолв override -> per-company -> deployment-default)."
+        "core.ai.runtime (tier-резолв override -> per-company -> deployment-default)."
     ),
 )
 async def transcribe_audio(
@@ -77,11 +77,12 @@ async def transcribe_audio(
         company_id=company_id,
     )
 
-    stt_client = await get_stt_client(company_id=company_id, override=override)
-    result = await stt_client.transcribe_audio(
+    result = await transcribe_audio_bytes(
+        company_id=company_id,
         audio_bytes=audio_bytes,
         file_name=filename,
         content_type=content_type,
+        override=override,
         language=language,
     )
 

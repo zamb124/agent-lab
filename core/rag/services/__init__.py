@@ -1,9 +1,6 @@
-"""
-Сервисы для RAG системы.
+"""RAG service helpers.
+
+AI transports live in ``core.ai``.
 """
 
-from .embedding_service import EmbeddingService
-
-__all__ = [
-    "EmbeddingService",
-]
+__all__: list[str] = []

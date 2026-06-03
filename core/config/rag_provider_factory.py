@@ -13,9 +13,10 @@ import json
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
-from core.ai.providers import PROVIDER_LITSERVE
-from core.ai.resolver import ResolvedEmbedding, resolve_embedding_for_company
-from core.company_ai.schema import CUSTOM_PROVIDER_SLUG
+from core.ai.company_settings.schema import CUSTOM_PROVIDER_SLUG
+from core.ai.models import ResolvedAIModel
+from core.ai.providers import PROVIDER_LITSERVE, AICapability
+from core.ai.resolver import resolve_ai_model
 from core.config.base import BaseSettings, get_settings
 from core.config.models import RAGProviderConfig
 from core.context import get_context
@@ -59,30 +60,33 @@ class ResolvedRagProvider:
 
 
 def _runtime_from_company_embedding(
-    resolved: ResolvedEmbedding,
+    resolved: ResolvedAIModel,
     *,
     settings: BaseSettings,
 ) -> RagEmbeddingRuntime:
-    if not resolved.model.strip():
+    if resolved.model is None or not resolved.model.strip():
         raise ValueError("company embedding override: model обязателен")
     if resolved.dimension is None:
         raise ValueError("company embedding override: dimension обязателен")
-    if resolved.provider == PROVIDER_LITSERVE:
+    if resolved.provider is None or not resolved.provider.strip():
+        raise ValueError("company embedding override: provider обязателен")
+    provider = resolved.provider
+    if provider == PROVIDER_LITSERVE:
         base_url = (
             resolved.base_url.strip()
-            if resolved.base_url.strip()
+            if resolved.base_url is not None and resolved.base_url.strip()
             else settings.provider_litserve.resolve_openai_v1_base_url()
         )
-    elif resolved.provider == CUSTOM_PROVIDER_SLUG:
-        base_url = resolved.base_url.strip()
+    elif provider == CUSTOM_PROVIDER_SLUG:
+        base_url = (resolved.base_url or "").strip()
         if not base_url:
             raise ValueError("company custom embedding override: base_url обязателен")
     else:
-        base_url = resolved.base_url.strip()
+        base_url = (resolved.base_url or "").strip()
         if not base_url:
             emb_copy = settings.rag.embedding.model_copy(
                 deep=True,
-                update={"provider": resolved.provider},
+                update={"provider": provider},
             )
             base_url = resolve_rag_embedding_runtime(
                 emb_copy,
@@ -90,12 +94,12 @@ def _runtime_from_company_embedding(
                 settings.provider_litserve,
             ).base_url
     return RagEmbeddingRuntime(
-        provider=resolved.provider,
+        provider=provider,
         model=resolved.model,
         dimension=resolved.dimension,
         base_url=base_url,
         mrl_output_dimension=resolved.mrl_output_dimension,
-        extra_request_headers=resolved.extra_request_headers,
+        extra_request_headers={key: str(value) for key, value in resolved.headers.items()} or None,
     )
 
 
@@ -114,7 +118,10 @@ def resolve_rag_provider_bundle(
         if provider_name is None:
             ctx = get_context()
             if ctx is not None and ctx.active_company is not None:
-                resolved = resolve_embedding_for_company()
+                resolved = resolve_ai_model(
+                    AICapability.EMBEDDING,
+                    include_platform_default=False,
+                )
                 if resolved is not None:
                     provider_config = provider_config.model_copy(
                         update=(

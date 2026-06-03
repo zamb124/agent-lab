@@ -1,6 +1,8 @@
 """Парсинг usage из OpenAI-совместимых ответов (в т.ч. OpenRouter)."""
 
-from core.clients.llm.factory import _merge_openai_compatible_usage_into_usage_data
+from core.clients.llm.openai_compat import (
+    merge_openai_compatible_usage_into_usage_data as _merge_openai_compatible_usage_into_usage_data,
+)
 from core.types import JsonObject
 
 

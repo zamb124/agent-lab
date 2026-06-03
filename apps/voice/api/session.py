@@ -26,13 +26,13 @@ from apps.voice.services.voice_client_channel import VoiceClientChannel
 from apps.voice.services.voice_session import VoiceSession
 from apps.voice.workers.stt_worker import VadCallbackState, run_stt_worker
 from apps.voice.workers.ws_receiver import run_ws_receiver
+from core.ai.runtime import create_voice_tts_streamer
 from core.clients.speech_override import (
     SpeechOverride,
     SpeechOverrideProviderName,
     SpeechProviderName,
 )
 from core.clients.speech_provider_catalog import STT_TTS_PROVIDER_IDS, VAD_PROVIDER_IDS
-from core.clients.voice_resolver import get_tts_streamer
 from core.logging import get_logger
 from core.utils.background import run_with_log_context
 
@@ -110,7 +110,7 @@ async def voice_session(
         str | None,
         Query(
             description=(
-                "Язык сессии (ISO 639-1): STT и выбор TTS-модели LitServe "
+                "Язык сессии (ISO 639-1): STT и выбор TTS-модели Humanitec Voice "
                 "по `synthesis_locale` в каталоге."
             ),
         ),
@@ -177,7 +177,7 @@ async def voice_session(
         stt_provider = await container.create_stt_provider(
             company_id=company_id, override=stt_override
         )
-        tts_streamer = await get_tts_streamer(
+        tts_streamer = await create_voice_tts_streamer(
             company_id=company_id, override=tts_override
         )
     except Exception as exc:

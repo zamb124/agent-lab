@@ -13,7 +13,7 @@
     },
     "models": {
         "title": "Реестр моделей",
-        "subtitle": "Локальные модели LitServe (embedding, rerank)",
+        "subtitle": "Системные модели Humanitec для эмбеддингов и реранка",
         "kind": "Тип",
         "kind_embedding": "Эмбеддинги",
         "kind_rerank": "Реранк",

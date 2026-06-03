@@ -15,6 +15,7 @@ from apps.flows.src.models.flow_config import FlowType
 from apps.frontend.dependencies import ContainerDep
 from core.config import get_settings
 from core.context import require_context
+from core.identity.embed_guest_turns import EMBED_SESSION_ID_METADATA_KEY
 from core.identity.system_bootstrap import SYSTEM_COMPANY_ID
 from core.logging import get_logger
 from core.models.embed_models import (
@@ -713,6 +714,7 @@ async def issue_embed_session_token(
             raise HTTPException(status_code=403, detail="origin не разрешен для этой конфигурации")
 
     user_roles = user.companies.get(company_id, [])
+    embed_session_id = f"embsess_{uuid.uuid4().hex}"
     expires_at = datetime.now(timezone.utc) + timedelta(seconds=request_data.expires_in_seconds)
     token = get_token_service().create_embed_session_token(
         user_id=user.user_id,
@@ -725,6 +727,7 @@ async def issue_embed_session_token(
             "embed_branch_id": config.branch_id,
             "allowed_origin": origin,
             "issued_by": "frontend.embed_configs",
+            EMBED_SESSION_ID_METADATA_KEY: embed_session_id,
         },
     )
 

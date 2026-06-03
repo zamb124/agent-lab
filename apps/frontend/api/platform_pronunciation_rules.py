@@ -17,8 +17,8 @@ from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, ConfigDict, Field
 
 from apps.frontend.dependencies import ContainerDep, require_frontend_context
+from core.ai.runtime import invalidate_voice_platform_pronunciation_cache
 from core.clients.tts_pronunciation.models import PronunciationRuleKind
-from core.clients.voice_resolver import invalidate_platform_pronunciation_cache
 from core.db.models.platform import PlatformPronunciationRule
 from core.logging import get_logger
 from core.models.identity_models import User
@@ -163,7 +163,7 @@ async def create_platform_pronunciation_rule(
         enabled=payload.enabled,
         note=payload.note,
     )
-    invalidate_platform_pronunciation_cache()
+    invalidate_voice_platform_pronunciation_cache()
     logger.info(
         "frontend.platform_pronunciation_rule_created",
         rule_id=row.id,
@@ -196,7 +196,7 @@ async def update_platform_pronunciation_rule(
     )
     if row is None:
         raise HTTPException(status_code=404, detail="Правило не найдено")
-    invalidate_platform_pronunciation_cache()
+    invalidate_voice_platform_pronunciation_cache()
     logger.info(
         "frontend.platform_pronunciation_rule_updated",
         rule_id=rule_id,
@@ -213,7 +213,7 @@ async def delete_platform_pronunciation_rule(
     """Удалить платформенное правило произношения TTS."""
     user = _require_superadmin()
     deleted = await container.platform_pronunciation_rule_repository.delete(rule_id)
-    invalidate_platform_pronunciation_cache()
+    invalidate_voice_platform_pronunciation_cache()
     logger.info(
         "frontend.platform_pronunciation_rule_deleted",
         rule_id=rule_id,

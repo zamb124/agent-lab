@@ -1,5 +1,6 @@
 """HTTP-тесты публичного каталога демо-агентов лендинга."""
 
+import hashlib
 import uuid
 
 import pytest
@@ -13,7 +14,10 @@ from apps.frontend.services.landing_demo_seed import (
     landing_demo_embed_ids,
 )
 from core.context import clear_context, set_context
-from core.identity.embed_guest_turns import EMBED_GUEST_USER_TURNS_REDIS_PREFIX
+from core.identity.embed_guest_turns import (
+    EMBED_GUEST_USER_TURNS_REDIS_PREFIX,
+    EMBED_SESSION_ID_METADATA_KEY,
+)
 from core.identity.system_bootstrap import SYSTEM_COMPANY_ID
 from core.models.context_models import Context
 from core.models.embed_models import EmbedConfig, EmbedMapping, EmbedStatus
@@ -262,6 +266,7 @@ async def test_public_landing_session_mints_token(
     embed_id, _config = system_landing_embed
     r = await frontend_client.post(
         "/frontend/api/public/landing-agents/session",
+        headers={"origin": "http://testserver", "referer": "http://testserver/"},
         json={"embed_id": embed_id, "expires_in_seconds": 120},
     )
     assert r.status_code == 200
@@ -278,7 +283,8 @@ async def test_public_landing_session_mints_token(
     assert token_data.metadata["embed_id"] == embed_id
     assert token_data.metadata["embed_flow_id"] == "universal_agent"
     assert token_data.metadata["embed_branch_id"] == "default"
-    assert token_data.metadata["allowed_origin"] == ""
+    assert token_data.metadata["allowed_origin"] == "http://testserver"
+    assert isinstance(token_data.metadata[EMBED_SESSION_ID_METADATA_KEY], str)
 
     guest = await frontend_container.user_repository.get(token_data.user_id)
     assert guest is not None
@@ -288,6 +294,7 @@ async def test_public_landing_session_mints_token(
     assert guest.attributes["runtime_identity"] is True
     assert guest.attributes["kind"] == "embed_session_guest"
     assert guest.attributes["embed_id"] == embed_id
+    assert guest.attributes[EMBED_SESSION_ID_METADATA_KEY] == token_data.metadata[EMBED_SESSION_ID_METADATA_KEY]
 
 
 @pytest.mark.asyncio
@@ -427,18 +434,24 @@ async def test_embed_guest_limit_on_public_landing_session(
 ):
     embed_id = system_landing_embed_guest_capped
     ctx_id = f"ctx-{unique_id}"
-    key = f"{EMBED_GUEST_USER_TURNS_REDIS_PREFIX}:{embed_id}:{ctx_id}"
+    key = ""
     try:
         sess = await frontend_client.post(
             "/frontend/api/public/landing-agents/session",
+            headers={"origin": "http://testserver", "referer": "http://testserver/"},
             json={"embed_id": embed_id, "expires_in_seconds": 300},
         )
         assert sess.status_code == 200
         token = sess.json()["token"]
+        token_data = get_token_service().validate_token(token)
+        assert token_data is not None
+        session_id = token_data.metadata[EMBED_SESSION_ID_METADATA_KEY]
+        key_part = hashlib.sha256(f"sid:{session_id}".encode("utf-8")).hexdigest()[:32]
+        key = f"{EMBED_GUEST_USER_TURNS_REDIS_PREFIX}:{embed_id}:{key_part}"
         for i in range(5):
             r = await flows_client.post(
                 f"/flows/api/v1/embed/{embed_id}",
-                headers={"Authorization": f"Bearer {token}"},
+                headers={"Authorization": f"Bearer {token}", "Origin": "http://testserver"},
                 json={
                     "jsonrpc": "2.0",
                     "id": f"rpc-{i}",
@@ -459,7 +472,7 @@ async def test_embed_guest_limit_on_public_landing_session(
             assert "result" in body
         r6 = await flows_client.post(
             f"/flows/api/v1/embed/{embed_id}",
-            headers={"Authorization": f"Bearer {token}"},
+            headers={"Authorization": f"Bearer {token}", "Origin": "http://testserver"},
             json={
                 "jsonrpc": "2.0",
                 "id": "rpc-6",
@@ -469,7 +482,7 @@ async def test_embed_guest_limit_on_public_landing_session(
                         "messageId": str(uuid.uuid4()),
                         "role": "user",
                         "parts": [{"kind": "text", "text": "over"}],
-                        "contextId": ctx_id,
+                        "contextId": f"{ctx_id}-new",
                     }
                 },
             },
@@ -480,4 +493,5 @@ async def test_embed_guest_limit_on_public_landing_session(
         assert err_body["error"]["code"] == -32000
         assert "лимит" in err_body["error"]["message"].lower()
     finally:
-        await container.redis_client.delete(key)
+        if key:
+            await container.redis_client.delete(key)

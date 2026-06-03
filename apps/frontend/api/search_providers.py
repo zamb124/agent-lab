@@ -15,7 +15,7 @@ from apps.search.config import (
     SearchTinyFishConfig,
     get_search_settings,
 )
-from core.company_ai import encrypt_secret, mask_encrypted_secret
+from core.ai.company_settings import encrypt_secret, mask_encrypted_secret
 from core.company_search import (
     COMPANY_SEARCH_METADATA_KEY,
     CompanyLinkupSearchProvider,

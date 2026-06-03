@@ -15,9 +15,8 @@ from apps.flows.src.models.registry_contracts import (
     RegistrySchemaSubflow,
 )
 from apps.flows.src.services.flows_loader import get_all_flows
-from core.ai.providers import AICapability
-from core.clients.llm.model_routing import HUMANITEC_LLM_PROVIDER, HUMANITEC_LLMS_DISPLAY_LABEL
-from core.company_ai import CUSTOM_PROVIDER_REF_PREFIX, CompanyAIProviders
+from core.ai.company_settings import CUSTOM_PROVIDER_REF_PREFIX, CompanyAIProviders
+from core.ai.providers import HUMANITEC_LLM_PROVIDER, HUMANITEC_LLMS_DISPLAY_LABEL, AICapability
 from core.context import get_context
 from core.frontend.viewport import PLATFORM_MOBILE_VIEWPORT_CONTENT
 from core.logging import get_logger
@@ -45,10 +44,28 @@ def _company_ai_from_context() -> CompanyAIProviders:
     return CompanyAIProviders.from_metadata(context.active_company.metadata)
 
 
-def _custom_provider_options(aip: CompanyAIProviders) -> list[RegistryProviderOption]:
+def _capability_from_query(raw: str | None) -> AICapability:
+    if raw is None or not raw.strip():
+        return AICapability.LLM_CHAT
+    try:
+        capability = AICapability(raw.strip())
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=f"Неизвестная AI capability: {raw!r}") from exc
+    if capability.value not in _LLM_CAPABILITY_VALUES:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Capability {capability.value!r} не поддерживается registry LLM catalog",
+        )
+    return capability
+
+
+def _custom_provider_options(
+    aip: CompanyAIProviders,
+    capability: AICapability,
+) -> list[RegistryProviderOption]:
     items: list[RegistryProviderOption] = []
     for provider in aip.custom_providers:
-        if not any(cap in _LLM_CAPABILITY_VALUES for cap in provider.capabilities):
+        if capability.value not in provider.capabilities:
             continue
         items.append(
             RegistryProviderOption(
@@ -77,7 +94,11 @@ def _platform_provider_options(providers: list[str]) -> list[str | RegistryProvi
     return out
 
 
-def _custom_provider_models(aip: CompanyAIProviders, provider_ref: str) -> list[str]:
+def _custom_provider_models(
+    aip: CompanyAIProviders,
+    provider_ref: str,
+    capability: AICapability,
+) -> list[str]:
     if not provider_ref.startswith(CUSTOM_PROVIDER_REF_PREFIX):
         return []
     custom_id = provider_ref[len(CUSTOM_PROVIDER_REF_PREFIX) :].strip()
@@ -85,14 +106,8 @@ def _custom_provider_models(aip: CompanyAIProviders, provider_ref: str) -> list[
         provider = aip.find_custom(custom_id)
     except KeyError:
         return []
-    out: list[str] = []
-    seen: set[str] = set()
-    for cap in _LLM_CAPABILITY_VALUES:
-        model = provider.model_by_capability.get(cap)
-        if model and model not in seen:
-            out.append(model)
-            seen.add(model)
-    return out
+    model = provider.model_by_capability.get(capability.value)
+    return [model] if model else []
 
 
 def get_base_url(request: Request) -> str:
@@ -216,33 +231,47 @@ async def get_tools(container: ContainerDep) -> list[JsonObject]:
 
 
 @router.get("/providers/values")
-async def get_providers_values(container: ContainerDep) -> list[str | RegistryProviderOption]:
+async def get_providers_values(
+    container: ContainerDep,
+    capability: str | None = None,
+) -> list[str | RegistryProviderOption]:
     """
-    Список настроенных LLM-провайдеров платформы и custom-провайдеров активной компании.
+    Capability-specific список настроенных LLM-провайдеров платформы и custom-провайдеров активной компании.
     """
-    platform_items = _platform_provider_options(container.llm_models_service.get_configured_providers())
-    return [*platform_items, *_custom_provider_options(_company_ai_from_context())]
+    cap = _capability_from_query(capability)
+    platform_items = _platform_provider_options(
+        container.llm_models_service.get_configured_providers_by_capability(cap)
+    )
+    return [*platform_items, *_custom_provider_options(_company_ai_from_context(), cap)]
 
 
 @router.get("/models/values")
 async def get_models_values(
     container: ContainerDep,
     provider: str | None = None,
+    capability: str | None = None,
 ) -> list[str | JsonObject]:
     """
-    Список доступных моделей.
+    Capability-specific список доступных моделей.
 
     Аргументы:
         provider: Провайдер из platform LLM provider registry.
                   Если не указан - используется текущий из конфига.
+        capability: AI capability. Если не указана - llm_chat.
     """
 
+    cap = _capability_from_query(capability)
     if provider and provider.startswith(CUSTOM_PROVIDER_REF_PREFIX):
-        models = _custom_provider_models(_company_ai_from_context(), provider)
+        models = _custom_provider_models(_company_ai_from_context(), provider, cap)
     elif provider:
-        models = await container.llm_models_service.get_models_by_provider(provider)
+        models = await container.llm_models_service.get_model_ids_by_provider_capability(
+            provider,
+            cap,
+        )
     else:
-        models = await container.llm_models_service.get_models()
+        models = await container.llm_models_service.get_default_model_ids_by_capability(
+            cap,
+        )
 
     result: list[str | JsonObject] = []
     result.extend(models)

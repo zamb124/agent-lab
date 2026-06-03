@@ -274,17 +274,6 @@
     "default_strategy": "platform_free_pool",
     "platform_free_pool": {
       "enabled": true,
-      "providers": [
-        "openrouter",
-        "bothub",
-        "groq",
-        "google",
-        "github",
-        "huggingface",
-        "deepinfra",
-        "openai",
-        "yandex"
-      ],
       "cache_ttl_seconds": 3540,
       "refresh_interval_seconds": 3300,
       "first_token_timeout_seconds": 20,
@@ -304,198 +293,229 @@
         {
           "provider": "openrouter",
           "model_id": "qwen/qwen3-coder:free",
+          "capability": "llm_chat",
           "score": 96,
           "note": "2026 seed: strongest coding/free candidate in current pool"
         },
         {
           "provider": "openrouter",
           "model_id": "nvidia/nemotron-3-super-120b-a12b:free",
+          "capability": "llm_chat",
           "score": 94,
           "note": "2026 seed: large MoE reasoning/instruct candidate"
         },
         {
           "provider": "openrouter",
           "model_id": "openai/gpt-oss-120b:free",
+          "capability": "llm_chat",
           "score": 93,
           "note": "2026 seed: large OpenAI OSS candidate"
         },
         {
           "provider": "bothub",
           "model_id": "gpt-oss-120b:free",
+          "capability": "llm_chat",
           "score": 92.5,
           "note": "2026 seed: BotHub mirror of large OpenAI OSS candidate"
         },
         {
           "provider": "openrouter",
           "model_id": "nousresearch/hermes-3-llama-3.1-405b:free",
+          "capability": "llm_chat",
           "score": 91,
           "note": "2026 seed: very large open-weight instruct model, older family"
         },
         {
           "provider": "openrouter",
           "model_id": "qwen/qwen3-next-80b-a3b-instruct:free",
+          "capability": "llm_chat",
           "score": 90,
           "note": "2026 seed: strong Qwen instruct candidate"
         },
         {
           "provider": "bothub",
           "model_id": "qwen3-next-80b-a3b-instruct:free",
+          "capability": "llm_chat",
           "score": 89.5,
           "note": "2026 seed: BotHub mirror of Qwen3 Next instruct candidate"
         },
         {
           "provider": "openrouter",
           "model_id": "deepseek/deepseek-v4-flash:free",
+          "capability": "llm_chat",
           "score": 88,
           "note": "2026 seed: strong DeepSeek flash/reasoning family candidate"
         },
         {
           "provider": "deepinfra",
           "model_id": "deepseek-ai/DeepSeek-V3",
+          "capability": "llm_chat",
           "score": 87,
           "note": "2026 seed: strong DeepInfra smoke model; not a free-pool candidate until provider free policy is enabled"
         },
         {
           "provider": "openrouter",
           "model_id": "meta-llama/llama-3.3-70b-instruct:free",
+          "capability": "llm_chat",
           "score": 86,
           "note": "2026 seed: reliable 70B general instruct baseline"
         },
         {
           "provider": "openrouter",
           "model_id": "google/gemma-4-31b-it:free",
+          "capability": "llm_chat",
           "score": 84,
           "note": "2026 seed: strong mid-size Gemma instruct candidate"
         },
         {
           "provider": "google",
           "model_id": "gemini-2.5-flash-lite",
+          "capability": "llm_chat",
           "score": 83,
           "note": "2026 seed: account free-tier fast Gemini candidate"
         },
         {
           "provider": "github",
           "model_id": "openai/gpt-4o-mini",
+          "capability": "llm_chat",
           "score": 82,
           "note": "2026 seed: compact proprietary baseline via GitHub Models"
         },
         {
           "provider": "openrouter",
           "model_id": "openrouter/owl-alpha",
+          "capability": "llm_chat",
           "score": 78,
           "note": "2026 seed: OpenRouter free experimental candidate"
         },
         {
           "provider": "openrouter",
           "model_id": "nvidia/nemotron-3-nano-omni-30b-a3b-reasoning:free",
+          "capability": "llm_chat",
           "score": 77,
           "note": "2026 seed: 30B-class multimodal/reasoning candidate"
         },
         {
           "provider": "openrouter",
           "model_id": "nvidia/nemotron-3-nano-30b-a3b:free",
+          "capability": "llm_chat",
           "score": 76,
           "note": "2026 seed: 30B-class instruct candidate"
         },
         {
           "provider": "openrouter",
           "model_id": "google/gemma-4-26b-a4b-it:free",
+          "capability": "llm_chat",
           "score": 74,
           "note": "2026 seed: mid-size Gemma instruct candidate"
         },
         {
           "provider": "openrouter",
           "model_id": "openrouter/free",
+          "capability": "llm_chat",
           "score": 5,
           "note": "2026 seed: provider router fallback, intentionally below concrete models"
         },
         {
           "provider": "bothub",
           "model_id": "free",
+          "capability": "llm_chat",
           "score": 5,
           "note": "2026 seed: BotHub generic free fallback"
         },
         {
           "provider": "openrouter",
           "model_id": "openai/gpt-oss-20b:free",
+          "capability": "llm_chat",
           "score": 69,
           "note": "2026 seed: smaller OpenAI OSS candidate"
         },
         {
           "provider": "bothub",
           "model_id": "gpt-oss-20b:free",
+          "capability": "llm_chat",
           "score": 68.5,
           "note": "2026 seed: BotHub mirror of smaller OpenAI OSS candidate"
         },
         {
           "provider": "groq",
           "model_id": "llama-3.1-8b-instant",
+          "capability": "llm_chat",
           "score": 65,
           "note": "2026 seed: small model, high latency advantage through Groq free tier"
         },
         {
           "provider": "openrouter",
           "model_id": "cognitivecomputations/dolphin-mistral-24b-venice-edition:free",
+          "capability": "llm_chat",
           "score": 64,
           "note": "2026 seed: 24B-class general candidate"
         },
         {
           "provider": "openrouter",
           "model_id": "nvidia/nemotron-nano-12b-v2-vl:free",
+          "capability": "llm_chat",
           "score": 60,
           "note": "2026 seed: 12B-class vision-language candidate"
         },
         {
           "provider": "bothub",
           "model_id": "qwen3-coder:free",
+          "capability": "llm_chat",
           "score": 95,
           "note": "2026 seed: BotHub free coder alias with incomplete catalog size metadata"
         },
         {
           "provider": "openrouter",
           "model_id": "nvidia/nemotron-nano-9b-v2:free",
+          "capability": "llm_chat",
           "score": 55,
           "note": "2026 seed: 9B-class instruct candidate"
         },
         {
           "provider": "openrouter",
           "model_id": "meta-llama/llama-3.2-3b-instruct:free",
+          "capability": "llm_chat",
           "score": 36,
           "note": "2026 seed: small 3B fallback candidate"
         },
         {
           "provider": "openrouter",
           "model_id": "liquid/lfm-2.5-1.2b-thinking:free",
+          "capability": "llm_chat",
           "score": 25,
           "note": "2026 seed: 1.2B reasoning fallback candidate"
         },
         {
           "provider": "openrouter",
           "model_id": "liquid/lfm-2.5-1.2b-instruct:free",
+          "capability": "llm_chat",
           "score": 24,
           "note": "2026 seed: 1.2B instruct fallback candidate"
         },
         {
           "provider": "huggingface",
           "model_id": "meta-llama/Llama-3.2-1B-Instruct:fastest",
+          "capability": "llm_chat",
           "score": 20,
           "note": "2026 seed: tiny account free-tier fallback candidate"
         },
         {
           "provider": "bothub",
           "model_id": "recraft-v3",
+          "capability": "llm_chat",
           "score": 15,
           "note": "2026 seed: image-oriented model, weak text-chat candidate"
         },
         {
           "provider": "openrouter",
           "model_id": "google/lyria-3-pro-preview",
+          "capability": "llm_chat",
           "score": 10,
           "note": "2026 seed: music/audio-oriented model, weak text-chat candidate"
         }
       ]
-    },
-    "timeout": 300
+    },    "timeout": 300
   },
   "text_transforms": {
     "markdown_max_chunk_chars": 6000,
@@ -665,17 +685,6 @@
         "default_strategy": "platform_free_pool",
         "platform_free_pool": {
           "enabled": true,
-          "providers": [
-            "openrouter",
-            "bothub",
-            "groq",
-            "google",
-            "github",
-            "huggingface",
-            "deepinfra",
-            "openai",
-            "yandex"
-          ],
           "cache_ttl_seconds": 3540,
           "refresh_interval_seconds": 3300,
           "first_token_timeout_seconds": 20,

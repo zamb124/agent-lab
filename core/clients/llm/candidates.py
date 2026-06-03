@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from core.clients.llm.config import LLMCallConfig
+from core.ai.llm_config import LLMCallConfig
 
 
 def candidate_key(candidate: LLMCallConfig) -> str:

@@ -1218,6 +1218,55 @@ beforeEach(() => {
 
 ХОРОШО: `nextModalLayerZIndex()` ([`core/frontend/static/lib/utils/modal-z-stack.js`](core/frontend/static/lib/utils/modal-z-stack.js)) или CSS-переменная `--platform-modal-layer-z`.
 
+### 16.4 Копия Figma CSS-export в компонент
+
+ПЛОХО:
+
+```css
+.daily-summary {
+    background: rgba(153, 166, 249, 0.2);
+    border-radius: 16px;
+    padding: 20px;
+}
+.tag-orange { background: #FF885C; }
+.muted { color: rgba(34, 34, 34, 0.3); }
+```
+
+Почему костыль: Figma задаёт визуальный стандарт, но runtime живёт в темах. Копия из `apps/crm/design/design.css` ломает dark/light, размножает цвета и делает редизайн ручным поиском hex.
+
+ХОРОШО:
+
+```css
+.daily-summary {
+    background: var(--crm-summary-bg);
+    border: 1px solid var(--crm-summary-stroke);
+    border-radius: var(--radius-lg);
+    padding: var(--space-5);
+}
+.tag-orange { background: var(--crm-note-related-orange-bg); }
+.muted { color: var(--text-tertiary); }
+```
+
+Если нужного meaning нет — сначала добавить semantic token в [`tokens.css`](core/frontend/static/assets/css/tokens.css), например `--crm-note-related-cyan-bg` или `--flows-node-warning-bg`, потом использовать его в компоненте.
+
+### 16.5 Маркетинговая композиция вместо рабочего экрана
+
+ПЛОХО: новая страница сервиса начинается с hero, крупного слогана, декоративных карточек и объяснения фичи, а реальный список/редактор/панель действий спрятаны ниже.
+
+Почему костыль: платформа — рабочий SaaS-инструмент. Базовые макеты Networkle строятся как workspace: header/sidebar, фильтры, списки, карточки/редактор, action panel. Hero-композиция снижает плотность, ломает повторяемость и не совпадает с Figma-ритмом.
+
+ХОРОШО: первый viewport сразу показывает основной workflow через core layout:
+
+```html
+<platform-service-sidebar></platform-service-sidebar>
+<platform-island>
+    <page-header ...></page-header>
+    <!-- filters / list / editor / side panel -->
+</platform-island>
+```
+
+На desktop sanity (`1440x1024`) и mobile sanity (`390x844`/`430x932`) не должно быть overlap, horizontal scroll и обрезанного текста.
+
 ---
 
 ## 17. Неиспользуемые core-компоненты (создание дублей)
@@ -1388,7 +1437,19 @@ items = [];
 
 ХОРОШО: `fallback_models: LLMCallConfig[]`, тот же редактор полей, раскрывающиеся элементы, порядок массива меняется drag-and-drop. Новое поле LLM-конфига появляется одновременно у основной модели и fallback.
 
-Канон: [`flows.mdc`](.cursor/rules/flows.mdc) → «LLM fallback-модели».
+Канон: [`ai_models.mdc`](.cursor/rules/ai_models.mdc) → «Embedding / Rerank / Fallback».
+
+---
+
+## 24. Локальный список AI providers/models в UI
+
+ПЛОХО: массив `['openrouter', 'bothub', ...]` в JS, ручной filter моделей по capability, отдельный список embedding/rerank providers, `provider=none`, raw JSON textarea для fallback.
+
+Почему костыль: UI начинает быть вторым источником правды и расходится с backend resolver/catalog. Добавление provider-а перестаёт автоматически появляться во всех настройках.
+
+ХОРОШО: UI получает typed catalog от backend: capabilities → providers → compatible models → disabled reasons. Fallback редактируется typed списком provider/model, без JSON.
+
+Канон: [`ai_models.mdc`](.cursor/rules/ai_models.mdc) → «UI».
 
 ---
 
