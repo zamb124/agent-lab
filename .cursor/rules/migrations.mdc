@@ -27,6 +27,7 @@ alwaysApply: false
 | rag | platform_rag | `migrations/rag/` | `DATABASE__RAG_URL` |
 | office | platform_office | `migrations/office/` | `DATABASE__OFFICE_URL` |
 | tracing | platform_tracing | `migrations/tracing/` | `DATABASE__TRACING_URL` |
+| search | platform_search | `migrations/search/` | `DATABASE__SEARCH_URL` |
 
 **Таблицы по БД** (важно для baseline и JOIN):
 
@@ -40,9 +41,9 @@ alwaysApply: false
 
 ## Локальный Postgres
 
-`docker-compose-dev.yaml` монтирует `migrations/postgres/init.sql`, `POSTGRES_DB=platform_shared`, остальные БД создаёт init-скрипт. Прод: тот же `init.sql` в ConfigMap `postgres-init-scripts` Helm-чарта (`deploy/helm/agent-lab/templates/10-postgres/configmap-init.yaml`), монтируется в `/docker-entrypoint-initdb.d/`. Физические БД Alembic **не** создаёт; на живом кластере при необходимости — `core.db.postgres_service_databases.ensure_postgres_service_databases_async` (не из `scripts.db_migrate`).
+`docker-compose-dev.yaml` монтирует `migrations/postgres/init.sql`, `POSTGRES_DB=platform_shared`, остальные БД создаёт init-скрипт. Прод: тот же `init.sql` в ConfigMap `postgres-init-scripts` Helm-чарта (`deploy/helm/agent-lab/templates/10-postgres/configmap-init.yaml`), монтируется в `/docker-entrypoint-initdb.d/`. Физические БД Alembic **не** создаёт; перед `upgrade` `scripts.db_migrate` идемпотентно вызывает `core.db.postgres_service_databases.ensure_postgres_service_databases_async` (CREATE DATABASE + GRANT + vector на БД из `postgres.vector_extensions`).
 
-Если в `init.sql` добавили новую БД, а том Postgres dev уже существует, entrypoint-initdb **не выполнится** снова — будет `database "…" does not exist`. Локально: `make dev-bootstrap-postgres` (Alembic не создаёт БД, поэтому при отсутствии — вручную `psql -U platform_user -d postgres -c 'CREATE DATABASE platform_<svc>'` или `make dev-clean && make dev-up`). На проде Helm пересоздаёт Postgres только при чистом PVC.
+Если в `init.sql` добавили новую БД, а том Postgres dev уже существует, entrypoint-initdb **не выполнится** снова — достаточно `make migrate` (создаст БД и применит Alembic). Альтернатива: `make dev-clean && make dev-up` (полный сброс тома). На проде Helm пересоздаёт Postgres только при чистом PVC.
 
 ## Переименования полей и сброс БД
 

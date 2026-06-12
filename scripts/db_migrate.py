@@ -28,6 +28,7 @@ from core.db.migrations import (
     run_migrations_async,
     run_revision,
 )
+from core.db.postgres_service_databases import ensure_postgres_service_databases_async
 
 _SERVICE_CHOICES = tuple(sorted(get_migration_service_names()))
 
@@ -99,7 +100,11 @@ def main(argv: Sequence[str] | None = None) -> None:
     args = _build_parser().parse_args(raw)
 
     if args.command == "upgrade":
-        asyncio.run(run_migrations_async(service=args.service))
+        async def _upgrade() -> None:
+            await ensure_postgres_service_databases_async()
+            await run_migrations_async(service=args.service)
+
+        asyncio.run(_upgrade())
         return
 
     if args.command == "revision":

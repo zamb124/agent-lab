@@ -1,9 +1,8 @@
 """
 Идемпотентное создание сервисных БД и расширений pgvector по migrations/services.json.
 
-Не вызывается из scripts.db_migrate: миграции Alembic идут сразу к целевым URL. Для ручного/скриптового
-вызова (идемпотентное создание сервисных БД и расширения vector) —
-asyncio.run(ensure_postgres_service_databases_async()).
+Перед `scripts.db_migrate upgrade` вызывается автоматически: на старом томе Postgres
+init.sql не перезапускается, поэтому новые БД (например platform_search) создаются здесь.
 """
 
 from __future__ import annotations
@@ -102,6 +101,7 @@ async def ensure_postgres_service_databases_async(
         poolclass=pool.NullPool,
         isolation_level="AUTOCOMMIT",
     )
+    created_databases: list[str] = []
     try:
         async with admin_engine.connect() as conn:
             for db_name in databases:
@@ -111,6 +111,7 @@ async def ensure_postgres_service_databases_async(
                 )
                 if chk.first() is None:
                     _ = await conn.execute(text(f"CREATE DATABASE {db_name}"))
+                    created_databases.append(db_name)
                     logger.info("Создана отсутствующая БД PostgreSQL: %s", db_name)
 
             for db_name in databases:
@@ -118,7 +119,7 @@ async def ensure_postgres_service_databases_async(
                     text(f"GRANT ALL PRIVILEGES ON DATABASE {db_name} TO {role}")
                 )
 
-            if shared_db_name in vector_dbs:
+            if shared_db_name in vector_dbs and shared_db_name in created_databases:
                 _ = await conn.execute(text("CREATE EXTENSION IF NOT EXISTS vector"))
     except InvalidPasswordError as e:
         raise RuntimeError(f"{_PG_AUTH_HINT}\n{_pg_target_debug(shared_str)}") from e
@@ -131,6 +132,8 @@ async def ensure_postgres_service_databases_async(
 
     for ext_db in vector_dbs:
         if ext_db == shared_db_name:
+            continue
+        if ext_db not in created_databases:
             continue
         db_url = str(make_url(shared_str).set(database=ext_db))
         v_engine = create_async_engine(db_url, poolclass=pool.NullPool)

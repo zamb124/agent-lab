@@ -61,10 +61,10 @@ dev-minio-restart:
 	docker-compose -f docker-compose-dev.yaml restart minio
 	@echo "MinIO dev перезапущен. Проверка UTC: date -u и docker exec agentlab_minio_dev date -u"
 
-# Недостающие БД на старом томе Postgres: применить миграции по сервисам.
+# Недостающие БД на старом томе Postgres + миграции Alembic.
 dev-bootstrap-postgres:
 	uv run python -m scripts.db_migrate upgrade
-	@echo "Postgres dev: миграции применены через scripts.db_migrate"
+	@echo "Postgres dev: ensure databases + миграции через scripts.db_migrate"
 
 stress:
 	@SERVICE="$(SERVICE)" PROFILE="$(PROFILE)" URL="$(URL)" TOKEN="$(TOKEN)" RPS="$(or $(RPS),$(STRESS_GOAL_RPS))" RATE="$(RATE)" DURATION="$(DURATION)" PRE_ALLOCATED_VUS="$(PRE_ALLOCATED_VUS)" MAX_VUS="$(MAX_VUS)" STRESS_USE_MOCK="$(STRESS_USE_MOCK)" DRY_RUN="$(DRY_RUN)" ./stress/run.sh
