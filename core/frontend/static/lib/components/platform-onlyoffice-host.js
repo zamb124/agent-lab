@@ -21,7 +21,7 @@
  */
 
 import { html, css, nothing } from '../../assets/js/lit/lit.min.js';
-import { guard } from '../../assets/js/lit/directives/guard.js';
+import { guard } from '../../assets/js/lit/directives/guard.min.js';
 import { PlatformElement } from '../platform-element/index.js';
 
 const BOOT_WATCH_TIMEOUT_MS = 120_000;

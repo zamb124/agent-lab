@@ -16,7 +16,6 @@ from apps.search.providers.linkup import LinkupSearchProvider, parse_linkup_resu
 from apps.search.providers.serper import SerperSearchProvider, parse_serper_results
 from apps.search.providers.tavily import TavilySearchProvider, parse_tavily_results
 from apps.search.providers.tinyfish import TinyFishSearchProvider, parse_tinyfish_results
-from apps.search.services import MetaSearchService
 from core.search import MetaSearchRequest
 
 
@@ -560,9 +559,10 @@ async def test_tavily_provider_reports_disabled_missing_key_and_http_errors(
 async def test_meta_search_ranks_dedupes_and_reports_unsupported_providers(
     serper_stub_url,
     provider_state_store,
+    meta_search_service_builder,
 ) -> None:
     base_url, _ = serper_stub_url
-    service = MetaSearchService(
+    service = meta_search_service_builder(
         SearchIntegrationConfig(
             serper=SearchSerperConfig(api_key="test-key", base_url=base_url, timeout_seconds=3)
         ),
@@ -587,7 +587,11 @@ async def test_meta_search_ranks_dedupes_and_reports_unsupported_providers(
 
 
 @pytest.mark.asyncio
-async def test_meta_search_keeps_unparseable_urls(serper_stub_url, provider_state_store) -> None:
+async def test_meta_search_keeps_unparseable_urls(
+    serper_stub_url,
+    provider_state_store,
+    meta_search_service_builder,
+) -> None:
     base_url, state = serper_stub_url
     state.payload = {
         "organic": [
@@ -598,7 +602,7 @@ async def test_meta_search_keeps_unparseable_urls(serper_stub_url, provider_stat
             }
         ]
     }
-    service = MetaSearchService(
+    service = meta_search_service_builder(
         SearchIntegrationConfig(
             serper=SearchSerperConfig(api_key="test-key", base_url=base_url, timeout_seconds=3)
         ),
@@ -614,10 +618,11 @@ async def test_meta_search_keeps_unparseable_urls(serper_stub_url, provider_stat
 async def test_meta_search_first_available_uses_redis_state_and_next_provider(
     provider_stub_url,
     provider_state_store,
+    meta_search_service_builder,
 ) -> None:
     base_url, _ = provider_stub_url
     await provider_state_store.mark_unavailable("tinyfish", "rate limited")
-    service = MetaSearchService(
+    service = meta_search_service_builder(
         SearchIntegrationConfig(
             provider_order=["tinyfish", "linkup", "serper"],
             tinyfish=SearchTinyFishConfig(api_key="tiny-key", base_url=f"{base_url}/tinyfish"),
@@ -638,10 +643,11 @@ async def test_meta_search_first_available_uses_redis_state_and_next_provider(
 async def test_meta_search_merge_skips_redis_unavailable_provider(
     provider_stub_url,
     provider_state_store,
+    meta_search_service_builder,
 ) -> None:
     base_url, _ = provider_stub_url
     await provider_state_store.mark_unavailable("tinyfish", "rate limited")
-    service = MetaSearchService(
+    service = meta_search_service_builder(
         SearchIntegrationConfig(
             provider_order=["tinyfish", "linkup"],
             tinyfish=SearchTinyFishConfig(api_key="tiny-key", base_url=f"{base_url}/tinyfish"),
@@ -667,9 +673,10 @@ async def test_meta_search_merge_skips_redis_unavailable_provider(
 async def test_meta_search_auto_appends_explicit_provider_after_default_order(
     provider_stub_url,
     provider_state_store,
+    meta_search_service_builder,
 ) -> None:
     base_url, _ = provider_stub_url
-    service = MetaSearchService(
+    service = meta_search_service_builder(
         SearchIntegrationConfig(
             provider_order=["linkup"],
             linkup=SearchLinkupConfig(api_key="linkup-key", base_url=base_url),
@@ -686,9 +693,13 @@ async def test_meta_search_auto_appends_explicit_provider_after_default_order(
 
 
 @pytest.mark.asyncio
-async def test_meta_search_resolves_tavily_aliases(provider_stub_url, provider_state_store) -> None:
+async def test_meta_search_resolves_tavily_aliases(
+    provider_stub_url,
+    provider_state_store,
+    meta_search_service_builder,
+) -> None:
     base_url, _ = provider_stub_url
-    service = MetaSearchService(
+    service = meta_search_service_builder(
         SearchIntegrationConfig(
             tavily=SearchTavilyConfig(api_key="tavily-key", base_url=base_url),
         ),
@@ -705,10 +716,11 @@ async def test_meta_search_resolves_tavily_aliases(provider_stub_url, provider_s
 async def test_meta_search_marks_failed_provider_unavailable_and_continues(
     provider_stub_url,
     provider_state_store,
+    meta_search_service_builder,
 ) -> None:
     base_url, state = provider_stub_url
     state.fail_tinyfish = True
-    service = MetaSearchService(
+    service = meta_search_service_builder(
         SearchIntegrationConfig(
             provider_order=["tinyfish", "linkup"],
             tinyfish=SearchTinyFishConfig(api_key="tiny-key", base_url=f"{base_url}/tinyfish"),
@@ -733,10 +745,11 @@ async def test_meta_search_merge_combines_available_providers(
     provider_stub_url,
     serper_stub_url,
     provider_state_store,
+    meta_search_service_builder,
 ) -> None:
     provider_base_url, _ = provider_stub_url
     serper_base_url, _ = serper_stub_url
-    service = MetaSearchService(
+    service = meta_search_service_builder(
         SearchIntegrationConfig(
             provider_order=["tinyfish", "serper"],
             tinyfish=SearchTinyFishConfig(
@@ -769,10 +782,11 @@ async def test_meta_search_merge_combines_available_providers(
 async def test_meta_search_merge_marks_failed_provider_unavailable(
     provider_stub_url,
     provider_state_store,
+    meta_search_service_builder,
 ) -> None:
     base_url, state = provider_stub_url
     state.fail_tinyfish = True
-    service = MetaSearchService(
+    service = meta_search_service_builder(
         SearchIntegrationConfig(
             provider_order=["tinyfish", "linkup"],
             tinyfish=SearchTinyFishConfig(api_key="tiny-key", base_url=f"{base_url}/tinyfish"),

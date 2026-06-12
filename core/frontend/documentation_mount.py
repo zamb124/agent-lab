@@ -29,8 +29,10 @@ def mount_documentation_static(
     dist = repo_root / DOCUMENTATION_DIST
     if not dist.is_dir():
         logger.warning(
-            "Каталог %s/ не найден (make doc: zensical.ru.toml + zensical.en.toml), "
-            "URL /documentation будет доступен после сборки документации",
+            (
+                "Каталог %s/ не найден (make doc: zensical.ru.toml + zensical.en.toml), "
+                "URL /documentation будет доступен после сборки документации"
+            ),
             DOCUMENTATION_DIST,
         )
 

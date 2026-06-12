@@ -76,6 +76,8 @@ def database_url_for_migration_key(
             return database.office_url
         case "tracing_url":
             return database.tracing_url
+        case "search_url":
+            return database.search_url
 
 
 def migration_entry_is_active(entry: MigrationServiceEntry) -> bool:

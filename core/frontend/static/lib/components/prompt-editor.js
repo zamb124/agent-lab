@@ -6,6 +6,7 @@
 import { html, css } from 'lit';
 import { unsafeHTML } from 'lit/directives/unsafe-html.js';
 import { PlatformElement } from '../platform-element/index.js';
+import './platform-help-hint.js';
 
 export class PromptEditor extends PlatformElement {
     static styles = [
@@ -41,6 +42,13 @@ export class PromptEditor extends PlatformElement {
                 font-size: var(--text-sm);
                 font-weight: var(--font-medium);
                 color: var(--text-primary);
+            }
+
+            .editor-label-wrap {
+                display: inline-flex;
+                align-items: center;
+                gap: var(--space-1);
+                min-width: 0;
             }
             
             .editor-actions {
@@ -382,6 +390,7 @@ export class PromptEditor extends PlatformElement {
         value: { type: String },
         variables: { type: Object },
         label: { type: String },
+        hint: { type: String },
         placeholder: { type: String },
         readonly: { type: Boolean },
         showPreview: { type: Boolean, attribute: 'show-preview' },
@@ -398,6 +407,7 @@ export class PromptEditor extends PlatformElement {
         this.value = '';
         this.variables = {};
         this.label = 'Промпт';
+        this.hint = '';
         this.placeholder = 'Введите промпт...';
         this.readonly = false;
         this.showPreview = true;
@@ -1098,7 +1108,12 @@ export class PromptEditor extends PlatformElement {
         return html`
             <div class="editor-wrapper">
                 <div class="editor-header">
-                    <span class="editor-label">${this.label}</span>
+                    <span class="editor-label-wrap">
+                        <span class="editor-label">${this.label}</span>
+                        ${typeof this.hint === 'string' && this.hint !== ''
+                            ? html`<platform-help-hint .text=${this.hint}></platform-help-hint>`
+                            : ''}
+                    </span>
                     <div class="editor-actions">
                         ${this.showPreview ? html`
                             <button 

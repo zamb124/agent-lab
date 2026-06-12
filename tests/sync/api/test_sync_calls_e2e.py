@@ -18,8 +18,6 @@ publisher, нам важна только серверная часть (зво�
 
 from __future__ import annotations
 
-import asyncio
-
 import pytest
 
 from core.utils.tokens import get_token_service
@@ -34,6 +32,7 @@ from tests.sync.api._realtime_helpers import (
     connect_ws,
     http_owner,
     wait_frame,
+    wait_sync_ws_online,
 )
 
 
@@ -94,7 +93,7 @@ async def test_call_invite_publishes_incoming_to_other_member(
     )
 
     async with connect_ws(sync_auth_token_user2) as ws_user2:
-        await asyncio.sleep(0.3)
+        await wait_sync_ws_online(user2_id)
         call = await _invite_call(sync_auth_token, channel_id)
         assert call["status"] == "ringing"
         assert isinstance(call["livekit_room_name"], str) and call["livekit_room_name"] != ""
@@ -131,7 +130,7 @@ async def test_call_invite_writes_call_boundary_started_to_feed(
     )
 
     async with connect_ws(sync_auth_token_user2) as ws_user2:
-        await asyncio.sleep(0.3)
+        await wait_sync_ws_online(user2_id)
         call = await _invite_call(sync_auth_token, channel_id)
 
         frame = await wait_frame(
@@ -178,8 +177,9 @@ async def test_call_accept_changes_status_active_and_publishes_accepted(
     )
     call = await _invite_call(sync_auth_token, channel_id)
 
+    owner_id = _user_id_from_token(sync_auth_token)
     async with connect_ws(sync_auth_token) as ws_owner:
-        await asyncio.sleep(0.3)
+        await wait_sync_ws_online(owner_id)
         async with http_owner(sync_auth_token_user2) as http2:
             r = await http2.post(f"/sync/api/v1/calls/{call['call_id']}/accept")
             assert r.status_code == 200, r.text
@@ -216,8 +216,9 @@ async def test_call_decline_publishes_declined_to_initiator(
     )
     call = await _invite_call(sync_auth_token, channel_id)
 
+    owner_id = _user_id_from_token(sync_auth_token)
     async with connect_ws(sync_auth_token) as ws_owner:
-        await asyncio.sleep(0.3)
+        await wait_sync_ws_online(owner_id)
         async with http_owner(sync_auth_token_user2) as http2:
             r = await http2.post(f"/sync/api/v1/calls/{call['call_id']}/decline")
             assert r.status_code == 204, r.text
@@ -256,7 +257,7 @@ async def test_call_hangup_by_last_participant_writes_call_boundary_ended(
         assert r.status_code == 200
 
     async with connect_ws(sync_auth_token_user2) as ws_user2:
-        await asyncio.sleep(0.3)
+        await wait_sync_ws_online(user2_id)
         async with http_owner(sync_auth_token) as http:
             r = await http.post(f"/sync/api/v1/calls/{call['call_id']}/hangup")
             assert r.status_code == 200, r.text
@@ -316,7 +317,8 @@ async def test_call_signal_forwards_to_target_user_only(
 
     async with connect_ws(sync_auth_token_user2) as ws_user2, \
             connect_ws(sync_auth_token_user3) as ws_user3:
-        await asyncio.sleep(0.3)
+        await wait_sync_ws_online(user2_id)
+        await wait_sync_ws_online(user3_id)
         async with http_owner(sync_auth_token) as http:
             r = await http.post(
                 f"/sync/api/v1/calls/{call['call_id']}/signal",
@@ -372,7 +374,7 @@ async def test_call_admin_transfer_only_admin_can_change(
         assert r.status_code == 403
 
     async with connect_ws(sync_auth_token_user2) as ws_user2:
-        await asyncio.sleep(0.3)
+        await wait_sync_ws_online(user2_id)
         async with http_owner(sync_auth_token) as http:
             r = await http.post(
                 f"/sync/api/v1/calls/{call['call_id']}/admin/transfer",

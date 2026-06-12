@@ -10,6 +10,7 @@
 import { html, css, nothing } from 'lit';
 import { PlatformPage } from '@platform/lib/base/PlatformPage.js';
 import '@platform/lib/components/platform-icon.js';
+import '@platform/lib/components/platform-help-hint.js';
 import '@platform/lib/components/layout/page-header.js';
 import { dispatchEmbedChatWindowToggle } from '@platform/lib/embed-chat/embed-chat-window-toggle.js';
 import {
@@ -80,6 +81,9 @@ export class ChatPage extends PlatformPage {
                 display: flex;
                 align-items: center;
                 gap: var(--space-2);
+            }
+            .chat-actions-help {
+                flex-shrink: 0;
             }
             .flow-chat-overflow-anchor {
                 position: relative;
@@ -925,6 +929,14 @@ export class ChatPage extends PlatformPage {
                 active-company-id=${asString(this._activeCompanySel.value)}
                 @files-updated=${this._onFilesPanelUpdated}
             ></chat-files-panel>
+            <platform-help-hint
+                class="chat-actions-help"
+                .label=${this.t('platform_chat.actions_help_label')}
+                .summary=${this.t('platform_chat.actions_help_summary')}
+                .details=${this.t('platform_chat.actions_help_details')}
+                .docHref=${'/documentation/scenarios/flows/run-flow-chat/'}
+                .docLabel=${this.t('help_hints.open_scenario')}
+            ></platform-help-hint>
             <button
                 type="button"
                 class="action-btn"
@@ -1018,6 +1030,14 @@ export class ChatPage extends PlatformPage {
                     active-company-id=${asString(this._activeCompanySel.value)}
                     @files-updated=${this._onFilesPanelUpdated}
                 ></chat-files-panel>
+                <platform-help-hint
+                    class="chat-actions-help"
+                    .label=${this.t('platform_chat.actions_help_label')}
+                    .summary=${this.t('platform_chat.actions_help_summary')}
+                    .details=${this.t('platform_chat.actions_help_details')}
+                    .docHref=${'/documentation/scenarios/flows/run-flow-chat/'}
+                    .docLabel=${this.t('help_hints.open_scenario')}
+                ></platform-help-hint>
                 <button
                     type="button"
                     class="action-btn"

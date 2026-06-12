@@ -18,7 +18,12 @@ from starlette.middleware.base import BaseHTTPMiddleware, RequestResponseEndpoin
 from starlette.responses import Response
 from starlette.types import ASGIApp
 
-from core.app_state import PlatformAppState
+from core.app_state import (
+    PlatformAppState,
+    read_reissue_auth_token,
+    read_session_token_override,
+    require_request_trace_id,
+)
 from core.container import BaseContainer
 from core.context import clear_context, set_context
 from core.identity.runtime_users import ensure_persisted_runtime_user
@@ -80,16 +85,7 @@ class AuthMiddleware(BaseHTTPMiddleware):
         return self._app_state(request).container
 
     def _trace_id_from_state(self, request: Request) -> str:
-        trace_id = getattr(request.state, "trace_id", None)
-        if not isinstance(trace_id, str):
-            message = (
-                "AuthMiddleware: request.state.trace_id отсутствует. Проверьте, что "
-                + "AccessLogMiddleware подключён внешним слоем."
-            )
-            raise RuntimeError(message)
-        if not trace_id.strip():
-            raise RuntimeError("AuthMiddleware: request.state.trace_id пуст")
-        return trace_id
+        return require_request_trace_id(request)
 
     @override
     async def dispatch(self, request: Request, call_next: RequestResponseEndpoint) -> Response:
@@ -138,8 +134,8 @@ class AuthMiddleware(BaseHTTPMiddleware):
 
             # Сохраняем token_data для эндпоинтов типа /auth/me
             token_data, _ = await self._extract_token(request, container)
-            session_token_data = getattr(request.state, "session_token_data", None)
-            if isinstance(session_token_data, TokenData):
+            session_token_data = read_session_token_override(request)
+            if session_token_data is not None:
                 token_data = session_token_data
 
             set_context(context)
@@ -175,8 +171,8 @@ class AuthMiddleware(BaseHTTPMiddleware):
                     )
 
             response = await call_next(request)
-            reissue_auth_token = getattr(request.state, "reissue_auth_token", None)
-            if isinstance(reissue_auth_token, str) and reissue_auth_token:
+            reissue_auth_token = read_reissue_auth_token(request)
+            if reissue_auth_token is not None:
                 attach_session_auth_cookie(response, request, reissue_auth_token)
             return response
 

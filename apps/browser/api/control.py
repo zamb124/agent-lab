@@ -4,19 +4,26 @@ HTTP API Browser Control (§17.3): сессии, navigate, observe, action.
 
 from __future__ import annotations
 
+import asyncio
 import json
 import random
 import re
+import time
 import uuid
-from collections.abc import Mapping
+from collections.abc import AsyncGenerator, Mapping
+from contextlib import asynccontextmanager
 from typing import Annotated, ClassVar, Literal, TypeAlias, TypedDict, cast
 
 from fastapi import APIRouter, HTTPException, Query, Response
+from playwright.async_api import Error as PlaywrightError
 from pydantic import BaseModel, ConfigDict, Field
 
 from apps.browser.contracts.control_types import (
     BrowserCapabilityError,
+    ControlHumanTakeoverBody,
     ControlPointerClickBody,
+    ControlPointerKeyBody,
+    ControlPointerTextBody,
     ControlSessionStatusResponse,
 )
 from apps.browser.dependencies import ContainerDep
@@ -44,6 +51,9 @@ from apps.browser.orchestration.runtime_facade import BrowserRuntimeFacade
 from core.types import JsonObject, require_json_object
 
 router = APIRouter(prefix="/control", tags=["browser-control"])
+
+AGENT_CONTROL_TAKEOVER_WAIT_SEC = 300.0
+AGENT_CONTROL_TAKEOVER_POLL_SEC = 0.25
 
 
 class ControlNavigateResponse(TypedDict):
@@ -82,6 +92,12 @@ class ControlPointerClickResponse(TypedDict):
     url: str
 
 
+class ControlHumanTakeoverResponse(TypedDict):
+    ok: bool
+    human_takeover: bool
+    owner: str | None
+
+
 class ControlDeleteResponse(TypedDict):
     status: str
 
@@ -92,12 +108,41 @@ ControlTypedResponse: TypeAlias = (
     | ControlObserveResponse
     | ControlOkResponse
     | ControlPointerClickResponse
+    | ControlHumanTakeoverResponse
     | ControlDeleteResponse
 )
 
 
 def _response_artifact(response: ControlTypedResponse) -> JsonObject:
     return require_json_object(cast(object, response), "response")
+
+
+async def wait_for_agent_control(runtime: BrowserRuntimeFacade, session_id: str) -> None:
+    deadline = time.monotonic() + AGENT_CONTROL_TAKEOVER_WAIT_SEC
+    while True:
+        takeover = await runtime.lease_manager.human_takeover_for_session(session_id)
+        if takeover is None:
+            return
+        if time.monotonic() >= deadline:
+            raise HTTPException(
+                status_code=423,
+                detail=(
+                    f"browser session {session_id} is under human control by {takeover.owner}; "
+                    "release human takeover to resume agent control"
+                ),
+            )
+        await asyncio.sleep(AGENT_CONTROL_TAKEOVER_POLL_SEC)
+
+
+@asynccontextmanager
+async def _agent_control_exclusive(
+    runtime: BrowserRuntimeFacade,
+    session_id: str,
+) -> AsyncGenerator[None]:
+    await wait_for_agent_control(runtime, session_id)
+    async with runtime.lease_manager.session_navigate_exclusive(session_id):
+        await wait_for_agent_control(runtime, session_id)
+        yield
 
 
 def _format_console_events_text(events: list[JsonObject]) -> str:
@@ -513,7 +558,7 @@ async def control_navigate(
     container: ContainerDep,
 ) -> ControlNavigateResponse:
     runtime = container.browser_runtime
-    async with runtime.lease_manager.session_navigate_exclusive(session_id):
+    async with _agent_control_exclusive(runtime, session_id):
         if body.new_tab:
             try:
                 page = await runtime.lease_manager.swap_active_page_for_session(session_id)
@@ -592,7 +637,7 @@ async def control_observe(
     container: ContainerDep,
 ) -> ControlObserveResponse:
     runtime = container.browser_runtime
-    async with runtime.lease_manager.session_navigate_exclusive(session_id):
+    async with _agent_control_exclusive(runtime, session_id):
         try:
             page = await runtime.lease_manager.get_page_for_session(session_id)
         except KeyError as exc:
@@ -670,7 +715,7 @@ async def control_action(
     container: ContainerDep,
 ) -> JsonObject:
     runtime = container.browser_runtime
-    async with runtime.lease_manager.session_navigate_exclusive(session_id):
+    async with _agent_control_exclusive(runtime, session_id):
         try:
             page = await runtime.lease_manager.get_page_for_session(session_id)
         except KeyError as exc:
@@ -749,7 +794,7 @@ async def control_click(
     container: ContainerDep,
 ) -> ControlOkResponse:
     runtime = container.browser_runtime
-    async with runtime.lease_manager.session_navigate_exclusive(session_id):
+    async with _agent_control_exclusive(runtime, session_id):
         try:
             page = await runtime.lease_manager.get_page_for_session(session_id)
         except KeyError as exc:
@@ -815,13 +860,13 @@ async def control_pointer_click(
     container: ContainerDep,
 ) -> ControlPointerClickResponse:
     runtime = container.browser_runtime
-    async with runtime.lease_manager.session_navigate_exclusive(session_id):
-        try:
-            page = await runtime.lease_manager.get_page_for_session(session_id)
-        except KeyError as exc:
-            raise HTTPException(status_code=404, detail=str(exc)) from exc
-        except RuntimeError as exc:
-            raise HTTPException(status_code=409, detail=str(exc)) from exc
+    try:
+        page = await runtime.lease_manager.get_page_for_session(session_id)
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except RuntimeError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    try:
         viewport_width, viewport_height = await _viewport_size(
             page,
             fallback_width=body.image_width,
@@ -835,25 +880,158 @@ async def control_pointer_click(
             button=body.button,
             click_count=body.click_count,
         )
-        out: ControlPointerClickResponse = {
-            "ok": True,
-            "x": x,
-            "y": y,
-            "viewport_width": viewport_width,
-            "viewport_height": viewport_height,
-            "url": page.url,
-        }
-        event_path = _write_session_event(
-            runtime=runtime,
-            session_id=session_id,
-            op="control.pointer_click",
-            request=body,
-            response=_response_artifact(out),
-            error=None,
-            meta={"transport": "http", "path": f"/control/sessions/{session_id}/pointer/click"},
-        )
-        _write_console_sidecars(runtime=runtime, session_id=session_id, event_path=event_path)
-        return out
+        page_url = page.url
+    except PlaywrightError as exc:
+        raise HTTPException(
+            status_code=409,
+            detail=f"browser page is not available for pointer click: {exc}",
+        ) from exc
+    out: ControlPointerClickResponse = {
+        "ok": True,
+        "x": x,
+        "y": y,
+        "viewport_width": viewport_width,
+        "viewport_height": viewport_height,
+        "url": page_url,
+    }
+    event_path = _write_session_event(
+        runtime=runtime,
+        session_id=session_id,
+        op="control.pointer_click",
+        request=body,
+        response=_response_artifact(out),
+        error=None,
+        meta={"transport": "http", "path": f"/control/sessions/{session_id}/pointer/click"},
+    )
+    _write_console_sidecars(runtime=runtime, session_id=session_id, event_path=event_path)
+    return out
+
+
+@router.post("/sessions/{session_id}/human-takeover")
+async def control_human_takeover(
+    session_id: str,
+    body: ControlHumanTakeoverBody,
+    container: ContainerDep,
+) -> ControlHumanTakeoverResponse:
+    runtime = container.browser_runtime
+    try:
+        page = await runtime.lease_manager.get_page_for_session(session_id)
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except RuntimeError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    if page.is_closed():
+        raise HTTPException(status_code=410, detail="browser page is closed")
+    record = await runtime.lease_manager.begin_human_takeover(session_id, owner=body.owner)
+    out: ControlHumanTakeoverResponse = {
+        "ok": True,
+        "human_takeover": True,
+        "owner": record.owner,
+    }
+    event_path = _write_session_event(
+        runtime=runtime,
+        session_id=session_id,
+        op="control.human_takeover.begin",
+        request=body,
+        response=_response_artifact(out),
+        error=None,
+        meta={"transport": "http", "path": f"/control/sessions/{session_id}/human-takeover"},
+    )
+    _write_console_sidecars(runtime=runtime, session_id=session_id, event_path=event_path)
+    return out
+
+
+@router.post("/sessions/{session_id}/human-takeover/release")
+async def control_human_takeover_release(
+    session_id: str,
+    container: ContainerDep,
+) -> ControlHumanTakeoverResponse:
+    runtime = container.browser_runtime
+    record = await runtime.lease_manager.end_human_takeover(session_id)
+    out: ControlHumanTakeoverResponse = {
+        "ok": True,
+        "human_takeover": False,
+        "owner": record.owner if record is not None else None,
+    }
+    event_path = _write_session_event(
+        runtime=runtime,
+        session_id=session_id,
+        op="control.human_takeover.release",
+        request={"release": True},
+        response=_response_artifact(out),
+        error=None,
+        meta={"transport": "http", "path": f"/control/sessions/{session_id}/human-takeover/release"},
+    )
+    _write_console_sidecars(runtime=runtime, session_id=session_id, event_path=event_path)
+    return out
+
+
+@router.post("/sessions/{session_id}/pointer/key")
+async def control_pointer_key(
+    session_id: str,
+    body: ControlPointerKeyBody,
+    container: ContainerDep,
+) -> ControlOkResponse:
+    runtime = container.browser_runtime
+    try:
+        page = await runtime.lease_manager.get_page_for_session(session_id)
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except RuntimeError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    try:
+        await page.keyboard.press(body.key)
+    except PlaywrightError as exc:
+        raise HTTPException(
+            status_code=409,
+            detail=f"browser page is not available for keyboard input: {exc}",
+        ) from exc
+    out: ControlOkResponse = {"ok": True}
+    event_path = _write_session_event(
+        runtime=runtime,
+        session_id=session_id,
+        op="control.pointer_key",
+        request=body,
+        response=_response_artifact(out),
+        error=None,
+        meta={"transport": "http", "path": f"/control/sessions/{session_id}/pointer/key"},
+    )
+    _write_console_sidecars(runtime=runtime, session_id=session_id, event_path=event_path)
+    return out
+
+
+@router.post("/sessions/{session_id}/pointer/text")
+async def control_pointer_text(
+    session_id: str,
+    body: ControlPointerTextBody,
+    container: ContainerDep,
+) -> ControlOkResponse:
+    runtime = container.browser_runtime
+    try:
+        page = await runtime.lease_manager.get_page_for_session(session_id)
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except RuntimeError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    try:
+        await page.keyboard.type(body.text)
+    except PlaywrightError as exc:
+        raise HTTPException(
+            status_code=409,
+            detail=f"browser page is not available for text input: {exc}",
+        ) from exc
+    out: ControlOkResponse = {"ok": True}
+    event_path = _write_session_event(
+        runtime=runtime,
+        session_id=session_id,
+        op="control.pointer_text",
+        request=body,
+        response=_response_artifact(out),
+        error=None,
+        meta={"transport": "http", "path": f"/control/sessions/{session_id}/pointer/text"},
+    )
+    _write_console_sidecars(runtime=runtime, session_id=session_id, event_path=event_path)
+    return out
 
 
 @router.post("/sessions/{session_id}/fill")
@@ -863,7 +1041,7 @@ async def control_fill(
     container: ContainerDep,
 ) -> ControlOkResponse:
     runtime = container.browser_runtime
-    async with runtime.lease_manager.session_navigate_exclusive(session_id):
+    async with _agent_control_exclusive(runtime, session_id):
         try:
             page = await runtime.lease_manager.get_page_for_session(session_id)
         except KeyError as exc:
@@ -907,7 +1085,7 @@ async def control_press(
     container: ContainerDep,
 ) -> ControlOkResponse:
     runtime = container.browser_runtime
-    async with runtime.lease_manager.session_navigate_exclusive(session_id):
+    async with _agent_control_exclusive(runtime, session_id):
         try:
             page = await runtime.lease_manager.get_page_for_session(session_id)
         except KeyError as exc:
@@ -937,7 +1115,7 @@ async def control_wait(
     container: ContainerDep,
 ) -> ControlOkResponse:
     runtime = container.browser_runtime
-    async with runtime.lease_manager.session_navigate_exclusive(session_id):
+    async with _agent_control_exclusive(runtime, session_id):
         try:
             page = await runtime.lease_manager.get_page_for_session(session_id)
         except KeyError as exc:
@@ -984,11 +1162,14 @@ async def control_session_status(
             title = await page.title()
         except Exception:
             title = ""
+    takeover = await runtime.lease_manager.human_takeover_for_session(session_id)
     return ControlSessionStatusResponse(
         session_id=session_id,
         url=page.url,
         title=title,
         closed=closed,
+        human_takeover=takeover is not None,
+        human_takeover_owner=takeover.owner if takeover is not None else None,
     )
 
 

@@ -16,9 +16,8 @@ import uuid
 from pathlib import Path
 
 import pytest
-from httpx import ASGITransport, AsyncClient
-
 from fastapi import FastAPI
+from httpx import ASGITransport, AsyncClient
 
 from tests.browser.e2e_step_metrics import e2e_lightpanda_cdp_url, e2e_lightpanda_enabled
 

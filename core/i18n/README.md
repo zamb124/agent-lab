@@ -81,9 +81,9 @@ app/i18n/
 ### HTTP API и Lit SPA
 
 - Эндпоинт **`GET /api/i18n/{locale}`** (`locale`: `ru` | `en`) подключается в **`create_service_app`** через **`core/app/i18n_routes.py`** на всех сервисах; тело — объединение всех `*.json` из **`core/i18n/translations/{locale}/`** (файлы с префиксом `_` не отдаются). Ключ верхнего уровня в ответе = **имя файла без `.json`** (namespace для `i18n.t`).
-- Основной бандл SPA сервиса с префиксом **`/{slug}`** называйте **`{slug}.json`** (например **`sync.json`**, **`frontend.json`**, **`crm.json`**) — дефолтный namespace на клиенте задаётся из **`PlatformApp.getBaseUrl()`** через **`i18nDefaultNamespaceForBaseUrl`** ([`i18n-default-namespace.js`](../../frontend/static/services/i18n/i18n-default-namespace.js)).
-- Клиентский движок: **`core/frontend/static/services/i18n/i18n.service.js`**, регистрация в **`ServiceRegistry.registerCore`** как **`i18n`**, в компонентах — **`this.i18n`** (`PlatformElement`).
-- Смена языка в UI: **`localStorage`** (`locale`), cookie **`language`**, атриут **`lang`** у `<html>` — в одну линию с определением языка в **`core/middleware/auth/context_factory.py`** (cookie `language` и `Accept-Language`).
+- Основной бандл SPA сервиса с префиксом **`/{slug}`** называйте **`{slug}.json`** (например **`sync.json`**, **`frontend.json`**, **`crm.json`**) — дефолтный namespace на клиенте задаётся из **`PlatformApp.getBaseUrl()`** через **`i18nDefaultNamespaceForBaseUrl`** ([`core/frontend/static/lib/utils/i18n-namespace.js`](../frontend/static/lib/utils/i18n-namespace.js)).
+- Клиентский слой: slice **`state.i18n`**, effect **`core/frontend/static/lib/events/effects/i18n.effect.js`**, в компонентах — **`this.t('ключ')`** (`PlatformElement`).
+- Смена языка в UI: **`localStorage`** (`locale`), cookie **`language`**, атрибут **`lang`** у `<html>` — в одну линию с определением языка в **`core/middleware/auth/context_factory.py`** (cookie `language` и `Accept-Language`).
 
 ### Python API
 

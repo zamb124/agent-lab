@@ -21,6 +21,7 @@ from starlette.datastructures import Headers
 from starlette.middleware.base import BaseHTTPMiddleware, RequestResponseEndpoint
 from starlette.requests import Request
 from starlette.responses import Response
+from starlette.routing import Route
 from starlette.types import ASGIApp
 
 from core.logging import (
@@ -164,9 +165,10 @@ class AccessLogMiddleware(BaseHTTPMiddleware):
     @staticmethod
     def _route_pattern(request: Request, path: str) -> str:
         route = request.scope.get("route")
-        pattern = getattr(route, "path", None)
-        if isinstance(pattern, str) and pattern:
-            return pattern
+        if isinstance(route, Route):
+            pattern = route.path
+            if pattern:
+                return pattern
         return path
 
     @staticmethod

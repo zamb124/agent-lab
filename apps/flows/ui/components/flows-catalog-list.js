@@ -14,6 +14,7 @@ import { sidebarStyles, sidebarNavItemStyles, sidebarSectionStyles } from '@plat
 import { platformConfirm } from '@platform/lib/components/platform-confirm-modal.js';
 import '@platform/lib/components/glass-spinner.js';
 import '@platform/lib/components/platform-icon.js';
+import '@platform/lib/components/platform-help-hint.js';
 import './flow-card.js';
 import { asArray, isPlainObject } from '../_helpers/flows-resolvers.js';
 
@@ -121,6 +122,9 @@ export class FlowsCatalogList extends PlatformElement {
             .flows-toolbar .flows-search {
                 flex: 1;
                 min-width: 0;
+            }
+            .catalog-help {
+                flex-shrink: 0;
             }
             .flows-search {
                 position: relative;
@@ -316,6 +320,14 @@ export class FlowsCatalogList extends PlatformElement {
                         >
                             <platform-icon name="plus" size="16"></platform-icon>
                         </button>
+                        <platform-help-hint
+                            class="catalog-help"
+                            .label=${this.t('flows_sidebar.catalog_help_label')}
+                            .summary=${this.t('flows_sidebar.catalog_help_summary')}
+                            .details=${this.t('flows_sidebar.catalog_help_details')}
+                            .docHref=${'/documentation/scenarios/flows/flows-home-overview/'}
+                            .docLabel=${this.t('help_hints.open_scenario')}
+                        ></platform-help-hint>
                     </div>
                 </div>
                 <div class="section-content catalog-scroll catalog-inner-cards">

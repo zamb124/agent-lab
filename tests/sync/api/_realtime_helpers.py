@@ -15,6 +15,8 @@ from typing import Any, AsyncIterator, Awaitable, Callable
 from httpx import AsyncClient
 
 from apps.sync.container import get_sync_container
+from apps.sync.ws_presence import is_user_sync_ws_online
+from core.config import get_settings
 from core.models.identity_models import Company, User
 from core.utils.tokens import get_token_service
 
@@ -36,6 +38,23 @@ async def connect_ws(token: str) -> AsyncIterator[Any]:
         additional_headers=[("Cookie", f"auth_token={token}")],
     ) as ws:
         yield ws
+
+
+async def wait_sync_ws_online(user_id: str, *, timeout: float = 10.0) -> None:
+    """Ждёт, пока connect-hook sync выставит `sync:ws:presence:<user_id>` в Redis."""
+    settings = get_settings()
+    redis_url = settings.database.redis_url
+    if not redis_url:
+        raise RuntimeError("database.redis_url не задан для wait_sync_ws_online.")
+
+    deadline = asyncio.get_event_loop().time() + timeout
+    while asyncio.get_event_loop().time() < deadline:
+        if await is_user_sync_ws_online(redis_url, user_id):
+            return
+        await asyncio.sleep(0.05)
+    raise AssertionError(
+        f"wait_sync_ws_online: user {user_id!r} не появился в sync WS presence за {timeout}s"
+    )
 
 
 async def wait_frame(

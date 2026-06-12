@@ -1,10 +1,11 @@
 import { fixture, fixtureCleanup, html, expect, elementUpdated, aTimeout, waitUntil } from '../helpers/render.js';
 import { resetPlatformState, bootstrapTestBus } from '../helpers/reset.js';
-import { FILES_EVENTS } from '@platform/lib/events/index.js';
+import { CoreEvents, FILES_EVENTS } from '@platform/lib/events/index.js';
 import '../../../../core/frontend/static/lib/flows-chat/flows-chat-message.js';
 import '../../../../core/frontend/static/lib/embed-chat/platform-embed-chat.js';
 import '../../../../apps/flows/ui/components/chat/chat-message.js';
 import '../../../../apps/flows/ui/components/chat/chat-files-panel.js';
+import '../../../../apps/flows/ui/modals/flows-browser-preview-modal.js';
 
 const LABELS = {
     role_user: 'You',
@@ -93,6 +94,79 @@ describe('flows-chat-message shared surface', () => {
         expect(renderer.shadowRoot.querySelector('flows-chat-ui-text')).to.not.equal(null);
     });
 
+    it('anchors the browser preview status dot to the tool orb corner', async () => {
+        const el = await fixture(html`
+            <flows-chat-message
+                role="assistant"
+                flow-root="/flows"
+                .labels=${LABELS}
+                .content=${'Browser tool finished'}
+                .toolCalls=${[{
+                    id: 'tc-browser',
+                    name: 'browser.open',
+                    arguments: { url: 'https://example.test' },
+                }]}
+                .toolResults=${[{
+                    tool_call_id: 'tc-browser',
+                    name: 'browser.open',
+                    content: 'ok',
+                }]}
+                .browserPreviews=${[{
+                    parentToolCallId: 'tc-browser',
+                    status: 'open',
+                    viewerUrl: 'https://browser.example.test/session/tc-browser',
+                    currentUrl: 'https://example.test',
+                    sessionId: 'tc-browser',
+                }]}
+                .showAvatar=${false}
+                .showHeader=${false}
+            ></flows-chat-message>
+        `);
+        await elementUpdated(el);
+        await aTimeout(0);
+
+        const orb = el.shadowRoot.querySelector('.tool-orb.browser-preview');
+        const hint = orb.querySelector('platform-help-hint');
+        const button = orb.querySelector('.tool-orb-button');
+        const dot = orb.querySelector('.browser-preview-dot');
+        expect(hint.hasAttribute('fill')).to.equal(true);
+
+        const orbRect = orb.getBoundingClientRect();
+        const hintRect = hint.getBoundingClientRect();
+        const buttonRect = button.getBoundingClientRect();
+        const dotRect = dot.getBoundingClientRect();
+        const dotCenterX = dotRect.left + dotRect.width / 2;
+        const dotCenterY = dotRect.top + dotRect.height / 2;
+
+        expect(hintRect.width).to.be.greaterThan(26);
+        expect(hintRect.height).to.be.greaterThan(26);
+        expect(buttonRect.width).to.be.greaterThan(26);
+        expect(buttonRect.height).to.be.greaterThan(26);
+        expect(dotCenterX).to.be.greaterThan(orbRect.right - 8);
+        expect(dotCenterY).to.be.lessThan(orbRect.top + 8);
+
+        const previousOpen = window.open;
+        let opened = false;
+        let eventDetail = null;
+        window.open = () => {
+            opened = true;
+            return null;
+        };
+        try {
+            el.addEventListener('browser-preview-open', (event) => {
+                event.preventDefault();
+                eventDetail = event.detail;
+            });
+            button.click();
+            await elementUpdated(el);
+            expect(opened).to.equal(false);
+            expect(eventDetail.viewerUrl).to.equal('https://browser.example.test/session/tc-browser');
+            expect(eventDetail.sessionId).to.equal('tc-browser');
+        } finally {
+            window.open = previousOpen;
+        }
+    });
+
     it('emits compose-edit from the real user action button', async () => {
         const el = await fixture(html`
             <flows-chat-message
@@ -176,6 +250,36 @@ describe('flows-chat-message shared surface', () => {
 
         expect(events).to.have.length(1);
         expect(events[0].payload).to.deep.equal({ text: 'Draft from app' });
+    });
+
+    it('app chat-message adapter opens browser preview through the platform modal stack', async () => {
+        const events = [];
+        bus.subscribeType(CoreEvents.UI_MODAL_OPEN, (event) => events.push(event));
+
+        const el = await fixture(html`
+            <chat-message
+                role="assistant"
+                content="Browser ready"
+                .toolCalls=${[{ id: 'tc-browser', name: 'browser.open', arguments: { url: 'https://example.test' } }]}
+                .toolResults=${[{ tool_call_id: 'tc-browser', name: 'browser.open', content: 'ok' }]}
+                .browserPreviews=${[{
+                    parentToolCallId: 'tc-browser',
+                    status: 'open',
+                    viewerUrl: 'https://browser.example.test/session/tc-browser',
+                    currentUrl: 'https://example.test',
+                    sessionId: 'tc-browser',
+                }]}
+            ></chat-message>
+        `);
+        await elementUpdated(el);
+        const surface = el.shadowRoot.querySelector('flows-chat-message');
+        await elementUpdated(surface);
+        surface.shadowRoot.querySelector('.tool-orb-button').click();
+
+        expect(events).to.have.length(1);
+        expect(events[0].payload.kind).to.equal('flows.browser_preview');
+        expect(events[0].payload.props.viewerUrl).to.equal('https://browser.example.test/session/tc-browser');
+        expect(events[0].payload.props.sessionId).to.equal('tc-browser');
     });
 
     it('embed chat host renders messages through flows-chat-message only', async () => {

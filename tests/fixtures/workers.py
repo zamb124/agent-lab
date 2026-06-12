@@ -32,12 +32,92 @@ _TASKIQ_WORKER_LOCK = "/tmp/platform_test_taskiq_worker.lock"
 _TASKIQ_WORKER_PID = "/tmp/platform_test_taskiq_worker.pid"
 _RAG_WORKER_LOCK = "/tmp/platform_test_rag_worker.lock"
 _RAG_WORKER_PID = "/tmp/platform_test_rag_worker.pid"
+_SEARCH_WORKER_LOCK = "/tmp/platform_test_search_worker.lock"
+_SEARCH_WORKER_PID = "/tmp/platform_test_search_worker.pid"
 
 _SYNC_WORKER_LOCK = "/tmp/platform_test_sync_taskiq_worker.lock"
 _SYNC_WORKER_PID = "/tmp/platform_test_sync_taskiq_worker.pid"
 _CRM_WORKER_LOCK = "/tmp/platform_test_crm_taskiq_worker.lock"
 _CRM_WORKER_PID = "/tmp/platform_test_crm_taskiq_worker.pid"
 _TEST_INFRA_EPOCH_FILE = Path("/tmp/platform_test_infra_epoch")
+_PLATFORM_TEST_CONTROLLER_PID = Path("/tmp/platform_test_pytest_controller.pid")
+_PLATFORM_TEST_HTTP_PORTS = (
+    9001,
+    9002,
+    9003,
+    9004,
+    9005,
+    9008,
+    9010,
+    9014,
+    9016,
+    9017,
+    9018,
+    9019,
+    9020,
+)
+
+
+def bump_test_infra_epoch() -> None:
+    from datetime import UTC, datetime
+
+    _TEST_INFRA_EPOCH_FILE.write_text(datetime.now(UTC).isoformat(), encoding="utf-8")
+
+
+def _pid_is_alive(pid: int) -> bool:
+    try:
+        os.kill(pid, 0)
+    except OSError:
+        return False
+    return True
+
+
+def claim_pytest_controller_session() -> None:
+    if _PLATFORM_TEST_CONTROLLER_PID.exists():
+        try:
+            existing_pid = int(
+                _PLATFORM_TEST_CONTROLLER_PID.read_text(encoding="utf-8").strip()
+            )
+        except ValueError:
+            existing_pid = -1
+        if existing_pid > 0 and _pid_is_alive(existing_pid):
+            raise RuntimeError(
+                "pytest controller уже запущен "
+                f"(pid={existing_pid}). Дождитесь завершения make test "
+                "или завершите процесс вручную."
+            )
+    _PLATFORM_TEST_CONTROLLER_PID.write_text(str(os.getpid()), encoding="utf-8")
+
+
+def release_pytest_controller_session() -> None:
+    if not _PLATFORM_TEST_CONTROLLER_PID.exists():
+        return
+    try:
+        recorded_pid = int(
+            _PLATFORM_TEST_CONTROLLER_PID.read_text(encoding="utf-8").strip()
+        )
+    except ValueError:
+        _PLATFORM_TEST_CONTROLLER_PID.unlink(missing_ok=True)
+        return
+    if recorded_pid == os.getpid():
+        _PLATFORM_TEST_CONTROLLER_PID.unlink(missing_ok=True)
+
+
+def terminate_stale_processes_on_test_http_ports() -> None:
+    for port in _PLATFORM_TEST_HTTP_PORTS:
+        subprocess.run(
+            f"lsof -ti:{port} | xargs kill -9 2>/dev/null",
+            shell=True,
+            check=False,
+            capture_output=True,
+            timeout=5,
+        )
+
+
+def prepare_pytest_controller_session() -> None:
+    claim_pytest_controller_session()
+    bump_test_infra_epoch()
+    terminate_stale_processes_on_test_http_ports()
 
 
 def _terminate_process_group_or_pid(pid: int, *, graceful_timeout: float = 0.2) -> None:
@@ -597,6 +677,63 @@ def rag_worker(provider_litserve_service):
         log_file="/tmp/rag_worker_test.log",
         err_file="/tmp/rag_worker_test_err.log",
         taskiq_stream_name="rag",
+        taskiq_redis_url="redis://localhost:63792/1",
+    )
+
+    with manager.start() as worker_process:
+        yield worker_process
+
+
+@pytest.fixture(scope="session")
+def search_worker(rag_worker, search_service):
+    """
+    TaskIQ worker очереди search (apps.search_worker.worker:worker_app).
+
+    Нужен для crawl orchestrator tick и enqueue discover/fetch через API.
+    """
+    _ = rag_worker, search_service
+    crawl_llm_env: dict[str, str] = {}
+    if os.getenv("CRAWL__E2E_LITSERVE_LLM") == "1":
+        crawl_llm_env = {
+            "SEARCH__CRAWL__ENRICHMENT__LITSERVE_BASE_URL": "http://localhost:9022/v1",
+        }
+    manager = SessionWorkerManager(
+        name="SearchWorker",
+        lock_file=_SEARCH_WORKER_LOCK,
+        pid_file=_SEARCH_WORKER_PID,
+        command=[
+            sys.executable,
+            "-m",
+            "taskiq",
+            "worker",
+            "apps.search_worker.worker:worker_app",
+            "-w",
+            "1",
+        ],
+        env={
+            **TEST_DATABASE_ENV,
+            "TESTING": "true",
+            "PYTHONUNBUFFERED": "1",
+            "DATABASE__REDIS_URL": "redis://localhost:63792/0",
+            "TASKS__BROKER_URL": "redis://localhost:63792/1",
+            "AUTH__PERMISSIONS_ENABLED": "false",
+            "SERVER__RAG_SERVICE_URL": "http://localhost:9002",
+            "SERVER__SEARCH_SERVICE_URL": "http://localhost:9010",
+            "CRAWL__MIN_EXTRACT_CHARS": "50",
+            "CRAWL__BOOTSTRAP_TRANCO_ON_EMPTY": "false",
+            "RAG__EMBEDDING__PROVIDER": "provider_litserve",
+            "RAG__EMBEDDING__API__MODEL": "qwen/qwen3-embedding-0.6b",
+            "RAG__EMBEDDING__API__DIMENSION": "1024",
+            "RAG__EMBEDDING__API__MRL_OUTPUT_DIMENSION": "1024",
+            "PROVIDER_LITSERVE__API__BASE_URL": "http://localhost:9014/v1",
+            **crawl_llm_env,
+        },
+        cleanup_patterns=[
+            "apps.search_worker.worker",
+        ],
+        log_file="/tmp/search_worker_test.log",
+        err_file="/tmp/search_worker_test_err.log",
+        taskiq_stream_name="search",
         taskiq_redis_url="redis://localhost:63792/1",
     )
 

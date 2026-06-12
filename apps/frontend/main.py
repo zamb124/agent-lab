@@ -28,6 +28,7 @@ from apps.frontend.api.company_pronunciation_rules import (
 from apps.frontend.api.company_voice_providers import (
     router as company_voice_providers_router,
 )
+from apps.frontend.api.crawl_report import router as crawl_report_router
 from apps.frontend.api.embed_configs import router as embed_configs_router
 from apps.frontend.api.invites import router as invites_router
 from apps.frontend.api.leads import lead_requests_router, leads_router
@@ -339,6 +340,7 @@ app = create_service_app(
         leads_router,
         lead_requests_router,
         platform_tracing_router,
+        crawl_report_router,
         platform_billing_router,
         platform_llm_model_scores_router,
         payments_webhook_router,

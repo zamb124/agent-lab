@@ -14,10 +14,12 @@ from apps.search.providers import (
     TavilySearchProvider,
     TinyFishSearchProvider,
 )
+from apps.search.providers.index import IndexSearchProvider
 from apps.search.services.company_config import (
     ResolvedSearchConfig,
     resolve_search_config_for_company,
 )
+from apps.search.services.index_resolver import preprocess_meta_search_request
 from apps.search.services.provider_availability import ProviderAvailabilityStore
 from core.billing.exceptions import BillingBalanceBlockedError
 from core.billing.service import BALANCE_BLOCK_OPERATION_SEARCH, BillingService
@@ -42,7 +44,8 @@ _PROVIDER_ALIASES: dict[str, str] = {
     "serper": "serper",
     "tavily": "tavily",
     "travily": "tavily",
-    "tvly": "tavily",
+    "runet": "index",
+    "index": "index",
 }
 
 _TRACKING_QUERY_PARAMS = {
@@ -54,6 +57,14 @@ _TRACKING_QUERY_PARAMS = {
 }
 
 ProviderSearchOutcome = tuple[list[WebSearchResult], MetaSearchProviderStatus]
+
+_INDEX_EMPTY_RESULTS_ERROR = "index returned no results"
+
+
+def _should_mark_provider_unavailable(provider_id: str, error: str) -> bool:
+    if provider_id == "index" and error == _INDEX_EMPTY_RESULTS_ERROR:
+        return False
+    return True
 
 
 def _canonical_url(url: str) -> str:
@@ -101,10 +112,12 @@ class MetaSearchService:
         search_config: SearchIntegrationConfig,
         availability_store: ProviderAvailabilityStore,
         billing_service: BillingService,
+        index_provider: IndexSearchProvider,
     ) -> None:
         self._config: SearchIntegrationConfig = search_config
         self._availability_store: ProviderAvailabilityStore = availability_store
         self._billing_service: BillingService = billing_service
+        self._index_provider: IndexSearchProvider = index_provider
 
     async def search(
         self,
@@ -113,6 +126,8 @@ class MetaSearchService:
         company: Company | None = None,
         user_id: str | None = None,
     ) -> MetaSearchResponse:
+        preprocessed = preprocess_meta_search_request(request, self._config.index)
+        request = preprocessed.request
         resolved = resolve_search_config_for_company(
             platform_config=self._config,
             company=company,
@@ -129,6 +144,7 @@ class MetaSearchService:
                 scope_id,
                 company,
                 user_id,
+                preprocessed.index_ids,
             )
         return await self._search_merge(
             request,
@@ -138,6 +154,7 @@ class MetaSearchService:
             scope_id,
             company,
             user_id,
+            preprocessed.index_ids,
         )
 
     async def _search_first_available(
@@ -149,6 +166,7 @@ class MetaSearchService:
         scope_id: str,
         company: Company | None,
         user_id: str | None,
+        index_ids: list[str],
     ) -> MetaSearchResponse:
         statuses: dict[str, MetaSearchProviderStatus] = {}
         for provider_id in provider_ids:
@@ -176,6 +194,7 @@ class MetaSearchService:
                 request,
                 resolved,
                 company,
+                index_ids,
             )
             status = status.model_copy(update={"selected": True})
             statuses[provider_id] = status
@@ -183,11 +202,13 @@ class MetaSearchService:
                 _ = await self._availability_store.mark_available(provider_id, scope_id=scope_id)
                 ranked = self._collect_ranked([(provider_id, results)], request.limit)
                 return MetaSearchResponse(query=request.query, results=ranked, providers=statuses)
-            _ = await self._availability_store.mark_unavailable(
-                provider_id,
-                status.error or "unknown error",
-                scope_id=scope_id,
-            )
+            provider_error = status.error or "unknown error"
+            if _should_mark_provider_unavailable(provider_id, provider_error):
+                _ = await self._availability_store.mark_unavailable(
+                    provider_id,
+                    provider_error,
+                    scope_id=scope_id,
+                )
 
         return MetaSearchResponse(query=request.query, results=[], providers=statuses)
 
@@ -200,6 +221,7 @@ class MetaSearchService:
         scope_id: str,
         company: Company | None,
         user_id: str | None,
+        index_ids: list[str],
     ) -> MetaSearchResponse:
         statuses: dict[str, MetaSearchProviderStatus] = {}
         tasks: list[tuple[str, Awaitable[ProviderSearchOutcome]]] = []
@@ -221,7 +243,12 @@ class MetaSearchService:
                 statuses[provider_id] = balance_status
                 continue
             provider = providers[provider_id]
-            tasks.append((provider_id, self._search_provider(provider_id, provider, request, resolved, company)))
+            tasks.append(
+                (
+                    provider_id,
+                    self._search_provider(provider_id, provider, request, resolved, company, index_ids),
+                )
+            )
 
         provider_results: list[tuple[str, list[WebSearchResult]]] = []
         if tasks:
@@ -233,11 +260,13 @@ class MetaSearchService:
                     _ = await self._availability_store.mark_available(provider_id, scope_id=scope_id)
                     provider_results.append((provider_id, results))
                 else:
-                    _ = await self._availability_store.mark_unavailable(
-                        provider_id,
-                        selected_status.error or "unknown error",
-                        scope_id=scope_id,
-                    )
+                    provider_error = selected_status.error or "unknown error"
+                    if _should_mark_provider_unavailable(provider_id, provider_error):
+                        _ = await self._availability_store.mark_unavailable(
+                            provider_id,
+                            provider_error,
+                            scope_id=scope_id,
+                        )
 
         ranked = self._collect_ranked(provider_results, request.limit)
         return MetaSearchResponse(query=request.query, results=ranked, providers=statuses)
@@ -307,6 +336,7 @@ class MetaSearchService:
         request: MetaSearchRequest,
         resolved: ResolvedSearchConfig,
         company: Company | None,
+        _index_ids: list[str],
     ) -> ProviderSearchOutcome:
         credential_source = resolved.credential_source(provider_id)
         billing_resource_name = f"search:{provider_id}"
@@ -322,7 +352,10 @@ class MetaSearchService:
                 "platform.search.credential_source": credential_source,
             },
         ) as span:
-            results, status = await provider.search(request)
+            if provider_id == "index":
+                results, status = await self._index_provider.search(request)
+            else:
+                results, status = await provider.search(request)
             status = status.model_copy(
                 update={
                     "credential_source": credential_source,
@@ -340,6 +373,7 @@ class MetaSearchService:
 
     def _providers(self, config: SearchIntegrationConfig) -> dict[str, SearchProvider]:
         return {
+            "index": self._index_provider,
             "tinyfish": TinyFishSearchProvider(config.tinyfish),
             "linkup": LinkupSearchProvider(config.linkup),
             "serper": SerperSearchProvider(config.serper),

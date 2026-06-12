@@ -28,6 +28,8 @@ BUILTIN_TOOL_SPECS: tuple[tuple[str, str], ...] = (
     ("apps.flows.tools.rag", "rag_add_text"),
     ("apps.flows.tools.rag", "rag_create_namespace"),
     ("apps.flows.tools.rag", "rag_search"),
+    ("apps.flows.tools.index_search", "index_search"),
+    ("apps.flows.tools.index_search", "runet_search"),
     ("apps.flows.tools.documentation", "docs_search"),
     ("apps.flows.tools.documentation", "docs_prepare_context"),
     ("apps.flows.tools.lara_crm", "crm_analyze_note_text"),

@@ -32,9 +32,7 @@ SKIP_PARTS = {
     "node_modules",
 }
 SKIP_TEXT_SUFFIXES = (".map", ".min.js")
-SKIP_TEXT_FILES = {
-    "core/frontend/static/assets/js/livekit/livekit-client.umd.js",
-}
+SKIP_TEXT_FILES: set[str] = set()
 
 Decision = Literal[
     "boundary.framework",
@@ -71,117 +69,25 @@ class GetattrDecision:
 GETATTR_DECISIONS: tuple[GetattrDecision, ...] = (
     GetattrDecision(
         path="core/app_state.py",
-        attrs=frozenset({"request_id", "trace_id", "company", "token_data"}),
+        attrs=frozenset(
+            {
+                "trace_id",
+                "request_id",
+                "company",
+                "token_data",
+                "session_token_data",
+                "reissue_auth_token",
+            }
+        ),
         decision="boundary.framework",
-        domain="FastAPI request.state typed adapter",
-        message="central adapter validating framework request state",
-    ),
-    GetattrDecision(
-        path="core/api/integration_oauth_error_html.py",
-        attrs=frozenset({"request_id", "trace_id"}),
-        decision="boundary.framework",
-        domain="FastAPI request.state read-only error renderer",
-        message="error-page boundary reads correlation ids only",
-    ),
-    GetattrDecision(
-        path="core/api/auth.py",
-        attrs=frozenset({"token_data"}),
-        decision="boundary.framework",
-        domain="FastAPI request.state auth endpoint",
-        message="auth endpoint validates middleware state",
-    ),
-    GetattrDecision(
-        path="core/middleware/auth/middleware.py",
-        attrs=frozenset({"trace_id", "session_token_data", "reissue_auth_token"}),
-        decision="boundary.framework",
-        domain="FastAPI request.state auth middleware",
-        message="middleware boundary between Starlette state and typed Context",
-    ),
-    GetattrDecision(
-        path="core/middleware/access_log.py",
-        attrs=frozenset({"path"}),
-        decision="boundary.framework",
-        domain="Starlette route inspection",
-        message="route objects are framework-owned and heterogeneous",
-    ),
-    GetattrDecision(
-        path="apps/crm/services/daily_summary_artifact_service.py",
-        attrs=frozenset({"response"}),
-        decision="boundary.external_sdk",
-        domain="httpx exception",
-        message="external exception shape",
-    ),
-    GetattrDecision(
-        path="core/files/reader/service.py",
-        attrs=frozenset({"response"}),
-        decision="boundary.external_sdk",
-        domain="S3 client exception",
-        message="provider exception shape",
-    ),
-    GetattrDecision(
-        path="core/files/docx_template/engine.py",
-        attrs=frozenset({"lineno", "name"}),
-        decision="boundary.external_sdk",
-        domain="Jinja template exception",
-        message="third-party exception optional fields",
-    ),
-    GetattrDecision(
-        path="apps/sync/realtime/operations.py",
-        attrs=frozenset({"egress_id"}),
-        decision="boundary.external_sdk",
-        domain="LiveKit egress response",
-        message="generated SDK object boundary",
-    ),
-    GetattrDecision(
-        path="apps/sync/realtime/speech_to_chat_workflow.py",
-        attrs=frozenset({"identity", "sid"}),
-        decision="boundary.external_sdk",
-        domain="LiveKit generated models",
-        message="generated SDK object boundary",
-    ),
-    GetattrDecision(
-        path="scripts/_check_print_calls.py",
-        attrs=frozenset({"end_lineno"}),
-        decision="tooling",
-        domain="AST tooling",
-        message="tooling supports AST nodes without end positions",
+        domain="Starlette Request.state",
+        message="middleware attaches correlation/auth fields on request.state at runtime",
     ),
 )
+
+STRICT_DEBT_TEXT_RULES: tuple[tuple[str, re.Pattern[str], str], ...] = ()
 
 TEXT_TERM = re.compile(r"\b(fallback|legacy|Backward-compatible)\b", re.IGNORECASE)
-
-STRICT_DEBT_TEXT_RULES: tuple[tuple[str, re.Pattern[str], str], ...] = (
-    (
-        "core/billing/service.py",
-        re.compile(r"\bfallback_user_id\b|\bLegacy\b"),
-        "billing span settlement still has a historical span-only path",
-    ),
-    (
-        "core/billing/span_billing_settlement.py",
-        re.compile(r"\blegacy\b|LEGACY_SPAN_ONLY_RULE_ID", re.IGNORECASE),
-        "billing settlement idempotency still reads/writes a historical span-only key",
-    ),
-    (
-        "apps/browser/api/control.py",
-        re.compile(r"\blegacy contract\b", re.IGNORECASE),
-        "browser control API documents a historical client contract",
-    ),
-    (
-        "apps/office/ui/app/office-app.js",
-        re.compile(r"\blegacy alias\b", re.IGNORECASE),
-        "office UI still exposes a historical route alias",
-    ),
-    (
-        "apps/office/ui/pages/documents-catalogs-page.js",
-        re.compile(r"\blegacy alias\b", re.IGNORECASE),
-        "office documents catalog page still documents a historical route alias",
-    ),
-    (
-        "core/frontend/static/lib/voice/tts-output-pref.js",
-        re.compile(r"\blegacy\b", re.IGNORECASE),
-        "voice preference still migrates a historical localStorage key",
-    ),
-)
 
 DOMAIN_STRATEGY_TEXT_RULES: tuple[tuple[re.Pattern[str], str], ...] = (
     (

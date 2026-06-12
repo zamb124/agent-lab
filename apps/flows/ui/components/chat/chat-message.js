@@ -146,6 +146,18 @@ export class ChatMessage extends PlatformElement {
         this.emit(event.type, event.detail || {});
     }
 
+    _onBrowserPreviewOpen(event) {
+        event.preventDefault();
+        event.stopPropagation();
+        const detail = event.detail && typeof event.detail === 'object' ? event.detail : {};
+        this.openModal('flows.browser_preview', {
+            viewerUrl: asString(detail.viewerUrl),
+            sessionId: asString(detail.sessionId),
+            currentUrl: asString(detail.currentUrl),
+            status: asString(detail.status),
+        });
+    }
+
     render() {
         const traceEntries = asArray(this.runTraceEntries);
         const showTrace = this.isLastUserMessage;
@@ -181,6 +193,7 @@ export class ChatMessage extends PlatformElement {
                 .voiceBaseUrl=${this._voiceBaseUrlForAssistantPlay()}
                 .getHeaders=${typeof this.voicePlayGetHeaders === 'function' ? this.voicePlayGetHeaders : null}
                 @compose-edit=${this._onComposeEdit}
+                @browser-preview-open=${this._onBrowserPreviewOpen}
                 @show-tracing=${this._forwardEvent}
                 @continue-breakpoint=${this._forwardEvent}
                 @view-breakpoint-state=${this._forwardEvent}

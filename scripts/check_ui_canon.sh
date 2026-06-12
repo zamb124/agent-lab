@@ -347,6 +347,22 @@ if [ -n "$BOTTOM_SHEET_KIND_BAD" ]; then
     echo "$BOTTOM_SHEET_KIND_BAD" >&2
 fi
 
+# 22. Запрещённые мёртвые vendor-артефакты (удалены из репозитория).
+DEAD_ASSET_PATHS=(
+    core/frontend/static/assets/js/zustand-bundle.js
+    core/frontend/static/assets/js/livekit/livekit-client.umd.js
+    core/frontend/static/assets/js/livekit/livekit-client.e2ee.worker.js
+    core/frontend/static/assets/js/livekit/livekit-client.e2ee.worker.mjs
+)
+for dead_asset in "${DEAD_ASSET_PATHS[@]}"; do
+    if [ -f "$dead_asset" ]; then
+        fail "мёртвый vendor-артефакт не должен возвращаться в репозиторий: $dead_asset"
+    fi
+done
+if rg -q 'zustand-bundle\.js' core/frontend/pwa/sw.js; then
+    fail "zustand-bundle.js запрещён в SW precache"
+fi
+
 if [ "$ERR" -ne 0 ]; then
     exit 1
 fi

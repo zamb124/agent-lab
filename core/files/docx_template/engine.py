@@ -93,8 +93,8 @@ def render_docx_template_bytes(
     except TemplateSyntaxError as exc:
         raise DocxTemplateSyntaxError(
             message=str(exc),
-            line=getattr(exc, "lineno", None),
-            name=getattr(exc, "name", None),
+            line=exc.lineno,
+            name=exc.name,
         ) from exc
     except UndefinedError as exc:
         raise DocxTemplateContextError(

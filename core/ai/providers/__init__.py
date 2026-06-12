@@ -55,6 +55,7 @@ class AICapability(str, Enum):
 AIProviderKind = Literal["virtual", "platform"]
 
 PROVIDER_LITSERVE = "provider_litserve"
+PROVIDER_LITSERVE_CRAWL = "provider_litserve_crawl"
 VOICE_PROVIDER_LITSERVE = "litserve"
 HUMANITEC_MODELS_DISPLAY_LABEL = "Humanitec"
 HUMANITEC_VOICE_DISPLAY_LABEL = "Humanitec Voice"
@@ -135,6 +136,13 @@ PLATFORM_PROVIDER_SPECS: tuple[PlatformProviderSpec, ...] = (
         label=HUMANITEC_MODELS_DISPLAY_LABEL,
         kind="platform",
         capabilities=frozenset({AICapability.EMBEDDING, AICapability.RERANK}),
+        byok_allowed=False,
+    ),
+    PlatformProviderSpec(
+        provider=PROVIDER_LITSERVE_CRAWL,
+        label=HUMANITEC_MODELS_DISPLAY_LABEL,
+        kind="platform",
+        capabilities=frozenset({AICapability.LLM_CHAT}),
         byok_allowed=False,
     ),
     PlatformProviderSpec(
@@ -237,6 +245,7 @@ __all__ = [
     "PLATFORM_LLM_PROVIDER_SLUGS",
     "PLATFORM_PROVIDER_SPECS",
     "PROVIDER_LITSERVE",
+    "PROVIDER_LITSERVE_CRAWL",
     "PlatformProviderSpec",
     "RERANK_PROVIDER_ORDER",
     "RERANK_PROVIDER_SLUGS",

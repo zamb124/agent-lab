@@ -31,6 +31,7 @@ pytest_plugins = [
     "tests.fixtures.push",
     "tests.fixtures.mcp_http_stub",
     "tests.fixtures.embed_e2e",
+    "tests.profiling.plugin",
 ]
 
 os.environ["TESTING"] = "true"
@@ -130,6 +131,8 @@ def _real_taskiq_xdist_lane(node: Node) -> str:
         return "sync"
     if "/tests/rag/" in path:
         return "rag"
+    if "/tests/search/" in path:
+        return "search"
     return "flows_llm"
 
 
@@ -545,9 +548,18 @@ def pytest_configure(config):
     import pathlib
     import time
 
+    if not hasattr(config, "workerinput"):
+        from tests.fixtures.workers import prepare_pytest_controller_session
+
+        try:
+            prepare_pytest_controller_session()
+        except RuntimeError as exc:
+            raise pytest.UsageError(str(exc)) from exc
+
     max_age_seconds = 3600
     for marker in [
         _DB_SETUP_LOCK,
+        "/tmp/platform_test_runet_index_seed.lock",
         _APP_INIT_LOCK,
         _APP_INIT_DONE,
         _TASKIQ_WORKER_LOCK,
@@ -574,6 +586,14 @@ def pytest_configure(config):
         junit_path.parent.mkdir(parents=True, exist_ok=True)
 
 
+def pytest_sessionfinish(session, exitstatus):
+    if hasattr(session.config, "workerinput"):
+        return
+    from tests.fixtures.workers import release_pytest_controller_session
+
+    release_pytest_controller_session()
+
+
 @pytest.hookimpl(tryfirst=True)
 def pytest_collection_modifyitems(items: list[pytest.Item]) -> None:
     """
@@ -597,6 +617,11 @@ def pytest_collection_modifyitems(items: list[pytest.Item]) -> None:
             item.add_marker(pytest.mark.xdist_group(f"real_taskiq_{lane}"))
             if item.get_closest_marker("timeout") is None:
                 item.add_marker(pytest.mark.timeout(120, func_only=True))
+        elif item.nodeid.startswith("tests/capabilities/"):
+            # Общие session-сервисы (flows/capability_gateway/code-runner-* на фиксированных
+            # портах) и tool-runtime manifest без изоляции по worker: cross_language_tool_ids
+            # регистрирует tools в system company, SDK-тесты читают manifest целиком.
+            item.add_marker(pytest.mark.xdist_group("capabilities"))
         elif item.nodeid.startswith("tests/sync/"):
             item.add_marker(pytest.mark.xdist_group("sync_db"))
         elif item.nodeid.startswith("tests/rag/test_rag_resource") or item.nodeid.startswith(

@@ -41,6 +41,7 @@ from apps.browser.api.control import (
     control_wait,
     create_control_session,
     delete_control_session,
+    wait_for_agent_control,
 )
 from apps.browser.container import BrowserContainer
 from apps.browser.dependencies import ContainerDep
@@ -484,7 +485,9 @@ async def _tool_call(
 
     if tool_name == "browser_save_html_to_s3":
         args = ToolSaveHtmlToS3Args.model_validate(arguments)
+        await wait_for_agent_control(runtime, args.session_id)
         async with runtime.lease_manager.session_navigate_exclusive(args.session_id):
+            await wait_for_agent_control(runtime, args.session_id)
             try:
                 page = await runtime.lease_manager.get_page_for_session(args.session_id)
             except KeyError as exc:

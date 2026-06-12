@@ -89,3 +89,27 @@ class V1ModelsResponseBody(BaseModel):
 
     object: Literal["list"] = "list"
     data: list[V1ModelItemSchema]
+
+
+class ChatCompletionMessageBody(BaseModel):
+    role: Literal["assistant"] = "assistant"
+    content: str
+
+
+class ChatCompletionChoiceBody(BaseModel):
+    index: int = 0
+    message: ChatCompletionMessageBody
+    finish_reason: Literal["stop"] = "stop"
+
+
+class OpenAIChatCompletionsResponseBody(BaseModel):
+    """Ответ POST ``/v1/chat/completions`` (OpenAI-compatible)."""
+
+    id: str
+    object: Literal["chat.completion"] = "chat.completion"
+    created: int
+    model: str
+    choices: list[ChatCompletionChoiceBody]
+    usage: dict[str, int] = Field(
+        default_factory=lambda: {"prompt_tokens": 0, "completion_tokens": 0, "total_tokens": 0},
+    )

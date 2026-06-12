@@ -42,7 +42,7 @@ def test_resolve_search_config_uses_company_credentials_without_touching_platfor
 
     resolved = resolve_search_config_for_company(platform_config=platform, company=company)
 
-    assert resolved.config.provider_order == ["tavily", "serper", "tinyfish", "linkup"]
+    assert resolved.config.provider_order == ["index", "tavily", "serper", "tinyfish", "linkup"]
     assert resolved.credential_source("tavily") == "company"
     assert resolved.config.tavily.api_key == "company-tavily-key"
     assert resolved.config.tavily.search_depth == "advanced"

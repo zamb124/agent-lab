@@ -195,6 +195,7 @@ ROUTE_RULES: list[RouteRule] = [
     RouteRule("/browser/api/v1/control/*", auth_required=False, context_type="anonymous"),
     RouteRule("/browser/api/v1/mcp*", auth_required=False, context_type="anonymous"),
     RouteRule("/search/api/v1/mcp*", auth_required=False, context_type="anonymous"),
+    RouteRule("/search/api/v1/*", context_type="api", auth_required=True),
 
     # Документация
     RouteRule("/docs*", auth_required=False, context_type="anonymous"),
@@ -295,6 +296,10 @@ ROUTE_RULES: list[RouteRule] = [
     RouteRule("/api/platform-tracing/*", context_type="api", auth_required=True),
     RouteRule("/frontend/api/platform-tracing/*", context_type="api", auth_required=True),
 
+    # Отчёт по краулерам (доступ system проверяется в обработчике)
+    RouteRule("/api/crawl-report/*", context_type="api", auth_required=True),
+    RouteRule("/frontend/api/crawl-report/*", context_type="api", auth_required=True),
+
     # Админ тарифы и usage (доступ system проверяется в обработчике)
     RouteRule("/api/platform-billing/*", context_type="api", auth_required=True),
     RouteRule("/frontend/api/platform-billing/*", context_type="api", auth_required=True),
@@ -344,6 +349,7 @@ ROUTE_RULES: list[RouteRule] = [
     RouteRule("/scheduler-tasks", context_type="frontend", auth_required=True),
     RouteRule("/lead-requests", context_type="frontend", auth_required=True),
     RouteRule("/platform-tracing", context_type="frontend", auth_required=True),
+    RouteRule("/crawl-report", context_type="frontend", auth_required=True),
     RouteRule("/platform-billing", context_type="frontend", auth_required=True),
 
     # Те же страницы консоли, если путь приходит с префиксом сервиса (/frontend/...).
@@ -358,6 +364,7 @@ ROUTE_RULES: list[RouteRule] = [
     RouteRule("/frontend/scheduler-tasks", context_type="frontend", auth_required=True),
     RouteRule("/frontend/lead-requests", context_type="frontend", auth_required=True),
     RouteRule("/frontend/platform-tracing", context_type="frontend", auth_required=True),
+    RouteRule("/frontend/crawl-report", context_type="frontend", auth_required=True),
     RouteRule("/frontend/platform-billing", context_type="frontend", auth_required=True),
 
     # API сервиса Scheduler

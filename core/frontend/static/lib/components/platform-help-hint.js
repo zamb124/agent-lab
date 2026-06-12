@@ -2,6 +2,8 @@
  * Подсказка по hover / focus. По умолчанию — кнопка «?»; опционально слот-контент
  * (кастомный триггер). Пузырёк в document.body (z-index из nextModalLayerZIndex).
  * Свойство strategy для совместимости; `wide` — широкий моноширинный режим (JSON).
+ * Для сложных подсказок доступны `summary`, `details`, `docHref`, `docLabel`.
+ * `fill` растягивает кастомный slotted trigger на всю область хоста.
  * `placement`: `auto` — не вылезать за верх вьюпорта (снизу от якоря), `top` / `bottom` — жёстко.
  * `size`: `md` — кнопка 32×32 (как `flows-node-run-control`).
  */
@@ -56,6 +58,29 @@ function ensurePortalBubbleStyles() {
             white-space: pre-wrap;
             word-break: break-word;
         }
+        .platform-help-hint-portal-summary {
+            margin: 0 0 4px;
+            color: var(--text-primary, rgba(255, 255, 255, 0.95));
+            font-size: 12px;
+            font-weight: 650;
+            line-height: 1.3;
+        }
+        .platform-help-hint-portal-body {
+            color: var(--text-secondary, rgba(255, 255, 255, 0.74));
+        }
+        .platform-help-hint-portal-link {
+            display: inline-flex;
+            align-items: center;
+            margin-top: 8px;
+            color: var(--accent, #60a5fa);
+            font-weight: 600;
+            text-decoration: none;
+        }
+        .platform-help-hint-portal-link:hover,
+        .platform-help-hint-portal-link:focus {
+            text-decoration: underline;
+            outline: none;
+        }
     `;
     document.head.appendChild(style);
 }
@@ -69,11 +94,26 @@ export class PlatformHelpHint extends PlatformElement {
                 vertical-align: middle;
             }
 
+            :host([fill]) {
+                width: 100%;
+                height: 100%;
+            }
+
             .hint-root {
                 position: relative;
                 display: inline-flex;
                 align-items: center;
                 cursor: help;
+            }
+
+            :host([fill]) .hint-root {
+                width: 100%;
+                height: 100%;
+            }
+
+            :host([fill]) .hint-root ::slotted(*) {
+                width: 100%;
+                height: 100%;
             }
 
             .hint-btn {
@@ -117,6 +157,10 @@ export class PlatformHelpHint extends PlatformElement {
 
     static properties = {
         text: { type: String },
+        summary: { type: String },
+        details: { type: String },
+        docHref: { type: String, attribute: 'doc-href' },
+        docLabel: { type: String, attribute: 'doc-label' },
         label: { type: String },
         strategy: { type: String },
         /** @type {'auto'|'top'|'bottom'} */
@@ -124,17 +168,23 @@ export class PlatformHelpHint extends PlatformElement {
         /** Площадь кнопки как у flows-node-run-control (32×32). */
         size: { type: String, reflect: true },
         wide: { type: Boolean, reflect: true },
+        fill: { type: Boolean, reflect: true },
         _open: { state: true },
     };
 
     constructor() {
         super();
         this.text = '';
+        this.summary = '';
+        this.details = '';
+        this.docHref = '';
+        this.docLabel = '';
         this.label = 'Справка';
         this.strategy = 'portal';
         this.placement = 'auto';
         this.size = '';
         this.wide = false;
+        this.fill = false;
         this._open = false;
         this._bubbleId = `platform-help-hint-${Math.random().toString(36).slice(2, 10)}`;
         this._closeTimer = null;
@@ -142,8 +192,11 @@ export class PlatformHelpHint extends PlatformElement {
         this._bubbleZ = 0;
         this._onGlobalScroll = this._onGlobalScroll.bind(this);
         this._onGlobalKeydown = this._onGlobalKeydown.bind(this);
+        this._onGlobalPointerDown = this._onGlobalPointerDown.bind(this);
         this._onPortalBubbleEnter = () => this._cancelClose();
         this._onPortalBubbleLeave = () => this._scheduleClose();
+        this._onPortalBubbleFocusIn = () => this._cancelClose();
+        this._onPortalBubbleFocusOut = (e) => this._onPortalFocusOut(e);
     }
 
     disconnectedCallback() {
@@ -161,12 +214,24 @@ export class PlatformHelpHint extends PlatformElement {
                 window.addEventListener('scroll', this._onGlobalScroll, true);
                 window.addEventListener('resize', this._onGlobalScroll, true);
                 window.addEventListener('keydown', this._onGlobalKeydown, true);
+                window.addEventListener('pointerdown', this._onGlobalPointerDown, true);
             } else {
                 this._teardownPortal();
                 this._detachGlobalListeners();
             }
-        } else if (this._open && changed.has('text') && this._portalBubble) {
-            this._portalBubble.textContent = this.text;
+        } else if (
+            this._open
+            && this._portalBubble
+            && (
+                changed.has('text')
+                || changed.has('summary')
+                || changed.has('details')
+                || changed.has('docHref')
+                || changed.has('docLabel')
+                || changed.has('label')
+            )
+        ) {
+            this._updatePortalContent();
             requestAnimationFrame(() => {
                 requestAnimationFrame(() => this._syncPortalPosition());
             });
@@ -186,6 +251,7 @@ export class PlatformHelpHint extends PlatformElement {
         window.removeEventListener('scroll', this._onGlobalScroll, true);
         window.removeEventListener('resize', this._onGlobalScroll, true);
         window.removeEventListener('keydown', this._onGlobalKeydown, true);
+        window.removeEventListener('pointerdown', this._onGlobalPointerDown, true);
     }
 
     _onGlobalScroll() {
@@ -199,6 +265,18 @@ export class PlatformHelpHint extends PlatformElement {
         if (e.key === 'Escape' && this._open) {
             this._closeNow();
         }
+    }
+
+    _onGlobalPointerDown(e) {
+        if (!this._open) {
+            return;
+        }
+        const target = e.target;
+        const root = this.renderRoot?.querySelector('.hint-root');
+        if ((root && root.contains(target)) || (this._portalBubble && this._portalBubble.contains(target))) {
+            return;
+        }
+        this._closeNow();
     }
 
     _clearCloseTimer() {
@@ -233,6 +311,58 @@ export class PlatformHelpHint extends PlatformElement {
             this._portalBubble.classList.add('platform-help-hint-portal-bubble--wide');
         } else {
             this._portalBubble.classList.remove('platform-help-hint-portal-bubble--wide');
+        }
+    }
+
+    _hasDocLink() {
+        return typeof this.docHref === 'string' && this.docHref.trim() !== '';
+    }
+
+    _textValue(value) {
+        return typeof value === 'string' ? value.trim() : '';
+    }
+
+    _appendPortalText(className, text) {
+        const value = this._textValue(text);
+        if (value === '' || !this._portalBubble) {
+            return;
+        }
+        const node = document.createElement('div');
+        node.className = className;
+        node.textContent = value;
+        this._portalBubble.appendChild(node);
+    }
+
+    _updatePortalContent() {
+        if (!this._portalBubble) {
+            return;
+        }
+        const summary = this._textValue(this.summary);
+        const details = this._textValue(this.details);
+        const text = this._textValue(this.text);
+        this._portalBubble.textContent = '';
+        this._portalBubble.setAttribute('role', this._hasDocLink() ? 'dialog' : 'tooltip');
+        if (this._hasDocLink()) {
+            this._portalBubble.setAttribute('aria-label', summary || this.label);
+            this._portalBubble.setAttribute('aria-modal', 'false');
+        } else {
+            this._portalBubble.removeAttribute('aria-label');
+            this._portalBubble.removeAttribute('aria-modal');
+        }
+        if (this.wide && summary === '' && details === '' && !this._hasDocLink()) {
+            this._portalBubble.textContent = text;
+            return;
+        }
+        this._appendPortalText('platform-help-hint-portal-summary', summary);
+        this._appendPortalText('platform-help-hint-portal-body', details || text);
+        if (this._hasDocLink()) {
+            const link = document.createElement('a');
+            link.className = 'platform-help-hint-portal-link';
+            link.href = this.docHref.trim();
+            link.target = '_blank';
+            link.rel = 'noopener noreferrer';
+            link.textContent = this._textValue(this.docLabel) || 'Open documentation';
+            this._portalBubble.appendChild(link);
         }
     }
 
@@ -306,13 +436,15 @@ export class PlatformHelpHint extends PlatformElement {
         const bubble = document.createElement('div');
         bubble.id = this._bubbleId;
         bubble.className = 'platform-help-hint-portal-bubble';
-        bubble.setAttribute('role', 'tooltip');
-        bubble.textContent = this.text;
+        bubble.tabIndex = -1;
         bubble.style.zIndex = String(this._bubbleZ);
         bubble.addEventListener('mouseenter', this._onPortalBubbleEnter);
         bubble.addEventListener('mouseleave', this._onPortalBubbleLeave);
+        bubble.addEventListener('focusin', this._onPortalBubbleFocusIn);
+        bubble.addEventListener('focusout', this._onPortalBubbleFocusOut);
         document.body.appendChild(bubble);
         this._portalBubble = bubble;
+        this._updatePortalContent();
         this._applyWideClass();
         this._syncPortalPosition();
         requestAnimationFrame(() => {
@@ -324,6 +456,8 @@ export class PlatformHelpHint extends PlatformElement {
         if (this._portalBubble) {
             this._portalBubble.removeEventListener('mouseenter', this._onPortalBubbleEnter);
             this._portalBubble.removeEventListener('mouseleave', this._onPortalBubbleLeave);
+            this._portalBubble.removeEventListener('focusin', this._onPortalBubbleFocusIn);
+            this._portalBubble.removeEventListener('focusout', this._onPortalBubbleFocusOut);
             this._portalBubble.remove();
             this._portalBubble = null;
         }
@@ -356,6 +490,21 @@ export class PlatformHelpHint extends PlatformElement {
         this._closeNow();
     }
 
+    _onPortalFocusOut(e) {
+        const related = e.relatedTarget;
+        const root = this.renderRoot?.querySelector('.hint-root');
+        if ((related && this._portalBubble?.contains(related)) || (root && related && root.contains(related))) {
+            return;
+        }
+        this._scheduleClose();
+    }
+
+    _onRootClick(e) {
+        e.stopPropagation();
+        this._cancelClose();
+        this._openBubble();
+    }
+
     render() {
         return html`
             <span
@@ -366,6 +515,7 @@ export class PlatformHelpHint extends PlatformElement {
                 @mouseleave=${this._onRootLeave}
                 @focusin=${this._onRootFocusIn}
                 @focusout=${this._onRootFocusOut}
+                @click=${this._onRootClick}
             >
                 <slot>
                     <button type="button" class="hint-btn" aria-label=${this.label}>?</button>

@@ -28,12 +28,12 @@ AI-layer — только `core.ai`: provider specs, shared model catalog, resol
 
 ## Проверки
 
-После Python-правок:
+После правок кода:
 
 ```bash
-uv run ruff check .
-uv run basedpyright core apps
-uv run python analyze_imports.py
+make lint FILE=<изменённый-файл>   # точечно
+make lint                          # всё перед PR
+make lint-ts                       # только frontend
 ```
 
 После узкой правки — целевой `pytest`. После архитектурного рефакторинга — `make test`. Если менялись gate/coverage/тест-инфра или пользователь просил coverage — `make test-cov`.

@@ -1,6 +1,6 @@
 # RAG Service
 
-Микросервис управления документами и поиска (RAG): REST API под **`/rag/api/v1/`**, UI в **`apps/rag/ui/`** (Lit 3, Zustand), порт **8004**.
+Микросервис управления документами и поиска (RAG): REST API под **`/rag/api/v1/`**, UI в **`apps/rag/ui/`** (Lit 3, EventBus + фабрики), порт **8004**.
 
 Подробные инварианты конфигурации, провайдеров и индексации — **`.cursor/rules/rag.mdc`**. Каскад настроек платформы — **`configuration.mdc`**.
 
@@ -69,11 +69,10 @@
 
 ## UI (`apps/rag/ui/`)
 
-- **HTTP**: класс **`RAGAPIService`** (`ui/services/rag-api.service.js`), базовый путь **`/rag/api/v1`** — обёртка над эндпоинтами выше (`getNamespaces`, `uploadDocument` с `metadata`, `search`, `globalSearch`, `getDocumentStatus`, и т.д.).
-- **Состояние**: **`RagStore`** (`ui/store/rag.store.js`) — провайдеры, список namespace, документы, поиск, сохраняемые **`uploadIndexProfileDefaults`** (дефолты **`split`** / **`parsing`** для поля **`metadata.index_profile_config`** при загрузке).
-- **Счётчики документов** на карточке namespace берутся из **`document_status_counts_by_namespace`** (и сопоставления с namespace), а не из одного числового поля без разбивки по статусам.
-- **Маршрутизация** (hash): `#/`, `#/namespace/:id`, `#/search`, `#/settings`.
-- Канон фронтенда платформы — **`frontend.mdc`** (импорты `@platform/...`, базовые компоненты).
+- **Состояние и HTTP**: фабрики в **`apps/rag/ui/events/resources/*.resource.js`** (`rag/namespaces`, `rag/documents`, `rag/search`, `rag/document_upload`, …) с REST mirror на эндпоинты выше.
+- **Счётчики документов** на карточке namespace берутся из **`document_status_counts_by_namespace`**.
+- **Маршрутизация**: `createRouterEffect` — `namespaces`, `namespace_detail`, `search`, `settings` (см. **`rag.mdc`**).
+- Канон фронтенда платформы — **`frontend.mdc`**, **`ui_factories.mdc`**.
 
 ## Flows: ресурс `RAGResource`
 
@@ -109,10 +108,9 @@ apps/rag/
     ├── index.js
     ├── app/rag-app.js
     ├── components/
-    ├── features/
     ├── modals/
-    ├── services/rag-api.service.js
-    └── store/rag.store.js
+    ├── pages/
+    └── events/resources/
 ```
 
 Реранк после retrieve: **`core/rag/post_retrieval_rerank.py`**.

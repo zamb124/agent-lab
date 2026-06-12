@@ -27,6 +27,7 @@
     "rag_url": "postgresql+asyncpg://platform_user:admin@localhost:54321/platform_rag",
     "office_url": "postgresql+asyncpg://platform_user:admin@localhost:54321/platform_office",
     "tracing_url": "postgresql+asyncpg://platform_user:admin@localhost:54321/platform_tracing",
+    "search_url": "postgresql+asyncpg://platform_user:admin@localhost:54321/platform_search",
     "redis_url": "redis://localhost:63791/0"
   },
   "tasks": {
@@ -630,6 +631,18 @@
       }
     },
     "document_indexing": {},
+    "index_profiles": {
+      "runet_web": {
+        "split": {
+          "strategy": "semantic",
+          "chunk_size": 800,
+          "chunk_overlap": 120
+        },
+        "lexical": {
+          "enabled": true
+        }
+      }
+    },
     "ttl": {
       "cleanup_enabled": true,
       "default_ttl_seconds": 864000,
@@ -912,6 +925,7 @@
       },
       "search": {
         "provider_order": [
+          "index",
           "tinyfish",
           "linkup",
           "serper",
@@ -920,6 +934,12 @@
         "provider_state_key_prefix": "search:providers",
         "available_ttl_seconds": 300,
         "unavailable_ttl_seconds": 300,
+        "index": {
+          "enabled": true,
+          "default_index_ids": ["runet"],
+          "max_indexes_per_request": 3,
+          "registry_cache_ttl_seconds": 60
+        },
         "tinyfish": {
           "api_key": "",
           "base_url": "https://api.search.tinyfish.ai",
@@ -949,6 +969,14 @@
           "topic": "general",
           "include_answer": false
         }
+      },
+      "crawl": {
+        "default_crawl_profile_id": "runet_platform",
+        "http_timeout_seconds": 20.0,
+        "min_extract_chars": 200,
+        "tranco_seed_limit": 200,
+        "skip_categories": ["ecommerce", "social"],
+        "ru_com_whitelist": ["habr.com", "vc.ru", "tass.ru"]
       }
     },
     "voice": {

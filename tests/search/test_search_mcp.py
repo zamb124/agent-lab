@@ -4,7 +4,6 @@ from httpx import ASGITransport, AsyncClient
 from apps.search.api.mcp import _tools
 from apps.search.config import SearchIntegrationConfig
 from apps.search.main import app
-from apps.search.services import MetaSearchService
 from core.integrations.mcp import MCP_PROTOCOL_VERSION
 from core.search import MetaSearchRequest
 
@@ -24,10 +23,14 @@ def test_search_mcp_exposes_search_tools() -> None:
 
 
 @pytest.mark.asyncio
-async def test_meta_search_reports_missing_serper_key(provider_state_store) -> None:
-    response = await MetaSearchService(SearchIntegrationConfig(), provider_state_store).search(
-        MetaSearchRequest(query="humanitec", providers=["serper"])
-    )
+async def test_meta_search_reports_missing_serper_key(
+    provider_state_store,
+    meta_search_service_builder,
+) -> None:
+    response = await meta_search_service_builder(
+        SearchIntegrationConfig(),
+        provider_state_store,
+    ).search(MetaSearchRequest(query="humanitec", providers=["serper"]))
 
     assert response.results == []
     assert response.providers["serper"].ok is False

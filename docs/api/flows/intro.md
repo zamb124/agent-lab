@@ -1675,50 +1675,845 @@ Flow получает нормализованное описание файла
 }
 ```
 
-## Embed endpoint для виджетов
+## Встраивание flow на сайт через Embed widget
 
-Для обычной server-to-server интеграции используйте:
+Embed widget нужен, когда вы хотите поставить чат с flow прямо на внешний сайт: лендинг, личный кабинет, help center, админку клиента или внутренний портал. Пользователь сайта видит обычный чат, а внутри каждый его вопрос уходит в A2A endpoint flow.
+
+Важно различать два сценария:
+
+- Server-to-server A2A: ваш backend сам вызывает `/flows/api/v1/{flow_id}` с `hum_...` API key.
+- Embed widget: браузер сайта вызывает `/flows/api/v1/embed/{embed_id}` только с коротким embed-session token. `hum_...` API key остается на вашем backend.
+
+Если объяснять совсем просто, схема такая:
+
+1. В консоли платформы вы создаете embed widget для конкретного flow и branch.
+2. Консоль дает вам `<script ...></script>` для сайта.
+3. Вы добавляете на своем backend endpoint, например `POST /api/chat-token`.
+4. Браузер сайта просит у вашего backend короткий token.
+5. Ваш backend с `hum_...` ключом просит платформу выдать embed-session token.
+6. Браузер получает короткий token и отправляет сообщения в `/flows/api/v1/embed/{embed_id}`.
+
+Главное правило безопасности: `hum_...` ключ никогда не должен попадать в браузер. Он не должен быть в HTML, JavaScript bundle, localStorage, query string, публичном репозитории или ответе `/api/chat-token`. В браузер можно вернуть только короткий embed-session token.
+
+### Шаг 1. Подготовьте flow
+
+Перед созданием виджета проверьте flow в редакторе или через обычный A2A API:
+
+- flow отвечает на тестовый вопрос;
+- нужный branch существует;
+- публичные variables задокументированы для разработчика сайта;
+- если flow принимает файлы, он умеет их обрабатывать;
+- если нужен голос, у компании и flow настроены speech/voice возможности;
+- если пользователь сайта должен видеть только один сценарий, создайте отдельный branch или отдельный flow под этот виджет.
+
+Branch выбирается отдельно от variables. Не кладите branch в `metadata.variables`. Для A2A branch находится в `params.metadata.branch`, а для embed widget branch выбирается в настройках самого виджета и затем закрепляется в коротком embed-session token.
+
+### Шаг 2. Откройте раздел встраиваемых виджетов
+
+В консоли платформы откройте раздел `Встраиваемые виджеты`. В локальном dev-окружении это обычно:
 
 ```text
-/flows/api/v1/{flow_id}
+http://demo.lvh.me:8002/embed-configs
 ```
 
-Endpoint embed нужен для браузерных виджетов:
+В production используйте домен консоли вашей компании.
 
-```text
-POST /flows/api/v1/embed/{embed_id}
+![Список embed widgets в консоли](../../assets/images/embed-widget-console-list.png)
+
+На странице видна таблица виджетов:
+
+- `Название` - понятное имя для людей в консоли.
+- `Embed ID` - публичный ID виджета. Он попадет в `data-embed-id`.
+- `Flow` - flow, который будет отвечать.
+- `Ветка` - branch, закрепленный за этим виджетом.
+- `Статус` - `active` или `disabled`.
+- `Использований` - счетчик обращений.
+- `Действия` - получить код, отредактировать или удалить виджет.
+
+### Шаг 3. Создайте или отредактируйте виджет
+
+Нажмите `Создать виджет`. Если виджет уже создан, кнопка `Редактировать` открывает те же настройки, только с заполненными значениями.
+
+![Основные настройки embed widget](../../assets/images/embed-widget-edit-basic.png)
+
+Заполняйте поля сверху вниз.
+
+| Поле | Что означает | Как выбирать |
+| --- | --- | --- |
+| `Название виджета` | Имя только для консоли. Пользователь сайта его не видит, если вы отдельно не используете его как title. | Пишите так, чтобы через месяц было понятно, где стоит виджет: `Чат поддержки на сайте`, `FAQ виджет`, `Личный кабинет`. |
+| `Flow (агент)` | Flow, который будет получать сообщения из чата. | Выберите flow, который уже протестирован. Если flow не найден, проверьте активную компанию и `flow_id`. |
+| `Ветка` | Branch внутри выбранного flow. | Для простого сценария используйте `default`. Для отдельных сценариев используйте отдельные branches: `support`, `sales`, `beta`. |
+| `Позиция на странице` | Визуальная позиция launcher/panel в настройке виджета. | Обычно `Справа внизу`. Для полноэкранных сценариев используйте `На весь экран`, если такой режим нужен вашему сайту. |
+| `Тема оформления` | Цветовая схема виджета. | `Светлая`, `Темная` или `Как в системе`. Для внешнего сайта чаще выбирают `Как в системе` или явно `Светлая`. |
+| `Имя ассистента` | Заголовок в шапке чата. | Например `AI-помощник`, `Поддержка`, `Консультант`. Это значение попадает в `data-assistant-title`. |
+| `Приветственное сообщение` | Первое сообщение, которое увидит пользователь при открытии чата. | Пишите коротко и понятно: `Здравствуйте! Чем помочь?`. Если приветствие не нужно, оставьте пустым. |
+| `Подсказка в поле ввода` | Placeholder в пустом поле сообщения. | Например `Напишите вопрос...`, `Опишите проблему...`. |
+| `Язык интерфейса` | Язык кнопок, подсказок и системных элементов виджета. | `Русский`, `English` или `Авто`. Если сайт русский, выбирайте `Русский`, чтобы не зависеть от браузера пользователя. |
+
+Ниже находятся настройки безопасности и поведения.
+
+![Дополнительные настройки embed widget](../../assets/images/embed-widget-edit-advanced.png)
+
+| Поле | Что означает | Как использовать |
+| --- | --- | --- |
+| `Голос ассистента` | Разрешает голосовой режим в виджете, если он доступен в вашей конфигурации. | Включайте только если вы реально хотите микрофон/голос в чате. Для обычного текстового чата оставьте выключенным. |
+| `Включать голос сразу` | Автоматически запускает голос при открытии виджета. | Используйте осторожно: браузеры часто требуют явное действие пользователя для микрофона. |
+| `Допустимые домены (CORS)` | Белый список сайтов, с которых можно использовать виджет. | В production лучше заполнить. Пишите по одному origin на строку: `https://example.com`, `https://app.example.com`. |
+| `Лимит сообщений гостя` | Максимум пользовательских сообщений в одном диалоге виджета. | Например `30`, чтобы один посетитель не мог бесконечно грузить flow в одном context. Пусто - без лимита. |
+| `primary_color` | Основной цвет в конфигурации виджета. | Используйте HEX-цвет бренда, например `#6366f1`. |
+| `Показывать кнопку запуска` | Показывает стандартную плавающую кнопку открытия чата. | Выключайте, если на сайте будет своя кнопка `Задать вопрос`. Тогда открывайте чат через custom event. |
+
+Правила для `Допустимые домены (CORS)`:
+
+- Указывайте origin целиком: `https://example.com`.
+- Если есть порт, он часть origin: `http://localhost:3000`.
+- Не добавляйте path: неправильно `https://example.com/help`.
+- Не добавляйте завершающий `/`: лучше `https://example.com`, а не `https://example.com/`.
+- `https://example.com` и `https://www.example.com` - разные origins.
+- `http://localhost:3000` и `http://localhost:5173` - разные origins.
+- Пустой список означает, что session-token endpoint не ограничивает origin белым списком. Для production обычно лучше не оставлять пусто.
+
+### Шаг 4. Получите код для вставки
+
+В таблице нажмите `Получить код`.
+
+![Код embed widget для вставки на сайт](../../assets/images/embed-widget-code-modal.png)
+
+Консоль покажет:
+
+- готовый `<script type="module" ...></script>`;
+- platform endpoint для выдачи короткого token;
+- список allowed origins;
+- пример backend-запроса;
+- пример browser-to-backend запроса.
+
+Ниже в модалке есть пример server-to-server запроса и список origins.
+
+![Backend пример для short-lived embed-session token](../../assets/images/embed-widget-code-backend.png)
+
+Код вставки выглядит примерно так:
+
+```html
+<script type="module"
+  src="https://cdn.humanitec.ru/lib/embed-chat/humanitec-embed-autoload.js"
+  data-embed-id="embed_abc123"
+  data-assistant-title="AI-помощник"
+  data-theme="auto"
+  data-locale="ru"
+  data-show-launcher="true"
+  data-flows-base-url="https://api.humanitec.ru/flows"
+  data-platform-ui-origin="https://api.humanitec.ru"
+  data-chat-token-url="/api/chat-token"
+  data-token-expires-seconds="300"
+  data-use-credentials="false"
+  data-event-namespace="assistant"
+  data-toggle-event-name="humanitec-embed-chat-toggle"
+  data-voice-enabled="false"
+  data-voice-default-on="false"
+  data-voice-base-url="https://api.humanitec.ru/voice"
+  data-company-id="your_company_id"
+></script>
 ```
 
-Он не принимает обычный company API key напрямую из браузера. Правильная схема такая:
+В dev-окружении `src`, `data-flows-base-url`, `data-platform-ui-origin` и `data-voice-base-url` будут указывать на локальный host. В production используйте код, который выдала production-консоль.
 
-1. Ваш backend хранит `hum_...` API key.
-2. Ваш backend вызывает:
+### Шаг 5. Реализуйте backend endpoint `/api/chat-token`
+
+`data-chat-token-url="/api/chat-token"` означает: браузер вашего сайта будет делать `POST /api/chat-token` на ваш backend. Этот endpoint должны реализовать вы.
+
+Браузер отправит примерно такое тело:
+
+```json
+{
+  "embed_id": "embed_abc123",
+  "origin": "https://example.com",
+  "expires_in_seconds": 300
+}
+```
+
+Ваш backend должен:
+
+1. Проверить, что `embed_id` ожидаемый.
+2. Взять `origin` из тела или из HTTP header `Origin`.
+3. Вызвать platform endpoint:
 
 ```text
 POST /frontend/api/embed/configs/{embed_id}/session-token
 ```
 
-3. Платформа выдает короткоживущий embed-session token.
-4. Браузер виджета использует этот короткий token для `/flows/api/v1/embed/{embed_id}`.
+4. Передать свой `hum_...` API key в `Authorization`.
+5. Вернуть браузеру только короткий token.
 
-Embed-session token обычно ограничен:
+Пример на Node.js / Express:
 
-- конкретным `embed_id`;
-- конкретным `flow_id`;
-- конкретным branch;
-- разрешенным `Origin`;
-- коротким временем жизни;
-- набором методов.
+```js
+import express from "express";
 
-Для embed-session token разрешены только:
+const app = express();
+app.use(express.json());
+
+const HUMANITEC_API_BASE = "https://api.humanitec.ru";
+const HUMANITEC_API_KEY = process.env.HUMANITEC_API_KEY;
+const HUMANITEC_EMBED_ID = process.env.HUMANITEC_EMBED_ID;
+
+app.post("/api/chat-token", async (req, res) => {
+  const embedId = String(req.body?.embed_id || "");
+  if (embedId !== HUMANITEC_EMBED_ID) {
+    return res.status(400).json({ error: "Unknown embed_id" });
+  }
+
+  const browserOrigin = String(req.body?.origin || req.headers.origin || "");
+  const ttl = Number(req.body?.expires_in_seconds || 300);
+
+  const platformResponse = await fetch(
+    `${HUMANITEC_API_BASE}/frontend/api/embed/configs/${encodeURIComponent(embedId)}/session-token`,
+    {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "Authorization": `Bearer ${HUMANITEC_API_KEY}`,
+      },
+      body: JSON.stringify({
+        origin: browserOrigin,
+        expires_in_seconds: ttl,
+      }),
+    },
+  );
+
+  if (!platformResponse.ok) {
+    const text = await platformResponse.text();
+    return res.status(platformResponse.status).json({
+      error: "Cannot issue embed session token",
+      detail: text,
+    });
+  }
+
+  const data = await platformResponse.json();
+  return res.json({
+    token: data.token,
+    token_type: data.token_type,
+    expires_at: data.expires_at,
+  });
+});
+```
+
+Минимальный scope для `hum_...` ключа, который выпускает embed-session token, обычно `agents:read`. `agents:write` для обычного чата не нужен.
+
+Что нельзя делать:
+
+- нельзя возвращать `HUMANITEC_API_KEY` в браузер;
+- нельзя вставлять `hum_...` в `data-*` атрибуты;
+- нельзя хранить `hum_...` в localStorage/sessionStorage;
+- нельзя делать browser fetch напрямую на `/frontend/api/embed/configs/{embed_id}/session-token` с company API key;
+- нельзя принимать любой `embed_id` без проверки, если ваш backend обслуживает один конкретный сайт.
+
+### Шаг 6. Вставьте script на сайт
+
+Вставьте `<script ...></script>` перед закрывающим `</body>` на странице, где нужен чат.
+
+```html
+<!doctype html>
+<html lang="ru">
+  <head>
+    <meta charset="utf-8" />
+    <title>Help Center</title>
+  </head>
+  <body>
+    <main>
+      <h1>Поддержка</h1>
+    </main>
+
+    <script type="module"
+      src="https://cdn.humanitec.ru/lib/embed-chat/humanitec-embed-autoload.js"
+      data-embed-id="embed_abc123"
+      data-assistant-title="AI-помощник"
+      data-theme="auto"
+      data-locale="ru"
+      data-show-launcher="true"
+      data-flows-base-url="https://api.humanitec.ru/flows"
+      data-platform-ui-origin="https://api.humanitec.ru"
+      data-chat-token-url="/api/chat-token"
+      data-token-expires-seconds="300"
+      data-use-credentials="false"
+      data-event-namespace="assistant"
+      data-toggle-event-name="humanitec-embed-chat-toggle"
+      data-voice-enabled="false"
+      data-voice-default-on="false"
+      data-voice-base-url="https://api.humanitec.ru/voice"
+      data-company-id="your_company_id"
+    ></script>
+  </body>
+</html>
+```
+
+После загрузки страницы должен появиться launcher виджета. При первом сообщении виджет запросит `/api/chat-token`, получит короткий token и отправит A2A `message/stream`.
+
+### Каждый атрибут script
+
+| Атрибут | Обязателен | Что делает | Как использовать |
+| --- | --- | --- | --- |
+| `type="module"` | Да | Загружает widget как ES module. | Не меняйте. Без этого браузер не загрузит модульный скрипт корректно. |
+| `src` | Да | URL autoload-скрипта виджета. | Берите из консоли. В production обычно CDN, в dev - локальный `/static/core/...`. |
+| `data-embed-id` | Да | ID конкретного embed widget. | Не придумывайте вручную. Копируйте из консоли. |
+| `data-assistant-title` | Нет | Заголовок в шапке чата. | Например `AI-помощник`. Если пусто, будет использовано имя из конфигурации. |
+| `data-theme` | Нет | Тема виджета: `light`, `dark`, `auto`. | `auto` подстраивается под окружение. Для фиксированного сайта можно поставить `light` или `dark`. |
+| `data-locale` | Нет | Язык UI виджета: `ru`, `en`, `auto`. | Для русского сайта ставьте `ru`, для английского `en`. |
+| `data-show-launcher` | Нет | Показывать стандартную плавающую кнопку открытия. | `true` - виджет сам показывает кнопку. `false` - открывайте своей кнопкой через event. |
+| `data-flows-base-url` | Да | Base URL сервиса Flows с префиксом `/flows`. | В production используйте значение из консоли, например `https://api.humanitec.ru/flows`. |
+| `data-platform-ui-origin` | Да для CDN/внешнего сайта | Origin платформы для вспомогательных ресурсов UI. | Оставьте значение из консоли. Обычно это `https://api.humanitec.ru`. |
+| `data-chat-token-url` | Да для безопасной схемы | URL вашего backend endpoint, который выдает короткий token браузеру. | Обычно `/api/chat-token`. Можно указать полный URL, если backend на другом origin и CORS настроен. |
+| `data-token-expires-seconds` | Нет | TTL короткого token, который браузер просит у вашего backend. | Значение должно быть положительным. Platform endpoint принимает 60..900 секунд. Обычно `300`. |
+| `data-use-credentials` | Нет | Управляет browser credentials для запросов виджета. | Обычно `false`. `true` нужно только если вы сознательно используете cookie-based схему на том же домене. |
+| `data-event-namespace` | Нет | Namespace событий виджета. | Оставьте `assistant`, если у вас нет своей event-интеграции. |
+| `data-toggle-event-name` | Нет | Имя browser event, который открывает/закрывает drawer. | По умолчанию `humanitec-embed-chat-toggle`. Меняйте только если на странице несколько независимых виджетов. |
+| `data-voice-enabled` | Нет | Разрешает голосовой режим. | `true`, если включили голос в настройках и сайт готов работать с микрофоном. |
+| `data-voice-default-on` | Нет | Пытаться включать голос сразу при открытии. | Имеет смысл только при `data-voice-enabled="true"`. |
+| `data-voice-base-url` | Нет | Base URL voice-сервиса. | Оставьте значение из консоли. |
+| `data-company-id` | Нет | Идентификатор компании для функций, которым нужен company context. | Не меняйте вручную. Берите из консоли. |
+
+Дополнительные атрибуты для продвинутых случаев:
+
+| Атрибут | Что делает | Когда использовать |
+| --- | --- | --- |
+| `data-initial-open="true"` | Открывает drawer сразу после загрузки страницы. | Для демо-страниц или preview. На обычном сайте лучше не открывать чат без действия пользователя. |
+| `data-flow-id` | Явно задает flow ID для компонента. | В обычном embed-коде не нужен, потому что flow закреплен за `embed_id`. |
+| `data-branch-id` | Явно задает branch ID для компонента. | В обычном embed-коде не нужен. Branch закреплен в настройке виджета и token. Несовпадение приведет к ошибке доступа. |
+| `data-static-bearer` | Позволяет передать bearer token прямо в script. | Не используйте на публичном сайте. Это допустимо только для закрытых preview/локальных тестов, где нет риска утечки. |
+
+### Query-параметры страницы
+
+Embed drawer умеет читать несколько параметров из URL страницы. Это удобно для preview-ссылок, демо-страниц и точечной отладки внешнего сайта.
+
+Пример:
+
+```text
+https://example.com/help?embed_theme=dark&embed_lang=ru&embed_width=420
+```
+
+Поддерживаемые параметры:
+
+| Параметр | Синонимы | Что делает | Пример |
+| --- | --- | --- | --- |
+| `embed_theme` | `embed-theme` | Переопределяет тему drawer. Допустимые значения: `light`, `dark`, `auto`. | `embed_theme=dark` |
+| `embed_lang` | `embed_locale`, `embed-lang`, `embed-locale` | Переопределяет язык UI. Допустимые значения: `ru`, `en`, `auto`. | `embed_lang=ru` |
+| `embed_width` | `embed-panel-width` | Задает ширину панели. Число превращается в pixels, CSS-значение используется как есть. | `embed_width=420` |
+| `embed_max_height` | `embed-panel-max-height` | Задает максимальную высоту панели. | `embed_max_height=720` |
+| `embed_locale_control` | `embed-locale-control` | Показывает или скрывает переключатель языка в composer. `0`, `false`, `no` означают выключить. | `embed_locale_control=0` |
+| `embed_assistant_name` | `embed-assistant-name`, `embed_chat_title`, `embed-chat-title` | Переопределяет подпись ассистента в шапке панели. | `embed_assistant_name=Support` |
+| `embed_branch` | `embed-branch`, `embed_branch_id`, `embed-branch-id` | Пытается передать branch в drawer. | Для обычного публичного embed не используйте. Branch должен быть закреплен в widget config и token. |
+
+Не используйте query-параметр `embed_branch` как способ выбора сценария для посетителя сайта. В безопасной embed-схеме branch задается в консоли виджета, а затем фиксируется в embed-session token. Если нужно два сценария, например `sales` и `support`, создайте два embed widgets.
+
+### Своя кнопка открытия чата
+
+Если в настройках выключено `Показывать кнопку запуска`, стандартная кнопка не появится. Тогда откройте виджет своей кнопкой сайта:
+
+```html
+<button type="button" id="open-ai-chat">Задать вопрос</button>
+
+<script>
+  document.getElementById("open-ai-chat").addEventListener("click", () => {
+    window.dispatchEvent(
+      new CustomEvent("humanitec-embed-chat-toggle", {
+        detail: { open: true },
+      }),
+    );
+  });
+</script>
+```
+
+Закрыть чат программно:
+
+```js
+window.dispatchEvent(
+  new CustomEvent("humanitec-embed-chat-toggle", {
+    detail: { open: false },
+  }),
+);
+```
+
+Переключить состояние туда-сюда:
+
+```js
+window.dispatchEvent(new CustomEvent("humanitec-embed-chat-toggle"));
+```
+
+Если вы поменяли `data-toggle-event-name`, используйте свое имя события вместо `humanitec-embed-chat-toggle`.
+
+### Runtime API в браузере
+
+После загрузки autoload-скрипта появляется `window.humanitecEmbed`. Его можно использовать для точечной настройки виджета со стороны сайта.
+
+```js
+function configureHumanitecEmbed() {
+  if (!window.humanitecEmbed) {
+    window.setTimeout(configureHumanitecEmbed, 50);
+    return;
+  }
+
+  window.humanitecEmbed.setTheme("light");
+  window.humanitecEmbed.setLocale("ru");
+  window.humanitecEmbed.setAssistantTitle("AI-помощник");
+}
+
+configureHumanitecEmbed();
+```
+
+Доступные методы:
+
+| Метод | Что делает |
+| --- | --- |
+| `setTheme(nextTheme)` | Меняет тему: `light`, `dark`, `auto`. |
+| `setLocale(nextLocale)` | Меняет язык UI: `ru`, `en`, `auto`. |
+| `setLauncherVisible(visible)` | Показывает или скрывает стандартный launcher. |
+| `setAssistantTitle(nextTitle)` | Меняет заголовок в шапке чата. |
+| `setFlowsBaseUrl(nextBaseUrl)` | Меняет base URL Flows. Обычно не нужно. |
+| `setEventNamespace(nextNamespace)` | Меняет namespace событий. |
+| `setToggleEventName(nextEventName)` | Меняет имя события открытия/закрытия. |
+| `setMetadataHooks(extraMetadataProvider, contextProvider)` | Добавляет variables/context к каждому сообщению. |
+| `setAuthProvider(authProvider)` | Заменяет способ получения Authorization header. Обычно не нужно, если работает `/api/chat-token`. |
+
+### Variables в embed widget
+
+Variables - это дополнительные данные, которые сайт передает flow вместе с сообщением пользователя. Например:
+
+- `customer_id`;
+- `tariff`;
+- `page_url`;
+- `cart_id`;
+- `locale`;
+- `utm_campaign`.
+
+В A2A они попадают в:
+
+```json
+{
+  "params": {
+    "metadata": {
+      "variables": {
+        "customer_id": "cust-123",
+        "tariff": "pro"
+      }
+    }
+  }
+}
+```
+
+Embed widget автоматически передает полезный контекст страницы:
+
+- `page_url` - текущий URL страницы;
+- `page_title` - заголовок страницы;
+- `viewport_width` - ширина окна браузера;
+- `viewport_height` - высота окна браузера;
+- переменные языка интерфейса, чтобы flow понимал, на каком языке отвечать.
+
+Чтобы добавить свои variables, используйте `setMetadataHooks`:
+
+```html
+<script>
+  function configureEmbedVariables() {
+    if (!window.humanitecEmbed) {
+      window.setTimeout(configureEmbedVariables, 50);
+      return;
+    }
+
+    window.humanitecEmbed.setMetadataHooks(
+      async () => ({
+        customer_id: window.currentCustomerId || null,
+        tariff: window.currentTariff || "free",
+        page_kind: "help_center",
+      }),
+      async () => ({
+        cart_total: window.currentCartTotal || 0,
+      }),
+    );
+  }
+
+  configureEmbedVariables();
+</script>
+```
+
+Оба provider должны возвращать обычный object. Виджет объединит эти данные и отправит их как `metadata.variables`.
+
+Правила:
+
+- Не кладите секреты в variables. Браузерные variables видит пользователь сайта.
+- Не кладите туда API keys, OAuth tokens, внутренние пароли, закрытые IDs.
+- Не используйте `variables.branch`. Branch - отдельное понятие.
+- Если flow ожидает `customer_id`, передавайте именно `customer_id`, а не `customerId`, если в flow настроено snake_case имя.
+- Если значение неизвестно, лучше передать `null` или не передавать ключ вообще.
+
+### Branches в embed widget
+
+В обычном A2A запросе branch выбирается так:
+
+```json
+{
+  "params": {
+    "metadata": {
+      "branch": "support"
+    }
+  }
+}
+```
+
+В embed widget branch выбирается в настройках виджета в консоли. Когда backend вызывает `/session-token`, платформа выпускает короткий token уже для этого branch. Поэтому браузер не должен сам выбирать произвольный branch.
+
+Практические правила:
+
+- Один сценарий сайта - один embed widget.
+- Нужен отдельный branch `sales` - создайте отдельный widget для branch `sales`.
+- Нужен branch `support` - создайте отдельный widget для branch `support`.
+- Не пытайтесь переключать branch через `metadata.variables`.
+- Не используйте `data-branch-id` для обхода настроек виджета. Если branch не совпадает с token/config, запрос будет отклонен.
+
+Так проще и безопаснее: посетитель сайта не может подменить branch и попасть в сценарий, который вы не планировали показывать в этом месте.
+
+### Файлы в embed widget
+
+Если UI виджета разрешает прикреплять файлы, пользователь может отправить файл вместе с сообщением. Виджет отправляет файл в A2A как `file` part.
+
+Для custom-клиента формат такой:
+
+```json
+{
+  "kind": "file",
+  "file": {
+    "name": "invoice.pdf",
+    "mimeType": "application/pdf",
+    "bytes": "JVBERi0xLjQK..."
+  }
+}
+```
+
+Что важно:
+
+- `bytes` - это base64 без префикса `data:application/pdf;base64,`.
+- `name` помогает flow и инструментам показать файл человеку.
+- `mimeType` помогает понять тип файла.
+- Не отправляйте слишком большие файлы без необходимости.
+- Если файл приватный, не передавайте внешний URL, который flow не сможет скачать.
+
+Если flow должен обрабатывать файлы, заранее протестируйте это через A2A API: отправьте `message/stream` с `file` part и убедитесь, что нужный node/tool получает файл.
+
+### Embed session-token API
+
+Endpoint:
+
+```text
+POST /frontend/api/embed/configs/{embed_id}/session-token
+```
+
+Кто вызывает: только backend вашего сайта.
+
+Авторизация:
+
+```http
+Authorization: Bearer hum_your_api_key
+Content-Type: application/json
+```
+
+Request body:
+
+```json
+{
+  "origin": "https://example.com",
+  "expires_in_seconds": 300
+}
+```
+
+Поля:
+
+| Поле | Обязательность | Что означает |
+| --- | --- | --- |
+| `origin` | Обязательно, если у виджета заполнен whitelist origins | Origin страницы, где открыт виджет. Должен совпадать с allowed origins. |
+| `expires_in_seconds` | Необязательно | Время жизни короткого token. Допустимо 60..900 секунд. По умолчанию и в коде из консоли обычно 300. |
+
+Response:
+
+```json
+{
+  "token": "eyJhbGciOi...",
+  "token_type": "Bearer",
+  "expires_at": "2026-06-03T18:30:00Z",
+  "flow_id": "support_agent",
+  "branch_id": "default"
+}
+```
+
+Поля:
+
+| Поле | Что означает |
+| --- | --- |
+| `token` | Короткий bearer token для browser widget. |
+| `token_type` | Всегда `Bearer`. |
+| `expires_at` | Когда token истечет. |
+| `flow_id` | Flow, закрепленный за embed widget. |
+| `branch_id` | Branch, закрепленный за embed widget. |
+
+Браузеру достаточно вернуть `token`. Остальные поля можно использовать для логов и диагностики, но не обязательно.
+
+### Embed A2A endpoint
+
+Endpoint:
+
+```text
+POST /flows/api/v1/embed/{embed_id}
+```
+
+Авторизация в браузере:
+
+```http
+Authorization: Bearer short_lived_embed_session_token
+Content-Type: application/json
+```
+
+Разрешенные JSON-RPC методы:
 
 - `message/send`
 - `message/stream`
 - `tasks/cancel`
 
-Например, `tasks/get` для embed token не подходит. Для виджетов используйте streaming или логику самого embed runtime.
+Запрещенные методы для embed-session token:
 
-Никогда не отдавайте company API key `hum_...` в браузер ради embed. В браузер можно отдавать только короткий embed-session token.
+- `tasks/get`
+- `tasks/resubscribe`
+- push notification methods;
+- управление branches;
+- любые методы, которые требуют полноценного company API key.
+
+Пример `message/stream` с коротким token:
+
+```bash
+curl -N "https://api.humanitec.ru/flows/api/v1/embed/embed_abc123" \
+  -H "Authorization: Bearer $EMBED_SESSION_TOKEN" \
+  -H "Content-Type: application/json" \
+  -H "Origin: https://example.com" \
+  -d '{
+    "jsonrpc": "2.0",
+    "id": "embed-stream-1",
+    "method": "message/stream",
+    "params": {
+      "message": {
+        "messageId": "msg-001",
+        "role": "user",
+        "parts": [
+          { "kind": "text", "text": "Привет" }
+        ]
+      }
+    }
+  }'
+```
+
+В реальном браузерном виджете этот запрос делает сам widget. Вам обычно не нужно писать его руками.
+
+### Embed Config API
+
+Обычно виджеты создают через консоль. Если вы автоматизируете окружения, используйте API.
+
+Список configs:
+
+```text
+GET /frontend/api/embed/configs
+```
+
+Создать config:
+
+```text
+POST /frontend/api/embed/configs
+```
+
+Пример:
+
+```json
+{
+  "name": "Чат поддержки на сайте",
+  "flow_id": "support_agent",
+  "branch_id": "default",
+  "allowed_origins": ["https://example.com"],
+  "theme": "auto",
+  "position": "bottom-right",
+  "show_launcher": true,
+  "assistant_title": "AI-помощник",
+  "greeting_message": "Здравствуйте! Чем помочь?",
+  "interface_locale": "ru",
+  "placeholder": "Напишите вопрос...",
+  "guest_max_user_messages": 30,
+  "voice_enabled": false,
+  "voice_default_on": false
+}
+```
+
+Поля create/update config:
+
+| Поле | Тип | Что означает | Как использовать |
+| --- | --- | --- | --- |
+| `name` | string | Имя widget в консоли. | Обязательное при создании. Пользователь сайта его не видит напрямую. |
+| `flow_id` | string | Flow, который будет отвечать в чате. | Обязательное при создании. Должен существовать в текущей компании. |
+| `branch_id` | string | Branch выбранного flow. | Если не передать, используется `default`. Для EXTERNAL flow branch будет `default`. |
+| `allowed_origins` | string[] | Белый список origins, с которых можно выпускать session token и вызывать embed endpoint. | В production указывайте реальные origins сайта. |
+| `status` | string | Статус widget: `active` или `disabled`. | Используется в update. `disabled` выключает выдачу session token. |
+| `theme` | string | Тема widget. | Обычно `auto`, `light` или `dark`. |
+| `position` | string | Позиция на странице. | Например `bottom-right`, если используется стандартный launcher. |
+| `show_launcher` | boolean | Показывать стандартную кнопку открытия. | `false`, если открываете чат своей кнопкой через custom event. |
+| `show_reasoning` | boolean | Показывать reasoning, если UI это поддерживает. | Для внешнего production-чата обычно `false`. |
+| `show_tool_calls` | boolean | Показывать tool calls, если UI это поддерживает. | Для внешнего production-чата обычно `false`. |
+| `primary_color` | string | Основной цвет widget. | HEX, например `#6366f1`. |
+| `greeting_message` | string или null | Приветствие в начале чата. | Держите коротким. |
+| `assistant_title` | string или null | Имя ассистента в шапке. | Например `AI-помощник`. |
+| `interface_locale` | string | Язык UI: `auto`, `ru`, `en`. | Для русского сайта обычно `ru`. |
+| `placeholder` | string | Текст в пустом поле ввода. | Например `Напишите вопрос...`. |
+| `branding` | boolean | Показывать брендинг платформы, если UI это поддерживает. | Оставьте значение из политики вашей компании. |
+| `landing_visible` | boolean | Показывать widget в публичном каталоге/демо-витрине. | Для обычного встраивания на сайт не нужно. |
+| `landing_card_image_url` | string или null | Картинка карточки для каталога/демо-витрины. | Для обычного embed не нужно. |
+| `landing_sort_order` | number | Порядок сортировки в каталоге/демо-витрине. | Для обычного embed не нужно. |
+| `guest_max_user_messages` | number или null | Лимит пользовательских сообщений в одном embed-диалоге. | Допустимо 1..500 или `null` без лимита. |
+| `voice_enabled` | boolean | Разрешить голосовой режим. | Включайте только если flow и сайт готовы к голосу. |
+| `voice_default_on` | boolean | Включать голосовой режим при открытии. | Можно включить только вместе с `voice_enabled=true`. |
+
+Получить один config:
+
+```text
+GET /frontend/api/embed/configs/{embed_id}
+```
+
+Обновить config:
+
+```text
+PATCH /frontend/api/embed/configs/{embed_id}
+```
+
+Удалить config:
+
+```text
+DELETE /frontend/api/embed/configs/{embed_id}
+```
+
+Получить код вставки:
+
+```text
+GET /frontend/api/embed/configs/{embed_id}/code
+```
+
+Response `/code` содержит:
+
+| Поле | Что означает |
+| --- | --- |
+| `html_code` | Готовый `<script ...></script>`. |
+| `script_url` | URL autoload-скрипта. |
+| `embed_id` | ID виджета. |
+| `token_endpoint` | Platform endpoint для server-to-server выдачи короткого token. |
+| `backend_proxy_code` | Пример backend-запроса в платформу. |
+| `browser_to_host_backend_code` | Пример запроса браузера к вашему backend. |
+| `allowed_origins` | Список origins из настройки виджета. |
+
+Response config содержит и служебные поля:
+
+| Поле | Что означает |
+| --- | --- |
+| `embed_id` | Публичный ID виджета. |
+| `status` | `active` или `disabled`. Disabled widget не выдаст session token. |
+| `usage_count` | Количество использований. |
+| `last_used_at` | Время последнего использования или `null`. |
+| `created_at` | Когда создан widget. |
+| `created_by` | ID пользователя, который создал widget. |
+| `updated_at` | Когда widget обновлялся. |
+| `preview_share_link` | Признак preview-ссылки. Для обычных embed widgets обычно `false`. |
+
+Дополнительные поля config:
+
+| Поле | Что означает |
+| --- | --- |
+| `show_reasoning` | Признак показа reasoning, если это поддерживается текущим UI виджета. |
+| `show_tool_calls` | Признак показа tool calls, если это поддерживается текущим UI виджета. |
+| `branding` | Признак показа брендинга платформы, если это поддерживается текущим UI виджета. |
+| `landing_visible`, `landing_card_image_url`, `landing_sort_order` | Поля для публичного каталога/демо-витрин. Для обычного встраивания на сайт не нужны. |
+
+### Ошибки embed-интеграции
+
+`401 Unauthorized` на `/session-token`.
+
+Что проверить:
+
+- backend отправляет `Authorization: Bearer hum_...`;
+- ключ не отозван;
+- ключ принадлежит нужной компании;
+- backend не отправляет browser cookie вместо API key;
+- в header нет лишнего переноса строки.
+
+`400 Bad Request` на `/session-token`.
+
+Частые причины:
+
+- `expires_in_seconds` меньше 60 или больше 900;
+- у виджета заполнены allowed origins, но `origin` не передан;
+- `interface_locale` не `auto`, `ru` или `en`;
+- `guest_max_user_messages` не число от 1 до 500;
+- `voice_default_on=true`, но `voice_enabled=false`.
+
+`403 Forbidden` на `/session-token`.
+
+Частые причины:
+
+- `origin` не совпадает с allowed origins;
+- widget отключен (`status=disabled`);
+- API key не имеет доступа к компании виджета.
+
+`404 Not Found` при создании widget.
+
+Что проверить:
+
+- правильно ли указан `flow_id`;
+- flow находится в той же компании;
+- branch существует;
+- вы не перепутали dev/prod окружение.
+
+`403` на preflight или `POST /flows/api/v1/embed/{embed_id}` из браузера.
+
+Что проверить:
+
+- `Origin` страницы точно совпадает с allowed origins;
+- в allowed origins нет path и лишнего `/`;
+- локальный порт совпадает: `localhost:3000` и `localhost:5173` разные origins;
+- browser действительно отправляет request на тот platform host, который указан в `data-flows-base-url`.
+
+JSON-RPC error `-32000` с текстом `supports only message/send, message/stream and tasks/cancel`.
+
+Причина: embed-session token использовали для запрещенного метода, например `tasks/get`. Для виджета используйте streaming. Если backend должен читать task status, используйте обычный server-to-server A2A с `hum_...` ключом и `/flows/api/v1/{flow_id}`.
+
+JSON-RPC error `-32000` с `not allowed for this embed`.
+
+Причина: token выпущен для одного `embed_id`, а запрос отправлен на другой `/embed/{embed_id}`.
+
+JSON-RPC error `-32000` с `not allowed for this branch`.
+
+Причина: branch в запросе не совпадает с branch, закрепленным в token/config. Не переключайте branch из браузера; создайте отдельный widget.
+
+JSON-RPC error `-32000` с `not allowed for this company`.
+
+Причина: token или widget относятся к другой компании.
+
+Ошибка `Cannot get embed session token` в браузере.
+
+Что проверить:
+
+- существует ли endpoint `/api/chat-token` на вашем сайте;
+- возвращает ли он JSON с полем `token`;
+- не отвечает ли backend HTML-страницей ошибки;
+- не блокирует ли CORS запрос к вашему backend;
+- не падает ли server-to-server запрос с backend в платформу.
+
+Ошибка `token response missing token field`.
+
+Причина: `/api/chat-token` вернул JSON без поля `token` или `access_token`.
+
+Ошибка `data-embed-id required`.
+
+Причина: в `<script>` нет `data-embed-id` или значение пустое.
+
+Ошибка `data-flows-base-url required`.
+
+Причина: в `<script>` нет `data-flows-base-url`. Скопируйте код из консоли заново.
 
 ## Ошибки
 

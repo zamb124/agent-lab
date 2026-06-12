@@ -1,5 +1,5 @@
-.PHONY: help runtime-bootstrap dev dev-up dev-down dev-logs dev-clean dev-minio-restart dev-bootstrap-postgres stress
-.PHONY: test-runner test-runner-down test-runner-unit test-integration test-e2e test-logs test-frontend test-rag
+.PHONY: help runtime-bootstrap dev dev-up dev-down dev-logs dev-clean dev-minio-restart dev-bootstrap-postgres stress lint lint-ts lint-file
+.PHONY: test-frontend test-rag test-crawl-llm-live
 .PHONY: check-ui-canon check-i18n check-i18n-keys check-inline-docs check-ui-factories check-command-rest-mirror check-core-frontend-canon check-embed-esm check-events-canon check-logging check-voice-resolver check-speakable-parity check-voice-canon check-field-canon check-rag-post-retrieval-rerank check-company-ai build-i18n
 .PHONY: clean-i18n-unused base
 .PHONY: render-helm-app-conf require-image-tag k8s-deploy k8s-template k8s-lint k8s-status k8s-logs k8s-rollback k8s-helm-clear-pending k8s-helm-adopt-orphans k8s-secrets-sync k8s-uninstall k8s-health k8s-backup k8s-restore k8s-decommission-compose k8s-cluster-reset
@@ -79,28 +79,6 @@ $(STRESS_NUMERIC_TARGETS):
 # Тесты — детали в mk/test.mk
 # ============================================================================
 
-# Старый one-shot runner (мигрирует на mk/test.mk полностью).
-test-runner:
-	@echo "Запуск контейнера tests_runner (docker-compose-test)..."
-	docker-compose -f docker-compose-test.yaml up --build --abort-on-container-exit tests_runner
-
-test-runner-down:
-	docker-compose -f docker-compose-test.yaml down -v
-
-test-runner-unit:
-	docker-compose -f docker-compose-test.yaml run --rm tests_runner pytest tests/ -m unit -v
-
-test-integration:
-	@echo "Запуск integration тестов..."
-	docker-compose -f docker-compose-test.yaml run --rm tests_runner pytest tests/ -m integration -v
-
-test-e2e:
-	@echo "Запуск e2e тестов..."
-	docker-compose -f docker-compose-test.yaml run --rm tests_runner pytest tests/ -m e2e -v
-
-test-logs:
-	docker-compose -f docker-compose-test.yaml logs -f
-
 # Frontend тесты (создание компаний и инициализация агентов)
 test-frontend:
 	@echo "Запуск всех frontend тестов..."
@@ -111,6 +89,19 @@ test-rag:
 	@echo "Запуск RAG тестов (pgvector + MinIO)..."
 	docker-compose -f docker-compose-test.yaml up -d postgres-test redis-test minio-test
 	uv run pytest tests/rag/ -v --tb=short
+
+test-crawl-llm-live:
+	@echo "Запуск crawl LLM live suite (GPU/transformers, CRAWL__E2E_LITSERVE_LLM=1)..."
+	CRAWL__E2E_LITSERVE_LLM=1 uv run pytest -q \
+		tests/provider_litserve/integration/test_llm_chat_live.py \
+		tests/search/integration/test_crawl_enrichment_litserve_e2e.py \
+		tests/search/integration/test_crawl_enrichment_skip_e2e.py \
+		tests/search/integration/test_crawl_multi_site_two_layer_strict_e2e.py::test_crawl_multi_site_two_layer_parse_search_then_llm_strict
+
+test-crawl-strict-e2e:
+	@echo "Strict crawl E2E: layer1 parse+search (real TaskIQ, no LLM)..."
+	uv run pytest -q \
+		tests/search/integration/test_crawl_multi_site_two_layer_strict_e2e.py::test_crawl_multi_site_layer1_parse_and_index_search_strict
 
 # ============================================================================
 # Канон / линты UI / i18n / логирование
@@ -354,9 +345,17 @@ help:
 	@echo "  make app APP_KILL=1  - то же, освободив порты 8001-8006/8014 перед запуском"
 	@echo ""
 	@echo "============================================================================"
+	@echo "Линтеры:"
+	@echo "============================================================================"
+	@echo "  make lint                  - Все линтеры (python + frontend)"
+	@echo "  make lint-ts               - Только frontend (UI/i18n/logging)"
+	@echo "  make lint FILE=<path>      - Точечно: .py → ruff+basedpyright, .js → lint-ts"
+	@echo "  make lint <path>           - То же: make lint apps/search/db/models.py"
+	@echo ""
+	@echo "============================================================================"
 	@echo "Тесты:"
 	@echo "============================================================================"
-	@echo "  make test            - Ruff + basedpyright, затем frontend-core + unit + retry"
+	@echo "  make test            - python lint + frontend-core + unit + retry"
 	@echo "  make test-unit       - Только unit/API"
 	@echo "  make test-rag        - RAG тесты"
 	@echo "  make test-frontend   - Frontend API тесты"
@@ -404,6 +403,7 @@ help:
 	@echo "  make doc-clean  - Удалить собранную документацию"
 	@echo "  make test-ui-doc - test-ui затем make doc"
 
+include mk/lint.mk
 include mk/app.mk
 include mk/test.mk
 include mk/migrate.mk

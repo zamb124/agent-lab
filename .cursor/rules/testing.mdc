@@ -106,8 +106,7 @@ async def test_example(app, mock_llm_with_queue, unique_id):
 | `app` | session | FastAPI приложение `apps.flows` с lifespan |
 | `flows_client` / `rag_client` / `crm_client` / `frontend_client` / `voice_client` | function | ASGI клиенты для unit-тестов API соответствующего сервиса |
 | `voice_app` | function | ASGI приложение voice с mock-провайдерами (`VOICE__{STT,TTS,VAD}__PROVIDER=mock`) |
-| `flows_client_http` / `rag_client_http` / `crm_client_http` / `frontend_client_http` | function | HTTP клиенты для E2E (см. `tests/fixtures/clients.py`) |
-| `all_clients_http` | function | dict HTTP клиентов (`flows`, `rag`, `crm`, `frontend`) |
+| `flows_client_http` / `office_client_http` | function | HTTP клиенты для E2E (см. `tests/fixtures/clients.py`) |
 | `flows_service` / `rag_service` / `crm_service` / `frontend_service` | session | Реальные HTTP серверы (`tests/fixtures/services.py`, порты 9001–9005) |
 | `all_services` | session | Все сервисы + dict URL |
 | `mock_llm` / `mock_llm_with_queue` | function | MockLLM с default_response / фабрика очереди ответов |
@@ -124,7 +123,7 @@ async def test_example(app, mock_llm_with_queue, unique_id):
 
 ## Выбор клиента
 
-Unit (один сервис, без межсервисных вызовов) → ASGI (`*_client`). E2E (межсервисные вызовы или WS) → HTTP (`*_client_http`); вся платформа → `all_clients_http`. Уровень теста «от потребителя» и согласование — `testing_invariants.mdc`.
+Unit (один сервис, без межсервисных вызовов) → ASGI (`*_client`). E2E (межсервисные вызовы или WS) → HTTP (`flows_client_http`, `office_client_http`). Уровень теста «от потребителя» и согласование — `testing_invariants.mdc`.
 
 ## MockLLM
 
@@ -185,7 +184,7 @@ async def test_integration(mock_llm_redis, flows_client, unique_id):
 | Раннер | `@web/test-runner` + `@web/test-runner-playwright` (Chromium), `web-test-runner.config.mjs` |
 | Файлы | `tests/ui_components/**/*.test.js`, хелперы — `tests/ui_components/helpers/` (`setupPlatformServices`, `teardownPlatformServices`, реэкспорт `fixture`/`html`/`expect` из `@open-wc/testing`) |
 | Импорты | Как в приложении: `lit` через node-resolve, префиксы `@platform/lib/`, `@platform/services/`, `@capacitor/*` (vendor) — через import map в конфиге |
-| Запуск | `npm ci`, затем `npm run test:ui-components` или `make test-ui-components`. В `make test` / `tests_runner` **не входит** — нужны Node.js и `package.json`. |
+| Запуск | `npm ci`, затем `npm run test:ui-components` или `make test-ui-components`. В `make test` **не входит** — нужны Node.js и `package.json`. |
 | Изоляция | Между тестами — `clearFactoryRegistry()`, `_resetResourceRegistryForTests()`, `resetPlatformBusForTests()` (`@platform/lib/events/...`). Не использовать в прод-коде. |
 | PWA (HTTP) | `tests/core/test_pwa_routes.py`: отдача `/manifest.json`, `/sw.js`, `/offline.html`, опционально `/.well-known/assetlinks.json` и `/.well-known/apple-app-site-association`. При `TESTING=true` маршруты PWA по умолчанию не регистрируются. |
 

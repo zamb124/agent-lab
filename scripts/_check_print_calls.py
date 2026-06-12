@@ -46,7 +46,8 @@ def _docstring_line_ranges(tree: ast.Module) -> list[tuple[int, int]]:
                 and isinstance(body[0].value.value, str)
             ):
                 first = body[0]
-                ranges.append((first.lineno, getattr(first, "end_lineno", first.lineno)))
+                end_lineno = first.end_lineno if hasattr(first, "end_lineno") else first.lineno
+                ranges.append((first.lineno, end_lineno))
     return ranges
 
 

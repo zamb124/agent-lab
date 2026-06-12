@@ -8,7 +8,25 @@ alwaysApply: true
 
 Отвечай на русском. Без эмодзи в коде, комментариях, логах.
 
-После любых Python-правок обязательны: `uv run ruff check .`, `uv run basedpyright core apps`. После архитектурного рефакторинга — дополнительно `uv run python analyze_imports.py` и целевой/полный тестовый прогон.
+## Lint gate (обязательно после правок кода)
+
+После **любых** изменений в `core/`, `apps/`, `tests/`, UI или i18n — перед завершением задачи запускай линтеры:
+
+| Объём | Команда |
+|---|---|
+| Всё | `make lint` |
+| Только frontend | `make lint-ts` |
+| Один файл | `make lint FILE=<path>` или `make lint <path>` |
+
+`make lint` = python (`ruff`, `basedpyright`, architecture gates, `analyze_imports.py`) + `make lint-ts`.
+
+`make lint-ts` = `check-events-canon`, `check-field-canon`, `check-logging`.
+
+Точечный `make lint FILE=...`: `.py` → ruff + basedpyright на файл; `.js` → `make lint-ts`.
+
+`make test` на старте гоняет только python-часть линтеров; перед PR нужен полный `make lint`.
+
+После архитектурного рефакторинга — дополнительно целевой или полный `make test`.
 
 ## Стек
 
@@ -51,7 +69,7 @@ alwaysApply: true
 4. **Никаких локальных импортов в `core/` и `apps/`.** Импорты в начале файла (stdlib → third-party → local). Цикл чинится архитектурой: выделить contracts/models, разорвать слой, передать зависимость через контейнер. Локальный импорт как «временный фикс» запрещён.
 5. **Никаких мета-комментариев.** «Отрефакторил», «обновил логику» запрещено. Комментарий объясняет ПОЧЕМУ, а не ЧТО.
 6. **Никаких бессмысленных имён.** `new_`, `old_`, `temp_`, `data`, `result` без контекста — нельзя.
-7. **Никаких неявных фолбеков в значениях.** `x = value or "default"`, `getattr(obj, "field", fallback)` — запрещены. Нет — `raise`.
+7. **Никаких неявных фолбеков в значениях.** `x = value or "default"`, `getattr(obj, "field", fallback)` — запрещены. Нет — `raise`. Любой новый `getattr(..., default)` в `apps/`/`core/`/`scripts/` — FAIL `scripts/audit_wider_repo_strictness.py` (часть `make lint`), без allowlist.
    ```python
    # ЗАПРЕЩЕНО
    x = value or "default"
@@ -74,7 +92,7 @@ alwaysApply: true
 - `dict[str, JsonValue]` не заменяет модель там, где есть бизнес-сущность. `dict[str, JsonValue]` допустим для словаря однотипных JSON-значений без фиксированных ключей; `JsonObject` — для JSON object без известной схемы; Pydantic-модель — для известной схемы.
 - Одна доменная сущность — одна каноническая модель. Перед созданием модели обязательно проверить `core/`, `apps/*/models/`, API schemas и tests на существующий контракт. Дубли вида `UserResponse`/`UserData`/`UserModel`, если это одна бизнес-сущность, запрещены; слой-специфичные request/patch/response модели допускаются только когда форма реально другая.
 - Запрещены helper-«нормализаторы», conversion-функции и adapter-слои, которые существуют только чтобы замолчать типизацию. Конвертация допустима только на реальной внешней границе или при смене доменной формы; место конвертации должно совпадать с владельцем контракта.
-- Проверка локальных импортов: `uv run python analyze_imports.py`. Ожидание для `core/` + `apps/`: `Total local imports: 0`.
+- Проверка локальных импортов: `make lint` (python-часть — `analyze_imports.py`). Ожидание для `core/` + `apps/`: `Total local imports: 0`.
 
 ## Глобальный naming contract
 

@@ -1,0 +1,71 @@
+# Platform Index Search
+
+Ownership: `apps/search` + `apps/search_worker` + `platform_search`.
+
+- Registry и crawl state — БД `platform_search` (`DATABASE__SEARCH_URL`).
+- Read path: `IndexSearchProvider` → `RagClient.search` по `search_indexes`.
+- Crawl pipeline: `CrawlOrchestratorService` + TaskIQ queue `search`.
+- flows интегрируется через tool `index_search` / `runet_search` → `SearchClient`.
+
+Запрещено в flows: import `apps.search.db`, crawl API, прямой доступ к `platform_search`.
+
+## Runet search path
+
+- Alias `runet` в meta-search → provider `index` + `index_ids=["runet"]` (см. `index_resolver.preprocess_meta_search_request`).
+- `public_search` flow: `search_providers: ["runet"]` во всех ветках (`quick` / `deep` / `research`) — только platform index, без SERP fallback.
+- **Fail-closed:** если после merge/rank `ranked` пустой → `MetaSearchProviderStatus(ok=false, error="index returned no results")`. В том числе когда RAG вернул chunks без `metadata.source_url`.
+- `providers: ["auto"]` + `first_available`: index fail-closed → fallback на следующий provider из `provider_order`. `providers: ["runet"]` — fallback запрещён (единственный provider).
+
+## Crawl fetch stack
+
+- **HTTP (primary):** `CrawlFetchService._fetch_http_markdown` — httpx + trafilatura + BS4. Детерминированно, без LLM.
+- **Browser fallback:** при `browser_fallback_enabled=true` и ошибке HTTP или `len(markdown) < min_extract_chars` → `BrowserFetchClient` → `POST /browser/api/v1/control/crawl/fetch` (Playwright, `page_mode=crawl`, block images/CSS/fonts). Fail-closed без флага.
+- **LLM enrichment (opt-in):** при `crawl_profiles.llm_enrichment_enabled=true` после fetch → `CrawlPageEnrichmentService` → `core.ai` + `provider_litserve_crawl` → `POST /v1/chat/completions` **в том же процессе `provider_litserve`** (отдельный k8s pod не используется). Structured JSON → `CrawlEnrichedPage.to_ingest_markdown()` заменяет raw markdown перед ingest. Fail-closed без флага профиля.
+- **Skip:** dual hash — `extract_content_hash` (raw markdown) + `enriched_content_hash` + `enrichment_prompt_version`. LitServe/humanitec_llm для scrape/extraction по-прежнему запрещены; LLM только enrichment layer и query-time (`public_search`, insights).
+
+## Indexing profile `runet_web`
+
+- Ключ в `search_indexes.indexing_profile_key` → `core.rag.index_profile_registry.resolve_index_profile`.
+- Конфиг: `conf.json` → `rag.index_profiles.runet_web` (semantic split, lexical enabled).
+- Ingest: `CrawlIngestService` кладёт `metadata.index_profile_config` для `pgvector_provider`; при enrichment — `page_summary`, `metadata_summaries`, `enrichment_model`, `enriched_content_hash`.
+
+## Infinite crawl cycle
+
+- `CrawlDomainRepository.list_due` — домены с `next_crawl_after <= now`.
+- После tick/fetch домен уходит в «сон» (`schedule_next` + `refresh_interval_seconds`, default 6h).
+- Tranco seed — append-only (`upsert_seed_batch` не сбрасывает `next_crawl_after` у existing domains).
+- Cron: `crawl_orchestrator_tick` (`0 */6 * * *`), `crawl_reclaim_stale_fetching` (`*/15 * * * *`) — `scripts/bootstrap_search_crawl_schedules.py` + Helm hook `bootstrap-search-crawl`.
+
+## Parallel fetch enqueue
+
+- `_enqueue_domain_fetch`: `batch = min(url_budget, max_urls_per_batch, pending)`, `parallel = min(batch, http_concurrency)`.
+- Enqueue `parallel` TaskIQ tasks `crawl_fetch_url` с `url_budget=1` each. Один URL — одна задача.
+
+## REST
+
+- `POST /search/api/v1/search` — meta search (`index_ids`, `providers`)
+- `/search/api/v1/search-indexes` — registry CRUD
+- `/search/api/v1/crawl/*` — crawl admin
+- `POST /search/api/v1/crawl/domains/{crawl_domain_id}/run?crawl_profile_id=...` — ручной перезапуск одного домена (discover или fetch)
+- `POST /search/api/v1/crawl/profiles/{id}/seed/tranco` — append Tranco seed
+
+## Worker tasks
+
+- `crawl_orchestrator_tick`
+- `crawl_discover_domain`
+- `crawl_fetch_url` — одна TaskIQ-задача на один URL
+- `crawl_import_seed_domains`
+- `crawl_reclaim_stale_fetching`
+
+## Bootstrap
+
+- `search_worker` startup → `CrawlBootstrapService.ensure_crawl_pipeline_ready()`: если у `default_crawl_profile_id` нет доменов и `bootstrap_tranco_on_empty=true` — `kiq crawl_import_seed_domains` (Tranco, async, default limit 2000).
+- `crawl_import_seed_domains` после `imported > 0` → `kiq crawl_orchestrator_tick`.
+- Cron schedules: `uv run python scripts/bootstrap_search_crawl_schedules.py` (Helm post-install hook).
+
+## Crawl report
+
+- Admin UI: `/frontend` → Crawl report (`frontend-crawl-report-page`): summary, domains/URLs/jobs, фильтры, transport badge, **LLM enriched** badge (`enriched_content_hash`), **Run** per domain, auto-refresh 15s при активном крауле.
+- Frontend proxy: `POST /frontend/api/crawl-report/domains/{crawl_domain_id}/run`
+- `crawl_urls.fetch_transport`: `http` | `browser` — UI badge в Crawl Report.
+- Job counters: `urls_enriched`, `urls_enrichment_failed`.

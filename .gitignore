@@ -68,3 +68,4 @@ tests/core/files/file_writer_output/
 # Локальные артефакты Gemini / IDE (не коммитить)
 .gemini/
 /.coverage
+/coverage/

@@ -455,6 +455,7 @@ export class FlowsChatMessage extends PlatformElement {
 
         .tool-orb-button {
             appearance: none;
+            position: relative;
             border: 0;
             padding: 0;
             margin: 0;
@@ -478,6 +479,8 @@ export class FlowsChatMessage extends PlatformElement {
             border-radius: 50%;
             background: var(--success, #22c55e);
             border: 2px solid var(--flows-chat-surface);
+            box-sizing: border-box;
+            pointer-events: none;
         }
 
         .browser-closed .browser-preview-dot {
@@ -953,6 +956,22 @@ export class FlowsChatMessage extends PlatformElement {
             return;
         }
         const sessionId = asString(preview.sessionId).replace(/[^a-zA-Z0-9_-]/g, '_') || 'browser';
+        const openEvent = new CustomEvent('browser-preview-open', {
+            detail: {
+                preview,
+                viewerUrl: url,
+                sessionId,
+                currentUrl: asString(preview.currentUrl),
+                status: asString(preview.status),
+            },
+            bubbles: true,
+            composed: true,
+            cancelable: true,
+        });
+        this.dispatchEvent(openEvent);
+        if (openEvent.defaultPrevented) {
+            return;
+        }
         const opened = globalThis.window?.open?.(
             url,
             `browser_preview_${sessionId}`,
@@ -992,7 +1011,7 @@ export class FlowsChatMessage extends PlatformElement {
                             })}
                             style="z-index: ${index + 1};"
                         >
-                            <platform-help-hint .text=${hint} .label=${preview ? 'Click to open browser preview' : name} ?wide=${true}>
+                            <platform-help-hint fill .text=${hint} .label=${preview ? 'Click to open browser preview' : name} ?wide=${true}>
                                 ${preview
                                     ? html`
                                           <button

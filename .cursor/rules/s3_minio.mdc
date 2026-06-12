@@ -110,7 +110,7 @@ S3 выключен — `POST .../files/` возвращает `503` (не `404`
 - Фикстура `minio_bucket` — готовый `S3Client` с автосозданным bucket; cleanup автоматический.
 - Не мокать `S3Client` — реальный MinIO. Уникальные ключи в тестах для избежания конфликтов.
 - Внутри контейнера — `endpoint_url=http://minio-test:9000`. Снаружи — `localhost:19001` (dev) / `localhost:19002` (test через override). `127.0.0.1` внутри контейнера — нельзя.
-- Запуск: `make test` (поднимает MinIO автоматически); напрямую — `docker-compose -f docker-compose-test.yaml up --build tests_runner`.
+- Запуск: `make test` (поднимает MinIO автоматически); инфраструктура — `make test-up`.
 
 ## Команды
 

@@ -5,6 +5,7 @@ from core.ai.adapters.model_catalog import create_model_catalog_adapter_registry
 from core.ai.adapters.openai_compatible import OpenAICompatibleModelCatalogAdapter
 from core.ai.adapters.openrouter import OpenRouterModelCatalogAdapter
 from core.ai.adapters.provider_litserve import ProviderLitserveModelCatalogAdapter
+from core.ai.adapters.provider_litserve_crawl import ProviderLitserveCrawlModelCatalogAdapter
 from core.ai.adapters.registry import AIProviderAdapterRegistry
 
 __all__ = [
@@ -15,5 +16,6 @@ __all__ = [
     "OpenAICompatibleModelCatalogAdapter",
     "OpenRouterModelCatalogAdapter",
     "ProviderLitserveModelCatalogAdapter",
+    "ProviderLitserveCrawlModelCatalogAdapter",
     "create_model_catalog_adapter_registry",
 ]

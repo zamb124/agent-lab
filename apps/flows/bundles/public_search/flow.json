@@ -237,7 +237,7 @@
     "search_language": "ru",
     "search_region": "ru",
     "search_providers": [
-      "auto"
+      "runet"
     ],
     "search_provider_strategy": "first_available"
   },

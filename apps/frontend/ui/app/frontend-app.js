@@ -72,6 +72,15 @@ import {
 import { leadSubmitOp, leadRequestsList } from '../events/resources/leads.resource.js';
 import { tracingSpansList, tracingFacets, tracingTraceLoadOp } from '../events/resources/tracing.resource.js';
 import {
+    crawlProfilesLoadOp,
+    crawlSummaryLoadOp,
+    crawlDomainsResource,
+    crawlUrlsResource,
+    crawlJobsResource,
+    crawlQueueTickOp,
+    crawlDomainRunOp,
+} from '../events/resources/crawl-report.resource.js';
+import {
     companiesOverviewLoadOp,
     companyResolveOp,
     pricesGlobalLoadOp,
@@ -139,6 +148,7 @@ import '../pages/scheduler-tasks-page.js';
 import '../pages/settings/settings-page.js';
 import '../pages/leads-requests-page.js';
 import '../pages/admin/tracing-page.js';
+import '../pages/admin/crawl-report-page.js';
 import '../pages/admin/billing-admin-page.js';
 
 const FRONTEND_ROUTES = [
@@ -171,6 +181,7 @@ const FRONTEND_ROUTES = [
     { key: 'settings',                path: 'settings',                 parent: 'dashboard',   titleKey: 'routes.settings' },
     { key: 'lead-requests',           path: 'lead-requests',            parent: 'dashboard',   titleKey: 'routes.lead-requests' },
     { key: 'platform-tracing',        path: 'platform-tracing',         parent: 'dashboard',   titleKey: 'routes.platform-tracing' },
+    { key: 'crawl-report',            path: 'crawl-report',             parent: 'dashboard',   titleKey: 'routes.crawl-report' },
     { key: 'platform-billing',        path: 'platform-billing',         parent: 'dashboard',   titleKey: 'routes.platform-billing' },
 ];
 
@@ -280,6 +291,13 @@ export class FrontendApp extends PlatformApp {
         tracingSpansList,
         tracingFacets,
         tracingTraceLoadOp,
+        crawlProfilesLoadOp,
+        crawlSummaryLoadOp,
+        crawlDomainsResource,
+        crawlUrlsResource,
+        crawlJobsResource,
+        crawlQueueTickOp,
+        crawlDomainRunOp,
         companiesOverviewLoadOp,
         companyResolveOp,
         pricesGlobalLoadOp,
@@ -646,6 +664,7 @@ export class FrontendApp extends PlatformApp {
             case 'settings':          content = html`<frontend-settings-page></frontend-settings-page>`; break;
             case 'lead-requests':     content = html`<frontend-leads-requests-page></frontend-leads-requests-page>`; break;
             case 'platform-tracing':  content = html`<frontend-tracing-page></frontend-tracing-page>`; break;
+            case 'crawl-report':      content = html`<frontend-crawl-report-page></frontend-crawl-report-page>`; break;
             case 'platform-billing':  content = html`<frontend-billing-admin-page></frontend-billing-admin-page>`; break;
             default:                  content = html`<dashboard-page></dashboard-page>`; break;
         }

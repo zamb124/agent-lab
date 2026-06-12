@@ -25,6 +25,7 @@ import olefile
 import trafilatura
 import xlrd
 from a2a.types import FilePart, FileWithBytes, Message, Part, Role, TextPart
+from botocore.exceptions import ClientError
 from bs4 import BeautifulSoup
 from charset_normalizer import from_bytes
 from ebooklib import epub
@@ -246,16 +247,9 @@ async def _read_http_bytes(url: str) -> bytes:
 
 
 def _s3_error_code(exc: Exception) -> str | None:
-    response = cast(object, getattr(exc, "response", None))
-    if not isinstance(response, Mapping):
+    if not isinstance(exc, ClientError):
         return None
-    response_map = cast(Mapping[str, object], response)
-    error = response_map.get("Error")
-    if not isinstance(error, Mapping):
-        return None
-    error_map = cast(Mapping[str, object], error)
-    code = error_map.get("Code")
-    return code if isinstance(code, str) else None
+    return exc.response["Error"]["Code"]
 
 
 async def _read_stored_file_by_id(file_id: str) -> tuple[bytes, str]:

@@ -20,6 +20,7 @@ from apps.crm_worker.broker import broker as crm_broker
 from apps.flows_worker.broker import broker as flows_broker
 from apps.idle_worker.broker import broker as idle_broker
 from apps.rag_worker.broker import broker as rag_broker
+from apps.search_worker.broker import broker as search_broker
 from apps.sync.realtime.broker import broker as sync_broker
 from core.logging import get_logger
 from core.logging.attributes import EVENT_TASK_SCHEDULED
@@ -33,6 +34,7 @@ _SCHEDULER_DISPATCH_BROKERS = (
     crm_broker,
     rag_broker,
     sync_broker,
+    search_broker,
 )
 
 _QUEUE_NAME_TO_BROKER: dict[str, AsyncBroker] = {
@@ -41,6 +43,7 @@ _QUEUE_NAME_TO_BROKER: dict[str, AsyncBroker] = {
     "crm": crm_broker,
     "rag": rag_broker,
     "sync": sync_broker,
+    "search": search_broker,
 }
 
 
@@ -50,6 +53,7 @@ def require_tasks_registered_for_scheduler(
     idle_queue_task_names: tuple[str, ...],
     crm_queue_task_names: tuple[str, ...] = (),
     rag_queue_task_names: tuple[str, ...] = (),
+    search_queue_task_names: tuple[str, ...] = (),
 ) -> None:
     """
     Падение процесса taskiq scheduler при старте, если обязательные задачи
@@ -59,7 +63,8 @@ def require_tasks_registered_for_scheduler(
     missing_idle = [n for n in idle_queue_task_names if idle_broker.find_task(n) is None]
     missing_crm = [n for n in crm_queue_task_names if crm_broker.find_task(n) is None]
     missing_rag = [n for n in rag_queue_task_names if rag_broker.find_task(n) is None]
-    if missing_flows or missing_idle or missing_crm or missing_rag:
+    missing_search = [n for n in search_queue_task_names if search_broker.find_task(n) is None]
+    if missing_flows or missing_idle or missing_crm or missing_rag or missing_search:
         parts: list[str] = []
         if missing_flows:
             parts.append(f"flows_worker broker: {missing_flows}")
@@ -69,6 +74,8 @@ def require_tasks_registered_for_scheduler(
             parts.append(f"crm broker: {missing_crm}")
         if missing_rag:
             parts.append(f"rag broker: {missing_rag}")
+        if missing_search:
+            parts.append(f"search broker: {missing_search}")
         message = (
             "TaskIQ scheduler: не зарегистрированы задачи. "
             + "Добавьте импорт модулей с @broker.task в apps/scheduler/scheduler.py. "
@@ -81,6 +88,7 @@ def require_tasks_registered_for_scheduler(
         idle_count=len(idle_queue_task_names),
         crm_count=len(crm_queue_task_names),
         rag_count=len(rag_queue_task_names),
+        search_count=len(search_queue_task_names),
     )
 
 

@@ -27,6 +27,7 @@ import { html, css } from 'lit';
 import { PlatformElement } from '@platform/lib/platform-element/index.js';
 import { platformConfirm } from '@platform/lib/components/platform-confirm-modal.js';
 import '@platform/lib/components/platform-icon.js';
+import '@platform/lib/components/platform-help-hint.js';
 import '@platform/lib/components/glass-spinner.js';
 import { getNodeTypeMeta, getCategoryToken } from '../../constants/node-icons.js';
 import { getTriggerTypeRowVisual } from '../../constants/trigger-types.js';
@@ -80,6 +81,12 @@ export class FlowsNodeTypesSidebar extends PlatformElement {
                 letter-spacing: 0.06em;
                 color: var(--text-tertiary);
                 font-weight: var(--font-semibold);
+            }
+            .triggers-title-wrap {
+                display: inline-flex;
+                align-items: center;
+                gap: var(--space-1);
+                min-width: 0;
             }
             .add-btn {
                 width: 24px; height: 24px;
@@ -210,6 +217,15 @@ export class FlowsNodeTypesSidebar extends PlatformElement {
                 border-color: var(--accent);
                 box-shadow: 0 0 0 2px var(--accent-subtle);
             }
+            .palette-help {
+                display: flex;
+                align-items: flex-start;
+                gap: var(--space-2);
+                padding: 0 var(--space-2);
+                color: var(--text-tertiary);
+                font-size: var(--text-xs);
+                line-height: 1.35;
+            }
 
             /* Категории */
             .category {
@@ -218,6 +234,9 @@ export class FlowsNodeTypesSidebar extends PlatformElement {
                 gap: var(--space-1);
             }
             .category-header {
+                display: flex;
+                align-items: center;
+                gap: var(--space-1);
                 font-size: var(--text-xs);
                 text-transform: uppercase;
                 letter-spacing: 0.06em;
@@ -225,6 +244,12 @@ export class FlowsNodeTypesSidebar extends PlatformElement {
                 font-weight: var(--font-semibold);
                 padding: 0 var(--space-2);
                 margin-bottom: 2px;
+            }
+            .category-title {
+                min-width: 0;
+                overflow: hidden;
+                text-overflow: ellipsis;
+                white-space: nowrap;
             }
             .category-divider {
                 height: 1px;
@@ -400,6 +425,16 @@ export class FlowsNodeTypesSidebar extends PlatformElement {
                         <span class="trigger-row-label">${this.t('flow_property_panel.card_title')}</span>
                     </div>
                 </button>
+                <div class="palette-help">
+                    <platform-help-hint
+                        .label=${this.t('node_types_sidebar.flow_settings_help_label')}
+                        .summary=${this.t('node_types_sidebar.flow_settings_help_summary')}
+                        .details=${this.t('node_types_sidebar.flow_settings_help_details')}
+                        .docHref=${'/documentation/scenarios/flows/operate-published-flow/'}
+                        .docLabel=${this.t('help_hints.open_scenario')}
+                    ></platform-help-hint>
+                    <span>${this.t('node_types_sidebar.flow_settings_help_inline')}</span>
+                </div>
             </div>
         `;
     }
@@ -412,7 +447,16 @@ export class FlowsNodeTypesSidebar extends PlatformElement {
         return html`
             <div class="triggers-section">
                 <div class="triggers-header">
-                    <span class="triggers-title">${this.t('node_types_sidebar.triggers')}</span>
+                    <span class="triggers-title-wrap">
+                        <span class="triggers-title">${this.t('node_types_sidebar.triggers')}</span>
+                        <platform-help-hint
+                            .label=${this.t('node_types_sidebar.triggers_help_label')}
+                            .summary=${this.t('node_types_sidebar.triggers_help_summary')}
+                            .details=${this.t('node_types_sidebar.triggers_help_details')}
+                            .docHref=${'/documentation/scenarios/flows/operate-published-flow/'}
+                            .docLabel=${this.t('help_hints.open_scenario')}
+                        ></platform-help-hint>
+                    </span>
                     <button class="add-btn" type="button" title=${this.t('node_types_sidebar.add_trigger')} @click=${this._addTrigger}>
                         <platform-icon name="plus" size="12"></platform-icon>
                     </button>
@@ -473,6 +517,16 @@ export class FlowsNodeTypesSidebar extends PlatformElement {
                     @input=${(e) => { this._query = e.target.value; }}
                 />
             </div>
+            <div class="palette-help">
+                <platform-help-hint
+                    .label=${this.t('node_types_sidebar.palette_help_label')}
+                    .summary=${this.t('node_types_sidebar.palette_help_summary')}
+                    .details=${this.t('node_types_sidebar.palette_help_details')}
+                    .docHref=${'/documentation/scenarios/flows/add-llm-node/'}
+                    .docLabel=${this.t('help_hints.open_scenario')}
+                ></platform-help-hint>
+                <span>${this.t('node_types_sidebar.palette_help_inline')}</span>
+            </div>
         `;
     }
 
@@ -482,7 +536,18 @@ export class FlowsNodeTypesSidebar extends PlatformElement {
         const categoryToken = getCategoryToken(typeof tokenKey === 'string' && tokenKey.length > 0 ? tokenKey : 'core');
         return html`
             <div class="category">
-                <div class="category-header">${this.t(titleKey)}</div>
+                <div class="category-header">
+                    <span class="category-title">${this.t(titleKey)}</span>
+                    <platform-help-hint
+                        .label=${this.t('node_types_sidebar.category_help_label')}
+                        .summary=${this.t(titleKey)}
+                        .details=${this.t(`node_types_sidebar.category_${categoryKey}_help`)}
+                        .docHref=${categoryKey === 'resources'
+                            ? '/documentation/scenarios/flows/edit-llm-flow/'
+                            : '/documentation/scenarios/flows/add-llm-node/'}
+                        .docLabel=${this.t('help_hints.open_scenario')}
+                    ></platform-help-hint>
+                </div>
                 <div class="category-items">
                     ${items.map((it) => {
                         const meta = getNodeTypeMeta(it.type);

@@ -10,6 +10,8 @@ from __future__ import annotations
 from pathlib import Path
 
 REPLACEMENTS_RU = {
+    "Api": "API",
+    "Guides": "Руководства",
     "Crm settings hub": "NetWorkle: хаб настроек",
     "Crm shell": "NetWorkle: оболочка записной книжки",
     "Crm": "NetWorkle",
@@ -17,6 +19,7 @@ REPLACEMENTS_RU = {
 }
 
 REPLACEMENTS_EN = {
+    "Api": "API",
     "Crm settings hub": "NetWorkle: settings hub",
     "Crm shell": "NetWorkle: notebook shell",
     "Crm": "NetWorkle",

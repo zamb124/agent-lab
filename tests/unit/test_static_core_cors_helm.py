@@ -1,6 +1,5 @@
 from pathlib import Path
 
-
 _CHART_ROOT = Path(__file__).parents[2] / "deploy" / "helm" / "agent-lab"
 _INGRESS_TEMPLATE = _CHART_ROOT / "templates" / "80-ingress" / "platform-ingress.yaml"
 _CORS_MIDDLEWARE_TEMPLATE = (

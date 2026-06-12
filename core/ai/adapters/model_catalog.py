@@ -5,6 +5,7 @@ from core.ai.adapters.huggingface import HuggingFaceModelCatalogAdapter
 from core.ai.adapters.openai_compatible import OpenAICompatibleModelCatalogAdapter
 from core.ai.adapters.openrouter import OpenRouterModelCatalogAdapter
 from core.ai.adapters.provider_litserve import ProviderLitserveModelCatalogAdapter
+from core.ai.adapters.provider_litserve_crawl import ProviderLitserveCrawlModelCatalogAdapter
 from core.ai.adapters.registry import AIProviderAdapterRegistry
 from core.ai.providers import OPENAI_COMPATIBLE_LLM_PROVIDER_ORDER
 from core.config import BaseSettings, get_settings
@@ -26,6 +27,7 @@ def create_model_catalog_adapter_registry(
         if provider not in special_providers
     )
     adapters.append(ProviderLitserveModelCatalogAdapter(resolved_settings))
+    adapters.append(ProviderLitserveCrawlModelCatalogAdapter(resolved_settings))
     return AIProviderAdapterRegistry(adapters)
 
 

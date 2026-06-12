@@ -139,7 +139,7 @@ export class FlowsSidebar extends PlatformElement {
                 </button>
                 <flows-catalog-list
                     mode="sidebar"
-                    ?collapsedSidebar=${this.collapsed}
+                    .collapsedSidebar=${this.collapsed}
                     @flows-catalog-dismiss-mobile=${this._onCatalogDismissMobile}
                 ></flows-catalog-list>
                 <div slot="footer">

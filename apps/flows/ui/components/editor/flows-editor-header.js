@@ -24,6 +24,7 @@
 import { html, css } from 'lit';
 import { PlatformElement } from '@platform/lib/platform-element/index.js';
 import '@platform/lib/components/platform-icon.js';
+import '@platform/lib/components/platform-help-hint.js';
 import {
     asArray,
     asObject,
@@ -106,7 +107,7 @@ export class FlowsEditorHeader extends PlatformElement {
             }
 
             /* CENTER pill */
-            .header-center { display: flex; justify-content: center; gap: var(--space-2); }
+            .header-center { display: flex; justify-content: center; align-items: center; gap: var(--space-2); }
             .mode-pill {
                 display: inline-flex;
                 gap: 2px;
@@ -321,6 +322,13 @@ export class FlowsEditorHeader extends PlatformElement {
                         ${hasBundleUpdate ? html`<span class="reload-dot"></span>` : ''}
                     </button>
                 </div>
+                <platform-help-hint
+                    .label=${this.t('editor_header.editor_help_label')}
+                    .summary=${this.t('editor_header.editor_help_summary')}
+                    .details=${this.t('editor_header.editor_help_details')}
+                    .docHref=${'/documentation/scenarios/flows/edit-llm-flow/'}
+                    .docLabel=${this.t('help_hints.open_scenario')}
+                ></platform-help-hint>
             </div>
 
             <div class="header-right">

@@ -96,6 +96,7 @@ import './modals/flows-logs-modal.js';
 import './modals/flows-durable-history-modal.js';
 import './modals/flows-raw-json-modal.js';
 import './modals/flows-state-modal.js';
+import './modals/flows-browser-preview-modal.js';
 
 // CRUD-модалки
 import './modals/flows-flow-create-modal.js';

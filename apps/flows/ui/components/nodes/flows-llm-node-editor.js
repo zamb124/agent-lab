@@ -37,6 +37,7 @@ import '../editors/flows-json-field-editor.js';
 import '@platform/lib/components/llm/llm-context-editor.js';
 import '@platform/lib/components/glass-button.js';
 import '@platform/lib/components/platform-icon.js';
+import '@platform/lib/components/platform-help-hint.js';
 import '@platform/lib/components/platform-switch.js';
 import { asObject, isPlainObject } from '../../_helpers/flows-resolvers.js';
 import { resolveResourceForPanel } from '../../_helpers/flows-branch-resource.js';
@@ -162,10 +163,16 @@ export class FlowsLlmNodeEditor extends PlatformElement {
             }
             .block { display: flex; flex-direction: column; gap: var(--space-2); }
             .block-title {
+                display: inline-flex;
+                align-items: center;
+                gap: var(--space-1);
                 font-size: var(--text-sm);
                 font-weight: var(--font-medium);
                 color: var(--text-secondary);
                 margin: 0;
+            }
+            .block-title-text {
+                min-width: 0;
             }
             .block-card {
                 display: flex; flex-direction: column;
@@ -751,6 +758,21 @@ export class FlowsLlmNodeEditor extends PlatformElement {
         });
     }
 
+    _sectionHeading(label, hintKey, docHref = '/documentation/scenarios/flows/edit-llm-flow/') {
+        return html`
+            <h4 class="block-title">
+                <span class="block-title-text">${label}</span>
+                <platform-help-hint
+                    .label=${this.t('help_hints.open_help')}
+                    .summary=${label}
+                    .details=${this.t(hintKey)}
+                    .docHref=${docHref}
+                    .docLabel=${this.t('help_hints.open_scenario')}
+                ></platform-help-hint>
+            </h4>
+        `;
+    }
+
     _onEditTool(toolRef) {
         const { tool_id: toolId, raw } = normalizeToolRef(toolRef);
         const st = asObject(this._editor.state);
@@ -821,6 +843,7 @@ export class FlowsLlmNodeEditor extends PlatformElement {
                 .value=${prompt}
                 .variables=${variables}
                 label=${this.t('llm_node_editor.section_prompt')}
+                .hint=${this.t('llm_node_editor.prompt_help')}
                 @change=${this._onPromptChange}
             ></prompt-editor>
         `;
@@ -836,9 +859,12 @@ export class FlowsLlmNodeEditor extends PlatformElement {
             : this._llmConfigForEditor();
         return html`
             <section class="block">
-                <h4 class="block-title">${pinned
-                    ? this.t('llm_node_editor.section_llm_from_branch', { id: resourceKey })
-                    : this.t('llm_node_editor.section_llm')}</h4>
+                ${this._sectionHeading(
+                    pinned
+                        ? this.t('llm_node_editor.section_llm_from_branch', { id: resourceKey })
+                        : this.t('llm_node_editor.section_llm'),
+                    'llm_node_editor.llm_section_help',
+                )}
                 <div class="block-card">
                     ${legacyRid !== null ? html`
                         <div class="row" style="align-items:center;gap:var(--space-2);flex-wrap:wrap;">
@@ -866,7 +892,10 @@ export class FlowsLlmNodeEditor extends PlatformElement {
         const nodes = Array.isArray(this.graphNodes) ? this.graphNodes : [];
         return html`
             <section class="block">
-                <h4 class="block-title">${this.t('llm_node_editor.section_messages_filter')}</h4>
+                ${this._sectionHeading(
+                    this.t('llm_node_editor.section_messages_filter'),
+                    'llm_node_editor.messages_filter_help',
+                )}
                 <div class="block-card">
                     <div class="row">
                         <label class="filter-row">
@@ -913,7 +942,10 @@ export class FlowsLlmNodeEditor extends PlatformElement {
         const contextResourceOptions = this._llmContextResourceOptions();
         return html`
             <section class="block">
-                <h4 class="block-title">${this.t('llm_node_editor.section_context')}</h4>
+                ${this._sectionHeading(
+                    this.t('llm_node_editor.section_context'),
+                    'llm_node_editor.context_section_help',
+                )}
                 <div class="block-card">
                     ${contextResourceOptions.values.length > 1 || contextResourceKey.length > 0
                         ? html`
@@ -944,7 +976,10 @@ export class FlowsLlmNodeEditor extends PlatformElement {
         const structured = Boolean(this.nodeConfig?.structured_output);
         return html`
             <section class="block">
-                <h4 class="block-title">${this.t('llm_node_editor.section_output_mode')}</h4>
+                ${this._sectionHeading(
+                    this.t('llm_node_editor.section_output_mode'),
+                    'llm_node_editor.output_mode_help',
+                )}
                 <div class="block-card">
                     <div class="toggle">
                         <button type="button" ?active=${!structured}
@@ -970,7 +1005,10 @@ export class FlowsLlmNodeEditor extends PlatformElement {
         const schema = JSON.stringify(schemaObj, null, 2);
         return html`
             <section class="block">
-                <h4 class="block-title">${this.t('llm_node_editor.section_output_schema')}</h4>
+                ${this._sectionHeading(
+                    this.t('llm_node_editor.section_output_schema'),
+                    'llm_node_editor.output_schema_help',
+                )}
                 <div class="block-card">
                     <div class="block-hint">${this.t('llm_node_editor.output_schema_strict_hint')}</div>
                     <flows-json-field-editor
@@ -1033,7 +1071,10 @@ export class FlowsLlmNodeEditor extends PlatformElement {
         const exitToolEnum = loopMode === 'explicit' ? this._exitToolEnumConfig(exitTool) : null;
         return html`
             <section class="block">
-                <h4 class="block-title">${this.t('llm_node_editor.section_react')}</h4>
+                ${this._sectionHeading(
+                    this.t('llm_node_editor.section_react'),
+                    'llm_node_editor.react_section_help',
+                )}
                 <div class="block-card">
                     <div class="react-composite-row">
                         <platform-field
@@ -1041,6 +1082,7 @@ export class FlowsLlmNodeEditor extends PlatformElement {
                             mode="edit"
                             type="enum"
                             .label=${this.t('llm_node_editor.react_loop_mode')}
+                            .hint=${this.t('llm_node_editor.react_loop_mode_hint')}
                             .value=${loopMode}
                             .config=${{ values: loopModeValues }}
                             @change=${this._onReactLoopMode}
@@ -1050,6 +1092,7 @@ export class FlowsLlmNodeEditor extends PlatformElement {
                             mode="edit"
                             type="integer"
                             .label=${this.t('llm_node_editor.react_max_iterations')}
+                            .hint=${this.t('llm_node_editor.react_max_iterations_hint')}
                             .value=${maxIter}
                             @change=${this._onReactMaxIter}
                         ></platform-field>
@@ -1061,6 +1104,7 @@ export class FlowsLlmNodeEditor extends PlatformElement {
                                 mode="edit"
                                 type="enum"
                                 .label=${this.t('llm_node_editor.react_exit_tool')}
+                                .hint=${this.t('llm_node_editor.react_exit_tool_hint')}
                                 .value=${exitTool}
                                 .config=${exitToolEnum}
                                 @change=${this._onReactExitTool}
@@ -1076,6 +1120,7 @@ export class FlowsLlmNodeEditor extends PlatformElement {
                             mode="edit"
                             type="string"
                             .label=${this.t('llm_node_editor.react_reminder')}
+                            .hint=${this.t('llm_node_editor.react_reminder_hint')}
                             .value=${reminder}
                             @change=${this._onReactReminder}
                         ></platform-field>
@@ -1090,7 +1135,11 @@ export class FlowsLlmNodeEditor extends PlatformElement {
         const tools = Array.isArray(this.nodeConfig?.tools) ? this.nodeConfig.tools : [];
         return html`
             <section class="block">
-                <h4 class="block-title">${this.t('llm_node_editor.section_tools')}</h4>
+                ${this._sectionHeading(
+                    this.t('llm_node_editor.section_tools'),
+                    'llm_node_editor.tools_section_help',
+                    '/documentation/scenarios/flows/add-llm-node/',
+                )}
                 <div class="block-card">
                     <div class="row">
                         ${tools.map((t) => {

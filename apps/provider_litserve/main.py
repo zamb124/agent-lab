@@ -28,6 +28,7 @@ from apps.provider_litserve.container import (
     get_provider_litserve_container,
 )
 from apps.provider_litserve.embedding.api import EmbeddingLitAPI
+from apps.provider_litserve.llm.api import ChatLitAPI
 from apps.provider_litserve.model_registry import (
     init_registry,
     sync_defaults_from_config,
@@ -44,9 +45,11 @@ from apps.provider_litserve.runtime_models import (
 from apps.provider_litserve.stt.api import STTLitAPI
 from apps.provider_litserve.tts.api import TTSLitAPI
 from apps.provider_litserve.vad.api import VADLitAPI
+from apps.provider_litserve.worker_registry import resolved_enabled_workers
 from core.app import create_service_app
 from core.app.health_payload import build_health_payload
 from core.app.server import serve
+from core.config.models import ProviderLitserveInfraConfig
 
 UI_PREFIX = "/litserve"
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
@@ -91,6 +94,8 @@ def _cuda_required_for_inference() -> bool:
         return True
     if cfg.embedding_accelerator == "cuda" or cfg.rerank_accelerator == "cuda":
         return True
+    if cfg.llm_accelerator == "cuda":
+        return True
     return False
 
 
@@ -129,6 +134,9 @@ def _inference_health_handler() -> JSONResponse:
         "accelerator": cfg.accelerator,
         "embedding_accelerator": cfg.embedding_accelerator,
         "rerank_accelerator": cfg.rerank_accelerator,
+        "llm_accelerator": cfg.llm_accelerator,
+        "llm_backend": cfg.llm_backend,
+        "enabled_workers": sorted(resolved_enabled_workers(cfg)),
         "cuda_required": cuda_required,
         "cuda_available": cuda_available,
         "torch_version": torch.__version__,
@@ -172,6 +180,9 @@ def _register_v1_models_route(server: ls.LitServer) -> None:
         stt_model_ids = runtime_api_model_ids("stt", cfg)
         tts_model_ids = runtime_api_model_ids("tts", cfg)
         vad_model_ids = runtime_api_model_ids("vad", cfg)
+        llm_model_ids: list[str] = []
+        if "llm" in resolved_enabled_workers(cfg):
+            llm_model_ids = [cfg.llm_openai_model_id]
         return build_provider_litserve_v1_models_response(
             embedding_openai_model_id=cfg.embedding_openai_model_id,
             embedding_model_ids=embedding_model_ids,
@@ -182,6 +193,10 @@ def _register_v1_models_route(server: ls.LitServer) -> None:
             rerank_model_ids=rerank_model_ids,
             rerank_hf_model_id=cfg.model_id,
             rerank_context_length=8192,
+            llm_openai_model_id=cfg.llm_openai_model_id if llm_model_ids else None,
+            llm_model_ids=llm_model_ids,
+            llm_hf_model_id=cfg.llm_model_id if llm_model_ids else None,
+            llm_context_length=32768,
             stt_model_ids=stt_model_ids,
             tts_model_ids=tts_model_ids,
             vad_model_ids=vad_model_ids,
@@ -222,19 +237,35 @@ def _merge_litserver_v1_routes(app: FastAPI, lit_app: FastAPI) -> None:
         known.add(signature)
 
 
+def _build_litserver_apis(cfg: ProviderLitserveInfraConfig) -> list[ls.LitAPI]:
+    enabled = resolved_enabled_workers(cfg)
+    apis: list[ls.LitAPI] = []
+    if "embedding" in enabled:
+        apis.append(EmbeddingLitAPI(cfg))
+    if "rerank" in enabled:
+        apis.append(RerankerLitAPI(cfg))
+    if "stt" in enabled:
+        apis.append(STTLitAPI(cfg))
+    if "tts" in enabled:
+        apis.append(TTSLitAPI(cfg))
+    if "vad" in enabled:
+        apis.append(VADLitAPI(cfg))
+    if "llm" in enabled:
+        if cfg.llm_backend != "transformers":
+            raise RuntimeError("enabled_workers contains llm but llm_backend is not transformers")
+        apis.append(ChatLitAPI(cfg))
+    if not apis:
+        raise RuntimeError("provider_litserve: no LitServe workers enabled")
+    return apis
+
+
 def _register_litserver_v1(app: FastAPI) -> None:
     global _provider_litserve_server
 
     settings = get_provider_litserve_settings()
     cfg = settings.provider_litserve.infra
     lit_server = ls.LitServer(
-        [
-            EmbeddingLitAPI(cfg),
-            RerankerLitAPI(cfg),
-            STTLitAPI(cfg),
-            TTSLitAPI(cfg),
-            VADLitAPI(cfg),
-        ],
+        _build_litserver_apis(cfg),
         accelerator=cfg.accelerator,
         workers_per_device=cfg.workers_per_device,
         timeout=cfg.request_timeout_seconds,

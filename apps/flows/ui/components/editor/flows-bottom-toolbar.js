@@ -13,6 +13,7 @@
 import { html, css } from 'lit';
 import { PlatformElement } from '@platform/lib/platform-element/index.js';
 import '@platform/lib/components/platform-icon.js';
+import '@platform/lib/components/platform-help-hint.js';
 import { asObject, isPlainObject, getBranchNodes } from '../../_helpers/flows-resolvers.js';
 import { computeFitViewBox, FLOWS_EDITOR_DEFAULT_VIEWBOX } from '../../_helpers/flows-viewbox.js';
 
@@ -156,6 +157,13 @@ export class FlowsBottomToolbar extends PlatformElement {
             <button class="btn" type="button" ?active=${guidesOn} title=${this.t('canvas.toolbar.toggle_guides')} @click=${this._toggleGuides}>
                 <platform-icon name="schema" size="16"></platform-icon>
             </button>
+            <platform-help-hint
+                .label=${this.t('canvas.toolbar.canvas_hint_label')}
+                .summary=${this.t('canvas.toolbar.canvas_hint_summary')}
+                .details=${this.t('canvas.toolbar.canvas_hint_details')}
+                .docHref=${'/documentation/scenarios/flows/add-llm-node/'}
+                .docLabel=${this.t('help_hints.open_scenario')}
+            ></platform-help-hint>
             <button class="btn" type="button" title=${this.t('canvas.toolbar.help')} @click=${this._help}>
                 <platform-icon name="help" size="16"></platform-icon>
             </button>

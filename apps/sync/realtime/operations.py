@@ -135,6 +135,7 @@ from apps.sync.realtime.handlers import (
     update_channel,
     upsert_git_resource,
 )
+from apps.sync.realtime.livekit_sdk_boundary import read_livekit_egress_id
 from apps.sync.realtime.publish_events import publish_realtime_events
 from apps.sync.realtime.task_names import (
     SYNC_AGGREGATE_CALL_TRANSCRIPT_TASK_NAME,
@@ -1677,9 +1678,7 @@ async def op_calls_recording_start(
         s3_endpoint=normalize_s3_egress_endpoint(bucket_config.endpoint_url),
         audio_only=(call.call_type == "audio"),
     )
-    provider_job_id = getattr(egress_info, "egress_id", None)
-    if not isinstance(provider_job_id, str) or provider_job_id == "":
-        raise WsCommandError("internal", "LiveKit не вернул egress_id после старта записи.")
+    provider_job_id = read_livekit_egress_id(egress_info)
     logger.info(
         "call.recording.start: call_id=%s recording_id=%s room=%s egress_id=%s audio_only=%s",
         call.call_id,

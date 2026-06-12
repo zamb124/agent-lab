@@ -28,6 +28,7 @@ import { PlatformElement } from '@platform/lib/platform-element/index.js';
 import '@platform/lib/components/fields/platform-field.js';
 import '@platform/lib/components/glass-button.js';
 import '@platform/lib/components/platform-icon.js';
+import '@platform/lib/components/platform-help-hint.js';
 import './flows-json-field-editor.js';
 import { asString } from '../../_helpers/flows-resolvers.js';
 
@@ -194,6 +195,16 @@ export class FlowsLlmConfigEditor extends PlatformElement {
                 font-size: var(--text-sm);
                 font-weight: var(--font-medium);
                 color: var(--text-primary);
+                display: inline-flex;
+                align-items: center;
+                gap: var(--space-1);
+            }
+            .extra-label-wrap {
+                display: inline-flex;
+                align-items: center;
+                gap: var(--space-1);
+                font-size: var(--text-sm);
+                color: var(--text-secondary);
             }
             .fallbacks-list {
                 display: flex;
@@ -675,14 +686,18 @@ export class FlowsLlmConfigEditor extends PlatformElement {
         if (provider === HUMANITEC_LLM_PROVIDER) {
             return this.t('llm_config_editor.humanitec_llms_provider_tooltip');
         }
-        return '';
+        return this.t('llm_config_editor.provider_hint');
     }
 
     _modelHint(provider, model) {
         if (provider === HUMANITEC_LLM_PROVIDER && (!model || model === HUMANITEC_LLM_AUTO_MODEL)) {
             return this.t('llm_config_editor.humanitec_llms_auto_tooltip');
         }
-        return '';
+        return this.t('llm_config_editor.model_hint');
+    }
+
+    _hint(key) {
+        return this.t(`llm_config_editor.${key}_hint`);
     }
 
     render() {
@@ -784,6 +799,7 @@ export class FlowsLlmConfigEditor extends PlatformElement {
                             type="number"
                             mode=${fieldMode}
                             .label=${this.t('llm_config_editor.temperature')}
+                            .hint=${this._hint('temperature')}
                             .placeholder=${this.t('llm_config_editor.placeholder_temperature')}
                             .value=${this._readNumberField('temperature')}
                             @change=${this.readOnly
@@ -796,6 +812,7 @@ export class FlowsLlmConfigEditor extends PlatformElement {
                             type="integer"
                             mode=${fieldMode}
                             .label=${this.t('llm_config_editor.max_tokens')}
+                            .hint=${this._hint('max_tokens')}
                             .placeholder=${this.t('llm_config_editor.placeholder_max_tokens')}
                             .value=${this._readNumberField('max_tokens')}
                             @change=${this.readOnly
@@ -820,6 +837,9 @@ export class FlowsLlmConfigEditor extends PlatformElement {
                                               <div class="fallbacks-head">
                                                   <div class="fallbacks-title">
                                                       ${this.t('llm_config_editor.fallback_models')}
+                                                      <platform-help-hint
+                                                          .text=${this.t('llm_config_editor.fallback_models_hint')}
+                                                      ></platform-help-hint>
                                                   </div>
                                                   ${this.readOnly
                                                       ? ''
@@ -942,6 +962,7 @@ export class FlowsLlmConfigEditor extends PlatformElement {
                                               mode=${fieldMode}
                                               input-type="password"
                                               .label=${this.t('llm_config_editor.api_key')}
+                                              .hint=${this._hint('api_key')}
                                               .placeholder="@var:KEY"
                                               .value=${apiKey}
                                               @change=${this.readOnly
@@ -957,6 +978,7 @@ export class FlowsLlmConfigEditor extends PlatformElement {
                                               type="string"
                                               mode=${fieldMode}
                                               .label=${this.t('llm_config_editor.folder_id')}
+                                              .hint=${this._hint('folder_id')}
                                               .placeholder=${this.t('llm_config_editor.placeholder_folder_id')}
                                               .value=${folderId}
                                               @change=${this.readOnly
@@ -978,6 +1000,7 @@ export class FlowsLlmConfigEditor extends PlatformElement {
                                               type="string"
                                               mode=${fieldMode}
                                               .label=${this.t('llm_config_editor.base_url')}
+                                              .hint=${this._hint('base_url')}
                                               .placeholder="https://api.example.com/v1"
                                               .value=${baseUrl}
                                               @change=${this.readOnly
@@ -991,6 +1014,7 @@ export class FlowsLlmConfigEditor extends PlatformElement {
                                     type="number"
                                     mode=${fieldMode}
                                     .label=${this.t('llm_config_editor.top_p')}
+                                    .hint=${this._hint('top_p')}
                                     .placeholder=${this.t('llm_config_editor.placeholder_top_p')}
                                     .value=${this._readNumberField('top_p')}
                                     @change=${this.readOnly
@@ -1003,6 +1027,7 @@ export class FlowsLlmConfigEditor extends PlatformElement {
                                     type="integer"
                                     mode=${fieldMode}
                                     .label=${this.t('llm_config_editor.top_k')}
+                                    .hint=${this._hint('top_k')}
                                     .placeholder=${this.t('llm_config_editor.placeholder_top_k')}
                                     .value=${this._readNumberField('top_k')}
                                     @change=${this.readOnly
@@ -1015,6 +1040,7 @@ export class FlowsLlmConfigEditor extends PlatformElement {
                                     type="number"
                                     mode=${fieldMode}
                                     .label=${this.t('llm_config_editor.frequency_penalty')}
+                                    .hint=${this._hint('frequency_penalty')}
                                     .placeholder=${this.t('llm_config_editor.placeholder_frequency_penalty')}
                                     .value=${this._readNumberField('frequency_penalty')}
                                     @change=${this.readOnly
@@ -1027,6 +1053,7 @@ export class FlowsLlmConfigEditor extends PlatformElement {
                                     type="number"
                                     mode=${fieldMode}
                                     .label=${this.t('llm_config_editor.presence_penalty')}
+                                    .hint=${this._hint('presence_penalty')}
                                     .placeholder=${this.t('llm_config_editor.placeholder_presence_penalty')}
                                     .value=${this._readNumberField('presence_penalty')}
                                     @change=${this.readOnly
@@ -1039,6 +1066,7 @@ export class FlowsLlmConfigEditor extends PlatformElement {
                                     type="integer"
                                     mode=${fieldMode}
                                     .label=${this.t('llm_config_editor.seed')}
+                                    .hint=${this._hint('seed')}
                                     .placeholder=${this.t('llm_config_editor.placeholder_seed')}
                                     .value=${this._readNumberField('seed')}
                                     @change=${this.readOnly
@@ -1051,6 +1079,7 @@ export class FlowsLlmConfigEditor extends PlatformElement {
                                     type="enum"
                                     mode=${fieldMode}
                                     .label=${this.t('llm_config_editor.reasoning_effort')}
+                                    .hint=${this._hint('reasoning_effort')}
                                     .value=${reasoning}
                                     .config=${{ values: reasoningEnumValues }}
                                     @change=${this.readOnly
@@ -1069,7 +1098,12 @@ export class FlowsLlmConfigEditor extends PlatformElement {
                                 ? ''
                                 : html`
                                       <div class="field full extra">
-                                          <label>${this.t('llm_config_editor.extra_request_body')}</label>
+                                          <span class="extra-label-wrap">
+                                              <span>${this.t('llm_config_editor.extra_request_body')}</span>
+                                              <platform-help-hint
+                                                  .text=${this.t('llm_config_editor.extra_request_body_hint')}
+                                              ></platform-help-hint>
+                                          </span>
                                           <flows-json-field-editor
                                               .value=${extraJson}
                                               .readonly=${this.readOnly}
@@ -1083,7 +1117,12 @@ export class FlowsLlmConfigEditor extends PlatformElement {
                                           ></flows-json-field-editor>
                                       </div>
                                       <div class="field full extra">
-                                          <label>${this.t('llm_config_editor.extra_request_headers')}</label>
+                                          <span class="extra-label-wrap">
+                                              <span>${this.t('llm_config_editor.extra_request_headers')}</span>
+                                              <platform-help-hint
+                                                  .text=${this.t('llm_config_editor.extra_request_headers_hint')}
+                                              ></platform-help-hint>
+                                          </span>
                                           ${(Array.isArray(this._headerRows) ? this._headerRows : []).map(
                                               (row, idx) => html`
                                                   <div class="header-pair-row">
@@ -1091,6 +1130,7 @@ export class FlowsLlmConfigEditor extends PlatformElement {
                                                           mode=${fieldMode}
                                                           type="string"
                                                           .label=${this.t('llm_config_editor.extra_header_name')}
+                                                          .hint=${this._hint('extra_header_name')}
                                                           .placeholder=${this.t('llm_config_editor.extra_header_name_placeholder')}
                                                           .value=${typeof row.name === 'string' ? row.name : ''}
                                                           @change=${this.readOnly
@@ -1101,6 +1141,7 @@ export class FlowsLlmConfigEditor extends PlatformElement {
                                                           mode=${fieldMode}
                                                           type="string"
                                                           .label=${this.t('llm_config_editor.extra_header_value')}
+                                                          .hint=${this._hint('extra_header_value')}
                                                           .placeholder=${this.t('llm_config_editor.extra_header_value_placeholder')}
                                                           .value=${typeof row.value === 'string' ? row.value : ''}
                                                           @change=${this.readOnly

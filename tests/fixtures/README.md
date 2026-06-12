@@ -91,29 +91,13 @@ async def test_api(rag_client):
 
 Используют реальные HTTP серверы:
 
-- `agents_client_http` - клиент к Agents на localhost:8000
-- `rag_client_http` - клиент к RAG на localhost:8004
-- `crm_client_http` - клиент к CRM на localhost:8003
-- `frontend_client_http` - клиент к Frontend на localhost:8001
-- `all_clients_http` - dict со всеми клиентами
+- `flows_client_http` - клиент к Flows на localhost:9001
+- `office_client_http` - клиент к Office на localhost:9008
 
 **Использование:**
 ```python
-async def test_e2e(all_clients_http):
-    # Создаем entity в CRM
-    response = await all_clients_http["crm"].post(
-        "/crm/api/v1/entities/",
-        json={"entity_type": "note", "text": "Test"}
-    )
-    entity_id = response.json()["entity_id"]
-    
-    # Добавляем attachment через RAG
-    with open("test.txt", "rb") as f:
-        response = await all_clients_http["crm"].post(
-            f"/crm/api/v1/entities/{entity_id}/attachments",
-            files={"file": f}
-        )
-    
+async def test_e2e(flows_client_http):
+    response = await flows_client_http.get("/flows/api/v1/flows/")
     assert response.status_code == 200
 ```
 
@@ -240,15 +224,8 @@ rag_client (ASGI)
 ├── rag_app (RAG ASGI app)
 └── rag_worker (для обработки документов)
 
-crm_client_http
-├── crm_service
-└── rag_service
-
-all_clients_http
-├── agents_client_http → agents_service
-├── rag_client_http → rag_service
-├── crm_client_http → crm_service + rag_service
-└── frontend_client_http → frontend_service
+flows_client_http → flows_service
+office_client_http → office_service
 ```
 
 ## Добавление нового сервиса
@@ -315,7 +292,7 @@ async def test_my_service(my_service_client):
    - Например, `crm_client` (ASGI) + `rag_service` (HTTP)
    - Тестируют взаимодействие между сервисами
 
-3. **E2E тесты** - используй HTTP клиенты (`all_clients_http`)
+3. **E2E тесты** - используй HTTP клиенты (`flows_client_http`, `office_client_http`) или pytest Playwright (`tests/ui/e2e`)
    - Полная интеграция всей платформы
    - Тестируют реальные пользовательские сценарии
 

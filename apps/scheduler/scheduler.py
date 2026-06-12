@@ -26,6 +26,7 @@ import apps.idle_worker.tasks.platform_free_models_tasks as _idle_platform_free_
 import apps.idle_worker.tasks.push_notification_tasks as _idle_push_notification_tasks  # noqa: E402
 import apps.idle_worker.tasks.span_billing_settlement_tasks as _idle_span_billing_settlement_tasks  # noqa: E402
 import apps.rag_worker.tasks.maintenance_tasks as _rag_maintenance_tasks  # noqa: E402
+import apps.search_worker.tasks.crawl_tasks as _search_crawl_tasks  # noqa: E402
 from apps.crm.scheduled_integration_constants import (  # noqa: E402
     SCHEDULED_NAMESPACE_INTEGRATION_UNIFIED_SYNC_TASK_NAME,
 )
@@ -55,6 +56,7 @@ _TASK_REGISTRATION_MODULES = (
     _idle_push_notification_tasks,
     _idle_span_billing_settlement_tasks,
     _rag_maintenance_tasks,
+    _search_crawl_tasks,
 )
 
 _FLOWS_SCHEDULER_REQUIRED_TASK_NAMES: tuple[str, ...] = (
@@ -95,11 +97,20 @@ _CRM_SCHEDULER_REQUIRED_TASK_NAMES: tuple[str, ...] = (
     CRM_RECONCILE_DAILY_SUMMARY_TASK_NAME,
 )
 
+_SEARCH_SCHEDULER_REQUIRED_TASK_NAMES: tuple[str, ...] = (
+    "crawl_orchestrator_tick",
+    "crawl_discover_domain",
+    "crawl_fetch_url",
+    "crawl_import_seed_domains",
+    "crawl_reclaim_stale_fetching",
+)
+
 require_tasks_registered_for_scheduler(
     flows_worker_task_names=_FLOWS_SCHEDULER_REQUIRED_TASK_NAMES,
     idle_queue_task_names=_IDLE_SCHEDULER_REQUIRED_TASK_NAMES,
     crm_queue_task_names=_CRM_SCHEDULER_REQUIRED_TASK_NAMES,
     rag_queue_task_names=_RAG_SCHEDULER_REQUIRED_TASK_NAMES,
+    search_queue_task_names=_SEARCH_SCHEDULER_REQUIRED_TASK_NAMES,
 )
 
 scheduler = create_scheduler(settings.database.redis_url)

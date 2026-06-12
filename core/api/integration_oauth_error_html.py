@@ -11,6 +11,7 @@ from typing import TypedDict
 
 from starlette.requests import Request
 
+from core.app_state import get_request_correlation_ids
 from core.integrations.guided_integration_error import (
     GuidedIntegrationError,
     OAuthErrorLocale,
@@ -178,12 +179,10 @@ a.btn:focus,a.btn:hover{background:#7b53a8}
 
 def oauth_error_correlation_ids(request: Request) -> OAuthErrorCorrelation:
     out: OAuthErrorCorrelation = {}
-    rq = getattr(request.state, "request_id", None)
-    tr = getattr(request.state, "trace_id", None)
-    if isinstance(rq, str) and rq.strip():
-        out["request_id"] = rq.strip()
-    if isinstance(tr, str) and tr.strip():
-        out["trace_id"] = tr.strip()
+    correlation = get_request_correlation_ids(request)
+    if correlation is not None:
+        out["request_id"] = correlation.request_id
+        out["trace_id"] = correlation.trace_id
     path = request.url.path.strip("/")
     if path:
         first = path.split("/", 1)[0]

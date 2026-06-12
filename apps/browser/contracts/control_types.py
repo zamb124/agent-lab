@@ -92,6 +92,24 @@ class ControlPointerClickBody(BaseModel):
     click_count: int = Field(default=1, ge=1, le=3)
 
 
+class ControlPointerKeyBody(BaseModel):
+    model_config: ClassVar[ConfigDict] = ConfigDict(extra="forbid")
+
+    key: str = Field(min_length=1, max_length=80)
+
+
+class ControlPointerTextBody(BaseModel):
+    model_config: ClassVar[ConfigDict] = ConfigDict(extra="forbid")
+
+    text: str = Field(min_length=1, max_length=4096)
+
+
+class ControlHumanTakeoverBody(BaseModel):
+    model_config: ClassVar[ConfigDict] = ConfigDict(extra="forbid")
+
+    owner: str = Field(default="human", min_length=1, max_length=120)
+
+
 class ControlSessionStatusResponse(BaseModel):
     model_config: ClassVar[ConfigDict] = ConfigDict(extra="forbid")
 
@@ -99,3 +117,5 @@ class ControlSessionStatusResponse(BaseModel):
     url: str
     title: str
     closed: bool = False
+    human_takeover: bool = False
+    human_takeover_owner: str | None = None

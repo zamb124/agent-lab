@@ -96,6 +96,10 @@ def patch_service_clients_asgi(
                 from apps.capability_gateway.main import app
 
                 _apps_cache[service] = app
+            elif service == "search":
+                from apps.search.main import app
+
+                _apps_cache[service] = app
             else:
                 return None
         except ImportError:
@@ -190,6 +194,31 @@ async def rag_client(rag_app, rag_worker):
     transport = ASGITransport(app=rag_app)
     async with AsyncClient(transport=transport, base_url="http://testserver") as client:
         yield client
+
+
+@pytest_asyncio.fixture
+async def search_app():
+    """FastAPI приложение search сервиса."""
+    from apps.search.container import reset_search_container
+    from apps.search.main import app
+
+    reset_search_container()
+    yield app
+    reset_search_container()
+
+
+@pytest_asyncio.fixture
+async def search_client(search_app, setup_database_before_tests, auth_headers_system):
+    """HTTP клиент для Search API (ASGI transport)."""
+    _ = setup_database_before_tests
+    transport = ASGITransport(app=search_app)
+    async with search_app.router.lifespan_context(search_app):
+        async with AsyncClient(
+            transport=transport,
+            base_url="http://testserver",
+            headers=auth_headers_system,
+        ) as client:
+            yield client
 
 
 @pytest_asyncio.fixture(scope="session")
@@ -393,48 +422,6 @@ async def flows_client_http(flows_service):
 
 
 @pytest_asyncio.fixture
-async def rag_client_http(rag_service):
-    """
-    HTTP клиент для RAG API (реальный HTTP).
-
-    Использует реальный HTTP сервер на порту 8004.
-    Для E2E тестов всей платформы.
-    """
-    async with AsyncClient(base_url="http://localhost:8004") as client:
-        yield client
-
-
-@pytest_asyncio.fixture
-async def crm_client_http(crm_service, crm_companies_initialized, rag_service, flows_service):
-    """
-    HTTP клиент для CRM API (реальный HTTP).
-
-    Использует реальный HTTP сервер на порту 9003.
-    Для E2E тестов всей платформы.
-    Таблицы создаются через миграции в setup_database_before_tests.
-
-    Зависимости:
-    - crm_companies_initialized: session-scoped, system/company2 компании
-    - rag_service: для attachments через inter-service communication
-    - flows_service: HTTP flows на 9001 для TaskIQ/worker и CRM→flows вызовов
-    """
-    async with AsyncClient(base_url="http://localhost:9003") as client:
-        yield client
-
-
-@pytest_asyncio.fixture
-async def frontend_client_http(frontend_service):
-    """
-    HTTP клиент для Frontend API (реальный HTTP).
-
-    Использует реальный HTTP сервер на порту 8001.
-    Для E2E тестов всей платформы.
-    """
-    async with AsyncClient(base_url="http://localhost:8001") as client:
-        yield client
-
-
-@pytest_asyncio.fixture
 async def office_client_http(office_service):
     """
     HTTP клиент для Documents/Office API (реальный HTTP).
@@ -443,27 +430,3 @@ async def office_client_http(office_service):
     """
     async with AsyncClient(base_url="http://localhost:9008") as client:
         yield client
-
-
-# ==============================================================================
-# Вспомогательные фикстуры
-# ==============================================================================
-
-@pytest_asyncio.fixture
-async def all_clients_http(
-    flows_client_http,
-    rag_client_http,
-    crm_client_http,
-    frontend_client_http
-):
-    """
-    Все HTTP клиенты для E2E тестов.
-
-    Возвращает dict с клиентами для всех сервисов.
-    """
-    return {
-        "flows": flows_client_http,
-        "rag": rag_client_http,
-        "crm": crm_client_http,
-        "frontend": frontend_client_http,
-    }

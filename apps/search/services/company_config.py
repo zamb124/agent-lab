@@ -61,10 +61,11 @@ def resolve_search_config_for_company(
     linkup, linkup_source = _resolve_linkup(platform_config.linkup, company_settings.linkup)
     serper, serper_source = _resolve_serper(platform_config.serper, company_settings.serper)
     tavily, tavily_source = _resolve_tavily(platform_config.tavily, company_settings.tavily)
+    provider_order = _effective_provider_order(platform_config, company_settings)
     return ResolvedSearchConfig(
         config=platform_config.model_copy(
             update={
-                "provider_order": list(company_settings.provider_order),
+                "provider_order": provider_order,
                 "tinyfish": tinyfish,
                 "linkup": linkup,
                 "serper": serper,
@@ -78,6 +79,16 @@ def resolve_search_config_for_company(
             "tavily": tavily_source,
         },
     )
+
+
+def _effective_provider_order(
+    platform_config: SearchIntegrationConfig,
+    company_settings: CompanySearchProviders,
+) -> list[SearchProviderId]:
+    order: list[SearchProviderId] = list(company_settings.provider_order)
+    if platform_config.index.enabled and "index" not in order:
+        order.insert(0, "index")
+    return order
 
 
 def _common_update(

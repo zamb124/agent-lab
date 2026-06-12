@@ -34,6 +34,11 @@
       "name": "tracing",
       "models_module": "core.db.models.tracing",
       "database_url_key": "tracing_url"
+    },
+    {
+      "name": "search",
+      "models_module": "apps.search.db.models",
+      "database_url_key": "search_url"
     }
   ],
   "postgres": {
@@ -44,7 +49,8 @@
       "platform_sync",
       "platform_rag",
       "platform_office",
-      "platform_tracing"
+      "platform_tracing",
+      "platform_search"
     ],
     "vector_extensions": ["platform_shared", "platform_crm", "platform_rag"]
   }

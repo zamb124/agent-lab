@@ -121,6 +121,10 @@ class DatabaseConfig(BaseModel):
         default=None,
         description="PostgreSQL platform_tracing (spans); отдельно от shared",
     )
+    search_url: str | None = Field(
+        default=None,
+        description="PostgreSQL platform_search (search_indexes, crawl state)",
+    )
     redis_url: str = "redis://localhost:8099"
     statement_timeout_ms: int = Field(
         default=30_000,
@@ -1318,12 +1322,42 @@ class ProviderLitserveInfraConfig(BaseModel):
         description="api id VAD-модели по умолчанию (должен присутствовать в vad_models).",
     )
 
+    llm_backend: Literal["disabled", "transformers"] = Field(
+        default="disabled",
+        description="Локальный chat LLM для crawl enrichment. disabled — воркер /v1/chat/completions не стартует.",
+    )
+    llm_model_id: str = Field(
+        default="Qwen/Qwen2.5-1.5B-Instruct",
+        description="HuggingFace id chat-модели для POST /v1/chat/completions.",
+    )
+    llm_openai_model_id: str = Field(
+        default="qwen/qwen2.5-1.5b-instruct-crawl",
+        description="OpenAI-compatible id chat-модели в payload и GET /v1/models.",
+    )
+    llm_accelerator: Literal["auto", "cpu", "cuda", "mps"] = Field(
+        default="cuda",
+        description="Устройство для chat LLM; auto — как глобальный accelerator воркера.",
+    )
+    llm_max_input_chars: int = Field(
+        default=12000,
+        ge=512,
+        le=200_000,
+        description="Максимум символов markdown, принимаемых crawl enrichment перед prompt.",
+    )
+    enabled_workers: list[Literal["embedding", "rerank", "stt", "tts", "vad", "llm"]] = Field(
+        default_factory=list,
+        description=(
+            "Явный список LitServe-воркеров процесса. Пусто — embedding/rerank/stt/tts/vad "
+            "и llm только при llm_backend=transformers."
+        ),
+    )
+
     hf_token: str | None = None
     sqlite_path: str = "./data/provider_litserve/registry.db"
 
 
 class ProviderLitserveConfig(BaseModel):
-    """Локальные не-LLM модели: клиентский корень API (``api``) и инфраструктура LitServe (``infra``)."""
+    """Локальные модели LitServe: embeddings, rerank, speech и crawl chat LLM."""
 
     model_config: ClassVar[ConfigDict] = ConfigDict(extra="forbid")
 
@@ -1408,6 +1442,10 @@ class RAGConfig(BaseModel):
     document_indexing: IndexProfileConfig = Field(
         default_factory=IndexProfileConfig,
         description="Парсинг, нарезка, lexical/search_defaults для индексации и поиска (без БД-профилей).",
+    )
+    index_profiles: dict[str, IndexProfileConfig] = Field(
+        default_factory=dict,
+        description="Именованные профили индексации (runet_web и др.).",
     )
     ttl: RagTtlConfig = Field(
         default_factory=RagTtlConfig,

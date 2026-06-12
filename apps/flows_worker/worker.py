@@ -158,7 +158,4 @@ register_worker_events(
     service_name="flows_worker",
 )
 
-# Задачи CRM attachment теперь в rag worker (apps/rag_worker/worker.py)
-# import apps.crm.tasks.attachment_tasks  # noqa: F401
-
 __all__ = ["worker_app"]

@@ -6,14 +6,19 @@
 
 from __future__ import annotations
 
-from typing import ClassVar
+import time
+import uuid
+from typing import ClassVar, Literal
 
 from pydantic import BaseModel, ConfigDict
 
 from apps.provider_litserve.provider_litserve_http_schemas import (
+    ChatCompletionChoiceBody,
+    ChatCompletionMessageBody,
     EmbeddingDataItem,
     ModelArchitectureSchema,
     ModelPricingSchema,
+    OpenAIChatCompletionsResponseBody,
     OpenAIEmbeddingsResponseBody,
     TopProviderSchema,
     V1ModelItemSchema,
@@ -79,6 +84,10 @@ def build_provider_litserve_v1_models_response(
     rerank_model_ids: list[str],
     rerank_hf_model_id: str,
     rerank_context_length: int,
+    llm_openai_model_id: str | None = None,
+    llm_model_ids: list[str] | None = None,
+    llm_hf_model_id: str | None = None,
+    llm_context_length: int = 32768,
     stt_model_ids: list[str],
     tts_model_ids: list[str],
     vad_model_ids: list[str],
@@ -143,6 +152,25 @@ def build_provider_litserve_v1_models_response(
             )
         )
 
+    llm_ids = _uniq([*( [llm_openai_model_id] if llm_openai_model_id else []), *(llm_model_ids or [])])
+    for llm_id in llm_ids:
+        hf_ref = llm_hf_model_id if llm_hf_model_id is not None else llm_id
+        data.append(
+            _openrouter_like_model_object(
+                model_id=llm_id,
+                name=llm_id,
+                description=(
+                    f"Local chat LLM (HF: {hf_ref}). "
+                    "Use POST /v1/chat/completions."
+                ),
+                created=created,
+                context_length=llm_context_length,
+                output_modalities=["text"],
+                capabilities=["llm_chat"],
+                supported_parameters=["temperature", "max_tokens", "response_format"],
+            )
+        )
+
     for stt_id in stt_ids:
         data.append(
             _openrouter_like_model_object(
@@ -202,6 +230,48 @@ class OpenAIEmbeddingsRequest(BaseModel):
 
     model: str
     input: str | list[str]
+
+
+class OpenAIChatMessage(BaseModel):
+    model_config: ClassVar[ConfigDict] = ConfigDict(extra="forbid")
+
+    role: str
+    content: str
+
+
+class OpenAIChatResponseFormat(BaseModel):
+    model_config: ClassVar[ConfigDict] = ConfigDict(extra="forbid")
+
+    type: Literal["json_object", "text"]
+
+
+class OpenAIChatCompletionsRequest(BaseModel):
+    """Тело POST ``/v1/chat/completions`` (совместимо с OpenAI)."""
+
+    model_config: ClassVar[ConfigDict] = ConfigDict(extra="ignore")
+
+    model: str
+    messages: list[OpenAIChatMessage]
+    temperature: float | None = None
+    max_tokens: int | None = None
+    response_format: OpenAIChatResponseFormat | None = None
+
+
+def build_openai_chat_completions_response(
+    *,
+    model_id: str,
+    content: str,
+) -> OpenAIChatCompletionsResponseBody:
+    return OpenAIChatCompletionsResponseBody(
+        id=f"chatcmpl-{uuid.uuid4().hex}",
+        created=int(time.time()),
+        model=model_id,
+        choices=[
+            ChatCompletionChoiceBody(
+                message=ChatCompletionMessageBody(content=content),
+            )
+        ],
+    )
 
 
 class RerankQueryPassagesRequest(BaseModel):

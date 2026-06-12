@@ -88,6 +88,20 @@ class SessionContextRecord:
     session_mode: SessionMode
 
 
+@dataclass(frozen=True)
+class HumanTakeoverRecord:
+    """
+    Маркер ручного управления browser-сессией.
+
+    Пока запись активна, агентские control/MCP-команды не должны выполнять
+    навигацию или семантические действия в этой сессии. Preview-канал при этом
+    продолжает читать screenshot/status и отправлять raw pointer/keyboard input.
+    """
+    session_id: str
+    owner: str
+    started_monotonic: float
+
+
 class PageLeaseManager:
     """
     Учёт активных page lease и связь `session_id -> page`.
@@ -156,6 +170,7 @@ class PageLeaseManager:
         self._console_listeners_by_page: dict[int, PageEventListeners] = {}
         self._page_event_logger: PageEventLogger | None = page_event_logger
         self._navigate_locks: dict[str, asyncio.Lock] = {}
+        self._human_takeovers: dict[str, HumanTakeoverRecord] = {}
 
     @staticmethod
     def _console_location(msg: ConsoleMessage) -> JsonObject:
@@ -264,6 +279,34 @@ class PageLeaseManager:
         lock = self._navigate_locks.setdefault(session_id, asyncio.Lock())
         async with lock:
             yield
+
+    async def begin_human_takeover(self, session_id: str, *, owner: str) -> HumanTakeoverRecord:
+        if not session_id:
+            raise ValueError("session_id обязателен")
+        takeover_owner = owner.strip() if owner.strip() else "human"
+        async with self._lock:
+            pids = self._session_pages.get(session_id)
+            if pids is None or len(pids) == 0:
+                raise KeyError(f"Нет активной страницы для session_id={session_id}")
+            record = HumanTakeoverRecord(
+                session_id=session_id,
+                owner=takeover_owner,
+                started_monotonic=time.monotonic(),
+            )
+            self._human_takeovers[session_id] = record
+            return record
+
+    async def end_human_takeover(self, session_id: str) -> HumanTakeoverRecord | None:
+        if not session_id:
+            raise ValueError("session_id обязателен")
+        async with self._lock:
+            return self._human_takeovers.pop(session_id, None)
+
+    async def human_takeover_for_session(self, session_id: str) -> HumanTakeoverRecord | None:
+        if not session_id:
+            raise ValueError("session_id обязателен")
+        async with self._lock:
+            return self._human_takeovers.get(session_id)
 
     async def swap_active_page_for_session(self, session_id: str) -> BrowserPage:
         """
@@ -448,6 +491,7 @@ class PageLeaseManager:
                 sess.discard(pid)
                 if len(sess) == 0:
                     _ = self._session_pages.pop(rec.session_id, None)
+                    _ = self._human_takeovers.pop(rec.session_id, None)
             session_mode = session_mode_override if session_mode_override is not None else rec.session_mode
             ctx_rec = self._session_contexts.get(rec.session_id)
             if ctx_rec is not None and (sess is None or len(sess) == 0):
@@ -498,6 +542,7 @@ class PageLeaseManager:
                 )
             async with self._lock:
                 ctx_rec = self._session_contexts.pop(session_id, None)
+                _ = self._human_takeovers.pop(session_id, None)
             if ctx_rec is not None:
                 await self._factory.close_context(ctx_rec.context)
             _ = self._console_events_by_session.pop(session_id, None)

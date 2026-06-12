@@ -17,7 +17,7 @@ from fastapi.responses import JSONResponse, RedirectResponse, Response
 from pydantic import BaseModel
 from pydantic import Field as PydanticField
 
-from core.app_state import PlatformAppState
+from core.app_state import PlatformAppState, get_request_token_data
 from core.config import get_settings
 from core.identity import AuthService
 from core.logging import get_logger
@@ -82,12 +82,7 @@ def _oauth_callback_container(request: Request) -> BaseContainer:
 
 
 def _request_token_data(request: Request) -> TokenData | None:
-    token_data = getattr(request.state, "token_data", None)
-    if token_data is None:
-        return None
-    if not isinstance(token_data, TokenData):
-        raise RuntimeError("AuthMiddleware did not populate request.state.token_data")
-    return token_data
+    return get_request_token_data(request)
 
 
 def _require_token_data(request: Request) -> TokenData:

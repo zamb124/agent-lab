@@ -186,6 +186,11 @@ SERVICES = {
         "worker_app": "apps.rag_worker.worker:worker_app",
         "workers": "1",
     },
+    "search_worker": {
+        "type": "taskiq-worker",
+        "worker_app": "apps.search_worker.worker:worker_app",
+        "workers": "2",
+    },
     "sync_worker": {
         "type": "taskiq-worker",
         "worker_app": "apps.sync_worker.worker:worker_app",

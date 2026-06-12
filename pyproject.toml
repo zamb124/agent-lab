@@ -156,6 +156,13 @@ rag = [
     "pyannote-audio>=4.0.4",
 ]
 
+llm-model = [
+    "torch>=2.6.0",
+    "transformers<5",
+    "accelerate>=1.4.0",
+    "bitsandbytes>=0.45.0",
+]
+
 sync = [
     "livekit-api>=1.1.0",
     "websockets>=16.0",

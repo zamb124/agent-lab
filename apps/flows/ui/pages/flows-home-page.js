@@ -8,6 +8,7 @@ import { PlatformPage } from '@platform/lib/base/PlatformPage.js';
 import { formatPlatformDateTime } from '@platform/lib/utils/format-platform-date.js';
 import '@platform/lib/components/layout/page-header.js';
 import '@platform/lib/components/platform-icon.js';
+import '@platform/lib/components/platform-help-hint.js';
 import '@platform/lib/components/glass-spinner.js';
 import '../components/flows-catalog-list.js';
 import { asArray, asString, isPlainObject } from '../_helpers/flows-resolvers.js';
@@ -455,6 +456,12 @@ export class FlowsHomePage extends PlatformPage {
                 font-size: var(--text-xl);
                 line-height: var(--leading-tight);
                 font-weight: var(--font-semibold);
+            }
+            .section-title-wrap {
+                display: inline-flex;
+                align-items: center;
+                gap: var(--space-1);
+                min-width: 0;
             }
             .section-subtitle {
                 margin: var(--space-1) 0 0;
@@ -1001,6 +1008,13 @@ export class FlowsHomePage extends PlatformPage {
                 >
                     <platform-icon name="chat" size="16"></platform-icon>
                 </button>
+                <platform-help-hint
+                    .label=${this.t('flows_home.header_help_label')}
+                    .summary=${this.t('flows_home.header_help_summary')}
+                    .details=${this.t('flows_home.header_help_details')}
+                    .docHref=${'/documentation/scenarios/flows/flows-home-overview/'}
+                    .docLabel=${this.t('help_hints.open_scenario')}
+                ></platform-help-hint>
             </div>
         `;
     }
@@ -1035,6 +1049,13 @@ export class FlowsHomePage extends PlatformPage {
                     <div class="hero-eyebrow">
                         <img class="hero-logo" src="/static/core/assets/service_logos/agents_logo.svg" alt="" aria-hidden="true" />
                         <span>${this.t('flows_home.eyebrow')}</span>
+                        <platform-help-hint
+                            .label=${this.t('flows_home.hero_help_label')}
+                            .summary=${this.t('flows_home.hero_help_summary')}
+                            .details=${this.t('flows_home.hero_help_details')}
+                            .docHref=${'/documentation/scenarios/flows/flows-home-overview/'}
+                            .docLabel=${this.t('help_hints.open_scenario')}
+                        ></platform-help-hint>
                     </div>
                     <h1>${this.t('flows_home.title')}</h1>
                     <p class="hero-subtitle">${this.t('flows_home.subtitle')}</p>
@@ -1131,7 +1152,7 @@ export class FlowsHomePage extends PlatformPage {
         const actions = this._visibleQuickActions();
         return html`
             <section>
-                ${this._renderSectionHead('flows_home.quick_title', 'flows_home.quick_subtitle')}
+                ${this._renderSectionHead('flows_home.quick_title', 'flows_home.quick_subtitle', '', 'flows_home.quick_help')}
                 <div class="action-grid">
                     ${repeat(actions, (action) => action.id, (action) => this._renderActionCard(action))}
                 </div>
@@ -1139,11 +1160,24 @@ export class FlowsHomePage extends PlatformPage {
         `;
     }
 
-    _renderSectionHead(titleKey, subtitleKey, actionTemplate = '') {
+    _renderSectionHead(titleKey, subtitleKey, actionTemplate = '', hintKey = '') {
         return html`
             <div class="section-head">
                 <div>
-                    <h2 class="section-title">${this.t(titleKey)}</h2>
+                    <div class="section-title-wrap">
+                        <h2 class="section-title">${this.t(titleKey)}</h2>
+                        ${hintKey
+                            ? html`
+                                <platform-help-hint
+                                    .label=${this.t('help_hints.open_help')}
+                                    .summary=${this.t(titleKey)}
+                                    .details=${this.t(hintKey)}
+                                    .docHref=${'/documentation/scenarios/flows/flows-home-overview/'}
+                                    .docLabel=${this.t('help_hints.open_scenario')}
+                                ></platform-help-hint>
+                            `
+                            : ''}
+                    </div>
                     <p class="section-subtitle">${this.t(subtitleKey)}</p>
                 </div>
                 ${actionTemplate}
@@ -1203,7 +1237,7 @@ export class FlowsHomePage extends PlatformPage {
         const visibleFlows = flows;
         return html`
             <section>
-                ${this._renderSectionHead('flows_home.flows_title', 'flows_home.flows_subtitle')}
+                ${this._renderSectionHead('flows_home.flows_title', 'flows_home.flows_subtitle', '', 'flows_home.flows_help')}
                 ${this._flows.loading && visibleFlows.length === 0
                     ? html`<div class="empty-panel"><glass-spinner></glass-spinner></div>`
                     : visibleFlows.length === 0
@@ -1263,7 +1297,7 @@ export class FlowsHomePage extends PlatformPage {
         };
         return html`
             <section>
-                ${this._renderSectionHead('flows_home.connect_title', 'flows_home.connect_subtitle')}
+                ${this._renderSectionHead('flows_home.connect_title', 'flows_home.connect_subtitle', '', 'flows_home.connect_help')}
                 <div class="connect-grid">
                     ${repeat(CONNECT_ACTIONS, (action) => action.id, (action) => this._renderConnectCard(action, values[action.id]))}
                 </div>
@@ -1274,7 +1308,7 @@ export class FlowsHomePage extends PlatformPage {
     _renderCapabilities() {
         return html`
             <section>
-                ${this._renderSectionHead('flows_home.capabilities_title', 'flows_home.capabilities_subtitle')}
+                ${this._renderSectionHead('flows_home.capabilities_title', 'flows_home.capabilities_subtitle', '', 'flows_home.capabilities_help')}
                 <div class="capability-grid">
                     ${repeat(CAPABILITY_GROUPS, (group) => group.id, (group) => html`
                         <article class="capability-card">
@@ -1338,7 +1372,7 @@ export class FlowsHomePage extends PlatformPage {
         const operatorCount = this._operatorAllowed() ? String(stats.operatorTaskCount) : this.t('flows_home.value_empty');
         return html`
             <section>
-                ${this._renderSectionHead('flows_home.activity_title', 'flows_home.activity_subtitle')}
+                ${this._renderSectionHead('flows_home.activity_title', 'flows_home.activity_subtitle', '', 'flows_home.activity_help')}
                 <div class="activity-layout">
                     <div class="session-list">
                         ${this._sessions.loading && sessions.length === 0

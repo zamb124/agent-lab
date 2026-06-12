@@ -31,7 +31,6 @@ export default defineConfig({
     resolve: {
         alias: {
             '@platform/lib': path.resolve(rootDir, 'core/frontend/static/lib'),
-            '@platform/services': path.resolve(rootDir, 'core/frontend/static/services'),
         },
     },
 });

@@ -16,10 +16,10 @@ import pytest
 
 from apps.crm.system_templates import (
     COMMON_NAMESPACE_ANCHOR_TYPES,
-    EntityTypeTemplate,
     NAMESPACE_TEMPLATE_SEEDS,
-    NamespaceTemplateTypeSpec,
     SYSTEM_ENTITY_TYPE_TEMPLATES,
+    EntityTypeTemplate,
+    NamespaceTemplateTypeSpec,
 )
 from tests.crm.e2e._json_helpers import object_dict, object_str
 

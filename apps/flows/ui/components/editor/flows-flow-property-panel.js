@@ -305,7 +305,7 @@ export class FlowsFlowPropertyPanel extends PlatformElement {
         return raw;
     }
 
-    _renderModelSelect(kind, provider, catalog, currentModel, onPick, emptyLabelKey) {
+    _renderModelSelect(kind, provider, catalog, currentModel, onPick, emptyLabelKey, hintKey = '') {
         const opts = this._modelOptions(kind, provider, catalog);
         if (opts.length === 0) {
             return nothing;
@@ -321,6 +321,7 @@ export class FlowsFlowPropertyPanel extends PlatformElement {
                     mode="edit"
                     type="enum"
                     .label=${this.t('property_panel.speech_field_model')}
+                    .hint=${hintKey ? this.t(hintKey) : ''}
                     .value=${cur}
                     .config=${{ values }}
                     @change=${onPick}
@@ -442,7 +443,7 @@ export class FlowsFlowPropertyPanel extends PlatformElement {
         return { opts, cur };
     }
 
-    _renderSpeechStringSelect(labelKey, sortedIds, currentStr, emptyLabelKey, onChange) {
+    _renderSpeechStringSelect(labelKey, sortedIds, currentStr, emptyLabelKey, onChange, hintKey = '') {
         const cur = typeof currentStr === 'string' ? currentStr : '';
         const ids = this._mergeStringOption(sortedIds, cur);
         if (ids.length === 0) return nothing;
@@ -453,6 +454,7 @@ export class FlowsFlowPropertyPanel extends PlatformElement {
                     mode="edit"
                     type="enum"
                     .label=${this.t(labelKey)}
+                    .hint=${hintKey ? this.t(hintKey) : ''}
                     .value=${cur}
                     .config=${{ values }}
                     @change=${onChange}
@@ -461,7 +463,7 @@ export class FlowsFlowPropertyPanel extends PlatformElement {
         `;
     }
 
-    _renderSpeechIntSelect(labelKey, sortedInts, currentNum, emptyLabelKey, onChange) {
+    _renderSpeechIntSelect(labelKey, sortedInts, currentNum, emptyLabelKey, onChange, hintKey = '') {
         const ints = this._mergeIntOption(sortedInts, typeof currentNum === 'number' ? currentNum : NaN);
         if (ints.length === 0) return nothing;
         const curStr =
@@ -476,6 +478,7 @@ export class FlowsFlowPropertyPanel extends PlatformElement {
                     mode="edit"
                     type="enum"
                     .label=${this.t(labelKey)}
+                    .hint=${hintKey ? this.t(hintKey) : ''}
                     .value=${curStr}
                     .config=${{ values }}
                     @change=${onChange}
@@ -484,7 +487,7 @@ export class FlowsFlowPropertyPanel extends PlatformElement {
         `;
     }
 
-    _renderVadThresholdSelect(emptyLabelKey, currentNum, onChange) {
+    _renderVadThresholdSelect(emptyLabelKey, currentNum, onChange, hintKey = '') {
         const { opts, cur } = this._mergeThresholdOpts(
             typeof currentNum === 'number' ? currentNum : NaN,
         );
@@ -498,6 +501,7 @@ export class FlowsFlowPropertyPanel extends PlatformElement {
                     mode="edit"
                     type="enum"
                     .label=${this.t('property_panel.speech_field_vad_threshold')}
+                    .hint=${hintKey ? this.t(hintKey) : ''}
                     .value=${cur}
                     .config=${{ values }}
                     @change=${onChange}
@@ -630,6 +634,7 @@ export class FlowsFlowPropertyPanel extends PlatformElement {
                     mode="edit"
                     type="enum"
                     .label=${this.t('property_panel.speech_field_provider')}
+                    .hint=${this.t('property_panel.speech_stt_provider_hint')}
                     .value=${sttProv}
                     .config=${{ values: sttProvValues }}
                     @change=${h.provider('stt')}
@@ -643,6 +648,7 @@ export class FlowsFlowPropertyPanel extends PlatformElement {
                       sttModel,
                       h.modelSelect('stt'),
                       'property_panel.speech_option_inherit_empty',
+                      'property_panel.speech_stt_model_hint',
                   )
                 : nothing}
             ${this._renderSpeechStringSelect(
@@ -651,6 +657,7 @@ export class FlowsFlowPropertyPanel extends PlatformElement {
                 typeof stt.language === 'string' ? stt.language : '',
                 'property_panel.speech_option_inherit_empty',
                 h.enumSelect('stt', 'language'),
+                'property_panel.speech_stt_language_hint',
             )}
 
             <div class="speech-subtitle">${this.t('property_panel.speech_section_tts')}</div>
@@ -659,6 +666,7 @@ export class FlowsFlowPropertyPanel extends PlatformElement {
                     mode="edit"
                     type="enum"
                     .label=${this.t('property_panel.speech_field_provider')}
+                    .hint=${this.t('property_panel.speech_tts_provider_hint')}
                     .value=${ttsProv}
                     .config=${{ values: ttsProvValuesFlow }}
                     @change=${h.provider('tts')}
@@ -672,6 +680,7 @@ export class FlowsFlowPropertyPanel extends PlatformElement {
                       ttsModel,
                       h.modelSelect('tts'),
                       'property_panel.speech_option_inherit_empty',
+                      'property_panel.speech_tts_model_hint',
                   )
                 : nothing}
             ${voiceOpts.length > 0
@@ -681,6 +690,7 @@ export class FlowsFlowPropertyPanel extends PlatformElement {
                       typeof tts.voice === 'string' ? tts.voice : '',
                       'property_panel.speech_option_inherit_empty',
                       h.enumSelect('tts', 'voice'),
+                      'property_panel.speech_tts_voice_hint',
                   )
                 : nothing}
             ${this._renderSpeechStringSelect(
@@ -689,12 +699,14 @@ export class FlowsFlowPropertyPanel extends PlatformElement {
                 typeof tts.language === 'string' ? tts.language : '',
                 'property_panel.speech_option_inherit_empty',
                 h.enumSelect('tts', 'language'),
+                'property_panel.speech_tts_language_hint',
             )}
             <div class="speech-field">
                 <platform-field
                     mode="edit"
                     type="enum"
                     .label=${this.t('property_panel.speech_field_response_format')}
+                    .hint=${this.t('property_panel.speech_response_format_hint')}
                     .value=${ttsRfStr}
                     .config=${{ values: rfValuesFlow }}
                     @change=${h.responseFormat('tts')}
@@ -706,6 +718,7 @@ export class FlowsFlowPropertyPanel extends PlatformElement {
                 typeof tts.sample_rate === 'number' ? tts.sample_rate : NaN,
                 'property_panel.speech_option_inherit_empty',
                 h.intSelect('tts', 'sample_rate'),
+                'property_panel.speech_tts_sample_rate_hint',
             )}
 
             <div class="speech-subtitle">${this.t('property_panel.speech_section_vad')}</div>
@@ -714,6 +727,7 @@ export class FlowsFlowPropertyPanel extends PlatformElement {
                     mode="edit"
                     type="enum"
                     .label=${this.t('property_panel.speech_field_provider')}
+                    .hint=${this.t('property_panel.speech_vad_provider_hint')}
                     .value=${vadProv}
                     .config=${{ values: vadProvValuesFlow }}
                     @change=${h.vadProvider('vad')}
@@ -725,11 +739,13 @@ export class FlowsFlowPropertyPanel extends PlatformElement {
                 typeof vad.sample_rate === 'number' ? vad.sample_rate : NaN,
                 'property_panel.speech_option_inherit_empty',
                 h.intSelect('vad', 'sample_rate'),
+                'property_panel.speech_vad_sample_rate_hint',
             )}
             ${this._renderVadThresholdSelect(
                 'property_panel.speech_option_inherit_empty',
                 typeof vad.threshold === 'number' ? vad.threshold : NaN,
                 h.vadThresholdSelect(),
+                'property_panel.speech_vad_threshold_hint',
             )}
             <div class="speech-actions">
                 <button type="button" @click=${() => this._clearFlowSpeech()}>
@@ -792,6 +808,7 @@ export class FlowsFlowPropertyPanel extends PlatformElement {
                     mode="edit"
                     type="enum"
                     .label=${this.t('property_panel.speech_field_provider')}
+                    .hint=${this.t('property_panel.speech_stt_provider_hint')}
                     .value=${sttProv}
                     .config=${{ values: sttProvValuesBranch }}
                     @change=${h.provider('stt')}
@@ -805,6 +822,7 @@ export class FlowsFlowPropertyPanel extends PlatformElement {
                       sttModel,
                       h.modelSelect('stt'),
                       'property_panel.speech_option_inherit_flow',
+                      'property_panel.speech_stt_model_hint',
                   )
                 : nothing}
             ${this._renderSpeechStringSelect(
@@ -813,6 +831,7 @@ export class FlowsFlowPropertyPanel extends PlatformElement {
                 typeof stt.language === 'string' ? stt.language : '',
                 'property_panel.speech_option_inherit_flow',
                 h.enumSelect('stt', 'language'),
+                'property_panel.speech_stt_language_hint',
             )}
 
             <div class="speech-subtitle">${this.t('property_panel.speech_section_tts')}</div>
@@ -821,6 +840,7 @@ export class FlowsFlowPropertyPanel extends PlatformElement {
                     mode="edit"
                     type="enum"
                     .label=${this.t('property_panel.speech_field_provider')}
+                    .hint=${this.t('property_panel.speech_tts_provider_hint')}
                     .value=${ttsProv}
                     .config=${{ values: ttsProvValuesBranch }}
                     @change=${h.provider('tts')}
@@ -834,6 +854,7 @@ export class FlowsFlowPropertyPanel extends PlatformElement {
                       ttsModel,
                       h.modelSelect('tts'),
                       'property_panel.speech_option_inherit_flow',
+                      'property_panel.speech_tts_model_hint',
                   )
                 : nothing}
             ${voiceOpts.length > 0
@@ -843,6 +864,7 @@ export class FlowsFlowPropertyPanel extends PlatformElement {
                       typeof tts.voice === 'string' ? tts.voice : '',
                       'property_panel.speech_option_inherit_flow',
                       h.enumSelect('tts', 'voice'),
+                      'property_panel.speech_tts_voice_hint',
                   )
                 : nothing}
             ${this._renderSpeechStringSelect(
@@ -851,12 +873,14 @@ export class FlowsFlowPropertyPanel extends PlatformElement {
                 typeof tts.language === 'string' ? tts.language : '',
                 'property_panel.speech_option_inherit_flow',
                 h.enumSelect('tts', 'language'),
+                'property_panel.speech_tts_language_hint',
             )}
             <div class="speech-field">
                 <platform-field
                     mode="edit"
                     type="enum"
                     .label=${this.t('property_panel.speech_field_response_format')}
+                    .hint=${this.t('property_panel.speech_response_format_hint')}
                     .value=${ttsRfStrBranch}
                     .config=${{ values: rfValuesBranch }}
                     @change=${h.responseFormat('tts')}
@@ -868,6 +892,7 @@ export class FlowsFlowPropertyPanel extends PlatformElement {
                 typeof tts.sample_rate === 'number' ? tts.sample_rate : NaN,
                 'property_panel.speech_option_inherit_flow',
                 h.intSelect('tts', 'sample_rate'),
+                'property_panel.speech_tts_sample_rate_hint',
             )}
 
             <div class="speech-subtitle">${this.t('property_panel.speech_section_vad')}</div>
@@ -876,6 +901,7 @@ export class FlowsFlowPropertyPanel extends PlatformElement {
                     mode="edit"
                     type="enum"
                     .label=${this.t('property_panel.speech_field_provider')}
+                    .hint=${this.t('property_panel.speech_vad_provider_hint')}
                     .value=${vadProv}
                     .config=${{ values: vadProvValuesBranch }}
                     @change=${h.vadProvider('vad')}
@@ -887,11 +913,13 @@ export class FlowsFlowPropertyPanel extends PlatformElement {
                 typeof vad.sample_rate === 'number' ? vad.sample_rate : NaN,
                 'property_panel.speech_option_inherit_flow',
                 h.intSelect('vad', 'sample_rate'),
+                'property_panel.speech_vad_sample_rate_hint',
             )}
             ${this._renderVadThresholdSelect(
                 'property_panel.speech_option_inherit_flow',
                 typeof vad.threshold === 'number' ? vad.threshold : NaN,
                 h.vadThresholdSelect(),
+                'property_panel.speech_vad_threshold_hint',
             )}
             <div class="speech-actions">
                 <button type="button" @click=${() => this._clearBranchSpeech(branchKey)}>

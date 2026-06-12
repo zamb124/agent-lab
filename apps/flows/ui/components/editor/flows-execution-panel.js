@@ -1673,6 +1673,7 @@ export class FlowsExecutionPanel extends PlatformElement {
                                                 .activity=${asString(message.activity)}
                                                 .toolCalls=${asArray(message.toolCalls)}
                                                 .toolResults=${asArray(message.toolResults)}
+                                                .browserPreviews=${asArray(message.browserPreviews)}
                                                 .inputRequired=${message.inputRequired != null ? message.inputRequired : null}
                                                 .operatorReply=${asString(message.operatorReply)}
                                                 .breakpoint=${message.breakpoint != null ? message.breakpoint : null}

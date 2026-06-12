@@ -2,9 +2,12 @@
 
 from __future__ import annotations
 
+import re
 from typing import ClassVar, Literal, cast
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
+
+_SEARCH_INDEX_ID_RE = re.compile(r"^[a-z][a-z0-9_]{0,62}$")
 
 SearchMode = Literal["quick", "deep", "research"]
 SearchSuggestionKind = Literal[
@@ -37,6 +40,10 @@ class WebSearchResult(BaseModel):
     score: float = Field(default=0.0, ge=0.0)
     published_at: str | None = None
     source_type: str = Field(default="organic", min_length=1)
+    chunk_id: str | None = None
+    document_id: str | None = None
+    heading_trail: list[str] = Field(default_factory=list)
+    search_index_id: str | None = None
 
 
 class MetaSearchProviderStatus(BaseModel):
@@ -63,6 +70,31 @@ class MetaSearchRequest(BaseModel):
     language: str = Field(default="ru", min_length=2, max_length=12)
     region: str = Field(default="ru", min_length=2, max_length=12)
     mode: SearchMode = "quick"
+    index_ids: list[str] = Field(default_factory=list)
+
+    @field_validator("index_ids", mode="before")
+    @classmethod
+    def _normalize_index_ids(cls, value: object) -> list[str]:
+        if value is None:
+            return []
+        if isinstance(value, str):
+            raw: list[object] = [value]
+        elif isinstance(value, list):
+            raw = cast(list[object], value)
+        else:
+            raise ValueError("index_ids must be a string or an array")
+        out: list[str] = []
+        for item in raw:
+            if not isinstance(item, str):
+                raise ValueError("index_ids[] must be string")
+            slug = item.strip().lower()
+            if not slug:
+                continue
+            if not _SEARCH_INDEX_ID_RE.match(slug):
+                raise ValueError(f"invalid search_index_id slug: {slug}")
+            if slug not in out:
+                out.append(slug)
+        return out
 
     @field_validator("providers", mode="before")
     @classmethod
@@ -91,6 +123,15 @@ class MetaSearchResponse(BaseModel):
     query: str
     results: list[WebSearchResult]
     providers: dict[str, MetaSearchProviderStatus]
+
+
+class SearchProvidersSnapshot(BaseModel):
+    model_config: ClassVar[ConfigDict] = ConfigDict(extra="forbid", str_strip_whitespace=True)
+
+    provider_order: list[str]
+    index_enabled: bool
+    default_index_ids: list[str]
+    search_index_ids: list[str]
 
 
 class SearchSuggestion(BaseModel):

@@ -137,6 +137,7 @@ export class FrontendSidebar extends PlatformElement {
                     ${isSystem ? html`
                         ${this._renderNavItem('lead-requests', 'access-request', t('console_sidebar.leads', 'Leads'), currentView)}
                         ${this._renderNavItem('platform-tracing', 'workflow', t('console_sidebar.tracing', 'Tracing'), currentView)}
+                        ${this._renderNavItem('crawl-report', 'globe', t('console_sidebar.crawl_report', 'Crawl report'), currentView)}
                         ${this._renderNavItem('platform-billing', 'database', t('console_sidebar.billing_admin', 'Billing admin'), currentView)}
                     ` : ''}
                 </nav>

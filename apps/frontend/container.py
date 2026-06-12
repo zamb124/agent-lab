@@ -3,7 +3,16 @@ Dependency Injection контейнер для Frontend
 """
 
 from apps.flows.src.db.flow_repository import FlowRepository
+from apps.search.db.base import SearchDatabase
+from apps.search.db.crawl_repositories import (
+    CrawlDomainRepository,
+    CrawlJobRepository,
+    CrawlProfileRepository,
+    CrawlUrlRepository,
+)
+from apps.search.services.crawl.report_service import CrawlReportService
 from core.clients.redis_client import RedisClient
+from core.clients.search_client import SearchClient
 from core.config import get_settings
 from core.container import BaseContainer, ContainerRegistry, lazy
 from core.context import get_context
@@ -64,6 +73,29 @@ class FrontendContainer(BaseContainer):
     @lazy
     def redis_client(self) -> RedisClient:
         return RedisClient(get_settings().database.redis_url)
+
+    @lazy
+    def search_database(self) -> SearchDatabase:
+        url = get_settings().database.search_url
+        if not url:
+            raise ValueError(
+                "database.search_url обязателен для crawl report: "
+                + "frontend читает crawl state из platform_search"
+            )
+        return SearchDatabase.get_instance(url)
+
+    @lazy
+    def crawl_report_service(self) -> CrawlReportService:
+        return CrawlReportService(
+            crawl_profile_repository=CrawlProfileRepository(self.search_database),
+            crawl_domain_repository=CrawlDomainRepository(self.search_database),
+            crawl_url_repository=CrawlUrlRepository(self.search_database),
+            crawl_job_repository=CrawlJobRepository(self.search_database),
+        )
+
+    @lazy
+    def search_client(self) -> SearchClient:
+        return SearchClient(self.service_client)
 
 
 def _create_frontend_container() -> FrontendContainer:

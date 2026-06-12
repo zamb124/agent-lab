@@ -19,7 +19,6 @@ const STATIC_ASSETS = [
   '/static/core/assets/css/tokens.css',
   '/static/core/assets/css/reset.css',
   '/static/core/assets/js/lit/lit.min.js',
-  '/static/core/assets/js/zustand-bundle.js',
   '/static/core/pwa/icons/icon-192x192.png',
   '/static/core/pwa/icons/icon-512x512.png',
 ];

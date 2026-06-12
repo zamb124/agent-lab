@@ -31,6 +31,10 @@ from apps.sync.models.messages import (
     MessageCreate,
 )
 from apps.sync.realtime.handlers import send_message_with_side_effects
+from apps.sync.realtime.livekit_sdk_boundary import (
+    read_livekit_participant_identity,
+    read_livekit_track_sid,
+)
 from core.calls.livekit_client import LiveKitClient
 from core.calls.livekit_usage_spans import trace_livekit_egress_segmented_usage
 from core.config import get_settings
@@ -698,16 +702,16 @@ async def _run_speech_to_chat_poll_cycle_inner(*, call_id: str, company_id: str)
 
                 speech_repo = container.call_speech_egress_track_repository
                 for participant in participants:
-                    identity = getattr(participant, "identity", "") or ""
-                    if identity == "":
+                    identity = read_livekit_participant_identity(participant)
+                    if identity is None:
                         continue
                     for track in participant.tracks:
                         if track.type != TrackType.AUDIO:
                             continue
                         if track.source not in (TrackSource.MICROPHONE, TrackSource.UNKNOWN):
                             continue
-                        track_sid = getattr(track, "sid", "") or ""
-                        if track_sid == "":
+                        track_sid = read_livekit_track_sid(track)
+                        if track_sid is None:
                             continue
                         existing = await speech_repo.get_by_call_and_track(call_id, track_sid)
                         if existing is not None:

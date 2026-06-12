@@ -27,6 +27,7 @@ import { PlatformPage } from '@platform/lib/base/PlatformPage.js';
 import '@platform/lib/components/glass-button.js';
 import '@platform/lib/components/glass-spinner.js';
 import '@platform/lib/components/platform-icon.js';
+import '@platform/lib/components/platform-help-hint.js';
 import '@platform/lib/components/fields/platform-field.js';
 import { resolveFileIconKey } from '@platform/lib/utils/file-icons.js';
 import { asArray, asString, isPlainObject } from '../_helpers/flows-resolvers.js';
@@ -79,7 +80,14 @@ export class OperatorPage extends PlatformPage {
                 padding: var(--space-3) var(--space-4);
                 border-bottom: 1px solid var(--border-subtle);
             }
-            .header-title { font-size: var(--text-lg); font-weight: var(--font-semibold); flex: 1; }
+            .header-title {
+                display: inline-flex;
+                align-items: center;
+                gap: var(--space-1);
+                font-size: var(--text-lg);
+                font-weight: var(--font-semibold);
+                flex: 1;
+            }
             .header-icon-btn {
                 display: inline-flex; align-items: center; gap: var(--space-2);
                 padding: var(--space-2) var(--space-3);
@@ -93,6 +101,13 @@ export class OperatorPage extends PlatformPage {
                 display: flex; align-items: center; gap: var(--space-2); flex-wrap: wrap;
                 padding: var(--space-2) var(--space-4);
                 border-bottom: 1px solid var(--border-subtle);
+            }
+            .queues-help {
+                display: inline-flex;
+                align-items: center;
+                gap: var(--space-1);
+                color: var(--text-tertiary);
+                font-size: var(--text-xs);
             }
             .queue-chip {
                 display: inline-flex; align-items: center; gap: var(--space-2);
@@ -132,6 +147,9 @@ export class OperatorPage extends PlatformPage {
                 display: flex; flex-direction: column; gap: var(--space-2);
             }
             .column-title {
+                display: inline-flex;
+                align-items: center;
+                gap: var(--space-1);
                 font-size: var(--text-xs); text-transform: uppercase;
                 color: var(--text-tertiary); letter-spacing: 0.06em;
                 padding: var(--space-1) var(--space-2);
@@ -458,6 +476,16 @@ export class OperatorPage extends PlatformPage {
         const me = this._authSel.value;
         const isAdmin = userIsAdmin(me.user, me.companyId);
         return html`
+            <span class="queues-help">
+                <platform-help-hint
+                    .label=${this.t('operator.queues_help_label')}
+                    .summary=${this.t('operator.queues_help_summary')}
+                    .details=${this.t('operator.queues_help_details')}
+                    .docHref=${'/documentation/scenarios/flows/operate-published-flow/'}
+                    .docLabel=${this.t('help_hints.open_scenario')}
+                ></platform-help-hint>
+                <span>${this.t('operator.queues_help_inline')}</span>
+            </span>
             ${items.map((q) => html`
                 <span
                     class="queue-chip"
@@ -513,7 +541,14 @@ export class OperatorPage extends PlatformPage {
         }
         return html`${STATUSES.map((status) => html`
             <div class="column">
-                <div class="column-title">${this.t(`operator.status_${status}`)}</div>
+                <div class="column-title">
+                    <span>${this.t(`operator.status_${status}`)}</span>
+                    <platform-help-hint
+                        .label=${this.t('operator.status_help_label')}
+                        .summary=${this.t(`operator.status_${status}`)}
+                        .details=${this.t(`operator.status_${status}_hint`)}
+                    ></platform-help-hint>
+                </div>
                 ${byStatus[status].length === 0
                     ? html`<div class="empty">${this.t('operator.empty_column')}</div>`
                     : byStatus[status].map((task) => {
@@ -780,7 +815,16 @@ export class OperatorPage extends PlatformPage {
                 <button class="header-icon-btn" type="button" title=${themeTitle} @click=${this._toggleTheme}>
                     <platform-icon name=${themeIcon} size="16"></platform-icon>
                 </button>
-                <span class="header-title">${this.t('operator.page_title')}</span>
+                <span class="header-title">
+                    <span>${this.t('operator.page_title')}</span>
+                    <platform-help-hint
+                        .label=${this.t('operator.page_help_label')}
+                        .summary=${this.t('operator.page_help_summary')}
+                        .details=${this.t('operator.page_help_details')}
+                        .docHref=${'/documentation/scenarios/flows/operate-published-flow/'}
+                        .docLabel=${this.t('help_hints.open_scenario')}
+                    ></platform-help-hint>
+                </span>
             </div>
             <div class="queues-bar">${this._renderQueues()}</div>
             <div class="body">

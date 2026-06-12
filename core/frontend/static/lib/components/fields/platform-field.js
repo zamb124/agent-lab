@@ -45,6 +45,10 @@ export class PlatformField extends PlatformElement {
         inputType: { type: String, attribute: 'input-type' },
         suggestions: { type: Array },
         hint: { type: String },
+        hintSummary: { type: String, attribute: 'hint-summary' },
+        hintDetails: { type: String, attribute: 'hint-details' },
+        hintDocHref: { type: String, attribute: 'hint-doc-href' },
+        hintDocLabel: { type: String, attribute: 'hint-doc-label' },
         pillDensity: { type: String, attribute: 'pill-density' },
         pillEmbed: { type: Boolean, attribute: 'pill-embed' },
     };
@@ -71,6 +75,10 @@ export class PlatformField extends PlatformElement {
         this.inputType = 'text';
         this.suggestions = [];
         this.hint = '';
+        this.hintSummary = '';
+        this.hintDetails = '';
+        this.hintDocHref = '';
+        this.hintDocLabel = '';
         this.pillDensity = 'default';
         this.pillEmbed = false;
     }
@@ -225,7 +233,10 @@ export class PlatformField extends PlatformElement {
 
     render() {
         const hasLabel = typeof this.label === 'string' && this.label !== '';
-        const hasHint = typeof this.hint === 'string' && this.hint !== '';
+        const hasHint =
+            (typeof this.hint === 'string' && this.hint !== '')
+            || (typeof this.hintSummary === 'string' && this.hintSummary !== '')
+            || (typeof this.hintDetails === 'string' && this.hintDetails !== '');
         const density =
             this.pillDensity === 'dense'
                 ? 'field-pill--compact field-pill--dense'
@@ -240,7 +251,13 @@ export class PlatformField extends PlatformElement {
                         <div class="field-pill-head">
                             <span class="field-pill-label">${this.label}</span>
                             ${hasHint
-                                ? html`<platform-help-hint .text=${this.hint}></platform-help-hint>`
+                                ? html`<platform-help-hint
+                                    .text=${this.hint}
+                                    .summary=${this.hintSummary}
+                                    .details=${this.hintDetails}
+                                    .docHref=${this.hintDocHref}
+                                    .docLabel=${this.hintDocLabel}
+                                ></platform-help-hint>`
                                 : nothing}
                         </div>
                     `

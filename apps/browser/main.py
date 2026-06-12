@@ -5,6 +5,7 @@
 from fastapi import FastAPI
 
 from apps.browser.api.control import router as browser_control_router
+from apps.browser.api.crawl_fetch import router as browser_crawl_fetch_router
 from apps.browser.api.mcp import router as browser_mcp_router
 from apps.browser.config import BrowserSettings, get_browser_settings
 from apps.browser.container import BrowserContainer, get_browser_container
@@ -25,7 +26,7 @@ app = create_service_app(
     service_name="browser",
     settings_class=BrowserSettings,
     get_container=get_browser_container,
-    routers=[browser_control_router, browser_mcp_router],
+    routers=[browser_control_router, browser_crawl_fetch_router, browser_mcp_router],
     on_shutdown=on_shutdown,
     cors_origins=["*"],
     title="Platform Browser Runtime",

@@ -74,6 +74,14 @@ class _RedisGetMessageCommand(Protocol):
     ) -> Awaitable[_RedisPubSubMessage | None]: ...
 
 
+class _RedisUnsubscribeCommand(Protocol):
+    def __call__(self, *channels: str) -> Awaitable[None]: ...
+
+
+class _RedisPubSubAcloseCommand(Protocol):
+    def __call__(self) -> Awaitable[None]: ...
+
+
 class _RedisPubSub:
     def __init__(self, pubsub: PubSub) -> None:
         self._pubsub: PubSub = pubsub
@@ -81,6 +89,14 @@ class _RedisPubSub:
     async def subscribe(self, channel: str) -> None:
         subscribe = cast(_RedisSubscribeCommand, self._pubsub.subscribe)
         await subscribe(channel)
+
+    async def unsubscribe(self, *channels: str) -> None:
+        unsubscribe = cast(_RedisUnsubscribeCommand, self._pubsub.unsubscribe)
+        await unsubscribe(*channels)
+
+    async def aclose(self) -> None:
+        aclose = cast(_RedisPubSubAcloseCommand, self._pubsub.aclose)
+        await aclose()
 
     async def get_message(
         self,
@@ -303,22 +319,40 @@ class NotificationManager:
         self._redis_task = asyncio.create_task(self._redis_loop())
         logger.info("Redis UI events listener started on channel %s", UI_EVENTS_REDIS_CHANNEL)
 
+    async def _close_redis_pubsub(self, pubsub: _RedisPubSub | None) -> None:
+        if pubsub is None:
+            return
+        try:
+            await asyncio.wait_for(
+                pubsub.unsubscribe(UI_EVENTS_REDIS_CHANNEL),
+                timeout=3.0,
+            )
+        except (TimeoutError, Exception) as exc:
+            logger.warning("notification_manager.pubsub_unsubscribe_failed: %s", exc)
+        try:
+            await asyncio.wait_for(pubsub.aclose(), timeout=3.0)
+        except (TimeoutError, Exception) as exc:
+            logger.warning("notification_manager.pubsub_aclose_failed: %s", exc)
+
     async def stop_redis_listener(self) -> None:
         """Остановить pub/sub loop и закрыть клиент.
 
-        ``cancel`` + ожидание задачи; если ``listen()`` не отпускает сокет сразу,
-        ``connection_pool.disconnect`` рвёт его — затем снова ожидание задачи.
-        Нельзя оставлять задачу ``_redis_loop`` живой: при закрытии
-        ``asyncio.Runner`` (pytest session) вызывается ``gather`` по всем задачам
-        цикла — зависание процесса после «passed».
+        Сначала ``unsubscribe``/``aclose`` pub/sub — иначе ``get_message`` держит
+        сокет и ``cancel`` не завершает ``_redis_loop`` до закрытия Runner (pytest session).
+
+        Затем ``cancel`` + ожидание задачи; если цикл всё ещё жив,
+        ``connection_pool.disconnect`` рвёт сокет — затем снова ожидание задачи.
 
         Затем ``disconnect`` пула (если ещё нужен) и ``aclose`` клиента.
         """
         task = self._redis_task
         client = self._redis_client
+        pubsub = self._redis_pubsub
 
         self._redis_task = None
         self._redis_pubsub = None
+
+        await self._close_redis_pubsub(pubsub)
 
         if task is not None and not task.done():
             _ = task.cancel()
@@ -399,7 +433,13 @@ class NotificationManager:
         except asyncio.CancelledError:
             raise
         finally:
-            self._redis_pubsub = None
+            if self._redis_pubsub is pubsub:
+                self._redis_pubsub = None
+                try:
+                    await pubsub.unsubscribe(UI_EVENTS_REDIS_CHANNEL)
+                    await pubsub.aclose()
+                except Exception as exc:
+                    logger.warning("notification_manager.redis_loop_pubsub_close_failed: %s", exc)
 
     def get_stats(self) -> dict[str, int | bool]:
         return {

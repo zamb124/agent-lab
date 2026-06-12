@@ -63,6 +63,10 @@ flows:
     landing_public_demo: true
     description: "Публичный поисковый агент: Search MCP выполняет SERP, suggestions и result insights, затем LLM формирует ответ и источники."
 
+  - id: runet_agent
+    public: true
+    description: "Агент поиска по platform index runet"
+
   - id: browser_agent
     public: true
     description: "Интерактивный агент управления браузером через MCP Browser Runtime (multi-turn): хранит browser_session_id в state, выполняет произвольные команды пользователя (navigate/observe/click/fill) и закрывает сессию по явной команде."

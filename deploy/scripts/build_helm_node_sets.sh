@@ -43,7 +43,7 @@ for app in "${APPS[@]}"; do
 done
 
 # ---------- workers ----------
-WORKERS=(flows-worker scheduler rag-worker sync-worker crm-worker idle-worker)
+WORKERS=(flows-worker scheduler rag-worker sync-worker crm-worker idle-worker search-worker)
 for w in "${WORKERS[@]}"; do
   add_set "workers.${w}" "$WORKERS_NODE"
 done
@@ -92,6 +92,7 @@ svc_to_helm_path() {
     sync-worker)     echo "workers.sync-worker" ;;
     crm-worker)      echo "workers.crm-worker" ;;
     idle-worker)     echo "workers.idle-worker" ;;
+    search-worker)   echo "workers.search-worker" ;;
     postgres)        echo "postgres" ;;
     redis)           echo "redis" ;;
     loki)            echo "observability.loki" ;;

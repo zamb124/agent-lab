@@ -14,7 +14,7 @@ export class FlowCard extends PlatformElement {
         flow: { type: Object },
         active: { type: Boolean, reflect: true },
         expanded: { type: Boolean, reflect: true },
-        collapsed: { type: Boolean },
+        collapsed: { type: Boolean, reflect: true },
     };
 
     static styles = [
@@ -270,6 +270,13 @@ export class FlowCard extends PlatformElement {
             }
 
             /* Свёрнутый режим */
+            :host([collapsed]) {
+                display: flex;
+                justify-content: center;
+                width: 100%;
+                min-width: 0;
+            }
+
             :host([collapsed]) .flow-info,
             :host([collapsed]) .flow-actions,
             :host([collapsed]) .expand-icon,
@@ -278,8 +285,14 @@ export class FlowCard extends PlatformElement {
             }
 
             :host([collapsed]) .flow-header {
+                width: 40px;
+                height: 40px;
                 justify-content: center;
-                padding: var(--space-2);
+                align-items: center;
+                gap: 0;
+                padding: 0;
+                padding-right: 0;
+                box-sizing: border-box;
             }
 
             :host([collapsed]) .flow-avatar {
@@ -291,8 +304,14 @@ export class FlowCard extends PlatformElement {
             :host([collapsed]) .flow-card {
                 border-radius: var(--radius-lg);
                 box-sizing: border-box;
-                max-width: 100%;
+                width: 44px;
+                max-width: 44px;
                 margin-inline: auto;
+            }
+
+            :host([collapsed]) .flow-card:hover .flow-header,
+            :host([collapsed]) .flow-card.expanded .flow-header {
+                padding-right: 0;
             }
 
             @media (max-width: 767px) {

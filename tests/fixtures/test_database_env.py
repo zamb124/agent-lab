@@ -29,6 +29,8 @@ _TEST_SERVICE_ENV: dict[str, str] = {
     "SERVER__CODE_RUNNER_NODE_SERVICE_URL": "http://localhost:9018",
     "SERVER__CODE_RUNNER_GO_SERVICE_URL": "http://localhost:9019",
     "SERVER__CODE_RUNNER_CSHARP_SERVICE_URL": "http://localhost:9020",
+    "SERVER__SEARCH_SERVICE_URL": "http://localhost:9010",
+    "DATABASE__SEARCH_URL": f"{_POSTGRES_TEST}/platform_search",
     "S3__ENABLED": "true",
     "S3__DEFAULT_BUCKET": "test-bucket",
     "S3__BUCKETS__TEST-BUCKET__ENDPOINT_URL": "http://localhost:19002",

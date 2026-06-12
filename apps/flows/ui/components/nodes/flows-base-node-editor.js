@@ -1153,6 +1153,7 @@ export class FlowsBaseNodeEditor extends PlatformElement {
                         type="string"
                         mode="view"
                         .label=${idLabel}
+                        .hint=${this.t('base_node_editor.node_id_hint')}
                         .value=${this.nodeId}
                     ></platform-field>
                 </div>
@@ -1161,6 +1162,7 @@ export class FlowsBaseNodeEditor extends PlatformElement {
                         type="text"
                         mode="edit"
                         .label=${this.t('base_node_editor.description')}
+                        .hint=${this.t('base_node_editor.description_help')}
                         .placeholder=${this.t('base_node_editor.description_hint')}
                         .value=${description}
                         @change=${this._onDescription}
@@ -1171,6 +1173,7 @@ export class FlowsBaseNodeEditor extends PlatformElement {
                         type="array"
                         mode="edit"
                         .label=${this.t('base_node_editor.tags')}
+                        .hint=${this.t('base_node_editor.tags_hint')}
                         .placeholder=${this.t('tag_input.placeholder')}
                         .value=${tags}
                         .config=${{ preserve_case: true }}
@@ -1181,6 +1184,9 @@ export class FlowsBaseNodeEditor extends PlatformElement {
                     <div class="field-pill field-pill-file-refs-shell">
                         <div class="field-pill-head">
                             <span class="field-pill-label">${this.t('base_node_editor.files_section')}</span>
+                            <platform-help-hint
+                                .text=${this.t('base_node_editor.files_section_hint')}
+                            ></platform-help-hint>
                         </div>
                         <div class="field-pill-file-refs-body">
                             ${files.length === 0
@@ -1247,6 +1253,7 @@ export class FlowsBaseNodeEditor extends PlatformElement {
                         type="enum"
                         mode="edit"
                         .label=${this.t('base_node_editor.incoming_policy')}
+                        .hint=${this.t('base_node_editor.incoming_policy_hint')}
                         .value=${policy}
                         .config=${this._incomingPolicyEnumConfig()}
                         @change=${this._onPolicy}

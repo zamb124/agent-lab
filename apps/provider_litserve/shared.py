@@ -39,6 +39,20 @@ def resolve_embedding_device(cfg: ProviderLitserveInfraConfig, litserve_worker_d
     raise ValueError(f"unknown embedding_accelerator: {ea!r}")
 
 
+def resolve_llm_device(cfg: ProviderLitserveInfraConfig, litserve_worker_device: str) -> str:
+    """Устройство для локального chat LLM: ``llm_accelerator``; ``auto`` = устройство воркера."""
+    la = cfg.llm_accelerator
+    if la == "auto":
+        return litserve_worker_device
+    if la == "cpu":
+        return "cpu"
+    if la == "mps":
+        return "mps"
+    if la == "cuda":
+        return "cuda:0"
+    raise ValueError(f"unknown llm_accelerator: {la!r}")
+
+
 def resolve_rerank_device(cfg: ProviderLitserveInfraConfig, litserve_worker_device: str) -> str:
     """Устройство для локального реранкера: ``rerank_accelerator``; ``auto`` = устройство воркера."""
     ra = cfg.rerank_accelerator
