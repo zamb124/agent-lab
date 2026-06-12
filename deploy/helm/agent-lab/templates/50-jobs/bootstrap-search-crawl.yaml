@@ -1,0 +1,51 @@
+{{- $search := index .Values.applications "search" }}
+{{- if and $search $search.enabled }}
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: bootstrap-search-crawl
+  namespace: {{ .Values.namespace }}
+  labels:
+    app.kubernetes.io/component: bootstrap
+    app.kubernetes.io/part-of: agent-lab
+  annotations:
+    helm.sh/hook: post-install,post-upgrade
+    helm.sh/hook-weight: "5"
+    helm.sh/hook-delete-policy: before-hook-creation,hook-succeeded
+spec:
+  ttlSecondsAfterFinished: 600
+  backoffLimit: 3
+  template:
+    metadata:
+      labels:
+        app: bootstrap-search-crawl
+        app.kubernetes.io/component: bootstrap
+    spec:
+      restartPolicy: OnFailure
+{{- include "agentlab.podImagePullSecrets" . | nindent 6 }}
+{{- include "agentlab.nodeSchedule" (list $ (index $.Values.workers "search-worker").nodeName) | nindent 6 }}
+      initContainers:
+        {{- include "agentlab.dbReadyAndMigrateInitContainers" . | nindent 8 }}
+      containers:
+        - name: bootstrap
+          image: {{ include "agentlab.image" . }}
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          command:
+            - uv
+            - run
+            - python
+            - scripts/bootstrap_search_crawl_schedules.py
+          env:
+            {{- include "agentlab.appEnv" . | nindent 12 }}
+          volumeMounts:
+            {{- include "agentlab.confVolumeMount" . | nindent 12 }}
+          resources:
+            requests:
+              cpu: 100m
+              memory: 256Mi
+            limits:
+              cpu: "1"
+              memory: 512Mi
+      volumes:
+        {{- include "agentlab.confVolume" . | nindent 8 }}
+{{- end }}

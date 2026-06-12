@@ -1,0 +1,22 @@
+{
+  "flow_id": "runet_agent",
+  "name": "Runet Agent",
+  "description": "Агент поиска по платформенному индексу runet через index_search.",
+  "tags": ["search", "runet", "index"],
+  "permission": [],
+  "entry": "search_runet",
+  "nodes": {
+    "search_runet": {
+      "type": "llm_node",
+      "name": "Runet Search Agent",
+      "prompt": "Ты ассистент с доступом к платформенному индексу runet.\n\nДля фактов из русскоязычного веба сначала вызывай index_search с search_index_ids=[\"runet\"].\n\nЗапрос пользователя:\n{content}",
+      "tools": ["index_search"],
+      "llm": {
+        "provider": "humanitec_llm",
+        "model": "auto",
+        "temperature": 0.2
+      }
+    }
+  },
+  "edges": []
+}
