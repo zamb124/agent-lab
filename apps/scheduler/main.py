@@ -11,6 +11,7 @@ from apps.crm.scheduled_task_constants import (
 from apps.scheduler.api.v1 import api_v1_router
 from apps.scheduler.config import SchedulerSettings, get_scheduler_settings
 from apps.scheduler.container import SchedulerContainer, get_scheduler_container
+from apps.scheduler.crawl_schedule_bootstrap import ensure_search_crawl_schedules
 from core.app import create_service_app
 from core.config.testing import is_testing
 from core.identity.system_bootstrap import (
@@ -469,6 +470,8 @@ async def on_startup(app: FastAPI, container: SchedulerContainer, settings: Sche
         cron=CRM_RECONCILE_DAILY_SUMMARY_CRON,
         log_label="CRM daily summary reconcile",
     )
+    if not is_testing():
+        await ensure_search_crawl_schedules(container=container)
 
 
 async def on_shutdown(app: FastAPI, container: SchedulerContainer) -> None:

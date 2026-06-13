@@ -34,7 +34,7 @@ Ownership: `apps/search` + `apps/search_worker` + `platform_search`.
 - `CrawlDomainRepository.list_due` — домены с `next_crawl_after <= now`.
 - После tick/fetch домен уходит в «сон» (`schedule_next` + `refresh_interval_seconds`, default 6h).
 - Tranco seed — append-only (`upsert_seed_batch` не сбрасывает `next_crawl_after` у existing domains).
-- Cron: `crawl_orchestrator_tick` (`0 */6 * * *`), `crawl_reclaim_stale_fetching` (`*/15 * * * *`) — `scripts/bootstrap_search_crawl_schedules.py` + Helm hook `bootstrap-search-crawl`.
+- Cron: `crawl_orchestrator_tick` (`0 */6 * * *`), `crawl_reclaim_stale_fetching` (`*/15 * * * *`) — idempotent bootstrap в `apps/scheduler/main.py::on_startup` (`company_id=system`), как calendar/RAG/CRM.
 
 ## Parallel fetch enqueue
 
@@ -61,7 +61,7 @@ Ownership: `apps/search` + `apps/search_worker` + `platform_search`.
 
 - `search_worker` startup → `CrawlBootstrapService.ensure_crawl_pipeline_ready()`: если у `default_crawl_profile_id` нет доменов и `bootstrap_tranco_on_empty=true` — `kiq crawl_import_seed_domains` (Tranco, async, default limit 2000).
 - `crawl_import_seed_domains` после `imported > 0` → `kiq crawl_orchestrator_tick`.
-- Cron schedules: `uv run python scripts/bootstrap_search_crawl_schedules.py` (Helm post-install hook).
+- Cron schedules: idempotent bootstrap в `apps/scheduler/main.py::on_startup` (rollout/restart `scheduler-api`).
 
 ## Crawl report
 
