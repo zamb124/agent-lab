@@ -9,6 +9,7 @@ from apps.flows_worker.broker import broker as flows_broker
 from apps.idle_worker.broker import broker as idle_broker
 from apps.rag_worker.broker import broker as rag_broker
 from apps.scheduler.config import get_scheduler_settings
+from apps.search_worker.broker import broker as search_broker
 from apps.sync.realtime.broker import broker as sync_broker
 from core.container import BaseContainer, ContainerRegistry, lazy
 from core.logging import get_logger
@@ -24,6 +25,7 @@ def scheduler_broker_for_queue(queue_name: str) -> AsyncBroker:
         "idle": idle_broker,
         "crm": crm_broker,
         "rag": rag_broker,
+        "search": search_broker,
         "sync": sync_broker,
     }
     if queue_name not in mapping:
