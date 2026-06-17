@@ -1,8 +1,7 @@
 """LitServe API chat LLM: POST ``/v1/chat/completions``."""
 
-from __future__ import annotations
-
 import litserve as ls
+from fastapi import Request
 
 from apps.provider_litserve.llm.engines import LocalChatEngine, parse_chat_body
 from apps.provider_litserve.openai_server_contracts import OpenAIChatCompletionsRequest
@@ -23,11 +22,7 @@ class ChatLitAPI(ls.LitAPI):
         llm_device = resolve_llm_device(self._cfg, litserve_device)
         self._engine.setup(llm_device)
 
-    def decode_request(
-        self,
-        request: OpenAIChatCompletionsRequest | JsonValue,
-        **kwargs: JsonValue,
-    ) -> OpenAIChatCompletionsRequest:
+    def decode_request(self, request: Request, **kwargs: JsonValue) -> OpenAIChatCompletionsRequest:
         _ = kwargs
         return parse_chat_body(request)
 

@@ -7,7 +7,7 @@ import time
 from typing import Protocol, Self, cast
 
 import torch
-from fastapi import HTTPException
+from fastapi import HTTPException, Request
 from pydantic import BaseModel, ValidationError
 from transformers import AutoModelForCausalLM, AutoTokenizer
 
@@ -67,7 +67,12 @@ def _require_cuda_when_selected(device: str) -> None:
         raise RuntimeError(message)
 
 
-def parse_chat_body(raw: BaseModel | JsonValue) -> OpenAIChatCompletionsRequest:
+def parse_chat_body(raw: BaseModel | JsonValue | Request) -> OpenAIChatCompletionsRequest:
+    if isinstance(raw, Request):
+        raise HTTPException(
+            status_code=422,
+            detail="Chat LLM: LitServe должен передать подготовленное тело запроса",
+        )
     if isinstance(raw, BaseModel):
         raw_payload = raw.model_dump(exclude_none=True)
     else:

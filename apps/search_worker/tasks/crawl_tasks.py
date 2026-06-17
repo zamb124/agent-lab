@@ -40,7 +40,9 @@ async def _enter_worker_context(*, trace_id: str) -> None:
 async def crawl_orchestrator_tick(
     crawl_profile_id: str,
     schedule_task_id: str | None = None,
+    company_id: str | None = None,
 ) -> CrawlOrchestratorTickResult:
+    _ = company_id
     trace_id = f"crawl:tick:{crawl_profile_id}"
     await _enter_worker_context(trace_id=trace_id)
     try:
@@ -144,14 +146,22 @@ async def crawl_import_seed_domains(
     retry_on_error=True,
     max_retries=1,
 )
-async def crawl_reclaim_stale_fetching() -> JsonObject:
+async def crawl_reclaim_stale_fetching(
+    schedule_task_id: str | None = None,
+    company_id: str | None = None,
+) -> JsonObject:
+    _ = schedule_task_id, company_id
     trace_id = f"crawl:reclaim:{datetime.now(UTC).isoformat()}"
     await _enter_worker_context(trace_id=trace_id)
     try:
         container = get_search_container()
-        reclaimed = await container.crawl_url_repository.reclaim_stale_fetching(
+        reclaimed_fetching = await container.crawl_url_repository.reclaim_stale_fetching(
             stale_before=datetime.now(UTC) - timedelta(minutes=30),
         )
-        return {"reclaimed": reclaimed}
+        requeued_failed = await container.crawl_url_repository.requeue_failed_urls()
+        return {
+            "reclaimed_fetching": reclaimed_fetching,
+            "requeued_failed": requeued_failed,
+        }
     finally:
         clear_context()

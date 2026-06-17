@@ -582,6 +582,22 @@ class CrawlUrlRepository:
             await session.commit()
         return stale_count
 
+    async def requeue_failed_urls(self) -> int:
+        now = datetime.now(UTC)
+        async with self._db.session() as session:
+            count_stmt = select(func.count()).where(CrawlUrlRow.crawl_status == "failed")
+            failed_count = int((await session.execute(count_stmt)).scalar_one())
+            if failed_count == 0:
+                return 0
+            stmt = (
+                update(CrawlUrlRow)
+                .where(CrawlUrlRow.crawl_status == "failed")
+                .values(crawl_status="pending", last_error=None, updated_at=now)
+            )
+            _ = await session.execute(stmt)
+            await session.commit()
+        return failed_count
+
     async def requeue_indexed_missing_enrichment(self, crawl_profile_id: str) -> int:
         now = datetime.now(UTC)
         async with self._db.session() as session:
