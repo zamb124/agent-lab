@@ -323,6 +323,38 @@ class CrawlDomainRepository:
             rows = list((await session.execute(stmt)).scalars().all())
         return [_domain_row_to_model(row) for row in rows]
 
+    async def list_with_pending_urls(
+        self,
+        crawl_profile_id: str,
+        *,
+        limit: int,
+    ) -> list[CrawlDomain]:
+        pending_by_domain = (
+            select(
+                CrawlUrlRow.crawl_domain_id,
+                func.count(CrawlUrlRow.crawl_url_id).label("pending_count"),
+            )
+            .where(CrawlUrlRow.crawl_status == "pending")
+            .group_by(CrawlUrlRow.crawl_domain_id)
+            .subquery()
+        )
+        async with self._db.session() as session:
+            stmt = (
+                select(CrawlDomainRow)
+                .join(
+                    pending_by_domain,
+                    CrawlDomainRow.crawl_domain_id == pending_by_domain.c.crawl_domain_id,
+                )
+                .where(
+                    CrawlDomainRow.crawl_profile_id == crawl_profile_id,
+                    CrawlDomainRow.status == "active",
+                )
+                .order_by(pending_by_domain.c.pending_count.desc(), CrawlDomainRow.domain)
+                .limit(limit)
+            )
+            rows = list((await session.execute(stmt)).scalars().all())
+        return [_domain_row_to_model(row) for row in rows]
+
     async def mark_discovered(self, crawl_domain_id: str, discovered_at: datetime) -> None:
         async with self._db.session() as session:
             stmt = (
@@ -464,6 +496,22 @@ class CrawlUrlRepository:
             stmt = select(func.count()).where(
                 CrawlUrlRow.crawl_domain_id == crawl_domain_id,
                 CrawlUrlRow.crawl_status == "pending",
+            )
+            return int((await session.execute(stmt)).scalar_one())
+
+    async def count_pending_for_profile(self, crawl_profile_id: str) -> int:
+        async with self._db.session() as session:
+            stmt = (
+                select(func.count())
+                .select_from(CrawlUrlRow)
+                .join(
+                    CrawlDomainRow,
+                    CrawlUrlRow.crawl_domain_id == CrawlDomainRow.crawl_domain_id,
+                )
+                .where(
+                    CrawlDomainRow.crawl_profile_id == crawl_profile_id,
+                    CrawlUrlRow.crawl_status == "pending",
+                )
             )
             return int((await session.execute(stmt)).scalar_one())
 

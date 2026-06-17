@@ -37,7 +37,10 @@ def _parse_lastmod(raw: str | None) -> datetime | None:
 
 
 def _parse_sitemap_xml(content: bytes, domain: str) -> list[SitemapEntry]:
-    root = ElementTree.fromstring(content)
+    try:
+        root = ElementTree.fromstring(content)
+    except ElementTree.ParseError:
+        return []
     tag = root.tag.lower()
     if tag.endswith("sitemapindex"):
         return []
@@ -91,7 +94,7 @@ async def discover_sitemap_urls(
         normalized_domain = normalized_domain[4:]
     sitemap_urls: list[str] = []
     robots_url = f"https://{normalized_domain}/robots.txt"
-    async with get_httpx_client(timeout=timeout_seconds) as client:
+    async with get_httpx_client(timeout=timeout_seconds, follow_redirects=True) as client:
         robots_response = await client.get(robots_url)
         if robots_response.status_code == 200:
             for line in robots_response.text.splitlines():
@@ -118,7 +121,10 @@ async def discover_sitemap_urls(
                 continue
             entries = _parse_sitemap_xml(response.content, normalized_domain)
             if not entries and response.content:
-                index_root = ElementTree.fromstring(response.content)
+                try:
+                    index_root = ElementTree.fromstring(response.content)
+                except ElementTree.ParseError:
+                    continue
                 if index_root.tag.lower().endswith("sitemapindex"):
                     for sm_node in index_root.findall(".//sm:sitemap", _SITEMAP_NS):
                         if limit_reached:

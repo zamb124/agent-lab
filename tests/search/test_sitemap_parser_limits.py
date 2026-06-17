@@ -82,3 +82,32 @@ async def test_discover_sitemap_urls_skips_oversized_xml() -> None:
 
     assert len(entries) == 1
     assert entries[0].url == "https://example.com/"
+
+
+@pytest.mark.asyncio
+async def test_discover_sitemap_urls_invalid_xml_falls_back_to_homepage() -> None:
+    mock_response = MagicMock()
+    mock_response.status_code = 200
+    mock_response.content = b"<html><body>not xml</body></html>"
+    mock_response.text = ""
+
+    mock_client = AsyncMock()
+    mock_client.get = AsyncMock(return_value=mock_response)
+
+    mock_cm = MagicMock()
+    mock_cm.__aenter__ = AsyncMock(return_value=mock_client)
+    mock_cm.__aexit__ = AsyncMock(return_value=False)
+
+    with patch(
+        "apps.search.services.crawl.sitemap_parser.get_httpx_client",
+        return_value=mock_cm,
+    ):
+        entries = await discover_sitemap_urls(
+            "example.com",
+            timeout_seconds=5.0,
+            max_urls=10,
+            max_sitemap_bytes=1_048_576,
+        )
+
+    assert len(entries) == 1
+    assert entries[0].url == "https://example.com/"

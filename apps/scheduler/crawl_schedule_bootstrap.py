@@ -23,7 +23,7 @@ from core.types import JsonObject
 logger = get_logger(__name__)
 
 SYSTEM_SCHEDULER_COMPANY_ID = "system"
-CRAWL_ORCHESTRATOR_TICK_CRON = "0 */6 * * *"
+CRAWL_ORCHESTRATOR_TICK_CRON = "*/10 * * * *"
 CRAWL_RECLAIM_STALE_FETCHING_CRON = "*/15 * * * *"
 CRAWL_ORCHESTRATOR_DEFAULT_PROFILE_ID = "runet_platform"
 

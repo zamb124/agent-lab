@@ -22,6 +22,7 @@ from apps.search_worker.broker import broker as search_worker_broker
 from apps.search_worker.tasks.task_names import (
     CRAWL_DISCOVER_DOMAIN_TASK_NAME,
     CRAWL_FETCH_URL_TASK_NAME,
+    CRAWL_ORCHESTRATOR_TICK_TASK_NAME,
 )
 from core.clients.rag_client import RagClient
 from core.context import Context, clear_context, set_context
@@ -97,49 +98,56 @@ class CrawlOrchestratorService:
         try:
             await self.ensure_rag_namespace(profile_bundle.search_index)
             now = datetime.now(UTC)
-            domains = await self._crawl_domain_repository.list_due(
+            max_domains = profile_bundle.profile.max_domains_per_tick
+            scheduled_domain_ids: set[str] = set()
+            domains: list[CrawlDomain] = []
+
+            backlog_domains = await self._crawl_domain_repository.list_with_pending_urls(
                 crawl_profile_id,
-                now=now,
-                limit=profile_bundle.profile.max_domains_per_tick,
+                limit=max_domains,
             )
+            for domain in backlog_domains:
+                if domain.crawl_domain_id in scheduled_domain_ids:
+                    continue
+                domains.append(domain)
+                scheduled_domain_ids.add(domain.crawl_domain_id)
+
+            remaining_slots = max_domains - len(domains)
+            if remaining_slots > 0:
+                due_domains = await self._crawl_domain_repository.list_due(
+                    crawl_profile_id,
+                    now=now,
+                    limit=remaining_slots,
+                )
+                for domain in due_domains:
+                    if domain.crawl_domain_id in scheduled_domain_ids:
+                        continue
+                    domains.append(domain)
+                    scheduled_domain_ids.add(domain.crawl_domain_id)
+                    if len(domains) >= max_domains:
+                        break
+
             await self._crawl_job_repository.increment(
                 job.crawl_job_id,
                 domains_scheduled=len(domains),
             )
+            work_enqueued = False
             for domain in domains:
                 if domain.status != "active":
                     continue
-                if domain.domain in profile_bundle.profile.denylist_domains:
-                    await self._crawl_domain_repository.schedule_next(
-                        domain.crawl_domain_id,
-                        now + timedelta(seconds=profile_bundle.profile.refresh_interval_seconds),
-                    )
-                    continue
-                if self._needs_discovery(
-                    domain,
-                    profile_bundle.profile.sitemap_stale_after_seconds,
-                    now,
-                ):
-                    await _enqueue_task(
-                        CRAWL_DISCOVER_DOMAIN_TASK_NAME,
-                        domain.crawl_domain_id,
-                        job.crawl_job_id,
-                        crawl_profile_id,
-                    )
-                else:
-                    pending = await self._crawl_url_repository.count_pending(domain.crawl_domain_id)
-                    if pending > 0:
-                        await self._enqueue_domain_fetch(
-                            crawl_domain_id=domain.crawl_domain_id,
-                            crawl_job_id=job.crawl_job_id,
-                            crawl_profile_id=crawl_profile_id,
-                            url_budget=profile_bundle.profile.max_urls_per_domain_per_tick,
-                        )
-                    await self._crawl_domain_repository.schedule_next(
-                        domain.crawl_domain_id,
-                        now + timedelta(seconds=profile_bundle.profile.refresh_interval_seconds),
-                    )
+                enqueued = await self._schedule_domain_for_tick(
+                    domain=domain,
+                    crawl_job_id=job.crawl_job_id,
+                    crawl_profile_id=crawl_profile_id,
+                    profile_bundle=profile_bundle,
+                    now=now,
+                )
+                if enqueued:
+                    work_enqueued = True
             _ = await self._crawl_job_repository.finish(job.crawl_job_id, status="completed")
+            pending_urls = await self._crawl_url_repository.count_pending_for_profile(crawl_profile_id)
+            if pending_urls > 0 and work_enqueued:
+                await _enqueue_task(CRAWL_ORCHESTRATOR_TICK_TASK_NAME, crawl_profile_id)
             return {
                 "crawl_job_id": job.crawl_job_id,
                 "crawl_profile_id": crawl_profile_id,
@@ -249,13 +257,12 @@ class CrawlOrchestratorService:
         if pending == 0:
             await self._crawl_domain_repository.mark_crawled(crawl_domain_id, datetime.now(UTC))
             return
-        if url_budget > 1:
-            await self._enqueue_domain_fetch(
-                crawl_domain_id=crawl_domain_id,
-                crawl_job_id=crawl_job_id,
-                crawl_profile_id=crawl_profile_id,
-                url_budget=url_budget - 1,
-            )
+        await self._enqueue_domain_fetch(
+            crawl_domain_id=crawl_domain_id,
+            crawl_job_id=crawl_job_id,
+            crawl_profile_id=crawl_profile_id,
+            url_budget=1,
+        )
 
     async def _fetch_and_index_url(
         self,
@@ -358,6 +365,62 @@ class CrawlOrchestratorService:
                 crawl_profile_id,
                 1,
             )
+
+    async def _schedule_domain_for_tick(
+        self,
+        *,
+        domain: CrawlDomain,
+        crawl_job_id: str,
+        crawl_profile_id: str,
+        profile_bundle: CrawlProfileWithIndex,
+        now: datetime,
+    ) -> bool:
+        profile = profile_bundle.profile
+        if domain.domain in profile.denylist_domains:
+            await self._crawl_domain_repository.schedule_next(
+                domain.crawl_domain_id,
+                now + timedelta(seconds=profile.refresh_interval_seconds),
+            )
+            return False
+
+        pending = await self._crawl_url_repository.count_pending(domain.crawl_domain_id)
+        if pending > 0:
+            await self._enqueue_domain_fetch(
+                crawl_domain_id=domain.crawl_domain_id,
+                crawl_job_id=crawl_job_id,
+                crawl_profile_id=crawl_profile_id,
+                url_budget=profile.max_urls_per_domain_per_tick,
+            )
+            await self._crawl_domain_repository.schedule_next(
+                domain.crawl_domain_id,
+                now + timedelta(seconds=self._crawl_config.backlog_reschedule_seconds),
+            )
+            return True
+
+        if self._needs_discovery(domain, profile.sitemap_stale_after_seconds, now):
+            await _enqueue_task(
+                CRAWL_DISCOVER_DOMAIN_TASK_NAME,
+                domain.crawl_domain_id,
+                crawl_job_id,
+                crawl_profile_id,
+            )
+            await self._crawl_domain_repository.schedule_next(
+                domain.crawl_domain_id,
+                now + timedelta(seconds=profile.refresh_interval_seconds),
+            )
+            return True
+
+        await _enqueue_task(
+            CRAWL_DISCOVER_DOMAIN_TASK_NAME,
+            domain.crawl_domain_id,
+            crawl_job_id,
+            crawl_profile_id,
+        )
+        await self._crawl_domain_repository.schedule_next(
+            domain.crawl_domain_id,
+            now + timedelta(seconds=profile.refresh_interval_seconds),
+        )
+        return True
 
     async def import_seed(self, body: SeedImportRequest) -> SeedImportResult:
         if body.seed_source != "tranco":

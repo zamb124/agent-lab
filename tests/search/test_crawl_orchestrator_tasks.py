@@ -71,6 +71,7 @@ async def test_enqueue_domain_fetch_respects_http_concurrency(monkeypatch: pytes
         crawl_url_repository=_UrlRepo(),  # pyright: ignore[reportArgumentType]
         crawl_job_repository=AsyncMock(),
         fetch_service=AsyncMock(),
+        page_enrichment_service=AsyncMock(),
         rag_client=AsyncMock(),
         build_system_context=AsyncMock(),
         crawl_config=get_search_settings().crawl,
