@@ -4,6 +4,7 @@
 deploy/helm/agent-lab/files/app-conf.json
 artifacts/*
 .env
+.env.test-compose-images
 .venv
 **/__pycache__/
 node_modules/

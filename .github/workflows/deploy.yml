@@ -132,7 +132,7 @@ jobs:
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
           cache-from: type=gha
-          cache-to: type=gha,mode=min
+          cache-to: type=gha,mode=max
 
       # GPU image для provider-litserve. Базовый агент-стек 3.14t несовместим с
       # torchaudio.abi3.so из GIL-build (PEP 703). Этот образ FROM agent-lab-base-gpu
@@ -155,7 +155,7 @@ jobs:
           tags: ${{ steps.meta_gpu.outputs.tags }}
           labels: ${{ steps.meta_gpu.outputs.labels }}
           cache-from: type=gha,scope=gpu
-          cache-to: type=gha,scope=gpu,mode=min
+          cache-to: type=gha,scope=gpu,mode=max
 
   deploy:
     name: Deploy to Kubernetes

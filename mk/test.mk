@@ -4,7 +4,8 @@ WORKERS ?= 5
 PYTEST_COMMAND_TIMEOUT_SECONDS ?= 1200
 PYTEST_MAX_WORKER_RESTART ?= 2
 RUN_UI_IN_TEST ?= 0
-DOCKER_COMPOSE_PULL ?= never
+DOCKER_COMPOSE_PULL ?= missing
+DOCKER_COMPOSE_ENV_FILE ?= .env.test-compose-images
 PYTHON_CHECK_PATHS ?= apps core
 RUFF_CHECK_ARGS ?= $(PYTHON_CHECK_PATHS)
 BASEDPYRIGHT_CHECK_ARGS ?= --level warning --warnings $(PYTHON_CHECK_PATHS)
@@ -22,7 +23,8 @@ check-wider-repo-strictness:
 	@uv run python scripts/audit_wider_repo_strictness.py
 
 test-up: runtime-bootstrap
-	docker-compose -f docker-compose-test.yaml up -d --pull $(DOCKER_COMPOSE_PULL) postgres-test redis-test minio-test onlyoffice-documentserver provider_litserve test-a2a-agent livekit-test livekit-egress-test livekit-cli-test loki-test tempo-test alloy-test grafana-test
+	@uv run python scripts/ensure_test_compose_images.py
+	docker-compose -f docker-compose-test.yaml --env-file $(DOCKER_COMPOSE_ENV_FILE) up -d --pull $(DOCKER_COMPOSE_PULL) postgres-test redis-test minio-test onlyoffice-documentserver provider_litserve test-a2a-agent livekit-test livekit-egress-test livekit-cli-test loki-test tempo-test alloy-test grafana-test
 	@echo "Ожидание готовности сервисов (postgres, redis, minio, onlyoffice, provider_litserve, test-a2a-agent, livekit, livekit-egress, livekit-cli, loki, tempo, alloy, grafana)..."
 	@sleep 7
 	@echo "Сброс тестовой БД (TRUNCATE managed таблиц + Redis FLUSHDB)..."
@@ -33,7 +35,7 @@ test-reset:
 	@uv run python -m scripts.db_test_reset
 
 test-down:
-	docker-compose -f docker-compose-test.yaml stop postgres-test redis-test minio-test onlyoffice-documentserver provider_litserve test-a2a-agent livekit-test livekit-egress-test livekit-cli-test loki-test tempo-test alloy-test grafana-test
+	docker-compose -f docker-compose-test.yaml --env-file $(DOCKER_COMPOSE_ENV_FILE) stop postgres-test redis-test minio-test onlyoffice-documentserver provider_litserve test-a2a-agent livekit-test livekit-egress-test livekit-cli-test loki-test tempo-test alloy-test grafana-test
 
 # Запуск unit/API тестов параллельно (без browser тестов)
 test-unit: test-up

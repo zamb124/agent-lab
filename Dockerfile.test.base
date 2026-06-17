@@ -1,0 +1,18 @@
+# Test base: production venv (agent-lab-base) + dev dependency group для pytest и линтеров.
+# Сборка и push: .github/workflows/build-test-base.yml → ghcr.io/<owner>/agent-lab-test-base.
+# Локальный fallback: scripts/ensure_test_compose_images.py (pull-or-build).
+
+ARG BASE_IMAGE=ghcr.io/zamb124/agent-lab-base:latest
+FROM ${BASE_IMAGE}
+
+WORKDIR /app
+
+COPY pyproject.toml uv.lock README.md ./
+
+ENV UV_HTTP_TIMEOUT=600
+
+RUN --mount=type=cache,target=/root/.cache/uv \
+    uv export --frozen --no-default-groups --only-group dev \
+        --no-annotate --no-header --no-emit-project \
+        -o /tmp/requirements-dev.txt && \
+    uv pip install --python "${VIRTUAL_ENV}/bin/python" -r /tmp/requirements-dev.txt

@@ -32,6 +32,23 @@ bash deploy/scripts/kubeconfig-for-github-actions.sh
 
 Если любой из секретов пустой — шаг workflow **падает** с понятной ошибкой (пропуска нет).
 
+## 1c. Локальный pull test-образов (make test-up)
+
+`make test` перед `docker-compose-test` вызывает `scripts/ensure_test_compose_images.py`: образы тянутся из GHCR, при отсутствии — локальная сборка.
+
+**Обязательно для каждого разработчика:** установлен **GitHub CLI (`gh`)**. При первом `make test-up` без GHCR-сессии скрипт **интерактивно запускает** `gh auth login -s read:packages` и затем `docker login ghcr.io` через токен `gh`.
+
+| Действие | Когда |
+|---|---|
+| Авто-login | Первый `make test-up` без docker/gh auth — скрипт сам вызовет `gh auth login` |
+| Ручная проверка | `gh auth status` и `docker manifest inspect ghcr.io/zamb124/agent-lab-base:latest` |
+| Push после локальной сборки | `TEST_IMAGES_PUSH=1 make test-up` (нужен scope **`write:packages`**) |
+| CI / без интерактива | `TEST_IMAGES_SKIP_GHCR_AUTH=1` (только automation, не для локальной разработки) |
+
+Образы: `ghcr.io/<owner>/agent-lab:<git-sha>`, `agent-lab-test-base:deps-<hash>`, `agent-lab-test:<git-sha>`, `agent-lab-test-a2a:<hash>`. CI пушит их через workflows **Build Test Base Image** и **Build Test Images** при push в `main`.
+
+Без успешного GHCR login **`make test-up` падает** — локальная сборка без auth не используется как обход.
+
 ## 2. Обязательные для шага «Sync platform-secrets»
 
 Имена должны совпадать с колонкой «Имя в GitHub».

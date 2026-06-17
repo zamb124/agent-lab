@@ -87,10 +87,11 @@ services:
 
   provider_litserve:
     platform: "linux/amd64"
+    image: ${AGENT_LAB_IMAGE:-ghcr.io/zamb124/agent-lab:local}
     build:
       context: .
-      dockerfile: Dockerfile.test
-      target: default
+      dockerfile: Dockerfile
+      target: full
     container_name: agentlab_provider_litserve_test
     command: ["python", "-m", "apps.provider_litserve.main"]
     ports:
@@ -118,6 +119,7 @@ services:
 
   test-a2a-agent:
     platform: "linux/amd64"
+    image: ${AGENT_LAB_TEST_A2A_IMAGE:-ghcr.io/zamb124/agent-lab-test-a2a:local}
     build:
       context: .
       dockerfile: apps/test_a2a_sample/Dockerfile
@@ -145,10 +147,13 @@ services:
 
   tests_runner:
     platform: "linux/amd64"
+    image: ${AGENT_LAB_TEST_IMAGE:-ghcr.io/zamb124/agent-lab-test:local}
     build:
       context: .
       dockerfile: Dockerfile.test
       target: default
+      args:
+        TEST_BASE_IMAGE: ${TEST_BASE_IMAGE:-ghcr.io/zamb124/agent-lab-test-base:latest}
     container_name: agentlab_tests_runner
     depends_on:
       redis-test:

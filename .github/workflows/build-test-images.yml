@@ -1,0 +1,143 @@
+name: Build Test Images
+
+# Предсобранные образы для docker-compose-test (make test-up):
+#   - agent-lab:<short-sha>        — production full (provider_litserve в test-compose)
+#   - agent-lab-test:<short-sha>   — pytest runner (Dockerfile.test)
+#   - agent-lab-test-a2a:<hash>    — test-a2a-agent sample
+#
+# Триггеры:
+#   - auto: push в main с изменениями кода / Dockerfile*
+#   - manual: workflow_dispatch
+
+concurrency:
+  group: agent-lab-build-test-images
+  cancel-in-progress: false
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - 'pyproject.toml'
+      - 'uv.lock'
+      - 'Dockerfile'
+      - 'Dockerfile.test'
+      - 'Dockerfile.test.base'
+      - 'apps/test_a2a_sample/**'
+      - 'core/**'
+      - 'apps/**'
+      - '.github/workflows/build-test-images.yml'
+
+env:
+  REGISTRY: ghcr.io/${{ github.repository_owner }}
+  IMAGE_APP: ghcr.io/${{ github.repository_owner }}/agent-lab
+  IMAGE_TEST: ghcr.io/${{ github.repository_owner }}/agent-lab-test
+  IMAGE_A2A: ghcr.io/${{ github.repository_owner }}/agent-lab-test-a2a
+  IMAGE_TEST_BASE: ghcr.io/${{ github.repository_owner }}/agent-lab-test-base
+
+jobs:
+  build:
+    name: Build & Push test compose images
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Helm image tag (short commit SHA)
+        id: tag
+        run: |
+          set -euo pipefail
+          tag="${GITHUB_SHA:0:7}"
+          echo "tag=${tag}" >> "${GITHUB_OUTPUT}"
+
+      - name: Compute a2a content hash
+        id: a2a
+        run: |
+          set -euo pipefail
+          hash="$(find apps/test_a2a_sample -type f -print0 | sort -z | xargs -0 cat | sha256sum | cut -c1-12)"
+          echo "hash=${hash}" >> "${GITHUB_OUTPUT}"
+
+      - name: Compute test-base deps hash
+        id: deps
+        run: |
+          set -euo pipefail
+          hash="$(cat pyproject.toml uv.lock Dockerfile.test.base | sha256sum | cut -c1-12)"
+          echo "hash=${hash}" >> "${GITHUB_OUTPUT}"
+
+      - name: Free disk space
+        run: |
+          set -e
+          docker system prune -af --volumes || true
+          docker builder prune -af || true
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build and push agent-lab-test-base (deps layer)
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: Dockerfile.test.base
+          platforms: linux/amd64
+          push: true
+          build-args: |
+            BASE_IMAGE=${{ env.REGISTRY }}/agent-lab-base:latest
+          tags: |
+            ${{ env.IMAGE_TEST_BASE }}:deps-${{ steps.deps.outputs.hash }}
+            ${{ env.IMAGE_TEST_BASE }}:latest
+          cache-from: type=gha,scope=test-base
+          cache-to: type=gha,scope=test-base,mode=max
+
+      - name: Build and push agent-lab (full)
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: Dockerfile
+          platforms: linux/amd64
+          push: true
+          target: full
+          build-args: |
+            BASE_IMAGE=${{ env.REGISTRY }}/agent-lab-base:latest
+          tags: |
+            ${{ env.IMAGE_APP }}:${{ steps.tag.outputs.tag }}
+            ${{ env.IMAGE_APP }}:latest
+          cache-from: type=gha,scope=app-test
+          cache-to: type=gha,scope=app-test,mode=max
+
+      - name: Build and push agent-lab-test (runner)
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: Dockerfile.test
+          platforms: linux/amd64
+          push: true
+          target: default
+          build-args: |
+            TEST_BASE_IMAGE=${{ env.IMAGE_TEST_BASE }}:deps-${{ steps.deps.outputs.hash }}
+          tags: |
+            ${{ env.IMAGE_TEST }}:${{ steps.tag.outputs.tag }}
+            ${{ env.IMAGE_TEST }}:latest
+          cache-from: type=gha,scope=test-runner
+          cache-to: type=gha,scope=test-runner,mode=max
+
+      - name: Build and push agent-lab-test-a2a
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: apps/test_a2a_sample/Dockerfile
+          platforms: linux/amd64
+          push: true
+          tags: |
+            ${{ env.IMAGE_A2A }}:${{ steps.a2a.outputs.hash }}
+            ${{ env.IMAGE_A2A }}:latest
+          cache-from: type=gha,scope=test-a2a
+          cache-to: type=gha,scope=test-a2a,mode=max

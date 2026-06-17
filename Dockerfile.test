@@ -1,96 +1,10 @@
-# Test Dockerfile — Python 3.14t (free-threaded), единая версия для всех окружений.
+# Test runner и rag-worker для docker-compose-test.
+# Базовый venv — agent-lab-test-base (prod deps + dev group), см. Dockerfile.test.base.
 
-FROM ghcr.io/astral-sh/uv:bookworm-slim AS base-test
+ARG TEST_BASE_IMAGE=ghcr.io/zamb124/agent-lab-test-base:latest
+ARG BASE_IMAGE=ghcr.io/zamb124/agent-lab-base:latest
 
-ARG NODE_MAJOR=24
-ARG GO_VERSION=1.26.1
-ARG DOTNET_CHANNEL=10.0
-
-ENV UV_PYTHON_INSTALL_DIR=/opt/uv-python
-ENV UV_PYTHON_PREFERENCE=only-managed
-ENV PYTHON_GIL=0
-
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    curl \
-    ca-certificates \
-    gnupg \
-    build-essential \
-    pkg-config \
-    libcairo2-dev \
-    libpq-dev \
-    ffmpeg \
-    tesseract-ocr \
-    poppler-utils \
-    libgl1 \
-    libglib2.0-0 \
-    antiword \
-    xz-utils \
-    && rm -rf /var/lib/apt/lists/*
-
-RUN uv python install 3.14t && uv python pin 3.14t
-
-RUN mkdir -p /etc/apt/keyrings && \
-    curl -fsSL https://deb.nodesource.com/gpgkey/nodesource-repo.gpg.key \
-      | gpg --dearmor -o /etc/apt/keyrings/nodesource.gpg && \
-    echo "deb [signed-by=/etc/apt/keyrings/nodesource.gpg] https://deb.nodesource.com/node_${NODE_MAJOR}.x nodistro main" \
-      > /etc/apt/sources.list.d/nodesource.list && \
-    apt-get update && apt-get install -y --no-install-recommends nodejs && \
-    rm -rf /var/lib/apt/lists/*
-
-RUN set -eux; \
-    arch="$(dpkg --print-architecture)"; \
-    case "$arch" in \
-      amd64) go_arch="amd64" ;; \
-      arm64) go_arch="arm64" ;; \
-      *) echo "Unsupported architecture for Go: $arch" >&2; exit 1 ;; \
-    esac; \
-    curl -fsSL "https://go.dev/dl/go${GO_VERSION}.linux-${go_arch}.tar.gz" -o /tmp/go.tgz; \
-    rm -rf /usr/local/go; \
-    tar -C /usr/local -xzf /tmp/go.tgz; \
-    ln -sf /usr/local/go/bin/go /usr/local/bin/go; \
-    ln -sf /usr/local/go/bin/gofmt /usr/local/bin/gofmt; \
-    rm -f /tmp/go.tgz; \
-    node --version; \
-    go version
-
-ENV DOTNET_ROOT=/usr/share/dotnet
-ENV PATH="${DOTNET_ROOT}:${PATH}"
-RUN curl -fsSL https://dot.net/v1/dotnet-install.sh -o /tmp/dotnet-install.sh && \
-    bash /tmp/dotnet-install.sh --channel "${DOTNET_CHANNEL}" --quality ga --install-dir "${DOTNET_ROOT}" && \
-    ln -sf "${DOTNET_ROOT}/dotnet" /usr/local/bin/dotnet && \
-    rm -f /tmp/dotnet-install.sh && \
-    dotnet --version
-
-WORKDIR /app
-
-COPY pyproject.toml uv.lock README.md ./
-
-ENV VIRTUAL_ENV=/opt/venv
-ENV PATH="/opt/venv/bin:${PATH}"
-ENV UV_HTTP_TIMEOUT=600
-RUN uv venv --python 3.14t "${VIRTUAL_ENV}"
-
-RUN --mount=type=cache,target=/root/.cache/uv \
-    uv export --frozen --no-default-groups \
-        --group core \
-        --group agents \
-        --group worker-base \
-        --group rag \
-        --group crm \
-        --group sync \
-        --group dev \
-        --no-annotate --no-header --no-emit-project \
-        -o /tmp/requirements.txt && \
-    uv pip install --python "${VIRTUAL_ENV}/bin/python" -r /tmp/requirements.txt
-
-# Стадия RAG Worker для тестов (минимальный образ; сборка: --target rag-worker)
-FROM base-test AS rag-worker
-
-RUN --mount=type=cache,target=/root/.cache/uv \
-    uv export --frozen --no-default-groups --only-group rag-worker \
-        --no-annotate --no-header --no-emit-project \
-        -o /tmp/rag-worker-requirements.txt && \
-    uv pip install --python "${VIRTUAL_ENV}/bin/python" -r /tmp/rag-worker-requirements.txt
+FROM ${BASE_IMAGE} AS rag-worker
 
 COPY core/ ./core/
 COPY apps/rag/ ./apps/rag/
@@ -104,8 +18,7 @@ ENV TESTING=true
 
 CMD ["taskiq", "worker", "apps.rag_worker.worker:worker_app", "--workers", "1"]
 
-# Полный образ для pytest и worker/scheduler (последняя стадия = default при сборке без --target)
-FROM base-test AS default
+FROM ${TEST_BASE_IMAGE} AS default
 
 COPY . .
 
