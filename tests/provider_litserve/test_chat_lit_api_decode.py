@@ -24,6 +24,26 @@ def test_chat_lit_api_decode_request_accepts_litserve_prepared_dict() -> None:
     assert parsed.messages[0].content == "hello"
 
 
+def test_chat_lit_api_decode_request_accepts_json_schema_response_format() -> None:
+    api = ChatLitAPI(ProviderLitserveInfraConfig())
+    body = {
+        "model": "qwen/qwen2.5-1.5b-instruct-crawl",
+        "messages": [{"role": "user", "content": "hello"}],
+        "response_format": {
+            "type": "json_schema",
+            "json_schema": {
+                "name": "CrawlEnrichedPageLLMOutput",
+                "strict": True,
+                "schema": {"type": "object", "properties": {"page_summary": {"type": "string"}}},
+            },
+        },
+    }
+    parsed = api.decode_request(body)  # type: ignore[arg-type]
+    assert isinstance(parsed, OpenAIChatCompletionsRequest)
+    assert parsed.response_format is not None
+    assert parsed.response_format.type == "json_schema"
+
+
 def test_chat_lit_api_decode_request_rejects_raw_fastapi_request() -> None:
     api = ChatLitAPI(ProviderLitserveInfraConfig())
     with pytest.raises(Exception, match="LitServe должен передать подготовленное тело"):

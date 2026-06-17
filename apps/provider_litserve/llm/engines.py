@@ -204,13 +204,19 @@ class LocalChatEngine:
         }
         if temperature > 0:
             generation_kwargs["temperature"] = temperature
-        if request.response_format is not None and request.response_format.type == "json_object":
+        if request.response_format is not None and request.response_format.type in {
+            "json_object",
+            "json_schema",
+        }:
             generation_kwargs["do_sample"] = False
         with torch.inference_mode():
             output_ids = model.generate(input_ids_tensor, **generation_kwargs)
         generated = output_ids[0, input_ids_tensor.shape[-1] :]
         content = tokenizer.decode(generated, skip_special_tokens=True).strip()
-        if request.response_format is not None and request.response_format.type == "json_object":
+        if request.response_format is not None and request.response_format.type in {
+            "json_object",
+            "json_schema",
+        }:
             try:
                 json.loads(content)
             except json.JSONDecodeError as exc:

@@ -10,7 +10,7 @@ import time
 import uuid
 from typing import ClassVar, Literal
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field
 
 from apps.provider_litserve.provider_litserve_http_schemas import (
     ChatCompletionChoiceBody,
@@ -24,6 +24,7 @@ from apps.provider_litserve.provider_litserve_http_schemas import (
     V1ModelItemSchema,
     V1ModelsResponseBody,
 )
+from core.types import JsonObject
 
 
 def _openrouter_like_model_object(
@@ -239,10 +240,19 @@ class OpenAIChatMessage(BaseModel):
     content: str
 
 
-class OpenAIChatResponseFormat(BaseModel):
-    model_config: ClassVar[ConfigDict] = ConfigDict(extra="forbid")
+class OpenAIChatJsonSchemaSpec(BaseModel):
+    model_config: ClassVar[ConfigDict] = ConfigDict(extra="ignore")
 
-    type: Literal["json_object", "text"]
+    name: str | None = None
+    strict: bool | None = None
+    schema_body: JsonObject | None = Field(default=None, alias="schema")
+
+
+class OpenAIChatResponseFormat(BaseModel):
+    model_config: ClassVar[ConfigDict] = ConfigDict(extra="ignore")
+
+    type: Literal["json_object", "text", "json_schema"]
+    json_schema: OpenAIChatJsonSchemaSpec | None = None
 
 
 class OpenAIChatCompletionsRequest(BaseModel):
