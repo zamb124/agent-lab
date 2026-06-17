@@ -81,6 +81,8 @@ class SearchCrawlConfig(BaseModel):
 
     default_crawl_profile_id: str = Field(default="runet_platform", min_length=1)
     http_timeout_seconds: float = Field(default=20.0, ge=1.0, le=120.0)
+    sitemap_max_urls_per_domain: int = Field(default=5000, ge=100, le=100_000)
+    sitemap_max_bytes: int = Field(default=10_485_760, ge=65_536, le=52_428_800)
     min_extract_chars: int = Field(default=200, ge=50, le=5000)
     tranco_seed_limit: int = Field(default=2000, ge=1, le=5000)
     bootstrap_tranco_on_empty: bool = True

@@ -58,6 +58,8 @@ async def test_discover_sitemap_example_com_real_http(crawl_search_container, se
     entries = await discover_sitemap_urls(
         domain_row.domain,
         timeout_seconds=get_search_settings().crawl.http_timeout_seconds,
+        max_urls=get_search_settings().crawl.sitemap_max_urls_per_domain,
+        max_sitemap_bytes=get_search_settings().crawl.sitemap_max_bytes,
     )
     assert entries
     assert any(entry.url.startswith("https://") for entry in entries)

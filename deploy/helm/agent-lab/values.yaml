@@ -632,7 +632,7 @@ workers:
         "worker",
         "apps.search_worker.worker:worker_app",
         "--workers",
-        "2",
+        "1",
       ]
     resources:
       requests:
@@ -640,7 +640,7 @@ workers:
         memory: 512Mi
       limits:
         cpu: "2"
-        memory: 4Gi
+        memory: 6Gi
 
 litserve:
   enabled: true

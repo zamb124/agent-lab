@@ -164,6 +164,8 @@ class CrawlOrchestratorService:
             entries = await discover_sitemap_urls(
                 domain.domain,
                 timeout_seconds=self._crawl_config.http_timeout_seconds,
+                max_urls=self._crawl_config.sitemap_max_urls_per_domain,
+                max_sitemap_bytes=self._crawl_config.sitemap_max_bytes,
             )
         except SitemapDiscoveryError as exc:
             await self._crawl_domain_repository.schedule_next(

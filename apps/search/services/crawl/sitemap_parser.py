@@ -57,7 +57,35 @@ def _parse_sitemap_xml(content: bytes, domain: str) -> list[SitemapEntry]:
     return entries
 
 
-async def discover_sitemap_urls(domain: str, *, timeout_seconds: float) -> list[SitemapEntry]:
+def _append_entries(
+    collected: list[SitemapEntry],
+    entries: list[SitemapEntry],
+    *,
+    max_urls: int,
+) -> bool:
+    if not entries:
+        return False
+    remaining = max_urls - len(collected)
+    if remaining <= 0:
+        return True
+    if len(entries) <= remaining:
+        collected.extend(entries)
+        return len(collected) >= max_urls
+    collected.extend(entries[:remaining])
+    return True
+
+
+async def discover_sitemap_urls(
+    domain: str,
+    *,
+    timeout_seconds: float,
+    max_urls: int,
+    max_sitemap_bytes: int,
+) -> list[SitemapEntry]:
+    if max_urls < 1:
+        raise ValueError("max_urls must be >= 1")
+    if max_sitemap_bytes < 1:
+        raise ValueError("max_sitemap_bytes must be >= 1")
     normalized_domain = domain.strip().lower()
     if normalized_domain.startswith("www."):
         normalized_domain = normalized_domain[4:]
@@ -76,18 +104,25 @@ async def discover_sitemap_urls(domain: str, *, timeout_seconds: float) -> list[
 
         collected: list[SitemapEntry] = []
         seen_sitemaps: set[str] = set()
+        limit_reached = False
         for sitemap_url in sitemap_urls:
+            if limit_reached:
+                break
             if sitemap_url in seen_sitemaps:
                 continue
             seen_sitemaps.add(sitemap_url)
             response = await client.get(sitemap_url)
             if response.status_code >= 400:
                 continue
+            if len(response.content) > max_sitemap_bytes:
+                continue
             entries = _parse_sitemap_xml(response.content, normalized_domain)
             if not entries and response.content:
                 index_root = ElementTree.fromstring(response.content)
                 if index_root.tag.lower().endswith("sitemapindex"):
                     for sm_node in index_root.findall(".//sm:sitemap", _SITEMAP_NS):
+                        if limit_reached:
+                            break
                         loc_node = sm_node.find("sm:loc", _SITEMAP_NS)
                         if loc_node is None or loc_node.text is None:
                             continue
@@ -98,9 +133,15 @@ async def discover_sitemap_urls(domain: str, *, timeout_seconds: float) -> list[
                         nested_response = await client.get(nested_url)
                         if nested_response.status_code >= 400:
                             continue
-                        collected.extend(_parse_sitemap_xml(nested_response.content, normalized_domain))
+                        if len(nested_response.content) > max_sitemap_bytes:
+                            continue
+                        limit_reached = _append_entries(
+                            collected,
+                            _parse_sitemap_xml(nested_response.content, normalized_domain),
+                            max_urls=max_urls,
+                        )
                     continue
-            collected.extend(entries)
+            limit_reached = _append_entries(collected, entries, max_urls=max_urls)
 
     if not collected:
         homepage = f"https://{normalized_domain}/"
@@ -108,4 +149,6 @@ async def discover_sitemap_urls(domain: str, *, timeout_seconds: float) -> list[
     deduped: dict[str, SitemapEntry] = {}
     for entry in collected:
         deduped[entry.url] = entry
+        if len(deduped) >= max_urls:
+            break
     return list(deduped.values())

@@ -141,10 +141,10 @@ class CrawlProfileCreateRequest(StrictBaseModel):
     seed_source: CrawlSeedSource = "manual"
     enabled: bool = True
     refresh_interval_seconds: int = Field(default=21600, ge=60)
-    max_urls_per_domain_per_tick: int = Field(default=200, ge=1)
-    max_domains_per_tick: int = Field(default=20, ge=1)
-    max_urls_per_batch: int = Field(default=50, ge=1)
-    http_concurrency: int = Field(default=8, ge=1)
+    max_urls_per_domain_per_tick: int = Field(default=10, ge=1)
+    max_domains_per_tick: int = Field(default=10, ge=1)
+    max_urls_per_batch: int = Field(default=10, ge=1)
+    http_concurrency: int = Field(default=2, ge=1)
     browser_fallback_enabled: bool = True
     sitemap_stale_after_seconds: int = Field(default=86400, ge=3600)
     denylist_domains: list[str] = Field(default_factory=list)
