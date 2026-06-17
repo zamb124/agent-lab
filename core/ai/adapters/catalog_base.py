@@ -400,20 +400,11 @@ class BaseModelCatalogAdapter(AIProviderAdapter, ABC):
             raise ValueError("github models catalog response must be an array")
         return self._records_from_array(payload, provider="github", primary_key="id")
 
-    def _extract_google_model_records(self, payload: JsonValue) -> list[AIModelRecord]:
-        payload_object = require_json_object(payload, "google.models.response")
-        models_raw = payload_object.get("models")
-        if not isinstance(models_raw, list):
-            raise ValueError("google models response: models must be an array")
-        return self._records_from_array(models_raw, provider="google", primary_key="name")
-
     def _extract_provider_model_records(self, payload: JsonValue, provider: str) -> list[AIModelRecord]:
         if provider == "bothub":
             return self._extract_bothub_model_records(payload)
         if provider == "github":
             return self._extract_github_catalog_model_records(payload)
-        if provider == "google":
-            return self._extract_google_model_records(payload)
         payload_object = require_json_object(payload, f"{provider}.models.response")
         return self._extract_openai_compatible_model_records(payload_object, provider)
 
@@ -547,9 +538,6 @@ class BaseModelCatalogAdapter(AIProviderAdapter, ABC):
                 **yandex_provider_http_headers(yandex_config),
                 "Content-Type": "application/json",
             }
-        if self.provider == "google":
-            headers["x-goog-api-key"] = api_key.strip()
-            return headers
         headers["Authorization"] = f"Bearer {api_key.strip()}"
         if self.provider == "openrouter":
             openrouter_config = cast(OpenRouterProviderConfig, cfg)

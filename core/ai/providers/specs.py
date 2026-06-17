@@ -83,7 +83,7 @@ LLM_PROVIDER_DEFAULT_MODELS_URLS: dict[str, str] = {
     "openai": "https://api.openai.com/v1/models",
     "yandex": "https://llm.api.cloud.yandex.net/v1/models",
     "groq": "https://api.groq.com/openai/v1/models",
-    "google": "https://generativelanguage.googleapis.com/v1beta/models",
+    "google": "https://generativelanguage.googleapis.com/v1beta/openai/models",
     "github": "https://models.github.ai/catalog/models",
     "huggingface": "https://router.huggingface.co/v1/models",
     "deepinfra": "https://api.deepinfra.com/v1/openai/models",

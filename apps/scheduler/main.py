@@ -107,6 +107,60 @@ async def _reconcile_idle_interval_payload(
     return repaired
 
 
+def _is_redis_cron_snapshot_current(
+    snapshot: PlatformRedisScheduleSnapshot,
+    *,
+    task_name: str,
+    cron: str,
+    expected_payload: JsonObject,
+) -> bool:
+    return (
+        snapshot.exists_in_redis
+        and snapshot.task_name == task_name
+        and snapshot.cron == cron
+        and snapshot.kwargs == expected_payload
+    )
+
+
+async def _reconcile_cron_payload(
+    *,
+    container: SchedulerContainer,
+    task: PlatformScheduledTask,
+    task_name: str,
+    cron: str,
+    log_label: str,
+) -> PlatformScheduledTask:
+    expected_payload = _canonical_system_payload(task.schedule_task_id, {})
+    recreate_schedule = False
+    if task.status == ScheduledTaskStatus.PENDING:
+        snapshot = await container.scheduler_service.get_redis_snapshot(
+            company_id=SYSTEM_SCHEDULER_COMPANY_ID,
+            schedule_task_id=task.schedule_task_id,
+        )
+        recreate_schedule = not _is_redis_cron_snapshot_current(
+            snapshot,
+            task_name=task_name,
+            cron=cron,
+            expected_payload=expected_payload,
+        )
+    if task.payload == expected_payload and not recreate_schedule:
+        return task
+
+    repaired = await container.scheduler_service.reconcile_payload(
+        company_id=SYSTEM_SCHEDULER_COMPANY_ID,
+        schedule_task_id=task.schedule_task_id,
+        payload={},
+        recreate_schedule=recreate_schedule,
+    )
+    logger.warning(
+        "%s cron schedule reconciled: schedule_task_id=%s recreate_schedule=%s",
+        log_label,
+        repaired.schedule_task_id,
+        recreate_schedule,
+    )
+    return repaired
+
+
 async def _ensure_calendar_schedule(
     *,
     container: SchedulerContainer,
@@ -129,6 +183,13 @@ async def _ensure_calendar_schedule(
     pending_tasks = [task for task in tasks if task.status == ScheduledTaskStatus.PENDING]
     if len(pending_tasks) > 0:
         logger.info("%s schedule already exists, count=%s", log_label, len(pending_tasks))
+        _ = await _reconcile_cron_payload(
+            container=container,
+            task=pending_tasks[0],
+            task_name=task_name,
+            cron=cron,
+            log_label=log_label,
+        )
         return
     paused_tasks = [task for task in tasks if task.status == ScheduledTaskStatus.PAUSED]
     if len(paused_tasks) > 0:
@@ -141,6 +202,13 @@ async def _ensure_calendar_schedule(
             log_label,
             resumed.schedule_task_id,
             resumed.schedule_id,
+        )
+        _ = await _reconcile_cron_payload(
+            container=container,
+            task=resumed,
+            task_name=task_name,
+            cron=cron,
+            log_label=log_label,
         )
         return
     request = PlatformScheduleCreateRequest(

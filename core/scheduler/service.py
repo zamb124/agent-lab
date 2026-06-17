@@ -97,6 +97,9 @@ class SchedulerService:
         schedule_task_id: str,
     ) -> JsonObject:
         canonical_payload = dict(payload)
+        legacy_schedule_task_id = canonical_payload.pop("scheduler_task_id", None)
+        if legacy_schedule_task_id is not None and "schedule_task_id" not in canonical_payload:
+            canonical_payload["schedule_task_id"] = legacy_schedule_task_id
         canonical_payload["schedule_task_id"] = schedule_task_id
         canonical_payload["company_id"] = company_id
         return canonical_payload

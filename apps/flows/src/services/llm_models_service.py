@@ -3,6 +3,8 @@
 import asyncio
 from datetime import datetime, timezone
 
+import httpx
+
 from apps.flows.config import get_settings
 from core.ai.adapters import create_model_catalog_adapter_registry
 from core.ai.free_pool import read_humanitec_llms_model_options
@@ -131,7 +133,15 @@ class LLMModelsService:
             logger.info("Синхронизировано %d моделей от %s", len(records), provider)
             return len(records)
         except Exception as exc:
-            logger.error("Ошибка при синхронизации моделей от %s: %s", provider, exc)
+            if isinstance(exc, httpx.HTTPStatusError):
+                logger.error(
+                    "Ошибка при синхронизации моделей от %s: %s response=%s",
+                    provider,
+                    exc,
+                    exc.response.text,
+                )
+            else:
+                logger.error("Ошибка при синхронизации моделей от %s: %s", provider, exc)
             return 0
 
     async def sync_models(self) -> int:
