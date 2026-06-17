@@ -214,3 +214,125 @@ async def test_fetch_one_url_reenqueues_while_pending(monkeypatch: pytest.Monkey
     fetch_tasks = [item for item in enqueued if item[0] == "crawl_fetch_url"]
     assert len(fetch_tasks) == 1
     assert fetch_tasks[0][-1] == 1
+
+
+@pytest.mark.asyncio
+async def test_fetch_one_url_enqueues_tick_when_domain_drained_but_profile_pending(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    enqueued: list[tuple[object, ...]] = []
+
+    async def _capture(task_name: str, *args: object, **kwargs: object) -> None:
+        enqueued.append((task_name, *args))
+
+    monkeypatch.setattr(
+        "apps.search.services.crawl.orchestrator_service._enqueue_task",
+        _capture,
+    )
+
+    profile_bundle = _profile_bundle()
+    domain = _domain("dom-1", "example.com")
+    now = datetime.now(UTC)
+
+    class _UrlRepo:
+        async def claim_pending_batch(self, crawl_domain_id: str, limit: int) -> list[object]:
+            from core.crawl.models import CrawlUrl
+
+            return [
+                CrawlUrl(
+                    crawl_url_id="url-1",
+                    crawl_domain_id=crawl_domain_id,
+                    url="https://example.com/page",
+                    canonical_url="https://example.com/page",
+                    crawl_status="fetching",
+                    created_at=now,
+                    updated_at=now,
+                )
+            ]
+
+        async def count_pending(self, crawl_domain_id: str) -> int:
+            return 0
+
+        async def count_pending_for_profile(self, crawl_profile_id: str) -> int:
+            assert crawl_profile_id == "cr_test"
+            return 50
+
+    class _DomainRepo:
+        async def get(self, crawl_domain_id: str) -> CrawlDomain:
+            return domain
+
+        async def mark_crawled(self, crawl_domain_id: str, crawled_at: datetime) -> None:
+            assert crawl_domain_id == "dom-1"
+
+    job_repo = AsyncMock()
+    job_repo.increment = AsyncMock()
+
+    orchestrator = _orchestrator(
+        profile_bundle=profile_bundle,
+        domain_repo=_DomainRepo(),
+        url_repo=_UrlRepo(),
+        job_repo=job_repo,
+    )
+    orchestrator._fetch_and_index_url = AsyncMock()  # pyright: ignore[reportAttributeAccessIssue]
+
+    await orchestrator.fetch_one_url("dom-1", "job-1", "cr_test", url_budget=1)
+
+    fetch_tasks = [item for item in enqueued if item[0] == "crawl_fetch_url"]
+    orchestrator_ticks = [item for item in enqueued if item[0] == "crawl_orchestrator_tick"]
+    assert fetch_tasks == []
+    assert orchestrator_ticks == [("crawl_orchestrator_tick", "cr_test")]
+
+
+@pytest.mark.asyncio
+async def test_run_tick_reenqueues_while_profile_pending_even_without_new_fetch(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    enqueued: list[tuple[object, ...]] = []
+
+    async def _capture(task_name: str, *args: object, **kwargs: object) -> None:
+        enqueued.append((task_name, *args))
+
+    monkeypatch.setattr(
+        "apps.search.services.crawl.orchestrator_service._enqueue_task",
+        _capture,
+    )
+
+    profile_bundle = _profile_bundle(max_domains_per_tick=1)
+
+    class _DomainRepo:
+        async def list_with_pending_urls(self, crawl_profile_id: str, *, limit: int) -> list[CrawlDomain]:
+            return []
+
+        async def list_due(self, crawl_profile_id: str, *, now: datetime, limit: int) -> list[CrawlDomain]:
+            return []
+
+    class _UrlRepo:
+        async def count_pending_for_profile(self, crawl_profile_id: str) -> int:
+            return 10
+
+    job = CrawlJob(
+        crawl_job_id="job-1",
+        crawl_profile_id="cr_test",
+        trigger="manual",
+        status="running",
+        started_at=datetime.now(UTC),
+    )
+    job_repo = AsyncMock()
+    job_repo.start = AsyncMock(return_value=job)
+    job_repo.finish = AsyncMock()
+
+    orchestrator = _orchestrator(
+        profile_bundle=profile_bundle,
+        domain_repo=_DomainRepo(),
+        url_repo=_UrlRepo(),
+        job_repo=job_repo,
+    )
+
+    await orchestrator.run_tick(
+        crawl_profile_id="cr_test",
+        trigger="manual",
+        schedule_task_id=None,
+    )
+
+    orchestrator_ticks = [item for item in enqueued if item[0] == "crawl_orchestrator_tick"]
+    assert orchestrator_ticks == [("crawl_orchestrator_tick", "cr_test")]

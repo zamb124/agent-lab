@@ -129,6 +129,8 @@ class SearchContainer(BaseContainer):
         return CrawlBootstrapService(
             crawl_profile_repository=self.crawl_profile_repository,
             crawl_domain_repository=self.crawl_domain_repository,
+            crawl_url_repository=self.crawl_url_repository,
+            crawl_job_repository=self.crawl_job_repository,
             crawl_config=get_search_settings().crawl,
         )
 

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from datetime import UTC, datetime, timedelta
 
+from apps.search.config import get_search_settings
 from apps.search.container import get_search_container
 from apps.search.services.system_context import build_search_system_context
 from apps.search_worker.broker import broker
@@ -155,11 +156,23 @@ async def crawl_reclaim_stale_fetching(
     await _enter_worker_context(trace_id=trace_id)
     try:
         container = get_search_container()
+        stale_before = datetime.now(UTC) - timedelta(hours=6)
+        stale_jobs = await container.crawl_job_repository.finish_stale_running_jobs(
+            stale_before=stale_before,
+        )
         reclaimed_fetching = await container.crawl_url_repository.reclaim_stale_fetching(
             stale_before=datetime.now(UTC) - timedelta(minutes=30),
         )
         requeued_failed = await container.crawl_url_repository.requeue_failed_urls()
+        crawl_profile_id = get_search_settings().crawl.default_crawl_profile_id
+        pending_urls = await container.crawl_url_repository.count_pending_for_profile(crawl_profile_id)
+        if pending_urls > 0:
+            tick_task = broker.find_task(CRAWL_ORCHESTRATOR_TICK_TASK_NAME)
+            if tick_task is None:
+                raise RuntimeError(f"task is not registered: {CRAWL_ORCHESTRATOR_TICK_TASK_NAME}")
+            _ = await tick_task.kiq(crawl_profile_id)
         return {
+            "stale_jobs_finished": stale_jobs,
             "reclaimed_fetching": reclaimed_fetching,
             "requeued_failed": requeued_failed,
         }

@@ -131,22 +131,19 @@ class CrawlOrchestratorService:
                 job.crawl_job_id,
                 domains_scheduled=len(domains),
             )
-            work_enqueued = False
             for domain in domains:
                 if domain.status != "active":
                     continue
-                enqueued = await self._schedule_domain_for_tick(
+                _ = await self._schedule_domain_for_tick(
                     domain=domain,
                     crawl_job_id=job.crawl_job_id,
                     crawl_profile_id=crawl_profile_id,
                     profile_bundle=profile_bundle,
                     now=now,
                 )
-                if enqueued:
-                    work_enqueued = True
             _ = await self._crawl_job_repository.finish(job.crawl_job_id, status="completed")
             pending_urls = await self._crawl_url_repository.count_pending_for_profile(crawl_profile_id)
-            if pending_urls > 0 and work_enqueued:
+            if pending_urls > 0:
                 await _enqueue_task(CRAWL_ORCHESTRATOR_TICK_TASK_NAME, crawl_profile_id)
             return {
                 "crawl_job_id": job.crawl_job_id,
@@ -256,6 +253,9 @@ class CrawlOrchestratorService:
         pending = await self._crawl_url_repository.count_pending(crawl_domain_id)
         if pending == 0:
             await self._crawl_domain_repository.mark_crawled(crawl_domain_id, datetime.now(UTC))
+            profile_pending = await self._crawl_url_repository.count_pending_for_profile(crawl_profile_id)
+            if profile_pending > 0:
+                await _enqueue_task(CRAWL_ORCHESTRATOR_TICK_TASK_NAME, crawl_profile_id)
             return
         await self._enqueue_domain_fetch(
             crawl_domain_id=crawl_domain_id,

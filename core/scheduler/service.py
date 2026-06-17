@@ -209,6 +209,44 @@ class SchedulerService:
             task.next_run_at = self._calculate_next_run_at(task)
         return await self._repository.save(task)
 
+    async def reconcile_cron(
+        self,
+        company_id: str,
+        schedule_task_id: str,
+        *,
+        cron: str,
+        payload: JsonObject,
+        recreate_schedule: bool = False,
+    ) -> PlatformScheduledTask:
+        task = await self.get(company_id=company_id, schedule_task_id=schedule_task_id)
+        if task.status not in (ScheduledTaskStatus.PENDING, ScheduledTaskStatus.PAUSED):
+            raise ValueError(
+                f"cannot reconcile task cron with status={self._status_value(task.status)}"
+            )
+
+        canonical_payload = self._canonical_payload(
+            payload,
+            company_id=company_id,
+            schedule_task_id=schedule_task_id,
+        )
+        if task.cron == cron and task.payload == canonical_payload and not recreate_schedule:
+            return task
+
+        if task.schedule_id:
+            source = get_schedule_source(self._redis_url)
+            await source.startup()
+            _ = await source.delete_schedule(task.schedule_id)
+            task.schedule_id = None
+
+        task.cron = cron
+        task.payload = canonical_payload
+        task.updated_at = datetime.now(timezone.utc)
+        task.error_message = None
+        if task.status == ScheduledTaskStatus.PENDING:
+            task.schedule_id = await self._create_schedule(task)
+            task.next_run_at = self._calculate_next_run_at(task)
+        return await self._repository.save(task)
+
     async def get(self, company_id: str, schedule_task_id: str) -> PlatformScheduledTask:
         task = await self._repository.get(company_id=company_id, schedule_task_id=schedule_task_id)
         if task is None:

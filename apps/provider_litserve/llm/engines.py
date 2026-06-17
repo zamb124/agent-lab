@@ -45,7 +45,7 @@ class ChatLanguageModel(Protocol):
 
     def to(self, device: torch.device) -> Self: ...
 
-    def generate(self, input_ids: torch.Tensor, **kwargs: float | int | bool | None) -> torch.Tensor: ...
+    def generate(self, **kwargs: object) -> torch.Tensor: ...
 
 
 class ChatTokenizerLoader(Protocol):
@@ -80,6 +80,27 @@ def _require_bitsandbytes_for_cuda_quant(device: str) -> None:
             "(uv sync --group llm-model или --group llm-model в Dockerfile.base.gpu GPU-образа)"
         )
         raise RuntimeError(message) from exc
+
+
+def _model_input_device(model: ChatLanguageModel, fallback_device: str) -> torch.device:
+    get_embeddings = getattr(model, "get_input_embeddings", None)
+    if get_embeddings is not None:
+        embeddings = get_embeddings()
+        weight = embeddings.weight
+        return weight.device
+    if fallback_device.startswith("cuda"):
+        return torch.device(fallback_device)
+    return torch.device("cpu")
+
+
+def _tokenizer_inputs_on_device(
+    inputs: dict[str, torch.Tensor],
+    device: torch.device,
+) -> dict[str, torch.Tensor]:
+    moved: dict[str, torch.Tensor] = {}
+    for key, tensor in inputs.items():
+        moved[key] = tensor.to(device)
+    return moved
 
 
 def parse_chat_body(raw: BaseModel | JsonValue | Request) -> OpenAIChatCompletionsRequest:
@@ -188,9 +209,9 @@ class LocalChatEngine:
             add_generation_prompt=True,
         )
         inputs = tokenizer(prompt, return_tensors="pt")
-        input_ids_tensor = inputs["input_ids"]
-        if self._device.startswith("cuda") and not hasattr(model, "hf_device_map"):
-            input_ids_tensor = input_ids_tensor.to(self._device)
+        input_device = _model_input_device(model, self._device)
+        model_inputs = _tokenizer_inputs_on_device(inputs, input_device)
+        input_ids_tensor = model_inputs["input_ids"]
         max_new_tokens = request.max_tokens if request.max_tokens is not None else 2048
         if max_new_tokens < 1:
             raise HTTPException(status_code=422, detail="max_tokens must be >= 1")
@@ -210,7 +231,7 @@ class LocalChatEngine:
         }:
             generation_kwargs["do_sample"] = False
         with torch.inference_mode():
-            output_ids = model.generate(input_ids_tensor, **generation_kwargs)
+            output_ids = model.generate(**model_inputs, **generation_kwargs)
         generated = output_ids[0, input_ids_tensor.shape[-1] :]
         content = tokenizer.decode(generated, skip_special_tokens=True).strip()
         if request.response_format is not None and request.response_format.type in {

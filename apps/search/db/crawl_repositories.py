@@ -836,6 +836,20 @@ class CrawlJobRepository:
             return None
         return _job_row_to_model(row)
 
+    async def finish_stale_running_jobs(self, *, stale_before: datetime) -> int:
+        now = datetime.now(UTC)
+        async with self._db.session() as session:
+            stmt = select(CrawlJobRow).where(
+                CrawlJobRow.status == "running",
+                CrawlJobRow.started_at < stale_before,
+            )
+            rows = list((await session.execute(stmt)).scalars().all())
+            for row in rows:
+                row.status = "failed"
+                row.finished_at = now
+            await session.commit()
+        return len(rows)
+
     async def list_page(
         self,
         *,

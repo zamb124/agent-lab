@@ -23,7 +23,7 @@ from core.types import JsonObject
 logger = get_logger(__name__)
 
 SYSTEM_SCHEDULER_COMPANY_ID = "system"
-CRAWL_ORCHESTRATOR_TICK_CRON = "*/10 * * * *"
+CRAWL_ORCHESTRATOR_BACKUP_CRON = "0 * * * *"
 CRAWL_RECLAIM_STALE_FETCHING_CRON = "*/15 * * * *"
 CRAWL_ORCHESTRATOR_DEFAULT_PROFILE_ID = "runet_platform"
 
@@ -72,12 +72,13 @@ async def _reconcile_crawl_cron_schedule(
             cron=cron,
             expected_payload=expected_payload,
         )
-    if task.payload == expected_payload and not recreate_schedule:
+    if task.cron == cron and task.payload == expected_payload and not recreate_schedule:
         return task
 
-    repaired = await container.scheduler_service.reconcile_payload(
+    repaired = await container.scheduler_service.reconcile_cron(
         company_id=SYSTEM_SCHEDULER_COMPANY_ID,
         schedule_task_id=task.schedule_task_id,
+        cron=cron,
         payload=payload,
         recreate_schedule=recreate_schedule,
     )
@@ -180,7 +181,7 @@ async def ensure_search_crawl_schedules(*, container: SchedulerContainer) -> Non
     await _ensure_crawl_cron_schedule(
         container=container,
         task_name=CRAWL_ORCHESTRATOR_TICK_TASK_NAME,
-        cron=CRAWL_ORCHESTRATOR_TICK_CRON,
+        cron=CRAWL_ORCHESTRATOR_BACKUP_CRON,
         payload={"crawl_profile_id": CRAWL_ORCHESTRATOR_DEFAULT_PROFILE_ID},
         log_label="Search crawl orchestrator",
         pending_match=lambda task: (

@@ -31,15 +31,23 @@ Ownership: `apps/search` + `apps/search_worker` + `platform_search`.
 
 ## Infinite crawl cycle
 
-- `CrawlDomainRepository.list_due` — домены с `next_crawl_after <= now`.
+- Основной loop — **self-re-enqueue через TaskIQ `kiq`**, не cron: tick/fetch/reclaim/worker startup ставят следующую задачу, пока `count_pending_for_profile > 0`.
+- `run_tick`: после tick при pending backlog → `kiq crawl_orchestrator_tick` (без условия «была ли работа в этом tick»).
+- `fetch_one_url`: domain `pending==0`, profile `pending>0` → `kiq crawl_orchestrator_tick` (handoff на следующий домен).
+- `fetch_one_url`: domain `pending>0` → `kiq crawl_fetch_url` (цепочка внутри домена).
+- `CrawlBootstrapService`: worker startup → `finish_stale_running_jobs`; при `skipped_seed` и pending → `kiq crawl_orchestrator_tick`.
+- `crawl_reclaim_stale_fetching`: reclaim + requeue failed + `finish_stale_running_jobs`; pending → `kiq crawl_orchestrator_tick`.
+- Cron **только backup**: `crawl_orchestrator_tick` (`0 * * * *`), `crawl_reclaim_stale_fetching` (`*/15 * * * *`) — idempotent bootstrap в `apps/scheduler/crawl_schedule_bootstrap.py` (`reconcile_cron`, `company_id=system`).
+- `CrawlDomainRepository.list_due` — домены с `next_crawl_after <= now`; backlog-first через `list_with_pending_urls`.
 - После tick/fetch домен уходит в «сон» (`schedule_next` + `refresh_interval_seconds`, default 6h).
 - Tranco seed — append-only (`upsert_seed_batch` не сбрасывает `next_crawl_after` у existing domains).
-- Cron: `crawl_orchestrator_tick` (`0 */6 * * *`), `crawl_reclaim_stale_fetching` (`*/15 * * * *`) — idempotent bootstrap в `apps/scheduler/main.py::on_startup` (`company_id=system`), как calendar/RAG/CRM.
 
 ## Parallel fetch enqueue
 
+- Параллелизм crawl = **N задач `crawl_fetch_url` в Redis queue `search`**, не `--workers N` у TaskIQ worker (prod: `--workers 1`).
 - `_enqueue_domain_fetch`: `batch = min(url_budget, max_urls_per_batch, pending)`, `parallel = min(batch, http_concurrency)`.
 - Enqueue `parallel` TaskIQ tasks `crawl_fetch_url` с `url_budget=1` each. Один URL — одна задача.
+- Профиль `runet_platform`: `max_domains_per_tick`, `http_concurrency` задают in-flight pool через kiq на tick + self-re-enqueue после fetch.
 
 ## REST
 
@@ -59,9 +67,9 @@ Ownership: `apps/search` + `apps/search_worker` + `platform_search`.
 
 ## Bootstrap
 
-- `search_worker` startup → `CrawlBootstrapService.ensure_crawl_pipeline_ready()`: если у `default_crawl_profile_id` нет доменов и `bootstrap_tranco_on_empty=true` — `kiq crawl_import_seed_domains` (Tranco, async, default limit 2000).
+- `search_worker` startup → `CrawlBootstrapService.ensure_crawl_pipeline_ready()`: `finish_stale_running_jobs`; если у `default_crawl_profile_id` нет доменов и `bootstrap_tranco_on_empty=true` — `kiq crawl_import_seed_domains` (Tranco, async, default limit 2000); если домены есть и pending → `kiq crawl_orchestrator_tick`.
 - `crawl_import_seed_domains` после `imported > 0` → `kiq crawl_orchestrator_tick`.
-- Cron schedules: idempotent bootstrap в `apps/scheduler/main.py::on_startup` (rollout/restart `scheduler-api`).
+- Cron schedules: idempotent bootstrap в `apps/scheduler/crawl_schedule_bootstrap.py` (rollout/restart `scheduler-api`).
 
 ## Crawl report
 
