@@ -342,7 +342,7 @@ export class FrontendCrawlReportPage extends PlatformPage {
         this._domains = this.useResource('frontend/crawl_domains');
         this._urls = this.useResource('frontend/crawl_urls');
         this._jobs = this.useResource('frontend/crawl_jobs');
-        this._queueTick = this.useOp('frontend/crawl_queue_tick');
+        this._queueTickOp = this.useOp('frontend/crawl_queue_tick');
         this._domainRun = this.useOp('frontend/crawl_domain_run');
         this._localeSel = this.select((state) => {
             const locale = state.i18n.locale;
@@ -598,7 +598,7 @@ export class FrontendCrawlReportPage extends PlatformPage {
     }
 
     _queueTick() {
-        this._queueTick.run({ crawl_profile_id: this._profileId, trigger: 'manual' });
+        this._queueTickOp.run({ crawl_profile_id: this._profileId, trigger: 'manual' });
     }
 
     _countFromSummary(key) {
@@ -867,7 +867,7 @@ export class FrontendCrawlReportPage extends PlatformPage {
                         <button
                             type="button"
                             class="btn primary"
-                            ?disabled=${this._queueTick.state.busy}
+                            ?disabled=${this._queueTickOp.state.busy}
                             @click=${() => this._queueTick()}
                         >${this.t('crawl_report_page.queue_tick')}</button>
                     </div>
