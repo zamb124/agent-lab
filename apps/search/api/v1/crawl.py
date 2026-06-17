@@ -8,6 +8,9 @@ from fastapi import APIRouter, HTTPException, Query
 
 from apps.search.dependencies import ContainerDep
 from apps.search_worker.broker import broker as search_worker_broker
+from apps.search_worker.tasks import (
+    crawl_tasks as _search_crawl_tasks,  # noqa: F401 — HTTP kiq регистрирует tasks на broker
+)
 from apps.search_worker.tasks.task_names import (
     CRAWL_IMPORT_SEED_DOMAINS_TASK_NAME,
     CRAWL_ORCHESTRATOR_TICK_TASK_NAME,
