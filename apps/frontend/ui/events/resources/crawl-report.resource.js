@@ -42,8 +42,11 @@ export const crawlDomainsResource = createResourceCollection({
     idField: 'crawl_domain_id',
     operations: ['list'],
     listQuery: (payload) => {
-        const q = { limit: 200, offset: 0 };
-        if (payload && payload.crawl_profile_id) q.crawl_profile_id = payload.crawl_profile_id;
+        const crawlProfileId = payload && payload.crawl_profile_id;
+        if (!crawlProfileId) {
+            throw new Error('frontend/crawl_domains: crawl_profile_id required for list');
+        }
+        const q = { limit: 200, offset: 0, crawl_profile_id: crawlProfileId };
         if (payload && payload.status) q.status = payload.status;
         return q;
     },
@@ -55,8 +58,11 @@ export const crawlUrlsResource = createResourceCollection({
     idField: 'crawl_url_id',
     operations: ['list'],
     listQuery: (payload) => {
-        const q = { limit: 200, offset: 0 };
-        if (payload && payload.crawl_profile_id) q.crawl_profile_id = payload.crawl_profile_id;
+        const crawlProfileId = payload && payload.crawl_profile_id;
+        if (!crawlProfileId) {
+            throw new Error('frontend/crawl_urls: crawl_profile_id required for list');
+        }
+        const q = { limit: 200, offset: 0, crawl_profile_id: crawlProfileId };
         if (payload && payload.crawl_status) q.crawl_status = payload.crawl_status;
         if (payload && payload.domain) q.domain = payload.domain;
         return q;
@@ -69,8 +75,11 @@ export const crawlJobsResource = createResourceCollection({
     idField: 'crawl_job_id',
     operations: ['list'],
     listQuery: (payload) => {
-        const q = { limit: 100, offset: 0 };
-        if (payload && payload.crawl_profile_id) q.crawl_profile_id = payload.crawl_profile_id;
+        const crawlProfileId = payload && payload.crawl_profile_id;
+        if (!crawlProfileId) {
+            throw new Error('frontend/crawl_jobs: crawl_profile_id required for list');
+        }
+        const q = { limit: 100, offset: 0, crawl_profile_id: crawlProfileId };
         if (payload && payload.status) q.status = payload.status;
         return q;
     },
@@ -96,7 +105,8 @@ export const crawlQueueTickOp = createAsyncOp({
             },
         });
     },
-    onSuccess(ctx, _payload, _result, requestPayload) {
+    onSuccess(ctx, _result, event) {
+        const requestPayload = event && event.payload;
         ctx.dispatch(
             CoreEvents.UI_TOAST_SHOW,
             { type: 'success', i18n_key: 'frontend:crawl_report_page.toast_queued' },
@@ -104,8 +114,8 @@ export const crawlQueueTickOp = createAsyncOp({
         );
         if (requestPayload && requestPayload.crawl_profile_id) {
             _reloadSummary(ctx, requestPayload.crawl_profile_id);
+            ctx.dispatch(crawlJobsResource.events.LIST_REQUESTED, requestPayload, { source: 'local' });
         }
-        ctx.dispatch(crawlJobsResource.events.LIST_REQUESTED, requestPayload, { source: 'local' });
     },
 });
 
@@ -125,15 +135,17 @@ export const crawlDomainRunOp = createAsyncOp({
             body: {},
         });
     },
-    onSuccess(ctx, _payload, _result, requestPayload) {
+    onSuccess(ctx, _result, event) {
+        const requestPayload = event && event.payload;
         ctx.dispatch(
             CoreEvents.UI_TOAST_SHOW,
             { type: 'success', i18n_key: 'frontend:crawl_report_page.toast_domain_queued' },
             { source: 'local' },
         );
-        if (requestPayload && requestPayload.crawl_profile_id) {
-            _reloadSummary(ctx, requestPayload.crawl_profile_id);
+        if (!requestPayload || !requestPayload.crawl_profile_id) {
+            return;
         }
+        _reloadSummary(ctx, requestPayload.crawl_profile_id);
         ctx.dispatch(crawlJobsResource.events.LIST_REQUESTED, requestPayload, { source: 'local' });
         ctx.dispatch(crawlDomainsResource.events.LIST_REQUESTED, requestPayload, { source: 'local' });
     },
