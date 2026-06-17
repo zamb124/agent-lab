@@ -12,7 +12,7 @@
 # ghcr.io/<owner>/agent-lab-base-gpu:latest|:<sha>.
 #
 # Когда пересобирать: при изменении ЛЮБОЙ зависимости в группах
-# core / rag / rag-worker / agents / worker-base в pyproject.toml.
+# core / rag / rag-worker / llm-model / agents / worker-base в pyproject.toml.
 
 FROM ghcr.io/astral-sh/uv:bookworm-slim
 
@@ -80,6 +80,7 @@ RUN --mount=type=cache,target=/root/.cache/uv \
 # Production deps платформы для GPU/ML-стороны: core + rag (litserve, silero,
 # silero-vad, pyannote-audio, sentence-transformers, transformers, flagembedding,
 # soundfile, hydra, omegaconf) + rag-worker (tiktoken, beautifulsoup4) +
+# llm-model (bitsandbytes для CUDA 4-bit chat LLM) +
 # agents + worker-base (общие зависимости для process-supervisor / granian).
 RUN --mount=type=cache,target=/root/.cache/uv \
     uv export --frozen --no-dev --no-default-groups \
@@ -88,6 +89,7 @@ RUN --mount=type=cache,target=/root/.cache/uv \
         --group worker-base \
         --group rag \
         --group rag-worker \
+        --group llm-model \
         --no-annotate --no-header --no-emit-project \
         -o /tmp/requirements.txt && \
     uv pip install --python "${VIRTUAL_ENV}/bin/python" -r /tmp/requirements.txt

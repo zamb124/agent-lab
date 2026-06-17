@@ -40,6 +40,7 @@ async def test_crawl_multi_site_layer1_parse_and_index_search_strict(
     search_client,
     search_worker,
     rag_worker,
+    rag_service,
     provider_litserve_service,
     search_container,
     search_system_context,
@@ -49,6 +50,7 @@ async def test_crawl_multi_site_layer1_parse_and_index_search_strict(
     _ = (
         search_worker,
         rag_worker,
+        rag_service,
         provider_litserve_service,
         search_system_context,
     )
@@ -89,6 +91,7 @@ async def test_crawl_multi_site_two_layer_parse_search_then_llm_strict(
     search_client,
     search_worker,
     rag_worker,
+    rag_service,
     provider_litserve_service,
     provider_litserve_crawl_llm_service,
     search_container,
@@ -104,6 +107,7 @@ async def test_crawl_multi_site_two_layer_parse_search_then_llm_strict(
     _ = (
         search_worker,
         rag_worker,
+        rag_service,
         provider_litserve_service,
         provider_litserve_crawl_llm_service,
         search_system_context,

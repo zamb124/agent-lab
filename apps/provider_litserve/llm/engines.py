@@ -67,6 +67,21 @@ def _require_cuda_when_selected(device: str) -> None:
         raise RuntimeError(message)
 
 
+def _require_bitsandbytes_for_cuda_quant(device: str) -> None:
+    if not device.startswith("cuda"):
+        return
+    import importlib.metadata
+
+    try:
+        _ = importlib.metadata.version("bitsandbytes")
+    except importlib.metadata.PackageNotFoundError as exc:
+        message = (
+            "provider_litserve: для CUDA 4-bit LLM нужен пакет bitsandbytes "
+            "(uv sync --group llm-model или --group llm-model в Dockerfile.base.gpu GPU-образа)"
+        )
+        raise RuntimeError(message) from exc
+
+
 def parse_chat_body(raw: BaseModel | JsonValue | Request) -> OpenAIChatCompletionsRequest:
     if isinstance(raw, Request):
         raise HTTPException(
@@ -118,6 +133,7 @@ class LocalChatEngine:
         tokenizer = tokenizer_loader(hf_model_id)
         model_loader = cast(ChatModelLoader, AutoModelForCausalLM.from_pretrained)
         if self._device.startswith("cuda"):
+            _require_bitsandbytes_for_cuda_quant(self._device)
             from transformers import BitsAndBytesConfig
 
             quantization_config = BitsAndBytesConfig(

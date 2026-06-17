@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import glob
-from collections.abc import Generator
+from collections.abc import AsyncGenerator, Generator
 from pathlib import Path
 
 import pytest
@@ -33,8 +33,9 @@ def pytest_runtest_setup(item: pytest.Item) -> Generator[None, object, object]:
 
 
 @pytest_asyncio.fixture(scope="session", autouse=True)
-async def _platform_runtime_loop_profile() -> None:
+async def _platform_runtime_loop_profile() -> AsyncGenerator[None, None]:
     if not profiling_enabled():
+        yield
         return
     import asyncio
 

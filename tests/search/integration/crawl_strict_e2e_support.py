@@ -160,6 +160,15 @@ async def queue_crawl_fetch_for_all_domains(
         assert payload["action"] in ("fetch", "discover")
 
 
+def _indexed_count_from_status_counts(
+    status_counts: list,
+) -> int:
+    for row in status_counts:
+        if row.status == "indexed":
+            return int(row.count)
+    return 0
+
+
 async def poll_indexed_url_count(
     search_client: AsyncClient,
     search_container: SearchContainer,
@@ -173,19 +182,30 @@ async def poll_indexed_url_count(
     last_total = 0
     ticks_sent = 0
     while time.monotonic() < deadline:
-        response = await search_client.get(
-            "/search/api/v1/crawl/urls",
-            params={
-                "crawl_profile_id": crawl_profile_id,
-                "crawl_status": "indexed",
-                "limit": 200,
-            },
+        status_counts = await search_container.crawl_url_repository.count_by_status_for_profile(
+            crawl_profile_id
         )
-        assert response.status_code == 200
-        payload = response.json()
-        last_total = int(payload["total"])
+        last_total = _indexed_count_from_status_counts(status_counts)
         if last_total >= min_indexed:
-            return payload["items"]
+            page = await search_container.crawl_url_repository.list_page_for_profile(
+                crawl_profile_id=crawl_profile_id,
+                crawl_status="indexed",
+                domain=None,
+                limit=200,
+                offset=0,
+            )
+            items = [item.model_dump(mode="json") for item in page.items]
+            response = await search_client.get(
+                "/search/api/v1/crawl/urls",
+                params={
+                    "crawl_profile_id": crawl_profile_id,
+                    "crawl_status": "indexed",
+                    "limit": 200,
+                },
+            )
+            assert response.status_code == 200, response.text
+            assert int(response.json()["total"]) >= min_indexed
+            return items
         if ticks_sent < retry_ticks and time.monotonic() + 30.0 < deadline:
             await queue_crawl_fetch_for_all_domains(
                 search_client,
@@ -194,8 +214,12 @@ async def poll_indexed_url_count(
             )
             ticks_sent += 1
         await asyncio.sleep(2.0)
+    status_summary = await search_container.crawl_url_repository.count_by_status_for_profile(
+        crawl_profile_id
+    )
     raise AssertionError(
-        f"crawl strict E2E timeout: expected >={min_indexed} indexed urls, got {last_total}"
+        f"crawl strict E2E timeout: expected >={min_indexed} indexed urls, "
+        f"got {last_total}; status_counts={status_summary!r}"
     )
 
 

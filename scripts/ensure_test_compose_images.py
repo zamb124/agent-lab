@@ -104,6 +104,33 @@ def _gh_auth_status_ok(gh_path: str) -> bool:
     return result.returncode == 0
 
 
+def _gh_auth_status_text(gh_path: str) -> str:
+    result = _run([gh_path, "auth", "status"], capture=True, check=False)
+    return f"{result.stdout}\n{result.stderr}"
+
+
+def _gh_has_read_packages_scope(gh_path: str) -> bool:
+    return "read:packages" in _gh_auth_status_text(gh_path)
+
+
+def _gh_ensure_read_packages_scope(gh_path: str) -> None:
+    if _gh_has_read_packages_scope(gh_path):
+        return
+    print("[ensure] Токен gh без scope read:packages — нужен для pull образов из GHCR.")
+    refresh_result = subprocess.run(
+        [gh_path, "auth", "refresh", "-s", "read:packages"],
+        cwd=PROJECT_ROOT,
+        check=False,
+    )
+    if refresh_result.returncode != 0:
+        print("[ensure] gh auth refresh не удался, запуск gh auth login -s read:packages...")
+        _gh_auth_login_interactive(gh_path)
+    if not _gh_has_read_packages_scope(gh_path):
+        raise RuntimeError(
+            "Токен gh без read:packages. Выполните: gh auth refresh -s read:packages или gh auth login -s read:packages"
+        )
+
+
 def _gh_auth_login_interactive(gh_path: str) -> None:
     print("[ensure] Требуется вход в GitHub для pull образов из GHCR.")
     print("[ensure] Запуск gh auth login (scope read:packages)...")
@@ -194,11 +221,12 @@ def _ensure_ghcr_auth(registry: str) -> None:
     if not _gh_auth_status_ok(gh_path):
         raise RuntimeError("gh auth login не завершился успешно")
 
+    _gh_ensure_read_packages_scope(gh_path)
     _docker_login_ghcr_from_gh(gh_path, registry_host)
 
     if not _ghcr_registry_reachable(registry):
         raise RuntimeError(
-            f"После docker login {registry} недоступен. Нужен доступ read:packages к пакетам ghcr.io/zamb124."
+            f"После docker login {registry} недоступен. Проверьте read:packages и доступ к пакетам ghcr.io/zamb124: gh auth refresh -s read:packages"
         )
     print(f"[ensure] GHCR auth OK ({registry})")
 

@@ -258,7 +258,7 @@
       "api_key": "YOUR_HUGGINGFACE_API_KEY",
       "base_url": "https://router.huggingface.co/v1",
       "models_url": "https://router.huggingface.co/v1/models",
-      "smoke_model": "meta-llama/Llama-3.2-1B-Instruct:fastest"
+      "smoke_model": "meta-llama/Llama-3.1-8B-Instruct"
     },
     "deepinfra": {
       "api_key": "YOUR_DEEPINFRA_API_KEY",

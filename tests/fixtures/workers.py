@@ -685,13 +685,14 @@ def rag_worker(provider_litserve_service):
 
 
 @pytest.fixture(scope="session")
-def search_worker(rag_worker, search_service):
+def search_worker(rag_worker, rag_service, search_service):
     """
     TaskIQ worker очереди search (apps.search_worker.worker:worker_app).
 
     Нужен для crawl orchestrator tick и enqueue discover/fetch через API.
+    crawl_fetch_url вызывает RAG ingest_text по HTTP — нужен rag_service (:9002).
     """
-    _ = rag_worker, search_service
+    _ = rag_worker, rag_service, search_service
     crawl_llm_env: dict[str, str] = {}
     if os.getenv("CRAWL__E2E_LITSERVE_LLM") == "1":
         crawl_llm_env = {

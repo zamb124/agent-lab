@@ -23,6 +23,10 @@ class _FakeLeaseManager:
     def __init__(self, page: _FakePage) -> None:
         self._page = page
 
+    async def human_takeover_for_session(self, session_id: str) -> None:
+        _ = session_id
+        return None
+
     @asynccontextmanager
     async def session_navigate_exclusive(self, session_id: str) -> AsyncIterator[None]:
         _ = session_id

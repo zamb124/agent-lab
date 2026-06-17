@@ -124,6 +124,9 @@ check-no-uvicorn:
 check-ft-wheels:
 	@./scripts/check_ft_wheels.sh
 
+check-gpu-dockerfile-llm-model:
+	@./scripts/check_gpu_dockerfile_llm_model.sh
+
 check-ui-factories:
 	@uv run python scripts/check_ui_factories.py
 

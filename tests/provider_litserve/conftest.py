@@ -6,14 +6,15 @@
 
 from __future__ import annotations
 
-import pytest_asyncio
+import pytest
 
 
-@pytest_asyncio.fixture(scope="session", autouse=True)
-async def setup_database_before_tests():
+@pytest.fixture(scope="session", autouse=True)
+def setup_database_before_tests():
     yield
 
 
-@pytest_asyncio.fixture(scope="session", autouse=True)
-async def platform_notification_manager_redis(setup_database_before_tests):
+@pytest.fixture(scope="session", autouse=True)
+def platform_notification_manager_redis(setup_database_before_tests):
+    _ = setup_database_before_tests
     yield

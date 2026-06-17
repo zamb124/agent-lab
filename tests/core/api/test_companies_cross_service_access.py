@@ -11,6 +11,7 @@ from core.models.identity_models import Company, User
 
 
 @pytest.mark.asyncio
+@pytest.mark.timeout(120)
 async def test_frontend_companies_me_endpoint_returns_list_response(
     unique_id: str,
     frontend_client,
