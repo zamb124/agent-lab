@@ -111,6 +111,7 @@ createAsyncOp({
 - `operations: ['list','get','create','update','remove']` — непустой; default `['list']`. Любая mutating требует `toastKeys[op]`.
 - Для `'ws'`: `wsTimeoutMs` (один транспорт на всю фабрику).
 - `restMirror` — auto: `list/create -> baseUrl`, `get/update/remove -> baseUrl/:idField`. Перекрывается под нестандартные пути.
+- `listPreserveItemsOnRefresh: true` — при повторном `LIST_REQUESTED` с непустым `items` slice ставит `refreshing: true` вместо `loading: true` (stale-while-revalidate для таблиц).
 
 ### `createCursorList`
 - `name`, `baseUrl`, `buildQuery(filters) -> query`, `pageSize` (>0).

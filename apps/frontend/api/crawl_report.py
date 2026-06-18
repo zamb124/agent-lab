@@ -17,6 +17,7 @@ from core.crawl.models import (
     CrawlJobQueuedResponse,
     CrawlProfileSummary,
     CrawlProfileWithIndex,
+    CrawlUrlDetail,
     CrawlUrlListItem,
 )
 from core.identity.system_bootstrap import SYSTEM_COMPANY_ID
@@ -128,6 +129,20 @@ async def list_crawl_urls(
             limit=limit,
             offset=offset,
         )
+    except ValueError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+
+@router.get("/urls/{crawl_url_id}", response_model=CrawlUrlDetail)
+async def get_crawl_url_detail(
+    crawl_url_id: str,
+    container: ContainerDep,
+    crawl_profile_id: Annotated[str, Query(min_length=1)],
+) -> CrawlUrlDetail:
+    _require_system()
+    _require_search_db()
+    try:
+        return await container.crawl_report_service.get_url_detail(crawl_url_id, crawl_profile_id)
     except ValueError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
 

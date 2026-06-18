@@ -66,11 +66,8 @@ class SearchIndexProviderConfig(BaseModel):
 class SearchCrawlEnrichmentConfig(BaseModel):
     model_config: ClassVar[ConfigDict] = ConfigDict(extra="forbid")
 
-    litserve_base_url: str | None = Field(
-        default=None,
-        description="OpenAI /v1 root для crawl LLM; пусто — provider_litserve.api.base_url.",
-    )
-    default_model: str = Field(default="qwen/qwen2.5-1.5b-instruct-crawl", min_length=1)
+    provider: str = Field(default="humanitec_llm", min_length=1)
+    model: str = Field(default="auto", min_length=1)
     timeout_seconds: float = Field(default=120.0, ge=1.0, le=600.0)
     prompt_version: str = Field(default="v1", min_length=1, max_length=32)
     max_input_chars: int = Field(default=12000, ge=512, le=200_000)

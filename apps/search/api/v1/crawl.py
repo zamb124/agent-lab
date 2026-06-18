@@ -8,9 +8,7 @@ from fastapi import APIRouter, HTTPException, Query
 
 from apps.search.dependencies import ContainerDep
 from apps.search_worker.broker import broker as search_worker_broker
-from apps.search_worker.tasks import (
-    crawl_tasks as _search_crawl_tasks,  # noqa: F401 — HTTP kiq регистрирует tasks на broker
-)
+from apps.search_worker.tasks import crawl_tasks as _search_crawl_tasks
 from apps.search_worker.tasks.task_names import (
     CRAWL_IMPORT_SEED_DOMAINS_TASK_NAME,
     CRAWL_ORCHESTRATOR_TICK_TASK_NAME,
@@ -24,6 +22,7 @@ from core.crawl.models import (
     CrawlProfileCreateRequest,
     CrawlProfileSummary,
     CrawlProfileWithIndex,
+    CrawlUrlDetail,
     CrawlUrlListItem,
     SeedImportRequest,
     SeedImportResult,
@@ -31,6 +30,8 @@ from core.crawl.models import (
 from core.pagination import OffsetPage
 
 router = APIRouter(prefix="/crawl", tags=["crawl"])
+
+_ = _search_crawl_tasks
 
 
 async def _kiq_task(task_name: str, *args: object, **kwargs: object) -> None:
@@ -114,6 +115,18 @@ async def list_crawl_urls(
             limit=limit,
             offset=offset,
         )
+    except ValueError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+
+@router.get("/urls/{crawl_url_id}", response_model=CrawlUrlDetail)
+async def get_crawl_url_detail(
+    crawl_url_id: str,
+    container: ContainerDep,
+    crawl_profile_id: Annotated[str, Query(min_length=1)],
+) -> CrawlUrlDetail:
+    try:
+        return await container.crawl_report_service.get_url_detail(crawl_url_id, crawl_profile_id)
     except ValueError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
 

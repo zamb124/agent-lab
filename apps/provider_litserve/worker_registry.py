@@ -6,10 +6,10 @@ from typing import Literal
 
 from core.config.models import ProviderLitserveInfraConfig
 
-ProviderLitserveWorkerKind = Literal["embedding", "rerank", "stt", "tts", "vad", "llm"]
+ProviderLitserveWorkerKind = Literal["embedding", "rerank", "stt", "tts", "vad"]
 
 _ALL_WORKERS: frozenset[ProviderLitserveWorkerKind] = frozenset(
-    ("embedding", "rerank", "stt", "tts", "vad", "llm")
+    ("embedding", "rerank", "stt", "tts", "vad")
 )
 
 
@@ -19,7 +19,4 @@ def resolved_enabled_workers(cfg: ProviderLitserveInfraConfig) -> frozenset[Prov
         if unknown:
             raise ValueError(f"unknown enabled_workers: {sorted(unknown)}")
         return frozenset(cfg.enabled_workers)
-    workers: set[ProviderLitserveWorkerKind] = {"embedding", "rerank", "stt", "tts", "vad"}
-    if cfg.llm_backend == "transformers":
-        workers.add("llm")
-    return frozenset(workers)
+    return frozenset({"embedding", "rerank", "stt", "tts", "vad"})

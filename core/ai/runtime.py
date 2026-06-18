@@ -16,7 +16,6 @@ from core.ai.llm_config import LLMCallConfig, ReasoningEffort
 from core.ai.models import AICostOrigin, ResolvedAIModel
 from core.ai.providers import (
     PROVIDER_LITSERVE,
-    PROVIDER_LITSERVE_CRAWL,
     AICapability,
     split_provider_prefixed_model,
 )
@@ -295,7 +294,7 @@ def create_embedding_client_from_runtime(
     """Create the low-level embeddings transport through the AI runtime facade."""
     resolved_api_key = api_key
     if resolved_api_key is None or not resolved_api_key.strip():
-        if provider in {PROVIDER_LITSERVE, PROVIDER_LITSERVE_CRAWL}:
+        if provider == PROVIDER_LITSERVE:
             resolved_api_key = PROVIDER_LITSERVE_PLACEHOLDER_BEARER
         else:
             resolved_api_key = resolve_provider_api_key_for_openai_compatible_calls(

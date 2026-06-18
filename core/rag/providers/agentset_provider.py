@@ -18,6 +18,7 @@ from core.http.client import SmartProxyClient
 from core.logging import get_logger
 from core.rag.models import (
     RAGDocument,
+    RAGDocumentContent,
     RAGMetadata,
     RAGMetadataFilter,
     RAGNamespace,
@@ -436,6 +437,14 @@ class AgentsetRAGProvider(BaseRAGProvider):
                 "created_at": data.get("createdAt"),
             }
         )
+
+    @override
+    async def get_document_content(
+        self,
+        namespace_id: str,
+        document_id: str,
+    ) -> RAGDocumentContent | None:
+        raise ValueError("agentset provider does not support get_document_content")
 
     @override
     async def list_documents(

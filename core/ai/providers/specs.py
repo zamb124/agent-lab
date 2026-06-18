@@ -51,7 +51,6 @@ LLM_ROUTING_PROVIDER_SLUGS = frozenset(
         *PLATFORM_LLM_PROVIDER_SLUGS,
         "custom_openai_compatible",
         "provider_litserve",
-        "provider_litserve_crawl",
     }
 )
 

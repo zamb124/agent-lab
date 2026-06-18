@@ -13,6 +13,7 @@ from core.logging import get_logger
 from core.rag.base_provider import BaseRAGProvider
 from core.rag.models import (
     RAGDocument,
+    RAGDocumentContent,
     RAGMetadata,
     RAGMetadataFilter,
     RAGNamespace,
@@ -187,6 +188,13 @@ class RAGRepository:
         document_id: str,
     ) -> RAGDocument | None:
         return await self.provider.get_document(namespace_id, document_id)
+
+    async def get_document_content(
+        self,
+        namespace_id: str,
+        document_id: str,
+    ) -> RAGDocumentContent | None:
+        return await self.provider.get_document_content(namespace_id, document_id)
 
     async def upload_document_from_s3(
         self,

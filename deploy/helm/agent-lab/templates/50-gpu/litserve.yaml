@@ -110,12 +110,6 @@ spec:
               value: {{ .Values.litserve.vadDefaultApiModelId | quote }}
             - name: PROVIDER_LITSERVE__INFRA__EMBEDDING_USE_BF16
               value: {{ .Values.litserve.embeddingUseBf16 | default "true" | quote }}
-            - name: PROVIDER_LITSERVE__INFRA__LLM_BACKEND
-              value: {{ .Values.litserve.llmBackend | default "disabled" | quote }}
-            - name: PROVIDER_LITSERVE__INFRA__LLM_MODEL_ID
-              value: {{ .Values.litserve.llmModelId | quote }}
-            - name: PROVIDER_LITSERVE__INFRA__LLM_OPENAI_MODEL_ID
-              value: {{ .Values.litserve.llmOpenaiModelId | quote }}
             - name: HF_HOME
               value: /root/.cache/huggingface
             - name: HF_TOKEN

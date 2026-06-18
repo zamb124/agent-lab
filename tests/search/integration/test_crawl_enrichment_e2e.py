@@ -1,4 +1,4 @@
-"""Crawl enrichment E2E: real HTTP fetch + LitServe LLM + RAG ingest."""
+"""Crawl enrichment E2E: real HTTP fetch + Humanitec LLM + RAG ingest."""
 
 from __future__ import annotations
 
@@ -14,7 +14,7 @@ from tests.search.integration.crawl_strict_e2e_support import (
     CRAWL_STRICT_ENRICHMENT_MODEL,
     poll_enriched_urls,
     poll_index_search_hits,
-    require_crawl_llm_live_gate,
+    require_crawl_humanitec_llm_live_gate,
 )
 
 pytestmark = [
@@ -32,17 +32,15 @@ async def test_crawl_enrichment_indexes_example_com_with_page_summary(
     rag_worker,
     search_worker,
     provider_litserve_service,
-    provider_litserve_crawl_llm_service,
     crawl_search_container,
     search_system_context,
     unique_id,
 ):
-    require_crawl_llm_live_gate()
+    require_crawl_humanitec_llm_live_gate()
     _ = (
         search_worker,
         rag_worker,
         provider_litserve_service,
-        provider_litserve_crawl_llm_service,
         search_system_context,
     )
     search_container = crawl_search_container

@@ -62,6 +62,11 @@ export class ResourceController {
     get items() { return this.state.items; }
     get byId() { return this.state.byId; }
     get loading() { return Boolean(this.state.loading); }
+    get refreshing() { return Boolean(this.state.refreshing); }
+    get listTotal() {
+        const total = this.state.listTotal;
+        return typeof total === 'number' ? total : null;
+    }
     get createInFlight() { return Boolean(this.state.createInFlight); }
     get error() { return this.state.error; }
     get busyIds() { return this.state.busyIds; }

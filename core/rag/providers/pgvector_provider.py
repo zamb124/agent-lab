@@ -51,6 +51,7 @@ from core.rag.base_provider import BaseRAGProvider, validate_metadata_filters
 from core.rag.embedding_runtime import RagEmbeddingRuntime
 from core.rag.models import (
     RAGDocument,
+    RAGDocumentContent,
     RAGMetadata,
     RAGMetadataFilter,
     RAGNamespace,
@@ -571,6 +572,47 @@ class PgVectorProvider(BaseRAGProvider):
             namespace=namespace_id,
             status="completed",
             metadata=row.metadata_ or {},
+        )
+
+    @override
+    async def get_document_content(
+        self,
+        namespace_id: str,
+        document_id: str,
+    ) -> RAGDocumentContent | None:
+        async with self._session_factory() as session:
+            stmt = (
+                select(VectorDocument)
+                .where(
+                    VectorDocument.namespace_id == namespace_id,
+                    VectorDocument.document_id == document_id,
+                )
+                .order_by(VectorDocument.chunk_index.asc())
+            )
+            rows = list((await session.execute(stmt)).scalars().all())
+        if not rows:
+            return None
+        first_row = rows[0]
+        document_name = first_row.document_name or ""
+        metadata = dict(first_row.metadata_ or {})
+        for key in ("document_id", "document_name", "chunk_index", "total_chunks"):
+            if key in metadata:
+                del metadata[key]
+        markdown_parts: list[str] = []
+        for row in rows:
+            if row.content.strip():
+                markdown_parts.append(row.content.strip())
+        markdown = "\n\n".join(markdown_parts)
+        if not markdown.strip():
+            raise ValueError(
+                f"document content is empty: namespace_id={namespace_id}, document_id={document_id}"
+            )
+        return RAGDocumentContent(
+            document_id=document_id,
+            document_name=document_name,
+            markdown=markdown,
+            chunks_count=len(rows),
+            metadata=metadata,
         )
 
     @override

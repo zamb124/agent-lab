@@ -16,7 +16,6 @@ from core.ai.providers import (
     LLM_CAPABILITIES,
     LLM_PROVIDER_DEFAULT_MODELS_URLS,
     PROVIDER_LITSERVE,
-    PROVIDER_LITSERVE_CRAWL,
     AICapability,
 )
 from core.config import BaseSettings, get_settings
@@ -563,12 +562,6 @@ class BaseModelCatalogAdapter(AIProviderAdapter, ABC):
         if self.provider == PROVIDER_LITSERVE:
             try:
                 _ = self._provider_litserve_openai_v1_base_url()
-            except (AttributeError, ValueError):
-                return False
-            return True
-        if self.provider == PROVIDER_LITSERVE_CRAWL:
-            try:
-                _ = self._settings.provider_litserve.resolve_openai_v1_base_url()
             except (AttributeError, ValueError):
                 return False
             return True

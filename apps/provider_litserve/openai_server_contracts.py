@@ -85,10 +85,6 @@ def build_provider_litserve_v1_models_response(
     rerank_model_ids: list[str],
     rerank_hf_model_id: str,
     rerank_context_length: int,
-    llm_openai_model_id: str | None = None,
-    llm_model_ids: list[str] | None = None,
-    llm_hf_model_id: str | None = None,
-    llm_context_length: int = 32768,
     stt_model_ids: list[str],
     tts_model_ids: list[str],
     vad_model_ids: list[str],
@@ -150,25 +146,6 @@ def build_provider_litserve_v1_models_response(
                 context_length=rerank_context_length,
                 output_modalities=["text"],
                 capabilities=["rerank"],
-            )
-        )
-
-    llm_ids = _uniq([*( [llm_openai_model_id] if llm_openai_model_id else []), *(llm_model_ids or [])])
-    for llm_id in llm_ids:
-        hf_ref = llm_hf_model_id if llm_hf_model_id is not None else llm_id
-        data.append(
-            _openrouter_like_model_object(
-                model_id=llm_id,
-                name=llm_id,
-                description=(
-                    f"Local chat LLM (HF: {hf_ref}). "
-                    "Use POST /v1/chat/completions."
-                ),
-                created=created,
-                context_length=llm_context_length,
-                output_modalities=["text"],
-                capabilities=["llm_chat"],
-                supported_parameters=["temperature", "max_tokens", "response_format"],
             )
         )
 

@@ -976,7 +976,14 @@
         "min_extract_chars": 200,
         "tranco_seed_limit": 200,
         "skip_categories": ["ecommerce", "social"],
-        "ru_com_whitelist": ["habr.com", "vc.ru", "tass.ru"]
+        "ru_com_whitelist": ["habr.com", "vc.ru", "tass.ru"],
+        "enrichment": {
+          "provider": "humanitec_llm",
+          "model": "auto",
+          "timeout_seconds": 120.0,
+          "prompt_version": "v1",
+          "max_input_chars": 12000
+        }
       }
     },
     "voice": {

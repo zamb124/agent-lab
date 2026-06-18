@@ -91,10 +91,9 @@ test-rag:
 	uv run pytest tests/rag/ -v --tb=short
 
 test-crawl-llm-live:
-	@echo "Запуск crawl LLM live suite (GPU/transformers, CRAWL__E2E_LITSERVE_LLM=1)..."
-	CRAWL__E2E_LITSERVE_LLM=1 uv run pytest -q \
-		tests/provider_litserve/integration/test_llm_chat_live.py \
-		tests/search/integration/test_crawl_enrichment_litserve_e2e.py \
+	@echo "Запуск crawl Humanitec LLM live suite (CRAWL__E2E_HUMANITEC_LLM=1)..."
+	CRAWL__E2E_HUMANITEC_LLM=1 uv run pytest -q \
+		tests/search/integration/test_crawl_enrichment_e2e.py \
 		tests/search/integration/test_crawl_enrichment_skip_e2e.py \
 		tests/search/integration/test_crawl_multi_site_two_layer_strict_e2e.py::test_crawl_multi_site_two_layer_parse_search_then_llm_strict
 

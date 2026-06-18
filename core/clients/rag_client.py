@@ -9,7 +9,13 @@ from io import BytesIO
 from urllib.parse import quote
 
 from core.clients.service_client import ServiceClient
-from core.rag.models import RAGIngestTextResponse, RAGMetadata, RAGMetadataFilter, RAGSearchOptions
+from core.rag.models import (
+    RAGDocumentContent,
+    RAGIngestTextResponse,
+    RAGMetadata,
+    RAGMetadataFilter,
+    RAGSearchOptions,
+)
 from core.rag.rag_http_namespace_search import (
     RAG_API_V1_PREFIX,
     build_namespace_search_json_body,
@@ -133,6 +139,21 @@ class RagClient:
         path = f"{RAG_API_V1_PREFIX}/documents/{document_id}/status"
         out = await self._http.get("rag", path)
         return _json_object_response(out, operation="get_document_processing_status")
+
+    async def get_namespace_document_content(
+        self,
+        namespace_id: str,
+        document_id: str,
+        *,
+        provider: str | None = None,
+    ) -> RAGDocumentContent:
+        seg = quote(namespace_id, safe="")
+        path = f"{RAG_API_V1_PREFIX}/namespaces/{seg}/documents/{quote(document_id, safe='')}/content"
+        params: dict[str, str] | None = {"provider": provider} if provider is not None else None
+        response = await self._http.get("rag", path, params=params)
+        return RAGDocumentContent.model_validate(
+            _json_object_response(response, operation="get_namespace_document_content")
+        )
 
     def _pack_search_options(
         self,

@@ -1,4 +1,4 @@
-"""Shared helpers for strict crawl E2E (real HTTP, TaskIQ, RAG, optional LitServe LLM)."""
+"""Shared helpers for strict crawl E2E (real HTTP, TaskIQ, RAG, optional Humanitec LLM)."""
 
 from __future__ import annotations
 
@@ -17,8 +17,14 @@ if TYPE_CHECKING:
 
     from apps.search.container import SearchContainer
 
-CRAWL_LITSERVE_LLM_PORT = 9022
-CRAWL_STRICT_ENRICHMENT_MODEL = "qwen/qwen2.5-1.5b-instruct-crawl"
+CRAWL_STRICT_ENRICHMENT_MODEL = "auto"
+
+
+def require_crawl_humanitec_llm_live_gate() -> None:
+    if os.getenv("CRAWL__E2E_HUMANITEC_LLM") != "1":
+        import pytest
+
+        pytest.skip("CRAWL__E2E_HUMANITEC_LLM=1 required for crawl Humanitec LLM live E2E")
 
 
 @dataclass(frozen=True)
@@ -43,13 +49,6 @@ CRAWL_STRICT_E2E_SITES: tuple[CrawlStrictE2ESite, ...] = (
         content_marker="IANA",
     ),
 )
-
-
-def require_crawl_llm_live_gate() -> None:
-    if os.getenv("CRAWL__E2E_LITSERVE_LLM") != "1":
-        import pytest
-
-        pytest.skip("CRAWL__E2E_LITSERVE_LLM=1 required for crawl LLM strict E2E")
 
 
 async def create_search_index_and_profile(

@@ -40,7 +40,6 @@ def disable_testing_mode():
 
 
 from core.ai.llm_config import LLMCallConfig  # noqa: E402
-from core.ai.providers import PROVIDER_LITSERVE_CRAWL  # noqa: E402
 from core.clients.llm.client import LLMClient  # noqa: E402
 from core.clients.llm.provider_resolution import (  # noqa: E402
     _detect_provider,
@@ -1075,32 +1074,3 @@ class TestGetDefaultBaseUrl:
 
         result = _get_default_base_url("openrouter", mock_settings)
         assert result == "https://openrouter.ai/api/v1"
-
-    def test_get_default_base_url_provider_litserve_crawl(self):
-        mock_settings = MagicMock()
-        mock_settings.provider_litserve.resolve_openai_v1_base_url.return_value = (
-            "http://provider-litserve.platform.svc.cluster.local:8014/v1"
-        )
-
-        result = _get_default_base_url(PROVIDER_LITSERVE_CRAWL, mock_settings)
-
-        assert result == "http://provider-litserve.platform.svc.cluster.local:8014/v1"
-
-    def test_resolve_llm_call_config_provider_litserve_crawl_explicit_transport(self):
-        mock_settings = MagicMock()
-        mock_settings.llm.provider = "openrouter"
-
-        resolved = _resolve_llm_call_config(
-            LLMCallConfig(
-                provider=PROVIDER_LITSERVE_CRAWL,
-                model="qwen/qwen2.5-1.5b-instruct-crawl",
-                base_url="http://provider-litserve.platform.svc.cluster.local:8014/v1",
-                api_key="litserve-local",
-            ),
-            settings=mock_settings,
-        )
-
-        assert resolved.provider == PROVIDER_LITSERVE_CRAWL
-        assert resolved.model == "qwen/qwen2.5-1.5b-instruct-crawl"
-        assert resolved.api_key == "litserve-local"
-        assert resolved.base_url == "http://provider-litserve.platform.svc.cluster.local:8014/v1"

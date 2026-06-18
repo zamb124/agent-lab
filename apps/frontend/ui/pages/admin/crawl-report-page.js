@@ -5,6 +5,10 @@ import { html, css } from 'lit';
 import { PlatformPage } from '@platform/lib/base/PlatformPage.js';
 import { frontendIslandPageBodyStyles } from '../../styles/frontend-island-page-body.styles.js';
 import { formatPlatformDateTime } from '@platform/lib/utils/format-platform-date.js';
+import { FrontendCrawlUrlDetailModal } from '../../modals/crawl-url-detail-modal.js';
+import '../../components/crawl-report/crawl-report-metric-strip.js';
+import '../../components/crawl-report/crawl-report-running-banner.js';
+import '../../components/crawl-report/crawl-report-charts-panel.js';
 import '@platform/lib/components/layout/page-header.js';
 import '@platform/lib/components/glass-spinner.js';
 import '@platform/lib/components/fields/platform-field.js';
@@ -16,6 +20,7 @@ const DEFAULT_PROFILE_ID = 'runet_platform';
 const DOMAIN_STATUS_VALUES = Object.freeze(['active', 'error', 'paused', 'blocked']);
 const URL_STATUS_VALUES = Object.freeze(['indexed', 'failed', 'pending', 'fetching', 'skipped']);
 const CATEGORY_KEYS = Object.freeze(['gov', 'wiki', 'ecommerce', 'social', 'docs', 'media', 'news', 'unknown']);
+const ACTIVE_POLL_MS = 5000;
 
 export class FrontendCrawlReportPage extends PlatformPage {
     static styles = [
@@ -56,77 +61,6 @@ export class FrontendCrawlReportPage extends PlatformPage {
             .index-meta strong {
                 color: var(--text-secondary);
                 font-weight: var(--font-medium);
-            }
-
-            .running-banner {
-                display: flex;
-                flex-wrap: wrap;
-                align-items: center;
-                justify-content: space-between;
-                gap: var(--space-3);
-                padding: var(--space-3) var(--space-4);
-                margin-bottom: var(--space-4);
-                border-radius: var(--radius-lg);
-                border: 1px solid color-mix(in srgb, var(--accent) 35%, transparent);
-                background: color-mix(in srgb, var(--accent) 8%, var(--glass-solid-subtle));
-            }
-            .running-banner-title {
-                display: flex;
-                align-items: center;
-                gap: var(--space-2);
-                font-size: var(--text-sm);
-                font-weight: var(--font-semibold);
-                color: var(--text-primary);
-            }
-            .running-banner-stats {
-                font-size: var(--text-sm);
-                color: var(--text-secondary);
-                font-family: var(--font-mono);
-            }
-            .pulse-dot {
-                width: 8px;
-                height: 8px;
-                border-radius: var(--radius-full);
-                background: var(--accent);
-                animation: crawl-pulse 1.4s ease-in-out infinite;
-            }
-            @keyframes crawl-pulse {
-                0%, 100% { opacity: 0.35; transform: scale(0.9); }
-                50% { opacity: 1; transform: scale(1); }
-            }
-
-            .summary-grid {
-                display: grid;
-                grid-template-columns: repeat(auto-fill, minmax(148px, 1fr));
-                gap: var(--space-3);
-                margin-bottom: var(--space-4);
-            }
-            .summary-card {
-                padding: var(--space-3);
-                background: var(--glass-solid-subtle);
-                border: 1px solid var(--glass-border-subtle);
-                border-radius: var(--radius-md);
-            }
-            .summary-card.highlight {
-                border-color: color-mix(in srgb, var(--accent) 40%, transparent);
-            }
-            .summary-card.warn {
-                border-color: color-mix(in srgb, var(--warning) 45%, transparent);
-            }
-            .summary-card.danger {
-                border-color: color-mix(in srgb, var(--error) 45%, transparent);
-            }
-            .summary-card .label {
-                font-size: var(--text-xs);
-                color: var(--text-tertiary);
-                text-transform: uppercase;
-                letter-spacing: 0.04em;
-            }
-            .summary-card .value {
-                font-size: var(--text-xl);
-                font-weight: var(--font-semibold);
-                color: var(--text-primary);
-                margin-top: var(--space-1);
             }
 
             .filters-panel {
@@ -239,10 +173,24 @@ export class FrontendCrawlReportPage extends PlatformPage {
             }
 
             .table-panel {
+                position: relative;
                 background: var(--glass-solid-subtle);
                 border: 1px solid var(--glass-border-subtle);
                 border-radius: var(--radius-lg);
                 overflow: hidden;
+            }
+            .table-panel.refreshing::after {
+                content: '';
+                position: absolute;
+                inset: 0;
+                background: color-mix(in srgb, var(--glass-solid-subtle) 35%, transparent);
+                pointer-events: none;
+            }
+            .table-refresh-indicator {
+                position: absolute;
+                top: var(--space-3);
+                right: var(--space-3);
+                z-index: 1;
             }
             table { width: 100%; border-collapse: collapse; }
             th, td {
@@ -260,7 +208,14 @@ export class FrontendCrawlReportPage extends PlatformPage {
             }
             td { color: var(--text-primary); font-size: var(--text-sm); }
             tr.data-row:hover { background: var(--glass-solid-medium); }
-            .domain-link {
+            tr.data-row.row-updated {
+                animation: crawl-row-highlight 1.5s ease-out;
+            }
+            @keyframes crawl-row-highlight {
+                0% { background: color-mix(in srgb, var(--accent) 18%, transparent); }
+                100% { background: transparent; }
+            }
+            .domain-link, .url-link {
                 background: none;
                 border: none;
                 color: var(--accent);
@@ -269,7 +224,7 @@ export class FrontendCrawlReportPage extends PlatformPage {
                 font: inherit;
                 text-align: left;
             }
-            .domain-link:hover { text-decoration: underline; }
+            .domain-link:hover, .url-link:hover { text-decoration: underline; }
             .actions-cell {
                 display: flex;
                 flex-wrap: wrap;
@@ -304,7 +259,6 @@ export class FrontendCrawlReportPage extends PlatformPage {
                 font-weight: var(--font-semibold);
                 margin-bottom: var(--space-2);
             }
-            .state.unavailable { border-top: 1px dashed var(--glass-border-subtle); }
             .mono {
                 font-family: var(--font-mono);
                 font-size: var(--text-xs);
@@ -333,6 +287,7 @@ export class FrontendCrawlReportPage extends PlatformPage {
         _urlDomainFilter: { state: true },
         _runningDomainId: { state: true },
         _loaded: { state: true },
+        _rowHighlightIds: { state: true },
     };
 
     constructor() {
@@ -359,22 +314,25 @@ export class FrontendCrawlReportPage extends PlatformPage {
         this._runningDomainId = null;
         this._loaded = false;
         this._pollIntervalId = null;
+        this._rowHighlightIds = [];
+        this._rowSnapshots = {
+            domains: new Map(),
+            urls: new Map(),
+            jobs: new Map(),
+        };
     }
 
     connectedCallback() {
         super.connectedCallback();
-        this._pollIntervalId = window.setInterval(() => this._maybeAutoRefresh(), 15000);
+        this._syncPollTimer();
     }
 
     disconnectedCallback() {
-        if (this._pollIntervalId !== null) {
-            window.clearInterval(this._pollIntervalId);
-            this._pollIntervalId = null;
-        }
+        this._clearPollTimer();
         super.disconnectedCallback();
     }
 
-    updated() {
+    updated(changed) {
         if (!this._loaded) {
             this._loaded = true;
             this._profilesOp.run({});
@@ -383,6 +341,25 @@ export class FrontendCrawlReportPage extends PlatformPage {
         if (!this._domainRun.state.busy && this._runningDomainId !== null) {
             this._runningDomainId = null;
         }
+        if (this._loaded) {
+            this._trackRowHighlights();
+            this._syncPollTimer();
+        }
+    }
+
+    _clearPollTimer() {
+        if (this._pollIntervalId !== null) {
+            window.clearInterval(this._pollIntervalId);
+            this._pollIntervalId = null;
+        }
+    }
+
+    _syncPollTimer() {
+        this._clearPollTimer();
+        if (!this._shouldAutoRefresh()) {
+            return;
+        }
+        this._pollIntervalId = window.setInterval(() => this._maybeAutoRefresh(), ACTIVE_POLL_MS);
     }
 
     _shouldAutoRefresh() {
@@ -393,8 +370,11 @@ export class FrontendCrawlReportPage extends PlatformPage {
     }
 
     _maybeAutoRefresh() {
-        if (!this._shouldAutoRefresh()) return;
-        this._reloadAll();
+        if (!this._shouldAutoRefresh()) {
+            this._syncPollTimer();
+            return;
+        }
+        this._reloadSummaryAndActiveTab();
     }
 
     _formatDt(value) {
@@ -420,8 +400,12 @@ export class FrontendCrawlReportPage extends PlatformPage {
         return items.find((item) => item.profile.crawl_profile_id === this._profileId) ?? null;
     }
 
+    _profilePayload() {
+        return { crawl_profile_id: this._profileId };
+    }
+
     _reloadAll() {
-        const payload = { crawl_profile_id: this._profileId };
+        const payload = this._profilePayload();
         this._summaryOp.run(payload);
         this._domains.load({ ...payload, status: this._domainStatusFilter || undefined });
         this._urls.load({
@@ -432,10 +416,30 @@ export class FrontendCrawlReportPage extends PlatformPage {
         this._jobs.load(payload);
     }
 
+    _reloadSummaryAndActiveTab() {
+        const payload = this._profilePayload();
+        this._summaryOp.run(payload);
+        if (this._activeTab === 'domains') {
+            this._domains.load({ ...payload, status: this._domainStatusFilter || undefined });
+        } else if (this._activeTab === 'urls') {
+            this._urls.load({
+                ...payload,
+                crawl_status: this._urlStatusFilter || undefined,
+                domain: this._urlDomainFilter || undefined,
+            });
+        } else {
+            this._jobs.load(payload);
+        }
+    }
+
     _onProfileChange(e) {
         this._profileId = e.detail.value;
         this._urlDomainFilter = '';
+        this._rowSnapshots.domains.clear();
+        this._rowSnapshots.urls.clear();
+        this._rowSnapshots.jobs.clear();
         this._reloadAll();
+        this._syncPollTimer();
     }
 
     _onDomainStatusFilterChange(e) {
@@ -479,6 +483,13 @@ export class FrontendCrawlReportPage extends PlatformPage {
             crawl_profile_id: this._profileId,
             crawl_status: this._urlStatusFilter || undefined,
             domain,
+        });
+    }
+
+    _openUrlDetail(row) {
+        this.openModal(FrontendCrawlUrlDetailModal, {
+            crawl_url_id: row.crawl_url_id,
+            crawl_profile_id: this._profileId,
         });
     }
 
@@ -544,6 +555,8 @@ export class FrontendCrawlReportPage extends PlatformPage {
     _tabCount(tab) {
         if (tab === 'domains') return this._countFromSummary('domains_total');
         if (tab === 'jobs') {
+            const total = this._jobs.listTotal;
+            if (total !== null) return total;
             const jobs = this._jobs.state.items;
             return jobs ? jobs.length : 0;
         }
@@ -552,6 +565,50 @@ export class FrontendCrawlReportPage extends PlatformPage {
         const pending = this._countFromSummary('url_pending');
         const failed = this._countFromSummary('url_failed');
         return indexed + fetching + pending + failed;
+    }
+
+    _countFromSummary(key) {
+        const summary = this._summaryOp.state.lastResult;
+        if (!summary) return 0;
+        if (key === 'domains_total') return summary.domains_total;
+        if (key === 'domains_due') return summary.domains_due;
+        const list = key.startsWith('url_') ? summary.url_counts : summary.domain_counts;
+        const status = key.replace(/^(url_|domain_)/, '');
+        const found = list.find((row) => row.status === status);
+        return found ? found.count : 0;
+    }
+
+    _trackRowHighlights() {
+        const highlights = [];
+        this._collectRowHighlights('domains', this._domains.items, 'crawl_domain_id', (row) => row.status, highlights);
+        this._collectRowHighlights('urls', this._urls.items, 'crawl_url_id', (row) => row.crawl_status, highlights);
+        this._collectRowHighlights('jobs', this._jobs.items, 'crawl_job_id', (row) => (
+            `${row.status}:${row.urls_fetched}:${row.urls_indexed}:${row.urls_enriched}:${row.errors}`
+        ), highlights);
+        if (highlights.length > 0) {
+            this._rowHighlightIds = highlights;
+            window.setTimeout(() => {
+                this._rowHighlightIds = [];
+            }, 1600);
+        }
+    }
+
+    _collectRowHighlights(scope, items, idField, signatureFn, highlights) {
+        if (!items) return;
+        const snapshot = this._rowSnapshots[scope];
+        for (const row of items) {
+            const rowId = row[idField];
+            const signature = signatureFn(row);
+            const previous = snapshot.get(rowId);
+            if (previous !== undefined && previous !== signature) {
+                highlights.push(`${scope}:${rowId}`);
+            }
+            snapshot.set(rowId, signature);
+        }
+    }
+
+    _rowClass(scope, rowId) {
+        return this._rowHighlightIds.includes(`${scope}:${rowId}`) ? 'data-row row-updated' : 'data-row';
     }
 
     _renderFilters() {
@@ -601,105 +658,32 @@ export class FrontendCrawlReportPage extends PlatformPage {
         this._queueTickOp.run({ crawl_profile_id: this._profileId, trigger: 'manual' });
     }
 
-    _countFromSummary(key) {
-        const summary = this._summaryOp.state.lastResult;
-        if (!summary) return 0;
-        if (key === 'domains_total') return summary.domains_total;
-        if (key === 'domains_due') return summary.domains_due;
-        const list = key.startsWith('url_') ? summary.url_counts : summary.domain_counts;
-        const status = key.replace(/^(url_|domain_)/, '');
-        const found = list.find((row) => row.status === status);
-        return found ? found.count : 0;
-    }
-
-    _renderRunningBanner() {
-        const summary = this._summaryOp.state.lastResult;
-        const runningJob = summary && summary.running_job;
-        if (!runningJob) return null;
-        return html`
-            <div class="running-banner">
-                <div class="running-banner-title">
-                    <span class="pulse-dot"></span>
-                    ${this.t('crawl_report_page.running_banner_title')}
-                </div>
-                <div class="running-banner-stats">
-                    ${this.t('crawl_report_page.running_banner_stats', {
-                        fetched: runningJob.urls_fetched,
-                        indexed: runningJob.urls_indexed,
-                        enriched: runningJob.urls_enriched,
-                        errors: runningJob.errors,
-                    })}
-                </div>
-            </div>
-        `;
-    }
-
-    _renderSummary() {
-        if (this._summaryOp.state.busy) {
-            return html`<glass-spinner size="sm"></glass-spinner>`;
-        }
-        if (this._summaryOp.state.errorKind === 'forbidden') {
-            return html`
-                <div class="state unavailable">
-                    <div class="state-title">${this.t('crawl_report_page.forbidden')}</div>
-                </div>
-            `;
-        }
-        if (this._summaryOp.state.errorKind === 'unavailable') {
-            return html`
-                <div class="state unavailable">
-                    <div class="state-title">${this.t('crawl_report_page.unavailable')}</div>
-                </div>
-            `;
-        }
-        const dueCount = this._countFromSummary('domains_due');
-        const fetchingCount = this._countFromSummary('url_fetching');
-        const failedCount = this._countFromSummary('url_failed');
-        return html`
-            <div class="summary-grid">
-                <div class="summary-card">
-                    <div class="label">${this.t('crawl_report_page.domains_total')}</div>
-                    <div class="value">${this._countFromSummary('domains_total')}</div>
-                </div>
-                <div class="summary-card ${dueCount > 0 ? 'highlight' : ''}">
-                    <div class="label">${this.t('crawl_report_page.domains_due')}</div>
-                    <div class="value">${dueCount}</div>
-                </div>
-                <div class="summary-card">
-                    <div class="label">${this.t('crawl_report_page.urls_indexed')}</div>
-                    <div class="value">${this._countFromSummary('url_indexed')}</div>
-                </div>
-                <div class="summary-card ${fetchingCount > 0 ? 'warn' : ''}">
-                    <div class="label">${this.t('crawl_report_page.urls_fetching')}</div>
-                    <div class="value">${fetchingCount}</div>
-                </div>
-                <div class="summary-card">
-                    <div class="label">${this.t('crawl_report_page.urls_pending')}</div>
-                    <div class="value">${this._countFromSummary('url_pending')}</div>
-                </div>
-                <div class="summary-card ${failedCount > 0 ? 'danger' : ''}">
-                    <div class="label">${this.t('crawl_report_page.urls_failed')}</div>
-                    <div class="value">${failedCount}</div>
-                </div>
-            </div>
-        `;
-    }
-
     _renderTableLoading() {
         return html`<div class="table-loading"><glass-spinner size="sm"></glass-spinner></div>`;
     }
 
+    _renderTableShell(refreshing, content) {
+        return html`
+            <div class="table-panel ${refreshing ? 'refreshing' : ''}">
+                ${refreshing ? html`<div class="table-refresh-indicator"><glass-spinner size="sm"></glass-spinner></div>` : null}
+                ${content}
+            </div>
+        `;
+    }
+
     _renderDomainsTable() {
-        const { items, loading } = this._domains.state;
-        if (loading) return this._renderTableLoading();
+        const { items, loading, refreshing } = this._domains.state;
+        if (loading && (!items || items.length === 0)) {
+            return this._renderTableShell(false, this._renderTableLoading());
+        }
         if (!items || items.length === 0) {
-            return html`
+            return this._renderTableShell(refreshing, html`
                 <div class="state">
                     <div class="state-title">${this.t('crawl_report_page.empty_domains')}</div>
                 </div>
-            `;
+            `);
         }
-        return html`
+        return this._renderTableShell(refreshing, html`
             <table>
                 <thead>
                     <tr>
@@ -714,7 +698,7 @@ export class FrontendCrawlReportPage extends PlatformPage {
                 </thead>
                 <tbody>
                     ${items.map((row) => html`
-                        <tr class="data-row">
+                        <tr class=${this._rowClass('domains', row.crawl_domain_id)}>
                             <td>
                                 <button type="button" class="domain-link" @click=${() => this._viewDomainUrls(row.domain)}>${row.domain}</button>
                             </td>
@@ -738,20 +722,22 @@ export class FrontendCrawlReportPage extends PlatformPage {
                     `)}
                 </tbody>
             </table>
-        `;
+        `);
     }
 
     _renderUrlsTable() {
-        const { items, loading } = this._urls.state;
-        if (loading) return this._renderTableLoading();
+        const { items, loading, refreshing } = this._urls.state;
+        if (loading && (!items || items.length === 0)) {
+            return this._renderTableShell(false, this._renderTableLoading());
+        }
         if (!items || items.length === 0) {
-            return html`
+            return this._renderTableShell(refreshing, html`
                 <div class="state">
                     <div class="state-title">${this.t('crawl_report_page.empty_urls')}</div>
                 </div>
-            `;
+            `);
         }
-        return html`
+        return this._renderTableShell(refreshing, html`
             <table>
                 <thead>
                     <tr>
@@ -762,38 +748,48 @@ export class FrontendCrawlReportPage extends PlatformPage {
                         <th>${this.t('crawl_report_page.col_enrichment')}</th>
                         <th>${this.t('crawl_report_page.col_last_crawled')}</th>
                         <th>${this.t('crawl_report_page.col_error')}</th>
+                        <th>${this.t('crawl_report_page.col_actions')}</th>
                     </tr>
                 </thead>
                 <tbody>
                     ${items.map((row) => html`
-                        <tr class="data-row">
+                        <tr class=${this._rowClass('urls', row.crawl_url_id)}>
                             <td>
                                 <button type="button" class="domain-link" @click=${() => this._viewDomainUrls(row.domain)}>${row.domain}</button>
                             </td>
-                            <td class="mono">${row.url}</td>
+                            <td class="mono">
+                                <button type="button" class="url-link" @click=${() => this._openUrlDetail(row)}>${row.url}</button>
+                            </td>
                             <td>${this._statusTag(row.crawl_status)}</td>
                             <td>${this._transportTag(row.fetch_transport)}</td>
                             <td>${this._enrichmentTag(row)}</td>
                             <td>${this._formatDt(row.last_crawled_at)}</td>
                             <td class="mono">${row.last_error || '—'}</td>
+                            <td>
+                                <button type="button" class="btn btn-sm" @click=${() => this._openUrlDetail(row)}>
+                                    ${this.t('crawl_report_page.view_url_detail')}
+                                </button>
+                            </td>
                         </tr>
                     `)}
                 </tbody>
             </table>
-        `;
+        `);
     }
 
     _renderJobsTable() {
-        const { items, loading } = this._jobs.state;
-        if (loading) return this._renderTableLoading();
+        const { items, loading, refreshing } = this._jobs.state;
+        if (loading && (!items || items.length === 0)) {
+            return this._renderTableShell(false, this._renderTableLoading());
+        }
         if (!items || items.length === 0) {
-            return html`
+            return this._renderTableShell(refreshing, html`
                 <div class="state">
                     <div class="state-title">${this.t('crawl_report_page.empty_jobs')}</div>
                 </div>
-            `;
+            `);
         }
-        return html`
+        return this._renderTableShell(refreshing, html`
             <table>
                 <thead>
                     <tr>
@@ -808,7 +804,7 @@ export class FrontendCrawlReportPage extends PlatformPage {
                 </thead>
                 <tbody>
                     ${items.map((row) => html`
-                        <tr class="data-row">
+                        <tr class=${this._rowClass('jobs', row.crawl_job_id)}>
                             <td>${this._formatDt(row.started_at)}</td>
                             <td>${this._statusTag(row.status)}</td>
                             <td>${this._triggerLabel(row.trigger)}</td>
@@ -820,7 +816,15 @@ export class FrontendCrawlReportPage extends PlatformPage {
                     `)}
                 </tbody>
             </table>
-        `;
+        `);
+    }
+
+    _summaryErrorKind() {
+        const error = this._summaryOp.state.error;
+        if (!error) return '';
+        if (error.includes('403')) return 'forbidden';
+        if (error.includes('503')) return 'unavailable';
+        return '';
     }
 
     _renderTabContent() {
@@ -833,6 +837,8 @@ export class FrontendCrawlReportPage extends PlatformPage {
         const profileBundle = this._selectedProfileBundle();
         const indexName = profileBundle ? profileBundle.search_index.display_name : null;
         const indexId = profileBundle ? profileBundle.search_index.search_index_id : null;
+        const summary = this._summaryOp.state.lastResult;
+        const summaryRefreshing = this._summaryOp.state.busy && summary !== null;
         return html`
             <page-header
                 title=${this.t('crawl_report_page.title')}
@@ -859,7 +865,12 @@ export class FrontendCrawlReportPage extends PlatformPage {
                         ` : null}
                     </div>
                     <div class="control-actions">
-                        <button type="button" class="btn" @click=${() => this._reloadAll()}>
+                        <button
+                            type="button"
+                            class="btn"
+                            aria-busy=${summaryRefreshing ? 'true' : 'false'}
+                            @click=${() => this._reloadSummaryAndActiveTab()}
+                        >
                             <platform-icon name="refresh" size="16"></platform-icon>
                             ${this.t('crawl_report_page.refresh')}
                         </button>
@@ -873,8 +884,28 @@ export class FrontendCrawlReportPage extends PlatformPage {
                     </div>
                 </section>
 
-                ${this._renderSummary()}
-                ${this._renderRunningBanner()}
+                <crawl-report-metric-strip
+                    .summary=${summary}
+                    .locale=${this._localeSel.value}
+                    .busy=${this._summaryOp.state.busy}
+                    .refreshing=${summaryRefreshing}
+                    .errorKind=${this._summaryErrorKind()}
+                    .countFromSummary=${(key) => this._countFromSummary(key)}
+                ></crawl-report-metric-strip>
+
+                <crawl-report-running-banner
+                    .runningJob=${summary && summary.running_job}
+                    .locale=${this._localeSel.value}
+                ></crawl-report-running-banner>
+
+                <crawl-report-charts-panel
+                    .summary=${summary}
+                    .jobs=${this._jobs.items || []}
+                    .domains=${this._domains.items || []}
+                    .locale=${this._localeSel.value}
+                    .statusLabel=${(status) => this._statusLabel(status)}
+                    .categoryLabel=${(category) => this._categoryLabel(category)}
+                ></crawl-report-charts-panel>
 
                 ${this._shouldAutoRefresh() ? html`
                     <div class="hint">${this.t('crawl_report_page.auto_refresh_hint')}</div>
@@ -899,7 +930,7 @@ export class FrontendCrawlReportPage extends PlatformPage {
                     <div class="filters-panel">${this._renderFilters()}</div>
                 ` : null}
 
-                <div class="table-panel">${this._renderTabContent()}</div>
+                ${this._renderTabContent()}
             </div>
         `;
     }

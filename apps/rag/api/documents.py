@@ -19,6 +19,7 @@ from core.rag.factory import get_rag_provider
 from core.rag.models import (
     DocumentProcessingStatus,
     RAGDocument,
+    RAGDocumentContent,
     RAGIngestTextResponse,
     RAGMetadata,
 )
@@ -269,6 +270,29 @@ async def delete_document(
 
     logger.info(f"Удалён документ {document_id} из namespace {namespace_id}")
     return {"success": True, "document_id": document_id}
+
+
+@router.get(
+    "/namespaces/{namespace_id}/documents/{document_id}/content",
+    response_model=RAGDocumentContent,
+)
+async def get_document_content(
+    namespace_id: str,
+    document_id: str,
+    container: ContainerDep,
+    provider: Annotated[str | None, Query()] = None,
+) -> RAGDocumentContent:
+    """Собранный текст документа из чанков индекса."""
+    await require_registered_rag_namespace(namespace_id, container)
+    settings = get_rag_settings()
+    rag_provider = get_rag_provider(provider, settings=settings) if provider else get_rag_provider(settings=settings)
+    try:
+        content = await rag_provider.get_document_content(namespace_id, document_id)
+    except ValueError as exc:
+        raise HTTPException(status_code=501, detail=str(exc)) from exc
+    if content is None:
+        raise HTTPException(status_code=404, detail="Document content not found")
+    return content
 
 
 @router.get("/documents/{document_id}/status")

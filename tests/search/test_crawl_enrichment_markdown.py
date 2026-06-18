@@ -22,7 +22,7 @@ def test_to_ingest_markdown_is_deterministic():
                 hierarchy=[],
             ),
         ],
-        enrichment_model="qwen/qwen2.5-1.5b-instruct-crawl",
+        enrichment_model="auto",
         enrichment_prompt_version="v1",
     )
     markdown = page.to_ingest_markdown()

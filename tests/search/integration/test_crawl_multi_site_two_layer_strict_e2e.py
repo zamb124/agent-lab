@@ -5,7 +5,7 @@ Strict crawl E2E: multi-site list → HTTP parse/index → index search → LLM 
 - orchestrator tick через REST → TaskIQ search_worker
 - fetch/enrich/ingest в worker-процессе
 - RAG индексация через rag_worker + provider_litserve embeddings
-- LLM enrichment через provider_litserve (порт 9022) при CRAWL__E2E_LITSERVE_LLM=1
+- LLM enrichment через humanitec_llm free pool при CRAWL__E2E_HUMANITEC_LLM=1
 """
 
 from __future__ import annotations
@@ -22,7 +22,7 @@ from tests.search.integration.crawl_strict_e2e_support import (
     poll_index_search_hits,
     poll_indexed_url_count,
     queue_crawl_fetch_for_all_domains,
-    require_crawl_llm_live_gate,
+    require_crawl_humanitec_llm_live_gate,
     seed_strict_sites,
 )
 
@@ -93,7 +93,6 @@ async def test_crawl_multi_site_two_layer_parse_search_then_llm_strict(
     rag_worker,
     rag_service,
     provider_litserve_service,
-    provider_litserve_crawl_llm_service,
     search_container,
     search_system_context,
     unique_id,
@@ -103,13 +102,12 @@ async def test_crawl_multi_site_two_layer_parse_search_then_llm_strict(
     1) parse + index + search (без LLM)
     2) requeue → LLM enrichment → повторный index search с enriched metadata
     """
-    require_crawl_llm_live_gate()
+    require_crawl_humanitec_llm_live_gate()
     _ = (
         search_worker,
         rag_worker,
         rag_service,
         provider_litserve_service,
-        provider_litserve_crawl_llm_service,
         search_system_context,
     )
 

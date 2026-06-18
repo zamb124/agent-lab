@@ -13,7 +13,7 @@ from tests.search.conftest import make_search_index_slug
 from tests.search.integration.crawl_strict_e2e_support import (
     CRAWL_STRICT_ENRICHMENT_MODEL,
     poll_enriched_urls,
-    require_crawl_llm_live_gate,
+    require_crawl_humanitec_llm_live_gate,
 )
 
 pytestmark = [
@@ -29,12 +29,11 @@ async def test_crawl_enrichment_second_fetch_skips_unchanged_url(
     search_client,
     search_worker,
     provider_litserve_service,
-    provider_litserve_crawl_llm_service,
     crawl_search_container,
     unique_id,
 ):
-    require_crawl_llm_live_gate()
-    _ = provider_litserve_service, provider_litserve_crawl_llm_service, search_worker
+    require_crawl_humanitec_llm_live_gate()
+    _ = provider_litserve_service, search_worker
     search_container = crawl_search_container
     search_index_id = make_search_index_slug(unique_id)
     crawl_profile_id = f"cr_{search_index_id}"[:64]

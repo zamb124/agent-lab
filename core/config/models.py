@@ -1322,34 +1322,9 @@ class ProviderLitserveInfraConfig(BaseModel):
         description="api id VAD-модели по умолчанию (должен присутствовать в vad_models).",
     )
 
-    llm_backend: Literal["disabled", "transformers"] = Field(
-        default="disabled",
-        description="Локальный chat LLM для crawl enrichment. disabled — воркер /v1/chat/completions не стартует.",
-    )
-    llm_model_id: str = Field(
-        default="Qwen/Qwen2.5-1.5B-Instruct",
-        description="HuggingFace id chat-модели для POST /v1/chat/completions.",
-    )
-    llm_openai_model_id: str = Field(
-        default="qwen/qwen2.5-1.5b-instruct-crawl",
-        description="OpenAI-compatible id chat-модели в payload и GET /v1/models.",
-    )
-    llm_accelerator: Literal["auto", "cpu", "cuda", "mps"] = Field(
-        default="cuda",
-        description="Устройство для chat LLM; auto — как глобальный accelerator воркера.",
-    )
-    llm_max_input_chars: int = Field(
-        default=12000,
-        ge=512,
-        le=200_000,
-        description="Максимум символов markdown, принимаемых crawl enrichment перед prompt.",
-    )
-    enabled_workers: list[Literal["embedding", "rerank", "stt", "tts", "vad", "llm"]] = Field(
+    enabled_workers: list[Literal["embedding", "rerank", "stt", "tts", "vad"]] = Field(
         default_factory=list,
-        description=(
-            "Явный список LitServe-воркеров процесса. Пусто — embedding/rerank/stt/tts/vad "
-            "и llm только при llm_backend=transformers."
-        ),
+        description="Явный список LitServe-воркеров процесса. Пусто — embedding/rerank/stt/tts/vad.",
     )
 
     hf_token: str | None = None
@@ -1357,7 +1332,7 @@ class ProviderLitserveInfraConfig(BaseModel):
 
 
 class ProviderLitserveConfig(BaseModel):
-    """Локальные модели LitServe: embeddings, rerank, speech и crawl chat LLM."""
+    """Локальные модели LitServe: embeddings, rerank, speech."""
 
     model_config: ClassVar[ConfigDict] = ConfigDict(extra="forbid")
 

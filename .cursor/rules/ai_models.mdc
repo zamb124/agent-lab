@@ -28,13 +28,6 @@ alwaysApply: true
 
 Запрещены отдельные таблицы/namespace `llm_model:*`, `embedding_models`, `rerank_models`, `free_models` и flows-owned model repository/model.
 
-## provider_litserve_crawl (crawl enrichment LLM)
-
-- Virtual provider slug `provider_litserve_crawl` — capability `AICapability.LLM_CHAT` для crawl page enrichment.
-- HTTP endpoint — тот же `provider_litserve.api.base_url` (`POST /v1/chat/completions` в процессе LitServe).
-- Adapter: `core.ai.adapters.provider_litserve_crawl.ProviderLitserveCrawlModelCatalogAdapter`.
-- Вызов только через `core.ai.runtime.create_llm_client_from_call_config` / `LLMCallConfig`; прямой httpx из `apps/search` запрещён.
-
 ## Discovery
 
 - Provider-specific model discovery живёт только в `core.ai.adapters.*`.

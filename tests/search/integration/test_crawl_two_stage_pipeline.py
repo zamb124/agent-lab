@@ -4,7 +4,7 @@ Two-stage crawl pipeline integration tests.
 Layer 1: fetch → raw ingest → indexed + search (must work without LLM).
 Layer 2: async enrich from stored markdown → re-ingest (independent of HTTP refetch).
 
-Enrichment LLM подменяется детерминированным CrawlEnrichedPage (граница LitServe),
+Enrichment LLM подменяется детерминированным CrawlEnrichedPage,
 HTTP fetch и RAG ingest — реальные.
 """
 
@@ -196,7 +196,7 @@ async def test_layer2_enrichment_failure_preserves_layer1_index_and_search(
     )
 
     async def _enrich_fail(*args: object, **kwargs: object):
-        raise ValueError("simulated litserve enrichment failure")
+        raise ValueError("simulated enrichment failure")
 
     monkeypatch.setattr(
         search_container.crawl_orchestrator_service._page_enrichment_service,
@@ -204,7 +204,7 @@ async def test_layer2_enrichment_failure_preserves_layer1_index_and_search(
         _enrich_fail,
     )
 
-    with pytest.raises(ValueError, match="simulated litserve enrichment failure"):
+    with pytest.raises(ValueError, match="simulated enrichment failure"):
         await run_layer2_enrich(
             search_container,
             crawl_url_id=crawl_url_id,
@@ -217,7 +217,7 @@ async def test_layer2_enrichment_failure_preserves_layer1_index_and_search(
     assert crawl_url.document_id is not None
     assert crawl_url.enriched_content_hash is None
     assert crawl_url.last_error is not None
-    assert "simulated litserve enrichment failure" in crawl_url.last_error
+    assert "simulated enrichment failure" in crawl_url.last_error
 
     job_after = await search_container.crawl_job_repository.get(job_id)
     assert job_after.urls_enrichment_failed >= 1

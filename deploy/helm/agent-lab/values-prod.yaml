@@ -28,4 +28,3 @@ observability:
 # После успешной миграции обновить значение до 100Gi и закоммитить.
 litserve:
   modelCacheSize: 50Gi
-  llmBackend: transformers

@@ -8,6 +8,7 @@ from typing import Literal, TypedDict
 from pydantic import Field, field_validator
 
 from core.models import StrictBaseModel
+from core.rag.models import RAGMetadata
 from core.search.index_models import SearchIndexDefinition
 
 CrawlJobTrigger = Literal["scheduler", "manual", "api"]
@@ -272,3 +273,20 @@ class CrawlProfileSummary(StrictBaseModel):
 
 class CrawlUrlListItem(CrawlUrl):
     domain: str
+
+
+class CrawlUrlIndexedContent(StrictBaseModel):
+    document_id: str
+    document_name: str
+    markdown: str
+    page_summary: str | None = None
+    llm_enriched: bool = False
+    chunks_count: int
+    metadata: RAGMetadata = Field(default_factory=dict)
+
+
+class CrawlUrlDetail(StrictBaseModel):
+    url: CrawlUrlListItem
+    extract_title: str | None = None
+    extract_markdown: str | None = None
+    indexed_content: CrawlUrlIndexedContent | None = None

@@ -242,18 +242,6 @@ async def test_enrich_one_url_reads_snapshot_not_http(
     fetch_service = AsyncMock()
     page_enrichment_service = AsyncMock(enrich_markdown=AsyncMock(return_value=enriched_page))
 
-    from collections.abc import AsyncGenerator
-    from contextlib import asynccontextmanager
-
-    @asynccontextmanager
-    async def _noop_enrichment_lock() -> AsyncGenerator[None]:
-        yield
-
-    monkeypatch.setattr(
-        "apps.search.services.crawl.orchestrator_service.crawl_enrichment_lock",
-        _noop_enrichment_lock,
-    )
-
     orchestrator = CrawlOrchestratorService(
         crawl_profile_repository=AsyncMock(get_with_index=AsyncMock(return_value=profile_bundle)),
         crawl_domain_repository=AsyncMock(get=AsyncMock(return_value=_domain())),
@@ -316,20 +304,8 @@ async def test_enrich_failure_keeps_indexed_status(
         async def mark_enriched(self, crawl_url_id: str, **kwargs: object) -> None:
             raise AssertionError("mark_enriched must not run on failure")
 
-    from collections.abc import AsyncGenerator
-    from contextlib import asynccontextmanager
-
-    @asynccontextmanager
-    async def _noop_enrichment_lock() -> AsyncGenerator[None]:
-        yield
-
-    monkeypatch.setattr(
-        "apps.search.services.crawl.orchestrator_service.crawl_enrichment_lock",
-        _noop_enrichment_lock,
-    )
-
     page_enrichment_service = AsyncMock(
-        enrich_markdown=AsyncMock(side_effect=ValueError("litserve timeout")),
+        enrich_markdown=AsyncMock(side_effect=ValueError("humanitec_llm timeout")),
     )
 
     orchestrator = CrawlOrchestratorService(
@@ -344,7 +320,7 @@ async def test_enrich_failure_keeps_indexed_status(
         crawl_config=get_search_settings().crawl,
     )
 
-    with pytest.raises(ValueError, match="litserve timeout"):
+    with pytest.raises(ValueError, match="humanitec_llm timeout"):
         await orchestrator.enrich_one_url("url-1", "job-1", "cr_test")
 
     enrichment_failed_mock.assert_awaited_once()

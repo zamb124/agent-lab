@@ -230,3 +230,66 @@ async def test_upload_multiple_documents(rag_client, unique_namespace_name, auth
 
     assert len(documents) >= 3
 
+
+@pytest.mark.asyncio
+async def test_get_document_content(
+    rag_client,
+    unique_namespace_name,
+    auth_headers_system,
+    provider_litserve_service,
+    rag_worker,
+):
+    """GET /namespaces/{id}/documents/{doc_id}/content возвращает склеенный markdown."""
+    _ = provider_litserve_service, rag_worker
+    ns_response = await rag_client.post(
+        "/rag/api/v1/namespaces",
+        json={"name": unique_namespace_name},
+        headers=auth_headers_system,
+    )
+    namespace_id = ns_response.json()["name"]
+    marker = "document_content_marker_alpha"
+    ingest = await rag_client.post(
+        f"/rag/api/v1/namespaces/{namespace_id}/ingest-text",
+        json={
+            "text": f"First chunk paragraph with {marker}. Second paragraph for content endpoint.",
+            "document_name": "content-test.md",
+            "metadata": {"page_summary": "Test summary"},
+        },
+        headers=auth_headers_system,
+    )
+    assert ingest.status_code == 200
+    document_id = ingest.json()["document_id"]
+
+    response = await rag_client.get(
+        f"/rag/api/v1/namespaces/{namespace_id}/documents/{document_id}/content",
+        headers=auth_headers_system,
+    )
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["document_id"] == document_id
+    assert payload["document_name"] == "content-test.md"
+    assert marker in payload["markdown"]
+    assert payload["chunks_count"] >= 1
+    assert payload["metadata"]["page_summary"] == "Test summary"
+
+
+@pytest.mark.asyncio
+async def test_get_document_content_not_found(
+    rag_client,
+    unique_namespace_name,
+    auth_headers_system,
+):
+    """GET content для несуществующего document_id возвращает 404."""
+    ns_response = await rag_client.post(
+        "/rag/api/v1/namespaces",
+        json={"name": unique_namespace_name},
+        headers=auth_headers_system,
+    )
+    namespace_id = ns_response.json()["name"]
+
+    response = await rag_client.get(
+        f"/rag/api/v1/namespaces/{namespace_id}/documents/missing_doc_id/content",
+        headers=auth_headers_system,
+    )
+    assert response.status_code == 404
+

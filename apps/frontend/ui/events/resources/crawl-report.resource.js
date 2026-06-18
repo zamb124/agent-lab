@@ -41,6 +41,7 @@ export const crawlDomainsResource = createResourceCollection({
     baseUrl: `${BASE}/domains`,
     idField: 'crawl_domain_id',
     operations: ['list'],
+    listPreserveItemsOnRefresh: true,
     listQuery: (payload) => {
         const crawlProfileId = payload && payload.crawl_profile_id;
         if (!crawlProfileId) {
@@ -57,6 +58,7 @@ export const crawlUrlsResource = createResourceCollection({
     baseUrl: `${BASE}/urls`,
     idField: 'crawl_url_id',
     operations: ['list'],
+    listPreserveItemsOnRefresh: true,
     listQuery: (payload) => {
         const crawlProfileId = payload && payload.crawl_profile_id;
         if (!crawlProfileId) {
@@ -74,6 +76,7 @@ export const crawlJobsResource = createResourceCollection({
     baseUrl: `${BASE}/jobs`,
     idField: 'crawl_job_id',
     operations: ['list'],
+    listPreserveItemsOnRefresh: true,
     listQuery: (payload) => {
         const crawlProfileId = payload && payload.crawl_profile_id;
         if (!crawlProfileId) {
@@ -83,6 +86,24 @@ export const crawlJobsResource = createResourceCollection({
         if (payload && payload.status) q.status = payload.status;
         return q;
     },
+});
+
+export const crawlUrlDetailOp = createAsyncOp({
+    name: 'frontend/crawl_url_detail',
+    silent: true,
+    restMirror: { method: 'GET', path: `${BASE}/urls/:crawl_url_id` },
+    request: async ({ payload }) => {
+        const crawlUrlId = payload && payload.crawl_url_id;
+        const crawlProfileId = payload && payload.crawl_profile_id;
+        if (!crawlUrlId) throw new Error('crawl_url_detail: crawl_url_id required');
+        if (!crawlProfileId) throw new Error('crawl_url_detail: crawl_profile_id required');
+        return await httpRequest({
+            method: 'GET',
+            url: `${BASE}/urls/${encodeURIComponent(crawlUrlId)}`,
+            query: { crawl_profile_id: crawlProfileId },
+        });
+    },
+    statusMap: { 403: 'forbidden', 503: 'unavailable', 404: 'not_found' },
 });
 
 function _reloadSummary(ctx, crawlProfileId) {

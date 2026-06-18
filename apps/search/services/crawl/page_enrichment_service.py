@@ -1,16 +1,16 @@
-"""LLM enrichment of crawled pages via provider_litserve chat."""
+"""LLM enrichment of crawled pages via platform humanitec_llm free pool."""
 
 from __future__ import annotations
 
 import time
 
 from apps.search.config import SearchCrawlEnrichmentConfig
-from core.ai.llm_config import LLMCallConfig
-from core.ai.providers import PROVIDER_LITSERVE_CRAWL
-from core.ai.runtime import create_llm_client_from_call_config
+from core.ai.models import ResolvedAIModel
+from core.ai.providers import AICapability
+from core.ai.requirements import AIRequestRequirements, AISelection
+from core.ai.resolver import resolve_ai_model
+from core.ai.runtime import create_llm_client_from_ai_model
 from core.clients.llm.client import LLMClient
-from core.config import get_settings
-from core.config.openai_v1_base_url import normalize_openai_v1_base_url
 from core.crawl.models import (
     CrawlEnrichedPage,
     CrawlEnrichedPageLLMOutput,
@@ -18,8 +18,8 @@ from core.crawl.models import (
     CrawlProfile,
 )
 from core.logging import get_logger
-from core.rag.openai_http_contracts import PROVIDER_LITSERVE_PLACEHOLDER_BEARER
 from core.tracing.operation_span import traced_operation
+from core.types import JsonObject
 
 logger = get_logger(__name__)
 
@@ -30,21 +30,45 @@ _ENRICHMENT_SYSTEM_PROMPT = (
     "The chunk must be self-contained and cite hierarchy headings from the page when available."
 )
 
+_CRAWL_ENRICHMENT_LLM_CONTEXT: JsonObject = {"profile": "off", "budget": "max"}
+
 
 class CrawlPageEnrichmentService:
     def __init__(self, enrichment_config: SearchCrawlEnrichmentConfig) -> None:
         self._enrichment_config: SearchCrawlEnrichmentConfig = enrichment_config
 
-    def _resolve_litserve_base_url(self) -> str:
-        configured = self._enrichment_config.litserve_base_url
-        if configured is not None and configured.strip():
-            return normalize_openai_v1_base_url(configured.strip())
-        return get_settings().provider_litserve.resolve_openai_v1_base_url()
-
     def _resolve_enrichment_model(self, profile: CrawlProfile) -> str:
         if profile.enrichment_model is not None and profile.enrichment_model.strip():
             return profile.enrichment_model.strip()
-        return self._enrichment_config.default_model.strip()
+        return self._enrichment_config.model.strip()
+
+    def _resolve_enrichment_provider(self) -> str:
+        return self._enrichment_config.provider.strip()
+
+    def _resolve_enrichment_llm(self, profile: CrawlProfile) -> ResolvedAIModel:
+        provider = self._resolve_enrichment_provider()
+        model = self._resolve_enrichment_model(profile)
+        requirements = AIRequestRequirements(
+            structured_output=True,
+            json_mode=True,
+            free_only=True,
+        )
+        selection = AISelection(provider=provider, model=model)
+        resolved = resolve_ai_model(
+            AICapability.LLM_CHAT,
+            requirements=requirements,
+            selection=selection,
+            include_platform_default=False,
+        )
+        if resolved is None:
+            raise ValueError(
+                f"crawl enrichment: LLM route не разрешён provider={provider!r} model={model!r}"
+            )
+        if resolved.provider is None or not resolved.provider.strip():
+            raise ValueError("crawl enrichment: resolved provider пуст")
+        if resolved.model is None or not resolved.model.strip():
+            raise ValueError("crawl enrichment: resolved model пуст")
+        return resolved
 
     def _truncate_markdown(self, markdown: str) -> str:
         max_input_chars = self._enrichment_config.max_input_chars
@@ -83,23 +107,23 @@ class CrawlPageEnrichmentService:
         profile: CrawlProfile,
         crawl_domain_id: str,
     ) -> CrawlEnrichedPage:
-        enrichment_model = self._resolve_enrichment_model(profile)
+        resolved = self._resolve_enrichment_llm(profile)
+        enrichment_provider = resolved.provider
+        enrichment_model_selected = resolved.model
+        if enrichment_provider is None or enrichment_model_selected is None:
+            raise ValueError("crawl enrichment: resolved LLM identity incomplete")
         prompt_version = self._enrichment_config.prompt_version
         truncated_markdown = self._truncate_markdown(markdown)
         user_prompt = self._build_user_prompt(truncated_markdown)
-        llm_client = create_llm_client_from_call_config(
-            LLMCallConfig(
-                provider=PROVIDER_LITSERVE_CRAWL,
-                model=enrichment_model,
-                base_url=self._resolve_litserve_base_url(),
-                api_key=PROVIDER_LITSERVE_PLACEHOLDER_BEARER,
-                max_tokens=4096,
-                temperature=0.0,
-            ),
+        llm_client = create_llm_client_from_ai_model(
+            resolved,
+            temperature=0.0,
+            max_tokens=4096,
+            allow_platform_paid_fallback=False,
         )
         if not isinstance(llm_client, LLMClient):
             raise RuntimeError("crawl page enrichment requires LLMClient")
-        llm_client.timeout = self._enrichment_config.timeout_seconds
+        llm_client.timeout = int(self._enrichment_config.timeout_seconds)
         llm_client.first_token_timeout = self._enrichment_config.timeout_seconds
         started_at = time.monotonic()
         async with traced_operation(
@@ -107,7 +131,9 @@ class CrawlPageEnrichmentService:
             extra_attributes={
                 "crawl_domain_id": crawl_domain_id,
                 "url": url,
-                "enrichment_model": enrichment_model,
+                "enrichment_provider": enrichment_provider,
+                "enrichment_model": enrichment_model_selected,
+                "enrichment_cost_origin": resolved.cost_origin,
             },
         ) as span:
             llm_output = await llm_client.chat(
@@ -116,10 +142,14 @@ class CrawlPageEnrichmentService:
                     {"role": "user", "content": user_prompt},
                 ],
                 response_model=CrawlEnrichedPageLLMOutput,
+                llm_context=_CRAWL_ENRICHMENT_LLM_CONTEXT,
             )
+            used_model = llm_client.model.strip()
+            if not used_model:
+                raise ValueError("crawl enrichment: LLM model пуст после вызова")
             enriched_page = CrawlEnrichedPage.from_llm_output(
                 llm_output,
-                enrichment_model=enrichment_model,
+                enrichment_model=used_model,
                 enrichment_prompt_version=prompt_version,
             )
             latency_ms = int((time.monotonic() - started_at) * 1000)
@@ -127,12 +157,14 @@ class CrawlPageEnrichmentService:
                 {
                     "chunk_count": len(enriched_page.chunks),
                     "llm_latency_ms": latency_ms,
+                    "llm_model_used": used_model,
                 }
             )
             logger.info(
-                "crawl enrichment completed url=%s model=%s chunks=%s latency_ms=%s",
+                "crawl enrichment completed url=%s provider=%s model=%s chunks=%s latency_ms=%s",
                 url,
-                enrichment_model,
+                enrichment_provider,
+                used_model,
                 len(enriched_page.chunks),
                 latency_ms,
             )

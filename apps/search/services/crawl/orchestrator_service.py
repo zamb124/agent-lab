@@ -13,7 +13,6 @@ from apps.search.db.crawl_repositories import (
     CrawlProfileRepository,
     CrawlUrlRepository,
 )
-from apps.search.services.crawl.crawl_enrichment_lock import crawl_enrichment_lock
 from apps.search.services.crawl.fetch_service import CrawlFetchService
 from apps.search.services.crawl.ingest_service import CrawlIngestService
 from apps.search.services.crawl.page_enrichment_service import CrawlPageEnrichmentService
@@ -378,30 +377,29 @@ class CrawlOrchestratorService:
             fetch_transport=crawl_url.fetch_transport or "http",
         )
         try:
-            async with crawl_enrichment_lock():
-                enriched_page = await self._page_enrichment_service.enrich_markdown(
-                    markdown=extract_markdown,
-                    url=url,
-                    profile=profile,
-                    crawl_domain_id=crawl_url.crawl_domain_id,
-                )
-                enriched_content_hash = compute_enriched_content_hash(enriched_page)
-                _ = await self._ingest_service.reingest_enriched_page(
-                    search_index=profile_bundle.search_index,
-                    crawl_job_id=crawl_job_id,
-                    crawl_profile_id=crawl_profile_id,
-                    domain=domain,
-                    document_id=crawl_url.document_id,
-                    fetched=fetched,
-                    enriched_page=enriched_page,
-                )
-                await self._crawl_url_repository.mark_enriched(
-                    crawl_url_id,
-                    enriched_content_hash=enriched_content_hash,
-                    enrichment_model=enriched_page.enrichment_model,
-                    enrichment_prompt_version=enriched_page.enrichment_prompt_version,
-                )
-                await self._crawl_job_repository.increment(crawl_job_id, urls_enriched=1)
+            enriched_page = await self._page_enrichment_service.enrich_markdown(
+                markdown=extract_markdown,
+                url=url,
+                profile=profile,
+                crawl_domain_id=crawl_url.crawl_domain_id,
+            )
+            enriched_content_hash = compute_enriched_content_hash(enriched_page)
+            _ = await self._ingest_service.reingest_enriched_page(
+                search_index=profile_bundle.search_index,
+                crawl_job_id=crawl_job_id,
+                crawl_profile_id=crawl_profile_id,
+                domain=domain,
+                document_id=crawl_url.document_id,
+                fetched=fetched,
+                enriched_page=enriched_page,
+            )
+            await self._crawl_url_repository.mark_enriched(
+                crawl_url_id,
+                enriched_content_hash=enriched_content_hash,
+                enrichment_model=enriched_page.enrichment_model,
+                enrichment_prompt_version=enriched_page.enrichment_prompt_version,
+            )
+            await self._crawl_job_repository.increment(crawl_job_id, urls_enriched=1)
         except Exception as exc:
             await self._crawl_url_repository.mark_enrichment_failed(crawl_url_id, str(exc))
             await self._crawl_job_repository.increment(

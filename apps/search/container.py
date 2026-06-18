@@ -167,6 +167,7 @@ class SearchContainer(BaseContainer):
             crawl_domain_repository=self.crawl_domain_repository,
             crawl_url_repository=self.crawl_url_repository,
             crawl_job_repository=self.crawl_job_repository,
+            rag_client=self.rag_client,
         )
 
     @lazy

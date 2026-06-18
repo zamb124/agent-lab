@@ -156,6 +156,29 @@ def _url_row_to_model(row: CrawlUrlRow) -> CrawlUrl:
     )
 
 
+def _crawl_url_to_list_item(url_model: CrawlUrl, domain: str) -> CrawlUrlListItem:
+    return CrawlUrlListItem(
+        crawl_url_id=url_model.crawl_url_id,
+        crawl_domain_id=url_model.crawl_domain_id,
+        url=url_model.url,
+        canonical_url=url_model.canonical_url,
+        sitemap_lastmod=url_model.sitemap_lastmod,
+        content_hash=url_model.content_hash,
+        extract_content_hash=url_model.extract_content_hash,
+        enriched_content_hash=url_model.enriched_content_hash,
+        enrichment_model=url_model.enrichment_model,
+        enrichment_prompt_version=url_model.enrichment_prompt_version,
+        crawl_status=url_model.crawl_status,
+        fetch_transport=url_model.fetch_transport,
+        document_id=url_model.document_id,
+        last_error=url_model.last_error,
+        last_crawled_at=url_model.last_crawled_at,
+        created_at=url_model.created_at,
+        updated_at=url_model.updated_at,
+        domain=domain,
+    )
+
+
 def _job_row_to_model(row: CrawlJobRow) -> CrawlJob:
     return CrawlJob(
         crawl_job_id=row.crawl_job_id,
@@ -806,29 +829,35 @@ class CrawlUrlRepository:
         items: list[CrawlUrlListItem] = []
         for url_row, domain_cell in rows:
             url_model = _url_row_to_model(url_row)
-            items.append(
-                CrawlUrlListItem(
-                    crawl_url_id=url_model.crawl_url_id,
-                    crawl_domain_id=url_model.crawl_domain_id,
-                    url=url_model.url,
-                    canonical_url=url_model.canonical_url,
-                    sitemap_lastmod=url_model.sitemap_lastmod,
-                    content_hash=url_model.content_hash,
-                    crawl_status=url_model.crawl_status,
-                    document_id=url_model.document_id,
-                    last_error=url_model.last_error,
-                    last_crawled_at=url_model.last_crawled_at,
-                    created_at=url_model.created_at,
-                    updated_at=url_model.updated_at,
-                    domain=domain_cell,
-                )
-            )
+            items.append(_crawl_url_to_list_item(url_model, domain_cell))
         return OffsetPage[CrawlUrlListItem](
             items=items,
             total=total,
             limit=limit,
             offset=offset,
         )
+
+    async def get_for_profile(
+        self,
+        crawl_url_id: str,
+        crawl_profile_id: str,
+    ) -> tuple[CrawlUrlListItem, str | None, str | None]:
+        async with self._db.session() as session:
+            stmt = (
+                select(CrawlUrlRow, CrawlDomainRow.domain)
+                .join(CrawlDomainRow, CrawlUrlRow.crawl_domain_id == CrawlDomainRow.crawl_domain_id)
+                .where(
+                    CrawlUrlRow.crawl_url_id == crawl_url_id,
+                    CrawlDomainRow.crawl_profile_id == crawl_profile_id,
+                )
+            )
+            row = (await session.execute(stmt)).tuples().one_or_none()
+        if row is None:
+            raise ValueError(f"crawl url not found: crawl_url_id={crawl_url_id}")
+        url_row, domain_cell = row
+        url_model = _url_row_to_model(url_row)
+        list_item = _crawl_url_to_list_item(url_model, domain_cell)
+        return list_item, url_row.extract_title, url_row.extract_markdown
 
 
 class CrawlJobRepository:

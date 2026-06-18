@@ -11,6 +11,7 @@ from apps.search.db.crawl_repositories import (
     CrawlUrlRepository,
 )
 from apps.search.services.crawl.report_service import CrawlReportService
+from core.clients.rag_client import RagClient
 from core.clients.redis_client import RedisClient
 from core.clients.search_client import SearchClient
 from core.config import get_settings
@@ -91,7 +92,12 @@ class FrontendContainer(BaseContainer):
             crawl_domain_repository=CrawlDomainRepository(self.search_database),
             crawl_url_repository=CrawlUrlRepository(self.search_database),
             crawl_job_repository=CrawlJobRepository(self.search_database),
+            rag_client=self.rag_client,
         )
+
+    @lazy
+    def rag_client(self) -> RagClient:
+        return RagClient(self.service_client)
 
     @lazy
     def search_client(self) -> SearchClient:

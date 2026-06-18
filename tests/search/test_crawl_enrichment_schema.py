@@ -21,7 +21,7 @@ def test_crawl_enriched_page_from_valid_json():
     )
     page = CrawlEnrichedPage.from_llm_output(
         payload,
-        enrichment_model="qwen/qwen2.5-1.5b-instruct-crawl",
+        enrichment_model="auto",
         enrichment_prompt_version="v1",
     )
     assert page.page_summary == "Example documentation page"
@@ -33,7 +33,7 @@ def test_crawl_enriched_page_rejects_empty_chunks():
         _ = CrawlEnrichedPage(
             page_summary="Summary",
             chunks=[],
-            enrichment_model="qwen/qwen2.5-1.5b-instruct-crawl",
+            enrichment_model="auto",
             enrichment_prompt_version="v1",
         )
 

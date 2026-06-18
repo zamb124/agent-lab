@@ -215,6 +215,32 @@ async def test_upload_and_get_document(rag_provider_pgvector, ns_name, rag_compa
     assert all(r.company_id == rag_company_id for r in rows)
     assert all(r.document_name == "python.txt" for r in rows)
     assert "programming language" in "".join(r.content for r in rows).lower()
+
+
+@pytest.mark.asyncio
+async def test_get_document_content(rag_provider_pgvector, ns_name, rag_company_id):
+    """get_document_content склеивает чанки по chunk_index."""
+    doc = await rag_provider_pgvector.upload_document_from_text(
+        namespace_id=ns_name,
+        text="Chunk one content. Chunk two content follows.",
+        document_name="chunks.txt",
+        metadata=_upload_metadata(rag_company_id, {"page_summary": "Summary line"}),
+    )
+    content = await rag_provider_pgvector.get_document_content(ns_name, doc.document_id)
+    assert content is not None
+    assert content.document_id == doc.document_id
+    assert content.document_name == "chunks.txt"
+    assert "Chunk one content" in content.markdown
+    assert "Chunk two content" in content.markdown
+    assert content.chunks_count >= 1
+    assert content.metadata.get("page_summary") == "Summary line"
+
+
+@pytest.mark.asyncio
+async def test_get_document_content_missing(rag_provider_pgvector, ns_name):
+    """get_document_content для отсутствующего document_id возвращает None."""
+    content = await rag_provider_pgvector.get_document_content(ns_name, "missing_document_id")
+    assert content is None
     assert all(r.embedding is not None for r in rows)
     assert [r.chunk_index for r in rows] == list(range(len(rows)))
     assert all(r.total_chunks == rows[0].total_chunks for r in rows)

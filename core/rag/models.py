@@ -104,6 +104,16 @@ class RAGIngestTextResponse(StrictBaseModel):
     provider: str
 
 
+class RAGDocumentContent(StrictBaseModel):
+    """Собранный текст документа из чанков индекса."""
+
+    document_id: str
+    document_name: str
+    markdown: str
+    chunks_count: int
+    metadata: RAGMetadata = PydanticField(default_factory=dict)
+
+
 class RAGDocument(StrictBaseModel):
     """Универсальная модель документа для RAG"""
 

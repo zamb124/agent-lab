@@ -693,11 +693,6 @@ def search_worker(rag_worker, rag_service, search_service):
     crawl_fetch_url вызывает RAG ingest_text по HTTP — нужен rag_service (:9002).
     """
     _ = rag_worker, rag_service, search_service
-    crawl_llm_env: dict[str, str] = {}
-    if os.getenv("CRAWL__E2E_LITSERVE_LLM") == "1":
-        crawl_llm_env = {
-            "SEARCH__CRAWL__ENRICHMENT__LITSERVE_BASE_URL": "http://localhost:9022/v1",
-        }
     manager = SessionWorkerManager(
         name="SearchWorker",
         lock_file=_SEARCH_WORKER_LOCK,
@@ -727,7 +722,6 @@ def search_worker(rag_worker, rag_service, search_service):
             "RAG__EMBEDDING__API__DIMENSION": "1024",
             "RAG__EMBEDDING__API__MRL_OUTPUT_DIMENSION": "1024",
             "PROVIDER_LITSERVE__API__BASE_URL": "http://localhost:9014/v1",
-            **crawl_llm_env,
         },
         cleanup_patterns=[
             "apps.search_worker.worker",

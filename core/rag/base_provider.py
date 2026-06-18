@@ -14,6 +14,7 @@ from core.files.types import ext_to_mime
 from core.logging import get_logger
 from core.rag.models import (
     RAGDocument,
+    RAGDocumentContent,
     RAGMetadata,
     RAGMetadataFilter,
     RAGNamespace,
@@ -340,6 +341,15 @@ class BaseRAGProvider(ABC):
         document_id: str
     ) -> RAGDocument | None:
         """Получает информацию о документе"""
+        pass
+
+    @abstractmethod
+    async def get_document_content(
+        self,
+        namespace_id: str,
+        document_id: str,
+    ) -> RAGDocumentContent | None:
+        """Собирает полный текст документа из чанков индекса."""
         pass
 
     @abstractmethod

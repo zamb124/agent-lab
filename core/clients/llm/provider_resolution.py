@@ -18,7 +18,6 @@ from core.ai.providers import (
     PLATFORM_FREE_MODEL_CANDIDATE_PROVIDER_ORDER,
     PLATFORM_FREE_MODEL_CANDIDATE_PROVIDER_SLUGS,
     PROVIDER_LITSERVE,
-    PROVIDER_LITSERVE_CRAWL,
 )
 from core.config.base import BaseSettings
 from core.config.llm_openai_compat import yandex_llm_openai_root_from_provider_cfg
@@ -180,7 +179,7 @@ def _get_default_base_url(provider: str, settings: BaseSettings) -> str:
         return LLM_PROVIDER_DEFAULT_BASE_URLS[provider]
     if provider == "custom_openai_compatible":
         raise ValueError("custom_openai_compatible LLM требует явный base_url")
-    if provider in {PROVIDER_LITSERVE, PROVIDER_LITSERVE_CRAWL}:
+    if provider == PROVIDER_LITSERVE:
         return settings.provider_litserve.resolve_openai_v1_base_url()
     raise ValueError(f"Неизвестный LLM провайдер: {provider}")
 

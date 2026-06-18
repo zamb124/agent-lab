@@ -62,6 +62,8 @@ const INITIAL_SLICE = freeze({
     items: freeze([]),
     byId: freeze({}),
     loading: false,
+    refreshing: false,
+    listTotal: null,
     error: null,
     busyIds: freeze({}),
     lastError: freeze({}),
@@ -119,6 +121,7 @@ export function createResourceCollection(options) {
     const listQuery = options.listQuery || (() => ({ limit: 200 }));
     const mapItem = options.mapItem || ((x) => x);
     const listFetchAllPages = options.listFetchAllPages === true;
+    const listPreserveItemsOnRefresh = options.listPreserveItemsOnRefresh === true;
     const buildItemUrl = options.buildItemUrl || ((id) => `${baseUrl}/${encodeURIComponent(id)}`);
     const reloadAfterMutation = options.reloadAfterMutation !== false;
     const requestHeaders = typeof options.requestHeaders === 'function' ? options.requestHeaders : null;
@@ -182,19 +185,24 @@ export function createResourceCollection(options) {
 
     const hasCreate = operations.includes('create');
 
-    function _withItems(state, items) {
+    function _withItems(state, items, listTotal) {
         const list = items.map(mapItem);
         const byId = {};
         for (const item of list) {
             byId[item[idField]] = item;
         }
-        return freeze({
+        const next = {
             ...state,
             items: freeze(list),
             byId: freeze(byId),
             loading: false,
+            refreshing: false,
             error: null,
-        });
+        };
+        if (typeof listTotal === 'number') {
+            next.listTotal = listTotal;
+        }
+        return freeze(next);
     }
 
     function _withItem(state, item) {
@@ -275,15 +283,20 @@ export function createResourceCollection(options) {
     function _baseReducer(state, event) {
         switch (event.type) {
             case events.LIST_REQUESTED:
-                return freeze({ ...state, loading: true, error: null });
+                if (listPreserveItemsOnRefresh && state.items.length > 0) {
+                    return freeze({ ...state, refreshing: true, error: null });
+                }
+                return freeze({ ...state, loading: true, refreshing: false, error: null });
             case events.LIST_LOADED: {
                 if (!event.payload || !Array.isArray(event.payload.items)) {
                     throw new Error(`createResourceCollection(${name}): LIST_LOADED payload.items required (array)`);
                 }
-                return _withItems(state, event.payload.items);
+                const listTotal = event.payload.total;
+                const resolvedTotal = typeof listTotal === 'number' ? listTotal : undefined;
+                return _withItems(state, event.payload.items, resolvedTotal);
             }
             case events.LIST_FAILED:
-                return freeze({ ...state, loading: false, error: _requireMessage(event, 'LIST_FAILED') });
+                return freeze({ ...state, loading: false, refreshing: false, error: _requireMessage(event, 'LIST_FAILED') });
             case events.ITEM_LOADED:
                 return _withItem(state, _requireItem(event, 'ITEM_LOADED'));
             case events.CREATE_REQUESTED: {
@@ -360,6 +373,11 @@ export function createResourceCollection(options) {
         all:      (state) => _readSlice(state).items,
         byId:     (state) => _readSlice(state).byId,
         loading:  (state) => Boolean(_readSlice(state).loading),
+        refreshing: (state) => Boolean(_readSlice(state).refreshing),
+        listTotal: (state) => {
+            const total = _readSlice(state).listTotal;
+            return typeof total === 'number' ? total : null;
+        },
         error:    (state) => _readSlice(state).error,
         busyIds:  (state) => _readSlice(state).busyIds,
         lastError:(state) => _readSlice(state).lastError,
@@ -460,7 +478,7 @@ export function createResourceCollection(options) {
                             }
                             off += pageLimit;
                         }
-                        ctx.dispatch(events.LIST_LOADED, { items: mergedItems }, { causation_id: event.id, source: _transportSource() });
+                        ctx.dispatch(events.LIST_LOADED, { items: mergedItems, total }, { causation_id: event.id, source: _transportSource() });
                         return;
                     }
                     data = await _doRequest({
@@ -482,7 +500,14 @@ export function createResourceCollection(options) {
                 if (!data || !Array.isArray(data.items)) {
                     throw new Error(`createResourceCollection(${name}): list response.items missing or not array`);
                 }
-                ctx.dispatch(events.LIST_LOADED, { items: data.items }, { causation_id: event.id, source: _transportSource() });
+                ctx.dispatch(
+                    events.LIST_LOADED,
+                    {
+                        items: data.items,
+                        total: typeof data.total === 'number' ? data.total : undefined,
+                    },
+                    { causation_id: event.id, source: _transportSource() },
+                );
                 return;
             }
             case events.ITEM_REQUESTED: {

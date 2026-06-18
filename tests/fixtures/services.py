@@ -323,42 +323,6 @@ def provider_litserve_service():
         yield
 
 
-_PROVIDER_LITSERVE_CRAWL_LLM_LOCK = "/tmp/platform_test_provider_litserve_crawl_llm.lock"
-_PROVIDER_LITSERVE_CRAWL_LLM_PID = "/tmp/platform_test_provider_litserve_crawl_llm.pid"
-_PROVIDER_LITSERVE_CRAWL_LLM_PORT = 9022
-
-
-@pytest.fixture(scope="session")
-def provider_litserve_crawl_llm_service():
-    """LitServe с chat LLM (тот же apps.provider_litserve.main, порт 9022)."""
-    import os
-
-    if os.getenv("CRAWL__E2E_LITSERVE_LLM") != "1":
-        pytest.skip("CRAWL__E2E_LITSERVE_LLM=1 required for crawl LLM live tests")
-    manager = SessionServerManager(
-        name="ProviderLitserveCrawlLLM",
-        lock_file=_PROVIDER_LITSERVE_CRAWL_LLM_LOCK,
-        pid_file=_PROVIDER_LITSERVE_CRAWL_LLM_PID,
-        app_path="apps.provider_litserve.main:app",
-        port=_PROVIDER_LITSERVE_CRAWL_LLM_PORT,
-        startup_wait=300.0,
-        log_file="/tmp/provider_litserve_crawl_llm_test.log",
-        err_file="/tmp/provider_litserve_crawl_llm_test_err.log",
-        env={
-            **_COMMON_TEST_ENV,
-            "PROVIDER_LITSERVE__API__BASE_URL": f"http://localhost:{_PROVIDER_LITSERVE_CRAWL_LLM_PORT}/v1",
-            "PROVIDER_LITSERVE__INFRA__LLM_BACKEND": "transformers",
-            "PROVIDER_LITSERVE__INFRA__LLM_ACCELERATOR": "auto",
-            "PROVIDER_LITSERVE__INFRA__ACCELERATOR": "auto",
-            "PROVIDER_LITSERVE__INFRA__ENABLED_WORKERS": '["llm"]',
-            "PROVIDER_LITSERVE__INFRA__GATEWAY_PORT": str(_PROVIDER_LITSERVE_CRAWL_LLM_PORT),
-            "PROVIDER_LITSERVE__INFRA__SQLITE_PATH": "/tmp/platform_test_provider_litserve_crawl_llm_registry.db",
-        },
-    )
-    with manager.start():
-        yield
-
-
 _VOICE_SERVER_LOCK = "/tmp/platform_test_voice_server.lock"
 _VOICE_SERVER_PID = "/tmp/platform_test_voice_server.pid"
 

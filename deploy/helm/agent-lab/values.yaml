@@ -657,7 +657,7 @@ litserve:
   port: 8014
   serviceName: provider-litserve
   # PVC под HF cache: GigaAM v3 (~3 Gi), Silero TTS v5 (~150 Mi), Silero VAD (~50 Mi),
-  # Qwen3-Embedding-0.6B, Qwen3-Reranker-0.6B, малый chat-Qwen (~1.5B) + запас
+  # Qwen3-Embedding-0.6B, Qwen3-Reranker-0.6B + запас
   # (gigaam/silero-tts/silero-vad/qwen/flagllm) → берём 100Gi.
   modelCacheSize: 100Gi
   modelId: Qwen/Qwen3-Reranker-0.6B
@@ -670,12 +670,8 @@ litserve:
   # Загружать embedding-модель в bfloat16 (экономия ~50% VRAM на RTX A2000 6GB).
   # Отключить: embeddingUseBf16: "false"
   embeddingUseBf16: "true"
-  # Crawl enrichment chat LLM в том же LitServe-процессе (POST /v1/chat/completions).
-  llmBackend: disabled
-  llmModelId: Qwen/Qwen2.5-1.5B-Instruct
-  llmOpenaiModelId: qwen/qwen2.5-1.5b-instruct-crawl
   resources:
-    # Память: GigaAM v3, Silero TTS/VAD, Qwen3-Reranker-0.6B, chat 1.5B, Qwen3-Embedding-0.6B.
+    # Память: GigaAM v3, Silero TTS/VAD, Qwen3-Reranker-0.6B, Qwen3-Embedding-0.6B.
     # Пара 0.6B снижает пик RSS vs 4B/8B; limits с запасом под суммарный RSS воркеров.
     # allocatable памяти ноды (kubelet) должен быть >= limits.memory, иначе Pod Pending.
     requests:

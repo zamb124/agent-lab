@@ -13,7 +13,7 @@ from httpx import ASGITransport, AsyncClient
 
 from apps.frontend.config import reset_frontend_settings
 from core.crawl.models import CrawlDomainSeed
-from tests.search.integration.test_crawl_report_api import _create_profile
+from tests.search.integration.test_crawl_report_api import _create_profile, _seed_crawl_urls
 
 pytest_plugins = ["tests.search.conftest"]
 
@@ -167,47 +167,38 @@ async def test_crawl_report_run_domain_system(
 
 
 @pytest.mark.asyncio
-async def test_crawl_report_run_domain_system(
+async def test_crawl_report_url_detail_system(
     frontend_client_system,
     search_container,
     search_system_context,
     unique_id,
-    monkeypatch: pytest.MonkeyPatch,
 ):
     _ = search_system_context
-
-    async def _noop_enqueue(task_name: str, *args: object, **kwargs: object) -> None:
-        _ = task_name
-        _ = args
-        _ = kwargs
-
-    monkeypatch.setattr(
-        "apps.search.services.crawl.orchestrator_service._enqueue_task",
-        _noop_enqueue,
-    )
-
     crawl_profile_id = await _create_profile(search_container, unique_id)
-    now = datetime.now(UTC)
-    await search_container.crawl_domain_repository.upsert_seed_batch(
-        crawl_profile_id,
-        [CrawlDomainSeed(domain="frontend-run.example.com", category="news")],
-        next_crawl_after=now,
-    )
-    domain = (
-        await search_container.crawl_domain_repository.list_page(
-            crawl_profile_id=crawl_profile_id,
-            status=None,
-            limit=1,
-            offset=0,
-        )
-    ).items[0]
+    _pending_id, indexed_id = await _seed_crawl_urls(search_container, crawl_profile_id, unique_id)
 
-    response = await frontend_client_system.post(
-        f"/frontend/api/crawl-report/domains/{domain.crawl_domain_id}/run",
+    response = await frontend_client_system.get(
+        f"/frontend/api/crawl-report/urls/{indexed_id}",
         params={"crawl_profile_id": crawl_profile_id},
-        json={},
     )
-    assert response.status_code == 202
+    assert response.status_code == 200
     payload = response.json()
-    assert payload["crawl_domain_id"] == domain.crawl_domain_id
-    assert payload["status"] == "queued"
+    assert payload["url"]["crawl_url_id"] == indexed_id
+    assert payload["extract_title"] == f"Title {unique_id}"
+
+
+@pytest.mark.asyncio
+async def test_crawl_report_url_detail_forbidden_for_non_system(
+    frontend_client_with_auth,
+    search_container,
+    search_system_context,
+    unique_id,
+):
+    _ = search_system_context
+    crawl_profile_id = await _create_profile(search_container, unique_id)
+
+    response = await frontend_client_with_auth.get(
+        f"/frontend/api/crawl-report/urls/missing_{unique_id}",
+        params={"crawl_profile_id": crawl_profile_id},
+    )
+    assert response.status_code == 403
