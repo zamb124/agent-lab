@@ -10,6 +10,9 @@
     "activism",
     "tech",
     "ai",
+    "data_science",
+    "infrastructure",
+    "browser",
     "software",
     "hardware",
     "bare_metal",
@@ -130,6 +133,9 @@
     "activism",
     "tech",
     "ai",
+    "data_science",
+    "infrastructure",
+    "browser",
     "software",
     "hardware",
     "bare_metal",
@@ -264,7 +270,6 @@
     "deep_learning",
     "nlp",
     "computer_vision",
-    "data_science",
     "analytics",
     "database",
     "sql",
@@ -568,6 +573,21 @@
     [
       "tech",
       "cloud"
+    ],
+    [
+      "tech",
+      "cloud",
+      "infrastructure"
+    ],
+    [
+      "tech",
+      "software",
+      "browser"
+    ],
+    [
+      "tech",
+      "ai",
+      "data_science"
     ],
     [
       "tech",

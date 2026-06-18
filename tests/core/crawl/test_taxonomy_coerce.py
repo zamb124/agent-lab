@@ -97,3 +97,34 @@ def test_coerce_accepts_bare_metal_tag() -> None:
     )
     validate_filter_metadata_against_taxonomy(coerced, taxonomy)
     assert "bare_metal" in coerced.topic_tags
+
+
+def test_coerce_accepts_data_science_infrastructure_browser() -> None:
+    taxonomy = _runet_taxonomy()
+    coerced = coerce_filter_metadata_for_taxonomy(
+        _filter_metadata(
+            primary_topic="data_science",
+            topic_tags=["data_science", "machine_learning"],
+            category_path=["tech", "ai", "data_science"],
+        ),
+        taxonomy,
+    )
+    validate_filter_metadata_against_taxonomy(coerced, taxonomy)
+    coerced_infra = coerce_filter_metadata_for_taxonomy(
+        _filter_metadata(
+            primary_topic="infrastructure",
+            topic_tags=["infrastructure", "cloud"],
+            category_path=["tech", "cloud", "infrastructure"],
+        ),
+        taxonomy,
+    )
+    validate_filter_metadata_against_taxonomy(coerced_infra, taxonomy)
+    coerced_browser = coerce_filter_metadata_for_taxonomy(
+        _filter_metadata(
+            primary_topic="browser",
+            topic_tags=["browser", "software"],
+            category_path=["tech", "software", "browser"],
+        ),
+        taxonomy,
+    )
+    validate_filter_metadata_against_taxonomy(coerced_browser, taxonomy)

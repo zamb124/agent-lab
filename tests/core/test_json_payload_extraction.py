@@ -27,3 +27,13 @@ def test_parse_json_value_accepts_object_embedded_in_prose() -> None:
         "test.payload",
     )
     assert payload == {"page_title": "Example", "ok": True}
+
+
+def test_parse_json_value_repairs_trailing_commas() -> None:
+    payload = parse_json_value('{"items": [1, 2,], "ok": true,}', "test.payload")
+    assert payload == {"items": [1, 2], "ok": True}
+
+
+def test_parse_json_value_repairs_python_literals() -> None:
+    payload = parse_json_value('{"ok": True, "missing": None}', "test.payload")
+    assert payload == {"ok": True, "missing": None}

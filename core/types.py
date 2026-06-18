@@ -201,6 +201,21 @@ def extract_json_payload_text(data: str) -> str:
     return stripped[start:]
 
 
+def repair_json_text(candidate: str) -> str:
+    """Нормализовать типичные нарушения strict JSON от LLM."""
+    repaired = candidate.strip()
+    if not repaired:
+        return repaired
+    repaired = re.sub(r",(\s*[}\]])", r"\1", repaired)
+    repaired = re.sub(r"\bNone\b", "null", repaired)
+    repaired = re.sub(r"\bTrue\b", "true", repaired)
+    repaired = re.sub(r"\bFalse\b", "false", repaired)
+    repaired = re.sub(r"\bNaN\b", "null", repaired)
+    repaired = re.sub(r"\b-Infinity\b", "null", repaired)
+    repaired = re.sub(r"\bInfinity\b", "null", repaired)
+    return repaired
+
+
 def parse_json_value(data: str | bytes, field_name: str = "value") -> JsonValue:
     """Распарсить JSON-строку в строгий JSON value."""
     text = data.decode("utf-8") if isinstance(data, bytes) else data
@@ -213,10 +228,15 @@ def parse_json_value(data: str | bytes, field_name: str = "value") -> JsonValue:
         candidates.append(extracted)
     last_exc: ValidationError | None = None
     for candidate in candidates:
-        try:
-            return cast(JsonValue, _JSON_VALUE_ADAPTER.validate_json(candidate))
-        except ValidationError as exc:
-            last_exc = exc
+        parse_variants = [candidate]
+        repaired = repair_json_text(candidate)
+        if repaired != candidate:
+            parse_variants.append(repaired)
+        for parse_candidate in parse_variants:
+            try:
+                return cast(JsonValue, _JSON_VALUE_ADAPTER.validate_json(parse_candidate))
+            except ValidationError as exc:
+                last_exc = exc
     if last_exc is not None:
         raise ValueError(f"{field_name} must be JSON-compatible") from last_exc
     raise ValueError(f"{field_name} must be JSON-compatible")

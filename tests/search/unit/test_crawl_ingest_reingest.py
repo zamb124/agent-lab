@@ -8,6 +8,7 @@ from unittest.mock import AsyncMock
 import pytest
 
 from apps.search.services.crawl.ingest_service import CrawlIngestService
+from core.clients.service_client import ServiceClientError
 from core.crawl.models import CrawlDomain, CrawlFetchResult
 from core.rag.models import RAGIngestTextResponse
 from core.search.index_models import SearchIndexDefinition, SearchIndexRetrievalConfig
@@ -89,3 +90,71 @@ async def test_reingest_deletes_then_ingests_with_same_document_id() -> None:
     assert metadata["llm_enriched"] is True
     assert metadata["content_type"] == "documentation"
     assert metadata["primary_topic"] == "tech"
+
+
+@pytest.mark.asyncio
+async def test_reingest_continues_when_delete_returns_404() -> None:
+    now = datetime.now(UTC)
+    search_index = SearchIndexDefinition(
+        search_index_id="idx_test",
+        company_id="system",
+        display_name="Test",
+        rag_namespace_id="idx_test:ns",
+        rag_collection_id="idx_test",
+        enabled=True,
+        search_enabled=True,
+        retrieval=SearchIndexRetrievalConfig(),
+        created_at=now,
+        updated_at=now,
+    )
+    domain = CrawlDomain(
+        crawl_domain_id="dom-1",
+        crawl_profile_id="cr_test",
+        domain="example.com",
+        category="docs",
+        crawl_policy="allow",
+        status="active",
+        next_crawl_after=now,
+        created_at=now,
+        updated_at=now,
+    )
+    fetched = CrawlFetchResult(
+        url="https://example.com/page",
+        canonical_url="https://example.com/page",
+        markdown="# Raw\n\nOriginal markdown.",
+        title="Original",
+        content_hash="hash-raw",
+        fetch_transport="http",
+    )
+    enriched_page = sample_enriched_page(
+        page_title="Enriched title",
+        page_summary="Enriched summary",
+    )
+    rag_client = AsyncMock()
+    rag_client.delete_namespace_document = AsyncMock(
+        side_effect=ServiceClientError('HTTP 404 при запросе к rag: {"detail": "Document not found"}'),
+    )
+    rag_client.ingest_text = AsyncMock(
+        return_value=RAGIngestTextResponse(
+            document_id="idx_test:abc123",
+            document_name="Enriched title",
+            namespace_id="idx_test:ns",
+            status="indexed",
+            provider="pgvector",
+        ),
+    )
+
+    service = CrawlIngestService(rag_client)
+    document_id = "idx_test:abc123"
+    result_id = await service.reingest_enriched_page(
+        search_index=search_index,
+        crawl_job_id="job-1",
+        crawl_profile_id="cr_test",
+        domain=domain,
+        document_id=document_id,
+        fetched=fetched,
+        enriched_page=enriched_page,
+    )
+
+    assert result_id == document_id
+    rag_client.ingest_text.assert_awaited_once()

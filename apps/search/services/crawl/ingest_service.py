@@ -5,6 +5,7 @@ from __future__ import annotations
 import hashlib
 
 from core.clients.rag_client import RagClient
+from core.clients.service_client import ServiceClientError
 from core.crawl.enrichment_skip import compute_enriched_content_hash
 from core.crawl.models import (
     CrawlDomain,
@@ -64,10 +65,15 @@ class CrawlIngestService:
         fetched: CrawlFetchResult,
         enriched_page: CrawlEnrichedPage,
     ) -> str:
-        _ = await self._rag_client.delete_namespace_document(
-            search_index.rag_namespace_id,
-            document_id,
-        )
+        try:
+            _ = await self._rag_client.delete_namespace_document(
+                search_index.rag_namespace_id,
+                document_id,
+            )
+        except ServiceClientError as exc:
+            error_message = str(exc)
+            if not error_message.startswith("HTTP 404"):
+                raise
         payload = CrawlIngestPayload(fetched=fetched, enriched_page=enriched_page)
         return await self.ingest_page(
             search_index=search_index,
