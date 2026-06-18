@@ -201,7 +201,15 @@ def _validate_public_search_guest() -> None:
         raise HTTPException(status_code=401, detail="Требуется публичная search-сессия")
     issued_by = ctx.user.attributes.get("issued_by")
     if issued_by != PUBLIC_SEARCH_SESSION_ISSUER:
-        raise HTTPException(status_code=403, detail="Недопустимый тип сессии для SERP")
+        auth_token = ctx.auth_token
+        if auth_token is None or auth_token.strip() == "":
+            raise HTTPException(status_code=403, detail="Недопустимый тип сессии для SERP")
+        token_data = get_token_service().validate_token(auth_token)
+        if token_data is None:
+            raise HTTPException(status_code=401, detail="Требуется публичная search-сессия")
+        token_issued_by = token_data.metadata.get("issued_by")
+        if token_issued_by != PUBLIC_SEARCH_SESSION_ISSUER:
+            raise HTTPException(status_code=403, detail="Недопустимый тип сессии для SERP")
 
 
 @router.post("/serp/more", response_model=MetaSearchResponse)

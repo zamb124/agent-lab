@@ -347,7 +347,7 @@ class MetaSearchService:
         ranked_page: list[WebSearchResult] = []
         for rank, item in enumerate(page_items, start=page_start + 1):
             ranked_page.append(item.model_copy(update={"rank": rank}))
-        has_more = page_end < total_count
+        has_more = page_end < total_count and serp_cache_key is not None
         return MetaSearchResponse(
             query=request.query,
             results=ranked_page,

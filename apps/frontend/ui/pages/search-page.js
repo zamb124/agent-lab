@@ -1365,6 +1365,28 @@ export class PublicSearchPage extends PlatformPage {
                 border-color: rgba(87, 104, 254, 0.22);
             }
 
+            :host-context([data-theme="light"]) .source-site-row {
+                color: rgba(30, 34, 48, 0.62);
+            }
+
+            :host-context([data-theme="light"]) .source-site-name {
+                color: rgba(18, 19, 26, 0.88);
+            }
+
+            :host-context([data-theme="light"]) .source-display-url {
+                color: #4E5DE8;
+            }
+
+            :host-context([data-theme="light"]) .source-results-meta {
+                color: rgba(30, 34, 48, 0.54);
+            }
+
+            :host-context([data-theme="light"]) .source-favicon,
+            :host-context([data-theme="light"]) .source-thumb {
+                background: rgba(16, 20, 34, 0.06);
+                border-color: rgba(16, 20, 34, 0.10);
+            }
+
             @media (max-width: 980px) {
                 .search-title {
                     font-size: 72px;
@@ -1510,8 +1532,11 @@ export class PublicSearchPage extends PlatformPage {
         this._lastScrollY = 0;
         this._scrollAnchorY = 0;
         this._scrollDirection = 'still';
-        this._scrollFrame = 0;
+        this.        _scrollFrame = 0;
         this._serpObserver = null;
+        this._serpObservedSentinel = null;
+        this._serpLoadBlocked = false;
+        this._lastSerpCacheKey = '';
         this._handleWindowScroll = this._handleWindowScroll.bind(this);
     }
 
@@ -1537,12 +1562,18 @@ export class PublicSearchPage extends PlatformPage {
         if (this._serpObserver !== null) {
             this._serpObserver.disconnect();
             this._serpObserver = null;
+            this._serpObservedSentinel = null;
         }
     }
 
     updated(changedProperties) {
         super.updated(changedProperties);
         this._syncFromRoute();
+        const stream = this._search.state.stream;
+        if (stream.serp_cache_key !== this._lastSerpCacheKey) {
+            this._lastSerpCacheKey = stream.serp_cache_key;
+            this._serpLoadBlocked = false;
+        }
         this._ensureSerpSentinelObserver();
     }
 
@@ -1613,6 +1644,7 @@ export class PublicSearchPage extends PlatformPage {
         this._scrollDirection = 'still';
         if (query !== '') {
             this._entryAnimation = takePublicSearchLandingTransition(query, mode) ? 'landing' : 'direct';
+            this._serpLoadBlocked = false;
             void this._runSearch(query, mode);
         } else {
             this._entryAnimation = 'direct';
@@ -2051,24 +2083,48 @@ export class PublicSearchPage extends PlatformPage {
     }
 
     _ensureSerpSentinelObserver() {
+        const stream = this._search.state.stream;
         const sentinel = this.renderRoot.querySelector('.source-scroll-sentinel');
-        if (!(sentinel instanceof HTMLElement)) {
+        const shouldObserve = stream.has_more
+            && stream.serp_cache_key !== ''
+            && !this._serpLoadBlocked
+            && !this._serpMore.busy;
+
+        if (!(sentinel instanceof HTMLElement) || !shouldObserve) {
+            if (this._serpObserver !== null && this._serpObservedSentinel !== null) {
+                this._serpObserver.unobserve(this._serpObservedSentinel);
+                this._serpObservedSentinel = null;
+            }
             return;
         }
-        if (this._serpObserver !== null) {
-            this._serpObserver.disconnect();
+
+        if (this._serpObserver === null) {
+            this._serpObserver = new IntersectionObserver((entries) => {
+                if (entries.some((entry) => entry.isIntersecting)) {
+                    this._loadMoreSerp();
+                }
+            }, { root: null, rootMargin: '240px 0px', threshold: 0 });
         }
-        this._serpObserver = new IntersectionObserver((entries) => {
-            if (entries.some((entry) => entry.isIntersecting)) {
-                this._loadMoreSerp();
-            }
-        }, { root: null, rootMargin: '240px 0px', threshold: 0 });
+
+        if (this._serpObservedSentinel === sentinel) {
+            return;
+        }
+
+        if (this._serpObservedSentinel !== null) {
+            this._serpObserver.unobserve(this._serpObservedSentinel);
+        }
+        this._serpObservedSentinel = sentinel;
         this._serpObserver.observe(sentinel);
     }
 
     _loadMoreSerp() {
         const stream = this._search.state.stream;
-        if (!stream.has_more || this._serpMore.busy || stream.serp_cache_key === '') {
+        if (
+            !stream.has_more
+            || this._serpMore.busy
+            || stream.serp_cache_key === ''
+            || this._serpLoadBlocked
+        ) {
             return;
         }
         const pageLimit = stream.page_limit > 0 ? stream.page_limit : 10;
@@ -2078,7 +2134,9 @@ export class PublicSearchPage extends PlatformPage {
             limit: pageLimit,
             mode: stream.mode,
         }).catch(() => {
+            this._serpLoadBlocked = true;
             this.toast('search_page.load_more_error', { type: 'error' });
+            this._ensureSerpSentinelObserver();
         });
     }
 
@@ -2177,7 +2235,9 @@ export class PublicSearchPage extends PlatformPage {
                 ` : html``}
                 <div class="source-list">
                     ${stream.results.map((result, index) => this._renderSource(stream, result, index))}
-                    <div class="source-scroll-sentinel" aria-hidden="true"></div>
+                    ${stream.has_more && stream.serp_cache_key !== '' ? html`
+                        <div class="source-scroll-sentinel" aria-hidden="true"></div>
+                    ` : html``}
                     ${this._serpMore.busy ? html`
                         <div class="skeleton"></div>
                         <div class="skeleton"></div>
