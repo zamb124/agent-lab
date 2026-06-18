@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import uuid
+from copy import deepcopy
 from typing import cast, override
 
 from apps.flows.config import get_settings as get_flows_settings
@@ -33,7 +34,7 @@ from core.errors import CodeExecutionRuntimeError
 from core.logging import get_log_context, get_logger
 from core.state import ExecutionState, parse_interrupt_body_from_external_dict
 from core.state.mutation_policy import (
-    assert_frozen_fields_unchanged,
+    should_skip_field_on_user_returned_state_copy,
     snapshot_frozen_fields,
 )
 from core.tracing.operation_span import traced_operation
@@ -60,6 +61,40 @@ RUNNER_VALIDATE_PATHS: dict[str, tuple[str, str]] = {
 }
 
 logger = get_logger(__name__)
+
+
+def _frozen_fields_differ(
+    returned_state: ExecutionState,
+    frozen_snapshot: dict[str, object],
+) -> list[str]:
+    state_fields = dict(vars(returned_state))
+    changed_fields: list[str] = []
+    for field_name, snapshot_value in frozen_snapshot.items():
+        if state_fields.get(field_name) != snapshot_value:
+            changed_fields.append(field_name)
+    return changed_fields
+
+
+def _restore_frozen_fields_from_snapshot(
+    returned_state: ExecutionState,
+    frozen_snapshot: dict[str, object],
+) -> None:
+    for field_name, snapshot_value in frozen_snapshot.items():
+        returned_state[field_name] = deepcopy(snapshot_value)
+
+
+def _merge_returned_state_fields(
+    state: ExecutionState,
+    returned_state: ExecutionState,
+) -> None:
+    for field_name in returned_state.__class__.model_fields:
+        if should_skip_field_on_user_returned_state_copy(field_name):
+            continue
+        state[field_name] = returned_state[field_name]
+    for field_name, field_value in returned_state.json_extra().items():
+        if should_skip_field_on_user_returned_state_copy(field_name):
+            continue
+        state[field_name] = field_value
 
 
 class RemoteCodeRunner(BaseCodeRunner):
@@ -366,11 +401,15 @@ class RemoteCodeRunner(BaseCodeRunner):
         frozen_snapshot: dict[str, object],
     ) -> None:
         returned_state = ExecutionState.model_validate(response.state)
-        assert_frozen_fields_unchanged(returned_state, frozen_snapshot)
-        for field_name in returned_state.__class__.model_fields:
-            state[field_name] = returned_state[field_name]
-        for field_name, field_value in returned_state.json_extra().items():
-            state[field_name] = field_value
+        changed_frozen = _frozen_fields_differ(returned_state, frozen_snapshot)
+        if changed_frozen:
+            logger.warning(
+                "code_runner.returned_state_echoed_frozen_fields",
+                changed_fields=changed_frozen,
+                language=self._language,
+            )
+            _restore_frozen_fields_from_snapshot(returned_state, frozen_snapshot)
+        _merge_returned_state_fields(state, returned_state)
 
     def _raise_execution_failed(self, response: CodeExecutionResponse) -> None:
         error = response.error
