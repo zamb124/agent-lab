@@ -10,6 +10,7 @@ from core.context import get_context
 from core.search.models import (
     MetaSearchRequest,
     MetaSearchResponse,
+    MetaSearchSerpMoreRequest,
     SearchProvidersSnapshot,
 )
 
@@ -25,6 +26,14 @@ async def meta_search(body: MetaSearchRequest, container: ContainerDep) -> MetaS
         return await container.meta_search_service.search(body, company=company, user_id=user_id)
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@router.post("/search/serp/more", response_model=MetaSearchResponse)
+async def meta_search_serp_more(body: MetaSearchSerpMoreRequest, container: ContainerDep) -> MetaSearchResponse:
+    try:
+        return await container.meta_search_service.serp_more(body)
+    except ValueError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
 
 
 @router.get("/providers", response_model=SearchProvidersSnapshot)

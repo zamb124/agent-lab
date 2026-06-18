@@ -7,6 +7,7 @@ import re
 from dataclasses import dataclass, field
 from datetime import date, datetime
 from typing import cast
+from urllib.parse import urljoin, urlparse
 
 from bs4 import BeautifulSoup, Tag
 
@@ -270,7 +271,19 @@ def _breadcrumb_categories(soup: BeautifulSoup) -> list[str]:
     return crumbs[:5]
 
 
-def extract_structural_signals_from_html(html: str) -> CrawlStructuralSignals:
+def _resolve_absolute_url(page_url: str, raw_url: str | None) -> str | None:
+    normalized = _normalize_text(raw_url)
+    if normalized is None:
+        return None
+    parsed = urlparse(normalized)
+    if parsed.scheme in {"http", "https"}:
+        return normalized
+    if not page_url.strip():
+        return None
+    return urljoin(page_url.strip(), normalized)
+
+
+def extract_structural_signals_from_html(html: str, *, page_url: str = "") -> CrawlStructuralSignals:
     soup = BeautifulSoup(html, "html.parser")
     json_ld = _collect_json_ld_signals(_first_json_ld_objects(soup))
 
@@ -338,12 +351,15 @@ def extract_structural_signals_from_html(html: str) -> CrawlStructuralSignals:
         if content is not None and content not in topic_hints:
             topic_hints.append(content)
 
+    og_image_url = _resolve_absolute_url(page_url, _meta_content(soup, prop="og:image"))
+
     return CrawlStructuralSignals(
         title=title,
         date_published=date_published,
         date_modified=date_modified,
         author=author,
         publisher=publisher,
+        og_image_url=og_image_url,
         language=html_lang,
         content_type_hint=content_type_hint,
         category_hints=category_hints[:10],

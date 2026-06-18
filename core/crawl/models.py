@@ -104,6 +104,7 @@ class CrawlStructuralSignals(StrictBaseModel):
     date_modified: date | None = None
     author: str | None = None
     publisher: str | None = None
+    og_image_url: str | None = None
     language: str | None = None
     content_type_hint: CrawlContentTypeHint | None = None
     category_hints: list[str] = Field(default_factory=list)

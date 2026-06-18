@@ -56,3 +56,23 @@ def test_extract_structural_signals_empty_when_no_html_metadata():
     assert signals.title is None
     assert signals.date_published is None
     assert signals.content_type_hint is None
+    assert signals.og_image_url is None
+
+
+_OG_IMAGE_HTML = """
+<!doctype html>
+<html>
+<head>
+  <meta property="og:image" content="/images/preview.jpg" />
+</head>
+<body>Body</body>
+</html>
+"""
+
+
+def test_extract_structural_signals_resolves_relative_og_image():
+    signals = extract_structural_signals_from_html(
+        _OG_IMAGE_HTML,
+        page_url="https://example.com/article",
+    )
+    assert signals.og_image_url == "https://example.com/images/preview.jpg"

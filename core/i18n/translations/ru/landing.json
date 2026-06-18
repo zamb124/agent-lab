@@ -96,6 +96,9 @@
         "error_retry": "Повторить поиск",
         "error_details": "Технические детали",
         "sources_label": "Источники",
+        "results_shown_of_total": "Показано {shown} из {total}",
+        "loading_more": "Загружаем ещё результаты…",
+        "load_more_error": "Не удалось подгрузить выдачу. Повторите поиск.",
         "providers_label": "Провайдеры",
         "suggestions_label": "Подсказки",
         "empty_hint": "Введите запрос, чтобы запустить публичный search-flow"

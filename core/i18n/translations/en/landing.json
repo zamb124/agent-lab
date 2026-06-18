@@ -96,6 +96,9 @@
         "error_retry": "Retry search",
         "error_details": "Technical details",
         "sources_label": "Sources",
+        "results_shown_of_total": "Showing {shown} of {total}",
+        "loading_more": "Loading more results…",
+        "load_more_error": "Could not load more results. Run the search again.",
         "providers_label": "Providers",
         "suggestions_label": "Suggestions",
         "empty_hint": "Enter a query to launch the public search flow"

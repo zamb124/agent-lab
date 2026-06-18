@@ -75,11 +75,11 @@ def _pick_category_path(
         if allowed_path and allowed_path[0] == primary_topic:
             return allowed_path
 
-    fallback = ["other"]
-    if fallback in allowed_paths:
-        return fallback
+    other_path = ["other"]
+    if other_path in allowed_paths:
+        return other_path
 
-    raise ValueError("taxonomy category_paths has no fallback path")
+    raise ValueError("taxonomy category_paths has no other path")
 
 
 def _pad_topic_tags_to_minimum(

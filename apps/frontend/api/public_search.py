@@ -2,12 +2,14 @@
 
 from __future__ import annotations
 
+import re
 import uuid
 from datetime import datetime, timedelta, timezone
-from typing import ClassVar
+from typing import Annotated, ClassVar
 from urllib.parse import urlparse
 
-from fastapi import APIRouter, HTTPException, Request
+from fastapi import APIRouter, HTTPException, Query, Request
+from fastapi.responses import Response
 from pydantic import BaseModel, ConfigDict, Field
 
 from apps.frontend.api.public_session_security import (
@@ -19,12 +21,16 @@ from apps.frontend.services.public_search_bootstrap import (
     PUBLIC_SEARCH_SPEC_BY_MODE,
     ensure_public_search_embed_configs,
 )
+from core.clients.service_client import ServiceClient
+from core.context import get_context
+from core.http import get_httpx_client
 from core.identity.embed_guest_turns import EMBED_SESSION_ID_METADATA_KEY
 from core.identity.runtime_users import ensure_persisted_runtime_user
 from core.identity.system_bootstrap import SYSTEM_COMPANY_ID, SYSTEM_COMPANY_SUBDOMAIN
 from core.logging import get_logger
 from core.models.embed_models import EmbedStatus
 from core.search import PUBLIC_SEARCH_FLOW_ID, PUBLIC_SEARCH_SESSION_ISSUER, PublicSearchMode
+from core.search.models import MetaSearchResponse, MetaSearchSerpMoreRequest
 from core.utils.tokens import get_token_service
 
 logger = get_logger(__name__)
@@ -49,6 +55,20 @@ class PublicSearchSessionResponse(BaseModel):
     embed_id: str
     flow_id: str
     branch_id: str
+
+
+class PublicSearchSerpMoreRequestBody(BaseModel):
+    model_config: ClassVar[ConfigDict] = ConfigDict(extra="forbid", str_strip_whitespace=True)
+
+    serp_cache_key: str = Field(..., min_length=1, max_length=64)
+    offset: int = Field(..., ge=0)
+    limit: int = Field(default=10, ge=1, le=25)
+
+
+_DOMAIN_RE = re.compile(
+    r"^(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,63}$",
+    re.IGNORECASE,
+)
 
 
 def _normalize_origin(raw: str) -> str:
@@ -173,3 +193,74 @@ async def issue_public_search_session(
         flow_id=persisted_config.flow_id,
         branch_id=persisted_config.branch_id,
     )
+
+
+def _validate_public_search_guest() -> None:
+    ctx = get_context()
+    if ctx is None:
+        raise HTTPException(status_code=401, detail="Требуется публичная search-сессия")
+    issued_by = ctx.user.attributes.get("issued_by")
+    if issued_by != PUBLIC_SEARCH_SESSION_ISSUER:
+        raise HTTPException(status_code=403, detail="Недопустимый тип сессии для SERP")
+
+
+@router.post("/serp/more", response_model=MetaSearchResponse)
+async def public_search_serp_more(
+    body: PublicSearchSerpMoreRequestBody,
+    container: ContainerDep,
+) -> MetaSearchResponse:
+    _ = container
+    _validate_public_search_guest()
+    search_body = MetaSearchSerpMoreRequest(
+        serp_cache_key=body.serp_cache_key,
+        offset=body.offset,
+        limit=body.limit,
+    )
+    client = ServiceClient()
+    try:
+        payload = await client.post(
+            "search",
+            "/search/api/v1/search/serp/more",
+            json=search_body.model_dump(mode="json"),
+        )
+    except Exception as exc:
+        message = str(exc)
+        if "404" in message or "serp cache expired" in message.lower():
+            raise HTTPException(status_code=404, detail=message) from exc
+        raise HTTPException(status_code=502, detail=message) from exc
+    return MetaSearchResponse.model_validate(payload)
+
+
+@router.get("/favicon")
+async def public_search_favicon(
+    request: Request,
+    domain: Annotated[str, Query(min_length=1, max_length=255)],
+    container: ContainerDep,
+) -> Response:
+    host = domain.strip().lower()
+    if host.startswith("www."):
+        host = host[4:]
+    if not _DOMAIN_RE.match(host):
+        raise HTTPException(status_code=400, detail="invalid domain")
+    await enforce_public_session_issue_rate_limit(
+        redis_client=container.redis_client,
+        request=request,
+        scope="public_search_favicon",
+    )
+    favicon_url = f"https://{host}/favicon.ico"
+    async with get_httpx_client(timeout=5.0, follow_redirects=True) as http_client:
+        response = await http_client.get(favicon_url)
+        if response.status_code >= 400:
+            raise HTTPException(status_code=404, detail="favicon not found")
+        content_type = "image/x-icon"
+        for header_name, header_value in response.headers.multi_items():
+            if header_name.lower() == "content-type" and header_value.strip():
+                content_type = header_value.strip()
+                break
+        if not content_type.startswith("image/"):
+            raise HTTPException(status_code=404, detail="favicon is not an image")
+        return Response(
+            content=response.content,
+            media_type=content_type,
+            headers={"Cache-Control": "public, max-age=86400"},
+        )

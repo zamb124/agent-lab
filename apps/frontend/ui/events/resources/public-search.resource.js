@@ -45,6 +45,11 @@ function _emptyStream() {
         answer: '',
         markdown_sources: '',
         completed: false,
+        serp_cache_key: '',
+        total_count: 0,
+        has_more: false,
+        results_offset: 0,
+        page_limit: 10,
     };
 }
 
@@ -169,6 +174,9 @@ function _normalizeResult(value, index) {
         score: _requireNumber(item.score, `results[${index}].score`),
         published_at: _requireNullableString(item.published_at, `results[${index}].published_at`),
         source_type: _requireNonEmptyString(item.source_type, `results[${index}].source_type`),
+        site_name: _requireString(item.site_name, `results[${index}].site_name`),
+        favicon_url: _requireString(item.favicon_url, `results[${index}].favicon_url`),
+        preview_image_url: _requireString(item.preview_image_url, `results[${index}].preview_image_url`),
     };
 }
 
@@ -319,6 +327,11 @@ function _normalizeStreamPayload(value) {
         answer: _requireString(stream.answer, 'stream.answer'),
         markdown_sources: _requireString(stream.markdown_sources, 'stream.markdown_sources'),
         completed: _requireBoolean(stream.completed, 'stream.completed'),
+        serp_cache_key: _requireString(stream.serp_cache_key, 'stream.serp_cache_key'),
+        total_count: _requireNumber(stream.total_count, 'stream.total_count'),
+        has_more: _requireBoolean(stream.has_more, 'stream.has_more'),
+        results_offset: _requireNumber(stream.results_offset, 'stream.results_offset'),
+        page_limit: _requireNumber(stream.page_limit, 'stream.page_limit'),
     };
 }
 
@@ -422,6 +435,20 @@ function _applySearchUiEvent(stream, event) {
         stream.phase = 'results';
         stream.results = _normalizeResults(payload.results);
         stream.providers = _normalizeProviders(payload.providers);
+        stream.total_count = _requireNumber(payload.total_count, 'results_ready.total_count');
+        stream.has_more = _requireBoolean(payload.has_more, 'results_ready.has_more');
+        stream.results_offset = stream.results.length;
+        if (Object.prototype.hasOwnProperty.call(payload, 'serp_cache_key')) {
+            const cacheKey = payload.serp_cache_key;
+            if (cacheKey === null) {
+                stream.serp_cache_key = '';
+            } else {
+                stream.serp_cache_key = _requireNonEmptyString(cacheKey, 'results_ready.serp_cache_key');
+            }
+        }
+        if (Object.prototype.hasOwnProperty.call(payload, 'limit')) {
+            stream.page_limit = _requireNumber(payload.limit, 'results_ready.limit');
+        }
         return;
     }
     if (eventType === 'search/serp/suggestions_ready') {
@@ -765,7 +792,7 @@ export const publicSearchRunOp = createAsyncOp({
     silent: true,
     restMirror: { method: 'POST', path: '/frontend/api/public/search/session' },
     extraInitial: { stream: _emptyStream(), active_run_id: '', error_kind: '', error_detail: '' },
-    extraEvents: { STREAM_EVENT: 'stream_event' },
+    extraEvents: { STREAM_EVENT: 'stream_event', SERP_APPEND: 'serp_append' },
     actions: { reset: 'reset' },
     extraReducer: (state, event, events) => {
         if (event.type === events.RESET) {
@@ -777,6 +804,24 @@ export const publicSearchRunOp = createAsyncOp({
                 error_detail: '',
                 lastResult: null,
                 error: null,
+            };
+        }
+        if (event.type === events.SERP_APPEND) {
+            const payload = _requireObject(event.payload, 'serp_append payload');
+            const stream = _requireObject(state.stream, 'stream state');
+            const appended = _normalizeResults(payload.results);
+            const hasMore = _requireBoolean(payload.has_more, 'serp_append.has_more');
+            const totalCount = _requireNumber(payload.total_count, 'serp_append.total_count');
+            const mergedResults = [..._normalizeResults(stream.results), ...appended];
+            return {
+                ...state,
+                stream: {
+                    ...stream,
+                    results: mergedResults,
+                    has_more: hasMore,
+                    total_count: totalCount,
+                    results_offset: mergedResults.length,
+                },
             };
         }
         if (event.type === events.REQUESTED) {
@@ -842,6 +887,51 @@ export const publicSearchRunOp = createAsyncOp({
                 run_id: request.run_id,
             });
         }
+    },
+});
+
+export const publicSearchSerpMoreOp = createAsyncOp({
+    name: 'frontend/public_search_serp_more',
+    silent: true,
+    restMirror: { method: 'POST', path: '/frontend/api/public/search/serp/more' },
+    request: async ({ payload, ctx, event }) => {
+        if (!ctx || typeof ctx.dispatch !== 'function') {
+            throw new Error('frontend/public_search_serp_more: ctx.dispatch required');
+        }
+        if (!event || typeof event.id !== 'string' || event.id === '') {
+            throw new Error('frontend/public_search_serp_more: event.id required');
+        }
+        const body = _requireObject(payload, 'serp_more payload');
+        const mode = _requirePublicSearchSessionMode(body.mode, 'serp_more.mode');
+        const serpCacheKey = _requireNonEmptyString(body.serp_cache_key, 'serp_more.serp_cache_key');
+        const offset = _requireNumber(body.offset, 'serp_more.offset');
+        const limit = _requireNumber(body.limit, 'serp_more.limit');
+        const session = await _issuePublicSearchSession(mode);
+        const response = _requireObject(await httpRequest({
+            method: 'POST',
+            url: '/frontend/api/public/search/serp/more',
+            credentials: 'same-origin',
+            headers: { Authorization: `${session.token_type} ${session.token}` },
+            body: {
+                serp_cache_key: serpCacheKey,
+                offset,
+                limit,
+            },
+        }), 'serp_more response');
+        ctx.dispatch(
+            'frontend/public_search_run/serp_append',
+            {
+                results: response.results,
+                has_more: response.has_more,
+                total_count: response.total_count,
+            },
+            { causation_id: event.id, source: 'http' },
+        );
+        return {
+            results: _normalizeResults(response.results),
+            has_more: _requireBoolean(response.has_more, 'serp_more.has_more'),
+            total_count: _requireNumber(response.total_count, 'serp_more.total_count'),
+        };
     },
 });
 

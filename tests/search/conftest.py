@@ -88,6 +88,7 @@ def build_meta_search_service(
         store,
         search_container.billing_service,
         search_container.index_search_provider,
+        search_container.serp_cache_service,
     )
 
 

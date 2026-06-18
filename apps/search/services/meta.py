@@ -21,6 +21,7 @@ from apps.search.services.company_config import (
 )
 from apps.search.services.index_resolver import preprocess_meta_search_request
 from apps.search.services.provider_availability import ProviderAvailabilityStore
+from apps.search.services.serp_cache import SerpCacheMissError, SerpCacheService
 from core.billing.exceptions import BillingBalanceBlockedError
 from core.billing.service import BALANCE_BLOCK_OPERATION_SEARCH, BillingService
 from core.models.billing_models import UsageType
@@ -29,6 +30,7 @@ from core.search import (
     MetaSearchProviderStatus,
     MetaSearchRequest,
     MetaSearchResponse,
+    MetaSearchSerpMoreRequest,
     WebSearchResult,
 )
 from core.tracing import attributes as trace_attr
@@ -113,11 +115,33 @@ class MetaSearchService:
         availability_store: ProviderAvailabilityStore,
         billing_service: BillingService,
         index_provider: IndexSearchProvider,
+        serp_cache_service: SerpCacheService,
     ) -> None:
         self._config: SearchIntegrationConfig = search_config
         self._availability_store: ProviderAvailabilityStore = availability_store
         self._billing_service: BillingService = billing_service
         self._index_provider: IndexSearchProvider = index_provider
+        self._serp_cache_service: SerpCacheService = serp_cache_service
+
+    async def serp_more(self, body: MetaSearchSerpMoreRequest) -> MetaSearchResponse:
+        try:
+            page_items, total_count, has_more, query = await self._serp_cache_service.slice(
+                body.serp_cache_key,
+                offset=body.offset,
+                limit=body.limit,
+            )
+        except SerpCacheMissError as exc:
+            raise ValueError(str(exc)) from exc
+        return MetaSearchResponse(
+            query=query,
+            results=page_items,
+            providers={},
+            total_count=total_count,
+            has_more=has_more,
+            offset=body.offset,
+            limit=body.limit,
+            serp_cache_key=body.serp_cache_key,
+        )
 
     async def search(
         self,
@@ -200,8 +224,13 @@ class MetaSearchService:
             statuses[provider_id] = status
             if status.ok:
                 _ = await self._availability_store.mark_available(provider_id, scope_id=scope_id)
-                ranked = self._collect_ranked([(provider_id, results)], request.limit)
-                return MetaSearchResponse(query=request.query, results=ranked, providers=statuses)
+                ranked_pool = self._normalize_ranked_pool(results)
+                return await self._finalize_paged_response(
+                    request,
+                    ranked_pool,
+                    statuses,
+                    index_ids,
+                )
             provider_error = status.error or "unknown error"
             if _should_mark_provider_unavailable(provider_id, provider_error):
                 _ = await self._availability_store.mark_unavailable(
@@ -210,7 +239,15 @@ class MetaSearchService:
                     scope_id=scope_id,
                 )
 
-        return MetaSearchResponse(query=request.query, results=[], providers=statuses)
+        return MetaSearchResponse(
+            query=request.query,
+            results=[],
+            providers=statuses,
+            total_count=0,
+            has_more=False,
+            offset=request.offset,
+            limit=request.limit,
+        )
 
     async def _search_merge(
         self,
@@ -268,8 +305,59 @@ class MetaSearchService:
                             scope_id=scope_id,
                         )
 
-        ranked = self._collect_ranked(provider_results, request.limit)
-        return MetaSearchResponse(query=request.query, results=ranked, providers=statuses)
+        pool_limit = self._resolve_pool_limit(request)
+        ranked_pool = self._collect_ranked(provider_results, pool_limit)
+        return await self._finalize_paged_response(
+            request,
+            ranked_pool,
+            statuses,
+            index_ids,
+        )
+
+    def _resolve_pool_limit(self, request: MetaSearchRequest) -> int:
+        if request.retrieve_limit is not None:
+            return request.retrieve_limit
+        return request.limit
+
+    def _normalize_ranked_pool(self, results: list[WebSearchResult]) -> list[WebSearchResult]:
+        normalized: list[WebSearchResult] = []
+        for rank, item in enumerate(results, start=1):
+            normalized.append(item.model_copy(update={"rank": rank, "provider_rank": rank}))
+        return normalized
+
+    async def _finalize_paged_response(
+        self,
+        request: MetaSearchRequest,
+        ranked_pool: list[WebSearchResult],
+        statuses: dict[str, MetaSearchProviderStatus],
+        index_ids: list[str],
+    ) -> MetaSearchResponse:
+        total_count = len(ranked_pool)
+        serp_cache_key: str | None = None
+        if total_count > request.limit:
+            serp_cache_key = await self._serp_cache_service.store_pool(
+                query=request.query,
+                mode=request.mode,
+                index_ids=index_ids,
+                ranked=ranked_pool,
+            )
+        page_start = request.offset
+        page_end = request.offset + request.limit
+        page_items = ranked_pool[page_start:page_end]
+        ranked_page: list[WebSearchResult] = []
+        for rank, item in enumerate(page_items, start=page_start + 1):
+            ranked_page.append(item.model_copy(update={"rank": rank}))
+        has_more = page_end < total_count
+        return MetaSearchResponse(
+            query=request.query,
+            results=ranked_page,
+            providers=statuses,
+            total_count=total_count,
+            has_more=has_more,
+            offset=request.offset,
+            limit=request.limit,
+            serp_cache_key=serp_cache_key,
+        )
 
     async def _unavailable_skip_status(
         self,

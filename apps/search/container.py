@@ -25,6 +25,7 @@ from apps.search.services.crawl.page_enrichment_service import CrawlPageEnrichme
 from apps.search.services.crawl.report_service import CrawlReportService
 from apps.search.services.crawl_service import SearchCrawlService
 from apps.search.services.search_index_service import SearchIndexService
+from apps.search.services.serp_cache import SerpCacheService
 from apps.search.services.system_context import build_search_system_context
 from core.clients.browser_fetch_client import BrowserFetchClient
 from core.clients.rag_client import RagClient
@@ -99,12 +100,22 @@ class SearchContainer(BaseContainer):
         )
 
     @lazy
+    def serp_cache_service(self) -> SerpCacheService:
+        config = get_search_settings().search
+        return SerpCacheService(
+            self.redis_client,
+            key_prefix=config.serp_cache_key_prefix,
+            ttl_seconds=config.serp_cache_ttl_seconds,
+        )
+
+    @lazy
     def meta_search_service(self) -> MetaSearchService:
         return MetaSearchService(
             get_search_settings().search,
             self.provider_availability_store,
             self.billing_service,
             self.index_search_provider,
+            self.serp_cache_service,
         )
 
     @lazy

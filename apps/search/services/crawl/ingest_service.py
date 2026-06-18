@@ -134,6 +134,12 @@ class CrawlIngestService:
             "index_profile_config": index_profile.model_dump(mode="json"),
             "extract_content_hash": fetched.content_hash,
         }
+        signals = fetched.structural_signals
+        if signals.publisher is not None:
+            metadata["publisher"] = signals.publisher
+            metadata["site_name"] = signals.publisher
+        if signals.og_image_url is not None:
+            metadata["og_image_url"] = signals.og_image_url
         if payload.enriched_page is not None:
             enriched_page = payload.enriched_page
             enriched_hash = compute_enriched_content_hash(enriched_page)

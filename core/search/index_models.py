@@ -15,6 +15,7 @@ class SearchIndexRetrievalConfig(StrictBaseModel):
     rerank: bool = True
     rrf_k: int | None = 60
     per_channel_top_k: int | None = None
+    retrieve_limit: int = Field(default=120, ge=10, le=200)
     snippet_max_chars: int = Field(default=2000, ge=200, le=8000)
 
 

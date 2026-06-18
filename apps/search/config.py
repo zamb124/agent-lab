@@ -127,6 +127,8 @@ class SearchIntegrationConfig(BaseModel):
     provider_state_key_prefix: str = Field(default="search:providers", min_length=1)
     available_ttl_seconds: int = Field(default=300, ge=30, le=86_400)
     unavailable_ttl_seconds: int = Field(default=300, ge=30, le=86_400)
+    serp_cache_key_prefix: str = Field(default="search:serp", min_length=1)
+    serp_cache_ttl_seconds: int = Field(default=1800, ge=60, le=7200)
     tinyfish: SearchTinyFishConfig = Field(default_factory=SearchTinyFishConfig)
     linkup: SearchLinkupConfig = Field(default_factory=SearchLinkupConfig)
     serper: SearchSerperConfig = Field(default_factory=SearchSerperConfig)

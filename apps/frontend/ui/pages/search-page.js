@@ -791,6 +791,81 @@ export class PublicSearchPage extends PlatformPage {
                 animation: resultIn 320ms ease both;
             }
 
+            .source-card-inner {
+                display: grid;
+                grid-template-columns: minmax(0, 1fr) auto;
+                gap: 12px;
+                align-items: start;
+            }
+
+            .source-content {
+                min-width: 0;
+                display: grid;
+                gap: 6px;
+            }
+
+            .source-site-row {
+                display: flex;
+                align-items: center;
+                gap: 8px;
+                min-width: 0;
+                color: rgba(245, 245, 243, 0.72);
+                font-size: 12px;
+                line-height: 1.2;
+            }
+
+            .source-favicon {
+                width: 16px;
+                height: 16px;
+                border-radius: 4px;
+                flex-shrink: 0;
+                object-fit: cover;
+                background: rgba(255, 255, 255, 0.08);
+            }
+
+            .source-site-name {
+                flex-shrink: 0;
+                max-width: 42%;
+                overflow: hidden;
+                text-overflow: ellipsis;
+                white-space: nowrap;
+                color: rgba(245, 245, 243, 0.86);
+            }
+
+            .source-site-sep {
+                flex-shrink: 0;
+                opacity: 0.55;
+            }
+
+            .source-display-url {
+                min-width: 0;
+                overflow: hidden;
+                text-overflow: ellipsis;
+                white-space: nowrap;
+                color: rgba(154, 163, 255, 0.92);
+            }
+
+            .source-thumb {
+                width: 72px;
+                height: 72px;
+                border-radius: 12px;
+                object-fit: cover;
+                background: rgba(255, 255, 255, 0.06);
+                border: 1px solid rgba(255, 255, 255, 0.08);
+            }
+
+            .source-results-meta {
+                margin: 2px 0 0;
+                color: rgba(245, 245, 243, 0.52);
+                font-size: 12px;
+                line-height: 1.3;
+            }
+
+            .source-scroll-sentinel {
+                width: 100%;
+                height: 1px;
+            }
+
             .source-card:hover {
                 transform: translateY(-2px);
                 background: rgba(255, 255, 255, 0.075);
@@ -868,7 +943,7 @@ export class PublicSearchPage extends PlatformPage {
             .source-title {
                 margin: 0;
                 color: #fff;
-                font-size: 15px;
+                font-size: 18px;
                 line-height: 1.28;
                 overflow-wrap: anywhere;
                 display: -webkit-box;
@@ -913,7 +988,7 @@ export class PublicSearchPage extends PlatformPage {
                 font-size: 13px;
                 line-height: 1.42;
                 display: -webkit-box;
-                -webkit-line-clamp: 2;
+                -webkit-line-clamp: 3;
                 -webkit-box-orient: vertical;
                 overflow: hidden;
             }
@@ -1419,6 +1494,7 @@ export class PublicSearchPage extends PlatformPage {
     constructor() {
         super();
         this._search = this.useOp('frontend/public_search_run');
+        this._serpMore = this.useOp('frontend/public_search_serp_more');
         this._sourceDescribe = this.useOp('frontend/public_search_source_describe');
         this._route = this.select((state) => state.router);
         this._localeSel = this.select((state) => state.i18n.locale);
@@ -1435,6 +1511,7 @@ export class PublicSearchPage extends PlatformPage {
         this._scrollAnchorY = 0;
         this._scrollDirection = 'still';
         this._scrollFrame = 0;
+        this._serpObserver = null;
         this._handleWindowScroll = this._handleWindowScroll.bind(this);
     }
 
@@ -1457,10 +1534,16 @@ export class PublicSearchPage extends PlatformPage {
             window.cancelAnimationFrame(this._scrollFrame);
             this._scrollFrame = 0;
         }
+        if (this._serpObserver !== null) {
+            this._serpObserver.disconnect();
+            this._serpObserver = null;
+        }
     }
 
-    updated() {
+    updated(changedProperties) {
+        super.updated(changedProperties);
         this._syncFromRoute();
+        this._ensureSerpSentinelObserver();
     }
 
     _handleWindowScroll() {
@@ -1960,41 +2043,103 @@ export class PublicSearchPage extends PlatformPage {
         `;
     }
 
+    _onFaviconError(event) {
+        const target = event.currentTarget;
+        if (target instanceof HTMLImageElement) {
+            target.remove();
+        }
+    }
+
+    _ensureSerpSentinelObserver() {
+        const sentinel = this.renderRoot.querySelector('.source-scroll-sentinel');
+        if (!(sentinel instanceof HTMLElement)) {
+            return;
+        }
+        if (this._serpObserver !== null) {
+            this._serpObserver.disconnect();
+        }
+        this._serpObserver = new IntersectionObserver((entries) => {
+            if (entries.some((entry) => entry.isIntersecting)) {
+                this._loadMoreSerp();
+            }
+        }, { root: null, rootMargin: '240px 0px', threshold: 0 });
+        this._serpObserver.observe(sentinel);
+    }
+
+    _loadMoreSerp() {
+        const stream = this._search.state.stream;
+        if (!stream.has_more || this._serpMore.busy || stream.serp_cache_key === '') {
+            return;
+        }
+        const pageLimit = stream.page_limit > 0 ? stream.page_limit : 10;
+        void this._serpMore.run({
+            serp_cache_key: stream.serp_cache_key,
+            offset: stream.results.length,
+            limit: pageLimit,
+            mode: stream.mode,
+        }).catch(() => {
+            this.toast('search_page.load_more_error', { type: 'error' });
+        });
+    }
+
     _renderSource(stream, result, index) {
         const insight = this._insightForUrl(stream, result.url);
         const activeUrl = this._sourceDescribe.state.active_url;
         const describing = this._sourceDescribe.busy && activeUrl === result.url;
+        const siteLabel = result.site_name !== '' ? result.site_name : result.display_url;
+        const displayUrl = this._displayUrl(result);
         return html`
             <article
                 class="source-card"
                 style=${`animation-delay: ${Math.min(index * 34, 260)}ms`}
             >
-                <div class="source-header">
-                    <div class="source-main">
-                        <div class="source-meta">
-                            <span class="rank-badge">#${result.rank}</span>
-                            <span class="provider-badge">${result.provider}</span>
+                <div class="source-card-inner">
+                    <div class="source-content">
+                        <div class="source-site-row">
+                            ${result.favicon_url !== '' ? html`
+                                <img
+                                    class="source-favicon"
+                                    src=${result.favicon_url}
+                                    alt=""
+                                    loading="lazy"
+                                    referrerpolicy="no-referrer"
+                                    @error=${this._onFaviconError}
+                                >
+                            ` : html``}
+                            <span class="source-site-name">${siteLabel}</span>
+                            <span class="source-site-sep">·</span>
+                            <span class="source-display-url">${displayUrl}</span>
                         </div>
-                        <a class="source-title" href=${result.url} target="_blank" rel="noopener noreferrer">${result.title}</a>
+                        <div class="source-header">
+                            <div class="source-main">
+                                <a class="source-title" href=${result.url} target="_blank" rel="noopener noreferrer">${result.title}</a>
+                            </div>
+                            <button
+                                class="source-ai-button"
+                                type="button"
+                                ?disabled=${this._sourceDescribe.busy}
+                                title="AI"
+                                aria-label="AI"
+                                @click=${() => this._describeSource(stream, result)}
+                            >
+                                ${describing ? html`<span class="stream-dot"></span>` : html`<platform-icon name="sparkle" size="14"></platform-icon>`}
+                                <span>AI</span>
+                            </button>
+                        </div>
+                        <p class="source-snippet">${result.snippet}</p>
+                        ${insight !== null ? html`<p class="source-insight">${insight.relevance_hint}</p>` : html``}
+                        ${this._renderSourceAiDescription(result)}
                     </div>
-                    <button
-                        class="source-ai-button"
-                        type="button"
-                        ?disabled=${this._sourceDescribe.busy}
-                        title="AI"
-                        aria-label="AI"
-                        @click=${() => this._describeSource(stream, result)}
-                    >
-                        ${describing ? html`<span class="stream-dot"></span>` : html`<platform-icon name="sparkle" size="14"></platform-icon>`}
-                        <span>AI</span>
-                    </button>
+                    ${result.preview_image_url !== '' ? html`
+                        <img
+                            class="source-thumb"
+                            src=${result.preview_image_url}
+                            alt=""
+                            loading="lazy"
+                            referrerpolicy="no-referrer"
+                        >
+                    ` : html``}
                 </div>
-                <p class="source-url">
-                    <a href=${result.url} target="_blank" rel="noopener noreferrer">${this._displayUrl(result)}</a>
-                </p>
-                <p class="source-snippet">${result.snippet}</p>
-                ${insight !== null ? html`<p class="source-insight">${insight.relevance_hint}</p>` : html``}
-                ${this._renderSourceAiDescription(result)}
             </article>
         `;
     }
@@ -2022,8 +2167,21 @@ export class PublicSearchPage extends PlatformPage {
                     <span>${this.t('search_page.sources_label')}</span>
                     <span class="panel-count">${stream.results.length}</span>
                 </p>
+                ${stream.total_count > 0 ? html`
+                    <p class="source-results-meta">
+                        ${this.t('search_page.results_shown_of_total', {
+                            shown: String(stream.results.length),
+                            total: String(stream.total_count),
+                        })}
+                    </p>
+                ` : html``}
                 <div class="source-list">
                     ${stream.results.map((result, index) => this._renderSource(stream, result, index))}
+                    <div class="source-scroll-sentinel" aria-hidden="true"></div>
+                    ${this._serpMore.busy ? html`
+                        <div class="skeleton"></div>
+                        <div class="skeleton"></div>
+                    ` : html``}
                 </div>
             </section>
         `;

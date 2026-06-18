@@ -44,6 +44,9 @@ class WebSearchResult(BaseModel):
     document_id: str | None = None
     heading_trail: list[str] = Field(default_factory=list)
     search_index_id: str | None = None
+    site_name: str = ""
+    favicon_url: str = ""
+    preview_image_url: str = ""
 
 
 class MetaSearchProviderStatus(BaseModel):
@@ -64,7 +67,10 @@ class MetaSearchRequest(BaseModel):
     model_config: ClassVar[ConfigDict] = ConfigDict(extra="forbid", str_strip_whitespace=True)
 
     query: str = Field(..., min_length=1, max_length=500)
-    limit: int = Field(default=10, ge=1, le=20)
+    limit: int = Field(default=10, ge=1, le=25)
+    offset: int = Field(default=0, ge=0)
+    retrieve_limit: int | None = Field(default=None, ge=1, le=200)
+    serp_cache_key: str | None = Field(default=None, min_length=1, max_length=64)
     providers: list[str] = Field(default_factory=lambda: ["auto"])
     provider_strategy: Literal["first_available", "merge"] = "first_available"
     language: str = Field(default="ru", min_length=2, max_length=12)
@@ -123,6 +129,19 @@ class MetaSearchResponse(BaseModel):
     query: str
     results: list[WebSearchResult]
     providers: dict[str, MetaSearchProviderStatus]
+    total_count: int = Field(default=0, ge=0)
+    has_more: bool = False
+    offset: int = Field(default=0, ge=0)
+    limit: int = Field(default=0, ge=0)
+    serp_cache_key: str | None = None
+
+
+class MetaSearchSerpMoreRequest(BaseModel):
+    model_config: ClassVar[ConfigDict] = ConfigDict(extra="forbid", str_strip_whitespace=True)
+
+    serp_cache_key: str = Field(..., min_length=1, max_length=64)
+    offset: int = Field(..., ge=0)
+    limit: int = Field(default=10, ge=1, le=25)
 
 
 class SearchProvidersSnapshot(BaseModel):

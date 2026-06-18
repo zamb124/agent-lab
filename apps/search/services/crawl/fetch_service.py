@@ -78,6 +78,7 @@ async def _fetch_http_markdown(
             _extract_markdown_and_signals,
             response.content,
             content_type,
+            final_url,
         )
     return _build_crawl_fetch_result(
         final_url=final_url,
@@ -97,6 +98,7 @@ def _build_crawl_fetch_result_from_html(
     markdown, structural_signals = _extract_markdown_and_signals(
         html.encode("utf-8"),
         "text/html",
+        browser_response.final_url,
     )
     return _build_crawl_fetch_result(
         final_url=browser_response.final_url,
@@ -142,6 +144,7 @@ def _resolve_title(markdown: str, structural_signals: CrawlStructuralSignals) ->
 def _extract_markdown_and_signals(
     content: bytes,
     content_type: str,
+    page_url: str,
 ) -> tuple[str, CrawlStructuralSignals]:
     text = decode_response_body_bytes(content, content_type=content_type)
     if "html" not in content_type.lower():
@@ -149,7 +152,7 @@ def _extract_markdown_and_signals(
             raise ValueError("empty response body")
         return text, CrawlStructuralSignals()
     html = text
-    structural_signals = extract_structural_signals_from_html(html)
+    structural_signals = extract_structural_signals_from_html(html, page_url=page_url)
     extracted = trafilatura.extract(
         html,
         output_format="markdown",

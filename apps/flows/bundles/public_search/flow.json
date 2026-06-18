@@ -63,6 +63,7 @@
       "input_mapping": {
         "query": "@state:search_effective_query",
         "limit": "@var:search_result_limit",
+        "retrieve_limit": "@var:search_retrieve_limit",
         "language": "@var:search_language",
         "region": "@var:search_region",
         "providers": "@var:search_providers",
@@ -72,7 +73,12 @@
       "output_mapping": {
         "query": "search_provider_query",
         "results": "search_results",
-        "providers": "search_providers_status"
+        "providers": "search_providers_status",
+        "total_count": "search_serp_total_count",
+        "has_more": "search_serp_has_more",
+        "serp_cache_key": "search_serp_cache_key",
+        "offset": "search_serp_offset",
+        "limit": "search_serp_page_limit"
       },
       "node_timeout_seconds": 25
     },
@@ -81,7 +87,7 @@
       "name": "Emit Search Results SSE Event",
       "language": "python",
       "entrypoint": "run",
-      "code": "VALID_SEARCH_MODES = {\"quick\", \"deep\", \"research\"}\n\n\ndef _mode(state):\n    variables = state[\"variables\"]\n    if not isinstance(variables, dict):\n        raise TypeError(\"public_search results event: state.variables must be object\")\n    mode = variables[\"search_mode\"]\n    if mode not in VALID_SEARCH_MODES:\n        raise ValueError(\"public_search results event: variables.search_mode is invalid\")\n    return mode\n\n\nasync def run(args, state):\n    payload = {\n        \"kind\": \"public_search_serp_update\",\n        \"version\": 1,\n        \"flow_id\": \"public_search\",\n        \"phase\": \"results\",\n        \"mode\": _mode(state),\n        \"query\": state[\"search_user_query\"],\n        \"results\": state[\"search_results\"],\n        \"providers\": state[\"search_providers_status\"],\n    }\n    await capability(\n        \"state.push_ui_event\",\n        event_type=\"search/serp/results_ready\",\n        payload=payload,\n        source=\"public_search\",\n    )\n    return {}\n",
+      "code": "VALID_SEARCH_MODES = {\"quick\", \"deep\", \"research\"}\n\n\ndef _mode(state):\n    variables = state[\"variables\"]\n    if not isinstance(variables, dict):\n        raise TypeError(\"public_search results event: state.variables must be object\")\n    mode = variables[\"search_mode\"]\n    if mode not in VALID_SEARCH_MODES:\n        raise ValueError(\"public_search results event: variables.search_mode is invalid\")\n    return mode\n\n\ndef _require_int(value, label):\n    if not isinstance(value, int):\n        raise TypeError(f\"public_search results event: {label} must be int\")\n    return value\n\n\ndef _optional_string(value, label):\n    if value is None:\n        return None\n    if not isinstance(value, str):\n        raise TypeError(f\"public_search results event: {label} must be string or null\")\n    text = value.strip()\n    if text == \"\":\n        return None\n    return text\n\n\nasync def run(args, state):\n    payload = {\n        \"kind\": \"public_search_serp_update\",\n        \"version\": 1,\n        \"flow_id\": \"public_search\",\n        \"phase\": \"results\",\n        \"mode\": _mode(state),\n        \"query\": state[\"search_user_query\"],\n        \"results\": state[\"search_results\"],\n        \"providers\": state[\"search_providers_status\"],\n        \"total_count\": _require_int(state[\"search_serp_total_count\"], \"search_serp_total_count\"),\n        \"has_more\": state[\"search_serp_has_more\"] is True,\n        \"serp_cache_key\": _optional_string(state[\"search_serp_cache_key\"], \"search_serp_cache_key\"),\n        \"offset\": _require_int(state[\"search_serp_offset\"], \"search_serp_offset\"),\n        \"limit\": _require_int(state[\"search_serp_page_limit\"], \"search_serp_page_limit\"),\n    }\n    await capability(\n        \"state.push_ui_event\",\n        event_type=\"search/serp/results_ready\",\n        payload=payload,\n        source=\"public_search\",\n    )\n    return {}\n",
       "node_timeout_seconds": 20
     },
     "search_suggestions": {
@@ -232,7 +238,8 @@
   ],
   "variables": {
     "search_mode": "quick",
-    "search_result_limit": 12,
+    "search_result_limit": 10,
+    "search_retrieve_limit": 120,
     "search_suggestion_limit": 6,
     "search_language": "ru",
     "search_region": "ru",
@@ -252,7 +259,8 @@
       "permission": [],
       "variables": {
         "search_mode": "quick",
-        "search_result_limit": 12,
+        "search_result_limit": 10,
+        "search_retrieve_limit": 120,
         "search_suggestion_limit": 5,
         "search_provider_strategy": "first_available"
       }
@@ -267,7 +275,8 @@
       "permission": [],
       "variables": {
         "search_mode": "deep",
-        "search_result_limit": 16,
+        "search_result_limit": 10,
+        "search_retrieve_limit": 120,
         "search_suggestion_limit": 7,
         "search_provider_strategy": "merge"
       }
@@ -282,7 +291,8 @@
       "permission": [],
       "variables": {
         "search_mode": "research",
-        "search_result_limit": 20,
+        "search_result_limit": 10,
+        "search_retrieve_limit": 120,
         "search_suggestion_limit": 8,
         "search_provider_strategy": "merge"
       }
