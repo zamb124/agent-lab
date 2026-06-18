@@ -314,26 +314,24 @@ async def enable_llm_enrichment_layer(
         llm_enrichment_enabled=True,
         enrichment_model=CRAWL_STRICT_ENRICHMENT_MODEL,
     )
-    requeued = await search_container.crawl_url_repository.requeue_indexed_missing_enrichment(
+    missing_count = await search_container.crawl_url_repository.requeue_indexed_missing_enrichment(
         crawl_profile_id
     )
-    if requeued < 1:
-        raise AssertionError(f"expected requeued urls for enrichment, got {requeued}")
-    domain_page = await search_container.crawl_domain_repository.list_page(
-        crawl_profile_id=crawl_profile_id,
-        status=None,
-        limit=50,
-        offset=0,
+    if missing_count < 1:
+        raise AssertionError(f"expected indexed urls missing enrichment, got {missing_count}")
+    backfill_job = await search_container.crawl_job_repository.start(
+        crawl_profile_id,
+        "manual",
+        schedule_task_id=None,
     )
-    now = datetime.now(UTC)
-    for domain in domain_page.items:
-        await search_container.crawl_domain_repository.schedule_next(
-            domain.crawl_domain_id,
-            now,
-            last_error=None,
-            status="active",
-        )
-    return requeued
+    enqueued = await search_container.crawl_orchestrator_service.enqueue_enrichment_backfill(
+        crawl_profile_id,
+        backfill_job.crawl_job_id,
+        limit=missing_count,
+    )
+    if enqueued < 1:
+        raise AssertionError(f"expected enrichment tasks enqueued, got {enqueued}")
+    return enqueued
 
 
 async def poll_enriched_urls(

@@ -145,8 +145,6 @@ async def test_crawl_multi_site_two_layer_parse_search_then_llm_strict(
     requeued = await enable_llm_enrichment_layer(search_container, crawl_profile_id)
     assert requeued >= MIN_INDEXED_URLS
 
-    await queue_crawl_fetch_for_all_domains(search_client, search_container, crawl_profile_id)
-
     enriched_urls = await poll_enriched_urls(
         search_client,
         crawl_profile_id=crawl_profile_id,

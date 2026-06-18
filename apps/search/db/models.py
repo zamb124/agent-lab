@@ -102,6 +102,8 @@ class CrawlUrlRow(Base):
     crawl_status: Mapped[str] = mapped_column(String(32), nullable=False, default="pending")
     fetch_transport: Mapped[str | None] = mapped_column(String(16), nullable=True)
     document_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    extract_markdown: Mapped[str | None] = mapped_column(Text, nullable=True)
+    extract_title: Mapped[str | None] = mapped_column(Text, nullable=True)
     last_error: Mapped[str | None] = mapped_column(Text, nullable=True)
     last_crawled_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)

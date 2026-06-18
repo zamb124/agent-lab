@@ -13,6 +13,7 @@ from apps.search.db.crawl_repositories import (
     CrawlProfileRepository,
     CrawlUrlRepository,
 )
+from apps.search.services.crawl.crawl_enrichment_lock import crawl_enrichment_lock
 from apps.search.services.crawl.fetch_service import CrawlFetchService
 from apps.search.services.crawl.ingest_service import CrawlIngestService
 from apps.search.services.crawl.page_enrichment_service import CrawlPageEnrichmentService
@@ -21,6 +22,7 @@ from apps.search.services.crawl.sitemap_parser import SitemapDiscoveryError, dis
 from apps.search_worker.broker import broker as search_worker_broker
 from apps.search_worker.tasks.task_names import (
     CRAWL_DISCOVER_DOMAIN_TASK_NAME,
+    CRAWL_ENRICH_URL_TASK_NAME,
     CRAWL_FETCH_URL_TASK_NAME,
     CRAWL_ORCHESTRATOR_TICK_TASK_NAME,
 )
@@ -33,6 +35,7 @@ from core.crawl.enrichment_skip import (
 from core.crawl.models import (
     CrawlDomain,
     CrawlDomainRunResponse,
+    CrawlFetchResult,
     CrawlIngestPayload,
     CrawlJobTrigger,
     CrawlOrchestratorTickResult,
@@ -300,17 +303,6 @@ class CrawlOrchestratorService:
                 await self._crawl_job_repository.increment(crawl_job_id, urls_skipped=1)
                 return
             enriched_page = None
-            enriched_content_hash: str | None = None
-            enrichment_model: str | None = None
-            if profile.llm_enrichment_enabled:
-                enriched_page = await self._page_enrichment_service.enrich_page(
-                    fetched=fetched,
-                    profile=profile,
-                    crawl_domain_id=crawl_url.crawl_domain_id,
-                )
-                enriched_content_hash = compute_enriched_content_hash(enriched_page)
-                enrichment_model = enriched_page.enrichment_model
-                await self._crawl_job_repository.increment(crawl_job_id, urls_enriched=1)
             payload = CrawlIngestPayload(fetched=fetched, enriched_page=enriched_page)
             document_id = await self._ingest_service.ingest_page(
                 search_index=profile_bundle.search_index,
@@ -318,27 +310,129 @@ class CrawlOrchestratorService:
                 crawl_profile_id=crawl_profile_id,
                 domain=domain,
                 payload=payload,
+                document_id=crawl_url.document_id,
             )
             await self._crawl_url_repository.mark_indexed(
                 crawl_url.crawl_url_id,
                 document_id,
                 fetched.content_hash,
                 fetched.fetch_transport,
-                enriched_content_hash=enriched_content_hash,
-                enrichment_model=enrichment_model,
-                enrichment_prompt_version=prompt_version if profile.llm_enrichment_enabled else None,
+                extract_markdown=fetched.markdown,
+                extract_title=fetched.title,
             )
             await self._crawl_job_repository.increment(crawl_job_id, urls_indexed=1)
+            if profile.llm_enrichment_enabled:
+                await _enqueue_task(
+                    CRAWL_ENRICH_URL_TASK_NAME,
+                    crawl_url.crawl_url_id,
+                    crawl_job_id,
+                    crawl_profile_id,
+                )
         except Exception as exc:
             await self._crawl_url_repository.mark_failed(crawl_url.crawl_url_id, str(exc))
-            if profile.llm_enrichment_enabled:
-                await self._crawl_job_repository.increment(
-                    crawl_job_id,
-                    errors=1,
-                    urls_enrichment_failed=1,
+            await self._crawl_job_repository.increment(crawl_job_id, errors=1)
+
+    async def enrich_one_url(
+        self,
+        crawl_url_id: str,
+        crawl_job_id: str,
+        crawl_profile_id: str,
+    ) -> None:
+        profile_bundle = await self._crawl_profile_repository.get_with_index(crawl_profile_id)
+        profile = profile_bundle.profile
+        if not profile.llm_enrichment_enabled:
+            raise ValueError(f"llm enrichment disabled for crawl profile: {crawl_profile_id}")
+        crawl_url = await self._crawl_url_repository.get(crawl_url_id)
+        if crawl_url.crawl_status != "indexed":
+            raise ValueError(
+                f"crawl enrich requires indexed status: crawl_url_id={crawl_url_id}, status={crawl_url.crawl_status}"
+            )
+        if crawl_url.document_id is None:
+            raise ValueError(f"crawl enrich requires document_id: crawl_url_id={crawl_url_id}")
+        prompt_version = self._crawl_config.enrichment.prompt_version
+        stored_extract_hash = crawl_url.extract_content_hash
+        if stored_extract_hash is None:
+            stored_extract_hash = crawl_url.content_hash
+        if stored_extract_hash is None:
+            raise ValueError(f"crawl enrich requires extract_content_hash: crawl_url_id={crawl_url_id}")
+        if should_skip_crawl_url_after_fetch(
+            llm_enrichment_enabled=True,
+            extract_hash=stored_extract_hash,
+            stored_extract_hash=stored_extract_hash,
+            stored_enriched_hash=crawl_url.enriched_content_hash,
+            stored_enrichment_prompt_version=crawl_url.enrichment_prompt_version,
+            current_prompt_version=prompt_version,
+            document_id=crawl_url.document_id,
+        ):
+            return
+        domain = await self._crawl_domain_repository.get(crawl_url.crawl_domain_id)
+        url, canonical_url, extract_markdown, extract_title, extract_content_hash = (
+            await self._crawl_url_repository.get_layer1_snapshot(crawl_url_id)
+        )
+        fetched = CrawlFetchResult(
+            url=url,
+            canonical_url=canonical_url,
+            markdown=extract_markdown,
+            title=extract_title,
+            content_hash=extract_content_hash,
+            fetch_transport=crawl_url.fetch_transport or "http",
+        )
+        try:
+            async with crawl_enrichment_lock():
+                enriched_page = await self._page_enrichment_service.enrich_markdown(
+                    markdown=extract_markdown,
+                    url=url,
+                    profile=profile,
+                    crawl_domain_id=crawl_url.crawl_domain_id,
                 )
-            else:
-                await self._crawl_job_repository.increment(crawl_job_id, errors=1)
+                enriched_content_hash = compute_enriched_content_hash(enriched_page)
+                _ = await self._ingest_service.reingest_enriched_page(
+                    search_index=profile_bundle.search_index,
+                    crawl_job_id=crawl_job_id,
+                    crawl_profile_id=crawl_profile_id,
+                    domain=domain,
+                    document_id=crawl_url.document_id,
+                    fetched=fetched,
+                    enriched_page=enriched_page,
+                )
+                await self._crawl_url_repository.mark_enriched(
+                    crawl_url_id,
+                    enriched_content_hash=enriched_content_hash,
+                    enrichment_model=enriched_page.enrichment_model,
+                    enrichment_prompt_version=enriched_page.enrichment_prompt_version,
+                )
+                await self._crawl_job_repository.increment(crawl_job_id, urls_enriched=1)
+        except Exception as exc:
+            await self._crawl_url_repository.mark_enrichment_failed(crawl_url_id, str(exc))
+            await self._crawl_job_repository.increment(
+                crawl_job_id,
+                errors=1,
+                urls_enrichment_failed=1,
+            )
+            raise
+
+    async def enqueue_enrichment_backfill(
+        self,
+        crawl_profile_id: str,
+        crawl_job_id: str,
+        *,
+        limit: int = 100,
+    ) -> int:
+        profile_bundle = await self._crawl_profile_repository.get_with_index(crawl_profile_id)
+        if not profile_bundle.profile.llm_enrichment_enabled:
+            raise ValueError(f"llm enrichment disabled for crawl profile: {crawl_profile_id}")
+        crawl_url_ids = await self._crawl_url_repository.list_indexed_missing_enrichment(
+            crawl_profile_id,
+            limit=limit,
+        )
+        for crawl_url_id in crawl_url_ids:
+            await _enqueue_task(
+                CRAWL_ENRICH_URL_TASK_NAME,
+                crawl_url_id,
+                crawl_job_id,
+                crawl_profile_id,
+            )
+        return len(crawl_url_ids)
 
     async def _enqueue_domain_fetch(
         self,

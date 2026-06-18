@@ -454,6 +454,14 @@ class CrawlUrlRepository:
     def __init__(self, db: SearchDatabase) -> None:
         self._db: SearchDatabase = db
 
+    async def get(self, crawl_url_id: str) -> CrawlUrl:
+        async with self._db.session() as session:
+            stmt = select(CrawlUrlRow).where(CrawlUrlRow.crawl_url_id == crawl_url_id)
+            row = (await session.execute(stmt)).scalar_one_or_none()
+        if row is None:
+            raise ValueError(f"crawl url not found: {crawl_url_id}")
+        return _url_row_to_model(row)
+
     async def upsert_from_sitemap(
         self,
         crawl_domain_id: str,
@@ -548,6 +556,8 @@ class CrawlUrlRepository:
         extract_content_hash: str,
         fetch_transport: str | None = None,
         *,
+        extract_markdown: str,
+        extract_title: str,
         enriched_content_hash: str | None = None,
         enrichment_model: str | None = None,
         enrichment_prompt_version: str | None = None,
@@ -562,6 +572,8 @@ class CrawlUrlRepository:
                     document_id=document_id,
                     content_hash=extract_content_hash,
                     extract_content_hash=extract_content_hash,
+                    extract_markdown=extract_markdown,
+                    extract_title=extract_title,
                     enriched_content_hash=enriched_content_hash,
                     enrichment_model=enrichment_model,
                     enrichment_prompt_version=enrichment_prompt_version,
@@ -573,6 +585,64 @@ class CrawlUrlRepository:
             )
             _ = await session.execute(stmt)
             await session.commit()
+
+    async def mark_enriched(
+        self,
+        crawl_url_id: str,
+        *,
+        enriched_content_hash: str,
+        enrichment_model: str,
+        enrichment_prompt_version: str,
+    ) -> None:
+        now = datetime.now(UTC)
+        async with self._db.session() as session:
+            stmt = (
+                update(CrawlUrlRow)
+                .where(CrawlUrlRow.crawl_url_id == crawl_url_id)
+                .values(
+                    enriched_content_hash=enriched_content_hash,
+                    enrichment_model=enrichment_model,
+                    enrichment_prompt_version=enrichment_prompt_version,
+                    updated_at=now,
+                    last_error=None,
+                )
+            )
+            _ = await session.execute(stmt)
+            await session.commit()
+
+    async def mark_enrichment_failed(self, crawl_url_id: str, error: str) -> None:
+        now = datetime.now(UTC)
+        async with self._db.session() as session:
+            stmt = (
+                update(CrawlUrlRow)
+                .where(CrawlUrlRow.crawl_url_id == crawl_url_id)
+                .values(last_error=error, updated_at=now)
+            )
+            _ = await session.execute(stmt)
+            await session.commit()
+
+    async def get_layer1_snapshot(
+        self,
+        crawl_url_id: str,
+    ) -> tuple[str, str, str, str, str]:
+        async with self._db.session() as session:
+            stmt = select(CrawlUrlRow).where(CrawlUrlRow.crawl_url_id == crawl_url_id)
+            row = (await session.execute(stmt)).scalar_one_or_none()
+        if row is None:
+            raise ValueError(f"crawl url not found: {crawl_url_id}")
+        if row.extract_markdown is None or not row.extract_markdown.strip():
+            raise ValueError(f"extract_markdown is missing for crawl_url_id={crawl_url_id}")
+        if row.extract_title is None or not row.extract_title.strip():
+            raise ValueError(f"extract_title is missing for crawl_url_id={crawl_url_id}")
+        if row.extract_content_hash is None or not row.extract_content_hash.strip():
+            raise ValueError(f"extract_content_hash is missing for crawl_url_id={crawl_url_id}")
+        return (
+            row.url,
+            row.canonical_url,
+            row.extract_markdown,
+            row.extract_title,
+            row.extract_content_hash,
+        )
 
     async def mark_failed(self, crawl_url_id: str, error: str) -> None:
         now = datetime.now(UTC)
@@ -646,27 +716,55 @@ class CrawlUrlRepository:
             await session.commit()
         return failed_count
 
-    async def requeue_indexed_missing_enrichment(self, crawl_profile_id: str) -> int:
+    async def requeue_indexed_for_content_recheck(self, crawl_url_id: str) -> None:
         now = datetime.now(UTC)
+        async with self._db.session() as session:
+            stmt = (
+                update(CrawlUrlRow)
+                .where(
+                    CrawlUrlRow.crawl_url_id == crawl_url_id,
+                    CrawlUrlRow.crawl_status == "indexed",
+                )
+                .values(crawl_status="pending", updated_at=now)
+            )
+            _ = await session.execute(stmt)
+            await session.commit()
+
+    async def list_indexed_missing_enrichment(
+        self,
+        crawl_profile_id: str,
+        *,
+        limit: int,
+    ) -> list[str]:
+        if limit < 1:
+            raise ValueError("limit must be >= 1")
         async with self._db.session() as session:
             domain_ids_stmt = select(CrawlDomainRow.crawl_domain_id).where(
                 CrawlDomainRow.crawl_profile_id == crawl_profile_id
             )
             domain_ids = list((await session.execute(domain_ids_stmt)).scalars().all())
             if not domain_ids:
-                return 0
+                return []
             stmt = (
-                update(CrawlUrlRow)
+                select(CrawlUrlRow.crawl_url_id)
                 .where(
                     CrawlUrlRow.crawl_domain_id.in_(domain_ids),
                     CrawlUrlRow.crawl_status == "indexed",
                     CrawlUrlRow.enriched_content_hash.is_(None),
+                    CrawlUrlRow.document_id.is_not(None),
+                    CrawlUrlRow.extract_markdown.is_not(None),
                 )
-                .values(crawl_status="pending", updated_at=now)
+                .order_by(CrawlUrlRow.updated_at)
+                .limit(limit)
             )
-            result = await session.execute(stmt)
-            await session.commit()
-        return get_rowcount(result)
+            return list((await session.execute(stmt)).scalars().all())
+
+    async def requeue_indexed_missing_enrichment(self, crawl_profile_id: str) -> int:
+        crawl_url_ids = await self.list_indexed_missing_enrichment(
+            crawl_profile_id,
+            limit=10_000,
+        )
+        return len(crawl_url_ids)
 
     async def count_by_status_for_profile(self, crawl_profile_id: str) -> list[CrawlStatusCount]:
         async with self._db.session() as session:

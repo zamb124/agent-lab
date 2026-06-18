@@ -41,7 +41,7 @@ class CrawlEnrichedChunk(StrictBaseModel):
 
 class CrawlEnrichedPageLLMOutput(StrictBaseModel):
     page_summary: str = Field(..., min_length=1)
-    chunks: list[CrawlEnrichedChunk] = Field(..., min_length=1)
+    chunks: list[CrawlEnrichedChunk] = Field(..., min_length=1, max_length=1)
 
 
 class CrawlEnrichedPage(StrictBaseModel):

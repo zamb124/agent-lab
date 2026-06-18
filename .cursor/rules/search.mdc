@@ -20,7 +20,7 @@ Ownership: `apps/search` + `apps/search_worker` + `platform_search`.
 
 - **HTTP (primary):** `CrawlFetchService._fetch_http_markdown` — httpx + trafilatura + BS4. Детерминированно, без LLM.
 - **Browser fallback:** при `browser_fallback_enabled=true` и ошибке HTTP или `len(markdown) < min_extract_chars` → `BrowserFetchClient` → `POST /browser/api/v1/control/crawl/fetch` (Playwright, `page_mode=crawl`, block images/CSS/fonts). Fail-closed без флага.
-- **LLM enrichment (opt-in):** при `crawl_profiles.llm_enrichment_enabled=true` после fetch → `CrawlPageEnrichmentService` → `core.ai` + `provider_litserve_crawl` → `POST /v1/chat/completions` **в том же процессе `provider_litserve`** (отдельный k8s pod не используется). Structured JSON → `CrawlEnrichedPage.to_ingest_markdown()` заменяет raw markdown перед ingest. Fail-closed без флага профиля.
+- **LLM enrichment (opt-in, two-stage):** при `crawl_profiles.llm_enrichment_enabled=true` layer 1 всегда ingest raw markdown в RAG (`crawl_fetch_url`); поиск работает сразу. После `mark_indexed` → `kiq(crawl_enrich_url)`. Layer 2: `CrawlPageEnrichmentService` → `core.ai` + `provider_litserve_crawl` → structured JSON (строго 1 chunk) → `reingest_enriched_page` (delete+ingest). Redis lock `crawl:enrichment:gpu` — 1 in-flight на GPU. Fail enrichment не сбрасывает `indexed`; backfill — `list_indexed_missing_enrichment` + `enqueue_enrichment_backfill`.
 - **Skip:** dual hash — `extract_content_hash` (raw markdown) + `enriched_content_hash` + `enrichment_prompt_version`. LitServe/humanitec_llm для scrape/extraction по-прежнему запрещены; LLM только enrichment layer и query-time (`public_search`, insights).
 
 ## Indexing profile `runet_web`

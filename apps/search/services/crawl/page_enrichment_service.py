@@ -24,10 +24,10 @@ from core.tracing.operation_span import traced_operation
 logger = get_logger(__name__)
 
 _ENRICHMENT_SYSTEM_PROMPT = (
-    "You structure web page markdown into semantic chunks for search indexing. "
+    "You structure web page markdown into a single semantic chunk for search indexing. "
     "Return only facts present in the source text. "
     "Do not invent entities, numbers, or claims. "
-    "Each chunk must be self-contained and cite hierarchy headings from the page when available."
+    "The chunk must be self-contained and cite hierarchy headings from the page when available."
 )
 
 
@@ -46,24 +46,14 @@ class CrawlPageEnrichmentService:
             return profile.enrichment_model.strip()
         return self._enrichment_config.default_model.strip()
 
-    async def enrich_page(
-        self,
-        *,
-        fetched: CrawlFetchResult,
-        profile: CrawlProfile,
-        crawl_domain_id: str,
-    ) -> CrawlEnrichedPage:
-        if not profile.llm_enrichment_enabled:
-            raise ValueError("llm enrichment is disabled for crawl profile")
-        markdown = fetched.markdown
+    def _truncate_markdown(self, markdown: str) -> str:
         max_input_chars = self._enrichment_config.max_input_chars
-        if len(markdown) > max_input_chars:
-            raise ValueError(
-                f"crawl markdown exceeds max_input_chars={max_input_chars}: url={fetched.url}"
-            )
-        enrichment_model = self._resolve_enrichment_model(profile)
-        prompt_version = self._enrichment_config.prompt_version
-        user_prompt = (
+        if len(markdown) <= max_input_chars:
+            return markdown
+        return markdown[:max_input_chars]
+
+    def _build_user_prompt(self, markdown: str) -> str:
+        return (
             "Extract structured page data from the markdown below.\n"
             "JSON schema:\n"
             "{\n"
@@ -77,11 +67,26 @@ class CrawlPageEnrichmentService:
             "  ]\n"
             "}\n"
             "Rules:\n"
-            "- chunks min 1\n"
+            "- exactly one chunk in chunks array\n"
+            "- page_summary is a concise page-level summary\n"
+            "- metadata_summary describes what the chunk covers\n"
             "- only facts from markdown\n"
             "- hierarchy reflects heading path when present\n\n"
             f"Markdown:\n{markdown}"
         )
+
+    async def _invoke_enrichment_llm(
+        self,
+        *,
+        markdown: str,
+        url: str,
+        profile: CrawlProfile,
+        crawl_domain_id: str,
+    ) -> CrawlEnrichedPage:
+        enrichment_model = self._resolve_enrichment_model(profile)
+        prompt_version = self._enrichment_config.prompt_version
+        truncated_markdown = self._truncate_markdown(markdown)
+        user_prompt = self._build_user_prompt(truncated_markdown)
         llm_client = create_llm_client_from_call_config(
             LLMCallConfig(
                 provider=PROVIDER_LITSERVE_CRAWL,
@@ -95,12 +100,13 @@ class CrawlPageEnrichmentService:
         if not isinstance(llm_client, LLMClient):
             raise RuntimeError("crawl page enrichment requires LLMClient")
         llm_client.timeout = self._enrichment_config.timeout_seconds
+        llm_client.first_token_timeout = self._enrichment_config.timeout_seconds
         started_at = time.monotonic()
         async with traced_operation(
             "crawl.enrich_page",
             extra_attributes={
                 "crawl_domain_id": crawl_domain_id,
-                "url": fetched.url,
+                "url": url,
                 "enrichment_model": enrichment_model,
             },
         ) as span:
@@ -125,9 +131,42 @@ class CrawlPageEnrichmentService:
             )
             logger.info(
                 "crawl enrichment completed url=%s model=%s chunks=%s latency_ms=%s",
-                fetched.url,
+                url,
                 enrichment_model,
                 len(enriched_page.chunks),
                 latency_ms,
             )
             return enriched_page
+
+    async def enrich_page(
+        self,
+        *,
+        fetched: CrawlFetchResult,
+        profile: CrawlProfile,
+        crawl_domain_id: str,
+    ) -> CrawlEnrichedPage:
+        if not profile.llm_enrichment_enabled:
+            raise ValueError("llm enrichment is disabled for crawl profile")
+        return await self._invoke_enrichment_llm(
+            markdown=fetched.markdown,
+            url=fetched.url,
+            profile=profile,
+            crawl_domain_id=crawl_domain_id,
+        )
+
+    async def enrich_markdown(
+        self,
+        *,
+        markdown: str,
+        url: str,
+        profile: CrawlProfile,
+        crawl_domain_id: str,
+    ) -> CrawlEnrichedPage:
+        if not profile.llm_enrichment_enabled:
+            raise ValueError("llm enrichment is disabled for crawl profile")
+        return await self._invoke_enrichment_llm(
+            markdown=markdown,
+            url=url,
+            profile=profile,
+            crawl_domain_id=crawl_domain_id,
+        )

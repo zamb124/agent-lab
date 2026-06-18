@@ -40,12 +40,24 @@ class ChatTokenizer(Protocol):
     def decode(self, token_ids: torch.Tensor, *, skip_special_tokens: bool) -> str: ...
 
 
+class ChatInputEmbeddings(Protocol):
+    weight: torch.nn.Parameter
+
+
 class ChatLanguageModel(Protocol):
     def eval(self) -> Self: ...
 
     def to(self, device: torch.device) -> Self: ...
 
     def generate(self, **kwargs: object) -> torch.Tensor: ...
+
+    def get_input_embeddings(self) -> ChatInputEmbeddings: ...
+
+
+def _model_input_device(model: ChatLanguageModel) -> torch.device:
+    embeddings = model.get_input_embeddings()
+    weight = embeddings.weight
+    return weight.device
 
 
 class ChatTokenizerLoader(Protocol):
@@ -80,17 +92,6 @@ def _require_bitsandbytes_for_cuda_quant(device: str) -> None:
             "(uv sync --group llm-model или --group llm-model в Dockerfile.base.gpu GPU-образа)"
         )
         raise RuntimeError(message) from exc
-
-
-def _model_input_device(model: ChatLanguageModel, fallback_device: str) -> torch.device:
-    get_embeddings = getattr(model, "get_input_embeddings", None)
-    if get_embeddings is not None:
-        embeddings = get_embeddings()
-        weight = embeddings.weight
-        return weight.device
-    if fallback_device.startswith("cuda"):
-        return torch.device(fallback_device)
-    return torch.device("cpu")
 
 
 def _tokenizer_inputs_on_device(
@@ -209,7 +210,7 @@ class LocalChatEngine:
             add_generation_prompt=True,
         )
         inputs = tokenizer(prompt, return_tensors="pt")
-        input_device = _model_input_device(model, self._device)
+        input_device = _model_input_device(model)
         model_inputs = _tokenizer_inputs_on_device(inputs, input_device)
         input_ids_tensor = model_inputs["input_ids"]
         max_new_tokens = request.max_tokens if request.max_tokens is not None else 2048

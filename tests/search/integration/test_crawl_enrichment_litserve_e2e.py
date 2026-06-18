@@ -12,6 +12,7 @@ from core.search.index_models import SearchIndexCreateRequest
 from tests.search.conftest import make_search_index_slug
 from tests.search.integration.crawl_strict_e2e_support import (
     CRAWL_STRICT_ENRICHMENT_MODEL,
+    poll_enriched_urls,
     poll_index_search_hits,
     require_crawl_llm_live_gate,
 )
@@ -91,9 +92,18 @@ async def test_crawl_enrichment_indexes_example_com_with_page_summary(
     _ = await crawl_discover_domain(domain.crawl_domain_id, job.crawl_job_id, crawl_profile_id)
     _ = await crawl_fetch_url(domain.crawl_domain_id, job.crawl_job_id, crawl_profile_id, 1)
 
+    job_after_fetch = await search_container.crawl_job_repository.get(job.crawl_job_id)
+    assert job_after_fetch.urls_indexed >= 1
+
+    await poll_enriched_urls(
+        search_client,
+        crawl_profile_id=crawl_profile_id,
+        min_enriched=1,
+        timeout_seconds=300.0,
+    )
+
     job_after = await search_container.crawl_job_repository.get(job.crawl_job_id)
     assert job_after.urls_enriched >= 1
-    assert job_after.urls_indexed >= 1
 
     hit = await poll_index_search_hits(
         search_client,

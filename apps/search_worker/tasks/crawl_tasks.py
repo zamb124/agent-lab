@@ -10,6 +10,7 @@ from apps.search.services.system_context import build_search_system_context
 from apps.search_worker.broker import broker
 from apps.search_worker.tasks.task_names import (
     CRAWL_DISCOVER_DOMAIN_TASK_NAME,
+    CRAWL_ENRICH_URL_TASK_NAME,
     CRAWL_FETCH_URL_TASK_NAME,
     CRAWL_IMPORT_SEED_DOMAINS_TASK_NAME,
     CRAWL_ORCHESTRATOR_TICK_TASK_NAME,
@@ -110,6 +111,31 @@ async def crawl_fetch_url(
 
 
 @broker.task(
+    task_name=CRAWL_ENRICH_URL_TASK_NAME,
+    queue_name="search",
+    retry_on_error=True,
+    max_retries=2,
+)
+async def crawl_enrich_url(
+    crawl_url_id: str,
+    crawl_job_id: str,
+    crawl_profile_id: str,
+) -> JsonObject:
+    trace_id = f"crawl:enrich:{crawl_url_id}"
+    await _enter_worker_context(trace_id=trace_id)
+    try:
+        container = get_search_container()
+        await container.crawl_orchestrator_service.enrich_one_url(
+            crawl_url_id,
+            crawl_job_id,
+            crawl_profile_id,
+        )
+        return {"crawl_url_id": crawl_url_id, "status": "enriched"}
+    finally:
+        clear_context()
+
+
+@broker.task(
     task_name=CRAWL_IMPORT_SEED_DOMAINS_TASK_NAME,
     queue_name="search",
     retry_on_error=False,
@@ -165,6 +191,28 @@ async def crawl_reclaim_stale_fetching(
         )
         requeued_failed = await container.crawl_url_repository.requeue_failed_urls()
         crawl_profile_id = get_search_settings().crawl.default_crawl_profile_id
+        profile_bundle = await container.crawl_profile_repository.get_with_index(crawl_profile_id)
+        enrichment_backfill = 0
+        if profile_bundle.profile.llm_enrichment_enabled:
+            missing_ids = await container.crawl_url_repository.list_indexed_missing_enrichment(
+                crawl_profile_id,
+                limit=50,
+            )
+            if missing_ids:
+                backfill_job = await container.crawl_job_repository.start(
+                    crawl_profile_id,
+                    "scheduler",
+                    schedule_task_id,
+                )
+                enrichment_backfill = await container.crawl_orchestrator_service.enqueue_enrichment_backfill(
+                    crawl_profile_id,
+                    backfill_job.crawl_job_id,
+                    limit=50,
+                )
+                _ = await container.crawl_job_repository.finish(
+                    backfill_job.crawl_job_id,
+                    status="completed",
+                )
         pending_urls = await container.crawl_url_repository.count_pending_for_profile(crawl_profile_id)
         if pending_urls > 0:
             tick_task = broker.find_task(CRAWL_ORCHESTRATOR_TICK_TASK_NAME)
@@ -175,6 +223,7 @@ async def crawl_reclaim_stale_fetching(
             "stale_jobs_finished": stale_jobs,
             "reclaimed_fetching": reclaimed_fetching,
             "requeued_failed": requeued_failed,
+            "enrichment_backfill": enrichment_backfill,
         }
     finally:
         clear_context()

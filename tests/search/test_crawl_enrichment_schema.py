@@ -36,3 +36,22 @@ def test_crawl_enriched_page_rejects_empty_chunks():
             enrichment_model="qwen/qwen2.5-1.5b-instruct-crawl",
             enrichment_prompt_version="v1",
         )
+
+
+def test_crawl_enriched_page_llm_output_rejects_multiple_chunks():
+    with pytest.raises(ValidationError):
+        _ = CrawlEnrichedPageLLMOutput(
+            page_summary="Example documentation page",
+            chunks=[
+                CrawlEnrichedChunk(
+                    content="First chunk content.",
+                    metadata_summary="First section",
+                    hierarchy=["Intro"],
+                ),
+                CrawlEnrichedChunk(
+                    content="Second chunk content.",
+                    metadata_summary="Second section",
+                    hierarchy=["Details"],
+                ),
+            ],
+        )

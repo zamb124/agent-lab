@@ -9,7 +9,7 @@ import pytest
 
 from apps.search.config import get_search_settings
 from apps.search.services.crawl.orchestrator_service import CrawlOrchestratorService
-from core.crawl.models import CrawlDomain, CrawlJob, CrawlProfile, CrawlProfileWithIndex
+from core.crawl.models import CrawlDomain, CrawlJob, CrawlProfile, CrawlProfileWithIndex, CrawlUrl
 from core.search.index_models import SearchIndexDefinition, SearchIndexRetrievalConfig
 
 
@@ -336,3 +336,75 @@ async def test_run_tick_reenqueues_while_profile_pending_even_without_new_fetch(
 
     orchestrator_ticks = [item for item in enqueued if item[0] == "crawl_orchestrator_tick"]
     assert orchestrator_ticks == [("crawl_orchestrator_tick", "cr_test")]
+
+
+@pytest.mark.asyncio
+async def test_fetch_and_index_url_enqueues_enrich_when_llm_enabled(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    enqueued: list[tuple[object, ...]] = []
+
+    async def _capture(task_name: str, *args: object, **kwargs: object) -> None:
+        enqueued.append((task_name, *args))
+
+    monkeypatch.setattr(
+        "apps.search.services.crawl.orchestrator_service._enqueue_task",
+        _capture,
+    )
+
+    now = datetime.now(UTC)
+    profile_bundle = _profile_bundle()
+    profile_bundle = profile_bundle.model_copy(
+        update={
+            "profile": profile_bundle.profile.model_copy(
+                update={"llm_enrichment_enabled": True},
+            ),
+        },
+    )
+    domain = _domain("dom-1", "example.com")
+    crawl_url = CrawlUrl(
+        crawl_url_id="url-1",
+        crawl_domain_id="dom-1",
+        url="https://example.com/page",
+        canonical_url="https://example.com/page",
+        crawl_status="fetching",
+        created_at=now,
+        updated_at=now,
+    )
+
+    from core.crawl.models import CrawlFetchResult
+
+    fetched = CrawlFetchResult(
+        url=crawl_url.url,
+        canonical_url=crawl_url.canonical_url,
+        markdown="# Example\n\nBody text for indexing.",
+        title="Example",
+        content_hash="hash-layer1",
+        fetch_transport="http",
+    )
+
+    orchestrator = _orchestrator(
+        profile_bundle=profile_bundle,
+        domain_repo=AsyncMock(get=AsyncMock(return_value=domain)),
+        url_repo=AsyncMock(
+            mark_indexed=AsyncMock(),
+            mark_failed=AsyncMock(),
+        ),
+        job_repo=AsyncMock(increment=AsyncMock()),
+    )
+    orchestrator._fetch_service.fetch_markdown = AsyncMock(return_value=fetched)  # pyright: ignore[reportAttributeAccessIssue]
+    orchestrator._ingest_service.ingest_page = AsyncMock(return_value="doc-1")  # pyright: ignore[reportAttributeAccessIssue]
+
+    await orchestrator._fetch_and_index_url(
+        crawl_url=crawl_url,
+        crawl_job_id="job-1",
+        crawl_profile_id="cr_test",
+        profile_bundle=profile_bundle,
+        domain=domain,
+        stored_extract_hash=None,
+    )
+
+    enrich_tasks = [item for item in enqueued if item[0] == "crawl_enrich_url"]
+    assert len(enrich_tasks) == 1
+    assert enrich_tasks[0][1:] == ("url-1", "job-1", "cr_test")
+    orchestrator._page_enrichment_service.enrich_page.assert_not_called()  # pyright: ignore[reportAttributeAccessIssue, reportUnknownMemberType]

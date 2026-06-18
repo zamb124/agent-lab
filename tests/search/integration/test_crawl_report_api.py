@@ -117,7 +117,10 @@ async def test_crawl_profile_summary_mixed_state(
     await search_container.crawl_url_repository.mark_indexed(
         indexed_urls[0].crawl_url_id,
         document_id=f"doc_{unique_id}",
-        content_hash=f"hash_{unique_id}",
+        extract_content_hash=f"hash_{unique_id}",
+        fetch_transport="http",
+        extract_markdown="Example page markdown for crawl report test.",
+        extract_title="Example page",
     )
 
     running_job = await search_container.crawl_job_repository.start(

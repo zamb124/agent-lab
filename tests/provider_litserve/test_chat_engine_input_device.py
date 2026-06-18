@@ -25,7 +25,7 @@ def _engine() -> engines.LocalChatEngine:
 def test_model_input_device_uses_embedding_weight_device() -> None:
     model = MagicMock()
     model.get_input_embeddings.return_value.weight.device = torch.device("cuda:0")
-    device = engines._model_input_device(model, "cpu")
+    device = engines._model_input_device(model)
     assert device == torch.device("cuda:0")
 
 

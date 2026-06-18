@@ -12,6 +12,7 @@ from core.search.index_models import SearchIndexCreateRequest
 from tests.search.conftest import make_search_index_slug
 from tests.search.integration.crawl_strict_e2e_support import (
     CRAWL_STRICT_ENRICHMENT_MODEL,
+    poll_enriched_urls,
     require_crawl_llm_live_gate,
 )
 
@@ -25,6 +26,7 @@ REAL_CRAWL_DOMAIN = "example.com"
 
 @pytest.mark.asyncio
 async def test_crawl_enrichment_second_fetch_skips_unchanged_url(
+    search_client,
     search_worker,
     provider_litserve_service,
     provider_litserve_crawl_llm_service,
@@ -81,6 +83,25 @@ async def test_crawl_enrichment_second_fetch_skips_unchanged_url(
     _ = await crawl_fetch_url(domain.crawl_domain_id, job.crawl_job_id, crawl_profile_id, 1)
     first_job = await search_container.crawl_job_repository.get(job.crawl_job_id)
     assert first_job.urls_indexed >= 1
+
+    url_page = await search_container.crawl_url_repository.list_page_for_profile(
+        crawl_profile_id=crawl_profile_id,
+        crawl_status="indexed",
+        domain=REAL_CRAWL_DOMAIN,
+        limit=1,
+        offset=0,
+    )
+    assert url_page.total >= 1
+    crawl_url_id = url_page.items[0].crawl_url_id
+
+    await poll_enriched_urls(
+        search_client,
+        crawl_profile_id=crawl_profile_id,
+        min_enriched=1,
+        timeout_seconds=120.0,
+    )
+
+    await search_container.crawl_url_repository.requeue_indexed_for_content_recheck(crawl_url_id)
 
     second_job = await search_container.crawl_job_repository.start(
         crawl_profile_id,
