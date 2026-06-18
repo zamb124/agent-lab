@@ -279,13 +279,32 @@ def _can_push() -> bool:
     return os.environ.get("TEST_IMAGES_PUSH", "").strip() == "1"
 
 
+def _pull_candidates(registry: str, spec: ImageSpec) -> list[str]:
+    primary = _image_ref(registry, spec.repository_suffix, spec.tag)
+    if spec.tag == "latest":
+        return [primary]
+    latest = _image_ref(registry, spec.repository_suffix, "latest")
+    return [primary, latest]
+
+
+def _try_pull_image(image_ref: str) -> bool:
+    if not _manifest_exists(image_ref):
+        return False
+    print(f"[ensure] pull {image_ref}")
+    return _docker_pull(image_ref)
+
+
 def _ensure_image(spec: ImageSpec, registry: str, *, try_pull: bool) -> str:
     image_ref = _image_ref(registry, spec.repository_suffix, spec.tag)
-    if try_pull and _manifest_exists(image_ref):
-        print(f"[ensure] pull {image_ref}")
-        if _docker_pull(image_ref):
+    if try_pull:
+        for candidate in _pull_candidates(registry, spec):
+            if not _try_pull_image(candidate):
+                continue
+            if candidate != image_ref:
+                print(f"[ensure] tag {candidate} -> {image_ref}")
+                _run(["docker", "tag", candidate, image_ref])
             return image_ref
-        print(f"[ensure] pull failed, building {image_ref}")
+        print(f"[ensure] registry miss for {spec.repository_suffix}:{spec.tag}, building locally")
 
     print(f"[ensure] build {image_ref}")
     _docker_build(spec, image_ref, registry)
@@ -320,10 +339,16 @@ def main() -> int:
     test_base_ref = _image_ref(registry, "agent-lab-test-base", f"deps-{deps_hash}")
     agent_lab_base_ref = _image_ref(registry, "agent-lab-base", "latest")
 
-    try_pull_code_images = not dirty
+    force_build = os.environ.get("TEST_IMAGES_FORCE_BUILD", "").strip() == "1"
+    try_pull_code_images = not force_build
 
     if dirty:
-        print("[ensure] git tree dirty — code images will be built locally (no pull)")
+        print(
+            "[ensure] git tree dirty — GHCR pull first (pytest runs from host); "
+            "set TEST_IMAGES_FORCE_BUILD=1 to force local docker build"
+        )
+    elif force_build:
+        print("[ensure] TEST_IMAGES_FORCE_BUILD=1 — code images will be built locally")
 
     test_base_spec = ImageSpec(
         env_key="TEST_BASE_IMAGE",
