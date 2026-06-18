@@ -31,6 +31,7 @@ from core.crawl.enrichment_skip import (
     compute_enriched_content_hash,
     should_skip_crawl_url_after_fetch,
 )
+from core.crawl.errors import CrawlExtractTooShortError
 from core.crawl.models import (
     CrawlDomain,
     CrawlDomainRunResponse,
@@ -329,6 +330,12 @@ class CrawlOrchestratorService:
                     crawl_job_id,
                     crawl_profile_id,
                 )
+        except CrawlExtractTooShortError:
+            await self._crawl_url_repository.mark_skipped(
+                crawl_url.crawl_url_id,
+                None,
+            )
+            await self._crawl_job_repository.increment(crawl_job_id, urls_skipped=1)
         except Exception as exc:
             await self._crawl_url_repository.mark_failed(crawl_url.crawl_url_id, str(exc))
             await self._crawl_job_repository.increment(crawl_job_id, errors=1)

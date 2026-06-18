@@ -809,7 +809,7 @@ class CrawlUrlRepository:
                     CrawlUrlRow.document_id.is_not(None),
                     CrawlUrlRow.extract_markdown.is_not(None),
                 )
-                .order_by(CrawlUrlRow.updated_at)
+                .order_by(CrawlUrlRow.last_error.is_not(None).desc(), CrawlUrlRow.updated_at)
                 .limit(limit)
             )
             return list((await session.execute(stmt)).scalars().all())

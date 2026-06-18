@@ -55,6 +55,7 @@ from core.clients.llm.messages import (
     normalize_messages as _normalize_messages,
 )
 from core.clients.llm.provider_resolution import _detect_provider
+from core.clients.llm.structured_output import resolve_structured_output_source_text
 from core.clients.llm.transport import (
     invoke_once as _transport_invoke_once,
 )
@@ -805,6 +806,7 @@ class LLMClient:
             }
 
         content_parts: list[str] = []
+        reasoning_parts: list[str] = []
         tool_calls: JsonArray = []
         last_status_text = ""
 
@@ -828,10 +830,15 @@ class LLMClient:
             llm_context_source_registry=llm_context_source_registry,
         ):
             if isinstance(event, TaskArtifactUpdateEvent):
-                if event.artifact and event.artifact.name != "reasoning" and event.artifact.parts:
+                if event.artifact and event.artifact.parts:
+                    artifact_name = event.artifact.name
                     for part in event.artifact.parts:
                         root = part.root
-                        if isinstance(root, TextPart):
+                        if not isinstance(root, TextPart):
+                            continue
+                        if artifact_name == "reasoning":
+                            reasoning_parts.append(root.text)
+                        elif artifact_name != "reasoning":
                             content_parts.append(root.text)
             if isinstance(event, TaskStatusUpdateEvent) and event.status:
                 if event.status.message:
@@ -852,7 +859,12 @@ class LLMClient:
 
         content = "".join(content_parts)
         if response_model:
-            text_for_json = content if content.strip() else last_status_text
+            reasoning_text = "".join(reasoning_parts)
+            text_for_json = resolve_structured_output_source_text(
+                content=content,
+                last_status_text=last_status_text,
+                reasoning_text=reasoning_text,
+            )
             if not text_for_json.strip():
                 raise ValueError(
                     "LLM structured output: пустой ответ (нет текста вне reasoning-артефакта и нет "

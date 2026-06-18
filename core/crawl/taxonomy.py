@@ -82,6 +82,27 @@ def _pick_category_path(
     raise ValueError("taxonomy category_paths has no fallback path")
 
 
+def _pad_topic_tags_to_minimum(
+    topic_tags: list[str],
+    *,
+    allowed_topic_tags: set[str],
+) -> list[str]:
+    if len(topic_tags) >= 2:
+        return topic_tags
+    padding_candidates = ("reference", "other")
+    for candidate in padding_candidates:
+        if candidate in allowed_topic_tags and candidate not in topic_tags:
+            topic_tags.append(candidate)
+        if len(topic_tags) >= 2:
+            return topic_tags
+    for candidate in sorted(allowed_topic_tags):
+        if candidate not in topic_tags:
+            topic_tags.append(candidate)
+        if len(topic_tags) >= 2:
+            break
+    return topic_tags
+
+
 def coerce_filter_metadata_for_taxonomy(
     filter_metadata: CrawlPageFilterMetadata,
     taxonomy: SearchIndexCrawlTaxonomy,
@@ -102,8 +123,10 @@ def coerce_filter_metadata_for_taxonomy(
 
     if primary_topic not in coerced_tags:
         coerced_tags.append(primary_topic)
-    if len(coerced_tags) < 2 and "other" in allowed_topic_tags and "other" not in coerced_tags:
-        coerced_tags.append("other")
+    coerced_tags = _pad_topic_tags_to_minimum(
+        coerced_tags,
+        allowed_topic_tags=allowed_topic_tags,
+    )
     coerced_tags.sort()
 
     category_path = _pick_category_path(

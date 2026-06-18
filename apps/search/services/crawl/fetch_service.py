@@ -13,6 +13,7 @@ from bs4 import BeautifulSoup
 from apps.browser.contracts.crawl_fetch_types import BrowserCrawlFetchResponse
 from apps.search.db.crawl_repositories import canonicalize_url
 from core.clients.browser_fetch_client import BrowserFetchClient
+from core.crawl.errors import CrawlExtractTooShortError
 from core.crawl.models import CrawlFetchResult, CrawlStructuralSignals
 from core.crawl.structural_signals import extract_structural_signals_from_html
 from core.http import get_httpx_client
@@ -115,7 +116,7 @@ def _build_crawl_fetch_result(
     fetch_transport: CrawlFetchTransport,
 ) -> CrawlFetchResult:
     if len(markdown.strip()) < min_extract_chars:
-        raise ValueError(f"extracted text too short for url: {final_url}")
+        raise CrawlExtractTooShortError(final_url)
     canonical_url = canonicalize_url(final_url)
     title = _resolve_title(markdown, structural_signals)
     heading_trail = _extract_heading_trail(markdown)

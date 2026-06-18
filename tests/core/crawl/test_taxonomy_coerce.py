@@ -85,20 +85,6 @@ def test_coerce_strips_schema_field_names_from_topic_tags() -> None:
     assert "category_path" not in coerced.topic_tags
 
 
-def test_coerce_accepts_bare_metal_tag() -> None:
-    taxonomy = _runet_taxonomy()
-    coerced = coerce_filter_metadata_for_taxonomy(
-        _filter_metadata(
-            primary_topic="hardware",
-            topic_tags=["bare_metal", "hardware"],
-            category_path=["tech", "hardware"],
-        ),
-        taxonomy,
-    )
-    validate_filter_metadata_against_taxonomy(coerced, taxonomy)
-    assert "bare_metal" in coerced.topic_tags
-
-
 def test_coerce_accepts_data_science_infrastructure_browser() -> None:
     taxonomy = _runet_taxonomy()
     coerced = coerce_filter_metadata_for_taxonomy(
@@ -128,3 +114,34 @@ def test_coerce_accepts_data_science_infrastructure_browser() -> None:
         taxonomy,
     )
     validate_filter_metadata_against_taxonomy(coerced_browser, taxonomy)
+
+
+def test_coerce_pads_single_other_topic_tag() -> None:
+    taxonomy = _runet_taxonomy()
+    filter_metadata = CrawlPageFilterMetadata.model_construct(
+        content_type="article",
+        primary_topic="other",
+        topic_tags=["other"],
+        category_path=["other"],
+        language="ru",
+        audience="general",
+    )
+    coerced = coerce_filter_metadata_for_taxonomy(filter_metadata, taxonomy)
+    validate_filter_metadata_against_taxonomy(coerced, taxonomy)
+    assert len(coerced.topic_tags) >= 2
+    assert "other" in coerced.topic_tags
+    assert "reference" in coerced.topic_tags
+
+
+def test_coerce_accepts_bare_metal_tag() -> None:
+    taxonomy = _runet_taxonomy()
+    coerced = coerce_filter_metadata_for_taxonomy(
+        _filter_metadata(
+            primary_topic="hardware",
+            topic_tags=["bare_metal", "hardware"],
+            category_path=["tech", "hardware"],
+        ),
+        taxonomy,
+    )
+    validate_filter_metadata_against_taxonomy(coerced, taxonomy)
+    assert "bare_metal" in coerced.topic_tags

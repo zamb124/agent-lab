@@ -190,6 +190,48 @@ async def test_fetch_layer1_skips_enrich_kiq_when_llm_disabled(
 
 
 @pytest.mark.asyncio
+async def test_fetch_marks_skipped_on_extract_too_short() -> None:
+    from core.crawl.errors import CrawlExtractTooShortError
+
+    profile_bundle = _profile_bundle(llm_enrichment_enabled=True)
+    mark_skipped_mock = AsyncMock()
+    mark_failed_mock = AsyncMock()
+    increment_mock = AsyncMock()
+    orchestrator = CrawlOrchestratorService(
+        crawl_profile_repository=AsyncMock(get_with_index=AsyncMock(return_value=profile_bundle)),
+        crawl_domain_repository=AsyncMock(get=AsyncMock(return_value=_domain())),
+        crawl_url_repository=AsyncMock(
+            mark_indexed=AsyncMock(),
+            mark_failed=mark_failed_mock,
+            mark_skipped=mark_skipped_mock,
+        ),
+        crawl_job_repository=AsyncMock(increment=increment_mock),
+        fetch_service=AsyncMock(
+            fetch_markdown=AsyncMock(
+                side_effect=CrawlExtractTooShortError("https://example.com/thin"),
+            ),
+        ),
+        page_enrichment_service=AsyncMock(),
+        rag_client=AsyncMock(),
+        build_system_context=AsyncMock(),
+        crawl_config=get_search_settings().crawl,
+    )
+
+    await orchestrator._fetch_and_index_url(
+        crawl_url=_crawl_url(),
+        crawl_job_id="job-1",
+        crawl_profile_id="cr_test",
+        profile_bundle=profile_bundle,
+        domain=_domain(),
+        stored_extract_hash=None,
+    )
+
+    mark_skipped_mock.assert_awaited_once_with("url-1", None)
+    mark_failed_mock.assert_not_called()
+    increment_mock.assert_awaited_once_with("job-1", urls_skipped=1)
+
+
+@pytest.mark.asyncio
 async def test_enrich_one_url_reads_snapshot_not_http(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
