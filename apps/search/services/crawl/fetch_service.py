@@ -16,6 +16,7 @@ from core.clients.browser_fetch_client import BrowserFetchClient
 from core.crawl.models import CrawlFetchResult, CrawlStructuralSignals
 from core.crawl.structural_signals import extract_structural_signals_from_html
 from core.http import get_httpx_client
+from core.http.text_encoding import decode_response_body_bytes
 
 CrawlFetchTransport = Literal["http", "browser"]
 
@@ -134,12 +135,12 @@ def _extract_markdown_and_signals(
     content: bytes,
     content_type: str,
 ) -> tuple[str, CrawlStructuralSignals]:
+    text = decode_response_body_bytes(content, content_type=content_type)
     if "html" not in content_type.lower():
-        text = content.decode("utf-8", errors="replace")
         if not text.strip():
             raise ValueError("empty response body")
         return text, CrawlStructuralSignals()
-    html = content.decode("utf-8", errors="replace")
+    html = text
     structural_signals = extract_structural_signals_from_html(html)
     extracted = trafilatura.extract(
         html,

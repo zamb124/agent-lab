@@ -14,11 +14,51 @@ from apps.search.db.search_index_repository import SearchIndexRepository
 from apps.search.errors import SearchIndexNotFoundError, SearchIndexSearchDisabledError
 from core.clients.rag_client import RagClient
 from core.context import Context, clear_context, set_context
-from core.rag.models import RAGSearchResult
+from core.rag.models import RAGMetadata, RAGSearchResult
 from core.rag_indexing_schema import SearchChannelsDefaults
 from core.search import MetaSearchProviderStatus, MetaSearchRequest, WebSearchResult
 from core.search.index_models import SearchIndexDefinition
 from core.types import require_json_array
+
+_MIN_USEFUL_CHUNK_CHARS = 40
+
+
+def _metadata_text_field(metadata: RAGMetadata, field: str) -> str | None:
+    raw = metadata.get(field)
+    if not isinstance(raw, str):
+        return None
+    text = raw.strip()
+    if not text:
+        return None
+    return text
+
+
+def _resolve_index_snippet(
+    *,
+    content: str,
+    metadata: RAGMetadata,
+    snippet_limit: int,
+) -> str:
+    page_summary = _metadata_text_field(metadata, "page_summary")
+    chunk_text = content.strip()
+    llm_enriched = metadata.get("llm_enriched") is True
+    if page_summary is not None and llm_enriched:
+        return page_summary[:snippet_limit]
+    if page_summary is not None and len(chunk_text) < _MIN_USEFUL_CHUNK_CHARS:
+        return page_summary[:snippet_limit]
+    if page_summary is not None and chunk_text in page_summary:
+        return page_summary[:snippet_limit]
+    if page_summary is not None:
+        combined = f"{page_summary}\n\n{chunk_text}"
+        return combined[:snippet_limit]
+    return content[:snippet_limit]
+
+
+def _resolve_index_title(*, document_name: str, metadata: RAGMetadata) -> str:
+    page_title = _metadata_text_field(metadata, "page_title")
+    if page_title is not None:
+        return page_title
+    return document_name
 
 
 class IndexSearchProvider:
@@ -173,7 +213,15 @@ class IndexSearchProvider:
             return None
         source_url = source_url_value.strip()
         snippet_limit = definition.retrieval.snippet_max_chars
-        snippet = rag_result.content[:snippet_limit]
+        snippet = _resolve_index_snippet(
+            content=rag_result.content,
+            metadata=rag_result.metadata,
+            snippet_limit=snippet_limit,
+        )
+        title = _resolve_index_title(
+            document_name=rag_result.document_name,
+            metadata=rag_result.metadata,
+        )
         heading_trail: list[str] = []
         heading_value = rag_result.metadata.get("heading_trail")
         if isinstance(heading_value, list):
@@ -182,7 +230,7 @@ class IndexSearchProvider:
                     heading_trail.append(entry.strip())
         display_url = urlparse(source_url).netloc
         return WebSearchResult(
-            title=rag_result.document_name,
+            title=title,
             url=source_url,
             snippet=snippet,
             display_url=display_url,
