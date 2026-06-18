@@ -46,6 +46,7 @@ COPY core/ ./core/
 COPY apps/ ./apps/
 COPY scripts/ ./scripts/
 COPY migrations/ ./migrations/
+COPY conf/ ./conf/
 
 # three + 3d-force-graph для CRM графа: apps/crm/main.py монтирует их из repo-root node_modules.
 # В образ без этой стадии vendor-URL отдавал index.html (SPA), что ломало загрузку модулей.
