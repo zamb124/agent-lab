@@ -22,8 +22,14 @@ CrawlFetchTransport = Literal["http", "browser"]
 
 
 class CrawlFetchService:
-    def __init__(self, *, browser_fetch_client: BrowserFetchClient) -> None:
+    def __init__(
+        self,
+        *,
+        browser_fetch_client: BrowserFetchClient,
+        browser_fetch_timeout_seconds: float,
+    ) -> None:
         self._browser_fetch_client: BrowserFetchClient = browser_fetch_client
+        self._browser_fetch_timeout_seconds: float = browser_fetch_timeout_seconds
 
     async def fetch_markdown(
         self,
@@ -45,6 +51,7 @@ class CrawlFetchService:
             browser_response = await self._browser_fetch_client.fetch_html(
                 url,
                 timeout_ms=int(timeout_seconds * 1000),
+                service_timeout_seconds=self._browser_fetch_timeout_seconds,
             )
             return _build_crawl_fetch_result_from_html(
                 browser_response,

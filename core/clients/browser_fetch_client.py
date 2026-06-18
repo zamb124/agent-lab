@@ -18,6 +18,7 @@ class BrowserFetchClient:
         url: str,
         *,
         timeout_ms: int,
+        service_timeout_seconds: float,
     ) -> BrowserCrawlFetchResponse:
         body = BrowserCrawlFetchRequest(
             url=url,
@@ -27,5 +28,6 @@ class BrowserFetchClient:
             "browser",
             "/browser/api/v1/control/crawl/fetch",
             json=body.model_dump(mode="json"),
+            timeout=service_timeout_seconds,
         )
         return BrowserCrawlFetchResponse.model_validate(response)

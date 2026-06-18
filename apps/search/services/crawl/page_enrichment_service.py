@@ -22,7 +22,10 @@ from core.crawl.models import (
     CrawlProfile,
     CrawlStructuralSignals,
 )
-from core.crawl.taxonomy import validate_filter_metadata_against_taxonomy
+from core.crawl.taxonomy import (
+    coerce_filter_metadata_for_taxonomy,
+    validate_filter_metadata_against_taxonomy,
+)
 from core.logging import get_logger
 from core.search.index_models import SearchIndexCrawlTaxonomy
 from core.tracing.operation_span import traced_operation
@@ -36,7 +39,9 @@ _ENRICHMENT_SYSTEM_PROMPT = (
     "1. Return ONLY JSON matching the schema. No prose outside JSON.\n"
     "2. Facts-only: every claim in body, summary, questions must be supported by markdown or structural_signals.\n"
     "3. Dates: use structural_signals first. If absent, extract ONLY from explicit bylines. Otherwise null — never guess from URL alone.\n"
-    "4. Taxonomy: primary_topic and topic_tags MUST be exact slugs from the provided whitelist.\n"
+    "4. Taxonomy: primary_topic, topic_tags, and category_path MUST be exact slugs/paths from the provided whitelist. "
+    "Never put JSON field names (category_path, primary_topic, topic_tags) into topic_tags. "
+    "If unsure, use primary_topic=other, topic_tags=[other, reference], category_path=[other].\n"
     "5. content_type: one of article, news, blog, product, documentation, tutorial, guide, faq, review, interview, opinion, press_release, research, case_study, changelog, support, catalog, landing, reference, wiki, tool, forum, legal, event, recipe, obituary, report, transcript, directory, portfolio, other; prefer structural_signals.content_type_hint.\n"
     "6. contextual_prefix: 50-120 tokens. Must mention page subject, site/domain context, and date if known.\n"
     "7. answerable_questions: 3-7 specific questions a user might search; must be answerable from body.\n"
@@ -197,6 +202,19 @@ class CrawlPageEnrichmentService:
                 ],
                 response_model=CrawlEnrichedPageLLMOutput,
                 llm_context=_CRAWL_ENRICHMENT_LLM_CONTEXT,
+            )
+            coerced_filter_metadata = coerce_filter_metadata_for_taxonomy(
+                llm_output.chunks[0].filter_metadata,
+                taxonomy,
+            )
+            llm_output = llm_output.model_copy(
+                update={
+                    "chunks": [
+                        llm_output.chunks[0].model_copy(
+                            update={"filter_metadata": coerced_filter_metadata}
+                        )
+                    ]
+                }
             )
             validate_filter_metadata_against_taxonomy(
                 llm_output.chunks[0].filter_metadata,

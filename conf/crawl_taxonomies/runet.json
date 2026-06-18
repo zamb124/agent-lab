@@ -12,6 +12,7 @@
     "ai",
     "software",
     "hardware",
+    "bare_metal",
     "cybersecurity",
     "mobile",
     "gaming",
@@ -55,6 +56,7 @@
     "art",
     "music",
     "cinema",
+    "comedy",
     "literature",
     "theater",
     "media",
@@ -106,6 +108,7 @@
     "wiki",
     "tools",
     "directory",
+    "domain",
     "forum",
     "community",
     "qa",
@@ -129,6 +132,7 @@
     "ai",
     "software",
     "hardware",
+    "bare_metal",
     "cybersecurity",
     "mobile",
     "gaming",
@@ -172,6 +176,7 @@
     "art",
     "music",
     "cinema",
+    "comedy",
     "literature",
     "theater",
     "media",
@@ -223,6 +228,7 @@
     "wiki",
     "tools",
     "directory",
+    "domain",
     "forum",
     "community",
     "qa",
@@ -1255,6 +1261,11 @@
     [
       "lifestyle",
       "diy"
+    ],
+    [
+      "lifestyle",
+      "hobbies",
+      "gardening"
     ],
     [
       "lifestyle",

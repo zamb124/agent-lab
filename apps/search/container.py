@@ -140,7 +140,11 @@ class SearchContainer(BaseContainer):
 
     @lazy
     def crawl_fetch_service(self) -> CrawlFetchService:
-        return CrawlFetchService(browser_fetch_client=self.browser_fetch_client)
+        crawl_config = get_search_settings().crawl
+        return CrawlFetchService(
+            browser_fetch_client=self.browser_fetch_client,
+            browser_fetch_timeout_seconds=crawl_config.browser_fetch_timeout_seconds,
+        )
 
     @lazy
     def crawl_page_enrichment_service(self) -> CrawlPageEnrichmentService:

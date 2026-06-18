@@ -6,6 +6,7 @@ import uuid
 
 from fastapi import APIRouter, HTTPException
 from playwright.async_api import Route
+from playwright.async_api import TimeoutError as PlaywrightTimeoutError
 
 from apps.browser.contracts.control_types import BrowserCapabilityError
 from apps.browser.contracts.crawl_fetch_types import (
@@ -89,6 +90,11 @@ async def crawl_fetch(
             fetched = await runtime.control_adapter.navigate(page, fetch_req)
         except BrowserCapabilityError as exc:
             raise HTTPException(status_code=501, detail=exc.to_dict()) from exc
+        except PlaywrightTimeoutError as exc:
+            raise HTTPException(
+                status_code=504,
+                detail=f"browser navigation timeout for {body.url}",
+            ) from exc
         if fetched.html is None or not fetched.html.strip():
             raise HTTPException(status_code=502, detail="browser fetch returned empty html")
         return BrowserCrawlFetchResponse(

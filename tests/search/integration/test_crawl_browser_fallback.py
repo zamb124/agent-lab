@@ -91,6 +91,7 @@ async def test_http_short_then_browser_fallback_succeeds(search_system_context) 
                 service_client.post = _browser_local_post  # pyright: ignore[reportAttributeAccessIssue]
                 fetch_service = CrawlFetchService(
                     browser_fetch_client=BrowserFetchClient(service_client),
+                    browser_fetch_timeout_seconds=get_search_settings().crawl.browser_fetch_timeout_seconds,
                 )
                 result = await fetch_service.fetch_markdown(
                     page_url,
@@ -111,6 +112,7 @@ async def test_browser_fallback_disabled_raises_without_browser(search_system_co
     try:
         fetch_service = CrawlFetchService(
             browser_fetch_client=BrowserFetchClient(ServiceClient()),
+            browser_fetch_timeout_seconds=get_search_settings().crawl.browser_fetch_timeout_seconds,
         )
         with pytest.raises(ValueError, match="extracted text too short"):
             await fetch_service.fetch_markdown(

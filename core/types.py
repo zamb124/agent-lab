@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 from collections.abc import Awaitable, Callable, Mapping, Sequence
 from datetime import date, datetime
 from decimal import Decimal
@@ -155,12 +156,70 @@ def require_json_value(value: object, field_name: str = "value") -> JsonValue:
         raise ValueError(f"{field_name} must be JSON-compatible") from exc
 
 
+def extract_json_payload_text(data: str) -> str:
+    """Выделить JSON object/array из markdown fences или текста с обрамлением."""
+    stripped = data.strip()
+    if not stripped:
+        return stripped
+    fenced = re.search(r"```(?:json)?\s*([\s\S]*?)```", stripped, flags=re.IGNORECASE)
+    if fenced:
+        return fenced.group(1).strip()
+    if stripped.startswith("{") or stripped.startswith("["):
+        return stripped
+    object_start = stripped.find("{")
+    array_start = stripped.find("[")
+    if object_start == -1 and array_start == -1:
+        return stripped
+    if object_start == -1:
+        start = array_start
+    elif array_start == -1:
+        start = object_start
+    else:
+        start = min(object_start, array_start)
+    depth = 0
+    in_string = False
+    escape = False
+    for index in range(start, len(stripped)):
+        char = stripped[index]
+        if in_string:
+            if escape:
+                escape = False
+            elif char == "\\":
+                escape = True
+            elif char == '"':
+                in_string = False
+            continue
+        if char == '"':
+            in_string = True
+            continue
+        if char in "{[":
+            depth += 1
+        elif char in "}]":
+            depth -= 1
+            if depth == 0:
+                return stripped[start : index + 1]
+    return stripped[start:]
+
+
 def parse_json_value(data: str | bytes, field_name: str = "value") -> JsonValue:
     """Распарсить JSON-строку в строгий JSON value."""
-    try:
-        return cast(JsonValue, _JSON_VALUE_ADAPTER.validate_json(data))
-    except ValidationError as exc:
-        raise ValueError(f"{field_name} must be JSON-compatible") from exc
+    text = data.decode("utf-8") if isinstance(data, bytes) else data
+    candidates: list[str] = []
+    stripped = text.strip()
+    if stripped:
+        candidates.append(stripped)
+    extracted = extract_json_payload_text(text)
+    if extracted and extracted not in candidates:
+        candidates.append(extracted)
+    last_exc: ValidationError | None = None
+    for candidate in candidates:
+        try:
+            return cast(JsonValue, _JSON_VALUE_ADAPTER.validate_json(candidate))
+        except ValidationError as exc:
+            last_exc = exc
+    if last_exc is not None:
+        raise ValueError(f"{field_name} must be JSON-compatible") from last_exc
+    raise ValueError(f"{field_name} must be JSON-compatible")
 
 
 def require_json_object(value: object, field_name: str = "value") -> JsonObject:
