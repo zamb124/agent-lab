@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import date, datetime
 from typing import Literal, TypedDict
 
 from pydantic import Field, field_validator
@@ -18,10 +18,96 @@ CrawlUrlStatus = Literal["pending", "fetching", "indexed", "failed", "skipped"]
 CrawlSeedSource = Literal["tranco", "manual", "cloudflare_radar"]
 CrawlFetchTransport = Literal["http", "browser"]
 
+CrawlContentTypeHint = Literal[
+    "article",
+    "news",
+    "blog",
+    "product",
+    "documentation",
+    "tutorial",
+    "guide",
+    "faq",
+    "review",
+    "interview",
+    "opinion",
+    "press_release",
+    "research",
+    "case_study",
+    "changelog",
+    "support",
+    "catalog",
+    "landing",
+    "reference",
+    "wiki",
+    "tool",
+    "forum",
+    "legal",
+    "event",
+    "recipe",
+    "obituary",
+    "report",
+    "transcript",
+    "directory",
+    "portfolio",
+    "other",
+]
+
+CrawlPageContentType = Literal[
+    "article",
+    "news",
+    "blog",
+    "product",
+    "documentation",
+    "tutorial",
+    "guide",
+    "faq",
+    "review",
+    "interview",
+    "opinion",
+    "press_release",
+    "research",
+    "case_study",
+    "changelog",
+    "support",
+    "catalog",
+    "landing",
+    "reference",
+    "wiki",
+    "tool",
+    "forum",
+    "legal",
+    "event",
+    "recipe",
+    "obituary",
+    "report",
+    "transcript",
+    "directory",
+    "portfolio",
+    "other",
+]
+
+CrawlPageAudience = Literal["general", "professional", "developer", "consumer", "internal"]
+
+CrawlPageFreshnessRelevance = Literal["evergreen", "time_sensitive", "archival"]
+
+CrawlDatePrecision = Literal["day", "month", "year"]
+
 
 class SitemapEntry(StrictBaseModel):
     url: str
     lastmod: datetime | None = None
+
+
+class CrawlStructuralSignals(StrictBaseModel):
+    title: str | None = None
+    date_published: date | None = None
+    date_modified: date | None = None
+    author: str | None = None
+    publisher: str | None = None
+    language: str | None = None
+    content_type_hint: CrawlContentTypeHint | None = None
+    category_hints: list[str] = Field(default_factory=list)
+    topic_hints: list[str] = Field(default_factory=list)
 
 
 class CrawlFetchResult(StrictBaseModel):
@@ -32,22 +118,75 @@ class CrawlFetchResult(StrictBaseModel):
     heading_trail: list[str] = Field(default_factory=list)
     content_hash: str
     fetch_transport: CrawlFetchTransport = "http"
+    structural_signals: CrawlStructuralSignals = Field(default_factory=CrawlStructuralSignals)
+
+
+class CrawlPageFilterMetadata(StrictBaseModel):
+    content_type: CrawlPageContentType
+    date_published: date | None = None
+    date_modified: date | None = None
+    date_precision: CrawlDatePrecision | None = None
+    primary_topic: str = Field(..., min_length=1, max_length=64)
+    topic_tags: list[str] = Field(..., min_length=2, max_length=5)
+    category_path: list[str] = Field(default_factory=list, max_length=3)
+    language: str = Field(..., min_length=2, max_length=8)
+    audience: CrawlPageAudience
+    freshness_relevance: CrawlPageFreshnessRelevance | None = None
+
+    @field_validator("topic_tags")
+    @classmethod
+    def _topic_tags_sorted_unique(cls, topic_tags: list[str]) -> list[str]:
+        normalized: list[str] = []
+        for tag in topic_tags:
+            token = tag.strip().lower()
+            if not token:
+                raise ValueError("topic_tags must not contain empty values")
+            if token not in normalized:
+                normalized.append(token)
+        normalized.sort()
+        if len(normalized) < 2:
+            raise ValueError("topic_tags must contain at least 2 unique items")
+        return normalized
+
+    @field_validator("category_path")
+    @classmethod
+    def _category_path_normalized(cls, category_path: list[str]) -> list[str]:
+        if not category_path:
+            return []
+        normalized = [segment.strip().lower() for segment in category_path if segment.strip()]
+        if not normalized:
+            raise ValueError("category_path must not contain only empty segments")
+        if len(normalized) > 3:
+            raise ValueError("category_path must have at most 3 levels")
+        return normalized
+
+
+class CrawlPageRetrievalAugment(StrictBaseModel):
+    contextual_prefix: str = Field(..., min_length=20, max_length=2000)
+    answerable_questions: list[str] = Field(..., min_length=3, max_length=7)
+    lexical_keywords: list[str] = Field(..., min_length=5, max_length=12)
+    entity_names: list[str] = Field(default_factory=list, max_length=10)
 
 
 class CrawlEnrichedChunk(StrictBaseModel):
-    content: str = Field(..., min_length=1)
-    metadata_summary: str = Field(..., min_length=1)
     hierarchy: list[str] = Field(default_factory=list)
+    body: str = Field(..., min_length=1)
+    filter_metadata: CrawlPageFilterMetadata
+    retrieval_augment: CrawlPageRetrievalAugment
 
 
 class CrawlEnrichedPageLLMOutput(StrictBaseModel):
+    page_title: str = Field(..., min_length=1)
     page_summary: str = Field(..., min_length=1)
     chunks: list[CrawlEnrichedChunk] = Field(..., min_length=1, max_length=1)
+    extraction_notes: list[str] = Field(default_factory=list, max_length=3)
 
 
 class CrawlEnrichedPage(StrictBaseModel):
+    page_title: str
     page_summary: str
     chunks: list[CrawlEnrichedChunk]
+    extraction_notes: list[str] = Field(default_factory=list)
     enrichment_model: str
     enrichment_prompt_version: str
 
@@ -67,25 +206,42 @@ class CrawlEnrichedPage(StrictBaseModel):
         enrichment_prompt_version: str,
     ) -> CrawlEnrichedPage:
         return cls(
+            page_title=output.page_title,
             page_summary=output.page_summary,
             chunks=output.chunks,
+            extraction_notes=output.extraction_notes,
             enrichment_model=enrichment_model,
             enrichment_prompt_version=enrichment_prompt_version,
         )
 
     def to_ingest_markdown(self) -> str:
-        lines: list[str] = [f"# {self.page_summary.strip()}", ""]
-        for index, chunk in enumerate(self.chunks, start=1):
-            heading = " > ".join(part.strip() for part in chunk.hierarchy if part.strip())
-            if heading:
-                lines.append(f"## {heading}")
-            else:
-                lines.append(f"## Chunk {index}")
-            if chunk.metadata_summary.strip():
-                lines.append(f"*{chunk.metadata_summary.strip()}*")
-                lines.append("")
-            lines.append(chunk.content.strip())
-            lines.append("")
+        chunk = self.chunks[0]
+        filter_metadata = chunk.filter_metadata
+        retrieval_augment = chunk.retrieval_augment
+        topic_line = ", ".join(filter_metadata.topic_tags)
+        lines: list[str] = [
+            retrieval_augment.contextual_prefix.strip(),
+            "",
+            f"## {self.page_title.strip()}",
+            f"*{self.page_summary.strip()}*",
+            "",
+            "### Topics",
+            f"{filter_metadata.primary_topic} · {topic_line}",
+            "",
+            "### Content",
+            chunk.body.strip(),
+            "",
+            "### Questions this page answers",
+        ]
+        for index, question in enumerate(retrieval_augment.answerable_questions, start=1):
+            lines.append(f"{index}. {question.strip()}")
+        lines.extend(
+            [
+                "",
+                "### Keywords",
+                ", ".join(keyword.strip() for keyword in retrieval_augment.lexical_keywords),
+            ]
+        )
         return "\n".join(lines).strip()
 
 
@@ -102,7 +258,7 @@ class CrawlIngestPayload(StrictBaseModel):
     @property
     def ingest_title(self) -> str:
         if self.enriched_page is not None:
-            return self.enriched_page.page_summary
+            return self.enriched_page.page_title
         return self.fetched.title
 
 
@@ -269,10 +425,22 @@ class CrawlProfileSummary(StrictBaseModel):
     domains_due: int
     latest_job: CrawlJob | None = None
     running_job: CrawlJob | None = None
+    content_type_counts: list[CrawlStatusCount] = Field(default_factory=list)
+    primary_topic_counts: list[CrawlStatusCount] = Field(default_factory=list)
+    urls_enriched_total: int = 0
+    urls_enrichment_pending: int = 0
+
+
+class CrawlUrlEnrichmentSnapshot(StrictBaseModel):
+    page_title: str = Field(..., min_length=1)
+    page_summary: str | None = None
+    filter_metadata: CrawlPageFilterMetadata
 
 
 class CrawlUrlListItem(CrawlUrl):
     domain: str
+    structural_signals: CrawlStructuralSignals = Field(default_factory=CrawlStructuralSignals)
+    enrichment_snapshot: CrawlUrlEnrichmentSnapshot | None = None
 
 
 class CrawlUrlIndexedContent(StrictBaseModel):
@@ -282,6 +450,7 @@ class CrawlUrlIndexedContent(StrictBaseModel):
     page_summary: str | None = None
     llm_enriched: bool = False
     chunks_count: int
+    filter_metadata: CrawlPageFilterMetadata | None = None
     metadata: RAGMetadata = Field(default_factory=dict)
 
 

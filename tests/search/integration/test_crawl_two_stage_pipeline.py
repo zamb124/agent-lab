@@ -66,7 +66,7 @@ async def test_layer1_indexes_and_search_before_enrichment_with_llm_flag_enabled
     assert crawl_url.enriched_content_hash is None
     assert crawl_url.enrichment_model is None
 
-    url, _canonical, markdown, title, content_hash = (
+    url, _canonical, markdown, title, content_hash, _structural_signals = (
         await search_container.crawl_url_repository.get_layer1_snapshot(crawl_url_id)
     )
     assert REAL_CRAWL_DOMAIN in url

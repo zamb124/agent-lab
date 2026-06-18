@@ -43,6 +43,7 @@ from core.crawl.models import (
     SeedImportRequest,
     SeedImportResult,
 )
+from core.crawl.report_projection import enrichment_snapshot_from_enriched_page
 from core.search.index_models import SearchIndexDefinition
 
 
@@ -318,6 +319,7 @@ class CrawlOrchestratorService:
                 fetched.fetch_transport,
                 extract_markdown=fetched.markdown,
                 extract_title=fetched.title,
+                extract_structural_signals=fetched.structural_signals,
             )
             await self._crawl_job_repository.increment(crawl_job_id, urls_indexed=1)
             if profile.llm_enrichment_enabled:
@@ -365,9 +367,14 @@ class CrawlOrchestratorService:
         ):
             return
         domain = await self._crawl_domain_repository.get(crawl_url.crawl_domain_id)
-        url, canonical_url, extract_markdown, extract_title, extract_content_hash = (
-            await self._crawl_url_repository.get_layer1_snapshot(crawl_url_id)
-        )
+        (
+            url,
+            canonical_url,
+            extract_markdown,
+            extract_title,
+            extract_content_hash,
+            structural_signals,
+        ) = await self._crawl_url_repository.get_layer1_snapshot(crawl_url_id)
         fetched = CrawlFetchResult(
             url=url,
             canonical_url=canonical_url,
@@ -375,13 +382,18 @@ class CrawlOrchestratorService:
             title=extract_title,
             content_hash=extract_content_hash,
             fetch_transport=crawl_url.fetch_transport or "http",
+            structural_signals=structural_signals,
         )
         try:
             enriched_page = await self._page_enrichment_service.enrich_markdown(
                 markdown=extract_markdown,
                 url=url,
                 profile=profile,
+                search_index_id=profile_bundle.search_index.search_index_id,
+                domain=domain,
                 crawl_domain_id=crawl_url.crawl_domain_id,
+                structural_signals=structural_signals,
+                sitemap_lastmod=crawl_url.sitemap_lastmod,
             )
             enriched_content_hash = compute_enriched_content_hash(enriched_page)
             _ = await self._ingest_service.reingest_enriched_page(
@@ -398,6 +410,7 @@ class CrawlOrchestratorService:
                 enriched_content_hash=enriched_content_hash,
                 enrichment_model=enriched_page.enrichment_model,
                 enrichment_prompt_version=enriched_page.enrichment_prompt_version,
+                enrichment_snapshot=enrichment_snapshot_from_enriched_page(enriched_page),
             )
             await self._crawl_job_repository.increment(crawl_job_id, urls_enriched=1)
         except Exception as exc:

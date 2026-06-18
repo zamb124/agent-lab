@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from pydantic import Field
+from pydantic import Field, field_validator
 
 from core.models import StrictBaseModel
 
@@ -16,6 +16,42 @@ class SearchIndexRetrievalConfig(StrictBaseModel):
     rrf_k: int | None = 60
     per_channel_top_k: int | None = None
     snippet_max_chars: int = Field(default=2000, ge=200, le=8000)
+
+
+class SearchIndexCrawlTaxonomy(StrictBaseModel):
+    primary_topics: list[str] = Field(..., min_length=1)
+    topic_tags: list[str] = Field(..., min_length=1)
+    category_paths: list[list[str]] = Field(default_factory=list)
+
+    @field_validator("primary_topics", "topic_tags")
+    @classmethod
+    def _validate_slug_tokens(cls, values: list[str]) -> list[str]:
+        normalized: list[str] = []
+        for value in values:
+            token = value.strip().lower()
+            if not token:
+                raise ValueError("taxonomy token must not be empty")
+            if token not in normalized:
+                normalized.append(token)
+        if not normalized:
+            raise ValueError("taxonomy list must not be empty")
+        return normalized
+
+    @field_validator("category_paths")
+    @classmethod
+    def _validate_category_paths(cls, values: list[list[str]]) -> list[list[str]]:
+        normalized_paths: list[list[str]] = []
+        for path in values:
+            if not path:
+                raise ValueError("category_path entry must not be empty")
+            if len(path) > 3:
+                raise ValueError("category_path entry must have at most 3 levels")
+            normalized = [segment.strip().lower() for segment in path if segment.strip()]
+            if not normalized:
+                raise ValueError("category_path entry must not be empty")
+            if normalized not in normalized_paths:
+                normalized_paths.append(normalized)
+        return normalized_paths
 
 
 class SearchIndexDefinition(StrictBaseModel):

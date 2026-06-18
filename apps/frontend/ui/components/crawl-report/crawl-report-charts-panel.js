@@ -20,6 +20,8 @@ export class CrawlReportChartsPanel extends PlatformElement {
         collapsed: { type: Boolean },
         statusLabel: { attribute: false },
         categoryLabel: { attribute: false },
+        contentTypeLabel: { attribute: false },
+        topicLabel: { attribute: false },
     };
 
     static styles = [
@@ -88,6 +90,8 @@ export class CrawlReportChartsPanel extends PlatformElement {
         this.collapsed = false;
         this.statusLabel = (status) => status;
         this.categoryLabel = (category) => category;
+        this.contentTypeLabel = (contentType) => contentType;
+        this.topicLabel = (topic) => topic;
     }
 
     _urlSegments() {
@@ -122,6 +126,26 @@ export class CrawlReportChartsPanel extends PlatformElement {
             label: this.categoryLabel(category),
             value,
             color: CATEGORY_CHART_COLORS[index % CATEGORY_CHART_COLORS.length],
+        }));
+    }
+
+    _contentTypeSegments() {
+        if (!this.summary || !Array.isArray(this.summary.content_type_counts)) return [];
+        return this.summary.content_type_counts.slice(0, 10).map((row, index) => ({
+            key: row.status,
+            label: this.contentTypeLabel(row.status),
+            value: row.count,
+            color: CATEGORY_CHART_COLORS[index % CATEGORY_CHART_COLORS.length],
+        }));
+    }
+
+    _primaryTopicSegments() {
+        if (!this.summary || !Array.isArray(this.summary.primary_topic_counts)) return [];
+        return this.summary.primary_topic_counts.slice(0, 10).map((row, index) => ({
+            key: row.status,
+            label: this.topicLabel(row.status),
+            value: row.count,
+            color: CATEGORY_CHART_COLORS[(index + 3) % CATEGORY_CHART_COLORS.length],
         }));
     }
 
@@ -226,6 +250,22 @@ export class CrawlReportChartsPanel extends PlatformElement {
                             <div class="chart-title">${this.t('crawl_report_page.chart_domains_by_category')}</div>
                             <platform-mini-bar-chart
                                 .segments=${this._categorySegments()}
+                                .locale=${this.locale}
+                                emptyLabel=${this.t('crawl_report_page.chart_empty')}
+                            ></platform-mini-bar-chart>
+                        </div>
+                        <div class="chart-card">
+                            <div class="chart-title">${this.t('crawl_report_page.chart_urls_by_content_type')}</div>
+                            <platform-mini-bar-chart
+                                .segments=${this._contentTypeSegments()}
+                                .locale=${this.locale}
+                                emptyLabel=${this.t('crawl_report_page.chart_empty')}
+                            ></platform-mini-bar-chart>
+                        </div>
+                        <div class="chart-card">
+                            <div class="chart-title">${this.t('crawl_report_page.chart_urls_by_primary_topic')}</div>
+                            <platform-mini-bar-chart
+                                .segments=${this._primaryTopicSegments()}
                                 .locale=${this.locale}
                                 emptyLabel=${this.t('crawl_report_page.chart_empty')}
                             ></platform-mini-bar-chart>

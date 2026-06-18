@@ -8,12 +8,34 @@ from apps.search.services import MetaSearchService
 from apps.search.services.provider_availability import ProviderAvailabilityStore
 from core.clients.redis_client import RedisClient
 from core.config import get_settings
+from core.search.index_models import SearchIndexCrawlTaxonomy
 
 _SEARCH_PROVIDER_AVAILABILITY_SCOPES = ("platform", "company_system")
 
+_TEST_CRAWL_TAXONOMY = SearchIndexCrawlTaxonomy(
+    primary_topics=["tech", "other", "documentation"],
+    topic_tags=["tech", "software", "other", "documentation", "faq"],
+    category_paths=[["tech"], ["other"]],
+)
+
 
 @pytest.fixture(autouse=True)
-async def reset_index_provider_availability_before_search_test():
+def crawl_taxonomy_for_search_tests(monkeypatch):
+    def _resolve(search_index_id: str) -> SearchIndexCrawlTaxonomy:
+        _ = search_index_id
+        return _TEST_CRAWL_TAXONOMY
+
+    monkeypatch.setattr(
+        "apps.search.services.crawl.page_enrichment_service.resolve_crawl_taxonomy",
+        _resolve,
+    )
+
+
+@pytest.fixture(autouse=True)
+async def reset_index_provider_availability_before_search_test(request):
+    if request.node.get_closest_marker("unit") is not None:
+        yield
+        return
     redis_client = RedisClient(get_settings().database.redis_url)
     await redis_client.connect()
     prefix = get_search_settings().search.provider_state_key_prefix

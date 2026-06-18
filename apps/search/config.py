@@ -3,12 +3,15 @@
 from __future__ import annotations
 
 import os
-from typing import ClassVar, Literal
+from pathlib import Path
+from typing import ClassVar, Literal, Self
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from core.config import BaseSettings
-from core.config.loader import load_merged_config
+from core.config.loader import get_project_root, load_merged_config
+from core.search.index_models import SearchIndexCrawlTaxonomy
+from core.types import parse_json_object
 
 SearchProviderId = Literal["tinyfish", "linkup", "serper", "tavily", "index"]
 
@@ -69,7 +72,7 @@ class SearchCrawlEnrichmentConfig(BaseModel):
     provider: str = Field(default="humanitec_llm", min_length=1)
     model: str = Field(default="auto", min_length=1)
     timeout_seconds: float = Field(default=120.0, ge=1.0, le=600.0)
-    prompt_version: str = Field(default="v1", min_length=1, max_length=32)
+    prompt_version: str = Field(default="structured", min_length=1, max_length=32)
     max_input_chars: int = Field(default=12000, ge=512, le=200_000)
 
 
@@ -89,6 +92,29 @@ class SearchCrawlConfig(BaseModel):
         default_factory=lambda: ["habr.com", "vc.ru", "tass.ru"]
     )
     enrichment: SearchCrawlEnrichmentConfig = Field(default_factory=SearchCrawlEnrichmentConfig)
+    taxonomies: dict[str, SearchIndexCrawlTaxonomy] = Field(default_factory=dict)
+    taxonomy_files: dict[str, str] = Field(default_factory=dict)
+
+    @model_validator(mode="after")
+    def _merge_taxonomy_files(self) -> Self:
+        if not self.taxonomy_files:
+            return self
+        project_root = get_project_root()
+        merged_taxonomies = dict(self.taxonomies)
+        for search_index_id, relative_path in self.taxonomy_files.items():
+            index_slug = search_index_id.strip()
+            if not index_slug:
+                raise ValueError("taxonomy_files key must not be empty")
+            taxonomy_path = Path(relative_path.strip())
+            if not taxonomy_path.is_absolute():
+                taxonomy_path = project_root / taxonomy_path
+            taxonomy_payload = parse_json_object(
+                taxonomy_path.read_text(encoding="utf-8"),
+                f"crawl taxonomy file {taxonomy_path}",
+            )
+            merged_taxonomies[index_slug] = SearchIndexCrawlTaxonomy.model_validate(taxonomy_payload)
+        self.taxonomies = merged_taxonomies
+        return self
 
 
 class SearchIntegrationConfig(BaseModel):

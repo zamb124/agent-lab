@@ -116,6 +116,9 @@ async def list_crawl_urls(
     crawl_profile_id: Annotated[str, Query(min_length=1)],
     crawl_status: Annotated[str | None, Query()] = None,
     domain: Annotated[str | None, Query()] = None,
+    content_type: Annotated[str | None, Query()] = None,
+    primary_topic: Annotated[str | None, Query()] = None,
+    enriched_only: Annotated[bool | None, Query()] = None,
     limit: Annotated[int, Query(ge=1, le=200)] = 50,
     offset: Annotated[int, Query(ge=0)] = 0,
 ) -> OffsetPage[CrawlUrlListItem]:
@@ -126,6 +129,9 @@ async def list_crawl_urls(
             crawl_profile_id=crawl_profile_id,
             crawl_status=crawl_status,
             domain=domain,
+            content_type=content_type,
+            primary_topic=primary_topic,
+            enriched_only=enriched_only,
             limit=limit,
             offset=offset,
         )

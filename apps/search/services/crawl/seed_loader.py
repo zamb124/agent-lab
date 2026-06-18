@@ -15,6 +15,45 @@ from core.types import JsonObject, parse_json_object
 
 _TRANCO_LATEST_LIST_API = "https://tranco-list.eu/api/lists/date/latest"
 
+_DOMAIN_CATEGORY_RULES: tuple[tuple[str, tuple[str, ...]], ...] = (
+    ("gov", (".gov.ru", ".gov.", "government", "gosuslugi", "kremlin.", "duma.", "minjust.", "nalog.", "cbr.ru")),
+    ("wiki", ("wikipedia.org", "wikimedia.", "wiki.", "fandom.com")),
+    ("docs", ("docs.", "documentation", "developer.", "dev.", "api.", "readme.", "manual.")),
+    ("forum", ("forum.", "forums.", "community.", "discourse.", "pikabu.ru", "reddit.com")),
+    ("blog", ("blog.", "medium.com", "livejournal.com", "habr.com", "vc.ru", "teletype.in")),
+    ("media", (
+        "news", "ria.", "tass.", "lenta.", "rbc.", "kommersant.", "vedomosti.", "gazeta.",
+        "interfax.", "mk.ru", "kp.ru", "aif.ru", "fontanka.", "meduza.", "snob.", "thebell.",
+        "tv", "radio", "journal", "press", "media", "rt.com", "sputnik",
+    )),
+    ("tech", (
+        "github.", "gitlab.", "stackoverflow.", "stackexchange.", "npmjs.", "pypi.org",
+        "docker.", "kubernetes.", "habr.", "ixbt.", "3dnews.", "serverfault.",
+        "digitalocean.", "cloudflare.", "aws.", "azure.", "googlecloud.",
+    )),
+    ("finance", (
+        "bank", "finance", "invest", "broker", "trading", "moex.", "bcs.", "sber.", "vtb.",
+        "alfabank.", "tinkoff.", "finam.", "quote.", "market.", "crypto", "binance.", "bybit.",
+    )),
+    ("ecommerce", ("shop", "market", "store", "ozon", "wildberries", "aliexpress", "lamoda", "avito.")),
+    ("social", ("vk.com", "ok.ru", "instagram", "facebook", "twitter", "t.me", "telegram.", "tiktok.")),
+    ("sport", ("sport", "championat.", "sports.ru", "matchtv.", "eurofootball.", "fifa.", "uefa.", "khl.")),
+    ("education", ("edu.", "university", "school", "academy", "coursera.", "stepik.", "netology.", "skillbox.")),
+    ("health", ("med", "health", "clinic", "hospital", "apteka", "doctor", "pharmacy", "medportal.")),
+    ("travel", ("travel", "booking.", "trip.", "tutu.", "aviasales.", "ostrovok.", "tourism", "hotel.")),
+    ("auto", ("auto.", "cars.", "drive.", "drom.", "autonews.", "kolesa.", "car.", "motor.")),
+    ("real_estate", ("realty", "real-estate", "cian.", "dom.", "m2.", "yard.", "property.")),
+    ("law", ("law", "legal", "pravo.", "consultant.", "garant.", "sud.", "notariat.")),
+    ("culture", ("culture", "theatre", "museum", "art.", "kino.", "kinopoisk.", "music.", "afisha.")),
+    ("science", ("science", "nature.", "elementy.", "nplus1.", "scientific.", "research.", "arxiv.")),
+    ("reference", ("dictionary", "translate.", "maps.", "weather.", "calendar.", "catalog.", "directory.")),
+    ("jobs", ("job.", "jobs.", "hh.ru", "superjob.", "career.", "rabota.", "work.")),
+    ("food", ("food", "restaurant", "delivery", "eda.", "menu.", "povar.", "gotovim.")),
+    ("lifestyle", ("beauty", "fashion", "style", "woman.", "cosmo.", "elle.", "vogue.", "lifestyle.")),
+    ("gaming", ("game", "games.", "steam.", "playstation.", "xbox.", "stopgame.", "dtf.ru")),
+    ("tools", ("calc.", "converter.", "generator.", "online-tool", "utility.")),
+)
+
 
 async def _resolve_tranco_download_url(client: SmartProxyClient) -> str:
     api_response = await client.get(_TRANCO_LATEST_LIST_API)
@@ -28,18 +67,9 @@ async def _resolve_tranco_download_url(client: SmartProxyClient) -> str:
 
 def _domain_category(domain: str) -> str:
     lowered = domain.lower()
-    if lowered.endswith(".gov.ru") or ".gov." in lowered:
-        return "gov"
-    if "wikipedia.org" in lowered:
-        return "wiki"
-    if any(token in lowered for token in ("shop", "market", "store", "ozon", "wildberries")):
-        return "ecommerce"
-    if any(token in lowered for token in ("vk.com", "ok.ru", "instagram", "facebook", "twitter", "t.me")):
-        return "social"
-    if any(token in lowered for token in ("docs.", "documentation", "wiki.")):
-        return "docs"
-    if any(token in lowered for token in ("news", "ria.", "tass.", "lenta.", "rbc.")):
-        return "media"
+    for category, tokens in _DOMAIN_CATEGORY_RULES:
+        if any(token in lowered for token in tokens):
+            return category
     return "unknown"
 
 

@@ -20,14 +20,14 @@ Ownership: `apps/search` + `apps/search_worker` + `platform_search`.
 
 - **HTTP (primary):** `CrawlFetchService._fetch_http_markdown` — httpx + trafilatura + BS4. Детерминированно, без LLM.
 - **Browser fallback:** при `browser_fallback_enabled=true` и ошибке HTTP или `len(markdown) < min_extract_chars` → `BrowserFetchClient` → `POST /browser/api/v1/control/crawl/fetch` (Playwright, `page_mode=crawl`, block images/CSS/fonts). Fail-closed без флага.
-- **LLM enrichment (opt-in, two-stage):** при `crawl_profiles.llm_enrichment_enabled=true` layer 1 всегда ingest raw markdown в RAG (`crawl_fetch_url`); поиск работает сразу. После `mark_indexed` → `kiq(crawl_enrich_url)`. Layer 2: `CrawlPageEnrichmentService` → `resolve_ai_model(AICapability.LLM_CHAT)` + `humanitec_llm` free pool (`search.crawl.enrichment`, `free_only`, без paid fallback) → structured JSON (строго 1 chunk) → `reingest_enriched_page` (delete+ingest). Fail enrichment не сбрасывает `indexed`; backfill — `list_indexed_missing_enrichment` + `enqueue_enrichment_backfill`.
+- **LLM enrichment (opt-in, two-stage):** при `crawl_profiles.llm_enrichment_enabled=true` layer 1 всегда ingest raw markdown в RAG (`crawl_fetch_url`); поиск работает сразу. Layer 0: `extract_structural_signals` (JSON-LD/OG/meta) persist в `crawl_urls.extract_structural_signals`. После `mark_indexed` → `kiq(crawl_enrich_url)`. Layer 2: `CrawlPageEnrichmentService` → `resolve_ai_model(AICapability.LLM_CHAT)` + `humanitec_llm` free pool (`search.crawl.enrichment`, `prompt_version=structured`, taxonomy whitelist per `search_index_id` из `search.crawl.taxonomy_files` / `taxonomies`, `free_only`, без paid fallback) → structured JSON (`body`, `filter_metadata`, `retrieval_augment`, строго 1 chunk) → `reingest_enriched_page` (delete+ingest). Fail enrichment не сбрасывает `indexed`; backfill — `list_indexed_missing_enrichment` + `enqueue_enrichment_backfill`.
 - **Skip:** dual hash — `extract_content_hash` (raw markdown) + `enriched_content_hash` + `enrichment_prompt_version`. LitServe/humanitec_llm для scrape/extraction по-прежнему запрещены; LLM только enrichment layer и query-time (`public_search`, insights).
 
 ## Indexing profile `runet_web`
 
 - Ключ в `search_indexes.indexing_profile_key` → `core.rag.index_profile_registry.resolve_index_profile`.
 - Конфиг: `conf.json` → `rag.index_profiles.runet_web` (semantic split, lexical enabled).
-- Ingest: `CrawlIngestService` кладёт `metadata.index_profile_config` для `pgvector_provider`; при enrichment — `page_summary`, `metadata_summaries`, `enrichment_model`, `enriched_content_hash`.
+- Ingest: `CrawlIngestService` кладёт `metadata.index_profile_config` для `pgvector_provider`; при enrichment — filter metadata (`content_type`, dates, `primary_topic`, `topic_tags`, `category_path`, `language`, `audience`, `freshness_relevance`, `page_title`, `page_summary`), `enrichment_model`, `enriched_content_hash`. Questions/keywords/contextual_prefix — только embed-текст (`to_ingest_markdown`), не RAG metadata.
 
 ## Infinite crawl cycle
 

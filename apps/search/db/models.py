@@ -104,6 +104,8 @@ class CrawlUrlRow(Base):
     document_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
     extract_markdown: Mapped[str | None] = mapped_column(Text, nullable=True)
     extract_title: Mapped[str | None] = mapped_column(Text, nullable=True)
+    extract_structural_signals: Mapped[dict[str, object] | None] = mapped_column(JSONB, nullable=True)
+    enrichment_snapshot: Mapped[dict[str, object] | None] = mapped_column(JSONB, nullable=True)
     last_error: Mapped[str | None] = mapped_column(Text, nullable=True)
     last_crawled_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)

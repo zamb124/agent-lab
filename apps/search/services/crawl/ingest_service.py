@@ -6,7 +6,13 @@ import hashlib
 
 from core.clients.rag_client import RagClient
 from core.crawl.enrichment_skip import compute_enriched_content_hash
-from core.crawl.models import CrawlDomain, CrawlEnrichedPage, CrawlFetchResult, CrawlIngestPayload
+from core.crawl.models import (
+    CrawlDomain,
+    CrawlEnrichedPage,
+    CrawlFetchResult,
+    CrawlIngestPayload,
+    CrawlPageFilterMetadata,
+)
 from core.rag.index_profile_registry import resolve_index_profile
 from core.rag.models import RAGMetadata
 from core.search.index_models import SearchIndexDefinition
@@ -72,6 +78,26 @@ class CrawlIngestService:
             document_id=document_id,
         )
 
+    @staticmethod
+    def _filter_metadata_to_rag_fields(filter_metadata: CrawlPageFilterMetadata) -> RAGMetadata:
+        rag_fields: RAGMetadata = {
+            "content_type": filter_metadata.content_type,
+            "primary_topic": filter_metadata.primary_topic,
+            "topic_tags": filter_metadata.topic_tags,
+            "category_path": filter_metadata.category_path,
+            "language": filter_metadata.language,
+            "audience": filter_metadata.audience,
+        }
+        if filter_metadata.date_published is not None:
+            rag_fields["date_published"] = filter_metadata.date_published.isoformat()
+        if filter_metadata.date_modified is not None:
+            rag_fields["date_modified"] = filter_metadata.date_modified.isoformat()
+        if filter_metadata.date_precision is not None:
+            rag_fields["date_precision"] = filter_metadata.date_precision
+        if filter_metadata.freshness_relevance is not None:
+            rag_fields["freshness_relevance"] = filter_metadata.freshness_relevance
+        return rag_fields
+
     def _build_metadata(
         self,
         *,
@@ -83,6 +109,8 @@ class CrawlIngestService:
         fetched: CrawlFetchResult,
     ) -> RAGMetadata:
         index_profile = resolve_index_profile(search_index.indexing_profile_key)
+        page_language = fetched.structural_signals.language
+        document_language = page_language if page_language is not None else "ru"
         metadata: RAGMetadata = {
             "collection_id": search_index.rag_collection_id,
             "search_index_id": search_index.search_index_id,
@@ -96,20 +124,19 @@ class CrawlIngestService:
             "heading_trail": fetched.heading_trail,
             "crawl_profile_id": crawl_profile_id,
             "crawl_job_id": crawl_job_id,
-            "lang": "ru",
+            "lang": document_language,
             "index_profile_config": index_profile.model_dump(mode="json"),
             "extract_content_hash": fetched.content_hash,
         }
         if payload.enriched_page is not None:
             enriched_page = payload.enriched_page
             enriched_hash = compute_enriched_content_hash(enriched_page)
-            metadata_summaries = [
-                chunk.metadata_summary for chunk in enriched_page.chunks[:32]
-            ]
+            filter_metadata = enriched_page.chunks[0].filter_metadata
+            metadata["page_title"] = enriched_page.page_title
             metadata["page_summary"] = enriched_page.page_summary
-            metadata["metadata_summaries"] = metadata_summaries
             metadata["enrichment_model"] = enriched_page.enrichment_model
             metadata["enrichment_prompt_version"] = enriched_page.enrichment_prompt_version
             metadata["enriched_content_hash"] = enriched_hash
             metadata["llm_enriched"] = True
+            metadata.update(self._filter_metadata_to_rag_fields(filter_metadata))
         return metadata

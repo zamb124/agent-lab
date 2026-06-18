@@ -21,9 +21,20 @@ export class CrawlReportMetricStrip extends PlatformElement {
             :host { display: block; }
             .summary-grid {
                 display: grid;
-                grid-template-columns: repeat(auto-fill, minmax(148px, 1fr));
+                grid-template-columns: repeat(4, minmax(0, 1fr));
                 gap: var(--space-3);
                 margin-bottom: var(--space-4);
+                align-items: stretch;
+            }
+            @media (max-width: 1200px) {
+                .summary-grid {
+                    grid-template-columns: repeat(2, minmax(0, 1fr));
+                }
+            }
+            @media (max-width: 640px) {
+                .summary-grid {
+                    grid-template-columns: repeat(2, minmax(0, 1fr));
+                }
             }
             .initial-loading {
                 padding: var(--space-4) 0;
@@ -76,6 +87,8 @@ export class CrawlReportMetricStrip extends PlatformElement {
         const dueCount = this.countFromSummary('domains_due');
         const fetchingCount = this.countFromSummary('url_fetching');
         const failedCount = this.countFromSummary('url_failed');
+        const enrichedTotal = this.summary.urls_enriched_total ?? 0;
+        const enrichmentPending = this.summary.urls_enrichment_pending ?? 0;
         return html`
             <div class="summary-grid">
                 <platform-metric-card
@@ -95,6 +108,20 @@ export class CrawlReportMetricStrip extends PlatformElement {
                     label=${this.t('crawl_report_page.urls_indexed')}
                     .value=${this.countFromSummary('url_indexed')}
                     .locale=${this.locale}
+                    .refreshing=${this.refreshing}
+                ></platform-metric-card>
+                <platform-metric-card
+                    label=${this.t('crawl_report_page.urls_enriched_total')}
+                    .value=${enrichedTotal}
+                    .locale=${this.locale}
+                    tone=${enrichedTotal > 0 ? 'accent' : ''}
+                    .refreshing=${this.refreshing}
+                ></platform-metric-card>
+                <platform-metric-card
+                    label=${this.t('crawl_report_page.urls_enrichment_pending')}
+                    .value=${enrichmentPending}
+                    .locale=${this.locale}
+                    tone=${enrichmentPending > 0 ? 'warn' : ''}
                     .refreshing=${this.refreshing}
                 ></platform-metric-card>
                 <platform-metric-card

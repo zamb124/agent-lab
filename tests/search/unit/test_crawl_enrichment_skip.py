@@ -14,7 +14,7 @@ def test_skip_when_extract_unchanged_without_enrichment():
         stored_extract_hash="abc",
         stored_enriched_hash=None,
         stored_enrichment_prompt_version=None,
-        current_prompt_version="v1",
+        current_prompt_version="structured",
         document_id="doc-1",
     )
 
@@ -25,8 +25,8 @@ def test_no_skip_when_enrichment_enabled_but_no_enriched_hash():
         extract_hash="abc",
         stored_extract_hash="abc",
         stored_enriched_hash=None,
-        stored_enrichment_prompt_version="v1",
-        current_prompt_version="v1",
+        stored_enrichment_prompt_version="structured",
+        current_prompt_version="structured",
         document_id="doc-1",
     )
 
@@ -37,8 +37,8 @@ def test_skip_when_enrichment_hashes_and_prompt_match():
         extract_hash="abc",
         stored_extract_hash="abc",
         stored_enriched_hash="enriched-1",
-        stored_enrichment_prompt_version="v1",
-        current_prompt_version="v1",
+        stored_enrichment_prompt_version="structured",
+        current_prompt_version="structured",
         document_id="doc-1",
     )
 
@@ -49,7 +49,7 @@ def test_no_skip_when_prompt_version_changed():
         extract_hash="abc",
         stored_extract_hash="abc",
         stored_enriched_hash="enriched-1",
-        stored_enrichment_prompt_version="v1",
-        current_prompt_version="v2",
+        stored_enrichment_prompt_version="structured",
+        current_prompt_version="structured-changed",
         document_id="doc-1",
     )

@@ -6,6 +6,7 @@ import { PlatformPage } from '@platform/lib/base/PlatformPage.js';
 import { frontendIslandPageBodyStyles } from '../../styles/frontend-island-page-body.styles.js';
 import { formatPlatformDateTime } from '@platform/lib/utils/format-platform-date.js';
 import { FrontendCrawlUrlDetailModal } from '../../modals/crawl-url-detail-modal.js';
+import '../../components/crawl-report/crawl-report-enrichment-tags.js';
 import '../../components/crawl-report/crawl-report-metric-strip.js';
 import '../../components/crawl-report/crawl-report-running-banner.js';
 import '../../components/crawl-report/crawl-report-charts-panel.js';
@@ -14,12 +15,21 @@ import '@platform/lib/components/glass-spinner.js';
 import '@platform/lib/components/fields/platform-field.js';
 import '@platform/lib/components/platform-help-hint.js';
 import '@platform/lib/components/platform-icon.js';
+import '@platform/lib/components/platform-button.js';
 
 const TABS = Object.freeze(['domains', 'urls', 'jobs']);
 const DEFAULT_PROFILE_ID = 'runet_platform';
 const DOMAIN_STATUS_VALUES = Object.freeze(['active', 'error', 'paused', 'blocked']);
 const URL_STATUS_VALUES = Object.freeze(['indexed', 'failed', 'pending', 'fetching', 'skipped']);
-const CATEGORY_KEYS = Object.freeze(['gov', 'wiki', 'ecommerce', 'social', 'docs', 'media', 'news', 'unknown']);
+const CATEGORY_KEYS = Object.freeze([
+    'gov', 'wiki', 'docs', 'forum', 'blog', 'media', 'tech', 'finance', 'ecommerce', 'social',
+    'sport', 'education', 'health', 'travel', 'auto', 'real_estate', 'law', 'culture', 'science',
+    'reference', 'jobs', 'food', 'lifestyle', 'gaming', 'tools', 'news', 'unknown',
+]);
+const CONTENT_TYPE_FILTER_VALUES = Object.freeze([
+    'article', 'news', 'blog', 'product', 'documentation', 'tutorial', 'guide', 'faq', 'review',
+    'research', 'wiki', 'forum', 'legal', 'landing', 'reference', 'other',
+]);
 const ACTIVE_POLL_MS = 5000;
 
 export class FrontendCrawlReportPage extends PlatformPage {
@@ -32,7 +42,7 @@ export class FrontendCrawlReportPage extends PlatformPage {
                 display: grid;
                 grid-template-columns: minmax(260px, 1fr) auto;
                 gap: var(--space-4);
-                align-items: end;
+                align-items: center;
                 background: var(--glass-solid-subtle);
                 border: 1px solid var(--glass-border-subtle);
                 border-radius: var(--radius-lg);
@@ -52,6 +62,11 @@ export class FrontendCrawlReportPage extends PlatformPage {
                 gap: var(--space-2);
                 justify-content: flex-end;
                 align-items: center;
+            }
+            .tick-action {
+                display: inline-flex;
+                align-items: center;
+                gap: var(--space-2);
             }
             .index-meta {
                 font-size: var(--text-xs);
@@ -283,6 +298,9 @@ export class FrontendCrawlReportPage extends PlatformPage {
         _profileId: { state: true },
         _activeTab: { state: true },
         _urlStatusFilter: { state: true },
+        _urlContentTypeFilter: { state: true },
+        _urlPrimaryTopicFilter: { state: true },
+        _urlEnrichedOnlyFilter: { state: true },
         _domainStatusFilter: { state: true },
         _urlDomainFilter: { state: true },
         _runningDomainId: { state: true },
@@ -309,6 +327,9 @@ export class FrontendCrawlReportPage extends PlatformPage {
         this._profileId = DEFAULT_PROFILE_ID;
         this._activeTab = 'domains';
         this._urlStatusFilter = '';
+        this._urlContentTypeFilter = '';
+        this._urlPrimaryTopicFilter = '';
+        this._urlEnrichedOnlyFilter = false;
         this._domainStatusFilter = '';
         this._urlDomainFilter = '';
         this._runningDomainId = null;
@@ -404,15 +425,22 @@ export class FrontendCrawlReportPage extends PlatformPage {
         return { crawl_profile_id: this._profileId };
     }
 
+    _urlListPayload() {
+        return {
+            crawl_profile_id: this._profileId,
+            crawl_status: this._urlStatusFilter || undefined,
+            domain: this._urlDomainFilter || undefined,
+            content_type: this._urlContentTypeFilter || undefined,
+            primary_topic: this._urlPrimaryTopicFilter || undefined,
+            enriched_only: this._urlEnrichedOnlyFilter || undefined,
+        };
+    }
+
     _reloadAll() {
         const payload = this._profilePayload();
         this._summaryOp.run(payload);
         this._domains.load({ ...payload, status: this._domainStatusFilter || undefined });
-        this._urls.load({
-            ...payload,
-            crawl_status: this._urlStatusFilter || undefined,
-            domain: this._urlDomainFilter || undefined,
-        });
+        this._urls.load(this._urlListPayload());
         this._jobs.load(payload);
     }
 
@@ -422,11 +450,7 @@ export class FrontendCrawlReportPage extends PlatformPage {
         if (this._activeTab === 'domains') {
             this._domains.load({ ...payload, status: this._domainStatusFilter || undefined });
         } else if (this._activeTab === 'urls') {
-            this._urls.load({
-                ...payload,
-                crawl_status: this._urlStatusFilter || undefined,
-                domain: this._urlDomainFilter || undefined,
-            });
+            this._urls.load(this._urlListPayload());
         } else {
             this._jobs.load(payload);
         }
@@ -435,6 +459,9 @@ export class FrontendCrawlReportPage extends PlatformPage {
     _onProfileChange(e) {
         this._profileId = e.detail.value;
         this._urlDomainFilter = '';
+        this._urlContentTypeFilter = '';
+        this._urlPrimaryTopicFilter = '';
+        this._urlEnrichedOnlyFilter = false;
         this._rowSnapshots.domains.clear();
         this._rowSnapshots.urls.clear();
         this._rowSnapshots.jobs.clear();
@@ -452,38 +479,38 @@ export class FrontendCrawlReportPage extends PlatformPage {
 
     _onUrlStatusFilterChange(e) {
         this._urlStatusFilter = e.detail.value;
-        this._urls.load({
-            crawl_profile_id: this._profileId,
-            crawl_status: this._urlStatusFilter || undefined,
-            domain: this._urlDomainFilter || undefined,
-        });
+        this._urls.load(this._urlListPayload());
+    }
+
+    _onUrlContentTypeFilterChange(e) {
+        this._urlContentTypeFilter = e.detail.value;
+        this._urls.load(this._urlListPayload());
+    }
+
+    _onUrlPrimaryTopicFilterChange(e) {
+        this._urlPrimaryTopicFilter = e.detail.value;
+        this._urls.load(this._urlListPayload());
+    }
+
+    _onUrlEnrichedOnlyFilterChange(e) {
+        this._urlEnrichedOnlyFilter = e.detail.value === 'true';
+        this._urls.load(this._urlListPayload());
     }
 
     _onUrlDomainFilterChange(e) {
         this._urlDomainFilter = e.detail.value.trim();
-        this._urls.load({
-            crawl_profile_id: this._profileId,
-            crawl_status: this._urlStatusFilter || undefined,
-            domain: this._urlDomainFilter || undefined,
-        });
+        this._urls.load(this._urlListPayload());
     }
 
     _clearUrlDomainFilter() {
         this._urlDomainFilter = '';
-        this._urls.load({
-            crawl_profile_id: this._profileId,
-            crawl_status: this._urlStatusFilter || undefined,
-        });
+        this._urls.load(this._urlListPayload());
     }
 
     _viewDomainUrls(domain) {
         this._activeTab = 'urls';
         this._urlDomainFilter = domain;
-        this._urls.load({
-            crawl_profile_id: this._profileId,
-            crawl_status: this._urlStatusFilter || undefined,
-            domain,
-        });
+        this._urls.load(this._urlListPayload());
     }
 
     _openUrlDetail(row) {
@@ -505,6 +532,20 @@ export class FrontendCrawlReportPage extends PlatformPage {
         const key = `crawl_report_page.status_${status}`;
         const translated = this.t(key);
         if (translated === key) return status;
+        return translated;
+    }
+
+    _contentTypeLabel(contentType) {
+        const key = `crawl_report_page.content_type_${contentType}`;
+        const translated = this.t(key);
+        if (translated === key) return contentType;
+        return translated;
+    }
+
+    _topicLabel(topic) {
+        const key = `crawl_report_page.topic_${topic}`;
+        const translated = this.t(key);
+        if (translated === key) return topic;
         return translated;
     }
 
@@ -535,11 +576,36 @@ export class FrontendCrawlReportPage extends PlatformPage {
         return html`<span class="status-tag ${fetchTransport}">${this.t(`crawl_report_page.transport_${fetchTransport}`)}</span>`;
     }
 
-    _enrichmentTag(row) {
-        if (row.enriched_content_hash) {
-            return html`<span class="status-tag indexed">${this.t('crawl_report_page.enrichment_llm')}</span>`;
-        }
-        return html`<span>—</span>`;
+    _enrichmentCell(row) {
+        return html`
+            <crawl-report-enrichment-tags
+                .enrichmentSnapshot=${row.enrichment_snapshot}
+                .structuralSignals=${row.structural_signals}
+                compact
+            ></crawl-report-enrichment-tags>
+        `;
+    }
+
+    _primaryTopicFilterValues() {
+        const summary = this._summaryOp.state.lastResult;
+        const rows = summary && Array.isArray(summary.primary_topic_counts) ? summary.primary_topic_counts : [];
+        return [
+            { value: '', label: this.t('crawl_report_page.filter_all') },
+            ...rows.slice(0, 40).map((row) => ({
+                value: row.status,
+                label: `${this._topicLabel(row.status)} (${row.count})`,
+            })),
+        ];
+    }
+
+    _contentTypeFilterValues() {
+        return [
+            { value: '', label: this.t('crawl_report_page.filter_all') },
+            ...CONTENT_TYPE_FILTER_VALUES.map((contentType) => ({
+                value: contentType,
+                label: this._contentTypeLabel(contentType),
+            })),
+        ];
     }
 
     _enumValues(statusKeys) {
@@ -633,6 +699,35 @@ export class FrontendCrawlReportPage extends PlatformPage {
                     .value=${this._urlStatusFilter}
                     .enumConfig=${{ values: this._enumValues(URL_STATUS_VALUES) }}
                     @value-changed=${this._onUrlStatusFilterChange}
+                ></platform-field>
+                <platform-field
+                    class="field"
+                    type="enum"
+                    label=${this.t('crawl_report_page.filter_content_type')}
+                    .value=${this._urlContentTypeFilter}
+                    .enumConfig=${{ values: this._contentTypeFilterValues() }}
+                    @value-changed=${this._onUrlContentTypeFilterChange}
+                ></platform-field>
+                <platform-field
+                    class="field"
+                    type="enum"
+                    label=${this.t('crawl_report_page.filter_primary_topic')}
+                    .value=${this._urlPrimaryTopicFilter}
+                    .enumConfig=${{ values: this._primaryTopicFilterValues() }}
+                    @value-changed=${this._onUrlPrimaryTopicFilterChange}
+                ></platform-field>
+                <platform-field
+                    class="field"
+                    type="enum"
+                    label=${this.t('crawl_report_page.filter_enriched_only')}
+                    .value=${this._urlEnrichedOnlyFilter ? 'true' : ''}
+                    .enumConfig=${{
+                        values: [
+                            { value: '', label: this.t('crawl_report_page.filter_all') },
+                            { value: 'true', label: this.t('crawl_report_page.filter_enriched_only_yes') },
+                        ],
+                    }}
+                    @value-changed=${this._onUrlEnrichedOnlyFilterChange}
                 ></platform-field>
                 <platform-field
                     class="field"
@@ -744,8 +839,8 @@ export class FrontendCrawlReportPage extends PlatformPage {
                         <th>${this.t('crawl_report_page.col_domain')}</th>
                         <th>${this.t('crawl_report_page.col_url')}</th>
                         <th>${this.t('crawl_report_page.col_status')}</th>
-                        <th>${this.t('crawl_report_page.col_transport')}</th>
                         <th>${this.t('crawl_report_page.col_enrichment')}</th>
+                        <th>${this.t('crawl_report_page.col_transport')}</th>
                         <th>${this.t('crawl_report_page.col_last_crawled')}</th>
                         <th>${this.t('crawl_report_page.col_error')}</th>
                         <th>${this.t('crawl_report_page.col_actions')}</th>
@@ -761,8 +856,8 @@ export class FrontendCrawlReportPage extends PlatformPage {
                                 <button type="button" class="url-link" @click=${() => this._openUrlDetail(row)}>${row.url}</button>
                             </td>
                             <td>${this._statusTag(row.crawl_status)}</td>
+                            <td>${this._enrichmentCell(row)}</td>
                             <td>${this._transportTag(row.fetch_transport)}</td>
-                            <td>${this._enrichmentTag(row)}</td>
                             <td>${this._formatDt(row.last_crawled_at)}</td>
                             <td class="mono">${row.last_error || '—'}</td>
                             <td>
@@ -865,22 +960,29 @@ export class FrontendCrawlReportPage extends PlatformPage {
                         ` : null}
                     </div>
                     <div class="control-actions">
-                        <button
-                            type="button"
-                            class="btn"
-                            aria-busy=${summaryRefreshing ? 'true' : 'false'}
+                        <platform-button
+                            variant="secondary"
+                            density="compact"
+                            aria-label=${this.t('crawl_report_page.refresh')}
+                            ?disabled=${summaryRefreshing}
                             @click=${() => this._reloadSummaryAndActiveTab()}
                         >
                             <platform-icon name="refresh" size="16"></platform-icon>
                             ${this.t('crawl_report_page.refresh')}
-                        </button>
-                        <platform-help-hint .text=${this.t('crawl_report_page.queue_tick_hint')}></platform-help-hint>
-                        <button
-                            type="button"
-                            class="btn primary"
-                            ?disabled=${this._queueTickOp.state.busy}
-                            @click=${() => this._queueTick()}
-                        >${this.t('crawl_report_page.queue_tick')}</button>
+                        </platform-button>
+                        <div class="tick-action">
+                            <platform-button
+                                variant="primary"
+                                density="compact"
+                                ?disabled=${this._queueTickOp.state.busy}
+                                ?loading=${this._queueTickOp.state.busy}
+                                @click=${() => this._queueTick()}
+                            >${this.t('crawl_report_page.queue_tick')}</platform-button>
+                            <platform-help-hint
+                                size="md"
+                                .text=${this.t('crawl_report_page.queue_tick_hint')}
+                            ></platform-help-hint>
+                        </div>
                     </div>
                 </section>
 
@@ -905,6 +1007,8 @@ export class FrontendCrawlReportPage extends PlatformPage {
                     .locale=${this._localeSel.value}
                     .statusLabel=${(status) => this._statusLabel(status)}
                     .categoryLabel=${(category) => this._categoryLabel(category)}
+                    .contentTypeLabel=${(contentType) => this._contentTypeLabel(contentType)}
+                    .topicLabel=${(topic) => this._topicLabel(topic)}
                 ></crawl-report-charts-panel>
 
                 ${this._shouldAutoRefresh() ? html`

@@ -8,9 +8,10 @@ from unittest.mock import AsyncMock
 import pytest
 
 from apps.search.services.crawl.ingest_service import CrawlIngestService
-from core.crawl.models import CrawlDomain, CrawlEnrichedChunk, CrawlEnrichedPage, CrawlFetchResult
+from core.crawl.models import CrawlDomain, CrawlFetchResult
 from core.rag.models import RAGIngestTextResponse
 from core.search.index_models import SearchIndexDefinition, SearchIndexRetrievalConfig
+from tests.search.unit.crawl_enrichment_fixtures import sample_enriched_page
 
 pytestmark = pytest.mark.unit
 
@@ -49,24 +50,16 @@ async def test_reingest_deletes_then_ingests_with_same_document_id() -> None:
         content_hash="hash-raw",
         fetch_transport="http",
     )
-    enriched_page = CrawlEnrichedPage(
+    enriched_page = sample_enriched_page(
+        page_title="Enriched title",
         page_summary="Enriched summary",
-        chunks=[
-            CrawlEnrichedChunk(
-                content="Single enriched chunk for indexing.",
-                metadata_summary="Test chunk metadata",
-                hierarchy=["Section"],
-            )
-        ],
-        enrichment_model="test-model",
-        enrichment_prompt_version="v1",
     )
     rag_client = AsyncMock()
     rag_client.delete_namespace_document = AsyncMock(return_value={"status": "deleted"})
     rag_client.ingest_text = AsyncMock(
         return_value=RAGIngestTextResponse(
             document_id="idx_test:abc123",
-            document_name="Enriched summary",
+            document_name="Enriched title",
             namespace_id="idx_test:ns",
             status="indexed",
             provider="pgvector",
@@ -90,7 +83,9 @@ async def test_reingest_deletes_then_ingests_with_same_document_id() -> None:
     ingest_call = rag_client.ingest_text.await_args
     assert ingest_call is not None
     assert ingest_call.kwargs["document_id"] == document_id
-    assert "Enriched summary" in ingest_call.args[1]
+    assert "Enriched title" in ingest_call.args[1]
     metadata = ingest_call.kwargs["metadata"]
     assert metadata is not None
     assert metadata["llm_enriched"] is True
+    assert metadata["content_type"] == "documentation"
+    assert metadata["primary_topic"] == "tech"

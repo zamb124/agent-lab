@@ -59,6 +59,10 @@ def test_search_settings_and_container_are_loadable() -> None:
     assert settings.search.linkup.enabled is True
     assert settings.search.serper.enabled is True
     assert settings.search.tavily.enabled is True
+    runet_taxonomy = settings.crawl.taxonomies["runet"]
+    assert len(runet_taxonomy.primary_topics) >= 100
+    assert len(runet_taxonomy.topic_tags) >= 250
+    assert len(runet_taxonomy.category_paths) >= 200
     assert container.meta_search_service is get_container().meta_search_service
 
     reset_search_container()

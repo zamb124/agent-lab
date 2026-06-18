@@ -12,7 +12,15 @@ from apps.search.services.crawl.page_enrichment_service import CrawlPageEnrichme
 from core.ai.models import ResolvedAIModel
 from core.ai.providers import HUMANITEC_LLM_PROVIDER, AICapability
 from core.ai.requirements import AIRequestRequirements, AISelection
-from core.crawl.models import CrawlEnrichedChunk, CrawlEnrichedPageLLMOutput, CrawlProfile
+from core.clients.llm.client import LLMClient
+from core.crawl.models import (
+    CrawlDomain,
+    CrawlEnrichedPageLLMOutput,
+    CrawlProfile,
+    CrawlStructuralSignals,
+)
+from core.search.index_models import SearchIndexCrawlTaxonomy
+from tests.search.unit.crawl_enrichment_fixtures import sample_enriched_chunk
 
 
 def _profile(*, enrichment_model: str | None = None) -> CrawlProfile:
@@ -33,6 +41,33 @@ def _profile(*, enrichment_model: str | None = None) -> CrawlProfile:
         enrichment_model=enrichment_model,
         created_at=now,
         updated_at=now,
+    )
+
+
+def _domain() -> CrawlDomain:
+    now = datetime.now(UTC)
+    return CrawlDomain(
+        crawl_domain_id="dom-1",
+        crawl_profile_id="cr_test",
+        domain="example.com",
+        domain_rank=None,
+        category="unknown",
+        crawl_policy="sitemap_only",
+        status="active",
+        last_discovered_at=None,
+        last_crawled_at=None,
+        next_crawl_after=now,
+        last_error=None,
+        created_at=now,
+        updated_at=now,
+    )
+
+
+def _taxonomy() -> SearchIndexCrawlTaxonomy:
+    return SearchIndexCrawlTaxonomy(
+        primary_topics=["tech", "other"],
+        topic_tags=["tech", "software", "other"],
+        category_paths=[["tech"]],
     )
 
 
@@ -79,16 +114,12 @@ async def test_invoke_enrichment_llm_disables_paid_fallback() -> None:
         cost_origin="platform",
     )
     llm_output = CrawlEnrichedPageLLMOutput(
+        page_title="Title",
         page_summary="summary",
-        chunks=[
-            CrawlEnrichedChunk(
-                content="chunk body",
-                metadata_summary="meta",
-                hierarchy=["H1"],
-            )
-        ],
+        chunks=[sample_enriched_chunk()],
     )
     llm_client = MagicMock()
+    llm_client.__class__ = LLMClient
     llm_client.model = "openrouter:qwen/qwen-2.5-7b-instruct:free"
     llm_client.chat = AsyncMock(return_value=llm_output)
 
@@ -98,12 +129,20 @@ async def test_invoke_enrichment_llm_disables_paid_fallback() -> None:
             "apps.search.services.crawl.page_enrichment_service.create_llm_client_from_ai_model",
             return_value=llm_client,
         ) as create_client_mock,
+        patch(
+            "apps.search.services.crawl.page_enrichment_service.resolve_crawl_taxonomy",
+            return_value=_taxonomy(),
+        ),
     ):
         enriched = await service._invoke_enrichment_llm(
             markdown="# Title\n\nBody",
             url="https://example.com/",
             profile=_profile(),
+            search_index_id="runet",
             crawl_domain_id="dom-1",
+            domain=_domain(),
+            structural_signals=CrawlStructuralSignals(),
+            sitemap_lastmod=None,
         )
 
     create_client_mock.assert_called_once()

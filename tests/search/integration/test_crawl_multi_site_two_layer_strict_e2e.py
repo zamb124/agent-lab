@@ -157,7 +157,7 @@ async def test_crawl_multi_site_two_layer_parse_search_then_llm_strict(
         assert item["crawl_status"] == "indexed"
         assert item["enrichment_model"] == CRAWL_STRICT_ENRICHMENT_MODEL
         assert item["enriched_content_hash"]
-        assert item["enrichment_prompt_version"] == "v1"
+        assert item["enrichment_prompt_version"] == "structured"
 
     for site in CRAWL_STRICT_E2E_SITES:
         hit = await poll_index_search_hits(

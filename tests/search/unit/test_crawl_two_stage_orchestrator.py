@@ -11,14 +11,14 @@ from apps.search.config import get_search_settings
 from apps.search.services.crawl.orchestrator_service import CrawlOrchestratorService
 from core.crawl.models import (
     CrawlDomain,
-    CrawlEnrichedChunk,
-    CrawlEnrichedPage,
     CrawlFetchResult,
     CrawlProfile,
     CrawlProfileWithIndex,
+    CrawlStructuralSignals,
     CrawlUrl,
 )
 from core.search.index_models import SearchIndexDefinition, SearchIndexRetrievalConfig
+from tests.search.unit.crawl_enrichment_fixtures import sample_enriched_page
 
 pytestmark = pytest.mark.unit
 
@@ -194,17 +194,9 @@ async def test_enrich_one_url_reads_snapshot_not_http(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     profile_bundle = _profile_bundle(llm_enrichment_enabled=True)
-    enriched_page = CrawlEnrichedPage(
-        page_summary="Summary",
-        chunks=[
-            CrawlEnrichedChunk(
-                content="Chunk",
-                metadata_summary="Meta",
-                hierarchy=["H1"],
-            )
-        ],
+    enriched_page = sample_enriched_page(
         enrichment_model="test-model",
-        enrichment_prompt_version="v1",
+        enrichment_prompt_version="structured",
     )
 
     class _UrlRepo:
@@ -223,7 +215,7 @@ async def test_enrich_one_url_reads_snapshot_not_http(
                 updated_at=datetime.now(UTC),
             )
 
-        async def get_layer1_snapshot(self, crawl_url_id: str) -> tuple[str, str, str, str, str]:
+        async def get_layer1_snapshot(self, crawl_url_id: str) -> tuple[str, str, str, str, str, CrawlStructuralSignals]:
             assert crawl_url_id == "url-1"
             return (
                 "https://example.com/page",
@@ -231,6 +223,7 @@ async def test_enrich_one_url_reads_snapshot_not_http(
                 "# Stored\n\nFrom database snapshot.",
                 "Stored title",
                 "hash-layer1",
+                CrawlStructuralSignals(title="Stored title"),
             )
 
         async def mark_enriched(self, crawl_url_id: str, **kwargs: object) -> None:
@@ -286,13 +279,14 @@ async def test_enrich_failure_keeps_indexed_status(
                 updated_at=datetime.now(UTC),
             )
 
-        async def get_layer1_snapshot(self, crawl_url_id: str) -> tuple[str, str, str, str, str]:
+        async def get_layer1_snapshot(self, crawl_url_id: str) -> tuple[str, str, str, str, str, CrawlStructuralSignals]:
             return (
                 "https://example.com/page",
                 "https://example.com/page",
                 "markdown",
                 "title",
                 "hash-layer1",
+                CrawlStructuralSignals(),
             )
 
         async def mark_enrichment_failed(self, crawl_url_id: str, error: str) -> None:

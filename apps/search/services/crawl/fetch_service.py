@@ -13,7 +13,8 @@ from bs4 import BeautifulSoup
 from apps.browser.contracts.crawl_fetch_types import BrowserCrawlFetchResponse
 from apps.search.db.crawl_repositories import canonicalize_url
 from core.clients.browser_fetch_client import BrowserFetchClient
-from core.crawl.models import CrawlFetchResult
+from core.crawl.models import CrawlFetchResult, CrawlStructuralSignals
+from core.crawl.structural_signals import extract_structural_signals_from_html
 from core.http import get_httpx_client
 
 CrawlFetchTransport = Literal["http", "browser"]
@@ -64,14 +65,15 @@ async def _fetch_http_markdown(
             content_type = response.headers["content-type"]
         except KeyError:
             content_type = "text/html"
-        markdown = await asyncio.to_thread(
-            _extract_markdown,
+        markdown, structural_signals = await asyncio.to_thread(
+            _extract_markdown_and_signals,
             response.content,
             content_type,
         )
     return _build_crawl_fetch_result(
         final_url=final_url,
         markdown=markdown,
+        structural_signals=structural_signals,
         min_extract_chars=min_extract_chars,
         fetch_transport="http",
     )
@@ -82,10 +84,15 @@ def _build_crawl_fetch_result_from_html(
     *,
     min_extract_chars: int,
 ) -> CrawlFetchResult:
-    markdown = _extract_markdown(browser_response.html.encode("utf-8"), "text/html")
+    html = browser_response.html
+    markdown, structural_signals = _extract_markdown_and_signals(
+        html.encode("utf-8"),
+        "text/html",
+    )
     return _build_crawl_fetch_result(
         final_url=browser_response.final_url,
         markdown=markdown,
+        structural_signals=structural_signals,
         min_extract_chars=min_extract_chars,
         fetch_transport="browser",
     )
@@ -95,13 +102,14 @@ def _build_crawl_fetch_result(
     *,
     final_url: str,
     markdown: str,
+    structural_signals: CrawlStructuralSignals,
     min_extract_chars: int,
     fetch_transport: CrawlFetchTransport,
 ) -> CrawlFetchResult:
     if len(markdown.strip()) < min_extract_chars:
         raise ValueError(f"extracted text too short for url: {final_url}")
     canonical_url = canonicalize_url(final_url)
-    title = _extract_title(markdown)
+    title = _resolve_title(markdown, structural_signals)
     heading_trail = _extract_heading_trail(markdown)
     content_hash = hashlib.sha256(markdown.encode("utf-8")).hexdigest()
     return CrawlFetchResult(
@@ -112,16 +120,27 @@ def _build_crawl_fetch_result(
         heading_trail=heading_trail,
         content_hash=content_hash,
         fetch_transport=fetch_transport,
+        structural_signals=structural_signals,
     )
 
 
-def _extract_markdown(content: bytes, content_type: str) -> str:
+def _resolve_title(markdown: str, structural_signals: CrawlStructuralSignals) -> str:
+    if structural_signals.title is not None and structural_signals.title.strip():
+        return structural_signals.title.strip()
+    return _extract_title(markdown)
+
+
+def _extract_markdown_and_signals(
+    content: bytes,
+    content_type: str,
+) -> tuple[str, CrawlStructuralSignals]:
     if "html" not in content_type.lower():
         text = content.decode("utf-8", errors="replace")
         if not text.strip():
             raise ValueError("empty response body")
-        return text
+        return text, CrawlStructuralSignals()
     html = content.decode("utf-8", errors="replace")
+    structural_signals = extract_structural_signals_from_html(html)
     extracted = trafilatura.extract(
         html,
         output_format="markdown",
@@ -137,7 +156,7 @@ def _extract_markdown(content: bytes, content_type: str) -> str:
         extracted = soup.get_text(separator="\n", strip=True)
     if not extracted or not extracted.strip():
         raise ValueError("html page has no extractable text")
-    return extracted
+    return extracted, structural_signals
 
 
 def _extract_title(markdown: str) -> str:

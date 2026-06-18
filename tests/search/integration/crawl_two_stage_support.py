@@ -9,13 +9,13 @@ from typing import TYPE_CHECKING
 
 from core.crawl.models import (
     CrawlDomainSeed,
-    CrawlEnrichedChunk,
     CrawlEnrichedPage,
     CrawlProfileCreateRequest,
     SitemapEntry,
 )
 from core.search.index_models import SearchIndexCreateRequest
 from tests.search.conftest import make_search_index_slug
+from tests.search.unit.crawl_enrichment_fixtures import sample_enriched_page
 
 if TYPE_CHECKING:
     from httpx import AsyncClient
@@ -29,17 +29,12 @@ REAL_CRAWL_MARKER = "Example Domain"
 
 def deterministic_enriched_page(unique_id: str) -> CrawlEnrichedPage:
     marker = f"TWO_STAGE_ENRICH_{unique_id}"
-    return CrawlEnrichedPage(
+    return sample_enriched_page(
+        page_title=f"Structured title {marker}",
         page_summary=f"Structured summary {marker}",
-        chunks=[
-            CrawlEnrichedChunk(
-                content=f"Enriched chunk body containing {marker} for search verification.",
-                metadata_summary="Deterministic test enrichment chunk",
-                hierarchy=["Introduction"],
-            )
-        ],
         enrichment_model="test-enrichment-model",
-        enrichment_prompt_version="v1",
+        enrichment_prompt_version="structured",
+        marker=marker,
     )
 
 

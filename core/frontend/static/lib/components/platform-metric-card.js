@@ -20,9 +20,14 @@ export class PlatformMetricCard extends PlatformElement {
         css`
             :host {
                 display: block;
+                height: 100%;
             }
             .card {
                 position: relative;
+                box-sizing: border-box;
+                height: 100%;
+                display: flex;
+                flex-direction: column;
                 padding: var(--space-3);
                 background: var(--glass-solid-subtle);
                 border: 1px solid var(--glass-border-subtle);
@@ -39,16 +44,24 @@ export class PlatformMetricCard extends PlatformElement {
                 border-color: color-mix(in srgb, var(--error) 45%, transparent);
             }
             .label {
+                flex: 0 0 auto;
+                min-height: calc(1.35em * 2);
                 font-size: var(--text-xs);
+                line-height: 1.35;
                 color: var(--text-tertiary);
                 text-transform: uppercase;
                 letter-spacing: 0.04em;
+                display: -webkit-box;
+                -webkit-box-orient: vertical;
+                -webkit-line-clamp: 2;
+                overflow: hidden;
             }
             .value-row {
+                flex: 0 0 auto;
                 display: flex;
                 align-items: baseline;
                 gap: var(--space-2);
-                margin-top: var(--space-1);
+                margin-top: var(--space-2);
             }
             .value {
                 font-size: var(--text-xl);

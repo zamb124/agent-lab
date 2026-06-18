@@ -67,6 +67,9 @@ export const crawlUrlsResource = createResourceCollection({
         const q = { limit: 200, offset: 0, crawl_profile_id: crawlProfileId };
         if (payload && payload.crawl_status) q.crawl_status = payload.crawl_status;
         if (payload && payload.domain) q.domain = payload.domain;
+        if (payload && payload.content_type) q.content_type = payload.content_type;
+        if (payload && payload.primary_topic) q.primary_topic = payload.primary_topic;
+        if (payload && payload.enriched_only === true) q.enriched_only = true;
         return q;
     },
 });

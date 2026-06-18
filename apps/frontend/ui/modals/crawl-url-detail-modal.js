@@ -5,8 +5,9 @@ import { registerModalKind } from '@platform/lib/utils/modal-registry.js';
 import { flowsChatMarkdownToHtml } from '@platform/lib/flows-chat/markdown.js';
 import { formatPlatformDateTime } from '@platform/lib/utils/format-platform-date.js';
 import '@platform/lib/components/glass-spinner.js';
+import '../components/crawl-report/crawl-report-metadata-panels.js';
 
-const DETAIL_TABS = Object.freeze(['metadata', 'fetched', 'indexed']);
+const DETAIL_TABS = Object.freeze(['metadata', 'structural', 'enrichment', 'fetched', 'indexed']);
 
 export class FrontendCrawlUrlDetailModal extends PlatformModal {
     static modalKind = 'frontend.crawl_url_detail';
@@ -194,11 +195,17 @@ export class FrontendCrawlUrlDetailModal extends PlatformModal {
             return html`<div class="state">${this.t('crawl_report_page.url_detail_indexed_unavailable')}</div>`;
         }
         return html`
-            ${indexed.page_summary ? html`
-                <div class="meta-item" style="margin-bottom: var(--space-3);">
-                    <div class="meta-label">${this.t('crawl_report_page.url_detail_page_summary')}</div>
-                    <div class="meta-value">${indexed.page_summary}</div>
-                </div>
+            ${indexed.filter_metadata ? html`
+                <crawl-report-filter-metadata-panel
+                    style="margin-bottom: var(--space-4); display: block;"
+                    .filterMetadata=${indexed.filter_metadata}
+                    .enrichmentSnapshot=${{
+                        page_title: detail.url.enrichment_snapshot?.page_title || indexed.document_name,
+                        page_summary: indexed.page_summary,
+                        filter_metadata: indexed.filter_metadata,
+                    }}
+                    .locale=${this._localeSel.value}
+                ></crawl-report-filter-metadata-panel>
             ` : nothing}
             ${this._renderMarkdownTab(indexed.markdown, 'crawl_report_page.url_detail_indexed_unavailable')}
         `;
@@ -240,6 +247,23 @@ export class FrontendCrawlUrlDetailModal extends PlatformModal {
                 `)}
             </div>
             ${this._activeTab === 'metadata' ? this._renderMetadata(detail) : nothing}
+            ${this._activeTab === 'structural' ? html`
+                <crawl-report-structural-panel
+                    .signals=${detail.url.structural_signals}
+                    .locale=${this._localeSel.value}
+                ></crawl-report-structural-panel>
+            ` : nothing}
+            ${this._activeTab === 'enrichment' ? html`
+                <crawl-report-filter-metadata-panel
+                    .filterMetadata=${detail.indexed_content?.filter_metadata || detail.url.enrichment_snapshot?.filter_metadata || null}
+                    .enrichmentSnapshot=${detail.url.enrichment_snapshot || (detail.indexed_content?.filter_metadata ? {
+                        page_title: detail.indexed_content.document_name,
+                        page_summary: detail.indexed_content.page_summary,
+                        filter_metadata: detail.indexed_content.filter_metadata,
+                    } : null)}
+                    .locale=${this._localeSel.value}
+                ></crawl-report-filter-metadata-panel>
+            ` : nothing}
             ${this._activeTab === 'fetched' ? html`
                 ${detail.extract_title ? html`
                     <div class="meta-item" style="margin-bottom: var(--space-3);">

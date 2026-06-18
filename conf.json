@@ -981,8 +981,12 @@
           "provider": "humanitec_llm",
           "model": "auto",
           "timeout_seconds": 120.0,
-          "prompt_version": "v1",
+          "prompt_version": "structured",
           "max_input_chars": 12000
+        },
+        "taxonomies": {},
+        "taxonomy_files": {
+          "runet": "conf/crawl_taxonomies/runet.json"
         }
       }
     },

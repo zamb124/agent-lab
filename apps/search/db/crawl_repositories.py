@@ -9,6 +9,7 @@ from typing import cast
 from urllib.parse import urlsplit, urlunsplit
 
 from sqlalchemy import func, select, update
+from sqlalchemy.sql.elements import ColumnElement
 
 from apps.search.db.base import SearchDatabase
 from apps.search.db.models import (
@@ -30,7 +31,9 @@ from core.crawl.models import (
     CrawlProfileCreateRequest,
     CrawlProfileWithIndex,
     CrawlStatusCount,
+    CrawlStructuralSignals,
     CrawlUrl,
+    CrawlUrlEnrichmentSnapshot,
     CrawlUrlListItem,
     CrawlUrlStatus,
     SitemapEntry,
@@ -38,6 +41,13 @@ from core.crawl.models import (
 )
 from core.db.utils import get_rowcount
 from core.pagination import OffsetPage
+
+
+def _enrichment_snapshot_text(*json_path: str) -> ColumnElement[str]:
+    node: object = CrawlUrlRow.enrichment_snapshot
+    for key in json_path:
+        node = node[key]
+    return cast(ColumnElement[str], getattr(node, "astext"))
 
 
 def _normalize_domain(domain: str) -> str:
@@ -130,6 +140,13 @@ def _domain_row_to_model(row: CrawlDomainRow) -> CrawlDomain:
     )
 
 
+def _structural_signals_from_row(row: CrawlUrlRow) -> CrawlStructuralSignals:
+    raw_signals = row.extract_structural_signals
+    if raw_signals is None:
+        return CrawlStructuralSignals()
+    return CrawlStructuralSignals.model_validate(raw_signals)
+
+
 def _url_row_to_model(row: CrawlUrlRow) -> CrawlUrl:
     fetch_transport: str | None = row.fetch_transport
     parsed_fetch_transport = None
@@ -156,7 +173,15 @@ def _url_row_to_model(row: CrawlUrlRow) -> CrawlUrl:
     )
 
 
-def _crawl_url_to_list_item(url_model: CrawlUrl, domain: str) -> CrawlUrlListItem:
+def _enrichment_snapshot_from_row(row: CrawlUrlRow) -> CrawlUrlEnrichmentSnapshot | None:
+    raw_snapshot = row.enrichment_snapshot
+    if raw_snapshot is None:
+        return None
+    return CrawlUrlEnrichmentSnapshot.model_validate(raw_snapshot)
+
+
+def _crawl_url_list_item_from_row(url_row: CrawlUrlRow, domain: str) -> CrawlUrlListItem:
+    url_model = _url_row_to_model(url_row)
     return CrawlUrlListItem(
         crawl_url_id=url_model.crawl_url_id,
         crawl_domain_id=url_model.crawl_domain_id,
@@ -176,6 +201,8 @@ def _crawl_url_to_list_item(url_model: CrawlUrl, domain: str) -> CrawlUrlListIte
         created_at=url_model.created_at,
         updated_at=url_model.updated_at,
         domain=domain,
+        structural_signals=_structural_signals_from_row(url_row),
+        enrichment_snapshot=_enrichment_snapshot_from_row(url_row),
     )
 
 
@@ -581,6 +608,7 @@ class CrawlUrlRepository:
         *,
         extract_markdown: str,
         extract_title: str,
+        extract_structural_signals: CrawlStructuralSignals,
         enriched_content_hash: str | None = None,
         enrichment_model: str | None = None,
         enrichment_prompt_version: str | None = None,
@@ -597,6 +625,7 @@ class CrawlUrlRepository:
                     extract_content_hash=extract_content_hash,
                     extract_markdown=extract_markdown,
                     extract_title=extract_title,
+                    extract_structural_signals=extract_structural_signals.model_dump(mode="json"),
                     enriched_content_hash=enriched_content_hash,
                     enrichment_model=enrichment_model,
                     enrichment_prompt_version=enrichment_prompt_version,
@@ -616,6 +645,7 @@ class CrawlUrlRepository:
         enriched_content_hash: str,
         enrichment_model: str,
         enrichment_prompt_version: str,
+        enrichment_snapshot: CrawlUrlEnrichmentSnapshot,
     ) -> None:
         now = datetime.now(UTC)
         async with self._db.session() as session:
@@ -626,6 +656,7 @@ class CrawlUrlRepository:
                     enriched_content_hash=enriched_content_hash,
                     enrichment_model=enrichment_model,
                     enrichment_prompt_version=enrichment_prompt_version,
+                    enrichment_snapshot=enrichment_snapshot.model_dump(mode="json"),
                     updated_at=now,
                     last_error=None,
                 )
@@ -647,7 +678,7 @@ class CrawlUrlRepository:
     async def get_layer1_snapshot(
         self,
         crawl_url_id: str,
-    ) -> tuple[str, str, str, str, str]:
+    ) -> tuple[str, str, str, str, str, CrawlStructuralSignals]:
         async with self._db.session() as session:
             stmt = select(CrawlUrlRow).where(CrawlUrlRow.crawl_url_id == crawl_url_id)
             row = (await session.execute(stmt)).scalar_one_or_none()
@@ -665,6 +696,7 @@ class CrawlUrlRepository:
             row.extract_markdown,
             row.extract_title,
             row.extract_content_hash,
+            _structural_signals_from_row(row),
         )
 
     async def mark_failed(self, crawl_url_id: str, error: str) -> None:
@@ -809,6 +841,9 @@ class CrawlUrlRepository:
         crawl_profile_id: str,
         crawl_status: str | None,
         domain: str | None,
+        content_type: str | None,
+        primary_topic: str | None,
+        enriched_only: bool | None,
         limit: int,
         offset: int,
     ) -> OffsetPage[CrawlUrlListItem]:
@@ -822,20 +857,115 @@ class CrawlUrlRepository:
                 base = base.where(CrawlUrlRow.crawl_status == crawl_status)
             if domain is not None:
                 base = base.where(CrawlDomainRow.domain == domain)
+            if content_type is not None:
+                base = base.where(
+                    _enrichment_snapshot_text("filter_metadata", "content_type") == content_type
+                )
+            if primary_topic is not None:
+                base = base.where(
+                    _enrichment_snapshot_text("filter_metadata", "primary_topic") == primary_topic
+                )
+            if enriched_only is True:
+                base = base.where(CrawlUrlRow.enriched_content_hash.isnot(None))
+            if enriched_only is False:
+                base = base.where(CrawlUrlRow.enriched_content_hash.is_(None))
             count_stmt = select(func.count()).select_from(base.subquery())
             total = int((await session.execute(count_stmt)).scalar_one())
             stmt = base.order_by(CrawlUrlRow.updated_at.desc()).limit(limit).offset(offset)
             rows: Sequence[tuple[CrawlUrlRow, str]] = (await session.execute(stmt)).tuples().all()
         items: list[CrawlUrlListItem] = []
         for url_row, domain_cell in rows:
-            url_model = _url_row_to_model(url_row)
-            items.append(_crawl_url_to_list_item(url_model, domain_cell))
+            items.append(_crawl_url_list_item_from_row(url_row, domain_cell))
         return OffsetPage[CrawlUrlListItem](
             items=items,
             total=total,
             limit=limit,
             offset=offset,
         )
+
+    async def count_enriched_for_profile(self, crawl_profile_id: str) -> int:
+        async with self._db.session() as session:
+            stmt = (
+                select(func.count())
+                .select_from(CrawlUrlRow)
+                .join(CrawlDomainRow, CrawlUrlRow.crawl_domain_id == CrawlDomainRow.crawl_domain_id)
+                .where(
+                    CrawlDomainRow.crawl_profile_id == crawl_profile_id,
+                    CrawlUrlRow.enriched_content_hash.isnot(None),
+                )
+            )
+            return int((await session.execute(stmt)).scalar_one())
+
+    async def count_enrichment_pending_for_profile(
+        self,
+        crawl_profile_id: str,
+        *,
+        llm_enrichment_enabled: bool,
+    ) -> int:
+        if not llm_enrichment_enabled:
+            return 0
+        async with self._db.session() as session:
+            stmt = (
+                select(func.count())
+                .select_from(CrawlUrlRow)
+                .join(CrawlDomainRow, CrawlUrlRow.crawl_domain_id == CrawlDomainRow.crawl_domain_id)
+                .where(
+                    CrawlDomainRow.crawl_profile_id == crawl_profile_id,
+                    CrawlUrlRow.crawl_status == "indexed",
+                    CrawlUrlRow.enriched_content_hash.is_(None),
+                )
+            )
+            return int((await session.execute(stmt)).scalar_one())
+
+    async def count_by_enrichment_content_type(self, crawl_profile_id: str) -> list[CrawlStatusCount]:
+        async with self._db.session() as session:
+            content_type_expr = _enrichment_snapshot_text("filter_metadata", "content_type")
+            stmt = (
+                select(content_type_expr, func.count())
+                .select_from(CrawlUrlRow)
+                .join(CrawlDomainRow, CrawlUrlRow.crawl_domain_id == CrawlDomainRow.crawl_domain_id)
+                .where(
+                    CrawlDomainRow.crawl_profile_id == crawl_profile_id,
+                    CrawlUrlRow.enrichment_snapshot.isnot(None),
+                    content_type_expr.isnot(None),
+                )
+                .group_by(content_type_expr)
+                .order_by(func.count().desc())
+                .limit(12)
+            )
+            rows: Sequence[tuple[str, int]] = (await session.execute(stmt)).tuples().all()
+        counts: list[CrawlStatusCount] = []
+        for content_type, count_cell in rows:
+            normalized = content_type.strip()
+            if not normalized:
+                continue
+            counts.append(CrawlStatusCount(status=normalized, count=count_cell))
+        return counts
+
+    async def count_by_enrichment_primary_topic(self, crawl_profile_id: str) -> list[CrawlStatusCount]:
+        async with self._db.session() as session:
+            primary_topic_expr = _enrichment_snapshot_text("filter_metadata", "primary_topic")
+            stmt = (
+                select(primary_topic_expr, func.count())
+                .select_from(CrawlUrlRow)
+                .join(CrawlDomainRow, CrawlUrlRow.crawl_domain_id == CrawlDomainRow.crawl_domain_id)
+                .where(
+                    CrawlDomainRow.crawl_profile_id == crawl_profile_id,
+                    CrawlUrlRow.enrichment_snapshot.isnot(None),
+                    primary_topic_expr.isnot(None),
+                )
+                .group_by(primary_topic_expr)
+                .order_by(func.count().desc())
+                .limit(12)
+            )
+            rows: Sequence[tuple[str, int]] = (await session.execute(stmt)).tuples().all()
+        counts: list[CrawlStatusCount] = []
+        for primary_topic, count_cell in rows:
+            normalized = primary_topic.strip()
+            if not normalized:
+                continue
+            counts.append(CrawlStatusCount(status=normalized, count=count_cell))
+        return counts
 
     async def get_for_profile(
         self,
@@ -855,8 +985,7 @@ class CrawlUrlRepository:
         if row is None:
             raise ValueError(f"crawl url not found: crawl_url_id={crawl_url_id}")
         url_row, domain_cell = row
-        url_model = _url_row_to_model(url_row)
-        list_item = _crawl_url_to_list_item(url_model, domain_cell)
+        list_item = _crawl_url_list_item_from_row(url_row, domain_cell)
         return list_item, url_row.extract_title, url_row.extract_markdown
 
 

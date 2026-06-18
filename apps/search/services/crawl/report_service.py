@@ -21,6 +21,7 @@ from core.crawl.models import (
     CrawlUrlIndexedContent,
     CrawlUrlListItem,
 )
+from core.crawl.report_projection import filter_metadata_from_rag_metadata
 from core.logging import get_logger
 from core.pagination import OffsetPage
 
@@ -70,6 +71,19 @@ class CrawlReportService:
         domains_due = await self._crawl_domain_repository.count_due(crawl_profile_id, now=now)
         running_job = await self._crawl_job_repository.get_running(crawl_profile_id)
         latest_job = await self._crawl_job_repository.get_latest(crawl_profile_id)
+        content_type_counts = await self._crawl_url_repository.count_by_enrichment_content_type(
+            crawl_profile_id
+        )
+        primary_topic_counts = await self._crawl_url_repository.count_by_enrichment_primary_topic(
+            crawl_profile_id
+        )
+        urls_enriched_total = await self._crawl_url_repository.count_enriched_for_profile(
+            crawl_profile_id
+        )
+        urls_enrichment_pending = await self._crawl_url_repository.count_enrichment_pending_for_profile(
+            crawl_profile_id,
+            llm_enrichment_enabled=profile.profile.llm_enrichment_enabled,
+        )
         return CrawlProfileSummary(
             profile=profile,
             domain_counts=domain_counts,
@@ -78,6 +92,10 @@ class CrawlReportService:
             domains_due=domains_due,
             latest_job=latest_job,
             running_job=running_job,
+            content_type_counts=content_type_counts,
+            primary_topic_counts=primary_topic_counts,
+            urls_enriched_total=urls_enriched_total,
+            urls_enrichment_pending=urls_enrichment_pending,
         )
 
     async def list_jobs(
@@ -102,6 +120,9 @@ class CrawlReportService:
         crawl_profile_id: str,
         crawl_status: str | None,
         domain: str | None,
+        content_type: str | None,
+        primary_topic: str | None,
+        enriched_only: bool | None,
         limit: int,
         offset: int,
     ) -> OffsetPage[CrawlUrlListItem]:
@@ -110,6 +131,9 @@ class CrawlReportService:
             crawl_profile_id=crawl_profile_id,
             crawl_status=crawl_status,
             domain=domain,
+            content_type=content_type,
+            primary_topic=primary_topic,
+            enriched_only=enriched_only,
             limit=limit,
             offset=offset,
         )
@@ -165,6 +189,9 @@ class CrawlReportService:
             page_summary = page_summary_raw.strip()
         llm_enriched_raw = rag_content.metadata.get("llm_enriched")
         llm_enriched = llm_enriched_raw is True
+        filter_metadata = None
+        if llm_enriched:
+            filter_metadata = filter_metadata_from_rag_metadata(rag_content.metadata)
         return CrawlUrlIndexedContent(
             document_id=rag_content.document_id,
             document_name=rag_content.document_name,
@@ -172,5 +199,6 @@ class CrawlReportService:
             page_summary=page_summary,
             llm_enriched=llm_enriched,
             chunks_count=rag_content.chunks_count,
+            filter_metadata=filter_metadata,
             metadata=rag_content.metadata,
         )
