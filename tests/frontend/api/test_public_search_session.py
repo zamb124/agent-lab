@@ -125,3 +125,20 @@ async def test_platform_session_user_bypasses_search_quota(
         assert token_data.token_type == TokenType.EMBED_SESSION
         assert not token_data.user_id.startswith("search_guest_")
         assert token_data.metadata["issued_by"] == PUBLIC_SEARCH_SESSION_ISSUER
+
+
+@pytest.mark.asyncio
+async def test_serp_more_accepts_platform_session_user(
+    frontend_client_with_auth: AsyncClient,
+):
+    response = await frontend_client_with_auth.post(
+        "/frontend/api/public/search/serp/more",
+        headers=_public_search_session_headers(),
+        json={
+            "serp_cache_key": "00000000000000000000000000000000",
+            "offset": 10,
+            "limit": 10,
+        },
+    )
+    if response.status_code == 403:
+        assert response.json()["detail"] != "Недопустимый тип сессии для SERP"

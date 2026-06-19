@@ -252,6 +252,8 @@ async def issue_public_search_session(
 
 
 def _validate_public_search_guest() -> None:
+    if _platform_authenticated_user() is not None:
+        return
     ctx = get_context()
     if ctx is None:
         raise HTTPException(status_code=401, detail="Требуется публичная search-сессия")
