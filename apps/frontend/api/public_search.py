@@ -13,6 +13,7 @@ from fastapi.responses import Response
 from pydantic import BaseModel, ConfigDict, Field
 
 from apps.frontend.api.public_session_security import (
+    enforce_public_search_run_quota,
     enforce_public_session_issue_rate_limit,
     new_embed_session_id,
 )
@@ -29,9 +30,11 @@ from core.identity.runtime_users import ensure_persisted_runtime_user
 from core.identity.system_bootstrap import SYSTEM_COMPANY_ID, SYSTEM_COMPANY_SUBDOMAIN
 from core.logging import get_logger
 from core.models.embed_models import EmbedStatus
+from core.models.identity_models import User
 from core.search import PUBLIC_SEARCH_FLOW_ID, PUBLIC_SEARCH_SESSION_ISSUER, PublicSearchMode
 from core.search.models import MetaSearchResponse, MetaSearchSerpMoreRequest
-from core.utils.tokens import get_token_service
+from core.types import JsonObject
+from core.utils.tokens import TokenType, get_token_service
 
 logger = get_logger(__name__)
 
@@ -44,6 +47,10 @@ class PublicSearchSessionRequest(BaseModel):
     mode: PublicSearchMode = "quick"
     origin: str = Field(default="", description="window.location.origin")
     expires_in_seconds: int = Field(default=300, ge=60, le=900)
+    consume_search_quota: bool = Field(
+        default=True,
+        description="True только для полноценного поискового запуска; serp/more и source AI не тратят квоту",
+    )
 
 
 class PublicSearchSessionResponse(BaseModel):
@@ -97,6 +104,39 @@ def _referer_path_allowed(referer: str) -> bool:
     return path.startswith("/search") or path.startswith("/frontend/search")
 
 
+def _platform_authenticated_user() -> User | None:
+    ctx = get_context()
+    if ctx is None:
+        return None
+    user = ctx.user
+    if user.user_id.startswith("search_guest_"):
+        return None
+    if user.attributes.get("kind") == "embed_session_guest":
+        return None
+    auth_token = ctx.auth_token
+    if auth_token is None or auth_token.strip() == "":
+        return None
+    token_data = get_token_service().validate_token(auth_token)
+    if token_data is None:
+        return None
+    if token_data.token_type != TokenType.SESSION:
+        return None
+    return user
+
+
+def _platform_user_roles(user: User) -> list[str]:
+    system_roles = user.companies.get(SYSTEM_COMPANY_ID)
+    if system_roles is not None and len(system_roles) > 0:
+        return list(system_roles)
+    active_company_id = user.active_company_id.strip()
+    if active_company_id == "":
+        raise HTTPException(status_code=403, detail="Активная компания пользователя не задана")
+    active_roles = user.companies.get(active_company_id)
+    if active_roles is None or len(active_roles) == 0:
+        raise HTTPException(status_code=403, detail="Роли пользователя не найдены")
+    return list(active_roles)
+
+
 @router.post("/session", response_model=PublicSearchSessionResponse)
 async def issue_public_search_session(
     body: PublicSearchSessionRequest,
@@ -122,11 +162,12 @@ async def issue_public_search_session(
     if origin == "":
         raise HTTPException(status_code=403, detail="origin обязателен для публичной сессии поиска")
 
-    await enforce_public_session_issue_rate_limit(
-        redis_client=container.redis_client,
-        request=request,
-        scope="public_search",
-    )
+    platform_user = _platform_authenticated_user()
+    if platform_user is None and body.consume_search_quota:
+        await enforce_public_search_run_quota(
+            redis_client=container.redis_client,
+            request=request,
+        )
 
     mapping = await container.embed_mapping_repository.get(config.embed_id)
     if mapping is None or mapping.company_id != SYSTEM_COMPANY_ID:
@@ -145,16 +186,23 @@ async def issue_public_search_session(
     if persisted_config.branch_id != config.branch_id:
         raise HTTPException(status_code=500, detail="Конфигурация ветки поиска повреждена")
 
-    guest_id = f"search_guest_{uuid.uuid4().hex}"
     embed_session_id = new_embed_session_id()
     expires_at = datetime.now(timezone.utc) + timedelta(seconds=body.expires_in_seconds)
-    _ = await ensure_persisted_runtime_user(
-        container,
-        user_id=guest_id,
-        company_id=SYSTEM_COMPANY_ID,
-        name="Search Guest",
-        roles=["guest"],
-        attributes={
+    runtime_attributes: JsonObject
+    if platform_user is not None:
+        session_user_id = platform_user.user_id
+        session_user_name = platform_user.name
+        session_roles = _platform_user_roles(platform_user)
+        runtime_attributes = {
+            "issued_by": PUBLIC_SEARCH_SESSION_ISSUER,
+            "token_expires_at": expires_at.isoformat(),
+            EMBED_SESSION_ID_METADATA_KEY: embed_session_id,
+        }
+    else:
+        session_user_id = f"search_guest_{uuid.uuid4().hex}"
+        session_user_name = "Search Guest"
+        session_roles = ["guest"]
+        runtime_attributes = {
             "kind": "embed_session_guest",
             "embed_id": persisted_config.embed_id,
             "embed_flow_id": persisted_config.flow_id,
@@ -162,12 +210,20 @@ async def issue_public_search_session(
             "issued_by": PUBLIC_SEARCH_SESSION_ISSUER,
             "token_expires_at": expires_at.isoformat(),
             EMBED_SESSION_ID_METADATA_KEY: embed_session_id,
-        },
+        }
+
+    _ = await ensure_persisted_runtime_user(
+        container,
+        user_id=session_user_id,
+        company_id=SYSTEM_COMPANY_ID,
+        name=session_user_name,
+        roles=session_roles,
+        attributes=runtime_attributes,
     )
     token = get_token_service().create_embed_session_token(
-        user_id=guest_id,
+        user_id=session_user_id,
         company_id=SYSTEM_COMPANY_ID,
-        roles=["guest"],
+        roles=session_roles,
         expires_in=body.expires_in_seconds,
         metadata={
             "embed_id": persisted_config.embed_id,

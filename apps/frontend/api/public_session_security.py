@@ -17,6 +17,10 @@ PUBLIC_SESSION_CLIENT_HOURLY_LIMIT = 20
 PUBLIC_SESSION_CLIENT_DAILY_LIMIT = 80
 PUBLIC_SESSION_SCOPE_DAILY_LIMIT = 1000
 
+PUBLIC_SEARCH_ANONYMOUS_DAILY_LIMIT = 20
+PUBLIC_SEARCH_QUOTA_REDIS_PREFIX = "public_search:quota:client_day"
+PUBLIC_SEARCH_QUOTA_EXHAUSTED_DETAIL = "search_quota_exhausted"
+
 _RATE_LIMIT_LUA = """
 for i = 1, #KEYS do
   local cur = tonumber(redis.call("GET", KEYS[i]) or "0")
@@ -32,6 +36,18 @@ for i = 1, #KEYS do
   end
 end
 return 1
+"""
+
+_SEARCH_RUN_QUOTA_LUA = """
+local cur = tonumber(redis.call("GET", KEYS[1]) or "0")
+if cur >= tonumber(ARGV[1]) then
+  return 0
+end
+local n = redis.call("INCR", KEYS[1])
+if n == 1 then
+  redis.call("EXPIRE", KEYS[1], tonumber(ARGV[2]))
+end
+return n
 """
 
 
@@ -83,3 +99,30 @@ async def enforce_public_session_issue_rate_limit(
         raise HTTPException(status_code=503, detail="Публичные сессии временно недоступны")
     if int(raw) < 0:
         raise HTTPException(status_code=429, detail="Слишком много публичных сессий. Попробуйте позже")
+
+
+async def enforce_public_search_run_quota(
+    *,
+    redis_client: RedisClient,
+    request: Request,
+) -> None:
+    scope_key = _key_part("public_search")
+    client_key = _key_part(_client_identity(request))
+    quota_key = f"{PUBLIC_SEARCH_QUOTA_REDIS_PREFIX}:{scope_key}:{client_key}"
+    try:
+        raw = await redis_client.eval(
+            _SEARCH_RUN_QUOTA_LUA,
+            1,
+            quota_key,
+            str(PUBLIC_SEARCH_ANONYMOUS_DAILY_LIMIT),
+            "86400",
+        )
+    except Exception:
+        logger.exception("public_search_run_quota_unavailable")
+        raise HTTPException(status_code=503, detail="Публичные сессии временно недоступны")
+
+    if isinstance(raw, bool) or not isinstance(raw, (int, float, str)):
+        logger.error("public_search_run_quota_bad_reply", raw=raw)
+        raise HTTPException(status_code=503, detail="Публичные сессии временно недоступны")
+    if int(raw) == 0:
+        raise HTTPException(status_code=429, detail=PUBLIC_SEARCH_QUOTA_EXHAUSTED_DETAIL)

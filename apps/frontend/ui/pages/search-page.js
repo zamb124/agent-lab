@@ -10,6 +10,7 @@ import {
     takePendingPublicSearchFiles,
 } from '../utils/public-search-files.js';
 import { takePublicSearchLandingTransition } from '../utils/public-search-transition.js';
+import { redirectToLogin } from '@platform/lib/utils/auth-redirect.js';
 import '@platform/lib/components/platform-icon.js';
 
 const SEARCH_MODES = Object.freeze([
@@ -1923,6 +1924,7 @@ export class PublicSearchPage extends PlatformPage {
             kind === 'search_timeout'
             || kind === 'search_service_unavailable'
             || kind === 'search_stream_incomplete'
+            || kind === 'search_quota_exhausted'
             || kind === 'search_failed'
         ) {
             return kind;
@@ -1941,6 +1943,9 @@ export class PublicSearchPage extends PlatformPage {
         if (errorKind === 'search_stream_incomplete') {
             return 'search_page.error_stream_title';
         }
+        if (errorKind === 'search_quota_exhausted') {
+            return 'search_page.quota_exhausted_title';
+        }
         return 'search_page.error_generic_title';
     }
 
@@ -1954,6 +1959,9 @@ export class PublicSearchPage extends PlatformPage {
         }
         if (errorKind === 'search_stream_incomplete') {
             return 'search_page.error_stream_text';
+        }
+        if (errorKind === 'search_quota_exhausted') {
+            return 'search_page.quota_exhausted_text';
         }
         return 'search_page.error_generic_text';
     }
@@ -1977,9 +1985,14 @@ export class PublicSearchPage extends PlatformPage {
         void this._runSearch(query, this._mode);
     }
 
+    _loginFromQuota() {
+        redirectToLogin();
+    }
+
     _renderSearchError() {
         const kind = this._normalizeSearchErrorKind(this._search.state.error_kind);
         const detail = this._searchErrorDetail();
+        const isQuotaExhausted = kind === 'search_quota_exhausted';
         return html`
             <section class="answer-panel" data-state="error">
                 <p class="panel-label">
@@ -1994,12 +2007,20 @@ export class PublicSearchPage extends PlatformPage {
                         <div class="answer-error-copy">
                             <h2 class="answer-error-title">${this.t(this._searchErrorTitleKey(kind))}</h2>
                             <p class="answer-error-text">${this.t(this._searchErrorTextKey(kind))}</p>
-                            <button class="answer-error-action" type="button" @click=${this._retrySearch}>
-                                ${this.t('search_page.error_retry')}
-                            </button>
+                            ${isQuotaExhausted
+                                ? html`
+                                    <button class="answer-error-action" type="button" @click=${this._loginFromQuota}>
+                                        ${this.t('search_page.quota_exhausted_login')}
+                                    </button>
+                                `
+                                : html`
+                                    <button class="answer-error-action" type="button" @click=${this._retrySearch}>
+                                        ${this.t('search_page.error_retry')}
+                                    </button>
+                                `}
                         </div>
                     </div>
-                    ${detail !== ''
+                    ${!isQuotaExhausted && detail !== ''
                         ? html`
                             <details class="answer-error-details">
                                 <summary>${this.t('search_page.error_details')}</summary>
@@ -2117,7 +2138,7 @@ export class PublicSearchPage extends PlatformPage {
         this._serpObserver.observe(sentinel);
     }
 
-    _loadMoreSerp() {
+    async _loadMoreSerp() {
         const stream = this._search.state.stream;
         if (
             !stream.has_more
@@ -2128,16 +2149,17 @@ export class PublicSearchPage extends PlatformPage {
             return;
         }
         const pageLimit = stream.page_limit > 0 ? stream.page_limit : 10;
-        void this._serpMore.run({
+        const result = await this._serpMore.run({
             serp_cache_key: stream.serp_cache_key,
             offset: stream.results.length,
             limit: pageLimit,
             mode: stream.mode,
-        }).catch(() => {
+        });
+        if (result === null) {
             this._serpLoadBlocked = true;
             this.toast('search_page.load_more_error', { type: 'error' });
             this._ensureSerpSentinelObserver();
-        });
+        }
     }
 
     _renderSource(stream, result, index) {

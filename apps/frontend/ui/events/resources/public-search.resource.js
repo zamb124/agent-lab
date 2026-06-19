@@ -17,6 +17,7 @@ const PUBLIC_SEARCH_ERROR_KINDS = Object.freeze(new Set([
     'search_timeout',
     'search_service_unavailable',
     'search_stream_incomplete',
+    'search_quota_exhausted',
     'search_failed',
 ]));
 const PUBLIC_SEARCH_STREAM_EVENT = 'frontend/public_search_run/stream_event';
@@ -24,6 +25,11 @@ const PUBLIC_SEARCH_SOURCE_STREAM_EVENT = 'frontend/public_search_source_describ
 const RUN_ID_PATTERN = /^[A-Za-z0-9_-]+$/;
 
 let activeSearchRun = null;
+
+/** @type {Map<string, ReturnType<typeof _normalizeSession>>} */
+const publicSearchSessionByMode = new Map();
+
+const PUBLIC_SEARCH_SESSION_EXPIRY_SKEW_MS = 30_000;
 
 function _emptyStream() {
     return {
@@ -567,8 +573,20 @@ function _errorMessage(error) {
     return String(error);
 }
 
-function _publicSearchErrorKind(detail, transportStatus) {
+function _publicSearchErrorKind(detail, transportStatus, errorBody = null) {
     const message = _requireString(detail, 'public search error detail');
+    if (message === 'search_quota_exhausted') {
+        return 'search_quota_exhausted';
+    }
+    if (errorBody !== null && typeof errorBody === 'object' && !Array.isArray(errorBody)) {
+        const errorCode = errorBody.error_code;
+        if (typeof errorCode === 'string' && errorCode === 'search_quota_exhausted') {
+            return 'search_quota_exhausted';
+        }
+    }
+    if (transportStatus === 429 && message === 'search_quota_exhausted') {
+        return 'search_quota_exhausted';
+    }
     if (message.startsWith("Нода '") && message.includes('превышен лимит времени выполнения')) {
         return 'search_timeout';
     }
@@ -592,15 +610,40 @@ function _publicSearchErrorStatus(kind, transportStatus) {
     if (errorKind === 'search_service_unavailable') {
         return 503;
     }
+    if (errorKind === 'search_quota_exhausted') {
+        return 429;
+    }
     if (typeof transportStatus !== 'number' || !Number.isFinite(transportStatus)) {
         throw new Error('public search transport status must be finite number');
     }
     return transportStatus;
 }
 
-async function _issuePublicSearchSession(mode) {
+function _isPublicSearchSessionFresh(session, mode) {
     const sessionMode = _requirePublicSearchSessionMode(mode, 'public search session mode');
-    return _normalizeSession(await httpRequest({
+    if (session.branch_id !== sessionMode) {
+        return false;
+    }
+    const expiresAtMs = Date.parse(session.expires_at);
+    if (!Number.isFinite(expiresAtMs)) {
+        throw new Error('session.expires_at must be parseable ISO datetime');
+    }
+    return Date.now() < expiresAtMs - PUBLIC_SEARCH_SESSION_EXPIRY_SKEW_MS;
+}
+
+function _rememberPublicSearchSession(session) {
+    publicSearchSessionByMode.set(session.branch_id, session);
+}
+
+async function _issuePublicSearchSession(mode, { force = false, consumeSearchQuota = true } = {}) {
+    const sessionMode = _requirePublicSearchSessionMode(mode, 'public search session mode');
+    if (!force) {
+        const cachedSession = publicSearchSessionByMode.get(sessionMode);
+        if (cachedSession !== undefined && _isPublicSearchSessionFresh(cachedSession, sessionMode)) {
+            return cachedSession;
+        }
+    }
+    const session = _normalizeSession(await httpRequest({
         method: 'POST',
         url: '/frontend/api/public/search/session',
         credentials: 'same-origin',
@@ -608,8 +651,11 @@ async function _issuePublicSearchSession(mode) {
             mode: sessionMode,
             origin: _windowOrigin(),
             expires_in_seconds: 300,
+            consume_search_quota: consumeSearchQuota,
         },
     }));
+    _rememberPublicSearchSession(session);
+    return session;
 }
 
 async function _runPublicSearch({ payload, ctx, event }) {
@@ -620,7 +666,7 @@ async function _runPublicSearch({ payload, ctx, event }) {
         throw new Error('frontend/public_search_run: event.id required');
     }
     const request = _normalizeRunPayload(payload);
-    const session = await _issuePublicSearchSession(request.mode);
+    const session = await _issuePublicSearchSession(request.mode, { force: true, consumeSearchQuota: true });
     const stream = _streamFromRunPayload(request);
     _publishStream(ctx, event.id, stream);
 
@@ -719,7 +765,7 @@ async function _runPublicSearchSourceDescribe({ payload, ctx, event }) {
         throw new Error('frontend/public_search_source_describe: event.id required');
     }
     const request = _normalizeSourceDescribePayload(payload);
-    const session = await _issuePublicSearchSession(request.mode);
+    const session = await _issuePublicSearchSession(request.mode, { consumeSearchQuota: false });
     const sourceStream = _sourceStreamFromPayload(request);
     _publishSourceDescribeStream(ctx, event.id, sourceStream);
 
@@ -879,7 +925,8 @@ export const publicSearchRunOp = createAsyncOp({
         } catch (error) {
             const detail = _errorMessage(error);
             const transportStatus = error instanceof HttpError ? error.status : 502;
-            const errorKind = _publicSearchErrorKind(detail, transportStatus);
+            const errorBody = error instanceof HttpError ? error.body : null;
+            const errorKind = _publicSearchErrorKind(detail, transportStatus, errorBody);
             const status = _publicSearchErrorStatus(errorKind, transportStatus);
             throw new HttpError(errorKind, status, {
                 detail,
@@ -906,7 +953,7 @@ export const publicSearchSerpMoreOp = createAsyncOp({
         const serpCacheKey = _requireNonEmptyString(body.serp_cache_key, 'serp_more.serp_cache_key');
         const offset = _requireNumber(body.offset, 'serp_more.offset');
         const limit = _requireNumber(body.limit, 'serp_more.limit');
-        const session = await _issuePublicSearchSession(mode);
+        const session = await _issuePublicSearchSession(mode, { consumeSearchQuota: false });
         const response = _requireObject(await httpRequest({
             method: 'POST',
             url: '/frontend/api/public/search/serp/more',
