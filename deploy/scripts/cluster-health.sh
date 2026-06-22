@@ -191,8 +191,26 @@ else
   log_info "Пропуск public-проверок (CHECK_PUBLIC=0 или нет curl)"
 fi
 
-# 14. Provider Litserve (in-cluster: runtime + embedding smoke)
-log_section "14) Provider Litserve (runtime + embedding smoke)"
+# 14. WebSocket upgrade через Ingress (Traefik -> Granian HTTP/1.1 hop)
+if [ "$CHECK_PUBLIC" = "1" ] && command -v curl >/dev/null 2>&1; then
+  log_section "14) WebSocket upgrade (через Ingress)"
+  for svc in flows crm sync rag voice; do
+    check_step \
+      "WS upgrade https://${APEX_HOST}/${svc}/api/ws/notifications (401 или 101, не 500)" \
+      "code=\$(curl -sS --http1.1 -o /dev/null -w '%{http_code}' --max-time 10 -H 'Connection: Upgrade' -H 'Upgrade: websocket' -H 'Sec-WebSocket-Version: 13' -H 'Sec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==' 'https://${APEX_HOST}/${svc}/api/ws/notifications'); [ \"\$code\" = '401' ] || [ \"\$code\" = '101' ]"
+  done
+else
+  log_info "Пропуск WS upgrade (CHECK_PUBLIC=0 или нет curl)"
+fi
+
+# 15. Запрет serversscheme h2c на app Service (ломает WS upgrade)
+log_section "15) Traefik backend-hop (no h2c on app Service)"
+check_step \
+  "нет Service с traefik serversscheme=h2c в $PLATFORM_NS" \
+  "! $K get svc -n $PLATFORM_NS -o jsonpath='{range .items[*]}{.metadata.annotations.traefik\\.ingress\\.kubernetes\\.io/service\\.serversscheme}{\"\\n\"}{end}' 2>/dev/null | grep -q '^h2c$'"
+
+# 16. Provider Litserve (in-cluster: runtime + embedding smoke)
+log_section "16) Provider Litserve (runtime + embedding smoke)"
 LITSERVE_POD=$($K get pod -n "$PLATFORM_NS" -l app=provider-litserve \
   -o jsonpath='{.items[0].metadata.name}' 2>/dev/null || true)
 if [ -z "$LITSERVE_POD" ]; then

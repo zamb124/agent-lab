@@ -19,9 +19,6 @@ metadata:
   namespace: {{ .Values.namespace }}
   labels:
     app: {{ .Values.litserve.serviceName }}
-  annotations:
-    # h2c: HTTP/2 cleartext backend (см. 30-apps/services.yaml)
-    traefik.ingress.kubernetes.io/service.serversscheme: h2c
 spec:
   type: ClusterIP
   selector:

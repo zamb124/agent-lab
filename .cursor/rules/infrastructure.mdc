@@ -128,7 +128,9 @@ Alembic миграции — **Helm hook Job** `migrations` (`post-install`, `po
 
 `Deployment/livekit` использует `hostNetwork` и занятые порты на ноде — **strategy `Recreate`**, не `RollingUpdate`: иначе новый под зависает в `Pending`, пока жив старый.
 
-`platform` Ingress генерирует одинаковые правила для apex и wildcard через `range`. Аннотации: `proxy-body-size: 100m`, `proxy-read-timeout: 300s` (для `/documents` и WebSocket sync).
+`platform` Ingress генерирует одинаковые правила для apex и wildcard через `range`. Аннотации: `proxy-body-size: 100m`, `proxy-read-timeout: 300s` (для `/documents` и WebSocket).
+
+**Traefik → Granian backend-hop:** app Service (`templates/30-apps/services.yaml`, `50-gpu/litserve.yaml`) **не** используют `traefik.ingress.kubernetes.io/service.serversscheme: h2c`. WebSocket-upgrade (и SSE) требуют HTTP/1.1 hop Traefik→backend; h2c (HTTP/2 cleartext) ломает Upgrade — Traefik отвечает `500`, UI WS-команды падают с `ws_timeout`. Granian `--http auto` обслуживает REST/WS/SSE по HTTP/1.1-hop; проверка — `deploy/scripts/cluster-health.sh` секция WebSocket upgrade.
 
 `ClusterIssuer letsencrypt-prod` создаётся чартом (`templates/80-ingress/cluster-issuer.yaml`); email — `values.certManager.email`. cert-manager должен быть установлен (`microk8s enable cert-manager`).
 
