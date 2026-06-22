@@ -13,7 +13,7 @@ from apps.browser.engine.types import (
     BrowserRuntimeSettingsView,
     ContextSignature,
 )
-from apps.browser.orchestration.runtime_facade import BrowserRuntimeFacade
+from tests.browser._runtime import build_test_facade
 
 
 def _cdp_url() -> str | None:
@@ -48,13 +48,15 @@ async def test_soak_100_acquire_fetch_release() -> None:
     view = BrowserRuntimeSettingsView(
         default_endpoint_key="default",
         cdp_urls_by_endpoint={"default": url},
-        artifacts_dir=f"artifacts/browser_runtime_soak_{uid}",
         default_page_ttl_sec=3600,
         warm_idle_sec=0,
         init_scripts_version="v1",
         control_backend="playwright",
+        reaper_interval_sec=60,
+        max_contexts=50,
+        session_state_ttl_sec=3600,
     )
-    facade = BrowserRuntimeFacade(view)
+    facade = build_test_facade(view)
     fr = BrowserFetchRequest(
         url="https://example.com",
         wait_policy="domcontentloaded",

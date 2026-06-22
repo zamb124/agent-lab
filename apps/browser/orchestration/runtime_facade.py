@@ -13,9 +13,13 @@ from apps.browser.engine.playwright_interactor import PlaywrightBrowserInteracto
 from apps.browser.engine.session_store import SessionStateStore
 from apps.browser.engine.types import BrowserRuntimeSettingsView
 from apps.browser.observe.observe_store import ControlObserveStore
-from apps.browser.observe.session_artifacts import ControlSessionArtifactsWriter
 from apps.browser.orchestration.control_adapter_factory import build_browser_control_adapter
+from core.clients.redis_client import RedisClient
+from core.files.processors import FileProcessor
+from core.logging import get_logger
 from core.types import JsonObject
+
+logger = get_logger(__name__)
 
 
 class BrowserRuntimeFacade:
@@ -43,17 +47,26 @@ class BrowserRuntimeFacade:
     - Не стоит: если нужен частичный runtime в узком юнит-тесте — лучше инстанцировать
       отдельные компоненты напрямую.
     """
-    def __init__(self, settings: BrowserRuntimeSettingsView) -> None:
+    def __init__(
+        self,
+        settings: BrowserRuntimeSettingsView,
+        *,
+        redis_client: RedisClient,
+        file_processor: FileProcessor,
+    ) -> None:
         self.settings: BrowserRuntimeSettingsView = settings
-        self.pool: CDPConnectionPool = CDPConnectionPool()
+        self.pool: CDPConnectionPool = CDPConnectionPool(
+            on_endpoint_disconnected=self._on_endpoint_disconnected,
+        )
         self.context_factory: ContextFactory = ContextFactory()
-        self.session_store: SessionStateStore = SessionStateStore()
-        self.session_artifacts: ControlSessionArtifactsWriter = ControlSessionArtifactsWriter(
-            artifacts_dir=settings.artifacts_dir,
+        self.session_store: SessionStateStore = SessionStateStore(
+            redis_client=redis_client,
+            ttl_sec=settings.session_state_ttl_sec,
         )
         self.lease_manager: PageLeaseManager = PageLeaseManager(
             self.context_factory,
             page_event_logger=self._log_page_event,
+            max_contexts=settings.max_contexts,
         )
         self.lifecycle: CDPLifecycleManagerImpl = CDPLifecycleManagerImpl(
             self.pool,
@@ -64,15 +77,35 @@ class BrowserRuntimeFacade:
             session_store=self.session_store,
             lease_manager=self.lease_manager,
             settings=settings,
+            file_processor=file_processor,
         )
         self.observe_store: ControlObserveStore = ControlObserveStore()
         self._control_adapter: BrowserControlAdapter | None = None
 
     def _log_page_event(self, session_id: str, event: JsonObject) -> None:
-        _ = self.session_artifacts.append_jsonl_for_session(
-            session_id=session_id,
-            filename="page_events.jsonl",
-            record=event,
+        # Debug-события страницы (console/pageerror/network) уходят в Loki сквозным
+        # request_id, без локальных файлов и без буфера в памяти.
+        logger.info("browser.page_event", session_id=session_id, page_event=event)
+
+    async def _on_endpoint_disconnected(self, endpoint_key: str) -> None:
+        """
+        CDP endpoint оборвался: закрыть все контексты/lease, привязанные к мёртвому Browser,
+        чтобы рантайм не держал записи на закрытый транспорт.
+        """
+        await self.lease_manager.kill_endpoint(endpoint_key)
+
+    async def reap_once(self) -> None:
+        """
+        Один проход фоновой очистки: истёкшие lease и idle-контексты.
+        """
+        await self.lease_manager.sweep_expired(warm_idle_sec=self.settings.warm_idle_sec)
+        await self.lease_manager.evict_idle_contexts()
+        logger.info(
+            "browser.runtime.stats",
+            active_contexts=self.lease_manager.total_active_contexts(),
+            active_leases=self.lease_manager.total_active_leases(),
+            pool_endpoints=self.pool.connected_endpoint_count(),
+            max_contexts=self.settings.max_contexts,
         )
 
     @property

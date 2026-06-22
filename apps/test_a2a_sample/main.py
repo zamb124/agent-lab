@@ -11,7 +11,7 @@ from a2a.server.apps import A2AStarletteApplication
 from a2a.server.request_handlers import DefaultRequestHandler
 from a2a.server.tasks import InMemoryTaskStore
 from a2a.types import AgentCapabilities, AgentCard, AgentSkill
-from pydantic import Field
+from pydantic import BaseModel, ConfigDict, Field
 from starlette.applications import Starlette
 from starlette.middleware.base import BaseHTTPMiddleware, RequestResponseEndpoint
 from starlette.requests import Request
@@ -19,14 +19,18 @@ from starlette.responses import JSONResponse, Response
 from starlette.routing import Route
 
 from apps.test_a2a_sample.simple_agent import SimpleTestAgent
-from core.models.base import StrictBaseModel
-from core.types import JsonObject
+
+# Self-contained: пакет собирается в минимальный образ без core (apps/test_a2a_sample/Dockerfile).
+type JsonObject = dict[str, object]
 
 API_KEY = os.environ["API_KEY"]
 AGENT_URL = os.environ["AGENT_URL"]
 
 
-class CatFactResponse(StrictBaseModel):
+class CatFactResponse(BaseModel):
+    # extra='ignore': внешний catfact.ninja отдаёт ещё и length, нам нужен только fact.
+    model_config: ClassVar[ConfigDict] = ConfigDict(extra="ignore")
+
     fact: str = Field(min_length=1)
 
 

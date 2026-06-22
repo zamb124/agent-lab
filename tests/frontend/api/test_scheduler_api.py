@@ -27,7 +27,11 @@ from core.config.models import (
     PaymentProvidersConfig,
     RAGConfig,
 )
-from core.scheduler.models import PlatformScheduleType, ScheduledTaskStatus
+from core.scheduler.models import (
+    PlatformRedisScheduleSnapshot,
+    PlatformScheduleType,
+    ScheduledTaskStatus,
+)
 
 
 @pytest.mark.asyncio
@@ -345,8 +349,41 @@ async def test_scheduler_startup_resumes_paused_calendar_sync_schedule() -> None
             return type(
                 "ResumedTask",
                 (),
-                {"schedule_task_id": schedule_task_id, "schedule_id": "schedule-2"},
+                {
+                    "schedule_task_id": schedule_task_id,
+                    "schedule_id": "schedule-2",
+                    "status": ScheduledTaskStatus.PENDING,
+                    "payload": {
+                        "schedule_task_id": schedule_task_id,
+                        "company_id": SYSTEM_SCHEDULER_COMPANY_ID,
+                    },
+                },
             )()
+
+        async def get_redis_snapshot(self, company_id, schedule_task_id):
+            assert company_id == SYSTEM_SCHEDULER_COMPANY_ID
+            return PlatformRedisScheduleSnapshot(
+                schedule_task_id=schedule_task_id,
+                company_id=company_id,
+                schedule_id="schedule-2",
+                exists_in_redis=True,
+                status=ScheduledTaskStatus.PENDING,
+                task_name=CALENDAR_SYNC_TASK_NAME,
+                cron="*/1 * * * *",
+                kwargs={
+                    "schedule_task_id": schedule_task_id,
+                    "company_id": company_id,
+                },
+            )
+
+        async def reconcile_payload(
+            self,
+            company_id,
+            schedule_task_id,
+            payload,
+            recreate_schedule=False,
+        ):
+            raise AssertionError("reconcile_payload should not be called in this test")
 
         async def create(self, company_id, user_id, request):
             assert company_id == SYSTEM_SCHEDULER_COMPANY_ID

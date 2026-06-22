@@ -5,14 +5,12 @@ HTTP API Browser Control (§17.3): сессии, navigate, observe, action.
 from __future__ import annotations
 
 import asyncio
-import json
 import random
-import re
 import time
 import uuid
 from collections.abc import AsyncGenerator, Mapping
 from contextlib import asynccontextmanager
-from typing import Annotated, ClassVar, Literal, TypeAlias, TypedDict, cast
+from typing import Annotated, ClassVar, Literal, TypedDict, cast
 
 from fastapi import APIRouter, HTTPException, Query, Response
 from playwright.async_api import Error as PlaywrightError
@@ -41,14 +39,16 @@ from apps.browser.interaction.interaction_profiles import (
     get_interaction_profile,
 )
 from apps.browser.observe.ax_snapshot import dom_accessibility_tree_dict_from_page
-from apps.browser.observe.session_artifacts import SessionArtifactObject
 from apps.browser.observe.snapshot_refs import (
     RefMap,
     build_interactive_snapshot_with_refs,
     parse_ref,
 )
 from apps.browser.orchestration.runtime_facade import BrowserRuntimeFacade
-from core.types import JsonObject, require_json_object
+from core.logging import get_logger
+from core.types import JsonObject
+
+logger = get_logger(__name__)
 
 router = APIRouter(prefix="/control", tags=["browser-control"])
 
@@ -102,21 +102,6 @@ class ControlDeleteResponse(TypedDict):
     status: str
 
 
-ControlTypedResponse: TypeAlias = (
-    ControlNavigateResponse
-    | ControlSnapshotResponse
-    | ControlObserveResponse
-    | ControlOkResponse
-    | ControlPointerClickResponse
-    | ControlHumanTakeoverResponse
-    | ControlDeleteResponse
-)
-
-
-def _response_artifact(response: ControlTypedResponse) -> JsonObject:
-    return require_json_object(cast(object, response), "response")
-
-
 async def wait_for_agent_control(runtime: BrowserRuntimeFacade, session_id: str) -> None:
     deadline = time.monotonic() + AGENT_CONTROL_TAKEOVER_WAIT_SEC
     while True:
@@ -145,134 +130,24 @@ async def _agent_control_exclusive(
         yield
 
 
-def _format_console_events_text(events: list[JsonObject]) -> str:
-    lines: list[str] = []
-    for e in events:
-        kind = str(e.get("kind", "") or "")
-        if kind == "console":
-            t = str(e.get("type", "") or "")
-            text = str(e.get("text", "") or "")
-            loc = e.get("location")
-            loc_s = ""
-            if isinstance(loc, dict):
-                loc_map = cast(Mapping[object, object], loc)
-                url = loc_map.get("url")
-                line = loc_map.get("line")
-                col = loc_map.get("column")
-                if isinstance(url, str) and url:
-                    loc_s = url
-                    if isinstance(line, int):
-                        loc_s += f":{line}"
-                        if isinstance(col, int):
-                            loc_s += f":{col}"
-            if loc_s:
-                lines.append(f"[console.{t}] {text} ({loc_s})")
-            else:
-                lines.append(f"[console.{t}] {text}")
-            continue
-        if kind == "pageerror":
-            msg = str(e.get("message", "") or "")
-            stack = str(e.get("stack", "") or "")
-            lines.append(f"[pageerror] {msg}")
-            if stack:
-                lines.append(stack)
-            continue
-        if kind == "requestfailed":
-            url = str(e.get("url", "") or "")
-            method = str(e.get("method", "") or "")
-            failure = str(e.get("failure", "") or "")
-            if method and url:
-                lines.append(f"[requestfailed] {method} {url} ({failure})" if failure else f"[requestfailed] {method} {url}")
-            elif url:
-                lines.append(f"[requestfailed] {url} ({failure})" if failure else f"[requestfailed] {url}")
-            else:
-                lines.append(json.dumps(e, ensure_ascii=False))
-            continue
-        if kind == "http_error":
-            url = str(e.get("url", "") or "")
-            status = e.get("status")
-            if isinstance(status, int) and url:
-                lines.append(f"[http.{status}] {url}")
-            else:
-                lines.append(json.dumps(e, ensure_ascii=False))
-            continue
-        lines.append(json.dumps(e, ensure_ascii=False))
-    return "\n".join(lines).strip() + ("\n" if len(lines) else "")
-
-
-def _write_console_sidecars(*, runtime: BrowserRuntimeFacade, session_id: str, event_path: str) -> None:
-    events = runtime.lease_manager.drain_console_events(session_id)
-    json_path = runtime.session_artifacts.write_sidecar_text_for_event(
-        event_json_path=event_path,
-        ext=".console.json",
-        content=json.dumps(events, ensure_ascii=False, indent=2),
-    )
-    txt_path = runtime.session_artifacts.write_sidecar_text_for_event(
-        event_json_path=event_path,
-        ext=".console.txt",
-        content=_format_console_events_text(events),
-    )
-    page_events_log_ref = runtime.session_artifacts.append_jsonl_for_session(
-        session_id=session_id,
-        filename="page_events.jsonl",
-        record={"kind": "checkpoint", "op": "drain_console_events", "count": len(events)},
-    )
-    runtime.session_artifacts.patch_event_meta(
-        event_json_path=event_path,
-        meta_patch={
-            "console_events": {
-                "count": len(events),
-                "json_ref": json_path,
-                "text_ref": txt_path,
-            },
-            "page_events_log_ref": page_events_log_ref,
-        },
-    )
-
-
-def _extract_page_error_from_html(html: str) -> JsonObject | None:
-    """
-    Лучшее усилие: вытащить "ошибку страницы" из HTML.
-
-    Это не CDP exception, а диагностический маркер, когда сайт отдаёт error-screen
-    (например Habr: tm-error-message / "Internal error").
-    """
-    if not html:
-        return None
-    if "tm-error-message__title" not in html:
-        return None
-    title_m = re.search(r'tm-error-message__title"\s*>\s*([^<]+)\s*<', html)
-    body_m = re.search(r'tm-error-message__body"\s*>\s*<p[^>]*>\s*([^<]+)\s*<', html)
-    title = title_m.group(1).strip() if title_m else ""
-    body = body_m.group(1).strip() if body_m else ""
-    if not title and not body:
-        return None
-    out: JsonObject = {}
-    if title:
-        out["title"] = title
-    if body:
-        out["message"] = body
-    return out if out else None
-
-
-def _write_session_event(
+def _log_control_event(
     *,
-    runtime: BrowserRuntimeFacade,
-    session_id: str,
     op: str,
-    request: SessionArtifactObject,
-    response: SessionArtifactObject | None,
-    error: SessionArtifactObject | None,
-    meta: JsonObject,
-) -> str:
-    return runtime.session_artifacts.write_event(
-        session_id=session_id,
-        op=op,
-        request=request,
-        response=response,
-        error=error,
-        meta=meta,
-    )
+    session_id: str,
+    meta: JsonObject | None = None,
+    error: JsonObject | None = None,
+) -> None:
+    """
+    Структурный лог шага control API в Loki (сквозной request_id), вместо файлов на диске.
+    """
+    fields: JsonObject = {"op": op, "session_id": session_id}
+    if meta is not None:
+        fields["meta"] = meta
+    if error is not None:
+        fields["error"] = error
+        logger.error("browser.control.event_failed", **fields)
+        return
+    logger.info("browser.control.event", **fields)
 
 
 class ContextSignatureBody(BaseModel):
@@ -513,16 +388,12 @@ async def create_control_session(
     try:
         res = await runtime.control_adapter.start(req)
     except BrowserCapabilityError as exc:
-        event_path = _write_session_event(
-            runtime=runtime,
-            session_id=sid,
+        _log_control_event(
             op="control.create_session",
-            request=body,
-            response=None,
-            error={"kind": "capability_error", "detail": exc.to_dict()},
+            session_id=sid,
             meta={"transport": "http", "path": "/control/sessions"},
+            error={"kind": "capability_error", "detail": exc.to_dict()},
         )
-        _write_console_sidecars(runtime=runtime, session_id=sid, event_path=event_path)
         raise HTTPException(status_code=501, detail=exc.to_dict()) from exc
     runtime.observe_store.set_interaction_config(
         sid,
@@ -538,16 +409,11 @@ async def create_control_session(
         context_signature_hash=res.context_signature_hash,
         features=_features_dict(runtime),
     )
-    event_path = _write_session_event(
-        runtime=runtime,
-        session_id=sid,
+    _log_control_event(
         op="control.create_session",
-        request=body,
-        response=out,
-        error=None,
+        session_id=sid,
         meta={"transport": "http", "path": "/control/sessions"},
     )
-    _write_console_sidecars(runtime=runtime, session_id=sid, event_path=event_path)
     return out
 
 
@@ -585,16 +451,12 @@ async def control_navigate(
         try:
             out = await runtime.control_adapter.navigate(page, req)
         except BrowserCapabilityError as exc:
-            event_path = _write_session_event(
-                runtime=runtime,
-                session_id=session_id,
+            _log_control_event(
                 op="control.navigate",
-                request=body,
-                response=None,
-                error={"kind": "capability_error", "detail": exc.to_dict()},
+                session_id=session_id,
                 meta={"transport": "http", "path": f"/control/sessions/{session_id}/navigate"},
+                error={"kind": "capability_error", "detail": exc.to_dict()},
             )
-            _write_console_sidecars(runtime=runtime, session_id=session_id, event_path=event_path)
             raise HTTPException(status_code=501, detail=exc.to_dict()) from exc
 
         # После навигации даём небольшой "поведенческий" шум в профилях human/fast,
@@ -617,16 +479,16 @@ async def control_navigate(
             "snapshot_ref": out.snapshot_ref,
             "anti_bot_signals": out.anti_bot_signals,
         }
-        event_path = _write_session_event(
-            runtime=runtime,
-            session_id=session_id,
+        _log_control_event(
             op="control.navigate",
-            request=body,
-            response=_response_artifact(payload),
-            error=None,
-            meta={"transport": "http", "path": f"/control/sessions/{session_id}/navigate"},
+            session_id=session_id,
+            meta={
+                "transport": "http",
+                "path": f"/control/sessions/{session_id}/navigate",
+                "final_url": out.final_url,
+                "status_code": out.status_code,
+            },
         )
-        _write_console_sidecars(runtime=runtime, session_id=session_id, event_path=event_path)
         return payload
 
 
@@ -673,38 +535,17 @@ async def control_observe(
         # if body.include_snapshot_refs:  # отключено
         snapshot["refs"] = refs
 
-        event_path = _write_session_event(
-            runtime=runtime,
-            session_id=session_id,
+        _log_control_event(
             op="control.observe",
-            request=body,
-            response=_response_artifact(payload),
-            error=None,
-            meta={"transport": "http", "path": f"/control/sessions/{session_id}/observe"},
+            session_id=session_id,
+            meta={
+                "transport": "http",
+                "path": f"/control/sessions/{session_id}/observe",
+                "url": page.url,
+                "refs_count": len(refs),
+                "include_snapshot_refs": body.include_snapshot_refs,
+            },
         )
-        _write_console_sidecars(runtime=runtime, session_id=session_id, event_path=event_path)
-        html = await page.content()
-        html_path = runtime.session_artifacts.write_sidecar_text_for_event(
-            event_json_path=event_path,
-            ext=".html",
-            content=html,
-        )
-        runtime.session_artifacts.patch_event_meta(
-            event_json_path=event_path,
-            meta_patch={"html_ref": html_path},
-        )
-
-        page_err = _extract_page_error_from_html(html)
-        if page_err is not None:
-            page_err_path = runtime.session_artifacts.write_sidecar_text_for_event(
-                event_json_path=event_path,
-                ext=".page_error.json",
-                content=json.dumps(page_err, ensure_ascii=False, indent=2),
-            )
-            runtime.session_artifacts.patch_event_meta(
-                event_json_path=event_path,
-                meta_patch={"page_error": page_err, "page_error_ref": page_err_path},
-            )
         return payload
 
 
@@ -728,28 +569,19 @@ async def control_action(
                 body.code,
                 timeout_ms=body.timeout_ms,
             )
-            event_path = _write_session_event(
-                runtime=runtime,
-                session_id=session_id,
+            _log_control_event(
                 op="control.action",
-                request=body,
-                response=out,
-                error=None,
+                session_id=session_id,
                 meta={"transport": "http", "path": f"/control/sessions/{session_id}/action"},
             )
-            _write_console_sidecars(runtime=runtime, session_id=session_id, event_path=event_path)
             return out
         except BrowserCapabilityError as exc:
-            event_path = _write_session_event(
-                runtime=runtime,
-                session_id=session_id,
+            _log_control_event(
                 op="control.action",
-                request=body,
-                response=None,
-                error={"kind": "capability_error", "detail": exc.to_dict()},
+                session_id=session_id,
                 meta={"transport": "http", "path": f"/control/sessions/{session_id}/action"},
+                error={"kind": "capability_error", "detail": exc.to_dict()},
             )
-            _write_console_sidecars(runtime=runtime, session_id=session_id, event_path=event_path)
             raise HTTPException(status_code=501, detail=exc.to_dict()) from exc
 
 
@@ -810,16 +642,11 @@ async def control_click(
         inter, profile, rnd = _interaction_for_session(runtime, session_id)
         await inter.click(page, loc, profile=profile, rnd=rnd, timeout_ms=body.timeout_ms)
         out: ControlOkResponse = {"ok": True}
-        event_path = _write_session_event(
-            runtime=runtime,
-            session_id=session_id,
+        _log_control_event(
             op="control.click",
-            request=body,
-            response=_response_artifact(out),
-            error=None,
+            session_id=session_id,
             meta={"transport": "http", "path": f"/control/sessions/{session_id}/click"},
         )
-        _write_console_sidecars(runtime=runtime, session_id=session_id, event_path=event_path)
         return out
 
 
@@ -894,16 +721,11 @@ async def control_pointer_click(
         "viewport_height": viewport_height,
         "url": page_url,
     }
-    event_path = _write_session_event(
-        runtime=runtime,
-        session_id=session_id,
+    _log_control_event(
         op="control.pointer_click",
-        request=body,
-        response=_response_artifact(out),
-        error=None,
+        session_id=session_id,
         meta={"transport": "http", "path": f"/control/sessions/{session_id}/pointer/click"},
     )
-    _write_console_sidecars(runtime=runtime, session_id=session_id, event_path=event_path)
     return out
 
 
@@ -928,16 +750,11 @@ async def control_human_takeover(
         "human_takeover": True,
         "owner": record.owner,
     }
-    event_path = _write_session_event(
-        runtime=runtime,
-        session_id=session_id,
+    _log_control_event(
         op="control.human_takeover.begin",
-        request=body,
-        response=_response_artifact(out),
-        error=None,
+        session_id=session_id,
         meta={"transport": "http", "path": f"/control/sessions/{session_id}/human-takeover"},
     )
-    _write_console_sidecars(runtime=runtime, session_id=session_id, event_path=event_path)
     return out
 
 
@@ -953,16 +770,11 @@ async def control_human_takeover_release(
         "human_takeover": False,
         "owner": record.owner if record is not None else None,
     }
-    event_path = _write_session_event(
-        runtime=runtime,
-        session_id=session_id,
+    _log_control_event(
         op="control.human_takeover.release",
-        request={"release": True},
-        response=_response_artifact(out),
-        error=None,
+        session_id=session_id,
         meta={"transport": "http", "path": f"/control/sessions/{session_id}/human-takeover/release"},
     )
-    _write_console_sidecars(runtime=runtime, session_id=session_id, event_path=event_path)
     return out
 
 
@@ -987,16 +799,11 @@ async def control_pointer_key(
             detail=f"browser page is not available for keyboard input: {exc}",
         ) from exc
     out: ControlOkResponse = {"ok": True}
-    event_path = _write_session_event(
-        runtime=runtime,
-        session_id=session_id,
+    _log_control_event(
         op="control.pointer_key",
-        request=body,
-        response=_response_artifact(out),
-        error=None,
+        session_id=session_id,
         meta={"transport": "http", "path": f"/control/sessions/{session_id}/pointer/key"},
     )
-    _write_console_sidecars(runtime=runtime, session_id=session_id, event_path=event_path)
     return out
 
 
@@ -1021,16 +828,11 @@ async def control_pointer_text(
             detail=f"browser page is not available for text input: {exc}",
         ) from exc
     out: ControlOkResponse = {"ok": True}
-    event_path = _write_session_event(
-        runtime=runtime,
-        session_id=session_id,
+    _log_control_event(
         op="control.pointer_text",
-        request=body,
-        response=_response_artifact(out),
-        error=None,
+        session_id=session_id,
         meta={"transport": "http", "path": f"/control/sessions/{session_id}/pointer/text"},
     )
-    _write_console_sidecars(runtime=runtime, session_id=session_id, event_path=event_path)
     return out
 
 
@@ -1065,16 +867,11 @@ async def control_fill(
             typing_delay_ms=body.typing_delay_ms,
         )
         out: ControlOkResponse = {"ok": True}
-        event_path = _write_session_event(
-            runtime=runtime,
-            session_id=session_id,
+        _log_control_event(
             op="control.fill",
-            request=body,
-            response=_response_artifact(out),
-            error=None,
+            session_id=session_id,
             meta={"transport": "http", "path": f"/control/sessions/{session_id}/fill"},
         )
-        _write_console_sidecars(runtime=runtime, session_id=session_id, event_path=event_path)
         return out
 
 
@@ -1095,16 +892,11 @@ async def control_press(
         inter, profile, rnd = _interaction_for_session(runtime, session_id)
         await inter.press(page, body.key, profile=profile, rnd=rnd)
         out: ControlOkResponse = {"ok": True}
-        event_path = _write_session_event(
-            runtime=runtime,
-            session_id=session_id,
+        _log_control_event(
             op="control.press",
-            request=body,
-            response=_response_artifact(out),
-            error=None,
+            session_id=session_id,
             meta={"transport": "http", "path": f"/control/sessions/{session_id}/press"},
         )
-        _write_console_sidecars(runtime=runtime, session_id=session_id, event_path=event_path)
         return out
 
 
@@ -1129,16 +921,11 @@ async def control_wait(
         if body.load_state is None and body.selector is None:
             raise HTTPException(status_code=422, detail="Нужно задать selector и/или load_state")
         out: ControlOkResponse = {"ok": True}
-        event_path = _write_session_event(
-            runtime=runtime,
-            session_id=session_id,
+        _log_control_event(
             op="control.wait",
-            request=body,
-            response=_response_artifact(out),
-            error=None,
+            session_id=session_id,
             meta={"transport": "http", "path": f"/control/sessions/{session_id}/wait"},
         )
-        _write_console_sidecars(runtime=runtime, session_id=session_id, event_path=event_path)
         return out
 
 
@@ -1230,16 +1017,51 @@ async def delete_control_session(
         warm_idle_sec=runtime.settings.warm_idle_sec,
     )
     runtime.observe_store.forget(session_id)
-    runtime.session_artifacts.forget(session_id)
     out: ControlDeleteResponse = {"status": "closed"}
-    event_path = _write_session_event(
-        runtime=runtime,
-        session_id=session_id,
+    _log_control_event(
         op="control.close_session",
-        request={"session_id": session_id},
-        response=_response_artifact(out),
-        error=None,
+        session_id=session_id,
         meta={"transport": "http", "path": f"/control/sessions/{session_id}"},
     )
-    _write_console_sidecars(runtime=runtime, session_id=session_id, event_path=event_path)
     return out
+
+
+class ControlSaveStateBody(BaseModel):
+    """
+    Вход для сохранения состояния сессии (cookies/storage_state) в Redis.
+    """
+    model_config: ClassVar[ConfigDict] = ConfigDict(extra="forbid")
+
+    shared_storage_key: str
+
+
+class ControlSaveStateResponse(TypedDict):
+    state_key: str
+
+
+@router.post("/sessions/{session_id}/state")
+async def save_control_session_state(
+    session_id: str,
+    body: ControlSaveStateBody,
+    container: ContainerDep,
+) -> ControlSaveStateResponse:
+    """
+    Сохранить состояние активной сессии в Redis и вернуть `state_key`.
+
+    Полученный `state_key` передаётся в create-session как `restore_state_key`,
+    чтобы поднять новый контекст с теми же cookies/storage (warm/restore).
+    """
+    runtime = container.browser_runtime
+    try:
+        page = await runtime.lease_manager.get_page_for_session(session_id)
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except RuntimeError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    state_key = await runtime.interactor.save_state(page.context, body.shared_storage_key)
+    _log_control_event(
+        op="control.save_state",
+        session_id=session_id,
+        meta={"transport": "http", "path": f"/control/sessions/{session_id}/state"},
+    )
+    return {"state_key": state_key}

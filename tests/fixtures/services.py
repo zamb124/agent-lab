@@ -336,7 +336,9 @@ def voice_service():
         pid_file=_VOICE_SERVER_PID,
         app_path="apps.voice.main:app",
         port=9015,
-        startup_wait=12.0,
+        # Voice стартует за ~1s изолированно, но под -n auto CPU насыщен и 12s readiness
+        # не успевал: выравниваем с DB-сервисами (frontend 20, office 25, sync 45).
+        startup_wait=30.0,
         env=_COMMON_TEST_ENV,
     )
     with manager.start():

@@ -41,9 +41,11 @@ class BrowserRuntimeIntegrationConfig(BaseModel):
     default_endpoint_key: str = Field(default="default")
     cdp_url: str = Field(default="")
     cdp_endpoints: dict[str, str] = Field(default_factory=dict)
-    artifacts_dir: str = Field(default="artifacts/browser_runtime")
-    default_page_ttl_sec: int = Field(default=3600, ge=60)
+    default_page_ttl_sec: int = Field(default=300, ge=60)
     warm_idle_sec: int = Field(default=300, ge=0)
+    reaper_interval_sec: int = Field(default=60, ge=5)
+    max_contexts: int = Field(default=50, ge=0)
+    session_state_ttl_sec: int = Field(default=3600, ge=60)
     init_scripts_version: str = Field(default="v1")
     control_backend: Literal["playwright", "browser_use", "agent_browser"] = Field(
         default="playwright",
@@ -134,9 +136,11 @@ def settings_to_runtime_view(settings: HasBrowserRuntimeConfig) -> BrowserRuntim
     return BrowserRuntimeSettingsView(
         default_endpoint_key=cfg.default_endpoint_key,
         cdp_urls_by_endpoint=endpoints,
-        artifacts_dir=cfg.artifacts_dir,
         default_page_ttl_sec=cfg.default_page_ttl_sec,
         warm_idle_sec=cfg.warm_idle_sec,
         init_scripts_version=cfg.init_scripts_version,
         control_backend=cfg.control_backend,
+        reaper_interval_sec=cfg.reaper_interval_sec,
+        max_contexts=cfg.max_contexts,
+        session_state_ttl_sec=cfg.session_state_ttl_sec,
     )

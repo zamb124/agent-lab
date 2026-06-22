@@ -45,6 +45,7 @@ from core.crawl.models import (
     SeedImportResult,
 )
 from core.crawl.report_projection import enrichment_snapshot_from_enriched_page
+from core.crawl.url_filter import build_url_filter
 from core.search.index_models import SearchIndexDefinition
 
 
@@ -169,18 +170,20 @@ class CrawlOrchestratorService:
     ) -> None:
         profile_bundle = await self._crawl_profile_repository.get_with_index(crawl_profile_id)
         domain = await self._crawl_domain_repository.get(crawl_domain_id)
+        url_filter = build_url_filter(profile_bundle.profile, domain)
         try:
             entries = await discover_sitemap_urls(
                 domain.domain,
                 timeout_seconds=self._crawl_config.http_timeout_seconds,
                 max_urls=self._crawl_config.sitemap_max_urls_per_domain,
                 max_sitemap_bytes=self._crawl_config.sitemap_max_bytes,
+                url_filter=url_filter,
             )
         except SitemapDiscoveryError as exc:
             await self._crawl_domain_repository.schedule_next(
                 crawl_domain_id,
                 datetime.now(UTC)
-                + timedelta(seconds=profile_bundle.profile.refresh_interval_seconds),
+                + timedelta(seconds=self._effective_refresh_interval(domain, profile_bundle)),
                 last_error=str(exc),
                 status="error",
             )
@@ -337,7 +340,12 @@ class CrawlOrchestratorService:
             )
             await self._crawl_job_repository.increment(crawl_job_id, urls_skipped=1)
         except Exception as exc:
-            await self._crawl_url_repository.mark_failed(crawl_url.crawl_url_id, str(exc))
+            await self._crawl_url_repository.mark_failed(
+                crawl_url.crawl_url_id,
+                str(exc),
+                retry_base_seconds=self._crawl_config.fetch_retry_base_seconds,
+                max_attempts=self._crawl_config.max_fetch_attempts,
+            )
             await self._crawl_job_repository.increment(crawl_job_id, errors=1)
 
     async def enrich_one_url(
@@ -478,6 +486,15 @@ class CrawlOrchestratorService:
                 1,
             )
 
+    def _effective_refresh_interval(
+        self,
+        domain: CrawlDomain,
+        profile_bundle: CrawlProfileWithIndex,
+    ) -> int:
+        if domain.refresh_interval_seconds is not None:
+            return domain.refresh_interval_seconds
+        return profile_bundle.profile.refresh_interval_seconds
+
     async def _schedule_domain_for_tick(
         self,
         *,
@@ -488,10 +505,11 @@ class CrawlOrchestratorService:
         now: datetime,
     ) -> bool:
         profile = profile_bundle.profile
+        refresh_interval = self._effective_refresh_interval(domain, profile_bundle)
         if domain.domain in profile.denylist_domains:
             await self._crawl_domain_repository.schedule_next(
                 domain.crawl_domain_id,
-                now + timedelta(seconds=profile.refresh_interval_seconds),
+                now + timedelta(seconds=refresh_interval),
             )
             return False
 
@@ -518,21 +536,16 @@ class CrawlOrchestratorService:
             )
             await self._crawl_domain_repository.schedule_next(
                 domain.crawl_domain_id,
-                now + timedelta(seconds=profile.refresh_interval_seconds),
+                now + timedelta(seconds=refresh_interval),
             )
             return True
 
-        await _enqueue_task(
-            CRAWL_DISCOVER_DOMAIN_TASK_NAME,
-            domain.crawl_domain_id,
-            crawl_job_id,
-            crawl_profile_id,
-        )
+        # Sitemap свежий и нет pending URL: переносим следующий обход без повторного discovery.
         await self._crawl_domain_repository.schedule_next(
             domain.crawl_domain_id,
-            now + timedelta(seconds=profile.refresh_interval_seconds),
+            now + timedelta(seconds=refresh_interval),
         )
-        return True
+        return False
 
     async def import_seed(self, body: SeedImportRequest) -> SeedImportResult:
         if body.seed_source != "tranco":

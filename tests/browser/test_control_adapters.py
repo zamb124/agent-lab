@@ -11,18 +11,20 @@ from apps.browser.engine.types import (
     BrowserRuntimeSettingsView,
     ContextSignature,
 )
-from apps.browser.orchestration.runtime_facade import BrowserRuntimeFacade
+from tests.browser._runtime import build_test_facade
 
 
 def _minimal_view() -> BrowserRuntimeSettingsView:
     return BrowserRuntimeSettingsView(
         default_endpoint_key="default",
         cdp_urls_by_endpoint={"default": "http://127.0.0.1:9222"},
-        artifacts_dir="artifacts/browser_unit",
         default_page_ttl_sec=3600,
         warm_idle_sec=0,
         init_scripts_version="v1",
         control_backend="playwright",
+        reaper_interval_sec=60,
+        max_contexts=50,
+        session_state_ttl_sec=3600,
     )
 
 
@@ -41,7 +43,7 @@ def _sig() -> ContextSignature:
 
 
 def test_playwright_adapter_features() -> None:
-    facade = BrowserRuntimeFacade(_minimal_view())
+    facade = build_test_facade(_minimal_view())
     f = facade.control_adapter.features()
     assert f.supports_ax_tree is True
     assert f.supports_selector_map is False

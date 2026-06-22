@@ -340,6 +340,18 @@ applications:
     port: 8009
     replicas: 1
     serviceName: browser
+    # Sidecar Chromium (CDP). Тег запинен (не latest) для детерминизма: latest
+    # периодически приносил нестабильные сборки с сегфолтами.
+    chromium:
+      image: zenika/alpine-chrome
+      tag: "124"
+      resources:
+        requests:
+          cpu: 250m
+          memory: 768Mi
+        limits:
+          cpu: "2"
+          memory: 2Gi
     command:
       - granian
       - --interface
@@ -355,10 +367,10 @@ applications:
     resources:
       requests:
         cpu: 200m
-        memory: 512Mi
+        memory: 768Mi
       limits:
         cpu: "2"
-        memory: 2Gi
+        memory: 3Gi
   search:
     nodeName: master
     enabled: true

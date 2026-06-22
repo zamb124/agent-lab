@@ -109,4 +109,3 @@ async def crawl_fetch(
             warm_idle_sec=runtime.settings.warm_idle_sec,
         )
         runtime.observe_store.forget(session_id)
-        runtime.session_artifacts.forget(session_id)

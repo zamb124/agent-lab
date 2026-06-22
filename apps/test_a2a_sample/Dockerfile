@@ -15,7 +15,7 @@ COPY apps/__init__.py ./apps/
 RUN uv pip install --python "${VIRTUAL_ENV}/bin/python" \
     granian>=2.7.4 \
     httpx>=0.27.0 \
-    a2a-sdk>=0.3.7 \
+    "a2a-sdk>=0.3.7,<1" \
     starlette>=0.36.0 \
     sse-starlette>=2.0.0
 

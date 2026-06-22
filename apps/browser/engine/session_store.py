@@ -1,11 +1,18 @@
 """
-Хранилище снимков состояния сессии (cookies, storage_state, sessionStorage).
+Хранилище снимков состояния сессии (cookies, storage_state, sessionStorage) в Redis.
+
+Состояние сессии переживает рестарт пода и доступно между процессами: оно лежит в
+Redis с TTL по ключу `browser:session_state:<state_key>`. Это позволяет warm/restore
+сценариям (повторное открытие контекста с теми же cookies/storage) работать durable,
+а не теряться вместе с памятью процесса.
 """
 
 from __future__ import annotations
 
+import json
 import secrets
 from collections.abc import Mapping
+from dataclasses import asdict
 from typing import cast
 from urllib.parse import urlparse
 
@@ -14,53 +21,83 @@ from apps.browser.engine.types import (
     BrowserPage,
     BrowserStorageState,
     ContextSignature,
+    PageMode,
     SessionStateBlob,
 )
+from core.clients.redis_client import RedisClient, RedisOperationError
+
+_KEY_PREFIX = "browser:session_state:"
 
 
 class SessionStateStore:
     """
-    In-memory хранилище state blob по ключу (v1).
-
-    Мотивация:
-    - Нужен простой и быстрый слой для warm/restore без внешней БД.
-    - Сессия должна уметь переносить cookies/storage между запусками контекста.
+    Redis-хранилище `SessionStateBlob` по ключу.
 
     Связи:
-    - Используется interactor-ом в `save_state/restore_state`.
-    - Сохраняет/выдаёт объекты `SessionStateBlob`.
-
-    Состояние:
-    - `_blobs`: map `state_key -> SessionStateBlob`.
+    - Используется interactor-ом в `save_state/restore_state` и при acquire с restore.
+    - Сериализует/десериализует `SessionStateBlob` в JSON.
 
     Инварианты:
     - Доступ к отсутствующему ключу приводит к `KeyError`.
+    - Неуспешная запись в Redis приводит к `RedisOperationError` (без тихой потери состояния).
     - `capture_from` сохраняет state в формате, пригодном для повторного `new_context`.
-
-    Переиспользование:
-    - Стоит: для in-process runtime и тестовых/локальных сценариев.
-    - Не стоит: для распределённого кластера между процессами; там нужен внешний store
-      (например Redis/Postgres) с тем же контрактом ключ->blob.
     """
 
-    def __init__(self) -> None:
-        self._blobs: dict[str, SessionStateBlob] = {}
+    def __init__(self, *, redis_client: RedisClient, ttl_sec: int) -> None:
+        if ttl_sec <= 0:
+            raise ValueError("ttl_sec должен быть положительным")
+        self._redis: RedisClient = redis_client
+        self._ttl_sec: int = ttl_sec
 
-    def _new_key(self) -> str:
+    @staticmethod
+    def _new_key() -> str:
         return secrets.token_hex(16)
 
-    def put(self, blob: SessionStateBlob) -> str:
+    @staticmethod
+    def _redis_key(state_key: str) -> str:
+        if not state_key:
+            raise ValueError("state_key обязателен")
+        return f"{_KEY_PREFIX}{state_key}"
+
+    @staticmethod
+    def _serialize(blob: SessionStateBlob) -> str:
+        return json.dumps(asdict(blob), ensure_ascii=False)
+
+    @staticmethod
+    def _deserialize(raw: str) -> SessionStateBlob:
+        data = cast(Mapping[str, object], json.loads(raw))
+        return SessionStateBlob(
+            shared_storage_key=cast(str, data["shared_storage_key"]),
+            storage_state=cast(BrowserStorageState, data["storage_state"]),
+            session_storage_by_origin=cast(dict[str, dict[str, str]], data["session_storage_by_origin"]),
+            current_url=cast(str, data["current_url"]),
+            proxy_policy=cast(str, data["proxy_policy"]),
+            anti_bot_tier=cast(str, data["anti_bot_tier"]),
+            locale=cast(str, data["locale"]),
+            timezone_id=cast(str, data["timezone_id"]),
+            user_agent=cast("str | None", data["user_agent"]),
+            page_mode=cast(PageMode, data["page_mode"]),
+            permissions_fingerprint=cast(str, data["permissions_fingerprint"]),
+            last_snapshot_ref=cast("str | None", data["last_snapshot_ref"]),
+            pause_ttl_soft_sec=cast("int | None", data["pause_ttl_soft_sec"]),
+            pause_ttl_hard_sec=cast("int | None", data["pause_ttl_hard_sec"]),
+        )
+
+    async def put(self, blob: SessionStateBlob) -> str:
         key = self._new_key()
-        self._blobs[key] = blob
+        ok = await self._redis.set(self._redis_key(key), self._serialize(blob), ttl=self._ttl_sec)
+        if not ok:
+            raise RedisOperationError(f"put({key}): Redis недоступен, состояние сессии не сохранено")
         return key
 
-    def get(self, state_key: str) -> SessionStateBlob:
-        if state_key not in self._blobs:
+    async def get(self, state_key: str) -> SessionStateBlob:
+        raw = await self._redis.get(self._redis_key(state_key))
+        if raw is None:
             raise KeyError(f"Неизвестный state_key: {state_key}")
-        return self._blobs[state_key]
+        return self._deserialize(raw)
 
-    def delete(self, state_key: str) -> None:
-        _ = self._blobs.pop(state_key, None)
+    async def delete(self, state_key: str) -> None:
+        _ = await self._redis.delete(self._redis_key(state_key))
 
     async def capture_from(
         self,
@@ -116,47 +153,24 @@ class SessionStateStore:
             permissions_fingerprint=context_signature.permissions_fingerprint,
             last_snapshot_ref=last_snapshot_ref,
         )
-        return self.put(blob)
+        return await self.put(blob)
 
-    def storage_state_for_new_context(self, state_key: str) -> BrowserStorageState:
-        blob = self.get(state_key)
+    async def storage_state_for_new_context(self, state_key: str) -> BrowserStorageState:
+        blob = await self.get(state_key)
         return blob.storage_state
 
-    def session_storage_for_origin(self, state_key: str, origin: str) -> dict[str, str]:
-        blob = self.get(state_key)
+    async def session_storage_for_origin(self, state_key: str, origin: str) -> dict[str, str]:
+        blob = await self.get(state_key)
         entries = blob.session_storage_by_origin.get(origin)
         if entries is None:
             return {}
         return dict(entries)
 
-    def current_url(self, state_key: str) -> str:
-        blob = self.get(state_key)
+    async def current_url(self, state_key: str) -> str:
+        blob = await self.get(state_key)
         if not blob.current_url:
             raise RuntimeError("SessionStateBlob.current_url должен быть непустой строкой")
         return blob.current_url
-
-    def context_signature_for_restore(self, state_key: str) -> ContextSignature:
-        blob = self.get(state_key)
-        if blob.pause_ttl_hard_sec is not None or blob.pause_ttl_soft_sec is not None:
-            soft = blob.pause_ttl_soft_sec
-            hard = blob.pause_ttl_hard_sec
-            if soft is None or hard is None:
-                raise ValueError("pause_ttl_soft_sec и pause_ttl_hard_sec должны быть заданы вместе")
-            if soft <= 0 or hard <= 0:
-                raise ValueError("pause_ttl_soft_sec и pause_ttl_hard_sec должны быть int > 0")
-            if soft > hard:
-                raise ValueError("pause_ttl_soft_sec должен быть <= pause_ttl_hard_sec")
-        return ContextSignature(
-            proxy_policy=blob.proxy_policy,
-            shared_storage_key=blob.shared_storage_key,
-            anti_bot_tier=blob.anti_bot_tier,
-            stealth_init_version="v1",
-            locale=blob.locale,
-            timezone_id=blob.timezone_id,
-            user_agent=blob.user_agent,
-            page_mode=blob.page_mode,
-            permissions_fingerprint=blob.permissions_fingerprint,
-        )
 
 
 def origin_from_url(url: str) -> str:

@@ -53,6 +53,8 @@ async def test_bootstrap_skips_seed_when_domains_exist(
     bootstrap = CrawlBootstrapService(
         crawl_profile_repository=search_container.crawl_profile_repository,
         crawl_domain_repository=search_container.crawl_domain_repository,
+        crawl_url_repository=search_container.crawl_url_repository,
+        crawl_job_repository=search_container.crawl_job_repository,
         crawl_config=SearchCrawlConfig(
             default_crawl_profile_id=crawl_profile_id,
             bootstrap_tranco_on_empty=True,
@@ -80,6 +82,8 @@ async def test_bootstrap_disabled_does_not_queue_seed(
     bootstrap = CrawlBootstrapService(
         crawl_profile_repository=search_container.crawl_profile_repository,
         crawl_domain_repository=search_container.crawl_domain_repository,
+        crawl_url_repository=search_container.crawl_url_repository,
+        crawl_job_repository=search_container.crawl_job_repository,
         crawl_config=SearchCrawlConfig(
             default_crawl_profile_id=crawl_profile_id,
             bootstrap_tranco_on_empty=False,

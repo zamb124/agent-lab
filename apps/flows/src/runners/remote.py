@@ -30,10 +30,11 @@ from core.capabilities import (
 from core.capabilities.source_sanitize import strip_forbidden_platform_import_lines
 from core.clients.service_client import ServiceClient
 from core.context import get_context
-from core.errors import CodeExecutionRuntimeError
+from core.errors import CodeExecutionRuntimeError, FrozenStateFieldError
 from core.logging import get_log_context, get_logger
 from core.state import ExecutionState, parse_interrupt_body_from_external_dict
 from core.state.mutation_policy import (
+    USER_RETURN_FORBIDDEN_FROZEN_FIELDS,
     should_skip_field_on_user_returned_state_copy,
     snapshot_frozen_fields,
 )
@@ -265,9 +266,9 @@ class RemoteCodeRunner(BaseCodeRunner):
         return response
 
     async def _load_manifest(self) -> CapabilityManifest:
-        return await self._fetch_manifest_from_gateway()
-
-    async def _fetch_manifest_from_gateway(self) -> CapabilityManifest:
+        # Манифест включает динамические tools.<tool_id>, которые меняются при создании/удалении
+        # tool'ов, поэтому он берётся из capability_gateway на каждый вызов без процессного кэша:
+        # устаревший снимок привёл бы к "capability is not declared in manifest" для свежих tool'ов.
         raw_manifest = await self._client.get(
             "capability_gateway",
             CAPABILITY_MANIFEST_PATH,
@@ -402,6 +403,16 @@ class RemoteCodeRunner(BaseCodeRunner):
     ) -> None:
         returned_state = ExecutionState.model_validate(response.state)
         changed_frozen = _frozen_fields_differ(returned_state, frozen_snapshot)
+        forbidden_changes = [
+            field_name
+            for field_name in changed_frozen
+            if field_name in USER_RETURN_FORBIDDEN_FROZEN_FIELDS
+        ]
+        if forbidden_changes:
+            raise FrozenStateFieldError(
+                field=forbidden_changes[0],
+                reason="assign",
+            )
         if changed_frozen:
             logger.warning(
                 "code_runner.returned_state_echoed_frozen_fields",

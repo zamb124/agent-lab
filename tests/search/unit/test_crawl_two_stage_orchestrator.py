@@ -63,7 +63,6 @@ def _domain() -> CrawlDomain:
         crawl_profile_id="cr_test",
         domain="example.com",
         category="unknown",
-        crawl_policy="allow",
         status="active",
         next_crawl_after=now,
         created_at=now,

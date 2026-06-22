@@ -18,7 +18,8 @@ from a2a.types import (
     TextPart,
 )
 
-from core.types import JsonObject
+# Self-contained: пакет собирается в минимальный образ без core (apps/test_a2a_sample/Dockerfile).
+type JsonObject = dict[str, object]
 
 
 class A2ATestTool(Protocol):

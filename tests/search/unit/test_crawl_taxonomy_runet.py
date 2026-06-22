@@ -5,7 +5,7 @@ from typing import get_args
 import pytest
 
 from apps.search.config import SearchCrawlConfig
-from core.crawl.models import CrawlPageContentType
+from core.crawl.models import CrawlContentType
 
 pytestmark = pytest.mark.unit
 
@@ -24,7 +24,7 @@ def test_runet_taxonomy_file_is_comprehensive() -> None:
 
 
 def test_crawl_page_content_type_includes_rich_page_kinds() -> None:
-    content_types = set(get_args(CrawlPageContentType))
+    content_types = set(get_args(CrawlContentType))
     expected = {
         "blog",
         "tutorial",

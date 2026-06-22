@@ -164,10 +164,20 @@ def _all_messages_text(call: dict[str, object]) -> str:
 
 
 def _call_matches_crm_analyze_schema(call: dict[str, object]) -> bool:
-    """Вызов CRM analyze (structured output) несёт json_schema с полями note/entities/metadata/attachment_summaries."""
-    response_format = object_dict(call.get("response_format"), field="response_format")
-    json_schema = object_dict(response_format.get("json_schema"), field="json_schema")
-    schema = object_dict(json_schema.get("schema"), field="schema")
+    """Матчит CRM analyze (structured output) по json_schema с полями note/entities/metadata/attachment_summaries.
+
+    Предикат: не-structured вызовы (response_format отсутствует или не dict) не матчатся и не
+    должны прерывать обход журнала MockLLM — поэтому проверки через isinstance, а не assert.
+    """
+    response_format = call.get("response_format")
+    if not isinstance(response_format, dict):
+        return False
+    json_schema = response_format.get("json_schema")
+    if not isinstance(json_schema, dict):
+        return False
+    schema = json_schema.get("schema")
+    if not isinstance(schema, dict):
+        return False
     required = schema.get("required")
     if isinstance(required, list):
         required_fields: set[str] = set()
@@ -181,7 +191,9 @@ def _call_matches_crm_analyze_schema(call: dict[str, object]) -> bool:
             and "metadata" in required_fields
         ):
             return True
-    properties = object_dict(schema.get("properties"), field="properties")
+    properties = schema.get("properties")
+    if not isinstance(properties, dict):
+        return False
     return (
         "note" in properties
         and "entities" in properties

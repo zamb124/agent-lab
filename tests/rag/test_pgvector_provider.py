@@ -241,21 +241,6 @@ async def test_get_document_content_missing(rag_provider_pgvector, ns_name):
     """get_document_content для отсутствующего document_id возвращает None."""
     content = await rag_provider_pgvector.get_document_content(ns_name, "missing_document_id")
     assert content is None
-    assert all(r.embedding is not None for r in rows)
-    assert [r.chunk_index for r in rows] == list(range(len(rows)))
-    assert all(r.total_chunks == rows[0].total_chunks for r in rows)
-
-    fetched = await rag_provider_pgvector.get_document(ns_name, doc.document_id)
-    assert fetched is not None
-    assert fetched.model_dump(
-        include={"document_id", "name", "namespace", "status", "content"}
-    ) == {
-        "document_id": doc.document_id,
-        "name": "python.txt",
-        "namespace": ns_name,
-        "status": "completed",
-        "content": None,
-    }
 
 
 @pytest.mark.asyncio

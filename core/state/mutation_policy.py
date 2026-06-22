@@ -84,6 +84,20 @@ USER_TOOL_PARALLEL_STATE_MERGE_FIELDS: frozenset[str] = frozenset(
     }
 )
 
+USER_RETURN_FORBIDDEN_FROZEN_FIELDS: frozenset[str] = frozenset(
+    {
+        "task_id",
+        "context_id",
+        "user_id",
+        "session_id",
+        "user_groups",
+        "flow_deadline_monotonic",
+        "flow_timeout_effective_seconds",
+        "branch_id",
+        "flow_config_version",
+    }
+)
+
 _runtime_mutation_allowed: ContextVar[bool] = ContextVar(
     "execution_state_runtime_mutation_allowed", default=True
 )
@@ -161,6 +175,7 @@ __all__ = [
     "FROZEN_STATE_SNAPSHOT_FIELDS",
     "FIELDS_COPY_FROM_RUNTIME_NODE_STATE",
     "USER_CODE_OVERRIDABLE_FROZEN_FIELDS",
+    "USER_RETURN_FORBIDDEN_FROZEN_FIELDS",
     "USER_TOOL_PARALLEL_STATE_MERGE_FIELDS",
     "assert_frozen_fields_unchanged",
     "forbid_frozen_update_key",

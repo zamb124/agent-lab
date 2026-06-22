@@ -11,11 +11,11 @@ from urllib.parse import urljoin, urlparse
 
 from bs4 import BeautifulSoup, Tag
 
-from core.crawl.models import CrawlContentTypeHint, CrawlStructuralSignals
+from core.crawl.models import CrawlContentType, CrawlStructuralSignals
 from core.types import JsonObject, JsonValue, require_json_object
 
 _ISO_DATE_RE = re.compile(r"^(\d{4})-(\d{2})-(\d{2})")
-_SCHEMA_ORG_TYPES: dict[str, CrawlContentTypeHint] = {
+_SCHEMA_ORG_TYPES: dict[str, CrawlContentType] = {
     "article": "article",
     "newsarticle": "news",
     "blogposting": "blog",
@@ -61,7 +61,7 @@ _SCHEMA_ORG_TYPES: dict[str, CrawlContentTypeHint] = {
     "vehicle": "product",
     "car": "product",
 }
-_OG_TYPE_MAP: dict[str, CrawlContentTypeHint] = {
+_OG_TYPE_MAP: dict[str, CrawlContentType] = {
     "article": "article",
     "website": "landing",
     "product": "product",
@@ -83,7 +83,7 @@ class JsonLdSignals:
     date_modified: date | None = None
     author: str | None = None
     publisher: str | None = None
-    content_type_hint: CrawlContentTypeHint | None = None
+    content_type_hint: CrawlContentType | None = None
     category_hints: list[str] = field(default_factory=list)
     topic_hints: list[str] = field(default_factory=list)
 
@@ -188,7 +188,7 @@ def _json_ld_string_field(node: JsonObject, key: str) -> str | None:
     return None
 
 
-def _map_content_type_hint(raw: str | None) -> CrawlContentTypeHint | None:
+def _map_content_type_hint(raw: str | None) -> CrawlContentType | None:
     if raw is None:
         return None
     normalized = raw.strip().lower()

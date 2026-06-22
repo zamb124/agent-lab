@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import importlib
 import os
-import uuid
 
 import pytest
 from httpx import ASGITransport, AsyncClient
@@ -14,9 +13,8 @@ from tests.browser.e2e_step_metrics import e2e_lightpanda_cdp_url, e2e_lightpand
 pytestmark = [pytest.mark.integration, pytest.mark.xdist_group("browser_cdp")]
 
 
-def _build_browser_app(*, cdp_url: str, artifacts_dir: str) -> object:
+def _build_browser_app(*, cdp_url: str) -> object:
     os.environ["BROWSER__CDP_URL"] = cdp_url
-    os.environ["BROWSER__ARTIFACTS_DIR"] = artifacts_dir
 
     from apps.browser.config import reset_browser_settings
     from apps.browser.container import reset_browser_container
@@ -39,8 +37,7 @@ async def test_crawl_fetch_returns_html_from_example_com() -> None:
     if not cdp:
         pytest.skip("Укажите BROWSER__E2E_LIGHTPANDA_CDP_URL или BROWSER__CDP_URL")
 
-    uid = uuid.uuid4().hex
-    app = _build_browser_app(cdp_url=cdp, artifacts_dir=f"artifacts/browser_crawl_fetch_{uid}")
+    app = _build_browser_app(cdp_url=cdp)
 
     async with app.router.lifespan_context(app):
         async with AsyncClient(transport=ASGITransport(app=app), base_url="http://testserver") as client:

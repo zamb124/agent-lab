@@ -7,6 +7,9 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 
 from apps.search.services.crawl.sitemap_parser import _append_entries, discover_sitemap_urls
+from core.crawl.url_filter import CrawlUrlFilter
+
+_PERMISSIVE_FILTER = CrawlUrlFilter(include_patterns=[], exclude_patterns=[], exclude_extensions=[])
 
 
 def test_append_entries_stops_at_max_urls() -> None:
@@ -47,6 +50,7 @@ async def test_discover_sitemap_urls_respects_max_urls() -> None:
             timeout_seconds=5.0,
             max_urls=2,
             max_sitemap_bytes=1_048_576,
+            url_filter=_PERMISSIVE_FILTER,
         )
 
     assert len(entries) == 2
@@ -78,6 +82,7 @@ async def test_discover_sitemap_urls_skips_oversized_xml() -> None:
             timeout_seconds=5.0,
             max_urls=10,
             max_sitemap_bytes=1024,
+            url_filter=_PERMISSIVE_FILTER,
         )
 
     assert len(entries) == 1
@@ -107,6 +112,7 @@ async def test_discover_sitemap_urls_invalid_xml_falls_back_to_homepage() -> Non
             timeout_seconds=5.0,
             max_urls=10,
             max_sitemap_bytes=1_048_576,
+            url_filter=_PERMISSIVE_FILTER,
         )
 
     assert len(entries) == 1

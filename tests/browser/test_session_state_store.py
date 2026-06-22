@@ -8,6 +8,29 @@ from apps.browser.engine.session_store import SessionStateStore
 from apps.browser.engine.types import ContextSignature
 
 
+class _FakeRedis:
+    """In-memory двойник RedisClient для проверки контракта стора (Redis — внешняя граница)."""
+
+    def __init__(self) -> None:
+        self._data: dict[str, str] = {}
+
+    async def set(self, key: str, value: str, ttl: int | None = None) -> bool:
+        _ = ttl
+        self._data[key] = value
+        return True
+
+    async def get(self, key: str) -> str | None:
+        return self._data.get(key)
+
+    async def delete(self, *keys: str) -> int:
+        removed = 0
+        for key in keys:
+            if key in self._data:
+                del self._data[key]
+                removed += 1
+        return removed
+
+
 class _FakeContext:
     def __init__(self, *, storage_state: dict[str, Any]) -> None:
         self._storage_state = storage_state
@@ -43,7 +66,7 @@ def _sig() -> ContextSignature:
 
 @pytest.mark.asyncio
 async def test_session_state_store_put_get_delete_and_unknown_key_raises() -> None:
-    store = SessionStateStore()
+    store = SessionStateStore(redis_client=_FakeRedis(), ttl_sec=3600)  # pyright: ignore[reportArgumentType]
     sig = _sig()
     ctx = _FakeContext(storage_state={"cookies": [], "origins": []})
     page = _FakePage(url="https://example.com/a", session_storage_dump={"k": "v"})
@@ -56,7 +79,7 @@ async def test_session_state_store_put_get_delete_and_unknown_key_raises() -> No
         last_snapshot_ref=None,
     )
 
-    blob = store.get(key)
+    blob = await store.get(key)
     assert blob.shared_storage_key == "bucket-test"
     assert blob.current_url == "https://example.com/a"
     assert blob.proxy_policy == sig.proxy_policy
@@ -68,10 +91,9 @@ async def test_session_state_store_put_get_delete_and_unknown_key_raises() -> No
     assert blob.last_snapshot_ref is None
     assert blob.session_storage_by_origin["https://example.com"] == {"k": "v"}
 
-    store.delete(key)
+    await store.delete(key)
     with pytest.raises(KeyError, match="Неизвестный state_key"):
-        store.get(key)
+        _ = await store.get(key)
 
     with pytest.raises(KeyError, match="Неизвестный state_key"):
-        store.get("missing")
-
+        _ = await store.get("missing")

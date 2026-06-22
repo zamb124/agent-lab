@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-from pathlib import Path
 from types import SimpleNamespace
 from typing import Iterator
 
@@ -72,15 +71,13 @@ class _HumanTakeoverLeaseManager:
 
 
 @pytest.mark.asyncio
-async def test_control_pointer_click_bypasses_navigate_lock(monkeypatch: pytest.MonkeyPatch) -> None:
+async def test_control_pointer_click_bypasses_navigate_lock() -> None:
     page = _FakePage()
     container = SimpleNamespace(
         browser_runtime=SimpleNamespace(
             lease_manager=_FakeLeaseManager(page),
         )
     )
-    monkeypatch.setattr(control, "_write_session_event", lambda **kwargs: Path("event.json"))
-    monkeypatch.setattr(control, "_write_console_sidecars", lambda **kwargs: None)
 
     result = await control.control_pointer_click(
         "sess-1",
@@ -114,15 +111,13 @@ async def test_control_pointer_click_bypasses_navigate_lock(monkeypatch: pytest.
 
 
 @pytest.mark.asyncio
-async def test_control_pointer_text_bypasses_navigate_lock(monkeypatch: pytest.MonkeyPatch) -> None:
+async def test_control_pointer_text_bypasses_navigate_lock() -> None:
     page = _FakePage()
     container = SimpleNamespace(
         browser_runtime=SimpleNamespace(
             lease_manager=_FakeLeaseManager(page),
         )
     )
-    monkeypatch.setattr(control, "_write_session_event", lambda **kwargs: Path("event.json"))
-    monkeypatch.setattr(control, "_write_console_sidecars", lambda **kwargs: None)
 
     result = await control.control_pointer_text(
         "sess-1",

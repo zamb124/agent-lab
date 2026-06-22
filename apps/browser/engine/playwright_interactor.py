@@ -4,9 +4,6 @@ Playwright-реализация BrowserInteractor (§17).
 
 from __future__ import annotations
 
-import uuid
-from pathlib import Path
-
 from apps.browser.engine.cdp_pool import CDPConnectionPool
 from apps.browser.engine.page_lease_manager import PageLeaseManager
 from apps.browser.engine.session_store import SessionStateStore, origin_from_url
@@ -22,6 +19,7 @@ from apps.browser.engine.types import (
     BrowserStorageState,
     ContextSignature,
 )
+from core.files.processors import FileProcessor
 
 
 class PlaywrightBrowserInteractor:
@@ -63,11 +61,13 @@ class PlaywrightBrowserInteractor:
         session_store: SessionStateStore,
         lease_manager: PageLeaseManager,
         settings: BrowserRuntimeSettingsView,
+        file_processor: FileProcessor,
     ) -> None:
         self._pool: CDPConnectionPool = pool
         self._store: SessionStateStore = session_store
         self._leases: PageLeaseManager = lease_manager
         self._settings: BrowserRuntimeSettingsView = settings
+        self._file_processor: FileProcessor = file_processor
 
     def _cdp_url(self, endpoint_key: str) -> str:
         urls = self._settings.cdp_urls_by_endpoint
@@ -94,7 +94,7 @@ class PlaywrightBrowserInteractor:
         browser = await self._pool.acquire_browser(req.endpoint_key, cdp_url)
         storage_state: BrowserStorageState | None = None
         if req.restore_state_key is not None:
-            blob = self._store.get(req.restore_state_key)
+            blob = await self._store.get(req.restore_state_key)
             if blob.proxy_policy != req.context_signature.proxy_policy:
                 raise ValueError("restore_state_key не совместим: proxy_policy отличается")
             if blob.anti_bot_tier != req.context_signature.anti_bot_tier:
@@ -109,7 +109,7 @@ class PlaywrightBrowserInteractor:
                 raise ValueError("restore_state_key не совместим: page_mode отличается")
             if blob.permissions_fingerprint != req.context_signature.permissions_fingerprint:
                 raise ValueError("restore_state_key не совместим: permissions_fingerprint отличается")
-            storage_state = self._store.storage_state_for_new_context(req.restore_state_key)
+            storage_state = await self._store.storage_state_for_new_context(req.restore_state_key)
         _context, page, cold_start = await self._leases.lease_page(
             browser,
             req.endpoint_key,
@@ -121,7 +121,7 @@ class PlaywrightBrowserInteractor:
             warm_idle_sec=self._settings.warm_idle_sec,
         )
         if req.restore_state_key is not None:
-            url = self._store.current_url(req.restore_state_key)
+            url = await self._store.current_url(req.restore_state_key)
             _ = await page.goto(
                 url,
                 wait_until="domcontentloaded",
@@ -178,30 +178,37 @@ class PlaywrightBrowserInteractor:
 
         html = await page.content()
 
-        artifacts_root = Path(self._settings.artifacts_dir)
-        artifacts_root.mkdir(parents=True, exist_ok=True)
         shot_ref: str | None = None
         pdf_ref: str | None = None
         snap_ref: str | None = None
-        token = uuid.uuid4().hex
         if req.screenshot:
-            shot_path = artifacts_root / f"page-{token}.png"
-            _ = await page.screenshot(
-                path=str(shot_path),
+            shot_bytes = await page.screenshot(
                 type="png",
                 full_page=False,
                 timeout=5_000,
                 animations="disabled",
             )
-            shot_ref = str(shot_path)
+            shot_ref = await self._store_artifact(
+                data=shot_bytes,
+                original_name="page.png",
+                content_type="image/png",
+                final_url=final_url,
+            )
         if req.capture_pdf:
-            pdf_path = artifacts_root / f"page-{token}.pdf"
-            _ = await page.pdf(path=str(pdf_path))
-            pdf_ref = str(pdf_path)
+            pdf_bytes = await page.pdf()
+            pdf_ref = await self._store_artifact(
+                data=pdf_bytes,
+                original_name="page.pdf",
+                content_type="application/pdf",
+                final_url=final_url,
+            )
         if req.snapshot:
-            snap_path = artifacts_root / f"snapshot-{token}.html"
-            _ = snap_path.write_text(html, encoding="utf-8")
-            snap_ref = str(snap_path)
+            snap_ref = await self._store_artifact(
+                data=html.encode("utf-8"),
+                original_name="snapshot.html",
+                content_type="text/html",
+                final_url=final_url,
+            )
 
         return BrowserFetchResult(
             final_url=final_url,
@@ -213,6 +220,29 @@ class PlaywrightBrowserInteractor:
             snapshot_ref=snap_ref,
             anti_bot_signals={},
         )
+
+    async def _store_artifact(
+        self,
+        *,
+        data: bytes,
+        original_name: str,
+        content_type: str,
+        final_url: str,
+    ) -> str:
+        """
+        Сохранить артефакт навигации (скриншот/pdf/html) в S3 и вернуть file_id.
+
+        Локальные пути не возвращаем: file_id — платформенная retrievable-ссылка,
+        которую вызывающие сервисы/агенты читают через файловый API.
+        """
+        record = await self._file_processor.process_file_from_bytes(
+            data=data,
+            original_name=original_name,
+            content_type=content_type,
+            metadata={"source": "browser_fetch", "final_url": final_url},
+            public=False,
+        )
+        return record.file_id
 
     async def save_state(self, context: BrowserContextHandle, shared_storage_key: str) -> str:
         pages = context.pages
@@ -234,7 +264,7 @@ class PlaywrightBrowserInteractor:
             if url.startswith("about:"):
                 continue
             origin = origin_from_url(url)
-            entries = self._store.session_storage_for_origin(state_key, origin)
+            entries = await self._store.session_storage_for_origin(state_key, origin)
             if len(entries) == 0:
                 continue
             await p.evaluate(
@@ -248,7 +278,7 @@ class PlaywrightBrowserInteractor:
 
     async def _apply_session_storage(self, page: BrowserPage, state_key: str) -> None:
         origin = origin_from_url(page.url)
-        entries = self._store.session_storage_for_origin(state_key, origin)
+        entries = await self._store.session_storage_for_origin(state_key, origin)
         if len(entries) == 0:
             return
         await page.evaluate(

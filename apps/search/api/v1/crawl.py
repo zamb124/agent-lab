@@ -15,17 +15,23 @@ from apps.search_worker.tasks.task_names import (
 )
 from core.crawl.models import (
     CrawlDomain,
+    CrawlDomainCreateRequest,
+    CrawlDomainPatchRequest,
     CrawlDomainRunResponse,
     CrawlJob,
     CrawlJobCreateRequest,
     CrawlJobQueuedResponse,
     CrawlProfileCreateRequest,
+    CrawlProfilePatchRequest,
     CrawlProfileSummary,
     CrawlProfileWithIndex,
+    CrawlUrl,
+    CrawlUrlAddRequest,
     CrawlUrlDetail,
     CrawlUrlListItem,
     SeedImportRequest,
     SeedImportResult,
+    UpsertStats,
 )
 from core.pagination import OffsetPage
 
@@ -57,6 +63,18 @@ async def create_crawl_profile(
 ) -> CrawlProfileWithIndex:
     try:
         return await container.crawl_service.create_profile(body)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@router.patch("/profiles/{crawl_profile_id}", response_model=CrawlProfileWithIndex)
+async def patch_crawl_profile(
+    crawl_profile_id: str,
+    body: CrawlProfilePatchRequest,
+    container: ContainerDep,
+) -> CrawlProfileWithIndex:
+    try:
+        return await container.crawl_service.patch_profile(crawl_profile_id, body)
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 
@@ -171,6 +189,74 @@ async def run_crawl_domain(
         return await container.crawl_service.run_domain(crawl_domain_id, crawl_profile_id)
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@router.post("/profiles/{crawl_profile_id}/domains", response_model=CrawlDomain, status_code=201)
+async def create_crawl_domain(
+    crawl_profile_id: str,
+    body: CrawlDomainCreateRequest,
+    container: ContainerDep,
+) -> CrawlDomain:
+    try:
+        domain = await container.crawl_service.create_domain(crawl_profile_id, body)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    await _kiq_task(CRAWL_ORCHESTRATOR_TICK_TASK_NAME, crawl_profile_id)
+    return domain
+
+
+@router.patch("/domains/{crawl_domain_id}", response_model=CrawlDomain)
+async def patch_crawl_domain(
+    crawl_domain_id: str,
+    body: CrawlDomainPatchRequest,
+    container: ContainerDep,
+    crawl_profile_id: Annotated[str, Query(min_length=1)],
+) -> CrawlDomain:
+    try:
+        return await container.crawl_service.patch_domain(crawl_domain_id, crawl_profile_id, body)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@router.delete("/domains/{crawl_domain_id}", status_code=204)
+async def delete_crawl_domain(
+    crawl_domain_id: str,
+    container: ContainerDep,
+    crawl_profile_id: Annotated[str, Query(min_length=1)],
+) -> None:
+    try:
+        await container.crawl_service.delete_domain(crawl_domain_id, crawl_profile_id)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@router.post("/domains/{crawl_domain_id}/urls", response_model=UpsertStats, status_code=202)
+async def add_crawl_domain_urls(
+    crawl_domain_id: str,
+    body: CrawlUrlAddRequest,
+    container: ContainerDep,
+    crawl_profile_id: Annotated[str, Query(min_length=1)],
+) -> UpsertStats:
+    try:
+        stats = await container.crawl_service.add_domain_urls(crawl_domain_id, crawl_profile_id, body)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    await _kiq_task(CRAWL_ORCHESTRATOR_TICK_TASK_NAME, crawl_profile_id)
+    return stats
+
+
+@router.post("/urls/{crawl_url_id}/recrawl", response_model=CrawlUrl, status_code=202)
+async def recrawl_crawl_url(
+    crawl_url_id: str,
+    container: ContainerDep,
+    crawl_profile_id: Annotated[str, Query(min_length=1)],
+) -> CrawlUrl:
+    try:
+        crawl_url = await container.crawl_service.recrawl_url(crawl_url_id, crawl_profile_id)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    await _kiq_task(CRAWL_ORCHESTRATOR_TICK_TASK_NAME, crawl_profile_id)
+    return crawl_url
 
 
 @router.post("/seed/import", response_model=SeedImportResult)

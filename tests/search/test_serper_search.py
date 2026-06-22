@@ -604,7 +604,8 @@ async def test_meta_search_keeps_unparseable_urls(
     }
     service = meta_search_service_builder(
         SearchIntegrationConfig(
-            serper=SearchSerperConfig(api_key="test-key", base_url=base_url, timeout_seconds=3)
+            provider_order=["serper"],
+            serper=SearchSerperConfig(api_key="test-key", base_url=base_url, timeout_seconds=3),
         ),
         provider_state_store,
     )

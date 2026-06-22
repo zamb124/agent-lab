@@ -41,7 +41,7 @@ class TestParallelNodeExecution:
         Если последовательное - сумма sleep по нодам.
         """
         flow_id = f"parallel_test_{unique_id}"
-        node_code_template = "\nimport time\nimport asyncio\n\nasync def run(args, state):\n    start = time.time()\n    await asyncio.sleep(0.12)\n    end = time.time()\n\n    state['{node_name}_start'] = start\n    state['{node_name}_end'] = end\n    state['{node_name}_done'] = True\n    return state\n"
+        node_code_template = "\nimport time\nimport asyncio\n\nasync def run(args, state):\n    start = time.time()\n    await asyncio.sleep(1.0)\n    end = time.time()\n\n    state['{node_name}_start'] = start\n    state['{node_name}_end'] = end\n    state['{node_name}_done'] = True\n    return state\n"
         flow_config = FlowConfig(
             flow_id=flow_id,
             name="Parallel Execution Test",
@@ -104,9 +104,13 @@ class TestParallelNodeExecution:
         state = result.return_value
         assert state["task_state"] == "completed"
         assert state["response"] == "All nodes completed"
-        print(f"\n⏱️  Overall duration: {overall_duration:.2f}s")
-        assert overall_duration < 2.0, (
-            f"Execution took {overall_duration:.2f}s, expected < 2.0s for parallel execution. Nodes may be executing sequentially instead of in parallel."
+        # node_a/b/c спят по 1.0s. Изолированное исполнение каждой code-node идёт HTTP-запросом
+        # в code-runner (~2-2.5s суммарного инфра-оверхеда на 5 нод через TaskIQ worker).
+        # Параллель: оверхед + ~1s; последовательно: оверхед + ~3s. Порог 4.5s ловит
+        # последовательное исполнение. Строгий инвариант перекрытия — в
+        # test_parallel_nodes_timestamps_overlap.
+        assert overall_duration < 4.5, (
+            f"Execution took {overall_duration:.2f}s, expected < 4.5s for parallel execution. Nodes may be executing sequentially instead of in parallel."
         )
 
     @pytest.mark.asyncio

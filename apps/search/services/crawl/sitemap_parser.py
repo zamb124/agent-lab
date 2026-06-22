@@ -2,18 +2,16 @@
 
 from __future__ import annotations
 
-import re
 from datetime import datetime
 from email.utils import parsedate_to_datetime
 from urllib.parse import urlparse
 from xml.etree import ElementTree
 
 from core.crawl.models import SitemapEntry
+from core.crawl.url_filter import CrawlUrlFilter
 from core.http import get_httpx_client
 
 _SITEMAP_NS = {"sm": "http://www.sitemaps.org/schemas/sitemap/0.9"}
-_DENY_PATH_RE = re.compile(r"/(cart|checkout|login|auth|search)(/|$)", re.IGNORECASE)
-_DENY_EXT_RE = re.compile(r"\.(pdf|zip|jpg|jpeg|png|gif)$", re.IGNORECASE)
 
 
 class SitemapDiscoveryError(Exception):
@@ -36,7 +34,7 @@ def _parse_lastmod(raw: str | None) -> datetime | None:
         return None
 
 
-def _parse_sitemap_xml(content: bytes, domain: str) -> list[SitemapEntry]:
+def _parse_sitemap_xml(content: bytes, domain: str, url_filter: CrawlUrlFilter) -> list[SitemapEntry]:
     try:
         root = ElementTree.fromstring(content)
     except ElementTree.ParseError:
@@ -52,7 +50,7 @@ def _parse_sitemap_xml(content: bytes, domain: str) -> list[SitemapEntry]:
         url = loc_node.text.strip()
         if not _same_domain(url, domain):
             continue
-        if _DENY_EXT_RE.search(url) or _DENY_PATH_RE.search(urlparse(url).path):
+        if not url_filter.allows(url):
             continue
         lastmod_node = url_node.find("sm:lastmod", _SITEMAP_NS)
         lastmod = _parse_lastmod(lastmod_node.text if lastmod_node is not None else None)
@@ -84,6 +82,7 @@ async def discover_sitemap_urls(
     timeout_seconds: float,
     max_urls: int,
     max_sitemap_bytes: int,
+    url_filter: CrawlUrlFilter,
 ) -> list[SitemapEntry]:
     if max_urls < 1:
         raise ValueError("max_urls must be >= 1")
@@ -119,7 +118,7 @@ async def discover_sitemap_urls(
                 continue
             if len(response.content) > max_sitemap_bytes:
                 continue
-            entries = _parse_sitemap_xml(response.content, normalized_domain)
+            entries = _parse_sitemap_xml(response.content, normalized_domain, url_filter)
             if not entries and response.content:
                 try:
                     index_root = ElementTree.fromstring(response.content)
@@ -143,7 +142,7 @@ async def discover_sitemap_urls(
                             continue
                         limit_reached = _append_entries(
                             collected,
-                            _parse_sitemap_xml(nested_response.content, normalized_domain),
+                            _parse_sitemap_xml(nested_response.content, normalized_domain, url_filter),
                             max_urls=max_urls,
                         )
                     continue

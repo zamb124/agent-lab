@@ -57,7 +57,6 @@ async def test_ingest_page_attaches_runet_web_profile_config(unique_id) -> None:
         domain="example.com",
         domain_rank=1,
         category="docs",
-        crawl_policy="sitemap_only",
         status="active",
         next_crawl_after=now,
         created_at=now,

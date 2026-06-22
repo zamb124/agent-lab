@@ -7,7 +7,12 @@ from datetime import UTC, datetime, timedelta
 import pytest
 
 from apps.search_worker.tasks.task_names import CRAWL_DISCOVER_DOMAIN_TASK_NAME
-from core.crawl.models import CrawlDomainSeed, CrawlProfileCreateRequest, SitemapEntry
+from core.crawl.models import (
+    CrawlDomainSeed,
+    CrawlProfileCreateRequest,
+    CrawlStructuralSignals,
+    SitemapEntry,
+)
 from core.search.index_models import SearchIndexCreateRequest
 from tests.search.conftest import make_search_index_slug
 
@@ -121,6 +126,7 @@ async def test_crawl_profile_summary_mixed_state(
         fetch_transport="http",
         extract_markdown="Example page markdown for crawl report test.",
         extract_title="Example page",
+        extract_structural_signals=CrawlStructuralSignals(),
     )
 
     running_job = await search_container.crawl_job_repository.start(
@@ -372,6 +378,7 @@ async def _seed_crawl_urls(
         fetch_transport="http",
         extract_markdown=f"Fetched markdown for {unique_id}",
         extract_title=f"Title {unique_id}",
+        extract_structural_signals=CrawlStructuralSignals(),
     )
     return pending_id, indexed_id
 
@@ -504,6 +511,7 @@ async def test_get_crawl_url_detail_with_rag_content(
         fetch_transport="browser",
         extract_markdown="Fetched body",
         extract_title="Fetched title",
+        extract_structural_signals=CrawlStructuralSignals(),
     )
 
     response = await search_client.get(
@@ -517,3 +525,234 @@ async def test_get_crawl_url_detail_with_rag_content(
     assert marker in payload["indexed_content"]["markdown"]
     assert payload["indexed_content"]["page_summary"] == f"Summary for {unique_id}"
     assert payload["indexed_content"]["chunks_count"] >= 1
+
+
+def _suppress_tick(monkeypatch: pytest.MonkeyPatch) -> None:
+    async def _noop(task_name: str, *args: object, **kwargs: object) -> None:
+        _ = task_name, args, kwargs
+
+    monkeypatch.setattr("apps.search.api.v1.crawl._kiq_task", _noop)
+
+
+@pytest.mark.asyncio
+async def test_patch_crawl_profile_updates_filters_and_limits(
+    search_client,
+    search_container,
+    search_system_context,
+    unique_id,
+):
+    _ = search_system_context
+    crawl_profile_id = await _create_profile(search_container, unique_id)
+
+    response = await search_client.patch(
+        f"/search/api/v1/crawl/profiles/{crawl_profile_id}",
+        json={
+            "refresh_interval_seconds": 3600,
+            "exclude_url_patterns": ["/private(/|$)"],
+            "exclude_extensions": ["pdf", "mp4"],
+            "llm_enrichment_enabled": True,
+            "enrichment_model": "auto",
+        },
+    )
+    assert response.status_code == 200
+    profile = response.json()["profile"]
+    assert profile["refresh_interval_seconds"] == 3600
+    assert profile["exclude_url_patterns"] == ["/private(/|$)"]
+    assert profile["exclude_extensions"] == ["pdf", "mp4"]
+    assert profile["llm_enrichment_enabled"] is True
+
+    stored = await search_container.crawl_profile_repository.get_with_index(crawl_profile_id)
+    assert stored.profile.refresh_interval_seconds == 3600
+    assert stored.profile.exclude_extensions == ["pdf", "mp4"]
+    assert stored.profile.llm_enrichment_enabled is True
+
+
+@pytest.mark.asyncio
+async def test_create_crawl_domain_with_seed_urls(
+    search_client,
+    search_container,
+    search_system_context,
+    unique_id,
+    monkeypatch: pytest.MonkeyPatch,
+):
+    _ = search_system_context
+    _suppress_tick(monkeypatch)
+    crawl_profile_id = await _create_profile(search_container, unique_id)
+
+    response = await search_client.post(
+        f"/search/api/v1/crawl/profiles/{crawl_profile_id}/domains",
+        json={
+            "domain": f"created-{unique_id}.example.com",
+            "category": "manual",
+            "refresh_interval_seconds": 7200,
+            "seed_urls": [f"https://created-{unique_id}.example.com/page-a"],
+        },
+    )
+    assert response.status_code == 201
+    domain_payload = response.json()
+    assert domain_payload["domain"] == f"created-{unique_id}.example.com"
+    assert domain_payload["refresh_interval_seconds"] == 7200
+
+    pending = await search_container.crawl_url_repository.count_pending(domain_payload["crawl_domain_id"])
+    assert pending == 1
+
+
+@pytest.mark.asyncio
+async def test_create_crawl_domain_rejects_duplicate(
+    search_client,
+    search_container,
+    search_system_context,
+    unique_id,
+    monkeypatch: pytest.MonkeyPatch,
+):
+    _ = search_system_context
+    _suppress_tick(monkeypatch)
+    crawl_profile_id = await _create_profile(search_container, unique_id)
+    body = {"domain": f"dup-{unique_id}.example.com"}
+
+    first = await search_client.post(
+        f"/search/api/v1/crawl/profiles/{crawl_profile_id}/domains",
+        json=body,
+    )
+    assert first.status_code == 201
+    second = await search_client.post(
+        f"/search/api/v1/crawl/profiles/{crawl_profile_id}/domains",
+        json=body,
+    )
+    assert second.status_code == 400
+
+
+@pytest.mark.asyncio
+async def test_patch_crawl_domain_pause_and_interval(
+    search_client,
+    search_container,
+    search_system_context,
+    unique_id,
+):
+    _ = search_system_context
+    crawl_profile_id = await _create_profile(search_container, unique_id)
+    await search_container.crawl_domain_repository.upsert_seed_batch(
+        crawl_profile_id,
+        [CrawlDomainSeed(domain=f"patch-{unique_id}.example.com", category="news")],
+        next_crawl_after=datetime.now(UTC),
+    )
+    domain = (
+        await search_container.crawl_domain_repository.list_page(
+            crawl_profile_id=crawl_profile_id,
+            status=None,
+            limit=1,
+            offset=0,
+        )
+    ).items[0]
+
+    response = await search_client.patch(
+        f"/search/api/v1/crawl/domains/{domain.crawl_domain_id}",
+        params={"crawl_profile_id": crawl_profile_id},
+        json={"status": "paused", "refresh_interval_seconds": 43200},
+    )
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["status"] == "paused"
+    assert payload["refresh_interval_seconds"] == 43200
+
+
+@pytest.mark.asyncio
+async def test_delete_crawl_domain(
+    search_client,
+    search_container,
+    search_system_context,
+    unique_id,
+):
+    _ = search_system_context
+    crawl_profile_id = await _create_profile(search_container, unique_id)
+    await search_container.crawl_domain_repository.upsert_seed_batch(
+        crawl_profile_id,
+        [CrawlDomainSeed(domain=f"del-{unique_id}.example.com", category="news")],
+        next_crawl_after=datetime.now(UTC),
+    )
+    domain = (
+        await search_container.crawl_domain_repository.list_page(
+            crawl_profile_id=crawl_profile_id,
+            status=None,
+            limit=1,
+            offset=0,
+        )
+    ).items[0]
+
+    response = await search_client.delete(
+        f"/search/api/v1/crawl/domains/{domain.crawl_domain_id}",
+        params={"crawl_profile_id": crawl_profile_id},
+    )
+    assert response.status_code == 204
+
+    remaining = await search_container.crawl_domain_repository.count_for_profile(crawl_profile_id)
+    assert remaining == 0
+
+
+@pytest.mark.asyncio
+async def test_add_crawl_domain_urls(
+    search_client,
+    search_container,
+    search_system_context,
+    unique_id,
+    monkeypatch: pytest.MonkeyPatch,
+):
+    _ = search_system_context
+    _suppress_tick(monkeypatch)
+    crawl_profile_id = await _create_profile(search_container, unique_id)
+    await search_container.crawl_domain_repository.upsert_seed_batch(
+        crawl_profile_id,
+        [CrawlDomainSeed(domain=f"addurls-{unique_id}.example.com", category="news")],
+        next_crawl_after=datetime.now(UTC),
+    )
+    domain = (
+        await search_container.crawl_domain_repository.list_page(
+            crawl_profile_id=crawl_profile_id,
+            status=None,
+            limit=1,
+            offset=0,
+        )
+    ).items[0]
+
+    response = await search_client.post(
+        f"/search/api/v1/crawl/domains/{domain.crawl_domain_id}/urls",
+        params={"crawl_profile_id": crawl_profile_id},
+        json={
+            "urls": [
+                f"https://addurls-{unique_id}.example.com/a",
+                f"https://addurls-{unique_id}.example.com/b",
+            ],
+        },
+    )
+    assert response.status_code == 202
+    stats = response.json()
+    assert stats["inserted"] == 2
+
+    pending = await search_container.crawl_url_repository.count_pending(domain.crawl_domain_id)
+    assert pending == 2
+
+
+@pytest.mark.asyncio
+async def test_recrawl_crawl_url_resets_to_pending(
+    search_client,
+    search_container,
+    search_system_context,
+    unique_id,
+    monkeypatch: pytest.MonkeyPatch,
+):
+    _ = search_system_context
+    _suppress_tick(monkeypatch)
+    crawl_profile_id = await _create_profile(search_container, unique_id)
+    _pending_id, indexed_id = await _seed_crawl_urls(search_container, crawl_profile_id, unique_id)
+
+    response = await search_client.post(
+        f"/search/api/v1/crawl/urls/{indexed_id}/recrawl",
+        params={"crawl_profile_id": crawl_profile_id},
+    )
+    assert response.status_code == 202
+    payload = response.json()
+    assert payload["crawl_status"] == "pending"
+
+    refreshed = await search_container.crawl_url_repository.get(indexed_id)
+    assert refreshed.crawl_status == "pending"
+    assert refreshed.fetch_attempts == 0

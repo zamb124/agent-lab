@@ -239,8 +239,10 @@ class BrowserRuntimeSettingsView:
 
     default_endpoint_key: str
     cdp_urls_by_endpoint: dict[str, str]
-    artifacts_dir: str
     default_page_ttl_sec: int
     warm_idle_sec: int
     init_scripts_version: str
     control_backend: ControlBackend
+    reaper_interval_sec: int
+    max_contexts: int
+    session_state_ttl_sec: int

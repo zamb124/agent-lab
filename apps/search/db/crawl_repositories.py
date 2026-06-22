@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import uuid
 from collections.abc import Sequence
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from typing import cast
 from urllib.parse import urlsplit, urlunsplit
 
@@ -22,6 +22,8 @@ from apps.search.db.models import (
 from apps.search.db.search_index_repository import search_index_row_to_definition
 from core.crawl.models import (
     CrawlDomain,
+    CrawlDomainCreateRequest,
+    CrawlDomainPatchRequest,
     CrawlDomainSeed,
     CrawlDomainStatus,
     CrawlJob,
@@ -29,6 +31,7 @@ from core.crawl.models import (
     CrawlJobTrigger,
     CrawlProfile,
     CrawlProfileCreateRequest,
+    CrawlProfilePatchRequest,
     CrawlProfileWithIndex,
     CrawlStatusCount,
     CrawlStructuralSignals,
@@ -115,6 +118,9 @@ def _profile_row_to_model(row: CrawlProfileRow) -> CrawlProfile:
         browser_fallback_enabled=row.browser_fallback_enabled,
         sitemap_stale_after_seconds=row.sitemap_stale_after_seconds,
         denylist_domains=list(row.denylist_domains),
+        include_url_patterns=list(row.include_url_patterns),
+        exclude_url_patterns=list(row.exclude_url_patterns),
+        exclude_extensions=list(row.exclude_extensions),
         llm_enrichment_enabled=row.llm_enrichment_enabled,
         enrichment_model=row.enrichment_model,
         created_at=row.created_at,
@@ -129,8 +135,10 @@ def _domain_row_to_model(row: CrawlDomainRow) -> CrawlDomain:
         domain=row.domain,
         domain_rank=row.domain_rank,
         category=row.category,
-        crawl_policy=row.crawl_policy,
         status=_parse_crawl_domain_status(row.status),
+        refresh_interval_seconds=row.refresh_interval_seconds,
+        include_url_patterns=list(row.include_url_patterns),
+        exclude_url_patterns=list(row.exclude_url_patterns),
         last_discovered_at=row.last_discovered_at,
         last_crawled_at=row.last_crawled_at,
         next_crawl_after=row.next_crawl_after,
@@ -166,6 +174,8 @@ def _url_row_to_model(row: CrawlUrlRow) -> CrawlUrl:
         crawl_status=_parse_crawl_url_status(row.crawl_status),
         fetch_transport=parsed_fetch_transport,
         document_id=row.document_id,
+        fetch_attempts=row.fetch_attempts,
+        next_retry_after=row.next_retry_after,
         last_error=row.last_error,
         last_crawled_at=row.last_crawled_at,
         created_at=row.created_at,
@@ -196,6 +206,8 @@ def _crawl_url_list_item_from_row(url_row: CrawlUrlRow, domain: str) -> CrawlUrl
         crawl_status=url_model.crawl_status,
         fetch_transport=url_model.fetch_transport,
         document_id=url_model.document_id,
+        fetch_attempts=url_model.fetch_attempts,
+        next_retry_after=url_model.next_retry_after,
         last_error=url_model.last_error,
         last_crawled_at=url_model.last_crawled_at,
         created_at=url_model.created_at,
@@ -262,6 +274,9 @@ class CrawlProfileRepository:
             browser_fallback_enabled=body.browser_fallback_enabled,
             sitemap_stale_after_seconds=body.sitemap_stale_after_seconds,
             denylist_domains=list(body.denylist_domains),
+            include_url_patterns=list(body.include_url_patterns),
+            exclude_url_patterns=list(body.exclude_url_patterns),
+            exclude_extensions=list(body.exclude_extensions),
             created_at=now,
             updated_at=now,
         )
@@ -269,6 +284,54 @@ class CrawlProfileRepository:
             session.add(row)
             await session.commit()
         return await self.get_with_index(body.crawl_profile_id)
+
+    async def patch(
+        self,
+        crawl_profile_id: str,
+        body: CrawlProfilePatchRequest,
+    ) -> CrawlProfileWithIndex:
+        values: dict[str, object] = {}
+        if body.enabled is not None:
+            values["enabled"] = body.enabled
+        if body.refresh_interval_seconds is not None:
+            values["refresh_interval_seconds"] = body.refresh_interval_seconds
+        if body.max_urls_per_domain_per_tick is not None:
+            values["max_urls_per_domain_per_tick"] = body.max_urls_per_domain_per_tick
+        if body.max_domains_per_tick is not None:
+            values["max_domains_per_tick"] = body.max_domains_per_tick
+        if body.max_urls_per_batch is not None:
+            values["max_urls_per_batch"] = body.max_urls_per_batch
+        if body.http_concurrency is not None:
+            values["http_concurrency"] = body.http_concurrency
+        if body.browser_fallback_enabled is not None:
+            values["browser_fallback_enabled"] = body.browser_fallback_enabled
+        if body.sitemap_stale_after_seconds is not None:
+            values["sitemap_stale_after_seconds"] = body.sitemap_stale_after_seconds
+        if body.denylist_domains is not None:
+            values["denylist_domains"] = list(body.denylist_domains)
+        if body.include_url_patterns is not None:
+            values["include_url_patterns"] = list(body.include_url_patterns)
+        if body.exclude_url_patterns is not None:
+            values["exclude_url_patterns"] = list(body.exclude_url_patterns)
+        if body.exclude_extensions is not None:
+            values["exclude_extensions"] = list(body.exclude_extensions)
+        if body.llm_enrichment_enabled is not None:
+            values["llm_enrichment_enabled"] = body.llm_enrichment_enabled
+            values["enrichment_model"] = body.enrichment_model
+        if not values:
+            return await self.get_with_index(crawl_profile_id)
+        values["updated_at"] = datetime.now(UTC)
+        async with self._db.session() as session:
+            stmt = (
+                update(CrawlProfileRow)
+                .where(CrawlProfileRow.crawl_profile_id == crawl_profile_id)
+                .values(**values)
+            )
+            result = await session.execute(stmt)
+            if get_rowcount(result) == 0:
+                raise ValueError(f"crawl profile not found: {crawl_profile_id}")
+            await session.commit()
+        return await self.get_with_index(crawl_profile_id)
 
     async def list_page(self, *, limit: int, offset: int) -> OffsetPage[CrawlProfileWithIndex]:
         async with self._db.session() as session:
@@ -336,7 +399,6 @@ class CrawlDomainRepository:
                         domain=domain,
                         domain_rank=seed.domain_rank,
                         category=seed.category,
-                        crawl_policy="sitemap_only",
                         status="active",
                         next_crawl_after=next_crawl_after,
                         created_at=now,
@@ -346,6 +408,73 @@ class CrawlDomainRepository:
                 inserted += 1
             await session.commit()
         return inserted
+
+    async def create(
+        self,
+        crawl_profile_id: str,
+        body: CrawlDomainCreateRequest,
+        *,
+        next_crawl_after: datetime,
+    ) -> CrawlDomain:
+        domain = _normalize_domain(body.domain)
+        now = datetime.now(UTC)
+        async with self._db.session() as session:
+            existing_stmt = select(CrawlDomainRow).where(
+                CrawlDomainRow.crawl_profile_id == crawl_profile_id,
+                CrawlDomainRow.domain == domain,
+            )
+            existing = (await session.execute(existing_stmt)).scalar_one_or_none()
+            if existing is not None:
+                raise ValueError(f"crawl domain already exists: {domain}")
+            row = CrawlDomainRow(
+                crawl_domain_id=str(uuid.uuid4()),
+                crawl_profile_id=crawl_profile_id,
+                domain=domain,
+                domain_rank=None,
+                category=body.category,
+                status="active",
+                refresh_interval_seconds=body.refresh_interval_seconds,
+                next_crawl_after=next_crawl_after,
+                created_at=now,
+                updated_at=now,
+            )
+            session.add(row)
+            await session.commit()
+            await session.refresh(row)
+        return _domain_row_to_model(row)
+
+    async def patch(self, crawl_domain_id: str, body: CrawlDomainPatchRequest) -> CrawlDomain:
+        values: dict[str, object] = {}
+        if body.status is not None:
+            values["status"] = body.status
+        if body.refresh_interval_seconds is not None:
+            values["refresh_interval_seconds"] = body.refresh_interval_seconds
+        if body.include_url_patterns is not None:
+            values["include_url_patterns"] = list(body.include_url_patterns)
+        if body.exclude_url_patterns is not None:
+            values["exclude_url_patterns"] = list(body.exclude_url_patterns)
+        if values:
+            values["updated_at"] = datetime.now(UTC)
+            async with self._db.session() as session:
+                stmt = (
+                    update(CrawlDomainRow)
+                    .where(CrawlDomainRow.crawl_domain_id == crawl_domain_id)
+                    .values(**values)
+                )
+                result = await session.execute(stmt)
+                if get_rowcount(result) == 0:
+                    raise ValueError(f"crawl domain not found: {crawl_domain_id}")
+                await session.commit()
+        return await self.get(crawl_domain_id)
+
+    async def delete(self, crawl_domain_id: str) -> None:
+        async with self._db.session() as session:
+            stmt = select(CrawlDomainRow).where(CrawlDomainRow.crawl_domain_id == crawl_domain_id)
+            row = (await session.execute(stmt)).scalar_one_or_none()
+            if row is None:
+                raise ValueError(f"crawl domain not found: {crawl_domain_id}")
+            await session.delete(row)
+            await session.commit()
 
     async def count_for_profile(self, crawl_profile_id: str) -> int:
         async with self._db.session() as session:
@@ -630,6 +759,8 @@ class CrawlUrlRepository:
                     enrichment_model=enrichment_model,
                     enrichment_prompt_version=enrichment_prompt_version,
                     fetch_transport=fetch_transport,
+                    fetch_attempts=0,
+                    next_retry_after=None,
                     last_crawled_at=now,
                     updated_at=now,
                     last_error=None,
@@ -699,15 +830,35 @@ class CrawlUrlRepository:
             _structural_signals_from_row(row),
         )
 
-    async def mark_failed(self, crawl_url_id: str, error: str) -> None:
+    async def mark_failed(
+        self,
+        crawl_url_id: str,
+        error: str,
+        *,
+        retry_base_seconds: int,
+        max_attempts: int,
+    ) -> None:
+        if retry_base_seconds < 1:
+            raise ValueError("retry_base_seconds must be >= 1")
+        if max_attempts < 1:
+            raise ValueError("max_attempts must be >= 1")
         now = datetime.now(UTC)
         async with self._db.session() as session:
-            stmt = (
-                update(CrawlUrlRow)
-                .where(CrawlUrlRow.crawl_url_id == crawl_url_id)
-                .values(crawl_status="failed", last_error=error, updated_at=now)
-            )
-            _ = await session.execute(stmt)
+            row_stmt = select(CrawlUrlRow).where(CrawlUrlRow.crawl_url_id == crawl_url_id)
+            row = (await session.execute(row_stmt)).scalar_one_or_none()
+            if row is None:
+                raise ValueError(f"crawl url not found: {crawl_url_id}")
+            attempts = row.fetch_attempts + 1
+            next_retry_after: datetime | None = None
+            if attempts < max_attempts:
+                # Экспоненциальный backoff с потолком в 24 часа.
+                backoff_seconds: int = min(retry_base_seconds * (1 << (attempts - 1)), 86400)
+                next_retry_after = now + timedelta(seconds=backoff_seconds)
+            row.crawl_status = "failed"
+            row.last_error = error
+            row.fetch_attempts = attempts
+            row.next_retry_after = next_retry_after
+            row.updated_at = now
             await session.commit()
 
     async def mark_skipped(
@@ -722,6 +873,8 @@ class CrawlUrlRepository:
             "crawl_status": "skipped",
             "updated_at": now,
             "last_crawled_at": now,
+            "fetch_attempts": 0,
+            "next_retry_after": None,
         }
         if extract_content_hash is not None:
             values["content_hash"] = extract_content_hash
@@ -756,20 +909,78 @@ class CrawlUrlRepository:
         return stale_count
 
     async def requeue_failed_urls(self) -> int:
+        # Возвращаем в очередь только те failed URL, у которых истёк backoff и не
+        # исчерпан лимит попыток (next_retry_after IS NULL означает исчерпание).
         now = datetime.now(UTC)
         async with self._db.session() as session:
-            count_stmt = select(func.count()).where(CrawlUrlRow.crawl_status == "failed")
-            failed_count = int((await session.execute(count_stmt)).scalar_one())
-            if failed_count == 0:
+            ready_filter = (
+                CrawlUrlRow.crawl_status == "failed",
+                CrawlUrlRow.next_retry_after.is_not(None),
+                CrawlUrlRow.next_retry_after <= now,
+            )
+            count_stmt = select(func.count()).where(*ready_filter)
+            ready_count = int((await session.execute(count_stmt)).scalar_one())
+            if ready_count == 0:
                 return 0
             stmt = (
                 update(CrawlUrlRow)
-                .where(CrawlUrlRow.crawl_status == "failed")
-                .values(crawl_status="pending", last_error=None, updated_at=now)
+                .where(*ready_filter)
+                .values(crawl_status="pending", last_error=None, next_retry_after=None, updated_at=now)
             )
             _ = await session.execute(stmt)
             await session.commit()
-        return failed_count
+        return ready_count
+
+    async def add_manual_urls(self, crawl_domain_id: str, urls: list[str]) -> UpsertStats:
+        inserted = 0
+        updated = 0
+        now = datetime.now(UTC)
+        async with self._db.session() as session:
+            for raw_url in urls:
+                canonical = canonicalize_url(raw_url)
+                stmt = select(CrawlUrlRow).where(
+                    CrawlUrlRow.crawl_domain_id == crawl_domain_id,
+                    CrawlUrlRow.canonical_url == canonical,
+                )
+                existing = (await session.execute(stmt)).scalar_one_or_none()
+                if existing is None:
+                    session.add(
+                        CrawlUrlRow(
+                            crawl_url_id=str(uuid.uuid4()),
+                            crawl_domain_id=crawl_domain_id,
+                            url=raw_url.strip(),
+                            canonical_url=canonical,
+                            crawl_status="pending",
+                            created_at=now,
+                            updated_at=now,
+                        )
+                    )
+                    inserted += 1
+                    continue
+                existing.crawl_status = "pending"
+                existing.fetch_attempts = 0
+                existing.next_retry_after = None
+                existing.last_error = None
+                existing.updated_at = now
+                updated += 1
+            await session.commit()
+        return UpsertStats(inserted=inserted, updated=updated)
+
+    async def requeue_url(self, crawl_url_id: str) -> CrawlUrl:
+        now = datetime.now(UTC)
+        async with self._db.session() as session:
+            stmt = select(CrawlUrlRow).where(CrawlUrlRow.crawl_url_id == crawl_url_id)
+            row = (await session.execute(stmt)).scalar_one_or_none()
+            if row is None:
+                raise ValueError(f"crawl url not found: {crawl_url_id}")
+            row.crawl_status = "pending"
+            row.fetch_attempts = 0
+            row.next_retry_after = None
+            row.last_error = None
+            row.updated_at = now
+            await session.commit()
+            await session.refresh(row)
+        return _url_row_to_model(row)
 
     async def requeue_indexed_for_content_recheck(self, crawl_url_id: str) -> None:
         now = datetime.now(UTC)

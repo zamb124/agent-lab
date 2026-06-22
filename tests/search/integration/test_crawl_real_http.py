@@ -21,6 +21,7 @@ REAL_CRAWL_QUERY = "documentation examples"
 async def test_discover_sitemap_example_com_real_http(crawl_search_container, search_system_context, unique_id):
     search_container = crawl_search_container
     from apps.search.services.crawl.sitemap_parser import discover_sitemap_urls
+    from core.crawl.url_filter import build_url_filter
 
     search_index_id = make_search_index_slug(unique_id)
     crawl_profile_id = f"cr_{search_index_id}"[:64]
@@ -55,11 +56,13 @@ async def test_discover_sitemap_example_com_real_http(crawl_search_container, se
     assert due
     domain_row = due[0]
 
+    profile_bundle = await search_container.crawl_profile_repository.get_with_index(crawl_profile_id)
     entries = await discover_sitemap_urls(
         domain_row.domain,
         timeout_seconds=get_search_settings().crawl.http_timeout_seconds,
         max_urls=get_search_settings().crawl.sitemap_max_urls_per_domain,
         max_sitemap_bytes=get_search_settings().crawl.sitemap_max_bytes,
+        url_filter=build_url_filter(profile_bundle.profile, domain_row),
     )
     assert entries
     assert any(entry.url.startswith("https://") for entry in entries)

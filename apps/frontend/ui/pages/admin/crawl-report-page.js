@@ -6,6 +6,10 @@ import { PlatformPage } from '@platform/lib/base/PlatformPage.js';
 import { frontendIslandPageBodyStyles } from '../../styles/frontend-island-page-body.styles.js';
 import { formatPlatformDateTime } from '@platform/lib/utils/format-platform-date.js';
 import { FrontendCrawlUrlDetailModal } from '../../modals/crawl-url-detail-modal.js';
+import { FrontendCrawlDomainAddModal } from '../../modals/crawl-domain-add-modal.js';
+import { FrontendCrawlDomainEditModal } from '../../modals/crawl-domain-edit-modal.js';
+import { FrontendCrawlUrlAddModal } from '../../modals/crawl-url-add-modal.js';
+import { FrontendCrawlProfileSettingsModal } from '../../modals/crawl-profile-settings-modal.js';
 import '../../components/crawl-report/crawl-report-enrichment-tags.js';
 import '../../components/crawl-report/crawl-report-metric-strip.js';
 import '../../components/crawl-report/crawl-report-running-banner.js';
@@ -182,9 +186,18 @@ export class FrontendCrawlReportPage extends PlatformPage {
                 color: white;
             }
             .btn:disabled { opacity: 0.5; cursor: not-allowed; }
+            .btn.danger:hover:not(:disabled) {
+                border-color: var(--error);
+                color: var(--error);
+            }
             .btn-sm {
                 padding: var(--space-1) var(--space-2);
                 font-size: var(--text-xs);
+            }
+            .confirm-text {
+                font-size: var(--text-xs);
+                color: var(--text-secondary);
+                align-self: center;
             }
 
             .table-panel {
@@ -306,6 +319,7 @@ export class FrontendCrawlReportPage extends PlatformPage {
         _runningDomainId: { state: true },
         _loaded: { state: true },
         _rowHighlightIds: { state: true },
+        _confirmDeleteDomainId: { state: true },
     };
 
     constructor() {
@@ -317,6 +331,9 @@ export class FrontendCrawlReportPage extends PlatformPage {
         this._jobs = this.useResource('frontend/crawl_jobs');
         this._queueTickOp = this.useOp('frontend/crawl_queue_tick');
         this._domainRun = this.useOp('frontend/crawl_domain_run');
+        this._domainPatch = this.useOp('frontend/crawl_domain_patch');
+        this._domainDelete = this.useOp('frontend/crawl_domain_delete');
+        this._urlRecrawl = this.useOp('frontend/crawl_url_recrawl');
         this._localeSel = this.select((state) => {
             const locale = state.i18n.locale;
             if (typeof locale !== 'string' || locale.length === 0) {
@@ -336,6 +353,7 @@ export class FrontendCrawlReportPage extends PlatformPage {
         this._loaded = false;
         this._pollIntervalId = null;
         this._rowHighlightIds = [];
+        this._confirmDeleteDomainId = null;
         this._rowSnapshots = {
             domains: new Map(),
             urls: new Map(),
@@ -528,6 +546,73 @@ export class FrontendCrawlReportPage extends PlatformPage {
         });
     }
 
+    _openProfileSettings() {
+        const bundle = this._selectedProfileBundle();
+        if (!bundle) return;
+        this.openModal(FrontendCrawlProfileSettingsModal, {
+            crawl_profile_id: this._profileId,
+            profile: bundle.profile,
+        });
+    }
+
+    _openAddDomain() {
+        this.openModal(FrontendCrawlDomainAddModal, {
+            crawl_profile_id: this._profileId,
+        });
+    }
+
+    _openEditDomain(row) {
+        this.openModal(FrontendCrawlDomainEditModal, {
+            crawl_profile_id: this._profileId,
+            crawl_domain_id: row.crawl_domain_id,
+            domain: row.domain,
+            status: row.status,
+            refresh_interval_seconds: row.refresh_interval_seconds,
+            include_url_patterns: row.include_url_patterns || [],
+            exclude_url_patterns: row.exclude_url_patterns || [],
+        });
+    }
+
+    _openAddUrl(row) {
+        this.openModal(FrontendCrawlUrlAddModal, {
+            crawl_profile_id: this._profileId,
+            crawl_domain_id: row.crawl_domain_id,
+            domain: row.domain,
+        });
+    }
+
+    _toggleDomainPause(row) {
+        const nextStatus = row.status === 'paused' ? 'active' : 'paused';
+        this._domainPatch.run({
+            crawl_domain_id: row.crawl_domain_id,
+            crawl_profile_id: this._profileId,
+            status: nextStatus,
+        });
+    }
+
+    _requestDeleteDomain(row) {
+        this._confirmDeleteDomainId = row.crawl_domain_id;
+    }
+
+    _cancelDeleteDomain() {
+        this._confirmDeleteDomainId = null;
+    }
+
+    _confirmDeleteDomain(row) {
+        this._confirmDeleteDomainId = null;
+        this._domainDelete.run({
+            crawl_domain_id: row.crawl_domain_id,
+            crawl_profile_id: this._profileId,
+        });
+    }
+
+    _recrawlUrl(row) {
+        this._urlRecrawl.run({
+            crawl_url_id: row.crawl_url_id,
+            crawl_profile_id: this._profileId,
+        });
+    }
+
     _statusLabel(status) {
         const key = `crawl_report_page.status_${status}`;
         const translated = this.t(key);
@@ -688,6 +773,14 @@ export class FrontendCrawlReportPage extends PlatformPage {
                     .enumConfig=${{ values: this._enumValues(DOMAIN_STATUS_VALUES) }}
                     @value-changed=${this._onDomainStatusFilterChange}
                 ></platform-field>
+                <platform-button
+                    variant="primary"
+                    density="compact"
+                    @click=${() => this._openAddDomain()}
+                >
+                    <platform-icon name="plus" size="16"></platform-icon>
+                    ${this.t('crawl_report_page.add_domain')}
+                </platform-button>
             `;
         }
         if (this._activeTab === 'urls') {
@@ -766,6 +859,39 @@ export class FrontendCrawlReportPage extends PlatformPage {
         `;
     }
 
+    _renderDomainActions(row) {
+        if (this._confirmDeleteDomainId === row.crawl_domain_id) {
+            return html`
+                <div class="actions-cell">
+                    <span class="confirm-text">${this.t('crawl_report_page.confirm_delete_domain')}</span>
+                    <button type="button" class="btn btn-sm danger" @click=${() => this._confirmDeleteDomain(row)}>
+                        ${this.t('crawl_report_page.confirm_yes')}
+                    </button>
+                    <button type="button" class="btn btn-sm" @click=${() => this._cancelDeleteDomain()}>
+                        ${this.t('crawl_report_page.confirm_no')}
+                    </button>
+                </div>
+            `;
+        }
+        const pauseLabel = row.status === 'paused'
+            ? this.t('crawl_report_page.resume_domain')
+            : this.t('crawl_report_page.pause_domain');
+        return html`
+            <div class="actions-cell">
+                <button
+                    type="button"
+                    class="btn primary btn-sm"
+                    ?disabled=${this._runningDomainId === row.crawl_domain_id && this._domainRun.state.busy}
+                    @click=${() => this._runDomain(row)}
+                >${this.t('crawl_report_page.run_domain')}</button>
+                <button type="button" class="btn btn-sm" @click=${() => this._openAddUrl(row)}>${this.t('crawl_report_page.add_url')}</button>
+                <button type="button" class="btn btn-sm" @click=${() => this._openEditDomain(row)}>${this.t('crawl_report_page.edit')}</button>
+                <button type="button" class="btn btn-sm" @click=${() => this._toggleDomainPause(row)}>${pauseLabel}</button>
+                <button type="button" class="btn btn-sm danger" @click=${() => this._requestDeleteDomain(row)}>${this.t('crawl_report_page.delete')}</button>
+            </div>
+        `;
+    }
+
     _renderDomainsTable() {
         const { items, loading, refreshing } = this._domains.state;
         if (loading && (!items || items.length === 0)) {
@@ -803,15 +929,7 @@ export class FrontendCrawlReportPage extends PlatformPage {
                             <td>${this._formatDt(row.next_crawl_after)}</td>
                             <td class="mono">${row.last_error || '—'}</td>
                             <td>
-                                <div class="actions-cell">
-                                    <button
-                                        type="button"
-                                        class="btn primary btn-sm"
-                                        ?disabled=${this._runningDomainId === row.crawl_domain_id && this._domainRun.state.busy}
-                                        @click=${() => this._runDomain(row)}
-                                    >${this.t('crawl_report_page.run_domain')}</button>
-                                    <button type="button" class="btn btn-sm" @click=${() => this._viewDomainUrls(row.domain)}>${this.t('crawl_report_page.view_urls')}</button>
-                                </div>
+                                ${this._renderDomainActions(row)}
                             </td>
                         </tr>
                     `)}
@@ -861,9 +979,14 @@ export class FrontendCrawlReportPage extends PlatformPage {
                             <td>${this._formatDt(row.last_crawled_at)}</td>
                             <td class="mono">${row.last_error || '—'}</td>
                             <td>
-                                <button type="button" class="btn btn-sm" @click=${() => this._openUrlDetail(row)}>
-                                    ${this.t('crawl_report_page.view_url_detail')}
-                                </button>
+                                <div class="actions-cell">
+                                    <button type="button" class="btn btn-sm" @click=${() => this._openUrlDetail(row)}>
+                                        ${this.t('crawl_report_page.view_url_detail')}
+                                    </button>
+                                    <button type="button" class="btn btn-sm" @click=${() => this._recrawlUrl(row)}>
+                                        ${this.t('crawl_report_page.recrawl_url')}
+                                    </button>
+                                </div>
                             </td>
                         </tr>
                     `)}
@@ -969,6 +1092,15 @@ export class FrontendCrawlReportPage extends PlatformPage {
                         >
                             <platform-icon name="refresh" size="16"></platform-icon>
                             ${this.t('crawl_report_page.refresh')}
+                        </platform-button>
+                        <platform-button
+                            variant="secondary"
+                            density="compact"
+                            ?disabled=${!this._selectedProfileBundle()}
+                            @click=${() => this._openProfileSettings()}
+                        >
+                            <platform-icon name="settings" size="16"></platform-icon>
+                            ${this.t('crawl_report_page.profile_settings')}
                         </platform-button>
                         <div class="tick-action">
                             <platform-button

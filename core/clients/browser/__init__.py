@@ -9,6 +9,7 @@ from core.clients.browser.mcp_contracts import (
     ToolCreateSessionArgs,
     ToolNavigateArgs,
     ToolObserveArgs,
+    ToolSaveStateArgs,
 )
 
 __all__ = [
@@ -16,4 +17,5 @@ __all__ = [
     "ToolCreateSessionArgs",
     "ToolNavigateArgs",
     "ToolObserveArgs",
+    "ToolSaveStateArgs",
 ]

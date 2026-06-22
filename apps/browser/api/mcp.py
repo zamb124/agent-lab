@@ -31,6 +31,7 @@ from apps.browser.api.control import (
     ControlNavigateBody,
     ControlObserveBody,
     ControlPressBody,
+    ControlSaveStateBody,
     ControlSessionCreateBody,
     ControlWaitBody,
     control_click,
@@ -41,6 +42,7 @@ from apps.browser.api.control import (
     control_wait,
     create_control_session,
     delete_control_session,
+    save_control_session_state,
     wait_for_agent_control,
 )
 from apps.browser.container import BrowserContainer
@@ -55,6 +57,7 @@ from core.clients.browser import (
     ToolCreateSessionArgs,
     ToolNavigateArgs,
     ToolObserveArgs,
+    ToolSaveStateArgs,
 )
 from core.integrations.mcp import MCP_PROTOCOL_VERSION, MCPToolDefinition
 from core.tracing.operation_span import traced_operation
@@ -260,6 +263,15 @@ def _tools() -> list[MCPToolDefinition]:
             name="browser_close_session",
             description="Закрыть сессию и освободить ресурсы.",
             parameters_schema=_schema_for_model(ToolCloseSessionArgs),
+        ),
+        MCPToolDefinition(
+            name="browser_save_state",
+            description=(
+                "Сохранить состояние сессии (cookies/storage_state) в Redis и вернуть state_key. "
+                "Передай state_key в browser_create_session как restore_state_key, чтобы поднять "
+                "контекст с теми же cookies/storage (warm/restore)."
+            ),
+            parameters_schema=_schema_for_model(ToolSaveStateArgs),
         ),
         MCPToolDefinition(
             name="browser_save_html_to_s3",
@@ -482,6 +494,15 @@ async def _tool_call(
             container=container,
         )
         return McpToolCallResult(content=_json_text_content(require_json_value(out, "browser_close_session result")), isError=False)
+
+    if tool_name == "browser_save_state":
+        args = ToolSaveStateArgs.model_validate(arguments)
+        out = await save_control_session_state(
+            session_id=args.session_id,
+            body=ControlSaveStateBody(shared_storage_key=args.shared_storage_key),
+            container=container,
+        )
+        return McpToolCallResult(content=_json_text_content(require_json_value(out, "browser_save_state result")), isError=False)
 
     if tool_name == "browser_save_html_to_s3":
         args = ToolSaveHtmlToS3Args.model_validate(arguments)

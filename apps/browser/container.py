@@ -4,8 +4,11 @@ DI контейнер сервиса browser.
 
 from __future__ import annotations
 
+import asyncio
+
 from apps.browser.config import get_browser_settings, settings_to_runtime_view
 from apps.browser.orchestration.runtime_facade import BrowserRuntimeFacade
+from core.clients.redis_client import RedisClient
 from core.container import BaseContainer, ContainerRegistry
 from core.logging import get_logger
 
@@ -44,11 +47,26 @@ class BrowserContainer(BaseContainer):
             shared_db_url=shared_db_url,
         )
         self._browser_runtime: BrowserRuntimeFacade | None = None
+        self._redis_client: RedisClient | None = None
+        self.reaper_task: asyncio.Task[None] | None = None
+
+    @property
+    def redis_client(self) -> RedisClient:
+        if self._redis_client is None:
+            settings = get_browser_settings()
+            if not settings.database.redis_url:
+                raise ValueError("database.redis_url is required для состояния сессий browser")
+            self._redis_client = RedisClient(settings.database.redis_url)
+        return self._redis_client
 
     @property
     def browser_runtime(self) -> BrowserRuntimeFacade:
         if self._browser_runtime is None:
-            self._browser_runtime = BrowserRuntimeFacade(settings_to_runtime_view(get_browser_settings()))
+            self._browser_runtime = BrowserRuntimeFacade(
+                settings_to_runtime_view(get_browser_settings()),
+                redis_client=self.redis_client,
+                file_processor=self.file_processor,
+            )
         return self._browser_runtime
 
     async def stop_browser_runtime(self) -> bool:

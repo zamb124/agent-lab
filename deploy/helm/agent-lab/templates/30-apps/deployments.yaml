@@ -28,7 +28,7 @@ spec:
       containers:
         {{- if eq $name "browser" }}
         - name: chromium-cdp
-          image: zenika/alpine-chrome:latest
+          image: "{{ $app.chromium.image }}:{{ $app.chromium.tag }}"
           imagePullPolicy: IfNotPresent
           # runAsUser=0 + --no-zygote: chromium пишет /proc/<pid>/oom_score_adj.
           securityContext:
@@ -49,18 +49,21 @@ spec:
             - --exclude-switches=enable-automation
             - --window-size=1920,1080
             - --lang=en-US
+            # Снижение фоновой активности и памяти рендереров под нагрузкой.
+            - --disable-extensions
+            - --disable-background-networking
+            - --disable-component-update
+            - --disable-features=site-per-process,Translate,BackForwardCache
+            - --metrics-recording-only
+            - --mute-audio
+            - --js-flags=--max-old-space-size=512
             # Chromium 124+ слушает только 127.0.0.1; browser-app ходит через shared netns pod'а.
             - --remote-debugging-port=9222
           volumeMounts:
             - name: chromium-dshm
               mountPath: /dev/shm
           resources:
-            requests:
-              cpu: 250m
-              memory: 768Mi
-            limits:
-              cpu: "2"
-              memory: 2Gi
+            {{- toYaml $app.chromium.resources | nindent 12 }}
           livenessProbe:
             exec:
               command:
@@ -116,6 +119,18 @@ spec:
             periodSeconds: 30
             timeoutSeconds: 10
             failureThreshold: 5
+          {{- if eq $name "browser" }}
+          # Readiness отражает реальную работоспособность CDP: пока Chromium
+          # недоступен/перезапускается, под выводится из Service, а не отдаёт ошибки.
+          readinessProbe:
+            httpGet:
+              path: /browser/api/v1/health/cdp
+              port: {{ $app.port }}
+            initialDelaySeconds: 20
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 3
+          {{- else }}
           readinessProbe:
             httpGet:
               path: /health
@@ -123,6 +138,7 @@ spec:
             initialDelaySeconds: 20
             periodSeconds: 10
             timeoutSeconds: 5
+          {{- end }}
           {{- if eq $name "browser" }}
           startupProbe:
             exec:

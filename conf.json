@@ -905,9 +905,11 @@
           "chromium": "http://127.0.0.1:9222",
           "lightpanda": "ws://127.0.0.1:9223"
         },
-        "artifacts_dir": "artifacts/browser_runtime",
-        "default_page_ttl_sec": 3600,
+        "default_page_ttl_sec": 300,
         "warm_idle_sec": 300,
+        "reaper_interval_sec": 60,
+        "max_contexts": 50,
+        "session_state_ttl_sec": 3600,
         "init_scripts_version": "v1",
         "control_backend": "playwright"
       }

@@ -27,9 +27,8 @@ from tests.browser.e2e_step_metrics import e2e_lightpanda_cdp_url, e2e_lightpand
 pytestmark = pytest.mark.xdist_group("browser_cdp")
 
 
-def _build_browser_app(*, cdp_url: str, artifacts_dir: str) -> object:
+def _build_browser_app(*, cdp_url: str) -> object:
     os.environ["BROWSER__CDP_URL"] = cdp_url
-    os.environ["BROWSER__ARTIFACTS_DIR"] = artifacts_dir
 
     from apps.browser.config import reset_browser_settings
     from apps.browser.container import reset_browser_container
@@ -54,8 +53,7 @@ async def test_control_http_api_full_flow() -> None:
         pytest.skip("Укажите BROWSER__E2E_LIGHTPANDA_CDP_URL (предпочтительно) или BROWSER__CDP_URL")
 
     uid = uuid.uuid4().hex
-    artifacts_dir = f"artifacts/browser_e2e_http_control_{uid}"
-    app = _build_browser_app(cdp_url=cdp, artifacts_dir=artifacts_dir)
+    app = _build_browser_app(cdp_url=cdp)
 
     async with app.router.lifespan_context(app):
         async with AsyncClient(
@@ -170,10 +168,7 @@ async def test_control_http_api_validation_page_mode_mismatch() -> None:
         pytest.skip("Укажите BROWSER__E2E_LIGHTPANDA_CDP_URL (предпочтительно) или BROWSER__CDP_URL")
 
     uid = uuid.uuid4().hex
-    app = _build_browser_app(
-        cdp_url=cdp,
-        artifacts_dir=f"artifacts/browser_e2e_http_control_{uid}",
-    )
+    app = _build_browser_app(cdp_url=cdp)
 
     async with app.router.lifespan_context(app):
         async with AsyncClient(

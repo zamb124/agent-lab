@@ -17,6 +17,7 @@ from apps.frontend.api.public_session_security import (
     enforce_public_session_issue_rate_limit,
     new_embed_session_id,
 )
+from apps.frontend.container import FrontendContainer
 from apps.frontend.dependencies import ContainerDep
 from apps.frontend.services.public_search_bootstrap import (
     PUBLIC_SEARCH_SPEC_BY_MODE,
@@ -124,6 +125,34 @@ def _platform_authenticated_user() -> User | None:
     return user
 
 
+async def _resolve_platform_authenticated_user(
+    request: Request,
+    container: FrontendContainer,
+) -> User | None:
+    platform_user = _platform_authenticated_user()
+    if platform_user is not None:
+        return platform_user
+
+    auth_token_raw = request.cookies.get("auth_token")
+    if auth_token_raw is None or auth_token_raw.strip() == "":
+        return None
+
+    token_data = get_token_service().validate_token(auth_token_raw)
+    if token_data is None:
+        return None
+    if token_data.token_type != TokenType.SESSION:
+        return None
+    if token_data.user_id.startswith("search_guest_"):
+        return None
+
+    user = await container.user_repository.get(token_data.user_id)
+    if user is None:
+        return None
+    if user.attributes.get("kind") == "embed_session_guest":
+        return None
+    return user
+
+
 def _platform_user_roles(user: User) -> list[str]:
     system_roles = user.companies.get(SYSTEM_COMPANY_ID)
     if system_roles is not None and len(system_roles) > 0:
@@ -162,7 +191,7 @@ async def issue_public_search_session(
     if origin == "":
         raise HTTPException(status_code=403, detail="origin обязателен для публичной сессии поиска")
 
-    platform_user = _platform_authenticated_user()
+    platform_user = await _resolve_platform_authenticated_user(request, container)
     if platform_user is None and body.consume_search_quota:
         await enforce_public_search_run_quota(
             redis_client=container.redis_client,

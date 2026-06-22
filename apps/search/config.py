@@ -85,6 +85,8 @@ class SearchCrawlConfig(BaseModel):
     sitemap_max_bytes: int = Field(default=10_485_760, ge=65_536, le=52_428_800)
     backlog_reschedule_seconds: int = Field(default=300, ge=60, le=3600)
     min_extract_chars: int = Field(default=200, ge=50, le=5000)
+    max_fetch_attempts: int = Field(default=5, ge=1, le=20)
+    fetch_retry_base_seconds: int = Field(default=600, ge=60, le=86400)
     browser_fetch_timeout_seconds: float = Field(default=120.0, ge=30.0, le=300.0)
     tranco_seed_limit: int = Field(default=2000, ge=1, le=5000)
     bootstrap_tranco_on_empty: bool = True

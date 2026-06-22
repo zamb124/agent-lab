@@ -52,7 +52,6 @@ def _domain(domain_id: str, domain_name: str) -> CrawlDomain:
         crawl_profile_id="cr_test",
         domain=domain_name,
         category="unknown",
-        crawl_policy="allow",
         status="active",
         next_crawl_after=now + timedelta(hours=6),
         created_at=now,

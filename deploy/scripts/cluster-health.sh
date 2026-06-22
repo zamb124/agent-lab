@@ -230,5 +230,34 @@ else
     "$K exec -n $PLATFORM_NS $LITSERVE_POD -- sh -lc 'PY=/opt/venv/bin/python; MODEL=\$(\"\$PY\" -c \"from apps.provider_litserve.config import get_provider_litserve_settings as g; print(g().provider_litserve.infra.embedding_openai_model_id)\"); curl -fsS --max-time 300 -H \"Content-Type: application/json\" -d \"{\\\"model\\\":\\\"\${MODEL}\\\",\\\"input\\\":\\\"litserve healthcheck\\\"}\" http://127.0.0.1:8014/v1/embeddings | \"\$PY\" -c \"import json, sys; body=json.load(sys.stdin); vec=body[\\\"data\\\"][0][\\\"embedding\\\"]; assert isinstance(vec, list) and len(vec) > 0\"'"
 fi
 
+# 17. Browser runtime (in-cluster: CDP sidecar + app readiness + рестарты)
+log_section "17) Browser runtime (CDP + рестарты)"
+BROWSER_POD=$($K get pod -n "$PLATFORM_NS" -l app=browser \
+  -o jsonpath='{.items[0].metadata.name}' 2>/dev/null || true)
+if [ -z "$BROWSER_POD" ]; then
+  log_warn "под browser не найден — секция пропущена"
+else
+  check_step_with_output \
+    "chromium-cdp GET /json/version (in-cluster)" \
+    "$K exec -n $PLATFORM_NS $BROWSER_POD -c chromium-cdp -- \
+      wget -q -O- http://127.0.0.1:9222/json/version >/dev/null"
+  check_step_with_output \
+    "browser app GET /browser/api/v1/health/cdp (in-cluster)" \
+    "$K exec -n $PLATFORM_NS $BROWSER_POD -c browser -- \
+      curl -fsS --max-time 15 http://127.0.0.1:8009/browser/api/v1/health/cdp >/dev/null"
+  # Высокий счётчик рестартов = death-loop (OOM app / segfault Chromium). Порог 5.
+  for c in browser chromium-cdp; do
+    RESTARTS=$($K get pod "$BROWSER_POD" -n "$PLATFORM_NS" \
+      -o jsonpath="{.status.containerStatuses[?(@.name=='$c')].restartCount}" 2>/dev/null || echo "")
+    if [ -z "$RESTARTS" ]; then
+      log_error "browser pod: контейнер $c не найден"
+    elif [ "$RESTARTS" -le 5 ]; then
+      log_ok "контейнер $c рестартов: $RESTARTS (<= 5)"
+    else
+      log_error "контейнер $c рестартов: $RESTARTS (> 5 — death-loop?)"
+    fi
+  done
+fi
+
 # Итог
 print_summary

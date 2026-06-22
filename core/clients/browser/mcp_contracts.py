@@ -69,3 +69,10 @@ class ToolCloseSessionArgs(BaseModel):
     model_config: ClassVar[ConfigDict] = ConfigDict(extra="forbid")
 
     session_id: str
+
+
+class ToolSaveStateArgs(BaseModel):
+    model_config: ClassVar[ConfigDict] = ConfigDict(extra="forbid")
+
+    session_id: str
+    shared_storage_key: str

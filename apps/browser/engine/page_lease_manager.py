@@ -29,7 +29,10 @@ from apps.browser.engine.types import (
     ContextSignature,
     SessionMode,
 )
+from core.logging import get_logger
 from core.types import JsonObject
+
+logger = get_logger(__name__)
 
 ConsoleHandler = Callable[[ConsoleMessage], None]
 PageErrorHandler = Callable[[PlaywrightError], None]
@@ -156,7 +159,10 @@ class PageLeaseManager:
         context_factory: ContextFactory,
         *,
         page_event_logger: PageEventLogger | None = None,
+        max_contexts: int = 0,
     ) -> None:
+        if max_contexts < 0:
+            raise ValueError("max_contexts должен быть >= 0 (0 — без лимита)")
         self._factory: ContextFactory = context_factory
         self._lock: asyncio.Lock = asyncio.Lock()
         self._leases: dict[int, LeaseRecord] = {}
@@ -164,9 +170,11 @@ class PageLeaseManager:
         self._allow_acquire: bool = True
         self._draining_endpoints: set[str] = set()
         self._session_contexts: dict[str, SessionContextRecord] = {}
-        # События для дебага страницы: console/pageerror/network.
-        # Пишутся в artifacts как sidecar и используются для triage.
-        self._console_events_by_session: dict[str, list[JsonObject]] = {}
+        # Потолок одновременно живых контекстов (0 — без лимита), чтобы рантайм
+        # не рос неограниченно.
+        self._max_contexts: int = max_contexts
+        # Debug-события страницы (console/pageerror/network) сразу уходят в sink
+        # (Loki через page_event_logger), без буфера в памяти.
         self._console_listeners_by_page: dict[int, PageEventListeners] = {}
         self._page_event_logger: PageEventLogger | None = page_event_logger
         self._navigate_locks: dict[str, asyncio.Lock] = {}
@@ -193,7 +201,6 @@ class PageLeaseManager:
     def _append_console_event(self, session_id: str, event: JsonObject) -> None:
         if not session_id:
             raise ValueError("session_id обязателен")
-        self._console_events_by_session.setdefault(session_id, []).append(event)
         if self._page_event_logger is not None:
             payload: JsonObject = dict(event)
             payload["ts_ms"] = int(time.time() * 1000)
@@ -355,24 +362,6 @@ class PageLeaseManager:
             self._session_pages[session_id] = {new_pid}
         return new_page
 
-    def drain_console_events(self, session_id: str) -> list[JsonObject]:
-        """
-        Слить накопленные debug-события страницы для session_id и очистить буфер.
-
-        События включают:
-        - console
-        - pageerror
-        - requestfailed
-        - http_error (status >= 400)
-        """
-        if not session_id:
-            raise ValueError("session_id обязателен")
-        events = self._console_events_by_session.get(session_id)
-        if events is None or len(events) == 0:
-            return []
-        self._console_events_by_session[session_id] = []
-        return events
-
     def set_allow_acquire(self, value: bool) -> None:
         self._allow_acquire = value
 
@@ -425,6 +414,7 @@ class PageLeaseManager:
             ctx_rec = self._session_contexts.get(session_id)
         cold_start = ctx_rec is None
         if ctx_rec is None:
+            await self._enforce_context_ceiling()
             context = await self._factory.new_context(
                 browser,
                 endpoint_key,
@@ -545,7 +535,6 @@ class PageLeaseManager:
                 _ = self._human_takeovers.pop(session_id, None)
             if ctx_rec is not None:
                 await self._factory.close_context(ctx_rec.context)
-            _ = self._console_events_by_session.pop(session_id, None)
         _ = self._navigate_locks.pop(session_id, None)
 
     async def close_all(self) -> None:
@@ -593,6 +582,12 @@ class PageLeaseManager:
         for _, context in to_close:
             await self._factory.close_context(context)
 
+    async def evict_idle_contexts(self) -> None:
+        """
+        Публичная точка для фонового reaper: закрыть контексты с истёкшим warm idle TTL.
+        """
+        await self._evict_idle_contexts()
+
     async def _evict_idle_contexts(self) -> None:
         now = time.monotonic()
         async with self._lock:
@@ -607,12 +602,54 @@ class PageLeaseManager:
                 _ = self._session_contexts.pop(sid, None)
         for _, context in to_close:
             await self._factory.close_context(context)
+        if to_close:
+            logger.info("browser.lease.idle_contexts_evicted", count=len(to_close))
+
+    async def _enforce_context_ceiling(self) -> None:
+        """
+        Удержать число живых контекстов в пределах `_max_contexts`.
+
+        Перед созданием нового контекста освобождаем место за счёт самых старых
+        idle-контекстов (без активных страниц). Если свободных нет — это перегрузка
+        конкуренции, и мы падаем явной ошибкой, а не растём бесконечно.
+        """
+        if self._max_contexts <= 0:
+            return
+        to_close: list[BrowserContextHandle] = []
+        async with self._lock:
+            if len(self._session_contexts) < self._max_contexts:
+                return
+            overflow = len(self._session_contexts) - self._max_contexts + 1
+            idle = [
+                (sid, ctx)
+                for sid, ctx in self._session_contexts.items()
+                if len(self._session_pages.get(sid, set())) == 0
+            ]
+            idle.sort(key=lambda item: item[1].idle_deadline_monotonic or 0.0)
+            if len(idle) < overflow:
+                raise RuntimeError(
+                    f"Достигнут потолок контекстов ({self._max_contexts}): "
+                    + f"активных без idle-резерва, освободить нельзя (нужно {overflow}, idle {len(idle)})"
+                )
+            for sid, ctx in idle[:overflow]:
+                _ = self._session_contexts.pop(sid, None)
+                to_close.append(ctx.context)
+        for context in to_close:
+            await self._factory.close_context(context)
+        logger.info(
+            "browser.lease.context_ceiling_evicted",
+            count=len(to_close),
+            max_contexts=self._max_contexts,
+        )
 
     def active_lease_count_for_endpoint(self, endpoint_key: str) -> int:
         return sum(1 for rec in self._leases.values() if rec.endpoint_key == endpoint_key)
 
     def total_active_leases(self) -> int:
         return len(self._leases)
+
+    def total_active_contexts(self) -> int:
+        return len(self._session_contexts)
 
     async def get_page_for_session(self, session_id: str) -> BrowserPage:
         """

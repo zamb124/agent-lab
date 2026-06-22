@@ -52,7 +52,6 @@ def _domain() -> CrawlDomain:
         domain="example.com",
         domain_rank=None,
         category="unknown",
-        crawl_policy="sitemap_only",
         status="active",
         last_discovered_at=None,
         last_crawled_at=None,

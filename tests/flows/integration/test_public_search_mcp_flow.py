@@ -8,6 +8,11 @@ from apps.flows.src.services.mcp_sync import sync_mcp_server_tools
 from core.integrations.mcp import mcp_tool_reference_id
 from tests.search.conftest import make_search_index_slug
 
+# Search MCP system context требует bootstrap system-admin (ensure_platform_search_worker_prerequisites
+# — autouse session fixture в tests/search/conftest.py). Без регистрации плагина autouse-фикстура не
+# срабатывает для тестов под tests/flows/, и MCP RPC падает "system admin user is required".
+pytest_plugins = ["tests.search.conftest"]
+
 
 async def _ingest_runet_marker(
     rag_client,
@@ -119,6 +124,7 @@ def _captured_tool_names(calls: list[dict[str, Any]]) -> set[str]:
 @pytest.mark.timeout(180, func_only=True)
 async def test_public_search_flow_calls_search_mcp_without_monkeypatches(
     search_service,
+    rag_service,
     rag_client,
     rag_worker,
     provider_litserve_service,
@@ -129,7 +135,9 @@ async def test_public_search_flow_calls_search_mcp_without_monkeypatches(
     mock_llm_capture,
     unique_id,
 ) -> None:
-    _ = search_service, rag_worker, provider_litserve_service
+    # rag_service (HTTP :9002) обязателен: search MCP index_search ходит в RAG по HTTP,
+    # а rag_client — только in-process ASGI и сервер не поднимает.
+    _ = search_service, rag_service, rag_worker, provider_litserve_service
     marker = f"public_search_runet_marker_{unique_id}"
     doc_text = await _ingest_runet_marker(
         rag_client,
@@ -423,6 +431,7 @@ async def test_public_search_source_branch_calls_browser_tool_without_builtin_by
 @pytest.mark.timeout(180, func_only=True)
 async def test_public_search_runet_empty_index_honest(
     search_service,
+    rag_service,
     search_client,
     rag_client,
     rag_worker,
@@ -433,7 +442,8 @@ async def test_public_search_runet_empty_index_honest(
     mock_llm_capture,
     unique_id,
 ) -> None:
-    _ = search_service, rag_worker, provider_litserve_service
+    # rag_service (HTTP :9002) обязателен: search MCP index_search ходит в RAG по HTTP.
+    _ = search_service, rag_service, rag_worker, provider_litserve_service
     search_index_id = make_search_index_slug(f"empty_{unique_id}")
     rag_namespace_id = f"{search_index_id}:ns"
 

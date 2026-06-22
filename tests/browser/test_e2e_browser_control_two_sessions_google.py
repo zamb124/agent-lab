@@ -45,13 +45,12 @@ def _cdp_url() -> str:
     return cdp
 
 
-def _build_browser_app(*, cdp_url: str, artifacts_dir: str) -> object:
+def _build_browser_app(*, cdp_url: str) -> object:
     os.environ.pop("BROWSER__E2E_CDP_URL", None)
     os.environ.pop("BROWSER__E2E_LIGHTPANDA", None)
     os.environ.pop("BROWSER__E2E_LIGHTPANDA_CDP_URL", None)
 
     os.environ["BROWSER__CDP_URL"] = cdp_url
-    os.environ["BROWSER__ARTIFACTS_DIR"] = artifacts_dir
 
     from apps.browser.config import reset_browser_settings
     from apps.browser.container import reset_browser_container
@@ -169,7 +168,7 @@ async def test_browser_control_http_two_sessions_google_search_artifacts() -> No
     artifacts_dir = f"artifacts/browser_e2e_two_sessions_google_{uid}"
     step_root = Path(artifacts_dir) / "steps"
 
-    app = _build_browser_app(cdp_url=_cdp_url(), artifacts_dir=artifacts_dir)
+    app = _build_browser_app(cdp_url=_cdp_url())
 
     async with app.router.lifespan_context(app):
         async with AsyncClient(transport=ASGITransport(app=app), base_url="http://testserver") as ac:
@@ -266,9 +265,3 @@ async def test_browser_control_http_two_sessions_google_search_artifacts() -> No
                 close_res = await ac.delete(f"/browser/api/v1/control/sessions/{sid}")
                 assert close_res.status_code == 200, close_res.text
                 _write_json(step_dir / "S99_close.json", close_res.json())
-
-                # Артефакты runtime: service-side лог вызовов по шагам.
-                events_dir = Path(artifacts_dir) / "sessions" / sid / "events"
-                assert events_dir.exists(), f"events_dir отсутствует: {events_dir}"
-                events = sorted(p for p in events_dir.iterdir() if p.suffix == ".json")
-                assert len(events) >= 6, f"Ожидались event artifacts, найдено: {len(events)}"

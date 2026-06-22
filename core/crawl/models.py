@@ -18,41 +18,7 @@ CrawlUrlStatus = Literal["pending", "fetching", "indexed", "failed", "skipped"]
 CrawlSeedSource = Literal["tranco", "manual", "cloudflare_radar"]
 CrawlFetchTransport = Literal["http", "browser"]
 
-CrawlContentTypeHint = Literal[
-    "article",
-    "news",
-    "blog",
-    "product",
-    "documentation",
-    "tutorial",
-    "guide",
-    "faq",
-    "review",
-    "interview",
-    "opinion",
-    "press_release",
-    "research",
-    "case_study",
-    "changelog",
-    "support",
-    "catalog",
-    "landing",
-    "reference",
-    "wiki",
-    "tool",
-    "forum",
-    "legal",
-    "event",
-    "recipe",
-    "obituary",
-    "report",
-    "transcript",
-    "directory",
-    "portfolio",
-    "other",
-]
-
-CrawlPageContentType = Literal[
+CrawlContentType = Literal[
     "article",
     "news",
     "blog",
@@ -88,6 +54,10 @@ CrawlPageContentType = Literal[
 
 CrawlPageAudience = Literal["general", "professional", "developer", "consumer", "internal"]
 
+# Дефолтные фильтры обхода: служебные пути и бинарные расширения, бесполезные для индекса.
+DEFAULT_CRAWL_EXCLUDE_URL_PATTERNS: list[str] = [r"/(cart|checkout|login|auth|search)(/|$)"]
+DEFAULT_CRAWL_EXCLUDE_EXTENSIONS: list[str] = ["pdf", "zip", "jpg", "jpeg", "png", "gif"]
+
 CrawlPageFreshnessRelevance = Literal["evergreen", "time_sensitive", "archival"]
 
 CrawlDatePrecision = Literal["day", "month", "year"]
@@ -106,7 +76,7 @@ class CrawlStructuralSignals(StrictBaseModel):
     publisher: str | None = None
     og_image_url: str | None = None
     language: str | None = None
-    content_type_hint: CrawlContentTypeHint | None = None
+    content_type_hint: CrawlContentType | None = None
     category_hints: list[str] = Field(default_factory=list)
     topic_hints: list[str] = Field(default_factory=list)
 
@@ -123,7 +93,7 @@ class CrawlFetchResult(StrictBaseModel):
 
 
 class CrawlPageFilterMetadata(StrictBaseModel):
-    content_type: CrawlPageContentType
+    content_type: CrawlContentType
     date_published: date | None = None
     date_modified: date | None = None
     date_precision: CrawlDatePrecision | None = None
@@ -282,6 +252,9 @@ class CrawlProfile(StrictBaseModel):
     browser_fallback_enabled: bool
     sitemap_stale_after_seconds: int
     denylist_domains: list[str] = Field(default_factory=list)
+    include_url_patterns: list[str] = Field(default_factory=list)
+    exclude_url_patterns: list[str] = Field(default_factory=list)
+    exclude_extensions: list[str] = Field(default_factory=list)
     llm_enrichment_enabled: bool = False
     enrichment_model: str | None = None
     created_at: datetime
@@ -306,6 +279,30 @@ class CrawlProfileCreateRequest(StrictBaseModel):
     browser_fallback_enabled: bool = True
     sitemap_stale_after_seconds: int = Field(default=86400, ge=3600)
     denylist_domains: list[str] = Field(default_factory=list)
+    include_url_patterns: list[str] = Field(default_factory=list)
+    exclude_url_patterns: list[str] = Field(
+        default_factory=lambda: list(DEFAULT_CRAWL_EXCLUDE_URL_PATTERNS)
+    )
+    exclude_extensions: list[str] = Field(
+        default_factory=lambda: list(DEFAULT_CRAWL_EXCLUDE_EXTENSIONS)
+    )
+
+
+class CrawlProfilePatchRequest(StrictBaseModel):
+    enabled: bool | None = None
+    refresh_interval_seconds: int | None = Field(default=None, ge=60)
+    max_urls_per_domain_per_tick: int | None = Field(default=None, ge=1)
+    max_domains_per_tick: int | None = Field(default=None, ge=1)
+    max_urls_per_batch: int | None = Field(default=None, ge=1)
+    http_concurrency: int | None = Field(default=None, ge=1)
+    browser_fallback_enabled: bool | None = None
+    sitemap_stale_after_seconds: int | None = Field(default=None, ge=3600)
+    denylist_domains: list[str] | None = None
+    include_url_patterns: list[str] | None = None
+    exclude_url_patterns: list[str] | None = None
+    exclude_extensions: list[str] | None = None
+    llm_enrichment_enabled: bool | None = None
+    enrichment_model: str | None = None
 
 
 class CrawlDomain(StrictBaseModel):
@@ -314,14 +311,34 @@ class CrawlDomain(StrictBaseModel):
     domain: str
     domain_rank: int | None = None
     category: str
-    crawl_policy: str
     status: CrawlDomainStatus
+    refresh_interval_seconds: int | None = None
+    include_url_patterns: list[str] = Field(default_factory=list)
+    exclude_url_patterns: list[str] = Field(default_factory=list)
     last_discovered_at: datetime | None = None
     last_crawled_at: datetime | None = None
     next_crawl_after: datetime
     last_error: str | None = None
     created_at: datetime
     updated_at: datetime
+
+
+class CrawlDomainCreateRequest(StrictBaseModel):
+    domain: str = Field(..., min_length=1, max_length=255)
+    category: str = Field(default="manual", min_length=1, max_length=32)
+    refresh_interval_seconds: int | None = Field(default=None, ge=60)
+    seed_urls: list[str] = Field(default_factory=list, max_length=500)
+
+
+class CrawlDomainPatchRequest(StrictBaseModel):
+    status: CrawlDomainStatus | None = None
+    refresh_interval_seconds: int | None = Field(default=None, ge=60)
+    include_url_patterns: list[str] | None = None
+    exclude_url_patterns: list[str] | None = None
+
+
+class CrawlUrlAddRequest(StrictBaseModel):
+    urls: list[str] = Field(..., min_length=1, max_length=500)
 
 
 class CrawlUrl(StrictBaseModel):
@@ -338,6 +355,8 @@ class CrawlUrl(StrictBaseModel):
     crawl_status: CrawlUrlStatus
     fetch_transport: CrawlFetchTransport | None = None
     document_id: str | None = None
+    fetch_attempts: int = 0
+    next_retry_after: datetime | None = None
     last_error: str | None = None
     last_crawled_at: datetime | None = None
     created_at: datetime

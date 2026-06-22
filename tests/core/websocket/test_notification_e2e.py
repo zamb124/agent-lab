@@ -71,6 +71,24 @@ def _expected_event_type(service: str, notification_type: NotificationType) -> s
     return f"notify/{service}/{notification_type.value}_received"
 
 
+async def _recv_pong(ws, timeout: float = 5.0) -> None:
+    """Дождаться pong на ping, пропуская push-события канала уведомлений.
+
+    Сокет `/notifications` несёт и request-reply (ping->pong), и push-события. Параллельные
+    тесты под общим system_user_id и общим crm_service могут доставить чужой push между ping и
+    pong, поэтому ждём именно литерал pong, отбрасывая JSON-фреймы событий.
+    """
+    deadline = time.monotonic() + timeout
+    while True:
+        remaining = deadline - time.monotonic()
+        if remaining <= 0:
+            raise AssertionError("Не получен pong на ping")
+        message = await asyncio.wait_for(ws.recv(), timeout=remaining)
+        text = message.decode() if isinstance(message, bytes) else message
+        if text == "pong":
+            return
+
+
 @pytest.mark.asyncio
 async def test_single_websocket_notification(crm_client, ws_cookie_system, system_user_id, crm_service):
     """Одно WebSocket подключение получает уведомление."""
@@ -173,8 +191,7 @@ async def test_websocket_heartbeat(crm_client, ws_cookie_system, system_user_id,
 
     async with websockets.connect(ws_url, additional_headers=ws_cookie_system) as ws:
         await ws.send("ping")
-        response = await asyncio.wait_for(ws.recv(), timeout=5)
-        assert response == "pong"
+        await _recv_pong(ws, timeout=5)
 
 
 @pytest.mark.asyncio
@@ -186,13 +203,11 @@ async def test_websocket_reconnection(crm_client, ws_cookie_system, system_user_
 
     async with websockets.connect(ws_url, additional_headers=ws_cookie_system) as ws1:
         await ws1.send("ping")
-        pong1 = await asyncio.wait_for(ws1.recv(), timeout=5)
-        assert pong1 == "pong"
+        await _recv_pong(ws1, timeout=5)
 
     async with websockets.connect(ws_url, additional_headers=ws_cookie_system) as ws2:
         await ws2.send("ping")
-        pong2 = await asyncio.wait_for(ws2.recv(), timeout=5)
-        assert pong2 == "pong"
+        await _recv_pong(ws2, timeout=5)
 
         await notify_user(
             user_id=system_user_id,

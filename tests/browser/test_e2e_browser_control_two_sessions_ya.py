@@ -47,14 +47,13 @@ def _cdp_url() -> str:
     return cdp
 
 
-def _build_browser_app(*, cdp_url: str, artifacts_dir: str) -> object:
+def _build_browser_app(*, cdp_url: str) -> object:
     # E2E-флаги не должны попадать в BrowserSettings (extra_forbid).
     os.environ.pop("BROWSER__E2E_CDP_URL", None)
     os.environ.pop("BROWSER__E2E_LIGHTPANDA", None)
     os.environ.pop("BROWSER__E2E_LIGHTPANDA_CDP_URL", None)
 
     os.environ["BROWSER__CDP_URL"] = cdp_url
-    os.environ["BROWSER__ARTIFACTS_DIR"] = artifacts_dir
 
     from apps.browser.config import reset_browser_settings
     from apps.browser.container import reset_browser_container
@@ -214,7 +213,7 @@ async def test_browser_control_http_two_sessions_ya_search_artifacts() -> None:
     artifacts_dir = f"artifacts/browser_e2e_two_sessions_ya_{uid}"
     step_root = Path(artifacts_dir) / "steps"
 
-    app = _build_browser_app(cdp_url=_cdp_url(), artifacts_dir=artifacts_dir)
+    app = _build_browser_app(cdp_url=_cdp_url())
 
     async with app.router.lifespan_context(app):
         async with AsyncClient(
