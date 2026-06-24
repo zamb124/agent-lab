@@ -36,6 +36,7 @@ import '@platform/lib/components/platform-date-picker.js';
 import '@platform/lib/components/platform-breadcrumbs.js';
 import '@platform/lib/components/glass-spinner.js';
 import '@platform/lib/components/layout/page-header.js';
+import '@platform/lib/components/platform-work-item-badge.js';
 import { formatPlatformDate } from '@platform/lib/utils/format-platform-date.js';
 import { openCrmLaraAssistant } from '../utils/open-crm-lara-assistant.js';
 import { readCrmListViewMode, writeCrmListViewMode } from '../utils/crm-list-view-mode-preference.js';
@@ -2243,6 +2244,18 @@ export class CRMEntitiesPage extends CRMNamespacePage {
                         })()}
                         <div class="card-title-row">
                             <h3 class="card-title">${entity.name}</h3>
+                            ${entity.entity_type === 'task'
+                                && typeof entity.work_item_id === 'string'
+                                && entity.work_item_id.length > 0
+                                ? html`<platform-work-item-badge
+                                    work-item-id=${entity.work_item_id}
+                                    .item=${entity}
+                                    variant="chip"
+                                    size="sm"
+                                    interactive
+                                    ?show-preview=${false}
+                                ></platform-work-item-badge>`
+                                : nothing}
                             ${showHeaderEnd ? nothing : this._semanticIndexListIcon(entity)}
                         </div>
                     </div>

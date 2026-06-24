@@ -50,6 +50,7 @@ import { CoreEvents } from '../events/contract.js';
 import { resolveAvatarImageSrc } from '../utils/placeholder-avatar.js';
 import './platform-button.js';
 import './platform-icon.js';
+import './platform-work-item-badge.js';
 
 const TEAM_MEMBERS_RESOURCE_NAME = 'frontend/team_members';
 const SYNC_SHARED_CHANNELS_OP_NAME = 'sync/shared_channels';
@@ -294,6 +295,7 @@ export class PlatformUserInfoModal extends PlatformFormModal {
         this._teamSel = this.select((s) => s.team);
         this._authSel = this.select((s) => s.auth);
         this._localeSel = this.select((s) => s.i18n.locale);
+        this._workCountsSel = this.select((s) => s.platformWorkItemCounts);
         this._loadDispatched = false;
         // Редактирование ролей живёт в фабрике сервиса frontend
         // (`frontend/team_members`). В сервисах без админ-панели команд
@@ -659,6 +661,7 @@ export class PlatformUserInfoModal extends PlatformFormModal {
                 </div>
             </div>
             ${this._renderSharedChannels()}
+            ${this._renderActiveTasks(user, isOwn)}
             ${showRolesEditor ? this._renderRolesEditor(user) : null}
         `;
     }
@@ -687,6 +690,22 @@ export class PlatformUserInfoModal extends PlatformFormModal {
                                     `)}
                                 </div>
                             `}
+            </div>
+        `;
+    }
+
+    _renderActiveTasks(user, isOwn) {
+        if (!isOwn) {
+            return null;
+        }
+        const counts = this._workCountsSel.value;
+        const total = typeof counts.total_open_count === 'number' ? counts.total_open_count : 0;
+        return html`
+            <div class="channels-section">
+                <div class="channels-section-title">${this.t('user_info_modal.active_tasks_title')}</div>
+                ${total <= 0
+                    ? html`<div class="channels-empty">${this.t('user_info_modal.active_tasks_empty')}</div>`
+                    : html`<a class="channels-empty" href="/worktracker/inbox">${this.t('user_info_modal.active_tasks_all')} (${total})</a>`}
             </div>
         `;
     }

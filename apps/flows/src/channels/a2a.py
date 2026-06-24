@@ -62,6 +62,7 @@ from core.tasks.push_notifications import (
     set_push_config,
 )
 from core.types import JsonObject, require_json_object
+from core.worktracker.models import UserActor, WorkItemCommentRole
 
 logger = get_logger(__name__)
 
@@ -303,15 +304,15 @@ class A2AChannel(BaseChannel):
         Маршрутизирует текст пользователя в dialog_log без запуска flow.
         Возвращает status-update input-required (задача остаётся в ожидании оператора).
         """
-        svc = self.container.operator_handoff_service
+        svc = self.container.work_item_service
         if self.context is None or self.context.active_company is None:
             raise ValueError("A2A takeover reply requires active_company in context")
 
-        file_ids: list[str] = []
+        comment_files: list[FileRef] = []
         if prepared.files_data:
             for file_ref in prepared.files_data:
                 if file_ref.file_id is not None:
-                    file_ids.append(file_ref.file_id)
+                    comment_files.append(file_ref)
                     continue
                 if file_ref.url is not None and file_ref.url.startswith(("http://", "https://")):
                     continue
@@ -321,22 +322,23 @@ class A2AChannel(BaseChannel):
                         + "локальные url в state.files не поддерживаются."
                     )
 
-        operator_task_id = prepared.takeover_operator_task_id
-        if operator_task_id is None:
-            raise ValueError("takeover_operator_task_id is required for takeover user reply")
+        work_item_id = prepared.takeover_work_item_id
+        if work_item_id is None:
+            raise ValueError("takeover_work_item_id is required for takeover user reply")
 
-        await svc.receive_user_reply(
+        _ = await svc.add_comment(
             company_id=self.context.active_company.company_id,
-            task_id=operator_task_id,
+            work_item_id=work_item_id,
+            author=UserActor(user_id=prepared.user_id),
+            role=WorkItemCommentRole.USER,
             text=prepared.content,
-            user_id=prepared.user_id,
-            file_ids=file_ids if file_ids else None,
+            files=comment_files if comment_files else None,
         )
         logger.info(
-            "[on_message_stream] takeover user-reply routed to dialog_log, "
-            + "task_id=%s, operator_task=%s",
+            "[on_message_stream] takeover user-reply added as WorkItemComment, "
+            + "task_id=%s, work_item=%s",
             prepared.task_id,
-            operator_task_id,
+            work_item_id,
         )
         yield TaskStatusUpdateEvent(
             task_id=prepared.task_id,

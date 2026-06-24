@@ -34,7 +34,6 @@ export class FlowsMcpNodeEditor extends PlatformElement {
         graphNodes: { type: Array },
         previewExecutionState: { type: Object },
         dataflowNode: { type: Object },
-        expanded: { type: Boolean, reflect: true },
         embedded: { type: Boolean, reflect: true },
     };
 
@@ -104,7 +103,6 @@ export class FlowsMcpNodeEditor extends PlatformElement {
         this.graphNodes = null;
         this.previewExecutionState = null;
         this.dataflowNode = null;
-        this.expanded = false;
         this.embedded = false;
         this._servers = this.useResource('flows/mcp_servers', { autoload: true });
         this._tools = this.useResource('flows/tools', { autoload: false });
@@ -432,7 +430,6 @@ export class FlowsMcpNodeEditor extends PlatformElement {
                 .graphNodes=${this.graphNodes}
                 .previewExecutionState=${this.previewExecutionState}
                 .dataflowNode=${this.dataflowNode}
-                ?expanded=${this.expanded}
                 ?embedded=${this.embedded}
                 @change=${(e) => this.emit('change', e.detail)}
                 @delete-node=${(e) => this.emit('delete-node', e.detail)}

@@ -14,8 +14,8 @@ const pollTimeout = new Counter("stress_a2a_poll_timeout");
 const BASE_URL = (__ENV.STRESS_URL || "http://localhost:8001").replace(/\/+$/, "");
 const TOKEN = __ENV.TOKEN || __ENV.STRESS_TOKEN || "";
 const USE_MOCK = (__ENV.STRESS_USE_MOCK || "true").toLowerCase() !== "false";
-const MAX_POLLS = Number.parseInt(__ENV.STRESS_MAX_POLLS || "40", 10);
-const POLL_SLEEP_S = Number.parseFloat(__ENV.STRESS_POLL_SLEEP || "0.25");
+const MAX_POLLS = Number.parseInt(__ENV.STRESS_MAX_POLLS || "120", 10);
+const POLL_SLEEP_S = Number.parseFloat(__ENV.STRESS_POLL_SLEEP || "0.5");
 const PROFILE = __ENV.STRESS_PROFILE || "local";
 const RATE = Number.parseInt(__ENV.STRESS_RATE || "5", 10);
 const DURATION = __ENV.STRESS_DURATION || "2m";
@@ -49,32 +49,49 @@ export const options = {
   },
 };
 
+// Mock задаётся per-node (по node_id графа), потому что в одном run могут
+// исполняться разные llm-ноды и каждой нужны свои ответы. Значение для любой
+// сущности — список (FIFO), даже если ответ один. Code-ноды (classifier,
+// formatter, greeting_node) не мокаются — исполняются реально, они дёшевы.
 const CASES = [
   {
     flowId: "example_graph",
     branch: "default",
     text: "привет, проверь графовый маршрут",
+    mock: {},
     expectedStates: ["completed"],
   },
   {
     flowId: "example_graph",
     branch: "fast_track",
     text: "заказ 1042: нужен статус",
-    mock: { llm: [{ type: "text", content: "Заказ 1042 принят в обработку" }] },
+    mock: {
+      nodes: {
+        order_processor: [{ type: "text", content: "Заказ 1042 принят в обработку" }],
+      },
+    },
     expectedStates: ["completed"],
   },
   {
     flowId: "example_graph",
     branch: "orders_only",
     text: "жалоба на доставку",
-    mock: { llm: [{ type: "text", content: "Передаю обращение в общий процессор" }] },
+    mock: {
+      nodes: {
+        complaint_processor: [{ type: "text", content: "Жалоба зарегистрирована" }],
+      },
+    },
     expectedStates: ["completed"],
   },
   {
     flowId: "example_react",
     branch: "default",
     text: "Привет! Ответь коротко для нагрузочного теста.",
-    mock: { llm: [{ type: "text", content: "Привет! Stress response ready." }] },
+    mock: {
+      nodes: {
+        main: [{ type: "text", content: "Привет! Stress response ready." }],
+      },
+    },
     expectedStates: ["completed"],
   },
   {
@@ -82,8 +99,9 @@ const CASES = [
     branch: "direct_mode",
     text: "Собери короткую справку через subflow.",
     mock: {
-      llm: [{ type: "text", content: "Subflow stress response ready." }],
-      flows: { example_subflow: "Mock ответ вложенного subflow" },
+      nodes: {
+        direct_subflow: [{ type: "text", content: "Subflow stress response ready." }],
+      },
     },
     expectedStates: ["completed"],
   },
@@ -118,14 +136,14 @@ function metadata(testCase) {
     },
   };
   if (USE_MOCK) {
-    data.mock = {
+    const caseMock = testCase.mock || {};
+    data.__mock__ = {
       enabled: true,
       permission_groups: ["admin", "developers"],
-      llm: [{ type: "text", content: "Stress mock response" }],
-      tools: {},
-      flows: {},
-      nodes: {},
-      ...(testCase.mock || {}),
+      tools: caseMock.tools || {},
+      nodes: caseMock.nodes || {},
+      flows: caseMock.flows || {},
+      llm: caseMock.llm || [],
     };
   }
   return data;

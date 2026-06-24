@@ -6,6 +6,12 @@
  */
 
 const _SUPPORTED_LOCALES = Object.freeze(new Set(['ru', 'en']));
+const _CANONICAL_ISO_DATE = /^(\d{4})-(\d{2})-(\d{2})$/;
+const _CANONICAL_ISO_DATETIME = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})$/;
+
+function _pad2(value) {
+    return String(value).padStart(2, '0');
+}
 
 function _resolveLocale(locale) {
     if (typeof locale !== 'string' || locale.length === 0) {
@@ -69,4 +75,52 @@ export function formatPlatformDateTime(input, locale) {
  */
 export function formatPlatformTime(input, locale) {
     return formatPlatformDate(input, locale, { hour: '2-digit', minute: '2-digit' });
+}
+
+/**
+ * @param {string|null|undefined} value
+ * @returns {string}
+ */
+export function normalizeIsoDateTimeForField(value) {
+    if (value === null || value === undefined) {
+        return '';
+    }
+    if (typeof value !== 'string') {
+        throw new Error('normalizeIsoDateTimeForField: value must be string');
+    }
+    if (value.length === 0) {
+        return '';
+    }
+    if (_CANONICAL_ISO_DATETIME.test(value)) {
+        return value;
+    }
+    const parsed = _toDate(value);
+    if (parsed === null) {
+        throw new Error(`normalizeIsoDateTimeForField: invalid datetime: ${value}`);
+    }
+    return `${parsed.getFullYear()}-${_pad2(parsed.getMonth() + 1)}-${_pad2(parsed.getDate())}T${_pad2(parsed.getHours())}:${_pad2(parsed.getMinutes())}`;
+}
+
+/**
+ * @param {string|null|undefined} value
+ * @returns {string}
+ */
+export function normalizeIsoDateForField(value) {
+    if (value === null || value === undefined) {
+        return '';
+    }
+    if (typeof value !== 'string') {
+        throw new Error('normalizeIsoDateForField: value must be string');
+    }
+    if (value.length === 0) {
+        return '';
+    }
+    if (_CANONICAL_ISO_DATE.test(value)) {
+        return value;
+    }
+    const parsed = _toDate(value);
+    if (parsed === null) {
+        throw new Error(`normalizeIsoDateForField: invalid date: ${value}`);
+    }
+    return `${parsed.getFullYear()}-${_pad2(parsed.getMonth() + 1)}-${_pad2(parsed.getDate())}`;
 }

@@ -31,7 +31,7 @@ templates/
   10-postgres/                  # StatefulSet + Service + ConfigMap init
   11-redis/                     # StatefulSet + Service
   20-migrations-job.yaml        # helm hook post-install/post-upgrade
-  30-apps/                      # 9 application Deployments + Services через range
+  30-apps/                      # 11 application Deployments + Services через range
   40-workers/                   # 6 worker Deployments через range
   50-gpu/litserve.yaml          # nodeSelector: accelerator=nvidia-gpu
   60-external/                  # livekit, livekit-egress, coturn DaemonSet, onlyoffice
@@ -45,7 +45,7 @@ files/                          # ConfigMap источники (loki, tempo, all
 - образ `image.repository=ghcr.io/zamb124/agent-lab`; production deploy задаёт уникальный immutable `image.tag` (CI: `--set image.tag=$SHA`). `latest` для production запрещён: он ломает `SERVER__DEPLOYMENT_VERSION` и PWA-инвалидацию статики;
 - `masterNodeName: master` — куда прибиваются Postgres/Redis/Loki/Tempo;
 - `gpuNodeSelectorKey/Value: accelerator=nvidia-gpu` — куда прибивается LitServe;
-- `applications.<name>` (9 сервисов: flows/frontend/crm/rag/sync/office/scheduler-api/voice/browser) — порт, реплики, command;
+- `applications.<name>` (11 сервисов: flows/frontend/crm/rag/sync/worktracker/office/scheduler-api/voice/browser/search) — порт, реплики, command;
 - `workers.<name>` (6 воркеров) — реплики и command для TaskIQ;
 - `litserve`, `livekit`, `livekitEgress`, `coturn`, `onlyoffice`, `observability.{loki,tempo,grafana,alloy}`, `ingress.*`;
 - `platformSecrets` + `platformSecretName: platform-secrets` — Helm создаёт Secret из `templates/01-platform-secrets.yaml` при `platformSecrets.create=true`. Значения через `--set-json platformSecrets=...` из `deploy/scripts/helm_platform_secrets_json.sh` и CI. Namespace релиза создаётся `helm upgrade --install ... --create-namespace`.
@@ -85,6 +85,7 @@ Free-threaded build (cp314t) даёт shared interpreter без fork-копир�
 | crm | 8003 | 1 | `granian --interface asgi apps.crm.main:app …` |
 | rag | 8004 | 1 | `granian --interface asgi apps.rag.main:app …` |
 | sync | 8005 | 1 | `granian --interface asgi apps.sync.main:app …` |
+| worktracker | 8021 | 1 | `granian --interface asgi apps.worktracker.main:app …` |
 | scheduler-api | 8006 | 1 | `granian --interface asgi apps.scheduler.main:app …` |
 | office | 8008 | 1 | `granian --interface asgi apps.office.main:app …` |
 | voice | 8015 | 1 | `granian --interface asgi apps.voice.main:app …` |

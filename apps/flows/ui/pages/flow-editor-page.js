@@ -7,13 +7,12 @@
  *   .editor-shell:
  *     <flows-node-types-sidebar />    — drag-source типов нод
  *     .canvas-host:
- *       <flows-flow-canvas />         — native SVG canvas
- *       <flows-bottom-toolbar />      — floating pill снизу
+ *       <flows-flow-canvas />
+ *       <flows-bottom-toolbar />
+ *       <flows-execution-panel />
+ *       <flows-floating-panel /> — chrome property/resource panel (drag, resize, collapse)
  *     .editor-right-rail:
- *       <flows-flow-property-panel /> — лимиты и речь (по кнопке в сайдбаре над триггерами)
- *       <flows-floating-panel dock-stack> — chrome для ноды или ресурса
- *         <flows-property-panel /> / <flows-resource-property-panel />
- *   <flows-execution-panel />        — тестовый запуск (виден по флагу)
+ *       <flows-flow-property-panel /> — лимиты и речь (по кнопке в сайдбаре)
  */
 
 import { html, css } from 'lit';
@@ -69,10 +68,13 @@ export class FlowEditorPage extends PlatformPage {
                 position: relative;
                 display: flex;
                 flex-direction: column;
-                /* Содержит z-index детей (тулбар 6, execution 5): иначе они бьются с rail (5)
+                /* Содержит z-index детей (тулбар 6, execution 5, property panel 20): иначе они бьются с rail (5)
                    на уровне .editor-shell и перекрывают модалку/развёрнутую панель справа. */
                 isolation: isolate;
                 z-index: 0;
+            }
+            .canvas-host > flows-floating-panel {
+                z-index: 20;
             }
             .editor-right-rail {
                 position: absolute;
@@ -238,23 +240,29 @@ export class FlowEditorPage extends PlatformPage {
         }
     }
 
+    _panelHeaderForNode(nodeId, state) {
+        const branchData = isPlainObject(state.branchData) ? state.branchData : null;
+        const nodes = branchData && isPlainObject(branchData.nodes) ? branchData.nodes : null;
+        const node = nodes ? nodes[nodeId] : null;
+        if (!node) {
+            return null;
+        }
+        const meta = getNodeTypeMeta(node.type);
+        const title = typeof node.name === 'string' && node.name.length > 0 ? node.name : nodeId;
+        return {
+            icon: meta.icon,
+            title,
+            colorToken: getCategoryToken(meta.category),
+        };
+    }
+
     _panelHeader() {
         const state = asObject(this._editor.state);
-        const branchData = isPlainObject(state.branchData) ? state.branchData : null;
         if (state.selectedNodeId) {
-            const nodes = branchData && isPlainObject(branchData.nodes) ? branchData.nodes : null;
-            const node = nodes ? nodes[state.selectedNodeId] : null;
-            const meta = getNodeTypeMeta(node?.type);
-            const title = node && typeof node.name === 'string' && node.name.length > 0
-                ? node.name
-                : state.selectedNodeId;
-            return {
-                icon: meta.icon,
-                title,
-                colorToken: getCategoryToken(meta.category),
-            };
+            return this._panelHeaderForNode(state.selectedNodeId, state);
         }
         if (state.selectedResourceId) {
+            const branchData = isPlainObject(state.branchData) ? state.branchData : null;
             const resources = branchData && isPlainObject(branchData.resources) ? branchData.resources : null;
             const resource = resources ? resources[state.selectedResourceId] : null;
             const title = resource && typeof resource.name === 'string' && resource.name.length > 0
@@ -281,60 +289,113 @@ export class FlowEditorPage extends PlatformPage {
         this._nodeAiHelperOpen = !this._nodeAiHelperOpen;
     }
 
-    _onCloseFloatingPanel() {
+    _onCloseFloatingPanel(nodeId) {
+        if (typeof nodeId === 'string' && nodeId.length > 0) {
+            if (this._nodeAiHelperOpen && asObject(this._editor.state).selectedNodeId === nodeId) {
+                this._nodeAiHelperOpen = false;
+            }
+            this._editor.closePanel({ nodeId });
+            return;
+        }
         this._nodeAiHelperOpen = false;
         this._editor.closePanel({});
     }
 
-    _renderFloatingPanelDocked() {
+    _onPanelLayoutChange(nodeId, e) {
+        const layout = e.detail;
+        if (!layout || typeof layout !== 'object') {
+            return;
+        }
+        this._editor.setPropertyPanelLayout({ nodeId, layout });
+    }
+
+    _onPanelActivate(nodeId) {
+        this._editor.selectNode({ nodeId });
+    }
+
+    _renderNodeFloatingPanels(state) {
+        const openIds = Array.isArray(state.openNodePanelIds) ? state.openNodePanelIds : [];
+        if (openIds.length === 0) {
+            return '';
+        }
+        const layouts = isPlainObject(state.propertyPanelLayouts) ? state.propertyPanelLayouts : {};
+        const selectedNodeId = typeof state.selectedNodeId === 'string' ? state.selectedNodeId : '';
+        return openIds.map((nodeId) => {
+            const header = this._panelHeaderForNode(nodeId, state);
+            if (!header) {
+                return '';
+            }
+            const layout = isPlainObject(layouts[nodeId]) ? layouts[nodeId] : {};
+            const collapsed = layout.collapsed === true;
+            const isActive = nodeId === selectedNodeId && !collapsed;
+            const nodeAiOpen = Boolean(isActive && this._nodeAiHelperOpen);
+            return html`
+                <flows-floating-panel
+                    panel-id=${nodeId}
+                    header-icon=${header.icon}
+                    header-title=${header.title}
+                    color-token=${header.colorToken}
+                    .layout=${layout}
+                    ?show-backdrop=${isActive}
+                    ?ai-enabled=${isActive}
+                    ?ai-active=${nodeAiOpen}
+                    @layout-change=${(e) => this._onPanelLayoutChange(nodeId, e)}
+                    @activate=${() => this._onPanelActivate(nodeId)}
+                    @node-ai-helper-toggle=${this._onToggleNodeAiHelper}
+                    @close=${() => this._onCloseFloatingPanel(nodeId)}
+                >
+                    ${isActive && nodeAiOpen
+                        ? html`
+                            <flows-node-ai-helper
+                                .flowId=${this.flowId}
+                                .branchId=${this.branchId}
+                                .nodeId=${nodeId}
+                            ></flows-node-ai-helper>
+                        `
+                        : isActive
+                            ? html`<flows-property-panel
+                                .flowId=${this.flowId}
+                                .branchId=${this.branchId}
+                                .nodeId=${nodeId}
+                            ></flows-property-panel>`
+                            : ''}
+                </flows-floating-panel>
+            `;
+        });
+    }
+
+    _renderResourceFloatingPanel(state) {
         const header = this._panelHeader();
-        if (!header) return '';
-        const state = asObject(this._editor.state);
-        const nodeId = typeof state.selectedNodeId === 'string' ? state.selectedNodeId : '';
-        const nodeAiOpen = Boolean(nodeId && this._nodeAiHelperOpen);
+        if (!header || !state.selectedResourceId) {
+            return '';
+        }
         return html`
             <flows-floating-panel
-                dock-stack
+                panel-id=${`resource:${state.selectedResourceId}`}
                 header-icon=${header.icon}
                 header-title=${header.title}
                 color-token=${header.colorToken}
-                ?ai-enabled=${Boolean(nodeId)}
-                ?ai-active=${nodeAiOpen}
-                ?expanded=${state.panelExpanded}
-                @node-ai-helper-toggle=${this._onToggleNodeAiHelper}
-                @expand-change=${(e) => {
-                    const d = e.detail;
-                    if (d && typeof d.expanded === 'boolean') {
-                        this._editor.togglePanelExpanded({ expanded: d.expanded });
-                    } else {
-                        this._editor.togglePanelExpanded({});
-                    }
-                }}
-                @close=${this._onCloseFloatingPanel}
+                ?show-backdrop=${true}
+                @close=${() => this._onCloseFloatingPanel()}
             >
-                ${nodeAiOpen
-                    ? html`
-                        <flows-node-ai-helper
-                            .flowId=${this.flowId}
-                            .branchId=${this.branchId}
-                            .nodeId=${nodeId}
-                        ></flows-node-ai-helper>
-                    `
-                    : nodeId
-                        ? html`<flows-property-panel .flowId=${this.flowId} .branchId=${this.branchId}></flows-property-panel>`
-                    : html`<flows-resource-property-panel .flowId=${this.flowId}></flows-resource-property-panel>`}
+                <flows-resource-property-panel .flowId=${this.flowId}></flows-resource-property-panel>
             </flows-floating-panel>
         `;
     }
 
+    _renderPropertyPanel() {
+        const state = asObject(this._editor.state);
+        return html`
+            ${this._renderNodeFloatingPanels(state)}
+            ${this._renderResourceFloatingPanel(state)}
+        `;
+    }
+
     _renderRightRail() {
-        if (!this.flowId) return '';
+        if (!this.flowId || !this._flowSettingsOpen) return '';
         return html`
             <div class="editor-right-rail">
-                ${this._flowSettingsOpen
-                    ? html`<flows-flow-property-panel .flowId=${this.flowId} .branchId=${this.branchId}></flows-flow-property-panel>`
-                    : ''}
-                ${this._renderFloatingPanelDocked()}
+                <flows-flow-property-panel .flowId=${this.flowId} .branchId=${this.branchId}></flows-flow-property-panel>
             </div>
         `;
     }
@@ -363,6 +424,7 @@ export class FlowEditorPage extends PlatformPage {
                     <flows-flow-canvas .flowId=${this.flowId} .branchId=${this.branchId}></flows-flow-canvas>
                     <flows-bottom-toolbar></flows-bottom-toolbar>
                     <flows-execution-panel .flowId=${this.flowId} .branchId=${this.branchId}></flows-execution-panel>
+                    ${this._renderPropertyPanel()}
                 </div>
                 ${this._renderRightRail()}
             </div>

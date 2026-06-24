@@ -3,6 +3,8 @@ import {
     formatPlatformDate,
     formatPlatformDateTime,
     formatPlatformTime,
+    normalizeIsoDateForField,
+    normalizeIsoDateTimeForField,
 } from '../../../../core/frontend/static/lib/utils/format-platform-date.js';
 
 describe('formatPlatformDate', () => {
@@ -44,5 +46,30 @@ describe('formatPlatformTime', () => {
     it('только время', () => {
         const result = formatPlatformTime('2026-05-15T10:30:00Z', 'ru');
         expect(result).toMatch(/^\d{2}:\d{2}$/);
+    });
+});
+
+describe('normalizeIsoDateTimeForField', () => {
+    it('оставляет канонический формат без изменений', () => {
+        expect(normalizeIsoDateTimeForField('2026-06-24T21:00')).toBe('2026-06-24T21:00');
+    });
+
+    it('нормализует ISO с секундами и Z в локальное YYYY-MM-DDTHH:mm', () => {
+        const normalized = normalizeIsoDateTimeForField('2026-06-24T21:00:00Z');
+        expect(normalized).toMatch(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/);
+        expect(normalized).not.toContain('Z');
+    });
+
+    it('пустая строка для null/undefined/""', () => {
+        expect(normalizeIsoDateTimeForField(null)).toBe('');
+        expect(normalizeIsoDateTimeForField(undefined)).toBe('');
+        expect(normalizeIsoDateTimeForField('')).toBe('');
+    });
+});
+
+describe('normalizeIsoDateForField', () => {
+    it('нормализует datetime ISO к локальной дате', () => {
+        const normalized = normalizeIsoDateForField('2026-06-24T12:00:00Z');
+        expect(normalized).toMatch(/^\d{4}-\d{2}-\d{2}$/);
     });
 });

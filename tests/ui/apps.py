@@ -56,4 +56,12 @@ SERVICE_UI_REGISTRY: dict[str, ServiceUiSpec] = {
         shell_selector="sync-app",
         title="Sync Chat",
     ),
+    "office": ServiceUiSpec(
+        key="office",
+        port=9008,
+        spa_path="/documents/",
+        shell_selector="office-app",
+        title=None,
+        subdomain_prefix="system",
+    ),
 }

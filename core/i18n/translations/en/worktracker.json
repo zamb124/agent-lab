@@ -1,0 +1,208 @@
+{
+  "routes": {
+    "inbox": "Inbox",
+    "my": "My tasks",
+    "board": "Board",
+    "queues": "Queues",
+    "queue_detail": "Queue",
+    "work_item_detail": "Task"
+  },
+  "bottom_nav": {
+    "inbox": "Inbox",
+    "board": "Board",
+    "profile": "Profile"
+  },
+  "sidebar": {
+    "title": "Tasks",
+    "nav": {
+      "inbox": "Inbox",
+      "my": "My tasks",
+      "board": "Boards",
+      "queues": "Queues"
+    }
+  },
+  "inbox_page": {
+    "title": "Inbox",
+    "create_task": "Create task",
+    "assigned": "Assigned to me",
+    "section_assigned": "Assigned to you",
+    "queue_inbox": "Queue inbox",
+    "section_queue": "Queue inbox",
+    "claim": "Claim",
+    "complete": "Complete",
+    "empty_assigned": "No assigned tasks.",
+    "empty_queue": "No tasks in queue inbox."
+  },
+  "my_page": {
+    "title": "My tasks",
+    "create_task": "Create task",
+    "empty": "No open tasks assigned to you."
+  },
+  "queue_detail_page": {
+    "title": "Queue: {{name}}",
+    "inbox": "Queue inbox",
+    "members": "Members",
+    "label_member_user_id": "User ID",
+    "add_member": "Add member",
+    "remove_member": "Remove",
+    "empty_inbox": "No unclaimed tasks in this queue.",
+    "empty_members": "No members yet."
+  },
+  "work_item_card": {
+    "actions": "Actions",
+    "open": "Open",
+    "claim": "Claim",
+    "complete": "Complete",
+    "cancel": "Cancel"
+  },
+  "detail_panel": {
+    "title": "Task details",
+    "close": "Close",
+    "label_title": "Title",
+    "label_description": "Description",
+    "loading": "Loading…",
+    "label_state": "State",
+    "label_priority": "Priority",
+    "label_kind": "Kind",
+    "comments": "Comments",
+    "label_comment": "Add comment",
+    "add_comment": "Send",
+    "no_comments": "No comments yet.",
+    "claim": "Claim",
+    "complete": "Complete",
+    "cancel": "Cancel"
+  },
+  "detail_page": {
+    "open_full": "Open full page",
+    "section_activity": "Activity",
+    "section_properties": "Properties",
+    "activity": "Activity",
+    "properties": "Properties",
+    "description_placeholder": "Add description…",
+    "comment_placeholder": "Write a comment…",
+    "no_comments": "No comments yet.",
+    "open_properties": "Properties",
+    "id_copied": "Task ID copied",
+    "id_copy_failed": "Could not copy task ID",
+    "add_description": "Add a description…",
+    "resolution": "Resolution",
+    "section_attachments": "Attachments",
+    "section_variables": "Variables",
+    "comment_hint": "Ctrl+Enter to send",
+    "back": "Back",
+    "no_id": "Task ID is missing.",
+    "not_found": "Task not found.",
+    "unassigned": "Unassigned",
+    "label_state": "Status",
+    "label_priority": "Priority",
+    "label_assignee": "Assignee",
+    "label_due_date": "Due date",
+    "label_labels": "Labels",
+    "label_board": "Board",
+    "label_kind": "Kind",
+    "label_created": "Created",
+    "label_updated": "Updated"
+  },
+  "board_page": {
+    "title": "Tasks",
+    "create": "New task",
+    "create_task": "Create task",
+    "create_board": "Create board",
+    "settings": "Board settings",
+    "reorder_column": "Drag to reorder",
+    "empty": "No board or columns yet. Create a board to get started."
+  },
+  "board_picker": {
+    "placeholder": "Select board",
+    "empty": "No boards yet",
+    "create": "Create board"
+  },
+  "board_create_modal": {
+    "header": "New board",
+    "label_name": "Name",
+    "name_placeholder": "e.g. Engineering",
+    "submit": "Create",
+    "saving": "Saving…",
+    "cancel": "Cancel"
+  },
+  "board_settings_modal": {
+    "header": "Board settings",
+    "label_name": "Name",
+    "columns": "Columns",
+    "column_index": "Column {{index}}",
+    "column_label": "Column name",
+    "column_state": "Task status",
+    "add_column": "Add column",
+    "remove_column": "Remove column",
+    "reorder_column": "Drag to reorder",
+    "new_column_label": "New column",
+    "loading": "Loading…",
+    "submit": "Save",
+    "saving": "Saving…",
+    "cancel": "Cancel"
+  },
+  "queues_page": {
+    "title": "Queues",
+    "label_name": "Name",
+    "label_slug": "Slug",
+    "create": "Create queue",
+    "empty": "No queues yet."
+  },
+  "work_item_create_modal": {
+    "header": "New task",
+    "label_title": "Title",
+    "title_placeholder": "What needs to be done?",
+    "label_description": "Description",
+    "submit": "Create",
+    "saving": "Saving…",
+    "cancel": "Cancel"
+  },
+  "priority": {
+    "low": "Low",
+    "normal": "Normal",
+    "high": "High",
+    "urgent": "Urgent"
+  },
+  "kind": {
+    "generic": "Task",
+    "operator_handoff": "Operator",
+    "agent_job": "Agent",
+    "crm_activity": "CRM"
+  },
+  "state": {
+    "open": "Open",
+    "in_progress": "In progress",
+    "blocked": "Blocked",
+    "done": "Done",
+    "cancelled": "Cancelled",
+    "failed": "Failed"
+  },
+  "form": {
+    "title_required": "Enter a task title",
+    "board_name_required": "Enter a board name"
+  },
+  "toast": {
+    "work_item_created": "Task created",
+    "work_item_create_failed": "Failed to create task",
+    "work_item_updated": "Task updated",
+    "work_item_update_failed": "Failed to update task",
+    "work_item_claimed": "Task claimed",
+    "work_item_claim_failed": "Failed to claim task",
+    "work_item_completed": "Task completed",
+    "work_item_complete_failed": "Failed to complete task",
+    "work_item_cancelled": "Task cancelled",
+    "work_item_cancel_failed": "Failed to cancel task",
+    "work_item_assigned": "Task assigned",
+    "work_item_assign_failed": "Failed to assign task",
+    "board_created": "Board created",
+    "board_create_failed": "Failed to create board",
+    "board_updated": "Board updated",
+    "board_update_failed": "Failed to update board",
+    "queue_created": "Queue created",
+    "queue_create_failed": "Failed to create queue",
+    "queue_member_added": "Member added",
+    "queue_member_add_failed": "Failed to add member",
+    "queue_member_removed": "Member removed",
+    "queue_member_remove_failed": "Failed to remove member"
+  }
+}

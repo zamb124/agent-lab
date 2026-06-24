@@ -7,6 +7,7 @@ from typing import ClassVar, Literal, Self, TypeAlias
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
+from core.documents.viewer.models import DocumentOpenConfigResponse
 from core.pagination import ListResponse
 
 SpreadsheetCellValue: TypeAlias = str | int | float | bool | None
@@ -17,8 +18,11 @@ class OfficeDocumentItem(BaseModel):
     catalog_id: str
     title: str
     file_id: str
-    document_type: str
+    file_category: str
+    onlyoffice_document_type: str | None = None
+    file_size: int
     created_at: datetime
+    updated_at: datetime
     created_by_user_id: str
     created_by_display_name: str
     created_by_avatar_url: str | None = None
@@ -31,7 +35,8 @@ class OfficeDocumentCreateResponse(BaseModel):
     binding_id: str
     file_id: str
     catalog_id: str
-    document_type: str | None = None
+    file_category: str | None = None
+    onlyoffice_document_type: str | None = None
     title: str | None = None
     editor_url: str | None = None
 
@@ -47,7 +52,8 @@ class OfficeDocumentEditorSessionResponse(BaseModel):
     file_id: str
     catalog_id: str
     title: str
-    document_type: str
+    file_category: str
+    onlyoffice_document_type: str | None = None
     namespace: str
     editor_url: str
 
@@ -117,14 +123,92 @@ class OfficeDocumentRenameResponse(BaseModel):
     title: str
 
 
+class OfficeDocumentMoveRequest(BaseModel):
+    catalog_id: str = Field(min_length=1, max_length=64)
+
+
+class OfficeDocumentCopyRequest(BaseModel):
+    catalog_id: str = Field(min_length=1, max_length=64)
+    title: str | None = Field(default=None, min_length=1, max_length=500)
+
+
+class OfficeDocumentShareCreateRequest(BaseModel):
+    permission: Literal["view", "edit"] = "view"
+    expires_in_hours: int | None = Field(default=None, ge=1, le=8760)
+
+
+class OfficeDocumentShareItem(BaseModel):
+    share_id: str
+    binding_id: str
+    permission: str
+    share_url: str
+    expires_at: datetime | None = None
+    created_at: datetime
+
+
+class OfficeDocumentShareListResponse(BaseModel):
+    items: list[OfficeDocumentShareItem]
+
+
+class OfficeDocumentShareResolveResponse(BaseModel):
+    binding_id: str
+    title: str
+    permission: str
+    file_category: str
+    onlyoffice_document_type: str | None = None
+
+
+class OfficeDocumentPreviewResponse(BaseModel):
+    binding_id: str
+    preview_url: str | None = None
+    editor_mode: Literal["view"] = "view"
+
+
+class OfficeDocumentRevisionItem(BaseModel):
+    revision_id: str
+    revision_number: int
+    file_id: str
+    created_by_user_id: str
+    created_at: datetime
+
+
+class OfficeDocumentRevisionListResponse(BaseModel):
+    items: list[OfficeDocumentRevisionItem]
+
+
+class OfficeDocumentEventItem(BaseModel):
+    event_id: str
+    event_type: str
+    user_id: str
+    created_at: datetime
+
+
+class OfficeDocumentEventListResponse(BaseModel):
+    items: list[OfficeDocumentEventItem]
+
+
+class OfficeDocumentSearchResponse(BaseModel):
+    items: list[OfficeDocumentItem]
+
+
+class OfficeDocumentAiSummaryResponse(BaseModel):
+    binding_id: str
+    summary: str
+    enabled: bool
+
+
+class OfficeDocumentMetadataResponse(BaseModel):
+    binding_id: str
+    classification_label: str | None = None
+    retention_days: int | None = None
+
+
 class OfficeIntegrationStatusResponse(BaseModel):
     configured: bool
     detail: str = ""
 
 
-class OfficeEditorConfigResponse(BaseModel):
-    document_server_url: str
-    token: str
+OfficeEditorConfigResponse = DocumentOpenConfigResponse
 
 
 class OnlyOfficeCallbackResponse(BaseModel):
@@ -200,6 +284,7 @@ class OfficeNamespaceCreateResponse(BaseModel):
 class OfficeCatalogCreateRequest(BaseModel):
     title: str = Field(min_length=1, max_length=500)
     is_public: bool = True
+    parent_catalog_id: str | None = Field(default=None, max_length=64)
 
 
 class OfficeCatalogPatchRequest(BaseModel):
@@ -215,6 +300,7 @@ class OfficeCatalogPatchRequest(BaseModel):
 
 class OfficeCatalogListItem(BaseModel):
     catalog_id: str
+    parent_catalog_id: str | None = None
     title: str
     file_count: int
     owner_user_id: str
@@ -222,6 +308,8 @@ class OfficeCatalogListItem(BaseModel):
     owner_avatar_url: str | None = None
     is_owner: bool
     is_public: bool
+    rag_index_enabled: bool
+    rag_index_include_subcatalogs: bool
 
 
 OfficeCatalogListResponse = ListResponse[OfficeCatalogListItem]
@@ -229,6 +317,7 @@ OfficeCatalogListResponse = ListResponse[OfficeCatalogListItem]
 
 class OfficeCatalogDetailResponse(BaseModel):
     catalog_id: str
+    parent_catalog_id: str | None = None
     title: str
     owner_user_id: str
     owner_display_name: str
@@ -247,5 +336,124 @@ class OfficeCatalogMemberItem(BaseModel):
     avatar_url: str | None = None
 
 
+class OfficeCatalogRagIndexBindingItem(BaseModel):
+    file_id: str
+    binding_id: str
+    title: str
+    file_category: str
+
+
+class OfficeCatalogRagIndexStatusTotals(BaseModel):
+    ready: int = 0
+    pending: int = 0
+    failed: int = 0
+    absent: int = 0
+
+
+class OfficeCatalogRagIndexEnableResponse(BaseModel):
+    rag_namespace_id: str
+    initial_task_id: str | None = None
+
+
+class OfficeCatalogRagIndexDisableResponse(BaseModel):
+    success: bool = True
+
+
+class OfficeCatalogRagIndexRebuildResponse(BaseModel):
+    task_id: str
+
+
+class OfficeCatalogRagIndexStatusResponse(BaseModel):
+    enabled: bool
+    rag_namespace_id: str
+    include_subcatalogs: bool
+    totals: OfficeCatalogRagIndexStatusTotals
+    rag_index_updated_at: datetime | None = None
+
+
+class OfficeCatalogRagIndexSettingsPatchRequest(BaseModel):
+    include_subcatalogs: bool
+
+
+class OfficeCatalogRagIndexSettingsResponse(BaseModel):
+    include_subcatalogs: bool
+
+
+class OfficeCatalogSemanticSearchRequest(BaseModel):
+    query: str = Field(min_length=1, max_length=500)
+    limit: int = Field(default=20, ge=1, le=50)
+
+
+class OfficeCatalogSemanticSearchHit(BaseModel):
+    binding_id: str
+    file_id: str
+    catalog_id: str
+    catalog_title: str
+    title: str
+    snippet: str
+    score: float
+
+
+class OfficeCatalogSemanticSearchResponse(BaseModel):
+    query: str
+    include_subcatalogs: bool
+    catalog_ids: list[str]
+    items: list[OfficeCatalogSemanticSearchHit]
+
+
 class OfficeCatalogMembersResponse(BaseModel):
     members: list[OfficeCatalogMemberItem]
+
+
+OfficeLinkPermission = Literal["view", "edit"]
+OfficeAccessResourceKind = Literal["catalog", "binding"]
+
+
+class OfficeResourceAccessMemberItem(BaseModel):
+    user_id: str
+
+
+class OfficeResourceAccessResponse(BaseModel):
+    resource_kind: OfficeAccessResourceKind
+    resource_id: str
+    company_visible: bool
+    link_enabled: bool
+    link_permission: OfficeLinkPermission
+    public_url: str | None = None
+    members: list[OfficeResourceAccessMemberItem]
+
+
+class OfficeResourceAccessPatchRequest(BaseModel):
+    company_visible: bool | None = None
+    link_enabled: bool | None = None
+    link_permission: OfficeLinkPermission | None = None
+    member_user_ids: list[str] | None = None
+
+
+class OfficeResourceAccessRotateLinkResponse(BaseModel):
+    public_url: str
+
+
+class OfficePublicResolveResponse(BaseModel):
+    resource_kind: OfficeAccessResourceKind
+    resource_id: str
+    title: str
+    link_permission: OfficeLinkPermission
+    file_id: str | None = None
+    catalog_id: str | None = None
+    binding_id: str | None = None
+
+
+class OfficePublicCatalogItem(BaseModel):
+    binding_id: str
+    title: str
+    file_id: str
+    file_category: str
+    onlyoffice_document_type: str | None = None
+    link_permission: OfficeLinkPermission
+
+
+class OfficePublicCatalogItemsResponse(BaseModel):
+    catalog_id: str
+    title: str
+    items: list[OfficePublicCatalogItem]

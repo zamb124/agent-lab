@@ -14,7 +14,7 @@
 import { html, css, nothing } from 'lit';
 import { PlatformPage } from '@platform/lib/base/PlatformPage.js';
 import '@platform/lib/components/platform-breadcrumbs.js';
-import '@platform/lib/components/platform-onlyoffice-host.js';
+import '@platform/lib/components/platform-document-viewer-host.js';
 
 const BAD_BINDING_PATTERNS = [/\//, /\.\./, /\.html?$/i, /^\s*$/];
 
@@ -47,30 +47,34 @@ export class OfficeDocumentEditorPage extends PlatformPage {
                 min-width: 0;
                 min-height: 0;
             }
-            .breadcrumbs-wrap {
-                padding: var(--space-2) var(--space-3) 0;
-                flex-shrink: 0;
-            }
-            .toolbar {
+            .page-header {
                 display: flex;
                 align-items: center;
-                gap: var(--space-2);
+                gap: var(--space-3);
                 padding: var(--space-2) var(--space-3);
                 background: var(--glass-solid-medium);
                 border-bottom: 1px solid var(--glass-border-subtle);
                 flex-shrink: 0;
+                min-width: 0;
             }
-            .toolbar .back {
+            .page-header platform-breadcrumbs {
+                flex: 1;
+                min-width: 0;
+            }
+            .page-header .back {
                 background: transparent;
                 border: none;
                 color: var(--text-secondary);
                 cursor: pointer;
                 padding: var(--space-1) var(--space-2);
-                display: inline-flex; align-items: center;
+                display: inline-flex;
+                align-items: center;
                 gap: var(--space-2);
                 font-size: var(--text-sm);
+                flex-shrink: 0;
+                white-space: nowrap;
             }
-            .toolbar .back:hover { color: var(--text-primary); }
+            .page-header .back:hover { color: var(--text-primary); }
             .editor-area { flex: 1; display: flex; min-height: 0; }
             :host([embedded]) .editor-area,
             :host-context([embedded]) .editor-area {
@@ -132,10 +136,18 @@ export class OfficeDocumentEditorPage extends PlatformPage {
     }
 
     _docTitle() {
-        const config = this._editor.lastResult;
-        if (!config || !config.document) return '';
-        const title = config.document.title;
-        return typeof title === 'string' && title.length > 0 ? title : '';
+        const openConfig = this._editor.lastResult;
+        if (!openConfig || typeof openConfig.title !== 'string') return '';
+        return openConfig.title.length > 0 ? openConfig.title : '';
+    }
+
+    _renderPageHeader() {
+        return html`
+            <div class="page-header">
+                <button class="back" type="button" @click=${this._back}>← ${this.t('editor.back')}</button>
+                <platform-breadcrumbs compact current-label=${this._docTitle()}></platform-breadcrumbs>
+            </div>
+        `;
     }
 
     render() {
@@ -144,37 +156,23 @@ export class OfficeDocumentEditorPage extends PlatformPage {
         }
         if (this._editorError) {
             return html`
-                ${this.embedded ? nothing : html`
-                    <div class="breadcrumbs-wrap">
-                        <platform-breadcrumbs current-label=${this._docTitle()}></platform-breadcrumbs>
-                    </div>
-                    <div class="toolbar">
-                        <button class="back" type="button" @click=${this._back}>← ${this.t('editor.back')}</button>
-                    </div>
-                `}
+                ${this.embedded ? nothing : this._renderPageHeader()}
                 <div class="error">${this._editorError}</div>
             `;
         }
-        const config = this._editor.lastResult;
-        const showLoading = this._editor.busy && !config;
+        const openConfig = this._editor.lastResult;
+        const showLoading = this._editor.busy && !openConfig;
         return html`
-            ${this.embedded ? nothing : html`
-                <div class="breadcrumbs-wrap">
-                    <platform-breadcrumbs current-label=${this._docTitle()}></platform-breadcrumbs>
-                </div>
-                <div class="toolbar">
-                    <button class="back" type="button" @click=${this._back}>← ${this.t('editor.back')}</button>
-                </div>
-            `}
+            ${this.embedded ? nothing : this._renderPageHeader()}
             <div class="editor-area">
                 ${showLoading
                     ? html`<div class="loading">${this.t('editor.loading')}</div>`
-                    : (config
-                        ? html`<platform-onlyoffice-host
+                    : (openConfig
+                        ? html`<platform-document-viewer-host
                                 .bindingId=${this.bindingId}
-                                .config=${config}
+                                .openConfig=${openConfig}
                                 @editor-error=${this._onEditorError}
-                            ></platform-onlyoffice-host>`
+                            ></platform-document-viewer-host>`
                         : nothing)}
             </div>
         `;

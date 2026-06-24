@@ -109,9 +109,37 @@ function editorConfigFor(fileId, title = `${fileId}.docx`) {
         },
     };
     return {
-        document_server_url: DOC_SERVER_URL,
-        token: `e30.${base64urlJson(claims)}.sig`,
+        handler: 'onlyoffice',
+        binding_id: fileId,
+        file_id: fileId,
+        title,
+        original_name: title,
+        content_type: DOCX_MIME,
+        file_category: 'office_doc',
+        onlyoffice_document_type: 'word',
+        download_url: null,
+        capabilities: {
+            view: true,
+            edit: true,
+            preview: true,
+            sync_on_close: true,
+            download: true,
+            server_mutations: true,
+        },
+        onlyoffice: {
+            document_server_url: DOC_SERVER_URL,
+            token: `e30.${base64urlJson(claims)}.sig`,
+        },
     };
+}
+
+function queryDocumentViewerHost(modal) {
+    return modal.shadowRoot?.querySelector('platform-document-viewer-host') || null;
+}
+
+function queryOnlyOfficeHost(modal) {
+    const viewerHost = queryDocumentViewerHost(modal);
+    return viewerHost?.shadowRoot?.querySelector('platform-onlyoffice-host') || null;
 }
 
 function jsonResponse(body, status = 200) {
@@ -322,10 +350,10 @@ async function waitForViewerCount(count) {
 
 async function waitForOnlyOfficeIframe(modal) {
     await waitUntil(
-        () => modal.shadowRoot?.querySelector('platform-onlyoffice-host'),
+        () => queryOnlyOfficeHost(modal),
         'onlyoffice host mounted',
     );
-    const host = modal.shadowRoot.querySelector('platform-onlyoffice-host');
+    const host = queryOnlyOfficeHost(modal);
     await elementUpdated(host);
     await waitUntil(
         () => Boolean(host.config?.token),
@@ -443,7 +471,7 @@ describe('platform-file-viewer-modal global viewer', () => {
         expect(first.shadowRoot.querySelector('platform-icon[file-icon]')).to.exist;
         expect(first.shadowRoot.querySelector('.header-buttons .header-btn:first-child platform-icon').name).to.equal('fullscreen');
         expect(getComputedStyle(first.shadowRoot.querySelector('.modal-scrim')).display).to.equal('none');
-        expect(first.shadowRoot.querySelector('platform-onlyoffice-host').suspended).to.equal(true);
+        expect(first.shadowRoot.querySelector('platform-document-viewer-host').suspended).to.equal(true);
         expect(firstIframe.style.pointerEvents).to.equal('none');
         const hit = document.elementFromPoint(48, 40);
         expect(hit === underlay || underlay.contains(hit)).to.equal(true);

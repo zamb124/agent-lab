@@ -19,6 +19,11 @@ export class OfficeCatalogCreateModal extends PlatformFormModal {
     static modalKind = 'office.catalog_create';
     static i18nNamespace = 'documents';
 
+    static properties = {
+        ...PlatformFormModal.properties,
+        parentCatalogId: { type: String },
+    };
+
     static styles = [
         ...PlatformFormModal.styles,
         css`
@@ -45,13 +50,18 @@ export class OfficeCatalogCreateModal extends PlatformFormModal {
         super();
         this.size = 'sm';
         this.headerSavePrimary = true;
+        this.parentCatalogId = '';
         this._catalogs = this.useResource(CATALOGS_NAME);
         this._form = this.useForm(FORM_NAME);
     }
 
     connectedCallback() {
         super.connectedCallback();
-        this._form.openForm({ title: '', is_public: true });
+        this._form.openForm({
+            title: '',
+            is_public: true,
+            parent_catalog_id: typeof this.parentCatalogId === 'string' ? this.parentCatalogId : '',
+        });
         this.useEvent(this._catalogs.resource.events.CREATED, () => this.closeAfterSave());
     }
 

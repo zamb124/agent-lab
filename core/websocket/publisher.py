@@ -43,7 +43,8 @@ class NotificationType(StrEnum):
     CALENDAR_NEW_EVENT = "calendar_new_event"
     CALENDAR_SYNC_MEETING_REMINDER = "calendar_sync_meeting_reminder"
     OFFICE_DOCUMENT_SAVED = "office_document_saved"
-    FLOWS_OPERATOR_TASKS_UPDATED = "flows_operator_tasks_updated"
+    WORK_ITEM_ASSIGNED = "work_item_assigned"
+    WORK_ITEM_UPDATED = "work_item_updated"
 
 
 class NotificationAction(BaseModel):

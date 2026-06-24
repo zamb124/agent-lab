@@ -58,7 +58,6 @@ from apps.flows.src.models.branch_contracts import (
 )
 from apps.flows.src.models.enums import ChannelType, NodeType
 from apps.flows.src.models.flow_config import FlowConfig
-from apps.flows.src.models.operator_schemas import OperatorTaskStatus
 from apps.flows.src.services.flow_speech_resolve import attach_flow_speech_layers_to_context
 from apps.flows.src.services.flow_validator import FlowValidator, ValidationSeverity
 from apps.flows.src.state import collect_flow_node_files
@@ -80,6 +79,10 @@ from apps.idle_worker.tasks.task_names import TASK_SEND_TASK_UPDATE
 from core.auth import permission_checker
 from core.auth.errors import PermissionDeniedA2AError
 from core.billing.exceptions import BillingBalanceBlockedError
+from core.clients.llm.mock_control import (
+    parse_mock_control_metadata,
+    setup_mock_control,
+)
 from core.context import Context, clear_context, get_context, set_context
 from core.files.file_ref import FileRef
 from core.logging import bind_log_context, get_logger
@@ -92,6 +95,7 @@ from core.tracing import get_tracer
 from core.tracing.provider import is_tracing_enabled
 from core.types import JsonObject, JsonValue, require_json_array, require_json_object
 from core.utils.background import run_with_log_context
+from core.worktracker.models import TERMINAL_WORK_ITEM_STATES
 
 logger = get_logger(__name__)
 
@@ -354,26 +358,23 @@ class BaseChannel(ABC):
         )
 
     async def _resolve_active_takeover_task(self, correlation_id: "UUID") -> str | None:
-        """Проверяет, есть ли активная (CLAIMED/USER_DIALOG) задача оператора по correlation_id.
+        """Проверяет, есть ли активная (не терминальная) задача оператора по correlation_id.
 
-        Возвращает operator_task_id или None (задача уже завершена / не найдена).
+        Возвращает work_item_id или None (задача уже завершена / не найдена).
         """
         container = self.container
         ctx = get_context()
         if ctx is None or ctx.active_company is None:
             return None
         company_id = ctx.active_company.company_id
-        task = await container.operator_repository.get_task_by_correlation(
+        work_item = await container.work_item_service.find_by_completion_correlation(
             company_id, str(correlation_id)
         )
-        if task is None:
+        if work_item is None:
             return None
-        if task.status not in (
-            OperatorTaskStatus.CLAIMED.value,
-            OperatorTaskStatus.USER_DIALOG.value,
-        ):
+        if work_item.state in TERMINAL_WORK_ITEM_STATES:
             return None
-        return task.id
+        return work_item.work_item_id
 
     async def _prepare_task_params(
         self,
@@ -407,7 +408,7 @@ class BaseChannel(ABC):
         state = await self._get_state(session_id)
 
         is_takeover_user_reply = False
-        takeover_operator_task_id: str | None = None
+        takeover_work_item_id: str | None = None
 
         if state is None:
             branch_id = "default"
@@ -436,7 +437,7 @@ class BaseChannel(ABC):
                     )
                     if op_task is not None:
                         is_takeover_user_reply = True
-                        takeover_operator_task_id = op_task
+                        takeover_work_item_id = op_task
 
         # Объединяем metadata из Context канала с переданным metadata
         final_metadata: JsonObject = metadata or {}
@@ -455,7 +456,7 @@ class BaseChannel(ABC):
             metadata=final_metadata,
             user_id=user_id or context_id,
             is_takeover_user_reply=is_takeover_user_reply,
-            takeover_operator_task_id=takeover_operator_task_id,
+            takeover_work_item_id=takeover_work_item_id,
         )
 
     async def create_task(self, params: PreparedTaskParams) -> None:
@@ -612,6 +613,18 @@ class BaseChannel(ABC):
                 if not isinstance(value, bool):
                     raise ValueError(f"metadata.breakpoints[{key!r}] must be bool")
                 breakpoints[key] = value
+
+        # Mock Control System: deterministic ответы для tool/node/flow/llm из metadata.__mock__.
+        # Очереди ответов и манифест пишутся в Redis со scope по session_id, поэтому
+        # runtime (в т.ч. в worker при async) подставляет mock вместо реальных вызовов.
+        mock_config = parse_mock_control_metadata(params.metadata) if params.metadata else None
+        if mock_config is not None:
+            await setup_mock_control(
+                container.redis_client,
+                params.session_id,
+                mock_config,
+                user_groups=self._get_user_groups_from_context(self.context),
+            )
 
         exec_state = ExecutionState(
             task_id=effective_task_id,

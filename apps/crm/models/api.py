@@ -11,7 +11,7 @@ from core.types import JsonObject, JsonValue
 
 SemanticTextIndexStatus = Literal["absent", "pending_embedding", "ready"]
 
-from core.models.identity_models import BoardStage, NamespaceCRMSettings  # noqa: E402
+from core.models.identity_models import NamespaceCRMSettings  # noqa: E402
 
 
 class EntityCreate(BaseModel):
@@ -37,9 +37,6 @@ class EntityCreate(BaseModel):
     )
 
     note_date: date | None = None
-    due_date: date | None = None
-    priority: str | None = None
-    assignees: list[str] = Field(default_factory=list)
 
 
 class EntityUpdate(BaseModel):
@@ -59,9 +56,6 @@ class EntityUpdate(BaseModel):
     entity_subtype: str | None = None
 
     note_date: date | None = None
-    due_date: date | None = None
-    priority: str | None = None
-    assignees: list[str] | None = Field(default=None)
 
 
 class EntityResponse(BaseModel):
@@ -82,9 +76,6 @@ class EntityResponse(BaseModel):
     attachment_ids: list[str]
 
     note_date: date | None
-    due_date: date | None
-    priority: str | None
-    assignees: list[str]
 
     user_id: str | None
     source_entity_id: str | None
@@ -92,6 +83,10 @@ class EntityResponse(BaseModel):
     external_relationships: list[JsonObject] = []
     relevance: float = Field(
         description="Значение CRMEntity.relevance в БД; на ранжирование результатов поиска не влияет.",
+    )
+    work_item_id: str | None = Field(
+        default=None,
+        description="Парный WorkItem для entity_type=task; work-семантика живёт в worktracker.",
     )
     access_level: str | None = None
     score: float | None = Field(
@@ -453,28 +448,6 @@ class NamespaceUpdateRequest(BaseModel):
     description: str | None = None
     allowed_type_ids: list[str] | None = None
     crm_settings: NamespaceCRMSettings | None = None
-
-
-class TaskBoardStagesApiResponse(BaseModel):
-    """Стадии доски задач для namespace и текущего фильтра подтипа."""
-
-    board_key: str
-    stages: list[BoardStage]
-
-
-class TaskBoardEditorBoardResponse(BaseModel):
-    """Одна доска в редакторе стадий пространства."""
-
-    board_key: str
-    label: str
-    stages: list[BoardStage]
-    uses_custom_preset: bool
-
-
-class TaskBoardEditorStateResponse(BaseModel):
-    """Сводка досок задач для экрана настройки namespace."""
-
-    boards: list[TaskBoardEditorBoardResponse]
 
 
 class NamespaceEditabilityResponse(BaseModel):

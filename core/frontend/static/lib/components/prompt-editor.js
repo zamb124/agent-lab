@@ -1,19 +1,60 @@
 /**
- * PromptEditor - редактор промптов с CodeMirror
- * Подсветка переменных, циклов, ссылок + tooltip со значениями
- * Режимы: split view, fullscreen
+ * PromptEditor — markdown + prompt variables editor (CodeMirror).
+ * Подсветка переменных, циклов, ссылок + preview/split/fullscreen.
  */
-import { html, css } from 'lit';
+import { html, css, nothing } from 'lit';
 import { unsafeHTML } from 'lit/directives/unsafe-html.js';
 import { PlatformElement } from '../platform-element/index.js';
+import { flowsChatMarkdownToHtml } from '../flows-chat/markdown.js';
 import './platform-help-hint.js';
 
 export class PromptEditor extends PlatformElement {
+    static i18nNamespace = 'platform';
+
     static styles = [
         PlatformElement.styles,
         css`
             :host {
                 display: block;
+                min-width: 0;
+            }
+
+            :host([variant="embed"]) .editor-wrapper {
+                border-color: transparent;
+                background: transparent;
+                box-shadow: none;
+            }
+
+            :host([variant="embed"]) .editor-wrapper:focus-within {
+                border-color: var(--glass-border-medium);
+                background: var(--glass-tint-subtle);
+                box-shadow: none;
+            }
+
+            :host([variant="embed"]) .editor-header {
+                background: transparent;
+                border-bottom: 1px solid var(--glass-border-subtle);
+                padding: var(--space-1) 0;
+            }
+
+            :host([variant="embed"]) #codemirror-container .cm-scroller {
+                padding: var(--space-2) 0;
+            }
+
+            :host([variant="embed"]) .preview-container {
+                padding: var(--space-2) 0;
+            }
+
+            :host([variant="embed"]) .editor-label {
+                font-size: var(--text-sm);
+                font-weight: var(--font-semibold);
+                color: var(--text-secondary);
+                text-transform: uppercase;
+                letter-spacing: 0.04em;
+            }
+
+            :host([variant="embed"]) .editor-header {
+                padding: var(--space-2) 0;
             }
             
             .editor-wrapper {
@@ -36,6 +77,10 @@ export class PromptEditor extends PlatformElement {
                 padding: var(--space-2) var(--space-3);
                 background: var(--glass-tint-medium);
                 border-bottom: 1px solid var(--border-subtle);
+            }
+
+            .editor-header.actions-only {
+                justify-content: flex-end;
             }
             
             .editor-label {
@@ -393,6 +438,8 @@ export class PromptEditor extends PlatformElement {
         hint: { type: String },
         placeholder: { type: String },
         readonly: { type: Boolean },
+        variant: { type: String, reflect: true },
+        showHeader: { type: Boolean, attribute: 'show-header' },
         showPreview: { type: Boolean, attribute: 'show-preview' },
         showHint: { type: Boolean, attribute: 'show-hint' },
         minHeight: { type: Number, attribute: 'min-height' },
@@ -406,10 +453,12 @@ export class PromptEditor extends PlatformElement {
         super();
         this.value = '';
         this.variables = {};
-        this.label = 'Промпт';
+        this.label = '';
         this.hint = '';
-        this.placeholder = 'Введите промпт...';
+        this.placeholder = '';
         this.readonly = false;
+        this.variant = 'default';
+        this.showHeader = true;
         this.showPreview = true;
         this.showHint = true;
         this.minHeight = 150;
@@ -422,6 +471,8 @@ export class PromptEditor extends PlatformElement {
         this._cmModules = null;
         this._readonlyCompartment = null;
         this._fileDropCleanup = null;
+        this._variablesFingerprint = '';
+        this._variablesRefreshInProgress = false;
     }
 
     async firstUpdated() {
@@ -450,6 +501,32 @@ export class PromptEditor extends PlatformElement {
         return cache.uiCache[name] || '';
     }
 
+    _variablesFingerprintValue(variables) {
+        if (!variables || typeof variables !== 'object' || Array.isArray(variables)) {
+            return '';
+        }
+        return JSON.stringify(variables);
+    }
+
+    _refreshVariableHighlighting() {
+        if (!this._editorView) {
+            return;
+        }
+        const doc = this._editorView.state.doc;
+        const docLength = doc.length;
+        this._variablesRefreshInProgress = true;
+        try {
+            this._editorView.dispatch({
+                changes: { from: docLength, to: docLength, insert: ' ' },
+            });
+            this._editorView.dispatch({
+                changes: { from: docLength, to: docLength + 1, insert: '' },
+            });
+        } finally {
+            this._variablesRefreshInProgress = false;
+        }
+    }
+
     updated(changedProperties) {
         if (changedProperties.has('value') && this._editorView) {
             const currentValue = this._editorView.state.doc.toString();
@@ -469,13 +546,11 @@ export class PromptEditor extends PlatformElement {
         }
         
         if (changedProperties.has('variables') && this._editorView) {
-            const doc = this._editorView.state.doc;
-            this._editorView.dispatch({
-                changes: { from: doc.length, to: doc.length, insert: ' ' }
-            });
-            this._editorView.dispatch({
-                changes: { from: doc.length, to: doc.length + 1, insert: '' }
-            });
+            const nextFingerprint = this._variablesFingerprintValue(this.variables);
+            if (nextFingerprint !== this._variablesFingerprint) {
+                this._variablesFingerprint = nextFingerprint;
+                this._refreshVariableHighlighting();
+            }
         }
         
         if (changedProperties.has('splitMode') && this._cmModules) {
@@ -561,9 +636,12 @@ export class PromptEditor extends PlatformElement {
             variableTooltip,
             ...themeExtensions,
             cm.EditorView.updateListener.of((update) => {
-                if (update.docChanged) {
+                if (update.docChanged && !this._variablesRefreshInProgress) {
                     this.value = update.state.doc.toString();
                     this.emit('change', { value: this.value });
+                }
+                if (update.focusChanged && !update.view.hasFocus) {
+                    this.emit('blur', null);
                 }
             }),
             cm.EditorView.theme({
@@ -579,6 +657,7 @@ export class PromptEditor extends PlatformElement {
             }),
             parent: container
         });
+        this._variablesFingerprint = this._variablesFingerprintValue(this.variables);
         this._syncFileDropListeners();
     }
 
@@ -814,7 +893,7 @@ export class PromptEditor extends PlatformElement {
                                     }
                                 } else {
                                     valueEl.className = 'variable-tooltip-undefined';
-                                    valueEl.textContent = 'не определена';
+                                    valueEl.textContent = self.t('prompt_editor.var_undefined');
                                 }
                                 dom.appendChild(valueEl);
                                 
@@ -958,22 +1037,12 @@ export class PromptEditor extends PlatformElement {
 
     _renderPreview() {
         if (!this.value) {
-            return html`<div class="preview-container" style="color: var(--text-tertiary);">Пустой промпт</div>`;
+            return html`<div class="preview-container" style="color: var(--text-tertiary);">${this.t('prompt_editor.empty_preview')}</div>`;
         }
-        
-        let rendered = this._resolveTemplate(this.value);
-        
-        if (window.marked) {
-            try {
-                const htmlContent = window.marked.parse(rendered);
-                return html`<div class="preview-container">${unsafeHTML(htmlContent)}</div>`;
-            } catch (e) {
-                console.warn('Marked parse error:', e);
-            }
-        }
-        
-        rendered = rendered.replace(/\n/g, '<br>');
-        return html`<div class="preview-container">${unsafeHTML(rendered)}</div>`;
+
+        const rendered = this._resolveTemplate(this.value);
+        const htmlContent = flowsChatMarkdownToHtml(rendered, { streaming: false });
+        return html`<div class="preview-container">${unsafeHTML(htmlContent)}</div>`;
     }
     
     _resolveTemplate(template) {
@@ -1023,7 +1092,7 @@ export class PromptEditor extends PlatformElement {
             const listValue = this._getVariableValue(listVar, 'variable');
             
             if (!Array.isArray(listValue)) {
-                return `⚠️ ${listVar} не является массивом`;
+                return `⚠️ ${this.t('prompt_editor.for_not_array', { name: listVar })}`;
             }
             
             const results = listValue.map(item => {
@@ -1101,60 +1170,94 @@ export class PromptEditor extends PlatformElement {
         }
     }
 
+    _hasLabelRow() {
+        const labelText = typeof this.label === 'string' && this.label.length > 0
+            ? this.label
+            : '';
+        const hasHint = typeof this.hint === 'string' && this.hint.length > 0;
+        return labelText.length > 0 || hasHint;
+    }
+
+    _labelText() {
+        if (typeof this.label === 'string' && this.label.length > 0) {
+            return this.label;
+        }
+        return this.t('prompt_editor.label_default');
+    }
+
+    _placeholderText() {
+        if (typeof this.placeholder === 'string' && this.placeholder.length > 0) {
+            return this.placeholder;
+        }
+        return this.t('prompt_editor.placeholder_default');
+    }
+
     render() {
         const style = `--editor-min-height: ${this.minHeight}px`;
         const splitMinHeight = Math.max(this.minHeight, 320);
-        
+        const hasLabelRow = this._hasLabelRow();
+        const headerClass = hasLabelRow ? 'editor-header' : 'editor-header actions-only';
+        const previewToggleLabel = this.previewMode
+            ? this.t('prompt_editor.mode_edit')
+            : this.t('prompt_editor.mode_preview');
+        const fullscreenTitle = this.fullscreenMode
+            ? this.t('prompt_editor.fullscreen_exit')
+            : this.t('prompt_editor.fullscreen_enter');
+
         return html`
             <div class="editor-wrapper">
-                <div class="editor-header">
-                    <span class="editor-label-wrap">
-                        <span class="editor-label">${this.label}</span>
-                        ${typeof this.hint === 'string' && this.hint !== ''
-                            ? html`<platform-help-hint .text=${this.hint}></platform-help-hint>`
-                            : ''}
-                    </span>
-                    <div class="editor-actions">
-                        ${this.showPreview ? html`
-                            <button 
-                                type="button" 
-                                class="editor-btn ${this.previewMode && !this.splitMode ? 'active' : ''}"
-                                @click=${this._togglePreview}
-                                title="Preview"
+                ${this.showHeader ? html`
+                    <div class=${headerClass}>
+                        ${hasLabelRow ? html`
+                            <span class="editor-label-wrap">
+                                <span class="editor-label">${this._labelText()}</span>
+                                ${typeof this.hint === 'string' && this.hint !== ''
+                                    ? html`<platform-help-hint .text=${this.hint}></platform-help-hint>`
+                                    : ''}
+                            </span>
+                        ` : nothing}
+                        <div class="editor-actions">
+                            ${this.showPreview ? html`
+                                <button
+                                    type="button"
+                                    class="editor-btn ${this.previewMode && !this.splitMode ? 'active' : ''}"
+                                    @click=${this._togglePreview}
+                                    title=${this.t('prompt_editor.mode_preview')}
+                                >
+                                    ${previewToggleLabel}
+                                </button>
+                                <button
+                                    type="button"
+                                    class="icon-btn ${this.splitMode ? 'active' : ''}"
+                                    @click=${this._toggleSplit}
+                                    title=${this.t('prompt_editor.split')}
+                                >
+                                    ${this._icon('list') ? unsafeHTML(this._icon('list')) : '⊞'}
+                                </button>
+                            ` : ''}
+                            <button
+                                type="button"
+                                class="icon-btn ${this.fullscreenMode ? 'active' : ''}"
+                                @click=${this._toggleFullscreen}
+                                title=${fullscreenTitle}
                             >
-                                ${this.previewMode ? 'Редактор' : 'Preview'}
+                                ${this.fullscreenMode
+                                    ? (this._icon('minimize') ? unsafeHTML(this._icon('minimize')) : '⊠')
+                                    : (this._icon('fullscreen') ? unsafeHTML(this._icon('fullscreen')) : '⊡')
+                                }
                             </button>
-                            <button 
-                                type="button" 
-                                class="icon-btn ${this.splitMode ? 'active' : ''}"
-                                @click=${this._toggleSplit}
-                                title="Split view"
-                            >
-                                ${this._icon('list') ? unsafeHTML(this._icon('list')) : '⊞'}
-                            </button>
-                        ` : ''}
-                        <button 
-                            type="button" 
-                            class="icon-btn ${this.fullscreenMode ? 'active' : ''}"
-                            @click=${this._toggleFullscreen}
-                            title="${this.fullscreenMode ? 'Выйти из полноэкранного режима' : 'Полноэкранный режим'}"
-                        >
-                            ${this.fullscreenMode 
-                                ? (this._icon('minimize') ? unsafeHTML(this._icon('minimize')) : '⊠')
-                                : (this._icon('fullscreen') ? unsafeHTML(this._icon('fullscreen')) : '⊡')
-                            }
-                        </button>
+                        </div>
                     </div>
-                </div>
-                
+                ` : nothing}
+
                 ${this.splitMode ? html`
                     <div class="split-container" style="min-height: ${splitMinHeight}px">
                         <div class="split-pane">
-                            <div class="split-pane-label">Редактор</div>
+                            <div class="split-pane-label">${this.t('prompt_editor.split_pane_edit')}</div>
                             <div id="codemirror-container"></div>
                         </div>
                         <div class="split-pane">
-                            <div class="split-pane-label">Preview</div>
+                            <div class="split-pane-label">${this.t('prompt_editor.split_pane_preview')}</div>
                             ${this._renderPreview()}
                         </div>
                     </div>
@@ -1162,13 +1265,9 @@ export class PromptEditor extends PlatformElement {
                     <div id="codemirror-container" style=${style} class="${this.previewMode ? 'hidden' : ''}"></div>
                     ${this.previewMode ? this._renderPreview() : ''}
                 `}
-                
+
                 ${this.showHint && !this.fullscreenMode ? html`
-                    <div class="hint">
-                        Переменные: <code>{variable}</code>, <code>{?optional}</code>, <code>{var|default}</code> | 
-                        Циклы: <code>{for x in list}...{endfor}</code> | 
-                        Ссылки: <code>@var:key</code>, <code>@state:path</code>
-                    </div>
+                    <div class="hint">${this.t('prompt_editor.var_hint')}</div>
                 ` : ''}
             </div>
         `;

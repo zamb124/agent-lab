@@ -132,10 +132,28 @@ class MockLLM:
         self._tool_responses: dict[str, JsonObject] = {}
         self._default_response: str = "Mock LLM ответ"
         self._redis_client: RedisClient | None = None
+        self._redis_key_override: str | None = None
+        self._strict_redis_queue: bool = False
 
     def set_redis_client(self, redis_client: RedisClient) -> "MockLLM":
         """Устанавливает Redis клиент для межпроцессного обмена."""
         self._redis_client = redis_client
+        return self
+
+    def bind_redis_queue(
+        self, redis_client: RedisClient, key: str, *, strict: bool = True
+    ) -> "MockLLM":
+        """
+        Привязывает экземпляр к конкретной Redis-очереди ответов.
+
+        Используется Mock Control System: каждая llm-нода читает строго свою
+        очередь `mock_control:{session_id}:node:{node_id}` (или общую llm).
+        При strict=True исчерпание очереди — ошибка (fail-closed), без
+        тихого паттерн-фолбэка на дефолтный ответ.
+        """
+        self._redis_client = redis_client
+        self._redis_key_override = key
+        self._strict_redis_queue = strict
         return self
 
     def configure(
@@ -173,7 +191,7 @@ class MockLLM:
         if not self._redis_client:
             return None
 
-        key = _mock_redis_key()
+        key = self._redis_key_override or _mock_redis_key()
         try:
             redis_response_payload = await self._redis_client.eval(
                 _MOCK_LLM_REDIS_POP_SCRIPT, 1, key
@@ -276,6 +294,11 @@ class MockLLM:
         redis_response = await self._get_redis_response()
         if redis_response is not None:
             return self._process_response(redis_response, messages)
+
+        if self._redis_key_override is not None and self._strict_redis_queue:
+            raise ValueError(
+                f"MockLLM strict queue exhausted: {self._redis_key_override}"
+            )
 
         return self._generate_from_patterns(messages)
 
@@ -870,6 +893,28 @@ def configure_mock_llm_redis(
         _ = mock_llm.set_redis_client(redis_client)
         logger.info("mock_llm.redis_configured")
     return mock_llm
+
+
+async def pop_mock_array_response(
+    redis_client: RedisClient, key: str
+) -> MockLLMQueuedResponse | None:
+    """
+    Атомарно снимает один элемент JSON-массива по ключу (Lua POP).
+
+    None — ключа нет или очередь исчерпана. Используется Mock Control System
+    для tool/node/flow очередей.
+    """
+    payload = await redis_client.eval(_MOCK_LLM_REDIS_POP_SCRIPT, 1, key)
+    if payload is None:
+        return None
+    if not isinstance(payload, str):
+        raise ValueError("mock_control pop response must be a JSON string")
+    parsed = parse_json_value(payload, "mock_control.pop_response")
+    if isinstance(parsed, str):
+        return parsed
+    if isinstance(parsed, dict):
+        return require_json_object(parsed, "mock_control.pop_response")
+    raise ValueError("mock_control pop response must be a string or JSON object")
 
 
 async def setup_mock_responses_redis(

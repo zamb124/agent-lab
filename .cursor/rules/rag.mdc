@@ -88,7 +88,13 @@ globs:
 
 ## Inter-service
 
-`core/clients/rag_client.py::RagClient` — единственный канон обращения к RAG из других сервисов (`crm`/`flows`). Поверх `ServiceClient`. CRM `apps/crm/services/attachment_service.py` индексирует attachments через `RagClient`, ссылку (`document_id`) сохраняет в `entity.metadata.attachments[]`.
+`core/clients/rag_client.py::RagClient` — единственный канон обращения к RAG из других сервисов (`crm`/`flows`/`office`). Поверх `ServiceClient`. CRM `apps/crm/services/attachment_service.py` индексирует attachments через `RagClient.upload_namespace_document`, ссылку (`document_id`) сохраняет в `entity.metadata.attachments[]`.
+
+### Index-file (внешний владелец байтов)
+
+Peer-сервис (Office и т.п.), у которого `FileRecord` уже в shared S3, индексирует через **`POST /rag/api/v1/namespaces/{namespace_id}/documents/index-file`** (`RagClient.index_file`). Worker — тот же `rag.index_document_s3`; новый S3-объект не создаётся. В metadata обязательны `document_id=file_id`, `company_id`, `uploaded_by_user_id`, `ttl_seconds` (Office — `0`).
+
+Деиндексация без удаления файла — **`DELETE /rag/api/v1/namespaces/{namespace_id}/documents/{document_id}/index`** (`RagClient.delete_document_index`). Полный **`DELETE .../documents/{document_id}`** удаляет `FileRecord` + S3 — для Office **запрещён**; только index-only delete.
 
 ## UI
 

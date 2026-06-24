@@ -1,13 +1,9 @@
 /**
  * flows-base-node-editor — общая обёртка редакторов нод.
  *
- * Два режима рендера, выбираются атрибутом `expanded`:
- *
- * 1. compact: header (только слот Run) → «Запустить» в шапке `flows-floating-panel`; заголовок панели — `cfg.name` или id;
- *    хост панели ищется обходом DOM ShadowRoot→host, иначе fallback. Для `resource` и `external_api` рядом с Run монтируется `platform-help-hint`.
- * 2. модалка «Инструмент» в LLM: `.embedded-tool-run-host` в шапке `flows-embedded-tool-config-modal`.
- * 3. expanded: .panel-main — fallback для Run без floating-panel и без этой модалки.
- * Запуск: `useOp('flows/code_execute')`, UI — `flows-node-run-control` (imperative mount).
+ * Master-detail layout: sidebar (basic/resources/state) + main (settings/mapping).
+ * «Запустить» монтируется в шапку `flows-floating-panel` или `flows-embedded-tool-config-modal`,
+ * иначе fallback в `.panel-main`.
  *
  * Эмитит наружу:
  *   - change { nodeId, patch } — patch с top-level полями NodeConfig
@@ -53,7 +49,6 @@ export class FlowsBaseNodeEditor extends PlatformElement {
         graphNodes: { type: Array },
         previewExecutionState: { type: Object },
         dataflowNode: { type: Object },
-        expanded: { type: Boolean, reflect: true },
         /** Редактирование вложенного tool: без смены node id */
         embedded: { type: Boolean, reflect: true },
         _stateDraft: { state: true },
@@ -73,19 +68,7 @@ export class FlowsBaseNodeEditor extends PlatformElement {
                 min-height: 0;
                 box-sizing: border-box;
             }
-            :host(:not([expanded])) {
-                padding: var(--space-3);
-                overflow: auto;
-            }
 
-            /* Компактная раскладка: столбец */
-            .compact {
-                display: flex;
-                flex-direction: column;
-                gap: var(--space-4);
-            }
-
-            /* Развёрнутая раскладка: master-detail */
             .panel-layout {
                 display: grid;
                 grid-template-columns: 320px 1fr;
@@ -125,15 +108,6 @@ export class FlowsBaseNodeEditor extends PlatformElement {
                 text-transform: uppercase;
                 letter-spacing: 0.06em;
             }
-            /* header */
-            .header {
-                display: flex;
-                flex-direction: column;
-                gap: var(--space-2);
-                padding-bottom: var(--space-3);
-                border-bottom: 1px solid var(--border-subtle);
-            }
-            .header-run-fallback:empty { display: none; }
             .panel-run-fallback:empty { display: none; }
             .panel-run-fallback:not(:empty) {
                 display: flex;
@@ -423,7 +397,6 @@ export class FlowsBaseNodeEditor extends PlatformElement {
         this.graphNodes = null;
         this.previewExecutionState = null;
         this.dataflowNode = null;
-        this.expanded = false;
         this.embedded = false;
         this._mappingTab = 'input';
         this._mappingSyncNonce = 0;
@@ -599,10 +572,8 @@ export class FlowsBaseNodeEditor extends PlatformElement {
             target = hostFromPanel;
         } else if (hostFromEmbedded) {
             target = hostFromEmbedded;
-        } else if (this.expanded) {
-            target = this.renderRoot?.querySelector?.('[data-node-run-fallback="expanded"]') ?? null;
         } else {
-            target = this.renderRoot?.querySelector?.('[data-node-run-fallback="compact"]') ?? null;
+            target = this.renderRoot?.querySelector?.('[data-node-run-fallback="panel-main"]') ?? null;
         }
         if (!target) {
             if (this._panelHeaderHintEl) {
@@ -1127,14 +1098,6 @@ export class FlowsBaseNodeEditor extends PlatformElement {
     _onStateReset() {
         this._stateDraft = null;
         this.requestUpdate();
-    }
-
-    _renderHeader() {
-        return html`
-            <div class="header">
-                <div class="header-run-fallback" data-node-run-fallback="compact"></div>
-            </div>
-        `;
     }
 
     _renderBasic() {
@@ -1778,30 +1741,18 @@ export class FlowsBaseNodeEditor extends PlatformElement {
 
     render() {
         if (!this.nodeConfig) return html`<div>${this.t('property_panel.select_node')}</div>`;
-        if (this.expanded) {
-            return html`
-                <div class="panel-layout">
-                    <div class="panel-sidebar">
-                        ${this._renderBasic()}
-                        ${this._shouldShowPinnedResourcesSection() ? this._renderResources() : nothing}
-                        ${this._renderInputState()}
-                    </div>
-                    <div class="panel-main">
-                        <div class="panel-run-fallback" data-node-run-fallback="expanded"></div>
-                        ${this._renderSettingsSlot()}
-                        ${this.nodeType === 'resource' ? nothing : this._renderDataflowMapping()}
-                    </div>
-                </div>
-            `;
-        }
         return html`
-            <div class="compact">
-                ${this._renderHeader()}
-                ${this._renderBasic()}
-                ${this._shouldShowPinnedResourcesSection() ? this._renderResources() : nothing}
-                ${this._renderSettingsSlot()}
-                ${this.nodeType === 'resource' ? nothing : this._renderDataflowMapping()}
-                ${this._renderInputState()}
+            <div class="panel-layout">
+                <div class="panel-sidebar">
+                    ${this._renderBasic()}
+                    ${this._shouldShowPinnedResourcesSection() ? this._renderResources() : nothing}
+                    ${this._renderInputState()}
+                </div>
+                <div class="panel-main">
+                    <div class="panel-run-fallback" data-node-run-fallback="panel-main"></div>
+                    ${this._renderSettingsSlot()}
+                    ${this.nodeType === 'resource' ? nothing : this._renderDataflowMapping()}
+                </div>
             </div>
         `;
     }

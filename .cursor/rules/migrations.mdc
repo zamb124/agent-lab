@@ -26,6 +26,7 @@ alwaysApply: false
 | sync | platform_sync | `migrations/sync/` | `DATABASE__SYNC_URL` |
 | rag | platform_rag | `migrations/rag/` | `DATABASE__RAG_URL` |
 | office | platform_office | `migrations/office/` | `DATABASE__OFFICE_URL` |
+| worktracker | platform_worktracker | `migrations/worktracker/` | `DATABASE__WORKTRACKER_URL` |
 | tracing | platform_tracing | `migrations/tracing/` | `DATABASE__TRACING_URL` |
 | search | platform_search | `migrations/search/` | `DATABASE__SEARCH_URL` |
 

@@ -4,7 +4,7 @@ import { registerModalKind } from '../utils/modal-registry.js';
 import { FILES_EVENTS } from '../events/reducers/files.js';
 import { resolveFileIconKey } from '../utils/file-icons.js';
 import './platform-icon.js';
-import './platform-onlyoffice-host.js';
+import './platform-document-viewer-host.js';
 
 const SYNC_TIMEOUT_MS = 20000;
 
@@ -534,6 +534,11 @@ export class PlatformFileViewerModal extends PlatformModal {
 
     async _syncBeforeClose() {
         if (this._closeSyncComplete || !this.config) return;
+        const capabilities = this.config.capabilities;
+        if (!capabilities || capabilities.sync_on_close !== true) {
+            this._closeSyncComplete = true;
+            return;
+        }
         this._syncing = true;
         this._error = '';
         try {
@@ -587,9 +592,44 @@ export class PlatformFileViewerModal extends PlatformModal {
         `;
     }
 
+    _resolveDownloadUrl() {
+        const config = this.config;
+        if (!config || typeof config !== 'object') {
+            return '';
+        }
+        if (typeof config.download_url === 'string' && config.download_url.length > 0) {
+            return config.download_url;
+        }
+        if (config.binary && typeof config.binary.download_url === 'string' && config.binary.download_url.length > 0) {
+            return config.binary.download_url;
+        }
+        return '';
+    }
+
+    _onDownloadClick() {
+        const downloadUrl = this._resolveDownloadUrl();
+        if (downloadUrl.length === 0) {
+            return;
+        }
+        window.open(downloadUrl, '_blank', 'noopener,noreferrer');
+    }
+
     renderHeaderActions() {
         const title = this.minimized ? this.t('file_viewer.restore') : this.t('file_viewer.minimize');
+        const downloadUrl = this._resolveDownloadUrl();
         return html`
+            ${downloadUrl.length > 0 ? html`
+                <button
+                    type="button"
+                    class="header-btn"
+                    title=${this.t('file_viewer.download')}
+                    aria-label=${this.t('file_viewer.download')}
+                    ?disabled=${this._syncing}
+                    @click=${this._onDownloadClick}
+                >
+                    <platform-icon name="download" size="16"></platform-icon>
+                </button>
+            ` : nothing}
             <button
                 type="button"
                 class="header-btn"
@@ -609,15 +649,15 @@ export class PlatformFileViewerModal extends PlatformModal {
             <div class="viewer-shell">
                 ${this.config
                     ? html`
-                        <platform-onlyoffice-host
+                        <platform-document-viewer-host
                             .bindingId=${fileId}
-                            .config=${this.config}
+                            .openConfig=${this.config}
                             .suspended=${this.minimized}
                             @editor-error=${this._onEditorError}
                             @document-state=${this._onDocumentState}
                         >
                             <span slot="loading">${this.t('file_viewer.loading')}</span>
-                        </platform-onlyoffice-host>
+                        </platform-document-viewer-host>
                     `
                     : html`<div class="viewer-status">${this.t('file_viewer.loading')}</div>`}
                 ${this._syncing ? html`<div class="sync-state">${this.t('file_viewer.syncing')}</div>` : nothing}

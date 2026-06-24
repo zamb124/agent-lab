@@ -8,12 +8,12 @@ from .code import router as code_router
 from .company import router as company_router
 from .evaluation import router as evaluation_router
 from .flows import router as flows_router
+from .internal_work_items import router as internal_work_items_router
 from .lara_actions import router as lara_actions_router
 from .mcp import router as mcp_router
 from .metadata import router as metadata_router
 from .nodes import router as nodes_router
 from .observability_logs import router as observability_logs_router
-from .operator import router as operator_router
 from .prompts import router as prompts_router
 from .resources import router as resources_router
 from .sessions import router as sessions_router
@@ -47,5 +47,5 @@ api_v1_router.include_router(code_router, prefix="/code")
 api_v1_router.include_router(company_router)
 api_v1_router.include_router(mcp_router, prefix="/mcp")
 api_v1_router.include_router(resources_router, prefix="/resources")
-api_v1_router.include_router(operator_router, prefix="/operator")
+api_v1_router.include_router(internal_work_items_router, prefix="/internal")
 api_v1_router.include_router(browser_preview_router, prefix="/browser-preview")

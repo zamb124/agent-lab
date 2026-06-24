@@ -182,4 +182,6 @@ export const CoreEvents = Object.freeze({
 
     APP_BOOTSTRAP_STARTED:   'ui/app/bootstrap_started',
     APP_BOOTSTRAP_COMPLETED: 'ui/app/bootstrap_completed',
+
+    PLATFORM_WORK_ITEM_DETAIL_OPEN_REQUESTED: 'platform/work_item_detail/open_requested',
 });

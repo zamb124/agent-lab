@@ -12,9 +12,6 @@ import '@platform/lib/components/platform-help-hint.js';
 import '@platform/lib/components/glass-spinner.js';
 import '../components/flows-catalog-list.js';
 import { asArray, asString, isPlainObject } from '../_helpers/flows-resolvers.js';
-import { userCanManageOperator } from '../_helpers/flows-operator-permissions.js';
-
-const OPEN_OPERATOR_STATUSES = new Set(['open', 'claimed', 'user_dialog', 'awaiting_agent']);
 
 const QUICK_ACTIONS = Object.freeze([
     Object.freeze({
@@ -30,14 +27,6 @@ const QUICK_ACTIONS = Object.freeze([
         tone: 'info',
         titleKey: 'flows_home.quick_sessions_title',
         descKey: 'flows_home.quick_sessions_desc',
-    }),
-    Object.freeze({
-        id: 'operator',
-        icon: 'users',
-        tone: 'warning',
-        titleKey: 'flows_home.quick_operator_title',
-        descKey: 'flows_home.quick_operator_desc',
-        operatorOnly: true,
     }),
 ]);
 
@@ -172,16 +161,6 @@ function activeSessionCount(items) {
             continue;
         }
         if (['active', 'processing', 'waiting_input'].includes(item.status)) {
-            total += 1;
-        }
-    }
-    return total;
-}
-
-function openOperatorTaskCount(items) {
-    let total = 0;
-    for (const item of items) {
-        if (isPlainObject(item) && typeof item.status === 'string' && OPEN_OPERATOR_STATUSES.has(item.status)) {
             total += 1;
         }
     }
@@ -753,7 +732,6 @@ export class FlowsHomePage extends PlatformPage {
         this._isMobile = false;
         this._flowsHomeMql = null;
         this._onFlowsHomeMql = null;
-        this._operatorLoaded = false;
         this._flows = this.useResource('flows/flows', { autoload: true });
         this._sessions = this.useResource('flows/sessions');
         this._resources = this.useResource('flows/resources');
@@ -762,7 +740,6 @@ export class FlowsHomePage extends PlatformPage {
         this._tools = this.useOp('flows/tools_all');
         this._bundles = this.useOp('flows/flow_store_bundles');
         this._integrations = this.useOp('flows/integrations_list');
-        this._operatorTasks = this.useOp('flows/operator_tasks_list');
         this._authSel = this.select((s) => {
             const auth = isPlainObject(s.auth) ? s.auth : {};
             return {
@@ -795,7 +772,6 @@ export class FlowsHomePage extends PlatformPage {
         void this._tools.run({ limit: 2000, offset: 0 });
         void this._bundles.run({});
         void this._integrations.run({});
-        this._ensureOperatorTasksLoaded();
         this._installMobileModeListener();
     }
 
@@ -808,10 +784,6 @@ export class FlowsHomePage extends PlatformPage {
         this._flowsHomeMql = null;
         this._onFlowsHomeMql = null;
         super.disconnectedCallback();
-    }
-
-    updated() {
-        this._ensureOperatorTasksLoaded();
     }
 
     _installMobileModeListener() {
@@ -857,22 +829,6 @@ export class FlowsHomePage extends PlatformPage {
         this.mobileCatalogOpen = false;
     }
 
-    _operatorAllowed() {
-        const auth = this._authSel.value;
-        return userCanManageOperator(auth.user, auth.companyId);
-    }
-
-    _ensureOperatorTasksLoaded() {
-        if (this._operatorLoaded) {
-            return;
-        }
-        if (!this._operatorAllowed()) {
-            return;
-        }
-        this._operatorLoaded = true;
-        void this._operatorTasks.run({ limit: 200, offset: 0 });
-    }
-
     _openQuickAction(id) {
         if (id === 'store') {
             this.openModal('flows.flow_create', {});
@@ -880,10 +836,6 @@ export class FlowsHomePage extends PlatformPage {
         }
         if (id === 'sessions') {
             this.openModal('flows.sessions', {});
-            return;
-        }
-        if (id === 'operator') {
-            this.navigate('operator', {});
             return;
         }
         throw new Error(`flows-home-page: unknown quick action "${id}"`);
@@ -957,20 +909,17 @@ export class FlowsHomePage extends PlatformPage {
     _flowStats() {
         const flows = asArray(this._flows.items).filter((flow) => isPlainObject(flow) && flow.hidden !== true);
         const sessions = asArray(this._sessions.items);
-        const operatorTasks = resultItems(this._operatorTasks.lastResult);
         return {
             flows,
             flowCount: flows.length,
             branchCount: countBranches(flows),
             nodeCount: countFlowNodes(flows),
             activeSessionCount: activeSessionCount(sessions),
-            operatorTaskCount: openOperatorTaskCount(operatorTasks),
             bundleUpdateCount: flows.filter((flow) => isPlainObject(flow) && flow.has_bundle_update === true).length,
         };
     }
 
     _renderHeaderActions() {
-        const operatorAllowed = this._operatorAllowed();
         return html`
             <div class="header-actions" slot="actions">
                 ${this._isMobile
@@ -983,19 +932,6 @@ export class FlowsHomePage extends PlatformPage {
                             @click=${() => this._openMobileCatalog()}
                         >
                             <platform-icon name="list" size="16"></platform-icon>
-                        </button>
-                    `
-                    : ''}
-                ${operatorAllowed
-                    ? html`
-                        <button
-                            type="button"
-                            class="icon-action"
-                            title=${this.t('flows_home.header_operator')}
-                            aria-label=${this.t('flows_home.header_operator')}
-                            @click=${() => this.navigate('operator', {})}
-                        >
-                            <platform-icon name="users" size="16"></platform-icon>
                         </button>
                     `
                     : ''}
@@ -1124,13 +1060,7 @@ export class FlowsHomePage extends PlatformPage {
     }
 
     _visibleQuickActions() {
-        const operatorAllowed = this._operatorAllowed();
-        return QUICK_ACTIONS.filter((action) => {
-            if (action.operatorOnly !== true) {
-                return true;
-            }
-            return operatorAllowed;
-        });
+        return [...QUICK_ACTIONS];
     }
 
     _renderActionCard(action) {
@@ -1362,14 +1292,13 @@ export class FlowsHomePage extends PlatformPage {
         `;
     }
 
-    _renderActivitySection(stats) {
+    _renderActivitySection() {
         const sessions = asArray(this._sessions.items).slice(0, 5);
         const bundles = resultItems(this._bundles.lastResult);
         const installedBundles = bundles.filter((item) => isPlainObject(item) && item.installed === true).length;
         const toolsCount = resultItems(this._tools.lastResult)
             .filter((item) => isPlainObject(item) && item.item_type === 'tool')
             .length;
-        const operatorCount = this._operatorAllowed() ? String(stats.operatorTaskCount) : this.t('flows_home.value_empty');
         return html`
             <section>
                 ${this._renderSectionHead('flows_home.activity_title', 'flows_home.activity_subtitle', '', 'flows_home.activity_help')}
@@ -1384,7 +1313,6 @@ export class FlowsHomePage extends PlatformPage {
                     <div class="readiness-list">
                         ${this._renderReadinessRow('box', 'flows_home.ready_bundles', `${installedBundles}/${bundles.length}`)}
                         ${this._renderReadinessRow('code', 'flows_home.ready_tools', String(toolsCount))}
-                        ${this._renderReadinessRow('users', 'flows_home.ready_operator', operatorCount)}
                     </div>
                 </div>
             </section>
@@ -1407,7 +1335,7 @@ export class FlowsHomePage extends PlatformPage {
                 ${this._renderFlowsSection(stats.flows)}
                 ${this._renderConnectSection()}
                 ${this._renderCapabilities()}
-                ${this._renderActivitySection(stats)}
+                ${this._renderActivitySection()}
             </div>
         `;
     }

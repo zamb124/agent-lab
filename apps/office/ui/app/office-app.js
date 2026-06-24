@@ -9,7 +9,7 @@
  *
  * Маршруты:
  *   /documents                                   → documents_list
- *   /documents/catalogs                          → documents_catalogs
+ *   /documents/catalogs                          → redirect → documents_list (legacy)
  *   /documents/edit/:bindingId                   → document_editor
  *   /documents/embed/edit/:bindingId             → document_editor_embed
  */
@@ -34,15 +34,42 @@ import {
     catalogMemberAddOp,
     catalogMemberRemoveOp,
 } from '../events/resources/catalog-members.resource.js';
+import {
+    catalogRagStatusOp,
+    catalogRagEnableOp,
+    catalogRagDisableOp,
+    catalogRagRebuildOp,
+    catalogRagSettingsOp,
+} from '../events/resources/catalog-rag.resource.js';
+import { catalogRagSearchOp } from '../events/resources/catalog-rag-search.resource.js';
+import { createOfficeCatalogsLegacyRoutesEffect } from '../events/office-catalogs-legacy-routes.effect.js';
 import { companyMembersOp } from '../events/resources/company-members.resource.js';
 import {
     documentsOp,
+    buildDocumentsListPayload,
     documentCreateEmptyOp,
     documentUploadOp,
     documentRenameOp,
     documentRemoveOp,
     documentRenameForm,
+    deletedDocumentsOp,
+    documentRestoreOp,
+    documentPermanentDeleteOp,
+    documentMoveOp,
+    documentShareCreateOp,
 } from '../events/resources/documents.resource.js';
+import {
+    catalogAccessGetOp,
+    catalogAccessPatchOp,
+    catalogAccessRotateLinkOp,
+    documentAccessGetOp,
+    documentAccessPatchOp,
+    documentAccessRotateLinkOp,
+    publicResolveOp,
+    publicOpenOp,
+    publicCatalogItemsOp,
+    publicCatalogBindingOpenOp,
+} from '../events/resources/access.resource.js';
 import { documentEditorConfigOp } from '../events/resources/editor.resource.js';
 import { applyCompanyHostRedirectIfNeeded } from '@platform/lib/utils/company-host-guard.js';
 import { COMPANIES_EVENTS } from '@platform/lib/events/reducers/companies.js';
@@ -51,39 +78,44 @@ import '@platform/lib/components/layout/platform-island.js';
 import '../components/office-sidebar.js';
 import '../components/sheets/office-workspace-picker-sheet.js';
 import '@platform/lib/components/platform-onlyoffice-host.js';
-import '../components/office-document-row.js';
-import '../components/office-catalog-card.js';
 import '../components/office-integration-banner.js';
-import '../pages/documents-list-page.js';
-import '../pages/documents-catalogs-page.js';
+import '../pages/documents-explorer-page.js';
+import '../components/sheets/office-catalog-picker-sheet.js';
+import '@platform/lib/components/platform-file-table.js';
+import '@platform/lib/components/platform-file-row.js';
+import '@platform/lib/components/platform-file-card.js';
 import '../pages/document-editor-page.js';
 import '../modals/namespace-create-modal.js';
 import '../modals/catalog-create-modal.js';
 import '../modals/catalog-edit-modal.js';
 import '../modals/catalog-members-modal.js';
+import '../modals/catalog-rag-modal.js';
 import '../modals/document-rename-modal.js';
 import '../modals/document-create-empty-modal.js';
 import '../modals/document-upload-modal.js';
+import '../modals/office-access-modal.js';
+import '../pages/office-public-preview-page.js';
 
 const OFFICE_ROUTES = [
     { key: 'documents_list',     path: '',                                           titleKey: 'routes.documents_list' },
+    { key: 'documents_recent',   path: 'recent',           parent: 'documents_list', titleKey: 'routes.documents_recent' },
     { key: 'platform_services',  path: 'services',           parent: 'documents_list', titleKey: 'routes.platform_services' },
     { key: 'documents_catalogs', path: 'catalogs',           parent: 'documents_list', titleKey: 'routes.documents_catalogs' },
+    { key: 'documents_public_preview', path: 'p/:token', titleKey: 'routes.documents_public_preview' },
     { key: 'document_editor',    path: 'edit/:bindingId',    parent: 'documents_list', titleKey: 'routes.document_editor' },
     { key: 'document_editor_embed', path: 'embed/edit/:bindingId', titleKey: 'routes.document_editor' },
 ];
 
 /**
- * Нижняя навигация (mobile shell 2026): Documents, Catalogs, Profile.
- * Редактор — fullscreen-маршрут с iframe OnlyOffice, капсула там скрывается.
+ * Нижняя навигация (mobile shell 2026): Documents, Recent, Profile.
  */
 const OFFICE_BOTTOM_NAV_ITEMS = [
     { key: 'documents', routeKey: 'documents_list',     icon: 'doc-detail', labelKey: 'bottom_nav.documents' },
-    { key: 'catalogs',  routeKey: 'documents_catalogs', icon: 'folder',     labelKey: 'bottom_nav.catalogs' },
+    { key: 'recent',    routeKey: 'documents_recent',   icon: 'clock',      labelKey: 'bottom_nav.recent' },
     { key: 'profile',   sheet: 'platform.service_switcher', icon: 'user',   labelKey: 'bottom_nav.profile' },
 ];
 
-const OFFICE_BOTTOM_NAV_HIDE_ON_ROUTES = ['document_editor'];
+const OFFICE_BOTTOM_NAV_HIDE_ON_ROUTES = ['document_editor', 'documents_public_preview'];
 
 export class OfficeApp extends PlatformApp {
     static defaultI18nNamespace = 'documents';
@@ -107,6 +139,12 @@ export class OfficeApp extends PlatformApp {
         catalogMembersOp,
         catalogMemberAddOp,
         catalogMemberRemoveOp,
+        catalogRagStatusOp,
+        catalogRagEnableOp,
+        catalogRagDisableOp,
+        catalogRagRebuildOp,
+        catalogRagSettingsOp,
+        catalogRagSearchOp,
         companyMembersOp,
         documentsOp,
         documentCreateEmptyOp,
@@ -114,8 +152,23 @@ export class OfficeApp extends PlatformApp {
         documentRenameOp,
         documentRemoveOp,
         documentRenameForm,
-        documentEditorConfigOp,
-    ];
+        deletedDocumentsOp,
+        documentRestoreOp,
+        documentPermanentDeleteOp,
+    documentMoveOp,
+    documentShareCreateOp,
+    documentEditorConfigOp,
+    catalogAccessGetOp,
+    catalogAccessPatchOp,
+    catalogAccessRotateLinkOp,
+    documentAccessGetOp,
+    documentAccessPatchOp,
+    documentAccessRotateLinkOp,
+    publicResolveOp,
+    publicOpenOp,
+    publicCatalogItemsOp,
+    publicCatalogBindingOpenOp,
+];
 
     static styles = [
         PlatformApp.styles,
@@ -171,6 +224,7 @@ export class OfficeApp extends PlatformApp {
     getServiceEffects() {
         return [
             createRouterEffect({ baseUrl: '/documents', routes: OFFICE_ROUTES }),
+            createOfficeCatalogsLegacyRoutesEffect(),
         ];
     }
 
@@ -188,15 +242,17 @@ export class OfficeApp extends PlatformApp {
     renderRoute(routeKey, params) {
         let content;
         let editorMode = false;
+        let explorerFullBleed = false;
         switch (routeKey) {
             case 'platform_services':
                 content = html`<platform-services-page></platform-services-page>`;
                 break;
             case 'documents_list':
-                content = html`<office-documents-list-page></office-documents-list-page>`;
-                break;
-            case 'documents_catalogs':
-                content = html`<office-documents-catalogs-page></office-documents-catalogs-page>`;
+            case 'documents_recent':
+                explorerFullBleed = true;
+                content = html`<office-documents-explorer-page
+                    .initialExplorerView=${routeKey === 'documents_recent' ? 'recent' : 'catalog'}
+                ></office-documents-explorer-page>`;
                 break;
             case 'document_editor':
                 editorMode = true;
@@ -218,14 +274,24 @@ export class OfficeApp extends PlatformApp {
                         >${content}</platform-island>
                     </div>
                 `;
+            case 'documents_public_preview':
+                editorMode = true;
+                return html`
+                    <div class="main main--bleed">
+                        <platform-island padding="none" ?content-no-scroll=${true}>
+                            <office-public-preview-page .token=${params.token}></office-public-preview-page>
+                        </platform-island>
+                    </div>
+                `;
             default:
-                content = html`<office-documents-list-page></office-documents-list-page>`;
+                content = html`<office-documents-explorer-page></office-documents-explorer-page>`;
         }
-        /** Редактор: остров без inset + без скролла у `.island-content` (iframe на весь слот). Список, каталоги, витрина сервисов — `padding="md"`, чтобы `<page-header>` и баннер не прилипали к рамке. */
-        const islandContentNoScroll = editorMode;
+        /** Редактор и explorer: остров без inset + без скролла у `.island-content`. Остальные маршруты — `padding="md"`. */
+        const islandContentNoScroll = editorMode || explorerFullBleed;
+        const mainBleed = editorMode || explorerFullBleed;
         return html`
             <div class="sidebar"><office-sidebar></office-sidebar></div>
-            <div class="main ${editorMode ? 'main--bleed' : ''}">
+            <div class="main ${mainBleed ? 'main--bleed' : ''}">
                 <platform-island
                     padding=${islandContentNoScroll ? 'none' : 'md'}
                     ?content-no-scroll=${islandContentNoScroll}

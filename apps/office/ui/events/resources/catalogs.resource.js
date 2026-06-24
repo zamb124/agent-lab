@@ -47,6 +47,7 @@ export const catalogsResource = createResourceCollection({
 export const catalogCreateForm = createForm({
     name: 'office/catalog_create_form',
     schema: {
+        parent_catalog_id: {},
         title: {
             required: true,
             minLength: 1,
@@ -55,11 +56,14 @@ export const catalogCreateForm = createForm({
         },
         is_public: {},
     },
-    initial: { title: '', is_public: true },
+    initial: { title: '', is_public: true, parent_catalog_id: '' },
     submitEvent: catalogsResource.events.CREATE_REQUESTED,
     buildPayload: (draft) => ({
         title: typeof draft.title === 'string' ? draft.title.trim() : '',
         is_public: Boolean(draft.is_public),
+        parent_catalog_id: typeof draft.parent_catalog_id === 'string' && draft.parent_catalog_id.length > 0
+            ? draft.parent_catalog_id
+            : null,
     }),
 });
 

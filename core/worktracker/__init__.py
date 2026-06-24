@@ -1,0 +1,93 @@
+"""
+WorkItem — платформенное ядро задач.
+
+Нейтральный домен: модели, репозиторий и чистый `WorkItemService` (стейт-машина и
+валидация). Не зависит от конкретных сервисов (flows/crm) и не делает кросс-сервисных
+вызовов. Потребители (apps/worktracker, apps/flows, apps/crm) импортируют отсюда.
+
+Контракт и архитектура — `.cursor/rules/worktracker.mdc`.
+"""
+
+from core.worktracker.events import (
+    WORK_ITEM_COMMENT_CREATED,
+    WORK_ITEM_COMPLETED,
+    WORK_ITEM_CREATED,
+    WORK_ITEM_MOVED,
+    WORK_ITEM_UPDATED,
+    WorkItemRealtimeEvent,
+)
+from core.worktracker.models import (
+    TERMINAL_WORK_ITEM_STATES,
+    AgentActor,
+    AgentAssignment,
+    Board,
+    BoardColumn,
+    CalendarEventLink,
+    CrmEntityLink,
+    FileLink,
+    FlowSessionLink,
+    QueueAssignment,
+    RagDocumentLink,
+    SyncMessageLink,
+    SystemActor,
+    UnassignedAssignment,
+    UserActor,
+    UsersAssignment,
+    WorkActor,
+    WorkItem,
+    WorkItemAssignment,
+    WorkItemComment,
+    WorkItemCommentRole,
+    WorkItemHook,
+    WorkItemHookEvent,
+    WorkItemKind,
+    WorkItemLink,
+    WorkItemLinkRelation,
+    WorkItemPriority,
+    WorkItemResolution,
+    WorkItemState,
+    WorkItemToWorkItemLink,
+    WorkQueue,
+    WorkQueueMember,
+)
+
+__all__ = [
+    "TERMINAL_WORK_ITEM_STATES",
+    "AgentActor",
+    "AgentAssignment",
+    "Board",
+    "BoardColumn",
+    "CalendarEventLink",
+    "CrmEntityLink",
+    "FileLink",
+    "FlowSessionLink",
+    "QueueAssignment",
+    "RagDocumentLink",
+    "SyncMessageLink",
+    "SystemActor",
+    "UnassignedAssignment",
+    "UserActor",
+    "UsersAssignment",
+    "WORK_ITEM_COMMENT_CREATED",
+    "WORK_ITEM_COMPLETED",
+    "WORK_ITEM_CREATED",
+    "WORK_ITEM_MOVED",
+    "WORK_ITEM_UPDATED",
+    "WorkActor",
+    "WorkItem",
+    "WorkItemAssignment",
+    "WorkItemComment",
+    "WorkItemCommentRole",
+    "WorkItemHook",
+    "WorkItemHookEvent",
+    "WorkItemKind",
+    "WorkItemLink",
+    "WorkItemLinkRelation",
+    "WorkItemPriority",
+    "WorkItemRealtimeEvent",
+    "WorkItemResolution",
+    "WorkItemState",
+    "WorkItemToWorkItemLink",
+    "WorkQueue",
+    "WorkQueueMember",
+]

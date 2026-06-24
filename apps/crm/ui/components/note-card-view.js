@@ -44,6 +44,7 @@ import { unsafeHTML } from 'lit/directives/unsafe-html.js';
 import { PlatformElement } from '@platform/lib/platform-element/index.js';
 import { selectCrmSidebarOrDefaultNamespace } from '../utils/crm-namespace-select.js';
 import '@platform/lib/components/platform-icon.js';
+import '@platform/lib/components/platform-work-item-badge.js';
 import '@platform/lib/components/fields/platform-field.js';
 import '@platform/lib/components/glass-card.js';
 import '@platform/lib/components/glass-spinner.js';
@@ -3315,18 +3316,6 @@ export class CRMNoteCardView extends PlatformElement {
         return cardRelated.filter((e) => e && entityKind(e) === 'task');
     }
 
-    _isTaskDone(task) {
-        if (!task) return false;
-        if (task.status === 'completed' || task.status === 'done') return true;
-        if (task.attributes && (task.attributes.completed === true || task.attributes.is_done === true)) return true;
-        return typeof task.completed_at === 'string' && task.completed_at.length > 0;
-    }
-
-    _onTaskToggle(taskId, nextDone) {
-        if (typeof taskId !== 'string' || taskId.length === 0) return;
-        this.emit('task-toggle', { entityId: taskId, completed: nextDone });
-    }
-
     _onTaskRemove(taskId) {
         if (typeof taskId !== 'string' || taskId.length === 0) return;
         this.emit('task-remove', { entityId: taskId });
@@ -3750,24 +3739,26 @@ export class CRMNoteCardView extends PlatformElement {
                     ${tasks.length === 0
                         ? html`<p class="related-empty">${this.t('note_view.no_tasks')}</p>`
                         : tasks.map((task) => {
-                            const done = this._isTaskDone(task);
                             const text = task.name && task.name.length > 0 ? task.name : task.entity_id;
+                            const workItemId = typeof task.work_item_id === 'string' ? task.work_item_id : '';
                             return html`
                                 <div class="task-row">
                                     <button
                                         type="button"
-                                        class="task-check ${done ? 'checked' : ''}"
-                                        title=${done ? this.t('note_view.task_undone') : this.t('note_view.task_done')}
-                                        @click=${() => this._onTaskToggle(task.entity_id, !done)}
-                                    >
-                                        ${done ? html`<platform-icon name="check" size="14"></platform-icon>` : ''}
-                                    </button>
-                                    <button
-                                        type="button"
-                                        class="task-text ${done ? 'done' : ''}"
+                                        class="task-text"
                                         style="background: transparent; border: none; padding: 0; text-align: left; cursor: pointer; font: inherit;"
                                         @click=${() => this._emitEntityOpen(task.entity_id)}
                                     >${text}</button>
+                                    ${workItemId.length > 0
+                                        ? html`<platform-work-item-badge
+                                            work-item-id=${workItemId}
+                                            .item=${task}
+                                            variant="chip"
+                                            size="sm"
+                                            interactive
+                                            ?show-preview=${false}
+                                        ></platform-work-item-badge>`
+                                        : nothing}
                                     <button
                                         type="button"
                                         class="task-remove"

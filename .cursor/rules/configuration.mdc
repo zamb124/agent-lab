@@ -46,7 +46,7 @@ LEGAL__COMPANY_NAME_RU=...
 
 | Секция | Что |
 |---|---|
-| **`database`** | `shared_url`, `flows_url`, `crm_url`, `sync_url`, `rag_url`, `office_url`, `tracing_url`, `redis_url`. Не дублировать в `services.*`. `DATABASE__OFFICE_URL` → `platform_office`; `DATABASE__TRACING_URL` → `platform_tracing` (см. `migrations.mdc`, `tracing.mdc`). `.env` и `DATABASE__*` в окружении **перекрывают** JSON. |
+| **`database`** | `shared_url`, `flows_url`, `crm_url`, `sync_url`, `rag_url`, `office_url`, `worktracker_url`, `tracing_url`, `redis_url`. Не дублировать в `services.*`. `DATABASE__OFFICE_URL` → `platform_office`; `DATABASE__WORKTRACKER_URL` → `platform_worktracker` (ядро задач WorkItem, см. `worktracker.mdc`); `DATABASE__TRACING_URL` → `platform_tracing` (см. `migrations.mdc`, `tracing.mdc`). `.env` и `DATABASE__*` в окружении **перекрывают** JSON. |
 | **`server`** | Плоские URL межсервисных вызовов (`flows_service_url`, `crm_service_url`, …). `voice` локально — `http://localhost:8015`. Вложенного `server.services.*` нет. **`platform_public_base_url`** — публичный origin без слэша на конце. **`deployment_version`** — метка релиза в JSON `health` (PWA при смене чистит Cache Storage). |
 | **`calendar_sync`** | Фоновая синхронизация (`CalendarSyncConfig`), в т.ч. `sync_meeting_reminder_*` — напоминания о встречах Sync за ~15 минут. |
 | **`voice`** | Deployment-default провайдеров речи: `voice.stt`, `voice.tts`, `voice.vad`. Ключ cloud.ru STT — `VOICE__STT__CLOUD_RU__API_KEY`. |

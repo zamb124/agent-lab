@@ -28,7 +28,6 @@ export class FlowsExternalApiEditor extends PlatformElement {
         graphNodes: { type: Array },
         previewExecutionState: { type: Object },
         dataflowNode: { type: Object },
-        expanded: { type: Boolean, reflect: true },
         embedded: { type: Boolean, reflect: true },
     };
 
@@ -71,7 +70,6 @@ export class FlowsExternalApiEditor extends PlatformElement {
         this.graphNodes = null;
         this.previewExecutionState = null;
         this.dataflowNode = null;
-        this.expanded = false;
         this.embedded = false;
     }
 
@@ -164,7 +162,6 @@ export class FlowsExternalApiEditor extends PlatformElement {
                 .graphNodes=${this.graphNodes}
                 .previewExecutionState=${this.previewExecutionState}
                 .dataflowNode=${this.dataflowNode}
-                ?expanded=${this.expanded}
                 ?embedded=${this.embedded}
             >
                 <div slot="settings" class="settings-wrap">

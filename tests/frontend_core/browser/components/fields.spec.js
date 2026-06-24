@@ -8,6 +8,8 @@
 
 import { fixture, html, expect, oneEvent, elementUpdated } from '../helpers/render.js';
 import { resetPlatformState, bootstrapTestBus } from '../helpers/reset.js';
+import { getPlatformBus } from '@platform/lib/events/index.js';
+import { formatPlatformDate } from '@platform/lib/utils/format-platform-date.js';
 import '@platform/lib/components/fields/platform-field.js';
 import '@platform/lib/components/fields/platform-field-string.js';
 import '@platform/lib/components/fields/platform-field-text.js';
@@ -422,7 +424,9 @@ describe('platform-field-boolean / date / array / object: smoke', () => {
 
     it('date рендерится в view', async () => {
         const el = await fixture(html`<platform-field-date mode="view" value="2026-01-01"></platform-field-date>`);
-        expect(el.shadowRoot.querySelector('.field-pill-readonly-text').textContent).to.equal('2026-01-01');
+        const locale = getPlatformBus().getState().i18n.locale;
+        const expected = formatPlatformDate('2026-01-01', locale);
+        expect(el.shadowRoot.querySelector('.field-pill-readonly-text').textContent).to.equal(expected);
     });
 
     it('array рендерится', async () => {

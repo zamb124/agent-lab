@@ -23,6 +23,7 @@ import '@platform/lib/components/platform-icon.js';
 import '@platform/lib/components/glass-spinner.js';
 import '@platform/lib/components/platform-help-hint.js';
 import '@platform/lib/components/fields/platform-field.js';
+import '@platform/lib/components/platform-work-item-badge.js';
 import './crm-related-entity-cards.js';
 import './crm-related-neighbor-rows.js';
 import {
@@ -2777,6 +2778,17 @@ export class CRMEntityCard extends PlatformElement {
                                     label=${this.t('entity_modal.label_name')}
                                     .value=${nameValue}
                                 ></platform-field>
+                                ${entity.entity_type === 'task'
+                                    && typeof entity.work_item_id === 'string'
+                                    && entity.work_item_id.length > 0
+                                    ? html`<platform-work-item-badge
+                                        work-item-id=${entity.work_item_id}
+                                        .item=${entity}
+                                        variant="chip"
+                                        size="sm"
+                                        interactive
+                                    ></platform-work-item-badge>`
+                                    : nothing}
                                 <div class="ecard-status-view">
                                     <span class="section-title text-only">${this.t('entity_modal.label_status')}</span>
                                     <div class="ecard-status-view-body">

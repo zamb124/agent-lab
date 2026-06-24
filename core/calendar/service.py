@@ -39,7 +39,7 @@ from core.models import (
     CalendarProvider,
 )
 from core.models.base import FlexibleBaseModel, StrictBaseModel
-from core.types import JsonObject, require_json_array, require_json_object
+from core.types import JsonObject, JsonValue, require_json_array, require_json_object
 from core.websocket.publisher import Notification, NotificationType, notify_user
 
 SYNC_LINK_TOKEN_META = "sync_link_token"
@@ -1371,74 +1371,136 @@ class CalendarService:
             "/crm/api/v1/entities/query",
             json={"entity_type": "note", "limit": 200, "search_mode": "hybrid"},
         )
-        tasks_response = await self._service_client.post(
-            "crm",
-            "/crm/api/v1/entities/query",
-            json={"entity_type": "task", "limit": 200, "search_mode": "hybrid"},
-        )
         notes_items_raw = notes_response.get("items") if isinstance(notes_response, dict) else None
-        tasks_items_raw = tasks_response.get("items") if isinstance(tasks_response, dict) else None
         notes_items = (
             require_json_array(notes_items_raw, "crm.notes.items")
             if isinstance(notes_items_raw, list)
             else []
         )
-        tasks_items = (
-            require_json_array(tasks_items_raw, "crm.tasks.items")
-            if isinstance(tasks_items_raw, list)
-            else []
-        )
         events: list[CalendarEvent] = []
         now = datetime.now(timezone.utc)
-        for item in [*notes_items, *tasks_items]:
+        for item in notes_items:
             if not isinstance(item, dict):
                 continue
             source_id = item.get("entity_id")
             if not isinstance(source_id, str) or source_id == "":
                 continue
-            raw_date = item.get("note_date") or item.get("due_date")
+            raw_date = item.get("note_date")
             if not isinstance(raw_date, str) or raw_date == "":
                 continue
-            start_value = datetime.fromisoformat(f"{raw_date}T09:00:00+00:00")
-            end_value = datetime.fromisoformat(f"{raw_date}T10:00:00+00:00")
-            if start_value >= end_at or end_value <= start_at:
-                continue
-            raw_kind = item.get("entity_type")
-            kind = raw_kind if isinstance(raw_kind, str) and raw_kind else "crm"
-            raw_title = item.get("name")
-            title = raw_title if isinstance(raw_title, str) and raw_title else "CRM event"
+            raw_name = item.get("name")
             raw_description = item.get("description")
-            description = raw_description if isinstance(raw_description, str) else None
-            events.append(
-                CalendarEvent(
-                    event_id=f"crm-{source_id}",
-                    source=CalendarEventSource.CRM,
-                    source_id=source_id,
-                    company_id=company_id,
-                    namespace=None,
-                    kind=kind,
-                    title=title,
-                    description=description,
-                    location=None,
-                    status=CalendarEventStatus.CONFIRMED,
-                    timezone="UTC",
-                    all_day=False,
-                    start_at=start_value,
-                    end_at=end_value,
-                    attendees=[],
-                    recurrence_rule=None,
-                    recurrence_id=None,
-                    series_id=None,
-                    deep_link=f"/crm?view=entities&entity_id={source_id}",
-                    external_refs=[],
-                    metadata={},
-                    created_by_user_id=user_id,
-                    updated_by_user_id=user_id,
-                    created_at=now,
-                    updated_at=now,
-                )
+            event = self._build_crm_calendar_event(
+                source_id=source_id,
+                date_str=raw_date[:10],
+                kind="note",
+                title=raw_name if isinstance(raw_name, str) else None,
+                description=raw_description if isinstance(raw_description, str) else None,
+                company_id=company_id,
+                user_id=user_id,
+                now=now,
+                start_at=start_at,
+                end_at=end_at,
             )
+            if event is not None:
+                events.append(event)
+
+        # Срок задач живёт в парном WorkItem(crm_activity), не в CRM-узле.
+        tasks_response = await self._service_client.get(
+            "worktracker",
+            "/worktracker/api/v1/work-items?kind=crm_activity&limit=200",
+        )
+        tasks_items_raw = tasks_response.get("items") if isinstance(tasks_response, dict) else None
+        tasks_items = (
+            require_json_array(tasks_items_raw, "worktracker.items")
+            if isinstance(tasks_items_raw, list)
+            else []
+        )
+        for item in tasks_items:
+            if not isinstance(item, dict):
+                continue
+            due_raw = item.get("due_date")
+            if not isinstance(due_raw, str) or due_raw == "":
+                continue
+            entity_id = self._crm_entity_id_from_work_item_links(item.get("links"))
+            if entity_id is None:
+                continue
+            raw_title = item.get("title")
+            raw_task_description = item.get("description")
+            event = self._build_crm_calendar_event(
+                source_id=entity_id,
+                date_str=due_raw[:10],
+                kind="task",
+                title=raw_title if isinstance(raw_title, str) else None,
+                description=raw_task_description if isinstance(raw_task_description, str) else None,
+                company_id=company_id,
+                user_id=user_id,
+                now=now,
+                start_at=start_at,
+                end_at=end_at,
+            )
+            if event is not None:
+                events.append(event)
         return events
+
+    @staticmethod
+    def _crm_entity_id_from_work_item_links(links: JsonValue) -> str | None:
+        if not isinstance(links, list):
+            return None
+        for link in links:
+            if not isinstance(link, dict):
+                continue
+            if link.get("link_kind") == "crm_entity":
+                entity_id = link.get("entity_id")
+                if isinstance(entity_id, str) and entity_id:
+                    return entity_id
+        return None
+
+    def _build_crm_calendar_event(
+        self,
+        *,
+        source_id: str,
+        date_str: str,
+        kind: str,
+        title: str | None,
+        description: str | None,
+        company_id: str,
+        user_id: str,
+        now: datetime,
+        start_at: datetime,
+        end_at: datetime,
+    ) -> CalendarEvent | None:
+        start_value = datetime.fromisoformat(f"{date_str}T09:00:00+00:00")
+        end_value = datetime.fromisoformat(f"{date_str}T10:00:00+00:00")
+        if start_value >= end_at or end_value <= start_at:
+            return None
+        return CalendarEvent(
+            event_id=f"crm-{source_id}",
+            source=CalendarEventSource.CRM,
+            source_id=source_id,
+            company_id=company_id,
+            namespace=None,
+            kind=kind,
+            title=title if title else "CRM event",
+            description=description,
+            location=None,
+            status=CalendarEventStatus.CONFIRMED,
+            timezone="UTC",
+            all_day=False,
+            start_at=start_value,
+            end_at=end_value,
+            attendees=[],
+            recurrence_rule=None,
+            recurrence_id=None,
+            series_id=None,
+            deep_link=f"/crm?view=entities&entity_id={source_id}",
+            external_refs=[],
+            metadata={},
+            created_by_user_id=user_id,
+            updated_by_user_id=user_id,
+            created_at=now,
+            updated_at=now,
+        )
 
     async def _fetch_sync_events(
         self,

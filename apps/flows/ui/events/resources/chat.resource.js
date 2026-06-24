@@ -1673,6 +1673,18 @@ export const chatResource = createResourceCollection({
                 messageMetadata: mmeta,
                 message: msg,
             };
+            if (typeof extracted.workItemId === 'string' && extracted.workItemId.length > 0) {
+                inputRequired.workItemId = extracted.workItemId;
+            }
+            if (typeof extracted.operatorTaskTitle === 'string' && extracted.operatorTaskTitle.length > 0) {
+                inputRequired.operatorTaskTitle = extracted.operatorTaskTitle;
+            }
+            if (typeof extracted.handoffMode === 'string' && extracted.handoffMode.length > 0) {
+                inputRequired.handoffMode = extracted.handoffMode;
+            }
+            if (typeof extracted.operatorAssigneeQueue === 'string' && extracted.operatorAssigneeQueue.length > 0) {
+                inputRequired.operatorAssigneeQueue = extracted.operatorAssigneeQueue;
+            }
             if (extracted.authUrl.length > 0) {
                 inputRequired.authUrl = extracted.authUrl;
             }

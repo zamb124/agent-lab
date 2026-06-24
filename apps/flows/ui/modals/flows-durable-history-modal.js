@@ -8,6 +8,7 @@ import { registerModalKind } from '@platform/lib/utils/modal-registry.js';
 import { platformConfirm } from '@platform/lib/components/platform-confirm-modal.js';
 import '@platform/lib/components/platform-button.js';
 import '@platform/lib/components/platform-icon.js';
+import '@platform/lib/components/platform-work-item-badge.js';
 import '@platform/lib/components/glass-spinner.js';
 import '../components/editors/flows-code-editor.js';
 
@@ -600,6 +601,15 @@ export class FlowsDurableHistoryModal extends PlatformModal {
         this._stateEditText = '';
     }
 
+    _eventWorkItemId(event) {
+        const payload = event.payload;
+        if (!payload || typeof payload !== 'object') {
+            return '';
+        }
+        const workItemId = payload.work_item_id;
+        return typeof workItemId === 'string' ? workItemId : '';
+    }
+
     _eventSubtitle(event) {
         return nonEmptyField(event.payload, [
             'node_id',
@@ -608,7 +618,6 @@ export class FlowsDurableHistoryModal extends PlatformModal {
             'activity_type',
             'child_session_id',
             'handoff_command_id',
-            'operator_task_id',
             'source_execution_branch_id',
         ]);
     }
@@ -900,6 +909,7 @@ export class FlowsDurableHistoryModal extends PlatformModal {
             <div class="timeline-list">
                 ${events.map((event) => {
                     const subtitle = this._eventSubtitle(event);
+                    const workItemId = this._eventWorkItemId(event);
                     return html`
                         <button
                             type="button"
@@ -909,7 +919,17 @@ export class FlowsDurableHistoryModal extends PlatformModal {
                             <div class="event-seq">#${event.sequence}</div>
                             <div class="event-main">
                                 <div class="event-type">${event.event_type}</div>
-                                ${subtitle.length > 0 ? html`<div class="event-subtitle">${subtitle}</div>` : nothing}
+                                ${workItemId.length > 0
+                                    ? html`<platform-work-item-badge
+                                        work-item-id=${workItemId}
+                                        variant="chip"
+                                        size="sm"
+                                        interactive
+                                        ?show-preview=${false}
+                                    ></platform-work-item-badge>`
+                                    : (subtitle.length > 0
+                                        ? html`<div class="event-subtitle">${subtitle}</div>`
+                                        : nothing)}
                                 <div class="event-created">${this._formatCreatedAt(event)}</div>
                             </div>
                         </button>

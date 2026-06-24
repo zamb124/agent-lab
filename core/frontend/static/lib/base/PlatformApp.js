@@ -41,6 +41,10 @@ import { nextModalLayerZIndex } from '../utils/modal-z-stack.js';
 import { serviceIdFromBaseUrl, setLastVisitedService } from '../utils/last-visited-service.js';
 import { registerFactory } from '../events/factory-registry.js';
 import { collectFactories } from '../events/factories/register.js';
+import {
+    platformWorkItemFactories,
+    createPlatformWorkItemCountsAuthEffect,
+} from '../events/resources/platform-work-item.resource.js';
 import { setDefaultI18nNamespace } from '../utils/i18n-namespace.js';
 import { prefersReducedMotion } from '../utils/motion.js';
 
@@ -120,9 +124,12 @@ export class PlatformApp extends PlatformElement {
         if (typeof ctor.defaultI18nNamespace === 'string' && ctor.defaultI18nNamespace.length > 0) {
             setDefaultI18nNamespace(ctor.defaultI18nNamespace);
         }
-        const factories = Array.isArray(ctor.factories) ? ctor.factories : [];
+        const factories = [
+            ...platformWorkItemFactories,
+            ...(Array.isArray(ctor.factories) ? ctor.factories : []),
+        ];
         const factorySlices = {};
-        const factoryEffects = [];
+        const factoryEffects = [createPlatformWorkItemCountsAuthEffect()];
         if (factories.length > 0) {
             for (const factory of factories) {
                 registerFactory(factory);
@@ -321,7 +328,9 @@ export class PlatformApp extends PlatformElement {
         const routeKey = route ? route.routeKey : null;
         const params = route ? route.params || {} : {};
         const ctor = this.constructor;
-        const bottomNavItems = Array.isArray(ctor.bottomNavItems) ? ctor.bottomNavItems : [];
+        const bottomNavItems = typeof this.getBottomNavItems === 'function'
+            ? this.getBottomNavItems()
+            : (Array.isArray(ctor.bottomNavItems) ? ctor.bottomNavItems : []);
         const bottomNavHideOnRoutes = Array.isArray(ctor.bottomNavHideOnRoutes)
             ? ctor.bottomNavHideOnRoutes
             : [];

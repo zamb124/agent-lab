@@ -244,8 +244,20 @@ def _manifest_exists(image_ref: str) -> bool:
     return result.returncode == 0
 
 
+def _local_image_exists(image_ref: str) -> bool:
+    result = _run(
+        ["docker", "image", "inspect", image_ref],
+        check=False,
+        capture=True,
+    )
+    return result.returncode == 0
+
+
 def _docker_pull(image_ref: str) -> bool:
-    result = _run(["docker", "pull", image_ref], check=False)
+    result = _run(
+        ["docker", "pull", "--platform", DOCKER_PLATFORM, image_ref],
+        check=False,
+    )
     return result.returncode == 0
 
 
@@ -294,6 +306,26 @@ def _try_pull_image(image_ref: str) -> bool:
     return _docker_pull(image_ref)
 
 
+def _ensure_agent_lab_base(registry: str) -> str:
+    image_ref = _image_ref(registry, "agent-lab-base", "latest")
+    if _local_image_exists(image_ref):
+        return image_ref
+    print(f"[ensure] pull {image_ref} ({DOCKER_PLATFORM})")
+    if _docker_pull(image_ref):
+        return image_ref
+    print(f"[ensure] pull failed for {image_ref}, building locally from Dockerfile.base")
+    spec = ImageSpec(
+        env_key="AGENT_LAB_BASE_IMAGE",
+        repository_suffix="agent-lab-base",
+        tag="latest",
+        dockerfile=PROJECT_ROOT / "Dockerfile.base",
+        target="",
+        build_args={},
+    )
+    _docker_build(spec, image_ref, registry)
+    return image_ref
+
+
 def _ensure_image(spec: ImageSpec, registry: str, *, try_pull: bool) -> str:
     image_ref = _image_ref(registry, spec.repository_suffix, spec.tag)
     if try_pull:
@@ -337,7 +369,6 @@ def main() -> int:
     a2a_hash = _content_hash(a2a_files)
 
     test_base_ref = _image_ref(registry, "agent-lab-test-base", f"deps-{deps_hash}")
-    agent_lab_base_ref = _image_ref(registry, "agent-lab-base", "latest")
 
     force_build = os.environ.get("TEST_IMAGES_FORCE_BUILD", "").strip() == "1"
     try_pull_code_images = not force_build
@@ -350,6 +381,8 @@ def main() -> int:
     elif force_build:
         print("[ensure] TEST_IMAGES_FORCE_BUILD=1 — code images will be built locally")
 
+    agent_lab_base_ref = _ensure_agent_lab_base(registry)
+
     test_base_spec = ImageSpec(
         env_key="TEST_BASE_IMAGE",
         repository_suffix="agent-lab-test-base",
@@ -358,13 +391,6 @@ def main() -> int:
         target="",
         build_args={"BASE_IMAGE": agent_lab_base_ref},
     )
-    if not _manifest_exists(test_base_ref):
-        if not _manifest_exists(agent_lab_base_ref):
-            print(f"[ensure] pull {agent_lab_base_ref}")
-            if not _docker_pull(agent_lab_base_ref):
-                raise RuntimeError(
-                    f"Cannot pull {agent_lab_base_ref}; run build-base workflow or set TEST_IMAGE_REGISTRY"
-                )
     test_base_ref = _ensure_image(test_base_spec, registry, try_pull=True)
 
     agent_lab_spec = ImageSpec(

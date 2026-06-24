@@ -55,13 +55,6 @@ MEMBER_AMO_OPTIONAL_FIELDS: JsonObject = {
 
 TASK_AMO_OPTIONAL_FIELDS: JsonObject = {
     "title": {"type": "string", "label": "Название задачи"},
-    "due_date": {"type": "date", "label": "Срок"},
-    "priority": {"type": "enum", "values": ["low", "medium", "high", "urgent"]},
-    "status": {
-        "type": "enum",
-        "values": ["todo", "in_progress", "done"],
-        "label": "Статус",
-    },
     "amo_task_type_id": {"type": "integer", "label": "Amo task_type_id"},
     "amo_task_type_name": {"type": "string", "label": "Тип задачи Amo"},
     "amo_is_completed": {"type": "boolean", "label": "Завершена в Amo"},

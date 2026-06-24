@@ -85,13 +85,13 @@ from core.types import JsonObject, JsonValue, require_json_object, require_json_
 
 logger = get_logger(__name__)
 from apps.crm.config import get_crm_settings  # noqa: E402
-from apps.crm.services.task_board_presets import (  # noqa: E402
-    resolve_allowed_task_status_ids,
-    resolve_task_board_stages,
-    task_board_key,
+from apps.crm.services.crm_work_item_service import (  # noqa: E402
+    CrmTaskWorkSeed,
+    CrmWorkItemService,
 )
 from core.config import get_settings  # noqa: E402
 from core.utils.chunked_async import map_reduce_tree, run_chunked_map  # noqa: E402
+from core.worktracker.models import UserActor  # noqa: E402
 
 if TYPE_CHECKING:
     from apps.crm.services.access_control_service import AccessControlService
@@ -210,9 +210,7 @@ _MERGE_SCALAR_KEYS: tuple[str, ...] = (
     "description",
     "status",
     "entity_subtype",
-    "priority",
     "note_date",
-    "due_date",
 )
 
 
@@ -330,6 +328,7 @@ class EntityService:
         company_repo: "CompanyRepository",
         access_control: "AccessControlService",
         task_repository: TaskRepository | None = None,
+        crm_work_item_service: CrmWorkItemService | None = None,
         note_markdown_format_scheduler: NoteMarkdownFormatScheduler | None = None,
     ) -> None:
         self._entity_repo: EntityRepository = entity_repo
@@ -350,6 +349,7 @@ class EntityService:
         self._company_repo: CompanyRepository = company_repo
         self._access_control: AccessControlService = access_control
         self._task_repository: TaskRepository | None = task_repository
+        self._crm_work_item_service: CrmWorkItemService | None = crm_work_item_service
         self._note_markdown_format_scheduler: NoteMarkdownFormatScheduler | None = (
             note_markdown_format_scheduler
         )
@@ -512,25 +512,6 @@ class EntityService:
         if errors:
             raise SchemaValidationError(errors)
 
-    async def _validate_task_entity_board_status(
-        self,
-        *,
-        namespace: str,
-        entity_subtype: str | None,
-        attributes: JsonObject,
-    ) -> None:
-        crm = await self._load_namespace_crm_settings(namespace)
-        key = task_board_key("task", entity_subtype)
-        allowed = resolve_allowed_task_status_ids(crm, key)
-        st = attributes.get("status")
-        if st is None:
-            return
-        if not isinstance(st, str):
-            raise ValueError("attributes.status для задачи должен быть строкой")
-        st_clean = st.strip()
-        if st_clean not in allowed:
-            raise ValueError(f"Недопустимая стадия доски задач: {st_clean!r}")
-
     @staticmethod
     def _parse_decimal_string_for_schema(raw: str) -> float | None:
         """Разбор строки в float для полей integer/number (пробелы, NBSP, запятые)."""
@@ -640,12 +621,10 @@ class EntityService:
             "entity_subtype": "string",
             "namespace": "string",
             "status": "string",
-            "priority": "string",
             "user_id": "string",
             "name": "text",
             "description": "text",
             "note_date": "date",
-            "due_date": "date",
             "created_at": "datetime",
             "tags": "array",
         }
@@ -1080,6 +1059,30 @@ class EntityService:
         source_version = self._build_source_version(notes)
         return notes, source_version
 
+    async def sync_task_work_item(
+        self, entity: CRMEntity, seed: CrmTaskWorkSeed, *, user_id: str
+    ) -> None:
+        """Создать/синхронизировать парный WorkItem(crm_activity) для CRM-задачи."""
+        if self._crm_work_item_service is None:
+            raise ValueError("crm_work_item_service обязателен для задач")
+        _ = await self._crm_work_item_service.sync_for_task(
+            company_id=entity.company_id,
+            entity_id=entity.entity_id,
+            namespace=entity.namespace,
+            title=entity.name,
+            description=entity.description or "",
+            seed=seed,
+            created_by=UserActor(user_id=user_id),
+        )
+
+    async def _delete_task_work_item(self, entity: CRMEntity) -> None:
+        """Удалить парный WorkItem CRM-задачи при удалении графового узла."""
+        if self._crm_work_item_service is None:
+            return
+        await self._crm_work_item_service.delete_for_task(
+            company_id=entity.company_id, entity_id=entity.entity_id
+        )
+
     async def create_entity(
         self,
         entity_type: str,
@@ -1126,23 +1129,17 @@ class EntityService:
             namespace=namespace,
             entity_subtype=entity_subtype,
         )
+        # Work-семантика задачи живёт в парном WorkItem; на CRM-узле её нет.
+        work_priority = kwargs.pop("priority", None)
+        work_due_date = kwargs.pop("due_date", None)
+        work_assignees = kwargs.pop("assignees", None)
+        work_board_status: str | None = None
         if entity_type == "task":
             base_attrs: JsonObject = dict(attributes or {})
-            crm = await self._load_namespace_crm_settings(namespace)
-            bkey = task_board_key("task", entity_subtype)
-            stages = resolve_task_board_stages(crm, bkey)
-            if "status" not in base_attrs or base_attrs.get("status") is None:
-                base_attrs["status"] = stages[0].id
-            else:
-                st0 = base_attrs["status"]
-                if not isinstance(st0, str) or not st0.strip():
-                    base_attrs["status"] = stages[0].id
+            raw_status = base_attrs.pop("status", None)
+            if isinstance(raw_status, str) and raw_status.strip():
+                work_board_status = raw_status.strip()
             attributes = base_attrs
-            await self._validate_task_entity_board_status(
-                namespace=namespace,
-                entity_subtype=entity_subtype,
-                attributes=attributes,
-            )
         await self._validate_entity_attributes(
             entity_type=entity_type,
             attributes=attributes or {},
@@ -1191,6 +1188,20 @@ class EntityService:
 
         _ = await self._entity_repo.create(entity)
         logger.info(f"Created entity: {entity.entity_id}, type={entity.full_type}")
+
+        if entity.entity_type == "task":
+            await self.sync_task_work_item(
+                entity,
+                CrmTaskWorkSeed(
+                    priority=work_priority if isinstance(work_priority, str) else None,
+                    due_date=work_due_date if isinstance(work_due_date, date) else None,
+                    assignees=[str(a) for a in cast(list[object], work_assignees)]
+                    if isinstance(work_assignees, list)
+                    else [],
+                    board_status=work_board_status,
+                ),
+                user_id=user_id,
+            )
 
         if attachment_text_merged:
             if self._note_markdown_format_scheduler is None:
@@ -1268,12 +1279,8 @@ class EntityService:
                 return entity.status
             case "entity_subtype":
                 return entity.entity_subtype
-            case "priority":
-                return entity.priority
             case "note_date":
                 return entity.note_date
-            case "due_date":
-                return entity.due_date
             case _:
                 raise ValueError(f"Unsupported merge scalar key: {key}")
 
@@ -1296,18 +1303,10 @@ class EntityService:
                 if value is not None and not isinstance(value, str):
                     raise ValueError("entity_subtype must be a string or null")
                 entity.entity_subtype = value
-            case "priority":
-                if value is not None and not isinstance(value, str):
-                    raise ValueError("priority must be a string or null")
-                entity.priority = value
             case "note_date":
                 if value is not None and not isinstance(value, date):
                     raise ValueError("note_date must be a date or null")
                 entity.note_date = value
-            case "due_date":
-                if value is not None and not isinstance(value, date):
-                    raise ValueError("due_date must be a date or null")
-                entity.due_date = value
             case _:
                 raise ValueError(f"Unsupported merge scalar key: {key}")
 
@@ -1427,7 +1426,6 @@ class EntityService:
             return list(dict.fromkeys(merged))
 
         merged_tags = _union_str_lists(survivor.tags, source.tags)
-        merged_assignees = _union_str_lists(survivor.assignees, source.assignees)
         merged_attachments = _union_str_lists(survivor.attachment_ids, source.attachment_ids)
 
         _ = await self._relationship_repo.rewrite_entity_id(company_id, source_id, survivor_id)
@@ -1460,7 +1458,6 @@ class EntityService:
         for key in _MERGE_SCALAR_KEYS:
             self._set_entity_merge_scalar_value(surv, key, merged_scalars[key])
         surv.tags = merged_tags
-        surv.assignees = merged_assignees
         surv.attributes = merged_attrs
         surv.attachment_ids = merged_attachments
         surv.updated_at = datetime.now(UTC)
@@ -1473,6 +1470,12 @@ class EntityService:
         _ = await self._entity_repo.update(surv)
 
         _ = await self._delete_entity_with_saga(source_id)
+
+        # Парный WorkItem source-узла больше не нужен (узел удалён); survivor сохраняет свой.
+        if source.entity_type == "task" and self._crm_work_item_service is not None:
+            await self._crm_work_item_service.delete_for_task(
+                company_id=company_id, entity_id=source_id
+            )
 
         out = await self._entity_repo.get(survivor_id)
         if out is None:
@@ -1530,12 +1533,6 @@ class EntityService:
                 raise ValueError("attributes must be an object or null")
             update_attributes = parsed_update_attributes
         merged_attributes: JsonObject = {**(entity.attributes or {}), **update_attributes}
-        if next_entity_type == "task":
-            await self._validate_task_entity_board_status(
-                namespace=next_namespace,
-                entity_subtype=next_entity_subtype,
-                attributes=merged_attributes,
-            )
         await self._validate_entity_attributes(
             entity_type=next_entity_type,
             attributes=merged_attributes,
@@ -1552,6 +1549,15 @@ class EntityService:
             if value is not None:
                 setattr(entity, key, value)
         entity.namespace = next_namespace
+
+        # Для задачи канбан-статус живёт в WorkItem, а не в attributes CRM-узла.
+        task_board_status: str | None = None
+        if next_entity_type == "task":
+            task_attrs = dict(entity.attributes or {})
+            raw_task_status = task_attrs.pop("status", None)
+            if isinstance(raw_task_status, str) and raw_task_status.strip():
+                task_board_status = raw_task_status.strip()
+            entity.attributes = task_attrs
 
         if is_note and "attachment_ids" in updates:
             prior = frozenset(old_attachment_ids)
@@ -1579,6 +1585,23 @@ class EntityService:
         _ = await self._entity_repo.update(entity)
 
         logger.info(f"Updated entity: {entity_id}")
+
+        if entity.entity_type == "task":
+            update_priority = updates.get("priority")
+            update_due = updates.get("due_date")
+            update_assignees = updates.get("assignees")
+            await self.sync_task_work_item(
+                entity,
+                CrmTaskWorkSeed(
+                    priority=update_priority if isinstance(update_priority, str) else None,
+                    due_date=update_due if isinstance(update_due, date) else None,
+                    assignees=[str(a) for a in cast(list[object], update_assignees)]
+                    if isinstance(update_assignees, list)
+                    else [],
+                    board_status=task_board_status,
+                ),
+                user_id=entity.user_id,
+            )
 
         if is_note:
             new_note_date = entity.note_date.isoformat() if entity.note_date is not None else None
@@ -1982,6 +2005,8 @@ class EntityService:
                         f"Skip already deleted exclusive entity for note {entity_id}: {related_entity_id}"
                     )
                     continue
+                if related_entity.entity_type == "task":
+                    await self._delete_task_work_item(related_entity)
                 _ = await self._delete_entity_with_saga(related_entity_id)
                 logger.info(
                     f"Deleted exclusive related entity for note {entity_id}: {related_entity_id}"
@@ -1992,6 +2017,8 @@ class EntityService:
                 f"Successfully deleted note {entity_id} with {len(exclusive_related_entity_ids)} exclusive entities"
             )
         else:
+            if entity.entity_type == "task":
+                await self._delete_task_work_item(entity)
             _ = await self._delete_entity_with_saga(entity_id)
             logger.info(f"Successfully deleted entity: {entity_id} (cascade)")
 
@@ -5522,6 +5549,7 @@ class EntityService:
             enriched_centers = await build_entity_responses_with_semantic_index(
                 self._entity_repo,
                 center_entities,
+                crm_work_item_service=self._crm_work_item_service,
             )
             for resp in enriched_centers:
                 center_payload_by_id[resp.entity_id] = cast(
@@ -5568,7 +5596,11 @@ class EntityService:
         return result
 
     async def _entity_as_api_dict(self, entity: CRMEntity) -> JsonObject:
-        enriched = await build_entity_responses_with_semantic_index(self._entity_repo, [entity])
+        enriched = await build_entity_responses_with_semantic_index(
+            self._entity_repo,
+            [entity],
+            crm_work_item_service=self._crm_work_item_service,
+        )
         if len(enriched) != 1:
             raise ValueError("_entity_as_api_dict: expected a single enriched entity")
         return cast(JsonObject, enriched[0].model_dump(mode="json"))
@@ -5576,7 +5608,11 @@ class EntityService:
     async def _related_entities_as_api_dicts(self, entities: list[CRMEntity]) -> list[JsonObject]:
         if not entities:
             return []
-        enriched = await build_entity_responses_with_semantic_index(self._entity_repo, entities)
+        enriched = await build_entity_responses_with_semantic_index(
+            self._entity_repo,
+            entities,
+            crm_work_item_service=self._crm_work_item_service,
+        )
         return [cast(JsonObject, resp.model_dump(mode="json")) for resp in enriched]
 
     @staticmethod
@@ -5593,10 +5629,7 @@ class EntityService:
             "status": entity.status,
             "tags": entity.tags or [],
             "attributes": entity.attributes or {},
-            "priority": entity.priority,
-            "due_date": entity.due_date.isoformat() if entity.due_date else None,
             "note_date": entity.note_date.isoformat() if entity.note_date else None,
-            "assignees": entity.assignees or [],
             "attachment_ids": entity.attachment_ids or [],
             "user_id": entity.user_id,
             "source_entity_id": entity.source_entity_id,

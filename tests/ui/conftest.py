@@ -166,3 +166,8 @@ async def flows_ui(flows_service) -> AppUI:
 @pytest_asyncio.fixture
 async def frontend_ui(frontend_service) -> AppUI:
     return AppUI(SERVICE_UI_REGISTRY["frontend"])
+
+
+@pytest_asyncio.fixture
+async def office_ui(office_service, _ui_subdomain_mappings) -> AppUI:
+    return AppUI(SERVICE_UI_REGISTRY["office"])

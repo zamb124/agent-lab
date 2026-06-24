@@ -117,6 +117,10 @@ class DatabaseConfig(BaseModel):
     sync_url: str | None = None
     rag_url: str | None = None
     office_url: str | None = None
+    worktracker_url: str | None = Field(
+        default=None,
+        description="PostgreSQL platform_worktracker (ядро задач WorkItem)",
+    )
     tracing_url: str | None = Field(
         default=None,
         description="PostgreSQL platform_tracing (spans); отдельно от shared",
@@ -276,6 +280,7 @@ class ServerConfig(BaseModel):
     sync_service_url: str | None = None
     scheduler_service_url: str | None = None
     office_service_url: str | None = None
+    worktracker_service_url: str | None = None
     browser_service_url: str | None = None
     search_service_url: str | None = None
     provider_litserve_service_url: str | None = None
@@ -316,6 +321,7 @@ class ServerConfig(BaseModel):
         "code_runner_node": 8018,
         "code_runner_go": 8019,
         "code_runner_csharp": 8020,
+        "worktracker": 8021,
     }
 
     def get_service_url(self, service: str | None = None) -> str:
@@ -353,6 +359,8 @@ class ServerConfig(BaseModel):
                 return self.scheduler_service_url
             case "office":
                 return self.office_service_url
+            case "worktracker":
+                return self.worktracker_service_url
             case "browser":
                 return self.browser_service_url
             case "search":

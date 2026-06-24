@@ -1,13 +1,15 @@
 {
     "routes": {
         "documents_list": "Documents",
+        "documents_recent": "Recent",
         "platform_services": "Services",
         "documents_catalogs": "Catalogs",
-        "document_editor": "Editor"
+        "document_editor": "Editor",
+        "documents_public_preview": "Shared document"
     },
     "bottom_nav": {
         "documents": "Files",
-        "catalogs": "Catalogs",
+        "recent": "Recent",
         "profile": "Profile"
     },
     "workspace_picker": {
@@ -44,13 +46,27 @@
         "cardsAria": "Document list",
         "colTitle": "Title",
         "colCreated": "Created",
+        "colSize": "Size",
+        "colUpdated": "Modified",
         "colAuthor": "Author",
         "creatorAria": "Author: {{name}}",
         "colType": "Type",
         "docType": {
             "word": "Document",
             "cell": "Spreadsheet",
-            "slide": "Presentation"
+            "slide": "Presentation",
+            "office_doc": "Document",
+            "spreadsheet": "Spreadsheet",
+            "presentation": "Presentation",
+            "pdf": "PDF",
+            "text": "Text",
+            "image": "Image",
+            "audio": "Audio",
+            "video": "Video",
+            "archive": "Archive",
+            "email": "Email",
+            "ebook": "E-book",
+            "unknown": "File"
         },
         "colActions": "Actions",
         "catalogUnknown": "Catalog",
@@ -69,9 +85,151 @@
         "deleteConfirmTitle": "Delete document",
         "deleteConfirm": "Delete document \"{{title}}\"?"
     },
+    "explorer": {
+        "catalogsTitle": "Catalogs",
+        "manageCatalogs": "Manage catalogs",
+        "noCatalogsInline": "No catalogs yet",
+        "dropOverlay": "Drop file to upload",
+        "emptyDropHint": "Drag a file here or use Upload in the toolbar.",
+        "catalogPickerTitle": "Select catalog",
+        "upload": {
+            "uploading": "Uploading…",
+            "done": "Done",
+            "failed": "Failed"
+        }
+    },
+    "nav": {
+        "sectionViews": "Views",
+        "sectionRecentPlaceholder": "Recent opens",
+        "allDocuments": "All documents",
+        "recent": "Recent",
+        "starred": "Starred",
+        "shared": "Shared with me",
+        "deleted": "Deleted",
+        "star": "Add to starred",
+        "unstar": "Remove from starred",
+        "comingSoon": "Coming soon"
+    },
+    "toolbar": {
+        "searchPlaceholder": "Search by title…",
+        "viewToggleAria": "View mode",
+        "refresh": "Refresh",
+        "moreActions": "More actions",
+        "searchModeAria": "Search mode",
+        "searchModeFiles": "Files",
+        "searchModeSemantic": "Semantic"
+    },
+    "tree": {
+        "newSubcatalog": "Subcatalog",
+        "catalogMenu": "Catalog settings"
+    },
+    "catalog_context_menu": {
+        "edit": "Edit",
+        "access": "Sharing",
+        "members": "Access",
+        "rag": "RAG indexing",
+        "delete": "Delete"
+    },
+    "catalog_rag_modal": {
+        "header": "RAG indexing",
+        "header_with_title": "RAG: {{title}}",
+        "loading": "Loading status…",
+        "enabled_label": "Index catalog in RAG",
+        "enabled_hint": "Documents in this catalog become searchable in semantic search.",
+        "updated_at": "Last indexed: {{value}}",
+        "updated_never": "Not indexed yet",
+        "totals_ready": "Ready",
+        "totals_pending": "Pending",
+        "totals_failed": "Failed",
+        "totals_absent": "Not indexed",
+        "include_subcatalogs_label": "Include nested catalogs",
+        "include_subcatalogs_hint": "Extends search, status, and rebuild scope to indexed subcatalogs.",
+        "subtree_scope_hint": "Search and status include this catalog and indexed subcatalogs.",
+        "current_catalog_scope_hint": "Search and status cover only this catalog.",
+        "rebuild": "Rebuild index",
+        "close": "Close"
+    },
+    "semantic_search": {
+        "loading": "Searching…",
+        "empty_query": "Enter a query for semantic search",
+        "no_results": "No results found"
+    },
+    "breadcrumbs": {
+        "aria": "Catalog path"
+    },
+    "view": {
+        "list": "List",
+        "grid": "Grid"
+    },
+    "details": {
+        "title": "Details",
+        "catalog": "Catalog",
+        "catalogSettings": "Catalog settings",
+        "fileCount": "Files",
+        "subcatalogCount": "Subcatalogs",
+        "visibility": "Access",
+        "catalogPublic": "Public in workspace",
+        "catalogPrivate": "Members only",
+        "owner": "Owner",
+        "type": "Type",
+        "size": "Size",
+        "updated": "Modified",
+        "created": "Created"
+    },
+    "bulk": {
+        "selected": "{{count}} selected"
+    },
+    "trash": {
+        "restore": "Restore",
+        "deletePermanent": "Delete permanently",
+        "permanentConfirmTitle": "Permanent delete",
+        "permanentConfirm": "Permanently delete \"{{title}}\"?"
+    },
+    "share": {
+        "copyLink": "Copy share link"
+    },
+    "access": {
+        "modalTitle": "Access — {{title}}",
+        "loading": "Loading access settings…",
+        "resourceTitle": "Resource",
+        "companySection": "Company",
+        "companyVisible": "Visible to entire company in this workspace",
+        "membersSection": "Members",
+        "memberSearchPlaceholder": "Search members…",
+        "removeMember": "Remove",
+        "publicLinkSection": "Public link",
+        "linkEnabled": "Anyone with the link",
+        "linkPermission": "Link permission",
+        "permissionView": "View only",
+        "permissionEdit": "Edit",
+        "enabled": "On",
+        "disabled": "Off",
+        "copyLink": "Copy link",
+        "rotateLink": "Rotate link",
+        "linkCopied": "Link copied",
+        "menuShare": "Sharing",
+        "save": "Save",
+        "cancel": "Cancel"
+    },
+    "public_preview": {
+        "title": "Shared content",
+        "loading": "Loading…",
+        "invalidToken": "Invalid link",
+        "notFound": "Link not found",
+        "openFailed": "Could not open file",
+        "catalogEmpty": "No files shared in this catalog"
+    },
+    "links": {
+        "section": "Platform links",
+        "createWorkItem": "Create WorkItem task",
+        "attachCrm": "Attach to CRM entity",
+        "openSync": "Discuss in Sync"
+    },
     "catalogs": {
         "heading": "Document catalogs",
         "create": "New catalog",
+        "edit": "Edit",
+        "members": "Members",
         "fileCount": "{{count}} files",
         "manageAccess": "Manage access",
         "delete": "Delete",
@@ -79,7 +237,8 @@
         "emptyStateHint": "Create a catalog to organize your documents.",
         "tagPublic": "Shared",
         "tagPrivate": "Invite-only",
-        "deleteConfirm": "Delete catalog \"{{title}}\"? It must be empty."
+        "deleteConfirmTitle": "Delete catalog",
+        "deleteConfirm": "Delete catalog \"{{title}}\"? It must have no files or subcatalogs."
     },
     "editor": {
         "back": "Back to list",
@@ -161,12 +320,18 @@
         "saving": "Creating…"
     },
     "document_upload_modal": {
-        "header": "Upload document",
-        "drop_here": "Drop a file here",
-        "drop_or_choose": "or click to choose a file",
-        "label_title": "Title (optional)",
-        "title_placeholder": "Defaults to the file name if left empty",
-        "selected_file": "Selected file: {{name}}",
+        "header": "Upload documents",
+        "drop_here": "Drop files here",
+        "drop_or_choose": "or click to choose files",
+        "files_count": "Selected files: {{count}}",
+        "remove_file": "Remove from list",
+        "status_uploading": "Uploading…",
+        "status_done": "Uploaded",
+        "status_failed": "Failed",
+        "submit_count": "Upload ({{count}})",
+        "upload_complete": "Uploaded files: {{count}}",
+        "upload_partial": "Uploaded: {{done}}, failed: {{failed}}",
+        "upload_failed": "Failed to upload files",
         "cancel": "Cancel",
         "submit": "Upload",
         "saving": "Uploading…"
@@ -191,6 +356,24 @@
         "document_renamed": "Title updated",
         "document_rename_failed": "Failed to rename document",
         "document_deleted": "Document deleted",
-        "document_delete_failed": "Failed to delete document"
+        "document_delete_failed": "Failed to delete document",
+        "document_restored": "Document restored",
+        "document_restore_failed": "Failed to restore document",
+        "document_permanent_deleted": "Document permanently deleted",
+        "document_permanent_delete_failed": "Failed to permanently delete document",
+        "document_moved": "Document moved",
+        "document_move_failed": "Failed to move document",
+        "share_created": "Share link copied",
+        "share_create_failed": "Failed to create share link",
+        "access_updated": "Access updated",
+        "access_update_failed": "Failed to update access",
+        "access_link_rotated": "Public link rotated",
+        "access_link_rotate_failed": "Failed to rotate public link",
+        "catalog_rag_enabled": "RAG indexing enabled",
+        "catalog_rag_enable_failed": "Failed to enable RAG indexing",
+        "catalog_rag_disabled": "RAG indexing disabled",
+        "catalog_rag_disable_failed": "Failed to disable RAG indexing",
+        "catalog_rag_rebuild_started": "RAG reindex started",
+        "catalog_rag_rebuild_failed": "Failed to start RAG reindex"
     }
 }

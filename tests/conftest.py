@@ -60,6 +60,7 @@ os.environ["SERVER__CODE_RUNNER_PYTHON_SERVICE_URL"] = "http://localhost:9017"
 os.environ["SERVER__CODE_RUNNER_NODE_SERVICE_URL"] = "http://localhost:9018"
 os.environ["SERVER__CODE_RUNNER_GO_SERVICE_URL"] = "http://localhost:9019"
 os.environ["SERVER__CODE_RUNNER_CSHARP_SERVICE_URL"] = "http://localhost:9020"
+os.environ["SERVER__WORKTRACKER_SERVICE_URL"] = "http://localhost:9021"
 os.environ.setdefault("VOICE__STT__PROVIDER", "mock")
 os.environ.setdefault("VOICE__STT__MOCK_TRANSCRIPT_TEXT", "Тестовая транскрипция sync worker")
 os.environ.setdefault("S3__DEFAULT_BUCKET", "test-bucket")
@@ -426,6 +427,12 @@ async def setup_database_before_tests():
     if tracing_db_url:
         admin_url = shared_db_url.rsplit("/", 1)[0] + "/postgres"
         await _ensure_postgres_database(admin_url, "platform_tracing")
+    worktracker_db_url = os.environ.get(
+        "DATABASE__WORKTRACKER_URL", TEST_DATABASE_ENV.get("DATABASE__WORKTRACKER_URL", "")
+    )
+    if worktracker_db_url:
+        admin_url = shared_db_url.rsplit("/", 1)[0] + "/postgres"
+        await _ensure_postgres_database(admin_url, "platform_worktracker")
     from core.db.migration_manifest import bootstrap_migration_registry
     from core.db.migrations import run_migrations_async
 
@@ -540,6 +547,9 @@ _TEST_SERVER_MARKERS = (
     "/tmp/platform_test_code_runner_csharp_server.pid",
     "/tmp/platform_test_code_runner_csharp_server.pid.ref_count",
     "/tmp/platform_test_code_runner_csharp_server.pid.envsig",
+    "/tmp/platform_test_worktracker_server.pid",
+    "/tmp/platform_test_worktracker_server.pid.ref_count",
+    "/tmp/platform_test_worktracker_server.pid.envsig",
 )
 
 
@@ -921,6 +931,9 @@ def sync_tools(request, monkeypatch):
     if request.node.get_closest_marker("real_taskiq"):
         yield
         return
+    import apps.office.services.catalog_rag_index_service as office_catalog_rag_index_module
+    import apps.rag.api.documents as rag_documents_module
+    import apps.rag_worker.tasks.indexing_tasks as rag_indexing_tasks
     import apps.crm.services.entity_service as crm_entity_service_module
     import apps.crm.services.task_service as crm_task_service_module
     import apps.crm_worker.tasks.analysis_tasks as crm_analysis_tasks
@@ -929,9 +942,10 @@ def sync_tools(request, monkeypatch):
     import apps.crm_worker.tasks.knowledge_import_tasks as crm_knowledge_import_tasks
     import apps.crm_worker.tasks.namespace_integration_tasks as crm_namespace_integration_tasks
     import apps.crm_worker.tasks.note_markdown_tasks as crm_note_markdown_tasks
+    import apps.flows.src.api.v1.internal_work_items as flows_internal_work_items_module
     import apps.flows.src.channels.a2a as flows_a2a_channel_module
     import apps.flows.src.channels.base as flows_base_channel_module
-    import apps.flows.src.services.operator_handoff_service as flows_operator_handoff_module
+    import apps.flows.src.services.hitl_work_item_service as flows_hitl_work_item_module
     import apps.flows.src.triggers.executor as flows_trigger_executor_module
     import apps.idle_worker.tasks.push_notification_tasks as push_notification_tasks
     import apps.sync.realtime.handlers as sync_handlers_module
@@ -1079,6 +1093,8 @@ def sync_tools(request, monkeypatch):
         SYNC_AGGREGATE_CALL_TRANSCRIPT_TASK_NAME: sync_realtime_tasks.sync_aggregate_call_transcript_task,
         SYNC_FINALIZE_RECORDING_TASK_NAME: sync_realtime_tasks.sync_finalize_recording_task,
         SYNC_SPEECH_TO_CHAT_POLL_TASK_NAME: sync_realtime_tasks.sync_speech_to_chat_poll_task,
+        rag_indexing_tasks.RAG_INDEX_DOCUMENT_S3_TASK_NAME: rag_indexing_tasks.index_rag_document_s3_task,
+        rag_indexing_tasks.RAG_INDEX_OFFICE_CATALOG_TASK_NAME: rag_indexing_tasks.index_office_catalog_task,
     }
 
     async def sync_task_name_kiq(
@@ -1123,12 +1139,16 @@ def sync_tools(request, monkeypatch):
         task_kicker_module,
         flows_base_channel_module,
         flows_a2a_channel_module,
-        flows_operator_handoff_module,
+        flows_hitl_work_item_module,
+        flows_internal_work_items_module,
         flows_trigger_executor_module,
         crm_task_service_module,
         crm_entity_service_module,
         sync_operations_module,
         sync_handlers_module,
+        rag_documents_module,
+        office_catalog_rag_index_module,
+        rag_indexing_tasks,
     ):
         monkeypatch.setattr(module, "kiq_task_name_with_context", sync_task_name_kiq)
     yield None

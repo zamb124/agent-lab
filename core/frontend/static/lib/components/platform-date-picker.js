@@ -28,26 +28,42 @@ function startOfDay(date) {
 
 function parseIsoDate(value) {
     const match = DATE_PATTERN.exec(value);
-    if (!match) {
+    if (match) {
+        const year = Number(match[1]);
+        const month = Number(match[2]) - 1;
+        const day = Number(match[3]);
+        return new Date(year, month, day);
+    }
+    const parsed = new Date(value);
+    if (Number.isNaN(parsed.getTime())) {
         throw new Error(`Invalid date format: ${value}`);
     }
-    const year = Number(match[1]);
-    const month = Number(match[2]) - 1;
-    const day = Number(match[3]);
-    return new Date(year, month, day);
+    return new Date(parsed.getFullYear(), parsed.getMonth(), parsed.getDate());
 }
 
 function parseIsoDateTime(value) {
     const match = DATETIME_PATTERN.exec(value);
-    if (!match) {
+    if (match) {
+        const year = Number(match[1]);
+        const month = Number(match[2]) - 1;
+        const day = Number(match[3]);
+        const hours = Number(match[4]);
+        const minutes = Number(match[5]);
+        return new Date(year, month, day, hours, minutes, 0, 0);
+    }
+    const parsed = new Date(value);
+    if (Number.isNaN(parsed.getTime())) {
         throw new Error(`Invalid datetime format: ${value}`);
     }
-    const year = Number(match[1]);
-    const month = Number(match[2]) - 1;
-    const day = Number(match[3]);
-    const hours = Number(match[4]);
-    const minutes = Number(match[5]);
-    return new Date(year, month, day, hours, minutes, 0, 0);
+    return new Date(
+        parsed.getFullYear(),
+        parsed.getMonth(),
+        parsed.getDate(),
+        parsed.getHours(),
+        parsed.getMinutes(),
+        0,
+        0,
+    );
 }
 
 function parseIsoTime(value) {
@@ -224,18 +240,21 @@ export class PlatformDatePicker extends PlatformElement {
                 background: transparent;
                 padding: 0;
                 box-shadow: none;
+                font-size: var(--field-pill-input-size, var(--text-sm));
             }
 
             :host([embedded]) .trigger-value {
-                font-size: 16px;
-                font-weight: 500;
-                line-height: 1.45;
+                min-height: 0;
+                font-size: var(--platform-date-picker-value-size, var(--field-pill-input-size, var(--text-sm)));
+                font-weight: var(--field-pill-input-weight, var(--font-medium));
+                line-height: var(--field-pill-input-line, 1.35);
             }
 
-            :host([embedded]) .trigger-placeholder,
+            :host([embedded]) .trigger-text.trigger-placeholder,
             :host([embedded]) .trigger-value.placeholder {
-                font-size: 16px;
-                font-weight: 500;
+                font-size: var(--platform-date-picker-value-size, var(--field-pill-input-size, var(--text-sm)));
+                font-weight: var(--font-normal);
+                color: var(--text-disabled, var(--text-tertiary));
             }
 
             :host([compact]) {

@@ -15,8 +15,6 @@ import {
     namespaceEditabilityOp,
     namespaceCreateForm,
     namespaceEditForm,
-    taskBoardStagesOp,
-    taskBoardEditorStateOp,
 } from '../events/resources/namespaces.resource.js';
 import {
     namespaceIntegrationsListOp,
@@ -32,7 +30,6 @@ import {
     templateSchemaOptionsOp,
     templateTypeUpsertOp,
     templateTypeDeleteOp,
-    templateTaskBoardEditorStateOp,
 } from '../events/resources/templates.resource.js';
 import {
     entityTypesResource,
@@ -126,7 +123,6 @@ import '../pages/settings-hub-page.js';
 import '../pages/daily-notes-page.js';
 import '../pages/entities-page.js';
 import '../pages/graph-page.js';
-import '../pages/tasks-page.js';
 import '../pages/suggests-page.js';
 import '../pages/templates-page.js';
 import '../pages/namespace-tasks-page.js';
@@ -174,7 +170,6 @@ const CRM_ROUTES = [
     { key: 'entity_new',          path: 'entities/new',     parent: 'entities', titleKey: 'routes.entity_new' },
     { key: 'entity',              path: 'entities/:itemId', parent: 'entities', titleKey: 'routes.entity' },
     { key: 'graph',               path: 'graph',            titleKey: 'routes.graph' },
-    { key: 'tasks',               path: 'tasks',            titleKey: 'routes.tasks' },
     { key: 'suggests',            path: 'suggests',         titleKey: 'routes.suggests' },
     { key: 'access_requests',     path: 'access-requests',  titleKey: 'routes.access_requests' },
     { key: 'namespaces',              path: 'namespaces',           parent: 'settings', titleKey: 'routes.namespaces' },
@@ -191,7 +186,6 @@ const CRM_ROUTES = [
  */
 const CRM_BOTTOM_NAV_ITEMS = [
     { key: 'notes',    routeKey: 'notes',    icon: 'note',         labelKey: 'bottom_nav.notes' },
-    { key: 'tasks',    routeKey: 'tasks',    icon: 'check-square', labelKey: 'bottom_nav.tasks' },
     { key: 'graph',    routeKey: 'graph',    icon: 'share',        labelKey: 'bottom_nav.graph' },
     { key: 'entities', routeKey: 'entities', icon: 'box',          labelKey: 'bottom_nav.entities' },
     { key: 'profile',  sheet: 'platform.service_switcher', icon: 'user', labelKey: 'bottom_nav.profile' },
@@ -253,8 +247,6 @@ export class CRMApp extends PlatformApp {
         namespaceEditabilityOp,
         namespaceCreateForm,
         namespaceEditForm,
-        taskBoardStagesOp,
-        taskBoardEditorStateOp,
         namespaceIntegrationsListOp,
         namespaceIntegrationAuthorizeOp,
         namespaceIntegrationEntitiesSyncOp,
@@ -266,7 +258,6 @@ export class CRMApp extends PlatformApp {
         templateSchemaOptionsOp,
         templateTypeUpsertOp,
         templateTypeDeleteOp,
-        templateTaskBoardEditorStateOp,
         entityTypesResource,
         entityTypeUpdateOp,
         entityTypePublicFieldsOp,
@@ -438,7 +429,6 @@ export class CRMApp extends PlatformApp {
             case 'entity_new':         content = html`<crm-entity-create-page></crm-entity-create-page>`; break;
             case 'entity':              content = html`<crm-entity-detail-page .itemId=${params.itemId}></crm-entity-detail-page>`; break;
             case 'graph':               content = html`<crm-graph-page></crm-graph-page>`; break;
-            case 'tasks':               content = html`<crm-tasks-page></crm-tasks-page>`; break;
             case 'suggests':            content = html`<crm-suggests-page></crm-suggests-page>`; break;
             case 'access_requests':     content = html`<crm-access-requests-page></crm-access-requests-page>`; break;
             case 'namespaces':              content = html`<crm-namespaces-page></crm-namespaces-page>`; break;

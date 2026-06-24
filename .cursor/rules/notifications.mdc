@@ -10,7 +10,7 @@ alwaysApply: false
 
 `notify_user` оборачивает уведомление в `UIEvent` (`type: notify/<service>/<kind>_received`) и публикует через `publish_ui_event` (`core/ui_events/dispatcher.py`) в `platform:ui_events`. WS-менеджер (`core/websocket/manager.py`) форвардит сериализованный `UIEvent` (`{id, type, payload, meta}`) в сокет адресата.
 
-**Исключение — операторские задачи flows:** `publish_operator_tasks_refresh` (`apps/flows/src/services/operator_tasks_broadcast.py`) публикует `{target, event}` в тот же канал напрямую через `RedisClient.publish` контейнера (работает в TaskIQ worker, где singleton `notification_manager._redis_client` не инициализирован). Тип — `notify/flows/flows_operator_tasks_updated_received`; `payload.kind = "flows_operator_tasks_updated"`. В `<platform-notification-manager>` без toast и без записи в колокольчик — отдельное WS-подключение в `operator-workbench-page` перезагружает канбан по этому событию.
+**Задачи WorkItem (ядро):** назначение исполнителю → `NotificationType.WORK_ITEM_ASSIGNED`, обновление → `WORK_ITEM_UPDATED`; `action_url` ведёт в worktracker. Реалтайм доски — push `worktracker/work_item/created|updated|moved|completed` через `platform:ui_events`; канбан-страница обновляет slice по этим событиям (по образцу прежнего `flows_operator_tasks_updated`). Детали → **`worktracker.mdc`**.
 
 ## Backend: как отправлять
 

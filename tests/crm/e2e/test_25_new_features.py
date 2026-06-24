@@ -414,7 +414,7 @@ class TestBulkOperations:
             entity_ids.append(_entity_id(create_resp))
 
         items = [
-            {"entity_id": eid, "updates": {"priority": "high"}}
+            {"entity_id": eid, "updates": {"status": "completed"}}
             for eid in entity_ids
         ]
         resp = await crm_client.put(
@@ -427,7 +427,7 @@ class TestBulkOperations:
         assert len(updated) == 3
         assert len(_bulk_error_entries(resp)) == 0
         for updated_entity in updated:
-            assert object_str(updated_entity.get("priority"), field="priority") == "high"
+            assert object_str(updated_entity.get("status"), field="status") == "completed"
 
     @pytest.mark.asyncio
     async def test_bulk_delete(

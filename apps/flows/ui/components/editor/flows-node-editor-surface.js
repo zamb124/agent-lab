@@ -27,7 +27,6 @@ import '../nodes/flows-base-node-editor.js';
  * @param {Array<{id:string,name:string,type:string}>} ctx.graphNodes
  * @param {object} ctx.previewExecutionState
  * @param {object|null} [ctx.dataflowNode]
- * @param {boolean} ctx.expanded
  * @param {boolean} [ctx.embedded]
  * @param {(e: CustomEvent) => void} ctx.onChange
  * @param {(e: CustomEvent) => void} ctx.onDelete
@@ -48,7 +47,6 @@ export function renderFlowsNodeEditorSurface(ctx) {
     const graphNodes = Array.isArray(ctx.graphNodes) ? ctx.graphNodes : [];
     const preview = ctx.previewExecutionState;
     const dataflowNode = isPlainObject(ctx.dataflowNode) ? ctx.dataflowNode : null;
-    const expanded = ctx.expanded === true;
     const embedded = ctx.embedded === true;
     const onChange = ctx.onChange;
     const onDelete = ctx.onDelete;
@@ -71,7 +69,7 @@ export function renderFlowsNodeEditorSurface(ctx) {
                 .flowVariables=${flowVariables} .graphNodes=${graphNodes}
                 .previewExecutionState=${preview}
                 .dataflowNode=${dataflowNode}
-                ?expanded=${expanded} ?embedded=${embedded}
+                ?embedded=${embedded}
                 @change=${onChange}
                 @delete-node=${onDelete} @duplicate-node=${onDuplicate}
             ></flows-llm-node-editor>`;
@@ -82,7 +80,7 @@ export function renderFlowsNodeEditorSurface(ctx) {
                 .flowVariables=${flowVariables} .graphNodes=${graphNodes}
                 .previewExecutionState=${preview}
                 .dataflowNode=${dataflowNode}
-                ?expanded=${expanded} ?embedded=${embedded}
+                ?embedded=${embedded}
                 @change=${onChange}
                 @delete-node=${onDelete} @duplicate-node=${onDuplicate}
             ></flows-code-node-editor>`;
@@ -93,7 +91,7 @@ export function renderFlowsNodeEditorSurface(ctx) {
                 .flowVariables=${flowVariables} .graphNodes=${graphNodes}
                 .previewExecutionState=${preview}
                 .dataflowNode=${dataflowNode}
-                ?expanded=${expanded} ?embedded=${embedded}
+                ?embedded=${embedded}
                 @change=${onChange}
                 @delete-node=${onDelete} @duplicate-node=${onDuplicate}
             ></flows-resource-node-editor>`;
@@ -104,7 +102,7 @@ export function renderFlowsNodeEditorSurface(ctx) {
                 .flowVariables=${flowVariables} .graphNodes=${graphNodes}
                 .previewExecutionState=${preview}
                 .dataflowNode=${dataflowNode}
-                ?expanded=${expanded} ?embedded=${embedded}
+                ?embedded=${embedded}
                 @change=${onChange}
                 @delete-node=${onDelete} @duplicate-node=${onDuplicate}
             ></flows-channel-node-editor>`;
@@ -115,7 +113,7 @@ export function renderFlowsNodeEditorSurface(ctx) {
                 .flowVariables=${flowVariables} .graphNodes=${graphNodes}
                 .previewExecutionState=${preview}
                 .dataflowNode=${dataflowNode}
-                ?expanded=${expanded} ?embedded=${embedded}
+                ?embedded=${embedded}
                 @change=${onChange}
                 @delete-node=${onDelete} @duplicate-node=${onDuplicate}
             ></flows-flow-node-editor>`;
@@ -126,7 +124,7 @@ export function renderFlowsNodeEditorSurface(ctx) {
                 .flowVariables=${flowVariables} .graphNodes=${graphNodes}
                 .previewExecutionState=${preview}
                 .dataflowNode=${dataflowNode}
-                ?expanded=${expanded} ?embedded=${embedded}
+                ?embedded=${embedded}
                 @change=${onChange}
                 @delete-node=${onDelete} @duplicate-node=${onDuplicate}
             ></flows-mcp-node-editor>`;
@@ -137,7 +135,7 @@ export function renderFlowsNodeEditorSurface(ctx) {
                 .flowVariables=${flowVariables} .graphNodes=${graphNodes}
                 .previewExecutionState=${preview}
                 .dataflowNode=${dataflowNode}
-                ?expanded=${expanded} ?embedded=${embedded}
+                ?embedded=${embedded}
                 @change=${onChange}
                 @delete-node=${onDelete} @duplicate-node=${onDuplicate}
             ></flows-hitl-node-editor>`;
@@ -148,7 +146,7 @@ export function renderFlowsNodeEditorSurface(ctx) {
                 .flowVariables=${flowVariables} .graphNodes=${graphNodes}
                 .previewExecutionState=${preview}
                 .dataflowNode=${dataflowNode}
-                ?expanded=${expanded} ?embedded=${embedded}
+                ?embedded=${embedded}
                 @change=${onChange}
                 @delete-node=${onDelete} @duplicate-node=${onDuplicate}
             ></flows-reflection-node-editor>`;
@@ -159,7 +157,7 @@ export function renderFlowsNodeEditorSurface(ctx) {
                 .flowVariables=${flowVariables} .graphNodes=${graphNodes}
                 .previewExecutionState=${preview}
                 .dataflowNode=${dataflowNode}
-                ?expanded=${expanded} ?embedded=${embedded}
+                ?embedded=${embedded}
                 @change=${onChange}
                 @delete-node=${onDelete} @duplicate-node=${onDuplicate}
             ></flows-external-api-editor>`;
@@ -170,7 +168,7 @@ export function renderFlowsNodeEditorSurface(ctx) {
                 .flowVariables=${flowVariables} .graphNodes=${graphNodes}
                 .previewExecutionState=${preview}
                 .dataflowNode=${dataflowNode}
-                ?expanded=${expanded} ?embedded=${embedded}
+                ?embedded=${embedded}
                 @change=${onChange}
                 @delete-node=${onDelete} @duplicate-node=${onDuplicate}
             ></flows-remote-flow-editor>`;
@@ -181,7 +179,7 @@ export function renderFlowsNodeEditorSurface(ctx) {
                 .flowVariables=${flowVariables} .graphNodes=${graphNodes}
                 .previewExecutionState=${preview}
                 .dataflowNode=${dataflowNode}
-                ?expanded=${expanded} ?embedded=${embedded}
+                ?embedded=${embedded}
                 @change=${onChange}
                 @delete-node=${onDelete} @duplicate-node=${onDuplicate}
             ></flows-base-node-editor>`;

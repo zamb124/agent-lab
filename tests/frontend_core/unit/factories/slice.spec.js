@@ -5,6 +5,7 @@
 
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { createSlice } from '@platform/lib/events/factories/slice.js';
+import { buildEventType } from '@platform/lib/events/factories/_internal.js';
 import { resetFactories } from '../../helpers/factory-fixtures.js';
 import { buildBus } from '../../helpers/bus-fixtures.js';
 
@@ -55,6 +56,17 @@ describe('createSlice: contract', () => {
             name: 'svc/x', extraInitial: { a: 1 }, extraReducer: (s) => s,
             actions: { open: '' },
         })).toThrow(/actions/);
+    });
+
+    it('actions: пустой methodName — throw', () => {
+        expect(() => createSlice({
+            name: 'svc/x', extraInitial: { a: 1 }, extraReducer: (s) => s,
+            actions: { '': 'open' },
+        })).toThrow(/method name/);
+    });
+
+    it('buildEventType: пустой verb — throw', () => {
+        expect(() => buildEventType('svc/x', '')).toThrow(/verb/);
     });
 });
 

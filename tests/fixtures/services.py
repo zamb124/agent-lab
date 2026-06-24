@@ -22,6 +22,7 @@
 - code_runner_node_service: Node.js runner (порт 9018)
 - code_runner_go_service: Go runner (порт 9019)
 - code_runner_csharp_service: C# runner (порт 9020)
+- worktracker_service: Worktracker сервис (порт 9021)
 """
 
 import os
@@ -71,6 +72,9 @@ _CODE_RUNNER_GO_SERVER_PID = "/tmp/platform_test_code_runner_go_server.pid"
 _CODE_RUNNER_CSHARP_SERVER_LOCK = "/tmp/platform_test_code_runner_csharp_server.lock"
 _CODE_RUNNER_CSHARP_SERVER_PID = "/tmp/platform_test_code_runner_csharp_server.pid"
 
+_WORKTRACKER_SERVER_LOCK = "/tmp/platform_test_worktracker_server.lock"
+_WORKTRACKER_SERVER_PID = "/tmp/platform_test_worktracker_server.pid"
+
 
 # Общие env переменные для всех сервисов (те же БД, что в conftest и миграциях)
 _COMMON_TEST_ENV = {
@@ -93,6 +97,7 @@ _COMMON_TEST_ENV = {
     "SERVER__CODE_RUNNER_NODE_SERVICE_URL": "http://localhost:9018",
     "SERVER__CODE_RUNNER_GO_SERVICE_URL": "http://localhost:9019",
     "SERVER__CODE_RUNNER_CSHARP_SERVICE_URL": "http://localhost:9020",
+    "SERVER__WORKTRACKER_SERVICE_URL": "http://localhost:9021",
     "VOICE__STT__PROVIDER": "mock",
     "VOICE__STT__MOCK_TRANSCRIPT_TEXT": "Тестовая транскрипция sync worker",
     "CALLS__LIVEKIT_URL": "ws://localhost:7890",
@@ -427,6 +432,28 @@ def sync_service():
         port=9005,
         startup_wait=45.0,
         env=_with_mock_llm_lane(_COMMON_TEST_ENV, "sync"),
+    )
+
+    with manager.start():
+        yield
+
+
+@pytest.fixture(scope="session")
+def worktracker_service(setup_database_before_tests):
+    """
+    Worktracker сервис как реальный HTTP сервер на порту 9021.
+
+    Используется для E2E HTTP smoke-тестов WorkItem API.
+    """
+    _ = setup_database_before_tests
+    manager = SessionServerManager(
+        name="Worktracker",
+        lock_file=_WORKTRACKER_SERVER_LOCK,
+        pid_file=_WORKTRACKER_SERVER_PID,
+        app_path="apps.worktracker.main:app",
+        port=9021,
+        startup_wait=12.0,
+        env=_COMMON_TEST_ENV,
     )
 
     with manager.start():

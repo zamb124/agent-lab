@@ -82,8 +82,10 @@ make stress 100 DRY_RUN=1
 3. Polling результата через A2A `tasks/get`.
 
 Покрыты `example_graph` и `example_react`, разные branches и разные входные данные.
-По умолчанию включен `metadata.mock`, чтобы стрессовать платформенный runtime без стоимости и
-нестабильности внешних LLM. Для реального LLM профиля:
+По умолчанию включён `metadata.__mock__` (Mock Control System): каждая llm-нода
+получает свою очередь ответов (`nodes.<node_id>`), поэтому runtime стрессуется без
+стоимости и нестабильности внешних LLM. Значение mock для любой сущности (tool, node,
+flow, llm) — список ответов (FIFO). Для реального LLM профиля:
 
 ```bash
 make stress STRESS_USE_MOCK=false

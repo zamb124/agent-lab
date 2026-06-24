@@ -1,7 +1,5 @@
 /**
  * Редактирование inline/реестр tool в LLM: тот же набор полей, что у standalone-ноды.
- * Редактор внутри модалки всегда с expanded: master-detail как у развёрнутой панели свойств,
- * а не от глобального panelExpanded (иначе при узкой панели вложенная нода оставалась в compact).
  */
 
 import { html, css } from 'lit';
@@ -218,7 +216,6 @@ export class FlowsEmbeddedToolConfigModal extends PlatformFormModal {
             flowVariables,
             graphNodes: this._graphNodesList(),
             previewExecutionState: st.previewExecutionState,
-            expanded: true,
             embedded: true,
             onChange: (e) => this._onNodeChange(e),
             onDelete: (e) => this._noopNode(e),

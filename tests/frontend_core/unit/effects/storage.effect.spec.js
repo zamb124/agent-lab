@@ -51,4 +51,10 @@ describe('storageEffect', () => {
         await createStorageEffect()(ev(CoreEvents.STORAGE_PERSIST_REQUESTED, { key: 'k', value: null }), buildCtx(() => ({}), []));
         expect(storage.localStorage.getItem('k')).toBeNull();
     });
+
+    it('PERSIST_REQUESTED без key — throw', async () => {
+        await expect(
+            createStorageEffect()(ev(CoreEvents.STORAGE_PERSIST_REQUESTED, {}), buildCtx(() => ({}), [])),
+        ).rejects.toThrow(/key/);
+    });
 });

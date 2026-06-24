@@ -129,6 +129,7 @@ MigrationDatabaseUrlKey: TypeAlias = Literal[
     "sync_url",
     "rag_url",
     "office_url",
+    "worktracker_url",
     "tracing_url",
     "search_url",
 ]

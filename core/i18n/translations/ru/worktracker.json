@@ -1,0 +1,208 @@
+{
+  "routes": {
+    "inbox": "Входящие",
+    "my": "Мои задачи",
+    "board": "Доска",
+    "queues": "Очереди",
+    "queue_detail": "Очередь",
+    "work_item_detail": "Задача"
+  },
+  "bottom_nav": {
+    "inbox": "Входящие",
+    "board": "Доска",
+    "profile": "Профиль"
+  },
+  "sidebar": {
+    "title": "Задачи",
+    "nav": {
+      "inbox": "Входящие",
+      "my": "Мои задачи",
+      "board": "Доски",
+      "queues": "Очереди"
+    }
+  },
+  "inbox_page": {
+    "title": "Входящие",
+    "create_task": "Создать задачу",
+    "assigned": "Назначенные мне",
+    "section_assigned": "Назначенные вам",
+    "queue_inbox": "Inbox очередей",
+    "section_queue": "Inbox очередей",
+    "claim": "Взять",
+    "complete": "Завершить",
+    "empty_assigned": "Нет назначенных задач.",
+    "empty_queue": "Нет задач в inbox очередей."
+  },
+  "my_page": {
+    "title": "Мои задачи",
+    "create_task": "Создать задачу",
+    "empty": "Нет открытых задач, назначенных вам."
+  },
+  "queue_detail_page": {
+    "title": "Очередь: {{name}}",
+    "inbox": "Inbox очереди",
+    "members": "Участники",
+    "label_member_user_id": "ID пользователя",
+    "add_member": "Добавить участника",
+    "remove_member": "Удалить",
+    "empty_inbox": "Нет незаклеймленных задач в этой очереди.",
+    "empty_members": "Участников пока нет."
+  },
+  "work_item_card": {
+    "actions": "Действия",
+    "open": "Открыть",
+    "claim": "Взять",
+    "complete": "Завершить",
+    "cancel": "Отменить"
+  },
+  "detail_panel": {
+    "title": "Детали задачи",
+    "close": "Закрыть",
+    "label_title": "Название",
+    "label_description": "Описание",
+    "loading": "Загрузка…",
+    "label_state": "Статус",
+    "label_priority": "Приоритет",
+    "label_kind": "Тип",
+    "comments": "Комментарии",
+    "label_comment": "Комментарий",
+    "add_comment": "Отправить",
+    "no_comments": "Комментариев пока нет.",
+    "claim": "Взять",
+    "complete": "Завершить",
+    "cancel": "Отменить"
+  },
+  "detail_page": {
+    "open_full": "Открыть полностью",
+    "section_activity": "Активность",
+    "section_properties": "Свойства",
+    "activity": "Активность",
+    "properties": "Свойства",
+    "description_placeholder": "Добавьте описание…",
+    "comment_placeholder": "Напишите комментарий…",
+    "no_comments": "Комментариев пока нет.",
+    "open_properties": "Свойства",
+    "id_copied": "ID задачи скопирован",
+    "id_copy_failed": "Не удалось скопировать ID задачи",
+    "add_description": "Добавьте описание…",
+    "resolution": "Результат",
+    "section_attachments": "Вложения",
+    "section_variables": "Переменные",
+    "comment_hint": "Ctrl+Enter — отправить",
+    "back": "Назад",
+    "no_id": "Не указан ID задачи.",
+    "not_found": "Задача не найдена.",
+    "unassigned": "Не назначена",
+    "label_state": "Статус",
+    "label_priority": "Приоритет",
+    "label_assignee": "Исполнитель",
+    "label_due_date": "Срок",
+    "label_labels": "Метки",
+    "label_board": "Доска",
+    "label_kind": "Тип",
+    "label_created": "Создана",
+    "label_updated": "Обновлена"
+  },
+  "board_page": {
+    "title": "Задачи",
+    "create": "Новая задача",
+    "create_task": "Создать задачу",
+    "create_board": "Создать доску",
+    "settings": "Настройки доски",
+    "reorder_column": "Перетащите, чтобы изменить порядок",
+    "empty": "Нет доски или колонок. Создайте доску, чтобы начать работу."
+  },
+  "board_picker": {
+    "placeholder": "Выберите доску",
+    "empty": "Досок пока нет",
+    "create": "Создать доску"
+  },
+  "board_create_modal": {
+    "header": "Новая доска",
+    "label_name": "Название",
+    "name_placeholder": "Например, Разработка",
+    "submit": "Создать",
+    "saving": "Сохранение…",
+    "cancel": "Отмена"
+  },
+  "board_settings_modal": {
+    "header": "Настройки доски",
+    "label_name": "Название",
+    "columns": "Колонки",
+    "column_index": "Колонка {{index}}",
+    "column_label": "Название колонки",
+    "column_state": "Статус задачи",
+    "add_column": "Добавить колонку",
+    "remove_column": "Удалить колонку",
+    "reorder_column": "Перетащите, чтобы изменить порядок",
+    "new_column_label": "Новая колонка",
+    "loading": "Загрузка…",
+    "submit": "Сохранить",
+    "saving": "Сохранение…",
+    "cancel": "Отмена"
+  },
+  "queues_page": {
+    "title": "Очереди",
+    "label_name": "Название",
+    "label_slug": "Слаг",
+    "create": "Создать очередь",
+    "empty": "Очередей пока нет."
+  },
+  "work_item_create_modal": {
+    "header": "Новая задача",
+    "label_title": "Название",
+    "title_placeholder": "Что нужно сделать?",
+    "label_description": "Описание",
+    "submit": "Создать",
+    "saving": "Сохранение…",
+    "cancel": "Отмена"
+  },
+  "priority": {
+    "low": "Низкий",
+    "normal": "Обычный",
+    "high": "Высокий",
+    "urgent": "Срочно"
+  },
+  "kind": {
+    "generic": "Задача",
+    "operator_handoff": "Оператору",
+    "agent_job": "Агенту",
+    "crm_activity": "CRM"
+  },
+  "state": {
+    "open": "Открыта",
+    "in_progress": "В работе",
+    "blocked": "Заблокирована",
+    "done": "Готово",
+    "cancelled": "Отменена",
+    "failed": "Ошибка"
+  },
+  "form": {
+    "title_required": "Введите название задачи",
+    "board_name_required": "Введите название доски"
+  },
+  "toast": {
+    "work_item_created": "Задача создана",
+    "work_item_create_failed": "Не удалось создать задачу",
+    "work_item_updated": "Задача обновлена",
+    "work_item_update_failed": "Не удалось обновить задачу",
+    "work_item_claimed": "Задача взята в работу",
+    "work_item_claim_failed": "Не удалось взять задачу",
+    "work_item_completed": "Задача завершена",
+    "work_item_complete_failed": "Не удалось завершить задачу",
+    "work_item_cancelled": "Задача отменена",
+    "work_item_cancel_failed": "Не удалось отменить задачу",
+    "work_item_assigned": "Задача назначена",
+    "work_item_assign_failed": "Не удалось назначить задачу",
+    "board_created": "Доска создана",
+    "board_create_failed": "Не удалось создать доску",
+    "board_updated": "Доска обновлена",
+    "board_update_failed": "Не удалось обновить доску",
+    "queue_created": "Очередь создана",
+    "queue_create_failed": "Не удалось создать очередь",
+    "queue_member_added": "Участник добавлен",
+    "queue_member_add_failed": "Не удалось добавить участника",
+    "queue_member_removed": "Участник удалён",
+    "queue_member_remove_failed": "Не удалось удалить участника"
+  }
+}

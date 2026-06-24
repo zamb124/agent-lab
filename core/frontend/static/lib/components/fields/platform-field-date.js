@@ -1,5 +1,11 @@
 import { html, css } from 'lit';
 import { PlatformElement } from '../../platform-element/index.js';
+import {
+    formatPlatformDate,
+    formatPlatformDateTime,
+    normalizeIsoDateForField,
+    normalizeIsoDateTimeForField,
+} from '../../utils/format-platform-date.js';
 import '../platform-date-picker.js';
 
 const ISO_DATE_VALUE = /^(\d{4})-(\d{2})-(\d{2})$/;
@@ -67,13 +73,29 @@ export class PlatformFieldDate extends PlatformElement {
         return this.datetime ? ISO_DATETIME_VALUE.test(val) : ISO_DATE_VALUE.test(val);
     }
 
-    _formatDisplay(val) {
-        if (!val) return null;
-        if (this.datetime && val.includes('T')) {
-            const [datePart, timePart] = val.split('T');
-            return `${datePart} ${timePart}`;
+    _normalizeFieldValue(val) {
+        if (val === null || val === undefined) {
+            return '';
         }
-        return val;
+        if (typeof val !== 'string') {
+            throw new Error('platform-field-date: value must be string');
+        }
+        if (val.length === 0) {
+            return '';
+        }
+        return this.datetime ? normalizeIsoDateTimeForField(val) : normalizeIsoDateForField(val);
+    }
+
+    _formatDisplay(val) {
+        if (val === null || val === undefined || typeof val !== 'string' || val.length === 0) {
+            return null;
+        }
+        const locale = this.select((state) => state.i18n.locale).value;
+        const normalized = this._normalizeFieldValue(val);
+        if (this.datetime) {
+            return formatPlatformDateTime(normalized, locale);
+        }
+        return formatPlatformDate(normalized, locale);
     }
 
     render() {
@@ -85,7 +107,7 @@ export class PlatformFieldDate extends PlatformElement {
         }
 
         const pickerMode = this.datetime ? 'datetime' : 'date';
-        const raw = this.value;
+        const raw = this._normalizeFieldValue(this.value);
 
         if (!this._storedStringMatchesIsoFormat(raw)) {
             const display = typeof raw === 'string' ? raw : String(raw);

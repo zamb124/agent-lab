@@ -47,6 +47,16 @@ export const PLATFORM_SERVICES = Object.freeze([
         metricKey: 'console_home.stat_spaces_count',
     }),
     Object.freeze({
+        id: 'worktracker',
+        nameKey: 'apps.worktracker.name',
+        logoSrc: `${SERVICE_LOGO_BASE}/worktracker_logo.svg`,
+        brandFrom: '#6366f1',
+        brandTo: '#14b8a6',
+        healthName: 'worktracker',
+        countOp: null,
+        metricKey: null,
+    }),
+    Object.freeze({
         id: 'documents',
         nameKey: 'apps.documents.name',
         logoSrc: `${SERVICE_LOGO_BASE}/documents_logo.svg`,

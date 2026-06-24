@@ -13,6 +13,7 @@ from core.context import clear_context, set_context
 from core.identity.system_bootstrap import ensure_system_company_exists
 from core.models.context_models import Context
 from core.models.identity_models import Company, User
+from core.worktracker.models import WorkItemState
 
 pytestmark = pytest.mark.timeout(30, func_only=True)
 
@@ -120,12 +121,19 @@ async def test_amocrm_import_tasks_upsert_and_relationships(
         assert len(rows) == 1
         ent = rows[0]
         assert ent.user_id == system_user_id
-        assert ent.attributes.get("status") == "todo"
         assert ent.attributes.get("amo_task_type_id") == 1
         assert ent.attributes.get("amo_task_type_name") == "Звонок"
-        assert ent.due_date == date(2024, 1, 1)
         assert ent.description is not None
         assert "Позвонить" in ent.description
+
+        # Канбан-статус и срок живут в парном WorkItem, не на CRM-узле.
+        work_item = await crm_container.work_item_service.find_by_crm_entity(
+            "system", ent.entity_id
+        )
+        assert work_item is not None
+        assert work_item.state is WorkItemState.OPEN
+        assert work_item.due_date is not None
+        assert work_item.due_date.date() == date(2024, 1, 1)
 
         lead_rows = await crm_container.entity_repository.find_by_external_ref(
             company_id="system",

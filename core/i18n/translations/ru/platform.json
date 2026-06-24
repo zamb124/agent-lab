@@ -85,7 +85,12 @@
         "sync": {
             "name": "Sync",
             "menu_description": "Чат, Git и звонки для команд",
-            "description": "Командный хаб для разработки: чат, Git и звонки рядом с репозиториями — быстрее согласовывать и внедрять"
+            "description": "Командный хаб для разработки: чат, Git и звонки рядом с reпозиториями — быстрее согласовывать и внедрять"
+        },
+        "worktracker": {
+            "name": "Задачи",
+            "menu_description": "Inbox, доски, очереди, HITL",
+            "description": "Единый центр задач: inbox, канбан, очереди операторов, CRM- и агентские задачи"
         },
         "documents": {
             "name": "Документы",
@@ -123,7 +128,34 @@
         "minimize": "Свернуть",
         "restore": "Развернуть",
         "open_failed": "Не удалось открыть файл в редакторе: {message}",
-        "close_failed": "Не удалось сохранить изменения перед закрытием"
+        "close_failed": "Не удалось сохранить изменения перед закрытием",
+        "download": "Скачать"
+    },
+    "file_attachments": {
+        "attach": "Прикрепить файл",
+        "open": "Открыть",
+        "remove": "Удалить",
+        "empty": "Нет вложений"
+    },
+    "variables_panel": {
+        "add": "Добавить переменную",
+        "remove": "Удалить",
+        "secret": "Секрет",
+        "empty": "Нет переменных",
+        "key_placeholder": "Имя",
+        "value_placeholder": "Значение"
+    },
+    "document_viewer": {
+        "loading": "Загружаем файл…",
+        "saving": "Сохранение…",
+        "saved": "Сохранено",
+        "save_failed": "Не удалось сохранить ({status})",
+        "save_hint": "Ctrl+S / Cmd+S — сохранить",
+        "load_failed": "Не удалось загрузить файл ({status})",
+        "missing_stream_url": "Не задан URL потока",
+        "missing_download_url": "Не задан URL скачивания",
+        "download": "Скачать",
+        "unknown_type": "Неизвестный тип"
     },
     "company": {
         "create_title": "Создание компании",
@@ -166,7 +198,36 @@
     },
     "user_chip": {
         "unknown": "Неизвестный пользователь",
-        "you": "Вы"
+        "you": "Вы",
+        "work_count_aria": "Открытые задачи",
+        "work_count_title": "Открытые задачи"
+    },
+    "work_item_badge": {
+        "loading": "Загрузка…",
+        "state": {
+            "open": "Открыта",
+            "in_progress": "В работе",
+            "blocked": "Заблокирована",
+            "done": "Готово",
+            "cancelled": "Отменена",
+            "failed": "Ошибка"
+        },
+        "priority": {
+            "low": "Низкий",
+            "normal": "Обычный",
+            "high": "Высокий",
+            "urgent": "Срочный"
+        },
+        "kind": {
+            "generic": "Задача",
+            "operator_handoff": "Оператор",
+            "agent_job": "Агент",
+            "crm_activity": "CRM"
+        }
+    },
+    "work_item_preview": {
+        "open": "Открыть задачу",
+        "not_found": "Задача не найдена"
     },
     "user_info_modal": {
         "header": "Профиль",
@@ -199,7 +260,10 @@
         "role_viewer": "Наблюдатель",
         "role_owner_locked": "Нельзя снять у владельца компании",
         "error_name_required": "Введите имя",
-        "error_role_required": "Нужна хотя бы одна роль"
+        "error_role_required": "Нужна хотя бы одна роль",
+        "active_tasks_title": "Активные задачи",
+        "active_tasks_all": "Все задачи",
+        "active_tasks_empty": "Нет открытых задач"
     },
     "trace_viewer": {
         "empty": "В этом trace нет spans",
@@ -403,5 +467,20 @@
         "reasoning_reserve_tokens_hint": "Резерв под reasoning у моделей, которым нужен отдельный запас.",
         "safety_buffer_tokens": "Буфер",
         "safety_buffer_tokens_hint": "Технический запас на служебные токены и погрешность подсчёта."
+    },
+    "prompt_editor": {
+        "label_default": "Промпт",
+        "placeholder_default": "Введите текст…",
+        "empty_preview": "Пусто",
+        "mode_edit": "Редактор",
+        "mode_preview": "Preview",
+        "split": "Split view",
+        "split_pane_edit": "Редактор",
+        "split_pane_preview": "Preview",
+        "fullscreen_enter": "Полноэкранный режим",
+        "fullscreen_exit": "Выйти из полноэкранного режима",
+        "var_hint": "Переменные: {variable}, {?optional}, {var|default} | Циклы: {for x in list}…{endfor} | Ссылки: @var:key, @state:path",
+        "var_undefined": "не определена",
+        "for_not_array": "{name} не является массивом"
     }
 }

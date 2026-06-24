@@ -105,6 +105,17 @@ spec:
                   number: {{ $.Values.applications.sync.port }}
           {{- end }}
 
+          {{- $worktracker := index $.Values.applications "worktracker" }}
+          {{- if and $worktracker $worktracker.enabled }}
+          - path: /worktracker
+            pathType: Prefix
+            backend:
+              service:
+                name: {{ $worktracker.serviceName }}
+                port:
+                  number: {{ $worktracker.port }}
+          {{- end }}
+
           {{- if $.Values.applications.office.enabled }}
           - path: /documents
             pathType: Prefix

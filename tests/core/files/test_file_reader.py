@@ -160,3 +160,16 @@ async def test_read_accepts_file_entry_dict(tmp_path) -> None:
         }
     )
     assert "hello" in res.pages[0].text
+
+
+@pytest.mark.asyncio
+async def test_mislabeled_docx_with_plain_text_fallback() -> None:
+    text = "Привет! Это произвольный текст для демонстрации."
+    raw = text.encode("utf-8")
+    reader = FileReader()
+    result = await reader.read(raw, file_name="demo.docx")
+    assert result.detected_kind == FileReadKind.TEXT
+    assert result.pages[0].text == text
+    assert result.warnings
+    assert "прочитано как текст" in result.warnings[0]
+    assert "office" in result.warnings[0]

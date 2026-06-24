@@ -348,38 +348,6 @@ class AuthCodeCache(BaseModel):
     token: str = Field(description="JWT, выпущенный для callback")
 
 
-class BoardStage(BaseModel):
-    """Стадия канбана задач.
-
-    Значение хранится в attributes.status у CRMEntity с entity_type=task.
-    """
-
-    model_config: ClassVar[ConfigDict] = ConfigDict(extra="forbid")
-
-    id: str = Field(
-        min_length=1,
-        pattern=r"^[a-z][a-z0-9_]*$",
-        description="Стабильный идентификатор стадии (snake_case)",
-    )
-    label: str = Field(min_length=1, description="Подпись колонки в UI")
-    color: str | None = Field(default=None, description="Опциональный CSS-цвет")
-
-
-class TaskBoardPreset(BaseModel):
-    """Набор колонок доски задач для одного ключа доски (см. task_board_key в CRM)."""
-
-    model_config: ClassVar[ConfigDict] = ConfigDict(extra="forbid")
-
-    stages: list[BoardStage] = Field(min_length=1, description="Упорядоченные стадии слева направо")
-
-    @model_validator(mode="after")
-    def _unique_stage_ids(self) -> "TaskBoardPreset":
-        ids = [s.id for s in self.stages]
-        if len(ids) != len(set(ids)):
-            raise ValueError("TaskBoardPreset: повторяющиеся id стадий")
-        return self
-
-
 class SidebarNavEntry(BaseModel):
     """Элемент дерева бокового меню пространства (NetWorkle).
 
@@ -467,11 +435,6 @@ class NamespaceCRMSettings(BaseModel):
         title="Идентификатор flow по умолчанию для типа сущности",
     )
     automation_rules: list[NamespaceAutomationRule] = Field(default_factory=list)
-    pipeline_stage_presets: dict[str, TaskBoardPreset] = Field(
-        default_factory=dict,
-        title="Пресеты колонок доски задач",
-        description="Ключ доски (task или task:<subtype>) → упорядоченные стадии. Пусто: резолвер CRM подставляет системный набор.",
-    )
     suggests: SuggestsSettings = Field(
         default_factory=SuggestsSettings,
         title="Настройки саджестов",

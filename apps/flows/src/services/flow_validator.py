@@ -665,14 +665,12 @@ class FlowValidator:
         nodes: dict[str, JsonObject],
         result: FlowValidationResult,
     ) -> None:
-        """hitl_node: ровно один источник очереди (slug или id)."""
+        """hitl_node: задан источник очереди (work_queue_slug или input_mapping.assignee_queue)."""
         for nid, cfg in nodes.items():
             if cfg.get("type") != "hitl_node":
                 continue
-            slug = cfg.get("operator_queue_slug")
-            qid = cfg.get("operator_queue_id")
+            slug = cfg.get("work_queue_slug")
             has_slug = isinstance(slug, str) and bool(slug.strip())
-            has_qid = isinstance(qid, str) and bool(qid.strip())
             im = cfg.get("input_mapping")
             assignee_queue = im.get("assignee_queue") if isinstance(im, dict) else None
             has_im_queue = (
@@ -680,21 +678,11 @@ class FlowValidator:
                 and isinstance(assignee_queue, str)
                 and bool(assignee_queue.strip())
             )
-            if has_slug and has_qid:
+            if not has_slug and not has_im_queue:
                 result.add_error(
                     code="hitl_queue_source",
                     message=(
-                        f"Нода '{nid}' (hitl_node): нельзя задавать одновременно "
-                        "operator_queue_slug и operator_queue_id"
-                    ),
-                    node_id=nid,
-                )
-                continue
-            if not has_slug and not has_qid and not has_im_queue:
-                result.add_error(
-                    code="hitl_queue_source",
-                    message=(
-                        f"Нода '{nid}' (hitl_node): укажите operator_queue_slug, operator_queue_id "
+                        f"Нода '{nid}' (hitl_node): укажите work_queue_slug "
                         "или input_mapping.assignee_queue"
                     ),
                     node_id=nid,

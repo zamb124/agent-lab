@@ -43,6 +43,7 @@ from apps.crm.models.api import (
     SearchMentionsRequest,
 )
 from apps.crm.services.crm_note_ws_broadcast import broadcast_crm_note_event
+from apps.crm.services.crm_work_item_service import CrmWorkItemService
 from apps.crm.services.entity_response_enrichment import build_entity_responses_with_semantic_index
 from apps.crm.services.entity_service import DraftVersionConflictError, SchemaValidationError
 from apps.crm.services.task_service import ActiveTaskExistsError
@@ -70,8 +71,13 @@ async def _single_entity_response(
     *,
     repo: EntityRepository,
     entity: CRMEntity,
+    crm_work_item_service: CrmWorkItemService | None = None,
 ) -> EntityResponse:
-    items = await build_entity_responses_with_semantic_index(repo, [entity])
+    items = await build_entity_responses_with_semantic_index(
+        repo,
+        [entity],
+        crm_work_item_service=crm_work_item_service,
+    )
     return items[0]
 
 
@@ -90,7 +96,11 @@ async def get_person_entity_for_current_user(
     entity = await container.entity_repository.get(person_id)
     if not entity:
         raise HTTPException(status_code=404, detail="Person entity not found")
-    return await _single_entity_response(repo=container.entity_repository, entity=entity)
+    return await _single_entity_response(
+        repo=container.entity_repository,
+        entity=entity,
+        crm_work_item_service=container.crm_work_item_service,
+    )
 
 
 @router.post("", response_model=EntityResponse)
@@ -111,9 +121,6 @@ async def create_entity(
             attachment_ids=data.attachment_ids,
             user_id=data.user_id,
             note_date=data.note_date,
-            due_date=data.due_date,
-            priority=data.priority,
-            assignees=data.assignees,
             voice_entity_id=data.voice_entity_id,
             context_entity_id=data.context_entity_id,
             voice_entity_in_payload="voice_entity_id" in data.model_fields_set,
@@ -123,7 +130,11 @@ async def create_entity(
         raise HTTPException(status_code=422, detail=exc.field_errors)
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc))
-    return await _single_entity_response(repo=container.entity_repository, entity=entity)
+    return await _single_entity_response(
+        repo=container.entity_repository,
+        entity=entity,
+        crm_work_item_service=container.crm_work_item_service,
+    )
 
 
 @router.post("/bulk", response_model=BulkCreateResponse)
@@ -149,9 +160,6 @@ async def bulk_create_entities(
                 tags=item.tags,
                 user_id=item.user_id,
                 note_date=item.note_date,
-                due_date=item.due_date,
-                priority=item.priority,
-                assignees=item.assignees,
             )
             created_entities.append(entity)
         except (ValueError, SchemaValidationError) as exc:
@@ -159,6 +167,7 @@ async def bulk_create_entities(
     created = await build_entity_responses_with_semantic_index(
         container.entity_repository,
         created_entities,
+        crm_work_item_service=container.crm_work_item_service,
     )
     return BulkCreateResponse(created=created, errors=errors)
 
@@ -183,6 +192,7 @@ async def bulk_update_entities(
     updated = await build_entity_responses_with_semantic_index(
         container.entity_repository,
         updated_entities,
+        crm_work_item_service=container.crm_work_item_service,
     )
     return BulkUpdateResponse(updated=updated, errors=errors)
 
@@ -292,6 +302,7 @@ async def _execute_entity_query(
         items = await build_entity_responses_with_semantic_index(
             container.entity_repository,
             entities,
+            crm_work_item_service=container.crm_work_item_service,
         )
         return CursorPage[EntityResponse](
             items=items,
@@ -317,6 +328,7 @@ async def _execute_entity_query(
         items = await build_entity_responses_with_semantic_index(
             container.entity_repository,
             entities_only,
+            crm_work_item_service=container.crm_work_item_service,
         )
         for resp, (_, score, match_type) in zip(items, results):
             resp.score = score
@@ -337,6 +349,7 @@ async def _execute_entity_query(
         items = await build_entity_responses_with_semantic_index(
             container.entity_repository,
             entities_only,
+            crm_work_item_service=container.crm_work_item_service,
         )
         for resp, (_, score) in zip(items, results):
             resp.score = score
@@ -356,6 +369,7 @@ async def _execute_entity_query(
     items = await build_entity_responses_with_semantic_index(
         container.entity_repository,
         entities_only,
+        crm_work_item_service=container.crm_work_item_service,
     )
     for resp, (_, score) in zip(items, results):
         resp.score = score
@@ -454,6 +468,7 @@ async def export_entities(
             enriched_batch = await build_entity_responses_with_semantic_index(
                 container.entity_repository,
                 batch,
+                crm_work_item_service=container.crm_work_item_service,
             )
             for resp in enriched_batch:
                 prefix = "" if first else ",\n"
@@ -684,7 +699,11 @@ async def get_entity(
     try:
         filtered = await container.access_control_service.filter_fields(entity, user_id, company_id)
         if isinstance(filtered, CRMEntity):
-            return await _single_entity_response(repo=container.entity_repository, entity=filtered)
+            return await _single_entity_response(
+                repo=container.entity_repository,
+                entity=filtered,
+                crm_work_item_service=container.crm_work_item_service,
+            )
         return filtered
     except PermissionError:
         raise HTTPException(status_code=403, detail="Access denied")
@@ -724,7 +743,11 @@ async def update_entity(
         raise HTTPException(status_code=422, detail=exc.field_errors)
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc))
-    return await _single_entity_response(repo=container.entity_repository, entity=updated)
+    return await _single_entity_response(
+        repo=container.entity_repository,
+        entity=updated,
+        crm_work_item_service=container.crm_work_item_service,
+    )
 
 
 @router.delete("/{entity_id}")

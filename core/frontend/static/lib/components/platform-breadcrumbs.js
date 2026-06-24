@@ -23,6 +23,7 @@ import '@platform/lib/components/platform-icon.js';
 export class PlatformBreadcrumbs extends PlatformElement {
     static properties = {
         currentLabel: { type: String, attribute: 'current-label' },
+        compact: { type: Boolean, reflect: true },
         _separator: { type: String },
     };
 
@@ -71,6 +72,10 @@ export class PlatformBreadcrumbs extends PlatformElement {
 
             .breadcrumb-current:hover {
                 color: var(--text-primary);
+            }
+
+            :host([compact]) .breadcrumbs {
+                margin-bottom: 0;
             }
 
             @media (max-width: 767px) {

@@ -22,6 +22,7 @@ from apps.crm.integrations.amocrm.mapping import (
 )
 from apps.crm.integrations.entity_upsert import upsert_canonical_by_external_ref
 from apps.crm.models.api import NoteProcessingConfig
+from apps.crm.services.crm_work_item_service import CrmTaskWorkSeed
 from apps.crm.services.entity_service import EntityService
 from apps.crm.services.task_service import ActiveTaskExistsError, TaskService
 from core.context import get_context
@@ -542,7 +543,7 @@ class AmoCRMIntegrationService:
                 attrs: JsonObject = {}
                 amo_done = raw.get("is_completed") is True
                 attrs["amo_is_completed"] = amo_done
-                attrs["status"] = "done" if amo_done else "todo"
+                board_status = "done" if amo_done else "todo"
                 tt_raw = raw.get("task_type_id")
                 if tt_raw is not None:
                     if not isinstance(tt_raw, (str, int, float)) or isinstance(tt_raw, bool):
@@ -576,9 +577,13 @@ class AmoCRMIntegrationService:
                     patch_attributes=attrs,
                     account_key=account_key,
                     description=description,
-                    due_date=due,
                 )
                 task_eid = task_ent.entity_id
+                await self._entity_service.sync_task_work_item(
+                    task_ent,
+                    CrmTaskWorkSeed(due_date=due, board_status=board_status),
+                    user_id=sync_user_id,
+                )
 
                 created_rel = await self._ensure_relationship(
                     namespace=namespace,

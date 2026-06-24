@@ -16,6 +16,7 @@ alwaysApply: false
    - Локальные DOM-события `this.emit('change', detail)` для родителя.
 
 2. **Container** (`platform-icon`, `platform-user`, `platform-user-chip`, `platform-user-info-modal`, `platform-notification-manager`, `platform-deployment-version`, `pwa-install-banner`, `glass-modal` и наследники, `platform-breadcrumbs`, `platform-audio-message-player`, `platform-date-picker`, `platform-calendar-modal`, `auth-modal`, `company-modal`, `file-text-preview-modal`, `prompt-editor`, `app-loader`, `glass-toast`, `platform-modal-stack`, `layout/platform-sidebar`, `layout/platform-service-sidebar`):
+   - **`prompt-editor`** — единый markdown + prompt-variables редактор (CodeMirror): `{var}`, `{?opt}`, `{for}`, `@var:`, `@state:`, preview/split/fullscreen, `variant="embed"` для встраивания в карточки (worktracker description, flows prompt). i18n — `platform.prompt_editor.*`.
    - Читают срез через `this.select(...)` (или ставят свой `useResource`/`useOp`).
    - Действия — через `this.dispatch(<CoreEvents.X>, payload)` (реализация helpers `PlatformElement`).
    - Запрещено: `this.services.*`, `BaseStore`, `ServiceRegistry`, `AppEvents`.
@@ -237,8 +238,10 @@ registerBottomSheetKind(CrmWorkspacePickerSheet.bottomSheetKind, 'crm-workspace-
 ### Контракт `<platform-user-chip>`
 
 ```html
-<platform-user-chip user-id="user_..." size="sm|md" ?interactive=${false}></platform-user-chip>
+<platform-user-chip user-id="user_..." size="sm|md" ?interactive=${false} ?show-work-count=${false}></platform-user-chip>
 ```
+
+`show-work-count` — только для chip текущего пользователя в shell/nav; badge справа, клик → `/worktracker/inbox`. Источник: `state.platformWorkItemCounts.total_open_count`.
 
 - `user-id` (обязателен, non-empty string) — отсутствие = `throw`.
 - `size` — `'sm'` (default, аватар 24×24, имя) или `'md'` (32×32, имя + email).
@@ -271,6 +274,29 @@ registerBottomSheetKind(CrmWorkspacePickerSheet.bottomSheetKind, 'crm-workspace-
 - регистрация альтернативных модалок с `modalKind === 'platform.user_info'`, отдельной модалки «редактирование своего профиля» или «редактирование участника команды».
 - открытие `platform.user_info` без `userId`-prop'а.
 - прямой переход «Профиль/Настройки» из `platform-user` меню на `/<svc>/settings` — пункты меню обязаны открывать `platform.user_info`.
+
+## `<platform-work-item-badge>` и `<platform-work-item-preview>`
+
+Cross-service WorkItem (CRM task, Flows HITL, notifications, worktracker) — **только** эти core-компоненты. Локальные `*-task-badge`/`*-work-item-row` в `apps/` запрещены.
+
+```html
+<platform-work-item-badge
+  work-item-id="wi_..."
+  .item=${workItemOptional}
+  variant="chip|row|card"
+  size="sm|md"
+  ?interactive=${true}
+  ?show-preview=${true}
+></platform-work-item-badge>
+```
+
+Данные: prop `.item` (zero HTTP) или lazy GET через фабрику `platform/work_item_get`. Счётчик задач текущего пользователя — `platform/work_item_counts` (`state.platformWorkItemCounts`), badge на `<platform-user-chip show-work-count>`.
+
+Deep link: `core/frontend/static/lib/utils/work-item-deeplink.js::buildWorkItemUrl(work_item_id, { from? })` → `/worktracker/tasks/{work_item_id}`.
+
+i18n namespace: `platform` (`work_item_badge.*`, `work_item_preview.*`). Semantic tokens в `tokens.css`:
+- **Статус (главный сигнал):** `--work-item-state-{open|in_progress|blocked|done|cancelled|failed}` + `-subtle` для pill; левая полоска row/card и `state-dot` — только по `WorkItem.state`. Alias `--work-item-state-active` → `in_progress`.
+- **Приоритет (вторичный):** `--work-item-priority-*`; индикатор в meta только для `high`/`urgent`, не на left bar.
 
 ## Sidebar / breadcrumbs / namespace
 

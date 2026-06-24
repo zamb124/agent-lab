@@ -116,6 +116,15 @@ SERVICES = {
             ("/documents/ui/static", "apps/office/ui"),
         ],
     },
+    "worktracker": {
+        "type": "granian",
+        "app": "apps.worktracker.main:app",
+        "port": "8021",
+        "static": [
+            CORE_FRONTEND_STATIC,
+            ("/worktracker/ui/static", "apps/worktracker/ui"),
+        ],
+    },
     "scheduler-api": {
         "type": "granian",
         "app": "apps.scheduler.main:app",

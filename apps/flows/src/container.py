@@ -21,7 +21,6 @@ from apps.flows.src.db import (
     ToolRepository,
 )
 from apps.flows.src.db.mcp_repository import MCPServerRepository
-from apps.flows.src.db.operator_repository import OperatorRepository
 from apps.flows.src.durable_execution import (
     DurableWorkflowRepository,
     DurableWorkflowRuntime,
@@ -32,10 +31,10 @@ from apps.flows.src.registry.nodes import NodeRegistry, create_default_node_regi
 from apps.flows.src.runners.remote import RemoteCodeRunner
 from apps.flows.src.services.flow_discovery import FlowDiscoveryService
 from apps.flows.src.services.flow_factory import FlowFactory
+from apps.flows.src.services.hitl_work_item_service import HitlWorkItemService
 from apps.flows.src.services.lara_action_engine import LaraActionEngine
 from apps.flows.src.services.lara_facade import LaraFacade
 from apps.flows.src.services.llm_models_service import LLMModelsService
-from apps.flows.src.services.operator_handoff_service import OperatorHandoffService
 from apps.flows.src.services.resource_loader import ResourceLoader
 from apps.flows.src.services.schedule_service import ScheduleService
 from apps.flows.src.tools.base import BaseTool
@@ -56,6 +55,10 @@ from core.db.repositories.embed_config_repository import EmbedConfigRepository
 from core.db.repositories.embed_mapping_repository import EmbedMappingRepository
 from core.logging import get_logger
 from core.scheduler import SchedulerTaskRepository
+from core.worktracker.db import WorktrackerDatabase
+from core.worktracker.hook_dispatcher import ServiceClientHookDispatcher
+from core.worktracker.repository import WorktrackerRepository
+from core.worktracker.service import WorkItemService
 
 if TYPE_CHECKING:
     from apps.flows.src.channels.a2a import A2AChannel
@@ -133,17 +136,22 @@ class FlowContainer(BaseContainer):
         return ResourceRepository(storage=self.storage)
 
     @lazy
-    def operator_repository(self) -> OperatorRepository:
-        return OperatorRepository(storage=self.storage)
+    def worktracker_repository(self) -> WorktrackerRepository:
+        settings = get_settings()
+        if not settings.database.worktracker_url:
+            raise ValueError("database.worktracker_url обязателен для worktracker_repository")
+        return WorktrackerRepository(db=WorktrackerDatabase(settings.database.worktracker_url))
 
     @lazy
-    def operator_handoff_service(self) -> OperatorHandoffService:
-        return OperatorHandoffService(
-            repository=self.operator_repository,
-            file_repository=self.file_repository,
-            redis_client=self.redis_client,
-            workflow_runtime=self.workflow_runtime,
+    def work_item_service(self) -> WorkItemService:
+        return WorkItemService(
+            repository=self.worktracker_repository,
+            hook_dispatcher=ServiceClientHookDispatcher(service_client=self.service_client),
         )
+
+    @lazy
+    def hitl_work_item_service(self) -> HitlWorkItemService:
+        return HitlWorkItemService(work_item_service=self.work_item_service)
 
     # rag_repository наследуется из BaseContainer (core/container/base.py)
 

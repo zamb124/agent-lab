@@ -17,9 +17,7 @@ _SUGGEST_MERGE_SCALAR_KEYS: tuple[str, ...] = (
     "description",
     "status",
     "entity_subtype",
-    "priority",
     "note_date",
-    "due_date",
 )
 _SKIP_DUPLICATE_STATUSES = {"pending", "dismissed"}
 
@@ -359,10 +357,6 @@ class SuggestService:
             return entity.status
         if key == "entity_subtype":
             return entity.entity_subtype
-        if key == "priority":
-            return entity.priority
         if key == "note_date":
             return entity.note_date
-        if key == "due_date":
-            return entity.due_date
         raise ValueError(f"Unsupported suggest merge scalar key: {key}")

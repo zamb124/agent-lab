@@ -1512,35 +1512,6 @@ _SEED_SALES: NamespaceTemplateSeed = {
     "crm_settings": {
         "default_note_voice": "self",
         "show_note_voice_ui": True,
-        "pipeline_stage_presets": {
-            "task": {
-                "stages": [
-                    {"id": "todo", "label": "К выполнению", "color": "#9E9E9E"},
-                    {"id": "in_progress", "label": "В работе", "color": "#42A5F5"},
-                    {"id": "blocked", "label": "Заблокировано", "color": "#EF5350"},
-                    {"id": "done", "label": "Готово", "color": "#66BB6A"},
-                ]
-            },
-            "task:lead": {
-                "stages": [
-                    {"id": "new", "label": "Новый", "color": "#90A4AE"},
-                    {"id": "working", "label": "В работе", "color": "#42A5F5"},
-                    {"id": "qualified", "label": "Квалифицирован", "color": "#7E57C2"},
-                    {"id": "disqualified", "label": "Не подходит", "color": "#BDBDBD"},
-                    {"id": "nurture", "label": "На дозревание", "color": "#FFB74D"},
-                ]
-            },
-            "task:deal": {
-                "stages": [
-                    {"id": "discovery", "label": "Discovery", "color": "#90A4AE"},
-                    {"id": "proposal", "label": "Предложение", "color": "#42A5F5"},
-                    {"id": "negotiation", "label": "Переговоры", "color": "#7E57C2"},
-                    {"id": "contract", "label": "Контракт", "color": "#FB8C00"},
-                    {"id": "closed_won", "label": "Закрыта 🎉", "color": "#66BB6A"},
-                    {"id": "closed_lost", "label": "Проиграна", "color": "#BDBDBD"},
-                ]
-            },
-        },
     },
 }
 
@@ -1937,46 +1908,6 @@ _SEED_AGILE: NamespaceTemplateSeed = {
     "crm_settings": {
         "default_note_voice": "self",
         "show_note_voice_ui": True,
-        "pipeline_stage_presets": {
-            "task": {
-                "stages": [
-                    {"id": "todo", "label": "Backlog", "color": "#90A4AE"},
-                    {"id": "in_progress", "label": "В работе", "color": "#42A5F5"},
-                    {"id": "in_review", "label": "На ревью", "color": "#7E57C2"},
-                    {"id": "blocked", "label": "Заблокировано", "color": "#EF5350"},
-                    {"id": "done", "label": "Готово", "color": "#66BB6A"},
-                ]
-            },
-            "task:user_story": {
-                "stages": [
-                    {"id": "backlog", "label": "Backlog", "color": "#90A4AE"},
-                    {"id": "ready", "label": "Ready", "color": "#26A69A"},
-                    {"id": "in_progress", "label": "В работе", "color": "#42A5F5"},
-                    {"id": "in_review", "label": "На ревью", "color": "#7E57C2"},
-                    {"id": "done", "label": "Done", "color": "#66BB6A"},
-                    {"id": "cancelled", "label": "Отменена", "color": "#BDBDBD"},
-                ]
-            },
-            "task:bug": {
-                "stages": [
-                    {"id": "open", "label": "Open", "color": "#90A4AE"},
-                    {"id": "triaged", "label": "Triaged", "color": "#26A69A"},
-                    {"id": "in_progress", "label": "Fixing", "color": "#42A5F5"},
-                    {"id": "fixed", "label": "Fixed", "color": "#7E57C2"},
-                    {"id": "verified", "label": "Verified", "color": "#66BB6A"},
-                    {"id": "closed", "label": "Closed", "color": "#BDBDBD"},
-                    {"id": "wont_fix", "label": "Won't fix", "color": "#9E9E9E"},
-                ]
-            },
-            "task:spike": {
-                "stages": [
-                    {"id": "proposed", "label": "Proposed", "color": "#90A4AE"},
-                    {"id": "time_boxed", "label": "В работе", "color": "#42A5F5"},
-                    {"id": "completed", "label": "Завершён", "color": "#66BB6A"},
-                    {"id": "discarded", "label": "Отброшен", "color": "#BDBDBD"},
-                ]
-            },
-        },
     },
 }
 
@@ -2286,36 +2217,6 @@ _SEED_DEVELOPMENT: NamespaceTemplateSeed = {
     "crm_settings": {
         "default_note_voice": "self",
         "show_note_voice_ui": True,
-        "pipeline_stage_presets": {
-            "task": {
-                "stages": [
-                    {"id": "todo", "label": "К выполнению", "color": "#90A4AE"},
-                    {"id": "in_progress", "label": "В работе", "color": "#42A5F5"},
-                    {"id": "in_review", "label": "На ревью", "color": "#7E57C2"},
-                    {"id": "blocked", "label": "Заблокировано", "color": "#EF5350"},
-                    {"id": "done", "label": "Готово", "color": "#66BB6A"},
-                ]
-            },
-            "task:incident": {
-                "stages": [
-                    {"id": "detected", "label": "Detected", "color": "#EF5350"},
-                    {"id": "mitigating", "label": "Mitigating", "color": "#FB8C00"},
-                    {"id": "mitigated", "label": "Mitigated", "color": "#FFB74D"},
-                    {"id": "resolved", "label": "Resolved", "color": "#66BB6A"},
-                    {"id": "post_mortem", "label": "Post-mortem", "color": "#5D4037"},
-                    {"id": "closed", "label": "Closed", "color": "#BDBDBD"},
-                ]
-            },
-            "task:feature": {
-                "stages": [
-                    {"id": "planned", "label": "Planned", "color": "#90A4AE"},
-                    {"id": "in_dev", "label": "In Dev", "color": "#42A5F5"},
-                    {"id": "in_qa", "label": "In QA", "color": "#7E57C2"},
-                    {"id": "released", "label": "Released", "color": "#66BB6A"},
-                    {"id": "sunset", "label": "Sunset", "color": "#9E9E9E"},
-                ]
-            },
-        },
     },
 }
 
@@ -2713,27 +2614,6 @@ _SEED_HR: NamespaceTemplateSeed = {
     "crm_settings": {
         "default_note_voice": "self",
         "show_note_voice_ui": True,
-        "pipeline_stage_presets": {
-            "task": {
-                "stages": [
-                    {"id": "todo", "label": "К выполнению", "color": "#90A4AE"},
-                    {"id": "in_progress", "label": "В работе", "color": "#42A5F5"},
-                    {"id": "blocked", "label": "Заблокировано", "color": "#EF5350"},
-                    {"id": "done", "label": "Готово", "color": "#66BB6A"},
-                ]
-            },
-            "task:candidate": {
-                "stages": [
-                    {"id": "sourced", "label": "Sourced", "color": "#90A4AE"},
-                    {"id": "screening", "label": "Screening", "color": "#42A5F5"},
-                    {"id": "interviewing", "label": "Interviewing", "color": "#7E57C2"},
-                    {"id": "offer", "label": "Offer", "color": "#FB8C00"},
-                    {"id": "hired", "label": "Hired", "color": "#66BB6A"},
-                    {"id": "rejected", "label": "Rejected", "color": "#BDBDBD"},
-                    {"id": "withdrawn", "label": "Withdrawn", "color": "#9E9E9E"},
-                ]
-            },
-        },
     },
 }
 
@@ -3034,36 +2914,6 @@ _SEED_MARKETING: NamespaceTemplateSeed = {
     "crm_settings": {
         "default_note_voice": "self",
         "show_note_voice_ui": True,
-        "pipeline_stage_presets": {
-            "task": {
-                "stages": [
-                    {"id": "todo", "label": "К выполнению", "color": "#90A4AE"},
-                    {"id": "in_progress", "label": "В работе", "color": "#42A5F5"},
-                    {"id": "blocked", "label": "Заблокировано", "color": "#EF5350"},
-                    {"id": "done", "label": "Готово", "color": "#66BB6A"},
-                ]
-            },
-            "task:campaign": {
-                "stages": [
-                    {"id": "planned", "label": "Planned", "color": "#90A4AE"},
-                    {"id": "creative", "label": "Creative", "color": "#7E57C2"},
-                    {"id": "running", "label": "Running", "color": "#42A5F5"},
-                    {"id": "paused", "label": "Paused", "color": "#FFB74D"},
-                    {"id": "completed", "label": "Completed", "color": "#66BB6A"},
-                    {"id": "cancelled", "label": "Cancelled", "color": "#BDBDBD"},
-                ]
-            },
-            "task:content": {
-                "stages": [
-                    {"id": "idea", "label": "Idea", "color": "#90A4AE"},
-                    {"id": "drafting", "label": "Drafting", "color": "#42A5F5"},
-                    {"id": "in_review", "label": "In Review", "color": "#7E57C2"},
-                    {"id": "approved", "label": "Approved", "color": "#26A69A"},
-                    {"id": "published", "label": "Published", "color": "#66BB6A"},
-                    {"id": "archived", "label": "Archived", "color": "#BDBDBD"},
-                ]
-            },
-        },
     },
 }
 
@@ -3351,45 +3201,6 @@ _SEED_SUPPORT: NamespaceTemplateSeed = {
     "crm_settings": {
         "default_note_voice": "self",
         "show_note_voice_ui": True,
-        "pipeline_stage_presets": {
-            "task": {
-                "stages": [
-                    {"id": "todo", "label": "К выполнению", "color": "#90A4AE"},
-                    {"id": "in_progress", "label": "В работе", "color": "#42A5F5"},
-                    {"id": "blocked", "label": "Заблокировано", "color": "#EF5350"},
-                    {"id": "done", "label": "Готово", "color": "#66BB6A"},
-                ]
-            },
-            "task:ticket": {
-                "stages": [
-                    {"id": "open", "label": "Open", "color": "#90A4AE"},
-                    {"id": "in_progress", "label": "In progress", "color": "#42A5F5"},
-                    {"id": "waiting_customer", "label": "Waiting on customer", "color": "#FFB74D"},
-                    {"id": "waiting_internal", "label": "Waiting on team", "color": "#FFA726"},
-                    {"id": "resolved", "label": "Resolved", "color": "#66BB6A"},
-                    {"id": "closed", "label": "Closed", "color": "#BDBDBD"},
-                    {"id": "escalated", "label": "Escalated", "color": "#EF5350"},
-                ]
-            },
-            "task:incident": {
-                "stages": [
-                    {"id": "detected", "label": "Detected", "color": "#EF5350"},
-                    {"id": "investigating", "label": "Investigating", "color": "#FB8C00"},
-                    {"id": "mitigating", "label": "Mitigating", "color": "#FFB74D"},
-                    {"id": "resolved", "label": "Resolved", "color": "#66BB6A"},
-                    {"id": "closed", "label": "Closed", "color": "#BDBDBD"},
-                ]
-            },
-            "task:knowledge_article": {
-                "stages": [
-                    {"id": "draft", "label": "Draft", "color": "#90A4AE"},
-                    {"id": "in_review", "label": "Review", "color": "#7E57C2"},
-                    {"id": "published", "label": "Published", "color": "#66BB6A"},
-                    {"id": "outdated", "label": "Outdated", "color": "#FFB74D"},
-                    {"id": "archived", "label": "Archived", "color": "#BDBDBD"},
-                ]
-            },
-        },
     },
 }
 
@@ -3744,48 +3555,6 @@ _SEED_PRODUCT: NamespaceTemplateSeed = {
     "crm_settings": {
         "default_note_voice": "self",
         "show_note_voice_ui": True,
-        "pipeline_stage_presets": {
-            "task": {
-                "stages": [
-                    {"id": "todo", "label": "К выполнению", "color": "#90A4AE"},
-                    {"id": "in_progress", "label": "В работе", "color": "#42A5F5"},
-                    {"id": "blocked", "label": "Заблокировано", "color": "#EF5350"},
-                    {"id": "done", "label": "Готово", "color": "#66BB6A"},
-                ]
-            },
-            "task:initiative": {
-                "stages": [
-                    {"id": "planned", "label": "Planned", "color": "#90A4AE"},
-                    {"id": "discovery", "label": "Discovery", "color": "#7E57C2"},
-                    {"id": "delivery", "label": "Delivery", "color": "#42A5F5"},
-                    {"id": "measuring", "label": "Measuring", "color": "#FFB74D"},
-                    {"id": "done", "label": "Done", "color": "#66BB6A"},
-                    {"id": "cancelled", "label": "Cancelled", "color": "#BDBDBD"},
-                ]
-            },
-            "task:experiment": {
-                "stages": [
-                    {"id": "planned", "label": "Planned", "color": "#90A4AE"},
-                    {"id": "running", "label": "Running", "color": "#42A5F5"},
-                    {"id": "completed", "label": "Completed", "color": "#7E57C2"},
-                    {"id": "succeeded", "label": "Succeeded", "color": "#66BB6A"},
-                    {"id": "failed", "label": "Failed", "color": "#EF5350"},
-                    {"id": "inconclusive", "label": "Inconclusive", "color": "#BDBDBD"},
-                ]
-            },
-            "task:feature": {
-                "stages": [
-                    {"id": "ideation", "label": "Ideation", "color": "#90A4AE"},
-                    {"id": "discovery", "label": "Discovery", "color": "#7E57C2"},
-                    {"id": "ready", "label": "Ready", "color": "#26A69A"},
-                    {"id": "in_dev", "label": "In Dev", "color": "#42A5F5"},
-                    {"id": "in_qa", "label": "In QA", "color": "#7E57C2"},
-                    {"id": "released", "label": "Released", "color": "#66BB6A"},
-                    {"id": "measuring", "label": "Measuring", "color": "#FFB74D"},
-                    {"id": "sunset", "label": "Sunset", "color": "#9E9E9E"},
-                ]
-            },
-        },
     },
 }
 
@@ -4064,39 +3833,6 @@ _SEED_RECRUITING: NamespaceTemplateSeed = {
     "crm_settings": {
         "default_note_voice": "self",
         "show_note_voice_ui": True,
-        "pipeline_stage_presets": {
-            "task": {
-                "stages": [
-                    {"id": "todo", "label": "К выполнению", "color": "#90A4AE"},
-                    {"id": "in_progress", "label": "В работе", "color": "#42A5F5"},
-                    {"id": "blocked", "label": "Заблокировано", "color": "#EF5350"},
-                    {"id": "done", "label": "Готово", "color": "#66BB6A"},
-                ]
-            },
-            "task:candidate": {
-                "stages": [
-                    {"id": "sourced", "label": "Sourced", "color": "#90A4AE"},
-                    {"id": "contacted", "label": "Contacted", "color": "#42A5F5"},
-                    {"id": "screened", "label": "Screened", "color": "#7E57C2"},
-                    {"id": "ready", "label": "Ready", "color": "#26A69A"},
-                    {"id": "submitted", "label": "Submitted", "color": "#5C6BC0"},
-                    {"id": "interviewing", "label": "Interviewing", "color": "#1976D2"},
-                    {"id": "offer", "label": "Offer", "color": "#FB8C00"},
-                    {"id": "placed", "label": "Placed", "color": "#66BB6A"},
-                    {"id": "rejected", "label": "Rejected", "color": "#BDBDBD"},
-                    {"id": "withdrawn", "label": "Withdrawn", "color": "#9E9E9E"},
-                ]
-            },
-            "task:submission": {
-                "stages": [
-                    {"id": "sent", "label": "Sent", "color": "#90A4AE"},
-                    {"id": "under_review", "label": "Under review", "color": "#7E57C2"},
-                    {"id": "interview_scheduled", "label": "Interview", "color": "#42A5F5"},
-                    {"id": "rejected", "label": "Rejected", "color": "#BDBDBD"},
-                    {"id": "hired", "label": "Hired", "color": "#66BB6A"},
-                ]
-            },
-        },
     },
 }
 
@@ -4360,37 +4096,6 @@ _SEED_REAL_ESTATE: NamespaceTemplateSeed = {
     "crm_settings": {
         "default_note_voice": "self",
         "show_note_voice_ui": True,
-        "pipeline_stage_presets": {
-            "task": {
-                "stages": [
-                    {"id": "todo", "label": "К выполнению", "color": "#90A4AE"},
-                    {"id": "in_progress", "label": "В работе", "color": "#42A5F5"},
-                    {"id": "blocked", "label": "Заблокировано", "color": "#EF5350"},
-                    {"id": "done", "label": "Готово", "color": "#66BB6A"},
-                ]
-            },
-            "task:property": {
-                "stages": [
-                    {"id": "available", "label": "Available", "color": "#66BB6A"},
-                    {"id": "under_offer", "label": "Under offer", "color": "#FB8C00"},
-                    {"id": "reserved", "label": "Reserved", "color": "#FFB74D"},
-                    {"id": "sold", "label": "Sold", "color": "#388E3C"},
-                    {"id": "rented", "label": "Rented", "color": "#0288D1"},
-                    {"id": "withdrawn", "label": "Withdrawn", "color": "#BDBDBD"},
-                ]
-            },
-            "task:lead": {
-                "stages": [
-                    {"id": "new", "label": "New", "color": "#90A4AE"},
-                    {"id": "qualified", "label": "Qualified", "color": "#7E57C2"},
-                    {"id": "touring", "label": "Touring", "color": "#42A5F5"},
-                    {"id": "negotiating", "label": "Negotiating", "color": "#FB8C00"},
-                    {"id": "offer_sent", "label": "Offer sent", "color": "#FFA726"},
-                    {"id": "won", "label": "Won", "color": "#66BB6A"},
-                    {"id": "lost", "label": "Lost", "color": "#BDBDBD"},
-                ]
-            },
-        },
     },
 }
 
@@ -4700,38 +4405,6 @@ _SEED_LEGAL: NamespaceTemplateSeed = {
     "crm_settings": {
         "default_note_voice": "self",
         "show_note_voice_ui": True,
-        "pipeline_stage_presets": {
-            "task": {
-                "stages": [
-                    {"id": "todo", "label": "К выполнению", "color": "#90A4AE"},
-                    {"id": "in_progress", "label": "В работе", "color": "#42A5F5"},
-                    {"id": "blocked", "label": "Заблокировано", "color": "#EF5350"},
-                    {"id": "done", "label": "Готово", "color": "#66BB6A"},
-                ]
-            },
-            "task:matter": {
-                "stages": [
-                    {"id": "intake", "label": "Intake", "color": "#90A4AE"},
-                    {"id": "open", "label": "Open", "color": "#42A5F5"},
-                    {"id": "active", "label": "Active", "color": "#7E57C2"},
-                    {"id": "on_hold", "label": "On hold", "color": "#FFB74D"},
-                    {"id": "closed", "label": "Closed", "color": "#66BB6A"},
-                    {"id": "lost", "label": "Lost", "color": "#BDBDBD"},
-                ]
-            },
-            "task:contract": {
-                "stages": [
-                    {"id": "drafting", "label": "Drafting", "color": "#90A4AE"},
-                    {"id": "in_review", "label": "In review", "color": "#7E57C2"},
-                    {"id": "redlining", "label": "Redlining", "color": "#FB8C00"},
-                    {"id": "approved", "label": "Approved", "color": "#26A69A"},
-                    {"id": "signed", "label": "Signed", "color": "#66BB6A"},
-                    {"id": "active", "label": "Active", "color": "#388E3C"},
-                    {"id": "expired", "label": "Expired", "color": "#9E9E9E"},
-                    {"id": "terminated", "label": "Terminated", "color": "#EF5350"},
-                ]
-            },
-        },
     },
 }
 
@@ -5025,38 +4698,6 @@ _SEED_FINANCE: NamespaceTemplateSeed = {
     "crm_settings": {
         "default_note_voice": "self",
         "show_note_voice_ui": True,
-        "pipeline_stage_presets": {
-            "task": {
-                "stages": [
-                    {"id": "todo", "label": "К выполнению", "color": "#90A4AE"},
-                    {"id": "in_progress", "label": "В работе", "color": "#42A5F5"},
-                    {"id": "blocked", "label": "Заблокировано", "color": "#EF5350"},
-                    {"id": "done", "label": "Готово", "color": "#66BB6A"},
-                ]
-            },
-            "task:invoice": {
-                "stages": [
-                    {"id": "drafted", "label": "Drafted", "color": "#90A4AE"},
-                    {"id": "sent", "label": "Sent", "color": "#42A5F5"},
-                    {"id": "approved", "label": "Approved", "color": "#26A69A"},
-                    {"id": "paid", "label": "Paid", "color": "#66BB6A"},
-                    {"id": "partially_paid", "label": "Partially paid", "color": "#FFB74D"},
-                    {"id": "overdue", "label": "Overdue", "color": "#EF5350"},
-                    {"id": "voided", "label": "Voided", "color": "#BDBDBD"},
-                    {"id": "disputed", "label": "Disputed", "color": "#FB8C00"},
-                ]
-            },
-            "task:expense": {
-                "stages": [
-                    {"id": "draft", "label": "Draft", "color": "#90A4AE"},
-                    {"id": "submitted", "label": "Submitted", "color": "#42A5F5"},
-                    {"id": "approved", "label": "Approved", "color": "#26A69A"},
-                    {"id": "rejected", "label": "Rejected", "color": "#BDBDBD"},
-                    {"id": "reimbursed", "label": "Reimbursed", "color": "#66BB6A"},
-                    {"id": "cancelled", "label": "Cancelled", "color": "#9E9E9E"},
-                ]
-            },
-        },
     },
 }
 
@@ -5425,26 +5066,6 @@ _SEED_EDUCATION: NamespaceTemplateSeed = {
     "crm_settings": {
         "default_note_voice": "self",
         "show_note_voice_ui": True,
-        "pipeline_stage_presets": {
-            "task": {
-                "stages": [
-                    {"id": "todo", "label": "К выполнению", "color": "#90A4AE"},
-                    {"id": "in_progress", "label": "В работе", "color": "#42A5F5"},
-                    {"id": "blocked", "label": "Заблокировано", "color": "#EF5350"},
-                    {"id": "done", "label": "Готово", "color": "#66BB6A"},
-                ]
-            },
-            "task:assignment": {
-                "stages": [
-                    {"id": "assigned", "label": "Assigned", "color": "#90A4AE"},
-                    {"id": "submitted", "label": "Submitted", "color": "#42A5F5"},
-                    {"id": "under_review", "label": "Under review", "color": "#7E57C2"},
-                    {"id": "graded", "label": "Graded", "color": "#66BB6A"},
-                    {"id": "returned_for_rework", "label": "Rework", "color": "#FB8C00"},
-                    {"id": "late", "label": "Late", "color": "#EF5350"},
-                ]
-            },
-        },
     },
 }
 

@@ -182,7 +182,7 @@ class HandoffRequestedPayload(DurableStrictBaseModel):
     node_id: str = Field(..., min_length=1)
     handoff_command_id: str = Field(..., min_length=1)
     correlation_id: str = Field(..., min_length=1)
-    operator_task_id: str = Field(..., min_length=1)
+    work_item_id: str = Field(..., min_length=1)
     task_title: str = Field(..., min_length=1)
     assignee_queue: str = Field(..., min_length=1)
     handoff_mode: HandoffMode
@@ -195,7 +195,7 @@ class HandoffRequestedPayload(DurableStrictBaseModel):
 class HandoffCompletedPayload(DurableStrictBaseModel):
     handoff_command_id: str = Field(..., min_length=1)
     correlation_id: str = Field(..., min_length=1)
-    operator_task_id: str = Field(..., min_length=1)
+    work_item_id: str = Field(..., min_length=1)
     operator_user_id: str = Field(..., min_length=1)
     handoff_mode: HandoffMode
     resolution_preview: str = Field(..., min_length=1)
@@ -205,7 +205,7 @@ class HandoffCompletedPayload(DurableStrictBaseModel):
 class HandoffRejectedPayload(DurableStrictBaseModel):
     handoff_command_id: str = Field(..., min_length=1)
     correlation_id: str = Field(..., min_length=1)
-    operator_task_id: str = Field(..., min_length=1)
+    work_item_id: str = Field(..., min_length=1)
     operator_user_id: str = Field(..., min_length=1)
     reason: str = Field(..., min_length=1)
 
@@ -215,7 +215,7 @@ class HandoffResumedPayload(DurableStrictBaseModel):
     node_id: str = Field(..., min_length=1)
     handoff_command_id: str = Field(..., min_length=1)
     correlation_id: str = Field(..., min_length=1)
-    operator_task_id: str = Field(..., min_length=1)
+    work_item_id: str = Field(..., min_length=1)
     response_preview: str = Field(..., min_length=1)
 
 

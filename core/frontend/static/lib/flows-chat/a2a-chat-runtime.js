@@ -102,7 +102,7 @@ export function inputRequiredFieldsFromA2a(message, resultMetadata) {
                     handoffMode: typeof body.handoff_mode === 'string' && body.handoff_mode.length > 0
                         ? body.handoff_mode
                         : 'single_reply',
-                    operatorTaskId: typeof body.operator_task_id === 'string' ? body.operator_task_id : null,
+                    workItemId: typeof body.work_item_id === 'string' ? body.work_item_id : null,
                 };
             }
             if (

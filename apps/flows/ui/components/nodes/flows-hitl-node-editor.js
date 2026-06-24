@@ -1,22 +1,22 @@
 /**
- * flows-hitl-node-editor — редактор HITL-ноды (передача оператору).
+ * flows-hitl-node-editor — редактор HITL-ноды (передача задачи в очередь).
  *
  * Поля точно по `NodeConfig` (apps/flows/src/models/node_config.py):
- *   - operator_queue_slug
- *   - operator_handoff_mode: 'single_reply' | 'takeover'
- *   - operator_task_title
- *   - operator_user_message (с подсказкой `@var:`)
+ *   - work_queue_slug
+ *   - handoff_mode: 'single_reply' | 'takeover'
+ *   - handoff_task_title
+ *   - handoff_user_message (с подсказкой `@var:`)
  *
- * Очередь: flows-searchable-combobox + useResource('flows/operator_queues').
+ * Очередь задаётся slug'ом WorkQueue (сервис worktracker); UI не тянет
+ * кросс-сервисный список очередей — slug вводится текстом.
  */
 
 import { html, css } from 'lit';
 import { PlatformElement } from '@platform/lib/platform-element/index.js';
 import '@platform/lib/components/fields/platform-field.js';
-import '../editors/flows-searchable-combobox.js';
 import './flows-base-node-editor.js';
 import '@platform/lib/components/prompt-editor.js';
-import { asObject, asString } from '../../_helpers/flows-resolvers.js';
+import { asObject } from '../../_helpers/flows-resolvers.js';
 
 export class FlowsHitlNodeEditor extends PlatformElement {
     static properties = {
@@ -29,7 +29,6 @@ export class FlowsHitlNodeEditor extends PlatformElement {
         graphNodes: { type: Array },
         previewExecutionState: { type: Object },
         dataflowNode: { type: Object },
-        expanded: { type: Boolean, reflect: true },
         embedded: { type: Boolean, reflect: true },
     };
 
@@ -39,9 +38,6 @@ export class FlowsHitlNodeEditor extends PlatformElement {
             :host { display: block; height: 100%; min-height: 0; }
             .field { display: flex; flex-direction: column; gap: var(--space-1); margin-bottom: var(--space-3); }
             label { font-size: var(--text-sm); color: var(--text-secondary); }
-            .queue-combo {
-                margin-top: var(--space-1);
-            }
             .hitl-handoff-task-stack {
                 display: flex;
                 flex-direction: column;
@@ -62,28 +58,26 @@ export class FlowsHitlNodeEditor extends PlatformElement {
         this.graphNodes = null;
         this.previewExecutionState = null;
         this.dataflowNode = null;
-        this.expanded = false;
         this.embedded = false;
-        this._queues = this.useResource('flows/operator_queues', { autoload: true });
     }
 
     _emitPatch(patch) {
         this.emit('change', { nodeId: this.nodeId, patch });
     }
 
-    _onQueueCombobox(e) {
+    _onQueueSlug(e) {
         const d = e.detail;
         if (d === null || typeof d !== 'object') {
-            throw new Error('flows-hitl-node-editor: queue combobox detail');
+            throw new Error('flows-hitl-node-editor: queue slug change detail');
         }
         if (!('value' in d)) {
-            throw new Error('flows-hitl-node-editor: queue combobox detail.value');
+            throw new Error('flows-hitl-node-editor: queue slug detail.value');
         }
         const v = d.value;
         if (typeof v !== 'string') {
             throw new Error('flows-hitl-node-editor: queue slug string required');
         }
-        this._emitPatch({ operator_queue_slug: v });
+        this._emitPatch({ work_queue_slug: v });
     }
 
     _onHandoffMode(e) {
@@ -99,7 +93,7 @@ export class FlowsHitlNodeEditor extends PlatformElement {
             throw new Error('flows-hitl-node-editor: handoff string required');
         }
         const v = raw === 'takeover' ? 'takeover' : 'single_reply';
-        this._emitPatch({ operator_handoff_mode: v });
+        this._emitPatch({ handoff_mode: v });
     }
 
     _onTaskTitle(e) {
@@ -114,7 +108,7 @@ export class FlowsHitlNodeEditor extends PlatformElement {
         if (typeof v !== 'string') {
             throw new Error('flows-hitl-node-editor: task title string required');
         }
-        this._emitPatch({ operator_task_title: v });
+        this._emitPatch({ handoff_task_title: v });
     }
 
     _onUserMessage(e) {
@@ -129,26 +123,15 @@ export class FlowsHitlNodeEditor extends PlatformElement {
         if (typeof v !== 'string') {
             throw new Error('flows-hitl-node-editor: user message string required');
         }
-        this._emitPatch({ operator_user_message: v });
+        this._emitPatch({ handoff_user_message: v });
     }
 
     render() {
         const cfg = asObject(this.nodeConfig);
-        const slug = typeof cfg.operator_queue_slug === 'string' ? cfg.operator_queue_slug : '';
-        const handoffMode = cfg.operator_handoff_mode === 'takeover' ? 'takeover' : 'single_reply';
-        const taskTitle = typeof cfg.operator_task_title === 'string' ? cfg.operator_task_title : '';
-        const userMessage = typeof cfg.operator_user_message === 'string' ? cfg.operator_user_message : '';
-        const queues = Array.isArray(this._queues.items) ? this._queues.items : [];
-        const queueOptions = queues.reduce((acc, q) => {
-            const slugVal = asString(q.slug);
-            if (slugVal.length === 0) {
-                return acc;
-            }
-            const nameVal = asString(q.name);
-            const label = nameVal.length > 0 ? nameVal : slugVal;
-            acc.push({ value: slugVal, label });
-            return acc;
-        }, []);
+        const slug = typeof cfg.work_queue_slug === 'string' ? cfg.work_queue_slug : '';
+        const handoffMode = cfg.handoff_mode === 'takeover' ? 'takeover' : 'single_reply';
+        const taskTitle = typeof cfg.handoff_task_title === 'string' ? cfg.handoff_task_title : '';
+        const userMessage = typeof cfg.handoff_user_message === 'string' ? cfg.handoff_user_message : '';
         const handoffValues = [
             { value: 'single_reply', label: this.t('hitl_node_editor.single_reply') },
             { value: 'takeover', label: this.t('hitl_node_editor.takeover') },
@@ -164,21 +147,18 @@ export class FlowsHitlNodeEditor extends PlatformElement {
                 .graphNodes=${this.graphNodes}
                 .previewExecutionState=${this.previewExecutionState}
                 .dataflowNode=${this.dataflowNode}
-                ?expanded=${this.expanded}
                 ?embedded=${this.embedded}
             >
                 <div slot="settings">
                     <div class="field">
-                        <label>${this.t('hitl_node_editor.queue_slug')}</label>
-                        <flows-searchable-combobox
-                            class="queue-combo"
+                        <platform-field
+                            mode="edit"
+                            type="string"
+                            .label=${this.t('hitl_node_editor.queue_slug')}
+                            .placeholder=${this.t('hitl_node_editor.queue_picker')}
                             .value=${slug}
-                            .options=${queueOptions}
-                            placeholder=${this.t('hitl_node_editor.queue_picker')}
-                            emptyLabel=${this.t('hitl_node_editor.queue_clear')}
-                            ariaLabel=${this.t('hitl_node_editor.queue_aria')}
-                            @change=${this._onQueueCombobox}
-                        ></flows-searchable-combobox>
+                            @change=${this._onQueueSlug}
+                        ></platform-field>
                     </div>
                     <div class="hitl-handoff-task-stack">
                         <platform-field

@@ -217,8 +217,8 @@ class Flow:
             )
         if interrupt.correlation_id is None:
             raise RuntimeError("Operator handoff interrupt requires correlation_id")
-        if body.operator_task_id is None:
-            raise RuntimeError("Operator handoff interrupt requires operator_task_id")
+        if body.work_item_id is None:
+            raise RuntimeError("Operator handoff interrupt requires work_item_id")
         return (
             WorkflowEventType.handoff_requested,
             HandoffRequestedPayload(
@@ -226,7 +226,7 @@ class Flow:
                 current_nodes=current_nodes,
                 handoff_command_id=body.handoff_command_id,
                 correlation_id=str(interrupt.correlation_id),
-                operator_task_id=body.operator_task_id,
+                work_item_id=body.work_item_id,
                 task_title=body.task_title,
                 assignee_queue=body.assignee_queue,
                 handoff_mode=body.handoff_mode,

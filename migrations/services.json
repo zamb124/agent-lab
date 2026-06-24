@@ -31,6 +31,11 @@
       "database_url_key": "office_url"
     },
     {
+      "name": "worktracker",
+      "models_module": "core.worktracker.db_models",
+      "database_url_key": "worktracker_url"
+    },
+    {
       "name": "tracing",
       "models_module": "core.db.models.tracing",
       "database_url_key": "tracing_url"
@@ -49,6 +54,7 @@
       "platform_sync",
       "platform_rag",
       "platform_office",
+      "platform_worktracker",
       "platform_tracing",
       "platform_search"
     ],

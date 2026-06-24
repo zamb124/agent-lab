@@ -38,7 +38,7 @@ CHECK_PUBLIC="${CHECK_PUBLIC:-1}"
 # При отключении компонента через Helm (*.enabled: false) уберите имя отсюда (см. deploy/README.md
 # «Состав приложений: Helm и cluster-health»).
 EXPECTED_DEPLOYMENTS=(
-  flows frontend crm rag sync office scheduler-api voice browser search capability-gateway code-runner-python code-runner-node code-runner-go code-runner-csharp
+  flows frontend crm rag sync worktracker office scheduler-api voice browser search capability-gateway code-runner-python code-runner-node code-runner-go code-runner-csharp
   flows-worker scheduler rag-worker sync-worker crm-worker idle-worker
   livekit livekit-egress onlyoffice grafana provider-litserve
 )
@@ -179,7 +179,7 @@ check_step \
 # 13. Health-endpoints через ingress (если есть DNS)
 if [ "$CHECK_PUBLIC" = "1" ] && command -v curl >/dev/null 2>&1; then
   log_section "13) Public health endpoints (через Ingress)"
-  for path in "/flows/health" "/crm/health" "/sync/health"; do
+  for path in "/flows/health" "/crm/health" "/sync/health" "/worktracker/health"; do
     check_step \
       "https://${APEX_HOST}${path}" \
       "curl -fsS --max-time 10 https://${APEX_HOST}${path} >/dev/null"
@@ -194,7 +194,7 @@ fi
 # 14. WebSocket upgrade через Ingress (Traefik -> Granian HTTP/1.1 hop)
 if [ "$CHECK_PUBLIC" = "1" ] && command -v curl >/dev/null 2>&1; then
   log_section "14) WebSocket upgrade (через Ingress)"
-  for svc in flows crm sync rag voice; do
+  for svc in flows crm sync rag worktracker voice; do
     check_step \
       "WS upgrade https://${APEX_HOST}/${svc}/api/ws/notifications (401 или 101, не 500)" \
       "code=\$(curl -sS --http1.1 -o /dev/null -w '%{http_code}' --max-time 10 -H 'Connection: Upgrade' -H 'Upgrade: websocket' -H 'Sec-WebSocket-Version: 13' -H 'Sec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==' 'https://${APEX_HOST}/${svc}/api/ws/notifications'); [ \"\$code\" = '401' ] || [ \"\$code\" = '101' ]"

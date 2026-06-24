@@ -2,8 +2,7 @@
  * Bootstrap UI Flows: импорт <flows-app> + страниц + компонентов.
  *
  * Доменные операции — фабрики в `events/resources/*.resource.js`. Транспорт —
- * единый platform WS `/flows/api/ws/notifications` для команд чата/operator
- * и REST для CRUD.
+ * единый platform WS `/flows/api/ws/notifications` для команд чата и REST для CRUD.
  */
 
 import '@platform/lib/components/app-loader.js';
@@ -30,8 +29,6 @@ import './pages/flows-home-page.js';
 import './pages/chat-page.js';
 import './pages/flow-editor-page.js';
 import './pages/flows-evaluation-page.js';
-import './pages/operator-page.js';
-
 // Компоненты
 import './components/flows-sidebar.js';
 import './components/flows-catalog-list.js';

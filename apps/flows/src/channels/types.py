@@ -40,7 +40,7 @@ class PreparedTaskParams:
     metadata: JsonObject | None
     user_id: str
     is_takeover_user_reply: bool
-    takeover_operator_task_id: str | None
+    takeover_work_item_id: str | None
 
     def __init__(
         self,
@@ -55,7 +55,7 @@ class PreparedTaskParams:
         metadata: JsonObject | None,
         user_id: str | None = None,
         is_takeover_user_reply: bool = False,
-        takeover_operator_task_id: str | None = None,
+        takeover_work_item_id: str | None = None,
     ) -> None:
         self.task_id = task_id
         self.context_id = context_id
@@ -68,4 +68,4 @@ class PreparedTaskParams:
         self.metadata = metadata
         self.user_id = user_id or context_id
         self.is_takeover_user_reply = is_takeover_user_reply
-        self.takeover_operator_task_id = takeover_operator_task_id
+        self.takeover_work_item_id = takeover_work_item_id

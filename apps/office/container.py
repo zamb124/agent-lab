@@ -6,8 +6,18 @@
 from typing import override
 
 from apps.office.db.base import OfficeDatabase
+from apps.office.db.repositories.access_repository import OfficeAccessRepository
 from apps.office.db.repositories.catalog_repository import CatalogRepository
 from apps.office.db.repositories.document_binding_repository import DocumentBindingRepository
+from apps.office.db.repositories.document_extended_repository import (
+    DocumentEventRepository,
+    DocumentRevisionRepository,
+    DocumentShareRepository,
+)
+from apps.office.services.catalog_rag_index_service import OfficeCatalogRagIndexService
+from apps.office.services.office_access_service import OfficeAccessService
+from apps.office.services.viewer_service import DocumentViewerService
+from core.clients.rag_client import RagClient
 from core.clients.redis_client import RedisClient
 from core.config import get_settings
 from core.container import BaseContainer, ContainerRegistry, lazy
@@ -32,6 +42,30 @@ class OfficeContainer(BaseContainer):
     @lazy
     def catalog_repository(self) -> CatalogRepository:
         return CatalogRepository(db=self.office_db)
+
+    @lazy
+    def access_repository(self) -> OfficeAccessRepository:
+        return OfficeAccessRepository(db=self.office_db)
+
+    @lazy
+    def office_access_service(self) -> OfficeAccessService:
+        return OfficeAccessService(
+            catalog_repository=self.catalog_repository,
+            document_binding_repository=self.document_binding_repository,
+            access_repository=self.access_repository,
+        )
+
+    @lazy
+    def document_share_repository(self) -> DocumentShareRepository:
+        return DocumentShareRepository(db=self.office_db)
+
+    @lazy
+    def document_revision_repository(self) -> DocumentRevisionRepository:
+        return DocumentRevisionRepository(db=self.office_db)
+
+    @lazy
+    def document_event_repository(self) -> DocumentEventRepository:
+        return DocumentEventRepository(db=self.office_db)
 
     @lazy
     def redis_client(self) -> RedisClient:
@@ -61,6 +95,24 @@ class OfficeContainer(BaseContainer):
     @override
     def file_processor(self) -> FileProcessor:
         return FileProcessor(file_repository=self.file_repository)
+
+    @lazy
+    def viewer_service(self) -> DocumentViewerService:
+        return DocumentViewerService()
+
+    @lazy
+    def rag_client(self) -> RagClient:
+        return RagClient()
+
+    @lazy
+    def catalog_rag_index_service(self) -> OfficeCatalogRagIndexService:
+        return OfficeCatalogRagIndexService(
+            catalog_repository=self.catalog_repository,
+            document_binding_repository=self.document_binding_repository,
+            file_repository=self.file_repository,
+            rag_client=self.rag_client,
+        )
+
 
 def _create_office_container() -> OfficeContainer:
     settings = get_settings()

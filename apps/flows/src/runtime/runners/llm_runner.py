@@ -86,6 +86,10 @@ from core.clients.llm import (
     MockLLM,
     StreamEvent,
 )
+from core.clients.llm.mock_control import (
+    resolve_llm_node_mock,
+    resolve_tool_mock_result,
+)
 from core.config import get_settings
 from core.config.testing import is_testing
 from core.context import get_context
@@ -708,6 +712,12 @@ class LlmNodeRunner(BaseLlmNodeRunner):
         if not str(actx.user.user_id).strip():
             raise ValueError("Контекст с user обязателен для LLM-ноды (биллинг и уведомления)")
         container = self.container
+        # Mock Control: своя очередь ответов для этой llm-ноды (или общая llm).
+        # None — mock не активен; при активном mock без очереди для ноды resolver
+        # бросает MockControlError (fail-closed, без реального LLM-вызова).
+        mock_llm_client = await resolve_llm_node_mock(
+            container.redis_client, state.session_id, self._source_node_id()
+        )
         allow_platform_paid_fallback = True
         byok_override = effective_llm.cost_origin == COST_ORIGIN_COMPANY
         (
@@ -730,6 +740,7 @@ class LlmNodeRunner(BaseLlmNodeRunner):
         )
         mock_llm_call = (
             is_testing()
+            or mock_llm_client is not None
             or str(billing_model or "").startswith("mock-")
             or str(billing_provider or "") == "mock"
         )
@@ -826,6 +837,7 @@ class LlmNodeRunner(BaseLlmNodeRunner):
                             state,
                             effective_llm=effective_llm,
                             allow_platform_paid_fallback=allow_platform_paid_fallback,
+                            mock_llm_client=mock_llm_client,
                         )
                         llm_provider = llm.llm_provider
                         billing_res = effective_llm.billing_resource_name
@@ -1227,9 +1239,12 @@ class LlmNodeRunner(BaseLlmNodeRunner):
         *,
         effective_llm: EffectiveLLMConfig,
         allow_platform_paid_fallback: bool = True,
+        mock_llm_client: MockLLM | None = None,
     ) -> tuple[LLMClient | MockLLM, int | None]:
         llm_config = effective_llm.config
         max_tok = llm_config.max_tokens
+        if mock_llm_client is not None:
+            return mock_llm_client, max_tok
         llm = create_llm_client_from_call_config(
             llm_config,
             state=state,
@@ -1625,14 +1640,22 @@ class LlmNodeRunner(BaseLlmNodeRunner):
             logger.info(f"Выполняю tool: {tool_name}")
             try:
                 reasoning_count_before = len(state.reasoning_history)
-                with active_tool_call_context(
-                    tool_name=tool_name,
-                    tool_call_id=tool_call_id,
-                    node_id=self._source_node_id(),
-                    state=state,
-                    emitter=emitter,
-                ):
-                    result = await tool.run(tool_args, state)
+                # Mock Control: если tool замокан, берём следующий ответ из его
+                # очереди вместо реального вызова; очередь исчерпана → MockControlError.
+                mock_tool_result = await resolve_tool_mock_result(
+                    self.container.redis_client, state.session_id, tool_name
+                )
+                if mock_tool_result is not None:
+                    result = mock_tool_result
+                else:
+                    with active_tool_call_context(
+                        tool_name=tool_name,
+                        tool_call_id=tool_call_id,
+                        node_id=self._source_node_id(),
+                        state=state,
+                        emitter=emitter,
+                    ):
+                        result = await tool.run(tool_args, state)
                 self._record_reason_tool_call(
                     tool=tool,
                     tool_args=tool_args,

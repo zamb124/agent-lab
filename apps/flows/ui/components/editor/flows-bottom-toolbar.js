@@ -94,8 +94,9 @@ export class FlowsBottomToolbar extends PlatformElement {
     }
 
     _fitView() {
-        const nodes = Object.values(getBranchNodes(this._editor.state));
-        const vb = computeFitViewBox(nodes);
+        const state = asObject(this._editor.state);
+        const nodes = getBranchNodes(state);
+        const vb = computeFitViewBox(Object.values(nodes));
         if (vb === null) {
             this._setViewBox({ ...FLOWS_EDITOR_DEFAULT_VIEWBOX });
             return;

@@ -58,10 +58,7 @@ class CRMEntity(Base):
     tags: Mapped[list[str]] = mapped_column(ARRAY(String), default=list, nullable=False)
     attributes: Mapped[JsonObject] = mapped_column(JSONB, default=dict)
 
-    priority: Mapped[str | None] = mapped_column(String(50), nullable=True)
-    due_date: Mapped[date | None] = mapped_column(Date, nullable=True)
     note_date: Mapped[date | None] = mapped_column(Date, nullable=True)
-    assignees: Mapped[list[str]] = mapped_column(ARRAY(String), default=list, nullable=False)
 
     attachment_ids: Mapped[list[str]] = mapped_column(ARRAY(String), default=list, nullable=False)
 
@@ -89,7 +86,6 @@ class CRMEntity(Base):
         Index("ix_crm_entities_company_status", "company_id", "status"),
         Index("ix_crm_entities_company_user", "company_id", "user_id"),
         Index("ix_crm_entities_tags", "tags", postgresql_using="gin"),
-        Index("ix_crm_entities_due_date", "due_date"),
         Index("ix_crm_entities_note_date", "note_date"),
         Index("ix_crm_entities_namespace", "company_id", "namespace"),
         Index("ix_crm_entities_fts", "search_vector", postgresql_using="gin"),

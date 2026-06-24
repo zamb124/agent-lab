@@ -586,13 +586,6 @@ export class CRMNotePage extends CRMNamespacePage {
         return await this._waitForResourceResult(this._relationships, requested.id);
     }
 
-    _taskById(taskId) {
-        const related = this._card && Array.isArray(this._card.related_entities)
-            ? this._card.related_entities
-            : [];
-        return related.find((item) => item && item.entity_type === 'task' && item.entity_id === taskId) || null;
-    }
-
     async _onTaskAdd(event) {
         const text = event.detail && typeof event.detail.text === 'string' ? event.detail.text.trim() : '';
         const note = this._resolveNote();
@@ -608,7 +601,7 @@ export class CRMNotePage extends CRMNamespacePage {
                 namespace,
                 name: text,
                 description: null,
-                attributes: { status: 'todo' },
+                attributes: {},
             });
             if (!task || typeof task.entity_id !== 'string') {
                 throw new Error('CRMNotePage._onTaskAdd: task create returned empty entity');
@@ -623,33 +616,6 @@ export class CRMNotePage extends CRMNamespacePage {
         } catch (error) {
             const message = error instanceof Error ? error.message : this.t('note_edit.err_save');
             this.toast('crm:toast.entity.create_failed', { type: 'error', vars: { message } });
-        }
-    }
-
-    async _onTaskToggle(event) {
-        const taskId = event.detail && typeof event.detail.entityId === 'string' ? event.detail.entityId : '';
-        const completed = Boolean(event.detail && event.detail.completed === true);
-        if (taskId.length === 0) {
-            return;
-        }
-        const task = this._taskById(taskId);
-        const currentAttributes = task && typeof task.attributes === 'object' && task.attributes !== null
-            ? task.attributes
-            : {};
-        try {
-            await this._entityUpdate.run({
-                id: taskId,
-                body: {
-                    attributes: {
-                        ...currentAttributes,
-                        status: completed ? 'done' : 'todo',
-                    },
-                },
-            });
-            this._reloadCardOnly();
-        } catch (error) {
-            const message = error instanceof Error ? error.message : this.t('note_edit.err_save');
-            this.toast('crm:toast.entity.update_failed', { type: 'error', vars: { message } });
         }
     }
 
@@ -857,7 +823,6 @@ export class CRMNotePage extends CRMNamespacePage {
                     @format-markdown-request=${this._onFormatMarkdownRequest}
                     @markdown-format-attachment-queued=${this._onMarkdownFormatAttachmentQueued}
                     @task-add=${this._onTaskAdd}
-                    @task-toggle=${this._onTaskToggle}
                     @task-remove=${this._onTaskRemove}
                     @overlay-panel-toggle=${this._onOverlayPanelToggle}
                 ></crm-note-card-view>

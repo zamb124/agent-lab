@@ -20,6 +20,7 @@ SPA_FALLBACK_EXCLUDED_PREFIXES: tuple[str, ...] = (
     "/crm/",
     "/rag/",
     "/sync/",
+    "/worktracker/",
     "/documents/",
     "/frontend/",
     "/browser/",
@@ -99,6 +100,7 @@ SKIP_PATHS = [
     "/crm/health",
     "/search/health",
     "/voice/health*",
+    "/worktracker/health",
     "/debug/*",
     "/api/v1/payments/webhook/*",
     "/frontend/api/v1/payments/webhook/*",
@@ -443,6 +445,16 @@ ROUTE_RULES: list[RouteRule] = [
     RouteRule("/sync/", auth_required=False, context_type="anonymous"),
     RouteRule("/sync/*", auth_required=False, context_type="anonymous"),
 
+    # Worktracker Service
+    RouteRule("/worktracker/ui/static/*", auth_required=False, context_type="anonymous"),
+    RouteRule("/worktracker/api/v1/*", context_type="api", auth_required=True),
+    RouteRule("/worktracker/api/auth/*", context_type="api", auth_required=True),
+    RouteRule("/worktracker/api/push/vapid-public-key", context_type="anonymous", auth_required=False),
+    RouteRule("/worktracker/api/push/*", context_type="api", auth_required=True),
+    RouteRule("/worktracker", auth_required=False, context_type="anonymous"),
+    RouteRule("/worktracker/", auth_required=False, context_type="anonymous"),
+    RouteRule("/worktracker/*", auth_required=False, context_type="anonymous"),
+
     # LitServe Service
     RouteRule("/litserve/ui/static/*", auth_required=False, context_type="anonymous"),
     RouteRule("/litserve/api/*", context_type="api", auth_required=True),
@@ -456,6 +468,10 @@ ROUTE_RULES: list[RouteRule] = [
     RouteRule("/documents/ui/static/*", auth_required=False, context_type="anonymous"),
     RouteRule("/documents/api/v1/office-download", auth_required=False, context_type="anonymous"),
     RouteRule("/documents/api/v1/onlyoffice/callback", auth_required=False, context_type="anonymous"),
+    RouteRule("/documents/api/v1/public/*", auth_required=False, context_type="anonymous"),
+    RouteRule("/documents/api/v1/viewer-stream", auth_required=False, context_type="anonymous"),
+    RouteRule("/documents/api/v1/viewer-frame", auth_required=False, context_type="anonymous"),
+    RouteRule("/documents/api/v1/viewer-save", auth_required=False, context_type="anonymous"),
     RouteRule("/documents/api/v1/*", context_type="session", auth_required=True),
     RouteRule("/documents", auth_required=False, context_type="anonymous"),
     RouteRule("/documents/", auth_required=False, context_type="anonymous"),

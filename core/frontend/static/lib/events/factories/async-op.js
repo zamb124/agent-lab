@@ -305,7 +305,7 @@ async function _runEffect(event, ctx, opts) {
             failurePayload,
             { causation_id: event.id, source: opts.transport === 'ws' ? 'ws' : 'http' },
         );
-        if (!opts.silent) {
+        if (!opts.silent && !(payload && payload.suppressErrorToast === true)) {
             ctx.dispatch(
                 CoreEvents.UI_TOAST_SHOW,
                 { type: 'error', i18n_key: opts.errorToastKey },
@@ -322,7 +322,7 @@ async function _runEffect(event, ctx, opts) {
         { result },
         { causation_id: event.id, source: opts.transport === 'ws' ? 'ws' : 'http' },
     );
-    if (!opts.silent) {
+    if (!opts.silent && !(payload && payload.suppressSuccessToast === true)) {
         ctx.dispatch(
             CoreEvents.UI_TOAST_SHOW,
             { type: 'success', i18n_key: opts.successToastKey },

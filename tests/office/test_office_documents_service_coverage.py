@@ -19,7 +19,13 @@ from apps.office.services.onlyoffice_jwt import encode_download_token
 pytestmark = [pytest.mark.timeout(120)]
 
 
-def _decode_editor_config_token(token: str) -> dict[str, object]:
+def _decode_editor_config_token(body: dict[str, object]) -> dict[str, object]:
+    onlyoffice = body.get("onlyoffice")
+    if not isinstance(onlyoffice, dict):
+        raise AssertionError("onlyoffice payload required")
+    token = onlyoffice.get("token")
+    if not isinstance(token, str):
+        raise AssertionError("onlyoffice.token must be str")
     secret = get_office_settings().office.jwt_secret
     payload: dict[str, object] = jwt.decode(token, secret, algorithms=["HS256"])  # pyright: ignore[reportAssignmentType]
     return payload
@@ -726,14 +732,15 @@ async def test_editor_config_jwt_matches_uploaded_xlsx(
     )
     assert lr.status_code == 200
     row = next(i for i in lr.json()["items"] if i["binding_id"] == binding_id)
-    assert row["document_type"] == "cell"
+    assert row["file_category"] == "spreadsheet"
+    assert row["onlyoffice_document_type"] == "cell"
 
     er = await office_client.get(
         f"/documents/api/v1/documents/{binding_id}/editor-config",
         headers=auth_headers_system,
     )
     assert er.status_code == 200
-    cfg = _decode_editor_config_token(er.json()["token"])
+    cfg = _decode_editor_config_token(er.json())
     assert cfg["documentType"] == "cell"
     assert _editor_document_file_type(cfg) == "xlsx"
 
@@ -765,14 +772,15 @@ async def test_editor_config_jwt_matches_uploaded_pptx(
         headers=auth_headers_system,
     )
     row = next(i for i in lr.json()["items"] if i["binding_id"] == binding_id)
-    assert row["document_type"] == "slide"
+    assert row["file_category"] == "presentation"
+    assert row["onlyoffice_document_type"] == "slide"
 
     er = await office_client.get(
         f"/documents/api/v1/documents/{binding_id}/editor-config",
         headers=auth_headers_system,
     )
     assert er.status_code == 200
-    cfg = _decode_editor_config_token(er.json()["token"])
+    cfg = _decode_editor_config_token(er.json())
     assert cfg["documentType"] == "slide"
     assert _editor_document_file_type(cfg) == "pptx"
 
@@ -804,7 +812,7 @@ async def test_editor_config_jwt_matches_uploaded_csv(
         headers=auth_headers_system,
     )
     assert er.status_code == 200
-    cfg = _decode_editor_config_token(er.json()["token"])
+    cfg = _decode_editor_config_token(er.json())
     assert cfg["documentType"] == "cell"
     assert _editor_document_file_type(cfg) == "csv"
 
@@ -836,12 +844,13 @@ async def test_upload_filename_blob_spreadsheet_mime_stores_cell_and_editor_cell
         headers=auth_headers_system,
     )
     row = next(i for i in lr.json()["items"] if i["binding_id"] == binding_id)
-    assert row["document_type"] == "cell"
+    assert row["file_category"] == "spreadsheet"
+    assert row["onlyoffice_document_type"] == "cell"
 
     er = await office_client.get(
         f"/documents/api/v1/documents/{binding_id}/editor-config",
         headers=auth_headers_system,
     )
-    cfg = _decode_editor_config_token(er.json()["token"])
+    cfg = _decode_editor_config_token(er.json())
     assert cfg["documentType"] == "cell"
     assert _editor_document_file_type(cfg) == "xlsx"

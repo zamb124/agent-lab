@@ -23,7 +23,6 @@ import {
     codeToolSourceOp, codeParseSignatureOp, codeValidateOp, codeExecuteOp,
 } from '../../../../apps/flows/ui/events/resources/code.resource.js';
 import { mcpServersResource, mcpServerSyncOp, mcpServerUpdateOp, mcpServerTestOp } from '../../../../apps/flows/ui/events/resources/mcp.resource.js';
-import { operatorQueuesResource } from '../../../../apps/flows/ui/events/resources/operator.resource.js';
 import { promptRenderOp } from '../../../../apps/flows/ui/events/resources/prompts.resource.js';
 import { variablesResource } from '../../../../apps/flows/ui/events/resources/variables.resource.js';
 import { toolsResource } from '../../../../apps/flows/ui/events/resources/tools.resource.js';
@@ -50,7 +49,6 @@ const FACTORIES = [
     codeSourceOp, codeFlowFunctionsOp, codeToolSourceOp, codeParseSignatureOp,
     codeValidateOp, codeExecuteOp,
     mcpServersResource, mcpServerSyncOp, mcpServerUpdateOp, mcpServerTestOp,
-    operatorQueuesResource,
     promptRenderOp,
     variablesResource,
     toolsResource,
@@ -333,7 +331,7 @@ describe('node editors — top-level NodeConfig contract', () => {
         expect(last.patch).to.have.property('channel_config').that.deep.equals({});
     });
 
-    it('flows-hitl-node-editor — operator_queue_slug устанавливается', async () => {
+    it('flows-hitl-node-editor — work_queue_slug устанавливается', async () => {
         const node = { node_id: 'a', type: 'hitl_node', name: 'A' };
         const el = await fixture(html`
             <flows-hitl-node-editor .nodeId=${'a'} .flowId=${'demo'} .branchId=${'base'}
@@ -347,16 +345,9 @@ describe('node editors — top-level NodeConfig contract', () => {
                 last = e.detail;
             }
         });
-        const base = el.shadowRoot.querySelector('flows-base-node-editor');
-        const combo = base.querySelector('flows-searchable-combobox.queue-combo');
-        expect(combo, 'operator queue flows-searchable-combobox').to.not.be.null;
-        const slugInp = combo.shadowRoot.querySelector('input');
-        expect(slugInp).to.not.be.null;
-        slugInp.value = 'support';
-        slugInp.dispatchEvent(new Event('input', { bubbles: true, composed: true }));
-        combo.flush();
+        el._onQueueSlug({ detail: { value: 'support' } });
         expect(last, 'editor change event').to.exist;
-        expect(last.patch).to.deep.equal({ operator_queue_slug: 'support' });
+        expect(last.patch).to.deep.equal({ work_queue_slug: 'support' });
     });
 
     it('flows-external-api-editor — смена HTTP-метода эмитит patch', async () => {
@@ -462,7 +453,7 @@ describe('node editors — top-level NodeConfig contract', () => {
         expect(el.shadowRoot.querySelector('.icon-btn')).to.be.null;
     });
 
-    it('flows-base-node-editor — compact: одна колонка без panel-layout', async () => {
+    it('flows-base-node-editor — master-detail layout', async () => {
         const node = { node_id: 'a', type: 'code', name: 'A' };
         const el = await fixture(html`
             <flows-base-node-editor .nodeId=${'a'} .flowId=${'demo'} .branchId=${'base'}
@@ -470,21 +461,8 @@ describe('node editors — top-level NodeConfig contract', () => {
             </flows-base-node-editor>
         `);
         await elementUpdated(el);
-        expect(el.shadowRoot.querySelector('.compact')).to.not.be.null;
-        expect(el.shadowRoot.querySelector('.panel-layout')).to.be.null;
-    });
-
-    it('flows-base-node-editor — expanded: master-detail layout', async () => {
-        const node = { node_id: 'a', type: 'code', name: 'A' };
-        const el = await fixture(html`
-            <flows-base-node-editor .nodeId=${'a'} .flowId=${'demo'} .branchId=${'base'}
-                .nodeConfig=${node} .nodeType=${'code'} ?expanded=${true}>
-            </flows-base-node-editor>
-        `);
-        await elementUpdated(el);
         expect(el.shadowRoot.querySelector('.panel-layout')).to.not.be.null;
         expect(el.shadowRoot.querySelector('.panel-sidebar')).to.not.be.null;
         expect(el.shadowRoot.querySelector('.panel-main')).to.not.be.null;
-        expect(el.shadowRoot.querySelector('.compact')).to.be.null;
     });
 });

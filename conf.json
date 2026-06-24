@@ -6,6 +6,7 @@
     "frontend_service_url": "http://localhost:8002",
     "rag_service_url": "http://localhost:8004",
     "sync_service_url": "http://localhost:8005",
+    "worktracker_service_url": "http://localhost:8021",
     "office_service_url": "http://localhost:8008",
     "browser_service_url": "http://localhost:8009",
     "search_service_url": "http://localhost:8010",
@@ -26,6 +27,7 @@
     "sync_url": "postgresql+asyncpg://platform_user:admin@localhost:54321/platform_sync",
     "rag_url": "postgresql+asyncpg://platform_user:admin@localhost:54321/platform_rag",
     "office_url": "postgresql+asyncpg://platform_user:admin@localhost:54321/platform_office",
+    "worktracker_url": "postgresql+asyncpg://platform_user:admin@localhost:54321/platform_worktracker",
     "tracing_url": "postgresql+asyncpg://platform_user:admin@localhost:54321/platform_tracing",
     "search_url": "postgresql+asyncpg://platform_user:admin@localhost:54321/platform_search",
     "redis_url": "redis://localhost:63791/0"
@@ -861,6 +863,18 @@
           "logo_link_url": "",
           "features_tips": false
         }
+      }
+    },
+    "worktracker": {
+      "service_name": "worktracker",
+      "server": {
+        "name": "worktracker",
+        "host": "0.0.0.0",
+        "port": 8021,
+        "debug": true
+      },
+      "auth": {
+        "permissions_enabled": true
       }
     },
     "frontend": {

@@ -21,6 +21,7 @@
 import { html, css, nothing } from 'lit';
 import { PlatformPage } from '@platform/lib/base/PlatformPage.js';
 import '@platform/lib/components/layout/page-header.js';
+import '@platform/lib/components/platform-work-item-badge.js';
 import '@platform/lib/components/glass-spinner.js';
 import '@platform/lib/components/platform-breadcrumbs.js';
 import '@platform/lib/components/platform-icon.js';
@@ -882,6 +883,17 @@ export class CRMEntityDetailPage extends PlatformPage {
                         ?hide-mobile-menu=${this.embedded && this._isMobile}
                     >
                         <div slot="actions" class="detail-header-actions">
+                            ${entity.entity_type === 'task'
+                                && typeof entity.work_item_id === 'string'
+                                && entity.work_item_id.length > 0
+                                ? html`<platform-work-item-badge
+                                    work-item-id=${entity.work_item_id}
+                                    .item=${entity}
+                                    variant="chip"
+                                    size="sm"
+                                    interactive
+                                ></platform-work-item-badge>`
+                                : nothing}
                             ${this._renderDetailHeaderActions(entity, editingCard, isBusy)}
                         </div>
                     </page-header>

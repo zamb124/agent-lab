@@ -109,13 +109,10 @@ class TestEntityLifecycle:
         create_resp = await crm_client.post("/crm/api/v1/entities/", json={
             "entity_type": "task",
             "name": f"Задача {unique_id}",
-            "priority": "low",
-            "status": "pending",
         }, headers=auth_headers_system)
         entity_id = _entity_id(create_resp)
 
         update_resp = await crm_client.put(f"/crm/api/v1/entities/{entity_id}", json={
-            "priority": "urgent",
             "status": "in_progress",
             "description": "Добавлено описание",
         }, headers=auth_headers_system)
@@ -123,7 +120,6 @@ class TestEntityLifecycle:
 
         get_resp = await crm_client.get(f"/crm/api/v1/entities/{entity_id}", headers=auth_headers_system)
         updated = _http_json(get_resp)
-        assert object_str(updated.get("priority"), field="priority") == "urgent"
         assert object_str(updated.get("status"), field="status") == "in_progress"
         assert object_str(updated.get("description"), field="description") == "Добавлено описание"
 
@@ -338,25 +334,22 @@ class TestEntityLifecycle:
         unique_id: str,
         auth_headers_system: dict[str, str],
     ) -> None:
-        """Создание entity со всеми опциональными полями"""
+        """Создание entity со всеми опциональными полями графового узла"""
         response = await crm_client.post("/crm/api/v1/entities/", json={
             "entity_type": "task",
             "name": f"Полная задача {unique_id}",
             "description": "Детальное описание задачи",
             "tags": ["срочно", "проект"],
             "attributes": {"project": "X", "sprint": 5},
-            "priority": "high",
-            "due_date": "2024-12-31",
-            "assignees": ["user1", "user2"],
         }, headers=auth_headers_system)
         assert response.status_code == 200
 
         entity = _http_json(response)
         assert object_str(entity.get("name"), field="name") == f"Полная задача {unique_id}"
-        assert object_str(entity.get("priority"), field="priority") == "high"
-        assert object_str(entity.get("due_date"), field="due_date") == "2024-12-31"
-        assert len(_string_list(entity.get("assignees"))) == 2
         assert "срочно" in _string_list(entity.get("tags"))
+        attrs = entity.get("attributes")
+        assert isinstance(attrs, dict)
+        assert attrs.get("project") == "X"
 
     @pytest.mark.asyncio
     async def test_create_entity_rejects_type_outside_namespace(

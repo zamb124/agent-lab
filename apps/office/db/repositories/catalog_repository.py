@@ -10,7 +10,11 @@ from datetime import datetime, timezone
 from sqlalchemy import exists, func, or_, select
 
 from apps.office.db.base import OfficeDatabase
-from apps.office.db.models import OfficeCatalogMember, OfficeDocumentBinding, OfficeDocumentCatalog
+from apps.office.db.models import (
+    OfficeCatalogMember,
+    OfficeDocumentBinding,
+    OfficeDocumentCatalog,
+)
 
 
 class CatalogRepository:
@@ -73,21 +77,30 @@ class CatalogRepository:
         namespace: str,
         user_id: str,
     ) -> bool:
-        cat = await self.get(catalog_id, company_id, namespace)
-        if cat is None:
-            return False
-        if cat.is_public:
-            return True
-        if cat.owner_user_id == user_id:
-            return True
-        async with self._db.session() as session:
-            result = await session.execute(
-                select(OfficeCatalogMember).where(
-                    OfficeCatalogMember.catalog_id == catalog_id,
-                    OfficeCatalogMember.user_id == user_id,
+        visited: set[str] = set()
+        current_id: str | None = catalog_id
+        while current_id is not None:
+            if current_id in visited:
+                return False
+            visited.add(current_id)
+            cat = await self.get(current_id, company_id, namespace)
+            if cat is None:
+                return False
+            if cat.is_public:
+                return True
+            if cat.owner_user_id == user_id:
+                return True
+            async with self._db.session() as session:
+                result = await session.execute(
+                    select(OfficeCatalogMember).where(
+                        OfficeCatalogMember.catalog_id == current_id,
+                        OfficeCatalogMember.user_id == user_id,
+                    )
                 )
-            )
-            return result.scalar_one_or_none() is not None
+                if result.scalar_one_or_none() is not None:
+                    return True
+            current_id = cat.parent_catalog_id
+        return False
 
     async def user_is_owner(
         self,
@@ -141,12 +154,18 @@ class CatalogRepository:
         title: str,
         owner_user_id: str,
         is_public: bool = True,
+        parent_catalog_id: str | None = None,
     ) -> OfficeDocumentCatalog:
+        if parent_catalog_id is not None:
+            parent = await self.get(parent_catalog_id, company_id, namespace)
+            if parent is None:
+                raise ValueError("Родительский каталог не найден")
         catalog_id = uuid.uuid4().hex
         row = OfficeDocumentCatalog(
             catalog_id=catalog_id,
             company_id=company_id,
             namespace=namespace,
+            parent_catalog_id=parent_catalog_id,
             title=title.strip(),
             owner_user_id=owner_user_id,
             is_public=is_public,
@@ -186,11 +205,133 @@ class CatalogRepository:
             await session.refresh(row)
             return row
 
+    async def list_descendant_catalog_ids(
+        self,
+        root_catalog_id: str,
+        company_id: str,
+        namespace: str,
+    ) -> list[str]:
+        visited: set[str] = set()
+        queue: list[str] = [root_catalog_id]
+        descendants: list[str] = []
+        while queue:
+            current_id = queue.pop(0)
+            if current_id in visited:
+                continue
+            visited.add(current_id)
+            async with self._db.session() as session:
+                result = await session.execute(
+                    select(OfficeDocumentCatalog.catalog_id).where(
+                        OfficeDocumentCatalog.company_id == company_id,
+                        OfficeDocumentCatalog.namespace == namespace,
+                        OfficeDocumentCatalog.parent_catalog_id == current_id,
+                    )
+                )
+                child_ids = list(result.scalars().all())
+            for child_id in child_ids:
+                if child_id in visited:
+                    continue
+                descendants.append(child_id)
+                queue.append(child_id)
+        return descendants
+
+    async def resolve_rag_search_catalog_ids(
+        self,
+        root_catalog_id: str,
+        company_id: str,
+        namespace: str,
+        *,
+        include_subcatalogs: bool,
+    ) -> list[str]:
+        root = await self.get(root_catalog_id, company_id, namespace)
+        if root is None:
+            raise ValueError("Каталог не найден")
+        catalog_ids: list[str] = []
+        seen: set[str] = set()
+        if root.rag_index_enabled:
+            catalog_ids.append(root.catalog_id)
+            seen.add(root.catalog_id)
+        if include_subcatalogs:
+            descendant_ids = await self.list_descendant_catalog_ids(
+                root_catalog_id,
+                company_id,
+                namespace,
+            )
+            for descendant_id in descendant_ids:
+                if descendant_id in seen:
+                    continue
+                descendant = await self.get(descendant_id, company_id, namespace)
+                if descendant is None:
+                    continue
+                if descendant.rag_index_enabled:
+                    catalog_ids.append(descendant.catalog_id)
+                    seen.add(descendant.catalog_id)
+        return catalog_ids
+
+    async def set_rag_index_include_subcatalogs(
+        self,
+        catalog_id: str,
+        company_id: str,
+        namespace: str,
+        *,
+        include_subcatalogs: bool,
+    ) -> OfficeDocumentCatalog | None:
+        async with self._db.session() as session:
+            result = await session.execute(
+                select(OfficeDocumentCatalog).where(
+                    OfficeDocumentCatalog.catalog_id == catalog_id,
+                    OfficeDocumentCatalog.company_id == company_id,
+                    OfficeDocumentCatalog.namespace == namespace,
+                )
+            )
+            row = result.scalar_one_or_none()
+            if row is None:
+                return None
+            row.rag_index_include_subcatalogs = include_subcatalogs
+            await session.commit()
+            await session.refresh(row)
+            return row
+
+    async def set_rag_index_enabled(
+        self,
+        catalog_id: str,
+        company_id: str,
+        namespace: str,
+        *,
+        enabled: bool,
+    ) -> OfficeDocumentCatalog | None:
+        async with self._db.session() as session:
+            result = await session.execute(
+                select(OfficeDocumentCatalog).where(
+                    OfficeDocumentCatalog.catalog_id == catalog_id,
+                    OfficeDocumentCatalog.company_id == company_id,
+                    OfficeDocumentCatalog.namespace == namespace,
+                )
+            )
+            row = result.scalar_one_or_none()
+            if row is None:
+                return None
+            row.rag_index_enabled = enabled
+            row.rag_index_updated_at = datetime.now(timezone.utc)
+            await session.commit()
+            await session.refresh(row)
+            return row
+
     async def count_bindings(self, catalog_id: str) -> int:
         async with self._db.session() as session:
             result = await session.execute(
                 select(func.count(OfficeDocumentBinding.binding_id)).where(
-                    OfficeDocumentBinding.catalog_id == catalog_id
+                    OfficeDocumentBinding.catalog_id == catalog_id,
+                    OfficeDocumentBinding.deleted_at.is_(None),
+                )
+            )
+            return int(result.scalar_one())
+
+    async def count_child_catalogs(self, catalog_id: str) -> int:
+        async with self._db.session() as session:
+            result = await session.execute(
+                select(func.count(OfficeDocumentCatalog.catalog_id)).where(
+                    OfficeDocumentCatalog.parent_catalog_id == catalog_id,
                 )
             )
             return int(result.scalar_one())
@@ -203,6 +344,8 @@ class CatalogRepository:
     ) -> bool:
         if await self.count_bindings(catalog_id) > 0:
             raise ValueError("В каталоге есть документы")
+        if await self.count_child_catalogs(catalog_id) > 0:
+            raise ValueError("В каталоге есть подкаталоги")
         async with self._db.session() as session:
             result = await session.execute(
                 select(OfficeDocumentCatalog).where(

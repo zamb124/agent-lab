@@ -256,14 +256,8 @@ class AccessControlService:
             return entity.status
         if field_name == "tags":
             return entity.tags
-        if field_name == "priority":
-            return entity.priority
-        if field_name == "due_date":
-            return entity.due_date
         if field_name == "note_date":
             return entity.note_date
-        if field_name == "assignees":
-            return entity.assignees
         if field_name == "attachment_ids":
             return entity.attachment_ids
         if field_name == "user_id":

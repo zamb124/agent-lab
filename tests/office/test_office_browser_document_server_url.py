@@ -4,7 +4,7 @@ from collections.abc import Mapping
 
 from starlette.requests import Request
 
-from apps.office.api.bff import _browser_document_server_url
+from apps.office.services.viewer_service import browser_document_server_url as _browser_document_server_url
 
 
 def _request(
@@ -37,10 +37,10 @@ def test_browser_document_server_url_upgrades_external_http_on_https_request():
     )
 
 
-def test_browser_document_server_url_keeps_local_http_for_dev():
+def test_browser_document_server_url_remaps_localhost_to_request_origin():
     request = _request(headers={"x-forwarded-proto": "https"})
 
-    assert _browser_document_server_url("http://localhost:8002", request) == "http://localhost:8002"
+    assert _browser_document_server_url("http://localhost:8002", request) == "https://system.humanitec.ru"
 
 
 def test_browser_document_server_url_keeps_http_for_http_request():

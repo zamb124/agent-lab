@@ -22,6 +22,7 @@ SERVICES: tuple[ServiceHealthTarget, ...] = (
     ServiceHealthTarget(name="crm", health_url="/crm/api/v1/health"),
     ServiceHealthTarget(name="rag", health_url="/rag/api/health"),
     ServiceHealthTarget(name="sync", health_url="/sync/api/health"),
+    ServiceHealthTarget(name="worktracker", health_url="/worktracker/health"),
     ServiceHealthTarget(name="office", health_url="/documents/api/health"),
     ServiceHealthTarget(name="provider_litserve", health_url="/litserve/health"),
 )

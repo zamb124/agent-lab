@@ -134,12 +134,6 @@ class EntityRepository(BaseCRMRepository[CRMEntity]):
         if entity.is_note and entity.entity_subtype:
             parts.append(f"Тип: {entity.entity_subtype}")
 
-        if entity.is_task:
-            if entity.priority:
-                parts.append(f"Приоритет: {entity.priority}")
-            if entity.due_date:
-                parts.append(f"Дедлайн: {entity.due_date}")
-
         return "\n".join(parts)
 
     def _rag_chunk_metadata(self, entity: CRMEntity) -> RAGMetadata:
@@ -658,8 +652,6 @@ class EntityRepository(BaseCRMRepository[CRMEntity]):
             return self._column_expression(CRMEntity.namespace)
         if field_name == "status":
             return self._column_expression(CRMEntity.status)
-        if field_name == "priority":
-            return self._column_expression(CRMEntity.priority)
         if field_name == "user_id":
             return self._column_expression(CRMEntity.user_id)
         if field_name == "name":
@@ -668,8 +660,6 @@ class EntityRepository(BaseCRMRepository[CRMEntity]):
             return self._column_expression(CRMEntity.description)
         if field_name == "note_date":
             return self._column_expression(CRMEntity.note_date)
-        if field_name == "due_date":
-            return self._column_expression(CRMEntity.due_date)
         if field_name == "created_at":
             return self._column_expression(CRMEntity.created_at)
         if field_name == "tags":

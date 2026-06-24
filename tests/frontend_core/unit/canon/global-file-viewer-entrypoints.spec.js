@@ -12,7 +12,6 @@ const ENTRYPOINT_FILES = [
     'apps/sync/ui/components/sync-message-bubble.js',
     'apps/crm/ui/components/entity-card.js',
     'apps/crm/ui/components/note-card-view.js',
-    'apps/flows/ui/pages/operator-page.js',
     'apps/flows/ui/components/nodes/flows-base-node-editor.js',
     'core/frontend/static/lib/components/platform-calendar-modal.js',
 ];
@@ -25,7 +24,6 @@ const FILE_ICON_SURFACE_FILES = [
     'apps/sync/ui/components/sync-message-bubble.js',
     'apps/crm/ui/components/entity-card.js',
     'apps/crm/ui/components/note-card-view.js',
-    'apps/flows/ui/pages/operator-page.js',
     'apps/flows/ui/components/nodes/flows-base-node-editor.js',
     'core/frontend/static/lib/components/platform-calendar-modal.js',
     'apps/crm/ui/modals/knowledge-import-modal.js',

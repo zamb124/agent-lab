@@ -87,6 +87,11 @@
             "menu_description": "Chat, Git, and calls for teams",
             "description": "The engineering team hub: chat, Git, and calls alongside repos — align faster and ship with less friction"
         },
+        "worktracker": {
+            "name": "Tasks",
+            "menu_description": "Inbox, boards, queues, HITL",
+            "description": "Unified task hub: inbox, kanban boards, operator queues, CRM and agent tasks in one place"
+        },
         "documents": {
             "name": "Documents",
             "menu_description": "Collaborative Office editing",
@@ -123,7 +128,34 @@
         "minimize": "Minimize",
         "restore": "Restore",
         "open_failed": "Could not open the file in the editor: {message}",
-        "close_failed": "Could not save changes before closing"
+        "close_failed": "Could not save changes before closing",
+        "download": "Download"
+    },
+    "file_attachments": {
+        "attach": "Attach file",
+        "open": "Open",
+        "remove": "Remove",
+        "empty": "No attachments"
+    },
+    "variables_panel": {
+        "add": "Add variable",
+        "remove": "Remove",
+        "secret": "Secret",
+        "empty": "No variables",
+        "key_placeholder": "Name",
+        "value_placeholder": "Value"
+    },
+    "document_viewer": {
+        "loading": "Loading file…",
+        "saving": "Saving…",
+        "saved": "Saved",
+        "save_failed": "Save failed ({status})",
+        "save_hint": "Press Ctrl+S / Cmd+S to save",
+        "load_failed": "Could not load file ({status})",
+        "missing_stream_url": "Stream URL is missing",
+        "missing_download_url": "Download URL is missing",
+        "download": "Download",
+        "unknown_type": "Unknown type"
     },
     "company": {
         "create_title": "Create company",
@@ -166,7 +198,36 @@
     },
     "user_chip": {
         "unknown": "Unknown user",
-        "you": "You"
+        "you": "You",
+        "work_count_aria": "Open tasks",
+        "work_count_title": "Open tasks"
+    },
+    "work_item_badge": {
+        "loading": "Loading…",
+        "state": {
+            "open": "Open",
+            "in_progress": "In progress",
+            "blocked": "Blocked",
+            "done": "Done",
+            "cancelled": "Cancelled",
+            "failed": "Failed"
+        },
+        "priority": {
+            "low": "Low",
+            "normal": "Normal",
+            "high": "High",
+            "urgent": "Urgent"
+        },
+        "kind": {
+            "generic": "Task",
+            "operator_handoff": "Operator",
+            "agent_job": "Agent",
+            "crm_activity": "CRM"
+        }
+    },
+    "work_item_preview": {
+        "open": "Open task",
+        "not_found": "Task not found"
     },
     "user_info_modal": {
         "header": "Profile",
@@ -199,7 +260,10 @@
         "role_viewer": "Viewer",
         "role_owner_locked": "Cannot remove from company owner",
         "error_name_required": "Name is required",
-        "error_role_required": "At least one role required"
+        "error_role_required": "At least one role required",
+        "active_tasks_title": "Active tasks",
+        "active_tasks_all": "All tasks",
+        "active_tasks_empty": "No open tasks"
     },
     "trace_viewer": {
         "empty": "No spans in this trace",
@@ -403,5 +467,20 @@
         "reasoning_reserve_tokens_hint": "Reserve for models that need extra reasoning budget.",
         "safety_buffer_tokens": "Safety buffer",
         "safety_buffer_tokens_hint": "Technical buffer for service tokens and token counting error."
+    },
+    "prompt_editor": {
+        "label_default": "Prompt",
+        "placeholder_default": "Enter text…",
+        "empty_preview": "Empty",
+        "mode_edit": "Editor",
+        "mode_preview": "Preview",
+        "split": "Split view",
+        "split_pane_edit": "Editor",
+        "split_pane_preview": "Preview",
+        "fullscreen_enter": "Fullscreen",
+        "fullscreen_exit": "Exit fullscreen",
+        "var_hint": "Variables: {variable}, {?optional}, {var|default} | Loops: {for x in list}…{endfor} | References: @var:key, @state:path",
+        "var_undefined": "undefined",
+        "for_not_array": "{name} is not an array"
     }
 }

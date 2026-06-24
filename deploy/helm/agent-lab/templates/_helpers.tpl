@@ -64,6 +64,8 @@ env в одном container spec: Kubernetes strategic-merge patch падает 
   value: postgresql+asyncpg://platform_user:$(POSTGRES_PASSWORD)@{{ .Values.appCommonEnv.postgresService }}:{{ .Values.appCommonEnv.postgresPort }}/platform_sync
 - name: DATABASE__RAG_URL
   value: postgresql+asyncpg://platform_user:$(POSTGRES_PASSWORD)@{{ .Values.appCommonEnv.postgresService }}:{{ .Values.appCommonEnv.postgresPort }}/platform_rag
+- name: DATABASE__WORKTRACKER_URL
+  value: postgresql+asyncpg://platform_user:$(POSTGRES_PASSWORD)@{{ .Values.appCommonEnv.postgresService }}:{{ .Values.appCommonEnv.postgresPort }}/platform_worktracker
 - name: DATABASE__OFFICE_URL
   value: postgresql+asyncpg://platform_user:$(POSTGRES_PASSWORD)@{{ .Values.appCommonEnv.postgresService }}:{{ .Values.appCommonEnv.postgresPort }}/platform_office
 - name: DATABASE__TRACING_URL
@@ -94,6 +96,11 @@ env в одном container spec: Kubernetes strategic-merge patch падает 
   value: http://{{ .Values.applications.rag.serviceName }}:{{ .Values.applications.rag.port }}
 - name: SERVER__SYNC_SERVICE_URL
   value: http://{{ .Values.applications.sync.serviceName }}:{{ .Values.applications.sync.port }}
+{{- $worktracker := index .Values.applications "worktracker" }}
+{{- if and $worktracker $worktracker.enabled }}
+- name: SERVER__WORKTRACKER_SERVICE_URL
+  value: http://{{ $worktracker.serviceName }}:{{ $worktracker.port }}
+{{- end }}
 - name: SERVER__OFFICE_SERVICE_URL
   value: http://{{ .Values.applications.office.serviceName }}:{{ .Values.applications.office.port }}
 - name: SERVER__SCHEDULER_SERVICE_URL

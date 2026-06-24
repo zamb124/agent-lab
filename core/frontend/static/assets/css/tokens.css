@@ -141,6 +141,48 @@
     --accent-subtle: rgba(153, 166, 249, 0.15);
     --accent-glow: 0 0 24px rgba(153, 166, 249, 0.4);
     --accent-gradient: linear-gradient(258.06deg, #FAD17A 13.41%, #FF9A76 50.99%, #99A6F9 95.5%);
+
+    /* WorkItem semantic tokens (cross-service badge/preview) */
+    --work-item-priority-low: var(--text-tertiary);
+    --work-item-priority-normal: var(--accent);
+    --work-item-priority-high: var(--warning);
+    --work-item-priority-urgent: var(--error);
+    --work-item-state-open: #94a3b8;
+    --work-item-state-open-subtle: rgba(148, 163, 184, 0.18);
+    --work-item-state-in_progress: var(--accent);
+    --work-item-state-in_progress-subtle: var(--accent-subtle);
+    --work-item-state-active: var(--work-item-state-in_progress);
+    --work-item-state-blocked: var(--warning);
+    --work-item-state-blocked-subtle: rgba(245, 158, 11, 0.18);
+    --work-item-state-done: var(--success);
+    --work-item-state-done-subtle: rgba(16, 185, 129, 0.18);
+    --work-item-state-cancelled: var(--text-tertiary);
+    --work-item-state-cancelled-subtle: rgba(255, 255, 255, 0.08);
+    --work-item-state-failed: var(--error);
+    --work-item-state-failed-subtle: rgba(244, 63, 94, 0.18);
+    --work-item-kind-generic: var(--text-secondary);
+    --work-item-kind-operator: var(--accent-secondary);
+    --work-item-kind-agent: var(--accent-tertiary);
+    --work-item-kind-crm: var(--accent);
+
+    /* Worktracker layout & density */
+    --worktracker-page-max-width: 1120px;
+    --worktracker-inspector-width: 300px;
+    --worktracker-panel-width: min(440px, 42vw);
+    --worktracker-row-min-height: 44px;
+    --worktracker-row-padding-x: var(--space-3);
+    --worktracker-section-gap: var(--space-4);
+    --worktracker-divider: 1px solid var(--glass-border-subtle);
+    --worktracker-inspector-row-height: 32px;
+    --worktracker-inspector-label-width: 108px;
+    --worktracker-detail-title-size: var(--text-2xl);
+    --worktracker-composer-min-height: 32px;
+    --worktracker-surface-bg: var(--glass-solid-subtle);
+    --worktracker-surface-border: 1px solid var(--glass-border-subtle);
+    --worktracker-surface-radius: var(--radius-lg);
+    --worktracker-surface-padding: var(--space-4);
+    --worktracker-surface-shadow: var(--glass-shadow-subtle);
+    --worktracker-detail-inner-gap: var(--space-3);
     
     /* Вторичный акцент (orange) */
     --accent-secondary: #FF885C;
@@ -531,6 +573,32 @@
     --sync-video-radius: var(--radius-lg);
     --sync-active-row-bg: linear-gradient(135deg, rgba(153, 166, 249, 0.14) 0%, rgba(255, 136, 92, 0.08) 100%);
 
+    /* ========== DOCUMENTS / OFFICE (dark defaults) ========== */
+    --documents-gradient: linear-gradient(105deg, #3ec9d8 0%, #6cb1e1 42%, #737ce9 100%);
+    --documents-gradient-hover: linear-gradient(105deg, #48d4e2 0%, #78b9ea 42%, #828df0 100%);
+    --documents-selected-bg: rgba(62, 201, 216, 0.14);
+    --documents-selected-stroke: rgba(115, 124, 233, 0.45);
+    --documents-selected-text: #9eb4ff;
+    --documents-surface-muted: rgba(255, 255, 255, 0.03);
+    --documents-stroke: rgba(100, 170, 215, 0.28);
+    --documents-link-hover: #78b9ea;
+    --documents-btn-shadow: 0 2px 14px rgba(70, 89, 184, 0.18);
+    --documents-btn-shadow-hover: 0 4px 20px rgba(70, 89, 184, 0.28);
+    --documents-explorer-divider: var(--glass-border-subtle);
+    --documents-explorer-toolbar-bg: var(--glass-solid-subtle);
+    --documents-empty-bg: rgba(255, 255, 255, 0.02);
+    --documents-empty-border: rgba(115, 124, 233, 0.35);
+    --documents-explorer-tree-width: 15rem;
+    --documents-explorer-details-width: 20rem;
+    --documents-explorer-table-row-height: 3.25rem;
+    --documents-explorer-grid-min: 11.25rem;
+    --documents-explorer-toolbar-height: 3rem;
+    --documents-explorer-control-height: 2.25rem;
+    --documents-explorer-btn-radius: var(--radius-md);
+    --documents-action-primary: #6284e8;
+    --documents-action-primary-hover: #5678dc;
+    --documents-action-primary-border: rgba(98, 132, 232, 0.45);
+
     /* Shimmer эффект для загрузки */
     --shimmer-gradient: linear-gradient(
         90deg,
@@ -824,6 +892,40 @@
     --accent-secondary-hover: #FF885C;
     --accent-secondary-subtle: rgba(242, 120, 74, 0.12);
     --accent-quaternary-subtle: rgba(245, 158, 11, 0.12);
+
+    /* WorkItem semantic tokens (light theme) */
+    --work-item-state-open: #64748b;
+    --work-item-state-open-subtle: rgba(100, 116, 139, 0.12);
+    --work-item-state-in_progress: var(--accent);
+    --work-item-state-in_progress-subtle: var(--accent-subtle);
+    --work-item-state-active: var(--work-item-state-in_progress);
+    --work-item-state-blocked: #d97706;
+    --work-item-state-blocked-subtle: rgba(217, 119, 6, 0.12);
+    --work-item-state-done: #059669;
+    --work-item-state-done-subtle: rgba(5, 150, 105, 0.12);
+    --work-item-state-cancelled: var(--text-tertiary);
+    --work-item-state-cancelled-subtle: rgba(15, 23, 42, 0.06);
+    --work-item-state-failed: #e11d48;
+    --work-item-state-failed-subtle: rgba(225, 29, 72, 0.1);
+
+    /* Worktracker layout & density (light theme) */
+    --worktracker-page-max-width: 1120px;
+    --worktracker-inspector-width: 300px;
+    --worktracker-panel-width: min(440px, 42vw);
+    --worktracker-row-min-height: 44px;
+    --worktracker-row-padding-x: var(--space-3);
+    --worktracker-section-gap: var(--space-4);
+    --worktracker-divider: 1px solid var(--glass-border-subtle);
+    --worktracker-inspector-row-height: 32px;
+    --worktracker-inspector-label-width: 108px;
+    --worktracker-detail-title-size: var(--text-2xl);
+    --worktracker-composer-min-height: 32px;
+    --worktracker-surface-bg: var(--glass-solid-subtle);
+    --worktracker-surface-border: 1px solid var(--glass-border-subtle);
+    --worktracker-surface-radius: var(--radius-lg);
+    --worktracker-surface-padding: var(--space-4);
+    --worktracker-surface-shadow: var(--glass-shadow-subtle);
+    --worktracker-detail-inner-gap: var(--space-3);
     
     /* Семантические токены Sync (светлая тема) */
     --sync-bubble-own-bg: linear-gradient(135deg, rgba(153, 166, 249, 0.22) 0%, rgba(135, 148, 240, 0.14) 100%);
@@ -916,12 +1018,8 @@
     --crm-note-input-bg: rgba(34, 34, 34, 0.05);
     --crm-note-text-muted: rgba(34, 34, 34, 0.3);
     --crm-note-text-strikethrough: rgba(34, 34, 34, 0.2);
-}
 
-/* ========== Палитра сервиса Office / Documents ========== */
-:root {
-    --documents-gradient: linear-gradient(105deg, #3ec9d8 0%, #6cb1e1 42%, #737ce9 100%);
-    --documents-gradient-hover: linear-gradient(105deg, #48d4e2 0%, #78b9ea 42%, #828df0 100%);
+    /* Documents / Office (light) */
     --documents-selected-bg: #dff3f9;
     --documents-selected-stroke: rgba(120, 127, 246, 0.38);
     --documents-selected-text: #4659b8;
@@ -930,6 +1028,21 @@
     --documents-link-hover: #3585c4;
     --documents-btn-shadow: 0 2px 14px rgba(70, 89, 184, 0.22);
     --documents-btn-shadow-hover: 0 4px 20px rgba(70, 89, 184, 0.32);
+    --documents-explorer-divider: rgba(15, 23, 42, 0.08);
+    --documents-explorer-toolbar-bg: rgba(255, 255, 255, 0.85);
+    --documents-empty-bg: rgba(238, 248, 252, 0.6);
+    --documents-empty-border: rgba(100, 170, 215, 0.45);
+}
+
+/* ========== Палитра сервиса Office / Documents (layout-only, theme-agnostic) ========== */
+:root {
+    --documents-explorer-tree-width: 15rem;
+    --documents-explorer-details-width: 20rem;
+    --documents-explorer-table-row-height: 3.25rem;
+    --documents-explorer-grid-min: 11.25rem;
+    --documents-explorer-toolbar-height: 3rem;
+    --documents-explorer-control-height: 2.25rem;
+    --documents-explorer-btn-radius: var(--radius-md);
 }
 
 /* ========== УТИЛИТЫ ========== */

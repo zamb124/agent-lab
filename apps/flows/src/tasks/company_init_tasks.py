@@ -7,11 +7,11 @@ from pathlib import Path
 from apps.flows.src.container import get_container
 from apps.flows.src.container_contracts import as_flow_runtime_container
 from apps.flows.src.services.flows_loader import FlowsLoader, load_tools_to_db
+from apps.flows.src.services.hitl_demo_queue import ensure_example_hitl_queue
 from apps.flows.src.services.mcp_sync import (
     ensure_default_mcp_servers_for_company,
     sync_auto_mcp_servers_for_company,
 )
-from apps.flows.src.services.operator_demo_queue import ensure_example_hitl_queue
 from apps.flows.src.tasks.task_names import TASK_INIT_COMPANY_RESOURCES
 from apps.flows_worker.broker_core import broker
 from core.context import Context, clear_context, set_context
@@ -123,7 +123,7 @@ async def init_company_resources(
             filter_public=(company_id != "system")
         )
 
-        await ensure_example_hitl_queue(container.operator_repository, company_id)
+        await ensure_example_hitl_queue(container.work_item_service, company_id)
 
         # Обновляем статистику tools
         stats["tools"] = len(loaded_tools)

@@ -506,46 +506,27 @@ class FileReader:
         info = self.recognize_file_type(file_name=name, head=raw[:8192])
         mime = info.content_type or _guess_mime(name)
 
-        if info.detected_kind == FileReadKind.PDF or _sniff_pdf(raw):
-            result = await asyncio.to_thread(_read_pdf_sync, raw, name, mime, opts)
-        elif info.detected_kind == FileReadKind.IMAGE:
+        if info.detected_kind == FileReadKind.IMAGE:
             result = await _read_image_impl(raw, name, mime or "application/octet-stream", opts)
         elif info.detected_kind == FileReadKind.AUDIO:
             result = await _read_audio_impl(raw, name, mime or "audio/mpeg", opts)
         elif info.detected_kind == FileReadKind.VIDEO:
             result = await _read_video_impl(raw, name, mime or "video/mp4", opts)
-        elif info.detected_kind == FileReadKind.HTML:
-            result = await asyncio.to_thread(_read_html_sync, raw, name, mime, opts)
-        elif info.detected_kind == FileReadKind.TEXT:
-            result = await asyncio.to_thread(_read_plain_text_sync, raw, name, mime, opts)
-        elif info.detected_kind == FileReadKind.SPREADSHEET and info.extension == ".xls":
-            result = await asyncio.to_thread(_read_xls_sync, raw, name, mime, opts)
-        elif info.detected_kind == FileReadKind.OFFICE and info.extension == ".doc":
-            result = await asyncio.to_thread(_read_doc_choosing_backend_sync, raw, name, mime, opts)
-        elif info.detected_kind == FileReadKind.OFFICE and info.extension == ".pptx":
-            result = await asyncio.to_thread(_read_pptx_sync, raw, name, mime, opts)
-        elif info.detected_kind == FileReadKind.OFFICE and info.extension == ".ppt":
-            result = await asyncio.to_thread(_read_ppt_sync, raw, name, mime, opts)
-        elif info.detected_kind == FileReadKind.OFFICE and info.extension == ".rtf":
-            result = await asyncio.to_thread(_read_rtf_sync, raw, name, mime, opts)
-        elif info.detected_kind == FileReadKind.OFFICE and info.extension == ".odt":
-            result = await asyncio.to_thread(_read_odt_sync, raw, name, mime, opts)
-        elif info.detected_kind == FileReadKind.OFFICE and info.extension == ".epub":
-            result = await asyncio.to_thread(_read_epub_sync, raw, name, mime, opts)
-        elif info.detected_kind == FileReadKind.OFFICE and info.extension == ".msg":
-            result = await asyncio.to_thread(_read_msg_sync, raw, name, mime, opts)
-        elif info.detected_kind == FileReadKind.OFFICE and info.extension == ".eml":
-            result = await asyncio.to_thread(_read_eml_sync, raw, name, mime, opts)
-        elif info.detected_kind in (FileReadKind.OFFICE, FileReadKind.SPREADSHEET):
-            result = await asyncio.to_thread(
-                _read_unstructured_sync, raw, name, mime, info.detected_kind, opts
-            )
-        elif info.detected_kind == FileReadKind.UNKNOWN:
-            result = await asyncio.to_thread(
-                _read_unstructured_sync, raw, name, mime, FileReadKind.UNKNOWN, opts
-            )
         else:
-            raise FileReadError(f"Неподдерживаемый тип: {info.detected_kind}")
+            try:
+                result = await asyncio.to_thread(_read_primary_sync, raw, name, mime, info, opts)
+            except FileReadError as primary_error:
+                if not _can_use_plain_text_handler_fallback(raw, name, info.detected_kind):
+                    raise
+                result = await asyncio.to_thread(
+                    _read_plain_text_handler_fallback_sync,
+                    raw,
+                    name,
+                    mime,
+                    info,
+                    opts,
+                    primary_error,
+                )
 
         result = result.model_copy(
             update={
@@ -1267,6 +1248,106 @@ def _read_eml_sync(
         pages=[ReadPage(index=0, text=text, assets=[], label=None)],
         warnings=[],
     )
+
+
+_PLAIN_TEXT_HANDLER_FALLBACK_KINDS: frozenset[FileReadKind] = frozenset(
+    {
+        FileReadKind.OFFICE,
+        FileReadKind.SPREADSHEET,
+        FileReadKind.HTML,
+        FileReadKind.UNKNOWN,
+    }
+)
+
+
+def _decoded_text_usable_as_plain_text(text: str) -> bool:
+    stripped = text.strip()
+    if not stripped:
+        return False
+    printable_count = sum(1 for ch in stripped if ch.isprintable() or ch in "\n\r\t")
+    return printable_count / len(stripped) >= 0.85
+
+
+def _can_use_plain_text_handler_fallback(
+    raw: bytes,
+    file_name: str,
+    kind: FileReadKind,
+) -> bool:
+    if kind in (
+        FileReadKind.PDF,
+        FileReadKind.IMAGE,
+        FileReadKind.AUDIO,
+        FileReadKind.VIDEO,
+        FileReadKind.TEXT,
+    ):
+        return False
+    if _sniff_pdf(raw):
+        return False
+    if not raw:
+        return False
+    if kind not in _PLAIN_TEXT_HANDLER_FALLBACK_KINDS:
+        return False
+    try:
+        text = _decode_text_bytes(raw, file_name)
+    except FileReadError:
+        return False
+    return _decoded_text_usable_as_plain_text(text)
+
+
+def _read_primary_sync(
+    raw: bytes,
+    name: str,
+    mime: str | None,
+    info: FileTypeInfo,
+    opts: ReadOptions,
+) -> FileReadResult:
+    if info.detected_kind == FileReadKind.PDF or _sniff_pdf(raw):
+        return _read_pdf_sync(raw, name, mime, opts)
+    if info.detected_kind == FileReadKind.HTML:
+        return _read_html_sync(raw, name, mime, opts)
+    if info.detected_kind == FileReadKind.TEXT:
+        return _read_plain_text_sync(raw, name, mime, opts)
+    if info.detected_kind == FileReadKind.SPREADSHEET and info.extension == ".xls":
+        return _read_xls_sync(raw, name, mime, opts)
+    if info.detected_kind == FileReadKind.OFFICE and info.extension == ".doc":
+        return _read_doc_choosing_backend_sync(raw, name, mime, opts)
+    if info.detected_kind == FileReadKind.OFFICE and info.extension == ".pptx":
+        return _read_pptx_sync(raw, name, mime, opts)
+    if info.detected_kind == FileReadKind.OFFICE and info.extension == ".ppt":
+        return _read_ppt_sync(raw, name, mime, opts)
+    if info.detected_kind == FileReadKind.OFFICE and info.extension == ".rtf":
+        return _read_rtf_sync(raw, name, mime, opts)
+    if info.detected_kind == FileReadKind.OFFICE and info.extension == ".odt":
+        return _read_odt_sync(raw, name, mime, opts)
+    if info.detected_kind == FileReadKind.OFFICE and info.extension == ".epub":
+        return _read_epub_sync(raw, name, mime, opts)
+    if info.detected_kind == FileReadKind.OFFICE and info.extension == ".msg":
+        return _read_msg_sync(raw, name, mime, opts)
+    if info.detected_kind == FileReadKind.OFFICE and info.extension == ".eml":
+        return _read_eml_sync(raw, name, mime, opts)
+    if info.detected_kind in (FileReadKind.OFFICE, FileReadKind.SPREADSHEET):
+        return _read_unstructured_sync(raw, name, mime, info.detected_kind, opts)
+    if info.detected_kind == FileReadKind.UNKNOWN:
+        return _read_unstructured_sync(raw, name, mime, FileReadKind.UNKNOWN, opts)
+    raise FileReadError(f"Неподдерживаемый тип: {info.detected_kind}")
+
+
+def _read_plain_text_handler_fallback_sync(
+    raw: bytes,
+    name: str,
+    mime: str | None,
+    info: FileTypeInfo,
+    opts: ReadOptions,
+    primary_error: FileReadError,
+) -> FileReadResult:
+    result = _read_plain_text_sync(raw, name, mime, opts)
+    warning = (
+        f"Содержимое прочитано как текст: обработчик {info.detected_kind.value} "
+        f"не разобрал файл ({primary_error})."
+    )
+    warnings = list(result.warnings)
+    warnings.append(warning)
+    return result.model_copy(update={"warnings": warnings})
 
 
 def _resolve_transcription_company_id(opts: ReadOptions) -> str:

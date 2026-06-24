@@ -42,7 +42,6 @@ import {
 const PRIMARY_NAV = [
     { route: 'notes', icon: 'list', label_key: 'sidebar.nav.notes' },
     { route: 'entities', icon: 'database', label_key: 'sidebar.nav.entities' },
-    { route: 'tasks', icon: 'check', label_key: 'sidebar.nav.tasks' },
     { route: 'graph', icon: 'share', label_key: 'sidebar.nav.graph', search: '?view=mindmap' },
 ];
 

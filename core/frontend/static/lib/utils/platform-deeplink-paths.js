@@ -14,6 +14,7 @@ export const DEEPLINK_PATH_PREFIXES = [
     '/documents',
     '/documentation',
     '/scheduler',
+    '/worktracker',
 ];
 
 /**

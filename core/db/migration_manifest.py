@@ -74,6 +74,8 @@ def database_url_for_migration_key(
             return database.rag_url
         case "office_url":
             return database.office_url
+        case "worktracker_url":
+            return database.worktracker_url
         case "tracing_url":
             return database.tracing_url
         case "search_url":

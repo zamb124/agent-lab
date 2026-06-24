@@ -9,20 +9,18 @@ description: "CRM (NetWorkle): entities, relationships, graph, namespaces, AI an
 ## Терминология
 
 - **Тип сущности (`EntityType` / `entity_type`)** — запись в каталоге компании: поля, иерархия (`parent_type_id`), обязательная колонка `namespace`. Уникальный ключ `(company_id, namespace, type_id)`.
-- **Activity (узкий CRM-смысл)** — `CRMEntity` с `entity_type=task` и подтипами от `task` (to-do с дедлайном/исполнителями).
-- **Объект воронки (deal/lead)** — обычная `CRMEntity` соответствующего типа. «Воронка» и стадии — отдельная модель в `NamespaceCRMSettings.pipeline_stage_presets`, не сводятся к одной строке `status`.
+- **Activity (узкий CRM-смысл)** — `CRMEntity` с `entity_type=task` и подтипами от `task` — **чистый узел графа** (имя/описание/`attributes`/теги/связи для AI/эмбеддинга/графа). **Вся work-семантика** (state/priority/due/assignee/доска/блокировка/HITL) живёт **только** в платформенном ядре `WorkItem(kind=crm_activity)` (сервис `worktracker`, → **`worktracker.mdc`**); CRM-задача связана 1:1 через `WorkItemLink(crm_entity)`. На CRM-узле задачи **нет** колонок `priority`/`due_date`/`assignees` и нет канбан-`attributes.status` — они удалены; источник истины work-полей — `WorkItem`. CRM API задачи (`EntityCreate/Update/Response`) work-полей не содержит.
+- **Объект воронки (deal/lead)** — обычная `CRMEntity` соответствующего типа.
 
-## Доска задач (канбан + `attributes.status`)
+## Пара CRM-задача ↔ WorkItem
 
-- **Источник стадий:** `NamespaceCRMSettings.pipeline_stage_presets: dict[board_key, TaskBoardPreset]`. `BoardStage = {id (стабильный, в attributes.status), label, color?}` (`core/models/identity_models.py`).
-- **`board_key`:** единственная реализация — `apps/crm/services/task_board_presets.py::task_board_key(entity_type, entity_subtype)` → `"task"` или `"task:<entity_subtype>"` при `entity_type=task` с парентом `task`.
-- **Резолвер:** `resolve_task_board_stages(crm_settings, board_key)` — упорядоченный список; нет ключа в пресетах → `default_task_board_stages()` только на бэке. Валидация `attributes.status` при create/update — `EntityService` через `resolve_allowed_task_status_ids` (неверный id → 422).
-- **API:** `GET .../namespaces/{name}/task-board-stages` (q `entity_subtype`), `GET .../namespaces/{name}/task-board-editor-state`. Сохранение пресетов — `PUT .../namespaces/{name}` с `crm_settings.pipeline_stage_presets` (частичный merge `crm_settings`).
-- **Запрет в UI:** `tasks-page` и редактор в `space-detail-page` не содержат каноничных списков стадий и не дублируют `board_key`/дефолты — только из API/фабрик (`crm/task_board_stages`, `crm/task_board_editor_state`).
+- Любой `CRMEntity(entity_type=task)` имеет ровно один парный `WorkItem(kind=crm_activity)` со связью 1:1 `CrmEntityLink(entity_id)`. Синхронизация — `apps/crm/services/crm_work_item_service.py::CrmWorkItemService` (тонкий адаптер над `core.worktracker.WorkItemService`), вызывается из `EntityService` на create/update/AI-apply/AmoCRM-import; удаление/слияние CRM-узла удаляет парный WorkItem.
+- Маппинг сидов: `priority`→`WorkItemPriority`, `attributes.status`→`WorkItemState` (`todo`→open, `in_progress`/`review`→in_progress, `blocked`→blocked, `done`/`completed`→done, `cancelled`→cancelled, иначе open), `assignees`→`UsersAssignment`, `due_date`→`WorkItem.due_date`. Сами эти значения через публичный CRM API не задаются — управление work-полями идёт через worktracker (`WorkItem`), включая канбан-доски `board_key=task[:subtype]`.
+- AI-извлечение задач (`AIExtractedEntity` содержит `due_date`/`priority`/`assignees`) на apply сидит парный WorkItem, не CRM-узел. AmoCRM `_import_tasks` создаёт узел + WorkItem. Срок задачи для календаря (`core/calendar/service.py`) читается из WorkItem.
 
 ## Автоматизация
 
-`NamespaceCRMSettings`: `default_flow_by_entity_type`, `automation_rules: list[NamespaceAutomationRule(entity_type, trigger, action, flow_id?)]`, `pipeline_stage_presets`. Исполнение команд (запуск flow, уведомления, смена полей) согласуется с `flows`/TaskIQ и правами доступа.
+`NamespaceCRMSettings`: `default_flow_by_entity_type`, `automation_rules: list[NamespaceAutomationRule(entity_type, trigger, action, flow_id?)]`. Исполнение команд (запуск flow, уведомления, смена полей) согласуется с `flows`/TaskIQ и правами доступа.
 
 ## Сайдбар namespace
 
@@ -32,7 +30,7 @@ description: "CRM (NetWorkle): entities, relationships, graph, namespaces, AI an
 
 ### `CRMEntity` (`apps/crm/db/models.py`)
 
-Ключевые колонки: `entity_id` (UUID PK), `company_id`, `namespace` (default `"default"`), `entity_type`, `entity_subtype?`, `name`, `description?`, `status` (default `"active"`), `tags: list[str]` (PG ARRAY), `attributes: dict` (JSONB), `priority?`, `due_date?`, `note_date?` (у заметок-чанков импорта = UTC сегодня), `assignees: list[str]`, `attachment_ids: list[str]`, `user_id` (автор; при импорте AmoCRM — platform `user_id`, сопоставленный с `created_by` через email из `GET /api/v4/users`; pre-provision — `IntegrationExternalAuthorService`), `source_entity_id?` / `source_company_id?` (при копировании через access request), `relevance: float` (default 1.0), `search_vector` (TSVECTOR), `created_at`/`updated_at`. `full_type` — computed `entity_type:entity_subtype` или `entity_type`.
+Ключевые колонки: `entity_id` (UUID PK), `company_id`, `namespace` (default `"default"`), `entity_type`, `entity_subtype?`, `name`, `description?`, `status` (default `"active"`, lifecycle записи — **не** канбан задачи), `tags: list[str]` (PG ARRAY), `attributes: dict` (JSONB), `note_date?` (у заметок-чанков импорта = UTC сегодня), `attachment_ids: list[str]`, `user_id` (автор; при импорте AmoCRM — platform `user_id`, сопоставленный с `created_by` через email из `GET /api/v4/users`; pre-provision — `IntegrationExternalAuthorService`), `source_entity_id?` / `source_company_id?` (при копировании через access request), `relevance: float` (default 1.0), `search_vector` (TSVECTOR), `created_at`/`updated_at`. `full_type` — computed `entity_type:entity_subtype` или `entity_type`. Work-колонок задач (`priority`/`due_date`/`assignees`) нет — они в парном `WorkItem`.
 
 ### `EntityType`
 
@@ -50,7 +48,7 @@ description: "CRM (NetWorkle): entities, relationships, graph, namespaces, AI an
 
 **Канон системного шаблона** (`apps/crm/system_templates.py`): у каждого типа `description ≥ 30`; у `extractable=True` `prompt ≥ 120` (формат «что извлекать → 2-3 примера → что НЕ извлекать»); для каждого поля — `type`, `label`, `description ≥ 10`; для `enum` — `values` непустой и каждое значение в `description` (формат `id — пояснение`); для `RelationshipType` с непустым `prompt` — `≥ 150` («когда использовать → примеры → когда НЕ»). Заметки/встречи/звонки — не якоря (`is_context_anchor=False`); `member`/`contact` — `is_voice_target=True`. Инварианты: `tests/crm/test_system_templates_invariants.py` и соседние.
 
-**Шаблоны пространств** (`NAMESPACE_TEMPLATE_SEEDS`): `sales`, `agile_project`, `development`, `hr`, `marketing`, `support`, `product_management`, `recruiting`, `real_estate`, `legal`, `finance`, `education`. В каждый seed дотягиваются `note` + `task` (`REQUIRED_NAMESPACE_TEMPLATE_TYPE_IDS`), `COMMON_NAMESPACE_ANCHOR_TYPES`, и парент-типы по транзитивным `parent_type_id`. `crm_settings` сидов содержит `pipeline_stage_presets` + дефолты голоса (`default_note_voice="self"`, `show_note_voice_ui=true`).
+**Шаблоны пространств** (`NAMESPACE_TEMPLATE_SEEDS`): `sales`, `agile_project`, `development`, `hr`, `marketing`, `support`, `product_management`, `recruiting`, `real_estate`, `legal`, `finance`, `education`. В каждый seed дотягиваются `note` + `task` (`REQUIRED_NAMESPACE_TEMPLATE_TYPE_IDS`), `COMMON_NAMESPACE_ANCHOR_TYPES`, и парент-типы по транзитивным `parent_type_id`. `crm_settings` сидов содержит дефолты голоса (`default_note_voice="self"`, `show_note_voice_ui=true`); канбан-пресетов задач в CRM нет (доски — в worktracker).
 
 **Reseed на рестарте:** `CompanyInitService._init_namespace_templates` обновляет только системные строки и шаблоны+типы пространства `default`. Уже созданные пользователями копии шаблона **не обновляются автоматически**.
 
@@ -174,7 +172,7 @@ Redis hot cache + locks + S3 долговечные снимки.
 - `GET /entities` — список с фильтрами, `search` = ILIKE по `name`/`description` (без векторов).
 - `GET /entities/search?search_mode={text|semantic|hybrid}`: `text` — FTS по `search_vector`; `semantic` — pgvector (`search_with_similarity` JOIN `vector_documents`); `hybrid` — RRF по FTS+pgvector, `match_type` в ответе.
 - **`EntityResponse.score`** — релевантность из пайплайна поиска. **`EntityResponse.relevance`** — атрибут сущности в БД (`CRMEntity.relevance`); со скором не смешивается.
-- Лимит default 100, max 1000. Фильтры: `entity_type`, `entity_subtype`, `namespace`, `status`, `priority`, `tags`, `user_id`, диапазоны `note_date`/`created_at`.
+- Лимит default 100, max 1000. Фильтры: `entity_type`, `entity_subtype`, `namespace`, `status` (lifecycle), `tags`, `user_id`, диапазоны `note_date`/`created_at`. Work-полей задач (`priority`/`due_date`/`assignees`) в фильтрах нет — они в worktracker.
 - UI: непустой `entities.filters.search` → `searchEntities` → `/entities/search`; иначе `/entities`.
 - `POST /entities/search/mentions` — кандидаты для @-упоминания.
 
@@ -200,8 +198,8 @@ Redis hot cache + locks + S3 долговечные снимки.
 `POST /entities/merge` (`EntityMergeRequest: survivor_entity_id, source_entity_id, scalar_choices, attribute_choices`). Survivor сохраняет `entity_id`/`entity_type`/`entity_subtype`. Source удаляется.
 
 - Связи: `RelationshipRepository.rewrite_entity_id` → дедуп `(namespace, source, target, type)` → удаление петель.
-- Конфликты `name`/`description`/`status`/`entity_subtype`/`priority`/`note_date`/`due_date` → `scalar_choices`. `attributes` → `attribute_choices`. Лишние ключи → 422.
-- `tags`/`assignees` — merge с дедупом; `attachment_ids` — merge; вложения source очищаются до удаления.
+- Конфликты `name`/`description`/`status`/`entity_subtype`/`note_date` → `scalar_choices`. `attributes` → `attribute_choices`. Лишние ключи → 422.
+- `tags` — merge с дедупом; `attachment_ids` — merge; вложения source очищаются до удаления. Парный WorkItem source-узла удаляется (survivor сохраняет свой).
 - `rewrite_source_entity_id_references` + `remap_entity_resource_id` (гранты + access requests).
 - **Ограничения:** одна компания + один namespace; `note`+`note` нельзя; `contact` с `platform_user_id` нельзя.
 - UI: DnD с `drag-handle` или Shift+клик → `entity-merge-modal`.
@@ -248,11 +246,10 @@ Redis hot cache + locks + S3 долговечные снимки.
 
 Канон — `frontend.mdc` + `ui_factories.mdc` + `ui_components.mdc`. Все доменные операции — фабрики `apps/crm/ui/events/resources/*.resource.js` через helpers `PlatformElement`. Запрещены: `services/`, `store/`, `features/`, `*.{service,store}.js`, `BaseStore`, `CRMStore`, `ServiceRegistry`, прямые `fetch`/`httpRequest`, прямой `dispatch(CoreEvents.UI_*|AUTH_*|...)`.
 
-Маршруты `/crm/...`: `notes` (`daily-notes-page`), `entities`, `graph` (`?view=3d|mindmap`), `tasks`, `suggests`, `settings` (`settings-hub-page`), `templates`, `spaces`, `namespace_imports`, `relationship_types`.
+Маршруты `/crm/...`: `notes` (`daily-notes-page`), `entities`, `graph` (`?view=3d|mindmap`), `suggests`, `settings` (`settings-hub-page`), `templates`, `spaces`, `namespace_imports`, `relationship_types`. Канбан-доски задач в CRM нет — задачи открываются как графовые узлы через `entities` (`?entity_type=task`); work-управление — в worktracker.
 
 **Особенности:**
 - `body.platform-shell` (`apps/crm/ui/index.html`) задаёт `--platform-btn-primary-*` из `--crm-button-primary-*` (модалки портятся в `document.body` и иначе берут зелёный fallback).
-- `tasks-page`: смена колонки — оптимистичный `attributes.status` + `document.startViewTransition` + `view-transition-name` на карточке; `_boardBusy` + оверлей `glass-spinner` без `_loading` на всю доску.
 - Auth в `<crm-app>` — `useEvent(CoreAuthEvents.AUTH_LOADED, ...)` + срез `state.auth.user`. `this.auth.validateToken()` не существует — этим занимается core auth-эффект.
 - `entity-card._isOwner` пересчёт в `_syncOwnershipAndAccessUI()` при `state.crm.entity_<id>` и `useEvent(CoreAuthEvents.AUTH_COMPANY_SWITCHED, ...)`.
 - Embed-чат CRM: `flow-id="lara"`, `skill-id="crm"`, `company-id` с активной компанией. Заголовок `X-Platform-Namespace`: при `company-id` платформа подмешивает его в запросы из `platform-embed-chat` к flows (A2A, Lara apply, credentials, voice-session-query) через `getActivePlatformNamespaceName(company_id)` — тот же источник, что CRM-сайдбар. Отдельно на хосте дублировать header не нужно. `getExtraMetadataVariables` → `GET /workspace/lara-summary?namespace=` (кэш ~45с) → `metadata.variables` (`crm_lara_summary`, `crm_lara_summary_json`, счётчики).

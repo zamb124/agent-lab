@@ -9,10 +9,10 @@ from typing import TYPE_CHECKING, ClassVar
 from pydantic import BaseModel, ConfigDict, Field
 
 from apps.flows.src.models.enums import ReactToolRole
+from apps.flows.src.models.hitl_schemas import build_hitl_handoff_command
 from apps.flows.src.runtime.exceptions import FlowInterrupt
 from apps.flows.src.runtime.tool_call_context import get_active_tool_call_context
-from apps.flows.src.services.operator_handoff_service import build_operator_handoff_command
-from apps.flows.src.services.platform_facades import get_operator_handoff_service
+from apps.flows.src.services.platform_facades import get_hitl_work_item_service
 from apps.flows.src.tools.decorator import tool
 from apps.flows.tools.tool_access import STANDARD_USER_TOOL_GROUPS
 from core.state.interrupt import HandoffMode, OperatorTaskInterrupt
@@ -141,13 +141,13 @@ async def hitl_operator_task(
     tool_context = get_active_tool_call_context()
     if tool_context is None:
         raise RuntimeError("hitl_operator_task requires active durable tool call context")
-    command = build_operator_handoff_command(
+    command = build_hitl_handoff_command(
         state=state,
         node_id=tool_context.node_id,
         tool_call_id=tool_context.tool_call_id,
     )
-    handoff = get_operator_handoff_service()
-    cid, op_task_id = await handoff.register_handoff(
+    handoff = get_hitl_work_item_service()
+    cid, work_item_id = await handoff.register_handoff(
         state,
         question=question.strip(),
         task_title=task_title.strip(),
@@ -161,7 +161,7 @@ async def hitl_operator_task(
             task_title=task_title.strip(),
             assignee_queue=assignee_queue.strip(),
             handoff_mode=mode,
-            operator_task_id=op_task_id,
+            work_item_id=work_item_id,
             handoff_command_id=command.idempotency_key,
             execution_branch_id=command.execution_branch_id,
             node_schedule_sequence=command.node_schedule_sequence,

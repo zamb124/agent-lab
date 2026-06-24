@@ -2,9 +2,10 @@
  * FlowsApp — корневой Lit-компонент сервиса flows.
  *
  * Все доменные операции описаны фабриками в `apps/flows/ui/events/resources/*`.
- * Чат и operator команды используют `transport: 'ws'` с REST-зеркалом;
- * сами стриминговые события чата приходят push-ами `flows/chat/*` через
- * единый WebSocket `/flows/api/ws/notifications`.
+ * Чат использует `transport: 'ws'` с REST-зеркалом; сами стриминговые события
+ * чата приходят push-ами `flows/chat/*` через единый WebSocket
+ * `/flows/api/ws/notifications`. Задачи (включая HITL) ведутся в сервисе
+ * worktracker, а не во flows UI.
  *
  * Маршруты заданы декларативно через `createRouterEffect` (см. SYNC_ROUTES
  * для образца). `renderRoute` — switch по routeKey.
@@ -61,9 +62,6 @@ import { dataflowInspectOp } from '../events/resources/dataflow.resource.js';
 import { integrationsListOp, integrationsRemoveOp } from '../events/resources/integrations.resource.js';
 import { fileUploadOp } from '../events/resources/files.resource.js';
 import { chatResource, chatSendOp, chatCancelOp, apiConsoleRunOp } from '../events/resources/chat.resource.js';
-import { operatorQueuesResource, operatorQueueAddMemberOp, operatorQueueRemoveMemberOp,
-         operatorTasksListOp, operatorTaskGetOp, operatorTaskClaimOp,
-         operatorTaskPostMessageOp, operatorTaskCompleteOp } from '../events/resources/operator.resource.js';
 import { editorResource, editorBulkDeleteOp, stickyNoteUpsertOp } from '../events/resources/editor.resource.js';
 import { executionUiSlice } from '../events/resources/execution-ui.resource.js';
 import {
@@ -114,7 +112,6 @@ import '../components/flows-catalog-list.js';
 
 const FLOWS_ROUTES = [
     { key: 'list',                 path: '',                              titleKey: 'routes.list' },
-    { key: 'operator',             path: 'operator',                      titleKey: 'routes.operator' },
     { key: 'platform_services',    path: 'services', parent: 'list',      titleKey: 'routes.platform_services' },
     { key: 'flow_chat',            path: ':flowId',                       parent: 'list', titleKey: 'routes.flow_chat' },
     { key: 'flow_chat_branch',     path: ':flowId/branch/:branchId',      parent: 'flow_chat', titleKey: 'routes.flow_chat_branch' },
@@ -126,12 +123,11 @@ const FLOWS_ROUTES = [
 ];
 
 /**
- * Нижняя навигация (mobile shell 2026): список, Оператор, Профиль.
+ * Нижняя навигация (mobile shell 2026): список, Профиль.
  * На маршруте чата или редактора капсула скрыта; из чата возврат — кнопка в шапке.
  */
 const FLOWS_BOTTOM_NAV_ITEMS = [
     { key: 'flows',    routeKey: 'list',     icon: 'workflow',  labelKey: 'bottom_nav.flows' },
-    { key: 'operator', routeKey: 'operator', icon: 'tasks',     labelKey: 'bottom_nav.operator' },
     { key: 'profile',  sheet: 'platform.service_switcher', icon: 'user', labelKey: 'bottom_nav.profile' },
 ];
 
@@ -225,14 +221,6 @@ export class FlowsApp extends PlatformApp {
         chatSendOp,
         chatCancelOp,
         apiConsoleRunOp,
-        operatorQueuesResource,
-        operatorQueueAddMemberOp,
-        operatorQueueRemoveMemberOp,
-        operatorTasksListOp,
-        operatorTaskGetOp,
-        operatorTaskClaimOp,
-        operatorTaskPostMessageOp,
-        operatorTaskCompleteOp,
         editorResource,
         editorBulkDeleteOp,
         stickyNoteUpsertOp,
@@ -302,8 +290,7 @@ export class FlowsApp extends PlatformApp {
                 min-width: 0;
             }
             flow-editor-page,
-            flows-evaluation-page,
-            operator-page {
+            flows-evaluation-page {
                 flex: 1;
                 min-width: 0;
                 min-height: 0;
@@ -446,8 +433,6 @@ export class FlowsApp extends PlatformApp {
                     </div>
                     ${this._renderLara()}
                 `;
-            case 'operator':
-                return html`<operator-page></operator-page>`;
             case 'flow_chat':
             case 'flow_chat_branch':
             case 'flow_chat_session':

@@ -375,23 +375,19 @@ class NodeConfig(StrictBaseModel):
         ),
     )
 
-    operator_queue_slug: str | None = Field(
+    work_queue_slug: str | None = Field(
         default=None,
-        description="Slug очереди оператора (взаимоисключающе с operator_queue_id)",
+        description="Slug очереди (WorkQueue), в которую уходит задача оператора",
     )
-    operator_queue_id: str | None = Field(
-        default=None,
-        description="UUID очереди оператора (взаимоисключающе с operator_queue_slug)",
-    )
-    operator_handoff_mode: Literal["single_reply", "takeover"] | None = Field(
+    handoff_mode: Literal["single_reply", "takeover"] | None = Field(
         default=None,
         description="Режим оператора: single_reply — один ответ; takeover — перехват диалога",
     )
-    operator_task_title: str | None = Field(
+    handoff_task_title: str | None = Field(
         default=None,
         description="Заголовок задачи; можно переопределить input_mapping.task_title",
     )
-    operator_user_message: str | None = Field(
+    handoff_user_message: str | None = Field(
         default=None,
         description="Текст для пользователя; можно переопределить input_mapping.user_facing_message",
     )
@@ -586,11 +582,10 @@ class GraphNodeConfig(StrictBaseModel):
     resources: dict[str, ResourceReference] = Field(default_factory=dict)
     files: list[FileRef] = Field(default_factory=list)
 
-    operator_queue_slug: str | None = Field(default=None)
-    operator_queue_id: str | None = Field(default=None)
-    operator_handoff_mode: Literal["single_reply", "takeover"] | None = Field(default=None)
-    operator_task_title: str | None = Field(default=None)
-    operator_user_message: str | None = Field(default=None)
+    work_queue_slug: str | None = Field(default=None)
+    handoff_mode: Literal["single_reply", "takeover"] | None = Field(default=None)
+    handoff_task_title: str | None = Field(default=None)
+    handoff_user_message: str | None = Field(default=None)
 
     save_to_messages: bool = Field(default=False)
     message_field: str | None = Field(default=None)

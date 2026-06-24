@@ -1,9 +1,6 @@
-"""WS realtime для сервиса flows: command-handlers и push-события.
+"""Realtime-слой flows.
 
-Регистрация handler'ов выполняется в `on_startup` сервиса
-(`apps/flows/main.py`) вызовом `register_flows_ws_commands()`.
+Доменных WS-команд у flows нет: задачи (включая HITL) ведутся через
+платформенное ядро WorkItem (сервис worktracker, HTTP + push-события).
+Чат сервиса flows работает по A2A SSE (`apps/flows/src/api/a2a.py`).
 """
-
-from apps.flows.src.realtime.command_router import register_flows_ws_commands
-
-__all__ = ["register_flows_ws_commands"]

@@ -149,17 +149,17 @@
     },
     "hitl_queue_demo": {
       "type": "hitl_node",
-      "operator_queue_slug": "example_hitl",
-      "operator_task_title": "example_graph: запрос оператора",
-      "operator_user_message": "Запрос передан в демо-очередь (example_hitl). Ожидайте ответа специалиста.",
-      "operator_handoff_mode": "single_reply"
+      "work_queue_slug": "example_hitl",
+      "handoff_task_title": "example_graph: запрос оператора",
+      "handoff_user_message": "Запрос передан в демо-очередь (example_hitl). Ожидайте ответа специалиста.",
+      "handoff_mode": "single_reply"
     },
     "hitl_takeover_demo": {
       "type": "hitl_node",
-      "operator_queue_slug": "example_hitl",
-      "operator_task_title": "example_graph: перехват диалога оператором",
-      "operator_user_message": "Диалог передан оператору. Вы общаетесь с живым человеком.",
-      "operator_handoff_mode": "takeover"
+      "work_queue_slug": "example_hitl",
+      "handoff_task_title": "example_graph: перехват диалога оператором",
+      "handoff_user_message": "Диалог передан оператору. Вы общаетесь с живым человеком.",
+      "handoff_mode": "takeover"
     },
     "formatter": {
       "type": "code",

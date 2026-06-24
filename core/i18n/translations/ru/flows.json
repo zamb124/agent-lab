@@ -1,7 +1,6 @@
 {
   "routes": {
     "list": "Обзор",
-    "operator": "Оператор",
     "platform_services": "Сервисы",
     "flow_chat": "Flow",
     "flow_chat_branch": "Flow",
@@ -13,7 +12,6 @@
   },
   "bottom_nav": {
     "flows": "Обзор",
-    "operator": "Оператор",
     "profile": "Профиль"
   },
   "flow_create_modal": {
@@ -1116,7 +1114,6 @@
   "flows_home": {
     "page_title": "Flows",
     "header_sessions": "Сессии",
-    "header_operator": "Оператор",
     "header_help_label": "Действия обзора",
     "header_help_summary": "Действия обзора Flows",
     "header_help_details": "В шапке открываются сессии и, при наличии прав, операторский контур. На мобильном здесь же доступен список агентов.",
@@ -1150,8 +1147,6 @@
     "quick_store_desc": "Готовые bundle-агенты и обновления из репозитория.",
     "quick_sessions_title": "Сессии",
     "quick_sessions_desc": "История запусков и продолжение диалогов.",
-    "quick_operator_title": "Оператор",
-    "quick_operator_desc": "Очереди HITL, takeover и ответы пользователям.",
     "flows_title": "Ваши flows",
     "flows_subtitle": "Открывайте чат, редактор или продолжайте работу с текущими агентами.",
     "flows_help": "Карточки показывают опубликованные и рабочие flow. Открывайте чат для проверки поведения, редактор — для изменения графа.",
@@ -1188,7 +1183,6 @@
     "sessions_empty": "Сессий пока нет",
     "ready_bundles": "Bundles",
     "ready_tools": "Tools",
-    "ready_operator": "HITL",
     "value_empty": "—"
   },
   "sessions_modal": {
@@ -1441,57 +1435,6 @@
     "empty_diff": "Нет отличий",
     "open_full": "Полный ответ"
   },
-  "operator": {
-    "page_title": "Задачи поддержки",
-    "page_help_label": "Операторский контур",
-    "page_help_summary": "Задачи поддержки",
-    "page_help_details": "Операторский контур показывает HITL-задачи, которые агент передал человеку. Возьмите задачу, ответьте пользователю или завершите её как tool result для агента.",
-    "queues_help_label": "Очереди",
-    "queues_help_summary": "Очереди операторов",
-    "queues_help_details": "Очереди определяют, какие операторы видят и берут HITL-задачи. Join добавляет вас в очередь, Leave убирает из распределения.",
-    "queues_help_inline": "Очереди и участие",
-    "status_help_label": "Статус задачи",
-    "status_open": "Открыто",
-    "status_open_hint": "Новая задача ожидает оператора. Нажмите «Взять в работу», чтобы закрепить её за собой.",
-    "status_claimed": "В работе",
-    "status_claimed_hint": "Задача закреплена за оператором, но пользовательский диалог ещё не открыт или ожидает действия.",
-    "status_user_dialog": "Диалог с пользователем",
-    "status_user_dialog_hint": "Оператор общается с пользователем напрямую. Ответы попадают в историю задачи.",
-    "status_awaiting_agent": "Ожидает агента",
-    "status_awaiting_agent_hint": "Оператор отправил результат, и задача ждёт продолжения агентом или runtime.",
-    "status_completed": "Завершено",
-    "status_completed_hint": "Задача закрыта. Диалог и resolution остаются в истории.",
-    "status_cancelled": "Отменено",
-    "status_cancelled_hint": "Задача отменена runtime, оператором или внешним процессом.",
-    "theme_to_light": "Светлая тема",
-    "theme_to_dark": "Тёмная тема",
-    "btn_claim": "Взять в работу",
-    "btn_complete": "Завершить и вернуть агенту",
-    "queue_name_placeholder": "Название (например, Линия поддержки)",
-    "queue_slug_placeholder": "Slug (например, support)",
-    "queue_create": "Создать очередь",
-    "btn_join_queue": "Стать оператором",
-    "btn_leave_queue": "Покинуть очередь",
-    "placeholder_single_reply": "Ваш ответ (станет tool result для агента)",
-    "takeover_no_messages": "Сообщений пока нет",
-    "section_chat_history": "История чата",
-    "section_operator_dialog": "Диалог с оператором",
-    "role_operator": "Оператор",
-    "role_user": "Пользователь",
-    "role_agent": "Агент",
-    "tooltip_reply_and_close": "Ответить и вернуть агенту",
-    "tooltip_attach_file": "Прикрепить файл",
-    "placeholder_composer": "Введите сообщение...",
-    "download_file": "Скачать",
-    "close_detail": "Закрыть панель задачи",
-    "no_detail": "Не удалось загрузить задачу",
-    "btn_send": "Отправить",
-    "default_resolution": "Закрыто оператором",
-    "empty_column": "—",
-    "task_data_title": "Данные задачи (API)",
-    "task_data_show": "Показать данные задачи",
-    "task_data_hide": "Скрыть данные задачи"
-  },
   "hitl_node_editor": {
     "queue_slug_label": "Slug очереди",
     "task_title_label": "Заголовок задачи (fallback)",
@@ -1669,6 +1612,12 @@
       "collapse": "Свернуть заметку",
       "delete": "Удалить заметку"
     },
+    "node": {
+      "drag_hint": "Перетащить ноду",
+      "expand": "Развернуть ноду",
+      "collapse": "Свернуть ноду",
+      "resize_hint": "Изменить размер ноды"
+    },
     "minimap": {
       "expand": "Открыть мини-карту",
       "collapse": "Свернуть мини-карту"
@@ -1679,11 +1628,13 @@
     }
   },
   "floating_panel": {
-    "expand": "Развернуть",
-    "collapse": "Свернуть",
     "close": "Закрыть",
     "open_node_ai": "Открыть AI по этой ноде",
-    "close_node_ai": "Вернуться к настройкам ноды"
+    "close_node_ai": "Вернуться к настройкам ноды",
+    "drag_hint": "Перетащите за заголовок",
+    "resize_hint": "Изменить размер",
+    "minimize_panel": "Свернуть панель",
+    "restore_panel": "Развернуть панель"
   },
   "evaluation": {
     "header": {
@@ -2077,18 +2028,6 @@
     "custom_node_update_error": "Не удалось обновить ноду",
     "custom_node_removed": "Кастомная нода удалена",
     "custom_node_remove_error": "Не удалось удалить ноду",
-    "operator_queue_created": "Очередь операторов создана",
-    "operator_queue_create_error": "Не удалось создать очередь",
-    "operator_queue_updated": "Очередь обновлена",
-    "operator_queue_update_error": "Не удалось обновить очередь",
-    "operator_member_added": "Участник добавлен",
-    "operator_member_add_error": "Не удалось добавить участника",
-    "operator_member_removed": "Участник удалён",
-    "operator_member_remove_error": "Не удалось удалить участника",
-    "operator_task_claimed": "Задача взята в работу",
-    "operator_task_claim_error": "Не удалось взять задачу в работу",
-    "operator_task_completed": "Задача завершена",
-    "operator_task_complete_error": "Не удалось завершить задачу",
     "trigger_created": "Триггер создан",
     "trigger_create_error": "Не удалось создать триггер",
     "trigger_updated": "Триггер обновлён",

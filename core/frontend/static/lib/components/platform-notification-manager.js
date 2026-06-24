@@ -19,6 +19,7 @@ import { NOTIFICATIONS_EVENTS } from '../events/reducers/notifications.js';
 import { PWA_EVENTS } from '../events/effects/pwa.effect.js';
 import { translate } from '../events/effects/i18n.effect.js';
 import './platform-icon.js';
+import './platform-work-item-badge.js';
 
 const PANEL_WIDTH = 360;
 const PANEL_GAP = 8;
@@ -323,6 +324,23 @@ export class PlatformNotificationManager extends PlatformElement {
         return '';
     }
 
+    _workItemIdFromNotification(item) {
+        if (!item || item.service !== 'worktracker') {
+            return '';
+        }
+        const href = this._safeHref(item.action_url);
+        if (href.length === 0) {
+            return '';
+        }
+        const queryIndex = href.indexOf('?');
+        if (queryIndex === -1) {
+            return '';
+        }
+        const params = new URLSearchParams(href.slice(queryIndex + 1));
+        const workItemId = params.get('work_item_id');
+        return typeof workItemId === 'string' ? workItemId : '';
+    }
+
     _resolveActionLabel(action) {
         const key = typeof action.label_i18n_key === 'string' ? action.label_i18n_key : '';
         const vars = action.label_i18n_vars || action.data || undefined;
@@ -379,11 +397,22 @@ export class PlatformNotificationManager extends PlatformElement {
                     const titleText = this._resolveNotifText(n, 'title');
                     const messageText = this._resolveNotifText(n, 'message');
                     const actions = this._notificationActions(n);
+                    const workItemId = this._workItemIdFromNotification(n);
                     return html`
                         <div class="platform-notif-portal__item"
                              @click=${() => this._onItemClick(n)}>
                             ${titleText ? html`<div class="platform-notif-portal__item-title">${titleText}</div>` : ''}
-                            ${messageText ? html`<div class="platform-notif-portal__item-message">${messageText}</div>` : ''}
+                            ${workItemId.length > 0
+                                ? html`<platform-work-item-badge
+                                    work-item-id=${workItemId}
+                                    variant="chip"
+                                    size="sm"
+                                    interactive
+                                    ?show-preview=${false}
+                                ></platform-work-item-badge>`
+                                : (messageText
+                                    ? html`<div class="platform-notif-portal__item-message">${messageText}</div>`
+                                    : '')}
                             ${actions.length > 0 ? html`
                                 <div class="platform-notif-portal__item-actions">
                                     ${actions.map((action) => html`

@@ -32,6 +32,7 @@ export class PlatformUserChip extends PlatformElement {
         userId: { type: String, attribute: 'user-id' },
         size: { type: String },
         interactive: { type: Boolean },
+        showWorkCount: { type: Boolean, attribute: 'show-work-count' },
         _chipAvatarFallback: { state: true },
     };
 
@@ -131,6 +132,27 @@ export class PlatformUserChip extends PlatformElement {
                 height: 32px;
                 font-size: var(--text-sm, 14px);
             }
+
+            .work-count {
+                flex-shrink: 0;
+                display: inline-flex;
+                align-items: center;
+                justify-content: center;
+                min-width: 20px;
+                height: 20px;
+                padding: 0 6px;
+                border-radius: var(--radius-full, 999px);
+                background: var(--accent);
+                color: var(--text-on-accent, #fff);
+                font-size: var(--text-xs, 12px);
+                font-weight: var(--font-semibold, 600);
+                border: none;
+                cursor: pointer;
+            }
+
+            .work-count:hover {
+                background: var(--accent-hover);
+            }
         `,
     ];
 
@@ -139,10 +161,12 @@ export class PlatformUserChip extends PlatformElement {
         this.userId = '';
         this.size = 'sm';
         this.interactive = true;
+        this.showWorkCount = false;
         this._chipAvatarFallback = 0;
         this._chipAvatarSig = '';
         this._teamSel = this.select((s) => s.team);
         this._authSel = this.select((s) => s.auth);
+        this._workCountsSel = this.select((s) => s.platformWorkItemCounts);
         this._loadDispatched = false;
     }
 
@@ -220,6 +244,31 @@ export class PlatformUserChip extends PlatformElement {
         this.openModal('platform.user_info', { userId: user.user_id });
     }
 
+    _onWorkCountClick(event) {
+        event.stopPropagation();
+        window.location.href = '/worktracker/inbox';
+    }
+
+    _renderWorkCountBadge(user) {
+        if (!this.showWorkCount || !user.is_self) {
+            return null;
+        }
+        const counts = this._workCountsSel.value;
+        const total = typeof counts.total_open_count === 'number' ? counts.total_open_count : 0;
+        if (total <= 0) {
+            return null;
+        }
+        return html`
+            <button
+                type="button"
+                class="work-count"
+                title=${this.t('user_chip.work_count_title')}
+                aria-label=${this.t('user_chip.work_count_aria')}
+                @click=${this._onWorkCountClick}
+            >${total > 99 ? '99+' : total}</button>
+        `;
+    }
+
     _onKeydown(event) {
         if (!this.interactive) return;
         if (event.key === 'Enter' || event.key === ' ') {
@@ -283,6 +332,7 @@ export class PlatformUserChip extends PlatformElement {
                     ${showEmail ? html`<span class="email">${user.email}</span>` : null}
                 </span>
             </button>
+            ${this._renderWorkCountBadge(user)}
         `;
     }
 }

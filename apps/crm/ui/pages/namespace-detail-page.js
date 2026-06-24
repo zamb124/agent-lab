@@ -116,8 +116,6 @@ export class CRMNamespaceDetailPage extends PlatformPage {
         _suggestsCron: { state: true },
         _suggestsScheduleTaskId: { state: true },
         _suggestsSaveBusy: { state: true },
-        _taskBoardDraft: { state: true },
-        _taskBoardSaveBusy: { state: true },
     };
 
     static styles = [
@@ -448,14 +446,11 @@ export class CRMNamespaceDetailPage extends PlatformPage {
         this._suggestsCron = DEFAULT_SUGGESTS_CRON;
         this._suggestsScheduleTaskId = '';
         this._suggestsSaveBusy = false;
-        this._taskBoardDraft = null;
-        this._taskBoardSaveBusy = false;
         this._lastRequestedId = '';
 
         this._namespaces = this.useResource('crm/namespaces');
         this._editabilityOp = this.useOp('crm/namespace_editability');
         this._namespaceUpdateOp = this.useOp('crm/namespace_update');
-        this._taskBoardEditorStateOp = this.useOp('crm/task_board_editor_state');
         this._entityTypes = this.useResource('crm/entity_types', { autoload: false });
         this._entityTypeUpdateOp = this.useOp('crm/entity_type_update');
         this._schemaOptionsOp = this.useOp('crm/template_schema_options');
@@ -499,37 +494,12 @@ export class CRMNamespaceDetailPage extends PlatformPage {
                 throw new Error('namespace_editability: current_allowed_type_ids must be an array');
             }
             this._allowedTypeIds = ids.filter((id) => typeof id === 'string' && id.length > 0);
-            this._loadTaskBoardEditorState();
-        });
-        this.useEvent(this._taskBoardEditorStateOp.op.events.SUCCEEDED, (event) => {
-            const r = event.payload.result;
-            const boards = r && Array.isArray(r.boards) ? r.boards : [];
-            this._taskBoardDraft = boards
-                .map((b) => {
-                    const board_key = typeof b.board_key === 'string' ? b.board_key : '';
-                    const label = typeof b.label === 'string' ? b.label : '';
-                    const stagesRaw = Array.isArray(b.stages) ? b.stages : [];
-                    const stages = stagesRaw.map((s) => {
-                        const id = typeof s.id === 'string' ? s.id : '';
-                        const lb = typeof s.label === 'string' ? s.label : '';
-                        const color = typeof s.color === 'string' ? s.color : '';
-                        return { id, label: lb, color };
-                    });
-                    return { board_key, label, stages };
-                })
-                .filter((row) => row.board_key.length > 0);
-        });
-        this.useEvent(this._taskBoardEditorStateOp.op.events.FAILED, (event) => {
-            this._taskBoardDraft = null;
-            const msg = event.payload && typeof event.payload.message === 'string' ? event.payload.message : '';
-            this.toast('crm:namespace_detail_page.task_board_load_failed', { type: 'error', vars: { message: msg } });
         });
         this.useEvent(this._namespaceUpdateOp.op.events.SUCCEEDED, (event) => {
             this._savingMeta = false;
             this._savingAllowed = false;
             this._sidebarMenuBusy = false;
             this._suggestsSaveBusy = false;
-            this._taskBoardSaveBusy = false;
             const result = event && event.payload && event.payload.result;
             if (result && result.name === this.itemId) {
                 this._hydrateFromNamespace(result);
@@ -537,14 +507,12 @@ export class CRMNamespaceDetailPage extends PlatformPage {
             this._namespaces.load();
             this._editabilityOp.run({ name: this.itemId });
             this._entityTypes.load({ namespace: this.itemId });
-            this._loadTaskBoardEditorState();
         });
         this.useEvent(this._namespaceUpdateOp.op.events.FAILED, () => {
             this._savingMeta = false;
             this._savingAllowed = false;
             this._sidebarMenuBusy = false;
             this._suggestsSaveBusy = false;
-            this._taskBoardSaveBusy = false;
         });
         this.useEvent(this._entityTypeUpdateOp.op.events.SUCCEEDED, () => {
             this._savingType = false;
@@ -632,7 +600,6 @@ export class CRMNamespaceDetailPage extends PlatformPage {
         this._suggestsCron = DEFAULT_SUGGESTS_CRON;
         this._suggestsScheduleTaskId = '';
         this._suggestsSaveBusy = false;
-        this._taskBoardDraft = null;
         this._namespaces.get(this.itemId);
         this._editabilityOp.run({ name: this.itemId });
         this._entityTypes.load({ namespace: this.itemId });
@@ -658,116 +625,6 @@ export class CRMNamespaceDetailPage extends PlatformPage {
         this._suggestsEnabled = suggests.enabled;
         this._suggestsCron = suggests.cron;
         this._suggestsScheduleTaskId = suggests.scheduleTaskId;
-    }
-
-    _loadTaskBoardEditorState() {
-        if (typeof this.itemId !== 'string' || this.itemId.length === 0) return;
-        this._taskBoardEditorStateOp.run({ namespace_name: this.itemId });
-    }
-
-    _taskBoardStageIdValid(raw) {
-        if (typeof raw !== 'string') return false;
-        return /^[a-z][a-z0-9_]*$/.test(raw.trim());
-    }
-
-    _onSaveTaskBoard() {
-        const draft = this._taskBoardDraft;
-        if (!Array.isArray(draft) || draft.length === 0) return;
-        const presets = {};
-        for (const row of draft) {
-            const board_key = typeof row.board_key === 'string' ? row.board_key : '';
-            if (!board_key) continue;
-            const stages = [];
-            const seen = new Set();
-            for (const st of row.stages) {
-                const id = typeof st.id === 'string' ? st.id.trim() : '';
-                const label = typeof st.label === 'string' ? st.label.trim() : '';
-                if (!id.length || !label.length) continue;
-                if (!this._taskBoardStageIdValid(id)) {
-                    this.toast('crm:namespace_detail_page.task_board_err_stage_id', { type: 'error' });
-                    return;
-                }
-                if (seen.has(id)) {
-                    this.toast('crm:namespace_detail_page.task_board_err_duplicate_id', { type: 'error' });
-                    return;
-                }
-                seen.add(id);
-                const cell = { id, label };
-                const color = typeof st.color === 'string' ? st.color.trim() : '';
-                if (color.length > 0) cell.color = color;
-                stages.push(cell);
-            }
-            if (stages.length === 0) {
-                this.toast('crm:namespace_detail_page.task_board_err_stages', { type: 'error' });
-                return;
-            }
-            presets[board_key] = { stages };
-        }
-        if (Object.keys(presets).length === 0) {
-            this.toast('crm:namespace_detail_page.task_board_err_stages', { type: 'error' });
-            return;
-        }
-        this._taskBoardSaveBusy = true;
-        this._namespaceUpdateOp.run({
-            name: this.itemId,
-            body: { crm_settings: { pipeline_stage_presets: presets } },
-        });
-    }
-
-    _setTaskBoardDraft(next) {
-        this._taskBoardDraft = next;
-    }
-
-    _onTaskBoardStageField(boardIdx, stageIdx, field, value) {
-        const draft = this._taskBoardDraft;
-        if (!Array.isArray(draft) || !draft[boardIdx] || !draft[boardIdx].stages[stageIdx]) return;
-        const next = draft.map((row, bi) => {
-            if (bi !== boardIdx) return row;
-            return {
-                ...row,
-                stages: row.stages.map((s, si) => (si === stageIdx ? { ...s, [field]: value } : s)),
-            };
-        });
-        this._setTaskBoardDraft(next);
-    }
-
-    _addTaskBoardStage(boardIdx) {
-        const draft = this._taskBoardDraft;
-        if (!Array.isArray(draft) || !draft[boardIdx]) return;
-        const next = draft.map((row, bi) => {
-            if (bi !== boardIdx) return row;
-            return { ...row, stages: [...row.stages, { id: '', label: '', color: '' }] };
-        });
-        this._setTaskBoardDraft(next);
-    }
-
-    _removeTaskBoardStage(boardIdx, stageIdx) {
-        const draft = this._taskBoardDraft;
-        if (!Array.isArray(draft) || !draft[boardIdx]) return;
-        const row = draft[boardIdx];
-        if (row.stages.length <= 1) {
-            this.toast('crm:namespace_detail_page.task_board_err_min_stages', { type: 'error' });
-            return;
-        }
-        const next = draft.map((r, bi) => {
-            if (bi !== boardIdx) return r;
-            return { ...r, stages: r.stages.filter((_, si) => si !== stageIdx) };
-        });
-        this._setTaskBoardDraft(next);
-    }
-
-    _moveTaskBoardStage(boardIdx, stageIdx, delta) {
-        const draft = this._taskBoardDraft;
-        if (!Array.isArray(draft) || !draft[boardIdx]) return;
-        const stages = draft[boardIdx].stages;
-        const j = stageIdx + delta;
-        if (j < 0 || j >= stages.length) return;
-        const nextStages = stages.slice();
-        const t = nextStages[stageIdx];
-        nextStages[stageIdx] = nextStages[j];
-        nextStages[j] = t;
-        const next = draft.map((row, bi) => (bi === boardIdx ? { ...row, stages: nextStages } : row));
-        this._setTaskBoardDraft(next);
     }
 
     _onDescriptionChange(e) {
@@ -1093,7 +950,6 @@ export class CRMNamespaceDetailPage extends PlatformPage {
                         </div>
                         ${this._renderRightPanel()}
                     </div>
-                    ${this._renderTaskBoardPanel()}
                 </div>
             </div>
         `;
@@ -1242,8 +1098,7 @@ export class CRMNamespaceDetailPage extends PlatformPage {
         const disabled = this._suggestsSaveBusy
             || this._savingMeta
             || this._savingAllowed
-            || this._sidebarMenuBusy
-            || this._taskBoardSaveBusy;
+            || this._sidebarMenuBusy;
         return html`
             <div class="panel">
                 <div class="panel-header">
@@ -1294,205 +1149,6 @@ export class CRMNamespaceDetailPage extends PlatformPage {
                             : this.t('namespace_detail_page.suggests_save')}
                     </button>
                 </div>
-            </div>
-        `;
-    }
-
-    _renderTaskBoardPanel() {
-        const ed = this._editabilityOp.lastResult;
-        if (!ed || typeof ed.namespace !== 'string' || ed.namespace !== this.itemId) {
-            return html`
-                <div class="panel">
-                    <div class="panel-header">
-                        <span class="panel-title panel-title-row-hint">
-                            <platform-icon name="layers" size="18"></platform-icon>
-                            <span>${this.t('namespace_detail_page.task_board_section')}</span>
-                            <platform-help-hint
-                                .text=${this.t('namespace_detail_page.task_board_section_hint')}
-                                label=${this.t('templates_page.field_hint_button_aria')}
-                            ></platform-help-hint>
-                        </span>
-                    </div>
-                    <div class="center" style="padding: var(--space-3);">
-                        <glass-spinner size="md"></glass-spinner>
-                    </div>
-                </div>
-            `;
-        }
-        const tbOp = this._taskBoardEditorStateOp;
-        const draft = this._taskBoardDraft;
-        return html`
-            <div class="panel">
-                <div class="panel-header">
-                    <span class="panel-title panel-title-row-hint">
-                        <platform-icon name="layers" size="18"></platform-icon>
-                        <span>${this.t('namespace_detail_page.task_board_section')}</span>
-                        <platform-help-hint
-                            .text=${this.t('namespace_detail_page.task_board_section_hint')}
-                            label=${this.t('templates_page.field_hint_button_aria')}
-                        ></platform-help-hint>
-                    </span>
-                </div>
-                <p class="hint">${this.t('namespace_detail_page.task_board_hint')}</p>
-                ${tbOp.busy && !Array.isArray(draft)
-                    ? html`<div class="center" style="padding: var(--space-3);"><glass-spinner size="md"></glass-spinner></div>`
-                    : ''}
-                ${!tbOp.busy && tbOp.error !== null && !Array.isArray(draft)
-                    ? html`
-                        <p class="hint">${this.t('namespace_detail_page.task_board_retry_hint', {
-                            message:
-                                typeof tbOp.error === 'string' && tbOp.error.length !== 0
-                                    ? tbOp.error
-                                    : '—',
-                        })}</p>
-                        <div class="actions-row">
-                            <button class="btn btn-soft" type="button" @click=${this._loadTaskBoardEditorState}>
-                                ${this.t('namespace_detail_page.task_board_retry')}
-                            </button>
-                        </div>
-                    `
-                    : ''}
-                ${Array.isArray(draft) && draft.length === 0
-                    ? html`<p class="hint">${this.t('namespace_detail_page.task_board_empty')}</p>`
-                    : ''}
-                ${Array.isArray(draft) && draft.length > 0
-                    ? html`
-                        ${draft.map((board, bi) => html`
-                            <div class="task-board-board">
-                                <div class="task-board-board-head">
-                                    <div class="task-board-board-head-top">
-                                        <div class="task-board-board-title">${board.label}</div>
-                                        <button
-                                            class="btn btn-soft task-board-add-stage"
-                                            type="button"
-                                            title=${this.t('namespace_detail_page.task_board_add_stage')}
-                                            aria-label=${this.t('namespace_detail_page.task_board_add_stage')}
-                                            @click=${() => this._addTaskBoardStage(bi)}
-                                        >
-                                            <platform-icon name="plus" size="18"></platform-icon>
-                                        </button>
-                                    </div>
-                                    <div class="hint mono">${board.board_key}</div>
-                                </div>
-                                <div class="stage-header-row">
-                                    <div class="stage-head-cell">
-                                        <span>${this.t('namespace_detail_page.task_board_col_stage_id_label')}</span>
-                                        <platform-help-hint
-                                            .text=${this.t('namespace_detail_page.task_board_col_stage_id_hint')}
-                                            label=${this.t('templates_page.field_hint_button_aria')}
-                                        ></platform-help-hint>
-                                    </div>
-                                    <div class="stage-head-cell">
-                                        <span>${this.t('namespace_detail_page.task_board_col_stage_title_label')}</span>
-                                        <platform-help-hint
-                                            .text=${this.t('namespace_detail_page.task_board_col_stage_title_hint')}
-                                            label=${this.t('templates_page.field_hint_button_aria')}
-                                        ></platform-help-hint>
-                                    </div>
-                                    <div class="stage-head-cell">
-                                        <span>${this.t('namespace_detail_page.task_board_col_color_label')}</span>
-                                        <platform-help-hint
-                                            .text=${this.t('namespace_detail_page.task_board_col_color_hint')}
-                                            label=${this.t('templates_page.field_hint_button_aria')}
-                                        ></platform-help-hint>
-                                    </div>
-                                    <div class="stage-head-cell stage-head-actions"></div>
-                                </div>
-                                ${board.stages.map((st, si) => html`
-                                    <div class="stage-row">
-                                        <platform-field
-                                            type="string"
-                                            mode="edit"
-                                            input-type="text"
-                                            .placeholder=${this.t('namespace_detail_page.task_board_stage_id_ph')}
-                                            .value=${st.id}
-                                            ?disabled=${this._taskBoardSaveBusy
-                                                || this._savingMeta
-                                                || this._savingAllowed
-                                                || this._sidebarMenuBusy}
-                                            @change=${(e) => {
-                                                const v = typeof e.detail.value === 'string' ? e.detail.value : '';
-                                                this._onTaskBoardStageField(bi, si, 'id', v);
-                                            }}
-                                        ></platform-field>
-                                        <platform-field
-                                            type="string"
-                                            mode="edit"
-                                            input-type="text"
-                                            .placeholder=${this.t('namespace_detail_page.task_board_stage_label_ph')}
-                                            .value=${st.label}
-                                            ?disabled=${this._taskBoardSaveBusy
-                                                || this._savingMeta
-                                                || this._savingAllowed
-                                                || this._sidebarMenuBusy}
-                                            @change=${(e) => {
-                                                const v = typeof e.detail.value === 'string' ? e.detail.value : '';
-                                                this._onTaskBoardStageField(bi, si, 'label', v);
-                                            }}
-                                        ></platform-field>
-                                        <platform-palette-color-picker
-                                            class="stage-color-picker"
-                                            allow-clear
-                                            .value=${st.color}
-                                            ?disabled=${this._taskBoardSaveBusy
-                                                || this._savingMeta
-                                                || this._savingAllowed
-                                                || this._sidebarMenuBusy}
-                                            @change=${(e) => {
-                                                const v = e.detail && typeof e.detail.value === 'string'
-                                                    ? e.detail.value
-                                                    : '';
-                                                this._onTaskBoardStageField(bi, si, 'color', v);
-                                            }}
-                                        ></platform-palette-color-picker>
-                                        <div class="stage-row-actions">
-                                            <button
-                                                class="btn btn-soft"
-                                                type="button"
-                                                ?disabled=${si === 0}
-                                                @click=${() => this._moveTaskBoardStage(bi, si, -1)}
-                                                title=${this.t('namespace_detail_page.task_board_move_up')}
-                                            >
-                                                ${this.t('namespace_detail_page.task_board_move_up')}
-                                            </button>
-                                            <button
-                                                class="btn btn-soft"
-                                                type="button"
-                                                ?disabled=${si >= board.stages.length - 1}
-                                                @click=${() => this._moveTaskBoardStage(bi, si, 1)}
-                                                title=${this.t('namespace_detail_page.task_board_move_down')}
-                                            >
-                                                ${this.t('namespace_detail_page.task_board_move_down')}
-                                            </button>
-                                            <button
-                                                class="btn btn-danger"
-                                                type="button"
-                                                @click=${() => this._removeTaskBoardStage(bi, si)}
-                                            >
-                                                ${this.t('namespace_detail_page.task_board_remove_stage')}
-                                            </button>
-                                        </div>
-                                    </div>
-                                `)}
-                            </div>
-                        `)}
-                        <div class="actions-row">
-                            <button
-                                class="btn btn-primary"
-                                type="button"
-                                ?disabled=${this._taskBoardSaveBusy
-                                    || this._savingMeta
-                                    || this._savingAllowed
-                                    || this._sidebarMenuBusy}
-                                @click=${this._onSaveTaskBoard}
-                            >
-                                ${this._taskBoardSaveBusy
-                                    ? this.t('namespace_detail_page.task_board_saving')
-                                    : this.t('namespace_detail_page.task_board_save')}
-                            </button>
-                        </div>
-                    `
-                    : ''}
             </div>
         `;
     }

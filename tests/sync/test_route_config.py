@@ -134,3 +134,37 @@ def test_products_pages_are_public_anonymous() -> None:
         assert rule is not None, f"no rule for {path}"
         assert rule.context_type == "anonymous", f"{path}: expected anonymous"
         assert rule.auth_required is False, f"{path}: expected auth_required=False"
+
+
+def test_worktracker_ui_shell_is_public() -> None:
+    matcher = RouteMatcher()
+    for path in ("/worktracker", "/worktracker/", "/worktracker/inbox", "/worktracker/board"):
+        rule = matcher.match(path)
+        assert rule is not None, f"no rule for {path}"
+        assert rule.context_type == "anonymous", f"{path}: expected anonymous"
+        assert rule.auth_required is False, f"{path}: expected auth_required=False"
+
+
+def test_worktracker_api_requires_auth() -> None:
+    matcher = RouteMatcher()
+    for path in (
+        "/worktracker/api/v1/work-items",
+        "/worktracker/api/v1/work-items/mine/summary",
+        "/worktracker/api/v1/boards",
+    ):
+        rule = matcher.match(path)
+        assert rule is not None, path
+        assert rule.context_type == "api", path
+        assert rule.auth_required is True, path
+
+
+def test_worktracker_ui_static_is_public() -> None:
+    matcher = RouteMatcher()
+    rule = matcher.match("/worktracker/ui/static/index.js")
+    assert rule is not None
+    assert rule.context_type == "anonymous"
+    assert rule.auth_required is False
+
+
+def test_spa_fallback_path_excludes_worktracker_api() -> None:
+    assert path_allows_spa_fallback("/worktracker/api/v1/work-items") is False

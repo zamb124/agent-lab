@@ -123,6 +123,31 @@ class RagClient:
             operation="upload_namespace_document",
         )
 
+    async def index_file(
+        self,
+        namespace_id: str,
+        file_id: str,
+        *,
+        metadata: RAGMetadata,
+        document_name: str | None = None,
+        provider: str | None = None,
+    ) -> JsonObject:
+        seg = quote(namespace_id, safe="")
+        path = f"{RAG_API_V1_PREFIX}/namespaces/{seg}/documents/index-file"
+        params: dict[str, str] | None = {"provider": provider} if provider is not None else None
+        body: JsonObject = {"file_id": file_id, "metadata": metadata}
+        if document_name is not None:
+            body["document_name"] = document_name
+        return _json_object_response(
+            await self._http.post(
+                "rag",
+                path,
+                json=body,
+                params=params,
+            ),
+            operation="index_file",
+        )
+
     async def delete_namespace_document(
         self,
         namespace_id: str,
@@ -134,6 +159,35 @@ class RagClient:
         path = f"{RAG_API_V1_PREFIX}/namespaces/{seg}/documents/{document_id}"
         params: dict[str, str] | None = {"provider": provider} if provider is not None else None
         return await self._http.delete("rag", path, params=params)
+
+    async def delete_document_index(
+        self,
+        namespace_id: str,
+        document_id: str,
+        *,
+        provider: str | None = None,
+    ) -> JsonValue:
+        seg = quote(namespace_id, safe="")
+        path = (
+            f"{RAG_API_V1_PREFIX}/namespaces/{seg}/documents/"
+            f"{quote(document_id, safe='')}/index"
+        )
+        params: dict[str, str] | None = {"provider": provider} if provider is not None else None
+        return await self._http.delete("rag", path, params=params)
+
+    async def delete_namespace(
+        self,
+        namespace_id: str,
+        *,
+        provider: str | None = None,
+    ) -> JsonObject:
+        seg = quote(namespace_id, safe="")
+        path = f"{RAG_API_V1_PREFIX}/namespaces/{seg}"
+        params: dict[str, str] | None = {"provider": provider} if provider is not None else None
+        return _json_object_response(
+            await self._http.delete("rag", path, params=params),
+            operation="delete_namespace",
+        )
 
     async def get_document_processing_status(self, document_id: str) -> JsonObject:
         path = f"{RAG_API_V1_PREFIX}/documents/{document_id}/status"

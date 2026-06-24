@@ -1,0 +1,151 @@
+---
+description: WorkItem — платформенное ядро задач (apps/worktracker, core/worktracker). Единая модель работы для людей, очередей операторов и агентов; HITL как частный случай задачи; fire-and-forget; канбан-доски; привязка возобновления flow
+globs:
+alwaysApply: false
+---
+# WorkItem — платформенное ядро задач
+
+`WorkItem` — единственная каноническая единица работы платформы. Сводит в одно ядро HITL/operator-задачи flows и work-семантику задач CRM. Сервис **worktracker** (порт 8021, БД `platform_worktracker`), домен — `core/worktracker/`.
+
+Запрещено имя `task` для этой сущности: `core/tasks/` занято TaskIQ-кикером (`core.tasks.kicker`), а `task_id` в `main.mdc` — runtime/A2A id. Каноническое имя — **`WorkItem` / `work_item_id`**.
+
+## Зачем
+
+Задача = единица работы с состоянием, исполнителем (человек / очередь / агент-flow), опциональной блокировкой исполнения и набором хуков жизненного цикла.
+
+- **Назначение гибкое и сменяемое**: `reassign(company_id, work_item_id, assignment)` меняет исполнителя любой non-terminal задачи любого `kind` (HITL-задачу можно перекинуть на flow, CRM-задачу — на агента/человека).
+- **HITL = частный случай**: `kind=operator_handoff`, `blocking=true`, хук `completed → flows`. На завершении WorkItem flows возобновляется. Завершить может кто угодно — хук срабатывает одинаково.
+- **Fire-and-forget**: `blocking=false`, без хуков — агент создаёт и не ждёт.
+- **Исполнитель**: `UsersAssignment` / `QueueAssignment` / `AgentAssignment(flow_id)` / `UnassignedAssignment`.
+
+## Слои
+
+| Слой | Где | Знает про |
+|---|---|---|
+| Домен (нейтральный) | `core/worktracker/` | модели, репозиторий, `WorkItemService` (стейт-машина, валидация), диспатч хуков через инъектируемый `WorkItemHookDispatcher` (Protocol). **Не** знает про flows/crm, **не** делает прямых кросс-сервисных вызовов |
+| Сервис | `apps/worktracker/` | API (REST + push) + UI + `ServiceClientHookDispatcher` (POST хука через `ServiceClient`) |
+| Потребители | `apps/flows`, `apps/crm` | пишут WorkItem через `core/worktracker` репозиторий+сервис (БД доступна), инъектируют `ServiceClientHookDispatcher` |
+
+`core/ → apps/` запрещён: ядро нейтрально. Хуки жизненного цикла декуплены через инъектируемый `WorkItemHookDispatcher` (`core/worktracker/hook_dispatcher.py`); реализация `ServiceClientHookDispatcher` дёргает `{hook.service, hook.path}` через `ServiceClient`. flows реализует internal-эндпоинты `/flows/api/v1/internal/work-items/{completed,assigned,comment}`.
+
+## Каноническая модель (`core/worktracker/models.py`)
+
+`WorkItem`:
+- `work_item_id`, `company_id`, `namespace`
+- `title`, `description`
+- `kind: WorkItemKind` — `generic | operator_handoff | agent_job | crm_activity`
+- `state: WorkItemState` — `open | in_progress | blocked | done | cancelled | failed` (терминальные: `done | cancelled | failed`)
+- `board_id`, `board_column_id`
+- `priority: WorkItemPriority` — `low | normal | high | urgent`
+- `due_date`, `labels: list[str]`
+- `created_by: WorkActor`
+- `assignment: WorkItemAssignment`
+- `blocking: bool`
+- `hooks: list[WorkItemHook]`
+- `resolution: WorkItemResolution | None`
+- `links: list[WorkItemLink]`
+- `variables: VariableMap` — канон `VariableEntry` из `core/variables/models.py` (симметрично flow/company variables, `@var:` в description)
+- `attachments: list[FileRef]` — task-level файлы (`core/files/file_ref.py`); upload/open через платформенный files API и `platform-file-attachments`
+- `created_at`, `updated_at`
+
+Дискриминированные union (StrEnum-дискриминатор, `core.models.StrictBaseModel`):
+- `WorkActor` (`actor_kind`): `user(user_id)` | `agent(flow_id, session_id?)` | `system`
+- `WorkItemAssignment` (`assignee_kind`): `unassigned` | `users(user_ids)` | `queue(work_queue_id, claimed_by_user_id?)` | `agent(flow_id, branch_id?)`
+- `WorkItemLink` (`link_kind`): `crm_entity(entity_id)` | `flow_session(session_id, a2a_task_id, context_id)` | `sync_message(channel_id, message_id)` | `rag_document(document_id)` | `file(file_id)` | `calendar_event(event_id)` | `work_item(work_item_id, relation: blocks|related|parent)`
+- `WorkItemHook`: `event: WorkItemHookEvent (assigned|comment|completed)`, `service`, `path`, `binding: JsonObject`. Ядро диспатчит подходящие хуки на переходах: `assigned` (create/reassign), `comment` (add_comment), `completed` (terminal).
+- `WorkItemResolution`: `text`, `files: list[FileRef]`, `resolved_by: WorkActor | None`
+
+Очереди и доски:
+- `WorkQueue` / `work_queue_id`, `work_queue_slug` (unique per company); `WorkQueueMember(work_queue_id, member: WorkActor, role)` — участник полиморфен (пользователь **или** агент-flow), `member_kind`/`member_ref` в БД.
+- `Board` / `board_id`, `BoardColumn` / `board_column_id` (`label`, `state: WorkItemState`, `position`); `board_key` (`generic|operator|task|task:<subtype>`) для резолва доски per `(company, namespace, board_key)`.
+- `WorkItemComment` (`comment_id`, `work_item_id`, `author: WorkActor`, `role: operator|user|system|agent`, `text`, `files: list[FileRef]`, `created_at`) — takeover-диалог.
+
+Файлы: канон `FileRef` (`file_id`, `original_name`, `content_type`, `file_size`, `url?`). Upload — `POST /{svc}/api/v1/files/`; open — `PlatformElement.openFile` → OnlyOffice viewer (`office.mdc`, `s3_minio.mdc`). UI — `platform-file-attachments.js`. Переменные — `platform-variables-panel.js` + `VariableResolver` в `prompt-editor`.
+
+## Naming
+
+| Сущность | Канон | id |
+|---|---|---|
+| Единица работы | `WorkItem` | `work_item_id` |
+| Очередь | `WorkQueue` | `work_queue_id`, `work_queue_slug` |
+| Член очереди | `WorkQueueMember` | (`work_queue_id`, `member_kind`, `member_ref`) |
+| Доска | `Board` | `board_id`, `board_key` |
+| Колонка | `BoardColumn` | `board_column_id` |
+| Комментарий | `WorkItemComment` | `comment_id` |
+
+Голый `id`, `task_id`, `operator_task_id` для этих сущностей запрещены. Поле коллекции — только `items` (`core/pagination.py`).
+
+## Транспорт (REST + push)
+
+REST API (`apps/worktracker/api/**`):
+
+- `POST /worktracker/api/v1/work-items` (create), `PATCH .../{id}` (update)
+- `POST .../{id}/assign` (reassign), `.../{id}/move`, `.../{id}/claim`, `.../{id}/comments`, `.../{id}/complete`, `.../{id}/cancel`
+- `/worktracker/api/v1/work-queues` — CRUD очередей + участники (user|agent), `PATCH`, `i_am_member`
+- `/worktracker/api/v1/boards` — list/get/create + `PATCH` (колонки)
+
+Push (зеркал не имеют): `worktracker/work_item/created|updated|moved|completed|comment_created` через `publish_ui_event_*` → `platform:ui_events`. Транспорт — HTTP + push (как CRM tasks / office namespaces), без WS command-router.
+
+AuthMiddleware: правила в `core/middleware/auth/route_config.py` — API `/worktracker/api/v1/*` (`context_type=api`, auth), SPA `/worktracker/*` (anonymous, как sync), health `/worktracker/health` в `SKIP_PATHS`.
+
+## Возобновление flow (HITL)
+
+1. `hitl_node` / tool `hitl_operator_task` бросает `OperatorTaskInterrupt` (поле `work_item_id`; контракт в `core/state/interrupt.py`) и через `HitlWorkItemService` (flows) создаёт `WorkItem(kind=operator_handoff, blocking=true)` с хуками `completed`→`/flows/api/v1/internal/work-items/completed` и `comment`→`/flows/api/v1/internal/work-items/comment` + `flow_session` link.
+2. Оператор: claim → (takeover: комментарии стримятся пользователю через `comment`-хук + `Emitter`; реплики пользователя → `add_comment(role=user)`) → complete(resolution).
+3. На первом терминале ядро диспатчит `completed`-хук; flows-endpoint возобновляет flow durable resume (`process_flow_task(is_resume=True)`), при takeover в content — форматированный диалог комментариев. Маршрутизация по `state.current_nodes`/`interrupt_path`.
+
+Тяжёлый `context_data` snapshot и `interrupt_snapshot` живут в `hook.binding` (flows-owned, для ядра непрозрачны).
+
+## Агент как исполнитель
+
+`AgentAssignment(flow_id)` + `assigned`-хук → flows endpoint `/internal/work-items/assigned` запускает flow с WorkItem на входе («инбокс агента»), в т.ч. для задач, переназначенных на агента (бывших HITL/CRM). Агент создаёт задачи себе/другому агенту/оператору/человеку через tools `work_item_create/complete/list`.
+
+## CRM (Networkle)
+
+Задача в CRM — узел графа (`CRMEntity` `entity_type=task`) для графа/AI/эмбеддинга; вся work-семантика (state/priority/due/assignee/доска/блокировка) — в парном `WorkItem(kind=crm_activity)`, связь 1:1 через `WorkItemLink(crm_entity)`. Синхронизация — `apps/crm/services/crm_work_item_service.py::CrmWorkItemService` из `EntityService` (create/update/AI-apply/AmoCRM); удаление/слияние CRM-узла чистит парный WorkItem. На CRM-узле задачи нет колонок `priority`/`due_date`/`assignees` и канбан-`attributes.status` — источник истины work-полей только WorkItem. Детали — `crm.mdc`.
+
+## Уведомления
+
+Назначение исполнителю (`UsersAssignment`) → `NotificationType.WORK_ITEM_ASSIGNED`; обновление → `WORK_ITEM_UPDATED`; `action_url` ведёт в worktracker (`/worktracker/tasks/{work_item_id}`). Доски слушают push `worktracker/work_item/*` и обновляют slice.
+
+## UI surfaces & shared styles
+
+Визуальный слой worktracker — через platform tokens (`--worktracker-*` в `tokens.css`) и shared Lit styles в `apps/worktracker/ui/styles/`:
+
+| Модуль | Классы | Назначение |
+|---|---|---|
+| `worktracker-surfaces.styles.js` | `.wt-page`, `.wt-section`, `.wt-section-title`, `.wt-empty` | страницы, секции, empty states |
+| `worktracker-list.styles.js` | `.wt-list`, `.wt-list-row` | flat inbox/my/queue lists |
+| `worktracker-inspector.styles.js` | `.wt-inspector`, `.wt-inspector-row`, `.wt-inspector-meta` | compact properties sidebar |
+| `worktracker-detail.styles.js` | `.wt-detail-main`, `.wt-activity`, `.wt-composer` | task detail page/panel |
+| `worktracker-kanban.styles.js` | `.wt-kanban`, `.wt-kanban-column`, `.wt-board-toolbar` | board kanban |
+
+Компоненты detail view: `worktracker-detail-content`, `worktracker-detail-inspector`, `worktracker-activity-thread`, `worktracker-detail-header`, `worktracker-inspector-row`, `worktracker-state-pill`, `worktracker-assignee-picker`, `worktracker-priority-picker`. Оркестратор — `work-item-detail-editor` (layouts: `page`, `panel`, `inspector-only`).
+
+Поля форм — только `platform-field` с `pill-density="dense"` / `pill-embed` в inspector; assignee в UI — `platform-user-chip`. **Описание задачи** — `<prompt-editor variant="embed">` (markdown + переменные `{var}` / `@var:` / preview/split); не `platform-field`. Локальные overrides `--field-pill-*` в `apps/worktracker/**` запрещены.
+
+Mobile properties на detail page — bottom sheet `worktracker.task_properties` (`worktracker-task-properties-sheet.js`).
+
+## UI (Linear-grade SPA)
+
+Маршруты worktracker: `inbox` (default), `my`, `board`, `queues`, `queues/:workQueueId`, `tasks/:workItemId` (полная страница задачи). Canonical deep link: `/worktracker/tasks/{work_item_id}` (+ опционально `?from=inbox|my|board|queues` для back/breadcrumbs). Legacy `?work_item_id=` редиректится на canonical route.
+
+Desktop: клик по карточке → боковая панель quick view (`work-item-detail-panel`) с кнопкой «Открыть полностью». Mobile: клик → сразу страница `tasks/:workItemId`. Cross-service badge → всегда canonical page.
+
+Cross-service отображение задачи — **только** `<platform-work-item-badge>` / `<platform-work-item-preview>` из core UI Kit; локальные карточки задач в `apps/` запрещены. Parent передаёт `.item` при list/read, чтобы избежать N+1.
+
+Платформенные фабрики: `platform/work_item_get`, `platform/work_item_counts` — регистрируются автоматически в `PlatformApp` (все сервисы).
+
+## Гейты
+
+- `make check-events-canon` — `restMirror` у каждой factory operation; имя push ≠ имя команды.
+- `make check-field-canon` — `platform-field` в формах UI.
+- `make check-i18n` / `check-i18n-keys` — пары ru+en для `worktracker`.
+- `make lint` — ruff + basedpyright + architecture gates.
+
+## Запреты
+
+- Имя `task`/`task_id`/`operator_task_id` для WorkItem-сущностей.
+- Возрождение таблиц `operator_*` или дублирование work-полей в CRM/flows.
+- Кросс-сервисный вызов из `core/worktracker` (только через инъектируемый `WorkItemHookDispatcher`).
+- Resume flow через что-либо кроме `completed`-хука; стрим takeover — кроме `comment`-хука.

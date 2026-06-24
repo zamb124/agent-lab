@@ -185,9 +185,9 @@
         },
         "hitl_pause": {
           "type": "hitl_node",
-          "operator_queue_slug": "example_hitl",
-          "operator_task_title": "example_react: skill hitl_operator_node",
-          "operator_user_message": "Запрос передан в демо-очередь операторов. Ожидайте ответа специалиста."
+          "work_queue_slug": "example_hitl",
+          "handoff_task_title": "example_react: skill hitl_operator_node",
+          "handoff_user_message": "Запрос передан в демо-очередь операторов. Ожидайте ответа специалиста."
         }
       },
       "nodes_mode": "merge",

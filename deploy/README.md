@@ -15,7 +15,7 @@ MicroK8s cluster
 ├── master (84.38.184.105)         hostname=master
 │   ├── postgres StatefulSet (PVC 50Gi)
 │   ├── redis StatefulSet (PVC 10Gi)
-│   ├── 10 application Deployments (flows, frontend, crm, rag, sync, scheduler-api, office, voice, browser, search)
+│   ├── 11 application Deployments (flows, frontend, crm, rag, sync, worktracker, scheduler-api, office, voice, browser, search)
 │   ├── 6 worker Deployments (flows-worker x2, scheduler, rag-worker, sync-worker, crm-worker, idle-worker)
 │   ├── livekit + livekit-egress + coturn DaemonSet (hostNetwork)
 │   ├── onlyoffice Deployment

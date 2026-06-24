@@ -2270,6 +2270,1688 @@
         "title": "CompanyVoiceProvidersResponse",
         "description": "Список настроек речи компании (stt/tts)."
       },
+      "CrawlDomain": {
+        "properties": {
+          "crawl_domain_id": {
+            "type": "string",
+            "title": "Crawl Domain Id"
+          },
+          "crawl_profile_id": {
+            "type": "string",
+            "title": "Crawl Profile Id"
+          },
+          "domain": {
+            "type": "string",
+            "title": "Domain"
+          },
+          "domain_rank": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Domain Rank"
+          },
+          "category": {
+            "type": "string",
+            "title": "Category"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "active",
+              "paused",
+              "blocked",
+              "error"
+            ],
+            "title": "Status"
+          },
+          "refresh_interval_seconds": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Refresh Interval Seconds"
+          },
+          "include_url_patterns": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Include Url Patterns"
+          },
+          "exclude_url_patterns": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Exclude Url Patterns"
+          },
+          "last_discovered_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Discovered At"
+          },
+          "last_crawled_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Crawled At"
+          },
+          "next_crawl_after": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Next Crawl After"
+          },
+          "last_error": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Error"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At"
+          },
+          "updated_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Updated At"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "crawl_domain_id",
+          "crawl_profile_id",
+          "domain",
+          "category",
+          "status",
+          "next_crawl_after",
+          "created_at",
+          "updated_at"
+        ],
+        "title": "CrawlDomain"
+      },
+      "CrawlDomainCreateRequest": {
+        "properties": {
+          "domain": {
+            "type": "string",
+            "maxLength": 255,
+            "minLength": 1,
+            "title": "Domain"
+          },
+          "category": {
+            "type": "string",
+            "maxLength": 32,
+            "minLength": 1,
+            "title": "Category",
+            "default": "manual"
+          },
+          "refresh_interval_seconds": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "minimum": 60.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Refresh Interval Seconds"
+          },
+          "seed_urls": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "maxItems": 500,
+            "title": "Seed Urls"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "domain"
+        ],
+        "title": "CrawlDomainCreateRequest"
+      },
+      "CrawlDomainPatchRequest": {
+        "properties": {
+          "status": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "active",
+                  "paused",
+                  "blocked",
+                  "error"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Status"
+          },
+          "refresh_interval_seconds": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "minimum": 60.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Refresh Interval Seconds"
+          },
+          "include_url_patterns": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Include Url Patterns"
+          },
+          "exclude_url_patterns": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Exclude Url Patterns"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "title": "CrawlDomainPatchRequest"
+      },
+      "CrawlDomainRunResponse": {
+        "properties": {
+          "crawl_domain_id": {
+            "type": "string",
+            "title": "Crawl Domain Id"
+          },
+          "crawl_job_id": {
+            "type": "string",
+            "title": "Crawl Job Id"
+          },
+          "crawl_profile_id": {
+            "type": "string",
+            "title": "Crawl Profile Id"
+          },
+          "action": {
+            "type": "string",
+            "enum": [
+              "discover",
+              "fetch"
+            ],
+            "title": "Action"
+          },
+          "status": {
+            "type": "string",
+            "title": "Status"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "crawl_domain_id",
+          "crawl_job_id",
+          "crawl_profile_id",
+          "action",
+          "status"
+        ],
+        "title": "CrawlDomainRunResponse"
+      },
+      "CrawlJob": {
+        "properties": {
+          "crawl_job_id": {
+            "type": "string",
+            "title": "Crawl Job Id"
+          },
+          "crawl_profile_id": {
+            "type": "string",
+            "title": "Crawl Profile Id"
+          },
+          "trigger": {
+            "type": "string",
+            "enum": [
+              "scheduler",
+              "manual",
+              "api"
+            ],
+            "title": "Trigger"
+          },
+          "schedule_task_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Schedule Task Id"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "running",
+              "completed",
+              "failed"
+            ],
+            "title": "Status"
+          },
+          "domains_scheduled": {
+            "type": "integer",
+            "title": "Domains Scheduled",
+            "default": 0
+          },
+          "urls_discovered": {
+            "type": "integer",
+            "title": "Urls Discovered",
+            "default": 0
+          },
+          "urls_fetched": {
+            "type": "integer",
+            "title": "Urls Fetched",
+            "default": 0
+          },
+          "urls_indexed": {
+            "type": "integer",
+            "title": "Urls Indexed",
+            "default": 0
+          },
+          "urls_skipped": {
+            "type": "integer",
+            "title": "Urls Skipped",
+            "default": 0
+          },
+          "urls_enriched": {
+            "type": "integer",
+            "title": "Urls Enriched",
+            "default": 0
+          },
+          "urls_enrichment_failed": {
+            "type": "integer",
+            "title": "Urls Enrichment Failed",
+            "default": 0
+          },
+          "errors": {
+            "type": "integer",
+            "title": "Errors",
+            "default": 0
+          },
+          "started_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Started At"
+          },
+          "finished_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Finished At"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "crawl_job_id",
+          "crawl_profile_id",
+          "trigger",
+          "status",
+          "started_at"
+        ],
+        "title": "CrawlJob"
+      },
+      "CrawlJobCreateRequest": {
+        "properties": {
+          "crawl_profile_id": {
+            "type": "string",
+            "maxLength": 64,
+            "minLength": 1,
+            "title": "Crawl Profile Id"
+          },
+          "trigger": {
+            "type": "string",
+            "enum": [
+              "scheduler",
+              "manual",
+              "api"
+            ],
+            "title": "Trigger",
+            "default": "manual"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "crawl_profile_id"
+        ],
+        "title": "CrawlJobCreateRequest"
+      },
+      "CrawlJobQueuedResponse": {
+        "properties": {
+          "crawl_profile_id": {
+            "type": "string",
+            "title": "Crawl Profile Id"
+          },
+          "status": {
+            "type": "string",
+            "title": "Status"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "crawl_profile_id",
+          "status"
+        ],
+        "title": "CrawlJobQueuedResponse"
+      },
+      "CrawlPageFilterMetadata": {
+        "properties": {
+          "content_type": {
+            "type": "string",
+            "enum": [
+              "article",
+              "news",
+              "blog",
+              "product",
+              "documentation",
+              "tutorial",
+              "guide",
+              "faq",
+              "review",
+              "interview",
+              "opinion",
+              "press_release",
+              "research",
+              "case_study",
+              "changelog",
+              "support",
+              "catalog",
+              "landing",
+              "reference",
+              "wiki",
+              "tool",
+              "forum",
+              "legal",
+              "event",
+              "recipe",
+              "obituary",
+              "report",
+              "transcript",
+              "directory",
+              "portfolio",
+              "other"
+            ],
+            "title": "Content Type"
+          },
+          "date_published": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Date Published"
+          },
+          "date_modified": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Date Modified"
+          },
+          "date_precision": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "day",
+                  "month",
+                  "year"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Date Precision"
+          },
+          "primary_topic": {
+            "type": "string",
+            "maxLength": 64,
+            "minLength": 1,
+            "title": "Primary Topic"
+          },
+          "topic_tags": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "maxItems": 5,
+            "minItems": 2,
+            "title": "Topic Tags"
+          },
+          "category_path": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "maxItems": 3,
+            "title": "Category Path"
+          },
+          "language": {
+            "type": "string",
+            "maxLength": 8,
+            "minLength": 2,
+            "title": "Language"
+          },
+          "audience": {
+            "type": "string",
+            "enum": [
+              "general",
+              "professional",
+              "developer",
+              "consumer",
+              "internal"
+            ],
+            "title": "Audience"
+          },
+          "freshness_relevance": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "evergreen",
+                  "time_sensitive",
+                  "archival"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Freshness Relevance"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "content_type",
+          "primary_topic",
+          "topic_tags",
+          "language",
+          "audience"
+        ],
+        "title": "CrawlPageFilterMetadata"
+      },
+      "CrawlProfile": {
+        "properties": {
+          "crawl_profile_id": {
+            "type": "string",
+            "title": "Crawl Profile Id"
+          },
+          "search_index_id": {
+            "type": "string",
+            "title": "Search Index Id"
+          },
+          "enabled": {
+            "type": "boolean",
+            "title": "Enabled"
+          },
+          "seed_source": {
+            "type": "string",
+            "title": "Seed Source"
+          },
+          "refresh_interval_seconds": {
+            "type": "integer",
+            "title": "Refresh Interval Seconds"
+          },
+          "max_urls_per_domain_per_tick": {
+            "type": "integer",
+            "title": "Max Urls Per Domain Per Tick"
+          },
+          "max_domains_per_tick": {
+            "type": "integer",
+            "title": "Max Domains Per Tick"
+          },
+          "max_urls_per_batch": {
+            "type": "integer",
+            "title": "Max Urls Per Batch"
+          },
+          "http_concurrency": {
+            "type": "integer",
+            "title": "Http Concurrency"
+          },
+          "browser_fallback_enabled": {
+            "type": "boolean",
+            "title": "Browser Fallback Enabled"
+          },
+          "sitemap_stale_after_seconds": {
+            "type": "integer",
+            "title": "Sitemap Stale After Seconds"
+          },
+          "denylist_domains": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Denylist Domains"
+          },
+          "include_url_patterns": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Include Url Patterns"
+          },
+          "exclude_url_patterns": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Exclude Url Patterns"
+          },
+          "exclude_extensions": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Exclude Extensions"
+          },
+          "llm_enrichment_enabled": {
+            "type": "boolean",
+            "title": "Llm Enrichment Enabled",
+            "default": false
+          },
+          "enrichment_model": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Enrichment Model"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At"
+          },
+          "updated_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Updated At"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "crawl_profile_id",
+          "search_index_id",
+          "enabled",
+          "seed_source",
+          "refresh_interval_seconds",
+          "max_urls_per_domain_per_tick",
+          "max_domains_per_tick",
+          "max_urls_per_batch",
+          "http_concurrency",
+          "browser_fallback_enabled",
+          "sitemap_stale_after_seconds",
+          "created_at",
+          "updated_at"
+        ],
+        "title": "CrawlProfile"
+      },
+      "CrawlProfilePatchRequest": {
+        "properties": {
+          "enabled": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Enabled"
+          },
+          "refresh_interval_seconds": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "minimum": 60.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Refresh Interval Seconds"
+          },
+          "max_urls_per_domain_per_tick": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "minimum": 1.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Max Urls Per Domain Per Tick"
+          },
+          "max_domains_per_tick": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "minimum": 1.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Max Domains Per Tick"
+          },
+          "max_urls_per_batch": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "minimum": 1.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Max Urls Per Batch"
+          },
+          "http_concurrency": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "minimum": 1.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Http Concurrency"
+          },
+          "browser_fallback_enabled": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Browser Fallback Enabled"
+          },
+          "sitemap_stale_after_seconds": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "minimum": 3600.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Sitemap Stale After Seconds"
+          },
+          "denylist_domains": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Denylist Domains"
+          },
+          "include_url_patterns": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Include Url Patterns"
+          },
+          "exclude_url_patterns": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Exclude Url Patterns"
+          },
+          "exclude_extensions": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Exclude Extensions"
+          },
+          "llm_enrichment_enabled": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Llm Enrichment Enabled"
+          },
+          "enrichment_model": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Enrichment Model"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "title": "CrawlProfilePatchRequest"
+      },
+      "CrawlProfileSummary": {
+        "properties": {
+          "profile": {
+            "$ref": "#/components/schemas/CrawlProfileWithIndex"
+          },
+          "domain_counts": {
+            "items": {
+              "$ref": "#/components/schemas/CrawlStatusCount"
+            },
+            "type": "array",
+            "title": "Domain Counts"
+          },
+          "url_counts": {
+            "items": {
+              "$ref": "#/components/schemas/CrawlStatusCount"
+            },
+            "type": "array",
+            "title": "Url Counts"
+          },
+          "domains_total": {
+            "type": "integer",
+            "title": "Domains Total"
+          },
+          "domains_due": {
+            "type": "integer",
+            "title": "Domains Due"
+          },
+          "latest_job": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/CrawlJob"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "running_job": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/CrawlJob"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "content_type_counts": {
+            "items": {
+              "$ref": "#/components/schemas/CrawlStatusCount"
+            },
+            "type": "array",
+            "title": "Content Type Counts"
+          },
+          "primary_topic_counts": {
+            "items": {
+              "$ref": "#/components/schemas/CrawlStatusCount"
+            },
+            "type": "array",
+            "title": "Primary Topic Counts"
+          },
+          "urls_enriched_total": {
+            "type": "integer",
+            "title": "Urls Enriched Total",
+            "default": 0
+          },
+          "urls_enrichment_pending": {
+            "type": "integer",
+            "title": "Urls Enrichment Pending",
+            "default": 0
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "profile",
+          "domain_counts",
+          "url_counts",
+          "domains_total",
+          "domains_due"
+        ],
+        "title": "CrawlProfileSummary"
+      },
+      "CrawlProfileWithIndex": {
+        "properties": {
+          "profile": {
+            "$ref": "#/components/schemas/CrawlProfile"
+          },
+          "search_index": {
+            "$ref": "#/components/schemas/SearchIndexDefinition"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "profile",
+          "search_index"
+        ],
+        "title": "CrawlProfileWithIndex"
+      },
+      "CrawlStatusCount": {
+        "properties": {
+          "status": {
+            "type": "string",
+            "title": "Status"
+          },
+          "count": {
+            "type": "integer",
+            "title": "Count"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "status",
+          "count"
+        ],
+        "title": "CrawlStatusCount"
+      },
+      "CrawlStructuralSignals": {
+        "properties": {
+          "title": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Title"
+          },
+          "date_published": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Date Published"
+          },
+          "date_modified": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Date Modified"
+          },
+          "author": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Author"
+          },
+          "publisher": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Publisher"
+          },
+          "og_image_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Og Image Url"
+          },
+          "language": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Language"
+          },
+          "content_type_hint": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "article",
+                  "news",
+                  "blog",
+                  "product",
+                  "documentation",
+                  "tutorial",
+                  "guide",
+                  "faq",
+                  "review",
+                  "interview",
+                  "opinion",
+                  "press_release",
+                  "research",
+                  "case_study",
+                  "changelog",
+                  "support",
+                  "catalog",
+                  "landing",
+                  "reference",
+                  "wiki",
+                  "tool",
+                  "forum",
+                  "legal",
+                  "event",
+                  "recipe",
+                  "obituary",
+                  "report",
+                  "transcript",
+                  "directory",
+                  "portfolio",
+                  "other"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Content Type Hint"
+          },
+          "category_hints": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Category Hints"
+          },
+          "topic_hints": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Topic Hints"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "title": "CrawlStructuralSignals"
+      },
+      "CrawlUrl": {
+        "properties": {
+          "crawl_url_id": {
+            "type": "string",
+            "title": "Crawl Url Id"
+          },
+          "crawl_domain_id": {
+            "type": "string",
+            "title": "Crawl Domain Id"
+          },
+          "url": {
+            "type": "string",
+            "title": "Url"
+          },
+          "canonical_url": {
+            "type": "string",
+            "title": "Canonical Url"
+          },
+          "sitemap_lastmod": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Sitemap Lastmod"
+          },
+          "content_hash": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Content Hash"
+          },
+          "extract_content_hash": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Extract Content Hash"
+          },
+          "enriched_content_hash": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Enriched Content Hash"
+          },
+          "enrichment_model": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Enrichment Model"
+          },
+          "enrichment_prompt_version": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Enrichment Prompt Version"
+          },
+          "crawl_status": {
+            "type": "string",
+            "enum": [
+              "pending",
+              "fetching",
+              "indexed",
+              "failed",
+              "skipped"
+            ],
+            "title": "Crawl Status"
+          },
+          "fetch_transport": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "http",
+                  "browser"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Fetch Transport"
+          },
+          "document_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Document Id"
+          },
+          "fetch_attempts": {
+            "type": "integer",
+            "title": "Fetch Attempts",
+            "default": 0
+          },
+          "next_retry_after": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Next Retry After"
+          },
+          "last_error": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Error"
+          },
+          "last_crawled_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Crawled At"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At"
+          },
+          "updated_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Updated At"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "crawl_url_id",
+          "crawl_domain_id",
+          "url",
+          "canonical_url",
+          "crawl_status",
+          "created_at",
+          "updated_at"
+        ],
+        "title": "CrawlUrl"
+      },
+      "CrawlUrlAddRequest": {
+        "properties": {
+          "urls": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "maxItems": 500,
+            "minItems": 1,
+            "title": "Urls"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "urls"
+        ],
+        "title": "CrawlUrlAddRequest"
+      },
+      "CrawlUrlDetail": {
+        "properties": {
+          "url": {
+            "$ref": "#/components/schemas/CrawlUrlListItem"
+          },
+          "extract_title": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Extract Title"
+          },
+          "extract_markdown": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Extract Markdown"
+          },
+          "indexed_content": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/CrawlUrlIndexedContent"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "url"
+        ],
+        "title": "CrawlUrlDetail"
+      },
+      "CrawlUrlEnrichmentSnapshot": {
+        "properties": {
+          "page_title": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Page Title"
+          },
+          "page_summary": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Page Summary"
+          },
+          "filter_metadata": {
+            "$ref": "#/components/schemas/CrawlPageFilterMetadata"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "page_title",
+          "filter_metadata"
+        ],
+        "title": "CrawlUrlEnrichmentSnapshot"
+      },
+      "CrawlUrlIndexedContent": {
+        "properties": {
+          "document_id": {
+            "type": "string",
+            "title": "Document Id"
+          },
+          "document_name": {
+            "type": "string",
+            "title": "Document Name"
+          },
+          "markdown": {
+            "type": "string",
+            "title": "Markdown"
+          },
+          "page_summary": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Page Summary"
+          },
+          "llm_enriched": {
+            "type": "boolean",
+            "title": "Llm Enriched",
+            "default": false
+          },
+          "chunks_count": {
+            "type": "integer",
+            "title": "Chunks Count"
+          },
+          "filter_metadata": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/CrawlPageFilterMetadata"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "metadata": {
+            "additionalProperties": {
+              "$ref": "#/components/schemas/JsonValue"
+            },
+            "type": "object",
+            "title": "Metadata"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "document_id",
+          "document_name",
+          "markdown",
+          "chunks_count"
+        ],
+        "title": "CrawlUrlIndexedContent"
+      },
+      "CrawlUrlListItem": {
+        "properties": {
+          "crawl_url_id": {
+            "type": "string",
+            "title": "Crawl Url Id"
+          },
+          "crawl_domain_id": {
+            "type": "string",
+            "title": "Crawl Domain Id"
+          },
+          "url": {
+            "type": "string",
+            "title": "Url"
+          },
+          "canonical_url": {
+            "type": "string",
+            "title": "Canonical Url"
+          },
+          "sitemap_lastmod": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Sitemap Lastmod"
+          },
+          "content_hash": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Content Hash"
+          },
+          "extract_content_hash": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Extract Content Hash"
+          },
+          "enriched_content_hash": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Enriched Content Hash"
+          },
+          "enrichment_model": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Enrichment Model"
+          },
+          "enrichment_prompt_version": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Enrichment Prompt Version"
+          },
+          "crawl_status": {
+            "type": "string",
+            "enum": [
+              "pending",
+              "fetching",
+              "indexed",
+              "failed",
+              "skipped"
+            ],
+            "title": "Crawl Status"
+          },
+          "fetch_transport": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "http",
+                  "browser"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Fetch Transport"
+          },
+          "document_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Document Id"
+          },
+          "fetch_attempts": {
+            "type": "integer",
+            "title": "Fetch Attempts",
+            "default": 0
+          },
+          "next_retry_after": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Next Retry After"
+          },
+          "last_error": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Error"
+          },
+          "last_crawled_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Crawled At"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At"
+          },
+          "updated_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Updated At"
+          },
+          "domain": {
+            "type": "string",
+            "title": "Domain"
+          },
+          "structural_signals": {
+            "$ref": "#/components/schemas/CrawlStructuralSignals"
+          },
+          "enrichment_snapshot": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/CrawlUrlEnrichmentSnapshot"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "crawl_url_id",
+          "crawl_domain_id",
+          "url",
+          "canonical_url",
+          "crawl_status",
+          "created_at",
+          "updated_at",
+          "domain"
+        ],
+        "title": "CrawlUrlListItem"
+      },
       "CreateCompanyRequest": {
         "properties": {
           "name": {
@@ -4553,6 +6235,148 @@
         ],
         "title": "ListResponse[UserSearchResult]"
       },
+      "MetaSearchProviderStatus": {
+        "properties": {
+          "ok": {
+            "type": "boolean",
+            "title": "Ok"
+          },
+          "latency_ms": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Latency Ms",
+            "default": 0
+          },
+          "results_count": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Results Count",
+            "default": 0
+          },
+          "error": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error"
+          },
+          "selected": {
+            "type": "boolean",
+            "title": "Selected",
+            "default": false
+          },
+          "skipped": {
+            "type": "boolean",
+            "title": "Skipped",
+            "default": false
+          },
+          "skip_reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Skip Reason"
+          },
+          "credential_source": {
+            "type": "string",
+            "enum": [
+              "platform",
+              "company"
+            ],
+            "title": "Credential Source",
+            "default": "platform"
+          },
+          "billing_resource_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Billing Resource Name"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "ok"
+        ],
+        "title": "MetaSearchProviderStatus"
+      },
+      "MetaSearchResponse": {
+        "properties": {
+          "query": {
+            "type": "string",
+            "title": "Query"
+          },
+          "results": {
+            "items": {
+              "$ref": "#/components/schemas/WebSearchResult"
+            },
+            "type": "array",
+            "title": "Results"
+          },
+          "providers": {
+            "additionalProperties": {
+              "$ref": "#/components/schemas/MetaSearchProviderStatus"
+            },
+            "type": "object",
+            "title": "Providers"
+          },
+          "total_count": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Total Count",
+            "default": 0
+          },
+          "has_more": {
+            "type": "boolean",
+            "title": "Has More",
+            "default": false
+          },
+          "offset": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Offset",
+            "default": 0
+          },
+          "limit": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Limit",
+            "default": 0
+          },
+          "serp_cache_key": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Serp Cache Key"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "query",
+          "results",
+          "providers"
+        ],
+        "title": "MetaSearchResponse"
+      },
       "OffsetPage_ApiKey_": {
         "properties": {
           "items": {
@@ -4583,6 +6407,130 @@
           "offset"
         ],
         "title": "OffsetPage[ApiKey]"
+      },
+      "OffsetPage_CrawlDomain_": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/CrawlDomain"
+            },
+            "type": "array",
+            "title": "Items"
+          },
+          "total": {
+            "type": "integer",
+            "title": "Total"
+          },
+          "limit": {
+            "type": "integer",
+            "title": "Limit"
+          },
+          "offset": {
+            "type": "integer",
+            "title": "Offset"
+          }
+        },
+        "type": "object",
+        "required": [
+          "items",
+          "total",
+          "limit",
+          "offset"
+        ],
+        "title": "OffsetPage[CrawlDomain]"
+      },
+      "OffsetPage_CrawlJob_": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/CrawlJob"
+            },
+            "type": "array",
+            "title": "Items"
+          },
+          "total": {
+            "type": "integer",
+            "title": "Total"
+          },
+          "limit": {
+            "type": "integer",
+            "title": "Limit"
+          },
+          "offset": {
+            "type": "integer",
+            "title": "Offset"
+          }
+        },
+        "type": "object",
+        "required": [
+          "items",
+          "total",
+          "limit",
+          "offset"
+        ],
+        "title": "OffsetPage[CrawlJob]"
+      },
+      "OffsetPage_CrawlProfileWithIndex_": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/CrawlProfileWithIndex"
+            },
+            "type": "array",
+            "title": "Items"
+          },
+          "total": {
+            "type": "integer",
+            "title": "Total"
+          },
+          "limit": {
+            "type": "integer",
+            "title": "Limit"
+          },
+          "offset": {
+            "type": "integer",
+            "title": "Offset"
+          }
+        },
+        "type": "object",
+        "required": [
+          "items",
+          "total",
+          "limit",
+          "offset"
+        ],
+        "title": "OffsetPage[CrawlProfileWithIndex]"
+      },
+      "OffsetPage_CrawlUrlListItem_": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/CrawlUrlListItem"
+            },
+            "type": "array",
+            "title": "Items"
+          },
+          "total": {
+            "type": "integer",
+            "title": "Total"
+          },
+          "limit": {
+            "type": "integer",
+            "title": "Limit"
+          },
+          "offset": {
+            "type": "integer",
+            "title": "Offset"
+          }
+        },
+        "type": "object",
+        "required": [
+          "items",
+          "total",
+          "limit",
+          "offset"
+        ],
+        "title": "OffsetPage[CrawlUrlListItem]"
       },
       "OffsetPage_EmbedConfigResponse_": {
         "properties": {
@@ -6986,6 +8934,35 @@
         ],
         "title": "PublicLandingSessionResponse"
       },
+      "PublicSearchSerpMoreRequestBody": {
+        "properties": {
+          "serp_cache_key": {
+            "type": "string",
+            "maxLength": 64,
+            "minLength": 1,
+            "title": "Serp Cache Key"
+          },
+          "offset": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Offset"
+          },
+          "limit": {
+            "type": "integer",
+            "maximum": 25.0,
+            "minimum": 1.0,
+            "title": "Limit",
+            "default": 10
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "serp_cache_key",
+          "offset"
+        ],
+        "title": "PublicSearchSerpMoreRequestBody"
+      },
       "PublicSearchSessionRequest": {
         "properties": {
           "mode": {
@@ -7011,6 +8988,12 @@
             "minimum": 60.0,
             "title": "Expires In Seconds",
             "default": 300
+          },
+          "consume_search_quota": {
+            "type": "boolean",
+            "title": "Consume Search Quota",
+            "description": "True только для полноценного поискового запуска; serp/more и source AI не тратят квоту",
+            "default": true
           }
         },
         "additionalProperties": false,
@@ -7208,6 +9191,147 @@
         ],
         "title": "ScheduledTaskStatus",
         "description": "Статус scheduled task."
+      },
+      "SearchIndexDefinition": {
+        "properties": {
+          "search_index_id": {
+            "type": "string",
+            "title": "Search Index Id"
+          },
+          "company_id": {
+            "type": "string",
+            "title": "Company Id"
+          },
+          "display_name": {
+            "type": "string",
+            "title": "Display Name"
+          },
+          "description": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Description"
+          },
+          "rag_namespace_id": {
+            "type": "string",
+            "title": "Rag Namespace Id"
+          },
+          "rag_collection_id": {
+            "type": "string",
+            "title": "Rag Collection Id"
+          },
+          "enabled": {
+            "type": "boolean",
+            "title": "Enabled"
+          },
+          "search_enabled": {
+            "type": "boolean",
+            "title": "Search Enabled"
+          },
+          "retrieval": {
+            "$ref": "#/components/schemas/SearchIndexRetrievalConfig"
+          },
+          "indexing_profile_key": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Indexing Profile Key"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At"
+          },
+          "updated_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Updated At"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "search_index_id",
+          "company_id",
+          "display_name",
+          "rag_namespace_id",
+          "rag_collection_id",
+          "enabled",
+          "search_enabled",
+          "retrieval",
+          "created_at",
+          "updated_at"
+        ],
+        "title": "SearchIndexDefinition"
+      },
+      "SearchIndexRetrievalConfig": {
+        "properties": {
+          "semantic": {
+            "type": "boolean",
+            "title": "Semantic",
+            "default": true
+          },
+          "lexical": {
+            "type": "boolean",
+            "title": "Lexical",
+            "default": true
+          },
+          "rerank": {
+            "type": "boolean",
+            "title": "Rerank",
+            "default": true
+          },
+          "rrf_k": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Rrf K",
+            "default": 60
+          },
+          "per_channel_top_k": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Per Channel Top K"
+          },
+          "retrieve_limit": {
+            "type": "integer",
+            "maximum": 200.0,
+            "minimum": 10.0,
+            "title": "Retrieve Limit",
+            "default": 120
+          },
+          "snippet_max_chars": {
+            "type": "integer",
+            "maximum": 8000.0,
+            "minimum": 200.0,
+            "title": "Snippet Max Chars",
+            "default": 2000
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "title": "SearchIndexRetrievalConfig"
       },
       "SearchProviderOrderRequest": {
         "properties": {
@@ -8226,6 +10350,25 @@
         "title": "UpdateEmbedConfigRequest",
         "description": "Запрос на обновление конфигурации виджета"
       },
+      "UpsertStats": {
+        "properties": {
+          "inserted": {
+            "type": "integer",
+            "title": "Inserted"
+          },
+          "updated": {
+            "type": "integer",
+            "title": "Updated"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "inserted",
+          "updated"
+        ],
+        "title": "UpsertStats"
+      },
       "UsageType": {
         "type": "string",
         "enum": [
@@ -8596,6 +10739,133 @@
         "type": "object",
         "title": "VoiceProvidersCatalogDTO",
         "description": "Ответ GET .../voice-providers/catalog (без конфиденциальных данных из conf)."
+      },
+      "WebSearchResult": {
+        "properties": {
+          "title": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Title"
+          },
+          "url": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Url"
+          },
+          "snippet": {
+            "type": "string",
+            "title": "Snippet",
+            "default": ""
+          },
+          "display_url": {
+            "type": "string",
+            "title": "Display Url",
+            "default": ""
+          },
+          "provider": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Provider"
+          },
+          "provider_rank": {
+            "type": "integer",
+            "minimum": 1.0,
+            "title": "Provider Rank"
+          },
+          "rank": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Rank",
+            "default": 0
+          },
+          "score": {
+            "type": "number",
+            "minimum": 0.0,
+            "title": "Score",
+            "default": 0.0
+          },
+          "published_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Published At"
+          },
+          "source_type": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Source Type",
+            "default": "organic"
+          },
+          "chunk_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Chunk Id"
+          },
+          "document_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Document Id"
+          },
+          "heading_trail": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Heading Trail"
+          },
+          "search_index_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Search Index Id"
+          },
+          "site_name": {
+            "type": "string",
+            "title": "Site Name",
+            "default": ""
+          },
+          "favicon_url": {
+            "type": "string",
+            "title": "Favicon Url",
+            "default": ""
+          },
+          "preview_image_url": {
+            "type": "string",
+            "title": "Preview Image Url",
+            "default": ""
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "title",
+          "url",
+          "provider",
+          "provider_rank"
+        ],
+        "title": "WebSearchResult"
       }
     }
   },

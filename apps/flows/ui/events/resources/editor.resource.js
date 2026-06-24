@@ -17,7 +17,6 @@
 import { createAsyncOp } from '@platform/lib/events/index.js';
 import { httpRequest } from '@platform/lib/events/http.js';
 import { applyAutoLayoutToBranchData, canvasNeedsAutoLayout } from '../../_helpers/flow-graph-auto-layout.js';
-
 const HISTORY_LIMIT = 50;
 const DEFAULT_VIEWBOX = Object.freeze({ x: 0, y: 0, w: 1600, h: 1000 });
 
@@ -240,8 +239,9 @@ export const editorResource = createAsyncOp({
         currentBranchId: null,
         selectedNodeId: null,
         selectedResourceId: null,
+        openNodePanelIds: [],
+        propertyPanelLayouts: {},
         panelOpen: false,
-        panelExpanded: false,
         executionPanelOpen: false,
         agentExecutionRunning: false,
         activeTool: 'select',
@@ -282,7 +282,7 @@ export const editorResource = createAsyncOp({
         NODE_SELECTED: 'node_selected',
         RESOURCE_SELECTED: 'resource_selected',
         PANEL_CLOSED: 'panel_closed',
-        PANEL_EXPANDED: 'panel_expanded',
+        PROPERTY_PANEL_LAYOUT_SET: 'property_panel_layout_set',
         EXECUTION_PANEL_SET: 'execution_panel_set',
         AGENT_EXECUTION_SET: 'agent_execution_set',
         ACTIVE_TOOL_SET: 'active_tool_set',
@@ -320,7 +320,7 @@ export const editorResource = createAsyncOp({
         selectNode: 'node_selected',
         selectResource: 'resource_selected',
         closePanel: 'panel_closed',
-        togglePanelExpanded: 'panel_expanded',
+        setPropertyPanelLayout: 'property_panel_layout_set',
         setExecutionPanelOpen: 'execution_panel_set',
         setAgentExecutionRunning: 'agent_execution_set',
         setActiveTool: 'active_tool_set',
@@ -399,6 +399,11 @@ export const editorResource = createAsyncOp({
                 multiSelection: [],
                 stickyNotes,
                 pendingNodeToolId: null,
+                selectedNodeId: null,
+                selectedResourceId: null,
+                openNodePanelIds: [],
+                propertyPanelLayouts: {},
+                panelOpen: false,
             };
         }
 
@@ -441,11 +446,33 @@ export const editorResource = createAsyncOp({
         if (t === 'flows/editor/node_selected') {
             const nodeId = typeof p.nodeId === 'string' && p.nodeId.length > 0 ? p.nodeId : null;
             const openToolId = typeof p.openToolId === 'string' && p.openToolId.length > 0 ? p.openToolId : null;
+            const prevNodeId = typeof state.selectedNodeId === 'string' ? state.selectedNodeId : null;
+            let openNodePanelIds = Array.isArray(state.openNodePanelIds) ? [...state.openNodePanelIds] : [];
+            let propertyPanelLayouts = _isPlainObject(state.propertyPanelLayouts)
+                ? { ...state.propertyPanelLayouts }
+                : {};
+            if (prevNodeId && prevNodeId !== nodeId && openNodePanelIds.includes(prevNodeId)) {
+                const prevLayout = _isPlainObject(propertyPanelLayouts[prevNodeId])
+                    ? propertyPanelLayouts[prevNodeId]
+                    : {};
+                propertyPanelLayouts[prevNodeId] = { ...prevLayout, collapsed: true };
+            }
+            if (nodeId) {
+                if (!openNodePanelIds.includes(nodeId)) {
+                    openNodePanelIds.push(nodeId);
+                }
+                const nextLayout = _isPlainObject(propertyPanelLayouts[nodeId])
+                    ? propertyPanelLayouts[nodeId]
+                    : {};
+                propertyPanelLayouts[nodeId] = { ...nextLayout, collapsed: false };
+            }
             return {
                 ...state,
                 selectedNodeId: nodeId,
                 selectedResourceId: null,
-                panelOpen: nodeId !== null,
+                openNodePanelIds,
+                propertyPanelLayouts,
+                panelOpen: nodeId !== null || openNodePanelIds.length > 0,
                 multiSelection: nodeId ? [nodeId] : [],
                 pendingNodeToolId: nodeId ? openToolId : null,
             };
@@ -457,32 +484,61 @@ export const editorResource = createAsyncOp({
                 ...state,
                 selectedResourceId: rid,
                 selectedNodeId: null,
-                panelOpen: rid !== null,
+                panelOpen: rid !== null || (Array.isArray(state.openNodePanelIds) && state.openNodePanelIds.length > 0),
                 multiSelection: [],
                 pendingNodeToolId: null,
             };
         }
 
         if (t === 'flows/editor/panel_closed') {
+            const targetNodeId = typeof p.nodeId === 'string' && p.nodeId.length > 0 ? p.nodeId : null;
+            if (targetNodeId) {
+                const openNodePanelIds = (Array.isArray(state.openNodePanelIds) ? state.openNodePanelIds : [])
+                    .filter((id) => id !== targetNodeId);
+                const propertyPanelLayouts = _isPlainObject(state.propertyPanelLayouts)
+                    ? { ...state.propertyPanelLayouts }
+                    : {};
+                delete propertyPanelLayouts[targetNodeId];
+                const nextSelectedNodeId = state.selectedNodeId === targetNodeId
+                    ? (openNodePanelIds.length > 0 ? openNodePanelIds[openNodePanelIds.length - 1] : null)
+                    : state.selectedNodeId;
+                return {
+                    ...state,
+                    openNodePanelIds,
+                    propertyPanelLayouts,
+                    selectedNodeId: nextSelectedNodeId,
+                    panelOpen: openNodePanelIds.length > 0 || Boolean(state.selectedResourceId),
+                    multiSelection: nextSelectedNodeId ? [nextSelectedNodeId] : [],
+                    pendingNodeToolId: nextSelectedNodeId ? state.pendingNodeToolId : null,
+                };
+            }
             return {
                 ...state,
                 panelOpen: false,
                 selectedNodeId: null,
                 selectedResourceId: null,
+                openNodePanelIds: [],
+                propertyPanelLayouts: {},
                 multiSelection: [],
                 pendingNodeToolId: null,
             };
         }
 
-        if (t === 'flows/editor/pending_node_tool_cleared') {
-            return { ...state, pendingNodeToolId: null };
+        if (t === 'flows/editor/property_panel_layout_set') {
+            const nodeId = typeof p.nodeId === 'string' && p.nodeId.length > 0 ? p.nodeId : null;
+            const layout = p.layout;
+            if (!nodeId || !layout || typeof layout !== 'object') {
+                return state;
+            }
+            const propertyPanelLayouts = _isPlainObject(state.propertyPanelLayouts)
+                ? { ...state.propertyPanelLayouts }
+                : {};
+            propertyPanelLayouts[nodeId] = { ...layout };
+            return { ...state, propertyPanelLayouts };
         }
 
-        if (t === 'flows/editor/panel_expanded') {
-            if (typeof p.expanded === 'boolean') {
-                return { ...state, panelExpanded: p.expanded };
-            }
-            return { ...state, panelExpanded: !state.panelExpanded };
+        if (t === 'flows/editor/pending_node_tool_cleared') {
+            return { ...state, pendingNodeToolId: null };
         }
 
         if (t === 'flows/editor/execution_panel_set') {
@@ -820,7 +876,18 @@ export const editorResource = createAsyncOp({
                 ...state,
                 branchData: { ...data, nodes: nextNodes, edges: nextEdges, entry: data.entry === nodeId ? null : data.entry },
                 selectedNodeId: state.selectedNodeId === nodeId ? null : state.selectedNodeId,
-                panelOpen: state.selectedNodeId === nodeId ? false : state.panelOpen,
+                openNodePanelIds: (Array.isArray(state.openNodePanelIds) ? state.openNodePanelIds : [])
+                    .filter((id) => id !== nodeId),
+                propertyPanelLayouts: (() => {
+                    const layouts = _isPlainObject(state.propertyPanelLayouts)
+                        ? { ...state.propertyPanelLayouts }
+                        : {};
+                    delete layouts[nodeId];
+                    return layouts;
+                })(),
+                panelOpen: (Array.isArray(state.openNodePanelIds) ? state.openNodePanelIds : [])
+                    .filter((id) => id !== nodeId).length > 0
+                    || (state.selectedNodeId !== null && state.selectedNodeId !== nodeId),
                 multiSelection: state.multiSelection.filter((id) => id !== nodeId),
                 breakpointNodeIds: _withoutId(state.breakpointNodeIds, nodeId),
                 runningNodeIds: _withoutId(state.runningNodeIds, nodeId),

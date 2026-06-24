@@ -21,6 +21,7 @@ export class FlowsPropertyPanel extends PlatformElement {
     static properties = {
         flowId: { type: String },
         branchId: { type: String },
+        nodeId: { type: String },
     };
 
     static styles = [
@@ -51,6 +52,7 @@ export class FlowsPropertyPanel extends PlatformElement {
         super();
         this.flowId = '';
         this.branchId = 'base';
+        this.nodeId = '';
         this._editor = this.useOp('flows/editor');
         this._bulkDelete = this.useOp('flows/editor_bulk_delete');
     }
@@ -136,7 +138,6 @@ export class FlowsPropertyPanel extends PlatformElement {
             : [];
         const previewExecutionState = state.previewExecutionState;
         const dataflowNode = isPlainObject(state.dataflow?.nodes?.[nodeId]) ? state.dataflow.nodes[nodeId] : null;
-        const expanded = state.panelExpanded === true;
         return renderFlowsNodeEditorSurface({
             node,
             nodeId,
@@ -146,7 +147,6 @@ export class FlowsPropertyPanel extends PlatformElement {
             graphNodes,
             previewExecutionState,
             dataflowNode,
-            expanded,
             embedded: false,
             onChange: (e) => this._onChange(e),
             onDelete: (e) => this._onDeleteNode(e),
@@ -156,7 +156,9 @@ export class FlowsPropertyPanel extends PlatformElement {
 
     render() {
         const state = asObject(this._editor.state);
-        const nodeId = state.selectedNodeId;
+        const nodeId = typeof this.nodeId === 'string' && this.nodeId.length > 0
+            ? this.nodeId
+            : state.selectedNodeId;
         if (!nodeId) {
             return html`
                 <div style="padding: var(--space-3); color: var(--text-tertiary)">${this.t('property_panel.select_node')}</div>

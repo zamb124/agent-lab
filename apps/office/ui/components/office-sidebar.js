@@ -16,29 +16,33 @@
  * Активный пункт — по `state.router.routeKey`. В режиме editor (route
  * `document_editor`) NS-select disabled и появляется кнопка «назад».
  *
- * Кнопки New empty / Upload открывают модалки `office.document_create_empty`
- * / `office.document_upload` с активным catalogId, который читается из
- * slice `state.officeDocuments.activeCatalogId`. Если активный каталог
- * не выбран — кнопки disabled (бэкенд требует явный catalog_id).
+ * На маршруте `documents_list` (и `documents_recent`) — nav-rail и дерево
+ * каталогов проводника внутри shell-сайдбара. Настройки каталога — контекстное
+ * меню на пункте дерева (ПКМ или ⋮).
+ *
+ * Создание и загрузка документов — в toolbar file explorer (`office-file-toolbar`).
  */
 
 import { html, css } from 'lit';
 import { PlatformElement } from '@platform/lib/platform-element/index.js';
 import { sidebarStyles, sidebarNavItemStyles } from '@platform/lib/styles/shared/sidebar.styles.js';
-import { buttonStyles } from '@platform/lib/styles/shared/button.styles.js';
 import {
     getPlatformNamespaceSidebarSelection,
     setPlatformNamespaceSelection,
 } from '@platform/lib/utils/platform-namespace.js';
 import { readShellSidebarCollapsed } from '@platform/lib/utils/shell-sidebar-preference.js';
+import { platformConfirm } from '@platform/lib/components/platform-confirm-modal.js';
 import '@platform/lib/components/layout/platform-service-sidebar.js';
 import '@platform/lib/components/platform-icon.js';
 import '@platform/lib/components/platform-user.js';
 import '@platform/lib/components/platform-notification-manager.js';
 import '@platform/lib/components/platform-deployment-version.js';
 import '@platform/lib/components/layout/platform-sidebar-namespace-select.js';
+import './office-explorer-nav-rail.js';
+import './office-explorer-tree.js';
 
 const NAMESPACES_NAME = 'office/namespaces';
+const CATALOGS_NAME = 'office/catalogs';
 const INTEGRATION_OP = 'office/integration_status';
 const DOCUMENTS_OP = 'office/documents';
 
@@ -48,15 +52,21 @@ export class OfficeSidebar extends PlatformElement {
     static properties = {
         collapsed: { type: Boolean, reflect: true },
         mobileOpen: { type: Boolean, reflect: true, attribute: 'mobile-open' },
+        explorerNav: { type: Boolean, reflect: true, attribute: 'explorer-nav' },
     };
 
     static styles = [
         PlatformElement.styles,
         sidebarStyles,
         sidebarNavItemStyles,
-        buttonStyles,
         css`
-            :host { display: block; height: 100%; }
+            :host {
+                display: block;
+                height: 100%;
+            }
+            :host([explorer-nav]) platform-service-sidebar {
+                --sidebar-width: 18.75rem;
+            }
             platform-service-sidebar {
                 --sidebar-logo-text-weight: 700;
                 --sidebar-logo-text-gradient: var(--documents-title-gradient);
@@ -64,14 +74,26 @@ export class OfficeSidebar extends PlatformElement {
                 --sidebar-logo-text-fill: transparent;
             }
             .office-sidebar-footer {
-                display: flex; flex-direction: column;
+                display: flex;
+                flex-direction: column;
                 align-items: stretch;
-                gap: 6px; width: 100%;
+                gap: 6px;
+                width: 100%;
                 min-width: 0;
                 box-sizing: border-box;
             }
+            .explorer-shell {
+                display: flex;
+                flex-direction: column;
+                flex: 1;
+                min-height: 0;
+                margin-top: var(--space-2);
+                padding-top: var(--space-2);
+                border-top: 1px solid var(--glass-border-subtle);
+            }
             .nav-item {
-                display: flex; align-items: center;
+                display: flex;
+                align-items: center;
                 gap: var(--space-3);
                 padding: var(--space-3);
                 margin-bottom: var(--space-1);
@@ -87,12 +109,6 @@ export class OfficeSidebar extends PlatformElement {
                 text-align: left;
             }
             .nav-item:hover { background: var(--glass-solid-subtle); }
-            .nav-item.active {
-                background: var(--accent-subtle);
-                color: var(--accent);
-                font-weight: 600;
-            }
-            .nav-item:disabled { opacity: 0.4; cursor: not-allowed; }
             .nav-label {
                 flex: 1;
                 font-size: var(--text-base);
@@ -101,12 +117,18 @@ export class OfficeSidebar extends PlatformElement {
                 overflow: hidden;
                 text-overflow: ellipsis;
             }
+            office-explorer-tree {
+                flex: 1;
+                min-height: 0;
+            }
             platform-service-sidebar[collapsed] .nav-label { display: none; }
             platform-service-sidebar[collapsed] .nav-item {
                 justify-content: center;
                 padding: var(--space-3);
             }
             platform-service-sidebar[collapsed] platform-sidebar-namespace-select { display: none; }
+            platform-service-sidebar[collapsed] .explorer-shell { display: none; }
+            platform-service-sidebar[collapsed] .editor-back { display: none; }
         `,
     ];
 
@@ -114,9 +136,12 @@ export class OfficeSidebar extends PlatformElement {
         super();
         this.collapsed = readShellSidebarCollapsed();
         this.mobileOpen = false;
+        this.explorerNav = false;
         this._namespaces = this.useResource(NAMESPACES_NAME, { autoload: true });
+        this._catalogs = this.useResource(CATALOGS_NAME, { autoload: true });
         this._integration = this.useOp(INTEGRATION_OP);
         this._documents = this.useOp(DOCUMENTS_OP);
+        this._move = this.useOp('office/document_move');
         this._routeSel = this.select((s) => s.router.routeKey);
         this._authSel = this.select((s) => s.auth.user);
     }
@@ -126,6 +151,11 @@ export class OfficeSidebar extends PlatformElement {
         if (!this._integration.lastResult && !this._integration.busy) {
             this._integration.run(null);
         }
+    }
+
+    updated(changed) {
+        super.updated(changed);
+        this.explorerNav = this._showExplorerNav();
     }
 
     _shell() { return this.renderRoot ? this.renderRoot.querySelector('platform-service-sidebar') : null; }
@@ -140,8 +170,12 @@ export class OfficeSidebar extends PlatformElement {
         const v = this._routeSel.value;
         return typeof v === 'string' && v !== '' ? v : 'documents_list';
     }
-    _isList() { return this._routeKey() === 'documents_list'; }
-    _isCatalogs() { return this._routeKey() === 'documents_catalogs'; }
+
+    _showExplorerNav() {
+        const key = this._routeKey();
+        return key === 'documents_list' || key === 'documents_recent';
+    }
+
     _isEditor() { return this._routeKey() === 'document_editor'; }
 
     _companyId() {
@@ -149,15 +183,17 @@ export class OfficeSidebar extends PlatformElement {
         return u && typeof u.company_id === 'string' ? u.company_id.trim() : '';
     }
 
+    _catalogItems() {
+        return this._catalogs.items;
+    }
+
     _activeCatalogId() {
         const state = this._documents.state;
         if (typeof state.activeCatalogId === 'string' && state.activeCatalogId.length > 0) {
             return state.activeCatalogId;
         }
-        if (Array.isArray(state.loadedCatalogIds) && state.loadedCatalogIds.length === 1) {
-            return state.loadedCatalogIds[0];
-        }
-        return '';
+        const cats = this._catalogItems();
+        return cats.length > 0 ? cats[0].catalog_id : '';
     }
 
     _namespaceEnumConfig(items, noNamespaces) {
@@ -221,23 +257,125 @@ export class OfficeSidebar extends PlatformElement {
         this.closeMobile();
     }
 
-    _openEmpty() {
-        const catalogId = this._activeCatalogId();
-        if (!catalogId) return;
-        this.openModal('office.document_create_empty', { catalogId, openAfterCreate: true });
+    _onExplorerViewChange(e) {
+        const explorerView = e.detail && e.detail.explorerView;
+        if (typeof explorerView !== 'string') return;
+        this._documents.setExplorerView({ explorerView });
+        this._documents.clearBindingSelection(null);
     }
 
-    _openUpload() {
-        const catalogId = this._activeCatalogId();
-        if (!catalogId) return;
-        this.openModal('office.document_upload', { catalogId, openAfterUpload: true });
+    _onCatalogSelect(e) {
+        const catalogId = e.detail && e.detail.catalogId;
+        if (typeof catalogId !== 'string') return;
+        this._documents.setExplorerView({ explorerView: 'catalog' });
+        this._documents.setActiveCatalog({ catalogId });
+        this._documents.setFilterCatalogs({ catalogIds: [catalogId] });
+        this._documents.setCatalogExpanded({ catalogId, expanded: true });
+        this._documents.clearBindingSelection(null);
     }
 
-    _reloadList() {
-        const ids = this._documents.state.loadedCatalogIds;
-        if (Array.isArray(ids) && ids.length > 0) {
-            this._documents.run({ catalogIds: ids });
+    _onToggleCatalog(e) {
+        const catalogId = e.detail && e.detail.catalogId;
+        const expanded = e.detail && e.detail.expanded === true;
+        if (typeof catalogId !== 'string') return;
+        this._documents.setCatalogExpanded({ catalogId, expanded });
+    }
+
+    _onCreateCatalog(e) {
+        const parentCatalogId = e.detail && e.detail.parentCatalogId;
+        this.openModal('office.catalog_create', {
+            parentCatalogId: typeof parentCatalogId === 'string' ? parentCatalogId : '',
+        });
+    }
+
+    _onMoveToCatalog(e) {
+        const bindingId = e.detail && e.detail.bindingId;
+        const catalogId = e.detail && e.detail.catalogId;
+        if (typeof bindingId !== 'string' || typeof catalogId !== 'string') {
+            return;
         }
+        this._move.run({ bindingId, catalogId });
+    }
+
+    async _onCatalogAction(e) {
+        const action = e.detail && e.detail.action;
+        const catalog = e.detail && e.detail.catalog;
+        if (typeof action !== 'string' || !catalog) {
+            return;
+        }
+        if (action === 'edit') {
+            this.openModal('office.catalog_edit', {
+                catalogId: catalog.catalog_id,
+                title: catalog.title,
+                isPublic: Boolean(catalog.is_public),
+            });
+            return;
+        }
+        if (action === 'members') {
+            this.openModal('office.catalog_members', {
+                catalogId: catalog.catalog_id,
+                catalogTitle: catalog.title,
+                isPublic: Boolean(catalog.is_public),
+            });
+            return;
+        }
+        if (action === 'access') {
+            this.openModal('office.access', {
+                resourceKind: 'catalog',
+                resourceId: catalog.catalog_id,
+                resourceTitle: catalog.title,
+            });
+            return;
+        }
+        if (action === 'rag') {
+            this.openModal('office.catalog_rag', {
+                catalogId: catalog.catalog_id,
+                catalogTitle: catalog.title,
+            });
+            return;
+        }
+        if (action === 'delete') {
+            const ok = await platformConfirm(
+                this.t('catalogs.deleteConfirm', { title: catalog.title }),
+                {
+                    title: this.t('catalogs.deleteConfirmTitle'),
+                    variant: 'danger',
+                    confirmText: this.t('list.delete'),
+                    cancelText: this.t('document_upload_modal.cancel'),
+                    confirmVariant: 'danger',
+                },
+            );
+            if (ok !== true) {
+                return;
+            }
+            await this._catalogs.remove(catalog.catalog_id);
+            this._documents.clearFilter(null);
+        }
+    }
+
+    _renderExplorerNav() {
+        if (!this._showExplorerNav()) return '';
+        const cats = this._catalogItems();
+        const state = this._documents.state;
+        return html`
+            <div class="explorer-shell" data-hide-collapsed>
+                <office-explorer-nav-rail
+                    active-view=${state.explorerView}
+                    deleted-enabled
+                    @view-change=${this._onExplorerViewChange}
+                ></office-explorer-nav-rail>
+                <office-explorer-tree
+                    .catalogs=${cats}
+                    active-catalog-id=${this._activeCatalogId()}
+                    .expandedCatalogIds=${state.expandedCatalogIds || []}
+                    @select-catalog=${this._onCatalogSelect}
+                    @toggle-catalog=${this._onToggleCatalog}
+                    @create-catalog=${this._onCreateCatalog}
+                    @catalog-action=${this._onCatalogAction}
+                    @move-to-catalog=${this._onMoveToCatalog}
+                ></office-explorer-tree>
+            </div>
+        `;
     }
 
     render() {
@@ -246,18 +384,15 @@ export class OfficeSidebar extends PlatformElement {
         const sidebarSel = getPlatformNamespaceSidebarSelection(companyId);
         this._ensureExplicitNamespace(items, sidebarSel, companyId);
         const isEditor = this._isEditor();
-        const integrationConfigured = this._integration.lastResult
-            ? Boolean(this._integration.lastResult.configured)
-            : true;
-        const actionsDisabled = !integrationConfigured || !this._activeCatalogId();
-        const refreshDisabled = !this._documents.state.loadedCatalogIds.length;
         const noNamespaces = items.length === 0;
         const nsValue = this._namespaceFieldValue(sidebarSel, items);
         const nsConfig = this._namespaceEnumConfig(items, noNamespaces);
+        const sidebarWidth = this._showExplorerNav() ? '300px' : '280px';
         return html`
             <platform-service-sidebar
                 logo-src="/static/core/assets/service_logos/documents_logo.svg"
                 logo-text=${this.t('sidebar.title')}
+                width=${sidebarWidth}
                 ?logo-opens-services=${true}
                 ?collapsed=${this.collapsed}
                 ?mobile-open=${this.mobileOpen}
@@ -276,47 +411,15 @@ export class OfficeSidebar extends PlatformElement {
                         @add-request=${this._openCreateNamespaceModal}
                     ></platform-sidebar-namespace-select>
                 </div>
-                <button class="nav-item ${this._isList() ? 'active' : ''}"
-                        type="button"
-                        @click=${() => this._navigateTo('documents_list')}>
-                    <platform-icon name="list" size="18"></platform-icon>
-                    <span class="nav-label">${this.t('sidebar.navList')}</span>
-                </button>
-                <button class="nav-item ${this._isCatalogs() ? 'active' : ''}"
-                        type="button"
-                        @click=${() => this._navigateTo('documents_catalogs')}>
-                    <platform-icon name="folder" size="18"></platform-icon>
-                    <span class="nav-label">${this.t('sidebar.navCatalogs')}</span>
-                </button>
                 ${isEditor ? html`
-                    <button class="nav-item"
+                    <button class="nav-item editor-back"
                             type="button"
                             @click=${() => this._navigateTo('documents_list')}>
                         <platform-icon name="chevron-left" size="18"></platform-icon>
                         <span class="nav-label">${this.t('sidebar.navBack')}</span>
                     </button>
                 ` : ''}
-                <button class="nav-item"
-                        type="button"
-                        ?disabled=${actionsDisabled}
-                        @click=${this._openEmpty}>
-                    <platform-icon name="plus" size="18"></platform-icon>
-                    <span class="nav-label">${this.t('sidebar.navNew')}</span>
-                </button>
-                <button class="nav-item"
-                        type="button"
-                        ?disabled=${actionsDisabled}
-                        @click=${this._openUpload}>
-                    <platform-icon name="paperclip" size="18"></platform-icon>
-                    <span class="nav-label">${this.t('sidebar.navUpload')}</span>
-                </button>
-                <button class="nav-item"
-                        type="button"
-                        ?disabled=${refreshDisabled || isEditor || this._isCatalogs()}
-                        @click=${this._reloadList}>
-                    <platform-icon name="refresh" size="18"></platform-icon>
-                    <span class="nav-label">${this.t('sidebar.navRefresh')}</span>
-                </button>
+                ${this._renderExplorerNav()}
                 <div slot="footer" class="office-sidebar-footer">
                     <platform-user block>
                         <platform-notification-manager slot="user-toolbar"></platform-notification-manager>

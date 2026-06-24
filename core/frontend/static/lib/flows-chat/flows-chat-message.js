@@ -2,6 +2,7 @@ import { html, css, nothing } from '../lit-shim.js';
 import { unsafeHTML } from '../unsafe-html-shim.js';
 import { PlatformElement } from '../platform-element/index.js';
 import '../components/platform-icon.js';
+import '../components/platform-work-item-badge.js';
 import '../components/platform-help-hint.js';
 import '../components/platform-assistant-message-actions.js';
 import { formatFileSize } from '../utils/format-file-size.js';
@@ -1100,6 +1101,7 @@ export class FlowsChatMessage extends PlatformElement {
             return nothing;
         }
         const kind = asString(this.inputRequired.interruptKind);
+        const workItemId = asString(this.inputRequired.workItemId);
         const banner = kind === 'oauth_required'
             ? this._label('interrupt_oauth_banner', 'External service authorization required')
             : kind === 'operator_task'
@@ -1109,6 +1111,14 @@ export class FlowsChatMessage extends PlatformElement {
         return html`
             <div class="input-required">
                 ${banner ? html`<div class="input-required-banner">${banner}</div>` : nothing}
+                ${kind === 'operator_task' && workItemId.length > 0
+                    ? html`<platform-work-item-badge
+                        work-item-id=${workItemId}
+                        variant="chip"
+                        size="sm"
+                        interactive
+                    ></platform-work-item-badge>`
+                    : nothing}
                 <div class="markdown">${this._markdownTemplate(asString(this.inputRequired.question))}</div>
                 ${kind === 'oauth_required' && authUrl
                     ? html`

@@ -34,11 +34,11 @@ from apps.flows.src.api.v1 import api_v1_router  # noqa: E402
 from apps.flows.src.container import FlowContainer, get_container  # noqa: E402
 from apps.flows.src.container_contracts import as_flow_runtime_container  # noqa: E402
 from apps.flows.src.middleware.embed_dynamic_cors import EmbedDynamicCorsMiddleware  # noqa: E402
-from apps.flows.src.realtime import register_flows_ws_commands  # noqa: E402
 from apps.flows.src.services.flows_loader import (  # noqa: E402
     load_flows_to_db,
     load_tools_to_db,
 )
+from apps.flows.src.services.hitl_demo_queue import ensure_example_hitl_queue  # noqa: E402
 from apps.flows.src.services.landing_bundle_dev_sync import (  # noqa: E402
     sync_landing_public_demo_flows_from_bundles,
 )
@@ -46,7 +46,6 @@ from apps.flows.src.services.mcp_sync import (  # noqa: E402
     ensure_default_mcp_servers_for_company,
     sync_auto_mcp_servers_for_company,
 )
-from apps.flows.src.services.operator_demo_queue import ensure_example_hitl_queue  # noqa: E402
 from apps.flows.src.tasks.company_init_tasks import init_company_resources  # noqa: E402
 from apps.flows.src.tasks.flow_tasks import process_flow_task  # noqa: E402
 from apps.flows.src.triggers.dev_polling import start_dev_polling, stop_dev_polling  # noqa: E402
@@ -77,7 +76,6 @@ _FLOWS_DEV_CORS_ORIGIN_REGEX = (
 
 async def on_startup(_app: FastAPI, container: FlowContainer, settings: FlowSettings) -> None:
     """Логика при старте сервиса flows."""
-    register_flows_ws_commands()
 
     async def _flow_resume_via_taskiq(
         *,
@@ -185,7 +183,7 @@ async def on_startup(_app: FastAPI, container: FlowContainer, settings: FlowSett
                     mcp_err,
                     exc_info=True,
                 )
-            await ensure_example_hitl_queue(container.operator_repository, "system")
+            await ensure_example_hitl_queue(container.work_item_service, "system")
         except Exception as e:
             logger.error(f"Ошибка запуска миграции в system: {e}", exc_info=True)
         finally:

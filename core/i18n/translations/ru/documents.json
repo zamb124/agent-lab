@@ -1,13 +1,15 @@
 {
     "routes": {
         "documents_list": "Документы",
+        "documents_recent": "Недавние",
         "platform_services": "Сервисы",
         "documents_catalogs": "Каталоги",
-        "document_editor": "Редактор"
+        "document_editor": "Редактор",
+        "documents_public_preview": "Общий доступ"
     },
     "bottom_nav": {
         "documents": "Файлы",
-        "catalogs": "Каталоги",
+        "recent": "Недавние",
         "profile": "Профиль"
     },
     "workspace_picker": {
@@ -44,13 +46,27 @@
         "cardsAria": "Список документов",
         "colTitle": "Название",
         "colCreated": "Создан",
+        "colSize": "Размер",
+        "colUpdated": "Изменён",
         "colAuthor": "Автор",
         "creatorAria": "Автор: {{name}}",
         "colType": "Тип",
         "docType": {
             "word": "Текст",
             "cell": "Таблица",
-            "slide": "Презентация"
+            "slide": "Презентация",
+            "office_doc": "Текст",
+            "spreadsheet": "Таблица",
+            "presentation": "Презентация",
+            "pdf": "PDF",
+            "text": "Текст",
+            "image": "Изображение",
+            "audio": "Аудио",
+            "video": "Видео",
+            "archive": "Архив",
+            "email": "Почта",
+            "ebook": "Книга",
+            "unknown": "Файл"
         },
         "colActions": "Действия",
         "catalogUnknown": "Каталог",
@@ -69,9 +85,151 @@
         "deleteConfirmTitle": "Удаление документа",
         "deleteConfirm": "Удалить документ «{{title}}»?"
     },
+    "explorer": {
+        "catalogsTitle": "Каталоги",
+        "manageCatalogs": "Управление каталогами",
+        "noCatalogsInline": "Каталогов пока нет",
+        "dropOverlay": "Отпустите файл для загрузки",
+        "emptyDropHint": "Перетащите файл сюда или нажмите «Загрузить файл» в панели инструментов.",
+        "catalogPickerTitle": "Выбор каталога",
+        "upload": {
+            "uploading": "Загрузка…",
+            "done": "Готово",
+            "failed": "Ошибка"
+        }
+    },
+    "nav": {
+        "sectionViews": "Разделы",
+        "sectionRecentPlaceholder": "Недавние открытия",
+        "allDocuments": "Все документы",
+        "recent": "Недавние",
+        "starred": "Избранное",
+        "shared": "Общий доступ",
+        "deleted": "Удалённые",
+        "star": "В избранное",
+        "unstar": "Убрать из избранного",
+        "comingSoon": "Скоро"
+    },
+    "toolbar": {
+        "searchPlaceholder": "Поиск по названию…",
+        "viewToggleAria": "Режим отображения",
+        "refresh": "Обновить",
+        "moreActions": "Ещё",
+        "searchModeAria": "Режим поиска",
+        "searchModeFiles": "Файлы",
+        "searchModeSemantic": "Семантика"
+    },
+    "tree": {
+        "newSubcatalog": "Подкаталог",
+        "catalogMenu": "Настройки каталога"
+    },
+    "catalog_context_menu": {
+        "edit": "Редактировать",
+        "access": "Доступ",
+        "members": "Доступ",
+        "rag": "RAG-индексация",
+        "delete": "Удалить"
+    },
+    "catalog_rag_modal": {
+        "header": "RAG-индексация",
+        "header_with_title": "RAG: {{title}}",
+        "loading": "Загрузка статуса…",
+        "enabled_label": "Индексировать каталог в RAG",
+        "enabled_hint": "Документы каталога становятся доступны в семантическом поиске.",
+        "updated_at": "Последняя индексация: {{value}}",
+        "updated_never": "Ещё не индексировался",
+        "totals_ready": "Готово",
+        "totals_pending": "В очереди",
+        "totals_failed": "Ошибки",
+        "totals_absent": "Не в индексе",
+        "include_subcatalogs_label": "Индексировать вложенные каталоги",
+        "include_subcatalogs_hint": "Расширяет область поиска, статуса и переиндексации на проиндексированные подкаталоги.",
+        "subtree_scope_hint": "Поиск и статус учитывают текущий каталог и проиндексированные подкаталоги.",
+        "current_catalog_scope_hint": "Поиск и статус только по текущему каталогу.",
+        "rebuild": "Переиндексировать",
+        "close": "Закрыть"
+    },
+    "semantic_search": {
+        "loading": "Ищем…",
+        "empty_query": "Введите запрос для семантического поиска",
+        "no_results": "Ничего не найдено"
+    },
+    "breadcrumbs": {
+        "aria": "Путь в каталоге"
+    },
+    "view": {
+        "list": "Список",
+        "grid": "Сетка"
+    },
+    "details": {
+        "title": "Сведения",
+        "catalog": "Каталог",
+        "catalogSettings": "Настройки каталога",
+        "fileCount": "Файлы",
+        "subcatalogCount": "Подкаталоги",
+        "visibility": "Доступ",
+        "catalogPublic": "Общий для пространства",
+        "catalogPrivate": "Только участники",
+        "owner": "Владелец",
+        "type": "Тип",
+        "size": "Размер",
+        "updated": "Изменён",
+        "created": "Создан"
+    },
+    "bulk": {
+        "selected": "Выбрано: {{count}}"
+    },
+    "trash": {
+        "restore": "Восстановить",
+        "deletePermanent": "Удалить навсегда",
+        "permanentConfirmTitle": "Безвозвратное удаление",
+        "permanentConfirm": "Удалить навсегда «{{title}}»?"
+    },
+    "share": {
+        "copyLink": "Скопировать ссылку"
+    },
+    "access": {
+        "modalTitle": "Доступ — {{title}}",
+        "loading": "Загрузка настроек доступа…",
+        "resourceTitle": "Ресурс",
+        "companySection": "Компания",
+        "companyVisible": "Доступно всей компании в этом пространстве",
+        "membersSection": "Участники",
+        "memberSearchPlaceholder": "Поиск участников…",
+        "removeMember": "Удалить",
+        "publicLinkSection": "Публичная ссылка",
+        "linkEnabled": "Любой по ссылке",
+        "linkPermission": "Права по ссылке",
+        "permissionView": "Только просмотр",
+        "permissionEdit": "Редактирование",
+        "enabled": "Вкл",
+        "disabled": "Выкл",
+        "copyLink": "Скопировать ссылку",
+        "rotateLink": "Обновить ссылку",
+        "linkCopied": "Ссылка скопирована",
+        "menuShare": "Доступ",
+        "save": "Сохранить",
+        "cancel": "Отмена"
+    },
+    "public_preview": {
+        "title": "Общий доступ",
+        "loading": "Загрузка…",
+        "invalidToken": "Некорректная ссылка",
+        "notFound": "Ссылка не найдена",
+        "openFailed": "Не удалось открыть файл",
+        "catalogEmpty": "В каталоге нет файлов с публичной ссылкой"
+    },
+    "links": {
+        "section": "Связи платформы",
+        "createWorkItem": "Создать задачу WorkItem",
+        "attachCrm": "Привязать к CRM",
+        "openSync": "Обсудить в Sync"
+    },
     "catalogs": {
         "heading": "Каталоги документов",
         "create": "Новый каталог",
+        "edit": "Редактировать",
+        "members": "Участники",
         "fileCount": "Файлов: {{count}}",
         "manageAccess": "Доступ",
         "delete": "Удалить",
@@ -79,7 +237,8 @@
         "emptyStateHint": "Создайте каталог, чтобы упорядочить документы.",
         "tagPublic": "Общий",
         "tagPrivate": "По списку",
-        "deleteConfirm": "Удалить каталог «{{title}}»? В нём не должно быть файлов."
+        "deleteConfirmTitle": "Удаление каталога",
+        "deleteConfirm": "Удалить каталог «{{title}}»? В нём не должно быть файлов и подкаталогов."
     },
     "editor": {
         "back": "К списку",
@@ -161,12 +320,18 @@
         "saving": "Создаём…"
     },
     "document_upload_modal": {
-        "header": "Загрузить документ",
-        "drop_here": "Перетащите файл сюда",
-        "drop_or_choose": "или нажмите для выбора файла",
-        "label_title": "Название (необязательно)",
-        "title_placeholder": "Будет взято из имени файла, если оставить пустым",
-        "selected_file": "Выбранный файл: {{name}}",
+        "header": "Загрузить документы",
+        "drop_here": "Перетащите файлы сюда",
+        "drop_or_choose": "или нажмите для выбора файлов",
+        "files_count": "Выбрано файлов: {{count}}",
+        "remove_file": "Убрать из списка",
+        "status_uploading": "Загрузка…",
+        "status_done": "Загружен",
+        "status_failed": "Ошибка",
+        "submit_count": "Загрузить ({{count}})",
+        "upload_complete": "Загружено файлов: {{count}}",
+        "upload_partial": "Загружено: {{done}}, ошибок: {{failed}}",
+        "upload_failed": "Не удалось загрузить файлы",
         "cancel": "Отмена",
         "submit": "Загрузить",
         "saving": "Загружаем…"
@@ -191,6 +356,24 @@
         "document_renamed": "Название обновлено",
         "document_rename_failed": "Не удалось переименовать документ",
         "document_deleted": "Документ удалён",
-        "document_delete_failed": "Не удалось удалить документ"
+        "document_delete_failed": "Не удалось удалить документ",
+        "document_restored": "Документ восстановлен",
+        "document_restore_failed": "Не удалось восстановить документ",
+        "document_permanent_deleted": "Документ удалён навсегда",
+        "document_permanent_delete_failed": "Не удалось удалить документ навсегда",
+        "document_moved": "Документ перемещён",
+        "document_move_failed": "Не удалось переместить документ",
+        "share_created": "Ссылка скопирована",
+        "share_create_failed": "Не удалось создать ссылку",
+        "access_updated": "Доступ обновлён",
+        "access_update_failed": "Не удалось обновить доступ",
+        "access_link_rotated": "Публичная ссылка обновлена",
+        "access_link_rotate_failed": "Не удалось обновить публичную ссылку",
+        "catalog_rag_enabled": "RAG-индексация включена",
+        "catalog_rag_enable_failed": "Не удалось включить RAG-индексацию",
+        "catalog_rag_disabled": "RAG-индексация отключена",
+        "catalog_rag_disable_failed": "Не удалось отключить RAG-индексацию",
+        "catalog_rag_rebuild_started": "Переиндексация запущена",
+        "catalog_rag_rebuild_failed": "Не удалось запустить переиндексацию"
     }
 }

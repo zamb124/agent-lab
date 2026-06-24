@@ -4,9 +4,9 @@ from __future__ import annotations
 
 from collections.abc import Awaitable, Callable, Mapping, Sequence
 from typing import TYPE_CHECKING, Protocol, TypeAlias, TypedDict, cast
-from uuid import UUID
 
 from core.types import JsonObject, JsonValue
+from core.worktracker.service import WorkItemService
 
 if TYPE_CHECKING:
     from apps.flows.src.db import (
@@ -16,7 +16,6 @@ if TYPE_CHECKING:
         ToolRepository,
     )
     from apps.flows.src.db.mcp_repository import MCPServerRepository
-    from apps.flows.src.db.operator_repository import OperatorRepository
     from apps.flows.src.durable_execution import DurableWorkflowRuntime
     from apps.flows.src.models import (
         BranchConfig,
@@ -36,10 +35,10 @@ if TYPE_CHECKING:
         EvaluationTaskiqExecutionContext,
     )
     from apps.flows.src.models.flow_config import Edge
-    from apps.flows.src.models.operator_schemas import OperatorHandoffCommand
     from apps.flows.src.models.registry_contracts import RegistryFlowSchema
     from apps.flows.src.runners.remote import RemoteCodeRunner
     from apps.flows.src.services.flow_discovery import FlowDiscoveryService
+    from apps.flows.src.services.hitl_work_item_service import HitlWorkItemService
     from apps.flows.src.services.lara_action_engine import LaraActionEngine
     from apps.flows.src.services.lara_facade import LaraFacade
     from apps.flows.src.services.llm_models_service import LLMModelsService
@@ -63,7 +62,6 @@ if TYPE_CHECKING:
     from core.rag.llm_context_memory_store import RAGLLMContextMemoryStore
     from core.rag.repository import RAGRepository
     from core.state import ExecutionState
-    from core.state.interrupt import HandoffMode
     from core.text_transforms import TextTransformService
 
 
@@ -260,57 +258,6 @@ class EvaluationLabServiceProtocol(Protocol):
     ) -> EvaluationMonitorCycleResult: ...
 
 
-class OperatorHandoffServiceProtocol(Protocol):
-    async def register_handoff(
-        self,
-        state: ExecutionState,
-        *,
-        question: str,
-        task_title: str,
-        assignee_queue_slug: str,
-        handoff_mode: HandoffMode,
-        command: OperatorHandoffCommand,
-    ) -> tuple[UUID, str]: ...
-
-    async def receive_user_reply(
-        self,
-        *,
-        company_id: str,
-        task_id: str,
-        text: str,
-        user_id: str,
-        file_ids: list[str] | None = None,
-    ) -> None: ...
-
-    async def claim_task(
-        self,
-        *,
-        company_id: str,
-        task_id: str,
-        operator_user_id: str,
-    ) -> None: ...
-
-    async def publish_operator_message_to_user_stream(
-        self,
-        *,
-        company_id: str,
-        task_id: str,
-        operator_user_id: str,
-        text: str,
-        file_ids: list[str] | None = None,
-    ) -> None: ...
-
-    async def complete_handoff(
-        self,
-        *,
-        company_id: str,
-        task_id: str,
-        operator_user_id: str,
-        resolution: str,
-        file_ids: list[str] | None = None,
-    ) -> None: ...
-
-
 class FlowRuntimeContainer(Protocol):
     @property
     def redis_client(self) -> RedisClient: ...
@@ -358,10 +305,10 @@ class FlowRuntimeContainer(Protocol):
     def channel_registry(self) -> ChannelRegistryProtocol: ...
 
     @property
-    def operator_repository(self) -> OperatorRepository: ...
+    def work_item_service(self) -> WorkItemService: ...
 
     @property
-    def operator_handoff_service(self) -> OperatorHandoffServiceProtocol: ...
+    def hitl_work_item_service(self) -> "HitlWorkItemService": ...
 
     @property
     def a2a_client(self) -> A2AClient: ...

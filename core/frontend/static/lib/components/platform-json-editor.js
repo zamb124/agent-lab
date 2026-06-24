@@ -22,6 +22,7 @@ export class PlatformJsonEditor extends PlatformElement {
         value: { type: String },
         readonly: { type: Boolean, reflect: true },
         showToolbar: { type: Boolean, attribute: 'show-toolbar' },
+        fillParent: { type: Boolean, reflect: true, attribute: 'fill-parent' },
         fullscreen: { type: Boolean, reflect: true },
         minHeight: { type: Number, attribute: 'min-height' },
     };
@@ -45,6 +46,20 @@ export class PlatformJsonEditor extends PlatformElement {
                 flex-direction: column;
                 background: var(--bg-primary);
                 box-shadow: var(--shadow-xl);
+            }
+            :host([fill-parent]) {
+                display: flex;
+                flex-direction: column;
+                flex: 1;
+                min-height: 0;
+                height: 100%;
+                border-radius: 0;
+                border: 0;
+                background: transparent;
+            }
+            :host([fill-parent]) .editor-root {
+                flex: 1;
+                min-height: 0;
             }
             :host([fullscreen]) .editor-root {
                 flex: 1 1 auto;
@@ -130,6 +145,7 @@ export class PlatformJsonEditor extends PlatformElement {
         this.value = '';
         this.readonly = true;
         this.showToolbar = true;
+        this.fillParent = false;
         this.fullscreen = false;
         this.minHeight = 220;
         this._cm = null;

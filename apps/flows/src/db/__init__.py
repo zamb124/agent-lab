@@ -22,7 +22,6 @@ from .models import (  # noqa: F401
     WorkflowSnapshots,
 )
 from .node_repository import NodeRepository
-from .operator_repository import OperatorRepository
 from .resource_repository import ResourceRepository
 from .tool_repository import ToolRepository
 
@@ -36,7 +35,6 @@ __all__ = [
     "VariableRepository",
     "MCPServerRepository",
     "ResourceRepository",
-    "OperatorRepository",
     "EvaluationSuites",
     "EvaluationCases",
     "EvaluationSuiteVersions",

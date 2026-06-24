@@ -106,8 +106,8 @@ async def test_example(app, mock_llm_with_queue, unique_id):
 | `app` | session | FastAPI приложение `apps.flows` с lifespan |
 | `flows_client` / `rag_client` / `crm_client` / `frontend_client` / `voice_client` | function | ASGI клиенты для unit-тестов API соответствующего сервиса |
 | `voice_app` | function | ASGI приложение voice с mock-провайдерами (`VOICE__{STT,TTS,VAD}__PROVIDER=mock`) |
-| `flows_client_http` / `office_client_http` | function | HTTP клиенты для E2E (см. `tests/fixtures/clients.py`) |
-| `flows_service` / `rag_service` / `crm_service` / `frontend_service` | session | Реальные HTTP серверы (`tests/fixtures/services.py`, порты 9001–9005) |
+| `flows_client_http` / `office_client_http` / `worktracker_client_http` | function | HTTP клиенты для E2E (см. `tests/fixtures/clients.py`) |
+| `flows_service` / `rag_service` / `crm_service` / `frontend_service` / `worktracker_service` | session | Реальные HTTP серверы (`tests/fixtures/services.py`, порты 9001–9021) |
 | `all_services` | session | Все сервисы + dict URL |
 | `mock_llm` / `mock_llm_with_queue` | function | MockLLM с default_response / фабрика очереди ответов |
 | `mock_llm_redis` | function | Очередь ответов MockLLM в реальном Redis (ключ `mock_llm:responses`) для worker / межпроцессной доставки |
@@ -123,7 +123,7 @@ async def test_example(app, mock_llm_with_queue, unique_id):
 
 ## Выбор клиента
 
-Unit (один сервис, без межсервисных вызовов) → ASGI (`*_client`). E2E (межсервисные вызовы или WS) → HTTP (`flows_client_http`, `office_client_http`). Уровень теста «от потребителя» и согласование — `testing_invariants.mdc`.
+Unit (один сервис, без межсервисных вызовов) → ASGI (`*_client`). E2E (межсервисные вызовы или WS) → HTTP (`flows_client_http`, `office_client_http`, `worktracker_client_http`). Уровень теста «от потребителя» и согласование — `testing_invariants.mdc`.
 
 ## MockLLM
 
@@ -159,6 +159,7 @@ async def test_integration(mock_llm_redis, flows_client, unique_id):
 - **Sync** (`tests/sync/`): только реальные фикстуры — PostgreSQL, Redis, TaskIQ worker (для `messages.transcribe_*` и `sync_finalize_recording_task`). Запрещено подменять `op_*` из `apps/sync/realtime/operations.py`, репозитории или WS через `monkeypatch`/`unittest.mock`. Единственное явное исключение — `@patch("core.push.service.webpush")` в `tests/sync/test_sync_notification_delivery.py` (Web Push требует device tokens и VAPID-ключей, физически невозможно в CI). `sync_db_clean` — no-op (БД между тестами не очищается; полагаемся на уникальные id). Тесты `tests/sync/` без `real_taskiq` автоматически в `xdist_group("sync_db")`.
 - **Browser Runtime** (`tests/browser/`): unit без Playwright/CDP — `BROWSER_RUNTIME_SKIP_DB=1` отключает session-фикстуры БД и Redis-listener. Интеграция (`@pytest.mark.integration`, `BROWSER__CDP_URL`) и soak (`@pytest.mark.slow`) — полноценный стек, без `BROWSER_RUNTIME_SKIP_DB`. E2E против Lightpanda — `BROWSER__E2E_LIGHTPANDA=1`, `BROWSER__E2E_LIGHTPANDA_CDP_URL` или `BROWSER__CDP_URL`, `xdist_group("browser_cdp")`.
 - **Office** (`tests/office/`): BFF с реальной `platform_office` и MinIO; healthcheck к Document Server (`@pytest.mark.integration`). В `docker-compose-test.yaml` сервис `onlyoffice-documentserver` на порте хоста 18088. Фикстуры `office_app`, `office_client`. См. `office.mdc`.
+- **Worktracker** (`tests/worktracker/`): строгие интеграционные тесты WorkItem без моков (кроме MockLLM в cross-flows HITL). БД `platform_worktracker` (PostgreSQL 54322), Redis `63792`. Фикстуры: `tests/worktracker/conftest.py` — `worktracker_client` (ASGI), `worktracker_service` / `worktracker_repository`, `worktracker_client_http` (порт 9021), `worktracker_ui_events_listener`. `patch_service_clients_asgi` знает сервис `worktracker`. Структура: `api/` (REST `/worktracker/api/v1/*`), `integration/` (service, repository, realtime, hooks, HITL cross-flows), `unit/` (модели, helpers), `e2e/` (HTTP smoke). Изоляция — `unique_id`. См. `worktracker.mdc`.
 - **FileWriter** (`tests/core/files/test_file_writer_network.py`): реальные HTTP GET к `picsum.photos`, маркеры `integration` и `network`, `@pytest.mark.timeout(180, func_only=True)`. Исключить из прогона: `pytest -m "not network"`. Каталог `tests/core/files/file_writer_output/` очищается в `pytest_sessionstart` (`tests/core/files/conftest.py`); в `.gitignore`.
 - **Тестовый WAV:** `minimal_wav_silence` в `tests/fixtures/audio_bytes.py` — валидный PCM без ffmpeg-транскода; используется в sync (голос/STT) и CRM e2e voice. Не дублировать.
 
@@ -219,7 +220,7 @@ tests/
 ├── conftest.py             # Импортирует все из fixtures/
 ├── fixtures/{auth,clients,services,workers,playwright,mcp_http_stub}.py
 ├── flows/{unit,integration,api,streaming}; core/llm_nodes/
-├── crm/, rag/, sync/, frontend/, core/, ui/, ui_components/, browser/, office/
+├── crm/, rag/, sync/, frontend/, core/, ui/, ui_components/, browser/, office/, worktracker/
 ```
 
 ## Команды

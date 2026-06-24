@@ -97,20 +97,3 @@ export const templateTypeDeleteOp = createAsyncOp({
     },
 });
 
-export const templateTaskBoardEditorStateOp = createAsyncOp({
-    name: 'crm/template_task_board_editor_state',
-    silent: true,
-    restMirror: {
-        method: 'GET',
-        path: '/crm/api/v1/namespaces/templates/:template_id/task-board-editor-state',
-    },
-    request: async ({ payload }) => {
-        if (!payload || typeof payload.template_id !== 'string' || payload.template_id.length === 0) {
-            throw new Error('templateTaskBoardEditorStateOp: payload.template_id required');
-        }
-        return await httpRequest({
-            method: 'GET',
-            url: `/crm/api/v1/namespaces/templates/${encodeURIComponent(payload.template_id)}/task-board-editor-state`,
-        });
-    },
-});

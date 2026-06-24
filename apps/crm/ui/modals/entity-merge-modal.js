@@ -40,9 +40,7 @@ const SCALAR_FIELDS = [
     { key: 'description', labelKey: 'entity_merge_modal.field_description' },
     { key: 'status', labelKey: 'entity_merge_modal.field_status' },
     { key: 'entity_subtype', labelKey: 'entity_merge_modal.field_entity_subtype' },
-    { key: 'priority', labelKey: 'entity_merge_modal.field_priority' },
     { key: 'note_date', labelKey: 'entity_merge_modal.field_note_date' },
-    { key: 'due_date', labelKey: 'entity_merge_modal.field_due_date' },
 ];
 
 function _canonical(value) {

@@ -49,6 +49,14 @@ _MIME_TO_DTYPE_AND_EXT: dict[str, tuple[str, str]] = {
 }
 
 
+def supports_onlyoffice_viewer(filename: str, content_type: str | None) -> bool:
+    try:
+        _ = onlyoffice_document_type_for_upload(filename, content_type)
+        return True
+    except ValueError:
+        return False
+
+
 def onlyoffice_document_type_and_file_type(filename: str) -> tuple[str, str]:
     """
     Возвращает:

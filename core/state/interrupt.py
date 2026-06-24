@@ -48,9 +48,9 @@ class OperatorTaskInterrupt(StrictBaseModel):
         default=HandoffMode.SINGLE_REPLY,
         description="single_reply — один ответ оператора; takeover — полный перехват диалога",
     )
-    operator_task_id: str | None = Field(
+    work_item_id: str | None = Field(
         default=None,
-        description="ID строки OperatorTasks (для user-reply в takeover)",
+        description="ID WorkItem операторской задачи (для user-reply в takeover)",
     )
     handoff_command_id: str = Field(..., min_length=1)
     execution_branch_id: str = Field(..., min_length=1)

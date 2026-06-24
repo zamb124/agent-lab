@@ -23,8 +23,9 @@ from pydantic import ConfigDict, Field, field_validator, model_validator
 
 from apps.flows.src.constants.execution_limits import get_flow_execution_wall_time_cap_seconds
 from core.models import StrictBaseModel
-from core.types import JsonObject, JsonValue, require_json_value
+from core.types import JsonObject, JsonValue
 from core.urn import extract_resource_id
+from core.variables.models import VariableEntry, normalize_variables_map
 
 from .enums import MergeMode
 from .flow_speech_settings import FlowSpeechSettings
@@ -33,34 +34,6 @@ from .trigger_config import TriggerConfig
 
 # Тип для permission: строка или список строк
 Permission = str | list[str] | None
-
-
-def normalize_flow_variables_payload(data: object) -> object:
-    """Нормализует scalar JSON variables в строгий FlowVariableConfig payload."""
-    if not isinstance(data, dict):
-        return data
-    raw = cast(Mapping[str, object], data)
-    variables = raw.get("variables")
-    if not isinstance(variables, dict):
-        return dict(raw)
-
-    normalized: dict[str, object] = {}
-    for key, value in cast(Mapping[object, object], variables).items():
-        if not isinstance(key, str):
-            raise ValueError(f"variables key must be str, got {type(key).__name__}")
-        if isinstance(value, FlowVariableConfig):
-            normalized[key] = value
-        elif isinstance(value, dict) and "value" in value:
-            normalized[key] = dict(cast(Mapping[str, object], value))
-        else:
-            normalized[key] = {
-                "value": require_json_value(cast(object, value), f"variables.{key}"),
-                "public": False,
-            }
-
-    out = dict(raw)
-    out["variables"] = normalized
-    return out
 
 
 def _parse_flow_config_int(value: object, field_name: str) -> int:
@@ -94,31 +67,40 @@ class ExternalAgentStatus(str, Enum):
     UNHEALTHY = "unhealthy"
 
 
-class FlowVariableConfig(StrictBaseModel):
+class FlowVariableConfig(VariableEntry):
     """
     Конфигурация переменной flow с метаданными.
 
     Контракт значения {value, secret} симметричен company-уровню
     (`core.db.repositories.variable_repository.Variable`). При выполнении flow
     переменная по тому же ключу перекрывает company-переменную.
-
-    Формат:
-    {
-      "value": "@var:key",
-      "secret": false,
-      "public": true,
-      "title": "API Key",
-      "description": "Ключ для доступа к API",
-      "order": 1
-    }
     """
 
-    value: JsonValue = Field(..., description="Значение переменной")
-    secret: bool = Field(default=False, description="Скрывать значение в UI (симметрично company Variable.secret)")
-    public: bool = Field(default=False, description="Публичная переменная для agent-card (A2A)")
-    title: str | None = Field(default=None, description="Заголовок переменной")
-    description: str | None = Field(default=None, description="Описание переменной")
-    order: int | None = Field(default=None, description="Порядок отображения")
+
+def normalize_flow_variables_map(raw: Mapping[str, object]) -> dict[str, FlowVariableConfig]:
+    """Нормализует scalar/wrapped JSON в dict[str, FlowVariableConfig]."""
+    normalized = normalize_variables_map(raw)
+    result: dict[str, FlowVariableConfig] = {}
+    for key, entry in normalized.items():
+        if isinstance(entry, FlowVariableConfig):
+            result[key] = entry
+        else:
+            result[key] = FlowVariableConfig.model_validate(entry.model_dump())
+    return result
+
+
+def normalize_flow_variables_payload(data: object) -> object:
+    """Нормализует scalar JSON variables в строгий FlowVariableConfig payload."""
+    if not isinstance(data, dict):
+        return data
+    raw = cast(Mapping[str, object], data)
+    variables = raw.get("variables")
+    if not isinstance(variables, dict):
+        return dict(raw)
+
+    out = dict(raw)
+    out["variables"] = normalize_flow_variables_map(cast(Mapping[str, object], variables))
+    return out
 
 
 EdgeConditionOperator = Literal["==", "!=", ">", "<", ">=", "<=", "in"]

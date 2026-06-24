@@ -8,6 +8,7 @@ const SERVICE_DEV_PORTS = Object.freeze({
     crm: '8003',
     rag: '8004',
     sync: '8005',
+    worktracker: '8021',
     documents: '8008',
     litserve: '8014',
     grafana: '3000',

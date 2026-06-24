@@ -26,6 +26,7 @@ from apps.crm.services.access_grant_service import AccessGrantService
 from apps.crm.services.access_request_service import AccessRequestService
 from apps.crm.services.attachment_service import AttachmentService
 from apps.crm.services.company_init_service import CompanyInitService
+from apps.crm.services.crm_work_item_service import CrmWorkItemService
 from apps.crm.services.daily_summary_artifact_service import DailySummaryArtifactService
 from apps.crm.services.daily_summary_cache_service import DailySummaryCacheService
 from apps.crm.services.entity_service import EntityService
@@ -42,6 +43,10 @@ from core.clients.a2a_client import A2AClient
 from core.config import get_settings
 from core.container import BaseContainer, ContainerRegistry, lazy
 from core.logging import get_logger
+from core.worktracker.db import WorktrackerDatabase
+from core.worktracker.hook_dispatcher import ServiceClientHookDispatcher
+from core.worktracker.repository import WorktrackerRepository
+from core.worktracker.service import WorkItemService
 
 logger = get_logger(__name__)
 
@@ -174,6 +179,24 @@ class CRMContainer(BaseContainer):
         )
 
     @lazy
+    def worktracker_repository(self) -> WorktrackerRepository:
+        settings = get_settings()
+        if not settings.database.worktracker_url:
+            raise ValueError("database.worktracker_url обязателен для worktracker_repository")
+        return WorktrackerRepository(db=WorktrackerDatabase(settings.database.worktracker_url))
+
+    @lazy
+    def work_item_service(self) -> WorkItemService:
+        return WorkItemService(
+            repository=self.worktracker_repository,
+            hook_dispatcher=ServiceClientHookDispatcher(service_client=self.service_client),
+        )
+
+    @lazy
+    def crm_work_item_service(self) -> CrmWorkItemService:
+        return CrmWorkItemService(work_item_service=self.work_item_service)
+
+    @lazy
     def entity_service(self) -> EntityService:
         return EntityService(
             entity_repo=self.entity_repository,
@@ -192,6 +215,7 @@ class CRMContainer(BaseContainer):
             company_repo=self.company_repository,
             access_control=self.access_control_service,
             task_repository=self.task_repository,
+            crm_work_item_service=self.crm_work_item_service,
             note_markdown_format_scheduler=self.schedule_note_markdown_format,
         )
 

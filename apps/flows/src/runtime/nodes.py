@@ -53,7 +53,7 @@ from apps.flows.src.models import (
 from apps.flows.src.models.enums import ChannelType, NodeType
 from apps.flows.src.models.exception_absorb_allow import ExceptionAbsorbAllowName
 from apps.flows.src.models.external_api import ExternalAPIConfig, HTTPMethod
-from apps.flows.src.models.operator_schemas import OperatorInterruptSnapshot, OperatorTaskStatus
+from apps.flows.src.models.hitl_schemas import HitlInterruptSnapshot, build_hitl_handoff_command
 from apps.flows.src.runtime.effective_llm_config import resolve_effective_llm_config_for_node
 from apps.flows.src.runtime.exception_policy import node_exception_policy, should_absorb_exception
 from apps.flows.src.runtime.exceptions import BreakpointInterrupt, FlowInterrupt
@@ -65,16 +65,18 @@ from apps.flows.src.runtime.llm_resource_config import (
     resolve_llm_config_with_resource_key,
 )
 from apps.flows.src.runtime.runners import LlmNodeRunner
+from apps.flows.src.services.hitl_work_item_service import HANDOFF_PREVIEW_MAX_LEN
 from apps.flows.src.services.mcp_sync import sync_mcp_server_tools
-from apps.flows.src.services.operator_handoff_service import (
-    HANDOFF_PREVIEW_MAX_LEN,
-    build_operator_handoff_command,
-)
 from apps.flows.src.state.interrupt_manager import InterruptManager
 from apps.flows.src.tools.base import BaseTool
 from apps.flows.src.tools.registry import ToolMaterializeInput
 from apps.flows.src.variables import VariableResolver, VarResolver
 from core.ai.runtime import create_llm_client_from_call_config
+from core.clients.llm.mock_control import (
+    MOCK_MISS,
+    MockMiss,
+    resolve_entity_node_mock_result,
+)
 from core.context import get_context as get_request_context
 from core.errors import NodeWallClockTimeoutError
 from core.integrations.mcp import mcp_tool_reference_id
@@ -114,6 +116,7 @@ from core.tracing.attributes import (
 )
 from core.tracing.operation_span import traced_operation
 from core.types import JsonObject, JsonValue, require_json_object, require_json_value
+from core.worktracker.models import WorkItem, WorkItemState
 
 logger = get_logger(__name__)
 NodeInputs: TypeAlias = JsonObject
@@ -633,6 +636,21 @@ class BaseNode(ABC):
 
         inputs = self._resolve_inputs(state)
 
+        # Mock Control: для не-LLM нод (code/function/...) и вложенных flow берём
+        # результат из mock-очереди вместо реального запуска. LLM-ноды мокаются
+        # внутри runner (per-node очередь LLM-ответов), не здесь.
+        mock_node_result = await self._resolve_node_mock_result(state)
+        result: NodeRunResult
+        if not isinstance(mock_node_result, MockMiss):
+            result = mock_node_result
+            if result is not None:
+                self._apply_output_mapping(state, result)
+            if self.save_to_messages:
+                message_content = self._get_message_content(state, state_before, result)
+                if message_content:
+                    self._append_to_messages(state, message_content)
+            return state
+
         node_timeout = self.config.get("node_timeout_seconds")
         nto: int | None = None
         try:
@@ -687,6 +705,26 @@ class BaseNode(ABC):
                 self._append_to_messages(state, message_content)
 
         return state
+
+    async def _resolve_node_mock_result(self, state: ExecutionState) -> JsonValue | MockMiss:
+        """
+        Результат ноды из Mock Control или `MOCK_MISS` (нужен реальный запуск).
+
+        LLM-ноды не мокаются здесь — у них per-node очередь LLM-ответов в runner.
+        Вложенный flow мокается по `flow_id`, остальные ноды — по `node_id`.
+        """
+        if self.node_type == NodeType.LLM_NODE:
+            return MOCK_MISS
+        if self.node_type == NodeType.FLOW:
+            flow_id = self.config.get("flow_id")
+            if not isinstance(flow_id, str) or not flow_id.strip():
+                return MOCK_MISS
+            return await resolve_entity_node_mock_result(
+                self.container.redis_client, state.session_id, "flow", flow_id
+            )
+        return await resolve_entity_node_mock_result(
+            self.container.redis_client, state.session_id, "node", self.node_id
+        )
 
     def _apply_output_mapping(self, state: ExecutionState, result: JsonValue) -> None:
         """
@@ -2359,8 +2397,7 @@ class HitlNode(BaseNode):
         cid_resume = state.hitl_handoff_correlation_id
         if isinstance(cid_resume, str) and cid_resume.strip() and state.content:
             container = self.container
-            repo = container.operator_repository
-            existing_resume = await repo.get_task_by_correlation(
+            existing_resume = await container.work_item_service.find_by_completion_correlation(
                 company_id, cid_resume.strip()
             )
             if existing_resume is None:
@@ -2368,18 +2405,12 @@ class HitlNode(BaseNode):
                     f"hitl_node {self.node_id}: resume с correlation_id={cid_resume!r}, "
                     + "задача оператора не найдена"
                 )
-            if existing_resume.status != OperatorTaskStatus.COMPLETED.value:
+            if existing_resume.state != WorkItemState.DONE:
                 raise ValueError(
                     f"hitl_node {self.node_id}: задача оператора ещё не завершена "
-                    + f"(status={existing_resume.status!r})"
+                    + f"(state={existing_resume.state.value!r})"
                 )
-            if existing_resume.interrupt_snapshot is None:
-                raise ValueError(
-                    f"hitl_node {self.node_id}: задача оператора без interrupt_snapshot"
-                )
-            snapshot = OperatorInterruptSnapshot.model_validate(
-                existing_resume.interrupt_snapshot
-            )
+            snapshot = self._hitl_snapshot_from_work_item(existing_resume)
             state.hitl_handoff_correlation_id = None
             answer = str(state.content).strip()
             state.response = answer
@@ -2391,13 +2422,13 @@ class HitlNode(BaseNode):
                     node_id=self.node_id,
                     handoff_command_id=snapshot.handoff_command_id,
                     correlation_id=cid_resume.strip(),
-                    operator_task_id=existing_resume.id,
+                    work_item_id=existing_resume.work_item_id,
                     response_preview=answer[:HANDOFF_PREVIEW_MAX_LEN],
                 ),
             )
             logger.info(
-                "operator_handoff.resumed",
-                operator_task_id=existing_resume.id,
+                "hitl.work_item.resumed",
+                work_item_id=existing_resume.work_item_id,
                 correlation_id=cid_resume.strip(),
                 handoff_command_id=snapshot.handoff_command_id,
                 session_id=state.session_id,
@@ -2406,62 +2437,47 @@ class HitlNode(BaseNode):
             return None
 
         slug_in = inputs.get("assignee_queue")
-        slug_cfg = self.config.get("operator_queue_slug")
-        qid_cfg = self.config.get("operator_queue_id")
+        slug_cfg = self.config.get("work_queue_slug")
 
         slug_effective: str
         if isinstance(slug_in, str) and slug_in.strip():
             slug_effective = slug_in.strip()
         elif isinstance(slug_cfg, str) and slug_cfg.strip():
             slug_effective = slug_cfg.strip()
-        elif isinstance(qid_cfg, str) and qid_cfg.strip():
-            container = self.container
-            row = await container.operator_repository.get_queue_by_id(
-                company_id, qid_cfg.strip()
-            )
-            if row is None:
-                raise ValueError(
-                    f"hitl_node {self.node_id}: очередь {qid_cfg!r} не найдена"
-                )
-            if not row.slug.strip():
-                raise ValueError(
-                    f"hitl_node {self.node_id}: у очереди {qid_cfg!r} не задан slug"
-                )
-            slug_effective = row.slug
         else:
             raise ValueError(
-                f"hitl_node {self.node_id}: укажите operator_queue_slug, operator_queue_id "
+                f"hitl_node {self.node_id}: укажите work_queue_slug "
                 + "или input_mapping.assignee_queue"
             )
 
-        title = inputs.get("task_title") or self.config.get("operator_task_title")
+        title = inputs.get("task_title") or self.config.get("handoff_task_title")
         if not title or not str(title).strip():
             raise ValueError(
-                f"hitl_node {self.node_id}: нужен task_title (input_mapping или operator_task_title)"
+                f"hitl_node {self.node_id}: нужен task_title (input_mapping или handoff_task_title)"
             )
         message = (
             inputs.get("user_facing_message")
             or inputs.get("question")
-            or self.config.get("operator_user_message")
+            or self.config.get("handoff_user_message")
         )
         if not message or not str(message).strip():
             raise ValueError(
                 f"hitl_node {self.node_id}: нужен текст для пользователя "
-                + "(user_facing_message / question / operator_user_message)"
+                + "(user_facing_message / question / handoff_user_message)"
             )
 
         raw_mode = (
             inputs.get("handoff_mode")
-            or self.config.get("operator_handoff_mode")
+            or self.config.get("handoff_mode")
             or "single_reply"
         )
         mode = HandoffMode(str(raw_mode).strip())
 
         container = self.container
-        svc = container.operator_handoff_service
+        svc = container.hitl_work_item_service
         question = str(message).strip()
         task_title = str(title).strip()
-        handoff_command = build_operator_handoff_command(
+        handoff_command = build_hitl_handoff_command(
             state=state,
             node_id=self.node_id,
         )
@@ -2483,7 +2499,7 @@ class HitlNode(BaseNode):
         )
 
         async def invoke() -> NodeRunResult:
-            cid, op_task_id = await svc.register_handoff(
+            cid, work_item_id = await svc.register_handoff(
                 state,
                 question=question,
                 task_title=task_title,
@@ -2493,7 +2509,7 @@ class HitlNode(BaseNode):
             )
             return {
                 "correlation_id": str(cid),
-                "operator_task_id": op_task_id,
+                "work_item_id": work_item_id,
                 "handoff_command_id": handoff_command.idempotency_key,
                 "execution_branch_id": handoff_command.execution_branch_id,
                 "node_schedule_sequence": handoff_command.node_schedule_sequence,
@@ -2514,15 +2530,15 @@ class HitlNode(BaseNode):
         correlation_id = handoff.get("correlation_id")
         if not isinstance(correlation_id, str) or not correlation_id:
             raise ValueError("hitl_handoff.result.correlation_id: обязательная строка")
-        operator_task_id_raw = handoff.get("operator_task_id")
-        operator_task_id = operator_task_id_raw if isinstance(operator_task_id_raw, str) else None
+        work_item_id_raw = handoff.get("work_item_id")
+        work_item_id = work_item_id_raw if isinstance(work_item_id_raw, str) else None
         raise FlowInterrupt(
             body=OperatorTaskInterrupt(
                 question=question,
                 task_title=task_title,
                 assignee_queue=slug_effective,
                 handoff_mode=mode,
-                operator_task_id=operator_task_id,
+                work_item_id=work_item_id,
                 handoff_command_id=handoff_command.idempotency_key,
                 execution_branch_id=handoff_command.execution_branch_id,
                 node_schedule_sequence=handoff_command.node_schedule_sequence,
@@ -2530,6 +2546,16 @@ class HitlNode(BaseNode):
                 tool_call_id=None,
             ),
             correlation_id=uuid.UUID(correlation_id),
+        )
+
+    @staticmethod
+    def _hitl_snapshot_from_work_item(work_item: WorkItem) -> HitlInterruptSnapshot:
+        for hook in work_item.hooks:
+            snapshot_raw = hook.binding.get("interrupt_snapshot")
+            if isinstance(snapshot_raw, dict):
+                return HitlInterruptSnapshot.model_validate(snapshot_raw)
+        raise ValueError(
+            f"WorkItem {work_item.work_item_id!r} без interrupt_snapshot в hook.binding"
         )
 
 

@@ -21,6 +21,15 @@ from tests.fixtures.aiohttp_ephemeral import tcp_site_assigned_port
 pytestmark = [pytest.mark.timeout(120)]
 
 
+def _onlyoffice_editor_token(body: dict[str, object]) -> str:
+    assert body.get("handler") == "onlyoffice"
+    onlyoffice = body.get("onlyoffice")
+    assert isinstance(onlyoffice, dict)
+    token = onlyoffice.get("token")
+    assert isinstance(token, str)
+    return token
+
+
 async def _first_accessible_catalog_id(office_client, headers: dict[str, str]) -> str:
     r = await office_client.get("/documents/api/v1/catalogs", headers=headers)
     assert r.status_code == 200
@@ -122,6 +131,9 @@ async def test_office_empty_document_list_rename_delete(office_client, auth_head
     assert match["catalog_id"] == catalog_id
     assert match["title"] == title
     assert "created_at" in match
+    assert "updated_at" in match
+    assert isinstance(match["file_size"], int)
+    assert match["file_size"] >= 0
     assert match["created_by_user_id"]
     assert "created_by_display_name" in match
     assert "created_by_avatar_url" in match
@@ -140,6 +152,42 @@ async def test_office_empty_document_list_rename_delete(office_client, auth_head
         headers=auth_headers_system,
     )
     assert dr.status_code == 204
+
+
+@pytest.mark.asyncio
+async def test_office_list_documents_search_and_sort(
+    office_client, auth_headers_system, unique_id
+):
+    catalog_id = await _first_accessible_catalog_id(office_client, auth_headers_system)
+    alpha_title = f"Alpha {unique_id}"
+    beta_title = f"Beta {unique_id}"
+    for title in (alpha_title, beta_title):
+        cr = await office_client.post(
+            "/documents/api/v1/documents/empty",
+            headers=auth_headers_system,
+            json={"title": title, "catalog_id": catalog_id},
+        )
+        assert cr.status_code == 200
+
+    search_r = await office_client.get(
+        "/documents/api/v1/documents",
+        params={"catalog_id": catalog_id, "q": "Alpha"},
+        headers=auth_headers_system,
+    )
+    assert search_r.status_code == 200
+    search_items = search_r.json()["items"]
+    assert any(i["title"] == alpha_title for i in search_items)
+    assert not any(i["title"] == beta_title for i in search_items)
+
+    sort_r = await office_client.get(
+        "/documents/api/v1/documents",
+        params={"catalog_id": catalog_id, "sort": "title", "order": "asc"},
+        headers=auth_headers_system,
+    )
+    assert sort_r.status_code == 200
+    sort_items = sort_r.json()["items"]
+    titles = [i["title"] for i in sort_items if i["title"] in (alpha_title, beta_title)]
+    assert titles == sorted(titles)
 
 
 @pytest.mark.asyncio
@@ -196,7 +244,8 @@ async def test_open_existing_file_as_document_is_same_file_and_idempotent(
     first_body = first.json()
     assert first_body["file_id"] == file_id
     assert first_body["catalog_id"] == catalog_id
-    assert first_body["document_type"] == "cell"
+    assert first_body["file_category"] == "spreadsheet"
+    assert first_body["onlyoffice_document_type"] == "cell"
     assert first_body["editor_url"].startswith("/documents/embed/edit/")
 
     second = await office_client.post(
@@ -242,7 +291,7 @@ async def test_office_empty_document_cell_slide_csv_editor_type(
         )
         assert er.status_code == 200
         secret = get_office_settings().office.jwt_secret
-        cfg = jwt.decode(er.json()["token"], secret, algorithms=["HS256"])
+        cfg = jwt.decode(_onlyoffice_editor_token(er.json()), secret, algorithms=["HS256"])
         assert cfg["documentType"] == expected_dt
 
 
@@ -280,7 +329,7 @@ async def test_office_editor_config_download_roundtrip(office_client, auth_heade
     assert er.status_code == 200
     body = er.json()
     secret = get_office_settings().office.jwt_secret
-    cfg = jwt.decode(body["token"], secret, algorithms=["HS256"])
+    cfg = jwt.decode(_onlyoffice_editor_token(body), secret, algorithms=["HS256"])
     assert cfg["documentType"] == "word"
     assert cfg["document"]["key"] == binding_id or cfg["document"]["key"].startswith(f"{binding_id}_")
     assert cfg["editorConfig"]["mode"] == "edit"
@@ -361,7 +410,7 @@ async def test_onlyoffice_callback_saves_to_s3(
         headers=auth_headers_system,
     )
     assert er.status_code == 200
-    cfg = jwt.decode(er.json()["token"], integ.jwt_secret, algorithms=["HS256"])
+    cfg = jwt.decode(_onlyoffice_editor_token(er.json()), integ.jwt_secret, algorithms=["HS256"])
     assert cfg["document"]["key"] == f"{binding_id}_{expected_checksum[:24]}"
 
     office_saved_file_http["set_body"](b"duplicate-callback-should-not-apply")
@@ -377,3 +426,128 @@ async def test_onlyoffice_callback_saves_to_s3(
     meta_after = await c.file_processor.get_file_record(file_id)
     assert meta_after.checksum == expected_checksum
     assert meta_after.file_size == len(new_body)
+
+
+@pytest.mark.asyncio
+async def test_office_nested_catalog_documents_list(office_client, auth_headers_system, unique_id):
+    parent_title = f"Parent {unique_id}"
+    pr = await office_client.post(
+        "/documents/api/v1/catalogs",
+        headers=auth_headers_system,
+        json={"title": parent_title, "is_public": True},
+    )
+    assert pr.status_code == 200
+    parent_id = pr.json()["catalog_id"]
+
+    child_title = f"Child {unique_id}"
+    cr = await office_client.post(
+        "/documents/api/v1/catalogs",
+        headers=auth_headers_system,
+        json={"title": child_title, "is_public": True, "parent_catalog_id": parent_id},
+    )
+    assert cr.status_code == 200
+    child_id = cr.json()["catalog_id"]
+
+    title = f"In subcatalog {unique_id}"
+    doc_cr = await office_client.post(
+        "/documents/api/v1/documents/empty",
+        headers=auth_headers_system,
+        json={"title": title, "catalog_id": child_id},
+    )
+    assert doc_cr.status_code == 200
+    binding_id = doc_cr.json()["binding_id"]
+
+    parent_lr = await office_client.get(
+        "/documents/api/v1/documents",
+        params={"catalog_id": parent_id},
+        headers=auth_headers_system,
+    )
+    assert parent_lr.status_code == 200
+    parent_ids = {item["binding_id"] for item in parent_lr.json()["items"]}
+    assert binding_id not in parent_ids
+
+    child_lr = await office_client.get(
+        "/documents/api/v1/documents",
+        params={"catalog_id": child_id},
+        headers=auth_headers_system,
+    )
+    assert child_lr.status_code == 200
+    child_items = child_lr.json()["items"]
+    match = next((item for item in child_items if item["binding_id"] == binding_id), None)
+    assert match is not None
+    assert match["catalog_id"] == child_id
+
+    delete_parent = await office_client.delete(
+        f"/documents/api/v1/catalogs/{parent_id}",
+        headers=auth_headers_system,
+    )
+    assert delete_parent.status_code == 409
+
+    await office_client.delete(
+        f"/documents/api/v1/documents/{binding_id}",
+        headers=auth_headers_system,
+    )
+    delete_child = await office_client.delete(
+        f"/documents/api/v1/catalogs/{child_id}",
+        headers=auth_headers_system,
+    )
+    assert delete_child.status_code == 204
+
+    delete_parent_ok = await office_client.delete(
+        f"/documents/api/v1/catalogs/{parent_id}",
+        headers=auth_headers_system,
+    )
+    assert delete_parent_ok.status_code == 204
+
+
+@pytest.mark.asyncio
+async def test_office_nested_catalog_create(office_client, auth_headers_system, unique_id):
+    parent_title = f"Parent {unique_id}"
+    pr = await office_client.post(
+        "/documents/api/v1/catalogs",
+        headers=auth_headers_system,
+        json={"title": parent_title, "is_public": True},
+    )
+    assert pr.status_code == 200
+    parent_id = pr.json()["catalog_id"]
+
+    child_title = f"Child {unique_id}"
+    cr = await office_client.post(
+        "/documents/api/v1/catalogs",
+        headers=auth_headers_system,
+        json={"title": child_title, "is_public": True, "parent_catalog_id": parent_id},
+    )
+    assert cr.status_code == 200
+    child = cr.json()
+    assert child["parent_catalog_id"] == parent_id
+
+    lr = await office_client.get("/documents/api/v1/catalogs", headers=auth_headers_system)
+    assert lr.status_code == 200
+    items = lr.json()["items"]
+    child_item = next((item for item in items if item["catalog_id"] == child["catalog_id"]), None)
+    assert child_item is not None
+    assert child_item["parent_catalog_id"] == parent_id
+    assert child_item["rag_index_enabled"] is False
+
+
+@pytest.mark.asyncio
+async def test_office_catalog_list_includes_rag_index_enabled(
+    office_client,
+    auth_headers_system,
+    unique_id,
+):
+    title = f"RAG flag {unique_id}"
+    create_response = await office_client.post(
+        "/documents/api/v1/catalogs",
+        headers=auth_headers_system,
+        json={"title": title, "is_public": True},
+    )
+    assert create_response.status_code == 200
+    catalog_id = create_response.json()["catalog_id"]
+
+    list_response = await office_client.get("/documents/api/v1/catalogs", headers=auth_headers_system)
+    assert list_response.status_code == 200
+    items = list_response.json()["items"]
+    catalog_item = next((item for item in items if item["catalog_id"] == catalog_id), None)
+    assert catalog_item is not None
+    assert catalog_item["rag_index_enabled"] is False

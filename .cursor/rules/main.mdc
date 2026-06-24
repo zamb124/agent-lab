@@ -50,6 +50,7 @@ alwaysApply: true
 | code_runner_node | 8018 | Isolated JavaScript/TypeScript user-code runner |
 | code_runner_go | 8019 | Isolated Go user-code runner |
 | code_runner_csharp | 8020 | Isolated C# user-code runner |
+| worktracker | 8021 | Платформенное ядро задач WorkItem (канбан, очереди, HITL, агентские задачи) |
 | scheduler | 8006 | Scheduler control-plane API + TaskIQ scheduler |
 | flows_worker, crm_worker, rag_worker, sync_worker, idle_worker | — | TaskIQ воркеры |
 
@@ -140,11 +141,13 @@ alwaysApply: true
 | API key | `key_id`, `ApiKeyRecord` | `key_hash`, `key_prefix`, `scopes`, `created_by`; не `id`. |
 | Schedule | `schedule_task_id`, `schedule_id`, `PlatformScheduledTask` | `schedule_task_id` — запись платформенного scheduler/API/TaskIQ kwargs/state, `schedule_id` — id RedisScheduleSource; `taskiq_task_id` — id сообщения TaskIQ. Запрещены `id`, `task_id`, `scheduler_task_id`, `scheduled_task_id` для schedule-записи. |
 | UI event | `UIEvent.id`, `type`, `payload`, `meta` | `payload` разрешён только для event envelope/transport. Доменную часть внутри payload называть конкретно. |
-| Operator queue/task | `queue_id`, `operator_task_id` | `operator_queue_slug`, `claimed_by_user_id`, `a2a_task_id`; role `"agent"` допустима как операторская роль до отдельной миграции. |
-| CRM entity | `entity_id`, `CRMEntity`, `entity_type`, `entity_subtype` | `attributes` — доменные кастомные поля; `type_id` только для каталога `EntityType`/`RelationshipType`. |
+| WorkItem (ядро задач) | `work_item_id`, `WorkItem` | `kind`, `state`, `board_id`, `board_column_id`, `assignment`, `created_by`, `blocking`, `hooks` (`assigned`/`comment`/`completed`), `resolution`, `links`, `variables: VariableMap`, `attachments: list[FileRef]`; не `task_id`, не `operator_task_id`. Детали → **`worktracker.mdc`**. |
+| Work queue | `work_queue_id`, `WorkQueue`, `work_queue_slug` | `WorkQueueMember(work_queue_id, user_id, role)`; полная замена `OperatorQueues`; не `queue_id`. |
+| Board / column | `board_id`, `Board`, `board_column_id`, `BoardColumn` | `label`, `state`, `position`; единая доска для людей/операторов/CRM. |
+| CRM entity | `entity_id`, `CRMEntity`, `entity_type`, `entity_subtype` | `attributes` — доменные кастомные поля; `type_id` только для каталога `EntityType`/`RelationshipType`. Задача (`entity_type=task`) — чистый граф-узел: work-семантика (priority/due/assignee/state/доска) живёт в парном `WorkItem(crm_activity)`, не на CRM-узле (→ `worktracker.mdc`, `crm.mdc`). |
 | CRM relationship | `relationship_id`, `relationship_type` | `source_entity_id`, `target_entity_id`, `weight`, `confidence`, `attributes`; не `edge_id` вне graph DTO. |
 | CRM namespace template | `template_id`, `template_key` | `template_key` — DB primary key, `template_id` — продуктовый slug шаблона; не смешивать. |
-| CRM task/suggest | `task_id`, `suggest_id` | `CRMTask.task_id`; `CRMSuggest.suggest_id`; API/JSON поле `suggest_id`; голый `id` для suggest запрещён. |
+| CRM task/suggest | `task_id`, `suggest_id` | `CRMTask.task_id` (журнал TaskIQ-джоб, не задача!); `CRMSuggest.suggest_id`; API/JSON поле `suggest_id`; голый `id` для suggest запрещён. Пользовательская задача CRM = `CRMEntity` `entity_type=task` (граф/AI) + 1:1 `WorkItem` (work-семантика, → `worktracker.mdc`). |
 | Sync channel/thread/message | `channel_id`, `thread_id`, `message_id` | API/WS/Pydantic/UI используют только конкретный id. Голый `id` для этих сущностей запрещён. |
 | Sync call | `call_id`, `call_participant_id`, `recording_id`, `link_token` | `participant_identity` — LiveKit identity, не `user_id`; `identity` допустим только как поле внешнего LiveKit SDK. |
 | Git resource ref | `git_ref_id`, `GitResourceRef` | `provider`, `kind`, `project_key`, `external_id`, `url`; API/WS payload поле `git_ref_id`; голый `id` запрещён. |
@@ -339,6 +342,7 @@ Cursor — `base64url(json({"ts": "<created_at.isoformat()>", "id": "<entity_id>
 | CRM | `crm.mdc` |
 | RAG | `rag.mdc` |
 | Sync (чат, каналы, Git) | `sync.mdc` |
+| WorkItem (ядро задач, канбан, HITL, очереди) | `worktracker.mdc` |
 | WebRTC звонки (LiveKit) | `calls.mdc` |
 | Office (OnlyOffice) | `office.mdc` |
 | Voice gateway + Speech providers | `voice.mdc` |

@@ -23,7 +23,6 @@ export class FlowsFlowNodeEditor extends PlatformElement {
         graphNodes: { type: Array },
         previewExecutionState: { type: Object },
         dataflowNode: { type: Object },
-        expanded: { type: Boolean, reflect: true },
         embedded: { type: Boolean, reflect: true },
         _showCustom: { state: true },
     };
@@ -67,7 +66,6 @@ export class FlowsFlowNodeEditor extends PlatformElement {
         this.graphNodes = null;
         this.previewExecutionState = null;
         this.dataflowNode = null;
-        this.expanded = false;
         this.embedded = false;
         this._showCustom = false;
         this._flows = this.useResource('flows/flows', { autoload: true });
@@ -200,7 +198,6 @@ export class FlowsFlowNodeEditor extends PlatformElement {
                 .graphNodes=${this.graphNodes}
                 .previewExecutionState=${this.previewExecutionState}
                 .dataflowNode=${this.dataflowNode}
-                ?expanded=${this.expanded}
                 ?embedded=${this.embedded}
             >
                 <div slot="settings">

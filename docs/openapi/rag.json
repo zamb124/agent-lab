@@ -1957,6 +1957,43 @@
         "title": "RAGDocument",
         "description": "Универсальная модель документа для RAG"
       },
+      "RAGDocumentContent": {
+        "properties": {
+          "document_id": {
+            "type": "string",
+            "title": "Document Id"
+          },
+          "document_name": {
+            "type": "string",
+            "title": "Document Name"
+          },
+          "markdown": {
+            "type": "string",
+            "title": "Markdown"
+          },
+          "chunks_count": {
+            "type": "integer",
+            "title": "Chunks Count"
+          },
+          "metadata": {
+            "additionalProperties": {
+              "$ref": "#/components/schemas/JsonValue"
+            },
+            "type": "object",
+            "title": "Metadata"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "document_id",
+          "document_name",
+          "markdown",
+          "chunks_count"
+        ],
+        "title": "RAGDocumentContent",
+        "description": "Собранный текст документа из чанков индекса."
+      },
       "RAGGlobalSearchRequest": {
         "properties": {
           "channels": {

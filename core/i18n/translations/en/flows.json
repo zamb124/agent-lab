@@ -1,7 +1,6 @@
 {
   "routes": {
     "list": "Overview",
-    "operator": "Operator",
     "platform_services": "Services",
     "flow_chat": "Flow",
     "flow_chat_branch": "Flow",
@@ -13,7 +12,6 @@
   },
   "bottom_nav": {
     "flows": "Overview",
-    "operator": "Operator",
     "profile": "Profile"
   },
   "flow_create_modal": {
@@ -1116,7 +1114,6 @@
   "flows_home": {
     "page_title": "Flows",
     "header_sessions": "Sessions",
-    "header_operator": "Operator",
     "header_help_label": "Overview actions",
     "header_help_summary": "Flows overview actions",
     "header_help_details": "The header opens sessions and, if you have access, the operator workspace. On mobile it also opens the agent list.",
@@ -1150,8 +1147,6 @@
     "quick_store_desc": "Ready bundle agents and repository updates.",
     "quick_sessions_title": "Sessions",
     "quick_sessions_desc": "Run history and continued conversations.",
-    "quick_operator_title": "Operator",
-    "quick_operator_desc": "HITL queues, takeover, and user replies.",
     "flows_title": "Your flows",
     "flows_subtitle": "Open chat, editor, or continue work with active agents.",
     "flows_help": "Cards show published and working flows. Open chat to verify behavior, or editor to change the graph.",
@@ -1188,7 +1183,6 @@
     "sessions_empty": "No sessions yet",
     "ready_bundles": "Bundles",
     "ready_tools": "Tools",
-    "ready_operator": "HITL",
     "value_empty": "—"
   },
   "sessions_modal": {
@@ -1441,57 +1435,6 @@
     "empty_diff": "No changes",
     "open_full": "Full response"
   },
-  "operator": {
-    "page_title": "Support tasks",
-    "page_help_label": "Operator workspace",
-    "page_help_summary": "Support tasks",
-    "page_help_details": "The operator workspace shows HITL tasks handed from agents to humans. Claim a task, reply to the user, or complete it as a tool result for the agent.",
-    "queues_help_label": "Queues",
-    "queues_help_summary": "Operator queues",
-    "queues_help_details": "Queues define which operators can see and claim HITL tasks. Join adds you to the queue; Leave removes you from assignment.",
-    "queues_help_inline": "Queues and membership",
-    "status_help_label": "Task status",
-    "status_open": "Open",
-    "status_open_hint": "A new task is waiting for an operator. Click Claim to assign it to yourself.",
-    "status_claimed": "Claimed",
-    "status_claimed_hint": "The task is assigned to an operator, but user dialog is not active yet or still needs action.",
-    "status_user_dialog": "User dialog",
-    "status_user_dialog_hint": "The operator is talking directly to the user. Replies are stored in task history.",
-    "status_awaiting_agent": "Awaiting agent",
-    "status_awaiting_agent_hint": "The operator submitted a result and the task is waiting for the agent or runtime to continue.",
-    "status_completed": "Completed",
-    "status_completed_hint": "The task is closed. Dialog and resolution remain in history.",
-    "status_cancelled": "Cancelled",
-    "status_cancelled_hint": "The task was cancelled by runtime, an operator, or an external process.",
-    "theme_to_light": "Light theme",
-    "theme_to_dark": "Dark theme",
-    "btn_claim": "Claim",
-    "btn_complete": "Complete and resume agent",
-    "queue_name_placeholder": "Name (e.g. Support line)",
-    "queue_slug_placeholder": "Slug (e.g. support)",
-    "queue_create": "Create queue",
-    "btn_join_queue": "Join as operator",
-    "btn_leave_queue": "Leave queue",
-    "placeholder_single_reply": "Your reply (becomes tool result for agent)",
-    "takeover_no_messages": "No messages yet",
-    "section_chat_history": "Chat history",
-    "section_operator_dialog": "Operator dialog",
-    "role_operator": "Operator",
-    "role_user": "User",
-    "role_agent": "Agent",
-    "tooltip_reply_and_close": "Reply and return to agent",
-    "tooltip_attach_file": "Attach file",
-    "placeholder_composer": "Type a message...",
-    "download_file": "Download",
-    "close_detail": "Close task panel",
-    "no_detail": "Failed to load task",
-    "btn_send": "Send",
-    "default_resolution": "Closed by operator",
-    "empty_column": "—",
-    "task_data_title": "Task data (API)",
-    "task_data_show": "Show task data",
-    "task_data_hide": "Hide task data"
-  },
   "hitl_node_editor": {
     "queue_slug_label": "Queue slug",
     "task_title_label": "Task title (fallback)",
@@ -1669,6 +1612,12 @@
       "collapse": "Collapse note",
       "delete": "Delete note"
     },
+    "node": {
+      "drag_hint": "Drag node",
+      "expand": "Expand node",
+      "collapse": "Collapse node",
+      "resize_hint": "Resize node"
+    },
     "minimap": {
       "expand": "Open minimap",
       "collapse": "Collapse minimap"
@@ -1679,11 +1628,13 @@
     }
   },
   "floating_panel": {
-    "expand": "Expand",
-    "collapse": "Collapse",
     "close": "Close",
     "open_node_ai": "Open AI for this node",
-    "close_node_ai": "Back to node settings"
+    "close_node_ai": "Back to node settings",
+    "drag_hint": "Drag by header",
+    "resize_hint": "Resize",
+    "minimize_panel": "Minimize panel",
+    "restore_panel": "Restore panel"
   },
   "evaluation": {
     "header": {
@@ -2077,18 +2028,6 @@
     "custom_node_update_error": "Failed to update custom node",
     "custom_node_removed": "Custom node removed",
     "custom_node_remove_error": "Failed to remove custom node",
-    "operator_queue_created": "Operator queue created",
-    "operator_queue_create_error": "Failed to create operator queue",
-    "operator_queue_updated": "Operator queue updated",
-    "operator_queue_update_error": "Failed to update operator queue",
-    "operator_member_added": "Member added",
-    "operator_member_add_error": "Failed to add member",
-    "operator_member_removed": "Member removed",
-    "operator_member_remove_error": "Failed to remove member",
-    "operator_task_claimed": "Task claimed",
-    "operator_task_claim_error": "Failed to claim task",
-    "operator_task_completed": "Task completed",
-    "operator_task_complete_error": "Failed to complete task",
     "trigger_created": "Trigger created",
     "trigger_create_error": "Failed to create trigger",
     "trigger_updated": "Trigger updated",

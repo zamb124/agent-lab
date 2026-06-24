@@ -48,7 +48,7 @@ ATTR_WORKFLOW_NODE_SCHEDULE_SEQUENCE = "platform.workflow.node_schedule_sequence
 ATTR_HITL_COMMAND_ID = "platform.hitl.command_id"
 ATTR_HITL_CORRELATION_ID = "platform.hitl.correlation_id"
 ATTR_HITL_QUEUE_SLUG = "platform.hitl.queue_slug"
-ATTR_HITL_OPERATOR_TASK_ID = "platform.hitl.operator_task_id"
+ATTR_HITL_WORK_ITEM_ID = "platform.hitl.work_item_id"
 
 # Память
 ATTR_MEMORY_CURSOR_KEY = "platform.memory.cursor_key"

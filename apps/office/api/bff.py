@@ -11,9 +11,10 @@ import uuid
 from collections.abc import Callable
 from contextlib import asynccontextmanager
 from dataclasses import dataclass
+from datetime import datetime, timezone
 from pathlib import Path
-from typing import Annotated
-from urllib.parse import quote, urlparse
+from typing import Annotated, Literal
+from urllib.parse import quote
 
 from botocore.exceptions import ClientError
 from fastapi import APIRouter, File, Form, HTTPException, Query, Request, UploadFile
@@ -21,6 +22,7 @@ from fastapi.responses import Response
 from httpx import HTTPError, HTTPStatusError
 from sqlalchemy.exc import IntegrityError
 
+from apps.office.api.viewer_routes import router as office_viewer_router
 from apps.office.config import OfficeSettings, get_office_settings
 from apps.office.container import OfficeContainer
 from apps.office.db.models import OfficeDocumentBinding
@@ -34,16 +36,38 @@ from apps.office.models.api import (
     OfficeCatalogMemberItem,
     OfficeCatalogMembersResponse,
     OfficeCatalogPatchRequest,
+    OfficeCatalogRagIndexDisableResponse,
+    OfficeCatalogRagIndexEnableResponse,
+    OfficeCatalogRagIndexRebuildResponse,
+    OfficeCatalogRagIndexSettingsPatchRequest,
+    OfficeCatalogRagIndexSettingsResponse,
+    OfficeCatalogRagIndexStatusResponse,
+    OfficeCatalogSemanticSearchRequest,
+    OfficeCatalogSemanticSearchResponse,
+    OfficeDocumentAiSummaryResponse,
     OfficeDocumentAppendTextRequest,
+    OfficeDocumentCopyRequest,
     OfficeDocumentCreateResponse,
     OfficeDocumentEditorSessionResponse,
+    OfficeDocumentEventItem,
+    OfficeDocumentEventListResponse,
     OfficeDocumentFromFileRequest,
     OfficeDocumentItem,
     OfficeDocumentListResponse,
+    OfficeDocumentMetadataResponse,
+    OfficeDocumentMoveRequest,
     OfficeDocumentMutationResponse,
+    OfficeDocumentPreviewResponse,
     OfficeDocumentRenameRequest,
     OfficeDocumentRenameResponse,
     OfficeDocumentReplaceTextRequest,
+    OfficeDocumentRevisionItem,
+    OfficeDocumentRevisionListResponse,
+    OfficeDocumentSearchResponse,
+    OfficeDocumentShareCreateRequest,
+    OfficeDocumentShareItem,
+    OfficeDocumentShareListResponse,
+    OfficeDocumentShareResolveResponse,
     OfficeDocumentSyncRequest,
     OfficeEditorConfigResponse,
     OfficeEmptyCreateRequest,
@@ -53,13 +77,22 @@ from apps.office.models.api import (
     OfficeNamespaceCreateResponse,
     OfficeNamespaceItem,
     OfficeNamespaceTemplateItem,
+    OfficePublicCatalogItemsResponse,
+    OfficePublicResolveResponse,
+    OfficeResourceAccessPatchRequest,
+    OfficeResourceAccessResponse,
+    OfficeResourceAccessRotateLinkResponse,
     OfficeSpreadsheetUpdateCellsRequest,
     OnlyOfficeCallbackResponse,
 )
 from apps.office.services.callback_dedupe import try_claim_onlyoffice_callback
 from apps.office.services.callback_token import (
     decode_callback_context_token,
-    encode_callback_context_token,
+)
+from apps.office.services.document_lifecycle import (
+    binding_to_item,
+    bindings_to_items,
+    record_document_event,
 )
 from apps.office.services.document_mutations import (
     DocumentMutationError,
@@ -67,26 +100,24 @@ from apps.office.services.document_mutations import (
     replace_text_in_document,
     update_spreadsheet_cells,
 )
-from apps.office.services.document_type import (
-    onlyoffice_document_type_for_upload,
-    onlyoffice_file_type_for_binding,
-    resolve_onlyoffice_document_type_for_editor,
-)
+from apps.office.services.document_type import supports_onlyoffice_viewer
+from apps.office.services.file_binding_metadata import resolve_binding_metadata
 from apps.office.services.minimal_ooxml import minimal_pptx_bytes, minimal_xlsx_bytes
+from apps.office.services.office_access_service import PublicLinkTarget
 from apps.office.services.onlyoffice_jwt import (
     decode_callback_authorization,
     decode_download_token,
-    encode_download_token,
-    encode_editor_config,
 )
+from apps.office.services.viewer_service import file_viewer_binding_id, integration_configured
 from core.clients.onlyoffice import OnlyOfficeJwtError, sign_onlyoffice_jwt_hs256
 from core.clients.service_client import ServiceClientError
 from core.config import get_settings
-from core.context import Context, get_context
-from core.files.models import FileRecord
+from core.context import Context, clear_context, get_context, set_context
+from core.context.job_context import build_job_context
 from core.files.s3_client import S3ClientFactory
+from core.files.types import FileCategory
 from core.http import get_httpx_client
-from core.logging import get_logger
+from core.logging import get_log_context, get_logger
 from core.models.i18n_models import Language
 from core.models.identity_models import Company, User
 from core.pagination import OffsetPage
@@ -95,10 +126,9 @@ from core.websocket.publisher import Notification, NotificationType, notify_user
 
 logger = get_logger(__name__)
 router = APIRouter(tags=["office-bff"])
+router.include_router(office_viewer_router)
 
 _EMPTY_DOCX = Path(__file__).resolve().parent.parent / "templates" / "empty.docx"
-
-_HUMANITEC_PLATFORM_LOGO_PATH = "/static/core/assets/service_logos/frontend_logo.svg"
 
 _CRM_API_V1_PREFIX = "/crm/api/v1"
 
@@ -141,6 +171,103 @@ def _http_exception_from_service_client(service: str, exc: ServiceClientError) -
         detail=f"Сервис {service} недоступен или вернул ошибку: {msg}",
     )
 
+
+async def _index_binding_if_catalog_enabled(
+    container: OfficeContainer,
+    binding: OfficeDocumentBinding,
+    *,
+    scope_company_id: str | None = None,
+    scope_workspace_namespace: str | None = None,
+    scope_user_id: str | None = None,
+) -> None:
+    _ = await container.catalog_rag_index_service.index_binding(
+        binding,
+        scope_company_id=scope_company_id,
+        scope_workspace_namespace=scope_workspace_namespace,
+        scope_user_id=scope_user_id,
+    )
+
+
+async def _index_binding_if_catalog_enabled_with_job_context(
+    container: OfficeContainer,
+    binding: OfficeDocumentBinding,
+    *,
+    company_id: str,
+    workspace_namespace: str,
+    user_id: str,
+) -> None:
+    """
+    OnlyOffice callback анонимный: RagClient берёт Authorization из Context.
+    Перед index-file поднимаем job context с JWT автора документа.
+    """
+    normalized_company_id = company_id.strip()
+    normalized_namespace = workspace_namespace.strip()
+    normalized_user_id = user_id.strip()
+    if normalized_company_id == "":
+        raise ValueError("company_id обязателен")
+    if normalized_namespace == "":
+        raise ValueError("workspace_namespace обязателен")
+    if normalized_user_id == "":
+        raise ValueError("user_id обязателен")
+
+    company = await container.company_repository.get(normalized_company_id)
+    if company is None:
+        raise ValueError(f"Компания не найдена: {normalized_company_id}")
+    user = await container.user_repository.get(normalized_user_id)
+    if user is None:
+        raise ValueError(f"Пользователь не найден: {normalized_user_id}")
+
+    log_ctx = get_log_context()
+    trace_raw = log_ctx.get("trace_id")
+    trace_id = (
+        trace_raw.strip()
+        if isinstance(trace_raw, str) and trace_raw.strip() != ""
+        else f"office-callback:{binding.binding_id}"
+    )
+    session_id = f"office-callback:{binding.binding_id}"
+    previous_context = get_context()
+    job_context = build_job_context(
+        company=company,
+        user=user,
+        host="office_onlyoffice_callback",
+        trace_id=trace_id,
+        session_id=session_id,
+        channel="office",
+    ).model_copy(update={"active_namespace": normalized_namespace})
+    set_context(job_context)
+    try:
+        await _index_binding_if_catalog_enabled(
+            container,
+            binding,
+            scope_company_id=normalized_company_id,
+            scope_workspace_namespace=normalized_namespace,
+            scope_user_id=normalized_user_id,
+        )
+    finally:
+        if previous_context is not None:
+            set_context(previous_context)
+        else:
+            clear_context()
+
+
+async def _unindex_binding_from_catalog(
+    container: OfficeContainer,
+    catalog_id: str,
+    file_id: str,
+) -> None:
+    await container.catalog_rag_index_service.unindex_binding(catalog_id, file_id)
+
+
+def _http_exception_from_catalog_rag_value_error(exc: ValueError) -> HTTPException:
+    message = str(exc)
+    if message == "Каталог не найден":
+        return HTTPException(status_code=404, detail=message)
+    if message == "RAG-индекс для каталога не включён":
+        return HTTPException(status_code=409, detail=message)
+    if message == "Нет проиндексированных каталогов для поиска":
+        return HTTPException(status_code=409, detail=message)
+    return HTTPException(status_code=400, detail=message)
+
 async def _resolve_catalog_for_create(
     c: OfficeContainer,
     *,
@@ -180,11 +307,11 @@ async def _require_binding_catalog_access(
     row: OfficeDocumentBinding,
     user_id: str,
 ) -> None:
-    allowed = await c.catalog_repository.user_can_access_catalog(
-        row.catalog_id,
-        row.company_id,
-        row.namespace,
-        user_id,
+    allowed = await c.office_access_service.user_can_view_binding(
+        row,
+        company_id=row.company_id,
+        namespace=row.namespace,
+        user_id=user_id,
     )
     if not allowed:
         raise HTTPException(status_code=403, detail="Нет доступа к каталогу документа")
@@ -227,10 +354,6 @@ def _onlyoffice_document_key(binding_id: str, checksum: str | None) -> str:
         return binding_id
     return f"{binding_id}_{safe_checksum}"
 
-
-def _file_viewer_binding_id(file_id: str) -> str:
-    digest = hashlib.sha256(file_id.encode("utf-8")).hexdigest()[:40]
-    return f"file_{digest}"
 
 def _onlyoffice_request_payload(token_payload: JsonObject, body: JsonObject) -> JsonObject:
     """
@@ -323,27 +446,6 @@ def _document_server_command_base_url(settings: OfficeSettings) -> str:
     if settings.server.env in ("development", "test") and dev_upstream:
         return dev_upstream
     return settings.office.document_server_public_url.strip().rstrip("/")
-
-
-def _request_public_scheme(request: Request) -> str:
-    forwarded_proto = (request.headers.get("x-forwarded-proto") or "").split(",", 1)[0].strip().lower()
-    if forwarded_proto in {"http", "https"}:
-        return forwarded_proto
-    return request.url.scheme
-
-
-def _browser_document_server_url(raw_url: str, request: Request) -> str:
-    value = raw_url.strip().rstrip("/")
-    if not value:
-        return ""
-    try:
-        parsed = urlparse(value)
-    except ValueError:
-        return value
-    host = (parsed.hostname or "").lower()
-    if _request_public_scheme(request) == "https" and parsed.scheme == "http" and host not in _LOCAL_DOCUMENT_SERVER_HOSTS:
-        return parsed._replace(scheme="https").geturl().rstrip("/")
-    return value
 
 
 async def _post_onlyoffice_command(
@@ -485,138 +587,6 @@ async def _wait_for_file_change_after_forcesave(
     )
     raise HTTPException(status_code=409, detail="Не удалось дождаться сохранения открытого редактора")
 
-def _editor_header_brand_base_url(settings: OfficeSettings) -> str:
-    """Origin для логотипа в шапке OnlyOffice (браузер пользователя, не host.docker.internal)."""
-    ec = settings.office.editor_customization
-    manual = ec.branding_public_base_url.strip().rstrip("/")
-    if manual:
-        return manual
-    srv = settings.server
-    # platform_public_base_url — публичный origin; office_service_url в Docker часто http://office:8008 (только внутри сети).
-    for candidate in (srv.platform_public_base_url, srv.frontend_service_url, srv.office_service_url):
-        if candidate is not None and str(candidate).strip():
-            return str(candidate).strip().rstrip("/")
-    return ""
-
-def _onlyoffice_editor_customization_payload() -> JsonObject:
-    settings = get_office_settings()
-    ec = settings.office.editor_customization
-    customization: JsonObject = {
-        "compactToolbar": ec.compact_toolbar,
-        "compactHeader": ec.compact_header,
-        "uiTheme": ec.ui_theme,
-        "features": {"featuresTips": ec.features_tips},
-    }
-    image = ec.logo_image_url.strip()
-    link_explicit = ec.logo_link_url.strip()
-    if image:
-        logo: JsonObject = {"image": image}
-        dark = ec.logo_image_dark_url.strip()
-        if dark:
-            logo["imageDark"] = dark
-        logo["url"] = link_explicit if link_explicit else ""
-        customization["logo"] = logo
-    elif ec.platform_header_branding:
-        origin = _editor_header_brand_base_url(settings)
-        if origin:
-            static_logo = f"{origin}{_HUMANITEC_PLATFORM_LOGO_PATH}"
-            customization["logo"] = {
-                "image": static_logo,
-                "imageDark": static_logo,
-                "url": link_explicit if link_explicit else f"{origin}/documents",
-            }
-            parsed = urlparse(origin)
-            www = parsed.netloc if parsed.netloc else origin
-            customization["customer"] = {"name": "HUMANITEC", "www": www}
-    return customization
-
-def _integration_configured() -> tuple[bool, str]:
-    s = get_office_settings().office
-    if not s.jwt_secret.strip():
-        return False, "Не задан office.jwt_secret (совпадает с JWT_SECRET Document Server)"
-    if not s.document_server_public_url.strip():
-        return False, "Не задан office.document_server_public_url"
-    if not s.callback_public_base_url.strip():
-        return False, "Не задан office.callback_public_base_url (доступен с контейнера Document Server)"
-    return True, ""
-
-
-def _build_onlyoffice_editor_config_response(
-    *,
-    request: Request,
-    ctx: _AuthenticatedOfficeContext,
-    meta: FileRecord,
-    binding_id: str,
-    binding_kind: str,
-    namespace: str | None,
-    title: str,
-    document_type: str,
-) -> OfficeEditorConfigResponse:
-    integ = get_office_settings().office
-    base = integ.callback_public_base_url.rstrip("/")
-    dl = encode_download_token(
-        file_id=meta.file_id,
-        company_id=ctx.active_company.company_id,
-        binding_id=binding_id,
-        binding_kind=binding_kind,
-        secret=integ.jwt_secret,
-        ttl_seconds=integ.download_token_ttl_seconds,
-    )
-    download_url = f"{base}/documents/api/v1/office-download?token={quote(dl, safe='')}"
-    cb_ctx = encode_callback_context_token(
-        binding_id=binding_id,
-        company_id=ctx.active_company.company_id,
-        namespace=namespace,
-        file_id=meta.file_id if binding_kind == "file" else None,
-        binding_kind=binding_kind,
-        secret=integ.jwt_secret,
-        ttl_seconds=3600,
-    )
-    callback_url = f"{base}/documents/api/v1/onlyoffice/callback?token={quote(cb_ctx, safe='')}"
-
-    doc_key = _onlyoffice_document_key(binding_id, meta.checksum)
-    editor_document_type = resolve_onlyoffice_document_type_for_editor(
-        document_type,
-        meta.original_name,
-    )
-    file_type = onlyoffice_file_type_for_binding(editor_document_type, meta.original_name)
-    user_name = ctx.user.name or ctx.user.email or ctx.user.user_id
-    editor_lang = ctx.language.value if ctx.language else Language.EN.value
-    config: JsonObject = {
-        "type": "desktop",
-        "width": "100%",
-        "height": "100%",
-        "document": {
-            "fileType": file_type,
-            "key": doc_key,
-            "title": title,
-            "url": download_url,
-            "permissions": {
-                "comment": True,
-                "copy": True,
-                "download": True,
-                "edit": True,
-                "fillForms": True,
-                "modifyContentControl": True,
-                "modifyFilter": True,
-                "print": True,
-                "review": True,
-            },
-        },
-        "documentType": editor_document_type,
-        "editorConfig": {
-            "mode": "edit",
-            "callbackUrl": callback_url,
-            "user": {"id": ctx.user.user_id, "name": user_name},
-            "lang": editor_lang,
-            "coEditing": {"mode": "fast"},
-            "customization": _onlyoffice_editor_customization_payload(),
-        },
-    }
-    token = encode_editor_config(config, integ.jwt_secret)
-    ds = _browser_document_server_url(integ.document_server_public_url, request)
-    return OfficeEditorConfigResponse(document_server_url=ds, token=token)
-
 
 async def _require_explicit_namespace(container: OfficeContainer) -> str:
     """
@@ -658,7 +628,7 @@ async def _require_explicit_namespace(container: OfficeContainer) -> str:
 
 @router.get("/integration/status", response_model=OfficeIntegrationStatusResponse)
 async def integration_status() -> OfficeIntegrationStatusResponse:
-    ok, detail = _integration_configured()
+    ok, detail = integration_configured()
     return OfficeIntegrationStatusResponse(configured=ok, detail=detail)
 
 
@@ -669,30 +639,26 @@ async def file_editor_config(
     request: Request,
 ) -> OfficeEditorConfigResponse:
     ctx = _require_office_context()
-    ok, detail = _integration_configured()
-    if not ok:
-        raise HTTPException(status_code=503, detail=detail)
     meta = await container.file_processor.get_file_record(file_id)
     if meta is None:
         raise HTTPException(status_code=404, detail="Файл не найден")
     if meta.company_id != ctx.active_company.company_id:
         raise HTTPException(status_code=403, detail="Файл не принадлежит компании")
-    try:
-        document_type, _ = onlyoffice_document_type_for_upload(
-            meta.original_name,
-            (meta.content_type or "application/octet-stream").split(";")[0].strip(),
-        )
-    except ValueError as exc:
-        raise HTTPException(status_code=415, detail=str(exc)) from exc
-    return _build_onlyoffice_editor_config_response(
+    file_category, onlyoffice_document_type = resolve_binding_metadata(
+        meta.original_name,
+        (meta.content_type or "application/octet-stream").split(";")[0].strip(),
+    )
+    user_name = ctx.user.name or ctx.user.email or ctx.user.user_id
+    editor_lang = container.viewer_service.default_editor_lang(ctx.language)
+    return await container.viewer_service.open_config_for_file(
         request=request,
-        ctx=ctx,
-        meta=meta,
-        binding_id=_file_viewer_binding_id(meta.file_id),
-        binding_kind="file",
-        namespace=None,
-        title=meta.original_name,
-        document_type=document_type,
+        file_record=meta,
+        company_id=ctx.active_company.company_id,
+        user_id=ctx.user.user_id,
+        user_name=user_name,
+        editor_lang=editor_lang,
+        file_category=file_category,
+        onlyoffice_document_type=onlyoffice_document_type,
     )
 
 
@@ -704,20 +670,22 @@ async def sync_file_editor_state(
 ) -> OfficeFileEditorSyncResponse:
     ctx = _require_office_context()
     sync_options = body or OfficeDocumentSyncRequest()
-    binding_id = _file_viewer_binding_id(file_id)
+    binding_id = file_viewer_binding_id(file_id)
     async with _document_mutation_lock(container, binding_id):
         meta = await container.file_processor.get_file_record(file_id)
         if meta is None:
             raise HTTPException(status_code=404, detail="Файл не найден")
         if meta.company_id != ctx.active_company.company_id:
             raise HTTPException(status_code=403, detail="Файл не принадлежит компании")
-        try:
-            _, _ = onlyoffice_document_type_for_upload(
-                meta.original_name,
-                (meta.content_type or "application/octet-stream").split(";")[0].strip(),
+        if not supports_onlyoffice_viewer(
+            meta.original_name,
+            (meta.content_type or "application/octet-stream").split(";")[0].strip(),
+        ):
+            return OfficeFileEditorSyncResponse(
+                file_id=meta.file_id,
+                checksum=meta.checksum,
+                file_size=meta.file_size,
             )
-        except ValueError as exc:
-            raise HTTPException(status_code=415, detail=str(exc)) from exc
         document_key = _onlyoffice_document_key(binding_id, meta.checksum)
         if sync_options.settle_ms > 0:
             await asyncio.sleep(sync_options.settle_ms / 1000)
@@ -913,6 +881,7 @@ async def list_catalogs(container: ContainerDep) -> OfficeCatalogListResponse:
         out.append(
             OfficeCatalogListItem(
                 catalog_id=cat.catalog_id,
+                parent_catalog_id=cat.parent_catalog_id,
                 title=cat.title,
                 file_count=file_count,
                 owner_user_id=cat.owner_user_id,
@@ -920,6 +889,8 @@ async def list_catalogs(container: ContainerDep) -> OfficeCatalogListResponse:
                 owner_avatar_url=avatar_url,
                 is_owner=cat.owner_user_id == ctx.user.user_id,
                 is_public=cat.is_public,
+                rag_index_enabled=cat.rag_index_enabled,
+                rag_index_include_subcatalogs=cat.rag_index_include_subcatalogs,
             )
         )
     return OfficeCatalogListResponse(items=out)
@@ -931,16 +902,38 @@ async def create_catalog(
 ) -> OfficeCatalogDetailResponse:
     namespace = await _require_explicit_namespace(container)
     ctx = _require_office_context()
-    cat = await container.catalog_repository.create(
-        company_id=ctx.active_company.company_id,
-        namespace=namespace,
-        title=body.title,
-        owner_user_id=ctx.user.user_id,
-        is_public=body.is_public,
-    )
+    if body.parent_catalog_id is not None:
+        parent_allowed = await container.catalog_repository.user_can_access_catalog(
+            body.parent_catalog_id,
+            ctx.active_company.company_id,
+            namespace,
+            ctx.user.user_id,
+        )
+        if not parent_allowed:
+            raise HTTPException(status_code=403, detail="Нет доступа к родительскому каталогу")
+        is_parent_owner = await container.catalog_repository.user_is_owner(
+            body.parent_catalog_id,
+            ctx.active_company.company_id,
+            namespace,
+            ctx.user.user_id,
+        )
+        if not is_parent_owner:
+            raise HTTPException(status_code=403, detail="Подкаталог может создать только владелец родительского каталога")
+    try:
+        cat = await container.catalog_repository.create(
+            company_id=ctx.active_company.company_id,
+            namespace=namespace,
+            title=body.title,
+            owner_user_id=ctx.user.user_id,
+            is_public=body.is_public,
+            parent_catalog_id=body.parent_catalog_id,
+        )
+    except ValueError as e:
+        raise HTTPException(status_code=404, detail=str(e)) from e
     display_name, avatar_url = await _user_display(container, cat.owner_user_id)
     return OfficeCatalogDetailResponse(
         catalog_id=cat.catalog_id,
+        parent_catalog_id=cat.parent_catalog_id,
         title=cat.title,
         owner_user_id=cat.owner_user_id,
         owner_display_name=display_name,
@@ -974,6 +967,7 @@ async def get_catalog(
     display_name, avatar_url = await _user_display(container, cat.owner_user_id)
     return OfficeCatalogDetailResponse(
         catalog_id=cat.catalog_id,
+        parent_catalog_id=cat.parent_catalog_id,
         title=cat.title,
         owner_user_id=cat.owner_user_id,
         owner_display_name=display_name,
@@ -1013,6 +1007,7 @@ async def patch_catalog(
     display_name, avatar_url = await _user_display(container, updated.owner_user_id)
     return OfficeCatalogDetailResponse(
         catalog_id=updated.catalog_id,
+        parent_catalog_id=updated.parent_catalog_id,
         title=updated.title,
         owner_user_id=updated.owner_user_id,
         owner_display_name=display_name,
@@ -1036,6 +1031,20 @@ async def delete_catalog_endpoint(
     )
     if not is_owner:
         raise HTTPException(status_code=403, detail="Только владелец может удалить каталог")
+    catalog = await container.catalog_repository.get(
+        catalog_id,
+        ctx.active_company.company_id,
+        namespace,
+    )
+    if catalog is None:
+        raise HTTPException(status_code=404, detail="Каталог не найден")
+    if catalog.rag_index_enabled:
+        try:
+            await container.catalog_rag_index_service.disable(catalog_id)
+        except ServiceClientError as exc:
+            raise _http_exception_from_service_client("rag", exc) from exc
+        except ValueError as exc:
+            raise _http_exception_from_catalog_rag_value_error(exc) from exc
     try:
         ok = await container.catalog_repository.delete_catalog(
             catalog_id,
@@ -1047,6 +1056,170 @@ async def delete_catalog_endpoint(
     if not ok:
         raise HTTPException(status_code=404, detail="Каталог не найден")
     return Response(status_code=204)
+
+
+@router.post(
+    "/catalogs/{catalog_id}/rag-index/enable",
+    response_model=OfficeCatalogRagIndexEnableResponse,
+)
+async def enable_catalog_rag_index(
+    catalog_id: str,
+    container: ContainerDep,
+) -> OfficeCatalogRagIndexEnableResponse:
+    namespace = await _require_explicit_namespace(container)
+    ctx = _require_office_context()
+    is_owner = await container.catalog_repository.user_is_owner(
+        catalog_id,
+        ctx.active_company.company_id,
+        namespace,
+        ctx.user.user_id,
+    )
+    if not is_owner:
+        raise HTTPException(status_code=403, detail="Только владелец может управлять RAG-индексом каталога")
+    try:
+        return await container.catalog_rag_index_service.enable(catalog_id)
+    except ServiceClientError as exc:
+        raise _http_exception_from_service_client("rag", exc) from exc
+    except ValueError as exc:
+        raise _http_exception_from_catalog_rag_value_error(exc) from exc
+
+
+@router.post(
+    "/catalogs/{catalog_id}/rag-index/disable",
+    response_model=OfficeCatalogRagIndexDisableResponse,
+)
+async def disable_catalog_rag_index(
+    catalog_id: str,
+    container: ContainerDep,
+) -> OfficeCatalogRagIndexDisableResponse:
+    namespace = await _require_explicit_namespace(container)
+    ctx = _require_office_context()
+    is_owner = await container.catalog_repository.user_is_owner(
+        catalog_id,
+        ctx.active_company.company_id,
+        namespace,
+        ctx.user.user_id,
+    )
+    if not is_owner:
+        raise HTTPException(status_code=403, detail="Только владелец может управлять RAG-индексом каталога")
+    try:
+        await container.catalog_rag_index_service.disable(catalog_id)
+    except ServiceClientError as exc:
+        raise _http_exception_from_service_client("rag", exc) from exc
+    except ValueError as exc:
+        raise _http_exception_from_catalog_rag_value_error(exc) from exc
+    return OfficeCatalogRagIndexDisableResponse()
+
+
+@router.post(
+    "/catalogs/{catalog_id}/rag-index/rebuild",
+    status_code=202,
+    response_model=OfficeCatalogRagIndexRebuildResponse,
+)
+async def rebuild_catalog_rag_index(
+    catalog_id: str,
+    container: ContainerDep,
+) -> OfficeCatalogRagIndexRebuildResponse:
+    namespace = await _require_explicit_namespace(container)
+    ctx = _require_office_context()
+    is_owner = await container.catalog_repository.user_is_owner(
+        catalog_id,
+        ctx.active_company.company_id,
+        namespace,
+        ctx.user.user_id,
+    )
+    if not is_owner:
+        raise HTTPException(status_code=403, detail="Только владелец может управлять RAG-индексом каталога")
+    try:
+        return await container.catalog_rag_index_service.rebuild_catalog(catalog_id)
+    except ValueError as exc:
+        raise _http_exception_from_catalog_rag_value_error(exc) from exc
+
+
+@router.get(
+    "/catalogs/{catalog_id}/rag-index/status",
+    response_model=OfficeCatalogRagIndexStatusResponse,
+)
+async def catalog_rag_index_status(
+    catalog_id: str,
+    container: ContainerDep,
+) -> OfficeCatalogRagIndexStatusResponse:
+    namespace = await _require_explicit_namespace(container)
+    ctx = _require_office_context()
+    allowed = await container.catalog_repository.user_can_access_catalog(
+        catalog_id,
+        ctx.active_company.company_id,
+        namespace,
+        ctx.user.user_id,
+    )
+    if not allowed:
+        raise HTTPException(status_code=403, detail="Нет доступа к каталогу")
+    try:
+        return await container.catalog_rag_index_service.get_status(catalog_id)
+    except ServiceClientError as exc:
+        raise _http_exception_from_service_client("rag", exc) from exc
+    except ValueError as exc:
+        raise _http_exception_from_catalog_rag_value_error(exc) from exc
+
+
+@router.patch(
+    "/catalogs/{catalog_id}/rag-index/settings",
+    response_model=OfficeCatalogRagIndexSettingsResponse,
+)
+async def patch_catalog_rag_index_settings(
+    catalog_id: str,
+    body: OfficeCatalogRagIndexSettingsPatchRequest,
+    container: ContainerDep,
+) -> OfficeCatalogRagIndexSettingsResponse:
+    namespace = await _require_explicit_namespace(container)
+    ctx = _require_office_context()
+    is_owner = await container.catalog_repository.user_is_owner(
+        catalog_id,
+        ctx.active_company.company_id,
+        namespace,
+        ctx.user.user_id,
+    )
+    if not is_owner:
+        raise HTTPException(status_code=403, detail="Только владелец может управлять RAG-индексом каталога")
+    try:
+        return await container.catalog_rag_index_service.set_include_subcatalogs(
+            catalog_id,
+            include_subcatalogs=body.include_subcatalogs,
+        )
+    except ValueError as exc:
+        raise _http_exception_from_catalog_rag_value_error(exc) from exc
+
+
+@router.post(
+    "/catalogs/{catalog_id}/rag-index/search",
+    response_model=OfficeCatalogSemanticSearchResponse,
+)
+async def search_catalog_rag_index(
+    catalog_id: str,
+    body: OfficeCatalogSemanticSearchRequest,
+    container: ContainerDep,
+) -> OfficeCatalogSemanticSearchResponse:
+    namespace = await _require_explicit_namespace(container)
+    ctx = _require_office_context()
+    allowed = await container.catalog_repository.user_can_access_catalog(
+        catalog_id,
+        ctx.active_company.company_id,
+        namespace,
+        ctx.user.user_id,
+    )
+    if not allowed:
+        raise HTTPException(status_code=403, detail="Нет доступа к каталогу")
+    try:
+        return await container.catalog_rag_index_service.search_catalog(
+            catalog_id,
+            body.query,
+            limit=body.limit,
+        )
+    except ServiceClientError as exc:
+        raise _http_exception_from_service_client("rag", exc) from exc
+    except ValueError as exc:
+        raise _http_exception_from_catalog_rag_value_error(exc) from exc
+
 
 @router.get("/catalogs/{catalog_id}/members", response_model=OfficeCatalogMembersResponse)
 async def list_catalog_members(
@@ -1142,11 +1315,197 @@ async def remove_catalog_member(
         raise HTTPException(status_code=404, detail="Участник не найден")
     return Response(status_code=204)
 
+
+@router.get("/catalogs/{catalog_id}/access", response_model=OfficeResourceAccessResponse)
+async def get_catalog_access(
+    catalog_id: str,
+    container: ContainerDep,
+    request: Request,
+) -> OfficeResourceAccessResponse:
+    namespace = await _require_explicit_namespace(container)
+    ctx = _require_office_context()
+    is_owner = await container.catalog_repository.user_is_owner(
+        catalog_id,
+        ctx.active_company.company_id,
+        namespace,
+        ctx.user.user_id,
+    )
+    if not is_owner:
+        raise HTTPException(status_code=403, detail="Только владелец может управлять доступом")
+    try:
+        return await container.office_access_service.get_catalog_access(
+            catalog_id,
+            ctx.active_company.company_id,
+            namespace,
+            request,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+
+@router.patch("/catalogs/{catalog_id}/access", response_model=OfficeResourceAccessResponse)
+async def patch_catalog_access(
+    catalog_id: str,
+    body: OfficeResourceAccessPatchRequest,
+    container: ContainerDep,
+    request: Request,
+) -> OfficeResourceAccessResponse:
+    namespace = await _require_explicit_namespace(container)
+    ctx = _require_office_context()
+    is_owner = await container.catalog_repository.user_is_owner(
+        catalog_id,
+        ctx.active_company.company_id,
+        namespace,
+        ctx.user.user_id,
+    )
+    if not is_owner:
+        raise HTTPException(status_code=403, detail="Только владелец может управлять доступом")
+    try:
+        response, _raw_token = await container.office_access_service.patch_catalog_access(
+            catalog_id,
+            ctx.active_company.company_id,
+            namespace,
+            body,
+            request,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    return response
+
+
+@router.post(
+    "/catalogs/{catalog_id}/access/link/rotate",
+    response_model=OfficeResourceAccessRotateLinkResponse,
+)
+async def rotate_catalog_access_link(
+    catalog_id: str,
+    container: ContainerDep,
+    request: Request,
+) -> OfficeResourceAccessRotateLinkResponse:
+    namespace = await _require_explicit_namespace(container)
+    ctx = _require_office_context()
+    is_owner = await container.catalog_repository.user_is_owner(
+        catalog_id,
+        ctx.active_company.company_id,
+        namespace,
+        ctx.user.user_id,
+    )
+    if not is_owner:
+        raise HTTPException(status_code=403, detail="Только владелец может управлять доступом")
+    try:
+        return await container.office_access_service.rotate_catalog_link(
+            catalog_id,
+            ctx.active_company.company_id,
+            namespace,
+            request,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@router.get("/documents/{binding_id}/access", response_model=OfficeResourceAccessResponse)
+async def get_document_access(
+    binding_id: str,
+    container: ContainerDep,
+    request: Request,
+) -> OfficeResourceAccessResponse:
+    namespace = await _require_explicit_namespace(container)
+    ctx = _require_office_context()
+    row = await container.document_binding_repository.get_for_company(
+        binding_id,
+        ctx.active_company.company_id,
+        namespace,
+    )
+    if row is None or row.deleted_at is not None:
+        raise HTTPException(status_code=404, detail="Привязка не найдена")
+    await _require_binding_catalog_access(container, row, ctx.user.user_id)
+    return await container.office_access_service.get_binding_access(row, request)
+
+
+@router.patch("/documents/{binding_id}/access", response_model=OfficeResourceAccessResponse)
+async def patch_document_access(
+    binding_id: str,
+    body: OfficeResourceAccessPatchRequest,
+    container: ContainerDep,
+    request: Request,
+) -> OfficeResourceAccessResponse:
+    namespace = await _require_explicit_namespace(container)
+    ctx = _require_office_context()
+    row = await container.document_binding_repository.get_for_company(
+        binding_id,
+        ctx.active_company.company_id,
+        namespace,
+    )
+    if row is None or row.deleted_at is not None:
+        raise HTTPException(status_code=404, detail="Привязка не найдена")
+    await _require_binding_catalog_access(container, row, ctx.user.user_id)
+    try:
+        response, _raw_token = await container.office_access_service.patch_binding_access(
+            row,
+            body,
+            request,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    return response
+
+
+@router.post(
+    "/documents/{binding_id}/access/link/rotate",
+    response_model=OfficeResourceAccessRotateLinkResponse,
+)
+async def rotate_document_access_link(
+    binding_id: str,
+    container: ContainerDep,
+    request: Request,
+) -> OfficeResourceAccessRotateLinkResponse:
+    namespace = await _require_explicit_namespace(container)
+    ctx = _require_office_context()
+    row = await container.document_binding_repository.get_for_company(
+        binding_id,
+        ctx.active_company.company_id,
+        namespace,
+    )
+    if row is None or row.deleted_at is not None:
+        raise HTTPException(status_code=404, detail="Привязка не найдена")
+    await _require_binding_catalog_access(container, row, ctx.user.user_id)
+    try:
+        return await container.office_access_service.rotate_binding_link(row, request)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+OfficeDocumentSortKey = Literal["created_at", "title", "file_size", "updated_at"]
+OfficeDocumentSortOrder = Literal["asc", "desc"]
+
+
+def _sort_office_document_items(
+    items: list[OfficeDocumentItem],
+    sort: OfficeDocumentSortKey,
+    order: OfficeDocumentSortOrder,
+) -> list[OfficeDocumentItem]:
+    reverse = order == "desc"
+
+    def sort_key(item: OfficeDocumentItem) -> str | int | float:
+        if sort == "title":
+            return item.title.casefold()
+        if sort == "file_size":
+            return item.file_size
+        if sort == "updated_at":
+            return item.updated_at.timestamp()
+        return item.created_at.timestamp()
+
+    return sorted(items, key=sort_key, reverse=reverse)
+
+
 @router.get("/documents", response_model=OfficeDocumentListResponse)
 async def list_documents(
     container: ContainerDep,
     catalog_id: Annotated[str | None, Query(min_length=1)] = None,
     catalog_ids: Annotated[list[str] | None, Query()] = None,
+    q: Annotated[str | None, Query(max_length=500)] = None,
+    sort: Annotated[OfficeDocumentSortKey, Query()] = "updated_at",
+    order: Annotated[OfficeDocumentSortOrder, Query()] = "desc",
 ) -> OfficeDocumentListResponse:
     namespace = await _require_explicit_namespace(container)
     ctx = _require_office_context()
@@ -1182,35 +1541,11 @@ async def list_documents(
         namespace,
         resolved_ids,
     )
-    user_ids = {r.created_by_user_id for r in rows}
-    users_by_id: dict[str, User] = {}
-    for uid in user_ids:
-        loaded = await container.user_repository.get(uid)
-        if loaded is not None:
-            users_by_id[uid] = loaded
-
-    items: list[OfficeDocumentItem] = []
-    for r in rows:
-        author = users_by_id.get(r.created_by_user_id)
-        if author is not None:
-            display_name = author.name
-            avatar_url = author.avatar_url
-        else:
-            display_name = r.created_by_user_id
-            avatar_url = None
-        items.append(
-            OfficeDocumentItem(
-                binding_id=r.binding_id,
-                catalog_id=r.catalog_id,
-                title=r.title,
-                file_id=r.file_id,
-                document_type=r.document_type,
-                created_at=r.created_at,
-                created_by_user_id=r.created_by_user_id,
-                created_by_display_name=display_name,
-                created_by_avatar_url=avatar_url,
-            )
-        )
+    items = await bindings_to_items(container, rows)
+    if q is not None and q.strip() != "":
+        needle = q.strip().casefold()
+        items = [item for item in items if needle in item.title.casefold()]
+    items = _sort_office_document_items(items, sort, order)
     return OfficeDocumentListResponse(items=items)
 
 @router.post("/documents", response_model=OfficeDocumentCreateResponse)
@@ -1233,13 +1568,8 @@ async def upload_document(
     if len(data) == 0:
         raise HTTPException(status_code=400, detail="Пустой файл")
     guessed_ct = file.content_type or "application/octet-stream"
-    try:
-        document_type, _ = onlyoffice_document_type_for_upload(
-            raw_name,
-            guessed_ct.split(";")[0].strip(),
-        )
-    except ValueError as e:
-        raise HTTPException(status_code=400, detail=str(e)) from e
+    normalized_ct = guessed_ct.split(";", 1)[0].strip()
+    file_category, onlyoffice_document_type = resolve_binding_metadata(raw_name, normalized_ct)
     fp = container.file_processor
     prefix = "/documents/api/v1/files/download"
     meta = await fp.persist_uploaded_file(
@@ -1263,15 +1593,23 @@ async def upload_document(
         namespace=namespace,
         catalog_id=resolved_catalog_id,
         file_id=meta.file_id,
-        document_type=document_type,
+        file_category=file_category,
+        onlyoffice_document_type=onlyoffice_document_type,
         title=doc_title,
         created_by_user_id=ctx.user.user_id,
     )
+    try:
+        await _index_binding_if_catalog_enabled(container, row)
+    except ServiceClientError as exc:
+        raise _http_exception_from_service_client("rag", exc) from exc
+    except ValueError as exc:
+        raise _http_exception_from_catalog_rag_value_error(exc) from exc
     return OfficeDocumentCreateResponse(
         binding_id=row.binding_id,
         file_id=row.file_id,
         catalog_id=row.catalog_id,
-        document_type=row.document_type,
+        file_category=row.file_category,
+        onlyoffice_document_type=row.onlyoffice_document_type,
         title=row.title,
         editor_url=_editor_embed_url(row.binding_id, namespace),
     )
@@ -1290,13 +1628,10 @@ async def open_existing_file_as_document(
     if meta.company_id != ctx.active_company.company_id:
         raise HTTPException(status_code=403, detail="Файл не принадлежит компании")
 
-    try:
-        document_type, _ = onlyoffice_document_type_for_upload(
-            meta.original_name,
-            (meta.content_type or "application/octet-stream").split(";")[0].strip(),
-        )
-    except ValueError as e:
-        raise HTTPException(status_code=400, detail=str(e)) from e
+    file_category, onlyoffice_document_type = resolve_binding_metadata(
+        meta.original_name,
+        (meta.content_type or "application/octet-stream").split(";")[0].strip(),
+    )
 
     existing = await container.document_binding_repository.get_by_file_for_company(
         file_id,
@@ -1309,7 +1644,8 @@ async def open_existing_file_as_document(
             binding_id=existing.binding_id,
             file_id=existing.file_id,
             catalog_id=existing.catalog_id,
-            document_type=existing.document_type,
+            file_category=existing.file_category,
+            onlyoffice_document_type=existing.onlyoffice_document_type,
             title=existing.title,
             editor_url=_editor_embed_url(existing.binding_id, namespace),
         )
@@ -1328,7 +1664,8 @@ async def open_existing_file_as_document(
             namespace=namespace,
             catalog_id=resolved_catalog_id,
             file_id=meta.file_id,
-            document_type=document_type,
+            file_category=file_category,
+            onlyoffice_document_type=onlyoffice_document_type,
             title=title,
             created_by_user_id=ctx.user.user_id,
         )
@@ -1345,15 +1682,23 @@ async def open_existing_file_as_document(
             binding_id=existing.binding_id,
             file_id=existing.file_id,
             catalog_id=existing.catalog_id,
-            document_type=existing.document_type,
+            file_category=existing.file_category,
+            onlyoffice_document_type=existing.onlyoffice_document_type,
             title=existing.title,
             editor_url=_editor_embed_url(existing.binding_id, namespace),
         )
+    try:
+        await _index_binding_if_catalog_enabled(container, row)
+    except ServiceClientError as exc:
+        raise _http_exception_from_service_client("rag", exc) from exc
+    except ValueError as exc:
+        raise _http_exception_from_catalog_rag_value_error(exc) from exc
     return OfficeDocumentCreateResponse(
         binding_id=row.binding_id,
         file_id=row.file_id,
         catalog_id=row.catalog_id,
-        document_type=row.document_type,
+        file_category=row.file_category,
+        onlyoffice_document_type=row.onlyoffice_document_type,
         title=row.title,
         editor_url=_editor_embed_url(row.binding_id, namespace),
     )
@@ -1380,7 +1725,8 @@ async def create_empty_document(
         content_type = (
             "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
         )
-        document_type = "word"
+        file_category = FileCategory.OFFICE_DOC.value
+        onlyoffice_document_type = "word"
     elif kind == "cell":
         fmt = body.spreadsheet_format
         if fmt == "csv":
@@ -1391,14 +1737,16 @@ async def create_empty_document(
             data = minimal_xlsx_bytes()
             original_name = f"{stem}.xlsx"
             content_type = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-        document_type = "cell"
+        file_category = FileCategory.SPREADSHEET.value
+        onlyoffice_document_type = "cell"
     else:
         data = minimal_pptx_bytes()
         original_name = f"{stem}.pptx"
         content_type = (
             "application/vnd.openxmlformats-officedocument.presentationml.presentation"
         )
-        document_type = "slide"
+        file_category = FileCategory.PRESENTATION.value
+        onlyoffice_document_type = "slide"
 
     fp = container.file_processor
     prefix = "/documents/api/v1/files/download"
@@ -1423,15 +1771,23 @@ async def create_empty_document(
         namespace=namespace,
         catalog_id=resolved_catalog_id,
         file_id=meta.file_id,
-        document_type=document_type,
+        file_category=file_category,
+        onlyoffice_document_type=onlyoffice_document_type,
         title=body.title.strip(),
         created_by_user_id=ctx.user.user_id,
     )
+    try:
+        await _index_binding_if_catalog_enabled(container, row)
+    except ServiceClientError as exc:
+        raise _http_exception_from_service_client("rag", exc) from exc
+    except ValueError as exc:
+        raise _http_exception_from_catalog_rag_value_error(exc) from exc
     return OfficeDocumentCreateResponse(
         binding_id=row.binding_id,
         file_id=row.file_id,
         catalog_id=row.catalog_id,
-        document_type=row.document_type,
+        file_category=row.file_category,
+        onlyoffice_document_type=row.onlyoffice_document_type,
         title=row.title,
         editor_url=_editor_embed_url(row.binding_id, namespace),
     )
@@ -1459,7 +1815,8 @@ async def document_editor_session(
         file_id=row.file_id,
         catalog_id=row.catalog_id,
         title=row.title,
-        document_type=row.document_type,
+        file_category=row.file_category,
+        onlyoffice_document_type=row.onlyoffice_document_type,
         namespace=namespace,
         editor_url=_editor_embed_url(row.binding_id, namespace),
     )
@@ -1488,6 +1845,21 @@ async def sync_document_editor_state(
         meta = await container.file_processor.get_file_record(row.file_id)
         if meta is None:
             raise HTTPException(status_code=404, detail="Файл не найден")
+
+        if not supports_onlyoffice_viewer(
+            meta.original_name,
+            (meta.content_type or "application/octet-stream").split(";")[0].strip(),
+        ):
+            return OfficeDocumentEditorSessionResponse(
+                binding_id=row.binding_id,
+                file_id=row.file_id,
+                catalog_id=row.catalog_id,
+                title=row.title,
+                file_category=row.file_category,
+                onlyoffice_document_type=row.onlyoffice_document_type,
+                namespace=namespace,
+                editor_url=_editor_embed_url(row.binding_id, namespace),
+            )
 
         document_key = _onlyoffice_document_key(row.binding_id, meta.checksum)
         if sync_options.settle_ms > 0:
@@ -1535,7 +1907,8 @@ async def sync_document_editor_state(
         file_id=row.file_id,
         catalog_id=row.catalog_id,
         title=row.title,
-        document_type=row.document_type,
+        file_category=row.file_category,
+        onlyoffice_document_type=row.onlyoffice_document_type,
         namespace=namespace,
         editor_url=_editor_embed_url(row.binding_id, namespace),
     )
@@ -1561,6 +1934,12 @@ async def _apply_document_bytes_mutation(
         meta = await container.file_processor.get_file_record(row.file_id)
         if meta is None:
             raise HTTPException(status_code=404, detail="Файл не найден")
+        caps = container.viewer_service.capabilities_for_file(
+            file_category=row.file_category,
+            file_record=meta,
+        )
+        if not caps.server_mutations:
+            raise HTTPException(status_code=422, detail="Серверные мутации недоступны для этого типа файла")
         document_key = _onlyoffice_document_key(row.binding_id, meta.checksum)
         force_code = await _force_save_open_editor_if_needed(
             binding_id=row.binding_id,
@@ -1738,7 +2117,91 @@ async def delete_document(binding_id: str, container: ContainerDep) -> Response:
     )
     if row is None:
         raise HTTPException(status_code=404, detail="Привязка не найдена")
+    if row.deleted_at is not None:
+        raise HTTPException(status_code=404, detail="Привязка не найдена")
     await _require_binding_catalog_access(container, row, ctx.user.user_id)
+    try:
+        await _unindex_binding_from_catalog(container, row.catalog_id, row.file_id)
+    except ServiceClientError as exc:
+        raise _http_exception_from_service_client("rag", exc) from exc
+    except ValueError as exc:
+        raise _http_exception_from_catalog_rag_value_error(exc) from exc
+    ok = await container.document_binding_repository.soft_delete(
+        binding_id,
+        ctx.active_company.company_id,
+        namespace,
+        ctx.user.user_id,
+    )
+    if not ok:
+        raise HTTPException(status_code=404, detail="Привязка не найдена")
+    await record_document_event(
+        container,
+        binding_id=binding_id,
+        company_id=ctx.active_company.company_id,
+        event_type="deleted",
+        user_id=ctx.user.user_id,
+    )
+    return Response(status_code=204)
+
+
+@router.get("/documents/deleted", response_model=OfficeDocumentListResponse)
+async def list_deleted_documents(container: ContainerDep) -> OfficeDocumentListResponse:
+    namespace = await _require_explicit_namespace(container)
+    ctx = _require_office_context()
+    rows = await container.document_binding_repository.list_deleted_by_namespace(
+        ctx.active_company.company_id,
+        namespace,
+    )
+    items = await bindings_to_items(container, rows)
+    return OfficeDocumentListResponse(items=items)
+
+
+@router.post("/documents/{binding_id}/restore", response_model=OfficeDocumentItem)
+async def restore_document(binding_id: str, container: ContainerDep) -> OfficeDocumentItem:
+    namespace = await _require_explicit_namespace(container)
+    ctx = _require_office_context()
+    row = await container.document_binding_repository.restore(
+        binding_id,
+        ctx.active_company.company_id,
+        namespace,
+    )
+    if row is None:
+        raise HTTPException(status_code=404, detail="Привязка не найдена в корзине")
+    await _require_binding_catalog_access(container, row, ctx.user.user_id)
+    await record_document_event(
+        container,
+        binding_id=binding_id,
+        company_id=ctx.active_company.company_id,
+        event_type="restored",
+        user_id=ctx.user.user_id,
+    )
+    try:
+        await _index_binding_if_catalog_enabled(container, row)
+    except ServiceClientError as exc:
+        raise _http_exception_from_service_client("rag", exc) from exc
+    except ValueError as exc:
+        raise _http_exception_from_catalog_rag_value_error(exc) from exc
+    return await binding_to_item(container, row)
+
+
+@router.delete("/documents/{binding_id}/permanent", status_code=204)
+async def permanent_delete_document(binding_id: str, container: ContainerDep) -> Response:
+    namespace = await _require_explicit_namespace(container)
+    ctx = _require_office_context()
+    row = await container.document_binding_repository.get_for_company(
+        binding_id,
+        ctx.active_company.company_id,
+        namespace,
+    )
+    if row is None or row.deleted_at is None:
+        raise HTTPException(status_code=404, detail="Привязка не найдена в корзине")
+    await _require_binding_catalog_access(container, row, ctx.user.user_id)
+    try:
+        await _unindex_binding_from_catalog(container, row.catalog_id, row.file_id)
+    except ServiceClientError as exc:
+        raise _http_exception_from_service_client("rag", exc) from exc
+    except ValueError as exc:
+        raise _http_exception_from_catalog_rag_value_error(exc) from exc
     ok = await container.document_binding_repository.delete_binding(
         binding_id,
         ctx.active_company.company_id,
@@ -1747,6 +2210,408 @@ async def delete_document(binding_id: str, container: ContainerDep) -> Response:
     if not ok:
         raise HTTPException(status_code=404, detail="Привязка не найдена")
     return Response(status_code=204)
+
+
+@router.post("/documents/{binding_id}/move", response_model=OfficeDocumentItem)
+async def move_document(
+    binding_id: str,
+    body: OfficeDocumentMoveRequest,
+    container: ContainerDep,
+) -> OfficeDocumentItem:
+    namespace = await _require_explicit_namespace(container)
+    ctx = _require_office_context()
+    row = await container.document_binding_repository.get_for_company(
+        binding_id,
+        ctx.active_company.company_id,
+        namespace,
+    )
+    if row is None or row.deleted_at is not None:
+        raise HTTPException(status_code=404, detail="Привязка не найдена")
+    await _require_binding_catalog_access(container, row, ctx.user.user_id)
+    allowed = await container.catalog_repository.user_can_access_catalog(
+        body.catalog_id,
+        ctx.active_company.company_id,
+        namespace,
+        ctx.user.user_id,
+    )
+    if not allowed:
+        raise HTTPException(status_code=403, detail="Нет доступа к каталогу")
+    source_catalog_id = row.catalog_id
+    moved = await container.document_binding_repository.move_to_catalog(
+        binding_id,
+        ctx.active_company.company_id,
+        namespace,
+        body.catalog_id,
+    )
+    if moved is None:
+        raise HTTPException(status_code=404, detail="Привязка не найдена")
+    await record_document_event(
+        container,
+        binding_id=binding_id,
+        company_id=ctx.active_company.company_id,
+        event_type="moved",
+        user_id=ctx.user.user_id,
+        payload={"catalog_id": body.catalog_id},
+    )
+    try:
+        await _unindex_binding_from_catalog(container, source_catalog_id, row.file_id)
+        await _index_binding_if_catalog_enabled(container, moved)
+    except ServiceClientError as exc:
+        raise _http_exception_from_service_client("rag", exc) from exc
+    except ValueError as exc:
+        raise _http_exception_from_catalog_rag_value_error(exc) from exc
+    return await binding_to_item(container, moved)
+
+
+@router.post("/documents/{binding_id}/copy", response_model=OfficeDocumentCreateResponse)
+async def copy_document(
+    binding_id: str,
+    body: OfficeDocumentCopyRequest,
+    container: ContainerDep,
+) -> OfficeDocumentCreateResponse:
+    namespace = await _require_explicit_namespace(container)
+    ctx = _require_office_context()
+    row = await container.document_binding_repository.get_for_company(
+        binding_id,
+        ctx.active_company.company_id,
+        namespace,
+    )
+    if row is None or row.deleted_at is not None:
+        raise HTTPException(status_code=404, detail="Привязка не найдена")
+    await _require_binding_catalog_access(container, row, ctx.user.user_id)
+    allowed = await container.catalog_repository.user_can_access_catalog(
+        body.catalog_id,
+        ctx.active_company.company_id,
+        namespace,
+        ctx.user.user_id,
+    )
+    if not allowed:
+        raise HTTPException(status_code=403, detail="Нет доступа к каталогу")
+    meta = await container.file_processor.get_file_record(row.file_id)
+    if meta is None:
+        raise HTTPException(status_code=404, detail="Файл не найден")
+    s3 = S3ClientFactory.create_client_for_bucket(meta.s3_bucket)
+    try:
+        file_bytes = await s3.download_bytes(meta.s3_key)
+    finally:
+        await s3.close()
+    copy_title = body.title.strip() if body.title is not None else f"{row.title} (copy)"
+    prefix = "/documents/api/v1/files/download"
+    copied_file = await container.file_processor.persist_uploaded_file(
+        data=file_bytes,
+        original_name=meta.original_name,
+        content_type=meta.content_type,
+        uploaded_by=ctx.user.user_id,
+        company_id=ctx.active_company.company_id,
+        public=False,
+        download_url_prefix=prefix,
+        content_sha256_hex=hashlib.sha256(file_bytes).hexdigest(),
+    )
+    created = await container.document_binding_repository.create(
+        company_id=ctx.active_company.company_id,
+        namespace=namespace,
+        catalog_id=body.catalog_id,
+        file_id=copied_file.file_id,
+        file_category=row.file_category,
+        onlyoffice_document_type=row.onlyoffice_document_type,
+        title=copy_title,
+        created_by_user_id=ctx.user.user_id,
+    )
+    await record_document_event(
+        container,
+        binding_id=created.binding_id,
+        company_id=ctx.active_company.company_id,
+        event_type="copied",
+        user_id=ctx.user.user_id,
+        payload={"source_binding_id": binding_id},
+    )
+    try:
+        await _index_binding_if_catalog_enabled(container, created)
+    except ServiceClientError as exc:
+        raise _http_exception_from_service_client("rag", exc) from exc
+    except ValueError as exc:
+        raise _http_exception_from_catalog_rag_value_error(exc) from exc
+    return OfficeDocumentCreateResponse(
+        binding_id=created.binding_id,
+        file_id=created.file_id,
+        catalog_id=created.catalog_id,
+        file_category=created.file_category,
+        onlyoffice_document_type=created.onlyoffice_document_type,
+        title=created.title,
+    )
+
+
+@router.get("/documents/search", response_model=OfficeDocumentSearchResponse)
+async def search_documents(
+    container: ContainerDep,
+    q: Annotated[str, Query(min_length=1, max_length=500)],
+) -> OfficeDocumentSearchResponse:
+    namespace = await _require_explicit_namespace(container)
+    ctx = _require_office_context()
+    rows = await container.document_binding_repository.search_by_title(
+        ctx.active_company.company_id,
+        namespace,
+        q,
+    )
+    items = await bindings_to_items(container, rows)
+    return OfficeDocumentSearchResponse(items=items)
+
+
+@router.get("/documents/{binding_id}/preview", response_model=OfficeDocumentPreviewResponse)
+async def document_preview(binding_id: str, container: ContainerDep) -> OfficeDocumentPreviewResponse:
+    namespace = await _require_explicit_namespace(container)
+    ctx = _require_office_context()
+    row = await container.document_binding_repository.get_for_company(
+        binding_id,
+        ctx.active_company.company_id,
+        namespace,
+    )
+    if row is None or row.deleted_at is not None:
+        raise HTTPException(status_code=404, detail="Привязка не найдена")
+    await _require_binding_catalog_access(container, row, ctx.user.user_id)
+    meta = await container.file_processor.get_file_record(row.file_id)
+    if meta is None:
+        raise HTTPException(status_code=404, detail="Файл не найден")
+    preview_url = await container.viewer_service.preview_for_binding(binding=row, file_record=meta)
+    return OfficeDocumentPreviewResponse(binding_id=row.binding_id, preview_url=preview_url)
+
+
+@router.post("/documents/{binding_id}/shares", response_model=OfficeDocumentShareItem)
+async def create_document_share(
+    binding_id: str,
+    body: OfficeDocumentShareCreateRequest,
+    container: ContainerDep,
+    request: Request,
+) -> OfficeDocumentShareItem:
+    namespace = await _require_explicit_namespace(container)
+    ctx = _require_office_context()
+    row = await container.document_binding_repository.get_for_company(
+        binding_id,
+        ctx.active_company.company_id,
+        namespace,
+    )
+    if row is None or row.deleted_at is not None:
+        raise HTTPException(status_code=404, detail="Привязка не найдена")
+    await _require_binding_catalog_access(container, row, ctx.user.user_id)
+    permission = body.permission if body.permission in ("view", "edit") else "view"
+    patch_body = OfficeResourceAccessPatchRequest(
+        link_enabled=True,
+        link_permission=permission,
+    )
+    try:
+        if row.link_enabled:
+            rotated = await container.office_access_service.rotate_binding_link(row, request)
+            public_url = rotated.public_url
+        else:
+            access_response, _raw_token = await container.office_access_service.patch_binding_access(
+                row,
+                patch_body,
+                request,
+            )
+            if access_response.public_url is None:
+                raise ValueError("Не удалось создать публичную ссылку")
+            public_url = access_response.public_url
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    await record_document_event(
+        container,
+        binding_id=binding_id,
+        company_id=ctx.active_company.company_id,
+        event_type="shared",
+        user_id=ctx.user.user_id,
+        payload={"binding_id": binding_id},
+    )
+    return OfficeDocumentShareItem(
+        share_id=binding_id,
+        binding_id=binding_id,
+        permission=permission,
+        share_url=public_url,
+        expires_at=None,
+        created_at=datetime.now(timezone.utc),
+    )
+
+
+@router.get("/documents/{binding_id}/shares", response_model=OfficeDocumentShareListResponse)
+async def list_document_shares(
+    binding_id: str,
+    container: ContainerDep,
+    request: Request,
+) -> OfficeDocumentShareListResponse:
+    namespace = await _require_explicit_namespace(container)
+    ctx = _require_office_context()
+    row = await container.document_binding_repository.get_for_company(
+        binding_id,
+        ctx.active_company.company_id,
+        namespace,
+    )
+    if row is None or row.deleted_at is not None:
+        raise HTTPException(status_code=404, detail="Привязка не найдена")
+    await _require_binding_catalog_access(container, row, ctx.user.user_id)
+    shares = await container.document_share_repository.list_for_binding(binding_id)
+    base = str(request.base_url).rstrip("/")
+    items = [
+        OfficeDocumentShareItem(
+            share_id=share.share_id,
+            binding_id=share.binding_id,
+            permission=share.permission,
+            share_url=f"{base}/documents/api/v1/shares/<token>",
+            expires_at=share.expires_at,
+            created_at=share.created_at,
+        )
+        for share in shares
+    ]
+    return OfficeDocumentShareListResponse(items=items)
+
+
+@router.get("/shares/{token}", response_model=OfficeDocumentShareResolveResponse)
+async def resolve_document_share(token: str, container: ContainerDep) -> OfficeDocumentShareResolveResponse:
+    token_hash = hashlib.sha256(token.encode("utf-8")).hexdigest()
+    share = await container.document_share_repository.get_by_token_hash(token_hash)
+    if share is None:
+        raise HTTPException(status_code=404, detail="Ссылка не найдена")
+    if share.expires_at is not None and share.expires_at < datetime.now(timezone.utc):
+        raise HTTPException(status_code=410, detail="Ссылка истекла")
+    row = await container.document_binding_repository.get_by_binding_and_company(
+        share.binding_id,
+        share.company_id,
+    )
+    if row is None or row.deleted_at is not None:
+        raise HTTPException(status_code=404, detail="Документ не найден")
+    return OfficeDocumentShareResolveResponse(
+        binding_id=row.binding_id,
+        title=row.title,
+        permission=share.permission,
+        file_category=row.file_category,
+        onlyoffice_document_type=row.onlyoffice_document_type,
+    )
+
+
+@router.get("/documents/{binding_id}/revisions", response_model=OfficeDocumentRevisionListResponse)
+async def list_document_revisions(
+    binding_id: str,
+    container: ContainerDep,
+) -> OfficeDocumentRevisionListResponse:
+    namespace = await _require_explicit_namespace(container)
+    ctx = _require_office_context()
+    row = await container.document_binding_repository.get_for_company(
+        binding_id,
+        ctx.active_company.company_id,
+        namespace,
+    )
+    if row is None or row.deleted_at is not None:
+        raise HTTPException(status_code=404, detail="Привязка не найдена")
+    await _require_binding_catalog_access(container, row, ctx.user.user_id)
+    revisions = await container.document_revision_repository.list_for_binding(binding_id)
+    items = [
+        OfficeDocumentRevisionItem(
+            revision_id=revision.revision_id,
+            revision_number=revision.revision_number,
+            file_id=revision.file_id,
+            created_by_user_id=revision.created_by_user_id,
+            created_at=revision.created_at,
+        )
+        for revision in revisions
+    ]
+    return OfficeDocumentRevisionListResponse(items=items)
+
+
+@router.post("/documents/{binding_id}/revisions", response_model=OfficeDocumentRevisionItem)
+async def create_document_revision(
+    binding_id: str,
+    container: ContainerDep,
+) -> OfficeDocumentRevisionItem:
+    namespace = await _require_explicit_namespace(container)
+    ctx = _require_office_context()
+    row = await container.document_binding_repository.get_for_company(
+        binding_id,
+        ctx.active_company.company_id,
+        namespace,
+    )
+    if row is None or row.deleted_at is not None:
+        raise HTTPException(status_code=404, detail="Привязка не найдена")
+    await _require_binding_catalog_access(container, row, ctx.user.user_id)
+    revision = await container.document_revision_repository.create(
+        binding_id=binding_id,
+        file_id=row.file_id,
+        created_by_user_id=ctx.user.user_id,
+    )
+    await record_document_event(
+        container,
+        binding_id=binding_id,
+        company_id=ctx.active_company.company_id,
+        event_type="revision_created",
+        user_id=ctx.user.user_id,
+        payload={"revision_id": revision.revision_id},
+    )
+    return OfficeDocumentRevisionItem(
+        revision_id=revision.revision_id,
+        revision_number=revision.revision_number,
+        file_id=revision.file_id,
+        created_by_user_id=revision.created_by_user_id,
+        created_at=revision.created_at,
+    )
+
+
+@router.get("/documents/{binding_id}/events", response_model=OfficeDocumentEventListResponse)
+async def list_document_events(
+    binding_id: str,
+    container: ContainerDep,
+) -> OfficeDocumentEventListResponse:
+    namespace = await _require_explicit_namespace(container)
+    ctx = _require_office_context()
+    row = await container.document_binding_repository.get_for_company(
+        binding_id,
+        ctx.active_company.company_id,
+        namespace,
+    )
+    if row is None:
+        raise HTTPException(status_code=404, detail="Привязка не найдена")
+    await _require_binding_catalog_access(container, row, ctx.user.user_id)
+    events = await container.document_event_repository.list_for_binding(binding_id)
+    items = [
+        OfficeDocumentEventItem(
+            event_id=event.event_id,
+            event_type=event.event_type,
+            user_id=event.user_id,
+            created_at=event.created_at,
+        )
+        for event in events
+    ]
+    return OfficeDocumentEventListResponse(items=items)
+
+
+@router.get("/documents/{binding_id}/metadata", response_model=OfficeDocumentMetadataResponse)
+async def document_metadata(binding_id: str, container: ContainerDep) -> OfficeDocumentMetadataResponse:
+    namespace = await _require_explicit_namespace(container)
+    ctx = _require_office_context()
+    row = await container.document_binding_repository.get_for_company(
+        binding_id,
+        ctx.active_company.company_id,
+        namespace,
+    )
+    if row is None or row.deleted_at is not None:
+        raise HTTPException(status_code=404, detail="Привязка не найдена")
+    await _require_binding_catalog_access(container, row, ctx.user.user_id)
+    return OfficeDocumentMetadataResponse(binding_id=row.binding_id)
+
+
+@router.get("/documents/{binding_id}/ai-summary", response_model=OfficeDocumentAiSummaryResponse)
+async def document_ai_summary(binding_id: str, container: ContainerDep) -> OfficeDocumentAiSummaryResponse:
+    namespace = await _require_explicit_namespace(container)
+    ctx = _require_office_context()
+    row = await container.document_binding_repository.get_for_company(
+        binding_id,
+        ctx.active_company.company_id,
+        namespace,
+    )
+    if row is None or row.deleted_at is not None:
+        raise HTTPException(status_code=404, detail="Привязка не найдена")
+    await _require_binding_catalog_access(container, row, ctx.user.user_id)
+    return OfficeDocumentAiSummaryResponse(
+        binding_id=row.binding_id,
+        summary="",
+        enabled=False,
+    )
 
 @router.get(
     "/documents/{binding_id}/editor-config",
@@ -1759,10 +2624,6 @@ async def editor_config(
 ) -> OfficeEditorConfigResponse:
     namespace = await _require_explicit_namespace(container)
     ctx = _require_office_context()
-    ok, detail = _integration_configured()
-    if not ok:
-        raise HTTPException(status_code=503, detail=detail)
-    integ = get_office_settings().office
     row = await container.document_binding_repository.get_for_company(
         binding_id,
         ctx.active_company.company_id,
@@ -1776,68 +2637,98 @@ async def editor_config(
         raise HTTPException(status_code=404, detail="Файл не найден в хранилище")
     if meta.company_id != ctx.active_company.company_id:
         raise HTTPException(status_code=403, detail="Файл не принадлежит компании")
-
-    base = integ.callback_public_base_url.rstrip("/")
-    dl = encode_download_token(
-        file_id=row.file_id,
-        company_id=ctx.active_company.company_id,
-        binding_id=row.binding_id,
-        secret=integ.jwt_secret,
-        ttl_seconds=integ.download_token_ttl_seconds,
-    )
-    download_url = f"{base}/documents/api/v1/office-download?token={quote(dl, safe='')}"
-    cb_ctx = encode_callback_context_token(
-        binding_id=row.binding_id,
-        company_id=ctx.active_company.company_id,
-        namespace=namespace,
-        secret=integ.jwt_secret,
-        ttl_seconds=3600,
-    )
-    callback_url = f"{base}/documents/api/v1/onlyoffice/callback?token={quote(cb_ctx, safe='')}"
-
-    doc_key = _onlyoffice_document_key(row.binding_id, meta.checksum)
-
-    editor_document_type = resolve_onlyoffice_document_type_for_editor(
-        row.document_type,
-        meta.original_name,
-    )
-    file_type = onlyoffice_file_type_for_binding(editor_document_type, meta.original_name)
     user_name = ctx.user.name or ctx.user.email or ctx.user.user_id
-    editor_lang = ctx.language.value if ctx.language else Language.EN.value
-    config: JsonObject = {
-        "type": "desktop",
-        "width": "100%",
-        "height": "100%",
-        "document": {
-            "fileType": file_type,
-            "key": doc_key,
-            "title": row.title,
-            "url": download_url,
-            "permissions": {
-                "comment": True,
-                "copy": True,
-                "download": True,
-                "edit": True,
-                "fillForms": True,
-                "modifyContentControl": True,
-                "modifyFilter": True,
-                "print": True,
-                "review": True,
-            },
-        },
-        "documentType": editor_document_type,
-        "editorConfig": {
-            "mode": "edit",
-            "callbackUrl": callback_url,
-            "user": {"id": ctx.user.user_id, "name": user_name},
-            "lang": editor_lang,
-            "coEditing": {"mode": "fast"},
-            "customization": _onlyoffice_editor_customization_payload(),
-        },
-    }
-    token = encode_editor_config(config, integ.jwt_secret)
-    ds = _browser_document_server_url(integ.document_server_public_url, request)
-    return OfficeEditorConfigResponse(document_server_url=ds, token=token)
+    editor_lang = container.viewer_service.default_editor_lang(ctx.language)
+    return await container.viewer_service.open_config_for_binding(
+        request=request,
+        binding=row,
+        file_record=meta,
+        user_id=ctx.user.user_id,
+        user_name=user_name,
+        editor_lang=editor_lang,
+    )
+
+
+@router.get("/public/resolve/{token}", response_model=OfficePublicResolveResponse)
+async def public_resolve(token: str, container: ContainerDep) -> OfficePublicResolveResponse:
+    try:
+        target = await container.office_access_service.resolve_public_token(token)
+    except ValueError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    return await container.office_access_service.build_public_resolve(target)
+
+
+@router.get("/public/open/{token}", response_model=OfficeEditorConfigResponse)
+async def public_open(
+    token: str,
+    container: ContainerDep,
+    request: Request,
+) -> OfficeEditorConfigResponse:
+    try:
+        target = await container.office_access_service.resolve_public_token(token)
+    except ValueError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    if target.kind != "binding" or target.binding is None:
+        raise HTTPException(status_code=400, detail="Откройте файл по прямой ссылке")
+    meta = await container.file_processor.get_file_record(target.binding.file_id)
+    if meta is None:
+        raise HTTPException(status_code=404, detail="Файл не найден")
+    if meta.company_id != target.binding.company_id:
+        raise HTTPException(status_code=403, detail="Доступ запрещён")
+    return await container.viewer_service.open_config_for_public_link(
+        request=request,
+        target=target,
+        file_record=meta,
+    )
+
+
+@router.get("/public/catalog/{token}/items", response_model=OfficePublicCatalogItemsResponse)
+async def public_catalog_items(token: str, container: ContainerDep) -> OfficePublicCatalogItemsResponse:
+    try:
+        target = await container.office_access_service.resolve_public_token(token)
+    except ValueError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    try:
+        return await container.office_access_service.list_public_catalog_items(target)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@router.get(
+    "/public/catalog/{token}/bindings/{binding_id}/open",
+    response_model=OfficeEditorConfigResponse,
+)
+async def public_catalog_binding_open(
+    token: str,
+    binding_id: str,
+    container: ContainerDep,
+    request: Request,
+) -> OfficeEditorConfigResponse:
+    try:
+        catalog_target = await container.office_access_service.resolve_public_token(token)
+        binding = await container.office_access_service.resolve_public_catalog_binding_open(
+            catalog_target,
+            binding_id,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    binding_target = PublicLinkTarget(
+        kind="binding",
+        catalog=None,
+        binding=binding,
+        token_hash=binding.link_token_hash or "",
+    )
+    if binding.link_token_hash is None:
+        raise HTTPException(status_code=403, detail="Публичная ссылка файла не настроена")
+    meta = await container.file_processor.get_file_record(binding.file_id)
+    if meta is None:
+        raise HTTPException(status_code=404, detail="Файл не найден")
+    return await container.viewer_service.open_config_for_public_link(
+        request=request,
+        target=binding_target,
+        file_record=meta,
+    )
+
 
 @router.get("/office-download")
 async def office_download(
@@ -1863,7 +2754,7 @@ async def office_download(
         if binding_row is None or binding_row.file_id != file_id:
             raise HTTPException(status_code=403, detail="Доступ запрещён")
     elif binding_kind == "file":
-        if binding_id != _file_viewer_binding_id(file_id):
+        if binding_id != file_viewer_binding_id(file_id):
             raise HTTPException(status_code=403, detail="Доступ запрещён")
     else:
         raise HTTPException(status_code=403, detail="Доступ запрещён")
@@ -1984,14 +2875,15 @@ async def onlyoffice_callback(
         notification_action_url: str | None = None
         notification_data: JsonObject = {}
         file_id: str
+        document_binding: OfficeDocumentBinding | None = None
 
         if binding_kind == "document":
-            row = await container.document_binding_repository.get_for_company(
+            document_binding = await container.document_binding_repository.get_for_company(
                 binding_id,
                 company_id,
                 namespace,
             )
-            if row is None:
+            if document_binding is None:
                 logger.error(
                     "OnlyOffice callback: привязка %s не найдена (company=%s ns=%s)",
                     binding_id,
@@ -1999,9 +2891,9 @@ async def onlyoffice_callback(
                     namespace,
                 )
                 raise HTTPException(status_code=404, detail="Привязка не найдена")
-            file_id = row.file_id
-            notification_user_id = row.created_by_user_id
-            notification_message = row.title
+            file_id = document_binding.file_id
+            notification_user_id = document_binding.created_by_user_id
+            notification_message = document_binding.title
             notification_action_url = f"/documents/edit/{binding_id}"
             notification_data = {"binding_id": binding_id, "company_id": company_id}
         elif binding_kind == "file":
@@ -2009,7 +2901,7 @@ async def onlyoffice_callback(
             if raw_file_id is None or raw_file_id == "":
                 raise HTTPException(status_code=400, detail="В callback-токене нет file_id")
             file_id = raw_file_id
-            if binding_id != _file_viewer_binding_id(file_id):
+            if binding_id != file_viewer_binding_id(file_id):
                 logger.error(
                     "OnlyOffice callback: некорректный binding_id для file viewer binding_id=%s file_id=%s",
                     binding_id,
@@ -2046,6 +2938,19 @@ async def onlyoffice_callback(
             update={"file_size": len(new_bytes), "checksum": digest},
         )
         _ = await container.file_processor.file_repository.set(updated)
+        if document_binding is not None:
+            try:
+                await _index_binding_if_catalog_enabled_with_job_context(
+                    container,
+                    document_binding,
+                    company_id=company_id,
+                    workspace_namespace=namespace,
+                    user_id=document_binding.created_by_user_id,
+                )
+            except ServiceClientError as exc:
+                raise _http_exception_from_service_client("rag", exc) from exc
+            except ValueError as exc:
+                raise _http_exception_from_catalog_rag_value_error(exc) from exc
         logger.info(
             "OnlyOffice callback saved binding_kind=%s binding_id=%s file_id=%s status=%s bytes=%s old_size=%s old_checksum=%s new_checksum=%s",
             binding_kind,

@@ -3214,6 +3214,20 @@
         "title": "CompanyMembershipResponse",
         "description": "Компания, в которой состоит текущий пользователь, с ролями и активным флагом."
       },
+      "ControlHumanTakeoverBody": {
+        "properties": {
+          "owner": {
+            "type": "string",
+            "maxLength": 120,
+            "minLength": 1,
+            "title": "Owner",
+            "default": "human"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "title": "ControlHumanTakeoverBody"
+      },
       "ControlPointerClickBody": {
         "properties": {
           "x": {
@@ -3263,6 +3277,38 @@
           "image_height"
         ],
         "title": "ControlPointerClickBody"
+      },
+      "ControlPointerKeyBody": {
+        "properties": {
+          "key": {
+            "type": "string",
+            "maxLength": 80,
+            "minLength": 1,
+            "title": "Key"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "key"
+        ],
+        "title": "ControlPointerKeyBody"
+      },
+      "ControlPointerTextBody": {
+        "properties": {
+          "text": {
+            "type": "string",
+            "maxLength": 4096,
+            "minLength": 1,
+            "title": "Text"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "text"
+        ],
+        "title": "ControlPointerTextBody"
       },
       "CredentialInfo": {
         "properties": {
@@ -11962,7 +12008,7 @@
             "type": "array",
             "title": "Files"
           },
-          "operator_queue_slug": {
+          "work_queue_slug": {
             "anyOf": [
               {
                 "type": "string"
@@ -11971,20 +12017,9 @@
                 "type": "null"
               }
             ],
-            "title": "Operator Queue Slug"
+            "title": "Work Queue Slug"
           },
-          "operator_queue_id": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Operator Queue Id"
-          },
-          "operator_handoff_mode": {
+          "handoff_mode": {
             "anyOf": [
               {
                 "type": "string",
@@ -11997,9 +12032,9 @@
                 "type": "null"
               }
             ],
-            "title": "Operator Handoff Mode"
+            "title": "Handoff Mode"
           },
-          "operator_task_title": {
+          "handoff_task_title": {
             "anyOf": [
               {
                 "type": "string"
@@ -12008,9 +12043,9 @@
                 "type": "null"
               }
             ],
-            "title": "Operator Task Title"
+            "title": "Handoff Task Title"
           },
-          "operator_user_message": {
+          "handoff_user_message": {
             "anyOf": [
               {
                 "type": "string"
@@ -12019,7 +12054,7 @@
                 "type": "null"
               }
             ],
-            "title": "Operator User Message"
+            "title": "Handoff User Message"
           },
           "save_to_messages": {
             "type": "boolean",
@@ -12131,10 +12166,10 @@
             "minLength": 1,
             "title": "Correlation Id"
           },
-          "operator_task_id": {
+          "work_item_id": {
             "type": "string",
             "minLength": 1,
-            "title": "Operator Task Id"
+            "title": "Work Item Id"
           },
           "operator_user_id": {
             "type": "string",
@@ -12160,7 +12195,7 @@
         "required": [
           "handoff_command_id",
           "correlation_id",
-          "operator_task_id",
+          "work_item_id",
           "operator_user_id",
           "handoff_mode",
           "resolution_preview",
@@ -12188,10 +12223,10 @@
             "minLength": 1,
             "title": "Correlation Id"
           },
-          "operator_task_id": {
+          "work_item_id": {
             "type": "string",
             "minLength": 1,
-            "title": "Operator Task Id"
+            "title": "Work Item Id"
           },
           "operator_user_id": {
             "type": "string",
@@ -12209,7 +12244,7 @@
         "required": [
           "handoff_command_id",
           "correlation_id",
-          "operator_task_id",
+          "work_item_id",
           "operator_user_id",
           "reason"
         ],
@@ -12240,10 +12275,10 @@
             "minLength": 1,
             "title": "Correlation Id"
           },
-          "operator_task_id": {
+          "work_item_id": {
             "type": "string",
             "minLength": 1,
-            "title": "Operator Task Id"
+            "title": "Work Item Id"
           },
           "task_title": {
             "type": "string",
@@ -12295,7 +12330,7 @@
           "node_id",
           "handoff_command_id",
           "correlation_id",
-          "operator_task_id",
+          "work_item_id",
           "task_title",
           "assignee_queue",
           "handoff_mode",
@@ -12329,10 +12364,10 @@
             "minLength": 1,
             "title": "Correlation Id"
           },
-          "operator_task_id": {
+          "work_item_id": {
             "type": "string",
             "minLength": 1,
-            "title": "Operator Task Id"
+            "title": "Work Item Id"
           },
           "response_preview": {
             "type": "string",
@@ -12347,7 +12382,7 @@
           "node_id",
           "handoff_command_id",
           "correlation_id",
-          "operator_task_id",
+          "work_item_id",
           "response_preview"
         ],
         "title": "HandoffResumedPayload"
@@ -15098,68 +15133,6 @@
         ],
         "title": "OffsetPage[NodeResponse]"
       },
-      "OffsetPage_OperatorQueueOut_": {
-        "properties": {
-          "items": {
-            "items": {
-              "$ref": "#/components/schemas/OperatorQueueOut"
-            },
-            "type": "array",
-            "title": "Items"
-          },
-          "total": {
-            "type": "integer",
-            "title": "Total"
-          },
-          "limit": {
-            "type": "integer",
-            "title": "Limit"
-          },
-          "offset": {
-            "type": "integer",
-            "title": "Offset"
-          }
-        },
-        "type": "object",
-        "required": [
-          "items",
-          "total",
-          "limit",
-          "offset"
-        ],
-        "title": "OffsetPage[OperatorQueueOut]"
-      },
-      "OffsetPage_OperatorTaskOut_": {
-        "properties": {
-          "items": {
-            "items": {
-              "$ref": "#/components/schemas/OperatorTaskOut"
-            },
-            "type": "array",
-            "title": "Items"
-          },
-          "total": {
-            "type": "integer",
-            "title": "Total"
-          },
-          "limit": {
-            "type": "integer",
-            "title": "Limit"
-          },
-          "offset": {
-            "type": "integer",
-            "title": "Offset"
-          }
-        },
-        "type": "object",
-        "required": [
-          "items",
-          "total",
-          "limit",
-          "offset"
-        ],
-        "title": "OffsetPage[OperatorTaskOut]"
-      },
       "OffsetPage_ResourceDefinition_": {
         "properties": {
           "items": {
@@ -15284,362 +15257,6 @@
         ],
         "title": "OffsetPage[VariableResponse]"
       },
-      "OperatorDialogLogEntry": {
-        "properties": {
-          "role": {
-            "type": "string",
-            "enum": [
-              "operator",
-              "user"
-            ],
-            "title": "Role"
-          },
-          "text": {
-            "type": "string",
-            "title": "Text",
-            "default": ""
-          },
-          "ts": {
-            "type": "string",
-            "minLength": 1,
-            "title": "Ts"
-          },
-          "user_id": {
-            "type": "string",
-            "minLength": 1,
-            "title": "User Id"
-          },
-          "file_ids": {
-            "items": {
-              "type": "string"
-            },
-            "type": "array",
-            "title": "File Ids"
-          }
-        },
-        "additionalProperties": false,
-        "type": "object",
-        "required": [
-          "role",
-          "ts",
-          "user_id"
-        ],
-        "title": "OperatorDialogLogEntry"
-      },
-      "OperatorInterruptSnapshot": {
-        "properties": {
-          "question": {
-            "type": "string",
-            "minLength": 1,
-            "title": "Question"
-          },
-          "task_title": {
-            "type": "string",
-            "minLength": 1,
-            "title": "Task Title"
-          },
-          "assignee_queue": {
-            "type": "string",
-            "minLength": 1,
-            "title": "Assignee Queue"
-          },
-          "queue_id": {
-            "type": "string",
-            "minLength": 1,
-            "title": "Queue Id"
-          },
-          "handoff_mode": {
-            "$ref": "#/components/schemas/HandoffMode",
-            "default": "single_reply"
-          },
-          "handoff_command_id": {
-            "type": "string",
-            "minLength": 1,
-            "title": "Handoff Command Id"
-          },
-          "execution_branch_id": {
-            "type": "string",
-            "minLength": 1,
-            "title": "Execution Branch Id"
-          },
-          "node_schedule_sequence": {
-            "type": "integer",
-            "minimum": 1.0,
-            "title": "Node Schedule Sequence"
-          },
-          "node_id": {
-            "type": "string",
-            "minLength": 1,
-            "title": "Node Id"
-          },
-          "tool_call_id": {
-            "anyOf": [
-              {
-                "type": "string",
-                "minLength": 1
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Tool Call Id"
-          }
-        },
-        "additionalProperties": false,
-        "type": "object",
-        "required": [
-          "question",
-          "task_title",
-          "assignee_queue",
-          "queue_id",
-          "handoff_command_id",
-          "execution_branch_id",
-          "node_schedule_sequence",
-          "node_id"
-        ],
-        "title": "OperatorInterruptSnapshot"
-      },
-      "OperatorMemberAdd": {
-        "properties": {
-          "user_id": {
-            "type": "string",
-            "minLength": 1,
-            "title": "User Id"
-          },
-          "role": {
-            "type": "string",
-            "minLength": 1,
-            "title": "Role",
-            "default": "agent"
-          }
-        },
-        "additionalProperties": false,
-        "type": "object",
-        "required": [
-          "user_id"
-        ],
-        "title": "OperatorMemberAdd"
-      },
-      "OperatorQueueCreate": {
-        "properties": {
-          "name": {
-            "type": "string",
-            "minLength": 1,
-            "title": "Name"
-          },
-          "slug": {
-            "type": "string",
-            "minLength": 1,
-            "title": "Slug"
-          },
-          "description": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Description"
-          }
-        },
-        "additionalProperties": false,
-        "type": "object",
-        "required": [
-          "name",
-          "slug"
-        ],
-        "title": "OperatorQueueCreate"
-      },
-      "OperatorQueueOut": {
-        "properties": {
-          "queue_id": {
-            "type": "string",
-            "title": "Queue Id"
-          },
-          "company_id": {
-            "type": "string",
-            "title": "Company Id"
-          },
-          "name": {
-            "type": "string",
-            "title": "Name"
-          },
-          "slug": {
-            "type": "string",
-            "title": "Slug"
-          },
-          "description": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Description"
-          },
-          "created_at": {
-            "anyOf": [
-              {
-                "type": "string",
-                "format": "date-time"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Created At"
-          },
-          "updated_at": {
-            "anyOf": [
-              {
-                "type": "string",
-                "format": "date-time"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Updated At"
-          },
-          "i_am_member": {
-            "type": "boolean",
-            "title": "I Am Member",
-            "default": false
-          }
-        },
-        "additionalProperties": false,
-        "type": "object",
-        "required": [
-          "queue_id",
-          "company_id",
-          "name",
-          "slug"
-        ],
-        "title": "OperatorQueueOut",
-        "description": "Operator queue API response."
-      },
-      "OperatorQueuePatch": {
-        "properties": {
-          "name": {
-            "anyOf": [
-              {
-                "type": "string",
-                "minLength": 1
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Name"
-          },
-          "description": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Description"
-          }
-        },
-        "additionalProperties": false,
-        "type": "object",
-        "title": "OperatorQueuePatch"
-      },
-      "OperatorResolutionPayload": {
-        "properties": {
-          "text": {
-            "type": "string",
-            "minLength": 1,
-            "title": "Text"
-          },
-          "file_ids": {
-            "items": {
-              "type": "string"
-            },
-            "type": "array",
-            "title": "File Ids"
-          }
-        },
-        "additionalProperties": false,
-        "type": "object",
-        "required": [
-          "text"
-        ],
-        "title": "OperatorResolutionPayload"
-      },
-      "OperatorTaskCompleteBody": {
-        "properties": {
-          "resolution": {
-            "type": "string",
-            "minLength": 1,
-            "title": "Resolution"
-          },
-          "file_ids": {
-            "items": {
-              "type": "string"
-            },
-            "type": "array",
-            "title": "File Ids"
-          }
-        },
-        "additionalProperties": false,
-        "type": "object",
-        "required": [
-          "resolution"
-        ],
-        "title": "OperatorTaskCompleteBody"
-      },
-      "OperatorTaskDetailOut": {
-        "properties": {
-          "task": {
-            "$ref": "#/components/schemas/OperatorTaskOut"
-          },
-          "interrupt_snapshot": {
-            "$ref": "#/components/schemas/OperatorInterruptSnapshot"
-          },
-          "resolution_payload": {
-            "anyOf": [
-              {
-                "$ref": "#/components/schemas/OperatorResolutionPayload"
-              },
-              {
-                "type": "null"
-              }
-            ]
-          },
-          "dialog_log": {
-            "items": {
-              "$ref": "#/components/schemas/OperatorDialogLogEntry"
-            },
-            "type": "array",
-            "title": "Dialog Log"
-          },
-          "dialog_messages": {
-            "items": {
-              "additionalProperties": {
-                "$ref": "#/components/schemas/JsonValue"
-              },
-              "type": "object"
-            },
-            "type": "array",
-            "title": "Dialog Messages"
-          }
-        },
-        "additionalProperties": false,
-        "type": "object",
-        "required": [
-          "task",
-          "interrupt_snapshot"
-        ],
-        "title": "OperatorTaskDetailOut"
-      },
       "OperatorTaskInterrupt": {
         "properties": {
           "kind": {
@@ -15669,7 +15286,7 @@
             "description": "single_reply — один ответ оператора; takeover — полный перехват диалога",
             "default": "single_reply"
           },
-          "operator_task_id": {
+          "work_item_id": {
             "anyOf": [
               {
                 "type": "string"
@@ -15678,8 +15295,8 @@
                 "type": "null"
               }
             ],
-            "title": "Operator Task Id",
-            "description": "ID строки OperatorTasks (для user-reply в takeover)"
+            "title": "Work Item Id",
+            "description": "ID WorkItem операторской задачи (для user-reply в takeover)"
           },
           "handoff_command_id": {
             "type": "string",
@@ -15727,211 +15344,6 @@
         ],
         "title": "OperatorTaskInterrupt",
         "description": "Пауза до действия оператора; в чате пользователю показывается question (статусная строка)."
-      },
-      "OperatorTaskMessageBody": {
-        "properties": {
-          "text": {
-            "type": "string",
-            "minLength": 1,
-            "title": "Text"
-          },
-          "file_ids": {
-            "items": {
-              "type": "string"
-            },
-            "type": "array",
-            "title": "File Ids"
-          }
-        },
-        "additionalProperties": false,
-        "type": "object",
-        "required": [
-          "text"
-        ],
-        "title": "OperatorTaskMessageBody"
-      },
-      "OperatorTaskOut": {
-        "properties": {
-          "operator_task_id": {
-            "type": "string",
-            "title": "Operator Task Id"
-          },
-          "company_id": {
-            "type": "string",
-            "title": "Company Id"
-          },
-          "queue_id": {
-            "type": "string",
-            "title": "Queue Id"
-          },
-          "status": {
-            "$ref": "#/components/schemas/OperatorTaskStatus"
-          },
-          "session_id": {
-            "type": "string",
-            "title": "Session Id"
-          },
-          "end_user_id": {
-            "type": "string",
-            "title": "End User Id"
-          },
-          "flow_id": {
-            "type": "string",
-            "title": "Flow Id"
-          },
-          "branch_id": {
-            "type": "string",
-            "title": "Branch Id"
-          },
-          "flow_display_name": {
-            "type": "string",
-            "title": "Flow Display Name",
-            "description": "Название flow из конфига; при отсутствии конфига — flow_id"
-          },
-          "skill_display_name": {
-            "type": "string",
-            "title": "Skill Display Name",
-            "description": "Название skill из конфига; при отсутствии — branch_id"
-          },
-          "handoff_title": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Handoff Title",
-            "description": "Заголовок из interrupt_snapshot (handoff)"
-          },
-          "handoff_message_preview": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Handoff Message Preview",
-            "description": "Краткий текст вопроса пользователю из interrupt_snapshot"
-          },
-          "handoff_mode": {
-            "$ref": "#/components/schemas/HandoffMode",
-            "description": "Режим оператора: single_reply или takeover",
-            "default": "single_reply"
-          },
-          "a2a_task_id": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "A2A Task Id"
-          },
-          "context_id": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Context Id"
-          },
-          "correlation_id": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Correlation Id"
-          },
-          "claimed_by_user_id": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Claimed By User Id"
-          },
-          "created_at": {
-            "anyOf": [
-              {
-                "type": "string",
-                "format": "date-time"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Created At"
-          },
-          "updated_at": {
-            "anyOf": [
-              {
-                "type": "string",
-                "format": "date-time"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Updated At"
-          }
-        },
-        "additionalProperties": false,
-        "type": "object",
-        "required": [
-          "operator_task_id",
-          "company_id",
-          "queue_id",
-          "status",
-          "session_id",
-          "end_user_id",
-          "flow_id",
-          "branch_id",
-          "flow_display_name",
-          "skill_display_name"
-        ],
-        "title": "OperatorTaskOut",
-        "description": "Operator task API response."
-      },
-      "OperatorTaskPatch": {
-        "properties": {
-          "status": {
-            "$ref": "#/components/schemas/OperatorTaskStatus"
-          }
-        },
-        "additionalProperties": false,
-        "type": "object",
-        "required": [
-          "status"
-        ],
-        "title": "OperatorTaskPatch"
-      },
-      "OperatorTaskStatus": {
-        "type": "string",
-        "enum": [
-          "open",
-          "claimed",
-          "user_dialog",
-          "awaiting_agent",
-          "completed",
-          "cancelled"
-        ],
-        "title": "OperatorTaskStatus"
       },
       "OutputAction": {
         "properties": {
@@ -19921,6 +19333,136 @@
         "type": "object",
         "title": "VoiceProvidersCatalogDTO",
         "description": "Ответ GET .../voice-providers/catalog (без конфиденциальных данных из conf)."
+      },
+      "WorkItemAssignedBody": {
+        "properties": {
+          "event": {
+            "type": "string",
+            "title": "Event",
+            "default": "assigned"
+          },
+          "work_item_id": {
+            "type": "string",
+            "title": "Work Item Id"
+          },
+          "company_id": {
+            "type": "string",
+            "title": "Company Id"
+          },
+          "assignment": {
+            "additionalProperties": {
+              "$ref": "#/components/schemas/JsonValue"
+            },
+            "type": "object",
+            "title": "Assignment"
+          },
+          "binding": {
+            "additionalProperties": {
+              "$ref": "#/components/schemas/JsonValue"
+            },
+            "type": "object",
+            "title": "Binding",
+            "default": {}
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "work_item_id",
+          "company_id",
+          "assignment"
+        ],
+        "title": "WorkItemAssignedBody"
+      },
+      "WorkItemCommentBody": {
+        "properties": {
+          "event": {
+            "type": "string",
+            "title": "Event",
+            "default": "comment"
+          },
+          "work_item_id": {
+            "type": "string",
+            "title": "Work Item Id"
+          },
+          "company_id": {
+            "type": "string",
+            "title": "Company Id"
+          },
+          "comment": {
+            "additionalProperties": {
+              "$ref": "#/components/schemas/JsonValue"
+            },
+            "type": "object",
+            "title": "Comment"
+          },
+          "binding": {
+            "additionalProperties": {
+              "$ref": "#/components/schemas/JsonValue"
+            },
+            "type": "object",
+            "title": "Binding"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "work_item_id",
+          "company_id",
+          "comment",
+          "binding"
+        ],
+        "title": "WorkItemCommentBody"
+      },
+      "WorkItemCompletedBody": {
+        "properties": {
+          "event": {
+            "type": "string",
+            "title": "Event",
+            "default": "completed"
+          },
+          "work_item_id": {
+            "type": "string",
+            "title": "Work Item Id"
+          },
+          "company_id": {
+            "type": "string",
+            "title": "Company Id"
+          },
+          "state": {
+            "type": "string",
+            "title": "State"
+          },
+          "resolution_text": {
+            "type": "string",
+            "title": "Resolution Text",
+            "default": ""
+          },
+          "resolution_file_ids": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Resolution File Ids",
+            "default": []
+          },
+          "binding": {
+            "additionalProperties": {
+              "$ref": "#/components/schemas/JsonValue"
+            },
+            "type": "object",
+            "title": "Binding"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "work_item_id",
+          "company_id",
+          "state",
+          "binding"
+        ],
+        "title": "WorkItemCompletedBody"
       },
       "WorkflowBranchOperationResponse": {
         "properties": {

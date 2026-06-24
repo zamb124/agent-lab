@@ -1,7 +1,7 @@
 /**
  * flows/editor — UI-only фабрика состояния редактора.
  *
- * extraReducer: flow_loaded / node_selected / panel_closed / panel_expanded /
+ * extraReducer: flow_loaded / node_selected / panel_closed /
  * execution_panel_set / agent_execution_set /
  * active_tool_set / dirty_set / saving_set / preview_state_set /
  * history_pushed / history_undone / history_redone / history_cleared.
@@ -12,10 +12,19 @@ import { collectFactories } from '@platform/lib/events/factories/register.js';
 import { editorResource } from '../../../../apps/flows/ui/events/resources/editor.resource.js';
 import { resetFactories } from '../../helpers/factory-fixtures.js';
 import { buildBus } from '../../helpers/bus-fixtures.js';
+import { installFakeStorage } from '../../helpers/fake-storage.js';
 import { registerFactory } from '@platform/lib/events/factory-registry.js';
 
-beforeEach(() => resetFactories());
-afterEach(() => resetFactories());
+let storage;
+
+beforeEach(() => {
+    resetFactories();
+    storage = installFakeStorage();
+});
+afterEach(() => {
+    storage.uninstall();
+    resetFactories();
+});
 
 function build() {
     registerFactory(editorResource);
@@ -130,23 +139,6 @@ describe('flows/editor extraReducer', () => {
         expect(s.historyStack).toEqual([]);
         expect(s.historyPosition).toBe(-1);
         expect(s.canUndo).toBe(false);
-    });
-
-    it('panel_expanded toggles', () => {
-        const { bus, getState } = build();
-        expect(getState().flowsEditor.panelExpanded).toBe(false);
-        bus.dispatch('flows/editor/panel_expanded', null);
-        expect(getState().flowsEditor.panelExpanded).toBe(true);
-        bus.dispatch('flows/editor/panel_expanded', null);
-        expect(getState().flowsEditor.panelExpanded).toBe(false);
-    });
-
-    it('panel_expanded принимает явный expanded', () => {
-        const { bus, getState } = build();
-        bus.dispatch('flows/editor/panel_expanded', { expanded: true });
-        expect(getState().flowsEditor.panelExpanded).toBe(true);
-        bus.dispatch('flows/editor/panel_expanded', { expanded: false });
-        expect(getState().flowsEditor.panelExpanded).toBe(false);
     });
 
     it('dirty_set / saving_set', () => {

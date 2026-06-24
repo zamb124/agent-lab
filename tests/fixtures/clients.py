@@ -100,6 +100,10 @@ def patch_service_clients_asgi(
                 from apps.search.main import app
 
                 _apps_cache[service] = app
+            elif service == "worktracker":
+                from apps.worktracker.main import app
+
+                _apps_cache[service] = app
             else:
                 return None
         except ImportError:
@@ -429,4 +433,15 @@ async def office_client_http(office_service):
     Использует реальный HTTP сервер на порту 9008.
     """
     async with AsyncClient(base_url="http://localhost:9008") as client:
+        yield client
+
+
+@pytest_asyncio.fixture
+async def worktracker_client_http(worktracker_service):
+    """
+    HTTP клиент для Worktracker API (реальный HTTP).
+
+    Использует реальный HTTP сервер на порту 9021.
+    """
+    async with AsyncClient(base_url="http://localhost:9021") as client:
         yield client

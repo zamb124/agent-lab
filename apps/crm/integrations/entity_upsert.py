@@ -30,7 +30,6 @@ async def upsert_canonical_by_external_ref(
     raw_version: str | None = None,
     description: str | None = None,
     note_date: date | None = None,
-    due_date: date | None = None,
 ) -> tuple[CRMEntity, bool]:
     rid = str(record_id).strip()
     if not rid:
@@ -68,8 +67,6 @@ async def upsert_canonical_by_external_ref(
             ent.note_date = note_date
         elif entity_type == NOTE_ROOT_ENTITY_TYPE_ID and ent.note_date is None:
             ent.note_date = datetime.now(UTC).date()
-        if due_date is not None:
-            ent.due_date = due_date
         updated = await entity_repo.update(ent)
         return updated, False
 
@@ -90,7 +87,6 @@ async def upsert_canonical_by_external_ref(
         tags=[],
         user_id=user_id,
         note_date=effective_note_date,
-        due_date=due_date,
     )
     created = await entity_repo.create(ent)
     return created, True

@@ -118,6 +118,23 @@
             "python": "${workspaceFolder}/.venv/bin/python"
         },
         {
+            "name": "Run: worktracker",
+            "consoleTitle": "run.py: worktracker ✅",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "${workspaceFolder}/scripts/run.py",
+            "args": [
+                "worktracker"
+            ],
+            "cwd": "${workspaceFolder}",
+            "console": "integratedTerminal",
+            "justMyCode": false,
+            "env": {
+                "PYTHONPATH": "${workspaceFolder}"
+            },
+            "python": "${workspaceFolder}/.venv/bin/python"
+        },
+        {
             "name": "Run: office",
             "consoleTitle": "run.py: office 📄",
             "type": "debugpy",
@@ -159,23 +176,6 @@
             "program": "${workspaceFolder}/scripts/run.py",
             "args": [
                 "browser"
-            ],
-            "cwd": "${workspaceFolder}",
-            "console": "integratedTerminal",
-            "justMyCode": false,
-            "env": {
-                "PYTHONPATH": "${workspaceFolder}"
-            },
-            "python": "${workspaceFolder}/.venv/bin/python"
-        },
-        {
-            "name": "Run: search",
-            "consoleTitle": "run.py: search 🔎",
-            "type": "debugpy",
-            "request": "launch",
-            "program": "${workspaceFolder}/scripts/run.py",
-            "args": [
-                "search"
             ],
             "cwd": "${workspaceFolder}",
             "console": "integratedTerminal",
@@ -409,6 +409,20 @@
     ],
     "compounds": [
         {
+            "name": "Run: office (with RAG)",
+            "configurations": [
+                "Run: office",
+                "Run: rag",
+                "Run: rag_worker",
+                "Run: provider_litserve"
+            ],
+            "stopAll": true,
+            "presentation": {
+                "group": "office",
+                "order": 1
+            }
+        },
+        {
             "name": "Run: each service (compound)",
             "configurations": [
                 "Run: flows",
@@ -416,10 +430,10 @@
                 "Run: crm",
                 "Run: rag",
                 "Run: sync",
+                "Run: worktracker",
                 "Run: office",
                 "Run: scheduler-api",
                 "Run: browser",
-                "Run: search",
                 "Run: provider_litserve",
                 "Run: voice",
                 "Run: capability_gateway",
