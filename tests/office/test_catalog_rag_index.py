@@ -24,6 +24,7 @@ from apps.office.models.api import (
 from apps.office.services.callback_token import encode_callback_context_token
 from apps.office.services.catalog_rag_index_service import OFFICE_CATALOG_RAG_NAMESPACE_PREFIX
 from tests.fixtures.aiohttp_ephemeral import tcp_site_assigned_port
+from tests.office.helpers import upload_office_file_bytes
 
 pytestmark = [pytest.mark.real_taskiq, pytest.mark.timeout(120)]
 
@@ -246,6 +247,7 @@ async def test_enable_creates_namespace_and_sets_flag(
     assert status_payload == {
         "enabled": True,
         "rag_namespace_id": rag_namespace_id,
+        "include_subcatalogs": False,
         "totals": status_payload["totals"],
         "rag_index_updated_at": status_payload["rag_index_updated_at"],
     }
@@ -390,7 +392,7 @@ async def test_upload_skips_index_when_catalog_rag_disabled(
         "ready": 0,
         "pending": 0,
         "failed": 0,
-        "absent": 1,
+        "absent": 0,
     }
 
     status_response = await rag_client.get(
@@ -410,6 +412,7 @@ async def test_upload_skips_index_when_catalog_rag_disabled(
 @pytest.mark.asyncio
 async def test_from_file_indexes_when_catalog_rag_enabled(
     office_client,
+    frontend_client,
     rag_client,
     rag_service,
     rag_worker,
@@ -425,20 +428,15 @@ async def test_from_file_indexes_when_catalog_rag_enabled(
     await _enable_rag_index(office_client, catalog_id, auth_headers_system)
 
     needle = f"office-rag-from-file-{unique_id}"
-    upload = await office_client.post(
-        "/documents/api/v1/files/",
-        headers=auth_headers_system,
-        files={
-            "file": (
-                f"raw-{unique_id}.txt",
-                io.BytesIO(f"plain text content {needle}".encode()),
-                "text/plain",
-            )
-        },
-        data={"public": "false"},
+
+    uploaded = await upload_office_file_bytes(
+        frontend_client,
+        auth_headers_system,
+        filename=f"raw-{unique_id}.txt",
+        content=f"plain text content {needle}".encode(),
+        content_type="text/plain",
     )
-    assert upload.status_code == 200
-    file_id = upload.json()["file_id"]
+    file_id = str(uploaded["file_id"])
 
     create = await office_client.post(
         "/documents/api/v1/documents/from-file",
@@ -774,7 +772,7 @@ async def test_move_to_disabled_catalog_unindexes_only(
     )
     assert disabled_status["enabled"] is False
     disabled_totals = OfficeCatalogRagIndexStatusTotals.model_validate(disabled_status["totals"])
-    assert disabled_totals.absent == 1
+    assert disabled_totals.absent == 0
 
     index_status = await rag_client.get(
         f"/rag/api/v1/documents/{file_id}/status",
@@ -1051,6 +1049,7 @@ async def test_rebuild_when_rag_disabled_returns_409(
 @pytest.mark.asyncio
 async def test_onlyoffice_callback_save_reindexes_document(
     office_client,
+    frontend_client,
     rag_client,
     rag_service,
     rag_worker,
@@ -1067,20 +1066,15 @@ async def test_onlyoffice_callback_save_reindexes_document(
     await _enable_rag_index(office_client, catalog_id, auth_headers_system)
 
     needle = f"office-rag-callback-{unique_id}"
-    upload_response = await office_client.post(
-        "/documents/api/v1/files/",
-        headers=auth_headers_system,
-        files={
-            "file": (
-                f"callback-{unique_id}.txt",
-                io.BytesIO(b"initial content before onlyoffice callback"),
-                "text/plain",
-            )
-        },
-        data={"public": "false"},
+
+    uploaded = await upload_office_file_bytes(
+        frontend_client,
+        auth_headers_system,
+        filename=f"callback-{unique_id}.txt",
+        content=b"initial content before onlyoffice callback",
+        content_type="text/plain",
     )
-    assert upload_response.status_code == 200
-    file_id = upload_response.json()["file_id"]
+    file_id = str(uploaded["file_id"])
 
     create_response = await office_client.post(
         "/documents/api/v1/documents/from-file",
@@ -1118,7 +1112,7 @@ async def test_onlyoffice_callback_save_reindexes_document(
     assert callback_response.json()["error"] == 0
 
     container = get_office_container()
-    meta = await container.file_processor.get_file_record(file_id)
+    meta = await container.files_service.get(file_id)
     assert meta is not None
     assert meta.checksum == hashlib.sha256(new_body).hexdigest()
 

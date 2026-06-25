@@ -5,7 +5,7 @@
 from __future__ import annotations
 
 from apps.flows.config import get_settings
-from apps.flows.src.models.mcp import MCPServerConfig, MCPTransportType
+from apps.flows.src.models.mcp import MCPServerConfig, MCPServerSource, MCPTransportType
 
 
 def build_default_mcp_servers() -> list[MCPServerConfig]:
@@ -25,6 +25,7 @@ def build_default_mcp_servers() -> list[MCPServerConfig]:
             propagate_platform_context=True,
             is_active=True,
             description="Platform Browser Runtime MCP (JSON-RPC 2.0)",
+            source=MCPServerSource.PLATFORM,
         ),
         MCPServerConfig(
             server_id="search",
@@ -35,5 +36,6 @@ def build_default_mcp_servers() -> list[MCPServerConfig]:
             propagate_platform_context=True,
             is_active=True,
             description="Platform Search MCP (SERP providers, suggestions, result insights)",
+            source=MCPServerSource.PLATFORM,
         ),
     ]

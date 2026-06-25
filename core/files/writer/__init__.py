@@ -8,7 +8,6 @@ from core.files.writer.models import (
     FileWriteResult,
     WriteOptions,
 )
-from core.files.writer.persist import write_bytes_via_processor
 from core.files.writer.service import FileWriter
 
 __all__ = [
@@ -19,5 +18,4 @@ __all__ = [
     "FileWriteResult",
     "FileWriter",
     "WriteOptions",
-    "write_bytes_via_processor",
 ]

@@ -4,7 +4,9 @@ from collections.abc import Mapping
 
 from starlette.requests import Request
 
-from apps.office.services.viewer_service import browser_document_server_url as _browser_document_server_url
+from apps.office.services.viewer_service import (
+    browser_document_server_url as _browser_document_server_url,
+)
 
 
 def _request(

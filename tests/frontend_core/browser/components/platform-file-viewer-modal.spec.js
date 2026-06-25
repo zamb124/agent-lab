@@ -57,7 +57,7 @@ import {
 } from '../../../../apps/crm/ui/events/resources/attachments.resource.js';
 import { entityGrantsListOp } from '../../../../apps/crm/ui/events/resources/grants.resource.js';
 import { relatedEntitiesOp } from '../../../../apps/crm/ui/events/resources/graph.resource.js';
-import { fileUploadOp } from '../../../../apps/crm/ui/events/resources/files.resource.js';
+import { platformFileCreateOp } from '@platform/lib/events/factories/platform-file-create.js';
 import { namespacesResource } from '../../../../apps/crm/ui/events/resources/namespaces.resource.js';
 import { noteVoiceInputOp } from '../../../../apps/crm/ui/events/resources/notes.resource.js';
 import { graphViewSlice } from '../../../../apps/crm/ui/events/resources/graph-view.resource.js';
@@ -325,7 +325,7 @@ function crmFactories() {
         attachmentDeleteOp,
         entityGrantsListOp,
         relatedEntitiesOp,
-        fileUploadOp,
+        platformFileCreateOp,
         namespacesResource,
         noteVoiceInputOp,
         graphViewSlice,

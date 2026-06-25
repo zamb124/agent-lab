@@ -21,7 +21,7 @@ async def test_update_each_field_independently(worktracker_service, unique_id: s
     item = await worktracker_service.create_manual_task(
         company_id="system",
         title=f"upd-{unique_id}",
-        created_by=SystemActor(),
+        created_by=UserActor(user_id=f"user_{unique_id}"),
     )
     updated = await worktracker_service.update(
         company_id="system",

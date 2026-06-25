@@ -9,7 +9,7 @@ takeover), потому что embed/chat ходят через те же `/flow
 Контракт:
 - На входе — список item-ов формата state.files (`original_name`, `url`,
   `content_type`, `file_size`, опционально `file_id`).
-- Для каждого item с категорией AUDIO достаются байты (через `file_processor`
+- Для каждого item с категорией AUDIO достаются байты (через `files_service`
   + S3, по `file_id`; URI без `file_id` пропускаются как «внешний ресурс,
   который скачивать не наша работа»), вызывается `core.ai.runtime.transcribe_audio_bytes(...)`
   и формируется блок текста для добавления в content.
@@ -33,6 +33,7 @@ from core.ai.runtime import transcribe_audio_bytes
 from core.clients.speech_override import SpeechOverride
 from core.context import get_context
 from core.files.file_ref import FileRef
+from core.files.s3_client import S3ClientFactory
 from core.files.types import FileCategory, ext_to_category, mime_to_category
 from core.logging import get_logger
 
@@ -64,12 +65,8 @@ async def _read_persisted_audio_bytes(
 
     Возвращает (audio_bytes, original_name, content_type).
     """
-    record = await container.file_processor.get_file_record(file_id)
-    if record is None:
-        raise ValueError(
-            f"audio_input: persisted-файл {file_id!r} не найден в FileRepository"
-        )
-    s3 = await container.file_processor.get_s3_client()
+    record = await container.files_service.get(file_id)
+    s3 = S3ClientFactory.create_client_for_bucket(record.s3_bucket)
     audio_bytes = await s3.download_bytes(record.s3_key, bucket=record.s3_bucket)
     return audio_bytes, record.original_name, record.content_type
 

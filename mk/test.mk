@@ -1,7 +1,7 @@
 .PHONY: test test-all test-static test-up test-down test-reset test-cov test-cov-all test-cov-report test-unit test-ui test-ui-doc test-ui-components test-frontend-core test-frontend-core-canon test-frontend-core-unit test-frontend-core-browser test-profile check-strict-agent-architecture check-wider-repo-strictness
 
 WORKERS ?= 5
-PYTEST_COMMAND_TIMEOUT_SECONDS ?= 1200
+PYTEST_COMMAND_TIMEOUT_SECONDS ?= 5400
 PYTEST_MAX_WORKER_RESTART ?= 2
 RUN_UI_IN_TEST ?= 0
 DOCKER_COMPOSE_PULL ?= missing

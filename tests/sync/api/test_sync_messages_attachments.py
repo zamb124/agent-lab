@@ -2,11 +2,9 @@
 
 from __future__ import annotations
 
-import io
-
 import pytest
 
-from tests.sync.api._helpers import create_topic_channel_via_http
+from tests.sync.api._helpers import create_topic_channel_via_http, upload_platform_file
 
 
 async def _create_topic_channel(
@@ -25,6 +23,7 @@ async def _create_topic_channel(
 @pytest.mark.asyncio
 async def test_http_send_message_file_document_list_round_trip(
     sync_client,
+    frontend_client,
     sync_auth_headers,
     sync_db_clean: None,
     company_id: str,
@@ -33,10 +32,12 @@ async def test_http_send_message_file_document_list_round_trip(
     channel_id = await _create_topic_channel(sync_client, sync_auth_headers, company_id, unique_id)
 
     pdf_bytes = b"%PDF-1.4\n1 0 obj<<>>endobj\ntrailer<<>>\n%%EOF"
-    up = await sync_client.post(
-        "/sync/api/v1/files/",
-        headers=sync_auth_headers,
-        files={"file": ("report.pdf", io.BytesIO(pdf_bytes), "application/pdf")},
+    up = await upload_platform_file(
+        frontend_client,
+        sync_auth_headers,
+        filename="report.pdf",
+        content=pdf_bytes,
+        content_type="application/pdf",
     )
     assert up.status_code == 200, up.text
     f = up.json()
@@ -84,6 +85,7 @@ async def test_http_send_message_file_document_list_round_trip(
 @pytest.mark.asyncio
 async def test_http_send_message_file_image_with_text_plain(
     sync_client,
+    frontend_client,
     sync_auth_headers,
     sync_db_clean: None,
     company_id: str,
@@ -96,10 +98,12 @@ async def test_http_send_message_file_image_with_text_plain(
         b"\xff\xdb\x00C\x00"
         b"\xff\xd9"
     )
-    up = await sync_client.post(
-        "/sync/api/v1/files/",
-        headers=sync_auth_headers,
-        files={"file": ("photo.jpg", io.BytesIO(jpeg_bytes), "image/jpeg")},
+    up = await upload_platform_file(
+        frontend_client,
+        sync_auth_headers,
+        filename="photo.jpg",
+        content=jpeg_bytes,
+        content_type="image/jpeg",
     )
     assert up.status_code == 200, up.text
     f = up.json()
@@ -153,6 +157,7 @@ async def test_http_send_message_file_image_with_text_plain(
 @pytest.mark.asyncio
 async def test_http_send_message_two_file_attachments_one_message(
     sync_client,
+    frontend_client,
     sync_auth_headers,
     sync_db_clean: None,
     company_id: str,
@@ -160,18 +165,22 @@ async def test_http_send_message_two_file_attachments_one_message(
 ) -> None:
     channel_id = await _create_topic_channel(sync_client, sync_auth_headers, company_id, unique_id)
 
-    up1 = await sync_client.post(
-        "/sync/api/v1/files/",
-        headers=sync_auth_headers,
-        files={"file": ("a.txt", io.BytesIO(b"alpha"), "text/plain")},
+    up1 = await upload_platform_file(
+        frontend_client,
+        sync_auth_headers,
+        filename="a.txt",
+        content=b"alpha",
+        content_type="text/plain",
     )
     assert up1.status_code == 200, up1.text
     fa = up1.json()
 
-    up2 = await sync_client.post(
-        "/sync/api/v1/files/",
-        headers=sync_auth_headers,
-        files={"file": ("b.txt", io.BytesIO(b"beta-longer"), "text/plain")},
+    up2 = await upload_platform_file(
+        frontend_client,
+        sync_auth_headers,
+        filename="b.txt",
+        content=b"beta-longer",
+        content_type="text/plain",
     )
     assert up2.status_code == 200, up2.text
     fb = up2.json()

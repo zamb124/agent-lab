@@ -1,17 +1,11 @@
 /**
- * Helper-обёртка над `createAsyncOp` для multipart upload файла на платформенный
- * `/<svc>/api/v1/files/` (или совместимый эндпоинт).
+ * Legacy helper для service-local multipart upload.
  *
- * Канон: payload `{ file: File, ...extraFields }` → POST multipart с полем `file`
- * + опциональные доп. поля. REST-only (multipart не помещается в WS-фрейм).
+ * Канон платформы — `platform/file_create` (`platform-file-create.js`):
+ * payload `{ file: File, spec: string }` → POST `/frontend/api/v1/files/` с полями
+ * `file` + JSON `spec` (FileCreateSpec). REST-only.
  *
- * Использование:
- *
- *   export const fileUploadOp = createMultipartFileUploadOp({
- *       name: 'sync/file_upload',
- *       url: '/sync/api/v1/files/',
- *       extraFields: ['purpose'],
- *   });
+ * `createMultipartFileUploadOp` оставлен только для исключений вне unified files API.
  */
 
 import { createAsyncOp } from './async-op.js';

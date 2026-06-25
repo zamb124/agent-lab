@@ -83,24 +83,30 @@ async def test_list_namespaces_with_provider_param(rag_client, unique_namespace_
 
 
 @pytest.mark.asyncio
-async def test_delete_namespace(rag_client, unique_namespace_name, auth_headers_system):
+async def test_delete_namespace(
+    frontend_client,
+    rag_client,
+    unique_namespace_name,
+    auth_headers_system,
+):
     """DELETE /namespaces/{id} удаляет namespace вместе с документами"""
-    from io import BytesIO
-
-    # Создаем namespace
     create_response = await rag_client.post(
         "/rag/api/v1/namespaces",
         json={"name": unique_namespace_name},
-        headers=auth_headers_system
+        headers=auth_headers_system,
     )
     namespace_id = create_response.json()["name"]
 
-    # Загружаем документ, чтобы namespace реально существовал в pgvector
-    files = {"file": ("test.txt", BytesIO(b"test content for delete"), "text/plain")}
-    await rag_client.post(
-        f"/rag/api/v1/namespaces/{namespace_id}/documents",
-        files=files,
-        headers=auth_headers_system,
+    from tests.rag.helpers import upload_rag_document_bytes
+
+    await upload_rag_document_bytes(
+        frontend_client,
+        rag_client,
+        auth_headers_system,
+        namespace_id=namespace_id,
+        filename="test.txt",
+        content=b"test content for delete",
+        content_type="text/plain",
     )
 
     # Удаляем

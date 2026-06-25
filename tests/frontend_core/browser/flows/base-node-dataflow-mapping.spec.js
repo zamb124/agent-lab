@@ -4,7 +4,7 @@ import { registerFactory, collectFactories } from '@platform/lib/events/index.js
 
 import { editorResource } from '../../../../apps/flows/ui/events/resources/editor.resource.js';
 import { resourcesBundleResource } from '../../../../apps/flows/ui/events/resources/resources-bundle.resource.js';
-import { fileUploadOp } from '../../../../apps/flows/ui/events/resources/files.resource.js';
+import { platformFileCreateOp } from '@platform/lib/events/factories/platform-file-create.js';
 import {
     codeCompletionsOp,
     codeDocumentationOp,
@@ -23,7 +23,7 @@ import '../../../../apps/flows/ui/components/nodes/flows-base-node-editor.js';
 const FACTORIES = [
     editorResource,
     resourcesBundleResource,
-    fileUploadOp,
+    platformFileCreateOp,
     codeCompletionsOp,
     codeDocumentationOp,
     codeTemplatesOp,

@@ -20,10 +20,11 @@ import pytest
 
 from core.utils.tokens import get_token_service
 from tests.fixtures.audio_bytes import minimal_wav_silence
-from tests.sync.api._helpers import create_topic_channel_via_http
+from tests.sync.api._helpers import create_topic_channel_via_http, platform_auxiliary_file_spec_json
 from tests.sync.api._realtime_helpers import (
     add_member_via_http,
     connect_ws,
+    http_frontend,
     http_owner,
     wait_frame,
 )
@@ -54,13 +55,15 @@ async def _upload_voice_and_send(
     token: str, channel_id: str
 ) -> tuple[str, dict[str, Any]]:
     wav = minimal_wav_silence(duration_sec=0.05)
-    async with http_owner(token) as http:
-        up = await http.post(
-            "/sync/api/v1/files/",
+    async with http_frontend(token) as frontend_http:
+        up = await frontend_http.post(
+            "/frontend/api/v1/files/",
+            data={"spec": platform_auxiliary_file_spec_json()},
             files={"file": ("note.wav", io.BytesIO(wav), "audio/wav")},
         )
         assert up.status_code == 200, up.text
         f = up.json()
+    async with http_owner(token) as http:
         sr = await http.post(
             f"/sync/api/v1/channels/{channel_id}/messages",
             json={

@@ -23,6 +23,7 @@ from apps.flows.src.models.hitl_schemas import HitlHandoffCommand, HitlInterrupt
 from apps.flows.src.tasks.task_names import TASK_PROCESS_FLOW
 from apps.flows_worker.broker_core import broker as flows_broker
 from core.context import get_context
+from core.files.storage import CANONICAL_DOWNLOAD_URL_PREFIX
 from core.logging import get_logger
 from core.state import ExecutionState
 from core.state.interrupt import HandoffMode
@@ -62,7 +63,7 @@ def _format_dialog(comments: list[WorkItemComment], resolution_text: str) -> str
         for file_ref in comment.files:
             if file_ref.file_id is None:
                 continue
-            parts.append(f"[Файл: /flows/api/v1/files/download/{file_ref.file_id}]")
+            parts.append(f"[Файл: {CANONICAL_DOWNLOAD_URL_PREFIX}/{file_ref.file_id}]")
         if parts:
             lines.append(f"[{label}]: {' '.join(parts)}")
     dialog_text = "\n".join(lines)

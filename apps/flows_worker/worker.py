@@ -78,10 +78,16 @@ async def _initialize_worker_state(state: TaskiqState, service_name: str) -> Non
 
     initialize_default_processors(container.file_repository)
 
-    s = get_settings()
+    from core.files.create_spec import FileCreateSpec, FileSourceKind, FileSourceRef
+    from core.files.registry import default_retention_for_source
+
     FileWriter.configure_process_upload(
-        file_processor=container.file_processor,
-        download_url_prefix=f"/{s.server.name}/api/v1/files/download",
+        files_service=container.files_service,
+        default_spec=FileCreateSpec(
+            source_kind=FileSourceKind.FLOW_ASSET,
+            source_ref=FileSourceRef(flow_id="runtime"),
+            retention=default_retention_for_source(FileSourceKind.FLOW_ASSET),
+        ),
     )
 
     container.use_worker = False

@@ -16,6 +16,7 @@
 import { html, css } from 'lit';
 import { PlatformApp } from '@platform/lib/base/PlatformApp.js';
 import { createRouterEffect } from '@platform/lib/events/effects/router.effect.js';
+import { platformFileCreateOp } from '@platform/lib/events/factories/platform-file-create.js';
 
 import { providersResource, providerSwitchOp } from '../events/resources/providers.resource.js';
 import { namespacesResource, namespaceCreateForm } from '../events/resources/namespaces.resource.js';
@@ -78,6 +79,7 @@ export class RagApp extends PlatformApp {
         documentIngestTextOp,
         documentStatusResource,
         searchOp,
+        platformFileCreateOp,
     ];
 
     static styles = [

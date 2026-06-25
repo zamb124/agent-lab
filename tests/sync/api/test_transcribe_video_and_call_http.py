@@ -15,6 +15,7 @@ import pytest
 from httpx import AsyncClient
 
 from tests.fixtures.audio_bytes import minimal_wav_silence
+from tests.sync.api._helpers import platform_auxiliary_file_spec_json
 
 
 def _minimal_mp4_bytes() -> bytes:
@@ -89,13 +90,17 @@ async def test_transcribe_video_endpoint_marks_done_via_worker(
         assert cr.status_code == 201
         channel_id = cr.json()["channel_id"]
 
-        up = await client.post(
-            "/sync/api/v1/files/",
+    async with AsyncClient(base_url="http://127.0.0.1:9004", timeout=120.0) as frontend_client:
+        up = await frontend_client.post(
+            "/frontend/api/v1/files/",
             headers=sync_auth_headers,
+            data={"spec": platform_auxiliary_file_spec_json()},
             files={"file": ("clip.mp4", io.BytesIO(mp4), "video/mp4")},
         )
         assert up.status_code == 200
         f = up.json()
+
+    async with AsyncClient(base_url="http://127.0.0.1:9005", timeout=120.0) as client:
         sr = await client.post(
             f"/sync/api/v1/channels/{channel_id}/messages",
             headers=sync_auth_headers,
@@ -259,13 +264,15 @@ async def test_transcribe_call_aggregate_includes_guest_line(
         assert tr.status_code == 201
 
         wav = minimal_wav_silence(duration_sec=0.05)
-        up = await client.post(
-            "/sync/api/v1/files/",
-            headers=sync_auth_headers,
-            files={"file": ("g.wav", io.BytesIO(wav), "audio/wav")},
-        )
-        assert up.status_code == 200
-        f = up.json()
+        async with AsyncClient(base_url="http://127.0.0.1:9004", timeout=120.0) as frontend_client:
+            up = await frontend_client.post(
+                "/frontend/api/v1/files/",
+                headers=sync_auth_headers,
+                data={"spec": platform_auxiliary_file_spec_json()},
+                files={"file": ("g.wav", io.BytesIO(wav), "audio/wav")},
+            )
+            assert up.status_code == 200
+            f = up.json()
 
         body_guest = MessageCreate(
             thread_id=None,

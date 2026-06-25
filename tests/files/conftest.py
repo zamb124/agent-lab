@@ -3,20 +3,27 @@
 """
 
 import pytest_asyncio
-from sqlalchemy import text
 
 
 @pytest_asyncio.fixture
-async def file_db_clean(sync_app):
+async def file_db_clean(app):
     """
-    Очищает shared DB FileRecord-записи между тестами (через прямой SQL в shared_storage).
+    Очищает shared DB FileRecord-записи между тестами.
 
     Для большинства тестов не нужна — file_id уникален для каждого теста.
-    Используется только там где важно чистое начальное состояние shared FileRecord таблицы.
     """
-    from apps.sync.container import get_sync_container
-    container = get_sync_container()
-    storage = container.shared_storage
-    async with storage._engine.begin() as conn:  # pyright: ignore[reportAttributeAccessIssue]
-        await conn.execute(text("DELETE FROM storage WHERE key LIKE 'file:%'"))
+    from apps.frontend.container import get_frontend_container
+    from sqlalchemy import delete, select
+
+    container = get_frontend_container()
+    storage = container.file_repository._storage
+    async with storage.get_session() as session:
+        table = storage._get_table("storage")
+        keys_result = await session.execute(
+            select(table.c["key"]).where(table.c["key"].like("file:%"))
+        )
+        keys = [row[0] for row in keys_result]
+        if keys:
+            await session.execute(delete(table).where(table.c["key"].in_(keys)))
+        await session.commit()
     yield

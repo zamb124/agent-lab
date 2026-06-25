@@ -39,12 +39,10 @@ def disable_testing_mode():
             os.environ["_PYTEST_RAISE"] = old_pytest_raise
 
 
-from core.ai.llm_config import LLMCallConfig  # noqa: E402
 from core.clients.llm.client import LLMClient  # noqa: E402
 from core.clients.llm.provider_resolution import (  # noqa: E402
     _detect_provider,
     _get_default_base_url,
-    _resolve_llm_call_config,
     _resolve_var,
 )
 from core.clients.llm.runtime import (  # noqa: E402

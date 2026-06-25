@@ -39,8 +39,10 @@ from core.clients.service_client import ServiceClientError
 from core.clients.speech_override import SpeechOverride, SpeechProviderName, SpeechResponseFormat
 from core.clients.speech_provider_catalog import STT_TTS_PROVIDER_IDS, VOICE_RESPONSE_FORMAT_IDS
 from core.files.audio_probe import probe_audio_duration_seconds_from_upload
+from core.files.create_spec import FileCreateSpec, FilePostCreate, FileSourceKind, FileSourceRef
 from core.files.models import FileResponse
 from core.files.reader import FileReader, FileReadError
+from core.files.registry import default_retention_for_source
 from core.files.s3_client import S3ClientFactory
 from core.files.writer import ContentMode, FileWriteError, FileWriter
 from core.http.client import HttpRequestKwargs
@@ -273,7 +275,9 @@ def _format_json_value(value: JsonValue) -> str:
     return f"`{json.dumps(value, ensure_ascii=False, sort_keys=True)}`"
 
 
-def _fields_table(fields: list[CapabilitySchemaFieldDocumentation], *, empty_text: str) -> list[str]:
+def _fields_table(
+    fields: list[CapabilitySchemaFieldDocumentation], *, empty_text: str
+) -> list[str]:
     if not fields:
         return [empty_text]
     lines = [
@@ -544,10 +548,7 @@ class CapabilityRegistry:
         handler_names = set(self._handlers)
         if not definition_names.issubset(handler_names):
             missing_handlers = sorted(definition_names - handler_names)
-            message = (
-                "Capability registry mismatch: "
-                f"missing_handlers={missing_handlers}"
-            )
+            message = f"Capability registry mismatch: missing_handlers={missing_handlers}"
             raise ValueError(message)
 
     async def manifest(self) -> CapabilityManifest:
@@ -561,13 +562,11 @@ class CapabilityRegistry:
             capabilities=[definitions[name] for name in sorted(definitions)],
         )
 
-    async def documentation(self, *, language: CapabilityLanguage | None = None) -> CapabilityDocumentation:
+    async def documentation(
+        self, *, language: CapabilityLanguage | None = None
+    ) -> CapabilityDocumentation:
         manifest = await self.manifest()
-        language_note = (
-            "all languages"
-            if language is None
-            else language
-        )
+        language_note = "all languages" if language is None else language
         method_docs = self._sdk_method_docs(manifest, language=language)
         namespace_docs = self._namespace_docs(method_docs, language=language)
         lines = [
@@ -590,8 +589,12 @@ class CapabilityRegistry:
                 methods = ", ".join(f"`{method}`" for method in namespace.methods)
                 lines.append(f"- `{namespace.name}` ({namespace.type}): {methods}")
         for method_doc in method_docs:
-            capability = next(item for item in manifest.capabilities if item.name == method_doc.capability_name)
-            lines.extend(self._capability_markdown_section(capability, method_doc, language=language))
+            capability = next(
+                item for item in manifest.capabilities if item.name == method_doc.capability_name
+            )
+            lines.extend(
+                self._capability_markdown_section(capability, method_doc, language=language)
+            )
         return CapabilityDocumentation(
             version=manifest.version,
             markdown="\n".join(lines),
@@ -672,7 +675,9 @@ class CapabilityRegistry:
                 "",
                 "Returns:",
                 "",
-                *_fields_table(output_fields, empty_text="Free-form JSON result. See output_schema."),
+                *_fields_table(
+                    output_fields, empty_text="Free-form JSON result. See output_schema."
+                ),
             ]
         )
         return CapabilitySdkMethodDocumentation(
@@ -713,8 +718,7 @@ class CapabilityRegistry:
         method_name = self._language_method_name(language, method)
         top_fields = self._top_level_fields(fields)
         args = ", ".join(
-            f"{field.name}{'' if field.required else '?'}: {field.type}"
-            for field in top_fields
+            f"{field.name}{'' if field.required else '?'}: {field.type}" for field in top_fields
         )
         if language == "python":
             return f"await {namespace}.{method_name}({args})"
@@ -740,9 +744,9 @@ class CapabilityRegistry:
             js_kwargs = ", ".join(f"{key}: {value}" for key, value in kwargs.items())
             return f"await {namespace}.{method_name}({{{js_kwargs}}})"
         if language == "go":
-            go_kwargs = ", ".join(f"\"{key}\": {value}" for key, value in kwargs.items())
+            go_kwargs = ", ".join(f'"{key}": {value}' for key, value in kwargs.items())
             return f"{namespace}.{method_name}(map[string]any{{{go_kwargs}}})"
-        csharp_kwargs = ", ".join(f"[\"{key}\"] = {value}" for key, value in kwargs.items())
+        csharp_kwargs = ", ".join(f'["{key}"] = {value}' for key, value in kwargs.items())
         return f"await {namespace}.{method_name}(new Dictionary<string, object?> {{ {csharp_kwargs} }})"
 
     def _capability_markdown_section(
@@ -775,7 +779,9 @@ class CapabilityRegistry:
                 "",
                 "### Returns",
                 "",
-                *_fields_table(method_doc.output_fields, empty_text="Free-form JSON result. See output schema."),
+                *_fields_table(
+                    method_doc.output_fields, empty_text="Free-form JSON result. See output schema."
+                ),
                 "",
                 "<details>",
                 "<summary>Input JSON Schema</summary>",
@@ -833,8 +839,8 @@ class CapabilityRegistry:
             return [
                 "```python",
                 "async def run(args, state):",
-                "    result = await tools.calculator(expression=\"2+2\")",
-                "    return {\"result\": result}",
+                '    result = await tools.calculator(expression="2+2")',
+                '    return {"result": result}',
                 "```",
             ]
         if language == "go":
@@ -843,11 +849,11 @@ class CapabilityRegistry:
                 "package main",
                 "",
                 "func run(args map[string]any, state map[string]any) (any, error) {",
-                "    result, err := tools.Calculator(map[string]any{\"expression\": \"2+2\"})",
+                '    result, err := tools.Calculator(map[string]any{"expression": "2+2"})',
                 "    if err != nil {",
                 "        return nil, err",
                 "    }",
-                "    return map[string]any{\"result\": result}, nil",
+                '    return map[string]any{"result": result}, nil',
                 "}",
                 "```",
             ]
@@ -859,8 +865,8 @@ class CapabilityRegistry:
                 "",
                 "async Task<object?> run(Dictionary<string, object?> args, Dictionary<string, object?> state)",
                 "{",
-                "    var result = await tools.Calculator(new Dictionary<string, object?> { [\"expression\"] = \"2+2\" });",
-                "    return new Dictionary<string, object?> { [\"result\"] = result };",
+                '    var result = await tools.Calculator(new Dictionary<string, object?> { ["expression"] = "2+2" });',
+                '    return new Dictionary<string, object?> { ["result"] = result };',
                 "}",
                 "```",
             ]
@@ -868,13 +874,15 @@ class CapabilityRegistry:
         return [
             f"```{fence}",
             "async function run(args, state) {",
-            "  const result = await tools.calculator({expression: \"2+2\"});",
+            '  const result = await tools.calculator({expression: "2+2"});',
             "  return {result};",
             "}",
             "```",
         ]
 
-    def _usage_block(self, language: CapabilityLanguage, capability: CapabilityDefinition) -> list[str]:
+    def _usage_block(
+        self, language: CapabilityLanguage, capability: CapabilityDefinition
+    ) -> list[str]:
         kwargs = self._sample_kwargs(capability, language)
         namespace, method = _capability_sdk(capability)
         if language == "python":
@@ -885,14 +893,14 @@ class CapabilityRegistry:
                 "```",
             ]
         if language == "go":
-            go_kwargs = ", ".join(f"\"{key}\": {value}" for key, value in kwargs.items())
+            go_kwargs = ", ".join(f'"{key}": {value}' for key, value in kwargs.items())
             return [
                 "```go",
                 f"result, err := {namespace}.{_go_exported_name(method)}(map[string]any{{{go_kwargs}}})",
                 "```",
             ]
         if language == "csharp":
-            csharp_kwargs = ", ".join(f"[\"{key}\"] = {value}" for key, value in kwargs.items())
+            csharp_kwargs = ", ".join(f'["{key}"] = {value}' for key, value in kwargs.items())
             return [
                 "```csharp",
                 f"var result = await {namespace}.{_go_exported_name(method)}(new Dictionary<string, object?> {{ {csharp_kwargs} }});",
@@ -944,7 +952,7 @@ class CapabilityRegistry:
             if language == "csharp":
                 return "new List<object?>()"
             return "[]"
-        return "\"value\""
+        return '"value"'
 
     async def call(self, request: CapabilityCallRequest) -> CapabilityCallResponse:
         verify_execution_context(request.context)
@@ -1083,8 +1091,12 @@ class CapabilityRegistry:
                     properties={
                         "file_id": _string_schema("ID файла в FileRepository"),
                         "file_name": _string_schema("Опциональное имя с расширением"),
-                        "include_asset_bytes": _boolean_schema("Включать base64 ассетов PDF/Office"),
-                        "vision_prompt": _string_schema("Опциональная инструкция для image/vision чтения"),
+                        "include_asset_bytes": _boolean_schema(
+                            "Включать base64 ассетов PDF/Office"
+                        ),
+                        "vision_prompt": _string_schema(
+                            "Опциональная инструкция для image/vision чтения"
+                        ),
                         "vision_model": _string_schema("Опциональная vision-модель"),
                     },
                     required=["file_id"],
@@ -1104,7 +1116,9 @@ class CapabilityRegistry:
                 ),
                 input_schema=_schema_object(
                     properties={
-                        "method": _string_schema("HTTP method: GET, POST, PUT, PATCH, DELETE, HEAD"),
+                        "method": _string_schema(
+                            "HTTP method: GET, POST, PUT, PATCH, DELETE, HEAD"
+                        ),
                         "url": _string_schema("Абсолютный http/https URL"),
                         "headers": _object_schema("Опциональные HTTP headers"),
                         "params": _object_schema("Опциональные query parameters"),
@@ -1265,7 +1279,9 @@ class CapabilityRegistry:
                     ),
                     input_schema=_schema_object(
                         properties={
-                            "service": _string_schema("Имя сервиса из конфигурации, например flows или capability_gateway"),
+                            "service": _string_schema(
+                                "Имя сервиса из конфигурации, например flows или capability_gateway"
+                            ),
                             "method": _string_schema("HTTP method"),
                             "path": _string_schema("Путь с ведущим /"),
                             "headers": _object_schema("Опциональные headers"),
@@ -1358,7 +1374,9 @@ class CapabilityRegistry:
                         required=["content"],
                     ),
                     output_schema=_schema_object(
-                        properties={"queued": _boolean_schema("True если сообщение поставлено в state")},
+                        properties={
+                            "queued": _boolean_schema("True если сообщение поставлено в state")
+                        },
                         required=["queued"],
                     ),
                     languages=_supported_languages(),
@@ -1378,7 +1396,9 @@ class CapabilityRegistry:
                         required=["content", "buttons"],
                     ),
                     output_schema=_schema_object(
-                        properties={"queued": _boolean_schema("True если сообщение поставлено в state")},
+                        properties={
+                            "queued": _boolean_schema("True если сообщение поставлено в state")
+                        },
                         required=["queued"],
                     ),
                     languages=_supported_languages(),
@@ -1446,7 +1466,9 @@ class CapabilityRegistry:
                 "Find state file",
                 "Ищет файл в state.files по original_name; без имени возвращает последний файл.",
                 _schema_object(
-                    properties={"original_name": _string_schema("Опциональное original_name файла")},
+                    properties={
+                        "original_name": _string_schema("Опциональное original_name файла")
+                    },
                     required=[],
                 ),
                 _json_schema("Найденный file object или null"),
@@ -1565,8 +1587,12 @@ class CapabilityRegistry:
 
         context = await self._context_service.build_context(request.context)
         writer = FileWriter.bind_for_upload(
-            file_processor=self._container.file_processor,
-            download_url_prefix="/flows/api/v1/files/download",
+            files_service=self._container.files_service,
+            default_spec=FileCreateSpec(
+                source_kind=FileSourceKind.FLOW_ASSET,
+                source_ref=FileSourceRef(flow_id="runtime"),
+                retention=default_retention_for_source(FileSourceKind.FLOW_ASSET),
+            ),
         )
         with self._context_service.activate(context):
             try:
@@ -1616,10 +1642,13 @@ class CapabilityRegistry:
         self._reject_positional_args(request)
         file_id = _required_string(request.kwargs.get("file_id"), "file_id")
         file_name = _optional_string(request.kwargs.get("file_name"), "file_name")
-        include_asset_bytes = _optional_bool(
-            request.kwargs.get("include_asset_bytes"),
-            "include_asset_bytes",
-        ) or False
+        include_asset_bytes = (
+            _optional_bool(
+                request.kwargs.get("include_asset_bytes"),
+                "include_asset_bytes",
+            )
+            or False
+        )
         vision_prompt = _optional_string(request.kwargs.get("vision_prompt"), "vision_prompt")
         vision_model = _optional_string(request.kwargs.get("vision_model"), "vision_model")
         context = await self._context_service.build_context(request.context)
@@ -1659,12 +1688,16 @@ class CapabilityRegistry:
         params = _optional_object(request.kwargs.get("params"), "params") or {}
         json_body = _optional_object(request.kwargs.get("json"), "json")
         body = _optional_string(request.kwargs.get("body"), "body")
-        timeout_seconds = _optional_int(request.kwargs.get("timeout_seconds"), "timeout_seconds") or 30
+        timeout_seconds = (
+            _optional_int(request.kwargs.get("timeout_seconds"), "timeout_seconds") or 30
+        )
         if timeout_seconds <= 0 or timeout_seconds > 120:
             raise ValueError("timeout_seconds must be between 1 and 120")
         if json_body is not None and body is not None:
             raise ValueError("Pass either json or body, not both")
-        async with httpx.AsyncClient(timeout=float(timeout_seconds), follow_redirects=True) as client:
+        async with httpx.AsyncClient(
+            timeout=float(timeout_seconds), follow_redirects=True
+        ) as client:
             response = await client.request(
                 method,
                 url,
@@ -1692,7 +1725,9 @@ class CapabilityRegistry:
         params = _optional_object(request.kwargs.get("params"), "params")
         json_body = _optional_object(request.kwargs.get("json"), "json")
         body = _optional_string(request.kwargs.get("body"), "body")
-        timeout_seconds = _optional_int(request.kwargs.get("timeout_seconds"), "timeout_seconds") or 30
+        timeout_seconds = (
+            _optional_int(request.kwargs.get("timeout_seconds"), "timeout_seconds") or 30
+        )
         if timeout_seconds <= 0 or timeout_seconds > 120:
             raise ValueError("timeout_seconds must be between 1 and 120")
         kwargs: HttpRequestKwargs = {}
@@ -1740,7 +1775,9 @@ class CapabilityRegistry:
             "platform.capability.trace.event_type": event_type,
         }
         for key, value in attributes.items():
-            trace_attributes[f"platform.capability.attr.{key}"] = _trace_event_attribute_value(key, value)
+            trace_attributes[f"platform.capability.attr.{key}"] = _trace_event_attribute_value(
+                key, value
+            )
         async with traced_operation(
             "capability_gateway.trace.event",
             event_type=event_type,
@@ -1988,11 +2025,9 @@ class CapabilityRegistry:
         context = await self._context_service.build_context(request.context)
         company = _active_company(context)
         with self._context_service.activate(context):
-            record = await self._container.file_processor.get_file_record(file_id)
-            if record is None:
-                raise ValueError(f"voice.transcribe_audio: file not found: {file_id}")
+            record = await self._container.files_service.get(file_id)
 
-            s3 = await self._container.file_processor.get_s3_client()
+            s3 = S3ClientFactory.create_client_for_bucket(record.s3_bucket)
             audio_bytes = await s3.download_bytes(record.s3_key, bucket=record.s3_bucket)
 
             result = await transcribe_audio_bytes(
@@ -2021,7 +2056,10 @@ class CapabilityRegistry:
                     company=company,
                     provider=result.provider,
                     audio_seconds=audio_seconds,
-                    metadata={"endpoint": "capability_gateway.voice.transcribe_audio", "file_id": file_id},
+                    metadata={
+                        "endpoint": "capability_gateway.voice.transcribe_audio",
+                        "file_id": file_id,
+                    },
                 )
 
         return {"text": result.text or ""}
@@ -2053,21 +2091,27 @@ class CapabilityRegistry:
 
             ext = result.response_format or "wav"
             original_name = file_name if file_name else f"tts_{uuid.uuid4().hex[:12]}.{ext}"
-            record = await self._container.file_processor.persist_uploaded_file(
+            spec = FileCreateSpec(
+                source_kind=FileSourceKind.GENERATED_EPHEMERAL,
+                source_ref=FileSourceRef(),
+                retention=default_retention_for_source(FileSourceKind.GENERATED_EPHEMERAL),
+                post_create=FilePostCreate(is_public=False),
+            )
+            record = await self._container.files_service.create(
+                spec=spec,
                 data=result.audio_bytes,
                 original_name=original_name,
                 content_type=result.mime_type,
-                uploaded_by=context.user.user_id,
-                company_id=company.company_id,
-                public=False,
-                download_url_prefix="/flows/api/v1/files/download",
             )
             _ = await record_tts_usage(
                 user=context.user,
                 company=company,
                 provider=result.provider,
                 char_count=len(text),
-                metadata={"endpoint": "capability_gateway.voice.synthesize_speech", "file_id": record.file_id},
+                metadata={
+                    "endpoint": "capability_gateway.voice.synthesize_speech",
+                    "file_id": record.file_id,
+                },
             )
 
         return {"file_id": record.file_id}

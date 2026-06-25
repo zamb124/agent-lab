@@ -2,90 +2,116 @@
 Тесты API документов RAG Service.
 
 Тестирует:
-- POST /rag/api/v1/namespaces/{id}/documents - загрузка документа
+- POST /frontend/api/v1/files/ + POST .../documents/index-file — загрузка документа
 - GET /rag/api/v1/namespaces/{id}/documents - список документов
 - DELETE /rag/api/v1/namespaces/{id}/documents/{doc_id} - удаление документа
 """
 
 from io import BytesIO
+from pathlib import Path
 
 import pytest
 
+from tests.rag.helpers import upload_rag_document_bytes
+
 
 @pytest.mark.asyncio
-async def test_upload_document(rag_client, unique_namespace_name, auth_headers_system):
-    """POST /namespaces/{id}/documents загружает текстовый файл"""
-    # Создаем namespace
+async def test_upload_document(
+    frontend_client,
+    rag_client,
+    unique_namespace_name,
+    auth_headers_system,
+):
+    """Upload через Files API + index-file возвращает pending и task_id."""
     ns_response = await rag_client.post(
         "/rag/api/v1/namespaces",
         json={"name": unique_namespace_name},
-        headers=auth_headers_system
+        headers=auth_headers_system,
     )
     namespace_id = ns_response.json()["name"]
 
-    # Загружаем текстовый файл
     content = b"Test document content for RAG testing. This is a sample document."
-    files = {"file": ("test.txt", BytesIO(content), "text/plain")}
-
-    response = await rag_client.post(
-        f"/rag/api/v1/namespaces/{namespace_id}/documents",
-        files=files,
-        headers=auth_headers_system
+    data = await upload_rag_document_bytes(
+        frontend_client,
+        rag_client,
+        auth_headers_system,
+        namespace_id=namespace_id,
+        filename="test.txt",
+        content=content,
+        content_type="text/plain",
     )
-    assert response.status_code == 202
-    data = response.json()
 
     assert "document_id" in data
     assert "task_id" in data
     assert "status" in data
     assert data["status"] == "pending"
+    assert data["file_id"] == data["document_id"]
 
 
 @pytest.mark.asyncio
-async def test_upload_document_pdf(rag_client, unique_namespace_name, auth_headers_system):
-    """POST /namespaces/{id}/documents загружает PDF файл"""
-    # Создаем namespace
+async def test_upload_document_pdf(
+    frontend_client,
+    rag_client,
+    unique_namespace_name,
+    auth_headers_system,
+):
+    """PDF загружается через Files API + index-file."""
     ns_response = await rag_client.post(
         "/rag/api/v1/namespaces",
         json={"name": unique_namespace_name},
-        headers=auth_headers_system
+        headers=auth_headers_system,
     )
     namespace_id = ns_response.json()["name"]
 
-    # Загружаем PDF (минимальный валидный PDF)
-    pdf_content = b"%PDF-1.4\n1 0 obj\n<<\n/Type /Catalog\n/Pages 2 0 R\n>>\nendobj\n%%EOF"
-    files = {"file": ("test.pdf", BytesIO(pdf_content), "application/pdf")}
-
-    response = await rag_client.post(
-        f"/rag/api/v1/namespaces/{namespace_id}/documents",
-        files=files,
-        headers=auth_headers_system
+    pdf_path = (
+        Path(__file__).resolve().parents[1]
+        / "core"
+        / "files"
+        / "example-docs"
+        / "pdf"
+        / "header-test-doc.pdf"
     )
-    assert response.status_code == 202  # Async processing
+    pdf_content = pdf_path.read_bytes()
+    data = await upload_rag_document_bytes(
+        frontend_client,
+        rag_client,
+        auth_headers_system,
+        namespace_id=namespace_id,
+        filename="test.pdf",
+        content=pdf_content,
+        content_type="application/pdf",
+    )
+    assert data["status"] == "pending"
 
 
 @pytest.mark.asyncio
-async def test_list_documents(rag_client, unique_namespace_name, auth_headers_system):
+async def test_list_documents(
+    frontend_client,
+    rag_client,
+    unique_namespace_name,
+    auth_headers_system,
+):
     """GET /namespaces/{id}/documents возвращает документы"""
-    # Создаем namespace и загружаем документ
     ns_response = await rag_client.post(
         "/rag/api/v1/namespaces",
         json={"name": unique_namespace_name},
-        headers=auth_headers_system
+        headers=auth_headers_system,
     )
     namespace_id = ns_response.json()["name"]
 
-    files = {"file": ("test.txt", BytesIO(b"Content for testing"), "text/plain")}
-    await rag_client.post(
-        f"/rag/api/v1/namespaces/{namespace_id}/documents",
-        files=files,
-        headers=auth_headers_system
+    await upload_rag_document_bytes(
+        frontend_client,
+        rag_client,
+        auth_headers_system,
+        namespace_id=namespace_id,
+        filename="test.txt",
+        content=b"Content for testing",
+        content_type="text/plain",
     )
 
-    # Получаем список
     response = await rag_client.get(
         f"/rag/api/v1/namespaces/{namespace_id}/documents",
-        headers=auth_headers_system
+        headers=auth_headers_system,
     )
     assert response.status_code == 200
     data = response.json()
@@ -99,18 +125,16 @@ async def test_list_documents(rag_client, unique_namespace_name, auth_headers_sy
 @pytest.mark.asyncio
 async def test_list_documents_empty_namespace(rag_client, unique_namespace_name, auth_headers_system):
     """GET /namespaces/{id}/documents для пустого namespace возвращает пустой список"""
-    # Создаем namespace без документов
     ns_response = await rag_client.post(
         "/rag/api/v1/namespaces",
         json={"name": unique_namespace_name},
-        headers=auth_headers_system
+        headers=auth_headers_system,
     )
     namespace_id = ns_response.json()["name"]
 
-    # Получаем список
     response = await rag_client.get(
         f"/rag/api/v1/namespaces/{namespace_id}/documents",
-        headers=auth_headers_system
+        headers=auth_headers_system,
     )
     assert response.status_code == 200
     data = response.json()
@@ -120,29 +144,34 @@ async def test_list_documents_empty_namespace(rag_client, unique_namespace_name,
 
 
 @pytest.mark.asyncio
-async def test_list_documents_with_limit(rag_client, unique_namespace_name, auth_headers_system):
+async def test_list_documents_with_limit(
+    frontend_client,
+    rag_client,
+    unique_namespace_name,
+    auth_headers_system,
+):
     """GET /namespaces/{id}/documents?limit=5 ограничивает количество документов"""
-    # Создаем namespace
     ns_response = await rag_client.post(
         "/rag/api/v1/namespaces",
         json={"name": unique_namespace_name},
-        headers=auth_headers_system
+        headers=auth_headers_system,
     )
     namespace_id = ns_response.json()["name"]
 
-    # Загружаем несколько документов
     for i in range(3):
-        files = {"file": (f"test{i}.txt", BytesIO(f"Content {i}".encode()), "text/plain")}
-        await rag_client.post(
-            f"/rag/api/v1/namespaces/{namespace_id}/documents",
-            files=files,
-            headers=auth_headers_system
+        await upload_rag_document_bytes(
+            frontend_client,
+            rag_client,
+            auth_headers_system,
+            namespace_id=namespace_id,
+            filename=f"test{i}.txt",
+            content=f"Content {i}".encode(),
+            content_type="text/plain",
         )
 
-    # Получаем список с лимитом
     response = await rag_client.get(
         f"/rag/api/v1/namespaces/{namespace_id}/documents?limit=2",
-        headers=auth_headers_system
+        headers=auth_headers_system,
     )
     assert response.status_code == 200
     data = response.json()
@@ -151,79 +180,87 @@ async def test_list_documents_with_limit(rag_client, unique_namespace_name, auth
 
 
 @pytest.mark.asyncio
-async def test_delete_document(rag_client, unique_namespace_name, auth_headers_system):
+async def test_delete_document(
+    frontend_client,
+    rag_client,
+    unique_namespace_name,
+    auth_headers_system,
+):
     """DELETE /namespaces/{id}/documents/{doc_id} удаляет документ"""
-    # Создаем namespace и загружаем документ
     ns_response = await rag_client.post(
         "/rag/api/v1/namespaces",
         json={"name": unique_namespace_name},
-        headers=auth_headers_system
+        headers=auth_headers_system,
     )
     namespace_id = ns_response.json()["name"]
 
-    files = {"file": ("test.txt", BytesIO(b"Content"), "text/plain")}
-    doc_response = await rag_client.post(
-        f"/rag/api/v1/namespaces/{namespace_id}/documents",
-        files=files,
-        headers=auth_headers_system
+    doc_response = await upload_rag_document_bytes(
+        frontend_client,
+        rag_client,
+        auth_headers_system,
+        namespace_id=namespace_id,
+        filename="test.txt",
+        content=b"Content",
+        content_type="text/plain",
     )
-    document_id = doc_response.json()["document_id"]
+    document_id = doc_response["document_id"]
 
-    # Документ можно удалять сразу после загрузки
-    # Удаление работает для документов в любом статусе (pending/processing/completed)
     delete_response = await rag_client.delete(
         f"/rag/api/v1/namespaces/{namespace_id}/documents/{document_id}",
-        headers=auth_headers_system
+        headers=auth_headers_system,
     )
-    assert delete_response.status_code == 200  # Document deleted successfully
+    assert delete_response.status_code == 200
 
 
 @pytest.mark.asyncio
 async def test_delete_nonexistent_document(rag_client, unique_namespace_name, auth_headers_system):
     """DELETE /namespaces/{id}/documents/{doc_id} с несуществующим ID возвращает 404"""
-    # Создаем namespace
     ns_response = await rag_client.post(
         "/rag/api/v1/namespaces",
         json={"name": unique_namespace_name},
-        headers=auth_headers_system
+        headers=auth_headers_system,
     )
     namespace_id = ns_response.json()["name"]
 
-    # Пытаемся удалить несуществующий документ
     response = await rag_client.delete(
         f"/rag/api/v1/namespaces/{namespace_id}/documents/nonexistent_doc_id",
-        headers=auth_headers_system
+        headers=auth_headers_system,
     )
     assert response.status_code == 404
 
 
 @pytest.mark.asyncio
-async def test_upload_multiple_documents(rag_client, unique_namespace_name, auth_headers_system     ):
+async def test_upload_multiple_documents(
+    frontend_client,
+    rag_client,
+    unique_namespace_name,
+    auth_headers_system,
+):
     """Загрузка нескольких документов в один namespace"""
-    # Создаем namespace
     ns_response = await rag_client.post(
         "/rag/api/v1/namespaces",
         json={"name": unique_namespace_name},
-        headers=auth_headers_system
+        headers=auth_headers_system,
     )
     namespace_id = ns_response.json()["name"]
 
-    # Загружаем несколько документов
     doc_ids = []
     for i in range(3):
-        files = {"file": (f"doc{i}.txt", BytesIO(f"Document {i} content".encode()), "text/plain")}
-        response = await rag_client.post(
-            f"/rag/api/v1/namespaces/{namespace_id}/documents",
-                files=files,
-            headers=auth_headers_system
+        response = await upload_rag_document_bytes(
+            frontend_client,
+            rag_client,
+            auth_headers_system,
+            namespace_id=namespace_id,
+            filename=f"doc{i}.txt",
+            content=f"Document {i} content".encode(),
+            content_type="text/plain",
         )
-        assert response.status_code == 202  # Async processing
-        doc_ids.append(response.json()["document_id"])
+        assert response["status"] == "pending"
+        doc_ids.append(response["document_id"])
 
-    # Проверяем что все документы в списке
     list_response = await rag_client.get(
         f"/rag/api/v1/namespaces/{namespace_id}/documents",
-        headers=auth_headers_system
+        headers=auth_headers_system,
     )
     assert list_response.status_code == 200
     documents = list_response.json()["items"]
@@ -292,4 +329,3 @@ async def test_get_document_content_not_found(
         headers=auth_headers_system,
     )
     assert response.status_code == 404
-

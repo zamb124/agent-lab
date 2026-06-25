@@ -1,9 +1,10 @@
-"""Real ServiceClientHookDispatcher → flows internal endpoints (ASGI patch)."""
+"""ServiceClientHookDispatcher → flows internal endpoints через HTTP flows_service."""
 
 from __future__ import annotations
 
 import pytest
 
+from apps.flows.src.models import FlowConfig
 from core.worktracker.models import (
     AgentAssignment,
     SystemActor,
@@ -15,8 +16,38 @@ from core.worktracker.models import (
 pytestmark = pytest.mark.asyncio
 
 
-async def test_assigned_hook_hits_flows_internal(app, worktracker_service, unique_id: str) -> None:
+async def _seed_minimal_flow(container, flow_id: str) -> None:
+    flow_config = FlowConfig(
+        flow_id=flow_id,
+        name=f"Hook flow {flow_id}",
+        entry="main",
+        nodes={
+            "main": {
+                "type": "code",
+                "code": (
+                    "async def run(args, state):\n"
+                    "    state['response'] = 'ok'\n"
+                    "    return state"
+                ),
+            },
+        },
+        edges=[{"from_node": "main", "to_node": None}],
+    )
+    await container.flow_repository.set(flow_config)
+
+
+async def test_assigned_hook_hits_flows_internal(
+    app,
+    flows_service,
+    worktracker_service,
+    unique_id: str,
+) -> None:
+    _ = app
+    from apps.flows.src.container import get_container
+
     flow_id = f"flow_hook_{unique_id}"
+    await _seed_minimal_flow(get_container(), flow_id)
+
     item = await worktracker_service.create(
         company_id="system",
         title=f"hook-{unique_id}",
@@ -38,9 +69,13 @@ async def test_assigned_hook_hits_flows_internal(app, worktracker_service, uniqu
 
 async def test_reassign_to_agent_dispatches_assigned_hook(
     app,
+    flows_service,
     worktracker_service,
     unique_id: str,
 ) -> None:
+    _ = app
+    from apps.flows.src.container import get_container
+
     item = await worktracker_service.create(
         company_id="system",
         title=f"reassign-hook-{unique_id}",
@@ -55,6 +90,7 @@ async def test_reassign_to_agent_dispatches_assigned_hook(
         ],
     )
     flow_id = f"flow_re_{unique_id}"
+    await _seed_minimal_flow(get_container(), flow_id)
     reassigned = await worktracker_service.reassign(
         company_id="system",
         work_item_id=item.work_item_id,

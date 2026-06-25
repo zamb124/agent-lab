@@ -7,16 +7,36 @@ from core.state import ExecutionState
 from core.types import JsonObject
 
 
+def _require_non_empty_str(raw: JsonObject, key: str) -> str:
+    value = raw[key]
+    if not isinstance(value, str) or not value.strip():
+        raise ValueError(f"{key} must be a non-empty string")
+    return value.strip()
+
+
+def _document_type_from_office_payload(raw: JsonObject) -> str:
+    if "document_type" in raw:
+        return _require_non_empty_str(raw, "document_type")
+    if "onlyoffice_document_type" not in raw:
+        raise ValueError("office documents payload requires onlyoffice_document_type")
+    return _require_non_empty_str(raw, "onlyoffice_document_type")
+
+
 def file_document_capability(raw: JsonObject, namespace: str) -> FileDocumentCapability:
+    if not namespace.strip():
+        raise ValueError("namespace must be a non-empty string")
+    editor_url = raw["editor_url"]
+    if not isinstance(editor_url, str) or not editor_url.strip():
+        raise ValueError("editor_url must be a non-empty string")
     return FileDocumentCapability.model_validate(
         {
-            "binding_id": raw["binding_id"],
-            "file_id": raw["file_id"],
-            "catalog_id": raw["catalog_id"],
-            "document_type": raw["document_type"],
-            "title": raw["title"],
-            "namespace": namespace,
-            "editor_url": raw["editor_url"],
+            "binding_id": _require_non_empty_str(raw, "binding_id"),
+            "file_id": _require_non_empty_str(raw, "file_id"),
+            "catalog_id": _require_non_empty_str(raw, "catalog_id"),
+            "document_type": _document_type_from_office_payload(raw),
+            "title": _require_non_empty_str(raw, "title"),
+            "namespace": namespace.strip(),
+            "editor_url": editor_url.strip(),
             "editable": True,
         }
     )

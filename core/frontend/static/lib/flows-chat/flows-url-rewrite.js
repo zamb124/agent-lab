@@ -1,15 +1,18 @@
 /**
- * Полный URL скачивания файла flows: агент возвращает путь вида /flows/api/v1/files/download/{id}
- * или с мусорной схемой sandbox: — хост чата другой origin, нужен абсолютный URL на flowsBaseUrl.
+ * Канонические URL файлов платформы: /frontend/api/v1/files/download/{file_id}
+ * Нормализует исторические same-origin пути вида .../api/v1/files/download/... в канон frontend.
  */
 
-const FLOWS_DOWNLOAD_FILE_ID_RE = /(?:\/flows)?\/api\/v1\/files\/download\/([^/?#]+)/;
+export const CANONICAL_FILES_DOWNLOAD_PREFIX = '/frontend/api/v1/files/download';
+
+const PLATFORM_DOWNLOAD_FILE_ID_RE =
+    /\/(?:frontend|flows|sync|crm|rag|worktracker|office|browser)?\/api\/v1\/files\/download\/([^/?#]+)/;
 
 /**
  * @param {string|null|undefined} raw
  * @returns {string|null} file_id
  */
-export function extractFlowsDownloadFileId(raw) {
+export function extractPlatformFileDownloadId(raw) {
     if (raw == null || raw === '') {
         return null;
     }
@@ -23,47 +26,41 @@ export function extractFlowsDownloadFileId(raw) {
     try {
         if (/^https?:\/\//i.test(s)) {
             const u = new URL(s);
-            const m = (u.pathname || '').match(FLOWS_DOWNLOAD_FILE_ID_RE);
+            const m = (u.pathname || '').match(PLATFORM_DOWNLOAD_FILE_ID_RE);
             return m ? m[1] : null;
         }
     } catch {
         /* ignore */
     }
-    const m = s.match(FLOWS_DOWNLOAD_FILE_ID_RE);
+    const m = s.match(PLATFORM_DOWNLOAD_FILE_ID_RE);
     return m ? m[1] : null;
 }
 
 /**
- * @param {string|null|undefined} raw — как в ответе tool / тексте модели
- * @param {string} flowsBaseUrl — без завершающего слэша, например https://host:8001/flows
+ * @param {string|null|undefined} raw
  * @returns {string}
  */
-export function resolveFlowsFileDownloadUrl(raw, flowsBaseUrl) {
-    if (!flowsBaseUrl || typeof flowsBaseUrl !== 'string' || !flowsBaseUrl.trim()) {
-        return raw == null ? '' : String(raw);
-    }
+export function resolvePlatformFileDownloadUrl(raw) {
     if (raw == null || raw === '') {
         return '';
     }
-    const fileId = extractFlowsDownloadFileId(raw);
+    const fileId = extractPlatformFileDownloadId(raw);
     if (!fileId) {
         return String(raw).trim();
     }
-    const base = flowsBaseUrl.replace(/\/$/, '');
-    return `${base}/api/v1/files/download/${encodeURIComponent(fileId)}`;
+    return `${CANONICAL_FILES_DOWNLOAD_PREFIX}/${encodeURIComponent(fileId)}`;
 }
 
 /**
  * @param {string} html
- * @param {string} flowsBaseUrl
  * @returns {string}
  */
-export function rewriteFlowsFileUrlsInHtml(html, flowsBaseUrl) {
-    if (!html || !flowsBaseUrl || typeof flowsBaseUrl !== 'string' || !flowsBaseUrl.trim()) {
+export function rewritePlatformFileUrlsInHtml(html) {
+    if (!html) {
         return html;
     }
     return html.replace(/\b(href|src)=(["'])([^"']*)\2/gi, (match, attr, q, url) => {
-        const next = resolveFlowsFileDownloadUrl(url, flowsBaseUrl);
+        const next = resolvePlatformFileDownloadUrl(url);
         if (next === url) {
             return match;
         }
@@ -73,11 +70,10 @@ export function rewriteFlowsFileUrlsInHtml(html, flowsBaseUrl) {
 
 /**
  * @param {object} block
- * @param {string} flowsBaseUrl
  * @returns {object}
  */
-export function normalizeFlowChatBlockForFlowsUrls(block, flowsBaseUrl) {
-    if (!block || typeof block !== 'object' || !flowsBaseUrl || !String(flowsBaseUrl).trim()) {
+export function normalizeFlowChatBlockForPlatformUrls(block) {
+    if (!block || typeof block !== 'object') {
         return block;
     }
     if (block.type !== 'file_card') {
@@ -85,10 +81,10 @@ export function normalizeFlowChatBlockForFlowsUrls(block, flowsBaseUrl) {
     }
     const out = { ...block };
     if (out.url) {
-        out.url = resolveFlowsFileDownloadUrl(out.url, flowsBaseUrl);
+        out.url = resolvePlatformFileDownloadUrl(out.url);
     }
     if (out.preview_url) {
-        out.preview_url = resolveFlowsFileDownloadUrl(out.preview_url, flowsBaseUrl);
+        out.preview_url = resolvePlatformFileDownloadUrl(out.preview_url);
     }
     return out;
 }

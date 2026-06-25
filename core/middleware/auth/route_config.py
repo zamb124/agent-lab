@@ -408,6 +408,7 @@ ROUTE_RULES: list[RouteRule] = [
     # API агентов (устаревший путь /api/v1)
     RouteRule("/flows/api/v1/tool-runtime/manifest", context_type="anonymous", auth_required=False),
     RouteRule("/flows/api/v1/tool-runtime/call", context_type="anonymous", auth_required=False),
+    RouteRule("/flows/api/v1/internal/*", context_type="anonymous", auth_required=False),
     RouteRule("/flows/api/v1/auth/me", context_type="api", auth_required=True),
     RouteRule("/flows/api/v1/*", context_type="api", auth_required=True),
 

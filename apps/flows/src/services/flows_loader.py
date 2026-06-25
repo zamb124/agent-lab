@@ -21,7 +21,6 @@ from urllib.parse import urlparse
 
 import yaml
 
-from apps.flows.config import FLOWS_PUBLIC_API_PREFIX
 from apps.flows.src.db import FlowRepository, NodeRepository, ToolRepository
 from apps.flows.src.models import CodeMode, FlowConfig, NodeConfig, ToolReference, TriggerConfig
 from apps.flows.src.models.bundle_registry import FlowBundleRegistry
@@ -30,8 +29,13 @@ from apps.flows.src.tools.decorator import FunctionTool
 from apps.flows.src.tools.json_schema_parameters import pydantic_model_to_parameters_schema
 from apps.flows.tools.builtin_specs import BUILTIN_TOOL_SPECS
 from core.context import get_context
-from core.files.processors import get_default_file_processor
+from core.files.create_spec import FileSourceKind
+from core.files.default_storage import get_default_storage
+from core.files.file_ref import FileRef
+from core.files.models import FileRecord
 from core.files.reader import FileReader, ReadOptions
+from core.files.registry import default_retention_for_source
+from core.files.storage import retention_fields_from_spec
 from core.llm_context import LLMContextPatch
 from core.logging import get_logger
 from core.types import (
@@ -271,17 +275,13 @@ class FlowsLoader:
             content_type = (
                 guessed if isinstance(guessed, str) and guessed else "application/octet-stream"
             )
-            processor = await get_default_file_processor()
             company_id = self._resolve_target_company_id()
-            prefix = f"{FLOWS_PUBLIC_API_PREFIX}/files/download"
-            record = await processor.persist_uploaded_file(
+            record = await self._upload_flow_asset_file(
                 data=data,
                 original_name=original_name,
                 content_type=content_type,
-                uploaded_by=None,
                 company_id=company_id,
-                public=True,
-                download_url_prefix=prefix,
+                is_public=True,
             )
             url = record.download_url
             if not isinstance(url, str) or not url.strip():
@@ -372,6 +372,31 @@ class FlowsLoader:
             return self._target_company_id
         raise ValueError("Не удалось определить company_id для материализации файлов bundle")
 
+    async def _upload_flow_asset_file(
+        self,
+        *,
+        data: bytes,
+        original_name: str,
+        content_type: str,
+        company_id: str,
+        is_public: bool,
+    ) -> FileRecord:
+        retention = default_retention_for_source(FileSourceKind.FLOW_ASSET)
+        retention_kind, ttl_seconds = retention_fields_from_spec(retention)
+        storage = get_default_storage()
+        record = await storage.upload_bytes(
+            data=data,
+            original_name=original_name,
+            content_type=content_type,
+            uploaded_by=None,
+            company_id=company_id,
+            is_public=is_public,
+            retention_kind=retention_kind,
+            ttl_seconds=ttl_seconds,
+            metadata={"source_kind": FileSourceKind.FLOW_ASSET.value},
+        )
+        return record
+
     def _map_source_to_local_static(self, source: str) -> Path | None:
         parsed = urlparse(source)
         if parsed.scheme not in ("http", "https"):
@@ -414,10 +439,8 @@ class FlowsLoader:
         if not isinstance(files, list):
             raise ValueError(f"Node '{node_id}': files должен быть списком")
 
-        processor = await get_default_file_processor()
-        reader = FileReader()
         company_id = self._resolve_target_company_id()
-        prefix = f"{FLOWS_PUBLIC_API_PREFIX}/files/download"
+        reader = FileReader()
 
         materialized: JsonArray = []
         for index, entry in enumerate(files):
@@ -440,15 +463,14 @@ class FlowsLoader:
             raw_bytes, _resolved_name = await reader.resolve_source(
                 source, original_name, ReadOptions()
             )
-            item = await processor.persist_uploaded_file_as_file_ref(
+            record = await self._upload_flow_asset_file(
                 data=raw_bytes,
                 original_name=original_name,
                 content_type=content_type.strip(),
-                uploaded_by=None,
                 company_id=company_id,
-                public=False,
-                download_url_prefix=prefix,
+                is_public=False,
             )
+            item = FileRef.from_record(record)
             materialized.append(item.to_json_object())
 
         node["files"] = materialized

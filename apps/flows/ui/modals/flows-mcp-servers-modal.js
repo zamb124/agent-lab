@@ -6,14 +6,18 @@
  */
 
 import { html, css } from 'lit';
+import { repeat } from 'lit/directives/repeat.js';
 import { PlatformModal } from '@platform/lib/components/glass-modal.js';
 import { registerModalKind } from '@platform/lib/utils/modal-registry.js';
 import { platformConfirm } from '@platform/lib/components/platform-confirm-modal.js';
+import { buildFileCreateSpecJson } from '@platform/lib/utils/file-create-spec.js';
 import '@platform/lib/components/platform-icon.js';
 import '@platform/lib/components/platform-switch.js';
 import '@platform/lib/components/glass-spinner.js';
 import '@platform/lib/components/fields/platform-field.js';
+import '@platform/lib/components/platform-file-attachments.js';
 import { asArray, asString, isPlainObject } from '../_helpers/flows-resolvers.js';
+import { renderMcpServerIcon } from '../_helpers/mcp-server-icon.js';
 
 const SERVER_ID_PATTERN = /^[a-zA-Z][a-zA-Z0-9_-]{1,63}$/;
 const TRANSPORT_TYPES = Object.freeze(['http', 'sse']);
@@ -36,6 +40,7 @@ function normalizeMcpTransportType(raw) {
 const HEADER_PRESET_BEARER = '{\n  "Authorization": "Bearer @var:token"\n}';
 const HEADER_PRESET_API_KEY = '{\n  "X-API-Key": "@var:api_key"\n}';
 const HEADER_PRESET_BASIC = '{\n  "Authorization": "Basic @var:basic_credentials"\n}';
+const PLATFORM_MCP_SLUGS = Object.freeze(['browser', 'search']);
 
 /**
  * @param {unknown} h
@@ -86,6 +91,8 @@ export class FlowsMcpServersModal extends PlatformModal {
         _form: { state: true },
         _formError: { state: true },
         _saving: { state: true },
+        _testFeedback: { state: true },
+        _testingServerId: { state: true },
     };
 
     static styles = [
@@ -141,6 +148,30 @@ export class FlowsMcpServersModal extends PlatformModal {
                 align-items: flex-start;
                 justify-content: space-between;
                 gap: var(--space-2);
+            }
+            .mcp-card-head-row {
+                display: flex;
+                align-items: flex-start;
+                gap: var(--space-3);
+                min-width: 0;
+                flex: 1;
+            }
+            .mcp-card-icon {
+                flex-shrink: 0;
+                width: 40px;
+                height: 40px;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                border-radius: var(--radius-md);
+                background: var(--glass-solid-medium);
+                border: 1px solid var(--glass-border-subtle);
+                overflow: hidden;
+            }
+            .mcp-card-icon .mcp-server-icon-img {
+                width: 28px;
+                height: 28px;
+                object-fit: contain;
             }
             .mcp-card-titles h3 {
                 margin: 0;
@@ -198,6 +229,14 @@ export class FlowsMcpServersModal extends PlatformModal {
                 font-size: var(--text-xs);
                 font-weight: var(--font-medium);
             }
+            .mcp-chip-warn {
+                background: var(--warning-subtle, rgba(245, 158, 11, 0.12));
+                color: var(--warning, #f59e0b);
+            }
+            .mcp-card-footer {
+                display: flex;
+                justify-content: flex-end;
+            }
             .mcp-headers-line {
                 font-size: var(--text-xs);
                 color: var(--text-secondary);
@@ -244,6 +283,111 @@ export class FlowsMcpServersModal extends PlatformModal {
             }
             .mcp-preset:hover { color: var(--text-primary); border-color: var(--accent); }
             .mcp-form-err { font-size: var(--text-sm); color: var(--error, #ef4444); }
+            .mcp-test-feedback {
+                font-size: var(--text-sm);
+                padding: var(--space-2) var(--space-3);
+                border-radius: var(--radius-md);
+            }
+            .mcp-test-feedback.ok {
+                background: var(--success-subtle, rgba(34, 197, 94, 0.12));
+                color: var(--success, #22c55e);
+            }
+            .mcp-test-feedback.err {
+                background: var(--error-subtle, rgba(239, 68, 68, 0.12));
+                color: var(--error, #ef4444);
+            }
+            .mcp-card-actions .icon-btn:disabled {
+                opacity: 0.5;
+                cursor: not-allowed;
+            }
+            .mcp-branding-toolbar {
+                display: flex;
+                flex-wrap: wrap;
+                align-items: center;
+                justify-content: space-between;
+                gap: var(--space-2);
+                margin-bottom: var(--space-3);
+            }
+            .mcp-branding-form {
+                display: flex;
+                flex-direction: column;
+                gap: var(--space-3);
+                padding: var(--space-4);
+                margin-bottom: var(--space-4);
+                border: 1px solid var(--glass-border-subtle);
+                border-radius: var(--radius-lg);
+                background: var(--glass-solid-subtle);
+            }
+            .mcp-branding-slugs {
+                display: flex;
+                flex-wrap: wrap;
+                gap: var(--space-1);
+            }
+            .mcp-branding-slug {
+                padding: 2px var(--space-2);
+                border-radius: var(--radius-full);
+                border: 1px solid var(--glass-border-subtle);
+                background: var(--glass-solid-medium);
+                font-size: var(--text-xs);
+                color: var(--text-secondary);
+                cursor: pointer;
+            }
+            .mcp-branding-slug:hover {
+                color: var(--text-primary);
+                border-color: var(--accent);
+            }
+            .mcp-branding-row {
+                display: flex;
+                flex-wrap: wrap;
+                align-items: center;
+                gap: var(--space-3);
+                padding: var(--space-3);
+                border: 1px solid var(--glass-border-subtle);
+                border-radius: var(--radius-lg);
+                background: var(--glass-solid-subtle);
+            }
+            .mcp-branding-row-icon {
+                width: 44px;
+                height: 44px;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                border-radius: var(--radius-md);
+                background: var(--glass-solid-medium);
+                flex-shrink: 0;
+            }
+            .mcp-branding-row-icon .mcp-server-icon-img {
+                width: 32px;
+                height: 32px;
+                object-fit: contain;
+            }
+            .mcp-branding-row-meta {
+                flex: 1;
+                min-width: 0;
+            }
+            .mcp-branding-row-meta code {
+                font-size: var(--text-sm);
+            }
+            .mcp-branding-row-actions {
+                display: inline-flex;
+                gap: var(--space-1);
+            }
+            .mcp-list-toolbar {
+                display: flex;
+                justify-content: flex-end;
+                margin-bottom: var(--space-2);
+            }
+            .mcp-branding-link {
+                border: none;
+                background: transparent;
+                color: var(--accent);
+                font-size: var(--text-sm);
+                cursor: pointer;
+                padding: var(--space-1) var(--space-2);
+            }
+            .mcp-branding-link:hover {
+                text-decoration: underline;
+            }
         `,
     ];
 
@@ -263,10 +407,24 @@ export class FlowsMcpServersModal extends PlatformModal {
             headers_json: '{}',
         };
         this._formError = null;
+        this._testFeedback = null;
+        this._testingServerId = null;
+        this._brandingItems = [];
+        this._catalogSlugs = [];
+        this._brandingForm = { server_id: '', icon_file_id: '' };
+        this._brandingUploadFiles = [];
+        this._brandingError = null;
+        this._brandingSaving = false;
+        this._brandingLoading = false;
+        this._activeCompanySel = this.select((s) => s.auth.activeCompanyId);
         this._servers = this.useResource('flows/mcp_servers', { autoload: true });
         this._update = this.useOp('flows/mcp_server_update');
         this._syncOp = this.useOp('flows/mcp_server_sync');
         this._testOp = this.useOp('flows/mcp_server_test');
+        this._resetCatalogOp = this.useOp('flows/mcp_server_reset_catalog_defaults');
+        this._brandingLoadOp = this.useOp('flows/mcp_branding_load');
+        this._brandingUpsertOp = this.useOp('flows/mcp_branding_upsert');
+        this._brandingRemoveOp = this.useOp('flows/mcp_branding_remove');
     }
 
     updated(changedProperties) {
@@ -276,9 +434,143 @@ export class FlowsMcpServersModal extends PlatformModal {
             this._editing = null;
             this._formError = null;
             this._saving = false;
+            this._testFeedback = null;
+            this._testingServerId = null;
+            this._brandingError = null;
+            this._brandingSaving = false;
+            this._brandingUploadFiles = [];
             this._resetFormFields();
+            this._resetBrandingFormFields();
             this.size = 'lg';
         }
+    }
+
+    _resetBrandingFormFields() {
+        this._brandingForm = { server_id: '', icon_file_id: '' };
+    }
+
+    _isSystemCompany() {
+        return this._activeCompanySel.value === 'system';
+    }
+
+    _brandingUploadSpec() {
+        return buildFileCreateSpecJson({
+            sourceKind: 'platform_auxiliary',
+            sourceRef: {},
+            postCreate: { is_public: true },
+        });
+    }
+
+    async _loadBranding() {
+        this._brandingLoading = true;
+        try {
+            const payload = await this._brandingLoadOp.run({});
+            if (!isPlainObject(payload)) {
+                throw new Error('flows-mcp-servers-modal: branding load invalid response');
+            }
+            this._brandingItems = asArray(payload.items);
+            this._catalogSlugs = asArray(payload.catalog_slugs).filter((slug) => typeof slug === 'string');
+        } finally {
+            this._brandingLoading = false;
+        }
+    }
+
+    async _goBranding() {
+        this._view = 'branding';
+        this._brandingError = null;
+        this._resetBrandingFormFields();
+        this._brandingUploadFiles = [];
+        await this._loadBranding();
+    }
+
+    _brandingSlugSuggestions() {
+        const seen = new Set();
+        const out = [];
+        for (const slug of PLATFORM_MCP_SLUGS) {
+            if (!seen.has(slug)) {
+                seen.add(slug);
+                out.push(slug);
+            }
+        }
+        for (const slug of this._catalogSlugs) {
+            if (typeof slug === 'string' && slug.length > 0 && !seen.has(slug)) {
+                seen.add(slug);
+                out.push(slug);
+            }
+        }
+        return out.slice(0, 48);
+    }
+
+    _brandingCanSave() {
+        const f = this._brandingForm;
+        return SERVER_ID_PATTERN.test(f.server_id) && f.icon_file_id.length > 0;
+    }
+
+    _onBrandingFilesChange(event) {
+        const detail = event.detail;
+        if (!isPlainObject(detail)) {
+            throw new TypeError('flows-mcp-servers-modal: branding files-change detail required');
+        }
+        const files = asArray(detail.files);
+        this._brandingUploadFiles = files;
+        const last = files.length > 0 ? files[files.length - 1] : null;
+        if (last && typeof last.file_id === 'string' && last.file_id.length > 0) {
+            this._brandingForm = { ...this._brandingForm, icon_file_id: last.file_id };
+        } else {
+            this._brandingForm = { ...this._brandingForm, icon_file_id: '' };
+        }
+        this._brandingError = null;
+    }
+
+    async _saveBranding() {
+        if (!this._brandingCanSave()) {
+            this._brandingError = this.t('mcp_servers_modal.branding_error_invalid');
+            return;
+        }
+        this._brandingSaving = true;
+        this._brandingError = null;
+        try {
+            await this._brandingUpsertOp.run({
+                server_id: this._brandingForm.server_id.trim(),
+                icon_file_id: this._brandingForm.icon_file_id,
+            });
+            this._resetBrandingFormFields();
+            this._brandingUploadFiles = [];
+            await this._loadBranding();
+            this._servers.load();
+        } catch (err) {
+            const message = err instanceof Error ? err.message : String(err);
+            this._brandingError = message;
+        } finally {
+            this._brandingSaving = false;
+        }
+    }
+
+    async _deleteBranding(serverId) {
+        const ok = await platformConfirm(
+            this.t('mcp_servers_modal.branding_delete_message', { id: serverId }),
+            {
+                title: this.t('mcp_servers_modal.branding_delete_title'),
+                variant: 'danger',
+                confirmVariant: 'danger',
+                confirmText: this.t('mcp_servers_modal.action_delete'),
+                cancelText: this.t('mcp_servers_modal.action_cancel'),
+            },
+        );
+        if (!ok) {
+            return;
+        }
+        await this._brandingRemoveOp.run({ server_id: serverId });
+        await this._loadBranding();
+        this._servers.load();
+    }
+
+    _applyBrandingSlug(slug) {
+        if (typeof slug !== 'string' || slug.length === 0) {
+            return;
+        }
+        this._brandingForm = { ...this._brandingForm, server_id: slug };
+        this._brandingError = null;
     }
 
     _resetFormFields() {
@@ -434,15 +726,66 @@ export class FlowsMcpServersModal extends PlatformModal {
         this._servers.load();
     }
 
+    async _runTest(serverId) {
+        if (typeof serverId !== 'string' || serverId.length === 0) {
+            throw new Error('flows-mcp-servers-modal: serverId required for test');
+        }
+        this._testingServerId = serverId;
+        this._testFeedback = null;
+        try {
+            const result = await this._testOp.run({ server_id: serverId });
+            if (result !== null) {
+                if (!isPlainObject(result) || typeof result.tools_count !== 'number') {
+                    throw new TypeError('flows-mcp-servers-modal: MCP test result must include tools_count');
+                }
+                this._testFeedback = {
+                    serverId,
+                    ok: true,
+                    toolsCount: result.tools_count,
+                };
+                return;
+            }
+            if (typeof this._testOp.error !== 'string') {
+                throw new Error('flows-mcp-servers-modal: MCP test failed without error message');
+            }
+            this._testFeedback = {
+                serverId,
+                ok: false,
+                message: this._testOp.error,
+            };
+        } finally {
+            this._testingServerId = null;
+        }
+    }
+
     async _test(s) {
-        await this._testOp.run({ server_id: s.server_id });
+        await this._runTest(s.server_id);
     }
 
     async _testFromForm() {
         if (typeof this._editing !== 'string' || this._editing.length === 0) {
             return;
         }
-        await this._testOp.run({ server_id: this._editing });
+        await this._runTest(this._editing);
+    }
+
+    _renderTestFeedback(serverId) {
+        const fb = this._testFeedback;
+        if (!fb || fb.serverId !== serverId) {
+            return html``;
+        }
+        if (fb.ok === true) {
+            return html`
+                <div class="mcp-test-feedback ok" role="status">
+                    ${this.t('mcp_servers_modal.test_result_ok', { n: fb.toolsCount })}
+                </div>
+            `;
+        }
+        return html`
+            <div class="mcp-test-feedback err" role="alert">
+                ${this.t('mcp_servers_modal.test_result_error', { message: fb.message })}
+            </div>
+        `;
     }
 
     async _onToggleActive(s, e) {
@@ -451,6 +794,37 @@ export class FlowsMcpServersModal extends PlatformModal {
             throw new Error('mcp: platform-switch must emit detail.value boolean');
         }
         await this._update.run({ server_id: s.server_id, body: { is_active: d.value } });
+        this._servers.load();
+    }
+
+    _sourceLabel(source) {
+        if (source === 'platform') {
+            return this.t('mcp_servers_modal.source_platform');
+        }
+        if (source === 'catalog') {
+            return this.t('mcp_servers_modal.source_catalog');
+        }
+        if (source === 'manual') {
+            return this.t('mcp_servers_modal.source_manual');
+        }
+        return this.t('mcp_servers_modal.source_unknown');
+    }
+
+    async _resetCatalogDefaults(s) {
+        const ok = await platformConfirm(
+            this.t('mcp_servers_modal.reset_confirm_message', { id: s.server_id }),
+            {
+                title: this.t('mcp_servers_modal.reset_confirm_title'),
+                variant: 'danger',
+                confirmVariant: 'primary',
+                confirmText: this.t('mcp_servers_modal.action_reset_defaults'),
+                cancelText: this.t('mcp_servers_modal.action_cancel'),
+            },
+        );
+        if (!ok) {
+            return;
+        }
+        await this._resetCatalogOp.run({ server_id: s.server_id });
         this._servers.load();
     }
 
@@ -493,9 +867,12 @@ export class FlowsMcpServersModal extends PlatformModal {
         return items.map((s) => html`
             <div class="mcp-card">
                 <div class="mcp-card-top">
-                    <div class="mcp-card-titles">
-                        <h3>${s.name}</h3>
-                        <div class="sub"><code>${s.server_id}</code></div>
+                    <div class="mcp-card-head-row">
+                        <div class="mcp-card-icon">${renderMcpServerIcon(s, 28)}</div>
+                        <div class="mcp-card-titles">
+                            <h3>${s.name}</h3>
+                            <div class="sub"><code>${s.server_id}</code></div>
+                        </div>
                     </div>
                     <div class="mcp-card-actions">
                         <platform-switch
@@ -508,8 +885,11 @@ export class FlowsMcpServersModal extends PlatformModal {
                             <platform-icon name="rotate-ccw" size="16"></platform-icon>
                         </button>
                         <button type="button" class="icon-btn" @click=${() => this._test(s)}
+                            ?disabled=${this._testingServerId === s.server_id}
                             title=${this.t('mcp_servers_modal.action_test_aria')}>
-                            <platform-icon name="check" size="16"></platform-icon>
+                            ${this._testingServerId === s.server_id
+                                ? html`<glass-spinner size="sm"></glass-spinner>`
+                                : html`<platform-icon name="check" size="16"></platform-icon>`}
                         </button>
                         <button type="button" class="icon-btn" @click=${() => this._editServer(s)}
                             title=${this.t('mcp_servers_modal.action_edit_aria')}>
@@ -524,17 +904,139 @@ export class FlowsMcpServersModal extends PlatformModal {
                 <div class="mcp-card-url">${s.url}</div>
                 <div class="mcp-card-meta">
                     <span class="mcp-chip">${this._transportLabel(s.transport_type)}</span>
+                    <span class="mcp-chip">${this._sourceLabel(s.source)}</span>
+                    ${s.override_locked === true
+                        ? html`<span class="mcp-chip mcp-chip-warn">${this.t('mcp_servers_modal.override_locked')}</span>`
+                        : ''}
                     <span>${this.t('mcp_servers_modal.tools_count', { n: this._toolsCount(s) })}</span>
                     <span>${this.t('mcp_servers_modal.sync_label')} ${this._formatLastSync(s)}</span>
                 </div>
                 <div class="mcp-headers-line">${this._headerNamesSummary(s)}</div>
+                ${this._renderTestFeedback(s.server_id)}
+                ${s.source === 'catalog'
+                    ? html`
+                        <div class="mcp-card-footer">
+                            <button
+                                type="button"
+                                class="text-action"
+                                @click=${() => this._resetCatalogDefaults(s)}>
+                                ${this.t('mcp_servers_modal.action_reset_defaults')}
+                            </button>
+                        </div>
+                    `
+                    : ''}
             </div>
         `);
     }
 
     _renderListView() {
+        const brandingBtn = this._isSystemCompany()
+            ? html`
+                <div class="mcp-list-toolbar">
+                    <button type="button" class="mcp-branding-link" @click=${() => { void this._goBranding(); }}>
+                        ${this.t('mcp_servers_modal.branding_title')}
+                    </button>
+                </div>
+            `
+            : html``;
         return html`
+            ${brandingBtn}
             <div class="mcp-cards">${this._renderList()}</div>
+        `;
+    }
+
+    _renderBrandingView() {
+        if (this._brandingLoading && this._brandingItems.length === 0) {
+            return html`<div class="mcp-empty"><glass-spinner></glass-spinner></div>`;
+        }
+        const slugSuggestions = this._brandingSlugSuggestions();
+        return html`
+            <div class="mcp-branding-form">
+                <div class="mcp-field">
+                    <label>${this.t('mcp_servers_modal.branding_slug')}</label>
+                    <platform-field
+                        type="string"
+                        mode="edit"
+                        .value=${this._brandingForm.server_id}
+                        placeholder=${this.t('mcp_servers_modal.placeholder_id')}
+                        @change=${(e) => {
+                            const v = e.detail.value;
+                            if (typeof v !== 'string') {
+                                throw new TypeError('flows-mcp-servers-modal: branding server_id expects string');
+                            }
+                            this._brandingForm = { ...this._brandingForm, server_id: v };
+                            this._brandingError = null;
+                        }}
+                    ></platform-field>
+                </div>
+                ${slugSuggestions.length > 0
+                    ? html`
+                        <div class="mcp-branding-slugs">
+                            ${repeat(
+                                slugSuggestions,
+                                (slug) => slug,
+                                (slug) => html`
+                                    <button
+                                        type="button"
+                                        class="mcp-branding-slug"
+                                        @click=${() => this._applyBrandingSlug(slug)}
+                                    ><code>${slug}</code></button>
+                                `,
+                            )}
+                        </div>
+                    `
+                    : ''}
+                <div class="mcp-field">
+                    <label>${this.t('mcp_servers_modal.branding_upload')}</label>
+                    <platform-file-attachments
+                        .files=${this._brandingUploadFiles}
+                        upload-op-name="platform/file_create"
+                        .uploadSpec=${this._brandingUploadSpec()}
+                        @files-change=${(e) => this._onBrandingFilesChange(e)}
+                    ></platform-file-attachments>
+                </div>
+                ${this._brandingError
+                    ? html`<div class="mcp-form-err" role="alert">${this._brandingError}</div>`
+                    : ''}
+                <div>
+                    <button
+                        type="button"
+                        class="mcp-preset"
+                        ?disabled=${!this._brandingCanSave() || this._brandingSaving || this._brandingUpsertOp.busy}
+                        @click=${() => { void this._saveBranding(); }}
+                    >
+                        ${this.t('mcp_servers_modal.branding_add')}
+                    </button>
+                </div>
+            </div>
+            <div class="mcp-cards">
+                ${this._brandingItems.length === 0
+                    ? html`<div class="mcp-empty">${this.t('mcp_servers_modal.branding_empty')}</div>`
+                    : repeat(
+                        this._brandingItems,
+                        (row) => (typeof row.server_id === 'string' ? row.server_id : ''),
+                        (row) => html`
+                            <div class="mcp-branding-row">
+                                <div class="mcp-branding-row-icon">
+                                    ${renderMcpServerIcon(row, 32)}
+                                </div>
+                                <div class="mcp-branding-row-meta">
+                                    <code>${row.server_id}</code>
+                                </div>
+                                <div class="mcp-branding-row-actions">
+                                    <button
+                                        type="button"
+                                        class="icon-btn"
+                                        title=${this.t('mcp_servers_modal.action_delete_aria')}
+                                        @click=${() => { void this._deleteBranding(row.server_id); }}
+                                    >
+                                        <platform-icon name="trash" size="16"></platform-icon>
+                                    </button>
+                                </div>
+                            </div>
+                        `,
+                    )}
+            </div>
         `;
     }
 
@@ -671,6 +1173,9 @@ export class FlowsMcpServersModal extends PlatformModal {
                 ${this._formError
                     ? html`<div class="mcp-form-err" role="alert">${this._formError}</div>`
                     : ''}
+                ${typeof this._editing === 'string' && this._editing.length > 0
+                    ? this._renderTestFeedback(this._editing)
+                    : ''}
             </div>
         `;
     }
@@ -680,6 +1185,9 @@ export class FlowsMcpServersModal extends PlatformModal {
             return typeof this._editing === 'string' && this._editing.length > 0
                 ? this.t('mcp_servers_modal.title_form_edit')
                 : this.t('mcp_servers_modal.title_form_add');
+        }
+        if (this._view === 'branding') {
+            return this.t('mcp_servers_modal.branding_title');
         }
         return this.t('mcp_servers_modal.title');
     }
@@ -696,6 +1204,19 @@ export class FlowsMcpServersModal extends PlatformModal {
                     @click=${() => this._goAdd()}
                 >
                     <platform-icon name="plus" size="16"></platform-icon>
+                </button>
+            `;
+        }
+        if (this._view === 'branding') {
+            return html`
+                <button
+                    type="button"
+                    class="header-btn"
+                    @click=${() => this._goList()}
+                    title=${this.t('mcp_servers_modal.action_back_aria')}
+                    aria-label=${this.t('mcp_servers_modal.action_back_aria')}
+                >
+                    <platform-icon name="chevron-left" size="16"></platform-icon>
                 </button>
             `;
         }
@@ -720,7 +1241,9 @@ export class FlowsMcpServersModal extends PlatformModal {
                         title=${this.t('mcp_servers_modal.action_test_aria')}
                         aria-label=${this.t('mcp_servers_modal.action_test_connection')}
                     >
-                        <platform-icon name="check" size="16"></platform-icon>
+                        ${this._testOp.busy
+                            ? html`<glass-spinner size="sm"></glass-spinner>`
+                            : html`<platform-icon name="check" size="16"></platform-icon>`}
                     </button>
                 `
                 : ''}
@@ -746,6 +1269,9 @@ export class FlowsMcpServersModal extends PlatformModal {
     renderBody() {
         if (this._view === 'form') {
             return this._renderForm();
+        }
+        if (this._view === 'branding') {
+            return this._renderBrandingView();
         }
         return this._renderListView();
     }

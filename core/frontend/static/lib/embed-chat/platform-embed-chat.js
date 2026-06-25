@@ -5,7 +5,7 @@ import {
     embedChatLabelsForLang,
 } from './embed-chat-default-labels.js';
 import { mergeBlocksFromToolResult } from '../flows-chat/tool-result-blocks.js';
-import { normalizeFlowChatBlockForFlowsUrls } from '../flows-chat/flows-url-rewrite.js';
+import { normalizeFlowChatBlockForPlatformUrls, CANONICAL_FILES_DOWNLOAD_PREFIX } from '../flows-chat/flows-url-rewrite.js';
 import {
     inputRequiredFieldsFromA2a,
     mapA2aResultToChatRuntimeEvents,
@@ -2329,7 +2329,7 @@ export class PlatformEmbedChat extends LitElement {
             return null;
         }
         const root = (this.flowsBaseUrl && String(this.flowsBaseUrl).trim()) || '';
-        const normalized = normalizeFlowChatBlockForFlowsUrls(block, root);
+        const normalized = normalizeFlowChatBlockForPlatformUrls(block);
         const document =
             normalized.document && typeof normalized.document === 'object' && !Array.isArray(normalized.document)
                 ? normalized.document
@@ -2377,7 +2377,7 @@ export class PlatformEmbedChat extends LitElement {
                 files = _upsertEmbedFiles(files, [{
                     file_id: id,
                     original_name: this._lb('operator_files', 'Attached files'),
-                    url: root ? `${root}/api/v1/files/download/${encodeURIComponent(id)}` : '',
+                    url: `${CANONICAL_FILES_DOWNLOAD_PREFIX}/${encodeURIComponent(id)}`,
                 }]);
             }
             for (const block of Array.isArray(message.blocks) ? message.blocks : []) {

@@ -7,7 +7,6 @@ import {
     createAsyncOp,
     createForm,
 } from '@platform/lib/events/index.js';
-import { createMultipartFileUploadOp } from '@platform/lib/events/factories/_multipart-upload.js';
 import { httpRequest } from '@platform/lib/events/http.js';
 
 export const WORK_ITEM_EVENTS = [
@@ -32,11 +31,6 @@ function _mergeWorkItem(state, item) {
     const items = idx === -1 ? [...state.items, item] : state.items.map((x, i) => (i === idx ? item : x));
     return { ...state, items, byId: { ...state.byId, [id]: item } };
 }
-
-export const worktrackerFileUploadOp = createMultipartFileUploadOp({
-    name: 'worktracker/file_upload',
-    url: '/worktracker/api/v1/files/',
-});
 
 export const workItemsResource = createResourceCollection({
     name: 'worktracker/work_items',

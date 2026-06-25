@@ -49,7 +49,7 @@ from core.config import set_settings
 from core.config.loader import get_project_root, load_merged_config
 from core.config.testing import is_testing
 from core.container.base import BaseContainer
-from core.files.api import build_file_api_router
+from core.files.api import build_files_router
 from core.files.processors import initialize_default_processors
 from core.frontend.documentation_mount import mount_documentation_static
 from core.logging import (
@@ -410,14 +410,13 @@ def create_service_app(
     public_segment = url_route_segment
 
     if include_platform_routers:
-        # Файловый роутер (upload/download/metadata) — единообразный контракт для доменных сервисов.
-        files_api_prefix = f"/{url_route_segment}/api/{api_version or 'v1'}"
-        _file_router = build_file_api_router(
-            get_file_repo=lambda: container.file_repository,
-            service_api_prefix=files_api_prefix,
-        )
-        app.include_router(_file_router, prefix=f"{files_api_prefix}/files")
-        logger.info("service.router_attached", router="files", prefix=f"{files_api_prefix}/files")
+        if service_name == "frontend":
+            files_api_prefix = f"/{url_route_segment}/api/{api_version or 'v1'}/files"
+            _files_router = build_files_router(
+                get_files_service=lambda: container.files_service,
+            )
+            app.include_router(_files_router, prefix=files_api_prefix)
+            logger.info("service.router_attached", router="files", prefix=files_api_prefix)
 
         auth_prefix = f"/{public_segment}/api/auth"
         logger.info("service.router_attached", router="core_auth", prefix=auth_prefix)

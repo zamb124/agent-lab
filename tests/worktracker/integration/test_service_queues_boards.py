@@ -89,6 +89,6 @@ async def test_list_boards_by_namespace(worktracker_service, unique_id: str) -> 
 
 
 async def test_ensure_generic_board_idempotent(worktracker_service) -> None:
-    first = await worktracker_service.ensure_generic_board("system")
-    second = await worktracker_service.ensure_generic_board("system")
+    first = await worktracker_service.ensure_generic_board(company_id="system")
+    second = await worktracker_service.ensure_generic_board(company_id="system")
     assert first.board_id == second.board_id

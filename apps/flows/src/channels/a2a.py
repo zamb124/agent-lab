@@ -33,7 +33,6 @@ from a2a.types import (
 )
 from a2a.utils.message import get_message_text, new_agent_text_message
 
-from apps.flows.config import FLOWS_PUBLIC_API_PREFIX
 from apps.flows.src.channels.base import BaseChannel
 from apps.flows.src.channels.types import ChannelRequestContext, PreparedTaskParams
 from apps.flows.src.container_contracts import FlowRuntimeContainer
@@ -51,7 +50,9 @@ from apps.idle_worker.broker import broker as idle_broker
 from apps.idle_worker.tasks.task_names import TASK_SEND_TASK_UPDATE
 from core.config.testing import is_testing
 from core.context import set_current_channel
+from core.files.create_spec import FileCreateSpec, FilePostCreate, FileSourceKind, FileSourceRef
 from core.files.file_ref import FileRef, file_id_from_download_url
+from core.files.registry import default_retention_for_source
 from core.logging import get_logger
 from core.state import ExecutionState
 from core.tasks.kicker import kiq_task_name_with_context
@@ -362,23 +363,33 @@ class A2AChannel(BaseChannel):
             )
 
         company_id = self.context.active_company.company_id
-        user_id = self.context.user.user_id if self.context.user else None
-        prefix = f"{FLOWS_PUBLIC_API_PREFIX}/files/download"
         files_data: list[FileRef] = []
+
+        context_id = message.context_id
+        if not isinstance(context_id, str) or not context_id.strip():
+            raise ValueError("A2A FileWithBytes требует message.context_id для FLOW_SESSION")
+        session_id = f"{self.flow_id}:{context_id.strip()}"
 
         for inc in incoming:
             if inc.data is not None:
                 if not inc.content_type or not inc.content_type.strip():
                     raise ValueError("FileWithBytes.content_type обязателен для state.files")
-                item = await self.container.file_processor.persist_uploaded_file_as_file_ref(
+                spec = FileCreateSpec(
+                    source_kind=FileSourceKind.FLOW_SESSION,
+                    source_ref=FileSourceRef(
+                        session_id=session_id,
+                        flow_id=self.flow_id,
+                    ),
+                    retention=default_retention_for_source(FileSourceKind.FLOW_SESSION),
+                    post_create=FilePostCreate(is_public=False),
+                )
+                record = await self.container.files_service.create(
+                    spec=spec,
                     data=inc.data,
                     original_name=inc.original_name,
                     content_type=inc.content_type.strip(),
-                    uploaded_by=user_id,
-                    company_id=company_id,
-                    public=False,
-                    download_url_prefix=prefix,
                 )
+                item = FileRef.from_record(record)
                 files_data.append(item)
             else:
                 if not inc.uri:
@@ -387,7 +398,7 @@ class A2AChannel(BaseChannel):
                     raise ValueError("FileWithUri.content_type обязателен для state.files")
                 linked_file_id = file_id_from_download_url(inc.uri)
                 if linked_file_id:
-                    record = await self.container.file_processor.get_file_record(linked_file_id)
+                    record = await self.container.files_service.get_optional(linked_file_id)
                     if record is None:
                         raise ValueError(f"FileWithUri с неизвестным file_id: {linked_file_id}")
                     if record.company_id != company_id:
@@ -511,8 +522,8 @@ class A2AChannel(BaseChannel):
                 history=[prepared.message] if prepared.message is not None else None,
             )
 
-        # Таймаут короче для тестов
-        timeout = 30.0 if is_testing() else 300.0
+        # В testing flows/integration и sandbox cold start могут занимать >30с до первого события.
+        timeout = 120.0 if is_testing() else 300.0
 
         subscriber = EventSubscriber(self.container.redis_client)
         ready_event = asyncio.Event()

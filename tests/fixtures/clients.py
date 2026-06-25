@@ -398,6 +398,26 @@ async def voice_client(voice_app):
 
 
 @pytest_asyncio.fixture
+async def worktracker_client(worktracker_app, auth_headers_system):
+    """HTTP клиент для Worktracker API (ASGI transport)."""
+    transport = ASGITransport(app=worktracker_app)
+    async with AsyncClient(
+        transport=transport,
+        base_url="http://testserver",
+        headers=auth_headers_system,
+    ) as client:
+        yield client
+
+
+@pytest_asyncio.fixture
+async def worktracker_app():
+    """FastAPI приложение worktracker (ASGI)."""
+    from apps.worktracker.main import app
+
+    yield app
+
+
+@pytest_asyncio.fixture
 async def sync_client(sync_app, sync_worker):
     """
     HTTP клиент для Sync API (ASGI, lifespan включён).
@@ -437,7 +457,7 @@ async def office_client_http(office_service):
 
 
 @pytest_asyncio.fixture
-async def worktracker_client_http(worktracker_service):
+async def worktracker_client_http(worktracker_http_service):
     """
     HTTP клиент для Worktracker API (реальный HTTP).
 

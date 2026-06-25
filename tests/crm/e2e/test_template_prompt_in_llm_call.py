@@ -89,12 +89,9 @@ def _empty_analyze_response_for(note_title: str) -> dict[str, object]:
 
 
 def _analyze_mock_redis_queue(note_title: str) -> list[object]:
-    """
-    Два одинаковых ответа в очереди MockLLM: при полном прогоне с TaskIQ возможен лишний
-    pop из mock_llm:responses до analyze; второй слот гарантирует валидный JSON для analyze.
-    """
-    one: object = _empty_analyze_response_for(note_title)
-    return [one, one]
+    from tests.crm.e2e._json_helpers import mock_llm_queue_with_analyze_spare
+
+    return mock_llm_queue_with_analyze_spare([_empty_analyze_response_for(note_title)])
 
 
 async def _create_namespace_from_template(

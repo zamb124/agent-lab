@@ -20,6 +20,7 @@ from apps.sync.container import get_sync_container  # noqa: E402
 from apps.sync.realtime.broker import broker as worker_app  # noqa: E402
 from apps.sync.realtime.broker import recovery_handler  # noqa: E402
 from core.billing import set_billing_service  # noqa: E402
+from core.files.processors import initialize_default_processors  # noqa: E402
 from core.logging import get_logger  # noqa: E402
 from core.push.apns_credentials import resolve_apns_credentials  # noqa: E402
 from core.push.apns_service import init_apns_push_service  # noqa: E402
@@ -38,6 +39,7 @@ async def sync_worker_startup(state: TaskiqState) -> None:
     settings = _sync_worker_settings
     container = get_sync_container()
     state.container = container
+    initialize_default_processors(container.file_repository)
     await recovery_handler()
     set_billing_service(container.billing_service)
     if settings.tracing.enabled:

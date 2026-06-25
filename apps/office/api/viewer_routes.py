@@ -39,7 +39,7 @@ async def viewer_stream(
     except OnlyOfficeJwtError as exc:
         raise HTTPException(status_code=401, detail="Недействительный viewer token") from exc
     await _authorize_viewer_claims(container, claims)
-    meta = await container.file_processor.get_file_record(claims.file_id)
+    meta = await container.files_service.get_optional(claims.file_id)
     if meta is None:
         raise HTTPException(status_code=404, detail="Файл не найден")
     if meta.company_id != claims.company_id:
@@ -84,7 +84,7 @@ async def viewer_frame(
     except OnlyOfficeJwtError as exc:
         raise HTTPException(status_code=401, detail="Недействительный viewer token") from exc
     await _authorize_viewer_claims(container, claims)
-    meta = await container.file_processor.get_file_record(claims.file_id)
+    meta = await container.files_service.get_optional(claims.file_id)
     if meta is None:
         raise HTTPException(status_code=404, detail="Файл не найден")
     base = browser_public_base_url(request)
@@ -144,7 +144,7 @@ async def viewer_save(
             status_code=413,
             detail=f"Размер текста превышает лимит {TEXT_MAX_EDIT_BYTES} байт",
         )
-    meta = await container.file_processor.get_file_record(claims.file_id)
+    meta = await container.files_service.get_optional(claims.file_id)
     if meta is None:
         raise HTTPException(status_code=404, detail="Файл не найден")
     if meta.company_id != claims.company_id:
@@ -165,7 +165,7 @@ async def viewer_save(
     updated_meta = meta.model_copy(
         update={"file_size": len(body), "checksum": digest},
     )
-    _ = await container.file_processor.file_repository.set(updated_meta)
+    _ = await container.files_service.save(updated_meta)
     return Response(status_code=204)
 
 

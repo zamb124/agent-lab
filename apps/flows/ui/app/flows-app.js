@@ -22,7 +22,7 @@ import { flowsResource, flowUpdateOp, flowReloadFromBundleOp, flowVersionsListOp
 import { flowsVoiceCatalogLoadOp } from '../events/resources/voice-catalog.resource.js';
 import { toolsResource, toolsAllOp } from '../events/resources/tools.resource.js';
 import { resourcesBundleResource, resourceUpdateOp } from '../events/resources/resources-bundle.resource.js';
-import { mcpServersResource, mcpServerUpdateOp, mcpServerSyncOp, mcpServerTestOp } from '../events/resources/mcp.resource.js';
+import { mcpServersResource, mcpServerUpdateOp, mcpServerSyncOp, mcpServerTestOp, mcpServerResetCatalogDefaultsOp, mcpBrandingLoadOp, mcpBrandingUpsertOp, mcpBrandingRemoveOp } from '../events/resources/mcp.resource.js';
 import { triggersListOp, triggerGetOp, triggerCreateOp, triggerUpdateOp,
          triggerRemoveOp, triggerVerifyOp, triggerReregisterOp, triggerTestOp } from '../events/resources/triggers.resource.js';
 import { variablesResource } from '../events/resources/variables.resource.js';
@@ -60,7 +60,7 @@ import { codeCompletionsOp, codeDocumentationOp, codeTemplatesOp,
 import { promptRenderOp } from '../events/resources/prompts.resource.js';
 import { dataflowInspectOp } from '../events/resources/dataflow.resource.js';
 import { integrationsListOp, integrationsRemoveOp } from '../events/resources/integrations.resource.js';
-import { fileUploadOp } from '../events/resources/files.resource.js';
+import { platformFileCreateOp } from '@platform/lib/events/factories/platform-file-create.js';
 import { chatResource, chatSendOp, chatCancelOp, apiConsoleRunOp } from '../events/resources/chat.resource.js';
 import { editorResource, editorBulkDeleteOp, stickyNoteUpsertOp } from '../events/resources/editor.resource.js';
 import { executionUiSlice } from '../events/resources/execution-ui.resource.js';
@@ -168,6 +168,10 @@ export class FlowsApp extends PlatformApp {
         mcpServerUpdateOp,
         mcpServerSyncOp,
         mcpServerTestOp,
+        mcpServerResetCatalogDefaultsOp,
+        mcpBrandingLoadOp,
+        mcpBrandingUpsertOp,
+        mcpBrandingRemoveOp,
         triggersListOp,
         triggerGetOp,
         triggerCreateOp,
@@ -216,7 +220,7 @@ export class FlowsApp extends PlatformApp {
         promptRenderOp,
         integrationsListOp,
         integrationsRemoveOp,
-        fileUploadOp,
+        platformFileCreateOp,
         chatResource,
         chatSendOp,
         chatCancelOp,

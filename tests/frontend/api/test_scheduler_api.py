@@ -12,6 +12,7 @@ from apps.scheduler.main import (
     CRM_RECONCILE_DAILY_SUMMARY_CRON,
     CRM_RECONCILE_DAILY_SUMMARY_TASK_NAME,
     CRM_REEMBED_STALE_DOCUMENTS_TASK_NAME,
+    FILE_RETENTION_PURGE_TASK_NAME,
     RAG_CLEANUP_EXPIRED_DOCUMENTS_TASK_NAME,
     RAG_CLEANUP_ORPHAN_COMPANY_CHUNKS_TASK_NAME,
     RAG_REEMBED_STALE_DOCUMENTS_TASK_NAME,
@@ -23,7 +24,9 @@ from core.config.models import (
     BillingConfig,
     BillingSpanSettlementConfig,
     CalendarSyncConfig,
+    FilesConfig,
     LLMConfig,
+    MCPCatalogConfig,
     PaymentProvidersConfig,
     RAGConfig,
 )
@@ -234,6 +237,8 @@ async def test_scheduler_startup_creates_calendar_sync_schedule_when_missing() -
         llm = LLMConfig()
         payment_providers = PaymentProvidersConfig()
         rag = RAGConfig()
+        files = FilesConfig()
+        mcp_catalog = MCPCatalogConfig()
 
     class _FakeSchedulerService:
         def __init__(self) -> None:
@@ -257,6 +262,8 @@ async def test_scheduler_startup_creates_calendar_sync_schedule_when_missing() -
                 return []
             if filters.task_name == CRM_RECONCILE_DAILY_SUMMARY_TASK_NAME:
                 return []
+            if filters.task_name == FILE_RETENTION_PURGE_TASK_NAME:
+                return []
             raise AssertionError(f"unexpected task_name={filters.task_name!r}")
 
         async def create(self, company_id, user_id, request):
@@ -275,11 +282,12 @@ async def test_scheduler_startup_creates_calendar_sync_schedule_when_missing() -
 
     await on_startup(app=None, container=fake_container, settings=_FakeSettings())
 
-    assert len(fake_service.created_requests) == 7
+    assert len(fake_service.created_requests) == 8
     names = {r.task_name for r in fake_service.created_requests}
     assert names == {
         CALENDAR_SYNC_TASK_NAME,
         CALENDAR_SYNC_MEETING_REMINDER_TASK_NAME,
+        FILE_RETENTION_PURGE_TASK_NAME,
         RAG_CLEANUP_EXPIRED_DOCUMENTS_TASK_NAME,
         RAG_REEMBED_STALE_DOCUMENTS_TASK_NAME,
         RAG_CLEANUP_ORPHAN_COMPANY_CHUNKS_TASK_NAME,
@@ -317,6 +325,8 @@ async def test_scheduler_startup_resumes_paused_calendar_sync_schedule() -> None
         llm = LLMConfig()
         payment_providers = PaymentProvidersConfig()
         rag = RAGConfig()
+        files = FilesConfig()
+        mcp_catalog = MCPCatalogConfig()
 
     class _FakeSchedulerService:
         def __init__(self) -> None:
@@ -340,6 +350,8 @@ async def test_scheduler_startup_resumes_paused_calendar_sync_schedule() -> None
             if filters.task_name == CRM_REEMBED_STALE_DOCUMENTS_TASK_NAME:
                 return []
             if filters.task_name == CRM_RECONCILE_DAILY_SUMMARY_TASK_NAME:
+                return []
+            if filters.task_name == FILE_RETENTION_PURGE_TASK_NAME:
                 return []
             raise AssertionError(f"unexpected task_name={filters.task_name!r}")
 
@@ -424,6 +436,8 @@ async def test_scheduler_startup_creates_span_billing_schedule_when_enabled() ->
         llm = LLMConfig()
         payment_providers = PaymentProvidersConfig()
         rag = RAGConfig()
+        files = FilesConfig()
+        mcp_catalog = MCPCatalogConfig()
 
     class _FakeSchedulerService:
         def __init__(self) -> None:

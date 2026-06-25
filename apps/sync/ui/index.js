@@ -53,3 +53,5 @@ import './modals/sync-call-link-edit-modal.js';
 import './modals/sync-call-incoming-modal.js';
 import './modals/sync-call-overlay-modal.js';
 import './modals/sync-forward-modal.js';
+
+export { platformFileCreateOp } from '@platform/lib/events/factories/platform-file-create.js';

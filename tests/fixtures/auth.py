@@ -36,6 +36,7 @@ async def auth_token_system(frontend_container):
     """
     user_id = f"test_user_system_{uuid.uuid4().hex[:8]}"
     company_id = "system"
+    company_roles = ["owner", "admin"]
 
     # Создаем или получаем компанию system
     existing_company = await frontend_container.company_repository.get(company_id)
@@ -44,13 +45,13 @@ async def auth_token_system(frontend_container):
             company_id=company_id,
             name="System Company",
             owner_user_id=user_id,
-            members={user_id: ["owner", "admin"]},
+            members={user_id: company_roles},
         )
         await frontend_container.company_repository.set(company)
     else:
         existing_company = company_with_test_ai_provider_defaults(existing_company)
         if user_id not in existing_company.members:
-            existing_company.members[user_id] = ["owner", "admin"]
+            existing_company.members[user_id] = company_roles
         await frontend_container.company_repository.set(existing_company)
 
     # Создаем пользователя
@@ -58,13 +59,13 @@ async def auth_token_system(frontend_container):
         user_id=user_id,
         name="System User 1",
         emails=[f"{user_id}@system.com"],
-        companies={company_id: ["owner", "admin"]},
+        companies={company_id: company_roles},
         active_company_id=company_id
     )
     await frontend_container.user_repository.set(user)
 
     token_service = get_token_service()
-    token = token_service.create_token(user_id, company_id=company_id)
+    token = token_service.create_token(user_id, company_id=company_id, roles=company_roles)
 
     yield token
 

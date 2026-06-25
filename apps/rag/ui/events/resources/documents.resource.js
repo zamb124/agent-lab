@@ -1,26 +1,12 @@
 /**
  * Documents — документы внутри RAG namespace.
  *
- * Backend (`/rag/api/v1/namespaces/{namespace_id}/...`):
- *   GET    /documents                          → OffsetPage[RAGDocument]
- *   POST   /documents (multipart: file, metadata)  → DocumentUploadResponse
- *   POST   /ingest-text   (JSON IngestTextRequest) → IngestTextResponse
- *   DELETE /documents/{document_id}            → { success, document_id }
- *
- * Список documents доступен под разные namespaceId — `createResourceCollection`
- * не подходит (path параметризован), поэтому сделан как `createAsyncOp` с
- * собственным slice-полем `items` и привязкой `loadedNamespaceId` к
- * последнему загруженному namespace. Компоненты сами вызывают
- * `useOp('rag/documents').run({ namespaceId })` при смене страницы.
- *
- * Upload асинхронный: backend кладёт задачу в TaskIQ, фабрика
- * `documentUploadOp.onSuccess` стартует поллинг через
- * `documentStatusResource.events.REQUESTED`. По завершении поллинга
- * страница перезагружает список.
+ * Upload: platform/file_create → POST /frontend/api/v1/files/, затем index-file.
  */
 
 import { createAsyncOp } from '@platform/lib/events/index.js';
 import { httpRequest } from '@platform/lib/events/http.js';
+import { buildRagDocumentFileCreateSpecJson } from '@platform/lib/utils/file-create-spec.js';
 import { documentStatusResource } from './document-status.resource.js';
 
 export const documentsResource = createAsyncOp({
@@ -63,21 +49,41 @@ export const documentUploadOp = createAsyncOp({
     name: 'rag/document_upload',
     successToastKey: 'rag:toast.document_uploaded',
     errorToastKey: 'rag:toast.document_upload_failed',
-    restMirror: { method: 'POST', path: '/rag/api/v1/namespaces/:namespace_id/documents' },
-    request: ({ payload }) => {
+    restMirror: {
+        method: 'POST',
+        path: '/rag/api/v1/namespaces/:namespace_id/documents/index-file',
+    },
+    request: async ({ payload }) => {
         if (!payload || typeof payload.namespaceId !== 'string' || payload.namespaceId.length === 0) {
             throw new Error('rag/document_upload: payload.namespaceId required');
         }
         if (!(payload.file instanceof File) && !(payload.file instanceof Blob)) {
             throw new Error('rag/document_upload: payload.file (File|Blob) required');
         }
-        const fd = new FormData();
-        fd.append('file', payload.file);
-        fd.append('metadata', JSON.stringify(payload.metadata !== undefined ? payload.metadata : {}));
+        const metadata = payload.metadata !== undefined ? payload.metadata : {};
+        const spec = buildRagDocumentFileCreateSpecJson({
+            namespaceId: payload.namespaceId,
+            ragMetadata: metadata,
+        });
+        const uploadForm = new FormData();
+        uploadForm.append('file', payload.file);
+        uploadForm.append('spec', spec);
+        const fileRecord = await httpRequest({
+            method: 'POST',
+            url: '/frontend/api/v1/files/',
+            body: uploadForm,
+        });
+        if (!fileRecord || typeof fileRecord.file_id !== 'string') {
+            throw new Error('rag/document_upload: file create response.file_id required');
+        }
         return httpRequest({
             method: 'POST',
-            url: `/rag/api/v1/namespaces/${encodeURIComponent(payload.namespaceId)}/documents`,
-            body: fd,
+            url: `/rag/api/v1/namespaces/${encodeURIComponent(payload.namespaceId)}/documents/index-file`,
+            body: {
+                file_id: fileRecord.file_id,
+                document_name: payload.file instanceof File ? payload.file.name : 'document',
+                metadata,
+            },
         });
     },
     onSuccess: (ctx, result, event) => {

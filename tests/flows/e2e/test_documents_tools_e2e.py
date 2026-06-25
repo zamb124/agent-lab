@@ -12,7 +12,11 @@ import pytest
 from docx import Document
 from openpyxl import Workbook, load_workbook
 
-pytestmark = [pytest.mark.real_taskiq, pytest.mark.timeout(180, func_only=True)]
+pytestmark = [
+    pytest.mark.real_taskiq,
+    pytest.mark.timeout(180, func_only=True),
+    pytest.mark.usefixtures("frontend_service"),
+]
 DOCX_MIME = "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
 XLSX_MIME = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
 
@@ -188,7 +192,7 @@ async def _state_file(
 
 async def _download_flow_file(flows_client_http, headers: dict[str, str], file_id: str) -> bytes:
     response = await flows_client_http.get(
-        f"/flows/api/v1/files/download/{file_id}", headers=headers
+        f"/frontend/api/v1/files/download/{file_id}", headers=headers
     )
     assert response.status_code == 200, response.text
     return response.content

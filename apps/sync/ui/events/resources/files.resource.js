@@ -1,18 +1,11 @@
 /**
- * Файлы Sync — загрузка файлов в чат.
+ * Файлы Sync — метаданные после REST upload.
  *
- * Загрузка бинарного потока — REST-only (multipart, до сотен МБ). После
- * upload UI шлёт WS-команду `sync/files/upload_completed_requested` чтобы
- * получить каноничные метаданные файла.
+ * Бинарный upload — platform/file_create → POST /frontend/api/v1/files/.
+ * После upload UI шлёт WS-команду `sync/files/upload_completed_requested`.
  */
 
-import { createAsyncOp, createMultipartFileUploadOp } from '@platform/lib/events/index.js';
-
-export const fileUploadOp = createMultipartFileUploadOp({
-    name: 'sync/file_upload',
-    url: '/sync/api/v1/files/',
-    extraFields: ['purpose'],
-});
+import { createAsyncOp } from '@platform/lib/events/index.js';
 
 export const fileUploadCompletedOp = createAsyncOp({
     name: 'sync/file_upload_completed',

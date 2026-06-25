@@ -8,6 +8,7 @@ from apps.flows.src.container import get_container
 from apps.flows.src.container_contracts import as_flow_runtime_container
 from apps.flows.src.services.flows_loader import FlowsLoader, load_tools_to_db
 from apps.flows.src.services.hitl_demo_queue import ensure_example_hitl_queue
+from apps.flows.src.services.mcp_catalog_provisioner import provision_mcp_catalog_for_company
 from apps.flows.src.services.mcp_sync import (
     ensure_default_mcp_servers_for_company,
     sync_auto_mcp_servers_for_company,
@@ -93,10 +94,13 @@ async def init_company_resources(
         try:
             runtime_container = as_flow_runtime_container(container)
             _ = await ensure_default_mcp_servers_for_company(container=runtime_container)
+            catalog_stats = await provision_mcp_catalog_for_company(container=runtime_container)
             synced = await sync_auto_mcp_servers_for_company(container=runtime_container)
             logger.info(
-                "MCP синхронизация для %s: servers=%s tools=%s",
+                "MCP синхронизация для %s: catalog_added=%s catalog_updated=%s servers=%s tools=%s",
                 company_id,
+                catalog_stats.added,
+                catalog_stats.updated,
                 synced["servers"],
                 synced["tools"],
             )

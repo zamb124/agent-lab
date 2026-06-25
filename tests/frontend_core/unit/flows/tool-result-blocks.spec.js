@@ -12,7 +12,7 @@ describe('flows-chat tool result blocks', () => {
                     file_id: 'file-docx-1',
                     original_name: 'Contract.docx',
                     content_type: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
-                    url: '/flows/api/v1/files/download/file-docx-1',
+                    url: '/frontend/api/v1/files/download/file-docx-1',
                 },
                 document: {
                     binding_id: 'binding-docx-1',
@@ -29,7 +29,7 @@ describe('flows-chat tool result blocks', () => {
             name: 'Contract.docx',
             mime_type: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
             file_size: undefined,
-            url: '/flows/api/v1/files/download/file-docx-1',
+            url: '/frontend/api/v1/files/download/file-docx-1',
             preview_url: undefined,
             editor_url: '/documents/embed/edit/binding-docx-1?namespace=system',
             binding_id: 'binding-docx-1',

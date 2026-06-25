@@ -21,7 +21,7 @@ def _require_s3_client() -> None:
 
 @pytest.mark.asyncio
 async def test_call_recording_register_platform_file_then_download_ok(
-    sync_app,
+    frontend_app,
     unique_id: str,
     company_id: str,
     sync_user_id: str,
@@ -53,10 +53,10 @@ async def test_call_recording_register_platform_file_then_download_ok(
         )
         assert file_size == len(payload)
 
-        transport = ASGITransport(app=sync_app)
+        transport = ASGITransport(app=frontend_app)
         async with AsyncClient(transport=transport, base_url="http://testserver") as http:
             dl = await http.get(
-                f"/sync/api/v1/files/download/{recording_id}",
+                f"/frontend/api/v1/files/download/{recording_id}",
                 headers=sync_auth_headers,
             )
         assert dl.status_code == 200, dl.text

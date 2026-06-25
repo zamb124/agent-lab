@@ -15,6 +15,7 @@ from apps.office.db.repositories.document_extended_repository import (
     DocumentShareRepository,
 )
 from apps.office.services.catalog_rag_index_service import OfficeCatalogRagIndexService
+from apps.office.services.docs_placement_service import DocsPlacementService
 from apps.office.services.office_access_service import OfficeAccessService
 from apps.office.services.viewer_service import DocumentViewerService
 from core.clients.rag_client import RagClient
@@ -22,7 +23,6 @@ from core.clients.redis_client import RedisClient
 from core.config import get_settings
 from core.container import BaseContainer, ContainerRegistry, lazy
 from core.files.file_repository import FileRepository
-from core.files.processors import FileProcessor
 from core.logging import get_logger
 
 logger = get_logger(__name__)
@@ -92,17 +92,20 @@ class OfficeContainer(BaseContainer):
         return FileRepository(storage=self.shared_storage)
 
     @lazy
-    @override
-    def file_processor(self) -> FileProcessor:
-        return FileProcessor(file_repository=self.file_repository)
-
-    @lazy
     def viewer_service(self) -> DocumentViewerService:
         return DocumentViewerService()
 
     @lazy
     def rag_client(self) -> RagClient:
         return RagClient()
+
+    @lazy
+    def docs_placement_service(self) -> DocsPlacementService:
+        return DocsPlacementService(
+            catalog_repository=self.catalog_repository,
+            document_binding_repository=self.document_binding_repository,
+            files_service=self.files_service,
+        )
 
     @lazy
     def catalog_rag_index_service(self) -> OfficeCatalogRagIndexService:

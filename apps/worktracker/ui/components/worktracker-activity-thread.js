@@ -5,6 +5,7 @@
 import { html, css, nothing } from 'lit';
 import { PlatformElement } from '@platform/lib/platform-element/index.js';
 import { formatPlatformDateTime } from '@platform/lib/utils/format-platform-date.js';
+import { buildWorkItemFileCreateSpecJson } from '@platform/lib/utils/file-create-spec.js';
 import { worktrackerDetailContentStyles } from '../styles/worktracker-detail.styles.js';
 import '@platform/lib/components/platform-icon.js';
 import '@platform/lib/components/platform-user-chip.js';
@@ -18,6 +19,7 @@ export class WorktrackerActivityThread extends PlatformElement {
         comments: { type: Array, attribute: false },
         commentDraft: { type: String, attribute: 'comment-draft' },
         commentFiles: { type: Array, attribute: false },
+        workItemId: { type: String, attribute: 'work-item-id' },
         locale: { type: String },
         embedded: { type: Boolean },
     };
@@ -54,6 +56,7 @@ export class WorktrackerActivityThread extends PlatformElement {
         this.comments = [];
         this.commentDraft = '';
         this.commentFiles = [];
+        this.workItemId = '';
         this.locale = 'ru';
         this.embedded = false;
     }
@@ -79,6 +82,10 @@ export class WorktrackerActivityThread extends PlatformElement {
 
     _submit() {
         this.emit('wt-comment-submit', null);
+    }
+
+    _uploadSpecJson() {
+        return buildWorkItemFileCreateSpecJson({ workItemId: this.workItemId });
     }
 
     _commentFiles(comment) {
@@ -167,7 +174,7 @@ export class WorktrackerActivityThread extends PlatformElement {
                     <platform-file-attachments
                         compact
                         .files=${Array.isArray(this.commentFiles) ? this.commentFiles : []}
-                        upload-op-name="worktracker/file_upload"
+                        .uploadSpec=${this._uploadSpecJson()}
                         open-source="worktracker_comment_composer"
                         @files-change=${(e) => {
                             const files = e.detail && Array.isArray(e.detail.files) ? e.detail.files : [];

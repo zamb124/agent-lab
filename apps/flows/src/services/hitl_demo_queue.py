@@ -2,7 +2,6 @@
 Демо-очередь HITL (WorkQueue) для примеров в bundles (example_react, example_graph).
 """
 
-from core.worktracker.models import SystemActor
 from core.worktracker.service import WorkItemService
 
 EXAMPLE_HITL_SLUG = "example_hitl"
@@ -20,5 +19,4 @@ async def ensure_example_hitl_queue(work_item_service: WorkItemService, company_
             "Демо-очередь для сценариев HITL в example_react и example_graph. "
             "Назначьте операторов через API или интерфейс."
         ),
-        creator=SystemActor(),
     )

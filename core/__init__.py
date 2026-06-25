@@ -13,7 +13,7 @@ Core - общая инфраструктура Humanitec.
 - logging/      - Логирование (JSON, Structured)
 - container/    - DI контейнер (BaseContainer)
 - variables/    - Переменные компаний (резолюция @var:key)
-- files/        - Файлы и S3 (S3Client, FileProcessor)
+- files/        - Файлы и S3 (FilesService, S3Client)
 - clients/      - Клиенты (LLM, NanoBanana, STT, Payment)
 - utils/        - Утилиты (tokens, slug)
 - middleware/   - Middleware

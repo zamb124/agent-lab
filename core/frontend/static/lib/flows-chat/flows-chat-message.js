@@ -15,7 +15,11 @@ import {
     toolCallIconName,
 } from './tool-helpers.js';
 import { flowsChatMarkdownToHtml } from './markdown.js';
-import { normalizeFlowChatBlockForFlowsUrls, rewriteFlowsFileUrlsInHtml } from './flows-url-rewrite.js';
+import {
+    normalizeFlowChatBlockForPlatformUrls,
+    rewritePlatformFileUrlsInHtml,
+    CANONICAL_FILES_DOWNLOAD_PREFIX,
+} from './flows-url-rewrite.js';
 import { registerBuiltinFlowChatBlocks } from './flows-chat-builtin-blocks.js';
 import { stopStreamTtsPlayback } from '../voice/stream-tts-registry.js';
 import './flows-chat-block-renderer.js';
@@ -870,15 +874,12 @@ export class FlowsChatMessage extends PlatformElement {
         if (fid.length === 0) {
             return '';
         }
-        const root = this._flowRoot();
-        return `${root}/api/v1/files/download/${encodeURIComponent(fid)}`;
+        return `${CANONICAL_FILES_DOWNLOAD_PREFIX}/${encodeURIComponent(fid)}`;
     }
 
     _markdownTemplate(text, opts = {}) {
-        const root = this._flowRoot();
-        const htmlText = rewriteFlowsFileUrlsInHtml(
+        const htmlText = rewritePlatformFileUrlsInHtml(
             flowsChatMarkdownToHtml(asString(text), opts),
-            root,
         );
         return unsafeHTML(htmlText);
     }
@@ -1260,7 +1261,7 @@ export class FlowsChatMessage extends PlatformElement {
         return html`
             <div class="blocks">
                 ${blocks.map((block) => html`
-                    <flows-chat-block-renderer .block=${normalizeFlowChatBlockForFlowsUrls(block, root)}></flows-chat-block-renderer>
+                    <flows-chat-block-renderer .block=${normalizeFlowChatBlockForPlatformUrls(block)}></flows-chat-block-renderer>
                 `)}
             </div>
         `;

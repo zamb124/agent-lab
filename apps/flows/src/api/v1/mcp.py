@@ -3,7 +3,6 @@ API endpoints для MCP серверов.
 """
 
 import asyncio
-from collections.abc import Mapping
 from datetime import datetime
 from typing import Annotated
 
@@ -16,11 +15,18 @@ from apps.flows.src.clients.mcp_client import (
 )
 from apps.flows.src.container_contracts import as_flow_runtime_container
 from apps.flows.src.dependencies import ContainerDep
-from apps.flows.src.models.mcp import MCPServerConfig, MCPTransportType
-from apps.flows.src.services.mcp_sync import sync_mcp_server_tools
+from apps.flows.src.models.mcp import MCPServerConfig, MCPServerSource, MCPTransportType
+from apps.flows.src.models.mcp_branding import MCPServerBrandingResolved
+from apps.flows.src.services.mcp_catalog_provisioner import (
+    apply_catalog_entry_to_server,
+    mark_server_override_locked,
+    mcp_server_update_triggers_override,
+)
+from apps.flows.src.services.mcp_sync import resolve_mcp_client_variables, sync_mcp_server_tools
+from core.context import get_context
 from core.logging import get_logger
 from core.pagination import OffsetPage
-from core.types import JsonObject, JsonValue
+from core.types import JsonObject
 
 logger = get_logger(__name__)
 
@@ -70,6 +76,36 @@ class MCPServerResponse(BaseModel):
     cached_tools: list[str]
     last_sync_at: datetime | None
     description: str | None
+    source: str
+    catalog_id: str | None
+    catalog_snapshot_hash: str | None
+    override_locked: bool
+    override_locked_at: datetime | None
+    override_locked_by_user_id: str | None
+    icon_url: str | None = None
+
+
+class MCPServerBrandingResponse(BaseModel):
+    """Глобальная иконка MCP сервера по slug."""
+
+    server_id: str
+    icon_file_id: str
+    icon_url: str
+    updated_at: datetime
+    updated_by_user_id: str
+
+
+class MCPServerBrandingListResponse(BaseModel):
+    """Список branding и slug из catalog для UI."""
+
+    items: list[MCPServerBrandingResponse]
+    catalog_slugs: list[str]
+
+
+class MCPServerBrandingUpsertRequest(BaseModel):
+    """Загрузка иконки для slug."""
+
+    icon_file_id: str = Field(..., min_length=1, description="Публичный file_id иконки")
 
 
 class MCPToolResponse(BaseModel):
@@ -102,7 +138,11 @@ class MCPTestResponse(BaseModel):
     url: str
 
 
-def _server_to_response(server: MCPServerConfig) -> MCPServerResponse:
+def _server_to_response(
+    server: MCPServerConfig,
+    *,
+    icon_url: str | None = None,
+) -> MCPServerResponse:
     """Конвертирует MCPServerConfig в response."""
     return MCPServerResponse(
         server_id=server.server_id,
@@ -114,7 +154,37 @@ def _server_to_response(server: MCPServerConfig) -> MCPServerResponse:
         cached_tools=server.cached_tools,
         last_sync_at=server.last_sync_at,
         description=server.description,
+        source=server.source.value,
+        catalog_id=server.catalog_id,
+        catalog_snapshot_hash=server.catalog_snapshot_hash,
+        override_locked=server.override_locked,
+        override_locked_at=server.override_locked_at,
+        override_locked_by_user_id=server.override_locked_by_user_id,
+        icon_url=icon_url,
     )
+
+
+def _branding_resolved_to_response(item: MCPServerBrandingResolved) -> MCPServerBrandingResponse:
+    return MCPServerBrandingResponse(
+        server_id=item.server_id,
+        icon_file_id=item.icon_file_id,
+        icon_url=item.icon_url,
+        updated_at=item.updated_at,
+        updated_by_user_id=item.updated_by_user_id,
+    )
+
+
+async def _server_response(
+    container: ContainerDep,
+    server: MCPServerConfig,
+    *,
+    icon_url_map: dict[str, str] | None = None,
+) -> MCPServerResponse:
+    if icon_url_map is None:
+        icon_url = await container.mcp_branding_service.get_icon_url(server.server_id)
+    else:
+        icon_url = icon_url_map.get(server.server_id)
+    return _server_to_response(server, icon_url=icon_url)
 
 
 @router.get("/servers", response_model=OffsetPage[MCPServerResponse])
@@ -123,11 +193,12 @@ async def list_servers(
     limit: Annotated[int, Query(ge=1, le=1000)] = 200,
     offset: Annotated[int, Query(ge=0)] = 0,
 ) -> OffsetPage[MCPServerResponse]:
-    servers, total = await asyncio.gather(
+    servers, total, icon_url_map = await asyncio.gather(
         container.mcp_server_repository.list(limit=limit, offset=offset),
         container.mcp_server_repository.count_all(),
+        container.mcp_branding_service.build_icon_url_map(),
     )
-    items = [_server_to_response(s) for s in servers]
+    items = [_server_to_response(s, icon_url=icon_url_map.get(s.server_id)) for s in servers]
     return OffsetPage[MCPServerResponse](items=items, total=total, limit=limit, offset=offset)
 
 
@@ -151,12 +222,13 @@ async def create_server(
         transport_type=request.transport_type,
         headers=request.headers,
         description=request.description,
+        source=MCPServerSource.MANUAL,
     )
 
     _ = await container.mcp_server_repository.set(server)
     logger.info(f"MCP server created: {request.server_id}")
 
-    return _server_to_response(server)
+    return await _server_response(container, server)
 
 
 @router.get("/servers/{server_id}", response_model=MCPServerResponse)
@@ -169,7 +241,7 @@ async def get_server(
     if not server:
         raise HTTPException(status_code=404, detail="Server not found")
 
-    return _server_to_response(server)
+    return await _server_response(container, server)
 
 
 @router.put("/servers/{server_id}", response_model=MCPServerResponse)
@@ -182,6 +254,21 @@ async def update_server(
     server = await container.mcp_server_repository.get(server_id)
     if not server:
         raise HTTPException(status_code=404, detail="Server not found")
+
+    next_transport = (
+        MCPTransportType(request.transport_type)
+        if request.transport_type is not None
+        else None
+    )
+    triggers_override = mcp_server_update_triggers_override(
+        server=server,
+        name=request.name,
+        url=request.url,
+        transport_type=next_transport,
+        headers=request.headers,
+        description=request.description,
+        is_active=request.is_active,
+    )
 
     if request.name is not None:
         server.name = request.name
@@ -196,9 +283,18 @@ async def update_server(
     if request.description is not None:
         server.description = request.description
 
+    if triggers_override:
+        ctx = get_context()
+        if ctx is None:
+            raise HTTPException(status_code=401, detail="Authentication required")
+        user_id = ctx.user.user_id.strip()
+        if not user_id:
+            raise HTTPException(status_code=401, detail="Authentication required")
+        server = mark_server_override_locked(server=server, user_id=user_id)
+
     _ = await container.mcp_server_repository.set(server)
     logger.info(f"MCP server updated: {server_id}")
-    return _server_to_response(server)
+    return await _server_response(container, server)
 
 
 @router.delete("/servers/{server_id}")
@@ -276,11 +372,11 @@ async def test_server_connection(
     if not server:
         raise HTTPException(status_code=404, detail="Server not found")
 
-    # Переменные нужны только если в headers есть @var: ссылки
-    variables: Mapping[str, JsonValue] = {}
-    has_var_refs = any("@var:" in str(v) for v in server.headers.values())
-    if has_var_refs:
-        variables = await container.variables_service.get_all_resolved_vars()
+    runtime = as_flow_runtime_container(container)
+    try:
+        variables = await resolve_mcp_client_variables(runtime, server)
+    except MCPClientError as exc:
+        raise HTTPException(status_code=502, detail=f"MCP server error: {exc}") from exc
 
     client = MCPClient(server, variables)
 
@@ -299,3 +395,79 @@ async def test_server_connection(
         transport_type=server.transport_type.value,
         url=server.url,
     )
+
+
+@router.post("/servers/{server_id}/reset_catalog_defaults", response_model=MCPServerResponse)
+async def reset_catalog_defaults(
+    server_id: str,
+    container: ContainerDep,
+) -> MCPServerResponse:
+    """Сбрасывает catalog-managed MCP сервер к snapshot из глобального catalog."""
+    server = await container.mcp_server_repository.get(server_id)
+    if not server:
+        raise HTTPException(status_code=404, detail="Server not found")
+    if server.source != MCPServerSource.CATALOG:
+        raise HTTPException(status_code=400, detail="reset_catalog_defaults requires source=catalog")
+    if server.catalog_id is None:
+        raise HTTPException(status_code=400, detail="catalog_id is required for reset")
+
+    entry = await container.mcp_catalog_repository.get(server.catalog_id)
+    if entry is None:
+        raise HTTPException(status_code=404, detail="Catalog entry not found")
+
+    try:
+        reset_server = apply_catalog_entry_to_server(server=server, entry=entry)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    _ = await container.mcp_server_repository.set(reset_server)
+    try:
+        _ = await sync_mcp_server_tools(
+            container=as_flow_runtime_container(container),
+            server_config=reset_server,
+        )
+    except MCPClientError as exc:
+        raise HTTPException(status_code=502, detail=f"MCP server error: {exc}") from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except Exception as exc:
+        raise HTTPException(status_code=502, detail=f"Connection error: {exc}") from exc
+
+    stored = await container.mcp_server_repository.get(server_id)
+    if stored is None:
+        raise HTTPException(status_code=404, detail="Server not found after reset")
+    logger.info("MCP server reset from catalog: server_id=%s catalog_id=%s", server_id, entry.catalog_id)
+    return await _server_response(container, stored)
+
+
+@router.get("/branding", response_model=MCPServerBrandingListResponse)
+async def list_mcp_branding(container: ContainerDep) -> MCPServerBrandingListResponse:
+    """Глобальные иконки MCP по slug и slug из catalog."""
+    items, catalog_slugs = await asyncio.gather(
+        container.mcp_branding_service.list_branding(),
+        container.mcp_branding_service.list_catalog_slugs(),
+    )
+    return MCPServerBrandingListResponse(
+        items=[_branding_resolved_to_response(item) for item in items],
+        catalog_slugs=catalog_slugs,
+    )
+
+
+@router.put("/branding/{server_id}", response_model=MCPServerBrandingResponse)
+async def upsert_mcp_branding(
+    server_id: str,
+    request: MCPServerBrandingUpsertRequest,
+    container: ContainerDep,
+) -> MCPServerBrandingResponse:
+    """Задаёт иконку MCP сервера по slug (только system company)."""
+    resolved = await container.mcp_branding_service.upsert_branding(
+        server_id,
+        request.icon_file_id,
+    )
+    return _branding_resolved_to_response(resolved)
+
+
+@router.delete("/branding/{server_id}", status_code=204)
+async def delete_mcp_branding(server_id: str, container: ContainerDep) -> None:
+    """Удаляет иконку MCP сервера по slug (только system company)."""
+    await container.mcp_branding_service.delete_branding(server_id)

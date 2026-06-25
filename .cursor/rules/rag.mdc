@@ -30,7 +30,7 @@ globs:
 3. **NamespaceManager для scope** (`core/rag/namespace_manager.py::NamespaceManager.resolve_namespace(scope, context_id?, session_id?) -> str`); `scope ∈ {"flow","company","session"}`. Хардкод `f"flow:{...}"` запрещён.
 4. **Async-индексация** — mutating-операции в воркере через TaskIQ (`process_document_upload`, `index_rag_document_s3_task`, `delete_document_task` в `apps/rag_worker/tasks/indexing_tasks.py` и связанные задачи). Синхронный `parse_document` в API — запрещён.
 5. **Доступ к namespace** — для `ingest-text` и `search` обязательна проверка `namespace_repository.get(id)` + совпадение `company_id` с контекстом; иначе 404/403. Для `POST /rag/api/v1/search` проверка для каждого `namespace_ids[i]`.
-6. **Межсервисный клиент** — только `core/clients/rag_client.py::RagClient` (поверх `ServiceClient`): `create_namespace`, `ingest_text`, `upload_namespace_document`, `delete_namespace_document`, `get_document_processing_status`, `files_download_url_path`, `search`, `global_search`. Не плодить `ServiceClient("rag", path=...)` в peer-сервисах в обход `RagClient`.
+6. **Межсервисный клиент** — только `core/clients/rag_client.py::RagClient` (поверх `ServiceClient`): `create_namespace`, `ingest_text`, `index_file`, `delete_namespace_document`, `get_document_processing_status`, `search`, `global_search`. Не плодить `ServiceClient("rag", path=...)` в peer-сервисах в обход `RagClient`.
 
 ## TTL документов и retention
 
@@ -88,7 +88,7 @@ globs:
 
 ## Inter-service
 
-`core/clients/rag_client.py::RagClient` — единственный канон обращения к RAG из других сервисов (`crm`/`flows`/`office`). Поверх `ServiceClient`. CRM `apps/crm/services/attachment_service.py` индексирует attachments через `RagClient.upload_namespace_document`, ссылку (`document_id`) сохраняет в `entity.metadata.attachments[]`.
+`core/clients/rag_client.py::RagClient` — единственный канон обращения к RAG из других сервисов (`crm`/`flows`/`office`). Поверх `ServiceClient`. CRM `apps/crm/services/attachment_service.py` индексирует attachments через `FilesService.create` + `post_create.rag_index` или `RagClient.index_file`; ссылку (`document_id`) сохраняет в `entity.metadata.attachments[]`.
 
 ### Index-file (внешний владелец байтов)
 

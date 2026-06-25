@@ -39,6 +39,10 @@ PLATFORM_FREE_MODELS_SYNC_TASK_NAME = "refresh_platform_free_models_task"
 RAG_CLEANUP_EXPIRED_DOCUMENTS_TASK_NAME = "rag_cleanup_expired_documents_tick"
 RAG_REEMBED_STALE_DOCUMENTS_TASK_NAME = "rag_reembed_stale_documents_tick"
 RAG_CLEANUP_ORPHAN_COMPANY_CHUNKS_TASK_NAME = "rag_cleanup_orphan_company_chunks_tick"
+FILE_RETENTION_PURGE_TASK_NAME = "file_retention_purge_tick"
+FILE_RETENTION_BACKFILL_TASK_NAME = "file_retention_backfill_tick"
+MCP_CATALOG_CRAWL_TASK_NAME = "mcp_catalog_crawl_task"
+MCP_CATALOG_RESYNC_TOOLS_TASK_NAME = "mcp_catalog_resync_tools_task"
 CRM_RECONCILE_DAILY_SUMMARY_CRON = "0 * * * *"
 SYSTEM_SCHEDULER_COMPANY_ID = "system"
 LLM_MODELS_SYNC_PAYLOAD_MARKER = "llm_models_background_sync"
@@ -168,6 +172,7 @@ async def _ensure_calendar_schedule(
     task_name: str,
     cron: str,
     log_label: str,
+    run_now_on_start: bool = False,
 ) -> None:
     if not config_enabled:
         logger.info("%s: disabled in config", log_label)
@@ -180,57 +185,68 @@ async def _ensure_calendar_schedule(
             offset=0,
         ),
     )
+    task: PlatformScheduledTask | None = None
     pending_tasks = [task for task in tasks if task.status == ScheduledTaskStatus.PENDING]
     if len(pending_tasks) > 0:
         logger.info("%s schedule already exists, count=%s", log_label, len(pending_tasks))
-        _ = await _reconcile_cron_payload(
+        task = await _reconcile_cron_payload(
             container=container,
             task=pending_tasks[0],
             task_name=task_name,
             cron=cron,
             log_label=log_label,
         )
-        return
-    paused_tasks = [task for task in tasks if task.status == ScheduledTaskStatus.PAUSED]
-    if len(paused_tasks) > 0:
-        resumed = await container.scheduler_service.resume(
+    else:
+        paused_tasks = [task for task in tasks if task.status == ScheduledTaskStatus.PAUSED]
+        if len(paused_tasks) > 0:
+            resumed = await container.scheduler_service.resume(
+                company_id=SYSTEM_SCHEDULER_COMPANY_ID,
+                schedule_task_id=paused_tasks[0].schedule_task_id,
+            )
+            logger.info(
+                "%s schedule resumed: schedule_task_id=%s schedule_id=%s",
+                log_label,
+                resumed.schedule_task_id,
+                resumed.schedule_id,
+            )
+            task = await _reconcile_cron_payload(
+                container=container,
+                task=resumed,
+                task_name=task_name,
+                cron=cron,
+                log_label=log_label,
+            )
+        else:
+            request = PlatformScheduleCreateRequest(
+                target_service="flows",
+                task_name=task_name,
+                queue_name="idle",
+                schedule_type=PlatformScheduleType.CRON,
+                cron=cron,
+                timezone="UTC",
+                payload={},
+            )
+            task = await container.scheduler_service.create(
+                company_id=SYSTEM_SCHEDULER_COMPANY_ID,
+                user_id=None,
+                request=request,
+            )
+            logger.info(
+                "%s schedule created: schedule_task_id=%s schedule_id=%s",
+                log_label,
+                task.schedule_task_id,
+                task.schedule_id,
+            )
+    if run_now_on_start:
+        _ = await container.scheduler_service.run_now(
             company_id=SYSTEM_SCHEDULER_COMPANY_ID,
-            schedule_task_id=paused_tasks[0].schedule_task_id,
+            schedule_task_id=task.schedule_task_id,
         )
         logger.info(
-            "%s schedule resumed: schedule_task_id=%s schedule_id=%s",
+            "%s cron schedule kicked immediately: schedule_task_id=%s",
             log_label,
-            resumed.schedule_task_id,
-            resumed.schedule_id,
+            task.schedule_task_id,
         )
-        _ = await _reconcile_cron_payload(
-            container=container,
-            task=resumed,
-            task_name=task_name,
-            cron=cron,
-            log_label=log_label,
-        )
-        return
-    request = PlatformScheduleCreateRequest(
-        target_service="flows",
-        task_name=task_name,
-        queue_name="idle",
-        schedule_type=PlatformScheduleType.CRON,
-        cron=cron,
-        timezone="UTC",
-        payload={},
-    )
-    created = await container.scheduler_service.create(
-        company_id=SYSTEM_SCHEDULER_COMPANY_ID,
-        user_id=None,
-        request=request,
-    )
-    logger.info(
-        "%s schedule created: schedule_task_id=%s schedule_id=%s",
-        log_label,
-        created.schedule_task_id,
-        created.schedule_id,
-    )
 
 
 async def _ensure_idle_interval_schedule(
@@ -501,6 +517,37 @@ async def on_startup(app: FastAPI, container: SchedulerContainer, settings: Sche
         payload={"system_task": PLATFORM_FREE_MODELS_SYNC_PAYLOAD_MARKER},
         log_label="Platform free-pool sync",
         run_now_on_start=True,
+    )
+    await _ensure_calendar_schedule(
+        container=container,
+        config_enabled=settings.files.retention.purge_enabled,
+        task_name=FILE_RETENTION_PURGE_TASK_NAME,
+        cron=settings.files.retention.purge_cron,
+        log_label="File retention purge",
+    )
+    await _ensure_calendar_schedule(
+        container=container,
+        config_enabled=not is_testing(),
+        task_name=FILE_RETENTION_BACKFILL_TASK_NAME,
+        cron=settings.files.retention.purge_cron,
+        log_label="File retention backfill",
+    )
+    await _ensure_calendar_schedule(
+        container=container,
+        config_enabled=settings.mcp_catalog.enabled and not is_testing(),
+        task_name=MCP_CATALOG_CRAWL_TASK_NAME,
+        cron=settings.mcp_catalog.crawl_cron,
+        log_label="MCP catalog crawl",
+        run_now_on_start=settings.mcp_catalog.crawl_run_on_start,
+    )
+    await _ensure_calendar_schedule(
+        container=container,
+        config_enabled=settings.mcp_catalog.enabled
+        and settings.mcp_catalog.auto_provision != "disabled"
+        and not is_testing(),
+        task_name=MCP_CATALOG_RESYNC_TOOLS_TASK_NAME,
+        cron=settings.mcp_catalog.resync_tools_cron,
+        log_label="MCP catalog resync tools",
     )
     cfg = settings.rag.ttl
     await _ensure_rag_ttl_cleanup_schedule(

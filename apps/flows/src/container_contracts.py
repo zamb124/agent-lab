@@ -15,6 +15,7 @@ if TYPE_CHECKING:
         ResourceRepository,
         ToolRepository,
     )
+    from apps.flows.src.db.mcp_catalog_repository import MCPCatalogRepository
     from apps.flows.src.db.mcp_repository import MCPServerRepository
     from apps.flows.src.durable_execution import DurableWorkflowRuntime
     from apps.flows.src.models import (
@@ -42,6 +43,7 @@ if TYPE_CHECKING:
     from apps.flows.src.services.lara_action_engine import LaraActionEngine
     from apps.flows.src.services.lara_facade import LaraFacade
     from apps.flows.src.services.llm_models_service import LLMModelsService
+    from apps.flows.src.services.mcp_branding_service import MCPServerBrandingService
     from apps.flows.src.services.schedule_service import ScheduleService
     from apps.flows.src.tools.base import BaseTool
     from apps.flows.src.variables import VariablesService
@@ -57,7 +59,7 @@ if TYPE_CHECKING:
     from core.db.repositories.user_repository import UserRepository
     from core.db.repositories.variable_repository import VariableRepository
     from core.files.file_repository import FileRepository
-    from core.files.processors import FileProcessor
+    from core.files.service import FilesService
     from core.integrations.oauth_service import OAuthService
     from core.rag.llm_context_memory_store import RAGLLMContextMemoryStore
     from core.rag.repository import RAGRepository
@@ -302,6 +304,12 @@ class FlowRuntimeContainer(Protocol):
     def mcp_server_repository(self) -> MCPServerRepository: ...
 
     @property
+    def mcp_catalog_repository(self) -> MCPCatalogRepository: ...
+
+    @property
+    def mcp_branding_service(self) -> MCPServerBrandingService: ...
+
+    @property
     def channel_registry(self) -> ChannelRegistryProtocol: ...
 
     @property
@@ -320,7 +328,7 @@ class FlowRuntimeContainer(Protocol):
     def billing_service(self) -> BillingService: ...
 
     @property
-    def file_processor(self) -> FileProcessor: ...
+    def files_service(self) -> FilesService: ...
 
     @property
     def base_tool_class(self) -> type[BaseTool]: ...

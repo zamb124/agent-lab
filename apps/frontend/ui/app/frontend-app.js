@@ -15,6 +15,7 @@ import { createRouterEffect } from '@platform/lib/events/effects/router.effect.j
 import { CoreAuthEvents } from '@platform/lib/events/effects/auth.effect.js';
 import { applyCompanyHostRedirectIfNeeded } from '@platform/lib/utils/company-host-guard.js';
 import { COMPANIES_EVENTS } from '@platform/lib/events/reducers/companies.js';
+import { platformFileCreateOp } from '@platform/lib/events/factories/platform-file-create.js';
 
 import { apiKeysResource } from '../events/resources/api-keys.resource.js';
 import {
@@ -344,6 +345,7 @@ export class FrontendApp extends PlatformApp {
         publicSiteBundleOp,
         publicBlogListOp,
         publicBlogPostOp,
+        platformFileCreateOp,
     ];
 
     constructor() {

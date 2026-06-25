@@ -1090,5 +1090,8 @@
     "sync_meeting_reminder_enabled": true,
     "sync_meeting_reminder_cron": "*/1 * * * *",
     "sync_meeting_reminder_limit": 500
+  },
+  "mcp_catalog": {
+    "auto_provision": "all_verified"
   }
 }

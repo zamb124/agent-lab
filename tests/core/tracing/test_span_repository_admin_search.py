@@ -124,7 +124,7 @@ async def test_admin_list_distinct_company_ids_in_spans(container, unique_id: st
             company_id=cid,
         )
     )
-    out = await repo.admin_list_distinct_company_ids_in_spans(max_ids=100)
+    out = await repo.admin_list_distinct_company_ids_in_spans(max_ids=5000)
     assert cid in out
 
 
@@ -143,7 +143,7 @@ async def test_admin_list_distinct_user_ids_in_spans(container, unique_id: str):
             user_id=uid,
         )
     )
-    out = await repo.admin_list_distinct_user_ids_in_spans(max_ids=100)
+    out = await repo.admin_list_distinct_user_ids_in_spans(max_ids=5000)
     assert uid in out
 
 

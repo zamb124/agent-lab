@@ -114,7 +114,7 @@ import {
     attachmentUploadOp,
     attachmentDeleteOp,
 } from '../events/resources/attachments.resource.js';
-import { fileUploadOp } from '../events/resources/files.resource.js';
+import { platformFileCreateOp } from '@platform/lib/events/factories/platform-file-create.js';
 
 import '../components/crm-sidebar.js';
 import '../components/sheets/crm-workspace-picker-sheet.js';
@@ -322,7 +322,7 @@ export class CRMApp extends PlatformApp {
         attachmentsListOp,
         attachmentUploadOp,
         attachmentDeleteOp,
-        fileUploadOp,
+        platformFileCreateOp,
         graphUiSlice,
         graphViewSlice,
         dailyNotesUiSlice,

@@ -35,6 +35,7 @@ import {
 } from '../../_helpers/flows-code-execute-run-gate.js';
 import { asObject, asString, isPlainObject } from '../../_helpers/flows-resolvers.js';
 import { formatExecuteViewModel } from '../../_helpers/flows-execute-preview.js';
+import { buildFlowAssetFileCreateSpecJson } from '@platform/lib/utils/file-create-spec.js';
 
 export class FlowsBaseNodeEditor extends PlatformElement {
     static i18nNamespace = 'flows';
@@ -402,7 +403,7 @@ export class FlowsBaseNodeEditor extends PlatformElement {
         this._mappingSyncNonce = 0;
         this._stateDraft = null;
         this._addResourcePick = '';
-        this._fileUpload = this.useOp('flows/file_upload');
+        this._fileUpload = this.useOp('platform/file_create');
         this._nodeExecute = this.useOp('flows/code_execute');
         this._exceptionAbsorbAllowNamesOp = this.useOp('flows/exception_absorb_allow_names');
         this._executionLimitsOp = this.useOp('flows/execution_limits');
@@ -817,21 +818,25 @@ export class FlowsBaseNodeEditor extends PlatformElement {
         const file = e.target.files && e.target.files[0];
         if (!file) return;
         const input = e.target;
-        const result = await this._fileUpload.run({ file });
+        if (typeof this.flowId !== 'string' || this.flowId.length === 0) {
+            throw new Error('flows-base-node-editor: flowId required for file upload');
+        }
+        const spec = buildFlowAssetFileCreateSpecJson({ flowId: this.flowId });
+        const result = await this._fileUpload.run({ file, spec });
         if (!result || typeof result.file_id !== 'string') {
-            throw new Error('flows-base-node-editor: file_upload op must return result.file_id');
+            throw new Error('flows-base-node-editor: platform/file_create must return result.file_id');
         }
         if (typeof result.original_name !== 'string' || result.original_name === '') {
-            throw new Error('flows-base-node-editor: file_upload op must return result.original_name');
+            throw new Error('flows-base-node-editor: platform/file_create must return result.original_name');
         }
         if (typeof result.content_type !== 'string' || result.content_type === '') {
-            throw new Error('flows-base-node-editor: file_upload op must return result.content_type');
+            throw new Error('flows-base-node-editor: platform/file_create must return result.content_type');
         }
         if (typeof result.file_size !== 'number') {
-            throw new Error('flows-base-node-editor: file_upload op must return result.file_size');
+            throw new Error('flows-base-node-editor: platform/file_create must return result.file_size');
         }
         if (typeof result.url !== 'string' || result.url === '') {
-            throw new Error('flows-base-node-editor: file_upload op must return result.url');
+            throw new Error('flows-base-node-editor: platform/file_create must return result.url');
         }
         const files = Array.isArray(this.nodeConfig?.files) ? this.nodeConfig.files : [];
         const next = [...files, {

@@ -409,7 +409,7 @@ async def test_public_landing_agents_resolves_card_from_flow_store_url(
     assert r.status_code == 200
     hit = next((x for x in r.json()["items"] if x["embed_id"] == embed_id), None)
     assert hit is not None
-    assert "/flows/api/v1/files/download/" in hit["landing_card_image_url"]
+    assert "/frontend/api/v1/files/download/" in hit["landing_card_image_url"]
 
     set_context(
         Context(

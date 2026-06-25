@@ -12,3 +12,5 @@ import '@platform/lib/components/glass-button.js';
 import '@platform/lib/components/company-modal.js';
 
 import './app/rag-app.js';
+
+export { platformFileCreateOp } from '@platform/lib/events/factories/platform-file-create.js';

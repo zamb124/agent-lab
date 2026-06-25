@@ -78,7 +78,7 @@ class OfficeAccessService:
             )
         raise ValueError("Ссылка не найдена")
 
-    async def user_can_view_binding(
+    async def _user_has_binding_management_access(
         self,
         binding: OfficeDocumentBinding,
         *,
@@ -86,10 +86,6 @@ class OfficeAccessService:
         namespace: str,
         user_id: str,
     ) -> bool:
-        if binding.company_id != company_id or binding.namespace != namespace:
-            return False
-        if binding.deleted_at is not None:
-            return False
         if await self._catalog_repository.user_can_access_catalog(
             binding.catalog_id,
             company_id,
@@ -102,6 +98,44 @@ class OfficeAccessService:
         if binding.created_by_user_id == user_id:
             return True
         return False
+
+    async def user_can_view_binding(
+        self,
+        binding: OfficeDocumentBinding,
+        *,
+        company_id: str,
+        namespace: str,
+        user_id: str,
+    ) -> bool:
+        if binding.company_id != company_id or binding.namespace != namespace:
+            return False
+        if binding.deleted_at is not None:
+            return False
+        return await self._user_has_binding_management_access(
+            binding,
+            company_id=company_id,
+            namespace=namespace,
+            user_id=user_id,
+        )
+
+    async def user_can_manage_trashed_binding(
+        self,
+        binding: OfficeDocumentBinding,
+        *,
+        company_id: str,
+        namespace: str,
+        user_id: str,
+    ) -> bool:
+        if binding.company_id != company_id or binding.namespace != namespace:
+            return False
+        if binding.deleted_at is None:
+            return False
+        return await self._user_has_binding_management_access(
+            binding,
+            company_id=company_id,
+            namespace=namespace,
+            user_id=user_id,
+        )
 
     async def binding_visible_in_public_catalog(
         self,

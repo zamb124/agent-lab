@@ -6,6 +6,7 @@ import { html, css, nothing } from 'lit';
 import { PlatformElement } from '@platform/lib/platform-element/index.js';
 import { worktrackerDetailContentStyles } from '../styles/worktracker-detail.styles.js';
 import { truncateWorkItemId } from '../utils/work-item-detail-shared.js';
+import { buildWorkItemFileCreateSpecJson } from '@platform/lib/utils/file-create-spec.js';
 import './worktracker-state-pill.js';
 import '@platform/lib/components/fields/platform-field.js';
 import '@platform/lib/components/prompt-editor.js';
@@ -86,6 +87,10 @@ export class WorktrackerDetailContent extends PlatformElement {
         });
     }
 
+    _uploadSpecJson() {
+        return buildWorkItemFileCreateSpecJson({ workItemId: this.workItemId });
+    }
+
     render() {
         const titlePlaceholder = this.t('detail_panel.label_title');
         const descPlaceholder = this.layout === 'page'
@@ -150,7 +155,7 @@ export class WorktrackerDetailContent extends PlatformElement {
                     <h4 class="wt-section-label">${this.t('detail_page.section_attachments')}</h4>
                     <platform-file-attachments
                         .files=${Array.isArray(this.attachments) ? this.attachments : []}
-                        upload-op-name="worktracker/file_upload"
+                        .uploadSpec=${this._uploadSpecJson()}
                         open-source="worktracker_task_attachments"
                         @files-change=${(e) => {
                             const files = e.detail && Array.isArray(e.detail.files) ? e.detail.files : [];

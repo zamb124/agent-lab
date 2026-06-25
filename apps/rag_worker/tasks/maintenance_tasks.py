@@ -8,7 +8,6 @@ from apps.rag.container import get_rag_container
 from apps.rag_worker.broker import broker
 from core.config import get_settings
 from core.context import Context, clear_context, set_context
-from core.files.processors import FileProcessor
 from core.logging import get_logger
 from core.rag.models import (
     RAGCleanupExpiredDocumentsTickResult,
@@ -179,7 +178,7 @@ async def rag_cleanup_expired_documents_tick(
     container = get_rag_container()
     status_repo = container.document_status_repository
     provider = container.rag_provider
-    processor = FileProcessor(file_repository=container.file_repository)
+    files_service = container.files_service
     now = datetime.now(timezone.utc)
 
     candidates = await status_repo.list_expired_document_candidates(
@@ -193,7 +192,7 @@ async def rag_cleanup_expired_documents_tick(
         try:
             file_record = await container.file_repository.get(document_id)
             if file_record is not None:
-                _ = await processor.delete_file(document_id)
+                _ = await files_service.delete(document_id)
             _ = await status_repo.delete_by_document_id(document_id)
             _ = await provider.delete_document(namespace_id, document_id)
             deleted += 1

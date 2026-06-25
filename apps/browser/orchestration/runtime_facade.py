@@ -15,7 +15,7 @@ from apps.browser.engine.types import BrowserRuntimeSettingsView
 from apps.browser.observe.observe_store import ControlObserveStore
 from apps.browser.orchestration.control_adapter_factory import build_browser_control_adapter
 from core.clients.redis_client import RedisClient
-from core.files.processors import FileProcessor
+from core.files.service import FilesService
 from core.logging import get_logger
 from core.types import JsonObject
 
@@ -52,7 +52,7 @@ class BrowserRuntimeFacade:
         settings: BrowserRuntimeSettingsView,
         *,
         redis_client: RedisClient,
-        file_processor: FileProcessor,
+        files_service: FilesService,
     ) -> None:
         self.settings: BrowserRuntimeSettingsView = settings
         self.pool: CDPConnectionPool = CDPConnectionPool(
@@ -77,7 +77,7 @@ class BrowserRuntimeFacade:
             session_store=self.session_store,
             lease_manager=self.lease_manager,
             settings=settings,
-            file_processor=file_processor,
+            files_service=files_service,
         )
         self.observe_store: ControlObserveStore = ControlObserveStore()
         self._control_adapter: BrowserControlAdapter | None = None

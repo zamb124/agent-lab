@@ -34,6 +34,8 @@ from core.api.crud_router import CRUDRouterGenerator
 from core.billing import BillingService
 from core.calendar.repositories import CalendarEventSqlRepository
 from core.calendar.service import CalendarService
+from core.clients.documents_client import DocumentsClient
+from core.clients.rag_client import RagClient
 from core.clients.scheduler_client import SchedulerClient
 from core.clients.service_client import ServiceClient
 from core.config import get_settings
@@ -54,9 +56,11 @@ from core.db.repositories.usage_repository import UsageRepository
 from core.db.repositories.user_repository import UserRepository
 from core.db.repositories.variable_repository import VariableRepository
 from core.db.storage import Storage
+from core.documents.placement import DocsBindResult, DocsPlacement
 from core.files.file_repository import FileRepository
-from core.files.processors import FileProcessor
+from core.files.purge import FilePurgeService
 from core.files.s3_client import S3ClientFactory
+from core.files.service import FilesService
 from core.identity.auth_service import AuthService
 from core.identity.integration_external_author import IntegrationExternalAuthorService
 from core.integrations.oauth_service import OAuthService
@@ -67,6 +71,7 @@ from core.push.repository import PushSubscriptionRepository
 from core.rag.constants import RAG_IN_PROCESS_PROVIDER_ID
 from core.rag.factory import get_rag_provider
 from core.rag.llm_context_memory_store import RAGLLMContextMemoryStore
+from core.rag.models import RAGMetadata
 from core.rag.repository import RAGRepository
 from core.short_links import ShortLinkService
 from core.short_links.repository import ShortLinkRepository
@@ -286,14 +291,33 @@ class BaseContainer:
         return FileRepository(storage=self.shared_storage)
 
     @lazy
-    def file_processor(self) -> FileProcessor:
-        """
-        Один процессор на процесс контейнера: shared FileRepository + S3.
-        Новый экземпляр FileProcessor(...) с тем же репозиторием не менял бы поведение — это та же логика;
-        кеш здесь убирает лишние объекты и явно «один на контейнер». Сервис с другим file_repository
-        (например office) переопределяет file_repository и при необходимости file_processor.
-        """
-        return FileProcessor(file_repository=self.file_repository)
+    def files_service(self) -> FilesService:
+        """FilesService — единственный путь create/register/get/bind/delete для FileRecord."""
+
+        async def docs_bind_hook(placement: DocsPlacement) -> DocsBindResult:
+            return await DocumentsClient().bind_file(placement)
+
+        async def rag_index_hook(
+            file_id: str,
+            namespace_id: str,
+            metadata: RAGMetadata | None,
+        ) -> None:
+            rag_metadata: RAGMetadata = metadata if metadata is not None else {}
+            _ = await RagClient().index_file(
+                namespace_id,
+                file_id,
+                metadata=rag_metadata,
+            )
+
+        return FilesService(
+            file_repository=self.file_repository,
+            docs_bind_hook=docs_bind_hook,
+            rag_index_hook=rag_index_hook,
+        )
+
+    @lazy
+    def file_purge_service(self) -> FilePurgeService:
+        return FilePurgeService(file_repository=self.file_repository)
 
     @lazy
     def namespace_repository(self) -> NamespaceRepository:

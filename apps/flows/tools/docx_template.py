@@ -23,7 +23,7 @@ _FILL_DOCX_DESCRIPTION = """
 
 Образец шаблона со всеми конструкциями в открытом виде (скачайте, откройте в Word — в тексте видны все теги):
 - Относительный путь от корня сервиса flows (с тем же origin, что у пользователя): `/static/examples/docx_templater_reference.docx`
-- Полный `https?://...` — только если известен публичный origin (конфиг `server.flows_service_url` / прокси); в ответах пользователю отдавай **каноничный** результат инструмента: поле `url` (путь вида `/flows/api/v1/files/download/{file_id}`) без выдуманного `localhost`.
+- Полный `https?://...` — только если известен публичный origin (конфиг `server.flows_service_url` / прокси); в ответах пользователю отдавай **каноничный** результат инструмента: поле `url` (путь вида `/frontend/api/v1/files/download/{file_id}`) без выдуманного `localhost`.
 - В репозитории платформы: apps/flows/static/examples/docx_templater_reference.docx
 Внутри файла есть готовая строка JSON для variables (раздел «Пример variables») и пояснение про strict.
 

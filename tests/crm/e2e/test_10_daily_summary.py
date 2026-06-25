@@ -4,7 +4,6 @@
 User Story: AI создает обобщенный отчет за день.
 """
 
-from datetime import date
 from typing import cast
 
 import pytest
@@ -116,7 +115,7 @@ class TestDailySummary:
         unique_id: str,
         auth_headers_system: dict[str, str],
     ) -> None:
-        today = date.today().isoformat()
+        isolated_day = f"2097-04-{hash(unique_id) % 28 + 1:02d}"
         create_response = await crm_client.post(
             "/crm/api/v1/entities",
             json={
@@ -124,7 +123,7 @@ class TestDailySummary:
                 "entity_subtype": "meeting",
                 "name": f"Обновляемая заметка {unique_id}",
                 "description": "Версия 1",
-                "note_date": today,
+                "note_date": isolated_day,
             },
             headers=auth_headers_system,
         )
@@ -140,7 +139,7 @@ class TestDailySummary:
 
         stale_response = await crm_client.post(
             "/crm/api/v1/entities/daily-summary",
-            json={"date": today},
+            json={"date": isolated_day},
             headers=auth_headers_system,
         )
         assert stale_response.status_code == 200
@@ -151,7 +150,7 @@ class TestDailySummary:
         _ = await wait_daily_summary_rebuild_done(
             crm_client,
             auth_headers_system,
-            date_str=today,
+            date_str=isolated_day,
         )
 
     @pytest.mark.asyncio

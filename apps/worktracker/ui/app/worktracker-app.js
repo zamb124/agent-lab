@@ -17,8 +17,8 @@ import {
     workItemCommentOp,
     workItemCommentsListOp,
     workItemCreateForm,
-    worktrackerFileUploadOp,
 } from '../events/resources/work-items.resource.js';
+import { platformFileCreateOp } from '@platform/lib/events/factories/platform-file-create.js';
 import { boardsResource, boardCreateForm } from '../events/resources/boards.resource.js';
 import {
     workQueuesResource,
@@ -77,7 +77,7 @@ export class WorktrackerApp extends PlatformApp {
         workItemCommentOp,
         workItemCommentsListOp,
         workItemCreateForm,
-        worktrackerFileUploadOp,
+        platformFileCreateOp,
         boardCreateForm,
         boardsResource,
         workQueuesResource,

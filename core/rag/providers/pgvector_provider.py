@@ -432,17 +432,6 @@ class PgVectorProvider(BaseRAGProvider):
             )
             metadata["index_profile_config"] = index_profile_config
 
-        async with self._session_factory() as session:
-            stmt = delete(VectorDocument).where(
-                VectorDocument.namespace_id == namespace_id,
-                VectorDocument.document_id == document_id,
-            )
-            result = await session.execute(stmt)
-            await session.commit()
-            count = get_rowcount(result)
-            if count:
-                logger.info(f"Удалены старые чанки документа '{document_name}': {count}")
-
         chunk_pairs = self._chunks_from_file_read_result(read_result)
         chunks = [pair[0] for pair in chunk_pairs]
         chunk_metas = [pair[1] for pair in chunk_pairs]
@@ -451,9 +440,6 @@ class PgVectorProvider(BaseRAGProvider):
             raise ValueError("index_profile_config должен быть объектом")
         indexing_runtime: RAGMetadata = dict(index_profile_config or {})
 
-        # Если embedding-сервис недоступен — сохраняем чанки с embedding=NULL.
-        # crm_reembed_stale_documents_tick / rag_reembed_stale_documents_tick подберут их
-        # когда сервис восстановится (ищут embedding_model IS NULL).
         try:
             raw_embeddings = await self._embedding_client.generate_embeddings(chunks)
             embeddings: list[list[float] | None] = list(raw_embeddings)
@@ -506,6 +492,18 @@ class PgVectorProvider(BaseRAGProvider):
             )
 
         async with self._session_factory() as session:
+            _ = await session.execute(
+                text("SELECT pg_advisory_xact_lock(hashtext(:lock_key))"),
+                {"lock_key": f"{namespace_id}:{document_id}"},
+            )
+            delete_stmt = delete(VectorDocument).where(
+                VectorDocument.namespace_id == namespace_id,
+                VectorDocument.document_id == document_id,
+            )
+            delete_result = await session.execute(delete_stmt)
+            deleted_count = get_rowcount(delete_result)
+            if deleted_count:
+                logger.info(f"Удалены старые чанки документа '{document_name}': {deleted_count}")
             session.add_all(rows)
             await session.commit()
 

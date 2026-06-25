@@ -56,6 +56,20 @@ async def _first_accessible_catalog_id(office_client, headers: dict[str, str]) -
     return items[0]["catalog_id"]
 
 
+async def _dedicated_catalog_id(
+    office_client,
+    headers: dict[str, str],
+    unique_id: str,
+) -> str:
+    cr = await office_client.post(
+        "/documents/api/v1/catalogs",
+        headers=headers,
+        json={"title": f"coverage-{unique_id}"},
+    )
+    assert cr.status_code == 200
+    return cr.json()["catalog_id"]
+
+
 @pytest.mark.asyncio
 async def test_documents_list_requires_catalog_id(office_client, auth_headers_system):
     r = await office_client.get(
@@ -708,7 +722,7 @@ async def test_office_download_token_mismatch_file_id(
 async def test_editor_config_jwt_matches_uploaded_xlsx(
     office_client, auth_headers_system, unique_id
 ):
-    catalog_id = await _first_accessible_catalog_id(office_client, auth_headers_system)
+    catalog_id = await _dedicated_catalog_id(office_client, auth_headers_system, unique_id)
     files = {
         "file": (
             f"upload-{unique_id}.xlsx",
@@ -749,7 +763,7 @@ async def test_editor_config_jwt_matches_uploaded_xlsx(
 async def test_editor_config_jwt_matches_uploaded_pptx(
     office_client, auth_headers_system, unique_id
 ):
-    catalog_id = await _first_accessible_catalog_id(office_client, auth_headers_system)
+    catalog_id = await _dedicated_catalog_id(office_client, auth_headers_system, unique_id)
     files = {
         "file": (
             f"deck-{unique_id}.pptx",
@@ -821,7 +835,7 @@ async def test_editor_config_jwt_matches_uploaded_csv(
 async def test_upload_filename_blob_spreadsheet_mime_stores_cell_and_editor_cell(
     office_client, auth_headers_system, unique_id
 ):
-    catalog_id = await _first_accessible_catalog_id(office_client, auth_headers_system)
+    catalog_id = await _dedicated_catalog_id(office_client, auth_headers_system, unique_id)
     files = {
         "file": (
             "blob",

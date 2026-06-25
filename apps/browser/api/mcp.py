@@ -59,6 +59,8 @@ from core.clients.browser import (
     ToolObserveArgs,
     ToolSaveStateArgs,
 )
+from core.files.create_spec import FileCreateSpec, FilePostCreate, FileSourceKind, FileSourceRef
+from core.files.registry import default_retention_for_source
 from core.integrations.mcp import MCP_PROTOCOL_VERSION, MCPToolDefinition
 from core.tracing.operation_span import traced_operation
 from core.types import JsonObject, JsonValue, require_json_object, require_json_value
@@ -149,7 +151,7 @@ class ToolWaitArgs(BaseModel):
     timeout_ms: int = Field(default=30_000, ge=1000)
 
 
-class ToolSaveHtmlToS3Args(BaseModel): # убрать костыль
+class ToolSaveHtmlToS3Args(BaseModel):  # убрать костыль
     model_config: ClassVar[ConfigDict] = ConfigDict(extra="forbid")
 
     session_id: str
@@ -276,7 +278,7 @@ def _tools() -> list[MCPToolDefinition]:
         MCPToolDefinition(
             name="browser_save_html_to_s3",
             description=(
-                "Сохранить HTML текущей страницы в S3 через file_processor и вернуть "
+                "Сохранить HTML текущей страницы в S3 через files_service и вернуть "
                 "file_id/s3_path плюс первые кликабельные ссылки."
             ),
             parameters_schema=_schema_for_model(ToolSaveHtmlToS3Args),
@@ -289,7 +291,9 @@ def _model_json_object(model: BaseModel) -> JsonObject:
 
 
 def _jsonrpc_payload(response: JsonRpcResponse) -> JsonObject:
-    return require_json_object(response.model_dump(mode="json", exclude_none=True), "JsonRpcResponse")
+    return require_json_object(
+        response.model_dump(mode="json", exclude_none=True), "JsonRpcResponse"
+    )
 
 
 def _json_text_content(value: JsonValue) -> list[JsonObject]:
@@ -355,7 +359,9 @@ async def _tool_call(
         sid = args.session_id if args.session_id else f"sess-{uuid.uuid4().hex}"
         run_id = args.run_id if args.run_id else f"run-{sid}"
         task_id = args.task_id if args.task_id else f"task-{sid}"
-        endpoint_key = args.endpoint_key if args.endpoint_key else runtime.settings.default_endpoint_key
+        endpoint_key = (
+            args.endpoint_key if args.endpoint_key else runtime.settings.default_endpoint_key
+        )
         ctx = dict(args.context or {})
         page_mode = args.page_mode
         ctx_page_mode = ctx.get("page_mode", page_mode)
@@ -414,7 +420,9 @@ async def _tool_call(
             ),
             container=container,
         )
-        return McpToolCallResult(content=_json_text_content(_model_json_object(out_model)), isError=False)
+        return McpToolCallResult(
+            content=_json_text_content(_model_json_object(out_model)), isError=False
+        )
 
     if tool_name == "browser_navigate":
         args = ToolNavigateArgs.model_validate(arguments)
@@ -431,7 +439,10 @@ async def _tool_call(
             ),
             container=container,
         )
-        return McpToolCallResult(content=_json_text_content(require_json_value(out, "browser_navigate result")), isError=False)
+        return McpToolCallResult(
+            content=_json_text_content(require_json_value(out, "browser_navigate result")),
+            isError=False,
+        )
 
     if tool_name == "browser_observe":
         args = ToolObserveArgs.model_validate(arguments)
@@ -440,7 +451,10 @@ async def _tool_call(
             body=ControlObserveBody(include_snapshot_refs=args.include_snapshot_refs),
             container=container,
         )
-        return McpToolCallResult(content=_json_text_content(require_json_value(payload, "browser_observe result")), isError=False)
+        return McpToolCallResult(
+            content=_json_text_content(require_json_value(payload, "browser_observe result")),
+            isError=False,
+        )
 
     if tool_name == "browser_click":
         args = ToolClickArgs.model_validate(arguments)
@@ -449,7 +463,10 @@ async def _tool_call(
             body=ControlClickBody(ref=args.ref, timeout_ms=args.timeout_ms),
             container=container,
         )
-        return McpToolCallResult(content=_json_text_content(require_json_value({"ok": True}, "browser_click result")), isError=False)
+        return McpToolCallResult(
+            content=_json_text_content(require_json_value({"ok": True}, "browser_click result")),
+            isError=False,
+        )
 
     if tool_name == "browser_fill":
         args = ToolFillArgs.model_validate(arguments)
@@ -463,7 +480,10 @@ async def _tool_call(
             ),
             container=container,
         )
-        return McpToolCallResult(content=_json_text_content(require_json_value({"ok": True}, "browser_fill result")), isError=False)
+        return McpToolCallResult(
+            content=_json_text_content(require_json_value({"ok": True}, "browser_fill result")),
+            isError=False,
+        )
 
     if tool_name == "browser_press":
         args = ToolPressArgs.model_validate(arguments)
@@ -472,7 +492,10 @@ async def _tool_call(
             body=ControlPressBody(key=args.key),
             container=container,
         )
-        return McpToolCallResult(content=_json_text_content(require_json_value({"ok": True}, "browser_press result")), isError=False)
+        return McpToolCallResult(
+            content=_json_text_content(require_json_value({"ok": True}, "browser_press result")),
+            isError=False,
+        )
 
     if tool_name == "browser_wait":
         args = ToolWaitArgs.model_validate(arguments)
@@ -485,7 +508,10 @@ async def _tool_call(
             ),
             container=container,
         )
-        return McpToolCallResult(content=_json_text_content(require_json_value({"ok": True}, "browser_wait result")), isError=False)
+        return McpToolCallResult(
+            content=_json_text_content(require_json_value({"ok": True}, "browser_wait result")),
+            isError=False,
+        )
 
     if tool_name == "browser_close_session":
         args = ToolCloseSessionArgs.model_validate(arguments)
@@ -493,7 +519,10 @@ async def _tool_call(
             session_id=args.session_id,
             container=container,
         )
-        return McpToolCallResult(content=_json_text_content(require_json_value(out, "browser_close_session result")), isError=False)
+        return McpToolCallResult(
+            content=_json_text_content(require_json_value(out, "browser_close_session result")),
+            isError=False,
+        )
 
     if tool_name == "browser_save_state":
         args = ToolSaveStateArgs.model_validate(arguments)
@@ -502,7 +531,10 @@ async def _tool_call(
             body=ControlSaveStateBody(shared_storage_key=args.shared_storage_key),
             container=container,
         )
-        return McpToolCallResult(content=_json_text_content(require_json_value(out, "browser_save_state result")), isError=False)
+        return McpToolCallResult(
+            content=_json_text_content(require_json_value(out, "browser_save_state result")),
+            isError=False,
+        )
 
     if tool_name == "browser_save_html_to_s3":
         args = ToolSaveHtmlToS3Args.model_validate(arguments)
@@ -517,16 +549,18 @@ async def _tool_call(
                 raise ValueError(str(exc)) from exc
             html = await page.content()
             links = _extract_clickable_links(html=html, base_url=page.url, limit=args.links_limit)
-            record = await container.file_processor.process_file_from_bytes(
+            spec = FileCreateSpec(
+                source_kind=FileSourceKind.BROWSER_ARTIFACT,
+                source_ref=FileSourceRef(browser_session_id=args.session_id),
+                retention=default_retention_for_source(FileSourceKind.BROWSER_ARTIFACT),
+                post_create=FilePostCreate(is_public=False),
+                metadata={"source": "browser_mcp", "session_id": args.session_id, **args.metadata},
+            )
+            record = await container.files_service.create(
+                spec=spec,
                 data=html.encode("utf-8"),
                 original_name=_ensure_html_name(args.original_name),
                 content_type="text/html",
-                metadata={
-                    "source": "browser_mcp",
-                    "session_id": args.session_id,
-                    **args.metadata,
-                },
-                public=False,
             )
             payload = {
                 "file_id": record.file_id,
@@ -539,7 +573,12 @@ async def _tool_call(
                 "source_url": page.url,
                 "links": links,
             }
-        return McpToolCallResult(content=_json_text_content(require_json_value(payload, "browser_save_html_to_s3 result")), isError=False)
+        return McpToolCallResult(
+            content=_json_text_content(
+                require_json_value(payload, "browser_save_html_to_s3 result")
+            ),
+            isError=False,
+        )
 
     raise ValueError(f"Tool not found: {tool_name}")
 
@@ -590,7 +629,14 @@ async def mcp_jsonrpc(
         # by_alias=True: на проводе MCP всегда camelCase `inputSchema`, как
         # того требует спецификация JSON-RPC MCP; внутри платформы поле
         # называется `parameters_schema`.
-        return _jsonrpc_payload(JsonRpcResponse(id=req_id, result=require_json_object(res.model_dump(mode="json", by_alias=True), "McpToolsListResult")))
+        return _jsonrpc_payload(
+            JsonRpcResponse(
+                id=req_id,
+                result=require_json_object(
+                    res.model_dump(mode="json", by_alias=True), "McpToolsListResult"
+                ),
+            )
+        )
 
     if method == "tools/call":
         name = params.get("name")
@@ -609,7 +655,9 @@ async def mcp_jsonrpc(
                 "browser.mcp.tool_call",
                 event_type="mcp.tool_call",
                 operation_category="mcp",
-                extra_attributes=_mcp_tool_trace_attributes(tool_name=name, arguments=arguments_obj),
+                extra_attributes=_mcp_tool_trace_attributes(
+                    tool_name=name, arguments=arguments_obj
+                ),
             ) as span:
                 call_res = await _tool_call(
                     tool_name=name,

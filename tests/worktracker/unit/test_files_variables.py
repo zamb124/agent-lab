@@ -53,7 +53,7 @@ def test_parse_file_refs_roundtrip() -> None:
             original_name="doc.txt",
             content_type="text/plain",
             file_size=5,
-            url="/worktracker/api/v1/files/f1",
+            url="/frontend/api/v1/files/download/f1",
         )
     ]
     raw = [ref.model_dump(mode="json") for ref in refs]

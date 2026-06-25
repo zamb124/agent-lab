@@ -343,12 +343,9 @@ def _collect_fastapi_routes(svc_dir: Path) -> set[tuple[str, str]]:
     _scan_router_file_with_mount(core_root / "api" / "auth.py", f"/{svc_name}/api/auth", routes)
     _scan_router_file_with_mount(core_root / "api" / "push.py", f"/{svc_name}", routes)
     _scan_router_file_with_mount(core_root / "api" / "integrations.py", f"/{svc_name}", routes)
-    # Файловый роутер собирается в `core/app/factory.py::build_file_api_router`
-    # и монтируется под `{service_api_prefix}/files` (т.е. `/<svc>/api/v1/files`
-    # для сервисов с `api_version != None`; `/<svc>/files` иначе). См.
-    # `core/app/factory.py`, строки про `files_api_prefix`.
-    files_mount = f"{service_api_prefix}/files" if api_version else f"/{svc_name}/files"
-    _scan_router_file_with_mount(core_root / "files" / "api.py", files_mount, routes)
+    if svc_name == "frontend":
+        files_mount = f"/{public_name}/api/{api_version}/files"
+        _scan_router_file_with_mount(core_root / "files" / "api.py", files_mount, routes)
 
     return routes
 

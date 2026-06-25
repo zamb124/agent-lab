@@ -9,9 +9,39 @@ import io
 import pytest
 
 from apps.rag.container import get_rag_container
+from tests.rag.helpers import upload_rag_document_bytes
+from core.files.create_spec import FileSourceKind
+from core.files.default_storage import get_default_storage
+from core.files.models import FileRecord
+from core.files.registry import default_retention_for_source
 from core.files.s3_client import S3ClientFactory
+from core.files.storage import retention_fields_from_spec
 
 pytestmark = [pytest.mark.real_taskiq, pytest.mark.timeout(120)]
+
+
+async def _persist_test_file_record(
+    *,
+    data: bytes,
+    original_name: str,
+    content_type: str,
+    uploaded_by: str,
+    company_id: str,
+) -> FileRecord:
+    retention = default_retention_for_source(FileSourceKind.RAG_DOCUMENT)
+    retention_kind, ttl_seconds = retention_fields_from_spec(retention)
+    storage = get_default_storage()
+    return await storage.upload_bytes(
+        data=data,
+        original_name=original_name,
+        content_type=content_type,
+        uploaded_by=uploaded_by,
+        company_id=company_id,
+        is_public=False,
+        retention_kind=retention_kind,
+        ttl_seconds=ttl_seconds,
+        metadata={"source_kind": FileSourceKind.RAG_DOCUMENT.value},
+    )
 
 
 async def _wait_rag_document_completed(
@@ -48,14 +78,12 @@ async def test_index_file_returns_202_without_new_s3_object(
 ):
     _ = rag_worker
     container = get_rag_container()
-    file_record = await container.file_processor.persist_uploaded_file(
+    file_record = await _persist_test_file_record(
         data=b"Office catalog document body",
         original_name="catalog_doc.txt",
         content_type="text/plain",
         uploaded_by="system_admin",
         company_id="system",
-        public=False,
-        download_url_prefix="/documents/api/v1/files/download",
     )
 
     ns_response = await rag_client.post(
@@ -102,16 +130,13 @@ async def test_index_file_processing_completes_and_searchable(
     auth_headers_system,
 ):
     _ = rag_worker
-    container = get_rag_container()
     needle = "index-file-worker-flow-needle"
-    file_record = await container.file_processor.persist_uploaded_file(
+    file_record = await _persist_test_file_record(
         data=f"Complete index-file worker flow {needle}".encode(),
         original_name="worker_flow.txt",
         content_type="text/plain",
         uploaded_by="system_admin",
         company_id="system",
-        public=False,
-        download_url_prefix="/documents/api/v1/files/download",
     )
 
     ns_response = await rag_client.post(
@@ -158,14 +183,12 @@ async def test_index_only_delete_preserves_file_record(
 ):
     _ = rag_worker
     container = get_rag_container()
-    file_record = await container.file_processor.persist_uploaded_file(
+    file_record = await _persist_test_file_record(
         data=b"Index delete preserves bytes",
         original_name="preserve_me.txt",
         content_type="text/plain",
         uploaded_by="system_admin",
         company_id="system",
-        public=False,
-        download_url_prefix="/documents/api/v1/files/download",
     )
 
     ns_response = await rag_client.post(
@@ -212,14 +235,12 @@ async def test_index_file_reindex_replaces_chunks(
     _ = rag_worker
     container = get_rag_container()
     first_body = b"first version of indexed text"
-    file_record = await container.file_processor.persist_uploaded_file(
+    file_record = await _persist_test_file_record(
         data=first_body,
         original_name="reindex.txt",
         content_type="text/plain",
         uploaded_by="system_admin",
         company_id="system",
-        public=False,
-        download_url_prefix="/documents/api/v1/files/download",
     )
 
     ns_response = await rag_client.post(
@@ -285,15 +306,12 @@ async def test_index_file_rejects_foreign_company_file(
     auth_headers_system,
 ):
     _ = rag_worker
-    container = get_rag_container()
-    file_record = await container.file_processor.persist_uploaded_file(
+    file_record = await _persist_test_file_record(
         data=b"foreign",
         original_name="foreign.txt",
         content_type="text/plain",
         uploaded_by="system_admin",
         company_id="other-company-id",
-        public=False,
-        download_url_prefix="/documents/api/v1/files/download",
     )
 
     ns_response = await rag_client.post(
@@ -313,6 +331,7 @@ async def test_index_file_rejects_foreign_company_file(
 
 @pytest.mark.asyncio
 async def test_full_delete_document_removes_file_record_but_index_only_does_not(
+    frontend_client,
     rag_client,
     rag_worker,
     unique_namespace_name,
@@ -320,14 +339,12 @@ async def test_full_delete_document_removes_file_record_but_index_only_does_not(
 ):
     _ = rag_worker
     container = get_rag_container()
-    file_record = await container.file_processor.persist_uploaded_file(
+    file_record = await _persist_test_file_record(
         data=b"compare delete modes",
         original_name="delete_modes.txt",
         content_type="text/plain",
         uploaded_by="system_admin",
         company_id="system",
-        public=False,
-        download_url_prefix="/documents/api/v1/files/download",
     )
 
     ns_response = await rag_client.post(
@@ -359,15 +376,18 @@ async def test_full_delete_document_removes_file_record_but_index_only_does_not(
         headers=auth_headers_system,
     )
     assert reindex.status_code == 202
-    await _wait_rag_document_completed(rag_client, document_id, auth_headers_system)
+    await _wait_rag_document_completed(rag_client, reindex.json()["document_id"], auth_headers_system)
 
-    upload_via_rag = await rag_client.post(
-        f"/rag/api/v1/namespaces/{namespace_id}/documents",
-        files={"file": ("other.txt", io.BytesIO(b"other"), "text/plain")},
-        headers=auth_headers_system,
+    rag_owned = await upload_rag_document_bytes(
+        frontend_client,
+        rag_client,
+        auth_headers_system,
+        namespace_id=namespace_id,
+        filename="other.txt",
+        content=b"other",
+        content_type="text/plain",
     )
-    assert upload_via_rag.status_code == 202
-    rag_owned_document_id = upload_via_rag.json()["document_id"]
+    rag_owned_document_id = rag_owned["document_id"]
 
     full_delete = await rag_client.delete(
         f"/rag/api/v1/namespaces/{namespace_id}/documents/{rag_owned_document_id}",

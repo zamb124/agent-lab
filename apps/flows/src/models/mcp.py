@@ -18,9 +18,18 @@ __all__ = [
     "MCPDiscoveredTool",
     "MCPInitializeResult",
     "MCPServerConfig",
+    "MCPServerSource",
     "MCPToolDefinition",
     "MCPTransportType",
 ]
+
+
+class MCPServerSource(str, Enum):
+    """Источник конфигурации MCP сервера в компании."""
+
+    PLATFORM = "platform"
+    CATALOG = "catalog"
+    MANUAL = "manual"
 
 
 class MCPTransportType(str, Enum):
@@ -77,6 +86,24 @@ class MCPServerConfig(BaseModel):
         description="Время последней синхронизации"
     )
     description: str | None = Field(default=None, description="Описание сервера")
+    source: MCPServerSource = Field(
+        default=MCPServerSource.MANUAL,
+        description="platform | catalog | manual",
+    )
+    catalog_id: str | None = Field(
+        default=None,
+        description="ID записи в глобальном MCP catalog (для source=catalog)",
+    )
+    catalog_snapshot_hash: str | None = Field(
+        default=None,
+        description="Hash catalog snapshot при последнем provision/reset",
+    )
+    override_locked: bool = Field(
+        default=False,
+        description="True — catalog provisioner не обновляет запись",
+    )
+    override_locked_at: datetime | None = Field(default=None)
+    override_locked_by_user_id: str | None = Field(default=None)
 
 
 class MCPCallResult(BaseModel):

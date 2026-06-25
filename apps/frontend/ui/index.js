@@ -52,3 +52,5 @@ import './components/landing/landing-cases.js';
 import './components/landing/landing-floating-cta.js';
 
 import './app/frontend-app.js';
+
+export { platformFileCreateOp } from '@platform/lib/events/factories/platform-file-create.js';

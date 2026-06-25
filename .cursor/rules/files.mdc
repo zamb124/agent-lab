@@ -1,0 +1,42 @@
+---
+description: "Files API: FilesService, FileCreateSpec, frontend-only HTTP, platform/file_create"
+alwaysApply: false
+---
+# Files API — единый контракт платформы
+
+## Публичный API
+
+| Слой | Контракт |
+|---|---|
+| Python | `container.files_service` — `create`, `register_s3`, `get`, `bind`, `delete`, `save` |
+| HTTP | **Только** `POST/GET /frontend/api/v1/files/*` (mount в `apps/frontend/main.py`) |
+| Cross-pod | `core/clients/files_client.py::FilesClient` → `ServiceClient("frontend", ...)` |
+| UI upload | `platform/file_create` + `<platform-file-attachments>` |
+
+## FileCreateSpec
+
+Единственный вход: `core/files/create_spec.py`. Defaults — `core/files/registry.py`. Новый источник = `FileSourceKind` + registry row, **не** новый HTTP endpoint.
+
+## Внутренности (private, не импортировать из apps)
+
+- `core/files/storage.py` — S3 + FileRecord persistence
+- `core/files/purge.py` — expired purge
+- `core/files/backfill.py` — retention backfill для legacy rows
+
+## Retention
+
+`FileRetentionSpec` обязателен в каждом `create`. `FileRecord.retention_kind` + `expires_at`. Purge: TaskIQ `file_retention_purge_tick` (idle queue, scheduler cron `files.retention.purge_cron`).
+
+## Docs placement
+
+`DocsPlacement` → `FilesService.bind` → `DocumentsClient` → `POST /documents/api/v1/documents/bind` (Office `DocsPlacementService`).
+
+## RAG
+
+Загрузка байтов — только через Files API. Индексация — `POST /rag/api/v1/namespaces/{id}/documents/index-file` или `post_create.rag_index_namespace` в `FileCreateSpec` (hook на `BaseContainer.files_service`).
+
+## Запрещено
+
+`FileProcessor`, `build_file_api_router`, per-service `/api/v1/files/`, `*/file_upload` factory names, `upload_namespace_document`, `persist_uploaded*`.
+
+CI: `scripts/check_files_canon.py`, `scripts/check_files_ui_canon.sh`.

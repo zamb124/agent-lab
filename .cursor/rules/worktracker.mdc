@@ -60,7 +60,7 @@ alwaysApply: false
 - `Board` / `board_id`, `BoardColumn` / `board_column_id` (`label`, `state: WorkItemState`, `position`); `board_key` (`generic|operator|task|task:<subtype>`) для резолва доски per `(company, namespace, board_key)`.
 - `WorkItemComment` (`comment_id`, `work_item_id`, `author: WorkActor`, `role: operator|user|system|agent`, `text`, `files: list[FileRef]`, `created_at`) — takeover-диалог.
 
-Файлы: канон `FileRef` (`file_id`, `original_name`, `content_type`, `file_size`, `url?`). Upload — `POST /{svc}/api/v1/files/`; open — `PlatformElement.openFile` → OnlyOffice viewer (`office.mdc`, `s3_minio.mdc`). UI — `platform-file-attachments.js`. Переменные — `platform-variables-panel.js` + `VariableResolver` в `prompt-editor`.
+Файлы: канон `FileRef` (`file_id`, `original_name`, `content_type`, `file_size`, `url?`). Upload — `POST /frontend/api/v1/files/` (`platform/file_create` + `FileCreateSpec`); open — `PlatformElement.openFile` → OnlyOffice viewer (`office.mdc`, `files.mdc`). UI — `platform-file-attachments.js`. Переменные — `platform-variables-panel.js` + `VariableResolver` в `prompt-editor`.
 
 ## Naming
 

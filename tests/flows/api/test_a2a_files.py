@@ -13,7 +13,10 @@ from typing import Any, Dict
 import pytest
 
 from apps.flows.src.container import get_container
+from core.context import Context, clear_context, set_context
 from core.files.file_ref import FileRef
+from core.models.identity_models import Company, User
+from tests.sync.api._helpers import platform_auxiliary_file_spec_json
 
 
 def _msg_with_file(
@@ -128,8 +131,8 @@ class TestA2AFilesHandling:
         assert file_info.file_size == len(test_content)
         assert file_info.file_id is not None
         assert file_info.url is not None
-        assert "/api/v1/files/download/" in file_info.url
-        stored = await get_container().file_processor.get_file_record(file_info.file_id)
+        assert "/frontend/api/v1/files/download/" in file_info.url
+        stored = await get_container().files_service.get(file_info.file_id)
         assert stored is not None
         assert stored.file_size == len(test_content)
 
@@ -137,6 +140,7 @@ class TestA2AFilesHandling:
     async def test_file_with_uri_reuses_existing_file_record(
         self,
         client,
+        frontend_client,
         flow_id,
         mock_llm_with_queue,
         sync_tools,
@@ -145,11 +149,11 @@ class TestA2AFilesHandling:
         """FileWithUri из chat upload остаётся тем же FileRecord, без повторной записи bytes."""
         mock_llm_with_queue([{"type": "text", "content": "I received your linked file"}])
 
-        upload = await client.post(
-            "/flows/api/v1/files/",
+        upload = await frontend_client.post(
+            "/frontend/api/v1/files/",
             headers=auth_headers_system,
+            data={"spec": platform_auxiliary_file_spec_json(is_public=False)},
             files={"file": ("linked.csv", b"a,b\n1,2\n", "text/csv")},
-            data={"public": "false"},
         )
         assert upload.status_code == 200, upload.text
         uploaded = upload.json()
@@ -186,7 +190,18 @@ class TestA2AFilesHandling:
         )
 
         assert resp.status_code == 200
-        state = await get_container().workflow_runtime.get_state(f"{flow_id}:{context_id}")
+        set_context(
+            Context(
+                user=User(user_id="test_user", name="Test User"),
+                active_company=Company(company_id="system", name="System", subdomain="system"),
+                session_id="test_session",
+                channel="test",
+            )
+        )
+        try:
+            state = await get_container().workflow_runtime.get_state(f"{flow_id}:{context_id}")
+        finally:
+            clear_context()
         assert state is not None
         files = _state_files(state)
         assert len(files) == 1
@@ -388,7 +403,7 @@ class TestIncomingA2aFilesUnit:
         files_data = [
             FileRef(
                 original_name="doc.pdf",
-                url="/flows/api/v1/files/download/file_abc",
+                url="/frontend/api/v1/files/download/file_abc",
                 content_type="application/pdf",
                 file_size=1024,
                 file_id="file_abc",
@@ -407,7 +422,7 @@ class TestIncomingA2aFilesUnit:
         assert "[/FILE]" in formatted
         assert "doc.pdf" in formatted
         assert "ref.png" in formatted
-        assert "/flows/api/v1/files/download/file_abc" in formatted
+        assert "/frontend/api/v1/files/download/file_abc" in formatted
         assert "https://cdn.example.com/ref.png" in formatted
         assert "application/pdf" in formatted
         assert "image/png" in formatted

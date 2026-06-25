@@ -8,6 +8,7 @@
  */
 
 import { html, css, nothing } from 'lit';
+import { repeat } from 'lit/directives/repeat.js';
 import { unsafeHTML } from 'lit/directives/unsafe-html.js';
 import { PlatformModal } from '@platform/lib/components/glass-modal.js';
 import { registerModalKind } from '@platform/lib/utils/modal-registry.js';
@@ -17,8 +18,9 @@ import '@platform/lib/components/platform-icon.js';
 import '../components/common/flows-code-language-icon.js';
 import { flowsChatMarkdownToHtml } from '@platform/lib/flows-chat/markdown.js';
 import { registryItemIconName, registryItemTitle } from '../_helpers/flows-registry-item-icon.js';
-import { isPlainObject } from '../_helpers/flows-resolvers.js';
-import { isMcpToolRegistryItem } from '../_helpers/flows-mcp-tool-registry.js';
+import { renderMcpServerIcon } from '../_helpers/mcp-server-icon.js';
+import { asArray, isPlainObject } from '../_helpers/flows-resolvers.js';
+import { isMcpToolRegistryItem, parseMcpToolIdToNodeConfig } from '../_helpers/flows-mcp-tool-registry.js';
 import {
     FLOW_CODE_LANGUAGES,
     flowCodeLanguageLabel,
@@ -169,6 +171,9 @@ export class FlowsLibraryPickerModal extends PlatformModal {
         _activeTag: { state: true },
         _toolCategoryTab: { state: true },
         _codeLanguage: { state: true },
+        _testFeedback: { state: true },
+        _testingServerId: { state: true },
+        _syncingServerId: { state: true },
     };
 
     static styles = [
@@ -437,6 +442,214 @@ export class FlowsLibraryPickerModal extends PlatformModal {
                     max-width: 220px;
                 }
             }
+            .header-search {
+                flex: 1 1 auto;
+                max-width: 360px;
+                min-width: 160px;
+                margin: 0 var(--space-2);
+            }
+            .header-search platform-field {
+                width: 100%;
+            }
+            .header-search platform-icon[slot='prefix'] {
+                color: var(--text-tertiary);
+            }
+            .mcp-picker-servers {
+                display: grid;
+                grid-template-columns: 1fr;
+                gap: var(--space-4);
+                min-height: 200px;
+                align-items: start;
+            }
+            @media (min-width: 960px) {
+                .mcp-picker-servers {
+                    grid-template-columns: repeat(2, minmax(0, 1fr));
+                }
+            }
+            @media (min-width: 1280px) {
+                .mcp-picker-servers {
+                    grid-template-columns: repeat(3, minmax(0, 1fr));
+                }
+            }
+            .mcp-picker-server {
+                display: flex;
+                flex-direction: column;
+                gap: var(--space-3);
+                padding: var(--space-4);
+                border: 1px solid var(--glass-border-subtle);
+                border-radius: var(--radius-lg);
+                background: var(--glass-solid-subtle);
+                min-width: 0;
+            }
+            .mcp-picker-server-head {
+                display: flex;
+                flex-wrap: wrap;
+                align-items: flex-start;
+                justify-content: space-between;
+                gap: var(--space-2);
+            }
+            .mcp-picker-server-head-main {
+                display: flex;
+                align-items: flex-start;
+                gap: var(--space-3);
+                min-width: 0;
+                flex: 1;
+            }
+            .mcp-picker-server-icon {
+                flex-shrink: 0;
+                width: 44px;
+                height: 44px;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                border-radius: var(--radius-md);
+                background: var(--glass-solid-medium);
+                border: 1px solid var(--glass-border-subtle);
+            }
+            .mcp-picker-server-icon .mcp-server-icon-img {
+                width: 30px;
+                height: 30px;
+                object-fit: contain;
+            }
+            .mcp-picker-server-titles h3 {
+                margin: 0;
+                font-size: var(--text-md);
+                font-weight: var(--font-semibold);
+                color: var(--text-primary);
+            }
+            .mcp-picker-server-titles .sub {
+                font-size: var(--text-sm);
+                color: var(--text-tertiary);
+                margin-top: 2px;
+            }
+            .mcp-picker-server-url {
+                font-size: var(--text-xs);
+                color: var(--text-secondary);
+                word-break: break-all;
+                margin-top: var(--space-1);
+            }
+            .mcp-picker-server-meta {
+                display: flex;
+                flex-wrap: wrap;
+                align-items: center;
+                gap: var(--space-2);
+                font-size: var(--text-xs);
+                color: var(--text-tertiary);
+            }
+            .mcp-picker-server-actions {
+                display: inline-flex;
+                align-items: center;
+                gap: var(--space-1);
+                flex-shrink: 0;
+            }
+            .mcp-picker-server-actions .icon-btn {
+                display: inline-flex;
+                align-items: center;
+                justify-content: center;
+                min-width: 32px;
+                min-height: 32px;
+                padding: 0;
+                border: 1px solid var(--glass-border-subtle);
+                border-radius: var(--radius-lg);
+                background: var(--glass-solid-medium);
+                color: var(--text-secondary);
+                cursor: pointer;
+            }
+            .mcp-picker-server-actions .icon-btn:hover:not(:disabled) {
+                background: var(--glass-solid-strong);
+                color: var(--text-primary);
+            }
+            .mcp-picker-server-actions .icon-btn:disabled {
+                opacity: 0.5;
+                cursor: not-allowed;
+            }
+            .mcp-picker-chip {
+                display: inline-block;
+                padding: 2px var(--space-2);
+                border-radius: var(--radius-full);
+                background: var(--info-subtle, rgba(59, 130, 246, 0.12));
+                color: var(--info, #3b82f6);
+                font-size: var(--text-xs);
+                font-weight: var(--font-medium);
+            }
+            .mcp-picker-test-feedback {
+                font-size: var(--text-sm);
+                padding: var(--space-2) var(--space-3);
+                border-radius: var(--radius-md);
+            }
+            .mcp-picker-test-feedback.ok {
+                background: var(--success-subtle, rgba(34, 197, 94, 0.12));
+                color: var(--success, #22c55e);
+            }
+            .mcp-picker-test-feedback.err {
+                background: var(--error-subtle, rgba(239, 68, 68, 0.12));
+                color: var(--error, #ef4444);
+            }
+            .mcp-picker-tools-grid {
+                display: grid;
+                grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+                gap: var(--space-2);
+            }
+            .mcp-picker-tool-card {
+                display: flex;
+                flex-direction: column;
+                align-items: stretch;
+                text-align: left;
+                padding: var(--space-2) var(--space-3);
+                border-radius: var(--radius-lg);
+                border: 1px solid var(--glass-border-subtle);
+                background: var(--glass-solid-medium);
+                cursor: pointer;
+                transition: background var(--duration-fast), border-color var(--duration-fast);
+                box-sizing: border-box;
+            }
+            .mcp-picker-tool-card:hover {
+                background: var(--glass-solid-strong);
+                border-color: var(--glass-border-medium);
+            }
+            .mcp-picker-tool-card:focus-visible {
+                outline: 2px solid var(--accent);
+                outline-offset: 2px;
+            }
+            .mcp-picker-tool-icon-row {
+                display: flex;
+                justify-content: center;
+                margin-bottom: var(--space-1);
+            }
+            .mcp-picker-tool-icon .mcp-server-icon-img {
+                width: 18px;
+                height: 18px;
+                object-fit: contain;
+            }
+            .mcp-picker-tool-icon {
+                width: 36px;
+                height: 36px;
+                border-radius: var(--radius-md);
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                background: linear-gradient(135deg, #82e0aa 0%, #58d68d 100%);
+                color: #fff;
+            }
+            .mcp-picker-tool-title {
+                font-weight: var(--font-semibold);
+                font-size: var(--text-xs);
+                margin-bottom: 2px;
+                color: var(--text-primary);
+                line-height: 1.3;
+            }
+            .mcp-picker-tool-desc {
+                font-size: 10px;
+                color: var(--text-secondary);
+                line-height: 1.3;
+                max-height: calc(1.3em * 3);
+                overflow: hidden;
+            }
+            .mcp-picker-server-empty {
+                font-size: var(--text-sm);
+                color: var(--text-tertiary);
+                padding: var(--space-2) 0;
+            }
         `,
     ];
 
@@ -450,9 +663,15 @@ export class FlowsLibraryPickerModal extends PlatformModal {
         this._activeTag = '';
         this._toolCategoryTab = 'all';
         this._codeLanguage = 'python';
+        this._testFeedback = null;
+        this._testingServerId = null;
+        this._syncingServerId = null;
         this._toolsAll = this.useOp('flows/tools_all');
         this._codeTemplates = this.useOp('flows/code_templates');
         this._codeParseSignature = this.useOp('flows/code_parse_signature');
+        this._mcpServers = this.useResource('flows/mcp_servers', { autoload: false });
+        this._syncOp = this.useOp('flows/mcp_server_sync');
+        this._testOp = this.useOp('flows/mcp_server_test');
     }
 
     _isCodeNodeTemplates() {
@@ -467,12 +686,26 @@ export class FlowsLibraryPickerModal extends PlatformModal {
             this._sourceTab = 'catalog';
             this._toolCategoryTab = 'all';
             this._codeLanguage = 'python';
+            this._testFeedback = null;
+            this._testingServerId = null;
+            this._syncingServerId = null;
             this.size = 'full';
             if (this._isCodeNodeTemplates()) {
                 void this._loadCodeTemplates();
             }
             void this._toolsAll.run({ limit: 2000, offset: 0 });
+            if (this.pickMode === 'mcp_only' || (this.pickMode === 'all' && this._toolCategoryTab === 'mcp')) {
+                void this._mcpServers.load();
+            }
         }
+        if (changed.has('_toolCategoryTab') && this._usesMcpGroupedLayout()) {
+            void this._mcpServers.load();
+        }
+    }
+
+    _usesMcpGroupedLayout() {
+        return this.pickMode === 'mcp_only'
+            || (this.pickMode === 'all' && this._toolCategoryTab === 'mcp');
     }
 
     _loadCodeTemplates() {
@@ -607,6 +840,370 @@ export class FlowsLibraryPickerModal extends PlatformModal {
                 || _lower(title).indexOf(q) >= 0
                 || _lower(desc).indexOf(q) >= 0;
         });
+    }
+
+    _mcpServerIdFromTool(item) {
+        if (!isPlainObject(item)) {
+            throw new Error('flows-library-picker-modal: MCP tool item required');
+        }
+        if (typeof item.mcp_server_id === 'string' && item.mcp_server_id.length > 0) {
+            return item.mcp_server_id;
+        }
+        const toolId = typeof item.tool_id === 'string' ? item.tool_id : '';
+        if (toolId.startsWith('mcp:')) {
+            return parseMcpToolIdToNodeConfig(toolId).server_id;
+        }
+        throw new Error('flows-library-picker-modal: MCP tool item missing mcp_server_id');
+    }
+
+    _mcpToolsBase() {
+        return this._toolsAllItems().filter((t) => isMcpToolRegistryItem(t));
+    }
+
+    _toolMatchesSearch(t, q) {
+        if (q.length === 0) {
+            return true;
+        }
+        const id = typeof t.tool_id === 'string' ? t.tool_id : '';
+        const title = typeof t.title === 'string' ? t.title : '';
+        const desc = typeof t.description === 'string' ? t.description : '';
+        return _lower(id).indexOf(q) >= 0
+            || _lower(title).indexOf(q) >= 0
+            || _lower(desc).indexOf(q) >= 0;
+    }
+
+    _serverRecordMatchesSearch(server, q) {
+        if (q.length === 0) {
+            return true;
+        }
+        const serverId = typeof server.server_id === 'string' ? server.server_id : '';
+        const name = typeof server.name === 'string' ? server.name : '';
+        const url = typeof server.url === 'string' ? server.url : '';
+        return _lower(serverId).indexOf(q) >= 0
+            || _lower(name).indexOf(q) >= 0
+            || _lower(url).indexOf(q) >= 0;
+    }
+
+    _buildMcpServerGroups() {
+        const q = _lower(this._search);
+        const allTools = this._mcpToolsBase();
+        const toolsByServerId = new Map();
+        for (const tool of allTools) {
+            const serverId = this._mcpServerIdFromTool(tool);
+            const bucket = toolsByServerId.get(serverId);
+            if (bucket) {
+                bucket.push(tool);
+            } else {
+                toolsByServerId.set(serverId, [tool]);
+            }
+        }
+
+        const activeServers = asArray(this._mcpServers.items)
+            .filter((s) => isPlainObject(s) && s.is_active === true)
+            .sort((a, b) => {
+                const an = typeof a.name === 'string' ? a.name : a.server_id;
+                const bn = typeof b.name === 'string' ? b.name : b.server_id;
+                return String(an).localeCompare(String(bn));
+            });
+
+        const knownServerIds = new Set();
+        const groups = [];
+
+        for (const server of activeServers) {
+            if (typeof server.server_id !== 'string' || server.server_id.length === 0) {
+                continue;
+            }
+            knownServerIds.add(server.server_id);
+            const serverTools = toolsByServerId.get(server.server_id) || [];
+            const filteredTools = q.length === 0
+                ? serverTools
+                : serverTools.filter((t) => this._toolMatchesSearch(t, q));
+            const include = q.length === 0
+                || this._serverRecordMatchesSearch(server, q)
+                || filteredTools.length > 0;
+            if (!include) {
+                continue;
+            }
+            groups.push({
+                server,
+                tools: filteredTools,
+            });
+        }
+
+        for (const [serverId, serverTools] of toolsByServerId.entries()) {
+            if (knownServerIds.has(serverId)) {
+                continue;
+            }
+            const filteredTools = q.length === 0
+                ? serverTools
+                : serverTools.filter((t) => this._toolMatchesSearch(t, q));
+            const synthetic = {
+                server_id: serverId,
+                name: serverId,
+                url: '',
+                transport_type: 'http',
+                source: 'manual',
+            };
+            const include = q.length === 0
+                || this._serverRecordMatchesSearch(synthetic, q)
+                || filteredTools.length > 0;
+            if (!include) {
+                continue;
+            }
+            groups.push({
+                server: synthetic,
+                tools: filteredTools,
+            });
+        }
+
+        return groups;
+    }
+
+    _mcpServerById(serverId) {
+        if (typeof serverId !== 'string' || serverId.length === 0) {
+            return null;
+        }
+        for (const server of asArray(this._mcpServers.items)) {
+            if (isPlainObject(server) && server.server_id === serverId) {
+                return server;
+            }
+        }
+        return null;
+    }
+
+    _mcpTransportLabel(value) {
+        if (value === 'http') {
+            return this.t('mcp_servers_modal.transport_http');
+        }
+        if (value === 'sse') {
+            return this.t('mcp_servers_modal.transport_sse');
+        }
+        return this.t('mcp_servers_modal.transport_unknown');
+    }
+
+    _mcpSourceLabel(source) {
+        if (source === 'platform') {
+            return this.t('mcp_servers_modal.source_platform');
+        }
+        if (source === 'catalog') {
+            return this.t('mcp_servers_modal.source_catalog');
+        }
+        if (source === 'manual') {
+            return this.t('mcp_servers_modal.source_manual');
+        }
+        return this.t('mcp_servers_modal.source_unknown');
+    }
+
+    _mcpGroupedInitialBusy() {
+        const toolsEmpty = this._toolsAllItems().length === 0;
+        const serversEmpty = asArray(this._mcpServers.items).length === 0;
+        return (this._toolsAll.busy && toolsEmpty) || (this._mcpServers.loading && serversEmpty);
+    }
+
+    async _syncMcpServer(serverId) {
+        if (typeof serverId !== 'string' || serverId.length === 0) {
+            throw new Error('flows-library-picker-modal: serverId required for sync');
+        }
+        this._syncingServerId = serverId;
+        try {
+            await this._syncOp.run({ server_id: serverId });
+            await this._toolsAll.run({ limit: 2000, offset: 0 });
+        } finally {
+            this._syncingServerId = null;
+        }
+    }
+
+    async _runMcpTest(serverId) {
+        if (typeof serverId !== 'string' || serverId.length === 0) {
+            throw new Error('flows-library-picker-modal: serverId required for test');
+        }
+        this._testingServerId = serverId;
+        this._testFeedback = null;
+        try {
+            const result = await this._testOp.run({ server_id: serverId });
+            if (result !== null) {
+                if (!isPlainObject(result) || typeof result.tools_count !== 'number') {
+                    throw new TypeError('flows-library-picker-modal: MCP test result must include tools_count');
+                }
+                this._testFeedback = {
+                    serverId,
+                    ok: true,
+                    toolsCount: result.tools_count,
+                };
+                return;
+            }
+            if (typeof this._testOp.error !== 'string') {
+                throw new Error('flows-library-picker-modal: MCP test failed without error message');
+            }
+            this._testFeedback = {
+                serverId,
+                ok: false,
+                message: this._testOp.error,
+            };
+        } finally {
+            this._testingServerId = null;
+        }
+    }
+
+    _renderMcpTestFeedback(serverId) {
+        const fb = this._testFeedback;
+        if (!fb || fb.serverId !== serverId) {
+            return html``;
+        }
+        if (fb.ok === true) {
+            return html`
+                <div class="mcp-picker-test-feedback ok" role="status">
+                    ${this.t('mcp_servers_modal.test_result_ok', { n: fb.toolsCount })}
+                </div>
+            `;
+        }
+        return html`
+            <div class="mcp-picker-test-feedback err" role="alert">
+                ${this.t('mcp_servers_modal.test_result_error', { message: fb.message })}
+            </div>
+        `;
+    }
+
+    _renderMcpToolCard(t) {
+        const title = registryItemTitle(t);
+        const desc = typeof t.description === 'string' ? t.description : '';
+        const icon = registryItemIconName(t);
+        const mcpServerId = typeof t.mcp_server_id === 'string' ? t.mcp_server_id : '';
+        const server = this._mcpServerById(mcpServerId);
+        const iconNode = server
+            ? renderMcpServerIcon(server, 18)
+            : html`<platform-icon name=${icon} size="18"></platform-icon>`;
+        return html`
+            <button type="button" class="mcp-picker-tool-card" @click=${() => this._pickToolLike(t)}>
+                <div class="mcp-picker-tool-icon-row">
+                    <div class="mcp-picker-tool-icon">
+                        ${iconNode}
+                    </div>
+                </div>
+                <div class="mcp-picker-tool-title">${title}</div>
+                <div class="mcp-picker-tool-desc">${desc}</div>
+            </button>
+        `;
+    }
+
+    _renderMcpServerSection(group) {
+        const server = group.server;
+        const serverId = server.server_id;
+        const tools = group.tools;
+        const transport = typeof server.transport_type === 'string' ? server.transport_type : 'http';
+        const source = typeof server.source === 'string' ? server.source : 'manual';
+        const isSyncing = this._syncingServerId === serverId;
+        const isTesting = this._testingServerId === serverId;
+        return html`
+            <section class="mcp-picker-server" aria-labelledby="mcp-server-${serverId}" data-server-id=${serverId}>
+                <div class="mcp-picker-server-head">
+                    <div class="mcp-picker-server-head-main">
+                        <div class="mcp-picker-server-icon">${renderMcpServerIcon(server, 30)}</div>
+                        <div class="mcp-picker-server-titles">
+                            <h3 id="mcp-server-${serverId}">${server.name}</h3>
+                            <div class="sub"><code>${serverId}</code></div>
+                            ${typeof server.url === 'string' && server.url.length > 0
+                                ? html`<div class="mcp-picker-server-url">${server.url}</div>`
+                                : nothing}
+                            <div class="mcp-picker-server-meta">
+                                <span class="mcp-picker-chip">${this._mcpTransportLabel(transport)}</span>
+                                <span class="mcp-picker-chip">${this._mcpSourceLabel(source)}</span>
+                                <span>${this.t('tool_picker_modal.mcp_server_tools_count', { n: tools.length })}</span>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="mcp-picker-server-actions">
+                        <button
+                            type="button"
+                            class="icon-btn"
+                            ?disabled=${isSyncing}
+                            title=${this.t('mcp_servers_modal.action_sync_aria')}
+                            aria-label=${this.t('mcp_servers_modal.action_sync_aria')}
+                            @click=${(e) => {
+                                e.stopPropagation();
+                                void this._syncMcpServer(serverId);
+                            }}
+                        >
+                            ${isSyncing
+                                ? html`<glass-spinner size="sm"></glass-spinner>`
+                                : html`<platform-icon name="rotate-ccw" size="16"></platform-icon>`}
+                        </button>
+                        <button
+                            type="button"
+                            class="icon-btn"
+                            ?disabled=${isTesting}
+                            title=${this.t('mcp_servers_modal.action_test_aria')}
+                            aria-label=${this.t('mcp_servers_modal.action_test_aria')}
+                            @click=${(e) => {
+                                e.stopPropagation();
+                                void this._runMcpTest(serverId);
+                            }}
+                        >
+                            ${isTesting
+                                ? html`<glass-spinner size="sm"></glass-spinner>`
+                                : html`<platform-icon name="check" size="16"></platform-icon>`}
+                        </button>
+                    </div>
+                </div>
+                ${this._renderMcpTestFeedback(serverId)}
+                ${tools.length === 0
+                    ? html`<div class="mcp-picker-server-empty">${this.t('tool_picker_modal.mcp_server_empty')}</div>`
+                    : html`
+                        <div class="mcp-picker-tools-grid" role="list">
+                            ${repeat(
+                                tools,
+                                (t) => (typeof t.tool_id === 'string' ? t.tool_id : registryItemTitle(t)),
+                                (t) => this._renderMcpToolCard(t),
+                            )}
+                        </div>
+                    `}
+            </section>
+        `;
+    }
+
+    _renderMcpGroupedBody() {
+        const showTabs = this._showToolCategoryTabs();
+        if (this._mcpGroupedInitialBusy()) {
+            return html`
+                ${showTabs ? this._renderToolCategoryTabs() : nothing}
+                <glass-spinner></glass-spinner>
+            `;
+        }
+        const groups = this._buildMcpServerGroups();
+        if (groups.length === 0) {
+            return html`
+                ${showTabs ? this._renderToolCategoryTabs() : nothing}
+                <div class="lib-empty">${this.t('tool_picker_modal.empty')}</div>
+            `;
+        }
+        return html`
+            ${showTabs ? this._renderToolCategoryTabs() : nothing}
+            <div class="mcp-picker-servers">
+                ${repeat(
+                    groups,
+                    (group) => group.server.server_id,
+                    (group) => this._renderMcpServerSection(group),
+                )}
+            </div>
+        `;
+    }
+
+    _renderHeaderSearch() {
+        return html`
+            <div class="header-search">
+                <platform-field
+                    type="string"
+                    mode="edit"
+                    pill-density="compact"
+                    input-type="search"
+                    .value=${this._search}
+                    placeholder=${this.t('tool_picker_modal.search_placeholder')}
+                    @change=${this._onSearchInput}
+                >
+                    <platform-icon slot="prefix" name="search" size="14"></platform-icon>
+                </platform-field>
+            </div>
+        `;
     }
 
     _onSearchInput(e) {
@@ -787,6 +1384,16 @@ export class FlowsLibraryPickerModal extends PlatformModal {
     }
 
     _renderToolPickerToolbar() {
+        if (this._usesMcpGroupedLayout()) {
+            if (!this._showToolCategoryTabs()) {
+                return nothing;
+            }
+            return html`
+                <div class="tool-picker-toolbar">
+                    ${this._renderToolCategoryTabs()}
+                </div>
+            `;
+        }
         return html`
             <div class="tool-picker-toolbar">
                 ${this._renderToolCategoryTabs()}
@@ -905,6 +1512,9 @@ export class FlowsLibraryPickerModal extends PlatformModal {
     }
 
     _renderBodyToolPick() {
+        if (this._usesMcpGroupedLayout()) {
+            return this._renderMcpGroupedBody();
+        }
         const busy = this._toolsAll.busy;
         const rows = this._pickModeRows();
         if (busy && this._toolsAllItems().length === 0) {
@@ -1011,6 +1621,13 @@ export class FlowsLibraryPickerModal extends PlatformModal {
             return this.t('tool_picker_modal.title_flow');
         }
         return this.t('tool_picker_modal.title');
+    }
+
+    renderHeaderActions() {
+        if (this._isCodeNodeTemplates() || !this._usesMcpGroupedLayout()) {
+            return html``;
+        }
+        return this._renderHeaderSearch();
     }
 
     renderBody() {

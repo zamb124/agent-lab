@@ -207,6 +207,7 @@ class TestKnowledgeImportE2E:
     async def test_notes_only_inline_text(
         self,
         crm_client: AsyncClient,
+        frontend_client: AsyncClient,
         crm_worker: object,
         unique_id: str,
         auth_headers_system: dict[str, str],
@@ -231,6 +232,7 @@ class TestKnowledgeImportE2E:
     async def test_notes_only_markdown_file(
         self,
         crm_client: AsyncClient,
+        frontend_client: AsyncClient,
         crm_worker: object,
         unique_id: str,
         auth_headers_system: dict[str, str],
@@ -239,7 +241,7 @@ class TestKnowledgeImportE2E:
         ns = _test_namespace(unique_id)
         marker = f"KN_E2E_MD_{unique_id}"
         raw = f"# Раздел\n\n{marker}\n".encode("utf-8")
-        fid = await crm_upload_bytes(crm_client, auth_headers_system, f"{unique_id}.md", raw)
+        fid = await crm_upload_bytes(frontend_client, auth_headers_system, f"{unique_id}.md", raw)
         task_id = await _start_notes_import(
             crm_client,
             auth_headers_system,
@@ -257,6 +259,7 @@ class TestKnowledgeImportE2E:
     async def test_notes_only_txt_file(
         self,
         crm_client: AsyncClient,
+        frontend_client: AsyncClient,
         crm_worker: object,
         unique_id: str,
         auth_headers_system: dict[str, str],
@@ -265,7 +268,7 @@ class TestKnowledgeImportE2E:
         ns = _test_namespace(unique_id)
         marker = f"KN_E2E_TXT_{unique_id}"
         raw = f"plain\n{marker}\n".encode("utf-8")
-        fid = await crm_upload_bytes(crm_client, auth_headers_system, f"{unique_id}.txt", raw)
+        fid = await crm_upload_bytes(frontend_client, auth_headers_system, f"{unique_id}.txt", raw)
         task_id = await _start_notes_import(
             crm_client,
             auth_headers_system,
@@ -283,6 +286,7 @@ class TestKnowledgeImportE2E:
     async def test_notes_only_csv_file(
         self,
         crm_client: AsyncClient,
+        frontend_client: AsyncClient,
         crm_worker: object,
         unique_id: str,
         auth_headers_system: dict[str, str],
@@ -291,7 +295,7 @@ class TestKnowledgeImportE2E:
         ns = _test_namespace(unique_id)
         marker = f"KN_E2E_CSV_{unique_id}"
         raw = f"col1,col2\n1,{marker}\n".encode("utf-8")
-        fid = await crm_upload_bytes(crm_client, auth_headers_system, f"{unique_id}.csv", raw)
+        fid = await crm_upload_bytes(frontend_client, auth_headers_system, f"{unique_id}.csv", raw)
         task_id = await _start_notes_import(
             crm_client,
             auth_headers_system,
@@ -309,6 +313,7 @@ class TestKnowledgeImportE2E:
     async def test_notes_only_xlsx_file(
         self,
         crm_client: AsyncClient,
+        frontend_client: AsyncClient,
         crm_worker: object,
         unique_id: str,
         auth_headers_system: dict[str, str],
@@ -317,7 +322,7 @@ class TestKnowledgeImportE2E:
         ns = _test_namespace(unique_id)
         marker = f"KN_E2E_XLSX_{unique_id}"
         raw = _xlsx_bytes(marker)
-        fid = await crm_upload_bytes(crm_client, auth_headers_system, f"{unique_id}.xlsx", raw)
+        fid = await crm_upload_bytes(frontend_client, auth_headers_system, f"{unique_id}.xlsx", raw)
         task_id = await _start_notes_import(
             crm_client,
             auth_headers_system,
@@ -335,6 +340,7 @@ class TestKnowledgeImportE2E:
     async def test_notes_only_docx_file(
         self,
         crm_client: AsyncClient,
+        frontend_client: AsyncClient,
         crm_worker: object,
         unique_id: str,
         auth_headers_system: dict[str, str],
@@ -343,7 +349,7 @@ class TestKnowledgeImportE2E:
         ns = _test_namespace(unique_id)
         marker = f"KN_E2E_DOCX_{unique_id}"
         raw = _docx_bytes(marker)
-        fid = await crm_upload_bytes(crm_client, auth_headers_system, f"{unique_id}.docx", raw)
+        fid = await crm_upload_bytes(frontend_client, auth_headers_system, f"{unique_id}.docx", raw)
         task_id = await _start_notes_import(
             crm_client,
             auth_headers_system,
@@ -361,6 +367,7 @@ class TestKnowledgeImportE2E:
     async def test_notes_only_pdf_file(
         self,
         crm_client: AsyncClient,
+        frontend_client: AsyncClient,
         crm_worker: object,
         unique_id: str,
         auth_headers_system: dict[str, str],
@@ -370,7 +377,7 @@ class TestKnowledgeImportE2E:
         ns = _test_namespace(unique_id)
         marker = f"KN_E2E_PDF_{unique_id}"
         raw = _pdf_bytes(tmp_path, marker)
-        fid = await crm_upload_bytes(crm_client, auth_headers_system, f"{unique_id}.pdf", raw)
+        fid = await crm_upload_bytes(frontend_client, auth_headers_system, f"{unique_id}.pdf", raw)
         task_id = await _start_notes_import(
             crm_client,
             auth_headers_system,
@@ -388,6 +395,7 @@ class TestKnowledgeImportE2E:
     async def test_notes_only_two_files_and_inline(
         self,
         crm_client: AsyncClient,
+        frontend_client: AsyncClient,
         crm_worker: object,
         unique_id: str,
         auth_headers_system: dict[str, str],
@@ -398,13 +406,13 @@ class TestKnowledgeImportE2E:
         m2 = f"KN_E2E_M2_{unique_id}"
         m0 = f"KN_E2E_M0_{unique_id}"
         f1 = await crm_upload_bytes(
-            crm_client,
+            frontend_client,
             auth_headers_system,
             f"a_{unique_id}.txt",
             f"file1\n{m1}\n".encode("utf-8"),
         )
         f2 = await crm_upload_bytes(
-            crm_client,
+            frontend_client,
             auth_headers_system,
             f"b_{unique_id}.txt",
             f"file2\n{m2}\n".encode("utf-8"),
@@ -427,6 +435,7 @@ class TestKnowledgeImportE2E:
     async def test_notes_only_split_by_headings_two_notes(
         self,
         crm_client: AsyncClient,
+        frontend_client: AsyncClient,
         crm_worker: object,
         unique_id: str,
         auth_headers_system: dict[str, str],
@@ -454,6 +463,7 @@ class TestKnowledgeImportE2E:
     async def test_review_list_and_complete_then_rollback(
         self,
         crm_client: AsyncClient,
+        frontend_client: AsyncClient,
         crm_worker: object,
         unique_id: str,
         auth_headers_system: dict[str, str],
@@ -490,6 +500,7 @@ class TestKnowledgeImportE2E:
     async def test_graph_mode_single_chunk_mock_llm(
         self,
         crm_client: AsyncClient,
+        frontend_client: AsyncClient,
         crm_worker: object,
         unique_id: str,
         auth_headers_system: dict[str, str],
@@ -566,6 +577,7 @@ class TestKnowledgeImportE2E:
     async def test_graph_mode_meeting_stored_as_note_for_notes_ui(
         self,
         crm_client: AsyncClient,
+        frontend_client: AsyncClient,
         crm_worker: object,
         unique_id: str,
         auth_headers_system: dict[str, str],

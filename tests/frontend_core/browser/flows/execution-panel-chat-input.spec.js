@@ -5,7 +5,7 @@ import { registerFactory } from '@platform/lib/events/factory-registry.js';
 import { TTS_OUTPUT_STORAGE_KEY } from '@platform/lib/voice/tts-output-pref.js';
 import { editorResource } from '../../../../apps/flows/ui/events/resources/editor.resource.js';
 import { chatResource, chatSendOp, chatCancelOp } from '../../../../apps/flows/ui/events/resources/chat.resource.js';
-import { fileUploadOp } from '../../../../apps/flows/ui/events/resources/files.resource.js';
+import { platformFileCreateOp } from '@platform/lib/events/factories/platform-file-create.js';
 import { executionUiSlice } from '../../../../apps/flows/ui/events/resources/execution-ui.resource.js';
 import '../../../../apps/flows/ui/components/editor/flows-execution-panel.js';
 import '../../../../apps/flows/ui/components/chat/chat-input.js';
@@ -16,7 +16,7 @@ const FACTORIES = [
     chatResource,
     chatSendOp,
     chatCancelOp,
-    fileUploadOp,
+    platformFileCreateOp,
     executionUiSlice,
 ];
 

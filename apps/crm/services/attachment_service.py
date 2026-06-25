@@ -18,6 +18,9 @@ from apps.crm.services.note_attachment_description import (
 from core.clients.rag_client import RagClient
 from core.clients.service_client import ServiceClientError
 from core.context import get_context
+from core.files.create_spec import FileCreateSpec, FilePostCreate, FileSourceKind, FileSourceRef
+from core.files.registry import default_retention_for_source
+from core.files.service import FilesService
 from core.logging import get_logger
 from core.types import JsonObject, require_json_object
 
@@ -54,13 +57,15 @@ class AttachmentService:
         access_grant_repository: "AccessGrantRepository",
         company_repository: "CompanyRepository",
         file_repository: "FileRepository",
+        files_service: FilesService,
         note_markdown_format_scheduler: NoteMarkdownFormatScheduler,
     ) -> None:
-        self._rag: RagClient = RagClient()
         self._entity_repo: EntityRepository = entity_repository
         self._access_grant_repo: AccessGrantRepository = access_grant_repository
         self._company_repo: CompanyRepository = company_repository
         self._file_repo: FileRepository = file_repository
+        self._files_service: FilesService = files_service
+        self._rag: RagClient = RagClient()
         self._note_markdown_format_scheduler: NoteMarkdownFormatScheduler = (
             note_markdown_format_scheduler
         )
@@ -117,20 +122,38 @@ class AttachmentService:
             "ttl_seconds": 0,
         }
 
-        response = self._as_json_object(
+        content_type = "application/octet-stream"
+        spec = FileCreateSpec(
+            source_kind=FileSourceKind.CRM_ENTITY,
+            source_ref=FileSourceRef(entity_id=entity_id),
+            retention=default_retention_for_source(FileSourceKind.CRM_ENTITY),
+            post_create=FilePostCreate(
+                rag_index_namespace=namespace,
+                rag_metadata=metadata,
+                is_public=False,
+            ),
+            metadata=metadata,
+        )
+        record = await self._files_service.create(
+            spec,
+            file_data,
+            original_name=filename,
+            content_type=content_type,
+        )
+        document_id = record.file_id
+
+        index_response = self._as_json_object(
             type_cast(
                 object,
-                await self._rag.upload_namespace_document(
+                await self._rag.index_file(
                     namespace,
-                    filename=filename,
-                    file_bytes=file_data,
+                    document_id,
                     metadata=metadata,
+                    document_name=filename,
                 ),
             ),
-            "RAG upload response",
+            "RAG index_file response",
         )
-
-        document_id = self._required_string(response, "document_id", "RAG upload response")
 
         if document_id not in entity.attachment_ids:
             entity.attachment_ids.append(document_id)
@@ -188,8 +211,8 @@ class AttachmentService:
         return {
             "document_id": document_id,
             "filename": filename,
-            "status": response.get("status", "unknown"),
-            "task_id": response.get("task_id"),
+            "status": index_response.get("status", "pending"),
+            "task_id": index_response.get("task_id"),
             "markdown_format_queued": markdown_format_queued,
         }
 

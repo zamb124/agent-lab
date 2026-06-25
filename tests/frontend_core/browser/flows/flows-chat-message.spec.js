@@ -398,7 +398,7 @@ describe('flows-chat-message shared surface', () => {
                             file_id: 'file-event-1',
                             original_name: 'Generated.txt',
                             content_type: 'text/plain',
-                            url: '/flows/api/v1/files/download/file-event-1',
+                            url: '/frontend/api/v1/files/download/file-event-1',
                         }],
                     },
                 },

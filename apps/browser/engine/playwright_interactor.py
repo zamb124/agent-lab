@@ -19,7 +19,9 @@ from apps.browser.engine.types import (
     BrowserStorageState,
     ContextSignature,
 )
-from core.files.processors import FileProcessor
+from core.files.create_spec import FileCreateSpec, FilePostCreate, FileSourceKind, FileSourceRef
+from core.files.registry import default_retention_for_source
+from core.files.service import FilesService
 
 
 class PlaywrightBrowserInteractor:
@@ -61,13 +63,13 @@ class PlaywrightBrowserInteractor:
         session_store: SessionStateStore,
         lease_manager: PageLeaseManager,
         settings: BrowserRuntimeSettingsView,
-        file_processor: FileProcessor,
+        files_service: FilesService,
     ) -> None:
         self._pool: CDPConnectionPool = pool
         self._store: SessionStateStore = session_store
         self._leases: PageLeaseManager = lease_manager
         self._settings: BrowserRuntimeSettingsView = settings
-        self._file_processor: FileProcessor = file_processor
+        self._files_service: FilesService = files_service
 
     def _cdp_url(self, endpoint_key: str) -> str:
         urls = self._settings.cdp_urls_by_endpoint
@@ -235,12 +237,18 @@ class PlaywrightBrowserInteractor:
         Локальные пути не возвращаем: file_id — платформенная retrievable-ссылка,
         которую вызывающие сервисы/агенты читают через файловый API.
         """
-        record = await self._file_processor.process_file_from_bytes(
+        spec = FileCreateSpec(
+            source_kind=FileSourceKind.GENERATED_EPHEMERAL,
+            source_ref=FileSourceRef(),
+            retention=default_retention_for_source(FileSourceKind.GENERATED_EPHEMERAL),
+            post_create=FilePostCreate(is_public=False),
+            metadata={"source": "browser_fetch", "final_url": final_url},
+        )
+        record = await self._files_service.create(
+            spec=spec,
             data=data,
             original_name=original_name,
             content_type=content_type,
-            metadata={"source": "browser_fetch", "final_url": final_url},
-            public=False,
         )
         return record.file_id
 

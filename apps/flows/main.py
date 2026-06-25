@@ -23,7 +23,7 @@ from fastapi.responses import HTMLResponse, RedirectResponse  # noqa: E402
 from fastapi.staticfiles import StaticFiles  # noqa: E402
 from starlette.middleware.sessions import SessionMiddleware  # noqa: E402
 
-from apps.flows.config import FLOWS_PUBLIC_API_PREFIX, FlowSettings, get_settings  # noqa: E402
+from apps.flows.config import FlowSettings, get_settings  # noqa: E402
 from apps.flows.src.api import (  # noqa: E402
     a2a_router,
     chat_router,
@@ -111,9 +111,16 @@ async def on_startup(_app: FastAPI, container: FlowContainer, settings: FlowSett
 
     set_flow_resume_handler(_flow_resume_via_taskiq)
 
+    from core.files.create_spec import FileCreateSpec, FileSourceKind, FileSourceRef
+    from core.files.registry import default_retention_for_source
+
     FileWriter.configure_process_upload(
-        file_processor=container.file_processor,
-        download_url_prefix=f"{FLOWS_PUBLIC_API_PREFIX}/files/download",
+        files_service=container.files_service,
+        default_spec=FileCreateSpec(
+            source_kind=FileSourceKind.FLOW_ASSET,
+            source_ref=FileSourceRef(flow_id="runtime"),
+            retention=default_retention_for_source(FileSourceKind.FLOW_ASSET),
+        ),
     )
 
     # Подключаемся к Redis с retry

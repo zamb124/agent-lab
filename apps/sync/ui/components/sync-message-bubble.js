@@ -32,7 +32,7 @@ import { formatFileSize } from '@platform/lib/utils/format-file-size.js';
 import { resolveFileIconKey } from '@platform/lib/utils/file-icons.js';
 import { initialsFromName, syncAvatarHueVar } from '../_helpers/sync-hue.js';
 
-const FILE_DOWNLOAD_BASE = '/sync/api/v1/files/download';
+const FILE_DOWNLOAD_BASE = '/frontend/api/v1/files/download';
 const LONG_PRESS_MS = 450;
 
 const EMOJI_QUICK = ['👍','👎','❤️', '😂', '🔥', '🎉', '👏'];

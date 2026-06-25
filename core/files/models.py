@@ -60,7 +60,7 @@ class FileRecord(BaseModel):
         default=None,
         description=(
             "Same-origin URL для скачивания через API (устанавливается сервисом при загрузке). "
-            "Если не задан, используется /api/v1/files/download/{file_id}."
+            "Если не задан, используется /frontend/api/v1/files/download/{file_id}."
         ),
     )
     created_at: datetime = Field(
@@ -72,6 +72,14 @@ class FileRecord(BaseModel):
         description="Время обновления файла"
     )
     deleted_at: datetime | None = Field(default=None, description="Время удаления файла")
+    retention_kind: str | None = Field(
+        default=None,
+        description="Канонический FileRetentionKind для audit и purge",
+    )
+    expires_at: datetime | None = Field(
+        default=None,
+        description="None только для permanent (ttl_seconds=0)",
+    )
 
     @property
     def key(self) -> str:
@@ -84,11 +92,11 @@ class FileRecord(BaseModel):
         Same-origin URL для доступа к файлу через API.
 
         Если сервис задал download_url при загрузке — возвращает его.
-        Иначе возвращает путь /api/v1/files/download/{file_id}.
+        Иначе возвращает путь /frontend/api/v1/files/download/{file_id}.
         """
         if self.download_url:
             return self.download_url
-        return f"/api/v1/files/download/{self.file_id}"
+        return f"/frontend/api/v1/files/download/{self.file_id}"
 
 
 class FileResponse(BaseModel):

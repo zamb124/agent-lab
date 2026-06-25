@@ -11,7 +11,7 @@ from core.worktracker.events import (
     WORK_ITEM_MOVED,
     WORK_ITEM_UPDATED,
 )
-from core.worktracker.models import SystemActor
+from core.worktracker.models import SystemActor, UserActor
 from tests.worktracker.helpers.redis_events import wait_work_item_event
 
 pytestmark = pytest.mark.asyncio
@@ -25,7 +25,7 @@ async def test_create_publishes_created_event(
     item = await worktracker_service.create_manual_task(
         company_id="system",
         title=f"rt-create-{unique_id}",
-        created_by=SystemActor(),
+        created_by=UserActor(user_id=f"user_{unique_id}"),
     )
     event = await wait_work_item_event(
         worktracker_ui_events_listener,

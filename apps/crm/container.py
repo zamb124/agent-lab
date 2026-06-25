@@ -125,6 +125,7 @@ class CRMContainer(BaseContainer):
             access_grant_repository=self.access_grant_repository,
             company_repository=self.company_repository,
             file_repository=self.file_repository,
+            files_service=self.files_service,
             note_markdown_format_scheduler=self.schedule_note_markdown_format,
         )
 

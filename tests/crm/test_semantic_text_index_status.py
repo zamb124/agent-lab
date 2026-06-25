@@ -38,7 +38,6 @@ def _bare_entity(entity_id: str, company_id: str, namespace: str = "default") ->
         status="active",
         tags=[],
         attributes={},
-        assignees=[],
         attachment_ids=[],
         user_id="user_test_semantic_index",
         relevance=1.0,

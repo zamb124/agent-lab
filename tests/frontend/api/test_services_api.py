@@ -8,7 +8,7 @@ Integration тесты для API проверки статуса сервисо
 import pytest
 from httpx import AsyncClient
 
-EXPECTED_SERVICES = {"flows", "crm", "rag", "sync", "office", "provider_litserve"}
+EXPECTED_SERVICES = {"flows", "crm", "rag", "sync", "office", "provider_litserve", "worktracker"}
 
 
 @pytest.mark.asyncio
@@ -141,6 +141,7 @@ class TestServicesAPI:
         assert services_dict["sync"]["url"] == "/sync"
         assert services_dict["office"]["url"] == "/office"
         assert services_dict["provider_litserve"]["url"] == "/litserve"
+        assert services_dict["worktracker"]["url"] == "/worktracker"
 
     async def test_services_status_consistent_across_requests(
         self,

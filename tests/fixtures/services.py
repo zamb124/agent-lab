@@ -439,7 +439,7 @@ def sync_service():
 
 
 @pytest.fixture(scope="session")
-def worktracker_service(setup_database_before_tests):
+def worktracker_http_service(setup_database_before_tests):
     """
     Worktracker сервис как реальный HTTP сервер на порту 9021.
 

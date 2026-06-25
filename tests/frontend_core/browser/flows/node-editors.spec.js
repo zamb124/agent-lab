@@ -13,7 +13,7 @@ import { registerFactory, collectFactories } from '@platform/lib/events/index.js
 
 import { editorResource, editorBulkDeleteOp } from '../../../../apps/flows/ui/events/resources/editor.resource.js';
 import { resourcesBundleResource, resourceUpdateOp } from '../../../../apps/flows/ui/events/resources/resources-bundle.resource.js';
-import { fileUploadOp } from '../../../../apps/flows/ui/events/resources/files.resource.js';
+import { platformFileCreateOp } from '@platform/lib/events/factories/platform-file-create.js';
 import { flowValidateOp, flowsResource } from '../../../../apps/flows/ui/events/resources/flows.resource.js';
 import { modelsListOp } from '../../../../apps/flows/ui/events/resources/models.resource.js';
 import { providersListOp } from '../../../../apps/flows/ui/events/resources/providers.resource.js';
@@ -41,7 +41,7 @@ import '../../../../apps/flows/ui/components/nodes/flows-remote-flow-editor.js';
 const FACTORIES = [
     editorResource, editorBulkDeleteOp,
     resourcesBundleResource, resourceUpdateOp,
-    fileUploadOp,
+    platformFileCreateOp,
     flowValidateOp, flowsResource,
     modelsListOp,
     providersListOp,

@@ -22,11 +22,14 @@ async def upload_attachment(
         raise HTTPException(status_code=422, detail="filename is required")
     file_content = await file.read()
 
-    result = await container.attachment_service.add_attachment(
-        entity_id=entity_id,
-        file_data=file_content,
-        filename=file.filename,
-    )
+    try:
+        result = await container.attachment_service.add_attachment(
+            entity_id=entity_id,
+            file_data=file_content,
+            filename=file.filename,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
 
     return result
 

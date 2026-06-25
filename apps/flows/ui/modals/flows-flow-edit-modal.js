@@ -1,12 +1,13 @@
 /**
  * flows-flow-edit-modal — редактирование метаданных flow (name, description, обложка).
  *
- * Обновление — `PUT /flows/api/v1/flows/{flow_id}`. Загрузка файла — `flows/file_upload` (POST `/flows/api/v1/files/`).
+ * Обновление — `PUT /flows/api/v1/flows/{flow_id}`. Загрузка файла — `platform/file_create`.
  */
 
 import { html, css } from 'lit';
 import { PlatformFormModal } from '@platform/lib/components/glass-form-modal.js';
 import { registerModalKind } from '@platform/lib/utils/modal-registry.js';
+import { buildFlowAssetFileCreateSpecJson } from '@platform/lib/utils/file-create-spec.js';
 import '@platform/lib/components/platform-button.js';
 import '@platform/lib/components/fields/platform-field.js';
 import { asArray } from '../_helpers/flows-resolvers.js';
@@ -63,7 +64,7 @@ export class FlowsFlowEditModal extends PlatformFormModal {
         this._hydrated = false;
         this._flows = this.useResource('flows/flows');
         this._update = this.useOp('flows/flow_update');
-        this._fileUpload = this.useOp('flows/file_upload');
+        this._fileUpload = this.useOp('platform/file_create');
     }
 
     updated(changed) {
@@ -182,7 +183,11 @@ export class FlowsFlowEditModal extends PlatformFormModal {
             input.value = '';
             return;
         }
-        const result = await this._fileUpload.run({ file });
+        if (typeof this.flowId !== 'string' || this.flowId.length === 0) {
+            throw new Error('flows-flow-edit-modal: flowId required for file upload');
+        }
+        const spec = buildFlowAssetFileCreateSpecJson({ flowId: this.flowId });
+        const result = await this._fileUpload.run({ file, spec });
         if (!result || typeof result !== 'object' || typeof result.url !== 'string' || result.url.length === 0) {
             throw new Error('flows-flow-edit-modal: file upload missing result.url');
         }

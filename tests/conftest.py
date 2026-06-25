@@ -29,7 +29,8 @@ pytest_plugins = [
     "tests.fixtures.clients",
     "tests.fixtures.auth",
     "tests.fixtures.push",
-    "tests.fixtures.mcp_http_stub",
+    "tests.fixtures.mcp_modes_stub",
+    "tests.fixtures.mcp_registry_stub",
     "tests.fixtures.embed_e2e",
     "tests.profiling.plugin",
 ]
@@ -101,6 +102,11 @@ if id(process_flow_task.broker) != id(platform_broker_module.broker):
 
 def pytest_sessionfinish(session, exitstatus):
     shutdown_tracing()
+    if hasattr(session.config, "workerinput"):
+        return
+    from tests.fixtures.workers import release_pytest_controller_session
+
+    release_pytest_controller_session()
 
 
 _DB_SETUP_LOCK = "/tmp/platform_test_db_setup.lock"
@@ -596,12 +602,23 @@ def pytest_configure(config):
         junit_path.parent.mkdir(parents=True, exist_ok=True)
 
 
-def pytest_sessionfinish(session, exitstatus):
-    if hasattr(session.config, "workerinput"):
-        return
-    from tests.fixtures.workers import release_pytest_controller_session
+_CODE_RUNNER_TEST_PREFIXES = (
+    "tests/flows/api/test_code_api.py",
+    "tests/flows/api/test_node_execute.py",
+    "tests/flows/core/agent/test_tool_node.py",
+    "tests/flows/core/tasks/test_tasks.py",
+    "tests/flows/e2e/test_tool_node_e2e.py",
+    "tests/flows/e2e/test_full_flow_api.py",
+)
 
-    release_pytest_controller_session()
+
+def _is_sandbox_runtime_test(nodeid: str) -> bool:
+    """Session-scoped code-runner/capability_gateway на фиксированных портах — один xdist worker."""
+    if nodeid.startswith("tests/capabilities/"):
+        return True
+    if nodeid.startswith("tests/flows/integration/"):
+        return True
+    return any(nodeid.startswith(prefix) for prefix in _CODE_RUNNER_TEST_PREFIXES)
 
 
 @pytest.hookimpl(tryfirst=True)
@@ -610,9 +627,12 @@ def pytest_collection_modifyitems(items: list[pytest.Item]) -> None:
     Тесты с маркером real_taskiq передают ответы LLM через Redis; ключ mock_llm:responses:<lane>
     задаётся MOCK_LLM_REDIS_KEY у session workers и uvicorn (fixtures).
 
-    xdist_group отделён от «папки теста»: CRM использует ту же очередь Redis, что flows
-    (LLM в CRM analyze идёт через A2A на flows), поэтому суффикс группы flows_llm объединяет
-    tests/crm, tests/flows и tests/frontend; sync и rag остаются отдельными полосами.
+    flows_llm (CRM/flows/frontend/office real_taskiq + sandbox/code-runner) не получают xdist_group:
+    один gw на всю очередь давал 20+ мин starvation и таймауты TaskIQ/code-runner к концу прогона.
+    Доступ к session flows:9001, capability_gateway:9016, code-runner-* и mock_llm:responses:flows
+    сериализует pytest_runtest_protocol + _SHARED_FLOWS_CONTOUR_FILE_LOCK между всеми gw.
+
+    sync/rag/search real_taskiq — отдельные xdist_group (свои Redis mock lanes).
 
     SessionServerManager сбрасывает PYTEST_XDIST_WORKER у subprocess; фикстура mock_llm_redis
     для real_taskiq пишет в ключ по _real_taskiq_mock_llm_lane.
@@ -624,14 +644,17 @@ def pytest_collection_modifyitems(items: list[pytest.Item]) -> None:
     for item in items:
         if item.get_closest_marker("real_taskiq"):
             lane = _real_taskiq_xdist_lane(item)
-            item.add_marker(pytest.mark.xdist_group(f"real_taskiq_{lane}"))
+            if lane == "flows_llm":
+                item.add_marker(pytest.mark.xdist_group(_SHARED_FLOWS_RUNTIME_XDIST_GROUP))
+            else:
+                item.add_marker(pytest.mark.xdist_group(f"real_taskiq_{lane}"))
             if item.get_closest_marker("timeout") is None:
                 item.add_marker(pytest.mark.timeout(120, func_only=True))
-        elif item.nodeid.startswith("tests/capabilities/"):
-            # Общие session-сервисы (flows/capability_gateway/code-runner-* на фиксированных
-            # портах) и tool-runtime manifest без изоляции по worker: cross_language_tool_ids
-            # регистрирует tools в system company, SDK-тесты читают manifest целиком.
-            item.add_marker(pytest.mark.xdist_group("capabilities"))
+        elif _is_sandbox_runtime_test(item.nodeid):
+            if item.get_closest_marker("xdist_group") is None:
+                item.add_marker(pytest.mark.xdist_group(_SHARED_FLOWS_RUNTIME_XDIST_GROUP))
+            if item.get_closest_marker("timeout") is None:
+                item.add_marker(pytest.mark.timeout(180, func_only=True))
         elif item.nodeid.startswith("tests/sync/"):
             item.add_marker(pytest.mark.xdist_group("sync_db"))
         elif item.nodeid.startswith("tests/rag/test_rag_resource") or item.nodeid.startswith(
@@ -642,6 +665,35 @@ def pytest_collection_modifyitems(items: list[pytest.Item]) -> None:
             item.add_marker(pytest.mark.xdist_group("ui_e2e"))
 
 
+_SHARED_FLOWS_CONTOUR_FILE_LOCK = "/tmp/platform_shared_flows_contour.lock"
+
+
+def _uses_shared_flows_contour_lock(item: pytest.Item) -> bool:
+    """Session flows HTTP + capability_gateway + code-runner-* + mock_llm:responses:flows — один контур."""
+    if _is_sandbox_runtime_test(item.nodeid):
+        return True
+    return (
+        item.get_closest_marker("real_taskiq") is not None
+        and _real_taskiq_mock_llm_lane(item) == "flows"
+    )
+
+
+@pytest.hookimpl(hookwrapper=True, tryfirst=True)
+def pytest_runtest_protocol(item, nextitem):
+    """Сериализует shared flows contour между pytest-xdist workers (фиксированные порты 9001/9016–9020)."""
+    if not _uses_shared_flows_contour_lock(item):
+        yield
+        return
+    from filelock import FileLock
+
+    lock = FileLock(_SHARED_FLOWS_CONTOUR_FILE_LOCK, timeout=600)
+    lock.acquire()
+    try:
+        yield
+    finally:
+        lock.release()
+
+
 @pytest.hookimpl(wrapper=True, tryfirst=True)
 def pytest_runtest_call(item) -> Generator[None, object, object]:
     """
@@ -649,7 +701,7 @@ def pytest_runtest_call(item) -> Generator[None, object, object]:
     с начала setup — ложные дампы. Снимаем его в начале call и ставим новый
     с тем же faulthandler_timeout только на фазу call (тело теста).
     """
-    if not item.get_closest_marker("real_taskiq"):
+    if not item.get_closest_marker("real_taskiq") and not _is_sandbox_runtime_test(item.nodeid):
         return (yield)
     import faulthandler
 
@@ -931,9 +983,6 @@ def sync_tools(request, monkeypatch):
     if request.node.get_closest_marker("real_taskiq"):
         yield
         return
-    import apps.office.services.catalog_rag_index_service as office_catalog_rag_index_module
-    import apps.rag.api.documents as rag_documents_module
-    import apps.rag_worker.tasks.indexing_tasks as rag_indexing_tasks
     import apps.crm.services.entity_service as crm_entity_service_module
     import apps.crm.services.task_service as crm_task_service_module
     import apps.crm_worker.tasks.analysis_tasks as crm_analysis_tasks
@@ -948,6 +997,9 @@ def sync_tools(request, monkeypatch):
     import apps.flows.src.services.hitl_work_item_service as flows_hitl_work_item_module
     import apps.flows.src.triggers.executor as flows_trigger_executor_module
     import apps.idle_worker.tasks.push_notification_tasks as push_notification_tasks
+    import apps.office.services.catalog_rag_index_service as office_catalog_rag_index_module
+    import apps.rag.api.documents as rag_documents_module
+    import apps.rag_worker.tasks.indexing_tasks as rag_indexing_tasks
     import apps.sync.realtime.handlers as sync_handlers_module
     import apps.sync.realtime.operations as sync_operations_module
     import apps.sync.realtime.tasks as sync_realtime_tasks
@@ -1018,8 +1070,8 @@ def sync_tools(request, monkeypatch):
         try:
             result = await tool_tasks.execute_tool(tool_id, args, state, context_data=context_data)
             return SyncTaskResult(result)
-        except Exception as e:
-            return SyncTaskResult(error=e)
+        except Exception as exc:
+            return SyncTaskResult(error=exc)
 
     async def sync_agent_kiq(**kwargs):
         """Выполняет agent task синхронно."""
@@ -1038,8 +1090,8 @@ def sync_tools(request, monkeypatch):
                 kwargs["context_data"] = mock_ctx.model_dump()
             result = await flow_tasks.process_flow_task(**kwargs)
             return SyncTaskResult(result)
-        except Exception as e:
-            return SyncTaskResult(error=e)
+        except Exception as exc:
+            return SyncTaskResult(error=exc)
         finally:
             if saved_context:
                 set_context(saved_context)
@@ -1047,8 +1099,28 @@ def sync_tools(request, monkeypatch):
     async def _sync_call(task_func, *args, **kwargs):
         try:
             return SyncTaskResult(await task_func(*args, **kwargs))
-        except Exception as e:
-            return SyncTaskResult(error=e)
+        except Exception as exc:
+            return SyncTaskResult(error=exc)
+
+    crm_background_task_names = frozenset(
+        {
+            CRM_REBUILD_DAILY_SUMMARY_TASK_NAME,
+            CRM_REBUILD_PERIOD_SUMMARY_TASK_NAME,
+        }
+    )
+
+    def _log_background_task_failure(task: asyncio.Task[object]) -> None:
+        from core.logging import get_logger
+
+        if task.cancelled():
+            return
+        exc = task.exception()
+        if exc is not None:
+            get_logger(__name__).error(
+                "sync_tools.background_task_failed",
+                task_name=task.get_name(),
+                exc_info=exc,
+            )
 
     async def sync_send_task_update_kiq(task_id, context_id, state, message=None, is_final=False):
         """Выполняет send_task_update синхронно."""
@@ -1118,9 +1190,7 @@ def sync_tools(request, monkeypatch):
         )
         handler = task_name_handlers.get(task_name)
         if handler is None:
-            return SyncTaskResult(
-                error=AssertionError(f"Неизвестный TaskIQ task-name: {task_name!r}")
-            )
+            raise AssertionError(f"Неизвестный TaskIQ task-name: {task_name!r}")
         if handler is sync_agent_kiq:
             return await sync_agent_kiq(**kwargs)
         if handler is sync_tool_kiq:
@@ -1129,6 +1199,13 @@ def sync_tools(request, monkeypatch):
             return await sync_send_task_update_kiq(*args, **kwargs)
         if handler is sync_send_webhook_kiq:
             return await sync_send_webhook_kiq(*args, **kwargs)
+        if task_name in crm_background_task_names:
+            task = asyncio.create_task(
+                handler(*args, **kwargs),
+                name=task_name,
+            )
+            task.add_done_callback(_log_background_task_failure)
+            return SyncTaskResult(result=None)
         return await _sync_call(handler, *args, **kwargs)
 
     monkeypatch.setattr(tool_tasks.execute_tool, "kiq", sync_tool_kiq)

@@ -40,6 +40,7 @@ import {
 } from '../../_helpers/flows-resolvers.js';
 import { collectCurrentChatFiles } from '../../_helpers/chat-files.js';
 import { resolveFlowsChatTaskId } from '../../_helpers/resolve-flows-chat-task-id.js';
+import { buildFlowSessionFileCreateSpecJson } from '@platform/lib/utils/file-create-spec.js';
 import {
     createFlowVoiceSession,
     disposeFlowVoiceSession,
@@ -412,7 +413,7 @@ export class FlowsExecutionPanel extends PlatformElement {
         this._chat = this.useResource('flows/chat');
         this._send = this.useOp('flows/chat_send');
         this._cancel = this.useOp('flows/chat_cancel');
-        this._upload = this.useOp('flows/file_upload');
+        this._upload = this.useOp('platform/file_create');
         this._ui = this.useSlice('flows/execution_ui');
         this._lastChatCtx = '';
         this._lastChatLen = 0;
@@ -943,24 +944,34 @@ export class FlowsExecutionPanel extends PlatformElement {
         if (!Array.isArray(files)) {
             throw new Error('flows-execution-panel: files must be an array');
         }
+        const contextId = this._ensureContextId();
+        if (typeof this.flowId !== 'string' || this.flowId.length === 0) {
+            throw new Error('flows-execution-panel: flowId required for file upload');
+        }
+        const sessionId = `${this.flowId}:${contextId}`;
+        const spec = buildFlowSessionFileCreateSpecJson({
+            flowId: this.flowId,
+            sessionId,
+            isPublic: false,
+        });
         const uploaded = [];
         for (const raw of files) {
             const file = _executionFileToUploadFile(raw);
-            const result = await this._upload.run({ file, public: 'false' });
+            const result = await this._upload.run({ file, spec });
             if (!result || typeof result.file_id !== 'string' || result.file_id.length === 0) {
-                throw new Error('flows execution: file_upload op must return file_id');
+                throw new Error('flows execution: platform/file_create must return file_id');
             }
             if (typeof result.original_name !== 'string' || result.original_name.length === 0) {
-                throw new Error('flows execution: file_upload op must return original_name');
+                throw new Error('flows execution: platform/file_create must return original_name');
             }
             if (typeof result.content_type !== 'string' || result.content_type.length === 0) {
-                throw new Error('flows execution: file_upload op must return content_type');
+                throw new Error('flows execution: platform/file_create must return content_type');
             }
             if (typeof result.file_size !== 'number') {
-                throw new Error('flows execution: file_upload op must return file_size');
+                throw new Error('flows execution: platform/file_create must return file_size');
             }
             if (typeof result.url !== 'string' || result.url.length === 0) {
-                throw new Error('flows execution: file_upload op must return url');
+                throw new Error('flows execution: platform/file_create must return url');
             }
             uploaded.push({
                 file_id: result.file_id,

@@ -42,6 +42,57 @@ active_servers = await mcp_repo.list_active()
 
 `Storage` напрямую для MCP — запрещён.
 
+## MCP Catalog + Provisioner
+
+Глобальный snapshot HTTPS MCP из [Official MCP Registry](https://registry.modelcontextprotocol.io) — без отдельного `apps/mcp_farm`. Runtime **не меняется**: `MCPClient` ходит **напрямую** на `upstream_url`.
+
+### Источники и jobs
+
+- **Crawl:** `apps/idle_worker/tasks/mcp_catalog_tasks.py::mcp_catalog_crawl_task` — paginate registry, filter `streamable-http`/`sse` + `https://`, verify через `MCPClient.initialize()` + `list_tools()`, upsert `MCPCatalogRepository`.
+- **Provision:** `mcp_catalog_provision_companies_task` — все компании → `provision_mcp_catalog_for_company`.
+- **Resync:** `mcp_catalog_resync_tools_task` — `sync_mcp_server_tools` для `source=catalog` без `override_locked`.
+- Scheduler: `apps/scheduler/main.py` — `mcp_catalog_crawl_task` по `crawl_cron` (default `0 * * * *`, раз в час) + `crawl_run_on_start=true` (kick при старте scheduler-api, как LLM sync). `mcp_catalog.resync_tools_cron`.
+
+### Модели
+
+```python
+from apps.flows.src.models.mcp import MCPServerConfig, MCPServerSource
+from apps.flows.src.models.mcp_catalog import MCPCatalogEntry
+```
+
+`MCPServerConfig` расширен: `source` (`platform` | `catalog` | `manual`), `catalog_id`, `catalog_snapshot_hash`, `override_locked`, `override_locked_at`, `override_locked_by_user_id`.
+
+`MCPCatalogEntry` — global (`MCPCatalogRepository`, table `mcp_catalog`, `is_global=True`).
+
+### Provisioner
+
+`apps/flows/src/services/mcp_catalog_provisioner.py::provision_mcp_catalog_for_company`:
+
+- **Add:** catalog entry + policy → `MCPServerConfig(source=CATALOG, url=upstream_url, headers=auth_template)`.
+- **Update:** если `override_locked=false` и hash изменился — merge managed fields + `sync_mcp_server_tools`.
+- **Deprecate:** entry исчез / не provisionable → `is_active=false` (если не locked).
+- **Skip:** `override_locked=true`, `source=platform|manual`.
+
+Policy: `settings.mcp_catalog.auto_provision` — `all_verified` | `approved_only` | `disabled`. Curated allowlist: `apps/flows/mcp_catalog_allowlist.yaml`.
+
+Новая компания: `apps/flows/src/tasks/company_init_tasks.py` после `ensure_default_mcp_servers`.
+
+### Override lock + Reset
+
+- `PUT /flows/api/v1/mcp/servers/{server_id}` — изменение managed field у `source=catalog` → `override_locked=true`.
+- `POST /flows/api/v1/mcp/servers/{server_id}/reset_catalog_defaults` — restore из `MCPCatalogEntry`, `override_locked=false`, re-sync.
+- UI: `flows-mcp-servers-modal.js` — badge source, «Изменено вручную», кнопка сброса.
+
+### Auth
+
+Catalog хранит `auth_template`; provisioner копирует в `headers`. Пользователь правит в MCP UI или через `@var:` — как для manual серверов.
+
+### Что не делаем в v1
+
+- stdio / local MCP
+- Отдельный JSON-RPC proxy (`apps/mcp_farm`) — только если понадобится central egress
+- Crawl GitHub repos напрямую (только registry API + optional yaml)
+
 ## Синхронизация тулов
 
 Единая реализация — `apps/flows/src/services/mcp_sync.py::sync_mcp_server_tools(container=..., server_config=...)`.
@@ -127,8 +178,10 @@ Mcp-Session-Id: {uuid}
 ```
 POST /flows/api/v1/mcp/servers
 GET  /flows/api/v1/mcp/servers/{server_id}
+PUT  /flows/api/v1/mcp/servers/{server_id}
 POST /flows/api/v1/mcp/servers/{server_id}/sync
 POST /flows/api/v1/mcp/servers/{server_id}/test
+POST /flows/api/v1/mcp/servers/{server_id}/reset_catalog_defaults
 ```
 
 ## Тестирование
@@ -143,6 +196,34 @@ async def test_mcp_tool(local_mcp_http_url):
     assert len(tools) > 0
 ```
 
+## Platform branding (icons)
+
+Глобальные иконки MCP по slug (`server_id`) — не per-company. Хранятся в `MCPServerBrandingRepository` (`is_global=True`); `icon_url` вычисляется из публичного `FileRecord` (`icon_file_id`).
+
+- **Read:** `GET /flows/api/v1/mcp/branding` (любая компания); `MCPServerResponse.icon_url` на list/get серверов.
+- **Write:** `PUT/DELETE /flows/api/v1/mcp/branding/{server_id}` — только `company_id=system`; файл обязан быть `is_public=true`, MIME: png/webp/svg/jpeg.
+- **UI:** модалка `flows-mcp-servers-modal` → «Иконки платформы» (system only); picker и список серверов показывают `icon_url` или static `/static/core/assets/mcp_logos/{browser,search}.svg`.
+
+### Seed bundle
+
+Git-бандл: `apps/flows/mcp_branding/` (`manifest.yaml`, `icons/`, `SOURCES.md`).
+
+- **Targets:** platform `browser`/`search` + все `catalog_id` из `MCPCatalogRepository`.
+- **Brand icon:** запись в `manifest.yaml` → upload в S3 + `upsert_branding`.
+- **Fallback:** `default_icon` (`icons/_generic.svg`) для catalog без явной записи; один `file_id` переиспользуется для всех generic.
+- **CLI:** `uv run python scripts/mcp_branding_seed.py` / `make mcp-branding-seed`.
+  - `--force` — перезаписать существующие branding.
+  - `--server-id` — только указанные slug.
+  - `--dry-run` — без upload/write.
+- **Crawl hook:** после `mcp_catalog_crawl_task` при `settings.mcp_branding.seed_after_crawl=true` — seed только **новых** catalog_id (skip existing).
+- **Maintainer:** `scripts/fetch_mcp_branding_icons.py` — автозаполнение git-бандла:
+  - `uv run python scripts/fetch_mcp_branding_icons.py --from-registry --max-pages 300` — скан official registry (`isLatest`), источники: publisher `icons[]` → Simple Icons (MIT) → skip (generic при seed).
+  - `--sync-manifest-only` — восстановить `manifest.yaml` из уже скачанных файлов в `icons/`.
+  - `--refresh-existing` — перезаписать локальные brand-иконки.
+  - `--dry-run` — без записи.
+  - Результат коммитится; затем `make mcp-branding-seed`.
+- **CI:** `scripts/check_mcp_branding_bundle.py` (`make check-mcp-branding-bundle`).
+
 ## Типичные ошибки
 
 - **Вызов `tool.coroutine` напрямую** — минует декоратор. Только `tool.ainvoke(...)`.
@@ -151,11 +232,24 @@ async def test_mcp_tool(local_mcp_http_url):
 
 ## Файлы
 
-- `apps/flows/src/models/mcp.py` — `MCPServerConfig`, `MCPTransportType`.
+- `apps/flows/src/models/mcp.py` — `MCPServerConfig`, `MCPServerSource`, `MCPTransportType`.
+- `apps/flows/src/models/mcp_catalog.py` — `MCPCatalogEntry`.
 - `apps/flows/src/db/mcp_repository.py` — `MCPServerRepository`.
+- `apps/flows/src/db/mcp_catalog_repository.py` — `MCPCatalogRepository`.
+- `apps/flows/src/db/mcp_server_branding_repository.py` — глобальные иконки по `server_id`.
+- `apps/flows/src/services/mcp_branding_service.py` — resolve `icon_url`, CRUD (write: `company_id=system` only).
+- `apps/flows/src/services/mcp_catalog_crawler.py` — registry crawl + verify.
+- `apps/flows/src/services/mcp_catalog_provisioner.py` — provision per company, override lock, reset.
 - `apps/flows/src/clients/mcp_client.py` — `MCPHttpClient`, `get_mcp_client`.
 - `apps/flows/src/services/mcp_sync.py` — `sync_mcp_server_tools`.
+- `apps/idle_worker/tasks/mcp_catalog_tasks.py` — TaskIQ crawl/provision/resync.
+- `apps/flows/mcp_catalog_allowlist.yaml` — curated `platform_approved` / auth overrides.
+- `apps/flows/mcp_branding/` — seed bundle иконок (manifest + SVG).
+- `apps/flows/src/services/mcp_branding_seed.py` — seed в S3/БД из bundle.
 - `apps/flows/src/runtime/nodes.py` — `MCPNode`.
 - `tests/fixtures/mcp_http_stub.py` — `local_mcp_http_url`.
+- `tests/flows/integration/test_mcp_catalog_provisioner.py` — provision, override lock, reset.
+- `tests/flows/integration/test_mcp_branding.py` — global icons by slug.
+- `tests/flows/integration/test_mcp_branding_seed.py` — seed bundle, generic reuse, skip/force.
 
 Спецификация: https://modelcontextprotocol.io

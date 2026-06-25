@@ -54,9 +54,30 @@ export const mcpServerSyncOp = createAsyncOp({
     },
 });
 
+export const mcpServerResetCatalogDefaultsOp = createAsyncOp({
+    name: 'flows/mcp_server_reset_catalog_defaults',
+    successToastKey: 'flows:toast.mcp_server_reset_catalog_defaults',
+    errorToastKey: 'flows:toast.mcp_server_reset_catalog_defaults_error',
+    restMirror: {
+        method: 'POST',
+        path: '/flows/api/v1/mcp/servers/{server_id}/reset_catalog_defaults',
+    },
+    request: async ({ payload }) => {
+        if (!payload || typeof payload.server_id !== 'string' || payload.server_id.length === 0) {
+            throw new Error('mcpServerResetCatalogDefaultsOp: { server_id } required');
+        }
+        return httpRequest({
+            method: 'POST',
+            url: `/flows/api/v1/mcp/servers/${encodeURIComponent(payload.server_id)}/reset_catalog_defaults`,
+            body: {},
+        });
+    },
+});
+
 export const mcpServerTestOp = createAsyncOp({
     name: 'flows/mcp_server_test',
-    silent: true,
+    successToastKey: 'flows:toast.mcp_server_tested',
+    errorToastKey: 'flows:toast.mcp_server_test_error',
     restMirror: { method: 'POST', path: '/flows/api/v1/mcp/servers/{server_id}/test' },
     request: async ({ payload }) => {
         if (!payload || typeof payload.server_id !== 'string' || payload.server_id.length === 0) {
@@ -66,6 +87,52 @@ export const mcpServerTestOp = createAsyncOp({
             method: 'POST',
             url: `/flows/api/v1/mcp/servers/${encodeURIComponent(payload.server_id)}/test`,
             body: {},
+        });
+    },
+});
+
+export const mcpBrandingLoadOp = createAsyncOp({
+    name: 'flows/mcp_branding_load',
+    silent: true,
+    restMirror: { method: 'GET', path: '/flows/api/v1/mcp/branding' },
+    request: async () => httpRequest({
+        method: 'GET',
+        url: '/flows/api/v1/mcp/branding',
+    }),
+});
+
+export const mcpBrandingUpsertOp = createAsyncOp({
+    name: 'flows/mcp_branding_upsert',
+    successToastKey: 'flows:toast.mcp_branding_saved',
+    errorToastKey: 'flows:toast.mcp_branding_save_error',
+    restMirror: { method: 'PUT', path: '/flows/api/v1/mcp/branding/{server_id}' },
+    request: async ({ payload }) => {
+        if (!payload || typeof payload.server_id !== 'string' || payload.server_id.length === 0) {
+            throw new Error('mcpBrandingUpsertOp: { server_id, icon_file_id } required');
+        }
+        if (typeof payload.icon_file_id !== 'string' || payload.icon_file_id.length === 0) {
+            throw new Error('mcpBrandingUpsertOp: icon_file_id required');
+        }
+        return httpRequest({
+            method: 'PUT',
+            url: `/flows/api/v1/mcp/branding/${encodeURIComponent(payload.server_id)}`,
+            body: { icon_file_id: payload.icon_file_id },
+        });
+    },
+});
+
+export const mcpBrandingRemoveOp = createAsyncOp({
+    name: 'flows/mcp_branding_remove',
+    successToastKey: 'flows:toast.mcp_branding_removed',
+    errorToastKey: 'flows:toast.mcp_branding_remove_error',
+    restMirror: { method: 'DELETE', path: '/flows/api/v1/mcp/branding/{server_id}' },
+    request: async ({ payload }) => {
+        if (!payload || typeof payload.server_id !== 'string' || payload.server_id.length === 0) {
+            throw new Error('mcpBrandingRemoveOp: { server_id } required');
+        }
+        return httpRequest({
+            method: 'DELETE',
+            url: `/flows/api/v1/mcp/branding/${encodeURIComponent(payload.server_id)}`,
         });
     },
 });

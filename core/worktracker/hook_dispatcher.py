@@ -13,11 +13,29 @@ from __future__ import annotations
 from typing import Protocol
 
 from core.clients.service_client import ServiceClient
+from core.internal_context_headers import build_internal_context_headers
 from core.logging import get_logger
 from core.types import JsonObject
-from core.worktracker.models import WorkItem, WorkItemHook
+from core.worktracker.models import (
+    AgentActor,
+    UserActor,
+    WorkItem,
+    WorkItemHook,
+)
 
 logger = get_logger(__name__)
+
+_PLATFORM_SYSTEM_HOOK_USER_ID = "platform-worktracker-system"
+
+
+def hook_dispatch_internal_user_id(work_item: WorkItem) -> str:
+    """user_id для signed internal context при service-to-service вызове хука."""
+    created_by = work_item.created_by
+    if isinstance(created_by, UserActor):
+        return created_by.user_id
+    if isinstance(created_by, AgentActor):
+        return f"platform-agent:{created_by.flow_id}"
+    return _PLATFORM_SYSTEM_HOOK_USER_ID
 
 
 class WorkItemHookDispatcher(Protocol):
@@ -50,7 +68,21 @@ class ServiceClientHookDispatcher:
             service=hook.service,
             path=hook.path,
         )
-        _ = await self._service_client.post(hook.service, hook.path, json=payload)
+        internal_headers = build_internal_context_headers(
+            company_id=work_item.company_id,
+            user_id=hook_dispatch_internal_user_id(work_item),
+        )
+        _ = await self._service_client.post(
+            hook.service,
+            hook.path,
+            json=payload,
+            headers=internal_headers,
+        )
 
 
-__all__ = ["WorkItemHookDispatcher", "NoopHookDispatcher", "ServiceClientHookDispatcher"]
+__all__ = [
+    "WorkItemHookDispatcher",
+    "NoopHookDispatcher",
+    "ServiceClientHookDispatcher",
+    "hook_dispatch_internal_user_id",
+]

@@ -2652,7 +2652,7 @@ async def op_files_upload_completed(
 ) -> FilesUploadCompletedResult:
     """Подтверждение метаданных файла после REST multipart upload.
 
-    Бинарный поток идёт через `POST /sync/api/v1/files/` (REST-only, multipart),
+    Бинарный поток идёт через `POST /frontend/api/v1/files/` (REST-only, multipart),
     а через WS клиент шлёт этот фрейм с `file_id`, чтобы получить
     каноничный `FilesUploadCompletedResult` для дальнейшей вставки в
     `MessagesSendPayload.body.contents`.

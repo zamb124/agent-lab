@@ -638,6 +638,7 @@ export class WorkItemDetailEditor extends PlatformElement {
         return html`
             <worktracker-activity-thread
                 ?embedded=${this.layout === 'page'}
+                work-item-id=${this.workItemId}
                 .comments=${this._commentsOp.state.items || []}
                 comment-draft=${this._commentDraft}
                 .commentFiles=${this._commentFilesDraft}

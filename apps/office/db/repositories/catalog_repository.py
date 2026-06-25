@@ -177,6 +177,52 @@ class CatalogRepository:
             await session.refresh(row)
         return row
 
+    async def find_child_by_title(
+        self,
+        *,
+        company_id: str,
+        namespace: str,
+        parent_catalog_id: str | None,
+        title: str,
+    ) -> OfficeDocumentCatalog | None:
+        async with self._db.session() as session:
+            query = select(OfficeDocumentCatalog).where(
+                OfficeDocumentCatalog.company_id == company_id,
+                OfficeDocumentCatalog.namespace == namespace,
+                OfficeDocumentCatalog.title == title.strip(),
+            )
+            if parent_catalog_id is None:
+                query = query.where(OfficeDocumentCatalog.parent_catalog_id.is_(None))
+            else:
+                query = query.where(OfficeDocumentCatalog.parent_catalog_id == parent_catalog_id)
+            result = await session.execute(query.limit(1))
+            return result.scalar_one_or_none()
+
+    async def get_or_create_child_by_title(
+        self,
+        *,
+        company_id: str,
+        namespace: str,
+        parent_catalog_id: str | None,
+        title: str,
+        owner_user_id: str,
+    ) -> OfficeDocumentCatalog:
+        existing = await self.find_child_by_title(
+            company_id=company_id,
+            namespace=namespace,
+            parent_catalog_id=parent_catalog_id,
+            title=title,
+        )
+        if existing is not None:
+            return existing
+        return await self.create(
+            company_id=company_id,
+            namespace=namespace,
+            title=title,
+            owner_user_id=owner_user_id,
+            parent_catalog_id=parent_catalog_id,
+        )
+
     async def update_catalog(
         self,
         catalog_id: str,

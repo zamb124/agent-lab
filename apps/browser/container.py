@@ -65,7 +65,7 @@ class BrowserContainer(BaseContainer):
             self._browser_runtime = BrowserRuntimeFacade(
                 settings_to_runtime_view(get_browser_settings()),
                 redis_client=self.redis_client,
-                file_processor=self.file_processor,
+                files_service=self.files_service,
             )
         return self._browser_runtime
 

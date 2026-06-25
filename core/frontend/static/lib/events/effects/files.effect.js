@@ -1,10 +1,12 @@
 /**
- * Эффект files — загрузка/получение файлов через /api/v1/files/.
+ * Эффект files — загрузка/получение файлов через /frontend/api/v1/files/.
  */
 
 import { httpRequest } from '../http.js';
 import { CoreEvents } from '../contract.js';
 import { FILES_EVENTS } from '../reducers/files.js';
+
+const FILES_API_PREFIX = '/frontend/api/v1/files';
 
 function _fileIdFromPayload(payload) {
     const file = payload && payload.file && typeof payload.file === 'object' ? payload.file : payload;
@@ -25,17 +27,21 @@ function _errorMessage(err) {
     return String(err && err.message ? err.message : err);
 }
 
-export function createFilesEffect({ baseUrl }) {
-    const base = baseUrl || '';
+export function createFilesEffect() {
     return async function filesEffect(event, ctx) {
         switch (event.type) {
             case FILES_EVENTS.UPLOAD_REQUESTED: {
                 const file = event.payload && event.payload.file;
                 if (!file) throw new Error('files.effect: payload.file required');
+                const specJson = event.payload.spec;
+                if (typeof specJson !== 'string' || specJson.length === 0) {
+                    throw new Error('files.effect: payload.spec (JSON FileCreateSpec) required');
+                }
                 const fd = new FormData();
                 fd.append('file', file);
+                fd.append('spec', specJson);
                 try {
-                    const result = await httpRequest({ method: 'POST', url: `${base}/api/v1/files/`, body: fd });
+                    const result = await httpRequest({ method: 'POST', url: `${FILES_API_PREFIX}/`, body: fd });
                     ctx.dispatch(FILES_EVENTS.UPLOAD_COMPLETED, { file: result }, { correlation_id: event.meta.correlation_id || event.id, causation_id: event.id, source: 'http' });
                 } catch (err) {
                     ctx.dispatch(FILES_EVENTS.UPLOAD_FAILED, { message: _errorMessage(err) }, { correlation_id: event.meta.correlation_id || event.id, causation_id: event.id, source: 'http' });
@@ -46,7 +52,7 @@ export function createFilesEffect({ baseUrl }) {
                 const fileId = event.payload && event.payload.file_id;
                 if (!fileId) throw new Error('files.effect: file_id required');
                 try {
-                    const file = await httpRequest({ method: 'GET', url: `${base}/api/v1/files/${encodeURIComponent(fileId)}` });
+                    const file = await httpRequest({ method: 'GET', url: `${FILES_API_PREFIX}/${encodeURIComponent(fileId)}` });
                     ctx.dispatch(FILES_EVENTS.LOADED, { file }, { causation_id: event.id, source: 'http' });
                 } catch (err) {
                     ctx.dispatch(FILES_EVENTS.LOAD_FAILED, { file_id: fileId, message: _errorMessage(err) }, { causation_id: event.id, source: 'http' });

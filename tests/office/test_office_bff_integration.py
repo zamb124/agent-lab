@@ -17,6 +17,7 @@ from apps.office.container import get_office_container
 from apps.office.services.callback_token import encode_callback_context_token
 from apps.office.services.onlyoffice_jwt import decode_download_token
 from tests.fixtures.aiohttp_ephemeral import tcp_site_assigned_port
+from tests.office.helpers import upload_office_file_bytes
 
 pytestmark = [pytest.mark.timeout(120)]
 
@@ -43,6 +44,20 @@ async def _first_accessible_catalog_id(office_client, headers: dict[str, str]) -
         assert cr.status_code == 200
         return cr.json()["catalog_id"]
     return items[0]["catalog_id"]
+
+
+async def _dedicated_catalog_id(
+    office_client,
+    headers: dict[str, str],
+    unique_id: str,
+) -> str:
+    cr = await office_client.post(
+        "/documents/api/v1/catalogs",
+        headers=headers,
+        json={"title": f"bff-test-{unique_id}"},
+    )
+    assert cr.status_code == 200
+    return cr.json()["catalog_id"]
 
 
 @pytest.fixture
@@ -107,7 +122,7 @@ async def test_office_list_namespaces_uses_shared_namespace_repository(
 
 @pytest.mark.asyncio
 async def test_office_empty_document_list_rename_delete(office_client, auth_headers_system, unique_id):
-    catalog_id = await _first_accessible_catalog_id(office_client, auth_headers_system)
+    catalog_id = await _dedicated_catalog_id(office_client, auth_headers_system, unique_id)
     title = f"Empty doc {unique_id}"
     cr = await office_client.post(
         "/documents/api/v1/documents/empty",
@@ -158,7 +173,7 @@ async def test_office_empty_document_list_rename_delete(office_client, auth_head
 async def test_office_list_documents_search_and_sort(
     office_client, auth_headers_system, unique_id
 ):
-    catalog_id = await _first_accessible_catalog_id(office_client, auth_headers_system)
+    catalog_id = await _dedicated_catalog_id(office_client, auth_headers_system, unique_id)
     alpha_title = f"Alpha {unique_id}"
     beta_title = f"Beta {unique_id}"
     for title in (alpha_title, beta_title):
@@ -216,24 +231,20 @@ async def test_office_upload_csv_cell_type(office_client, auth_headers_system, u
 @pytest.mark.asyncio
 async def test_open_existing_file_as_document_is_same_file_and_idempotent(
     office_client,
+    frontend_client,
     auth_headers_system,
     unique_id,
 ):
     catalog_id = await _first_accessible_catalog_id(office_client, auth_headers_system)
-    upload = await office_client.post(
-        "/documents/api/v1/files/",
-        headers=auth_headers_system,
-        files={
-            "file": (
-                f"flow-table-{unique_id}.csv",
-                io.BytesIO(b"a,b\n1,2\n"),
-                "text/csv",
-            )
-        },
-        data={"public": "false"},
+
+    uploaded = await upload_office_file_bytes(
+        frontend_client,
+        auth_headers_system,
+        filename=f"flow-table-{unique_id}.csv",
+        content=b"a,b\n1,2\n",
+        content_type="text/csv",
     )
-    assert upload.status_code == 200, upload.text
-    file_id = upload.json()["file_id"]
+    file_id = str(uploaded["file_id"])
 
     first = await office_client.post(
         "/documents/api/v1/documents/from-file",
@@ -399,7 +410,7 @@ async def test_onlyoffice_callback_saves_to_s3(
     assert post.json()["error"] == 0
 
     c = get_office_container()
-    meta = await c.file_processor.get_file_record(file_id)
+    meta = await c.files_service.get(file_id)
     assert meta is not None
     expected_checksum = hashlib.sha256(new_body).hexdigest()
     assert meta.checksum == expected_checksum
@@ -423,7 +434,7 @@ async def test_onlyoffice_callback_saves_to_s3(
     assert post_dup.status_code == 200
     assert post_dup.json()["error"] == 0
 
-    meta_after = await c.file_processor.get_file_record(file_id)
+    meta_after = await c.files_service.get(file_id)
     assert meta_after.checksum == expected_checksum
     assert meta_after.file_size == len(new_body)
 

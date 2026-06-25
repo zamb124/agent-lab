@@ -10,11 +10,12 @@ from __future__ import annotations
 from datetime import datetime, timezone
 from typing import TYPE_CHECKING
 
-from apps.flows.src.clients.mcp_client import MCPClient
+from apps.flows.src.clients.mcp_client import MCPClient, MCPClientError
 from apps.flows.src.models.enums import CodeMode
 from apps.flows.src.models.mcp import MCPDiscoveredTool, MCPServerConfig
 from apps.flows.src.models.tool_reference import ToolReference
 from apps.flows.src.services.mcp_defaults import build_default_mcp_servers
+from core.context import get_context
 from core.integrations.mcp import mcp_tool_reference_id
 from core.logging import get_logger
 
@@ -28,12 +29,24 @@ def _mcp_headers_need_variables(server_config: MCPServerConfig) -> bool:
     return any("@var:" in str(v) for v in server_config.headers.values())
 
 
-async def _mcp_resolved_variables(
-    container: FlowRuntimeContainer, server_config: MCPServerConfig
+async def resolve_mcp_client_variables(
+    container: FlowRuntimeContainer,
+    server_config: MCPServerConfig,
 ) -> dict[str, str]:
-    if not _mcp_headers_need_variables(server_config):
-        return {}
-    return await container.variables_service.get_all_resolved_vars()
+    """Переменные для MCPClient: @var: headers и platform context propagation."""
+    variables: dict[str, str] = {}
+    if _mcp_headers_need_variables(server_config):
+        variables = await container.variables_service.get_company_variables_map()
+    if server_config.propagate_platform_context:
+        ctx = get_context()
+        if ctx is None or ctx.active_company is None:
+            raise MCPClientError(
+                "Platform MCP requires authenticated user and company context"
+            )
+        variables = dict(variables)
+        variables["company_id"] = ctx.active_company.company_id
+        variables["user_id"] = ctx.user.user_id
+    return variables
 
 
 async def sync_mcp_server_tools(
@@ -49,7 +62,7 @@ async def sync_mcp_server_tools(
 
     Возвращает (tool_ids, список инструментов с MCP) для HTTP-ответа и логов.
     """
-    variables = await _mcp_resolved_variables(container, server_config)
+    variables = await resolve_mcp_client_variables(container, server_config)
     client = MCPClient(server_config, variables=variables)
     _ = await client.initialize()
     tools = await client.list_tools()

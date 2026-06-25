@@ -76,6 +76,12 @@ class _RuntimeContainer:
     billing_service = _BillingService()
     workflow_runtime = _NoopWorkflowRuntime()
 
+    @property
+    def redis_client(self):
+        from apps.flows.src.container import get_container
+
+        return get_container().redis_client
+
 
 def _runtime_container() -> FlowRuntimeContainer:
     return cast(FlowRuntimeContainer, _RuntimeContainer())

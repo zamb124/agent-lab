@@ -11,10 +11,11 @@ pytestmark = pytest.mark.asyncio
 
 
 async def test_add_comment_and_list_ordered(worktracker_service, unique_id: str) -> None:
+    user_id = f"user_{unique_id}"
     item = await worktracker_service.create_manual_task(
         company_id="system",
         title=f"cmt-{unique_id}",
-        created_by=SystemActor(),
+        created_by=UserActor(user_id=user_id),
     )
     first = await worktracker_service.add_comment(
         company_id="system",

@@ -69,10 +69,11 @@ import { resolveFileIconKey } from '@platform/lib/utils/file-icons.js';
 import { escapeHtml as _escapeHtmlCanon } from '@platform/lib/utils/escape-html.js';
 import { formatPlatformDate, formatPlatformTime } from '@platform/lib/utils/format-platform-date.js';
 import { stripOuterMarkdownCodeFence } from '@platform/lib/utils/strip-outer-markdown-fence.js';
+import { buildPlatformAuxiliaryFileCreateSpecJson } from '@platform/lib/utils/file-create-spec.js';
 
 const ENTITIES_NAME = 'crm/entities';
 const ENTITY_UPDATE_OP = 'crm/entity_update';
-const FILE_UPLOAD_OP = 'crm/file_upload';
+const FILE_UPLOAD_OP = 'platform/file_create';
 const ATTACHMENT_UPLOAD_OP = 'crm/attachment_upload';
 const ATTACHMENT_DELETE_OP = 'crm/attachment_delete';
 const VOICE_OP = 'crm/note_voice_input';
@@ -2841,7 +2842,10 @@ export class CRMNoteCardView extends PlatformElement {
             }
         } else {
             for (const file of files) {
-                this._fileUpload.run({ file });
+                const spec = buildPlatformAuxiliaryFileCreateSpecJson({
+                    retentionKind: 'platform_default',
+                });
+                this._fileUpload.run({ file, spec });
             }
         }
         this._uploadTargetMode = 'edit';

@@ -1,0 +1,106 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <link rel="icon" type="image/png" sizes="32x32" href="/logo.png" />
+    <link rel="icon" type="image/png" sizes="192x192" href="/logo.png" />
+    <link rel="apple-touch-icon" sizes="180x180" href="/logo.png" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    
+    <!-- Content Security Policy -->
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline' 'wasm-unsafe-eval' https://www.googletagmanager.com https://www.google-analytics.com https://ssl.google-analytics.com https://tagmanager.google.com https://apis.google.com; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; font-src 'self' data:; connect-src 'self' https://*.firebaseio.com https://*.googleapis.com https://*.cloudfunctions.net https://*.google-analytics.com https://*.analytics.google.com https://*.googletagmanager.com https://analytics.google.com https://region1.google-analytics.com https://www.google-analytics.com https://identitytoolkit.googleapis.com https://securetoken.googleapis.com; frame-src https://accounts.google.com https://apis.google.com https://github.com https://agenttrustai.firebaseapp.com; frame-ancestors 'none'; base-uri 'self'; form-action 'self';" />
+    
+    <!-- Primary Meta Tags -->
+    <title>AgentTrust - A2A and Emails for AI Agents</title>
+    <meta name="title" content="AgentTrust - A2A and Emails for AI Agents" />
+    <meta name="description" content="A2A and emails for AI agents. Agent-to-agent messaging, email addresses for AI agents, and verified identity for autonomous workflows." />
+    <meta name="keywords" content="email for AI agents, AI agent email address, cloud storage for AI agents, AI agent storage, agent-to-agent messaging, A2A messaging, A2A protocol, AI agent identity, AI agent infrastructure, MCP server for AI agents, how to give AI agent an email, AI agent inbox, AI agent cloud drive, autonomous AI agents, agent communication, prompt injection detection, human-in-the-loop AI" />
+    <link rel="canonical" href="https://agenttrust.ai" />
+    
+    <!-- Open Graph / Facebook -->
+    <meta property="og:type" content="website" />
+    <meta property="og:url" content="https://agenttrust.ai" />
+    <meta property="og:title" content="AgentTrust - A2A and Emails for AI Agents" />
+    <meta property="og:description" content="A2A and emails for AI agents. Agent-to-agent messaging and verified identity for autonomous workflows." />
+    <meta property="og:image" content="https://agenttrust.ai/logo.png" />
+    
+    <!-- Twitter -->
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:url" content="https://agenttrust.ai" />
+    <meta name="twitter:title" content="AgentTrust - A2A and Emails for AI Agents" />
+    <meta name="twitter:description" content="A2A and emails for AI agents. Agent-to-agent messaging and verified identity for autonomous workflows." />
+    <meta name="twitter:image" content="https://agenttrust.ai/logo.png" />
+    
+    <!-- Structured Data -->
+    <script type="application/ld+json">
+    {
+      "@context": "https://schema.org",
+      "@type": "SoftwareApplication",
+      "name": "AgentTrust",
+      "applicationCategory": "SecurityApplication",
+      "operatingSystem": "Web",
+      "offers": {
+        "@type": "Offer",
+        "price": "0",
+        "priceCurrency": "USD"
+      },
+      "description": "Identity, email, cloud storage, and A2A messaging for AI agents. Give every agent a dedicated @agenttrust.ai inbox, agent-native cloud storage, and instant messaging with other agents."
+    }
+    </script>
+    
+    <!-- FAQ Schema -->
+    <script type="application/ld+json">
+    {
+      "@context": "https://schema.org",
+      "@type": "FAQPage",
+      "mainEntity": [
+        {
+          "@type": "Question",
+          "name": "How does secure agent-to-agent collaboration work?",
+          "acceptedAnswer": {
+            "@type": "Answer",
+            "text": "Secure A2A (agent-to-agent) collaboration requires verified identities, protected communication channels, and human oversight. AgentTrust provides all three: every agent gets a verifiable identity so collaborating agents know who they're working with, all messages are scanned for prompt injection attacks via InjectionGuard, and human-in-the-loop controls let organizations approve, hold, or reject interactions. Agents discover each other through the A2A protocol and communicate securely through AgentTrust's relay or direct endpoints."
+          }
+        },
+        {
+          "@type": "Question",
+          "name": "What is prompt injection and how does it affect agent-to-agent communication?",
+          "acceptedAnswer": {
+            "@type": "Answer",
+            "text": "Prompt injection is an attack where malicious text is crafted to override an AI agent's instructions. In A2A workflows, a compromised or malicious agent could send injected messages to hijack another agent's behavior, exfiltrate data, or bypass safety policies. AgentTrust's InjectionGuard scans every inbound message — whether via relay or direct A2A endpoint — using pattern-based rules and LLM-powered analysis to detect and block these attacks before they reach your agent."
+          }
+        },
+        {
+          "@type": "Question",
+          "name": "How does agent identity verification work in A2A collaboration?",
+          "acceptedAnswer": {
+            "@type": "Answer",
+            "text": "When an AI agent collaborates with another agent through the A2A protocol, it includes a TrustCode — a one-time cryptographic verification code. The receiving agent can verify this code instantly through AgentTrust to confirm the sender's identity, parent organization, permissions, and allowlist status. Combined with agent cards for discovery and allowlist policies for access control, this creates a trusted foundation for multi-agent collaboration."
+          }
+        },
+        {
+          "@type": "Question",
+          "name": "How do I get an email address for an AI agent?",
+          "acceptedAnswer": {
+            "@type": "Answer",
+            "text": "Register your agent on AgentTrust and it automatically receives a dedicated email address at @agents.agenttrust.ai. Your agent can send and receive emails, manage threads, handle attachments, and reply — all via the AgentTrust API or MCP tools. No SMTP configuration required. Emails work with any external address, so your agent can communicate with humans and other agents alike."
+          }
+        },
+        {
+          "@type": "Question",
+          "name": "How do I send messages between AI agents?",
+          "acceptedAnswer": {
+            "@type": "Answer",
+            "text": "AgentTrust provides two ways for AI agents to communicate: A2A relay messaging for real-time agent-to-agent conversations using the A2A protocol with signed and verified messages, and Agent Email for asynchronous communication via dedicated @agents.agenttrust.ai email addresses. Both methods include identity verification, prompt injection scanning, and full audit trails."
+          }
+        }
+      ]
+    }
+    </script>
+    <script type="module" crossorigin src="/assets/index-BnfPbYdY.js"></script>
+    <link rel="stylesheet" crossorigin href="/assets/index-BDHwY5GX.css">
+  </head>
+  <body>
+    <div id="root"></div>
+  </body>
+</html>

@@ -6,9 +6,9 @@
 - POST /rag/api/v1/search - глобальный поиск по нескольким namespaces
 """
 
-from io import BytesIO
-
 import pytest
+
+from tests.rag.helpers import upload_rag_document_bytes, wait_rag_document_status
 
 # Несколько HTTP + эмбеддинг/поиск за один тест; глобальный timeout=5s ловит SIGALRM,
 # фикстура rag_client закрывает httpx-клиент при teardown — возможен RuntimeError на await post.
@@ -17,43 +17,36 @@ pytestmark = pytest.mark.timeout(60)
 
 @pytest.mark.asyncio
 @pytest.mark.real_taskiq
-async def test_search_documents(rag_client, unique_namespace_name, auth_headers_system):
+async def test_search_documents(
+    frontend_client,
+    rag_client,
+    unique_namespace_name,
+    unique_id,
+    auth_headers_system,
+):
     """POST /namespaces/{id}/search находит документы по семантике"""
-    # Создаем namespace
     ns_response = await rag_client.post(
         "/rag/api/v1/namespaces",
         json={"name": unique_namespace_name},
-        headers=auth_headers_system
+        headers=auth_headers_system,
     )
     namespace_id = ns_response.json()["name"]
 
-    # Загружаем документ с контентом
-    content = b"Python is a programming language. It is used for web development and data science."
-    files = {"file": ("python.txt", BytesIO(content), "text/plain")}
-    doc_response = await rag_client.post(
-        f"/rag/api/v1/namespaces/{namespace_id}/documents",
-        files=files,
-        headers=auth_headers_system
+    content = (
+        f"Python is a programming language marker {unique_id}. "
+        "It is used for web development and data science."
+    ).encode()
+    doc_response = await upload_rag_document_bytes(
+        frontend_client,
+        rag_client,
+        auth_headers_system,
+        namespace_id=namespace_id,
+        filename="python.txt",
+        content=content,
+        content_type="text/plain",
     )
-    assert doc_response.status_code == 202  # Async processing
-    document_id = doc_response.json()["document_id"]
-
-    import asyncio
-    max_wait = 90
-    wait_interval = 0.25
-    elapsed = 0
-
-    while elapsed < max_wait:
-        status_response = await rag_client.get(
-            f"/rag/api/v1/documents/{document_id}/status",
-            headers=auth_headers_system
-        )
-        if status_response.status_code == 200:
-            status = status_response.json().get("status")
-            if status == "completed":
-                break
-        await asyncio.sleep(wait_interval)
-        elapsed += wait_interval
+    document_id = doc_response["document_id"]
+    await wait_rag_document_status(rag_client, document_id, auth_headers_system)
 
     # Ищем по семантике
     response = await rag_client.post(
@@ -82,7 +75,12 @@ async def test_search_documents(rag_client, unique_namespace_name, auth_headers_
 
 
 @pytest.mark.asyncio
-async def test_search_documents_with_filters(rag_client, unique_namespace_name, auth_headers_system):
+async def test_search_documents_with_filters(
+    frontend_client,
+    rag_client,
+    unique_namespace_name,
+    auth_headers_system,
+):
     """POST /namespaces/{id}/search с фильтрами"""
     # Создаем namespace
     ns_response = await rag_client.post(
@@ -94,11 +92,14 @@ async def test_search_documents_with_filters(rag_client, unique_namespace_name, 
 
     # Загружаем документ
     content = b"FastAPI is a web framework for building APIs with Python."
-    files = {"file": ("fastapi.txt", BytesIO(content), "text/plain")}
-    await rag_client.post(
-        f"/rag/api/v1/namespaces/{namespace_id}/documents",
-        files=files,
-        headers=auth_headers_system
+    await upload_rag_document_bytes(
+        frontend_client,
+        rag_client,
+        auth_headers_system,
+        namespace_id=namespace_id,
+        filename="fastapi.txt",
+        content=content,
+        content_type="text/plain",
     )
 
     # Поиск с фильтрами (пустой фильтр = без фильтрации)
@@ -146,7 +147,12 @@ async def test_search_empty_namespace(rag_client, unique_namespace_name, auth_he
 
 
 @pytest.mark.asyncio
-async def test_search_with_limit(rag_client, unique_namespace_name, auth_headers_system         ):
+async def test_search_with_limit(
+    frontend_client,
+    rag_client,
+    unique_namespace_name,
+    auth_headers_system,
+):
     """POST /namespaces/{id}/search ограничивает количество результатов"""
     # Создаем namespace
     ns_response = await rag_client.post(
@@ -159,11 +165,14 @@ async def test_search_with_limit(rag_client, unique_namespace_name, auth_headers
     # Загружаем несколько документов
     for i in range(3):
         content = f"Document {i} about Python programming and web development.".encode()
-        files = {"file": (f"doc{i}.txt", BytesIO(content), "text/plain")}
-        await rag_client.post(
-            f"/rag/api/v1/namespaces/{namespace_id}/documents",
-            files=files,
-            headers=auth_headers_system
+        await upload_rag_document_bytes(
+            frontend_client,
+            rag_client,
+            auth_headers_system,
+            namespace_id=namespace_id,
+            filename=f"doc{i}.txt",
+            content=content,
+            content_type="text/plain",
         )
 
     # Поиск с лимитом
@@ -180,7 +189,12 @@ async def test_search_with_limit(rag_client, unique_namespace_name, auth_headers
 
 
 @pytest.mark.asyncio
-async def test_search_relevance_score(rag_client, unique_namespace_name, auth_headers_system):
+async def test_search_relevance_score(
+    frontend_client,
+    rag_client,
+    unique_namespace_name,
+    auth_headers_system,
+):
     """Результаты поиска имеют score релевантности"""
     # Создаем namespace
     ns_response = await rag_client.post(
@@ -192,11 +206,14 @@ async def test_search_relevance_score(rag_client, unique_namespace_name, auth_he
 
     # Загружаем документ
     content = b"Machine learning is a subset of artificial intelligence."
-    files = {"file": ("ml.txt", BytesIO(content), "text/plain")}
-    await rag_client.post(
-        f"/rag/api/v1/namespaces/{namespace_id}/documents",
-        files=files,
-        headers=auth_headers_system
+    await upload_rag_document_bytes(
+        frontend_client,
+        rag_client,
+        auth_headers_system,
+        namespace_id=namespace_id,
+        filename="ml.txt",
+        content=content,
+        content_type="text/plain",
     )
 
     # Поиск
@@ -219,7 +236,12 @@ async def test_search_relevance_score(rag_client, unique_namespace_name, auth_he
 
 @pytest.mark.asyncio
 @pytest.mark.integration
-async def test_global_search(rag_client, unique_id, auth_headers_system):
+async def test_global_search(
+    frontend_client,
+    rag_client,
+    unique_id,
+    auth_headers_system,
+):
     """POST /search выполняет глобальный поиск по нескольким namespaces"""
     # Создаем два namespace
     ns1_name = f"test_ns1_{unique_id}"
@@ -240,18 +262,24 @@ async def test_global_search(rag_client, unique_id, auth_headers_system):
     ns2_id = ns2_response.json()["name"]
 
     # Загружаем документы в оба namespace
-    files1 = {"file": ("doc1.txt", BytesIO(b"Python programming"), "text/plain")}
-    await rag_client.post(
-        f"/rag/api/v1/namespaces/{ns1_id}/documents",
-        files=files1,
-        headers=auth_headers_system
+    await upload_rag_document_bytes(
+        frontend_client,
+        rag_client,
+        auth_headers_system,
+        namespace_id=ns1_id,
+        filename="doc1.txt",
+        content=b"Python programming",
+        content_type="text/plain",
     )
 
-    files2 = {"file": ("doc2.txt", BytesIO(b"JavaScript programming"), "text/plain")}
-    await rag_client.post(
-        f"/rag/api/v1/namespaces/{ns2_id}/documents",
-            files=files2,
-        headers=auth_headers_system
+    await upload_rag_document_bytes(
+        frontend_client,
+        rag_client,
+        auth_headers_system,
+        namespace_id=ns2_id,
+        filename="doc2.txt",
+        content=b"JavaScript programming",
+        content_type="text/plain",
     )
 
     # Глобальный поиск

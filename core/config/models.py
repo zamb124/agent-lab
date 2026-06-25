@@ -1784,6 +1784,60 @@ class S3Config(BaseModel):
     buckets: dict[str, S3BucketConfig] = Field(default_factory=dict)
 
 
+class FilesRetentionConfig(BaseModel):
+    default_ttl_seconds: int = Field(default=864000, ge=0)
+    flow_session_ttl_seconds: int = Field(default=1209600, ge=0)
+    sync_speech_segment_ttl_seconds: int = Field(default=1209600, ge=0)
+    browser_artifact_ttl_seconds: int = Field(default=2592000, ge=0)
+    generated_ephemeral_ttl_seconds: int = Field(default=604800, ge=0)
+    office_document_ttl_seconds: int = Field(default=31536000, ge=0)
+    purge_enabled: bool = Field(default=True)
+    purge_batch_size: int = Field(default=200, ge=1, le=1000)
+    purge_cron: str = Field(default="0 * * * *")
+    backfill_batch_size: int = Field(default=200, ge=1, le=1000)
+
+
+class FilesConfig(BaseModel):
+    retention: FilesRetentionConfig = Field(default_factory=FilesRetentionConfig)
+    max_upload_bytes: int = Field(default=25 * 1024 * 1024, ge=1024)
+
+
+class MCPBrandingConfig(BaseModel):
+    """Seed глобальных иконок MCP из git-бандла."""
+
+    bundle_path: str = Field(
+        default="apps/flows/mcp_branding/manifest.yaml",
+        description="Путь к manifest.yaml относительно корня репозитория",
+    )
+    seed_after_crawl: bool = Field(
+        default=True,
+        description="После crawl registry создавать branding для новых catalog_id",
+    )
+
+
+class MCPCatalogConfig(BaseModel):
+    """Глобальный catalog HTTPS MCP + provision в компании."""
+
+    enabled: bool = Field(default=True)
+    auto_provision: Literal["all_verified", "approved_only", "disabled"] = Field(
+        default="approved_only",
+    )
+    registry_base_url: str = Field(default="https://registry.modelcontextprotocol.io")
+    crawl_cron: str = Field(default="0 * * * *")
+    crawl_run_on_start: bool = Field(
+        default=True,
+        description="Запустить mcp_catalog_crawl_task сразу при старте scheduler-api",
+    )
+    resync_tools_cron: str = Field(default="0 * * * *")
+    verify_timeout_seconds: float = Field(default=30.0, ge=1.0, le=300.0)
+    crawl_page_limit: int = Field(default=100, ge=1, le=500)
+    max_verify_per_crawl: int = Field(default=100, ge=0, le=5000)
+    allowlist_path: str = Field(
+        default="apps/flows/mcp_catalog_allowlist.yaml",
+        description="Путь к yaml allowlist относительно корня репозитория",
+    )
+
+
 class SpeechToChatConfig(BaseModel):
     """Серверный egress «речь в ленту»: сегменты LiveKit и опрос TaskIQ в sync worker."""
 

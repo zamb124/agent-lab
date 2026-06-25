@@ -4,12 +4,12 @@
  * 5-шаговый мастер поверх PlatformModal:
  *   0. mode      — graph (полный граф сущностей и связей) | notes_only (только заметки).
  *   1. types     — какие типы сущностей извлекать; пусто = все типы из namespace.
- *   2. source    — файлы (через crm/file_upload, multipart) и/или вставленный текст.
+ *   2. source    — файлы (через platform/file_create) и/или вставленный текст.
  *   3. settings  — split_by_headings, chunk_max_chars (2000..500000).
  *   4. summary   — финальный обзор и запуск crm/task_knowledge_import_start.
  *
  * Шаг source:
- *   - upload файла идёт через POST /crm/api/v1/files/, который возвращает file_id;
+ *   - upload файла идёт через POST /frontend/api/v1/files/ (platform/file_create),
  *     id-шники накапливаются в this._files и подставляются в payload как
  *     source_file_ids.
  *   - paste-area — обычный textarea, отдаётся в payload как source_text.
@@ -27,6 +27,7 @@ import { CoreEvents } from '@platform/lib/events/index.js';
 import { selectCrmApiNamespace } from '../utils/crm-namespace-select.js';
 import { registerModalKind } from '@platform/lib/utils/modal-registry.js';
 import { resolveFileIconKey } from '@platform/lib/utils/file-icons.js';
+import { buildPlatformAuxiliaryFileCreateSpecJson } from '@platform/lib/utils/file-create-spec.js';
 import '@platform/lib/components/platform-icon.js';
 import '@platform/lib/components/platform-switch.js';
 import '@platform/lib/components/fields/platform-field.js';
@@ -275,7 +276,7 @@ export class CRMKnowledgeImportModal extends PlatformModal {
         this._dropzoneActive = false;
 
         this._entityTypes = this.useResource('crm/entity_types', { autoload: false });
-        this._fileUpload = this.useOp('crm/file_upload');
+        this._fileUpload = this.useOp('platform/file_create');
         this._startImport = this.useOp('crm/task_knowledge_import_start');
 
         this._crmNamespaceSel = this.select(selectCrmApiNamespace);
@@ -356,7 +357,10 @@ export class CRMKnowledgeImportModal extends PlatformModal {
         this._uploading = true;
         const next = [...this._files];
         for (const file of rawFiles) {
-            const result = await this._awaitOp(this._fileUpload, { file });
+            const spec = buildPlatformAuxiliaryFileCreateSpecJson({
+                retentionKind: 'crm_knowledge_import',
+            });
+            const result = await this._awaitOp(this._fileUpload, { file, spec });
             if (!result || typeof result.file_id !== 'string') {
                 this._uploading = false;
                 throw new Error('CRMKnowledgeImportModal: upload returned no file_id');

@@ -31,6 +31,7 @@ import { collectCurrentChatFiles } from '../_helpers/chat-files.js';
 import { a2aStateMessagesToChatMessages } from '../_helpers/chat-session-messages.js';
 import { relayA2aVoiceStreamRpcFrame } from '../_helpers/relay-voice-a2a-to-chat.js';
 import { resolveFlowsChatTaskId } from '../_helpers/resolve-flows-chat-task-id.js';
+import { buildFlowSessionFileCreateSpecJson } from '@platform/lib/utils/file-create-spec.js';
 import {
     readTtsOutputEnabled,
     toggleTtsOutputEnabled,
@@ -195,7 +196,7 @@ export class ChatPage extends PlatformPage {
         this._chat = this.useResource('flows/chat');
         this._send = this.useOp('flows/chat_send');
         this._cancel = this.useOp('flows/chat_cancel');
-        this._upload = this.useOp('flows/file_upload');
+        this._upload = this.useOp('platform/file_create');
         this._sessionState = this.useOp('flows/session_state');
         this._flows = this.useResource('flows/flows');
         this._activeCompanySel = this.select((s) => authActiveCompanyId(s));
@@ -762,22 +763,35 @@ export class ChatPage extends PlatformPage {
     async _uploadChatFiles(files) {
         const list = Array.isArray(files) ? files : [];
         const uploaded = [];
+        const contextId = this._chat.state?.currentContextId;
+        if (typeof contextId !== 'string' || contextId.length === 0) {
+            throw new Error('flows chat: currentContextId required for file upload');
+        }
+        if (typeof this.flowId !== 'string' || this.flowId.length === 0) {
+            throw new Error('flows chat: flowId required for file upload');
+        }
+        const sessionId = `${this.flowId}:${contextId}`;
+        const spec = buildFlowSessionFileCreateSpecJson({
+            flowId: this.flowId,
+            sessionId,
+            isPublic: false,
+        });
         for (const file of list) {
-            const result = await this._upload.run({ file, public: 'false' });
+            const result = await this._upload.run({ file, spec });
             if (!result || typeof result.file_id !== 'string' || result.file_id.length === 0) {
-                throw new Error('flows chat: file_upload op must return file_id');
+                throw new Error('flows chat: platform/file_create must return file_id');
             }
             if (typeof result.original_name !== 'string' || result.original_name.length === 0) {
-                throw new Error('flows chat: file_upload op must return original_name');
+                throw new Error('flows chat: platform/file_create must return original_name');
             }
             if (typeof result.content_type !== 'string' || result.content_type.length === 0) {
-                throw new Error('flows chat: file_upload op must return content_type');
+                throw new Error('flows chat: platform/file_create must return content_type');
             }
             if (typeof result.file_size !== 'number') {
-                throw new Error('flows chat: file_upload op must return file_size');
+                throw new Error('flows chat: platform/file_create must return file_size');
             }
             if (typeof result.url !== 'string' || result.url.length === 0) {
-                throw new Error('flows chat: file_upload op must return url');
+                throw new Error('flows chat: platform/file_create must return url');
             }
             uploaded.push({
                 file_id: result.file_id,

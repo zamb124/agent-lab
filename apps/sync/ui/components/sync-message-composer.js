@@ -12,11 +12,12 @@
  * `useOp('sync/messages_send')`, `useOp('sync/messages_edit')`.
  * Локальный optimistic-state — slice `sync/messages_store`
  * (`useSlice('sync/messages_store').addOptimistic / failOptimistic / setReplyMode / setEditMode`).
- * Загрузка файла — `useOp('sync/file_upload')`.
+ * Загрузка файла — `useOp('platform/file_create')` с FileCreateSpec.
  */
 
 import { html, css } from 'lit';
 import { PlatformElement } from '@platform/lib/platform-element/index.js';
+import { buildSyncMessageFileCreateSpecJson } from '@platform/lib/utils/file-create-spec.js';
 import '@platform/lib/components/platform-icon.js';
 import { SYNC_MESSAGE_TEXT_MAX_CHARS } from './_helpers/sync-limits.js';
 import { resolveDisplayName } from '../_helpers/sync-id-resolvers.js';
@@ -307,7 +308,7 @@ export class SyncMessageComposer extends PlatformElement {
         this._mentionIndex = 0;
         this._sendOp = this.useOp('sync/messages_send');
         this._editOp = this.useOp('sync/messages_edit');
-        this._upload = this.useOp('sync/file_upload');
+        this._upload = this.useOp('platform/file_create');
         this._typing = this.useOp('sync/channel_typing');
         this._members = this.useResource('sync/company_members', { autoload: true });
         this._store = this.useSlice('sync/messages_store');
@@ -530,7 +531,11 @@ export class SyncMessageComposer extends PlatformElement {
     }
 
     async _uploadFile(file, opts) {
-        await this._upload.run({ file });
+        if (typeof this.channelId !== 'string' || this.channelId.length === 0) {
+            throw new Error('sync-message-composer: channelId required for file upload');
+        }
+        const spec = buildSyncMessageFileCreateSpecJson({ channelId: this.channelId });
+        await this._upload.run({ file, spec });
         const result = this._upload.lastResult;
         if (!result || typeof result.file_id !== 'string' || result.file_id === '') return;
         const meta = typeof opts === 'object' && opts !== null ? opts : null;

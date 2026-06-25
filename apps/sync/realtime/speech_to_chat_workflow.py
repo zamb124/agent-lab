@@ -44,9 +44,12 @@ from core.files.audio_silence import (
     volumedetect_max_volume_db_from_bytes,
 )
 from core.files.audio_transcode import transcode_audio_bytes_to_m4a_aac
+from core.files.create_spec import FileSourceKind
+from core.files.default_storage import get_default_storage
 from core.files.models import AudioAttachmentContent, AudioTranscriptionStatus
-from core.files.processors import FileProcessor
+from core.files.registry import default_retention_for_source
 from core.files.s3_client import S3ClientFactory
+from core.files.storage import retention_fields_from_spec
 from core.http import get_httpx_client
 from core.logging import get_logger
 from core.models.identity_models import User
@@ -306,7 +309,7 @@ async def _normalize_egress_audio_for_upload_pipeline(
     """
     Форматы сегментов egress (ADTS AAC, MPEG-TS, fMP4 .m4s) приводим к M4A+faststart,
     как после перекодирования в обычной загрузке голосового для Safari.
-    Остальное оставляем — дальше тот же FileProcessor, что и POST .../files/.
+    Остальное оставляем — дальше тот же FilesService, что и POST .../files/.
     """
     base_content_type = content_type.split(";")[0].strip().lower()
     suf = Path(original_name).suffix.lower()
@@ -395,23 +398,27 @@ async def _post_segment_file_as_message(
         raise ValueError("Не удалось определить длительность сегмента speech-to-chat.")
 
     checksum = hashlib.sha256(normalized_audio).hexdigest()
-    container = get_sync_container()
-    processor = FileProcessor(file_repository=container.file_repository)
-    try:
-        api_prefix = f"/{settings.server.name}/api/v1"
-        download_url_prefix = f"{api_prefix}/files/download"
-        file_record = await processor.persist_uploaded_file(
-            data=normalized_audio,
-            original_name=upload_name,
-            content_type=upload_mime,
-            uploaded_by=row.participant_identity,
-            company_id=row.company_id,
-            public=True,
-            download_url_prefix=download_url_prefix,
-            content_sha256_hex=checksum,
-        )
-    finally:
-        await processor.close()
+    api_prefix = f"/{settings.server.name}/api/v1"
+    download_url_prefix = f"{api_prefix.rstrip('/')}/files/download"
+    retention = default_retention_for_source(FileSourceKind.SYNC_SPEECH_SEGMENT)
+    retention_kind, ttl_seconds = retention_fields_from_spec(retention)
+    storage = get_default_storage()
+    file_record = await storage.upload_bytes(
+        data=normalized_audio,
+        original_name=upload_name,
+        content_type=upload_mime,
+        uploaded_by=row.participant_identity,
+        company_id=row.company_id,
+        is_public=True,
+        retention_kind=retention_kind,
+        ttl_seconds=ttl_seconds,
+        metadata={"source_kind": FileSourceKind.SYNC_SPEECH_SEGMENT.value},
+        content_sha256_hex=checksum,
+    )
+    sync_download_url = f"{download_url_prefix}/{file_record.file_id}"
+    if file_record.download_url != sync_download_url:
+        file_record = file_record.model_copy(update={"download_url": sync_download_url})
+        file_record = await storage.save(file_record)
 
     body = MessageCreate(
         thread_id=None,

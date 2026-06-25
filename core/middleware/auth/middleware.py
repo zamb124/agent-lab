@@ -416,7 +416,12 @@ class AuthMiddleware(BaseHTTPMiddleware):
         if rule.context_type != "anonymous":
             return None
         path = request.url.path
-        if not path.startswith(("/search/api/v1/mcp", "/browser/api/v1/mcp")):
+        internal_path_prefixes = (
+            "/search/api/v1/mcp",
+            "/browser/api/v1/mcp",
+            "/flows/api/v1/internal/",
+        )
+        if not path.startswith(internal_path_prefixes):
             return None
         try:
             internal = parse_internal_context_headers(request.headers)

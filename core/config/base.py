@@ -16,9 +16,12 @@ from core.config.models import (
     CalendarSyncConfig,
     CallsConfig,
     DatabaseConfig,
+    FilesConfig,
     LegalConfig,
     LLMConfig,
     LoggingConfig,
+    MCPBrandingConfig,
+    MCPCatalogConfig,
     MediaTranscriberConfig,
     NanoBananaConfig,
     PaymentProvidersConfig,
@@ -85,6 +88,9 @@ class BaseSettings(PydanticBaseSettings):
     worker: WorkerConfig = Field(default_factory=WorkerConfig)
     logging: LoggingConfig = Field(default_factory=LoggingConfig)
     s3: S3Config = Field(default_factory=S3Config)
+    files: FilesConfig = Field(default_factory=FilesConfig)
+    mcp_branding: MCPBrandingConfig = Field(default_factory=MCPBrandingConfig)
+    mcp_catalog: MCPCatalogConfig = Field(default_factory=MCPCatalogConfig)
     voice: SpeechProvidersConfig = Field(default_factory=SpeechProvidersConfig)
     telegram: TelegramConfig = Field(default_factory=TelegramConfig)
     whatsapp: WhatsAppConfig = Field(default_factory=WhatsAppConfig)

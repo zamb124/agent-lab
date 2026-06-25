@@ -1,0 +1,41 @@
+# Curated MCP catalog allowlist for auto_provision=approved_only.
+# catalog_id — slug сервера в MCPServerRepository (source=catalog).
+#
+# Запись без upstream_url — только overlay для official registry (platform_approved, auth).
+# Запись с upstream_url — curated seed вне registry (Context7, DeepWiki и т.д.).
+
+- catalog_id: deepwiki
+  registry_name: com.deepwiki/mcp
+  upstream_url: https://mcp.deepwiki.com/mcp
+  transport_type: http
+  title: DeepWiki
+  description: Documentation and codebase Q&A MCP
+  platform_approved: true
+  auth_policy: none
+
+- catalog_id: context7_catalog
+  registry_name: com.context7/mcp
+  upstream_url: https://mcp.context7.com/mcp
+  transport_type: http
+  title: Context7
+  description: Up-to-date library documentation for LLM
+  platform_approved: true
+  auth_policy: none
+
+- catalog_id: io_brandfetch_brandfetch
+  registry_name: io.brandfetch/brandfetch
+  upstream_url: https://mcp.brandfetch.io/mcp
+  transport_type: http
+  title: Brandfetch
+  description: Brand assets and company data
+  platform_approved: true
+  auth_template:
+    Authorization: "Bearer @var:brandfetch_api_key"
+  required_variables:
+    - brandfetch_api_key
+  auth_policy: api_key
+
+- catalog_id: ai_aarna_atars_mcp
+  registry_name: ai.aarna/atars-mcp
+  platform_approved: true
+  auth_policy: none

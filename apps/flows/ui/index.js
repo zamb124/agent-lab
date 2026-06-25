@@ -106,3 +106,5 @@ import './modals/flows-variables-modal.js';
 import './modals/flows-trigger-editor-modal.js';
 import './modals/flows-triggers-modal.js';
 import './modals/flows-integrations-modal.js';
+
+export { platformFileCreateOp } from '@platform/lib/events/factories/platform-file-create.js';

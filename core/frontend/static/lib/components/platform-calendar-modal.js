@@ -10,6 +10,7 @@ import './platform-switch.js';
 import { CALENDAR_EVENTS } from '../events/reducers/calendar.js';
 import { TEAM_EVENTS } from '../events/reducers/team.js';
 import { FILES_EVENTS } from '../events/reducers/files.js';
+import { buildCalendarEventFileCreateSpecJson } from '../utils/file-create-spec.js';
 import { registerModalKind } from '../utils/modal-registry.js';
 
 import { COLOR_PALETTE } from '@platform/lib/utils/color-palette.js';
@@ -3144,7 +3145,15 @@ export class PlatformCalendarModal extends PlatformModal {
         for (const file of files) {
             const correlation_id = `cal-upload-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
             this._pendingAttachmentUploads.set(correlation_id, { name: file.name });
-            this.dispatch(FILES_EVENTS.UPLOAD_REQUESTED, { file, name: file.name }, { correlation_id, source: 'local' });
+            this.dispatch(
+                FILES_EVENTS.UPLOAD_REQUESTED,
+                {
+                    file,
+                    name: file.name,
+                    spec: buildCalendarEventFileCreateSpecJson({ eventId: this._selectedEventId }),
+                },
+                { correlation_id, source: 'local' },
+            );
         }
         this._uploadingAttachments = this._pendingAttachmentUploads.size > 0;
         this.requestUpdate();

@@ -8,10 +8,21 @@ import {
     codeParseSignatureOp,
     codeValidateOp,
 } from '../../../../apps/flows/ui/events/resources/code.resource.js';
+import { mcpServersResource, mcpServerSyncOp, mcpServerTestOp } from '../../../../apps/flows/ui/events/resources/mcp.resource.js';
 import '../../../../apps/flows/ui/modals/flows-library-picker-modal.js';
 import '../../../../apps/flows/ui/modals/flows-tool-create-modal.js';
 
-const FACTORIES = [toolsAllOp, toolsResource, codeCompletionsOp, codeTemplatesOp, codeParseSignatureOp, codeValidateOp];
+const FACTORIES = [
+    toolsAllOp,
+    toolsResource,
+    codeCompletionsOp,
+    codeTemplatesOp,
+    codeParseSignatureOp,
+    codeValidateOp,
+    mcpServersResource,
+    mcpServerSyncOp,
+    mcpServerTestOp,
+];
 
 function bootstrap() {
     for (const factory of FACTORIES) {

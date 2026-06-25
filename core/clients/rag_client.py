@@ -4,8 +4,6 @@
 
 from __future__ import annotations
 
-import json
-from io import BytesIO
 from urllib.parse import quote
 
 from core.clients.service_client import ServiceClient
@@ -96,31 +94,6 @@ class RagClient:
                 response,
                 operation="ingest_text",
             )
-        )
-
-    async def upload_namespace_document(
-        self,
-        namespace_id: str,
-        *,
-        filename: str,
-        file_bytes: bytes,
-        metadata: RAGMetadata,
-        content_type: str = "application/octet-stream",
-        provider: str | None = None,
-    ) -> JsonObject:
-        seg = quote(namespace_id, safe="")
-        path = f"{RAG_API_V1_PREFIX}/namespaces/{seg}/documents"
-        params: dict[str, str] | None = {"provider": provider} if provider is not None else None
-        files = {"file": (filename, BytesIO(file_bytes), content_type)}
-        return _json_object_response(
-            await self._http.post(
-                "rag",
-                path,
-                files=files,
-                data={"metadata": json.dumps(metadata)},
-                params=params,
-            ),
-            operation="upload_namespace_document",
         )
 
     async def index_file(

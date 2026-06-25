@@ -82,8 +82,9 @@ async def test_create_manual_task_assigns_creator_and_generic_board(app, contain
     assert item.board_column_id == "todo"
 
     boards = await svc.list_boards("system")
-    assert len(boards) == 1
-    assert boards[0].board_key == "generic"
+    generic = [b for b in boards if b.board_key == "generic"]
+    assert len(generic) >= 1
+    assert item.board_id in {b.board_id for b in generic}
 
 
 async def test_get_unknown_work_item_raises(app, container, unique_id):

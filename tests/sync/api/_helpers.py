@@ -99,3 +99,61 @@ async def create_topic_channel_via_http(
     )
     assert cr.status_code == 201, cr.text
     return cr.json()["channel_id"]
+
+
+def platform_auxiliary_file_spec_json(*, is_public: bool = True) -> str:
+    import json
+
+    return json.dumps(
+        {
+            "source_kind": "platform_auxiliary",
+            "source_ref": {},
+            "retention": {"kind": "platform_default"},
+            "post_create": {"is_public": is_public},
+        }
+    )
+
+
+async def upload_platform_file(
+    frontend_client,
+    auth_headers,
+    *,
+    filename: str,
+    content: bytes,
+    content_type: str,
+    is_public: bool = True,
+):
+    import io
+
+    return await frontend_client.post(
+        "/frontend/api/v1/files/",
+        headers=auth_headers,
+        data={"spec": platform_auxiliary_file_spec_json(is_public=is_public)},
+        files={"file": (filename, io.BytesIO(content), content_type)},
+    )
+
+
+_FRONTEND_HTTP_BASE_URL = "http://127.0.0.1:9004"
+
+
+async def upload_platform_file_http(
+    auth_token: str,
+    *,
+    filename: str,
+    content: bytes,
+    content_type: str,
+    is_public: bool = True,
+):
+    """Upload через реальный frontend_service — нужен sync_worker и transcribe/STT."""
+    import io
+
+    from httpx import AsyncClient
+
+    headers = {"Authorization": f"Bearer {auth_token}"}
+    async with AsyncClient(base_url=_FRONTEND_HTTP_BASE_URL, timeout=60.0) as client:
+        return await client.post(
+            "/frontend/api/v1/files/",
+            headers=headers,
+            data={"spec": platform_auxiliary_file_spec_json(is_public=is_public)},
+            files={"file": (filename, io.BytesIO(content), content_type)},
+        )

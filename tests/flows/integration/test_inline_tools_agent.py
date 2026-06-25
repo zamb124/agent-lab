@@ -9,6 +9,8 @@ import pytest
 from apps.flows.src.tools.code_tool import CodeTool
 from core.state import ExecutionState
 
+pytestmark = [pytest.mark.usefixtures("sandbox_services")]
+
 EMPTY_PARAMETERS_SCHEMA = {"type": "object", "properties": {}, "required": []}
 
 

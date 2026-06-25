@@ -10,7 +10,7 @@
   6. MockLLM снова вызывает tool -> credential найден -> GoogleDocsClient мокнут
   7. MockLLM возвращает финальный текст
 
-Глобальный MockLLM — один на процесс; pytest-xdist группа исключает гонки за очередь ответов.
+Глобальный MockLLM — один на процесс; xdist group shared_flows_runtime исключает гонки за очередь ответов.
 """
 
 from __future__ import annotations
@@ -28,7 +28,7 @@ from core.state import ExecutionState, InterruptKind
 from core.types import JsonObject
 from tests.flows.durable_runtime_harness import run_flow
 
-pytestmark = pytest.mark.xdist_group("flows_mock_llm_singleton")
+pytestmark = pytest.mark.xdist_group("shared_flows_runtime")
 
 
 @pytest.fixture()

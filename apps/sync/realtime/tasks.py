@@ -439,7 +439,7 @@ async def _register_platform_file_record_for_call_recording(
     raw_storage_url: str,
 ) -> int:
     """
-    Единый GET /sync/api/v1/files/download/{id} читает FileRepository (shared), не sync_files.
+    GET /frontend/api/v1/files/download/{id} читает FileRepository (shared).
     Без записи здесь — 404 для плеера, скачивания и transcribe_video.
     """
     settings = get_settings()
@@ -692,10 +692,12 @@ async def transcribe_audio_message_core(
     if timeout_seconds <= 0:
         raise ValueError("media_transcriber.batch_download_timeout_s должен быть больше 0.")
 
-    sync_base_url = settings.server.get_service_url("sync")
-    if sync_base_url == "":
-        raise ValueError("URL sync сервиса не задан.")
-    file_download_url = f"{sync_base_url.rstrip('/')}/sync/api/v1/files/download/{audio_info.file_id}"
+    frontend_base_url = settings.server.get_service_url("frontend")
+    if frontend_base_url == "":
+        raise ValueError("URL frontend сервиса не задан.")
+    file_download_url = (
+        f"{frontend_base_url.rstrip('/')}/frontend/api/v1/files/download/{audio_info.file_id}"
+    )
     auth_headers = _build_interservice_auth_headers(
         actor_user_id=actor_user_id,
         company_id=company_id,
@@ -862,10 +864,12 @@ async def transcribe_video_message_core(
     if timeout_seconds <= 0:
         raise ValueError("media_transcriber.batch_download_timeout_s должен быть больше 0.")
 
-    sync_base_url = settings.server.get_service_url("sync")
-    if sync_base_url == "":
-        raise ValueError("URL sync сервиса не задан.")
-    file_download_url = f"{sync_base_url.rstrip('/')}/sync/api/v1/files/download/{video_info.file_id}"
+    frontend_base_url = settings.server.get_service_url("frontend")
+    if frontend_base_url == "":
+        raise ValueError("URL frontend сервиса не задан.")
+    file_download_url = (
+        f"{frontend_base_url.rstrip('/')}/frontend/api/v1/files/download/{video_info.file_id}"
+    )
     auth_headers = _build_interservice_auth_headers(
         actor_user_id=actor_user_id,
         company_id=company_id,

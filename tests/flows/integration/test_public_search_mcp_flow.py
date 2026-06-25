@@ -322,6 +322,7 @@ async def test_public_search_with_file_reads_file_before_search(
             "params": {
                 "message": {
                     "messageId": f"public-search-file-message-{unique_id}",
+                    "contextId": f"ctx-{unique_id}",
                     "role": "user",
                     "parts": [
                         {"kind": "text", "text": query},

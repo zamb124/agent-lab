@@ -14,6 +14,7 @@ from typing import cast
 from httpx import AsyncClient, Response
 
 from tests.crm.e2e._json_helpers import json_object, object_dict, object_str, optional_object_dict
+from tests.sync.api._helpers import upload_platform_file
 
 
 def _http_json(response: Response) -> dict[str, object]:
@@ -21,13 +22,20 @@ def _http_json(response: Response) -> dict[str, object]:
 
 
 async def crm_upload_bytes(
-    crm_client: AsyncClient,
+    frontend_client: AsyncClient,
     headers: dict[str, str],
     filename: str,
     content: bytes,
+    *,
+    content_type: str = "application/octet-stream",
 ) -> str:
-    files = {"file": (filename, content, "application/octet-stream")}
-    response = await crm_client.post("/crm/api/v1/files/", files=files, headers=headers)
+    response = await upload_platform_file(
+        frontend_client,
+        headers,
+        filename=filename,
+        content=content,
+        content_type=content_type,
+    )
     if response.status_code != 200:
         raise AssertionError(f"upload {filename}: {response.status_code} {response.text}")
     payload = _http_json(response)

@@ -47,7 +47,8 @@ import { callTokenOp, callStatusOp, callTurnOp, callRecordingsListOp,
          callJoinAcceptOp, callUiResource,
          channelCreateAdhocCallOp } from '../events/resources/calls.resource.js';
 import { callPrefsSlice } from '../events/resources/call-prefs.resource.js';
-import { fileUploadOp } from '../events/resources/files.resource.js';
+import { fileUploadCompletedOp } from '../events/resources/files.resource.js';
+import { platformFileCreateOp } from '@platform/lib/events/factories/platform-file-create.js';
 import { gitResourceUpsertOp, gitResourceGetOp } from '../events/resources/git-resources.resource.js';
 import { chatUiResource } from '../events/resources/chat-ui.resource.js';
 import { createSyncPersistEffect } from '../events/sync-persist.effect.js';
@@ -271,7 +272,8 @@ export class SyncApp extends PlatformApp {
         callUiResource,
         callPrefsSlice,
         channelCreateAdhocCallOp,
-        fileUploadOp,
+        platformFileCreateOp,
+        fileUploadCompletedOp,
         gitResourceUpsertOp,
         gitResourceGetOp,
         chatUiResource,

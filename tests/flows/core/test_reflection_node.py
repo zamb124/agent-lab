@@ -92,6 +92,12 @@ class RuntimeContainer:
     def __init__(self, workflow_runtime: RecordingWorkflowRuntime) -> None:
         self.workflow_runtime = workflow_runtime
 
+    @property
+    def redis_client(self):
+        from apps.flows.src.container import get_container
+
+        return get_container().redis_client
+
 
 class FakeCriticLLM:
     def __init__(self, critique: ReflectionCritiqueResult) -> None:

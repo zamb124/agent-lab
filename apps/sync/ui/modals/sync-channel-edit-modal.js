@@ -15,11 +15,12 @@ import '@platform/lib/components/platform-icon.js';
 import '@platform/lib/components/platform-switch.js';
 import '@platform/lib/components/platform-user-chip.js';
 import '@platform/lib/components/fields/platform-field.js';
+import { buildSyncChannelAssetFileCreateSpecJson } from '@platform/lib/utils/file-create-spec.js';
 import { compressImageFileToJpeg } from '../_helpers/sync-avatar-image-compress.js';
 import { syncChannelPlaceholderCollection } from '../_helpers/sync-channel-placeholder-collection.js';
 import { resolveChannelTitle } from '../_helpers/sync-id-resolvers.js';
 
-const FILE_DOWNLOAD_BASE = '/sync/api/v1/files/download';
+const FILE_DOWNLOAD_BASE = '/frontend/api/v1/files/download';
 
 export class SyncChannelEditModal extends PlatformFormModal {
     static modalKind = 'sync.channel_edit';
@@ -219,7 +220,7 @@ export class SyncChannelEditModal extends PlatformFormModal {
         this._channelUpdate = this.useOp('sync/channel_update');
         this._membersOp = this.useOp('sync/channel_members_list');
         this._notificationsOp = this.useOp('sync/channel_notifications_update');
-        this._fileUpload = this.useOp('sync/file_upload');
+        this._fileUpload = this.useOp('platform/file_create');
     }
 
     async updated(changed) {
@@ -298,9 +299,13 @@ export class SyncChannelEditModal extends PlatformFormModal {
         if (!item || item.type === 'direct') return;
         try {
             const compressed = await compressImageFileToJpeg(file);
+            const spec = buildSyncChannelAssetFileCreateSpecJson({
+                channelId: this.channelId,
+                purpose: 'channel_avatar',
+            });
             const result = await this._fileUpload.run({
                 file: compressed,
-                purpose: 'channel_avatar',
+                spec,
             });
             if (
                 result === null

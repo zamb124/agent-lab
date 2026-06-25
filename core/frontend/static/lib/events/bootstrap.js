@@ -101,7 +101,7 @@ export function bootstrapPlatformBus(options) {
     );
     bus.registerEffect(createIconEffect({ platformApexOrigin: platformApex }));
     bus.registerEffect(createFileTypesEffect({ platformApexOrigin: platformApex }));
-    bus.registerEffect(createFilesEffect({ baseUrl }));
+    bus.registerEffect(createFilesEffect());
     bus.registerEffect(createCompaniesEffect({ baseUrl }));
     bus.registerEffect(createTeamEffect({ baseUrl }));
     bus.registerEffect(createCalendarEffect({ baseUrl }));

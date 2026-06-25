@@ -7,14 +7,20 @@ End-to-end интеграционные тесты RAG Service.
 - Изоляция данных между провайдерами
 """
 
-from io import BytesIO
 
 import pytest
+
+from tests.rag.helpers import upload_rag_document_bytes, wait_rag_document_status
 
 
 @pytest.mark.asyncio
 @pytest.mark.real_taskiq
-async def test_full_rag_workflow(rag_client, unique_namespace_name, auth_headers_system):
+async def test_full_rag_workflow(
+    frontend_client,
+    rag_client,
+    unique_namespace_name,
+    auth_headers_system,
+):
     """
     Полный цикл RAG: создать namespace, загрузить документ, найти, удалить.
 
@@ -35,37 +41,23 @@ async def test_full_rag_workflow(rag_client, unique_namespace_name, auth_headers
     It is based on standard Python type hints and uses Pydantic for validation.
     FastAPI is very fast and easy to use.
     """
-    files = {"file": ("fastapi.txt", BytesIO(content), "text/plain")}
-    doc_response = await rag_client.post(
-        f"/rag/api/v1/namespaces/{namespace_id}/documents",
-        files=files,
-        headers=auth_headers_system
+    doc_response = await upload_rag_document_bytes(
+        frontend_client,
+        rag_client,
+        auth_headers_system,
+        namespace_id=namespace_id,
+        filename="fastapi.txt",
+        content=content.strip(),
+        content_type="text/plain",
     )
-    assert doc_response.status_code == 202  # Async processing
-    document_id = doc_response.json()["document_id"]
+    document_id = doc_response["document_id"]
 
-    import asyncio
-    max_wait = 90
-    wait_interval = 0.25
-    elapsed = 0
-    status = None
-    status_data = {}
-
-    while elapsed < max_wait:
-        status_response = await rag_client.get(
-            f"/rag/api/v1/documents/{document_id}/status",
-            headers=auth_headers_system
-        )
-        if status_response.status_code == 200:
-            status_data = status_response.json()
-            status = status_data.get("status")
-            print(f"[TEST] Document status: {status}, error: {status_data.get('error_message')}")
-            if status == "completed":
-                break
-        await asyncio.sleep(wait_interval)
-        elapsed += wait_interval
-
-    assert status == "completed", f"Document processing did not complete: status={status}, error={status_data.get('error_message')}"
+    status_data = await wait_rag_document_status(
+        rag_client,
+        document_id,
+        auth_headers_system,
+    )
+    assert status_data["status"] == "completed"
 
     # 3. Проверить что документ в списке
     list_response = await rag_client.get(
@@ -122,7 +114,12 @@ async def test_provider_switch_persistence(rag_client, rag_provider_pgvector, au
 
 
 @pytest.mark.asyncio
-async def test_multiple_namespaces_isolation(rag_client, unique_id, auth_headers_system):
+async def test_multiple_namespaces_isolation(
+    frontend_client,
+    rag_client,
+    unique_id,
+    auth_headers_system,
+):
     """
     Создание нескольких namespaces и проверка изоляции данных.
 
@@ -147,11 +144,14 @@ async def test_multiple_namespaces_isolation(rag_client, unique_id, auth_headers
     ns2_id = ns2_response.json()["name"]
 
     # Загружаем документ только в первый namespace
-    files = {"file": ("doc1.txt", BytesIO(b"Content in namespace 1"), "text/plain")}
-    await rag_client.post(
-        f"/rag/api/v1/namespaces/{ns1_id}/documents",
-        files=files,
-        headers=auth_headers_system
+    await upload_rag_document_bytes(
+        frontend_client,
+        rag_client,
+        auth_headers_system,
+        namespace_id=ns1_id,
+        filename="doc1.txt",
+        content=b"Content in namespace 1",
+        content_type="text/plain",
     )
 
     # Проверяем что документ есть в ns1
@@ -171,7 +171,12 @@ async def test_multiple_namespaces_isolation(rag_client, unique_id, auth_headers
 
 @pytest.mark.asyncio
 @pytest.mark.real_taskiq
-async def test_large_document_processing(rag_client, unique_namespace_name, auth_headers_system):
+async def test_large_document_processing(
+    frontend_client,
+    rag_client,
+    unique_namespace_name,
+    auth_headers_system,
+):
     """
     Загрузка и поиск в большом документе.
 
@@ -200,31 +205,18 @@ async def test_large_document_processing(rag_client, unique_namespace_name, auth
     Scikit-learn is another important library for ML in Python.
     """
 
-    files = {"file": ("large_doc.txt", BytesIO(large_content), "text/plain")}
-    doc_response = await rag_client.post(
-        f"/rag/api/v1/namespaces/{namespace_id}/documents",
-        files=files,
-        headers=auth_headers_system
+    doc_response = await upload_rag_document_bytes(
+        frontend_client,
+        rag_client,
+        auth_headers_system,
+        namespace_id=namespace_id,
+        filename="large_doc.txt",
+        content=large_content.strip(),
+        content_type="text/plain",
     )
-    assert doc_response.status_code == 202  # Async processing
-    document_id = doc_response.json()["document_id"]
+    document_id = doc_response["document_id"]
 
-    import asyncio
-    max_wait = 90
-    wait_interval = 0.25
-    elapsed = 0
-
-    while elapsed < max_wait:
-        status_response = await rag_client.get(
-            f"/rag/api/v1/documents/{document_id}/status",
-            headers=auth_headers_system
-        )
-        if status_response.status_code == 200:
-            status = status_response.json().get("status")
-            if status == "completed":
-                break
-        await asyncio.sleep(wait_interval)
-        elapsed += wait_interval
+    await wait_rag_document_status(rag_client, document_id, auth_headers_system)
 
     # Поиск по разным частям документа
     queries = [
@@ -277,7 +269,12 @@ async def test_concurrent_operations(rag_client, unique_id, auth_headers_system)
 
 
 @pytest.mark.asyncio
-async def test_error_recovery(rag_client, unique_namespace_name, auth_headers_system):
+async def test_error_recovery(
+    frontend_client,
+    rag_client,
+    unique_namespace_name,
+    auth_headers_system,
+):
     """
     Тест восстановления после ошибок.
 
@@ -299,13 +296,16 @@ async def test_error_recovery(rag_client, unique_namespace_name, auth_headers_sy
     assert delete_response.status_code == 404
 
     # Проверяем что namespace все еще работает
-    files = {"file": ("test.txt", BytesIO(b"Test content"), "text/plain")}
-    upload_response = await rag_client.post(
-        f"/rag/api/v1/namespaces/{namespace_id}/documents",
-        files=files,
-        headers=auth_headers_system
+    upload_response = await upload_rag_document_bytes(
+        frontend_client,
+        rag_client,
+        auth_headers_system,
+        namespace_id=namespace_id,
+        filename="test.txt",
+        content=b"Test content",
+        content_type="text/plain",
     )
-    assert upload_response.status_code == 202  # Async processing
+    assert upload_response["status"] == "pending"
 
     # Cleanup
     await rag_client.delete(f"/rag/api/v1/namespaces/{namespace_id}", headers=auth_headers_system)

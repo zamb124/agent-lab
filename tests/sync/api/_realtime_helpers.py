@@ -21,6 +21,7 @@ from core.models.identity_models import Company, User
 from core.utils.tokens import get_token_service
 
 SYNC_BASE_URL = "http://127.0.0.1:9005"
+FRONTEND_BASE_URL = "http://127.0.0.1:9004"
 SYNC_WS_URI = "ws://127.0.0.1:9005/sync/api/ws/notifications"
 
 
@@ -224,5 +225,13 @@ PubSubReceive = Callable[[str, float], Awaitable[list[dict[str, Any]]]]
 async def http_owner(token: str) -> AsyncIterator[AsyncClient]:
     """`AsyncClient` к sync_service с готовыми Bearer-заголовками."""
     async with AsyncClient(base_url=SYNC_BASE_URL, timeout=60.0) as client:
+        client.headers.update({"Authorization": f"Bearer {token}"})
+        yield client
+
+
+@asynccontextmanager
+async def http_frontend(token: str) -> AsyncIterator[AsyncClient]:
+    """`AsyncClient` к frontend_service для Files API."""
+    async with AsyncClient(base_url=FRONTEND_BASE_URL, timeout=60.0) as client:
         client.headers.update({"Authorization": f"Bearer {token}"})
         yield client

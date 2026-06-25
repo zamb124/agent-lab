@@ -24,10 +24,10 @@ from reportlab.lib.units import inch
 from reportlab.platypus import Flowable, Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle
 from reportlab.platypus import Image as RLImage
 
-from core.context import require_active_company, require_context
 from core.files.checksum import compute_content_checksum_sha256
+from core.files.create_spec import FileCreateSpec, FilePostCreate
 from core.files.models import FileRecord
-from core.files.processors import FileProcessor
+from core.files.service import FilesService
 from core.files.types import ext_to_category, ext_to_mime
 from core.files.writer.content_kind import (
     SourceContent,
@@ -39,70 +39,62 @@ from core.files.writer.image_fetch import fetch_url_bytes
 from core.files.writer.md_parse import flatten_markdown_segments, parse_gfm_table
 from core.files.writer.models import ContentKind, ContentMode, FileWriteResult, WriteOptions
 from core.files.writer.pdf_unicode_font import register_pdf_unicode_font
-from core.files.writer.persist import write_bytes_via_processor
 
 
 class FileWriter:
     """
     Сборка файла (build_bytes) и опционально загрузка в хранилище (create_file).
-    Для create_file в процессе один раз вызывают configure_process_upload(...); дальше FileWriter() подхватывает те же processor и префикс URL.
-    Явная пара file_processor + download_url_prefix в конструкторе переопределяет процессные дефолты.
     """
 
-    _process_file_processor: ClassVar[FileProcessor | None] = None
-    _process_download_url_prefix: ClassVar[str | None] = None
+    _process_files_service: ClassVar[FilesService | None] = None
+    _process_default_spec: ClassVar[FileCreateSpec | None] = None
 
     @classmethod
     def configure_process_upload(
         cls,
         *,
-        file_processor: FileProcessor,
-        download_url_prefix: str,
+        files_service: FilesService,
+        default_spec: FileCreateSpec,
     ) -> None:
-        """Один вызов при старте процесса сервиса: дальше writer = FileWriter() и await writer.write(...)."""
-        stripped = (download_url_prefix or "").strip().rstrip("/")
-        if not stripped:
-            raise ValueError("download_url_prefix не может быть пустым")
-        cls._process_file_processor = file_processor
-        cls._process_download_url_prefix = stripped
+        cls._process_files_service = files_service
+        cls._process_default_spec = default_spec
 
     def __init__(
         self,
         options: WriteOptions | None = None,
         *,
-        file_processor: FileProcessor | None = None,
-        download_url_prefix: str | None = None,
+        files_service: FilesService | None = None,
+        default_spec: FileCreateSpec | None = None,
     ) -> None:
         self._default_options: WriteOptions = options or WriteOptions()
-        if file_processor is None and download_url_prefix is None:
-            fp = FileWriter._process_file_processor
-            prefix_raw = FileWriter._process_download_url_prefix
-        elif file_processor is None or download_url_prefix is None:
+        resolved_files_service: FilesService | None
+        resolved_default_spec: FileCreateSpec | None
+        if files_service is None and default_spec is None:
+            resolved_files_service = FileWriter._process_files_service
+            resolved_default_spec = FileWriter._process_default_spec
+        elif files_service is None or default_spec is None:
             raise ValueError(
-                "file_processor и download_url_prefix задавайте вместе в конструкторе, "
-                + "или оба опустите для значений из configure_process_upload"
+                "files_service and default_spec must be set together in constructor, "
+                + "or both omitted for process defaults from configure_process_upload"
             )
         else:
-            fp = file_processor
-            prefix_raw = download_url_prefix
-        self._file_processor: FileProcessor | None = fp
-        self._download_url_prefix: str | None = (
-            prefix_raw.rstrip("/") if prefix_raw else None
-        )
+            resolved_files_service = files_service
+            resolved_default_spec = default_spec
+        self._files_service: FilesService | None = resolved_files_service
+        self._default_spec: FileCreateSpec | None = resolved_default_spec
 
     @classmethod
     def bind_for_upload(
         cls,
         *,
-        file_processor: FileProcessor,
-        download_url_prefix: str,
+        files_service: FilesService,
+        default_spec: FileCreateSpec,
         options: WriteOptions | None = None,
     ) -> FileWriter:
-        """Экземпляр с возможностью await write(...) для данного процессора и префикса URL."""
         return cls(
             options=options,
-            file_processor=file_processor,
-            download_url_prefix=download_url_prefix,
+            files_service=files_service,
+            default_spec=default_spec,
         )
 
     def _opts(self, override: WriteOptions | None) -> WriteOptions:
@@ -165,24 +157,27 @@ class FileWriter:
         *,
         original_name: str,
         public: bool,
+        create_spec: FileCreateSpec | None,
     ) -> FileRecord:
-        if self._file_processor is None or self._download_url_prefix is None:
+        if self._files_service is None:
             raise FileWriteError(
-                "write: нет привязки к хранилищу — вызовите FileWriter.configure_process_upload(...) "
-                + "при старте процесса или FileWriter.bind_for_upload(...) для экземпляра"
+                "write: files_service not configured — call FileWriter.configure_process_upload at startup"
             )
-        ctx = require_context()
-        active_company = require_active_company()
-        return await write_bytes_via_processor(
-            data=built.data,
-            content_type=built.content_type,
+        spec = create_spec if create_spec is not None else self._default_spec
+        if spec is None:
+            raise FileWriteError("write: FileCreateSpec is required")
+        post_create = spec.post_create
+        if post_create is None:
+            post_create = FilePostCreate(is_public=public)
+        elif post_create.is_public != public:
+            post_create = post_create.model_copy(update={"is_public": public})
+            spec = spec.model_copy(update={"post_create": post_create})
+        return await self._files_service.create(
+            spec,
+            built.data,
             original_name=original_name,
-            file_processor=self._file_processor,
-            uploaded_by=ctx.user.user_id,
-            company_id=active_company.company_id,
-            download_url_prefix=self._download_url_prefix,
+            content_type=built.content_type,
             content_sha256_hex=built.checksum_sha256_hex,
-            public=public,
         )
 
     async def write(
@@ -192,6 +187,7 @@ class FileWriter:
         original_name: str,
         content_mode: ContentMode = "auto",
         public: bool = True,
+        create_spec: FileCreateSpec | None = None,
         text_encoding: str = "utf-8",
         max_image_bytes: int = 15 * 1024 * 1024,
         http_timeout_seconds: float = 30.0,
@@ -209,7 +205,10 @@ class FileWriter:
             content, original_name, content_mode=content_mode, options=opts
         )
         return await self._persist_upload(
-            built, original_name=original_name, public=public
+            built,
+            original_name=original_name,
+            public=public,
+            create_spec=create_spec,
         )
 
     async def create_file(
@@ -220,19 +219,24 @@ class FileWriter:
         content_mode: ContentMode = "auto",
         options: WriteOptions | None = None,
         public: bool = True,
+        create_spec: FileCreateSpec | None = None,
     ) -> FileRecord:
         if options is not None:
             built = self.build_bytes(
                 content, original_name, content_mode=content_mode, options=options
             )
             return await self._persist_upload(
-                built, original_name=original_name, public=public
+                built,
+                original_name=original_name,
+                public=public,
+                create_spec=create_spec,
             )
         return await self.write(
             content=content,
             original_name=original_name,
             content_mode=content_mode,
             public=public,
+            create_spec=create_spec,
         )
 
     def _build_base64(

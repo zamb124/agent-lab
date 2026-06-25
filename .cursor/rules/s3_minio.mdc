@@ -72,15 +72,17 @@ API **никогда** не возвращает клиенту прямой S3/
 
 ### Архитектура
 
-`core/files/api.py::build_file_api_router(get_file_repo, service_api_prefix)`. Роутер автоматически подключается в `create_service_app` для всех сервисов независимо от `api_version`. Для сервисов с `api_version=None` (frontend) — канонический префикс `/{svc}/api/v1/files/*`. Никакого кода на уровне сервиса не нужно.
+`core/files/api.py::build_files_router(get_files_service)`. Mount **только** на frontend: `/frontend/api/v1/files/*`. In-process — `container.files_service` (`FilesService` + `FileCreateSpec`). Cross-pod HTTP — `core/clients/files_client.py::FilesClient`.
 
 | Метод | Путь | Описание |
 |---|---|---|
-| `POST` | `/{svc}/api/v1/files/` | Загрузка |
-| `GET` | `/{svc}/api/v1/files/download/{file_id}` | Стриминг (с `Accept-Ranges: bytes`, `Content-Length`, `206 Partial Content` на `Range`) |
-| `GET` | `/{svc}/api/v1/files/{file_id}` | Метаданные |
+| `POST` | `/frontend/api/v1/files/` | Multipart upload (`file` + form `spec`) |
+| `POST` | `/frontend/api/v1/files/register-s3` | Регистрация уже загруженного S3-объекта |
+| `POST` | `/frontend/api/v1/files/{file_id}/bind` | Docs bind (`DocsPlacement`) |
+| `GET` | `/frontend/api/v1/files/download/{file_id}` | Стриминг (с `Accept-Ranges: bytes`, `Content-Length`, `206 Partial Content` на `Range`) |
+| `GET` | `/frontend/api/v1/files/{file_id}` | Метаданные |
 
-S3 выключен — `POST .../files/` возвращает `503` (не `404`). Маршрут регистрируется в `route_config.py` с `auth_required=False`; приватные файлы проверяет сам хендлер.
+Per-service `/{svc}/api/v1/files/*` **запрещены**. S3 выключен — `POST .../files/` возвращает `503`. Download публичных файлов — `auth_required=False` в `route_config.py`; приватные проверяет хендлер.
 
 ### Логика доступа
 
@@ -89,14 +91,14 @@ S3 выключен — `POST .../files/` возвращает `503` (не `404`
 
 ### Поля `FileRecord`
 
-`FileRecord.download_url: str | None` — same-origin URL, устанавливается сервисом при загрузке. `FileRecord.url` возвращает `download_url`, иначе fallback `/api/v1/files/download/{file_id}` (только сервис flows, обратная совместимость).
+`FileRecord.download_url: str | None` — same-origin URL при загрузке. `FileRecord.url` — канонический `/frontend/api/v1/files/download/{file_id}`.
 
 ### Запрещённые паттерны
 
-- `file_record.direct_s3_url` — свойство удалено, прямые S3 URL запрещены в ответах.
+- `FileProcessor`, `build_file_api_router`, per-service file routers, `upload_namespace_document`.
+- `file_record.direct_s3_url` — прямые S3 URL запрещены в ответах.
 - `s3_client.get_public_url()` в API-хендлерах (разрешён только в RAG internals).
-- Сервис-специфичные `FileRead`/`FileUploadResponse` — использовать `FileResponse` из `core.files`.
-- Регистрировать файловый роутер вручную — добавляется через `create_service_app`.
+- Сервис-специфичные upload endpoints и factory `*/file_upload` — только `platform/file_create`.
 
 ## Что НЕ нарушение
 

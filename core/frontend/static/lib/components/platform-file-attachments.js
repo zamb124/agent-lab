@@ -40,6 +40,7 @@ export class PlatformFileAttachments extends PlatformElement {
         files: { type: Array, attribute: false },
         readonly: { type: Boolean, reflect: true },
         uploadOpName: { type: String, attribute: 'upload-op-name' },
+        uploadSpec: { type: String, attribute: 'upload-spec' },
         openSource: { type: String, attribute: 'open-source' },
         compact: { type: Boolean, reflect: true },
         _uploading: { state: true },
@@ -125,7 +126,8 @@ export class PlatformFileAttachments extends PlatformElement {
         super();
         this.files = [];
         this.readonly = false;
-        this.uploadOpName = '';
+        this.uploadOpName = 'platform/file_create';
+        this.uploadSpec = '';
         this.openSource = 'platform_file_attachments';
         this.compact = false;
         this._uploading = false;
@@ -137,7 +139,7 @@ export class PlatformFileAttachments extends PlatformElement {
             return this._uploadOp;
         }
         if (typeof this.uploadOpName !== 'string' || this.uploadOpName.length === 0) {
-            throw new Error('platform-file-attachments: upload-op-name required when not readonly');
+            throw new Error('platform-file-attachments: uploadOpName required when not readonly');
         }
         this._uploadOp = this.useOp(this.uploadOpName);
         return this._uploadOp;
@@ -166,8 +168,11 @@ export class PlatformFileAttachments extends PlatformElement {
         }
         this._uploading = true;
         try {
+            if (typeof this.uploadSpec !== 'string' || this.uploadSpec.length === 0) {
+                throw new Error('platform-file-attachments: upload-spec required when not readonly');
+            }
             const uploadOp = this._ensureUploadOp();
-            const result = await uploadOp.run({ file: selected });
+            const result = await uploadOp.run({ file: selected, spec: this.uploadSpec });
             const fileRef = _fileRefFromUploadResult(result);
             const rows = Array.isArray(this.files) ? [...this.files] : [];
             rows.push(fileRef);

@@ -3,12 +3,14 @@
 Использует service БД, is_global=False (изолирован по компаниям).
 """
 
+from __future__ import annotations
 
+from datetime import datetime
 from typing import ClassVar, override
 
 from core.db.base_repository import BaseRepository
 from core.db.storage import Storage
-from core.files.models import FileRecord
+from core.files.models import FileRecord, FileStatus
 from core.logging import get_logger
 
 logger = get_logger(__name__)
@@ -45,16 +47,6 @@ class FileRepository(BaseRepository[FileRecord]):
         return entity.file_id
 
     async def get_by_s3_key(self, provider: str, file_id: str) -> FileRecord | None:
-        """
-        Получает файл по S3 ключу.
-
-        Аргументы:
-            provider: Провайдер S3
-            file_id: ID файла
-
-        Возвращает:
-            FileRecord или None
-        """
         key = f"s3:{provider}:{file_id}"
         final_key = self._build_final_key(key)
         table_name = self._get_table_name()
@@ -66,19 +58,50 @@ class FileRepository(BaseRepository[FileRecord]):
         return self.model_class.model_validate_json(data)
 
     async def set_by_s3_key(self, provider: str, file_record: FileRecord) -> bool:
-        """
-        Сохраняет файл по S3 ключу.
-
-        Аргументы:
-            provider: Провайдер S3
-            file_record: Запись о файле
-
-        Возвращает:
-            True если сохранение успешно
-        """
         key = f"s3:{provider}:{file_record.file_id}"
         final_key = self._build_final_key(key)
         table_name = self._get_table_name()
 
         data = file_record.model_dump_json()
         return await self._storage.set_with_table(final_key, data, table_name)
+
+    async def list_expired(self, *, before: datetime, limit: int) -> list[FileRecord]:
+        prefix = self._get_prefix()
+        keys = await self._storage.list_by_prefix(prefix, limit=limit * 20, force_global=True)
+        expired: list[FileRecord] = []
+        for key in keys:
+            if len(expired) >= limit:
+                break
+            raw = await self._storage.get(key, force_global=True)
+            if raw is None:
+                continue
+            record = FileRecord.model_validate_json(raw)
+            if record.deleted_at is not None:
+                continue
+            if record.status == FileStatus.DELETED:
+                continue
+            if record.expires_at is None:
+                continue
+            if record.expires_at <= before:
+                expired.append(record)
+        return expired
+
+    async def list_missing_retention(self, *, limit: int) -> list[FileRecord]:
+        prefix = self._get_prefix()
+        keys = await self._storage.list_by_prefix(prefix, limit=limit * 20, force_global=True)
+        missing: list[FileRecord] = []
+        for key in keys:
+            if len(missing) >= limit:
+                break
+            raw = await self._storage.get(key, force_global=True)
+            if raw is None:
+                continue
+            record = FileRecord.model_validate_json(raw)
+            if record.deleted_at is not None:
+                continue
+            if record.status == FileStatus.DELETED:
+                continue
+            if record.retention_kind is not None and record.expires_at is not None:
+                continue
+            missing.append(record)
+        return missing

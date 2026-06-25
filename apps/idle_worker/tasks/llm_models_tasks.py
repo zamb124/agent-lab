@@ -22,7 +22,7 @@ class LLMModelsSyncTaskResult(TypedDict):
     total: int
 
 
-async def _build_scheduler_auth_context(
+async def build_scheduler_auth_context(
     container: IdleWorkerContainer, trace_id: str, session_id: str
 ) -> Context:
     """Создаёт системный контекст для фоновых задач с авторизацией."""
@@ -66,7 +66,7 @@ async def sync_llm_models_task(
     container = get_container()
 
     # Создаём системный контекст для доступа к сервису
-    scheduler_context = await _build_scheduler_auth_context(
+    scheduler_context = await build_scheduler_auth_context(
         container=container,
         trace_id=f"scheduler:sync_llm_models:{schedule_task_id}",
         session_id=f"sync_llm_models:{schedule_task_id}",

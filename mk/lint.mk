@@ -31,6 +31,11 @@ _lint-py:
 	uv run python scripts/check_strict_agent_architecture.py
 	@echo "=== lint: wider repo strictness ==="
 	uv run python scripts/audit_wider_repo_strictness.py
+	@echo "=== lint: files canon ==="
+	uv run python scripts/check_files_canon.py
+	@bash scripts/check_files_ui_canon.sh
+	@echo "=== lint: mcp branding bundle ==="
+	uv run python scripts/check_mcp_branding_bundle.py
 	@echo "=== lint: basedpyright ==="
 	uv run basedpyright $(BASEDPYRIGHT_CHECK_ARGS)
 	@echo "=== lint: local imports ==="

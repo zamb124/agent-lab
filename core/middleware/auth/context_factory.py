@@ -96,6 +96,11 @@ class ContextFactory:
         if platform:
             metadata["platform"] = platform
 
+        permission_groups = self._resolve_platform_permission_groups(
+            user, company, token_data
+        )
+        metadata["grps"] = permission_groups
+
         active_namespace = await self._resolve_active_namespace(
             request,
             company,
@@ -262,3 +267,33 @@ class ContextFactory:
                         return lang
 
         return Language.EN
+
+    def _resolve_platform_permission_groups(
+        self,
+        user: User,
+        company: Company | None,
+        token_data: TokenData | None,
+    ) -> list[str]:
+        """
+        Группы для permission/mock control: platform user.groups, роли JWT,
+        membership в активной компании и внешний claim grps (Blitz).
+        """
+        groups: list[str] = list(user.groups)
+        if token_data is not None:
+            groups.extend(token_data.roles)
+            raw_grps = token_data.metadata.get("grps")
+            if isinstance(raw_grps, list):
+                for item in raw_grps:
+                    if isinstance(item, str):
+                        groups.append(item)
+        if company is not None:
+            company_roles = user.companies.get(company.company_id)
+            if company_roles is not None:
+                groups.extend(company_roles)
+        deduped: list[str] = []
+        seen: set[str] = set()
+        for group in groups:
+            if group not in seen:
+                seen.add(group)
+                deduped.append(group)
+        return deduped

@@ -42,10 +42,10 @@ from core.billing import get_billing_service
 from core.billing.service import BALANCE_BLOCK_OPERATION_VISION
 from core.context import get_context
 from core.files.checksum import compute_content_checksum_sha256
+from core.files.default_storage import get_default_storage
 from core.files.file_ref import FileRef, FileRefSource, file_id_from_download_url
 from core.files.media.transcriber import MediaTranscriber
 from core.files.models import FileRecord, FileResponse
-from core.files.processors import get_default_file_processor
 from core.files.reader.exceptions import FileReadError
 from core.files.reader.models import (
     FileReadKind,
@@ -253,8 +253,8 @@ def _s3_error_code(exc: Exception) -> str | None:
 
 
 async def _read_stored_file_by_id(file_id: str) -> tuple[bytes, str]:
-    proc = await get_default_file_processor()
-    record = await proc.get_file_record(file_id)
+    storage = get_default_storage()
+    record = await storage.get(file_id)
     if record is None:
         raise FileReadError(f"Файл не найден в хранилище: {file_id}")
     s3_bucket = record.s3_bucket
@@ -1273,6 +1273,8 @@ def _can_use_plain_text_handler_fallback(
     file_name: str,
     kind: FileReadKind,
 ) -> bool:
+    if kind == FileReadKind.UNKNOWN and not _normalize_extension(file_name):
+        return False
     if kind in (
         FileReadKind.PDF,
         FileReadKind.IMAGE,
@@ -1328,6 +1330,8 @@ def _read_primary_sync(
     if info.detected_kind in (FileReadKind.OFFICE, FileReadKind.SPREADSHEET):
         return _read_unstructured_sync(raw, name, mime, info.detected_kind, opts)
     if info.detected_kind == FileReadKind.UNKNOWN:
+        if not info.extension:
+            raise FileReadError(f"Файл без расширения не поддерживается: {name}")
         return _read_unstructured_sync(raw, name, mime, FileReadKind.UNKNOWN, opts)
     raise FileReadError(f"Неподдерживаемый тип: {info.detected_kind}")
 

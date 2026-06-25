@@ -38,8 +38,8 @@ class _FakeLeaseManager:
         return self._page
 
 
-class _FakeFileProcessor:
-    async def process_file_from_bytes(self, **kwargs):
+class _FakeFilesService:
+    async def create(self, **kwargs):
         data = kwargs["data"]
         if not isinstance(data, bytes) or len(data) == 0:
             raise ValueError("expected non-empty bytes")
@@ -49,7 +49,7 @@ class _FakeFileProcessor:
             s3_key="files/file_test_1.html",
             storage_url=None,
             file_size=len(data),
-            content_type="text/html",
+            content_type=kwargs.get("content_type", "text/html"),
         )
 
 
@@ -65,7 +65,7 @@ async def test_tool_call_save_html_to_s3_returns_s3_path_and_links() -> None:
         browser_runtime=SimpleNamespace(
             lease_manager=_FakeLeaseManager(_FakePage("https://example.com/root", html))
         ),
-        file_processor=_FakeFileProcessor(),
+        files_service=_FakeFilesService(),
     )
     result = await _tool_call(
         tool_name="browser_save_html_to_s3",

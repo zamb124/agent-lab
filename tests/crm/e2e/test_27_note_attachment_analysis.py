@@ -534,7 +534,7 @@ class TestAttachmentGuarantee:
         unique_id: str,
         auth_headers_system: dict[str, str],
     ) -> None:
-        """Пустой файл → resolve_note_text бросает ValueError с именем файла."""
+        """Пустой файл отклоняется на upload через Files API."""
         note_resp = await crm_client.post(
             "/crm/api/v1/entities/",
             json={
@@ -555,14 +555,8 @@ class TestAttachmentGuarantee:
             files=files,
             headers=auth_headers_system,
         )
-        assert upload.status_code == 200, upload.text
-
-        with pytest.raises(ValueError, match="не содержит извлекаемого текста"):
-            _ = await crm_container.note_processing_service.resolve_note_text(
-                note_id,
-                include_attachments=True,
-                attachment_chars_limit=1_000_000,
-            )
+        assert upload.status_code == 400, upload.text
+        assert "Пустой" in upload.json()["detail"]
 
     @pytest.mark.asyncio
     async def test_whitespace_only_attachment_raises(
@@ -610,7 +604,7 @@ class TestAttachmentGuarantee:
         unique_id: str,
         auth_headers_system: dict[str, str],
     ) -> None:
-        """Непустой файл + пустой файл → ошибка на пустом (порядок проверяется)."""
+        """Непустой файл проходит resolve_note_text; пустой отклоняется на upload."""
         note_resp = await crm_client.post(
             "/crm/api/v1/entities/",
             json={
@@ -638,14 +632,14 @@ class TestAttachmentGuarantee:
             files={"file": ("empty.txt", b"", "text/plain")},
             headers=auth_headers_system,
         )
-        assert upload_empty.status_code == 200, upload_empty.text
+        assert upload_empty.status_code == 400, upload_empty.text
 
-        with pytest.raises(ValueError, match="не содержит извлекаемого текста"):
-            _ = await crm_container.note_processing_service.resolve_note_text(
-                note_id,
-                include_attachments=True,
-                attachment_chars_limit=1_000_000,
-            )
+        text = await crm_container.note_processing_service.resolve_note_text(
+            note_id,
+            include_attachments=True,
+            attachment_chars_limit=1_000_000,
+        )
+        assert good_content.decode() in text
 
 
 @pytest.mark.real_taskiq
@@ -659,10 +653,8 @@ class TestAnalyzeBlockedByEmptyAttachment:
         unique_id: str,
         auth_headers_system: dict[str, str],
     ) -> None:
-        """Пустой txt → воркер бросает ValueError → HTTP 422 с текстом ошибки.
+        """Пустой txt → upload 400, analyze не ставится в очередь с вложением."""
 
-        mock_llm_redis не нужен: LLM до него не доходит — ошибка в resolve_note_text.
-        """
         note_resp = await crm_client.post(
             "/crm/api/v1/entities/",
             json={
@@ -683,17 +675,5 @@ class TestAnalyzeBlockedByEmptyAttachment:
             files=files,
             headers=auth_headers_system,
         )
-        assert upload.status_code == 200, upload.text
-
-        task, _ = await _analyze_note_task(
-            crm_client,
-            auth_headers_system,
-            note_id,
-            fail_on_failed=False,
-            include_attachments=True,
-            check_duplicates=False,
-        )
-        assert object_str(task.get("status"), field="status") == "failed", task
-        error_message = task.get("error_message")
-        assert isinstance(error_message, str)
-        assert "не содержит извлекаемого текста" in error_message
+        assert upload.status_code == 400, upload.text
+        assert "Пустой" in upload.json()["detail"]

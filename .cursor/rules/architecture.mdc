@@ -168,7 +168,7 @@ from core.ai.runtime import create_llm_client_for_capability
 llm = create_llm_client_for_capability(AICapability.LLM_CHAT)
 ```
 
-LLM transport internals обрабатывают файлы от LLM: изображения/аудио/файлы → `file_processor`/`audio_processor` → S3 (с STT для аудио).
+LLM transport internals обрабатывают файлы от LLM: изображения/аудио/файлы → `files_service`/`audio_processor` → S3 (с STT для аудио).
 
 Генерация изображений — capability `AICapability.IMAGE_GEN`; `NanoBananaClient` резолвит модель через `core.ai.resolver` и создаёт client через `core.ai.runtime`.
 

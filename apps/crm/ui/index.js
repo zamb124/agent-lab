@@ -7,3 +7,5 @@ import '@platform/lib/components/company-modal.js';
 
 import './app/crm-app.js';
 import './components/crm-sidebar.js';
+
+export { platformFileCreateOp } from '@platform/lib/events/factories/platform-file-create.js';

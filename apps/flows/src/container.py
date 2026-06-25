@@ -20,7 +20,9 @@ from apps.flows.src.db import (
     ResourceRepository,
     ToolRepository,
 )
+from apps.flows.src.db.mcp_catalog_repository import MCPCatalogRepository
 from apps.flows.src.db.mcp_repository import MCPServerRepository
+from apps.flows.src.db.mcp_server_branding_repository import MCPServerBrandingRepository
 from apps.flows.src.durable_execution import (
     DurableWorkflowRepository,
     DurableWorkflowRuntime,
@@ -35,6 +37,7 @@ from apps.flows.src.services.hitl_work_item_service import HitlWorkItemService
 from apps.flows.src.services.lara_action_engine import LaraActionEngine
 from apps.flows.src.services.lara_facade import LaraFacade
 from apps.flows.src.services.llm_models_service import LLMModelsService
+from apps.flows.src.services.mcp_branding_service import MCPServerBrandingService
 from apps.flows.src.services.resource_loader import ResourceLoader
 from apps.flows.src.services.schedule_service import ScheduleService
 from apps.flows.src.tools.base import BaseTool
@@ -130,6 +133,22 @@ class FlowContainer(BaseContainer):
     @lazy
     def mcp_server_repository(self) -> MCPServerRepository:
         return MCPServerRepository(storage=self.storage)
+
+    @lazy
+    def mcp_catalog_repository(self) -> MCPCatalogRepository:
+        return MCPCatalogRepository(storage=self.storage)
+
+    @lazy
+    def mcp_server_branding_repository(self) -> MCPServerBrandingRepository:
+        return MCPServerBrandingRepository(storage=self.storage)
+
+    @lazy
+    def mcp_branding_service(self) -> MCPServerBrandingService:
+        return MCPServerBrandingService(
+            branding_repository=self.mcp_server_branding_repository,
+            catalog_repository=self.mcp_catalog_repository,
+            files_service=self.files_service,
+        )
 
     @lazy
     def resource_repository(self) -> ResourceRepository:

@@ -737,15 +737,18 @@ def search_worker(rag_worker, rag_service, search_service):
 
 
 @pytest.fixture(scope="session")
-def sync_worker():
+def sync_worker(frontend_service):
     """
     TaskIQ worker очереди sync (apps.sync_worker.worker:worker_app).
 
     Нужен для REST/WS, где вызывается handle_command.kiq() (создание space/channel и т.д.).
+    Зависит от frontend_service: worker скачивает файлы через
+    SERVER__FRONTEND_SERVICE_URL (localhost:9004), не через in-process ASGI.
 
     Логи процесса: stdout /tmp/sync_taskiq_worker_test.log, stderr /tmp/sync_taskiq_worker_test_err.log
     (line-buffered, PYTHONUNBUFFERED=1 у дочернего процесса).
     """
+    _ = frontend_service
     manager = SessionWorkerManager(
         name="SyncTaskIQ",
         lock_file=_SYNC_WORKER_LOCK,

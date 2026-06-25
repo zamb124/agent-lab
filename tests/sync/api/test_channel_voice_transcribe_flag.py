@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import asyncio
-import io
 import time
 from typing import Any
 
@@ -11,7 +10,11 @@ import pytest
 from httpx import AsyncClient
 
 from tests.fixtures.audio_bytes import minimal_wav_silence
-from tests.sync.api._helpers import create_topic_channel_via_http
+from tests.sync.api._helpers import (
+    create_topic_channel_via_http,
+    upload_platform_file,
+    upload_platform_file_http,
+)
 
 
 async def _create_topic_channel(
@@ -45,6 +48,7 @@ def _audio_content_block(file_payload: dict[str, Any]) -> dict[str, Any]:
 @pytest.mark.timeout(30)
 async def test_voice_message_without_channel_flag_stays_idle(
     sync_client,
+    frontend_client,
     sync_auth_headers,
     sync_db_clean: None,
     company_id: str,
@@ -52,10 +56,12 @@ async def test_voice_message_without_channel_flag_stays_idle(
 ) -> None:
     channel_id = await _create_topic_channel(sync_client, sync_auth_headers, company_id, unique_id)
     wav = minimal_wav_silence(duration_sec=0.05)
-    up = await sync_client.post(
-        "/sync/api/v1/files/",
-        headers=sync_auth_headers,
-        files={"file": ("note.wav", io.BytesIO(wav), "audio/wav")},
+    up = await upload_platform_file(
+        frontend_client,
+        sync_auth_headers,
+        filename="note.wav",
+        content=wav,
+        content_type="audio/wav",
     )
     assert up.status_code == 200
     f = up.json()
@@ -81,6 +87,7 @@ async def test_voice_message_with_channel_flag_processing_then_done_via_worker(
     sync_service,
     sync_client,
     sync_worker,
+    sync_auth_token,
     sync_auth_headers,
     sync_db_clean: None,
     company_id: str,
@@ -97,10 +104,11 @@ async def test_voice_message_with_channel_flag_processing_then_done_via_worker(
     assert patch_data.get("transcribe_voice_messages") is True
 
     wav = minimal_wav_silence(duration_sec=0.05)
-    up = await sync_client.post(
-        "/sync/api/v1/files/",
-        headers=sync_auth_headers,
-        files={"file": ("note.wav", io.BytesIO(wav), "audio/wav")},
+    up = await upload_platform_file_http(
+        sync_auth_token,
+        filename="note.wav",
+        content=wav,
+        content_type="audio/wav",
     )
     assert up.status_code == 200
     f = up.json()

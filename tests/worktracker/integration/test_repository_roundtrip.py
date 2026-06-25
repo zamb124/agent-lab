@@ -46,7 +46,7 @@ async def test_repository_save_and_load_work_item(
         state=WorkItemState.OPEN,
     )
     saved = await worktracker_repository.save_work_item(item)
-    loaded = await worktracker_repository.get("system", saved.work_item_id)
+    loaded = await worktracker_repository.get_work_item("system", saved.work_item_id)
     assert loaded.variables["k"].value == "v"
     assert loaded.attachments[0].file_id == f"f_{unique_id}"
     assert loaded.links[0].entity_id == f"ent_{unique_id}"
@@ -77,11 +77,12 @@ async def test_find_by_completion_correlation(
         state=WorkItemState.OPEN,
     )
     saved = await worktracker_repository.save_work_item(item)
-    found_id = await worktracker_repository.find_work_item_by_correlation(
+    found = await worktracker_repository.find_work_item_by_correlation(
         "system",
         correlation_id,
     )
-    assert found_id == saved.work_item_id
+    assert found is not None
+    assert found.work_item_id == saved.work_item_id
 
 
 async def test_map_work_item_ids_by_crm_entities(
@@ -94,6 +95,7 @@ async def test_map_work_item_ids_by_crm_entities(
         work_item_id=f"wi_crm_{unique_id}",
         company_id="system",
         title="CRM task",
+        kind=WorkItemKind.CRM_ACTIVITY,
         created_by=SystemActor(),
         links=[CrmEntityLink(entity_id=entity_id)],
         created_at=now,

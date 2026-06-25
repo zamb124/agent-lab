@@ -1001,9 +1001,9 @@ class TestNodeAsToolWrapperBasics:
                 config["channel"] = "webhook"
                 config["action"] = "send"
             elif node_type == NodeType.HITL_NODE:
-                config["operator_queue_slug"] = "support"
-                config["operator_task_title"] = "Test"
-                config["operator_user_message"] = "Test"
+                config["work_queue_slug"] = "support"
+                config["handoff_task_title"] = "Test"
+                config["handoff_user_message"] = "Test"
             elif node_type == NodeType.REFLECTION:
                 config["critic_policy"] = reflection_policy().model_dump(mode="json")
                 config["llm"] = {"model": "mock-gpt-4"}

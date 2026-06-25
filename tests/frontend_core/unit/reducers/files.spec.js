@@ -44,10 +44,10 @@ describe('filesReducer', () => {
 
 describe('buildFileDownloadUrl', () => {
     it('собирает URL с encode', () => {
-        expect(buildFileDownloadUrl('/svc', 'file id with space')).toBe('/svc/api/v1/files/download/file%20id%20with%20space');
+        expect(buildFileDownloadUrl('file id with space')).toBe('/frontend/api/v1/files/download/file%20id%20with%20space');
     });
 
     it('пустой fileId — throw', () => {
-        expect(() => buildFileDownloadUrl('/svc', '')).toThrow(/fileId/);
+        expect(() => buildFileDownloadUrl('')).toThrow(/fileId/);
     });
 });

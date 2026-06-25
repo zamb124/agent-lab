@@ -35,7 +35,7 @@ async def test_landing_demo_bundles_store_card_image_in_storage(app) -> None:
     await loader.load_tools_cache()
     await loader.load_nodes_cache()
 
-    prefix = "/flows/api/v1/files/download/"
+    prefix = "/frontend/api/v1/files/download/"
     demo_ids = ("lawyer", "support_demo", "psy", "coach", "tutor")
 
     for bundle_id in demo_ids:
@@ -51,7 +51,7 @@ async def test_landing_demo_bundles_store_card_image_in_storage(app) -> None:
 
         file_id = url.rstrip("/").split("/")[-1]
         assert file_id.startswith("file_")
-        record = await container.file_processor.get_file_record(file_id)
+        record = await container.files_service.get(file_id)
         assert record is not None
         assert record.content_type.startswith("image/")
         assert record.is_public is True

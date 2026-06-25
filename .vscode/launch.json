@@ -405,9 +405,119 @@
                 "PYTHONPATH": "${workspaceFolder}"
             },
             "python": "${workspaceFolder}/.venv/bin/python"
+        },
+        {
+            "name": "Run: search",
+            "consoleTitle": "run.py: search 🔍",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "${workspaceFolder}/scripts/run.py",
+            "args": [
+                "search"
+            ],
+            "cwd": "${workspaceFolder}",
+            "console": "integratedTerminal",
+            "justMyCode": false,
+            "env": {
+                "PYTHONPATH": "${workspaceFolder}"
+            },
+            "python": "${workspaceFolder}/.venv/bin/python"
+        },
+        {
+            "name": "Run: search_worker",
+            "consoleTitle": "run.py: search_worker 🔎",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "${workspaceFolder}/scripts/run.py",
+            "args": [
+                "search_worker"
+            ],
+            "cwd": "${workspaceFolder}",
+            "console": "integratedTerminal",
+            "justMyCode": false,
+            "env": {
+                "PYTHONPATH": "${workspaceFolder}"
+            },
+            "python": "${workspaceFolder}/.venv/bin/python"
+        },
+        {
+            "name": "Debug: search :8010",
+            "type": "debugpy",
+            "request": "launch",
+            "module": "granian",
+            "args": [
+                "--interface",
+                "asgi",
+                "apps.search.main:app",
+                "--host",
+                "0.0.0.0",
+                "--port",
+                "8010",
+                "--http",
+                "auto",
+                "--ws",
+                "--reload",
+                "--reload-paths",
+                "apps",
+                "--reload-paths",
+                "core",
+                "--no-access-log"
+            ],
+            "cwd": "${workspaceFolder}",
+            "python": "${workspaceFolder}/.venv/bin/python",
+            "env": {
+                "PYTHONUNBUFFERED": "1",
+                "PYTHONPATH": "${workspaceFolder}"
+            },
+            "justMyCode": false
+        },
+        {
+            "name": "Debug: flows :8001",
+            "type": "debugpy",
+            "request": "launch",
+            "module": "granian",
+            "args": [
+                "--interface",
+                "asgi",
+                "apps.flows.main:app",
+                "--host",
+                "0.0.0.0",
+                "--port",
+                "8001",
+                "--http",
+                "auto",
+                "--ws",
+                "--reload",
+                "--reload-paths",
+                "apps",
+                "--reload-paths",
+                "core",
+                "--no-access-log"
+            ],
+            "cwd": "${workspaceFolder}",
+            "python": "${workspaceFolder}/.venv/bin/python",
+            "env": {
+                "PYTHONUNBUFFERED": "1",
+                "PYTHONPATH": "${workspaceFolder}"
+            },
+            "justMyCode": false
         }
     ],
     "compounds": [
+        {
+            "name": "Run: MCP stack (flows + search + browser + idle_worker)",
+            "configurations": [
+                "Run: flows",
+                "Run: search",
+                "Run: browser",
+                "Run: idle_worker"
+            ],
+            "stopAll": true,
+            "presentation": {
+                "group": "mcp",
+                "order": 1
+            }
+        },
         {
             "name": "Run: office (with RAG)",
             "configurations": [
@@ -434,6 +544,8 @@
                 "Run: office",
                 "Run: scheduler-api",
                 "Run: browser",
+                "Run: search_worker",
+                "Run: search",
                 "Run: provider_litserve",
                 "Run: voice",
                 "Run: capability_gateway",

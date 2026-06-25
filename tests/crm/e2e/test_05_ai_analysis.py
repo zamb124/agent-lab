@@ -15,6 +15,7 @@ from httpx import AsyncClient, Response
 
 from tests.crm.e2e._json_helpers import (
     json_object,
+    mock_llm_queue_with_analyze_spare,
     object_dict,
     object_list,
     object_str,
@@ -44,12 +45,22 @@ async def _analyze_note(
     crm_client: AsyncClient,
     headers: dict[str, str],
     note_id: str,
+    *,
+    mock_llm_redis: MockLlmRedisFactory | None = None,
+    mock_responses: list[object] | None = None,
+    prepare_mock: Callable[[], Awaitable[None]] | None = None,
     **extra: object,
 ) -> tuple[dict[str, object], _DraftResponse]:
     """Запускает анализ заметки через POST /tasks/note-analyze и ждёт завершения.
 
     Возвращает (task_row, ai_analysis_draft).
     """
+    if mock_llm_redis is not None or mock_responses is not None:
+        if mock_llm_redis is None or mock_responses is None:
+            raise ValueError("mock_llm_redis and mock_responses must be passed together")
+        await mock_llm_redis(mock_llm_queue_with_analyze_spare(mock_responses))
+    elif prepare_mock is not None:
+        await prepare_mock()
     body: dict[str, object] = {
         "note_id": note_id,
         "check_duplicates": False,
@@ -103,7 +114,7 @@ class TestAIAnalysis:
         """AI извлекает note + entities + relationships из текста"""
         _ = unique_id
         note_title = "Встреча с Иваном"
-        await mock_llm_redis([{
+        analyze_mock_responses = [{
             "type": "text",
             "content": json.dumps({
                 "note": {
@@ -153,7 +164,7 @@ class TestAIAnalysis:
                 "metadata": _META,
                 "attachment_summaries": [],
             })
-        }])
+        }]
 
         note_resp = await crm_client.post("/crm/api/v1/entities/", json={
             "entity_type": "note",
@@ -164,7 +175,13 @@ class TestAIAnalysis:
         note_payload = _http_json(note_resp)
         note_id = object_str(note_payload.get("entity_id"), field="entity_id")
 
-        _, response = await _analyze_note(crm_client, auth_headers_system, note_id)
+        _, response = await _analyze_note(
+            crm_client,
+            auth_headers_system,
+            note_id,
+            mock_llm_redis=mock_llm_redis,
+            mock_responses=analyze_mock_responses,
+        )
 
         assert response.status_code == 200
         result = response.json()
@@ -196,7 +213,7 @@ class TestAIAnalysis:
     ):
         """AI извлекает задачи с дедлайнами и приоритетами"""
         _ = unique_id
-        await mock_llm_redis([{
+        analyze_mock_responses = [{
             "type": "text",
             "content": json.dumps({
                 "note": {
@@ -240,7 +257,7 @@ class TestAIAnalysis:
                 "metadata": _META,
                 "attachment_summaries": [],
             })
-        }])
+        }]
 
         note_resp = await crm_client.post("/crm/api/v1/entities/", json={
             "entity_type": "note",
@@ -250,7 +267,13 @@ class TestAIAnalysis:
         }, headers=auth_headers_system)
         note_id = object_str(_http_json(note_resp).get("entity_id"), field="entity_id")
 
-        _, response = await _analyze_note(crm_client, auth_headers_system, note_id)
+        _, response = await _analyze_note(
+            crm_client,
+            auth_headers_system,
+            note_id,
+            mock_llm_redis=mock_llm_redis,
+            mock_responses=analyze_mock_responses,
+        )
 
         assert response.status_code == 200
         result = response.json()
@@ -286,7 +309,7 @@ class TestAIAnalysis:
         Следующая встреча назначена на следующую неделю.
         Основные договоренности: начать разработку новой фичи, провести код-ревью, подготовить документацию."""
 
-        await mock_llm_redis([{
+        analyze_mock_responses = [{
             "type": "text",
             "content": json.dumps({
                 "note": {
@@ -306,7 +329,7 @@ class TestAIAnalysis:
                 "metadata": _META,
                 "attachment_summaries": [],
             })
-        }])
+        }]
 
         note_resp = await crm_client.post("/crm/api/v1/entities/", json={
             "entity_type": "note",
@@ -316,7 +339,13 @@ class TestAIAnalysis:
         }, headers=auth_headers_system)
         note_id = object_str(_http_json(note_resp).get("entity_id"), field="entity_id")
 
-        _, response = await _analyze_note(crm_client, auth_headers_system, note_id)
+        _, response = await _analyze_note(
+            crm_client,
+            auth_headers_system,
+            note_id,
+            mock_llm_redis=mock_llm_redis,
+            mock_responses=analyze_mock_responses,
+        )
 
         assert response.status_code == 200
         result = response.json()
@@ -344,7 +373,7 @@ class TestAIAnalysis:
         )
 
         call_title = "Звонок с клиентом"
-        await mock_llm_redis([{
+        analyze_mock_responses = [{
             "type": "text",
             "content": json.dumps({
                 "note": {
@@ -369,7 +398,7 @@ class TestAIAnalysis:
                 "metadata": _META,
                 "attachment_summaries": [],
             })
-        }])
+        }]
 
         note_resp = await crm_client.post("/crm/api/v1/entities/", json={
             "entity_type": "note",
@@ -379,7 +408,14 @@ class TestAIAnalysis:
         }, headers=auth_headers_system)
         note_id = object_str(_http_json(note_resp).get("entity_id"), field="entity_id")
 
-        _, response = await _analyze_note(crm_client, auth_headers_system, note_id, mentioned_entity_ids=[existing_id])
+        _, response = await _analyze_note(
+            crm_client,
+            auth_headers_system,
+            note_id,
+            mock_llm_redis=mock_llm_redis,
+            mock_responses=analyze_mock_responses,
+            mentioned_entity_ids=[existing_id],
+        )
 
         assert response.status_code == 200
         result = response.json()
@@ -407,7 +443,7 @@ class TestAIAnalysis:
     ):
         """AI извлекает только указанные типы entities"""
         _ = unique_id
-        await mock_llm_redis([{
+        analyze_mock_responses = [{
             "type": "text",
             "content": json.dumps({
                 "note": {
@@ -425,7 +461,7 @@ class TestAIAnalysis:
                 "metadata": _META,
                 "attachment_summaries": [],
             })
-        }])
+        }]
 
         note_resp = await crm_client.post("/crm/api/v1/entities/", json={
             "entity_type": "note",
@@ -435,7 +471,14 @@ class TestAIAnalysis:
         }, headers=auth_headers_system)
         note_id = object_str(_http_json(note_resp).get("entity_id"), field="entity_id")
 
-        _, response = await _analyze_note(crm_client, auth_headers_system, note_id, extract_entity_types=["task"])
+        _, response = await _analyze_note(
+            crm_client,
+            auth_headers_system,
+            note_id,
+            mock_llm_redis=mock_llm_redis,
+            mock_responses=analyze_mock_responses,
+            extract_entity_types=["task"],
+        )
 
         assert response.status_code == 200
         result = response.json()
@@ -454,7 +497,7 @@ class TestAIAnalysis:
             "is_directed": True
         }, headers=auth_headers_system)
 
-        await mock_llm_redis([{
+        analyze_mock_responses = [{
             "type": "text",
             "content": json.dumps({
                 "note": {
@@ -482,7 +525,7 @@ class TestAIAnalysis:
                 "metadata": _META,
                 "attachment_summaries": [],
             })
-        }])
+        }]
 
         note_resp = await crm_client.post("/crm/api/v1/entities/", json={
             "entity_type": "note",
@@ -494,6 +537,8 @@ class TestAIAnalysis:
 
         _, response = await _analyze_note(
             crm_client, auth_headers_system, note_id,
+            mock_llm_redis=mock_llm_redis,
+            mock_responses=analyze_mock_responses,
             extract_relationship_types=[f"works_on_{unique_id}"],
         )
         result = response.json()

@@ -5,7 +5,6 @@ from __future__ import annotations
 import uuid
 from typing import TYPE_CHECKING, cast
 
-from apps.flows.config import FLOWS_PUBLIC_API_PREFIX
 from apps.flows.src.clients.mcp_client import get_mcp_client as build_mcp_client
 from apps.flows.src.container_state import require_current_container
 from apps.flows.src.runtime.exceptions import FlowInterrupt
@@ -19,6 +18,8 @@ from core.clients.speech_override import SpeechOverride, SpeechProviderName, Spe
 from core.clients.speech_provider_catalog import STT_TTS_PROVIDER_IDS, VOICE_RESPONSE_FORMAT_IDS
 from core.context import get_context
 from core.files.audio_probe import probe_audio_duration_seconds_from_upload
+from core.files.create_spec import FileCreateSpec, FilePostCreate, FileSourceKind, FileSourceRef
+from core.files.registry import default_retention_for_source
 from core.files.s3_client import S3ClientFactory
 from core.integrations.models import IntegrationProvider
 from core.logging import get_logger
@@ -180,11 +181,8 @@ async def transcribe_audio(
     company_id = ctx.active_company.company_id
 
     container = require_current_container()
-    record = await container.file_processor.get_file_record(file_id.strip())
-    if record is None:
-        raise ValueError(f"transcribe_audio: файл {file_id!r} не найден.")
-
-    s3 = await container.file_processor.get_s3_client()
+    record = await container.files_service.get(file_id.strip())
+    s3 = S3ClientFactory.create_client_for_bucket(record.s3_bucket)
     audio_bytes = await s3.download_bytes(record.s3_key, bucket=record.s3_bucket)
 
     override = SpeechOverride(
@@ -266,7 +264,6 @@ async def synthesize_speech(
     if ctx is None or ctx.active_company is None:
         raise ValueError("synthesize_speech: нужен Context с active_company.")
     company_id = ctx.active_company.company_id
-    user_id = ctx.user.user_id if ctx.user else None
 
     override = SpeechOverride(
         provider=_speech_provider(provider),
@@ -287,14 +284,17 @@ async def synthesize_speech(
     name = file_name if file_name and file_name.strip() else f"tts_{uuid.uuid4().hex[:12]}.{ext}"
 
     container = require_current_container()
-    record = await container.file_processor.persist_uploaded_file(
+    spec = FileCreateSpec(
+        source_kind=FileSourceKind.GENERATED_EPHEMERAL,
+        source_ref=FileSourceRef(),
+        retention=default_retention_for_source(FileSourceKind.GENERATED_EPHEMERAL),
+        post_create=FilePostCreate(is_public=False),
+    )
+    record = await container.files_service.create(
+        spec=spec,
         data=result.audio_bytes,
         original_name=name,
         content_type=result.mime_type,
-        uploaded_by=user_id,
-        company_id=company_id,
-        public=False,
-        download_url_prefix=f"{FLOWS_PUBLIC_API_PREFIX}/files/download",
     )
 
     _ = await record_tts_usage(

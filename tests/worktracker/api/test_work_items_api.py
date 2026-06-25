@@ -127,13 +127,21 @@ async def test_create_manual_task_assigns_creator(
 
 
 async def test_create_with_variables_and_attachments_roundtrip(
+    frontend_client,
     worktracker_client,
+    auth_headers_system,
     unique_id: str,
 ) -> None:
+    from tests.sync.api._helpers import upload_platform_file
+
     pdf_bytes = b"%PDF-1.4\n1 0 obj<<>>endobj\ntrailer<<>>\n%%EOF"
-    upload = await worktracker_client.post(
-        f"{API_PREFIX}/files/",
-        files={"file": ("note.pdf", io.BytesIO(pdf_bytes), "application/pdf")},
+    upload = await upload_platform_file(
+        frontend_client,
+        auth_headers_system,
+        filename="note.pdf",
+        content=pdf_bytes,
+        content_type="application/pdf",
+        is_public=False,
     )
     assert upload.status_code == 200
     file_ref = upload.json()
@@ -181,7 +189,7 @@ async def test_patch_work_item_fields(worktracker_client, unique_id: str) -> Non
             "title": f"Updated {unique_id}",
             "description": "desc",
             "labels": ["a"],
-            "variables": {"x": {"value": "1", "visibility": "internal"}},
+            "variables": {"x": {"value": "1", "secret": False}},
         },
     )
     assert patch_resp.status_code == 200

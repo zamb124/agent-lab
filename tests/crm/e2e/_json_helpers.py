@@ -37,3 +37,11 @@ def object_str(value: object, *, field: str = "value") -> str:
     if not isinstance(value, str):
         raise AssertionError(f"{field} must be a string")
     return value
+
+
+def mock_llm_queue_with_analyze_spare(responses: list[object]) -> list[object]:
+    """TaskIQ + shared mock_llm:responses:flows may consume slots before CRM analyze."""
+    if not responses:
+        raise ValueError("responses must not be empty")
+    primary = responses[-1]
+    return [*responses, primary, primary]
