@@ -105,7 +105,7 @@ bash deploy/scripts/kubeconfig-for-github-actions.sh
 
 ## 4. HumanitecAgent desktop release (`humanitec-agent-build.yml`)
 
-Запускается автоматически после успешного **Deploy** (`workflow_run`). Без секретов ниже macOS/Windows job'ы упадут; Linux-сборки пройдут.
+Запускается **только вручную** (`workflow_dispatch` в GitHub Actions). Без секретов ниже macOS/Windows job'ы упадут; Linux-сборки пройдут.
 
 | Имя в GitHub | Назначение |
 |---|---|

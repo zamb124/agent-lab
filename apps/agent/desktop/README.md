@@ -14,18 +14,16 @@
 
 ## Release workflow (prod)
 
-После **каждого успешного Deploy** workflow [`.github/workflows/humanitec-agent-build.yml`](../../.github/workflows/humanitec-agent-build.yml) запускается автоматически (`workflow_run`).
+Сборка HumanitecAgent — **только вручную** через GitHub Actions → **humanitec-agent-build** → `workflow_dispatch`.
 
 | Инвариант | Значение |
 |---|---|
-| Триггер | Deploy success → `humanitec-agent-build` |
-| Release tag | `humanitec-agent-{short_sha}` (совпадает с Helm `image.tag`) |
+| Триггер | `workflow_dispatch` (Deploy не запускает сборку) |
+| Release tag | `humanitec-agent-{short_sha}` или явный `release_tag` |
 | `releases/latest` | `make_latest: true` на каждой публикации |
-| Повторный Deploy того же SHA | release уже есть → skip matrix, только promote latest |
+| Release с таким tag уже есть | skip matrix; `force_rebuild=true` для пересборки |
 
-Ручной перезапуск: GitHub Actions → **humanitec-agent-build** → `workflow_dispatch` ( `release_tag` опционален ).
-
-Legacy semver: push тега `humanitec-agent-v0.x.y` по-прежнему поддерживается.
+Параметры `workflow_dispatch`: `release_tag` (опционально), `artifact_mode`, `publish_draft`, `force_rebuild`.
 
 ### Локально (dev/smoke)
 

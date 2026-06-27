@@ -5,9 +5,6 @@ concurrency:
   cancel-in-progress: false
 
 on:
-  workflow_run:
-    workflows: ["Deploy"]
-    types: [completed]
   workflow_dispatch:
     inputs:
       release_tag:
@@ -28,16 +25,17 @@ on:
         required: false
         default: false
         type: boolean
-  push:
-    tags:
-      - "humanitec-agent-*"
+      force_rebuild:
+        description: "Пересобрать matrix, даже если release с таким tag уже существует"
+        required: false
+        default: false
+        type: boolean
 
 env:
   AGENT_ARTIFACT_MODE: release
 
 jobs:
   resolve-release:
-    if: github.event_name != 'workflow_run' || github.event.workflow_run.conclusion == 'success'
     runs-on: ubuntu-latest
     outputs:
       release_tag: ${{ steps.resolve.outputs.release_tag }}
@@ -49,15 +47,9 @@ jobs:
         id: resolve
         run: |
           set -euo pipefail
-          if [[ "${{ github.event_name }}" == "workflow_run" ]]; then
-            VERSION_SHA="${{ github.event.workflow_run.head_sha }}"
-          else
-            VERSION_SHA="${{ github.sha }}"
-          fi
+          VERSION_SHA="${{ github.sha }}"
           SHORT_SHA="${VERSION_SHA:0:7}"
-          if [[ "${{ github.event_name }}" == "push" ]]; then
-            RELEASE_TAG="${GITHUB_REF_NAME}"
-          elif [[ "${{ github.event_name }}" == "workflow_dispatch" && -n "${{ github.event.inputs.release_tag }}" ]]; then
+          if [[ "${{ github.event_name }}" == "workflow_dispatch" && -n "${{ github.event.inputs.release_tag }}" ]]; then
             RELEASE_TAG="${{ github.event.inputs.release_tag }}"
           else
             RELEASE_TAG="humanitec-agent-${SHORT_SHA}"
@@ -74,6 +66,12 @@ jobs:
         run: |
           set -euo pipefail
           TAG="${{ steps.resolve.outputs.release_tag }}"
+          FORCE_REBUILD="${{ github.event.inputs.force_rebuild }}"
+          if [[ "${FORCE_REBUILD}" == "true" ]]; then
+            echo "skip_build=false" >> "${GITHUB_OUTPUT}"
+            echo "force_rebuild=true — full matrix build for ${TAG}"
+            exit 0
+          fi
           if gh release view "${TAG}" --repo "${GITHUB_REPOSITORY}" >/dev/null 2>&1; then
             echo "skip_build=true" >> "${GITHUB_OUTPUT}"
             echo "Release ${TAG} already exists — skip matrix build"
