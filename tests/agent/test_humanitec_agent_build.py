@@ -185,10 +185,15 @@ def test_apply_branding_script_patches_goose_desktop() -> None:
 
         assert '"productName": "HumanitecAgent"' in package_payload
         assert '"name": "humanitecagent"' in package_payload
+        assert '"@electron-forge/maker-wix"' in package_payload
+        assert '"@reforged/maker-appimage"' in package_payload
         assert "name: process.env.GOOSE_BUNDLE_NAME" in forge_payload
         assert "name: 'humanitecagent'" in forge_payload
         assert "bin: 'HumanitecAgent'" in forge_payload
         assert "schemes: ['humanitec']" in forge_payload
+        assert "@electron-forge/maker-wix" in forge_payload
+        assert "@reforged/maker-appimage" in forge_payload
+        assert "name: '@electron-forge/maker-deb',\n      platforms: ['linux']," in forge_payload
         assert "Name=HumanitecAgent" in deb_payload
         assert "x-scheme-handler/humanitec" in deb_payload
         defaults_payload = (goose_desktop / "humanitec.defaults.json").read_text(encoding="utf-8")

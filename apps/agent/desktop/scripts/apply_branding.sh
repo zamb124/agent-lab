@@ -49,6 +49,14 @@ package_slug = distro.bundle_name.lower()
 package_payload["name"] = package_slug
 package_payload["productName"] = distro.bundle_name
 package_payload["description"] = f"{distro.display_name} App"
+dev_dependencies = package_payload.get("devDependencies")
+if not isinstance(dev_dependencies, dict):
+    raise SystemExit("package.json devDependencies missing")
+if "@electron-forge/maker-wix" not in dev_dependencies:
+    dev_dependencies["@electron-forge/maker-wix"] = "^7.11.1"
+if "@reforged/maker-appimage" not in dev_dependencies:
+    dev_dependencies["@reforged/maker-appimage"] = "^5.2.0"
+package_payload["devDependencies"] = dev_dependencies
 package_path.write_text(json.dumps(package_payload, indent=2) + "\n", encoding="utf-8")
 
 for desktop_name in ("forge.deb.desktop", "forge.rpm.desktop"):
@@ -446,6 +454,58 @@ if extend_info_anchor in text and "NSHumanitecUsageDescription" not in text:
         + f"\n      NSHumanitecUsageDescription: '{distro.display_name} desktop agent',",
         1,
     )
+
+zip_platforms_old = "platforms: ['darwin', 'win32', 'linux'],"
+zip_platforms_new = "platforms: ['darwin'],"
+if zip_platforms_old in text:
+    text = text.replace(zip_platforms_old, zip_platforms_new, 1)
+elif "@electron-forge/maker-zip" in text and "platforms: ['darwin']," not in text:
+    raise SystemExit("forge.config.ts maker-zip platforms anchor missing")
+
+deb_maker_anchor = "      name: '@electron-forge/maker-deb',\n      config:"
+deb_maker_patch = "      name: '@electron-forge/maker-deb',\n      platforms: ['linux'],\n      config:"
+if deb_maker_anchor in text and "name: '@electron-forge/maker-deb',\n      platforms:" not in text:
+    text = text.replace(deb_maker_anchor, deb_maker_patch, 1)
+
+rpm_maker_anchor = "      name: '@electron-forge/maker-rpm',\n      config:"
+rpm_maker_patch = "      name: '@electron-forge/maker-rpm',\n      platforms: ['linux'],\n      config:"
+if rpm_maker_anchor in text and "name: '@electron-forge/maker-rpm',\n      platforms:" not in text:
+    text = text.replace(rpm_maker_anchor, rpm_maker_patch, 1)
+
+flatpak_maker_anchor = "      name: '@electron-forge/maker-flatpak',\n      config:"
+flatpak_maker_patch = "      name: '@electron-forge/maker-flatpak',\n      platforms: ['linux'],\n      config:"
+if flatpak_maker_anchor in text and "name: '@electron-forge/maker-flatpak',\n      platforms:" not in text:
+    text = text.replace(flatpak_maker_anchor, flatpak_maker_patch, 1)
+
+makers_plugins_anchor = "  ],\n  plugins:"
+if "@electron-forge/maker-wix" not in text:
+    if makers_plugins_anchor not in text:
+        raise SystemExit("forge.config.ts makers/plugins anchor missing")
+    extra_makers = """
+    {
+      name: '@electron-forge/maker-wix',
+      platforms: ['win32'],
+      config: {
+        language: 1033,
+        manufacturer: 'Humanitec',
+        icon: 'src/images/icon.ico',
+      },
+    },
+    {
+      name: '@reforged/maker-appimage',
+      platforms: ['linux'],
+      config: {
+        options: {
+          name: 'humanitecagent',
+          bin: 'HumanitecAgent',
+          categories: ['Development'],
+          icon: 'src/images/icon.png',
+        },
+      },
+    },
+  ],
+  plugins:"""
+    text = text.replace(makers_plugins_anchor, extra_makers, 1)
 
 forge_path.write_text(text, encoding="utf-8")
 
