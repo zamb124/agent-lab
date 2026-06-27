@@ -134,9 +134,9 @@ build_release() {
       pnpm install --frozen-lockfile
       if [[ "${PLATFORM}" == "macos-x64" ]]; then
         export ELECTRON_ARCH=x64
-        pnpm run bundle:intel
+        pnpm run make -- --arch=x64
       else
-        pnpm run bundle:default
+        pnpm run make
       fi
       popd >/dev/null
       built_dmg_path="$(find "${VENDOR_DIR}/ui/desktop/out" -name "*.dmg" -type f | head -n 1)"

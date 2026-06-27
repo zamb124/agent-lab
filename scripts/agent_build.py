@@ -35,6 +35,25 @@ from apps.agent.desktop.build_contract import (  # noqa: E402, I001
 )
 
 
+def _build_shell_command(
+    *,
+    platform_name: str,
+    artifact_mode: str,
+    version_sha: str,
+) -> list[str]:
+    build_args = [
+        "--platform",
+        platform_name,
+        "--artifact-mode",
+        artifact_mode,
+        "--version-sha",
+        version_sha,
+    ]
+    if sys.platform == "win32":
+        return ["bash", str(BUILD_SCRIPT), *build_args]
+    return [str(BUILD_SCRIPT), *build_args]
+
+
 def _run_build(
     *,
     platform_name: str,
@@ -47,15 +66,11 @@ def _run_build(
         raise ValueError(f"Unsupported artifact mode: {artifact_mode!r}")
     if not BUILD_SCRIPT.is_file():
         raise FileNotFoundError(f"Build script missing: {BUILD_SCRIPT}")
-    command = [
-        str(BUILD_SCRIPT),
-        "--platform",
-        platform_name,
-        "--artifact-mode",
-        artifact_mode,
-        "--version-sha",
-        version_sha,
-    ]
+    command = _build_shell_command(
+        platform_name=platform_name,
+        artifact_mode=artifact_mode,
+        version_sha=version_sha,
+    )
     print(f"agent-build: {' '.join(command)}", flush=True)
     _ = subprocess.run(command, check=True, cwd=str(REPO_ROOT))
 

@@ -184,6 +184,8 @@ def test_apply_branding_script_patches_goose_desktop() -> None:
         deb_payload = (goose_desktop / "forge.deb.desktop").read_text(encoding="utf-8")
 
         assert '"productName": "HumanitecAgent"' in package_payload
+        assert '"name": "humanitecagent"' in package_payload
+        assert "name: process.env.GOOSE_BUNDLE_NAME" in forge_payload
         assert "name: 'humanitecagent'" in forge_payload
         assert "bin: 'HumanitecAgent'" in forge_payload
         assert "schemes: ['humanitec']" in forge_payload

@@ -45,6 +45,8 @@ resolved_frontend_base_url = resolve_default_frontend_base_url()
 
 package_path = goose_desktop / "package.json"
 package_payload = json.loads(package_path.read_text(encoding="utf-8"))
+package_slug = distro.bundle_name.lower()
+package_payload["name"] = package_slug
 package_payload["productName"] = distro.bundle_name
 package_payload["description"] = f"{distro.display_name} App"
 package_path.write_text(json.dumps(package_payload, indent=2) + "\n", encoding="utf-8")
@@ -57,15 +59,21 @@ for desktop_name in ("forge.deb.desktop", "forge.rpm.desktop"):
 icons_dir = branding_dir / "icons"
 goose_images = goose_desktop / "src" / "images"
 goose_images.mkdir(parents=True, exist_ok=True)
-icon_generator = repo_root / "scripts" / "generate_humanitec_desktop_icons.py"
-if not icon_generator.is_file():
-    raise SystemExit(f"desktop icon generator missing: {icon_generator}")
-subprocess.run(
-    [sys.executable, str(icon_generator), str(icons_dir)],
-    check=True,
-    cwd=str(repo_root),
-)
-for icon_name in ("icon.png", "icon.ico", "icon.icns"):
+required_icons = ("icon.png", "icon.ico", "icon.icns")
+icons_complete = all((icons_dir / icon_name).is_file() for icon_name in required_icons)
+if not icons_complete:
+    icon_generator = repo_root / "scripts" / "generate_humanitec_desktop_icons.py"
+    if not icon_generator.is_file():
+        raise SystemExit(f"desktop icon generator missing: {icon_generator}")
+    subprocess.run(
+        [sys.executable, str(icon_generator), str(icons_dir)],
+        check=True,
+        cwd=str(repo_root),
+    )
+    icons_complete = all((icons_dir / icon_name).is_file() for icon_name in required_icons)
+    if not icons_complete:
+        raise SystemExit(f"desktop icons incomplete after generation: {icons_dir}")
+for icon_name in required_icons:
     source_icon = icons_dir / icon_name
     if source_icon.is_file():
         shutil.copyfile(source_icon, goose_images / icon_name)
@@ -398,6 +406,18 @@ main_path.write_text(main_text, encoding="utf-8")
 forge_path = goose_desktop / "forge.config.ts"
 text = forge_path.read_text(encoding="utf-8")
 package_id = distro.bundle_name.lower()
+packager_name_marker = "name: process.env.GOOSE_BUNDLE_NAME"
+packager_cfg_anchor = "let cfg = {\n  asar: true,"
+packager_cfg_patch = (
+    "let cfg = {\n"
+    "  name: process.env.GOOSE_BUNDLE_NAME || 'Goose',\n"
+    "  asar: true,"
+)
+if packager_name_marker not in text:
+    if packager_cfg_anchor in text:
+        text = text.replace(packager_cfg_anchor, packager_cfg_patch, 1)
+    else:
+        raise SystemExit("forge.config.ts packager cfg anchor missing")
 replacements = {
     "name: 'Goose'": f"name: '{package_id}'",
     "bin: 'Goose'": f"bin: '{distro.bundle_name}'",

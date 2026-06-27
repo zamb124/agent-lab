@@ -134,6 +134,12 @@ jobs:
       - name: Setup Rust
         uses: dtolnay/rust-toolchain@stable
 
+      - name: Install Linux skia dependencies
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libegl1 libgl1 libfontconfig1 libfreetype6
+
       - name: Resolve artifact mode
         shell: bash
         run: |
