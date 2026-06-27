@@ -4,6 +4,7 @@ set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 REPO_ROOT="$(cd "${ROOT_DIR}/../../.." && pwd)"
 VENDOR_DIR="${ROOT_DIR}/vendor/goose"
+GOOSE_UI_DIR="${VENDOR_DIR}/ui"
 DISTRO_JSON="${ROOT_DIR}/distro/humanitec.json"
 OUTPUT_DIR="${AGENT_OUTPUT_DIR:-${ROOT_DIR}/dist}"
 DESKTOP_DIR="${VENDOR_DIR}/ui/desktop"
@@ -99,21 +100,38 @@ require_desktop_make_dir() {
 }
 
 install_desktop_node_modules() {
-  pushd "${DESKTOP_DIR}" >/dev/null
   case "${PLATFORM}" in
     windows|linux-deb|linux-rpm|linux-appimage)
+      pushd "${DESKTOP_DIR}" >/dev/null
       pnpm add -D @electron-forge/maker-wix@^7.11.1 @reforged/maker-appimage@^5.2.0
       pnpm install
+      popd >/dev/null
       ;;
     macos-arm64|macos-x64)
+      if [[ ! -f "${GOOSE_UI_DIR}/pnpm-lock.yaml" ]]; then
+        echo "Goose UI lockfile missing: ${GOOSE_UI_DIR}/pnpm-lock.yaml" >&2
+        exit 1
+      fi
+      pushd "${GOOSE_UI_DIR}" >/dev/null
       pnpm install --frozen-lockfile
+      popd >/dev/null
       ;;
     *)
       echo "Unsupported platform for desktop node install: ${PLATFORM}" >&2
       exit 1
       ;;
   esac
-  popd >/dev/null
+  require_electron_dist
+}
+
+require_electron_dist() {
+  local electron_app=""
+  electron_app="$(find "${GOOSE_UI_DIR}" -path "*/node_modules/electron/dist/Electron.app" -type d 2>/dev/null | head -n 1)"
+  if [[ -z "${electron_app}" ]]; then
+    echo "electron dist missing after pnpm install under ${GOOSE_UI_DIR}" >&2
+    exit 1
+  fi
+  echo "electron dist ready: ${electron_app}"
 }
 
 run_desktop_i18n_compile() {
@@ -122,29 +140,41 @@ run_desktop_i18n_compile() {
   popd >/dev/null
 }
 
-run_desktop_forge_make() {
-  local forge_target="$1"
+run_desktop_forge() {
+  local forge_subcommand="$1"
   shift
+  local forge_log="${DESKTOP_DIR}/forge-${forge_subcommand}.log"
   run_desktop_i18n_compile
   pushd "${DESKTOP_DIR}" >/dev/null
-  pnpm exec electron-forge make --targets="${forge_target}" "$@"
-  local forge_exit=$?
+  set +e
+  pnpm exec electron-forge "${forge_subcommand}" "$@" 2>&1 | tee "${forge_log}"
+  local forge_exit="${PIPESTATUS[0]}"
+  set -e
   popd >/dev/null
-  if [[ ${forge_exit} -ne 0 ]]; then
-    echo "electron-forge make failed with exit code ${forge_exit} (target=${forge_target})" >&2
+  if [[ "${forge_exit}" -ne 0 ]]; then
+    echo "electron-forge ${forge_subcommand} failed with exit code ${forge_exit}; log: ${forge_log}" >&2
     exit "${forge_exit}"
+  fi
+  if [[ ! -d "${DESKTOP_DIR}/out" ]]; then
+    echo "electron-forge ${forge_subcommand} finished without out/; log: ${forge_log}" >&2
+    diagnose_desktop_build_state
+    exit 1
   fi
 }
 
-run_desktop_forge_package() {
-  run_desktop_i18n_compile
-  pushd "${DESKTOP_DIR}" >/dev/null
-  pnpm exec electron-forge package "$@"
-  local forge_exit=$?
-  popd >/dev/null
-  if [[ ${forge_exit} -ne 0 ]]; then
-    echo "electron-forge package failed with exit code ${forge_exit}" >&2
-    exit "${forge_exit}"
+run_desktop_forge_make() {
+  local forge_target="$1"
+  shift
+  run_desktop_forge make --targets="${forge_target}" "$@"
+}
+
+run_desktop_forge_macos_zip() {
+  local package_arch="$1"
+  if [[ "${package_arch}" == "x64" ]]; then
+    export ELECTRON_ARCH=x64
+    run_desktop_forge make --targets="@electron-forge/maker-zip" --arch x64
+  else
+    run_desktop_forge make --targets="@electron-forge/maker-zip" --arch arm64
   fi
 }
 
@@ -266,12 +296,7 @@ build_release() {
       export MACOSX_DEPLOYMENT_TARGET="${MACOSX_DEPLOYMENT_TARGET:-12.0}"
       local package_arch
       package_arch="$(macos_package_arch)"
-      if [[ "${PLATFORM}" == "macos-x64" ]]; then
-        export ELECTRON_ARCH=x64
-        run_desktop_forge_package --arch=x64
-      else
-        run_desktop_forge_package --arch="${package_arch}"
-      fi
+      run_desktop_forge_macos_zip "${package_arch}"
       require_desktop_out_dir
       local app_dir app_path
       app_dir="${DESKTOP_DIR}/out/${GOOSE_BUNDLE_NAME}-darwin-${package_arch}"

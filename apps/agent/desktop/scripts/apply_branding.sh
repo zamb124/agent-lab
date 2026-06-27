@@ -411,6 +411,7 @@ packager_cfg_anchor = "let cfg = {\n  asar: true,"
 packager_cfg_patch = (
     "let cfg = {\n"
     "  name: process.env.GOOSE_BUNDLE_NAME || 'Goose',\n"
+    "  executableName: process.env.GOOSE_BUNDLE_NAME || 'Goose',\n"
     "  asar: true,"
 )
 if packager_name_marker not in text:
