@@ -99,6 +99,25 @@ def _skip_provider_transient_unavailable(provider: str, exc: httpx.HTTPStatusErr
     pytest.skip(f"{provider}: provider temporarily unavailable ({exc.response.status_code})")
 
 
+def _skip_provider_content_filter(provider: str, exc: httpx.HTTPStatusError) -> None:
+    if exc.response.status_code != 400:
+        return
+    response_text = exc.response.text
+    if (
+        "content_filter" in response_text
+        or "ResponsibleAIPolicyViolation" in response_text
+    ):
+        pytest.skip(f"{provider}: smoke prompt rejected by provider content policy")
+
+
+def _live_chat_smoke_prompt(marker: str) -> str:
+    """Формулировка без jailbreak-триггеров («exactly … and no other text») у Azure/GitHub Models."""
+    return (
+        f"Platform API connectivity check. "
+        f"Write one short sentence that includes the token {marker}."
+    )
+
+
 def _skip_openrouter_post_route_issue(response: httpx.Response) -> None:
     if response.status_code == 429:
         pytest.skip("openrouter: provider rate limit")
@@ -332,7 +351,7 @@ async def test_live_provider_catalog_records_normalize_algorithm(provider: str) 
 async def test_live_provider_chat_completion_smoke(provider: str) -> None:
     _ = _configured_provider(provider)
     service = _live_model_service()
-    prompt = f"Reply with exactly {_EXPECTED_MARKER} and no other text."
+    prompt = _live_chat_smoke_prompt(_EXPECTED_MARKER)
     candidate_models = await _live_smoke_model_candidates(provider, service)
     last_rate_limit: httpx.HTTPStatusError | None = None
     last_unavailable: httpx.HTTPStatusError | None = None
@@ -359,6 +378,7 @@ async def test_live_provider_chat_completion_smoke(provider: str) -> None:
             if _is_provider_transient_unavailable(exc):
                 last_unavailable = exc
                 continue
+            _skip_provider_content_filter(provider, exc)
             if exc.response.status_code == 402:
                 pytest.skip(
                     f"{provider}: catalog доступен, но inference требует положительный баланс"

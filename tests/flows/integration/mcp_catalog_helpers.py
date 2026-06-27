@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import os
+import tempfile
 from collections.abc import Generator
 from contextlib import contextmanager
 from datetime import datetime, timezone
@@ -35,13 +37,23 @@ class AllowlistYamlEntry(TypedDict):
 def mcp_catalog_settings(**overrides: object) -> Generator[MCPCatalogConfig]:
     """Временно меняет `settings.mcp_catalog` через `set_settings`, без monkeypatch."""
     original_settings: BaseSettings = get_settings()
-    mcp_catalog_cfg = original_settings.mcp_catalog.model_copy(update=overrides)
+    effective_overrides = dict(overrides)
+    temp_allowlist_path: Path | None = None
+    if "allowlist_path" not in effective_overrides:
+        fd, temp_path = tempfile.mkstemp(suffix=".yaml", prefix="mcp_catalog_allowlist_test_")
+        os.close(fd)
+        temp_allowlist_path = Path(temp_path)
+        write_allowlist_yaml(path=temp_allowlist_path, entries=[])
+        effective_overrides["allowlist_path"] = str(temp_allowlist_path)
+    mcp_catalog_cfg = original_settings.mcp_catalog.model_copy(update=effective_overrides)
     updated_settings = original_settings.model_copy(update={"mcp_catalog": mcp_catalog_cfg})
     set_settings(updated_settings)
     try:
         yield mcp_catalog_cfg
     finally:
         set_settings(original_settings)
+        if temp_allowlist_path is not None:
+            temp_allowlist_path.unlink(missing_ok=True)
 
 
 def build_verified_catalog_entry(

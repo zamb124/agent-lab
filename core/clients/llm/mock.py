@@ -887,11 +887,19 @@ def get_or_create_global_mock_llm(model: str = "mock-gpt-4") -> MockLLM:
 def configure_mock_llm_redis(
     redis_client: RedisClient, model: str = "mock-gpt-4"
 ) -> MockLLM | None:
-    """Настраивает MockLLM для чтения из Redis."""
+    """Настраивает MockLLM для чтения из Redis.
+
+    При MOCK_LLM_REDIS_KEY процесс читает общую session-очередь (flows/crm worker,
+    session uvicorn). strict=True: исчерпание очереди — ошибка, без паттерн-ответа.
+    """
     mock_llm = get_global_mock_llm(model)
     if mock_llm:
-        _ = mock_llm.set_redis_client(redis_client)
-        logger.info("mock_llm.redis_configured")
+        explicit_key = os.environ.get("MOCK_LLM_REDIS_KEY", "").strip()
+        if explicit_key:
+            _ = mock_llm.bind_redis_queue(redis_client, explicit_key, strict=True)
+        else:
+            _ = mock_llm.set_redis_client(redis_client)
+        logger.info("mock_llm.redis_configured", redis_key=explicit_key or "auto")
     return mock_llm
 
 

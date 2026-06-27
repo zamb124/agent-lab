@@ -21,6 +21,7 @@ from urllib.parse import urlparse
 from urllib.request import urlopen
 
 import pytest
+import redis
 import redis.asyncio as redis_asyncio
 import redis.exceptions as redis_exceptions
 from filelock import FileLock
@@ -158,6 +159,66 @@ def _terminate_process_group_or_pid(pid: int, *, graceful_timeout: float = 0.2) 
             pass
     except OSError:
         pass
+
+
+_CONTOUR_TASKIQ_STREAMS: tuple[str, ...] = ("flows_worker", "crm")
+_CONTOUR_TASKIQ_REDIS_URL = "redis://localhost:63792/1"
+
+
+def wait_for_contour_taskiq_idle(*, timeout_sec: float = 120.0, pending_only: bool = True) -> None:
+    """Ждёт простоя очередей flows_worker и crm (TaskIQ Redis Stream).
+
+    CRM note_analyze/daily_summary и flows_worker делят session flows:9001 и
+    mock_llm:responses:flows. Фоновая задача с другого pytest-xdist gw может
+    забрать mock-ответ, пока contour-тест держит только file lock на HTTP-порты.
+
+    pending_only=True: только XPENDING у consumer group taskiq (in-flight задачи).
+    lag не проверяем — scheduler может держать lag>0 без активного LLM-вызова.
+    """
+    parsed = urlparse(_CONTOUR_TASKIQ_REDIS_URL)
+    if parsed.hostname is None or parsed.port is None:
+        raise ValueError(f"Некорректный Redis URL: {_CONTOUR_TASKIQ_REDIS_URL}")
+    db_part = parsed.path.lstrip("/")
+    db_index = db_part if db_part != "" else "0"
+
+    client = redis.Redis(
+        host=parsed.hostname,
+        port=parsed.port,
+        db=int(db_index),
+        decode_responses=True,
+    )
+    deadline = time.monotonic() + timeout_sec
+    try:
+        while time.monotonic() < deadline:
+            pending_work = False
+            for stream_name in _CONTOUR_TASKIQ_STREAMS:
+                if not client.exists(stream_name):
+                    continue
+                groups = client.xinfo_groups(stream_name)
+                for group in groups:
+                    if str(group.get("name")) != "taskiq":
+                        continue
+                    pending_raw = group.get("pending", 0)
+                    pending = int(pending_raw) if isinstance(pending_raw, int) else 0
+                    if pending > 0:
+                        pending_work = True
+                        break
+                    if not pending_only:
+                        lag_raw = group.get("lag", 0)
+                        lag = int(lag_raw) if isinstance(lag_raw, int) else 0
+                        if lag > 0:
+                            pending_work = True
+                            break
+                if pending_work:
+                    break
+            if not pending_work:
+                return
+            time.sleep(0.15)
+        raise TimeoutError(
+            f"contour TaskIQ streams {_CONTOUR_TASKIQ_STREAMS} не освободились за {timeout_sec}s"
+        )
+    finally:
+        client.close()
 
 
 def _reset_taskiq_stream_before_worker_start(stream_name: str, redis_url: str) -> None:

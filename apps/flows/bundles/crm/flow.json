@@ -35,6 +35,10 @@
             "temperature": 0.1,
             "provider": "humanitec_llm"
           },
+          "llm_context": {
+            "profile": "compact",
+            "budget": "medium"
+          },
           "tools": [],
           "structured_output": true,
           "output_schema_file": "schemas/analyze.output_schema.json",

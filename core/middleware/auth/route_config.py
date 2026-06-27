@@ -197,6 +197,7 @@ ROUTE_RULES: list[RouteRule] = [
     RouteRule("/api/platform/file-types", auth_required=False, context_type="anonymous"),
     # Control-plane Browser Runtime (Playwright/CDP). Технический сервис, auth делается на уровне внешнего контура.
     RouteRule("/browser/api/v1/control/*", auth_required=False, context_type="anonymous"),
+    RouteRule("/browser/api/v1/health*", auth_required=False, context_type="anonymous"),
     RouteRule("/browser/api/v1/mcp*", auth_required=False, context_type="anonymous"),
     RouteRule("/search/api/v1/mcp*", auth_required=False, context_type="anonymous"),
     RouteRule("/search/api/v1/*", context_type="api", auth_required=True),

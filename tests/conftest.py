@@ -629,8 +629,8 @@ def pytest_collection_modifyitems(items: list[pytest.Item]) -> None:
 
     flows_llm (CRM/flows/frontend/office real_taskiq + sandbox/code-runner) не получают xdist_group:
     один gw на всю очередь давал 20+ мин starvation и таймауты TaskIQ/code-runner к концу прогона.
-    Доступ к session flows:9001, capability_gateway:9016, code-runner-* и mock_llm:responses:flows
-    сериализует pytest_runtest_protocol + _SHARED_FLOWS_CONTOUR_FILE_LOCK между всеми gw.
+    Contour file lock: sandbox + flows real_taskiq; CRM real_taskiq — только тесты с mock_llm_redis
+    (note-analyze/dedup/graph import). CRM TaskIQ без LLM (knowledge import notes-only) lock не берут.
 
     sync/rag/search real_taskiq — отдельные xdist_group (свои Redis mock lanes).
 
@@ -644,15 +644,11 @@ def pytest_collection_modifyitems(items: list[pytest.Item]) -> None:
     for item in items:
         if item.get_closest_marker("real_taskiq"):
             lane = _real_taskiq_xdist_lane(item)
-            if lane == "flows_llm":
-                item.add_marker(pytest.mark.xdist_group(_SHARED_FLOWS_RUNTIME_XDIST_GROUP))
-            else:
+            if lane != "flows_llm":
                 item.add_marker(pytest.mark.xdist_group(f"real_taskiq_{lane}"))
             if item.get_closest_marker("timeout") is None:
                 item.add_marker(pytest.mark.timeout(120, func_only=True))
         elif _is_sandbox_runtime_test(item.nodeid):
-            if item.get_closest_marker("xdist_group") is None:
-                item.add_marker(pytest.mark.xdist_group(_SHARED_FLOWS_RUNTIME_XDIST_GROUP))
             if item.get_closest_marker("timeout") is None:
                 item.add_marker(pytest.mark.timeout(180, func_only=True))
         elif item.nodeid.startswith("tests/sync/"):
@@ -672,10 +668,14 @@ def _uses_shared_flows_contour_lock(item: pytest.Item) -> bool:
     """Session flows HTTP + capability_gateway + code-runner-* + mock_llm:responses:flows — один контур."""
     if _is_sandbox_runtime_test(item.nodeid):
         return True
-    return (
-        item.get_closest_marker("real_taskiq") is not None
-        and _real_taskiq_mock_llm_lane(item) == "flows"
-    )
+    if item.get_closest_marker("real_taskiq") is None:
+        return False
+    if _real_taskiq_mock_llm_lane(item) != "flows":
+        return False
+    path = str(item.path).replace("\\", "/")
+    if "/tests/crm/" in path:
+        return "mock_llm_redis" in item.fixturenames or "mock_llm_capture" in item.fixturenames
+    return True
 
 
 @pytest.hookimpl(hookwrapper=True, tryfirst=True)
@@ -686,10 +686,13 @@ def pytest_runtest_protocol(item, nextitem):
         return
     from filelock import FileLock
 
+    from tests.fixtures.workers import wait_for_contour_taskiq_idle
+
     lock = FileLock(_SHARED_FLOWS_CONTOUR_FILE_LOCK, timeout=600)
     lock.acquire()
     try:
         yield
+        wait_for_contour_taskiq_idle()
     finally:
         lock.release()
 
@@ -878,8 +881,13 @@ async def mock_llm_redis(container, request):
     key_override = (
         f"mock_llm:responses:{_real_taskiq_mock_llm_lane(request.node)}" if is_real_taskiq else None
     )
+    flows_lane = is_real_taskiq and _real_taskiq_mock_llm_lane(request.node) == "flows"
 
     async def _factory(responses: List[Any]) -> None:
+        if flows_lane:
+            from tests.fixtures.workers import wait_for_contour_taskiq_idle
+
+            wait_for_contour_taskiq_idle()
         await clear_mock_responses_redis(container.redis_client, key_override=key_override)
         await setup_mock_responses_redis(
             container.redis_client, responses, key_override=key_override

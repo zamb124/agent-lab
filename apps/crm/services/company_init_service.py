@@ -30,7 +30,9 @@ from apps.crm.system_templates import (
     EntityTypeTemplate,
 )
 from core.db.repositories.company_repository import CompanyRepository
+from core.db.repositories.namespace_repository import NamespaceRepository
 from core.logging import get_logger
+from core.models.identity_models import Namespace
 from core.types import require_json_object
 
 logger = get_logger(__name__)
@@ -57,6 +59,7 @@ class CompanyInitService:
         company_repo: CompanyRepository,
         relationship_repo: RelationshipRepository,
         company_mapping_repo: CompanyMappingRepository,
+        namespace_repo: NamespaceRepository,
     ) -> None:
         self._entity_type_repo: EntityTypeRepository = entity_type_repo
         self._relationship_type_repo: RelationshipTypeRepository = relationship_type_repo
@@ -65,6 +68,7 @@ class CompanyInitService:
         self._company_repo: CompanyRepository = company_repo
         self._relationship_repo: RelationshipRepository = relationship_repo
         self._company_mapping_repo: CompanyMappingRepository = company_mapping_repo
+        self._namespace_repo: NamespaceRepository = namespace_repo
 
     async def initialize_company(self, company_id: str) -> dict[str, int | bool]:
         """
@@ -83,6 +87,7 @@ class CompanyInitService:
         templates_created = await self._init_namespace_templates(company_id)
         _ = await self._ensure_company_entity(company_id)
         _ = await self._ensure_namespace_entity(company_id, "default")
+        await self._ensure_default_namespace_record(company_id)
         await self._ensure_default_organization_entity(company_id)
 
         logger.info(
@@ -305,6 +310,19 @@ class CompanyInitService:
         _ = await self._entity_repo.create(entity)
         logger.info(f"Created company entity {entity.entity_id} for company {company_id}")
         return entity.entity_id
+
+    async def _ensure_default_namespace_record(self, company_id: str) -> None:
+        """Запись Namespace в storage — отдельно от CRM graph entity namespace."""
+        existing = await self._namespace_repo.get("default")
+        if existing is not None:
+            return
+        namespace = Namespace(
+            name="default",
+            company_id=company_id,
+            description="Основное пространство",
+            is_default=True,
+        )
+        _ = await self._namespace_repo.set(namespace)
 
     async def _ensure_namespace_entity(
         self,

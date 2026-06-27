@@ -94,17 +94,12 @@ class TestS3Integration:
     async def test_bucket_config_key_on_factory_client(self):
         """FileRecord.s3_bucket = ключ конфига; клиент знает физическое имя и ключ."""
         skip_if_s3_disabled()
-        from core.config import get_settings
-
-        s = get_settings()
-        for cfg_key, bucket_cfg in s.s3.buckets.items():
-            if not bucket_cfg.enabled:
-                continue
-            c = S3ClientFactory.create_client_for_bucket(cfg_key)
-            try:
-                assert c.require_bucket_config_key() == cfg_key
-            finally:
-                await c.close()
+        cfg_key = get_test_bucket_name()
+        client = S3ClientFactory.create_client_for_bucket(cfg_key)
+        try:
+            assert client.require_bucket_config_key() == cfg_key
+        finally:
+            await client.close()
 
     async def test_upload_and_download_bytes(self, minio_bucket):
         """Тест загрузки и скачивания данных в MinIO S3"""

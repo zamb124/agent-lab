@@ -77,6 +77,13 @@ from apps.crm_worker.task_names import (
 from core.clients.a2a_client import A2AClient, A2ATaskResponse
 from core.context import get_context, resolve_namespace_or_raise
 from core.db.repositories.namespace_repository import NamespaceRepository
+from core.llm_context import (
+    LLMContextBudgetError,
+    LLMContextCompiler,
+    LLMContextCompileRequest,
+    LLMContextPatch,
+)
+from core.llm_context.resolver import resolve_llm_context_policy
 from core.logging import get_logger
 from core.models.i18n_models import Language
 from core.models.identity_models import Namespace, NamespaceCRMSettings
@@ -152,6 +159,36 @@ _A2A_STRUCTURED_DATA_KEYS: frozenset[str] = frozenset(
         "action",
         "patch_entities",
     }
+)
+
+_ANALYZE_LLM_CONTEXT_NODE = LLMContextPatch(profile="compact", budget="medium")
+
+_ANALYZE_PROMPT_STATIC_PREFIX = """# CRM Text Analyzer
+
+## ЯЗЫК ОТВЕТА
+
+## ВХОД
+
+## РАЗРЕШЁННЫЕ ИДЕНТИФИКАТОРЫ СУЩНОСТЕЙ
+
+## ТИПЫ ENTITIES (промпты извлечения)
+
+## РАЗРЕШЁННЫЕ ИДЕНТИФИКАТОРЫ СВЯЗЕЙ
+
+## ТИПЫ RELATIONSHIPS (промпты)
+
+## ПОЛЯ РЕЗУЛЬТАТА
+
+## АБСОЛЮТНЫЕ ЗАПРЕТЫ
+
+## КАЧЕСТВО
+
+## ВЛОЖЕНИЯ
+"""
+
+_ANALYZE_BUDGET_USER_MESSAGE = (
+    "Текст заметки с вложениями слишком большой для AI-анализа. "
+    "Сократите текст, уменьшите число вложений или разделите материал на несколько заметок."
 )
 
 _INTERFACE_LANGUAGE_NAMES_RU: dict[str, str] = {
@@ -3301,6 +3338,15 @@ class EntityService:
         if prefix_parts:
             prompt = "\n\n".join(prefix_parts) + "\n\n" + prompt
 
+        self._assert_analyze_text_fits_llm_budget(
+            text=request.text,
+            entity_types=entity_types,
+            relationship_types=relationship_types,
+            extract_entity_types=request.extract_entity_types,
+            extract_relationship_types=request.extract_relationship_types,
+            known_entities=known_entities if known_entities else None,
+        )
+
         if progress_cb:
             await progress_cb("analyzing", 57, "Извлечение данных")
         t_analyze = time.perf_counter()
@@ -3459,6 +3505,125 @@ class EntityService:
                 prompt_parts.append(rt.prompt)
 
         return "\n".join(prompt_parts)
+
+    def _build_analyze_system_catalog_text(
+        self,
+        entity_types: list[EntityType],
+        relationship_types: list[RelationshipType],
+        extract_entity_types: list[str] | None,
+        extract_relationship_types: list[str] | None,
+        known_entities: list[JsonObject] | None,
+    ) -> str:
+        parts = [_ANALYZE_PROMPT_STATIC_PREFIX]
+        extractable = [
+            entity_type
+            for entity_type in entity_types
+            if entity_type.prompt and entity_type.extractable
+        ]
+        if extract_entity_types:
+            allowed_types = set(extract_entity_types)
+            extractable = [
+                entity_type for entity_type in extractable if entity_type.type_id in allowed_types
+            ]
+
+        for entity_type in extractable:
+            parts.append(f"- `{entity_type.type_id}`")
+
+        for entity_type in extractable:
+            parts.append(f"- **`{entity_type.type_id}`**: {entity_type.prompt}")
+            fields = _extract_entity_type_fields(entity_type)
+            if fields:
+                parts.append("  Поля `attributes` для этого типа:")
+                for field in fields:
+                    req_mark = " [обязательное]" if field["required"] else ""
+                    field_description = field.get("description")
+                    desc_part = f": {field_description}" if field_description else ""
+                    field_values = field.get("values")
+                    values_part = (
+                        f" Допустимые значения: {field_values}" if field_values else ""
+                    )
+                    field_type = field.get("type")
+                    type_part = f" [{field_type}]" if field_type else ""
+                    parts.append(
+                        f"  - `{field['name']}` ({field['label']}){req_mark}{type_part}"
+                        + f"{desc_part}{values_part}"
+                    )
+
+        for relationship_type in relationship_types:
+            if extract_relationship_types and relationship_type.type_id not in extract_relationship_types:
+                continue
+            if relationship_type.prompt:
+                parts.append(f"- `{relationship_type.type_id}`")
+
+        for relationship_type in relationship_types:
+            if extract_relationship_types and relationship_type.type_id not in extract_relationship_types:
+                continue
+            if relationship_type.prompt:
+                parts.append(
+                    f"- **`{relationship_type.type_id}`**: {relationship_type.prompt}"
+                )
+
+        if known_entities:
+            parts.append("## KNOWN ENTITIES (существующие сущности)")
+            for known_entity in known_entities:
+                entity_type = known_entity.get("type")
+                name = known_entity.get("name")
+                entity_id = known_entity.get("entity_id")
+                if (
+                    not isinstance(entity_type, str)
+                    or not isinstance(name, str)
+                    or not isinstance(entity_id, str)
+                ):
+                    raise ValueError(
+                        "known_entities entry must include string type, name, entity_id"
+                    )
+                line = f"- **{entity_type}**: `{name}` (entity_id: `{entity_id}`)"
+                description = known_entity.get("description")
+                if isinstance(description, str) and description.strip():
+                    line = f"{line} — {description.strip()}"
+                parts.append(line)
+
+        return "\n".join(parts)
+
+    def _assert_analyze_text_fits_llm_budget(
+        self,
+        *,
+        text: str,
+        entity_types: list[EntityType],
+        relationship_types: list[RelationshipType],
+        extract_entity_types: list[str] | None,
+        extract_relationship_types: list[str] | None,
+        known_entities: list[JsonObject] | None,
+    ) -> None:
+        stripped = text.strip()
+        if not stripped:
+            raise ValueError("Текст для AI-анализа не может быть пустым")
+
+        system_catalog = self._build_analyze_system_catalog_text(
+            entity_types,
+            relationship_types,
+            extract_entity_types,
+            extract_relationship_types,
+            known_entities,
+        )
+        messages: list[JsonObject] = [
+            {"role": "system", "content": system_catalog},
+            {"role": "user", "content": stripped},
+        ]
+        policy = resolve_llm_context_policy(node=_ANALYZE_LLM_CONTEXT_NODE)
+        compiler = LLMContextCompiler()
+        try:
+            _ = compiler.compile(
+                LLMContextCompileRequest(
+                    messages=messages,
+                    candidate_blocks=[],
+                    policy=policy,
+                    tools_schema_tokens=0,
+                    model_context_length=None,
+                )
+            )
+        except LLMContextBudgetError as exc:
+            raise ValueError(_ANALYZE_BUDGET_USER_MESSAGE) from exc
 
     async def _inject_mentioned_entities_into_analyze_state(
         self,

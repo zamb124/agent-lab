@@ -67,9 +67,22 @@ from core.utils.tokens import get_token_service  # noqa: E402
 _SYNC_REPO_ROOT = Path(__file__).resolve().parents[2]
 
 
+def _livekit_cli_test_container_running() -> bool:
+    inspect = subprocess.run(
+        ["docker", "inspect", "-f", "{{.State.Running}}", "agentlab_livekit_cli_test"],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    return inspect.returncode == 0 and inspect.stdout.strip() == "true"
+
+
 @pytest.fixture(scope="session")
 def livekit_cli_test_container() -> None:
     """Поднимает контейнер lk cli до тестов; иначе docker-compose внутри тела теста съедает лимит timeout."""
+    if _livekit_cli_test_container_running():
+        yield
+        return
     compose = _SYNC_REPO_ROOT / "docker-compose-test.yaml"
     r = subprocess.run(
         [
@@ -78,6 +91,8 @@ def livekit_cli_test_container() -> None:
             str(compose),
             "up",
             "-d",
+            "--pull",
+            "never",
             "livekit-cli-test",
         ],
         cwd=str(_SYNC_REPO_ROOT),
