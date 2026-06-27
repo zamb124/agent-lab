@@ -35,6 +35,10 @@ from apps.agent.desktop.build_contract import (  # noqa: E402, I001
 )
 
 
+def _bash_script_path(script: Path) -> str:
+    return script.resolve().as_posix()
+
+
 def _build_shell_command(
     *,
     platform_name: str,
@@ -50,7 +54,7 @@ def _build_shell_command(
         version_sha,
     ]
     if sys.platform == "win32":
-        return ["bash", str(BUILD_SCRIPT), *build_args]
+        return ["bash", _bash_script_path(BUILD_SCRIPT), *build_args]
     return [str(BUILD_SCRIPT), *build_args]
 
 

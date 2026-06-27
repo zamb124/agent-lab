@@ -60,6 +60,7 @@ def test_build_shell_command_uses_bash_on_windows(monkeypatch: pytest.MonkeyPatc
     )
     assert command[0] == "bash"
     assert command[1].endswith("build.sh")
+    assert "\\" not in command[1]
     assert command[2:] == [
         "--platform",
         "windows",
