@@ -185,8 +185,6 @@ def test_apply_branding_script_patches_goose_desktop() -> None:
 
         assert '"productName": "HumanitecAgent"' in package_payload
         assert '"name": "humanitecagent"' in package_payload
-        assert '"@electron-forge/maker-wix"' in package_payload
-        assert '"@reforged/maker-appimage"' in package_payload
         assert "name: process.env.GOOSE_BUNDLE_NAME" in forge_payload
         assert "name: 'humanitecagent'" in forge_payload
         assert "bin: 'HumanitecAgent'" in forge_payload

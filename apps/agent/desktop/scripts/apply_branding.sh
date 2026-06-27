@@ -49,14 +49,6 @@ package_slug = distro.bundle_name.lower()
 package_payload["name"] = package_slug
 package_payload["productName"] = distro.bundle_name
 package_payload["description"] = f"{distro.display_name} App"
-dev_dependencies = package_payload.get("devDependencies")
-if not isinstance(dev_dependencies, dict):
-    raise SystemExit("package.json devDependencies missing")
-if "@electron-forge/maker-wix" not in dev_dependencies:
-    dev_dependencies["@electron-forge/maker-wix"] = "^7.11.1"
-if "@reforged/maker-appimage" not in dev_dependencies:
-    dev_dependencies["@reforged/maker-appimage"] = "^5.2.0"
-package_payload["devDependencies"] = dev_dependencies
 package_path.write_text(json.dumps(package_payload, indent=2) + "\n", encoding="utf-8")
 
 for desktop_name in ("forge.deb.desktop", "forge.rpm.desktop"):
