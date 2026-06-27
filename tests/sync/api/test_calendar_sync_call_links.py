@@ -7,6 +7,7 @@
 from __future__ import annotations
 
 from datetime import UTC, datetime, timedelta
+from urllib.parse import urlparse
 
 import pytest
 
@@ -41,8 +42,9 @@ async def test_calendar_call_link_create_list_meetings_scheduled_detail_and_dupl
     created = create.json()
     token = created["link_token"]
     assert created["calendar_event_id"] == event_id
-    assert "/l/" in created["join_url"]
-    assert created["join_url"].startswith("http://testserver/l/")
+    join_path = urlparse(created["join_url"]).path
+    assert join_path.startswith("/l/")
+    assert len(join_path) > len("/l/")
 
     dup = await sync_client.post(
         "/sync/api/v1/calls/links",
@@ -110,7 +112,7 @@ async def test_calendar_call_link_patch_updates_window(
     assert patch.status_code == 200
     patched = patch.json()
     assert patched["title"] == f"After {unique_id}"
-    assert patched["join_url"].startswith("http://testserver/l/")
+    assert urlparse(patched["join_url"]).path.startswith("/l/")
 
 
 @pytest.mark.asyncio

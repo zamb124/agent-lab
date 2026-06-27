@@ -1,4 +1,4 @@
-.PHONY: test test-all test-static test-up test-down test-reset test-cov test-cov-all test-cov-report test-unit test-ui test-ui-doc test-ui-components test-frontend-core test-frontend-core-canon test-frontend-core-unit test-frontend-core-browser test-profile check-strict-agent-architecture check-wider-repo-strictness agent-ensure test-agent test-agent-e2e test-agent-desktop-e2e
+.PHONY: test test-until-fail test-all test-static test-up test-down test-reset test-cov test-cov-all test-cov-report test-unit test-ui test-ui-doc test-ui-components test-frontend-core test-frontend-core-canon test-frontend-core-unit test-frontend-core-browser test-profile check-strict-agent-architecture check-wider-repo-strictness agent-ensure test-agent test-agent-e2e test-agent-desktop-e2e
 
 WORKERS ?= 5
 PYTEST_COMMAND_TIMEOUT_SECONDS ?= 5400
@@ -13,6 +13,7 @@ BASEDPYRIGHT_CHECK_ARGS ?= --level warning --warnings $(PYTHON_CHECK_PATHS)
 # E2E UI (pytest + Playwright) — browser; agent desktop E2E только в phase 4 (-n0, Electron)
 _PYTEST_IGNORE_UI := --ignore=tests/ui
 _PYTEST_IGNORE_AGENT_DESKTOP := --ignore=tests/agent/desktop_e2e
+_PYTEST_IGNORE_AGENT_E2E := --ignore=tests/agent/e2e
 
 test-static:
 	@$(MAKE) --no-print-directory _lint-py
@@ -151,6 +152,22 @@ test:
 	if [ $$phase1_rc -ne 0 ] || [ $$phase2_rc -ne 0 ] || [ $$phase3_rc -ne 0 ] || [ $$phase4a_rc -ne 0 ] || [ $$phase4c_rc -ne 0 ]; then \
 		exit 1; \
 	fi
+
+# Как make test до phase 1 pytest, но -x: останов на первом FAILED/ERROR без retry и phase 4.
+test-until-fail:
+	@$(MAKE) --no-print-directory test-static
+	@$(MAKE) --no-print-directory runtime-bootstrap
+	@AGENT_ARTIFACT_MODE=release $(MAKE) --no-print-directory agent-ensure
+	@$(MAKE) --no-print-directory test-frontend-core
+	@$(MAKE) --no-print-directory test-up
+	@echo "=== pytest phase 1 (exit on first failure, -x) ==="
+	@rm -f /tmp/platform_test_pytest_controller.pid .pytest_cache/v/cache/lastfailed
+	@uv run python scripts/pytest_with_timeout.py $(PYTEST_COMMAND_TIMEOUT_SECONDS) uv run pytest tests/ -n $(WORKERS) --max-worker-restart=$(PYTEST_MAX_WORKER_RESTART) \
+		-x -v --tb=short \
+		$(_PYTEST_IGNORE_UI) \
+		$(_PYTEST_IGNORE_AGENT_DESKTOP) \
+		$(_PYTEST_IGNORE_AGENT_E2E) \
+		-m "not integration"
 
 test-all:
 	@$(MAKE) --no-print-directory test-static

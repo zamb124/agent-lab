@@ -1,4 +1,4 @@
-.PHONY: agent agent-ensure agent-submodule agent-build agent-build-all agent-publish agent-ci-build agent-release agent-release-placeholder
+.PHONY: agent agent-ensure agent-submodule agent-build agent-build-all agent-verify-local agent-publish agent-ci-build agent-release agent-release-placeholder
 
 AGENT_PLATFORMS := windows macos-arm64 macos-x64 linux-deb linux-rpm linux-appimage
 AGENT_ARTIFACT_MODE ?= placeholder
@@ -28,6 +28,14 @@ agent-build: agent-submodule
 agent-build-all: agent-submodule
 	@chmod +x apps/agent/desktop/scripts/build.sh
 	@uv run python scripts/agent_build.py build-all \
+		--artifact-mode $(AGENT_ARTIFACT_MODE) \
+		--version-sha $(AGENT_VERSION_SHA)
+
+# Локальная копия CI matrix: build + verify_agent_artifact для всех 6 платформ
+agent-verify-local: runtime-bootstrap agent-submodule
+	@chmod +x apps/agent/desktop/scripts/build.sh apps/agent/desktop/scripts/apply_branding.sh
+	@test -f apps/agent/desktop/distro/humanitec.json
+	@uv run python scripts/agent_build.py verify-ci-local \
 		--artifact-mode $(AGENT_ARTIFACT_MODE) \
 		--version-sha $(AGENT_VERSION_SHA)
 

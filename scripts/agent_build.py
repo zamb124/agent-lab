@@ -27,6 +27,7 @@ sys.path.insert(0, str(REPO_ROOT))
 from apps.agent.desktop.artifact_verify import (  # noqa: E402, I001
     MIN_RELEASE_BYTES,
     is_placeholder_artifact,
+    verify_artifact,
 )
 from apps.agent.desktop.build_contract import (  # noqa: E402, I001
     VALID_PLATFORMS,
@@ -163,6 +164,41 @@ def build_all(*, artifact_mode: str, version_sha: str) -> list[Path]:
     return built
 
 
+def verify_ci_local(*, artifact_mode: str, version_sha: str) -> list[Path]:
+    """Повторяет шаги humanitec-agent-build matrix: build + verify на каждой платформе."""
+    distro_path = DESKTOP_ROOT / "distro" / "humanitec.json"
+    if not distro_path.is_file():
+        raise FileNotFoundError(f"Distro config missing: {distro_path}")
+    if artifact_mode not in {"placeholder", "release"}:
+        raise ValueError(f"Unsupported artifact mode: {artifact_mode!r}")
+
+    ensure_submodule()
+    verified: list[Path] = []
+    for platform_name in VALID_PLATFORMS:
+        artifact = build_platform(
+            platform_name=platform_name,
+            artifact_mode=artifact_mode,
+            version_sha=version_sha,
+        )
+        verify_artifact(
+            artifact,
+            platform=platform_name,
+            version_sha=version_sha,
+            artifact_mode=artifact_mode,
+        )
+        print(
+            f"agent-verify-ci-local: OK {platform_name} {artifact.name}",
+            flush=True,
+        )
+        verified.append(artifact)
+
+    print(
+        f"agent-verify-ci-local: all {len(verified)} platforms verified ({artifact_mode})",
+        flush=True,
+    )
+    return verified
+
+
 def ensure_local(*, artifact_mode: str, version_sha: str) -> Path | None:
     host_platform = detect_host_platform()
     if artifact_ready(host_platform, version_sha, artifact_mode=artifact_mode):
@@ -280,6 +316,13 @@ def _parse_args(argv: list[str]) -> argparse.Namespace:
     build_all_parser.add_argument("--artifact-mode", default="placeholder")
     build_all_parser.add_argument("--version-sha", required=True)
 
+    verify_ci_parser = subparsers.add_parser(
+        "verify-ci-local",
+        help="Build and verify all CI matrix platforms (same as humanitec-agent-build job)",
+    )
+    verify_ci_parser.add_argument("--artifact-mode", default="placeholder")
+    verify_ci_parser.add_argument("--version-sha", required=True)
+
     publish_parser = subparsers.add_parser("publish-release", help="Upload dist to GitHub Release")
     publish_parser.add_argument("--tag", required=True)
     publish_parser.add_argument("--version-sha", required=True)
@@ -301,7 +344,13 @@ def main(argv: list[str] | None = None) -> int:
         )
         return 0
     if command == "build-all":
-        _ = build_all(_artifact_mode=str(args.artifact_mode), version_sha=str(args.version_sha))
+        _ = build_all(artifact_mode=str(args.artifact_mode), version_sha=str(args.version_sha))
+        return 0
+    if command == "verify-ci-local":
+        _ = verify_ci_local(
+            artifact_mode=str(args.artifact_mode),
+            version_sha=str(args.version_sha),
+        )
         return 0
     if command == "publish-release":
         publish_release(release_tag=str(args.tag), version_sha=str(args.version_sha))
