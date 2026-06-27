@@ -12,32 +12,25 @@
 - `branding/icons/` — иконки HumanitecAgent
 - `dist/` — выходные установщики
 
-## Semver release workflow
+## Release workflow (prod)
 
-Release **не** привязан к deploy. Публикуется вручную semver-тегом или через GitHub Actions.
+После **каждого успешного Deploy** workflow [`.github/workflows/humanitec-agent-build.yml`](../../.github/workflows/humanitec-agent-build.yml) запускается автоматически (`workflow_run`).
 
-### Вариант A: push semver tag
+| Инвариант | Значение |
+|---|---|
+| Триггер | Deploy success → `humanitec-agent-build` |
+| Release tag | `humanitec-agent-{short_sha}` (совпадает с Helm `image.tag`) |
+| `releases/latest` | `make_latest: true` на каждой публикации |
+| Повторный Deploy того же SHA | release уже есть → skip matrix, только promote latest |
 
-```bash
-git tag humanitec-agent-v0.2.0
-git push origin humanitec-agent-v0.2.0
-```
+Ручной перезапуск: GitHub Actions → **humanitec-agent-build** → `workflow_dispatch` ( `release_tag` опционален ).
 
-Workflow `.github/workflows/humanitec-agent-build.yml` собирает **release** артефакты (не placeholder) для 6 платформ и публикует GitHub Release.
+Legacy semver: push тега `humanitec-agent-v0.x.y` по-прежнему поддерживается.
 
-### Вариант B: workflow_dispatch
-
-GitHub Actions → **humanitec-agent-build** → `release_tag=humanitec-agent-v0.2.0`, `artifact_mode=release`.
-
-### Локально (полный контур)
+### Локально (dev/smoke)
 
 ```bash
 make agent-release AGENT_RELEASE_TAG=humanitec-agent-v0.2.0 AGENT_VERSION_SHA=$(git rev-parse HEAD)
-```
-
-Placeholder только для dev/CI smoke:
-
-```bash
 make agent-release-placeholder AGENT_RELEASE_TAG=humanitec-agent-v0.2.0-dev
 make agent-ensure AGENT_ARTIFACT_MODE=placeholder
 ```

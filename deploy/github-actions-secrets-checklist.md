@@ -102,3 +102,20 @@ bash deploy/scripts/kubeconfig-for-github-actions.sh
 В **`helm_platform_secrets_json.sh`** ключ embedding в платформенный Secret попадает только из **`RAG_EMBEDDING_API_KEY`**; подстановки из **`LLM__OPENROUTER__API_KEY`** нет.
 
 Полное описание назначения — в [`deploy/README.md`](README.md).
+
+## 4. HumanitecAgent desktop release (`humanitec-agent-build.yml`)
+
+Запускается автоматически после успешного **Deploy** (`workflow_run`). Без секретов ниже macOS/Windows job'ы упадут; Linux-сборки пройдут.
+
+| Имя в GitHub | Назначение |
+|---|---|
+| `APPLE_ID` | macOS notarization |
+| `APPLE_ID_PASSWORD` | app-specific password |
+| `APPLE_TEAM_ID` | Apple Team ID |
+| `KEYCHAIN_PATH` | CI keychain для codesign |
+| `WINDOWS_CERTIFICATE_FILE` | Authenticode certificate (base64 или путь — как настроено в Goose forge) |
+| `WINDOWS_CERTIFICATE_PASSWORD` | пароль сертификата |
+
+Workflow использует `GITHUB_TOKEN` для публикации GitHub Release; отдельный PAT не нужен (`permissions: contents: write`).
+
+Release tag по умолчанию: `humanitec-agent-{short_sha}` (тот же short SHA, что Helm `image.tag` после Deploy).

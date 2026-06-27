@@ -1,11 +1,19 @@
 name: humanitec-agent-build
 
+concurrency:
+  group: humanitec-agent-release-${{ github.repository }}
+  cancel-in-progress: false
+
 on:
+  workflow_run:
+    workflows: ["Deploy"]
+    types: [completed]
   workflow_dispatch:
     inputs:
       release_tag:
-        description: "Git tag for HumanitecAgent release (e.g. humanitec-agent-v0.2.0)"
-        required: true
+        description: "Git tag for release; пусто = humanitec-agent-{short_sha} коммита"
+        required: false
+        default: ""
         type: string
       artifact_mode:
         description: "release for real installers, placeholder for smoke only"
@@ -22,13 +30,61 @@ on:
         type: boolean
   push:
     tags:
-      - "humanitec-agent-v*"
+      - "humanitec-agent-*"
 
 env:
   AGENT_ARTIFACT_MODE: release
 
 jobs:
+  resolve-release:
+    if: github.event_name != 'workflow_run' || github.event.workflow_run.conclusion == 'success'
+    runs-on: ubuntu-latest
+    outputs:
+      release_tag: ${{ steps.resolve.outputs.release_tag }}
+      version_sha: ${{ steps.resolve.outputs.version_sha }}
+      checkout_ref: ${{ steps.resolve.outputs.checkout_ref }}
+      skip_build: ${{ steps.check.outputs.skip_build }}
+    steps:
+      - name: Resolve release metadata
+        id: resolve
+        run: |
+          set -euo pipefail
+          if [[ "${{ github.event_name }}" == "workflow_run" ]]; then
+            VERSION_SHA="${{ github.event.workflow_run.head_sha }}"
+          else
+            VERSION_SHA="${{ github.sha }}"
+          fi
+          SHORT_SHA="${VERSION_SHA:0:7}"
+          if [[ "${{ github.event_name }}" == "push" ]]; then
+            RELEASE_TAG="${GITHUB_REF_NAME}"
+          elif [[ "${{ github.event_name }}" == "workflow_dispatch" && -n "${{ github.event.inputs.release_tag }}" ]]; then
+            RELEASE_TAG="${{ github.event.inputs.release_tag }}"
+          else
+            RELEASE_TAG="humanitec-agent-${SHORT_SHA}"
+          fi
+          echo "version_sha=${VERSION_SHA}" >> "${GITHUB_OUTPUT}"
+          echo "checkout_ref=${VERSION_SHA}" >> "${GITHUB_OUTPUT}"
+          echo "release_tag=${RELEASE_TAG}" >> "${GITHUB_OUTPUT}"
+          echo "Resolved release_tag=${RELEASE_TAG} version_sha=${VERSION_SHA}"
+
+      - name: Check existing release
+        id: check
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          TAG="${{ steps.resolve.outputs.release_tag }}"
+          if gh release view "${TAG}" --repo "${GITHUB_REPOSITORY}" >/dev/null 2>&1; then
+            echo "skip_build=true" >> "${GITHUB_OUTPUT}"
+            echo "Release ${TAG} already exists — skip matrix build"
+          else
+            echo "skip_build=false" >> "${GITHUB_OUTPUT}"
+            echo "Release ${TAG} not found — full build"
+          fi
+
   build-matrix:
+    needs: resolve-release
+    if: needs.resolve-release.outputs.skip_build != 'true'
     timeout-minutes: 180
     strategy:
       fail-fast: false
@@ -51,6 +107,7 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
         with:
+          ref: ${{ needs.resolve-release.outputs.checkout_ref }}
           submodules: recursive
 
       - name: Validate distro config
@@ -90,7 +147,7 @@ jobs:
         shell: bash
         env:
           AGENT_PLATFORM: ${{ matrix.platform }}
-          AGENT_VERSION_SHA: ${{ github.sha }}
+          AGENT_VERSION_SHA: ${{ needs.resolve-release.outputs.version_sha }}
           AGENT_ARTIFACT_MODE: ${{ env.AGENT_ARTIFACT_MODE }}
           APPLE_ID: ${{ secrets.APPLE_ID }}
           APPLE_ID_PASSWORD: ${{ secrets.APPLE_ID_PASSWORD }}
@@ -104,7 +161,7 @@ jobs:
         shell: bash
         env:
           AGENT_PLATFORM: ${{ matrix.platform }}
-          AGENT_VERSION_SHA: ${{ github.sha }}
+          AGENT_VERSION_SHA: ${{ needs.resolve-release.outputs.version_sha }}
         run: |
           uv run python scripts/verify_agent_artifact.py \
             --platform "${AGENT_PLATFORM}" \
@@ -118,22 +175,63 @@ jobs:
           path: apps/agent/desktop/dist/*
 
   publish-release:
-    needs: build-matrix
+    needs: [resolve-release, build-matrix]
+    if: >
+      always() &&
+      needs.resolve-release.result == 'success' &&
+      (needs.resolve-release.outputs.skip_build == 'true' || needs.build-matrix.result == 'success')
     runs-on: ubuntu-latest
     permissions:
       contents: write
     steps:
+      - name: Promote existing release to latest
+        if: needs.resolve-release.outputs.skip_build == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          TAG="${{ needs.resolve-release.outputs.release_tag }}"
+          gh release edit "${TAG}" --repo "${GITHUB_REPOSITORY}" --latest
+          echo "Promoted ${TAG} to latest"
+
       - name: Download all platform artifacts
+        if: needs.resolve-release.outputs.skip_build != 'true'
         uses: actions/download-artifact@v4
         with:
           path: release-assets
           merge-multiple: true
 
       - name: Publish GitHub Release
+        if: needs.resolve-release.outputs.skip_build != 'true'
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: ${{ github.event.inputs.release_tag || github.ref_name }}
-          name: HumanitecAgent ${{ github.event.inputs.release_tag || github.ref_name }}
+          tag_name: ${{ needs.resolve-release.outputs.release_tag }}
+          name: HumanitecAgent ${{ needs.resolve-release.outputs.release_tag }}
           files: release-assets/**/*
+          make_latest: true
           draft: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.publish_draft == 'true' }}
           generate_release_notes: true
+
+  verify-release:
+    needs: [resolve-release, publish-release]
+    if: needs.publish-release.result == 'success'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Verify GitHub release assets
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          TAG="${{ needs.resolve-release.outputs.release_tag }}"
+          ASSET_COUNT="$(gh release view "${TAG}" --repo "${GITHUB_REPOSITORY}" --json assets --jq '.assets | length')"
+          echo "Release ${TAG} has ${ASSET_COUNT} assets"
+          if [[ "${ASSET_COUNT}" -lt 6 ]]; then
+            echo "::error::Expected at least 6 platform assets, got ${ASSET_COUNT}"
+            exit 1
+          fi
+          LATEST_TAG="$(curl -sf "https://api.github.com/repos/${GITHUB_REPOSITORY}/releases/latest" | jq -r .tag_name)"
+          echo "releases/latest tag: ${LATEST_TAG}"
+          if [[ "${LATEST_TAG}" != "${TAG}" ]]; then
+            echo "::error::releases/latest is ${LATEST_TAG}, expected ${TAG}"
+            exit 1
+          fi

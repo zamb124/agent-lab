@@ -102,7 +102,7 @@ POST /flows/api/v1/agent/platform-mcp
 
 - Distro: `apps/agent/desktop/distro/humanitec.json` → `platform_mcp_path`, `default_extensions` (`platform_mcp`, …)
 - Branding: `apps/agent/desktop/scripts/apply_branding.sh`, `humanitecDistro.ts`
-- Releases: GitHub assets `HumanitecAgent-{platform}-{sha}.{ext}`, redirect `GET /frontend/api/agent/download/{platform}`
+- Releases: GitHub assets `HumanitecAgent-{platform}-{sha}.{ext}`, redirect `GET /frontend/api/agent/download/{platform}`; tag `humanitec-agent-{short_sha}` публикуется автоматически после успешного Deploy (`humanitec-agent-build.yml`, `workflow_run`); `releases/latest` = последний prod
 - Config: `conf.json` → `agent.*` (`apps/agent/config.py`)
 
 ## Prod-инварианты
