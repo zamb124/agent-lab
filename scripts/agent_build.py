@@ -20,6 +20,7 @@ BUILD_SCRIPT = DESKTOP_ROOT / "scripts" / "build.sh"
 DIST_DIR = DESKTOP_ROOT / "dist"
 VENDOR_DIR = DESKTOP_ROOT / "vendor" / "goose"
 GITMODULES_PATH = REPO_ROOT / ".gitmodules"
+WINDOWS_GIT_BASH = Path(r"C:\Program Files\Git\bin\bash.exe")
 
 sys.path.insert(0, str(REPO_ROOT))
 
@@ -39,6 +40,14 @@ def _bash_script_path(script: Path) -> str:
     return script.resolve().as_posix()
 
 
+def _windows_bash_executable() -> Path:
+    if not WINDOWS_GIT_BASH.is_file():
+        raise FileNotFoundError(
+            f"Git Bash required for Windows agent build, not found: {WINDOWS_GIT_BASH}"
+        )
+    return WINDOWS_GIT_BASH
+
+
 def _build_shell_command(
     *,
     platform_name: str,
@@ -54,7 +63,7 @@ def _build_shell_command(
         version_sha,
     ]
     if sys.platform == "win32":
-        return ["bash", _bash_script_path(BUILD_SCRIPT), *build_args]
+        return [str(_windows_bash_executable()), _bash_script_path(BUILD_SCRIPT), *build_args]
     return [str(BUILD_SCRIPT), *build_args]
 
 

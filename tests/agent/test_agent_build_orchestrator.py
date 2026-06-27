@@ -51,14 +51,20 @@ def test_ensure_local_idempotent(tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     assert build_calls == []
 
 
-def test_build_shell_command_uses_bash_on_windows(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_build_shell_command_uses_git_bash_on_windows(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    fake_git_bash = tmp_path / "bash.exe"
+    fake_git_bash.write_bytes(b"")
+    monkeypatch.setattr(agent_build_module, "WINDOWS_GIT_BASH", fake_git_bash)
     monkeypatch.setattr(agent_build_module.sys, "platform", "win32")
     command = agent_build_module._build_shell_command(
         platform_name="windows",
         artifact_mode="release",
         version_sha="abc123",
     )
-    assert command[0] == "bash"
+    assert command[0] == str(fake_git_bash)
     assert command[1].endswith("build.sh")
     assert "\\" not in command[1]
     assert command[2:] == [
