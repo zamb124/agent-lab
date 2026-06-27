@@ -155,6 +155,7 @@ jobs:
           AGENT_PLATFORM: ${{ matrix.platform }}
           AGENT_VERSION_SHA: ${{ needs.resolve-release.outputs.version_sha }}
           AGENT_ARTIFACT_MODE: ${{ env.AGENT_ARTIFACT_MODE }}
+          MACOSX_DEPLOYMENT_TARGET: ${{ startsWith(matrix.platform, 'macos-') && '12.0' || '' }}
           APPLE_ID: ${{ secrets.APPLE_ID }}
           APPLE_ID_PASSWORD: ${{ secrets.APPLE_ID_PASSWORD }}
           APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}

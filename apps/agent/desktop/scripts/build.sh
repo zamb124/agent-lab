@@ -83,6 +83,7 @@ is_windows_host() {
 
 require_desktop_out_dir() {
   if [[ ! -d "${DESKTOP_DIR}/out" ]]; then
+    diagnose_desktop_build_state
     echo "electron-forge did not create ${DESKTOP_DIR}/out" >&2
     exit 1
   fi
@@ -91,6 +92,7 @@ require_desktop_out_dir() {
 require_desktop_make_dir() {
   require_desktop_out_dir
   if [[ ! -d "${DESKTOP_DIR}/out/make" ]]; then
+    diagnose_desktop_build_state
     echo "electron-forge did not create ${DESKTOP_DIR}/out/make" >&2
     exit 1
   fi
@@ -98,9 +100,81 @@ require_desktop_make_dir() {
 
 install_desktop_node_modules() {
   pushd "${DESKTOP_DIR}" >/dev/null
-  pnpm add -D @electron-forge/maker-wix@^7.11.1 @reforged/maker-appimage@^5.2.0
-  pnpm install
+  case "${PLATFORM}" in
+    windows|linux-deb|linux-rpm|linux-appimage)
+      pnpm add -D @electron-forge/maker-wix@^7.11.1 @reforged/maker-appimage@^5.2.0
+      pnpm install
+      ;;
+    macos-arm64|macos-x64)
+      pnpm install --frozen-lockfile
+      ;;
+    *)
+      echo "Unsupported platform for desktop node install: ${PLATFORM}" >&2
+      exit 1
+      ;;
+  esac
   popd >/dev/null
+}
+
+run_desktop_i18n_compile() {
+  pushd "${DESKTOP_DIR}" >/dev/null
+  pnpm run i18n:compile
+  popd >/dev/null
+}
+
+run_desktop_forge_make() {
+  local forge_target="$1"
+  shift
+  run_desktop_i18n_compile
+  pushd "${DESKTOP_DIR}" >/dev/null
+  pnpm exec electron-forge make --targets="${forge_target}" "$@"
+  local forge_exit=$?
+  popd >/dev/null
+  if [[ ${forge_exit} -ne 0 ]]; then
+    echo "electron-forge make failed with exit code ${forge_exit} (target=${forge_target})" >&2
+    exit "${forge_exit}"
+  fi
+}
+
+run_desktop_forge_package() {
+  run_desktop_i18n_compile
+  pushd "${DESKTOP_DIR}" >/dev/null
+  pnpm exec electron-forge package "$@"
+  local forge_exit=$?
+  popd >/dev/null
+  if [[ ${forge_exit} -ne 0 ]]; then
+    echo "electron-forge package failed with exit code ${forge_exit}" >&2
+    exit "${forge_exit}"
+  fi
+}
+
+macos_package_arch() {
+  if [[ "${PLATFORM}" == "macos-x64" ]]; then
+    echo "x64"
+  else
+    echo "arm64"
+  fi
+}
+
+diagnose_desktop_build_state() {
+  echo "Desktop build diagnostics (${PLATFORM}):" >&2
+  if [[ -d "${DESKTOP_DIR}" ]]; then
+    ls -la "${DESKTOP_DIR}" >&2 || true
+  else
+    echo "  missing desktop dir: ${DESKTOP_DIR}" >&2
+  fi
+  if [[ -d "${DESKTOP_DIR}/src/bin" ]]; then
+    echo "  src/bin:" >&2
+    ls -la "${DESKTOP_DIR}/src/bin" >&2 || true
+  else
+    echo "  missing src/bin" >&2
+  fi
+  if [[ -d "${DESKTOP_DIR}/out" ]]; then
+    echo "  out:" >&2
+    ls -la "${DESKTOP_DIR}/out" >&2 || true
+  else
+    echo "  missing out/" >&2
+  fi
 }
 
 prepare_desktop_binaries() {
@@ -153,6 +227,7 @@ build_goosed_binary() {
       exit 1
     fi
     cp "${goosed_bin}" "${DESKTOP_DIR}/src/bin/"
+    chmod +x "${DESKTOP_DIR}/src/bin/goosed"
   fi
 }
 
@@ -188,36 +263,38 @@ build_release() {
       build_goosed_binary
       install_desktop_node_modules
       prepare_desktop_binaries
-      pushd "${DESKTOP_DIR}" >/dev/null
+      export MACOSX_DEPLOYMENT_TARGET="${MACOSX_DEPLOYMENT_TARGET:-12.0}"
+      local package_arch
+      package_arch="$(macos_package_arch)"
       if [[ "${PLATFORM}" == "macos-x64" ]]; then
         export ELECTRON_ARCH=x64
-        pnpm run make -- --targets=@electron-forge/maker-zip --arch=x64
+        run_desktop_forge_package --arch=x64
       else
-        pnpm run make -- --targets=@electron-forge/maker-zip
+        run_desktop_forge_package --arch="${package_arch}"
       fi
-      popd >/dev/null
       require_desktop_out_dir
-      built_dmg_path="$(find "${DESKTOP_DIR}/out" -name "*.dmg" -type f | head -n 1)"
-      if [[ -n "${built_dmg_path}" ]]; then
-        cp "${built_dmg_path}" "${OUTPUT_DIR}/${filename}"
-      else
+      local app_dir app_path
+      app_dir="${DESKTOP_DIR}/out/${GOOSE_BUNDLE_NAME}-darwin-${package_arch}"
+      app_path="${app_dir}/${GOOSE_BUNDLE_NAME}.app"
+      if [[ ! -d "${app_path}" ]]; then
         app_path="$(find "${DESKTOP_DIR}/out" -name "${GOOSE_BUNDLE_NAME}.app" -type d | head -n 1)"
-        if [[ -z "${app_path}" ]]; then
-          echo "Goose desktop build did not produce .dmg or .app" >&2
-          exit 1
-        fi
-        if ! command -v hdiutil >/dev/null 2>&1; then
-          echo "hdiutil is required to pack ${GOOSE_BUNDLE_NAME}.app into .dmg" >&2
-          exit 1
-        fi
-        rm -f "${OUTPUT_DIR}/${filename}"
-        hdiutil create \
-          -volname "${GOOSE_BUNDLE_NAME}" \
-          -srcfolder "${app_path}" \
-          -ov \
-          -format UDZO \
-          "${OUTPUT_DIR}/${filename}"
       fi
+      if [[ -z "${app_path}" || ! -d "${app_path}" ]]; then
+        diagnose_desktop_build_state
+        echo "Goose desktop package did not produce ${GOOSE_BUNDLE_NAME}.app" >&2
+        exit 1
+      fi
+      if ! command -v hdiutil >/dev/null 2>&1; then
+        echo "hdiutil is required to pack ${GOOSE_BUNDLE_NAME}.app into .dmg" >&2
+        exit 1
+      fi
+      rm -f "${OUTPUT_DIR}/${filename}"
+      hdiutil create \
+        -volname "${GOOSE_BUNDLE_NAME}" \
+        -srcfolder "${app_path}" \
+        -ov \
+        -format UDZO \
+        "${OUTPUT_DIR}/${filename}"
       ;;
     linux-deb|linux-rpm|linux-appimage)
       if ! command -v pnpm >/dev/null 2>&1; then
@@ -231,13 +308,11 @@ build_release() {
       build_goosed_binary
       install_desktop_node_modules
       prepare_desktop_binaries
-      pushd "${DESKTOP_DIR}" >/dev/null
       case "${PLATFORM}" in
-        linux-deb) pnpm run make -- --targets=@electron-forge/maker-deb ;;
-        linux-rpm) pnpm run make -- --targets=@electron-forge/maker-rpm ;;
-        linux-appimage) pnpm run make -- --targets=@reforged/maker-appimage ;;
+        linux-deb) run_desktop_forge_make "@electron-forge/maker-deb" ;;
+        linux-rpm) run_desktop_forge_make "@electron-forge/maker-rpm" ;;
+        linux-appimage) run_desktop_forge_make "@reforged/maker-appimage" ;;
       esac
-      popd >/dev/null
       require_desktop_make_dir
       built_artifact_path="$(find "${DESKTOP_DIR}/out/make" -type f \( -name "*.deb" -o -name "*.rpm" -o -name "*.AppImage" \) | head -n 1)"
       if [[ -z "${built_artifact_path}" ]]; then
@@ -258,9 +333,7 @@ build_release() {
       build_goosed_binary
       install_desktop_node_modules
       prepare_desktop_binaries
-      pushd "${DESKTOP_DIR}" >/dev/null
-      pnpm run make -- --targets=@electron-forge/maker-wix
-      popd >/dev/null
+      run_desktop_forge_make "@electron-forge/maker-wix"
       require_desktop_make_dir
       built_msi_path="$(find "${DESKTOP_DIR}/out/make" -name "*.msi" -type f | head -n 1)"
       if [[ -z "${built_msi_path}" ]]; then
