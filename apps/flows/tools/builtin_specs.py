@@ -65,6 +65,8 @@ BUILTIN_TOOL_SPECS: tuple[tuple[str, str], ...] = (
     ("apps.flows.tools.web_browser", "browser_duckduckgo_links_batch"),
     ("apps.flows.tools.web_browser", "browser_page_markdown"),
     ("apps.flows.tools.web_browser", "browser_page_snapshot"),
+    ("apps.flows.src.tools.handoff_tools", "handoff_to_flow"),
+    ("apps.flows.src.tools.handoff_tools", "handback_to_parent"),
 )
 
 

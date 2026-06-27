@@ -72,6 +72,10 @@ class WorkflowEventType(StrEnum):
     rewind_committed = "RewindCommitted"
     manual_state_patch_applied = "ManualStatePatchApplied"
     retry_scheduled = "RetryScheduled"
+    handoff_initiated = "HandoffInitiated"
+    handoff_accepted = "HandoffAccepted"
+    handback_requested = "HandbackRequested"
+    handback_completed = "HandbackCompleted"
 
 
 class ActivityStatus(StrEnum):
@@ -289,6 +293,44 @@ class ChildWorkflowLifecyclePayload(DurableStrictBaseModel):
     error: str | None = None
 
 
+class FlowHandoffInitiatedPayload(DurableStrictBaseModel):
+    parent_session_id: str = Field(..., min_length=3)
+    child_session_id: str = Field(..., min_length=3)
+    target_flow_id: str = Field(..., min_length=1)
+    target_branch_id: str = Field(..., min_length=1)
+    variables: JsonObject = Field(default_factory=dict)
+    handoff_depth: int = Field(..., ge=1)
+    trace_id: str | None = Field(
+        default=None,
+        min_length=1,
+        description="OTEL trace_id цепочки handoff для jump в trace viewer",
+    )
+    span_id: str | None = Field(
+        default=None,
+        min_length=1,
+        description="Span handoff.initiated для корреляции",
+    )
+
+
+class FlowHandbackCompletedPayload(DurableStrictBaseModel):
+    parent_session_id: str = Field(..., min_length=3)
+    child_session_id: str = Field(..., min_length=3)
+    child_flow_id: str = Field(..., min_length=1)
+    response: str = Field(..., min_length=1)
+    variables: JsonObject = Field(default_factory=dict)
+    handoff_depth: int = Field(..., ge=0)
+    trace_id: str | None = Field(
+        default=None,
+        min_length=1,
+        description="OTEL trace_id цепочки handoff",
+    )
+    span_id: str | None = Field(
+        default=None,
+        min_length=1,
+        description="Span handback.completed",
+    )
+
+
 WorkflowEventPayload: TypeAlias = (
     EmptyWorkflowEventPayload
     | RunStartedPayload
@@ -311,6 +353,8 @@ WorkflowEventPayload: TypeAlias = (
     | RetryScheduledPayload
     | ActivityLifecyclePayload
     | ChildWorkflowLifecyclePayload
+    | FlowHandoffInitiatedPayload
+    | FlowHandbackCompletedPayload
 )
 
 _PAYLOAD_BY_EVENT_TYPE: dict[WorkflowEventType, type[DurableStrictBaseModel]] = {
@@ -343,6 +387,8 @@ _PAYLOAD_BY_EVENT_TYPE: dict[WorkflowEventType, type[DurableStrictBaseModel]] = 
     WorkflowEventType.rewind_committed: BranchTransitionPayload,
     WorkflowEventType.manual_state_patch_applied: BranchTransitionPayload,
     WorkflowEventType.retry_scheduled: RetryScheduledPayload,
+    WorkflowEventType.handoff_initiated: FlowHandoffInitiatedPayload,
+    WorkflowEventType.handback_completed: FlowHandbackCompletedPayload,
 }
 
 

@@ -23,6 +23,8 @@ from fastapi.responses import HTMLResponse, RedirectResponse  # noqa: E402
 from fastapi.staticfiles import StaticFiles  # noqa: E402
 from starlette.middleware.sessions import SessionMiddleware  # noqa: E402
 
+from apps.agent.llm_proxy import router as agent_llm_proxy_router  # noqa: E402
+from apps.agent.platform_mcp import router as agent_platform_mcp_router  # noqa: E402
 from apps.flows.config import FlowSettings, get_settings  # noqa: E402
 from apps.flows.src.api import (  # noqa: E402
     a2a_router,
@@ -141,6 +143,10 @@ async def on_startup(_app: FastAPI, container: FlowContainer, settings: FlowSett
             else:
                 logger.error("Failed to connect to Redis on startup")
                 raise
+
+    from apps.agent.tunnel_bus import start_tunnel_bus_listener
+
+    await start_tunnel_bus_listener(container.redis_client)
 
     if settings.server.env == "development" and not is_testing():
         await sync_landing_public_demo_flows_from_bundles(container, settings)
@@ -301,6 +307,8 @@ app = create_service_app(
         chat_router,
         websocket_router,
         a2a_router,
+        agent_platform_mcp_router,
+        agent_llm_proxy_router,
     ],
     on_startup=on_startup,
     on_shutdown=on_shutdown,

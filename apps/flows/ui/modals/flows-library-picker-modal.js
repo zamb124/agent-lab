@@ -12,7 +12,7 @@ import { repeat } from 'lit/directives/repeat.js';
 import { unsafeHTML } from 'lit/directives/unsafe-html.js';
 import { PlatformModal } from '@platform/lib/components/glass-modal.js';
 import { registerModalKind } from '@platform/lib/utils/modal-registry.js';
-import '@platform/lib/components/fields/platform-field.js';
+import '@platform/lib/components/platform-modal-search-field.js';
 import '@platform/lib/components/glass-spinner.js';
 import '@platform/lib/components/platform-icon.js';
 import '../components/common/flows-code-language-icon.js';
@@ -217,10 +217,6 @@ export class FlowsLibraryPickerModal extends PlatformModal {
                 flex: 0 1 240px;
                 min-width: 160px;
             }
-            .search-wrap platform-field {
-                width: 100%;
-                min-width: 0;
-            }
             .tool-picker-toolbar {
                 display: flex;
                 align-items: center;
@@ -234,9 +230,8 @@ export class FlowsLibraryPickerModal extends PlatformModal {
                 min-width: 0;
             }
             .tool-picker-toolbar .search-wrap {
-                flex: 0 0 170px;
-                min-width: 140px;
-                max-width: 170px;
+                flex: 0 0 auto;
+                min-width: 0;
                 margin-left: auto;
             }
             .tabs {
@@ -441,18 +436,6 @@ export class FlowsLibraryPickerModal extends PlatformModal {
                     flex: 1 1 160px;
                     max-width: 220px;
                 }
-            }
-            .header-search {
-                flex: 1 1 auto;
-                max-width: 360px;
-                min-width: 160px;
-                margin: 0 var(--space-2);
-            }
-            .header-search platform-field {
-                width: 100%;
-            }
-            .header-search platform-icon[slot='prefix'] {
-                color: var(--text-tertiary);
             }
             .mcp-picker-servers {
                 display: grid;
@@ -1190,19 +1173,12 @@ export class FlowsLibraryPickerModal extends PlatformModal {
 
     _renderHeaderSearch() {
         return html`
-            <div class="header-search">
-                <platform-field
-                    type="string"
-                    mode="edit"
-                    pill-density="compact"
-                    input-type="search"
-                    .value=${this._search}
-                    placeholder=${this.t('tool_picker_modal.search_placeholder')}
-                    @change=${this._onSearchInput}
-                >
-                    <platform-icon slot="prefix" name="search" size="14"></platform-icon>
-                </platform-field>
-            </div>
+            <platform-modal-search-field
+                layout="header"
+                .value=${this._search}
+                placeholder=${this.t('tool_picker_modal.search_placeholder')}
+                @change=${this._onSearchInput}
+            ></platform-modal-search-field>
         `;
     }
 
@@ -1355,14 +1331,12 @@ export class FlowsLibraryPickerModal extends PlatformModal {
             <div class="bar">
                 ${tagRow}
                 <div class="search-wrap">
-                    <platform-field
-                        type="string"
-                        input-type="search"
-                        mode="edit"
+                    <platform-modal-search-field
+                        layout="toolbar"
                         .value=${this._search}
-                        .placeholder=${this.t('tool_picker_modal.search_placeholder')}
+                        placeholder=${this.t('tool_picker_modal.search_placeholder')}
                         @change=${this._onSearchInput}
-                    ></platform-field>
+                    ></platform-modal-search-field>
                 </div>
             </div>
         `;
@@ -1371,14 +1345,12 @@ export class FlowsLibraryPickerModal extends PlatformModal {
     _renderSearchField(searchWrapClass = '') {
         return html`
             <div class="search-wrap ${searchWrapClass}">
-                <platform-field
-                    type="string"
-                    input-type="search"
-                    mode="edit"
+                <platform-modal-search-field
+                    layout="toolbar"
                     .value=${this._search}
-                    .placeholder=${this.t('tool_picker_modal.search_placeholder')}
+                    placeholder=${this.t('tool_picker_modal.search_placeholder')}
                     @change=${this._onSearchInput}
-                ></platform-field>
+                ></platform-modal-search-field>
             </div>
         `;
     }

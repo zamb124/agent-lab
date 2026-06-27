@@ -40,6 +40,12 @@ _lint-py:
 	uv run basedpyright $(BASEDPYRIGHT_CHECK_ARGS)
 	@echo "=== lint: local imports ==="
 	uv run python analyze_imports.py
+	@echo "=== lint: agent e2e coverage gate ==="
+	uv run python scripts/check_agent_e2e_coverage.py
+	@echo "=== lint: agent goose tool contract ==="
+	uv run python scripts/check_agent_goose_tool_contract.py
+	@echo "=== lint: agent e2e no monkeypatch ==="
+	uv run python scripts/check_agent_test_no_monkeypatch.py
 
 lint-file:
 	@test -n "$(FILE)" || (echo "usage: make lint FILE=<path>  или  make lint <path>" >&2; exit 1)

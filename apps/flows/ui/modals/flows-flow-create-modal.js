@@ -21,6 +21,7 @@ import { registerModalKind } from '@platform/lib/utils/modal-registry.js';
 import '@platform/lib/components/platform-button.js';
 import '@platform/lib/components/platform-icon.js';
 import '@platform/lib/components/glass-spinner.js';
+import '@platform/lib/components/platform-modal-search-field.js';
 import '@platform/lib/components/fields/platform-field.js';
 import { getBlankCodeNodeConfig } from '../_helpers/code-node-defaults.js';
 
@@ -159,15 +160,6 @@ export class FlowsFlowCreateModal extends PlatformFormModal {
             .modal-title { padding: 0; }
             .head-row { display: flex; flex-direction: column; gap: 2px; }
             .subtitle { color: var(--text-secondary); font-size: var(--text-sm); font-weight: var(--font-normal); }
-            .header-search {
-                width: clamp(220px, 28vw, 360px);
-            }
-            .header-search platform-field {
-                width: 100%;
-            }
-            .header-search platform-icon[slot='prefix'] {
-                color: var(--text-tertiary);
-            }
             .section-title {
                 font-size: var(--text-base);
                 font-weight: var(--font-semibold);
@@ -358,25 +350,18 @@ export class FlowsFlowCreateModal extends PlatformFormModal {
     renderHeaderActions() {
         if (this._step !== 1) return '';
         return html`
-            <div class="header-search">
-                <platform-field
-                    type="string"
-                    mode="edit"
-                    pill-density="compact"
-                    input-type="search"
-                    .value=${this._query}
-                    placeholder=${this.t('flow_create_modal.search_placeholder')}
-                    @change=${(e) => {
-                        const v = e.detail.value;
-                        if (typeof v !== 'string') {
-                            throw new TypeError('flows-flow-create-modal: search expects string detail.value');
-                        }
-                        this._query = v;
-                    }}
-                >
-                    <platform-icon slot="prefix" name="search" size="14"></platform-icon>
-                </platform-field>
-            </div>
+            <platform-modal-search-field
+                layout="header"
+                .value=${this._query}
+                placeholder=${this.t('flow_create_modal.search_placeholder')}
+                @change=${(e) => {
+                    const v = e.detail.value;
+                    if (typeof v !== 'string') {
+                        throw new TypeError('flows-flow-create-modal: search expects string detail.value');
+                    }
+                    this._query = v;
+                }}
+            ></platform-modal-search-field>
         `;
     }
 

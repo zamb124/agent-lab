@@ -1,0 +1,24 @@
+{
+  "flow_id": "handoff_demo_child",
+  "name": "Handoff Child Demo",
+  "hidden": true,
+  "description": "Дочerний агент для демонстрации handoff. Получает переменные (order_id, customer_name), обрабатывает запрос, возвращает результат через handback_to_parent с переменными (ticket_id, courier_name)",
+  "tags": ["example", "handoff", "demo"],
+  "permission": ["admin", "developers"],
+  "entry": "main",
+  "nodes": {
+    "main": {
+      "type": "llm_node",
+      "prompt": "Ты агент обработки заказов и жалоб на курьеров. После решения проблемы верни результат через handback_to_parent. Обязательно укажи в variables возвращаемые значения: ticket_id (ID созданного тикета) и courier_name (имя курьера если замена).\n\nЕсли тебе не хватает информации — спроси пользователя через ask_user.",
+      "llm": { "provider": "humanitec_llm", "model": "auto", "temperature": 0.2 },
+      "tools": [
+        { "tool_id": "calculator", "description": "Калькулятор для вычислений", "code": "async def run(args, state):\n    try:\n        return {'result': str(eval(args.get('expression', '0')))}\n    except Exception as e:\n        return {'result': 'error: ' + str(e)}\n", "parameters_schema": { "type": "object", "properties": { "expression": { "type": "string", "description": "Математическое выражение" } }, "required": ["expression"] } },
+        { "tool_id": "handback_to_parent", "description": "Вернуть управление родительскому агенту с результатом" },
+        { "tool_id": "ask_user", "description": "Спросить пользователя" },
+        { "tool_id": "finish", "description": "Завершить ответ" }
+      ]
+    }
+  },
+  "edges": [{ "from_node": "main", "to_node": null }],
+  "branches": {}
+}

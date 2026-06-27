@@ -51,15 +51,25 @@ markers = [
     "real_taskiq: тесты с реальным TaskIQ worker",
     "timeout: тесты с таймаутом выполнения",
     "schemathesis: автоматические тесты API на основе OpenAPI схемы",
+    "agent_e2e: HumanitecAgent protocol E2E через HTTP/WS",
+    "agent_desktop_e2e: HumanitecAgent desktop install/pairing E2E",
 ]
 
 [tool.ruff]
 line-length = 100
 target-version = "py314"
+exclude = [
+    "apps/agent/desktop/vendor",
+]
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "W"]
 ignore = ["E501"]
+
+[tool.basedpyright]
+exclude = [
+    "apps/agent/desktop/vendor",
+]
 
 [dependency-groups]
 core = [

@@ -70,6 +70,14 @@ from apps.flows.src.state.flow_deadline import apply_flow_wall_clock_deadline
 from apps.flows.src.state.interrupt_manager import InterruptManager
 from apps.flows.src.streaming import Emitter
 from apps.flows.src.tasks.task_names import TASK_PROCESS_FLOW
+from apps.flows.src.tracing.handoff_tracing import (
+    HANDOFF_OP_INITIATED,
+    HANDOFF_OP_ROUTE_REPLY,
+    continue_handoff_trace_context,
+    handoff_span_attributes,
+    resolve_active_trace_context,
+    trace_context_to_kiq_payload,
+)
 from apps.flows.src.triggers.output_actions import OutputActionExecutor
 from apps.flows.src.triggers.trigger_type_contract import effective_output_actions_for_trigger
 from apps.flows.src.utils import extract_json_from_response
@@ -87,11 +95,13 @@ from core.context import Context, clear_context, get_context, set_context
 from core.files.file_ref import FileRef
 from core.logging import bind_log_context, get_logger
 from core.logging.attributes import LOG_SESSION_AGENT
-from core.state import ExecutionState, ExecutionTaskState
-from core.state.interrupt import HandoffMode, OperatorTaskInterrupt
+from core.state import ChildWorkflowLink, ExecutionState, ExecutionTaskState
+from core.state.interrupt import HandoffInterrupt, HandoffMode, OperatorTaskInterrupt
 from core.state.trigger_runtime import TriggerRuntimeSnapshot
 from core.tasks.kicker import kiq_task_name_with_context
 from core.tracing import get_tracer
+from core.tracing.context import TraceContext
+from core.tracing.operation_span import traced_operation
 from core.tracing.provider import is_tracing_enabled
 from core.types import JsonObject, JsonValue, require_json_array, require_json_object
 from core.utils.background import run_with_log_context
@@ -409,6 +419,10 @@ class BaseChannel(ABC):
 
         is_takeover_user_reply = False
         takeover_work_item_id: str | None = None
+        is_handoff_user_reply = False
+        handoff_child_session_id: str | None = None
+        handoff_child_flow_id: str | None = None
+        handoff_child_branch_id: str | None = None
 
         if state is None:
             branch_id = "default"
@@ -438,6 +452,16 @@ class BaseChannel(ABC):
                     if op_task is not None:
                         is_takeover_user_reply = True
                         takeover_work_item_id = op_task
+                elif isinstance(state.interrupt.body, HandoffInterrupt):
+                    routing = self.container.handoff_orchestrator_service.resolve_active_handoff_child(
+                        state
+                    )
+                    if routing is not None:
+                        is_handoff_user_reply = True
+                        handoff_child_session_id = routing.child_session_id
+                        handoff_child_flow_id = routing.child_flow_id
+                        handoff_child_branch_id = routing.child_branch_id
+                        is_resume = False
 
         # Объединяем metadata из Context канала с переданным metadata
         final_metadata: JsonObject = metadata or {}
@@ -457,6 +481,10 @@ class BaseChannel(ABC):
             user_id=user_id or context_id,
             is_takeover_user_reply=is_takeover_user_reply,
             takeover_work_item_id=takeover_work_item_id,
+            is_handoff_user_reply=is_handoff_user_reply,
+            handoff_child_session_id=handoff_child_session_id,
+            handoff_child_flow_id=handoff_child_flow_id,
+            handoff_child_branch_id=handoff_child_branch_id,
         )
 
     async def create_task(self, params: PreparedTaskParams) -> None:
@@ -470,47 +498,97 @@ class BaseChannel(ABC):
             raise ValueError("Context is not set. Context must be created in middleware.")
 
         context_data = self.context.to_dict()
+        target = await self.container.handoff_orchestrator_service.resolve_execution_target(
+            parent_flow_id=self.flow_id,
+            params=params,
+        )
 
         # Создаем trace context для propagation в worker
-        trace_context_data = None
+        trace_context_data: JsonObject | None = None
+        route_reply_span_ctx: TraceContext | None = None
+        route_reply_span_attrs = None
         if is_tracing_enabled():
             tracer = get_tracer()
-            trace_ctx = tracer.create_trace_context(
-                user_id=self.context.user.user_id,
-                user_name=self.context.user.name,
-                user_groups=self._get_user_groups_from_context(self.context),
-                session_auth=self.context.session_id,
-                session_agent=params.session_id,
-                task_id=params.task_id,
-                context_id=params.context_id,
-                flow_id=self.flow_id,
-                branch_id=params.branch_id,
-                channel=self.name,
-                is_resume=params.is_resume,
-            )
-            trace_context_data = trace_ctx.to_dict()
+            parent_state = await self._get_state(params.session_id)
+            handoff_trace_id: str | None = None
+            if params.is_handoff_user_reply and parent_state is not None:
+                handoff_trace_id = parent_state.handoff_trace_id
+            if params.is_handoff_user_reply and handoff_trace_id is not None:
+                trace_ctx = continue_handoff_trace_context(
+                    handoff_trace_id,
+                    user_id=self.context.user.user_id if self.context.user else params.user_id,
+                    user_name=self.context.user.name if self.context.user else None,
+                    user_groups=self._get_user_groups_from_context(self.context),
+                    session_auth=self.context.session_id,
+                    session_agent=target.session_id,
+                    task_id=params.task_id,
+                    context_id=target.context_id,
+                    flow_id=target.flow_id,
+                    branch_id=target.branch_id,
+                    channel=self.name,
+                    is_resume=target.is_resume,
+                )
+                route_reply_span_ctx = trace_ctx
+                route_reply_span_attrs = handoff_span_attributes(
+                    phase="route_reply",
+                    parent_session_id=params.session_id,
+                    child_session_id=target.session_id,
+                    target_flow_id=target.flow_id,
+                    depth=parent_state.handoff_depth if parent_state is not None else None,
+                    trace_id=handoff_trace_id,
+                )
+            else:
+                trace_ctx = tracer.create_trace_context(
+                    user_id=self.context.user.user_id if self.context.user else params.user_id,
+                    user_name=self.context.user.name if self.context.user else None,
+                    user_groups=self._get_user_groups_from_context(self.context),
+                    session_auth=self.context.session_id,
+                    session_agent=target.session_id,
+                    task_id=params.task_id,
+                    context_id=target.context_id,
+                    flow_id=target.flow_id,
+                    branch_id=target.branch_id,
+                    channel=self.name,
+                    is_resume=target.is_resume,
+                )
+            trace_context_data = trace_context_to_kiq_payload(trace_ctx)
 
         broker_url = get_settings().tasks.broker_url
         logger.info("flow.create_task.broker", broker_url=broker_url)
-        logger.debug(f"[create_task] Kicking task_id={params.task_id} for flow_id={self.flow_id}")
-        _ = await kiq_task_name_with_context(
-            TASK_PROCESS_FLOW,
-            flows_broker,
-            flow_id=self.flow_id,
-            session_id=params.session_id,
-            user_id=params.user_id,
-            content=params.content,
-            branch_id=params.branch_id,
-            channel=self.name,
-            task_id=params.task_id,
-            context_id=params.context_id,
-            metadata=params.metadata or {},
-            is_resume=params.is_resume,
-            files=[file_ref.to_json_object() for file_ref in params.files_data],
-            context_data=context_data,
-            trace_context=trace_context_data,
-            background_kind="flow_task",
+        logger.debug(
+            f"[create_task] Kicking task_id={params.task_id} flow_id={target.flow_id} "
+            + f"session_id={target.session_id}"
         )
+
+        async def _kick_flow_task() -> None:
+            _ = await kiq_task_name_with_context(
+                TASK_PROCESS_FLOW,
+                flows_broker,
+                flow_id=target.flow_id,
+                session_id=target.session_id,
+                user_id=params.user_id,
+                content=params.content,
+                branch_id=target.branch_id,
+                channel=self.name,
+                task_id=params.task_id,
+                context_id=target.context_id,
+                metadata=params.metadata or {},
+                is_resume=target.is_resume,
+                files=[file_ref.to_json_object() for file_ref in params.files_data],
+                context_data=context_data,
+                trace_context=trace_context_data,
+                background_kind="flow_task",
+            )
+
+        if route_reply_span_ctx is not None and route_reply_span_attrs is not None:
+            async with traced_operation(
+                HANDOFF_OP_ROUTE_REPLY,
+                trace_ctx=route_reply_span_ctx,
+                extra_attributes=route_reply_span_attrs,
+            ):
+                await _kick_flow_task()
+        else:
+            await _kick_flow_task()
         logger.debug(f"[create_task] Task kicked to TaskIQ: task_id={params.task_id}")
 
     # === Основной метод выполнения задачи ===
@@ -847,6 +925,14 @@ class BaseChannel(ABC):
                     context_id=params.context_id,
                     task_id=effective_task_id,
                 )
+                ir = state.interrupt
+                if isinstance(ir.body, HandoffInterrupt):
+                    await self._handle_handoff(
+                        ir.body,
+                        emitter,
+                        state,
+                        params,
+                    )
                 await self._save_terminal_state(params.session_id, state, "input-required")
                 await emitter.emit_interrupt(state.interrupt)
                 await self._send_push_notification(
@@ -854,6 +940,19 @@ class BaseChannel(ABC):
                     params.context_id,
                     "input-required",
                     state.interrupt.question,
+                )
+            elif state.terminal_task_state == "handback":
+                await container.handoff_orchestrator_service.complete_handback(
+                    child_state=state,
+                    channel_name=self.name,
+                    context_data=self.context.to_dict(),
+                    trace_context=resolve_active_trace_context(),
+                )
+                await self._save_terminal_state(params.session_id, state, "completed")
+                handback_text = state.response or ""
+                await emitter.emit_complete(handback_text, has_artifact=False)
+                await self._send_push_notification(
+                    params.task_id, params.context_id, "completed", handback_text
                 )
             else:
                 json_data = extract_json_from_response(final_response)
@@ -877,6 +976,8 @@ class BaseChannel(ABC):
                 bool(state.interrupt),
             )
             task_state: ExecutionTaskState = "input-required" if state.interrupt else "completed"
+            if state.terminal_task_state == "handback":
+                task_state = "completed"
 
             return FlowTaskResult(
                 response=final_response,
@@ -959,6 +1060,125 @@ class BaseChannel(ABC):
             background_kind="a2a_task",
         )
 
+    async def _handle_handoff(
+        self,
+        body: HandoffInterrupt,
+        emitter: Emitter,
+        parent_state: ExecutionState,
+        params: PreparedTaskParams,
+    ) -> None:
+        """
+        Синхронизирует handoff-interrupt, запускает child flow и UI-событие.
+        """
+        orchestrator = self.container.handoff_orchestrator_service
+        validated_body = await orchestrator.validate_handoff_target(body)
+        child_depth = orchestrator.assert_handoff_depth_allowed(parent_state)
+        parent_state.handoff_depth = child_depth
+
+        child_context_id, child_session_id = orchestrator.build_child_session_ids(
+            params.context_id,
+            validated_body.target_flow_id,
+        )
+
+        active_trace = resolve_active_trace_context()
+        initiated_span_id: str | None = None
+        if active_trace is not None:
+            parent_state.handoff_trace_id = active_trace.trace_id
+            initiated_span_id = active_trace.span_id
+
+        InterruptManager.apply_handoff_interrupt(
+            parent_state,
+            validated_body,
+            child_session_id,
+        )
+        parent_state.child_workflows[child_session_id] = ChildWorkflowLink(
+            node_id=validated_body.target_flow_id,
+            child_session_id=child_session_id,
+            child_flow_id=validated_body.target_flow_id,
+            child_flow_branch_id=validated_body.target_branch_id,
+            child_execution_branch_id="initial",
+            parent_session_id=params.session_id,
+            parent_execution_branch_id="initial",
+            parent_node_schedule_sequence=1,
+            status="running",
+            handoff=True,
+        )
+
+        span_attrs = handoff_span_attributes(
+            phase="initiated",
+            parent_session_id=params.session_id,
+            child_session_id=child_session_id,
+            target_flow_id=validated_body.target_flow_id,
+            depth=child_depth,
+            trace_id=parent_state.handoff_trace_id,
+        )
+
+        async with traced_operation(
+            HANDOFF_OP_INITIATED,
+            trace_ctx=active_trace,
+            extra_attributes=span_attrs,
+        ):
+            await emitter.emit_handoff_initiated(
+                target_flow_id=validated_body.target_flow_id,
+                target_flow_name=validated_body.target_name,
+                handoff_reason=validated_body.reason,
+                depth=child_depth,
+                child_session_id=child_session_id,
+                trace_id=parent_state.handoff_trace_id,
+            )
+
+            await orchestrator.record_handoff_initiated(
+                parent_session_id=params.session_id,
+                parent_state=parent_state,
+                body=validated_body,
+                child_session_id=child_session_id,
+                child_depth=child_depth,
+                trace_id=parent_state.handoff_trace_id,
+                span_id=initiated_span_id,
+            )
+
+            if self.context is None:
+                raise ValueError("Context required for handoff child kickoff")
+            await orchestrator.kickoff_child_flow(
+                parent_params=params,
+                parent_state=parent_state,
+                body=validated_body,
+                child_session_id=child_session_id,
+                child_context_id=child_context_id,
+                child_depth=child_depth,
+                channel_name=self.name,
+                context_data=self.context.to_dict(),
+                trace_context=active_trace,
+            )
+
+        if parent_state.interrupt is not None:
+            body_with_depth = validated_body.model_copy(update={"depth": child_depth})
+            parent_state.interrupt = parent_state.interrupt.model_copy(
+                update={"body": body_with_depth}
+            )
+
+    async def _cancel_handoff_children(
+        self,
+        state: ExecutionState,
+        *,
+        visited: set[str] | None = None,
+    ) -> None:
+        seen = visited if visited is not None else set[str]()
+        for key, link in list(state.child_workflows.items()):
+            if not link.handoff:
+                continue
+            if link.status in ("completed", "failed"):
+                continue
+            child_session_id = link.child_session_id
+            if child_session_id in seen:
+                continue
+            seen.add(child_session_id)
+            child_state = await self._get_state(child_session_id)
+            if child_state is not None:
+                await self._cancel_handoff_children(child_state, visited=seen)
+                await self._save_terminal_state(child_session_id, child_state, "canceled")
+            state.child_workflows[key] = link.model_copy(update={"status": "failed"})
+
     # === Общая реализация on_get_task ===
 
     async def _get_task_from_state(self, lookup_id: str) -> Task | None:
@@ -1020,6 +1240,14 @@ class BaseChannel(ABC):
 
         if state is None:
             return None
+
+        await self._cancel_handoff_children(state)
+        await self._save_state(
+            session_id,
+            state,
+            event_type=WorkflowEventType.state_projection_committed,
+            payload=None,
+        )
 
         await self._save_terminal_state(session_id, state, "canceled")
 

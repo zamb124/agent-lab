@@ -132,6 +132,34 @@ async def test_reload_from_bundle_returns_400_when_no_bundle_directory(
 
 
 @pytest.mark.asyncio
+async def test_reload_handoff_demo_parent_installs_parent_and_child(client, auth_headers_system):
+    """Store install: parent bundle + depends_on_flow_ids companion без nodes.json."""
+    flow_id = "handoff_demo_parent"
+    child_id = "handoff_demo_child"
+    for fid in (flow_id, child_id):
+        existing = await client.get(f"/flows/api/v1/flows/{fid}", headers=auth_headers_system)
+        if existing.status_code == 200:
+            delete = await client.delete(
+                f"/flows/api/v1/flows/{fid}", headers=auth_headers_system
+            )
+            assert delete.status_code == 200, delete.text
+
+    response = await client.post(
+        f"/flows/api/v1/flows/{flow_id}/reload-from-bundle", headers=auth_headers_system
+    )
+    assert response.status_code == 200, response.text
+    assert response.json()["flow_id"] == flow_id
+
+    parent = await client.get(f"/flows/api/v1/flows/{flow_id}", headers=auth_headers_system)
+    assert parent.status_code == 200, parent.text
+    assert parent.json().get("source") == "file"
+
+    child = await client.get(f"/flows/api/v1/flows/{child_id}", headers=auth_headers_system)
+    assert child.status_code == 200, child.text
+    assert child.json().get("source") == "file"
+
+
+@pytest.mark.asyncio
 async def test_get_flow_returns_source_for_listed_flows(client, auth_headers_system):
     """Список и GET отдают поле source для bundle-агента."""
     list_resp = await client.get("/flows/api/v1/flows/", headers=auth_headers_system)

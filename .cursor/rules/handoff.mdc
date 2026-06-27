@@ -1,0 +1,110 @@
+---
+description: "Agent-to-agent handoff/handback между flows (не HITL, не embed preview)"
+alwaysApply: false
+---
+# Agent handoff / handback
+
+Передача управления между **flows** (субагентами) через tools и channel layer. Не путать с:
+
+| Термин | Смысл |
+|---|---|
+| **Agent handoff** (этот документ) | `handoff_to_flow` / `handback_to_parent`, `HandoffInterrupt` (`kind=handoff`) |
+| **HITL `handoff_mode`** | `OperatorTaskInterrupt`, WorkItem `operator_handoff`, `HandoffMode.SINGLE_REPLY`/`TAKEOVER` |
+| **`flow_preview_handoff`** | Redis payload для embed preview share (`core/identity/flow_preview_handoff.py`) |
+
+## Контракт
+
+- **`handoff_to_flow`** (`apps/flows/src/tools/handoff_tools.py`) → `FlowInterrupt(body=HandoffInterrupt)`. Parent **suspended** до handback.
+- **`handback_to_parent`** → `state.response`, `handback_return_variables`, `terminal_task_state="handback"`. Channel вызывает `HandoffOrchestratorService.complete_handback`.
+- **Variables — только явно** в args tools. Нет неявного merge parent↔child state.
+- **`handoff_max_depth`** (`apps/flows/config.py`) — лимит цепочки; проверка в `assert_handoff_depth_allowed`.
+
+## Session IDs
+
+| Слой | Формат |
+|---|---|
+| Parent A2A | `{parent_flow_id}:{context_id}` |
+| Child context | `{parent_context_id}:handoff:{target_flow_id}` |
+| Child session | `{target_flow_id}:{child_context_id}` |
+
+`HandoffOrchestratorService.build_child_session_ids(parent_context_id, target_flow_id)`.
+
+In-process `run_flow`: child `unique_id` = `child_context_id.removeprefix("context-")` (см. `workflow_state`).
+
+## Channel layer — единственное место маршрутизации user reply
+
+1. **`BaseChannel._prepare_task_params`**: parent с `HandoffInterrupt` → `is_handoff_user_reply=True` + child routing fields (`resolve_active_handoff_child`).
+2. **`create_task`**: **`resolve_execution_target`** материализует `FlowExecutionTarget` (flow_id, session_id, context_id, branch_id, is_resume) **до** `kiq_task_name_with_context`.
+3. User reply при active handoff → **child session**, не parent.
+4. **`process_task` worker** — dumb executor; **не** патчит routing (удалён legacy `apply_active_handoff_routing`).
+5. **`_handle_handoff`**: depth++, `InterruptManager.apply_handoff_interrupt`, `ChildWorkflowLink(handoff=True)`, durable `handoff_initiated`, `kickoff_child_flow`.
+6. **`complete_handback`**: tool result в parent messages, merge `handback_return_variables`, `handback_completed`, parent `process_flow_task` resume.
+7. **Cancel parent** → `_cancel_handoff_children` (рекурсивно по `child_workflows` с `handoff=True`).
+
+Файлы: `apps/flows/src/channels/base.py`, `apps/flows/src/channels/types.py` (`FlowExecutionTarget`, `PreparedTaskParams`), `apps/flows/src/services/handoff_orchestrator_service.py`.
+
+## Альтернативные entry points
+
+| Механизм | Поведение |
+|---|---|
+| **FlowNode `handoff_mode: true`** | Durable child workflow; **тот же** child session id `:handoff:` что и tool-path; parent suspended; см. `FlowNode` в `nodes.py` |
+| **NodeAsToolWrapper `call_type: "handoff"`** | Tool-flow бросает `HandoffInterrupt` вместо inline run |
+| **FlowNode без handoff** | Обычный durable child link, без agent handoff interrupt |
+
+## State (`ExecutionState`)
+
+- `handoff_depth` — выставляется channel при kickoff (in-process без channel остаётся 0).
+- `child_workflows` — `ChildWorkflowLink` с `handoff=True`, status `running|completed`.
+- `handoff_parent_session_id` — на child после kickoff.
+- `handback_return_variables` — payload handback для orchestrator.
+
+Подробнее — `execution_state.mdc`, `InterruptManager` в `apps/flows/src/state/interrupt_manager.py`.
+
+## Durable events / UI / SSE
+
+- Ledger: `WorkflowEventType.handoff_initiated`, `handback_completed`.
+- Push UI: `platform.handoff_initiated`, `platform.handback_completed` (`Emitter`).
+- A2A `input-required` с `metadata.platform_handoff_continue=true` — SSE не финал (как operator takeover). Chat: `a2a-chat-runtime.js`.
+
+## Observability (handoff trace chain)
+
+- **`ExecutionState.handoff_trace_id`** — один `trace_id` на цепочку parent→child→handback; выставляется в `_handle_handoff`, копируется в child `ensure_child_state`.
+- **Spans:** `flows.handoff.initiated` (`_handle_handoff`), `flows.handoff.route_reply` (`create_task` при `is_handoff_user_reply`), `flows.handback.completed` (`complete_handback`).
+- **Атрибуты:** `platform.handoff.parent_session_id`, `child_session_id`, `target_flow_id`, `depth`, `phase`, `trace_id` (`core/tracing/attributes.py`).
+- **TaskIQ:** `kickoff_child_flow` / parent resume после handback — `trace_context` fork/continue, не `None`.
+- **Ledger:** `FlowHandoffInitiatedPayload` / `FlowHandbackCompletedPayload` — поле `trace_id`.
+- **API:** `GET /flows/api/v1/traces/handoff-chain/{parent_session_id}` — дерево spans по `handoff_trace_id`.
+- **UI:** handoff/handback cards → «Open trace»; trace viewer — badge `platform.handoff.phase`.
+
+## Structured handback
+
+- Child `handback_to_parent(variables=...)` → `handback_return_variables` на child state.
+- **`HandoffOrchestratorService._validate_handback_variables`**: если у entry node child flow задан `output_schema`, variables валидируются JSON Schema до merge в parent.
+- Opt-in shared context: **`HandoffContextResource`** (`ResourceType.HANDOFF_CONTEXT`) + `handoff_context_resource_key` на `HandoffInterrupt`.
+
+## Remote / external handoff (P2)
+
+- `HandoffInterrupt.target_kind`: `internal` | `external`; для `external` обязателен `remote_flow_id` (validate в orchestrator).
+- Полный A2A proxy multi-turn — отдельная фича; canonical external pattern = **`remote_flow` as tool** (one-shot).
+
+## Повторный handoff
+
+В одной parent-сессии допустимы **многократные** циклы handoff→handback к **тому же** child session id или к **разным** child flows. После handback `handoff_depth` parent уменьшается; новый handoff снова проходит depth check.
+
+## Тесты (без моков, только MockLLM)
+
+| Файл | Покрытие |
+|---|---|
+| `tests/flows/integration/test_handoff_e2e.py` | In-process A–I, multi-cycle L6 |
+| `tests/flows/api/test_handoff_a2a.py` | A2A K1–K9, demo bundles |
+| `tests/flows/api/test_handoff_a2a_multi.py` | Повторные циклы L1–L5 |
+| `tests/flows/integration/test_handoff_sandbox_e2e.py` | Sandbox j1/j2 (capability) |
+| `tests/flows/services/test_handoff_orchestrator_schema.py` | Structured handback JSON Schema |
+
+**Store (Магазин):** `handoff_demo_parent` + `handoff_demo_child` в `registry.yaml` (`public: true`); child `hidden: true`; parent `depends_on_flow_ids` ставит оба flow при установке из UI и при company init.
+
+**MockLLM queue:** после `handback_to_parent` на child — текстовый buffer (`"child cycle N finished"`), иначе child съест parent mock `handoff_to_flow`.
+
+**`sync_tools`:** `handoff_orchestrator_service` в patch list для `kiq_task_name_with_context` (`tests/conftest.py`).
+
+Запрещено: `monkeypatch` settings для depth (использовать `assert_handoff_depth_allowed` или default config).

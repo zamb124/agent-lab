@@ -14,6 +14,7 @@ import { buildFileCreateSpecJson } from '@platform/lib/utils/file-create-spec.js
 import '@platform/lib/components/platform-icon.js';
 import '@platform/lib/components/platform-switch.js';
 import '@platform/lib/components/glass-spinner.js';
+import '@platform/lib/components/platform-modal-search-field.js';
 import '@platform/lib/components/fields/platform-field.js';
 import '@platform/lib/components/platform-file-attachments.js';
 import { asArray, asString, isPlainObject } from '../_helpers/flows-resolvers.js';
@@ -93,6 +94,7 @@ export class FlowsMcpServersModal extends PlatformModal {
         _saving: { state: true },
         _testFeedback: { state: true },
         _testingServerId: { state: true },
+        _search: { state: true },
     };
 
     static styles = [
@@ -125,6 +127,30 @@ export class FlowsMcpServersModal extends PlatformModal {
                 opacity: 0.5;
                 cursor: not-allowed;
             }
+            .mcp-title-row platform-modal-search-field {
+                margin-left: auto;
+            }
+            .mcp-title-row {
+                display: flex;
+                align-items: center;
+                gap: var(--space-3);
+                min-width: 0;
+                width: 100%;
+                font-size: var(--text-sm);
+                line-height: 1.2;
+            }
+            .mcp-title-text {
+                flex-shrink: 0;
+                font-size: var(--text-xl);
+                font-weight: var(--font-semibold);
+                letter-spacing: var(--tracking-tight);
+                color: var(--text-primary);
+            }
+            .modal-title:has(.mcp-title-row) {
+                white-space: normal;
+                overflow: visible;
+                text-overflow: clip;
+            }
             .mcp-cards {
                 display: flex;
                 flex-direction: column;
@@ -132,6 +158,24 @@ export class FlowsMcpServersModal extends PlatformModal {
                 max-height: min(70vh, 640px);
                 overflow-y: auto;
                 padding: var(--space-1);
+            }
+            .mcp-cards.is-fullscreen {
+                display: grid;
+                grid-template-columns: repeat(3, minmax(0, 1fr));
+                max-height: none;
+                flex: 1;
+                min-height: 0;
+                align-content: start;
+            }
+            @media (max-width: 1280px) {
+                .mcp-cards.is-fullscreen {
+                    grid-template-columns: repeat(2, minmax(0, 1fr));
+                }
+            }
+            @media (max-width: 768px) {
+                .mcp-cards.is-fullscreen {
+                    grid-template-columns: minmax(0, 1fr);
+                }
             }
             .mcp-card {
                 display: flex;
@@ -236,6 +280,31 @@ export class FlowsMcpServersModal extends PlatformModal {
             .mcp-card-footer {
                 display: flex;
                 justify-content: flex-end;
+            }
+            .mcp-reset-btn {
+                display: inline-flex;
+                align-items: center;
+                justify-content: center;
+                gap: var(--space-2);
+                min-height: 32px;
+                padding: 0 var(--space-3);
+                border-radius: var(--radius-md);
+                border: 1px solid var(--border-subtle);
+                background: var(--glass-solid-subtle);
+                color: var(--text-secondary);
+                cursor: pointer;
+                font: inherit;
+                font-size: var(--text-sm);
+                transition: background var(--duration-fast), border-color var(--duration-fast), color var(--duration-fast);
+            }
+            .mcp-reset-btn:hover {
+                color: var(--text-primary);
+                background: var(--glass-solid-medium);
+                border-color: var(--glass-border-medium);
+            }
+            .mcp-reset-btn:focus-visible {
+                outline: none;
+                box-shadow: var(--focus-ring);
             }
             .mcp-headers-line {
                 font-size: var(--text-xs);
@@ -425,6 +494,7 @@ export class FlowsMcpServersModal extends PlatformModal {
         this._brandingLoadOp = this.useOp('flows/mcp_branding_load');
         this._brandingUpsertOp = this.useOp('flows/mcp_branding_upsert');
         this._brandingRemoveOp = this.useOp('flows/mcp_branding_remove');
+        this._search = '';
     }
 
     updated(changedProperties) {
@@ -439,10 +509,83 @@ export class FlowsMcpServersModal extends PlatformModal {
             this._brandingError = null;
             this._brandingSaving = false;
             this._brandingUploadFiles = [];
+            this._search = '';
             this._resetFormFields();
             this._resetBrandingFormFields();
             this.size = 'lg';
         }
+    }
+
+    _onSearchInput(e) {
+        const v = e.detail?.value;
+        if (typeof v !== 'string') {
+            throw new TypeError('flows-mcp-servers-modal: search expects string detail.value');
+        }
+        this._search = v;
+    }
+
+    _renderHeaderSearch() {
+        return html`
+            <platform-modal-search-field
+                layout="header"
+                .value=${this._search}
+                placeholder=${this.t('mcp_servers_modal.search_placeholder')}
+                @change=${this._onSearchInput}
+            ></platform-modal-search-field>
+        `;
+    }
+
+    /**
+     * @param {Array<Record<string, unknown>>} items
+     * @returns {Array<Record<string, unknown>>}
+     */
+    _sortServers(items) {
+        const rank = (source) => {
+            if (source === 'platform') {
+                return 0;
+            }
+            if (source === 'manual') {
+                return 1;
+            }
+            if (source === 'catalog') {
+                return 2;
+            }
+            return 1;
+        };
+        return [...items].sort((a, b) => {
+            const sourceA = typeof a.source === 'string' ? a.source : '';
+            const sourceB = typeof b.source === 'string' ? b.source : '';
+            const byRank = rank(sourceA) - rank(sourceB);
+            if (byRank !== 0) {
+                return byRank;
+            }
+            const nameA = typeof a.name === 'string' ? a.name : '';
+            const nameB = typeof b.name === 'string' ? b.name : '';
+            const byName = nameA.localeCompare(nameB, undefined, { sensitivity: 'base' });
+            if (byName !== 0) {
+                return byName;
+            }
+            const idA = typeof a.server_id === 'string' ? a.server_id : '';
+            const idB = typeof b.server_id === 'string' ? b.server_id : '';
+            return idA.localeCompare(idB, undefined, { sensitivity: 'base' });
+        });
+    }
+
+    /**
+     * @param {Array<Record<string, unknown>>} items
+     * @returns {Array<Record<string, unknown>>}
+     */
+    _filterServers(items) {
+        const sorted = this._sortServers(items);
+        const q = this._search.trim().toLowerCase();
+        if (q.length === 0) {
+            return sorted;
+        }
+        return sorted.filter((s) => {
+            const parts = [s.name, s.server_id, s.url, s.description]
+                .filter((part) => typeof part === 'string' && part.length > 0);
+            return parts.join(' ').toLowerCase().includes(q);
+        });
     }
 
     _resetBrandingFormFields() {
@@ -857,12 +1000,15 @@ export class FlowsMcpServersModal extends PlatformModal {
     }
 
     _renderList() {
-        const items = asArray(this._servers.items);
-        if (this._servers.loading && items.length === 0) {
+        const items = this._filterServers(asArray(this._servers.items));
+        if (this._servers.loading && asArray(this._servers.items).length === 0) {
             return html`<div class="mcp-empty"><glass-spinner></glass-spinner></div>`;
         }
-        if (items.length === 0) {
+        if (asArray(this._servers.items).length === 0) {
             return html`<div class="mcp-empty">${this.t('mcp_servers_modal.empty')}</div>`;
+        }
+        if (items.length === 0) {
+            return html`<div class="mcp-empty">${this.t('mcp_servers_modal.empty_search')}</div>`;
         }
         return items.map((s) => html`
             <div class="mcp-card">
@@ -918,7 +1064,7 @@ export class FlowsMcpServersModal extends PlatformModal {
                         <div class="mcp-card-footer">
                             <button
                                 type="button"
-                                class="text-action"
+                                class="mcp-reset-btn"
                                 @click=${() => this._resetCatalogDefaults(s)}>
                                 ${this.t('mcp_servers_modal.action_reset_defaults')}
                             </button>
@@ -941,7 +1087,7 @@ export class FlowsMcpServersModal extends PlatformModal {
             : html``;
         return html`
             ${brandingBtn}
-            <div class="mcp-cards">${this._renderList()}</div>
+            <div class="mcp-cards ${this._isFullscreen ? 'is-fullscreen' : ''}">${this._renderList()}</div>
         `;
     }
 
@@ -1189,7 +1335,12 @@ export class FlowsMcpServersModal extends PlatformModal {
         if (this._view === 'branding') {
             return this.t('mcp_servers_modal.branding_title');
         }
-        return this.t('mcp_servers_modal.title');
+        return html`
+            <div class="mcp-title-row">
+                <span class="mcp-title-text">${this.t('mcp_servers_modal.title')}</span>
+                ${this._renderHeaderSearch()}
+            </div>
+        `;
     }
 
     renderHeaderActions() {

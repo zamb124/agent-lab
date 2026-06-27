@@ -10,7 +10,7 @@ alwaysApply: false
 
 ## Категории
 
-1. **Presentational** (`glass-button`, `glass-card`, `glass-spinner`, `platform-button`, `platform-switch`, `tag-input`, `platform-icon-picker`, `platform-help-hint`, `platform-timezone-picker`, `platform-cron-field`, `platform-palette-color-picker`, `platform-trace-viewer`, `platform-log-viewer`, `platform-shell-page`, `layout/platform-sidebar-nav-tree`, `layout/*`, `fields/*`):
+1. **Presentational** (`glass-button`, `glass-card`, `glass-spinner`, `platform-button`, `platform-switch`, `platform-modal-search-field`, `tag-input`, `platform-icon-picker`, `platform-help-hint`, `platform-timezone-picker`, `platform-cron-field`, `platform-palette-color-picker`, `platform-trace-viewer`, `platform-log-viewer`, `platform-shell-page`, `layout/platform-sidebar-nav-tree`, `layout/*`, `fields/*`):
    - Не читают state платформы (только `t()` для подписей).
    - Не диспатчат в bus, кроме `CoreEvents.UI_TOAST_SHOW` (через `this.toast(...)`).
    - Локальные DOM-события `this.emit('change', detail)` для родителя.
@@ -79,6 +79,14 @@ CSS variables из `core/frontend/static/assets/css/tokens.css`: `--space-*`, `-
 | `<platform-palette-color-picker>` | swatches цветов |
 | `<tag-input>` | multi-tag input (внутри `platform-field-array`); атрибут `flat` удалён |
 | `<platform-help-hint>` | info bubble |
+| `<platform-modal-search-field>` | компактный поиск в header/toolbar/sidebar модалки (`layout="header|toolbar|fill"`, dense pill, `radius-full`) |
+
+### Поиск в модалках
+
+- **Канон:** [`<platform-modal-search-field>`](core/frontend/static/lib/components/platform-modal-search-field.js) — presentational обёртка над `<platform-field input-type="search" pill-density="dense">` + prefix `platform-icon search`.
+- **`layout`:** `header` — ~220px в actions/title row модалки; `toolbar` — ~170px в body toolbar; `fill` — 100% ширины (sidebar).
+- Событие: `@change` → `detail.value: string` (локальный DOM, через `this.emit('change', …)`).
+- В `apps/**` не дублировать локальные `.header-search` / pill-override для modal search — только layout-контейнеры flex (`.search-wrap`, title row).
 
 ### Сырые `<input>` / `<textarea>` / `<select>` вне `<platform-field>`
 

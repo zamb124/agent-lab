@@ -9,14 +9,13 @@ import json
 
 import pytest
 
+from tests.fixtures.s3 import require_s3_configured
 from tests.sync.api._helpers import platform_auxiliary_file_spec_json, upload_platform_file
 
 
 @pytest.mark.asyncio
 async def test_bind_rejects_mismatched_file_id(frontend_client, auth_headers_system, unique_id: str):
-    from core.files.s3_client import S3ClientFactory
-
-    S3ClientFactory.create_default_client()
+    require_s3_configured()
     upload = await upload_platform_file(
         frontend_client,
         auth_headers_system,

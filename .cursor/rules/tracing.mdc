@@ -154,7 +154,18 @@ OTel SDK → OTLP → Alloy → **Tempo** (retention 7 дней). Alloy → **Lo
 - `GET /flows/api/v1/traces/session/{session_id}` → Tempo search по `platform.session.agent` → fetch каждого trace.
 - `GET /flows/api/v1/traces/task/{task_id}` → Tempo search по `platform.task_id`.
 - `GET /flows/api/v1/traces/trace/{trace_id}` → Tempo GET trace напрямую.
+- `GET /flows/api/v1/traces/handoff-chain/{parent_session_id}` → spans по `ExecutionState.handoff_trace_id` (parent↔child handoff chain).
 - Ответ совместим с `<platform-trace-viewer>` (поля как у `_serialize_span`).
+
+**Agent handoff trace chain** (`handoff.mdc`):
+
+| operation | Где |
+|---|---|
+| `flows.handoff.initiated` | `BaseChannel._handle_handoff` |
+| `flows.handoff.route_reply` | `BaseChannel.create_task` при `is_handoff_user_reply` |
+| `flows.handback.completed` | `HandoffOrchestratorService.complete_handback` |
+
+Атрибуты spans: `platform.handoff.parent_session_id`, `child_session_id`, `target_flow_id`, `depth`, `phase`, `trace_id`. TaskIQ kickoff/resume передаёт `TraceContext` fork/continue (не `None`). UI: handoff card → trace viewer; spans с `platform.handoff.phase` — badge в trace viewer.
 
 **Flows Logs API (Loki whitelist)** — `apps/flows/src/api/v1/observability_logs.py` через `LokiClient` (`core/clients/loki_client.py`):
 

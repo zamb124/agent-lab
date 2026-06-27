@@ -253,3 +253,13 @@ make test WORKERS=2 2>&1 | tee logs/make-test.log
 - [ ] Нет моков внутренних компонентов (кроме MockLLM)
 - [ ] Интеграция с worker — `@pytest.mark.real_taskiq` + `mock_llm_redis`
 - [ ] Новые worker фикстуры — `SessionWorkerManager`
+
+## Agent handoff (flows)
+
+- Матрица: `tests/flows/integration/test_handoff_e2e.py`, `tests/flows/api/test_handoff_a2a.py`, `test_handoff_a2a_multi.py`.
+- Только **MockLLM**; без monkeypatch orchestrator/settings (depth — через `assert_handoff_depth_allowed` или default config).
+- **`sync_tools`:** `handoff_orchestrator_service` в patch list (`tests/conftest.py`).
+- **MockLLM queue:** после `handback_to_parent` на child — текстовый ответ в очереди, иначе child перехватит parent `handoff_to_flow`.
+- A2A multi-cycle: предпочтительно 2 HTTP-сообщения (start + reply chain при sync_tools).
+
+Подробно — **`handoff.mdc`**.

@@ -33,6 +33,10 @@ from apps.flows.src.registry.nodes import NodeRegistry, create_default_node_regi
 from apps.flows.src.runners.remote import RemoteCodeRunner
 from apps.flows.src.services.flow_discovery import FlowDiscoveryService
 from apps.flows.src.services.flow_factory import FlowFactory
+from apps.flows.src.services.handoff_context_service import (
+    HandoffContextService,
+)
+from apps.flows.src.services.handoff_orchestrator_service import HandoffOrchestratorService
 from apps.flows.src.services.hitl_work_item_service import HitlWorkItemService
 from apps.flows.src.services.lara_action_engine import LaraActionEngine
 from apps.flows.src.services.lara_facade import LaraFacade
@@ -171,6 +175,19 @@ class FlowContainer(BaseContainer):
     @lazy
     def hitl_work_item_service(self) -> HitlWorkItemService:
         return HitlWorkItemService(work_item_service=self.work_item_service)
+
+    @lazy
+    def handoff_context_service(self) -> HandoffContextService:
+        return HandoffContextService(resource_repository=self.resource_repository)
+
+    @lazy
+    def handoff_orchestrator_service(self) -> HandoffOrchestratorService:
+        return HandoffOrchestratorService(
+            workflow_runtime=self.workflow_runtime,
+            flow_repository=self.flow_repository,
+            redis_client=self.redis_client,
+            handoff_context_service=self.handoff_context_service,
+        )
 
     # rag_repository наследуется из BaseContainer (core/container/base.py)
 

@@ -8,7 +8,7 @@ import { PlatformModal } from '@platform/lib/components/glass-modal.js';
 import { registerModalKind } from '@platform/lib/utils/modal-registry.js';
 import '@platform/lib/components/platform-icon.js';
 import '@platform/lib/components/glass-spinner.js';
-import '@platform/lib/components/fields/platform-field.js';
+import '@platform/lib/components/platform-modal-search-field.js';
 import '../components/common/flows-code-language-icon.js';
 import { asObject } from '../_helpers/flows-resolvers.js';
 import {
@@ -132,10 +132,6 @@ export class FlowsCodeDocsModal extends PlatformModal {
                 padding: var(--space-3);
                 border-bottom: 1px solid var(--glass-border-subtle);
                 flex-shrink: 0;
-            }
-            .docs-sidebar-search {
-                width: 100%;
-                min-width: 0;
             }
             .language-segment {
                 display: grid;
@@ -428,16 +424,12 @@ export class FlowsCodeDocsModal extends PlatformModal {
                 <aside class="docs-sidebar" aria-label=${this.t('code_docs_modal.toc_aria')}>
                     <div class="docs-sidebar-top">
                         ${this._renderLanguageSegment()}
-                        <div class="docs-sidebar-search">
-                            <platform-field
-                                type="string"
-                                input-type="search"
-                                mode="edit"
-                                .value=${this._search}
-                                .placeholder=${this.t('code_docs_modal.search_placeholder')}
-                                @change=${this._onSearchInput}
-                            ></platform-field>
-                        </div>
+                        <platform-modal-search-field
+                            layout="fill"
+                            .value=${this._search}
+                            placeholder=${this.t('code_docs_modal.search_placeholder')}
+                            @change=${this._onSearchInput}
+                        ></platform-modal-search-field>
                     </div>
                     <nav class="docs-toc">
                         ${shown.length === 0

@@ -50,3 +50,22 @@ export const tracesByTraceOp = createAsyncOp({
         });
     },
 });
+
+export const tracesByHandoffChainOp = createAsyncOp({
+    name: 'flows/traces_by_handoff_chain',
+    silent: true,
+    restMirror: { method: 'GET', path: '/flows/api/v1/traces/handoff-chain/{parent_session_id}' },
+    request: async ({ payload }) => {
+        if (
+            !payload
+            || typeof payload.parent_session_id !== 'string'
+            || payload.parent_session_id.length === 0
+        ) {
+            throw new Error('tracesByHandoffChainOp: { parent_session_id } required');
+        }
+        return httpRequest({
+            method: 'GET',
+            url: `/flows/api/v1/traces/handoff-chain/${encodeURIComponent(payload.parent_session_id)}`,
+        });
+    },
+});

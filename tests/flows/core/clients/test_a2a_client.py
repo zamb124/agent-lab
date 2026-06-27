@@ -8,7 +8,7 @@ from aiohttp import web
 
 from core.clients.a2a_client import A2AClient, A2AClientError, _extract_task_status_message
 from core.types import require_json_object
-from tests.fixtures.aiohttp_ephemeral import tcp_site_assigned_port
+from tests.fixtures.aiohttp_ephemeral import ephemeral_web_server
 
 
 class TestA2AClient:
@@ -46,16 +46,9 @@ class TestA2AClient:
         app.router.add_get("/.well-known/agent-card.json", handle_agent_card)
         app.router.add_post("/", handle_send_task)
 
-        runner = web.AppRunner(app)
-        await runner.setup()
-        site = web.TCPSite(runner, "127.0.0.1", 0)
-        await site.start()
-        port = tcp_site_assigned_port(site)
-        public["base"] = f"http://127.0.0.1:{port}"
-
-        yield public["base"]
-
-        await runner.cleanup()
+        async with ephemeral_web_server(app) as base_url:
+            public["base"] = base_url
+            yield base_url
 
     @pytest.fixture
     async def error_server(self):
@@ -74,16 +67,8 @@ class TestA2AClient:
         app.router.add_get("/.well-known/agent-card.json", handle_404)
         app.router.add_post("/", handle_error)
 
-        runner = web.AppRunner(app)
-        await runner.setup()
-        site = web.TCPSite(runner, "127.0.0.1", 0)
-        await site.start()
-        port = tcp_site_assigned_port(site)
-        base = f"http://127.0.0.1:{port}"
-
-        yield base
-
-        await runner.cleanup()
+        async with ephemeral_web_server(app) as base_url:
+            yield base_url
 
     @pytest.mark.asyncio
     async def test_get_agent_card_success(self, mock_agent_server):

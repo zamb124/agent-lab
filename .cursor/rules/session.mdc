@@ -6,6 +6,10 @@ alwaysApply: false
 
 `session_id` связывает пользовательский поток с durable workflow instance. Формат для A2A/flows: `{flow_id}:{context_id}`. Значение хранится в `ExecutionState.session_id`, но сам `ExecutionState` является projection, а не источником истины.
 
+## Agent handoff sessions
+
+При agent handoff child session: `{target_flow_id}:{parent_context_id}:handoff:{target_flow_id}`; child `context_id`: `{parent_context_id}:handoff:{target_flow_id}`. User reply при active `HandoffInterrupt` маршрутизируется на child session в channel layer (`create_task` → `resolve_execution_target`). → **`handoff.mdc`**
+
 ## Runtime
 
 Канонический доступ к состоянию — через `DurableWorkflowRuntime` из контейнера:

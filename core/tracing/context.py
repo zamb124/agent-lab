@@ -8,7 +8,7 @@ from contextvars import ContextVar
 
 from pydantic import BaseModel, Field
 
-from core.types import JsonObject
+from core.types import JsonObject, JsonValue
 
 # ContextVar для хранения trace context в worker
 _trace_context_var: ContextVar[JsonObject | None] = ContextVar("trace_context", default=None)
@@ -91,3 +91,12 @@ class TraceContext(BaseModel):
         if len(parts) != 4:
             return None
         return cls(trace_id=parts[1], span_id=parts[2])
+
+    @classmethod
+    def merge_from(cls, base: "TraceContext", **updates: JsonValue) -> "TraceContext":
+        """Копия TraceContext с перекрытием полей."""
+        data = base.to_dict()
+        for key, value in updates.items():
+            if key in cls.model_fields:
+                data[key] = value
+        return cls.from_dict(data)

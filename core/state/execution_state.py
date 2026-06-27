@@ -35,6 +35,7 @@ ExecutionTaskState = Literal[
     "failed",
     "rejected",
     "auth-required",
+    "handback",
     "unknown",
 ]
 TERMINAL_TASK_STATES: frozenset[str] = frozenset(get_args(ExecutionTaskState))
@@ -71,6 +72,9 @@ class ExecutionStateCreateKwargs(TypedDict, total=False):
     execution_exceptions: list[ExecutionExceptionRecord]
     nested_states: dict[str, NestedStateData]
     child_workflows: dict[str, ChildWorkflowLink]
+    handoff_parent_session_id: str | None
+    handoff_depth: int
+    handback_return_variables: JsonObject
     reasoning_history: list[JsonObject]
     reflection_history: list[ReflectionRecord]
     pending_reasoning: JsonObject | None
@@ -150,6 +154,7 @@ class ChildWorkflowLink(StrictBaseModel):
     parent_execution_branch_id: str = Field(..., min_length=1)
     parent_node_schedule_sequence: int = Field(..., ge=1)
     status: ChildWorkflowStatus
+    handoff: bool = Field(default=False, description="Handoff или обычный child workflow")
 
 
 class PromptHistoryItem(FlexibleBaseModel):
@@ -600,6 +605,24 @@ class ExecutionState(FlexibleBaseModel):
             "Durable child workflow links по node_id; хранит session_id child flow "
             "для resume без snapshot-копии child state в родителе."
         ),
+    )
+    handoff_parent_session_id: str | None = Field(
+        default=None,
+        description="ID родительской сессии у дочернего flow при handoff — чтобы знать куда handback'ить",
+    )
+    handoff_depth: int = Field(
+        default=0,
+        ge=0,
+        description="Глубина цепочки handoff (для отладки и лимитов)",
+    )
+    handoff_trace_id: str | None = Field(
+        default=None,
+        min_length=1,
+        description="OTEL trace_id цепочки handoff parent↔child для observability",
+    )
+    handback_return_variables: JsonObject = Field(
+        default_factory=dict,
+        description="Переменные, явно возвращаемые родителю через handback_to_parent",
     )
     @field_validator("child_workflows", mode="before")
     @classmethod

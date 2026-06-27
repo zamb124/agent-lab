@@ -23,6 +23,7 @@ PY_GLOBS=(
     --glob '!**/migrations/versions/**'
     --glob '!**/__pycache__/**'
     --glob '!core/docs/data/python/**'
+    --glob '!apps/agent/desktop/vendor/**'
 )
 
 # 1. Запрет logging.getLogger(...) в прикладном коде.

@@ -11,7 +11,7 @@ from aiohttp import web
 from apps.flows.src.models import Edge, FlowConfig
 from apps.flows.src.runtime.flow import Flow
 from apps.flows.src.runtime.nodes import RemoteFlowNode, create_node
-from tests.fixtures.aiohttp_ephemeral import tcp_site_assigned_port
+from tests.fixtures.aiohttp_ephemeral import ephemeral_web_server
 from tests.flows.durable_runtime_harness import run_flow, run_node, workflow_state
 
 
@@ -49,16 +49,9 @@ class TestRemoteFlowNode:
         app.router.add_get("/.well-known/agent-card.json", handle_agent_card)
         app.router.add_post("/", handle_send_task)
 
-        runner = web.AppRunner(app)
-        await runner.setup()
-        site = web.TCPSite(runner, "127.0.0.1", 0)
-        await site.start()
-        port = tcp_site_assigned_port(site)
-        public["base"] = f"http://127.0.0.1:{port}"
-
-        yield public["base"]
-
-        await runner.cleanup()
+        async with ephemeral_web_server(app) as base_url:
+            public["base"] = base_url
+            yield base_url
 
     @pytest.mark.asyncio
     async def test_create_remote_flow_node(self, container):
@@ -161,16 +154,9 @@ class TestFlowWithRemoteAgent:
         app.router.add_get("/.well-known/agent-card.json", handle_agent_card)
         app.router.add_post("/", handle_send_task)
 
-        runner = web.AppRunner(app)
-        await runner.setup()
-        site = web.TCPSite(runner, "127.0.0.1", 0)
-        await site.start()
-        port = tcp_site_assigned_port(site)
-        public["base"] = f"http://127.0.0.1:{port}"
-
-        yield public["base"]
-
-        await runner.cleanup()
+        async with ephemeral_web_server(app) as base_url:
+            public["base"] = base_url
+            yield base_url
 
     @pytest.mark.asyncio
     async def test_flow_with_single_remote_node(self, remote_flow_server, container, unique_id):
@@ -329,16 +315,9 @@ class TestRemoteAgentInputMapping:
         app.router.add_get("/.well-known/agent-card.json", handle_agent_card)
         app.router.add_post("/", handle_send_task)
 
-        runner = web.AppRunner(app)
-        await runner.setup()
-        site = web.TCPSite(runner, "127.0.0.1", 0)
-        await site.start()
-        port = tcp_site_assigned_port(site)
-        public["base"] = f"http://127.0.0.1:{port}"
-
-        yield {"url": public["base"], "received": received_messages}
-
-        await runner.cleanup()
+        async with ephemeral_web_server(app) as base_url:
+            public["base"] = base_url
+            yield {"url": base_url, "received": received_messages}
 
     @pytest.mark.asyncio
     async def test_input_mapping_content_default(

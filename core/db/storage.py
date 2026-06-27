@@ -256,13 +256,16 @@ class Storage:
         """Получает значение с использованием переданной сессии"""
         table = self._get_table(table_name)
 
-        stmt = select(table.c["value"]).where(table.c["key"] == key)
+        stmt = select(table.c["value"], table.c["expired_at"]).where(table.c["key"] == key)
         if for_update:
             stmt = stmt.with_for_update()
         result = await session.execute(stmt)
 
         row = result.first()
         if row:
+            expired_at_raw = cast(datetime | None, row[1])
+            if expired_at_raw is not None and expired_at_raw <= datetime.now(timezone.utc):
+                return None
             return _encode_storage_value(cast(JsonValue, row[0]))
         return None
 

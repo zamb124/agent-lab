@@ -24,7 +24,7 @@ from aiohttp import web
 from granian.constants import Interfaces
 from granian.server.embed import Server as GranianEmbedServer
 
-from tests.fixtures.aiohttp_ephemeral import tcp_site_assigned_port
+from tests.fixtures.aiohttp_ephemeral import ephemeral_web_server
 from tests.flows.fixtures.external_api.main import external_api_app
 
 
@@ -100,16 +100,9 @@ async def remote_flow_server():
     app.router.add_get("/.well-known/agent-card.json", handle_agent_card)
     app.router.add_post("/", handle_send_task)
 
-    runner = web.AppRunner(app)
-    await runner.setup()
-    site = web.TCPSite(runner, "127.0.0.1", 0)
-    await site.start()
-    port = tcp_site_assigned_port(site)
-    public["base"] = f"http://127.0.0.1:{port}"
-
-    yield public["base"]
-
-    await runner.cleanup()
+    async with ephemeral_web_server(app) as base_url:
+        public["base"] = base_url
+        yield base_url
 
 
 def assert_execute_response(data, expected_success: bool, expected_error: str | None = None):

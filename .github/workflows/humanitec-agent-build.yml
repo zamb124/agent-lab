@@ -1,0 +1,139 @@
+name: humanitec-agent-build
+
+on:
+  workflow_dispatch:
+    inputs:
+      release_tag:
+        description: "Git tag for HumanitecAgent release (e.g. humanitec-agent-v0.2.0)"
+        required: true
+        type: string
+      artifact_mode:
+        description: "release for real installers, placeholder for smoke only"
+        required: false
+        default: release
+        type: choice
+        options:
+          - release
+          - placeholder
+      publish_draft:
+        description: "Create GitHub release as draft"
+        required: false
+        default: false
+        type: boolean
+  push:
+    tags:
+      - "humanitec-agent-v*"
+
+env:
+  AGENT_ARTIFACT_MODE: release
+
+jobs:
+  build-matrix:
+    timeout-minutes: 180
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - platform: windows
+            runs_on: windows-latest
+          - platform: macos-arm64
+            runs_on: macos-14
+          - platform: macos-x64
+            runs_on: macos-13
+          - platform: linux-deb
+            runs_on: ubuntu-latest
+          - platform: linux-rpm
+            runs_on: ubuntu-latest
+          - platform: linux-appimage
+            runs_on: ubuntu-latest
+    runs-on: ${{ matrix.runs_on }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Validate distro config
+        shell: bash
+        run: test -f apps/agent/desktop/distro/humanitec.json
+
+      - name: Prepare build scripts
+        shell: bash
+        run: chmod +x apps/agent/desktop/scripts/build.sh apps/agent/desktop/scripts/apply_branding.sh
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10.30.0
+
+      - name: Setup uv
+        uses: astral-sh/setup-uv@v5
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Resolve artifact mode
+        shell: bash
+        run: |
+          if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
+            echo "AGENT_ARTIFACT_MODE=${{ github.event.inputs.artifact_mode || 'release' }}" >> "$GITHUB_ENV"
+          else
+            echo "AGENT_ARTIFACT_MODE=release" >> "$GITHUB_ENV"
+          fi
+
+      - name: Build artifact
+        shell: bash
+        env:
+          AGENT_PLATFORM: ${{ matrix.platform }}
+          AGENT_VERSION_SHA: ${{ github.sha }}
+          AGENT_ARTIFACT_MODE: ${{ env.AGENT_ARTIFACT_MODE }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_ID_PASSWORD: ${{ secrets.APPLE_ID_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          KEYCHAIN_PATH: ${{ secrets.KEYCHAIN_PATH }}
+          WINDOWS_CERTIFICATE_FILE: ${{ secrets.WINDOWS_CERTIFICATE_FILE }}
+          WINDOWS_CERTIFICATE_PASSWORD: ${{ secrets.WINDOWS_CERTIFICATE_PASSWORD }}
+        run: make agent-ci-build
+
+      - name: Verify artifact branding
+        shell: bash
+        env:
+          AGENT_PLATFORM: ${{ matrix.platform }}
+          AGENT_VERSION_SHA: ${{ github.sha }}
+        run: |
+          uv run python scripts/verify_agent_artifact.py \
+            --platform "${AGENT_PLATFORM}" \
+            --version-sha "${AGENT_VERSION_SHA}" \
+            --artifact-mode "${AGENT_ARTIFACT_MODE}"
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: humanitec-agent-${{ matrix.platform }}
+          path: apps/agent/desktop/dist/*
+
+  publish-release:
+    needs: build-matrix
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Download all platform artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: release-assets
+          merge-multiple: true
+
+      - name: Publish GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.event.inputs.release_tag || github.ref_name }}
+          name: HumanitecAgent ${{ github.event.inputs.release_tag || github.ref_name }}
+          files: release-assets/**/*
+          draft: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.publish_draft == 'true' }}
+          generate_release_notes: true

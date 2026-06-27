@@ -7,6 +7,7 @@ from copy import deepcopy
 from typing import cast, override
 
 from apps.flows.config import get_settings as get_flows_settings
+from apps.flows.src.constants.execution_limits import get_remote_code_runner_http_timeout_seconds
 from apps.flows.src.runners.base import BaseCodeRunner
 from apps.flows.src.runtime.exceptions import FlowInterrupt
 from apps.flows.src.runtime.tool_call_context import get_active_tool_call_context
@@ -201,7 +202,7 @@ class RemoteCodeRunner(BaseCodeRunner):
                 runner_service,
                 runner_path,
                 json=request.model_dump(mode="json"),
-                timeout=float(get_flows_settings().node_execution_wall_time_cap_seconds),
+                timeout=get_remote_code_runner_http_timeout_seconds(),
             )
         return CodeValidationResponse.model_validate(raw_response)
 
@@ -255,7 +256,7 @@ class RemoteCodeRunner(BaseCodeRunner):
                 runner_service,
                 runner_path,
                 json=request.model_dump(mode="json"),
-                timeout=float(get_flows_settings().node_execution_wall_time_cap_seconds),
+                timeout=get_remote_code_runner_http_timeout_seconds(),
             )
         response = CodeExecutionResponse.model_validate(raw_response)
         if response.status == "failed":

@@ -186,6 +186,23 @@ ROUTE_RULES: list[RouteRule] = [
     RouteRule("/frontend/api/public/blog/post", auth_required=False, context_type="anonymous"),
     RouteRule("/api/public/startup-card", auth_required=False, context_type="anonymous"),
     RouteRule("/frontend/api/public/startup-card", auth_required=False, context_type="anonymous"),
+
+    # HumanitecAgent: скачивание, login, register (pairing code), tunnel WS
+    RouteRule("/agent", auth_required=False, context_type="anonymous"),
+    RouteRule("/agent/", auth_required=False, context_type="anonymous"),
+    RouteRule("/frontend/api/agent/login", auth_required=False, context_type="anonymous"),
+    RouteRule("/frontend/api/agent/download/*", auth_required=False, context_type="anonymous"),
+    RouteRule("/frontend/api/agent/releases/status", auth_required=False, context_type="anonymous"),
+    RouteRule("/frontend/api/agent/discover", auth_required=False, context_type="anonymous"),
+    RouteRule("/frontend/api/agent/register", auth_required=False, context_type="anonymous"),
+    RouteRule("/frontend/api/agent/register-with-auth", context_type="api", auth_required=True),
+    RouteRule("/frontend/api/agent/auth/device-token", context_type="api", auth_required=True),
+    RouteRule("/frontend/api/agent/pairing", context_type="api", auth_required=True),
+    RouteRule("/frontend/api/agent/devices", context_type="api", auth_required=True),
+    RouteRule("/frontend/api/agent/devices/*", context_type="api", auth_required=True),
+    RouteRule("/frontend/api/agent/audit", context_type="api", auth_required=True),
+    RouteRule("/frontend/api/agent/tunnel", auth_required=False, context_type="anonymous"),
+
     RouteRule("/api/health", auth_required=False, context_type="anonymous"),
     RouteRule("/frontend/health", auth_required=False, context_type="anonymous"),
     RouteRule("/sitemap.xml", auth_required=False, context_type="anonymous"),

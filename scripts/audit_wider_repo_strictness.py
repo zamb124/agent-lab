@@ -31,6 +31,9 @@ SKIP_PARTS = {
     ".venv",
     "node_modules",
 }
+SKIP_PATH_PREFIXES: tuple[str, ...] = (
+    "apps/agent/desktop/vendor/",
+)
 SKIP_TEXT_SUFFIXES = (".map", ".min.js")
 SKIP_TEXT_FILES: set[str] = set()
 
@@ -134,6 +137,8 @@ def _iter_files(entries: Iterable[str], suffixes: tuple[str, ...]) -> Iterable[P
                 continue
             rel = path.relative_to(REPO_ROOT).as_posix()
             if rel in SKIP_TEXT_FILES:
+                continue
+            if any(rel.startswith(prefix) for prefix in SKIP_PATH_PREFIXES):
                 continue
             parts = set(path.relative_to(REPO_ROOT).parts)
             if parts & SKIP_PARTS:

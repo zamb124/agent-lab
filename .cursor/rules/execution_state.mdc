@@ -44,10 +44,19 @@ Canonical commit изменений state — только через `Execution
 
 - `state.interrupt: Optional[InterruptData]` — типизированное прерывание (HITL).
 - `state.hitl_handoff_correlation_id: Optional[str]` — при resume после ответа по задаче оператора (`body = operator_task`): перед сбросом `interrupt` в `Flow.run` сюда копируется `correlation_id`, чтобы `hitl_node` при повторном входе подтянула задачу из БД, выставила `response` и пошла по исходящим рёбрам без повторного `FlowInterrupt`.
-- `InterruptData.body` — discriminated union (`user_message` | `operator_task` | …), `core/state/interrupt.py`. `system` — `InterruptSystemContext` (`tool_call`, `path`, `task_id`, `context_id`).
+- `InterruptData.body` — discriminated union (`user_message` | `operator_task` | `handoff` | …), `core/state/interrupt.py`. `system` — `InterruptSystemContext` (`tool_call`, `path`, `task_id`, `context_id`).
 - `interrupt.question` — строка для A2A/UI.
 - Старые плоские формы `{question, context?}` запрещены; interrupt всегда хранится как `{body, system, correlation_id?}`.
 - Запись только через `InterruptManager.apply_interrupt` (или эквивалент); канал дополняет `system` через `InterruptManager.enrich_system_from_channel`.
+
+### Agent handoff (ExecutionState)
+
+- `handoff_depth` — глубина цепочки; channel выставляет при kickoff child.
+- `handoff_parent_session_id` — на child после kickoff.
+- `handback_return_variables` — merge в parent при `complete_handback`.
+- `child_workflows[child_session_id]` — `ChildWorkflowLink` с `handoff=True`, status `running|completed`.
+
+Детали маршрутизации и session ids — **`handoff.mdc`**.
 
 ## messages и `metadata.node_id`
 

@@ -232,9 +232,14 @@ def check_components_zone() -> None:
         "platform-modal-stack.js",
         "platform-confirm-modal.js",  # абстрактный родитель для apps/<svc>/ui/modals/confirm-modal.js
     }
+    modal_named_presentational = {
+        "platform-modal-search-field.js",
+    }
     modal_files = [
         p for p in files
-        if "modal" in p.name and p.name not in base_modals
+        if "modal" in p.name
+        and p.name not in base_modals
+        and p.name not in modal_named_presentational
     ]
     for path in modal_files:
         text = path.read_text(encoding="utf-8")

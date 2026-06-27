@@ -90,6 +90,8 @@ AuthMiddleware: правила в `core/middleware/auth/route_config.py` — API
 
 ## Возобновление flow (HITL)
 
+`handoff_mode` на hitl_node — режим HITL (`single_reply`/`takeover`), **не** agent handoff между flows (→ **`handoff.mdc`**).
+
 1. `hitl_node` / tool `hitl_operator_task` бросает `OperatorTaskInterrupt` (поле `work_item_id`; контракт в `core/state/interrupt.py`) и через `HitlWorkItemService` (flows) создаёт `WorkItem(kind=operator_handoff, blocking=true)` с хуками `completed`→`/flows/api/v1/internal/work-items/completed` и `comment`→`/flows/api/v1/internal/work-items/comment` + `flow_session` link.
 2. Оператор: claim → (takeover: комментарии стримятся пользователю через `comment`-хук + `Emitter`; реплики пользователя → `add_comment(role=user)`) → complete(resolution).
 3. На первом терминале ядро диспатчит `completed`-хук; flows-endpoint возобновляет flow durable resume (`process_flow_task(is_resume=True)`), при takeover в content — форматированный диалог комментариев. Маршрутизация по `state.current_nodes`/`interrupt_path`.

@@ -306,6 +306,60 @@ class PlatformTracer:
             is_resume=is_resume,
         )
 
+    def fork_trace_context(
+        self,
+        base: TraceContext,
+        *,
+        parent_span_id: str | None = None,
+        **updates: JsonValue,
+    ) -> TraceContext:
+        """Новый span в том же trace_id (handoff child / parent resume)."""
+        _, span_id = self._generate_ids()
+        merged_parent_span_id = parent_span_id if parent_span_id is not None else base.span_id
+        return TraceContext.merge_from(
+            base,
+            trace_id=base.trace_id,
+            span_id=span_id,
+            parent_span_id=merged_parent_span_id,
+            **updates,
+        )
+
+    def continue_trace_context(
+        self,
+        trace_id: str,
+        *,
+        parent_span_id: str | None = None,
+        user_id: str | None = None,
+        user_name: str | None = None,
+        user_groups: list[str] | None = None,
+        session_auth: str | None = None,
+        session_agent: str | None = None,
+        task_id: str | None = None,
+        context_id: str | None = None,
+        flow_id: str | None = None,
+        branch_id: str | None = None,
+        channel: str | None = None,
+        is_resume: bool = False,
+    ) -> TraceContext:
+        """Продолжение существующего trace_id (HTTP reply в handoff child)."""
+        _, span_id = self._generate_ids()
+        return TraceContext(
+            trace_id=trace_id,
+            span_id=span_id,
+            parent_span_id=parent_span_id,
+            user_id=user_id,
+            user_name=user_name,
+            user_groups=user_groups or [],
+            session_auth=session_auth,
+            session_agent=session_agent,
+            task_id=task_id,
+            context_id=context_id,
+            flow_id=flow_id,
+            branch_id=branch_id,
+            channel=channel,
+            is_resume=is_resume,
+        )
+
     def _base_attributes(self, trace_ctx: TraceContext | None) -> dict[str, OtelAttributeValue]:
         """Возвращает базовые атрибуты для всех spans."""
         if trace_ctx is None:

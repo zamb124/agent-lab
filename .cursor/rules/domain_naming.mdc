@@ -24,6 +24,14 @@ alwaysApply: false
 
 Не смешивать с внешним «агентом» в смысле спецификации A2A (agent card, удалённый endpoint): там допустимы термины спеки, но платформенная сущность — **flow**.
 
+## Handoff (не путать)
+
+| Термин | Канон |
+|---|---|
+| Agent handoff между flows | `HandoffInterrupt`, tools `handoff_to_flow`/`handback_to_parent` → **`handoff.mdc`** |
+| HITL режим оператора | `handoff_mode` на hitl_node, `HandoffMode`, `OperatorTaskInterrupt` → **`worktracker.mdc`** |
+| Embed preview share | `flow_preview_handoff`, Redis handoff_id → **`flows.mdc`** |
+
 ## Пользователь
 
 Идентификатор пользователя везде **`user_id`**, не голый `id` в моделях пользователя (например `UserBrief.user_id` в Sync API).

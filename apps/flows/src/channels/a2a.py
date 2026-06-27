@@ -150,7 +150,10 @@ async def _build_task_from_events(
                             else:
                                 response_parts = [text]
         else:
-            if event.final:
+            task_state = event.status.state
+            if task_state == TaskState.input_required:
+                final_status = event.status
+            elif event.final:
                 final_status = event.status
 
     response_text = "".join(response_parts)

@@ -23,9 +23,14 @@ function _walk(dir, predicate) {
     const out = [];
     if (!existsSync(dir)) return out;
     for (const name of readdirSync(dir)) {
-        if (name === 'node_modules' || name === '.git') continue;
+        if (name === 'node_modules' || name === '.git' || name === 'vendor') continue;
         const full = path.join(dir, name);
-        const st = statSync(full);
+        let st;
+        try {
+            st = statSync(full);
+        } catch {
+            continue;
+        }
         if (st.isDirectory()) {
             out.push(..._walk(full, predicate));
         } else if (name.endsWith('.js')) {

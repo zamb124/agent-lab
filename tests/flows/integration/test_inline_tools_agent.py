@@ -258,7 +258,7 @@ class TestCodeToolsInFlowConfig:
                     "properties": {"expression": {"type": "string"}},
                     "required": ["expression"],
                 },
-                "code": "async def run(args, state):\n    return eval(args.get('expression', '0'))",
+                "code": "async def run(args, state):\n    import ast\n    import operator\n    expr = args.get('expression', '0')\n    if not isinstance(expr, str):\n        expr = str(expr)\n    ops = {ast.Add: operator.add, ast.Sub: operator.sub, ast.Mult: operator.mul, ast.Div: operator.truediv}\n    def _eval(node):\n        if isinstance(node, ast.Expression): return _eval(node.body)\n        if isinstance(node, ast.Constant): return node.value\n        if isinstance(node, ast.BinOp): return ops[type(node.op)](_eval(node.left), _eval(node.right))\n        if isinstance(node, ast.UnaryOp) and isinstance(node.op, ast.USub): return -_eval(node.operand)\n        raise ValueError(f\"Unsupported: {type(node)}\")\n    return _eval(ast.parse(expr, mode='eval'))\n",
             },
             {
                 "tool_id": "custom_formatter",

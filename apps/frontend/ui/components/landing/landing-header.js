@@ -789,6 +789,15 @@ export class LandingHeader extends PlatformElement {
                                     <span class="nav-dropdown-item-desc">${h('product_documents_desc')}</span>
                                 </div>
                             </a>
+                            <a href="/agent" class="nav-dropdown-item" @click=${this._handleNavClick}>
+                                <div class="nav-dropdown-item-icon">
+                                    <img src="/static/core/assets/service_logos/humanitec_agent_logo.svg" alt=${h('product_humanitec_agent_title')} />
+                                </div>
+                                <div class="nav-dropdown-item-content">
+                                    <span class="nav-dropdown-item-title">${h('product_humanitec_agent_title')}</span>
+                                    <span class="nav-dropdown-item-desc">${h('product_humanitec_agent_desc')}</span>
+                                </div>
+                            </a>
                         </div>
                     </div>
                     <a href="/documentation" class="nav-link">${h('docs')}</a>
@@ -878,6 +887,12 @@ export class LandingHeader extends PlatformElement {
                             <img src="/static/core/assets/service_logos/documents_logo.svg" alt=${h('product_documents_title')} />
                         </div>
                         ${h('product_documents_title')}
+                    </a>
+                    <a href="/agent" class="mobile-product-link" @click=${this._handleNavClick}>
+                        <div class="mobile-product-icon">
+                            <img src="/static/core/assets/service_logos/humanitec_agent_logo.svg" alt=${h('product_humanitec_agent_title')} />
+                        </div>
+                        ${h('product_humanitec_agent_title')}
                     </a>
                 </div>
                 

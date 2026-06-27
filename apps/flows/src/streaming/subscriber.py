@@ -15,11 +15,23 @@ from pydantic import ValidationError
 from core.clients.redis_client import RedisClient
 from core.logging import get_logger
 from core.state import TERMINAL_TASK_STATES
-from core.types import parse_json_object
+from core.types import JsonObject, parse_json_object, require_json_object
 
 from .base import BaseSubscriber, StreamEvent
 
 logger = get_logger(__name__)
+
+
+def _is_agent_handoff_input_required(metadata: JsonObject) -> bool:
+    interrupt_value = metadata.get("platform_interrupt")
+    if interrupt_value is None:
+        return False
+    platform_interrupt = require_json_object(interrupt_value, "metadata.platform_interrupt")
+    body_value = platform_interrupt.get("body")
+    if body_value is None:
+        return False
+    body = require_json_object(body_value, "metadata.platform_interrupt.body")
+    return body.get("kind") == "handoff"
 
 
 def parse_event(data: str) -> StreamEvent:
@@ -46,16 +58,24 @@ def is_final_event(event: StreamEvent) -> bool:
     Промежуточные события с final=True (например tool_call) НЕ являются финальными!
     """
     if isinstance(event, TaskStatusUpdateEvent):
-        if not event.final:
-            return False
         state = event.status.state if event.status else None
         if state is None:
             return False
         state_str = state.value
-        if state_str in TERMINAL_TASK_STATES:
-            md = event.metadata or {}
-            if state_str == "input-required" and md.get("platform_handoff_continue") is True:
+        metadata_raw = event.metadata
+        metadata: JsonObject = (
+            require_json_object(metadata_raw, "TaskStatusUpdateEvent.metadata")
+            if metadata_raw is not None
+            else {}
+        )
+        if state_str == "input-required":
+            if _is_agent_handoff_input_required(metadata):
+                return True
+            if metadata.get("platform_handoff_continue") is True:
                 return False
+        if not event.final:
+            return False
+        if state_str in TERMINAL_TASK_STATES:
             return True
         return False
     return False

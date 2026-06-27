@@ -151,6 +151,38 @@ class TestIsFinalEvent:
         assert "working" not in TERMINAL_TASK_STATES
         assert "submitted" not in TERMINAL_TASK_STATES
 
+    def test_agent_handoff_input_required_final_even_when_event_not_final(self):
+        """Handoff pause: collect останавливается, хотя emit_interrupt ставит final=False."""
+        event = TaskStatusUpdateEvent(
+            contextId="ctx",
+            taskId="task",
+            status=TaskStatus(state=TaskState.input_required),
+            final=False,
+            metadata={
+                "platform_handoff_continue": True,
+                "platform_interrupt": {
+                    "body": {"kind": "handoff", "target_flow_id": "child_flow"},
+                },
+            },
+        )
+        assert is_final_event(event) is True
+
+    def test_operator_handoff_continue_input_required_not_final(self):
+        """Operator takeover: подписчик ждёт следующий раунд."""
+        event = TaskStatusUpdateEvent(
+            contextId="ctx",
+            taskId="task",
+            status=TaskStatus(state=TaskState.input_required),
+            final=False,
+            metadata={
+                "platform_handoff_continue": True,
+                "platform_interrupt": {
+                    "body": {"kind": "operator_task"},
+                },
+            },
+        )
+        assert is_final_event(event) is False
+
 
 @pytest.mark.real_taskiq
 class TestStreamingWithToolCalls:

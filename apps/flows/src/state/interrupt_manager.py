@@ -14,11 +14,17 @@ Zero-Guess: все методы работают с ExecutionState, не Dict.
 
 from uuid import UUID
 
+from apps.flows.src.models.enums import NodeType
 from apps.flows.src.runtime.a2a_messages import build_user_message
 from core.clients.llm import LLMToolCall
 from core.logging import get_logger
 from core.state import ExecutionState, InterruptData, InterruptPathItem, NestedStateData
-from core.state.interrupt import InterruptBody, InterruptSystemContext
+from core.state.interrupt import (
+    HandoffInterrupt,
+    InterruptBody,
+    InterruptSystemContext,
+)
+from core.types import JsonObject
 
 logger = get_logger(__name__)
 
@@ -223,3 +229,45 @@ class InterruptManager:
 
         logger.info(f"Подготовлен resume для {nested_id}, ответ: {user_answer[:50]}...")
         return nested_state
+
+    @staticmethod
+    def apply_handoff_interrupt(
+        state: ExecutionState,
+        body: HandoffInterrupt,
+        child_session_id: str,
+    ) -> None:
+        """
+        Единая запись handoff-interrupt с привязкой к child_session_id.
+
+        Добавляет InterruptPathItem с typed child frame в путь прерывания,
+        чтобы при resume управление шло напрямую в дочерний flow.
+        """
+        path_item = InterruptPathItem(
+            node_type=NodeType.FLOW.value,
+            node_id=body.target_flow_id,
+            child_session_id=child_session_id,
+            child_flow_id=body.target_flow_id,
+            child_flow_branch_id=body.target_branch_id,
+        )
+        state.interrupt_path.insert(0, path_item)
+
+        InterruptManager.apply_interrupt(state, body)
+
+    @staticmethod
+    def prepare_handback_resume(
+        parent_state: ExecutionState,
+        handback_response: str,
+        handback_variables: JsonObject,
+    ) -> None:
+        """
+        Подготавливает родительский state к resume после handback.
+
+        Устанавливает content, мержит переменные. Interrupt уже должен
+        быть сброшен дочерним flow при handback.
+        """
+        parent_state.content = handback_response
+        if handback_variables:
+            parent_state.variables = {**parent_state.variables, **handback_variables}
+        if parent_state.interrupt_path:
+            parent_state.interrupt_path = parent_state.interrupt_path[1:]
+        parent_state.interrupt = None

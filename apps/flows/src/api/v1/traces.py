@@ -108,6 +108,52 @@ async def get_traces_by_task(
     }
 
 
+@router.get("/handoff-chain/{parent_session_id}")
+async def get_handoff_chain(
+    parent_session_id: str,
+    container: ContainerDep,
+) -> JsonObject:
+    """Trace tree для handoff-цепочки parent↔child по handoff_trace_id."""
+    if not parent_session_id:
+        raise HTTPException(status_code=422, detail="parent_session_id обязателен")
+    parent_state = await container.workflow_runtime.get_state(parent_session_id)
+    if parent_state is None:
+        raise HTTPException(status_code=404, detail="parent session not found")
+    trace_id = parent_state.handoff_trace_id
+    if trace_id is None:
+        raise HTTPException(status_code=404, detail="handoff_trace_id not set on parent session")
+    try:
+        tempo_spans = await container.tempo_client.get_trace(trace_id)
+    except TempoClientError as exc:
+        logger.warning(
+            "traces.handoff_chain.tempo_failed",
+            parent_session_id=parent_session_id,
+            trace_id=trace_id,
+            error=str(exc),
+        )
+        tempo_spans = []
+    db_spans = await container.span_repository.get_trace(trace_id)
+    all_spans: list[JsonObject] = []
+    seen: set[str] = set()
+    for span in tempo_spans:
+        sid = span.get("span_id", "")
+        if isinstance(sid, str) and sid and sid not in seen:
+            seen.add(sid)
+            all_spans.append(span)
+    for span_record in db_spans:
+        sid = span_record.span_id
+        if sid not in seen:
+            seen.add(sid)
+            all_spans.append(span_record.to_json_object())
+    return {
+        "parent_session_id": parent_session_id,
+        "trace_id": trace_id,
+        "handoff_depth": parent_state.handoff_depth,
+        "spans_count": len(all_spans),
+        "spans": build_span_tree(all_spans),
+    }
+
+
 @router.get("/trace/{trace_id}")
 async def get_trace(
     trace_id: str,

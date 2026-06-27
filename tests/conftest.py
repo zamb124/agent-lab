@@ -29,13 +29,16 @@ pytest_plugins = [
     "tests.fixtures.clients",
     "tests.fixtures.auth",
     "tests.fixtures.push",
+    "tests.fixtures.s3",
     "tests.fixtures.mcp_modes_stub",
     "tests.fixtures.mcp_registry_stub",
     "tests.fixtures.embed_e2e",
+    "tests.agent.fixtures.local_releases",
     "tests.profiling.plugin",
 ]
 
 os.environ["TESTING"] = "true"
+os.environ.setdefault("AGENT__RELEASES__SOURCE", "local")
 if sys.platform == "darwin":
     _brew_path = "/opt/homebrew/bin"
     if _brew_path not in os.environ.get("PATH", ""):
@@ -102,6 +105,14 @@ if id(process_flow_task.broker) != id(platform_broker_module.broker):
 
 def pytest_sessionfinish(session, exitstatus):
     shutdown_tracing()
+    _release_shared_flows_contour_lock_if_held()
+    from tests.fixtures.aiohttp_cleanup import (
+        close_all_open_aiohttp_sessions_sync,
+        shutdown_test_logging_handlers,
+    )
+
+    close_all_open_aiohttp_sessions_sync()
+    shutdown_test_logging_handlers()
     if hasattr(session.config, "workerinput"):
         return
     from tests.fixtures.workers import release_pytest_controller_session
@@ -662,6 +673,33 @@ def pytest_collection_modifyitems(items: list[pytest.Item]) -> None:
 
 
 _SHARED_FLOWS_CONTOUR_FILE_LOCK = "/tmp/platform_shared_flows_contour.lock"
+_contour_lock_holder: FileLock | None = None
+
+
+def _pytest_xdist_worker_label() -> str:
+    worker = os.environ.get("PYTEST_XDIST_WORKER")
+    if worker:
+        return worker
+    return "master"
+
+
+def _release_shared_flows_contour_lock_if_held() -> None:
+    global _contour_lock_holder
+    if _contour_lock_holder is None:
+        return
+    from core.logging import get_logger
+
+    logger = get_logger(__name__)
+    try:
+        _contour_lock_holder.release()
+        logger.warning(
+            "tests.shared_flows_contour.lock_force_released",
+            worker=_pytest_xdist_worker_label(),
+        )
+    except OSError:
+        pass
+    finally:
+        _contour_lock_holder = None
 
 
 def _uses_shared_flows_contour_lock(item: pytest.Item) -> bool:
@@ -684,17 +722,32 @@ def pytest_runtest_protocol(item, nextitem):
     if not _uses_shared_flows_contour_lock(item):
         yield
         return
-    from filelock import FileLock
+    from core.logging import get_logger
 
     from tests.fixtures.workers import wait_for_contour_taskiq_idle
 
+    global _contour_lock_holder
+    logger = get_logger(__name__)
+    worker = _pytest_xdist_worker_label()
+    logger.info(
+        "tests.shared_flows_contour.lock_acquire",
+        nodeid=item.nodeid,
+        worker=worker,
+    )
     lock = FileLock(_SHARED_FLOWS_CONTOUR_FILE_LOCK, timeout=600)
     lock.acquire()
+    _contour_lock_holder = lock
     try:
         yield
         wait_for_contour_taskiq_idle()
     finally:
+        logger.info(
+            "tests.shared_flows_contour.lock_release",
+            nodeid=item.nodeid,
+            worker=worker,
+        )
         lock.release()
+        _contour_lock_holder = None
 
 
 @pytest.hookimpl(wrapper=True, tryfirst=True)
@@ -1002,6 +1055,7 @@ def sync_tools(request, monkeypatch):
     import apps.flows.src.api.v1.internal_work_items as flows_internal_work_items_module
     import apps.flows.src.channels.a2a as flows_a2a_channel_module
     import apps.flows.src.channels.base as flows_base_channel_module
+    import apps.flows.src.services.handoff_orchestrator_service as flows_handoff_orchestrator_module
     import apps.flows.src.services.hitl_work_item_service as flows_hitl_work_item_module
     import apps.flows.src.triggers.executor as flows_trigger_executor_module
     import apps.idle_worker.tasks.push_notification_tasks as push_notification_tasks
@@ -1223,6 +1277,7 @@ def sync_tools(request, monkeypatch):
     for module in (
         task_kicker_module,
         flows_base_channel_module,
+        flows_handoff_orchestrator_module,
         flows_a2a_channel_module,
         flows_hitl_work_item_module,
         flows_internal_work_items_module,

@@ -1093,5 +1093,15 @@
   },
   "mcp_catalog": {
     "auto_provision": "all_verified"
+  },
+  "agent": {
+    "releases": {
+      "github_owner": "zamb124",
+      "github_repo": "agent-lab"
+    },
+    "pairing_ttl_seconds": 600,
+    "tunnel_online_ttl_seconds": 120,
+    "pairing_rate_limit_per_hour": 20,
+    "register_rate_limit_per_hour": 60
   }
 }

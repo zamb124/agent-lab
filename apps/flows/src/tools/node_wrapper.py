@@ -48,6 +48,7 @@ from apps.flows.src.tools.base import (
 )
 from core.logging import get_logger
 from core.state import ExecutionState, InterruptPathItem
+from core.state.interrupt import HandoffInterrupt
 from core.types import JsonObject, JsonValue, require_json_object, require_json_value
 
 if TYPE_CHECKING:
@@ -103,6 +104,7 @@ class NodeAsToolWrapper(BaseTool):
         node_config: NodeConfig | JsonObject,
         *,
         container: FlowRuntimeContainer | None = None,
+        call_type: str = "call",
     ):
         self.node_config: NodeConfig = (
             node_config
@@ -115,6 +117,7 @@ class NodeAsToolWrapper(BaseTool):
         )
         self.tags: list[str] = self.node_config.tags or [self.node_config.type.value]
         self.is_nested_flow_tool: bool = self.node_config.type == NodeType.FLOW
+        self.call_type: str = call_type
         self._node: BaseNode | None = None
         self._bound_node: BaseNode | None = None
         self.container: ToolContainerRef | None = container
@@ -255,6 +258,25 @@ class NodeAsToolWrapper(BaseTool):
         # Для llm_node создаем изолированный state
         if node_type == NodeType.LLM_NODE:
             return await self._run_llm_node(node, node_id, node_type, args, state)
+
+        # При call_type="handoff" бросаем HandoffInterrupt вместо ожидания result
+        if self.call_type == "handoff":
+            target_flow_id = self.node_config.flow_id
+            if target_flow_id is None:
+                if node_type == NodeType.FLOW:
+                    raise ValueError(
+                        f"Node-as-tool '{node_id}' with call_type=handoff requires flow_id"
+                    )
+                target_flow_id = node_id
+            target_branch_id = self.node_config.branch_id or "default"
+            interrupt_body = HandoffInterrupt(
+                question=f"Передаю управление агенту «{target_flow_id}»",
+                target_flow_id=target_flow_id,
+                target_branch_id=target_branch_id,
+                target_name=target_flow_id,
+                variables=dict(args),
+            )
+            raise FlowInterrupt(body=interrupt_body)
 
         # Для остальных нод - простой вызов
         for key, value in args.items():

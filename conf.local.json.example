@@ -4,7 +4,7 @@
   },
   "server": {
     "env": "development",
-    "platform_public_base_url": "https://your-public-app-origin.example.com",
+    "platform_public_base_url": "http://system.lvh.me:8002",
     "document_server_dev_upstream_url": "http://localhost:8088"
   },
   "auth": {
@@ -189,6 +189,12 @@
       {"name": "office", "port": 8008, "path": "/documents", "websocket": false}
     ],
     "onlyoffice_port": 8088
+  },
+  "agent": {
+    "releases": {
+      "github_owner": "zamb124",
+      "github_repo": "agent-lab"
+    }
   },
   "services": {
     "office": {

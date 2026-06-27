@@ -42,6 +42,7 @@ from core.types import (
     JsonArray,
     JsonObject,
     JsonValue,
+    parse_json_object,
     require_json_array,
     require_json_object,
 )
@@ -112,9 +113,13 @@ class FlowsLoader:
             return [], []
 
         self.load_registry_yaml()
-        bundle_ids = [entry.id for entry in self._bundle_registry.flows]
+        registry_bundle_ids = [entry.id for entry in self._bundle_registry.flows]
+        bundle_ids = self._expand_bundle_ids_with_dependencies(registry_bundle_ids)
 
-        logger.info(f"Загрузка {len(bundle_ids)} flow из registry в БД")
+        logger.info(
+            f"Загрузка {len(bundle_ids)} flow из registry в БД "
+            + f"({len(registry_bundle_ids)} bundle, с учётом depends_on_flow_ids)"
+        )
 
         # Фаза 1: все nodes.json в кеш (для кросс-ссылок при инлайне tools)
         for bundle_id in bundle_ids:
@@ -230,6 +235,12 @@ class FlowsLoader:
         if not isinstance(raw_entry, str) or not raw_entry.strip():
             raise ValueError("flow.json: поле entry обязательно и должно быть непустой строкой")
 
+        raw_hidden = raw_config.get("hidden", False)
+        if not isinstance(raw_hidden, bool):
+            raise ValueError("flow.json: поле hidden должно быть boolean")
+
+        depends_on_flow_ids = self._read_bundle_depends_on_flow_ids(bundle_dir)
+
         return FlowConfig.model_validate(
             {
                 "flow_id": raw_flow_id,
@@ -244,6 +255,8 @@ class FlowsLoader:
                 "triggers": triggers,
                 "source": "file",
                 "store_card_image_url": store_card_image_url,
+                "hidden": raw_hidden,
+                "depends_on_flow_ids": depends_on_flow_ids,
             }
         )
 
@@ -1032,16 +1045,20 @@ class FlowsLoader:
             if not should_filter or entry.public:
                 bundles_to_load.append(entry.id)
 
+        expanded_bundle_ids = self._expand_bundle_ids_with_dependencies(bundles_to_load)
+
         logger.info(
-            f"Загрузка {len(bundles_to_load)} flow для company:{company_id} (фильтр public: {should_filter})"
+            f"Загрузка {len(expanded_bundle_ids)} flow для company:{company_id} "
+            + f"({len(bundles_to_load)} bundle, с учётом depends_on_flow_ids; "
+            + f"фильтр public: {should_filter})"
         )
 
-        for bundle_id in bundles_to_load:
+        for bundle_id in expanded_bundle_ids:
             await self.preload_nodes_to_cache(bundle_id)
 
         loaded_flow_ids: list[str] = []
         failed_bundle_ids: list[str] = []
-        for bundle_id in bundles_to_load:
+        for bundle_id in expanded_bundle_ids:
             try:
                 flow_id = await self._load_flow_bundle(bundle_id)
                 if flow_id:
@@ -1067,6 +1084,78 @@ class FlowsLoader:
 
         return stats
 
+    @staticmethod
+    def _parse_bundle_depends_on_flow_ids(raw_flow: JsonObject, bundle_name: str) -> list[str]:
+        raw_deps = raw_flow.get("depends_on_flow_ids")
+        if raw_deps is None:
+            raw_deps = raw_flow.get("install_with_bundles", [])
+        if raw_deps is None:
+            return []
+        if not isinstance(raw_deps, list):
+            raise ValueError(
+                f"Bundle '{bundle_name}': depends_on_flow_ids must be list[str]"
+            )
+        deps: list[str] = []
+        for item in raw_deps:
+            if not isinstance(item, str) or not item.strip():
+                raise ValueError(
+                    f"Bundle '{bundle_name}': depends_on_flow_ids entries must be non-empty strings"
+                )
+            deps.append(item.strip())
+        return deps
+
+    def _read_bundle_depends_on_flow_ids(self, bundle_dir: Path) -> list[str]:
+        config_path = bundle_dir / "flow.json"
+        if not config_path.exists():
+            return []
+        with open(config_path, "r", encoding="utf-8") as f:
+            raw_flow = parse_json_object(f.read(), f"{bundle_dir.name}.flow")
+        return self._parse_bundle_depends_on_flow_ids(raw_flow, bundle_dir.name)
+
+    def _expand_bundle_ids_with_dependencies(self, bundle_ids: list[str]) -> list[str]:
+        """
+        Топологический порядок: зависимости раньше зависимого bundle.
+        Каждый bundle_id в результате не более одного раза.
+        """
+        ordered: list[str] = []
+        seen: set[str] = set()
+        visiting: set[str] = set()
+
+        def visit(bundle_id: str, path: list[str]) -> None:
+            if bundle_id in seen:
+                return
+            if bundle_id in visiting:
+                chain = " -> ".join(path + [bundle_id])
+                raise ValueError(f"Cycle in depends_on_flow_ids: {chain}")
+            visiting.add(bundle_id)
+            bundle_dir = self.bundles_dir / bundle_id
+            for dep_id in self._read_bundle_depends_on_flow_ids(bundle_dir):
+                visit(dep_id, path + [bundle_id])
+            visiting.remove(bundle_id)
+            seen.add(bundle_id)
+            ordered.append(bundle_id)
+
+        for bundle_id in bundle_ids:
+            visit(bundle_id, [])
+        return ordered
+
+    async def _reload_bundle_chain(self, bundle_id: str, *, seen: set[str]) -> None:
+        if bundle_id in seen:
+            return
+        seen.add(bundle_id)
+        bundle_dir = self.bundles_dir / bundle_id
+        config_path = bundle_dir / "flow.json"
+        if not config_path.exists():
+            raise ValueError(
+                f"Каталог bundle '{bundle_id}' не найден или в нём нет flow.json: {bundle_dir}"
+            )
+        for companion_id in self._read_bundle_depends_on_flow_ids(bundle_dir):
+            await self._reload_bundle_chain(companion_id, seen=seen)
+        await self.preload_nodes_to_cache(bundle_id)
+        loaded_flow_id = await self._load_flow_bundle(bundle_id)
+        if not loaded_flow_id:
+            raise ValueError(f"Не удалось загрузить bundle '{bundle_id}' в БД")
+
     async def reload_flow_bundle(self, bundle_id: str) -> str:
         """
         Перезаписывает один flow и связанные nodes из каталога ``bundles/<bundle_id>/`` в БД.
@@ -1085,18 +1174,9 @@ class FlowsLoader:
 
         self.load_registry_yaml()
 
-        bundle_dir = self.bundles_dir / bundle_id
-        config_path = bundle_dir / "flow.json"
-        if not config_path.exists():
-            raise ValueError(
-                f"Каталог bundle '{bundle_id}' не найден или в нём нет flow.json: {bundle_dir}"
-            )
-
-        await self.preload_nodes_to_cache(bundle_id)
-        loaded_flow_id = await self._load_flow_bundle(bundle_id)
-        if not loaded_flow_id:
-            raise ValueError(f"Не удалось загрузить bundle '{bundle_id}' в БД")
-        return loaded_flow_id
+        seen: set[str] = set()
+        await self._reload_bundle_chain(bundle_id, seen=seen)
+        return bundle_id
 
 
 async def load_flows_to_db(

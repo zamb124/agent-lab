@@ -1456,6 +1456,7 @@ class FlowNode(BaseNode):
             self.branch_id: str = r_s
         else:
             self.branch_id = "default"
+        self.handoff_mode: bool = bool(cfg.get("handoff_mode", False))
         self._nested_flow: RuntimeFlowProtocol | None = None
 
     @override
@@ -1466,6 +1467,9 @@ class FlowNode(BaseNode):
         Parent ledger хранит ChildWorkflow* events, а сам child имеет отдельный
         session_id и собственную event history. State child не копируется в
         parent snapshots; parent хранит только typed link для resume.
+
+        При handoff_mode=True родитель suspended сразу после запуска child
+        и ждёт handback (а не обычного child completion).
         """
         if not self.flow_id:
             raise ValueError(f"Node '{self.node_id}': flow_id required")
@@ -1473,6 +1477,23 @@ class FlowNode(BaseNode):
         container = self.container
         nested_flow = await self._load_nested_flow(container)
         existing_link = self._resume_link_from_parent_state(state)
+
+        if self.handoff_mode and existing_link is not None and existing_link.handoff:
+            if existing_link.status == "completed":
+                nested_state, link, _child_started = await self._load_child_workflow_state(
+                    container,
+                    state,
+                    existing_link,
+                )
+                self._copy_child_result_to_parent(nested_state, state, link)
+                await self._record_child_workflow_event(
+                    container,
+                    state.session_id,
+                    WorkflowEventType.child_workflow_completed,
+                    link,
+                )
+                return state.response
+
         if existing_link is None:
             nested_state, link, _child_started = await self._create_child_workflow_state(
                 container,
@@ -1486,6 +1507,10 @@ class FlowNode(BaseNode):
                 state,
                 existing_link,
             )
+
+        if self.handoff_mode:
+            link = link.model_copy(update={"handoff": True})
+            state.child_workflows[self.node_id] = link
 
         await self._record_child_workflow_event(
             container,
@@ -1680,13 +1705,21 @@ class FlowNode(BaseNode):
         parent_execution_branch_id, parent_node_schedule_sequence = (
             self._require_parent_child_scope(parent_state)
         )
-        child_context_id = self._child_context_id(
-            parent_state,
-            inputs,
-            parent_execution_branch_id=parent_execution_branch_id,
-            parent_node_schedule_sequence=parent_node_schedule_sequence,
-        )
-        child_session_id = f"{flow_id}:{child_context_id}"
+        if self.handoff_mode:
+            child_context_id, child_session_id = (
+                container.handoff_orchestrator_service.build_child_session_ids(
+                    parent_state.context_id,
+                    flow_id,
+                )
+            )
+        else:
+            child_context_id = self._child_context_id(
+                parent_state,
+                inputs,
+                parent_execution_branch_id=parent_execution_branch_id,
+                parent_node_schedule_sequence=parent_node_schedule_sequence,
+            )
+            child_session_id = f"{flow_id}:{child_context_id}"
         existing_child = await container.workflow_runtime.get_state(child_session_id)
         if existing_child is not None:
             child_position = await self._require_child_execution_position(
@@ -1706,6 +1739,7 @@ class FlowNode(BaseNode):
                     container,
                     existing_child,
                 ),
+                handoff=self.handoff_mode,
             )
             return existing_child, link, False
 
@@ -1728,6 +1762,12 @@ class FlowNode(BaseNode):
         child_state.result = None
         child_state.validation = None
         child_state.messages = self.get_filtered_messages(parent_state)
+
+        if self.handoff_mode:
+            child_state.handoff_parent_session_id = parent_state.session_id
+            child_state.handoff_depth = parent_state.handoff_depth + 1
+            if parent_state.handoff_trace_id is not None:
+                child_state.handoff_trace_id = parent_state.handoff_trace_id
 
         run_started = await container.workflow_runtime.record_state_event(
             child_session_id,
@@ -1756,6 +1796,7 @@ class FlowNode(BaseNode):
             parent_execution_branch_id=parent_execution_branch_id,
             parent_node_schedule_sequence=parent_node_schedule_sequence,
             status="running",
+            handoff=self.handoff_mode,
         )
         return child_state, link, True
 

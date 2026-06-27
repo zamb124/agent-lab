@@ -1,0 +1,8 @@
+[Desktop Entry]
+Name=HumanitecAgent
+Exec=/usr/lib/humanitec/HumanitecAgent %U
+Icon=/usr/share/pixmaps/humanitecagent.png
+Terminal=false
+Type=Application
+Categories=Development;
+MimeType=x-scheme-handler/humanitec;

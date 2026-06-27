@@ -22,6 +22,7 @@ from apps.flows.src.services.mcp_catalog_provisioner import (
     mark_server_override_locked,
     mcp_server_update_triggers_override,
 )
+from apps.flows.src.services.mcp_server_display_order import sort_mcp_servers_for_display
 from apps.flows.src.services.mcp_sync import resolve_mcp_client_variables, sync_mcp_server_tools
 from core.context import get_context
 from core.logging import get_logger
@@ -194,11 +195,13 @@ async def list_servers(
     offset: Annotated[int, Query(ge=0)] = 0,
 ) -> OffsetPage[MCPServerResponse]:
     servers, total, icon_url_map = await asyncio.gather(
-        container.mcp_server_repository.list(limit=limit, offset=offset),
+        container.mcp_server_repository.list(limit=5000, offset=0),
         container.mcp_server_repository.count_all(),
         container.mcp_branding_service.build_icon_url_map(),
     )
-    items = [_server_to_response(s, icon_url=icon_url_map.get(s.server_id)) for s in servers]
+    ordered_servers = sort_mcp_servers_for_display(servers)
+    page_servers = ordered_servers[offset : offset + limit]
+    items = [_server_to_response(s, icon_url=icon_url_map.get(s.server_id)) for s in page_servers]
     return OffsetPage[MCPServerResponse](items=items, total=total, limit=limit, offset=offset)
 
 

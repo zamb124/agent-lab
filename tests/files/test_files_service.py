@@ -11,6 +11,7 @@ import pytest
 from core.files.create_spec import FileCreateSpec, FileSourceKind, FileSourceRef
 from core.files.models import FileRecord
 from core.files.retention import FileRetentionKind, FileRetentionSpec
+from tests.fixtures.s3 import require_s3_configured
 
 
 def _platform_auxiliary_spec(*, is_public: bool = False) -> FileCreateSpec:
@@ -39,10 +40,8 @@ async def test_files_service_create_persists_record(app):
     _ = app
     from apps.frontend.container import get_frontend_container
 
+    require_s3_configured()
     container = get_frontend_container()
-    from core.files.s3_client import S3ClientFactory
-
-    S3ClientFactory.create_default_client()
 
     data = b"files service create payload"
     record = await container.files_service.create(
@@ -72,20 +71,17 @@ async def test_files_service_get_missing_raises(app):
 
 
 @pytest.mark.asyncio
-async def test_files_service_register_s3(app, unique_id: str):
+async def test_files_service_register_s3(app, s3_client, unique_id: str):
     _ = app
     from apps.frontend.container import get_frontend_container
     from core.config import get_settings
-    from core.files.s3_client import S3ClientFactory
 
-    S3ClientFactory.create_default_client()
     settings = get_settings()
     bucket = settings.s3.default_bucket
     if bucket is None or bucket == "":
         pytest.fail("S3 default_bucket is required")
 
     s3_key = f"test/register-s3/{unique_id}.bin"
-    s3_client = S3ClientFactory.create_default_client()
     payload = b"register s3 object bytes"
     _ = await s3_client.upload_bytes(payload, s3_key, content_type="application/octet-stream")
 
@@ -141,11 +137,9 @@ async def test_frontend_upload_invalid_spec_422(frontend_client, auth_headers_sy
 
 
 @pytest.mark.asyncio
-async def test_frontend_register_s3_http(frontend_client, auth_headers_system, unique_id: str):
+async def test_frontend_register_s3_http(frontend_client, auth_headers_system, s3_client, unique_id: str):
     from core.config import get_settings
-    from core.files.s3_client import S3ClientFactory
 
-    S3ClientFactory.create_default_client()
     settings = get_settings()
     bucket = settings.s3.default_bucket
     if bucket is None or bucket == "":
@@ -153,7 +147,6 @@ async def test_frontend_register_s3_http(frontend_client, auth_headers_system, u
 
     s3_key = f"test/http-register/{unique_id}.txt"
     payload = b"http register s3"
-    s3_client = S3ClientFactory.create_default_client()
     _ = await s3_client.upload_bytes(payload, s3_key, content_type="text/plain")
 
     body = {

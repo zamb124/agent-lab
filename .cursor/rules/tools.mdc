@@ -43,5 +43,6 @@ alwaysApply: false
 - Google Docs: `gdocs_*`.
 - Browser: `browser_*`.
 - CRM/Lara: `crm_*`, `push_embed_blocks`.
+- Agent handoff: `handoff_to_flow`, `handback_to_parent` (`apps/flows/src/tools/handoff_tools.py` → **`handoff.mdc`**).
 
 Новый platform API для пользовательского кода добавляется не как Python namespace helper, а как capability в `apps/capability_gateway/services/registry.py`.

@@ -27,6 +27,14 @@ flows:
   - id: example_custom_class
     public: true
     description: "Кастомный класс агента с llm_node_class параметром"
+
+  - id: handoff_demo_child
+    public: true
+    description: "Дочерний flow для демо agent handoff/handback (устанавливается вместе с parent)"
+
+  - id: handoff_demo_parent
+    public: true
+    description: "Multi-agent handoff: родитель передаёт управление дочернему flow через handoff_to_flow и получает structured handback"
   
   # CRM агенты
   - id: crm

@@ -10,9 +10,10 @@ import pytest
 
 from core.files.backfill import FileRetentionBackfillService
 from core.files.create_spec import FileCreateSpec
-from core.files.models import FileRecord, FileStatus
+from core.files.models import FileStatus
 from core.files.purge import FilePurgeService
 from core.files.retention import FileRetentionKind, FileRetentionSpec, resolve_retention_ttl_seconds
+from tests.fixtures.s3 import require_s3_configured
 
 
 def _platform_auxiliary_spec(*, is_public: bool = False) -> FileCreateSpec:
@@ -47,9 +48,7 @@ def test_resolve_retention_ttl_custom_seconds():
 async def test_backfill_sets_retention_fields(app, file_db_clean, unique_id: str):
     _ = app
     from apps.frontend.container import get_frontend_container
-    from core.files.s3_client import S3ClientFactory
-
-    S3ClientFactory.create_default_client()
+    require_s3_configured()
     container = get_frontend_container()
     record = await container.files_service.create(
         _platform_auxiliary_spec(),
@@ -74,9 +73,7 @@ async def test_backfill_sets_retention_fields(app, file_db_clean, unique_id: str
 async def test_purge_deletes_expired_file(app, file_db_clean, unique_id: str):
     _ = app
     from apps.frontend.container import get_frontend_container
-    from core.files.s3_client import S3ClientFactory
-
-    S3ClientFactory.create_default_client()
+    require_s3_configured()
     container = get_frontend_container()
     record = await container.files_service.create(
         _platform_auxiliary_spec(),
@@ -106,9 +103,7 @@ async def test_purge_deletes_expired_file(app, file_db_clean, unique_id: str):
 async def test_purge_skips_permanent_files(app, unique_id: str):
     _ = app
     from apps.frontend.container import get_frontend_container
-    from core.files.s3_client import S3ClientFactory
-
-    S3ClientFactory.create_default_client()
+    require_s3_configured()
     container = get_frontend_container()
     record = await container.files_service.create(
         _platform_auxiliary_spec(),

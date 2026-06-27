@@ -402,7 +402,10 @@ def frontend_service():
         app_path="apps.frontend.main:app",
         port=9004,
         startup_wait=20.0,
-        env=_with_mock_llm_lane(_COMMON_TEST_ENV, "flows"),
+        env={
+            **_with_mock_llm_lane(_COMMON_TEST_ENV, "flows"),
+            "HOSTNAME": "frontend-e2e-pod",
+        },
     )
 
     with manager.start():

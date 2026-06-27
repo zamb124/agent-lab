@@ -1,0 +1,13 @@
+<svg width="48" height="48" viewBox="0 0 48 48" fill="none" xmlns="http://www.w3.org/2000/svg">
+<rect x="6" y="8" width="36" height="26" rx="4" fill="url(#humanitec_agent_gradient)"/>
+<rect x="10" y="12" width="28" height="18" rx="2" fill="white" fill-opacity="0.18"/>
+<path d="M22 18V28M22 28L18 24M22 28L26 24" stroke="white" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M16 38H32" stroke="url(#humanitec_agent_gradient)" stroke-width="3" stroke-linecap="round"/>
+<path d="M24 34V38" stroke="url(#humanitec_agent_gradient)" stroke-width="3" stroke-linecap="round"/>
+<defs>
+<linearGradient id="humanitec_agent_gradient" x1="24" y1="8" x2="24" y2="40" gradientUnits="userSpaceOnUse">
+<stop stop-color="#5768FE"/>
+<stop offset="1" stop-color="#8B9DFF"/>
+</linearGradient>
+</defs>
+</svg>

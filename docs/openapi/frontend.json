@@ -32,6 +32,485 @@
         }
       }
     },
+    "/frontend/api/agent/download/{platform}": {
+      "get": {
+        "tags": [
+          "agent",
+          "agent",
+          "agent",
+          "public"
+        ],
+        "summary": "Download Agent",
+        "operationId": "download_agent_frontend_api_agent_download__platform__get",
+        "parameters": [
+          {
+            "name": "platform",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Platform"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/frontend/api/agent/releases/artifact/{platform}": {
+      "get": {
+        "tags": [
+          "agent",
+          "agent",
+          "agent",
+          "public"
+        ],
+        "summary": "Serve Local Release Artifact",
+        "operationId": "serve_local_release_artifact_frontend_api_agent_releases_artifact__platform__get",
+        "parameters": [
+          {
+            "name": "platform",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Platform"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/frontend/api/agent/releases/status": {
+      "get": {
+        "tags": [
+          "agent",
+          "agent",
+          "agent",
+          "public"
+        ],
+        "summary": "Agent Releases Status",
+        "operationId": "agent_releases_status_frontend_api_agent_releases_status_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AgentReleaseStatusResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/frontend/api/agent/discover": {
+      "get": {
+        "tags": [
+          "agent",
+          "agent",
+          "agent",
+          "public"
+        ],
+        "summary": "Agent Discover",
+        "operationId": "agent_discover_frontend_api_agent_discover_get",
+        "parameters": [
+          {
+            "name": "origin",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Opt-in override публичного origin (lvh.me dev)",
+              "title": "Origin"
+            },
+            "description": "Opt-in override публичного origin (lvh.me dev)"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AgentDiscoverResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/frontend/api/agent/pairing": {
+      "post": {
+        "tags": [
+          "agent",
+          "agent",
+          "agent",
+          "public"
+        ],
+        "summary": "Create Agent Pairing Code",
+        "operationId": "create_agent_pairing_code_frontend_api_agent_pairing_post",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PairingCodeResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/frontend/api/agent/devices": {
+      "get": {
+        "tags": [
+          "agent",
+          "agent",
+          "agent",
+          "public"
+        ],
+        "summary": "List Agent Devices",
+        "operationId": "list_agent_devices_frontend_api_agent_devices_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AgentDeviceListResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/frontend/api/agent/devices/{device_id}": {
+      "delete": {
+        "tags": [
+          "agent",
+          "agent",
+          "agent",
+          "public"
+        ],
+        "summary": "Revoke Agent Device",
+        "operationId": "revoke_agent_device_frontend_api_agent_devices__device_id__delete",
+        "parameters": [
+          {
+            "name": "device_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Device Id"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/frontend/api/agent/devices/{device_id}/policy": {
+      "patch": {
+        "tags": [
+          "agent",
+          "agent",
+          "agent",
+          "public"
+        ],
+        "summary": "Update Agent Device Policy",
+        "operationId": "update_agent_device_policy_frontend_api_agent_devices__device_id__policy_patch",
+        "parameters": [
+          {
+            "name": "device_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Device Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DevicePolicyUpdateRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AgentDeviceListItem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/frontend/api/agent/audit": {
+      "get": {
+        "tags": [
+          "agent",
+          "agent",
+          "agent",
+          "public"
+        ],
+        "summary": "List Agent Audit",
+        "operationId": "list_agent_audit_frontend_api_agent_audit_get",
+        "parameters": [
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "default": 50,
+              "title": "Limit"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AgentAuditListResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/frontend/api/agent/register-with-auth": {
+      "post": {
+        "tags": [
+          "agent",
+          "agent",
+          "agent",
+          "public"
+        ],
+        "summary": "Register Agent Device With Auth",
+        "operationId": "register_agent_device_with_auth_frontend_api_agent_register_with_auth_post",
+        "parameters": [
+          {
+            "name": "origin",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Opt-in override публичного origin (lvh.me dev)",
+              "title": "Origin"
+            },
+            "description": "Opt-in override публичного origin (lvh.me dev)"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DeviceRegisterWithAuthRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DeviceRegisterResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/frontend/api/agent/register": {
+      "post": {
+        "tags": [
+          "agent",
+          "agent",
+          "agent",
+          "public"
+        ],
+        "summary": "Register Agent Device",
+        "operationId": "register_agent_device_frontend_api_agent_register_post",
+        "parameters": [
+          {
+            "name": "origin",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Opt-in override публичного origin (lvh.me dev)",
+              "title": "Origin"
+            },
+            "description": "Opt-in override публичного origin (lvh.me dev)"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DeviceRegisterRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DeviceRegisterResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/frontend/api/companies/check-slug": {
       "post": {
         "tags": [
@@ -446,6 +925,292 @@
           "subdomain"
         ],
         "title": "AcceptInviteResponse"
+      },
+      "AgentAuditEvent": {
+        "properties": {
+          "event_type": {
+            "type": "string",
+            "title": "Event Type"
+          },
+          "actor_user_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Actor User Id"
+          },
+          "device_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Device Id"
+          },
+          "detail": {
+            "type": "string",
+            "title": "Detail"
+          },
+          "recorded_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Recorded At"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "event_type",
+          "detail",
+          "recorded_at"
+        ],
+        "title": "AgentAuditEvent",
+        "description": "Запись audit-лога HumanitecAgent."
+      },
+      "AgentAuditListResponse": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/AgentAuditEvent"
+            },
+            "type": "array",
+            "title": "Items"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "title": "AgentAuditListResponse",
+        "description": "Список audit-событий компании."
+      },
+      "AgentDeviceListItem": {
+        "properties": {
+          "device_id": {
+            "type": "string",
+            "title": "Device Id"
+          },
+          "device_name": {
+            "type": "string",
+            "title": "Device Name"
+          },
+          "user_id": {
+            "type": "string",
+            "title": "User Id"
+          },
+          "company_id": {
+            "type": "string",
+            "title": "Company Id"
+          },
+          "os": {
+            "type": "string",
+            "title": "Os"
+          },
+          "hostname": {
+            "type": "string",
+            "title": "Hostname"
+          },
+          "paired_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Paired At"
+          },
+          "last_seen_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Seen At"
+          },
+          "is_active": {
+            "type": "boolean",
+            "title": "Is Active",
+            "default": true
+          },
+          "is_tunnel_online": {
+            "type": "boolean",
+            "title": "Is Tunnel Online",
+            "description": "Tunnel WS активен",
+            "default": false
+          },
+          "policy": {
+            "$ref": "#/components/schemas/DevicePolicy"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "device_id",
+          "device_name",
+          "user_id",
+          "company_id",
+          "os",
+          "hostname",
+          "paired_at"
+        ],
+        "title": "AgentDeviceListItem",
+        "description": "Устройство в списке для UI/API."
+      },
+      "AgentDeviceListResponse": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/AgentDeviceListItem"
+            },
+            "type": "array",
+            "title": "Items"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "title": "AgentDeviceListResponse",
+        "description": "Список устройств компании."
+      },
+      "AgentDiscoverResponse": {
+        "properties": {
+          "frontend_base_url": {
+            "type": "string",
+            "title": "Frontend Base Url"
+          },
+          "platform_mcp_url": {
+            "type": "string",
+            "title": "Platform Mcp Url"
+          },
+          "tunnel_ws_url": {
+            "type": "string",
+            "title": "Tunnel Ws Url"
+          },
+          "llm_api_url": {
+            "type": "string",
+            "title": "Llm Api Url"
+          },
+          "releases": {
+            "$ref": "#/components/schemas/AgentReleaseStatusResponse"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "frontend_base_url",
+          "platform_mcp_url",
+          "tunnel_ws_url",
+          "llm_api_url",
+          "releases"
+        ],
+        "title": "AgentDiscoverResponse",
+        "description": "Публичный discover HumanitecAgent до pairing."
+      },
+      "AgentLlmBundle": {
+        "properties": {
+          "provider_id": {
+            "type": "string",
+            "const": "humanitec",
+            "title": "Provider Id",
+            "default": "humanitec"
+          },
+          "model_id": {
+            "type": "string",
+            "const": "auto",
+            "title": "Model Id",
+            "default": "auto"
+          },
+          "api_base_url": {
+            "type": "string",
+            "title": "Api Base Url",
+            "description": "Base URL без /chat/completions (Goose добавляет path)"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "api_base_url"
+        ],
+        "title": "AgentLlmBundle",
+        "description": "OpenAI-compatible LLM endpoint для HumanitecAgent после pairing."
+      },
+      "AgentReleaseAssetChecksum": {
+        "properties": {
+          "asset_name": {
+            "type": "string",
+            "title": "Asset Name"
+          },
+          "sha256": {
+            "type": "string",
+            "title": "Sha256"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "asset_name",
+          "sha256"
+        ],
+        "title": "AgentReleaseAssetChecksum",
+        "description": "Checksum арtefact release для integrity check."
+      },
+      "AgentReleaseStatusResponse": {
+        "properties": {
+          "ready": {
+            "type": "boolean",
+            "title": "Ready"
+          },
+          "latest_tag": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Latest Tag"
+          },
+          "github_owner": {
+            "type": "string",
+            "title": "Github Owner"
+          },
+          "github_repo": {
+            "type": "string",
+            "title": "Github Repo"
+          },
+          "detail": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Detail"
+          },
+          "asset_checksums": {
+            "items": {
+              "$ref": "#/components/schemas/AgentReleaseAssetChecksum"
+            },
+            "type": "array",
+            "title": "Asset Checksums"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "ready",
+          "github_owner",
+          "github_repo"
+        ],
+        "title": "AgentReleaseStatusResponse",
+        "description": "Статус GitHub release для лендинга и диагностики."
       },
       "ApiKey": {
         "properties": {
@@ -945,21 +1710,15 @@
             "contentMediaType": "application/octet-stream",
             "title": "File"
           },
-          "public": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Public"
+          "spec": {
+            "type": "string",
+            "title": "Spec"
           }
         },
         "type": "object",
         "required": [
-          "file"
+          "file",
+          "spec"
         ],
         "title": "Body_upload_file_frontend_api_v1_files__post"
       },
@@ -4556,6 +5315,494 @@
         ],
         "title": "DemoLoginRequest"
       },
+      "DevicePolicy": {
+        "properties": {
+          "allowed_roots": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Allowed Roots",
+            "description": "Разрешённые корневые папки для filesystem MCP"
+          },
+          "exec_whitelist": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Exec Whitelist",
+            "description": "Разрешённые команды для shell MCP (пусто = deny all)"
+          },
+          "exec_require_confirm": {
+            "type": "boolean",
+            "title": "Exec Require Confirm",
+            "description": "Требовать подтверждение пользователя перед каждым exec",
+            "default": true
+          },
+          "shell_enabled": {
+            "type": "boolean",
+            "title": "Shell Enabled",
+            "description": "Shell MCP включён (по умолчанию выключен)",
+            "default": false
+          },
+          "browser_enabled": {
+            "type": "boolean",
+            "title": "Browser Enabled",
+            "description": "Playwright MCP включён",
+            "default": true
+          },
+          "max_file_size_mb": {
+            "type": "integer",
+            "minimum": 1.0,
+            "title": "Max File Size Mb",
+            "description": "Максимальный размер файла для чтения MCP, МБ",
+            "default": 50
+          },
+          "audit_retention_days": {
+            "type": "integer",
+            "minimum": 1.0,
+            "title": "Audit Retention Days",
+            "description": "Срок хранения audit-логов MCP вызовов, дней",
+            "default": 30
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "title": "DevicePolicy",
+        "description": "Политика безопасности для устройства HumanitecAgent."
+      },
+      "DevicePolicyUpdateRequest": {
+        "properties": {
+          "policy": {
+            "$ref": "#/components/schemas/DevicePolicy"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "policy"
+        ],
+        "title": "DevicePolicyUpdateRequest",
+        "description": "Обновление политики устройства HumanitecAgent."
+      },
+      "DeviceRegisterRequest": {
+        "properties": {
+          "pairing_code": {
+            "type": "string",
+            "maxLength": 6,
+            "minLength": 6,
+            "title": "Pairing Code",
+            "description": "6-значный pairing code из браузера"
+          },
+          "device_id": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Device Id",
+            "description": "UUID устройства"
+          },
+          "device_name": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Device Name",
+            "description": "Имя устройства"
+          },
+          "os": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Os",
+            "description": "ОС"
+          },
+          "hostname": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Hostname",
+            "description": "hostname"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "pairing_code",
+          "device_id",
+          "device_name",
+          "os",
+          "hostname"
+        ],
+        "title": "DeviceRegisterRequest",
+        "description": "Запрос на регистрацию устройства от HumanitecAgent."
+      },
+      "DeviceRegisterResponse": {
+        "properties": {
+          "device_id": {
+            "type": "string",
+            "title": "Device Id"
+          },
+          "token": {
+            "type": "string",
+            "title": "Token",
+            "description": "Device JWT (30 дней)"
+          },
+          "platform_mcp_url": {
+            "type": "string",
+            "title": "Platform Mcp Url",
+            "description": "URL Platform MCP endpoint для Goose"
+          },
+          "frontend_base_url": {
+            "type": "string",
+            "title": "Frontend Base Url",
+            "description": "Публичный origin frontend для API и deep links"
+          },
+          "tunnel_ws_url": {
+            "type": "string",
+            "title": "Tunnel Ws Url",
+            "description": "WebSocket URL tunnel HumanitecAgent"
+          },
+          "company_id": {
+            "type": "string",
+            "title": "Company Id",
+            "description": "ID компании, привязанной при pairing"
+          },
+          "company_subdomain": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Company Subdomain",
+            "description": "Subdomain компании для UI и документации"
+          },
+          "llm": {
+            "$ref": "#/components/schemas/AgentLlmBundle",
+            "description": "Platform LLM bundle для Goose openai-compatible provider"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "device_id",
+          "token",
+          "platform_mcp_url",
+          "frontend_base_url",
+          "tunnel_ws_url",
+          "company_id",
+          "llm"
+        ],
+        "title": "DeviceRegisterResponse",
+        "description": "Ответ при успешной регистрации устройства."
+      },
+      "DeviceRegisterWithAuthRequest": {
+        "properties": {
+          "device_id": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Device Id",
+            "description": "UUID устройства"
+          },
+          "device_name": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Device Name",
+            "description": "Имя устройства"
+          },
+          "os": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Os",
+            "description": "ОС"
+          },
+          "hostname": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Hostname",
+            "description": "hostname"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "device_id",
+          "device_name",
+          "os",
+          "hostname"
+        ],
+        "title": "DeviceRegisterWithAuthRequest",
+        "description": "Регистрация устройства по browser session JWT (без pairing code)."
+      },
+      "DocsPlacement": {
+        "properties": {
+          "namespace": {
+            "type": "string",
+            "title": "Namespace"
+          },
+          "file_id": {
+            "type": "string",
+            "title": "File Id"
+          },
+          "title": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Title"
+          },
+          "path_segments": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Path Segments"
+          },
+          "anchor": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/DocsPlacementAnchor"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "retention": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/FileRetentionSpec"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "namespace",
+          "file_id"
+        ],
+        "title": "DocsPlacement"
+      },
+      "DocsPlacementAnchor": {
+        "properties": {
+          "source_kind": {
+            "type": "string",
+            "enum": [
+              "crm_entity",
+              "crm_knowledge_import",
+              "flow_session",
+              "flow_asset",
+              "work_item",
+              "work_item_comment",
+              "work_item_resolution",
+              "sync_channel_message",
+              "sync_call_recording",
+              "sync_speech_segment",
+              "sync_channel_asset",
+              "calendar_event",
+              "browser_session",
+              "rag_namespace",
+              "office_manual",
+              "manual"
+            ],
+            "title": "Source Kind"
+          },
+          "entity_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Entity Id"
+          },
+          "entity_type": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Entity Type"
+          },
+          "entity_title": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Entity Title"
+          },
+          "import_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Import Id"
+          },
+          "flow_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Flow Id"
+          },
+          "flow_slug": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Flow Slug"
+          },
+          "session_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Session Id"
+          },
+          "work_item_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Work Item Id"
+          },
+          "comment_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Comment Id"
+          },
+          "channel_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Channel Id"
+          },
+          "message_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Message Id"
+          },
+          "call_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Call Id"
+          },
+          "recording_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Recording Id"
+          },
+          "event_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Event Id"
+          },
+          "browser_session_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Browser Session Id"
+          },
+          "namespace_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Namespace Id"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "source_kind"
+        ],
+        "title": "DocsPlacementAnchor"
+      },
       "EmbedCodeResponse": {
         "properties": {
           "html_code": {
@@ -4866,6 +6113,112 @@
         "title": "EmbedStatus",
         "description": "Статус встраиваемого виджета"
       },
+      "FileCreateSpec": {
+        "properties": {
+          "source_kind": {
+            "$ref": "#/components/schemas/FileSourceKind"
+          },
+          "source_ref": {
+            "$ref": "#/components/schemas/FileSourceRef"
+          },
+          "retention": {
+            "$ref": "#/components/schemas/FileRetentionSpec"
+          },
+          "placement": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/DocsPlacement"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "post_create": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/FilePostCreate"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "metadata": {
+            "anyOf": [
+              {
+                "additionalProperties": {
+                  "$ref": "#/components/schemas/JsonValue"
+                },
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Metadata"
+          },
+          "tags": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Tags"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "source_kind",
+          "source_ref",
+          "retention"
+        ],
+        "title": "FileCreateSpec"
+      },
+      "FilePostCreate": {
+        "properties": {
+          "rag_index_namespace": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Rag Index Namespace"
+          },
+          "rag_metadata": {
+            "anyOf": [
+              {
+                "additionalProperties": {
+                  "$ref": "#/components/schemas/JsonValue"
+                },
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Rag Metadata"
+          },
+          "is_public": {
+            "type": "boolean",
+            "title": "Is Public",
+            "default": false
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "title": "FilePostCreate"
+      },
       "FileReadPreviewResponse": {
         "properties": {
           "text": {
@@ -4986,6 +6339,222 @@
         ],
         "title": "FileResponse",
         "description": "Публичное представление файла для API-ответов.\n\nНе содержит внутренних полей (s3_key, s3_bucket, s3_endpoint).\nИспользуется как return-тип всех file-эндпоинтов во всех сервисах."
+      },
+      "FileRetentionKind": {
+        "type": "string",
+        "enum": [
+          "permanent",
+          "flow_session",
+          "flow_asset",
+          "crm_entity",
+          "crm_knowledge_import",
+          "work_item",
+          "sync_message_attachment",
+          "sync_channel_asset",
+          "sync_call_recording",
+          "sync_speech_segment",
+          "calendar_event_attachment",
+          "browser_artifact",
+          "generated_ephemeral",
+          "rag_document",
+          "office_document",
+          "platform_default"
+        ],
+        "title": "FileRetentionKind"
+      },
+      "FileRetentionSpec": {
+        "properties": {
+          "kind": {
+            "$ref": "#/components/schemas/FileRetentionKind"
+          },
+          "ttl_seconds": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ttl Seconds"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "kind"
+        ],
+        "title": "FileRetentionSpec"
+      },
+      "FileSourceKind": {
+        "type": "string",
+        "enum": [
+          "crm_entity",
+          "flow_session",
+          "flow_asset",
+          "work_item",
+          "sync_message",
+          "sync_call_recording",
+          "sync_speech_segment",
+          "sync_channel_asset",
+          "browser_artifact",
+          "rag_document",
+          "office_document",
+          "calendar_event",
+          "platform_auxiliary",
+          "generated_ephemeral"
+        ],
+        "title": "FileSourceKind"
+      },
+      "FileSourceRef": {
+        "properties": {
+          "entity_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Entity Id"
+          },
+          "flow_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Flow Id"
+          },
+          "flow_slug": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Flow Slug"
+          },
+          "session_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Session Id"
+          },
+          "work_item_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Work Item Id"
+          },
+          "channel_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Channel Id"
+          },
+          "message_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Message Id"
+          },
+          "call_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Call Id"
+          },
+          "recording_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Recording Id"
+          },
+          "namespace_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Namespace Id"
+          },
+          "event_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Event Id"
+          },
+          "browser_session_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Browser Session Id"
+          },
+          "import_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Import Id"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "title": "FileSourceRef"
       },
       "GenerateInviteRequest": {
         "properties": {
@@ -6624,6 +8193,29 @@
           "offset"
         ],
         "title": "OffsetPage[ServiceStatus]"
+      },
+      "PairingCodeResponse": {
+        "properties": {
+          "pairing_code": {
+            "type": "string",
+            "maxLength": 6,
+            "minLength": 6,
+            "title": "Pairing Code"
+          },
+          "expires_in_seconds": {
+            "type": "integer",
+            "minimum": 60.0,
+            "title": "Expires In Seconds"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "pairing_code",
+          "expires_in_seconds"
+        ],
+        "title": "PairingCodeResponse",
+        "description": "Ответ при создании pairing code в браузере."
       },
       "PaymentHistoryResponse": {
         "properties": {
@@ -9180,6 +10772,44 @@
         ],
         "title": "PushSuccessResponse"
       },
+      "RegisterS3Request": {
+        "properties": {
+          "spec": {
+            "$ref": "#/components/schemas/FileCreateSpec"
+          },
+          "s3_key": {
+            "type": "string",
+            "title": "S3 Key"
+          },
+          "s3_bucket": {
+            "type": "string",
+            "title": "S3 Bucket"
+          },
+          "original_name": {
+            "type": "string",
+            "title": "Original Name"
+          },
+          "content_type": {
+            "type": "string",
+            "title": "Content Type"
+          },
+          "file_size": {
+            "type": "integer",
+            "title": "File Size"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "spec",
+          "s3_key",
+          "s3_bucket",
+          "original_name",
+          "content_type",
+          "file_size"
+        ],
+        "title": "RegisterS3Request"
+      },
       "ScheduledTaskStatus": {
         "type": "string",
         "enum": [
@@ -10870,6 +12500,10 @@
     }
   },
   "tags": [
+    {
+      "name": "agent",
+      "description": "Public API endpoints for agent"
+    },
     {
       "name": "companies",
       "description": "Public API endpoints for companies"

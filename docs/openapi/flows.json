@@ -652,6 +652,126 @@
           }
         }
       }
+    },
+    "/flows/api/v1/agent/platform-mcp": {
+      "get": {
+        "tags": [
+          "agent-platform-mcp",
+          "agent-platform-mcp",
+          "agent-platform-mcp",
+          "public"
+        ],
+        "summary": "Platform Mcp Discover",
+        "operationId": "platform_mcp_discover_flows_api_v1_agent_platform_mcp_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": {
+                    "$ref": "#/components/schemas/JsonValue"
+                  },
+                  "type": "object",
+                  "title": "Response Platform Mcp Discover Flows Api V1 Agent Platform Mcp Get"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "agent-platform-mcp",
+          "agent-platform-mcp",
+          "agent-platform-mcp",
+          "public"
+        ],
+        "summary": "Platform Mcp Message",
+        "operationId": "platform_mcp_message_flows_api_v1_agent_platform_mcp_post",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": {
+                    "$ref": "#/components/schemas/JsonValue"
+                  },
+                  "type": "object",
+                  "title": "Response Platform Mcp Message Flows Api V1 Agent Platform Mcp Post"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/flows/api/v1/agent/llm/v1/models": {
+      "get": {
+        "tags": [
+          "agent-llm-proxy",
+          "agent-llm-proxy",
+          "agent-llm-proxy",
+          "public"
+        ],
+        "summary": "Agent Llm Models",
+        "operationId": "agent_llm_models_flows_api_v1_agent_llm_v1_models_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AgentOpenAIModelsResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/flows/api/v1/agent/llm/v1/chat/completions": {
+      "post": {
+        "tags": [
+          "agent-llm-proxy",
+          "agent-llm-proxy",
+          "agent-llm-proxy",
+          "public"
+        ],
+        "summary": "Agent Llm Chat Completions",
+        "operationId": "agent_llm_chat_completions_flows_api_v1_agent_llm_v1_chat_completions_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AgentOpenAIChatCompletionsRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
     }
   },
   "components": {
@@ -772,6 +892,183 @@
         ],
         "title": "ActivityStatus"
       },
+      "AgentOpenAIChatCompletionsRequest": {
+        "properties": {
+          "model": {
+            "type": "string",
+            "title": "Model"
+          },
+          "messages": {
+            "items": {
+              "$ref": "#/components/schemas/AgentOpenAIChatMessage"
+            },
+            "type": "array",
+            "title": "Messages"
+          },
+          "stream": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Stream",
+            "default": false
+          },
+          "temperature": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Temperature"
+          },
+          "max_tokens": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Max Tokens"
+          },
+          "tools": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/JsonValue"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Tools"
+          }
+        },
+        "type": "object",
+        "required": [
+          "model",
+          "messages"
+        ],
+        "title": "AgentOpenAIChatCompletionsRequest"
+      },
+      "AgentOpenAIChatMessage": {
+        "properties": {
+          "role": {
+            "type": "string",
+            "title": "Role"
+          },
+          "content": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "items": {
+                  "$ref": "#/components/schemas/JsonValue"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Content"
+          },
+          "tool_calls": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/JsonValue"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Tool Calls"
+          },
+          "tool_call_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Tool Call Id"
+          }
+        },
+        "type": "object",
+        "required": [
+          "role"
+        ],
+        "title": "AgentOpenAIChatMessage"
+      },
+      "AgentOpenAIModelItem": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id"
+          },
+          "object": {
+            "type": "string",
+            "const": "model",
+            "title": "Object",
+            "default": "model"
+          },
+          "created": {
+            "type": "integer",
+            "title": "Created"
+          },
+          "owned_by": {
+            "type": "string",
+            "title": "Owned By",
+            "default": "humanitec"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "id",
+          "created"
+        ],
+        "title": "AgentOpenAIModelItem"
+      },
+      "AgentOpenAIModelsResponse": {
+        "properties": {
+          "object": {
+            "type": "string",
+            "const": "list",
+            "title": "Object",
+            "default": "list"
+          },
+          "data": {
+            "items": {
+              "$ref": "#/components/schemas/AgentOpenAIModelItem"
+            },
+            "type": "array",
+            "title": "Data"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "data"
+        ],
+        "title": "AgentOpenAIModelsResponse"
+      },
       "Artifact": {
         "properties": {
           "artifactId": {
@@ -881,31 +1178,6 @@
           "state"
         ],
         "title": "Body_auth_callback_post_flows_api_auth_callback__provider_name__post"
-      },
-      "Body_upload_file_flows_api_v1_files__post": {
-        "properties": {
-          "file": {
-            "type": "string",
-            "contentMediaType": "application/octet-stream",
-            "title": "File"
-          },
-          "public": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Public"
-          }
-        },
-        "type": "object",
-        "required": [
-          "file"
-        ],
-        "title": "Body_upload_file_flows_api_v1_files__post"
       },
       "BranchCreateRequest": {
         "properties": {
@@ -2930,6 +3202,12 @@
               "failed"
             ],
             "title": "Status"
+          },
+          "handoff": {
+            "type": "boolean",
+            "title": "Handoff",
+            "description": "Handoff или обычный child workflow",
+            "default": false
           }
         },
         "additionalProperties": false,
@@ -9197,6 +9475,7 @@
                   "failed",
                   "rejected",
                   "auth-required",
+                  "handback",
                   "unknown"
                 ]
               },
@@ -9389,6 +9668,46 @@
             "type": "object",
             "title": "Child Workflows",
             "description": "Durable child workflow links по node_id; хранит session_id child flow для resume без snapshot-копии child state в родителе."
+          },
+          "handoff_parent_session_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Handoff Parent Session Id",
+            "description": "ID родительской сессии у дочернего flow при handoff — чтобы знать куда handback'ить"
+          },
+          "handoff_depth": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Handoff Depth",
+            "description": "Глубина цепочки handoff (для отладки и лимитов)",
+            "default": 0
+          },
+          "handoff_trace_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "minLength": 1
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Handoff Trace Id",
+            "description": "OTEL trace_id цепочки handoff parent↔child для observability"
+          },
+          "handback_return_variables": {
+            "additionalProperties": {
+              "$ref": "#/components/schemas/JsonValue"
+            },
+            "type": "object",
+            "title": "Handback Return Variables",
+            "description": "Переменные, явно возвращаемые родителю через handback_to_parent"
           },
           "reasoning_history": {
             "items": {
@@ -9586,6 +9905,7 @@
                   "failed",
                   "rejected",
                   "auth-required",
+                  "handback",
                   "unknown"
                 ]
               },
@@ -9778,6 +10098,46 @@
             "type": "object",
             "title": "Child Workflows",
             "description": "Durable child workflow links по node_id; хранит session_id child flow для resume без snapshot-копии child state в родителе."
+          },
+          "handoff_parent_session_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Handoff Parent Session Id",
+            "description": "ID родительской сессии у дочернего flow при handoff — чтобы знать куда handback'ить"
+          },
+          "handoff_depth": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Handoff Depth",
+            "description": "Глубина цепочки handoff (для отладки и лимитов)",
+            "default": 0
+          },
+          "handoff_trace_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "minLength": 1
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Handoff Trace Id",
+            "description": "OTEL trace_id цепочки handoff parent↔child для observability"
+          },
+          "handback_return_variables": {
+            "additionalProperties": {
+              "$ref": "#/components/schemas/JsonValue"
+            },
+            "type": "object",
+            "title": "Handback Return Variables",
+            "description": "Переменные, явно возвращаемые родителю через handback_to_parent"
           },
           "reasoning_history": {
             "items": {
@@ -10148,71 +10508,6 @@
         "title": "FilePart",
         "description": "Represents a file segment within a message or artifact. The file content can be\nprovided either directly as bytes or as a URI."
       },
-      "FileReadPreviewResponse": {
-        "properties": {
-          "text": {
-            "type": "string",
-            "title": "Text",
-            "description": "Извлечённый текст (может быть усечён для UI)"
-          },
-          "truncated": {
-            "type": "boolean",
-            "title": "Truncated",
-            "description": "Усечён ли текст по лимиту превью"
-          },
-          "page_count": {
-            "type": "integer",
-            "title": "Page Count",
-            "description": "Число страниц после чтения",
-            "default": 0
-          },
-          "detected_kind": {
-            "type": "string",
-            "title": "Detected Kind",
-            "description": "Тип файла по FileReader"
-          },
-          "content_type": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Content Type",
-            "description": "Content-Type после распознавания"
-          },
-          "warnings": {
-            "items": {
-              "type": "string"
-            },
-            "type": "array",
-            "title": "Warnings",
-            "description": "Предупреждения парсера"
-          },
-          "preview_note": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Preview Note",
-            "description": "Пояснение для пользователя (например для изображений)"
-          }
-        },
-        "type": "object",
-        "required": [
-          "text",
-          "truncated",
-          "detected_kind"
-        ],
-        "title": "FileReadPreviewResponse",
-        "description": "Текстовое превью содержимого файла (извлечение без vision для изображений)."
-      },
       "FileRef": {
         "properties": {
           "file_id": {
@@ -10290,62 +10585,6 @@
         ],
         "title": "FileRef",
         "description": "Канонический элемент `ExecutionState.files`."
-      },
-      "FileResponse": {
-        "properties": {
-          "file_id": {
-            "type": "string",
-            "title": "File Id"
-          },
-          "original_name": {
-            "type": "string",
-            "title": "Original Name"
-          },
-          "content_type": {
-            "type": "string",
-            "title": "Content Type"
-          },
-          "file_size": {
-            "type": "integer",
-            "title": "File Size"
-          },
-          "url": {
-            "type": "string",
-            "title": "Url"
-          },
-          "checksum": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Checksum"
-          },
-          "is_public": {
-            "type": "boolean",
-            "title": "Is Public"
-          },
-          "created_at": {
-            "type": "string",
-            "format": "date-time",
-            "title": "Created At"
-          }
-        },
-        "type": "object",
-        "required": [
-          "file_id",
-          "original_name",
-          "content_type",
-          "file_size",
-          "url",
-          "is_public",
-          "created_at"
-        ],
-        "title": "FileResponse",
-        "description": "Публичное представление файла для API-ответов.\n\nНе содержит внутренних полей (s3_key, s3_bucket, s3_endpoint).\nИспользуется как return-тип всех file-эндпоинтов во всех сервисах."
       },
       "FileWithBytes": {
         "properties": {
@@ -10664,6 +10903,150 @@
         ],
         "title": "FlowFunctionsResponse",
         "description": "Список функций из bundle flow (``functions.py``)."
+      },
+      "FlowHandbackCompletedPayload": {
+        "properties": {
+          "parent_session_id": {
+            "type": "string",
+            "minLength": 3,
+            "title": "Parent Session Id"
+          },
+          "child_session_id": {
+            "type": "string",
+            "minLength": 3,
+            "title": "Child Session Id"
+          },
+          "child_flow_id": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Child Flow Id"
+          },
+          "response": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Response"
+          },
+          "variables": {
+            "additionalProperties": {
+              "$ref": "#/components/schemas/JsonValue"
+            },
+            "type": "object",
+            "title": "Variables"
+          },
+          "handoff_depth": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Handoff Depth"
+          },
+          "trace_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "minLength": 1
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Trace Id",
+            "description": "OTEL trace_id цепочки handoff"
+          },
+          "span_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "minLength": 1
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Span Id",
+            "description": "Span handback.completed"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "parent_session_id",
+          "child_session_id",
+          "child_flow_id",
+          "response",
+          "handoff_depth"
+        ],
+        "title": "FlowHandbackCompletedPayload"
+      },
+      "FlowHandoffInitiatedPayload": {
+        "properties": {
+          "parent_session_id": {
+            "type": "string",
+            "minLength": 3,
+            "title": "Parent Session Id"
+          },
+          "child_session_id": {
+            "type": "string",
+            "minLength": 3,
+            "title": "Child Session Id"
+          },
+          "target_flow_id": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Target Flow Id"
+          },
+          "target_branch_id": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Target Branch Id"
+          },
+          "variables": {
+            "additionalProperties": {
+              "$ref": "#/components/schemas/JsonValue"
+            },
+            "type": "object",
+            "title": "Variables"
+          },
+          "handoff_depth": {
+            "type": "integer",
+            "minimum": 1.0,
+            "title": "Handoff Depth"
+          },
+          "trace_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "minLength": 1
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Trace Id",
+            "description": "OTEL trace_id цепочки handoff для jump в trace viewer"
+          },
+          "span_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "minLength": 1
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Span Id",
+            "description": "Span handoff.initiated для корреляции"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "parent_session_id",
+          "child_session_id",
+          "target_flow_id",
+          "target_branch_id",
+          "handoff_depth"
+        ],
+        "title": "FlowHandoffInitiatedPayload"
       },
       "FlowMetadataRequest": {
         "properties": {
@@ -11358,7 +11741,7 @@
           "secret": {
             "type": "boolean",
             "title": "Secret",
-            "description": "Скрывать значение в UI (симметрично company Variable.secret)",
+            "description": "Скрывать значение в UI",
             "default": false
           },
           "public": {
@@ -11410,7 +11793,7 @@
           "value"
         ],
         "title": "FlowVariableConfig",
-        "description": "Конфигурация переменной flow с метаданными.\n\nКонтракт значения {value, secret} симметричен company-уровню\n(`core.db.repositories.variable_repository.Variable`). При выполнении flow\nпеременная по тому же ключу перекрывает company-переменную.\n\nФормат:\n{\n  \"value\": \"@var:key\",\n  \"secret\": false,\n  \"public\": true,\n  \"title\": \"API Key\",\n  \"description\": \"Ключ для доступа к API\",\n  \"order\": 1\n}"
+        "description": "Конфигурация переменной flow с метаданными.\n\nКонтракт значения {value, secret} симметричен company-уровню\n(`core.db.repositories.variable_repository.Variable`). При выполнении flow\nпеременная по тому же ключу перекрывает company-переменную."
       },
       "FlowVoiceSessionQueryResponse": {
         "properties": {
@@ -12203,6 +12586,111 @@
         ],
         "title": "HandoffCompletedPayload"
       },
+      "HandoffInterrupt": {
+        "properties": {
+          "kind": {
+            "type": "string",
+            "const": "handoff",
+            "title": "Kind",
+            "default": "handoff"
+          },
+          "question": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Question",
+            "description": "Текст для UI конечного пользователя"
+          },
+          "target_kind": {
+            "type": "string",
+            "enum": [
+              "internal",
+              "external"
+            ],
+            "title": "Target Kind",
+            "description": "internal — flow платформы; external — federated A2A handoff (ownership transfer)",
+            "default": "internal"
+          },
+          "target_flow_id": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Target Flow Id"
+          },
+          "target_branch_id": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Target Branch Id",
+            "default": "default"
+          },
+          "target_name": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Target Name",
+            "description": "Имя целевого flow для UI"
+          },
+          "remote_flow_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "minLength": 1
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Remote Flow Id",
+            "description": "ID remote_flow из registry для target_kind=external"
+          },
+          "variables": {
+            "additionalProperties": {
+              "$ref": "#/components/schemas/JsonValue"
+            },
+            "type": "object",
+            "title": "Variables",
+            "description": "Переменные, ЯВНО передаваемые дочернему flow"
+          },
+          "handoff_context_resource_key": {
+            "anyOf": [
+              {
+                "type": "string",
+                "minLength": 1
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Handoff Context Resource Key",
+            "description": "Opt-in HandoffContextResource для shared context policy"
+          },
+          "reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reason",
+            "description": "Почему произошёл handoff"
+          },
+          "depth": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Depth",
+            "description": "Глубина handoff-цепочки для UI",
+            "default": 0
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "question",
+          "target_flow_id",
+          "target_name"
+        ],
+        "title": "HandoffInterrupt",
+        "description": "Передача управления дочернему flow — родитель suspended до handback."
+      },
       "HandoffMode": {
         "type": "string",
         "enum": [
@@ -12447,12 +12935,16 @@
               },
               {
                 "$ref": "#/components/schemas/OAuthInterrupt"
+              },
+              {
+                "$ref": "#/components/schemas/HandoffInterrupt"
               }
             ],
             "title": "Body",
             "discriminator": {
               "propertyName": "kind",
               "mapping": {
+                "handoff": "#/components/schemas/HandoffInterrupt",
                 "oauth_required": "#/components/schemas/OAuthInterrupt",
                 "operator_task": "#/components/schemas/OperatorTaskInterrupt",
                 "user_message": "#/components/schemas/UserMessageInterrupt"
@@ -13784,6 +14276,82 @@
         ],
         "title": "ListResponse[str]"
       },
+      "MCPServerBrandingListResponse": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/MCPServerBrandingResponse"
+            },
+            "type": "array",
+            "title": "Items"
+          },
+          "catalog_slugs": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Catalog Slugs"
+          }
+        },
+        "type": "object",
+        "required": [
+          "items",
+          "catalog_slugs"
+        ],
+        "title": "MCPServerBrandingListResponse",
+        "description": "Список branding и slug из catalog для UI."
+      },
+      "MCPServerBrandingResponse": {
+        "properties": {
+          "server_id": {
+            "type": "string",
+            "title": "Server Id"
+          },
+          "icon_file_id": {
+            "type": "string",
+            "title": "Icon File Id"
+          },
+          "icon_url": {
+            "type": "string",
+            "title": "Icon Url"
+          },
+          "updated_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Updated At"
+          },
+          "updated_by_user_id": {
+            "type": "string",
+            "title": "Updated By User Id"
+          }
+        },
+        "type": "object",
+        "required": [
+          "server_id",
+          "icon_file_id",
+          "icon_url",
+          "updated_at",
+          "updated_by_user_id"
+        ],
+        "title": "MCPServerBrandingResponse",
+        "description": "Глобальная иконка MCP сервера по slug."
+      },
+      "MCPServerBrandingUpsertRequest": {
+        "properties": {
+          "icon_file_id": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Icon File Id",
+            "description": "Публичный file_id иконки"
+          }
+        },
+        "type": "object",
+        "required": [
+          "icon_file_id"
+        ],
+        "title": "MCPServerBrandingUpsertRequest",
+        "description": "Загрузка иконки для slug."
+      },
       "MCPServerCreateRequest": {
         "properties": {
           "server_id": {
@@ -13897,6 +14465,70 @@
               }
             ],
             "title": "Description"
+          },
+          "source": {
+            "type": "string",
+            "title": "Source"
+          },
+          "catalog_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Catalog Id"
+          },
+          "catalog_snapshot_hash": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Catalog Snapshot Hash"
+          },
+          "override_locked": {
+            "type": "boolean",
+            "title": "Override Locked"
+          },
+          "override_locked_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Override Locked At"
+          },
+          "override_locked_by_user_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Override Locked By User Id"
+          },
+          "icon_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Icon Url"
           }
         },
         "type": "object",
@@ -13909,7 +14541,13 @@
           "is_active",
           "cached_tools",
           "last_sync_at",
-          "description"
+          "description",
+          "source",
+          "catalog_id",
+          "catalog_snapshot_hash",
+          "override_locked",
+          "override_locked_at",
+          "override_locked_by_user_id"
         ],
         "title": "MCPServerResponse",
         "description": "Ответ с данными MCP сервера."
@@ -16473,6 +17111,7 @@
         "enum": [
           "llm",
           "llm_context",
+          "handoff_context",
           "rag",
           "files"
         ],
@@ -16806,6 +17445,7 @@
               "failed",
               "rejected",
               "auth-required",
+              "handback",
               "unknown"
             ],
             "title": "Terminal Task State"
@@ -19438,13 +20078,12 @@
             "title": "Resolution Text",
             "default": ""
           },
-          "resolution_file_ids": {
+          "resolution_files": {
             "items": {
-              "type": "string"
+              "$ref": "#/components/schemas/FileRef"
             },
             "type": "array",
-            "title": "Resolution File Ids",
-            "default": []
+            "title": "Resolution Files"
           },
           "binding": {
             "additionalProperties": {
@@ -19698,6 +20337,12 @@
               },
               {
                 "$ref": "#/components/schemas/ChildWorkflowLifecyclePayload"
+              },
+              {
+                "$ref": "#/components/schemas/FlowHandoffInitiatedPayload"
+              },
+              {
+                "$ref": "#/components/schemas/FlowHandbackCompletedPayload"
               }
             ],
             "title": "Payload"
@@ -19772,7 +20417,11 @@
           "ForkCreated",
           "RewindCommitted",
           "ManualStatePatchApplied",
-          "RetryScheduled"
+          "RetryScheduled",
+          "HandoffInitiated",
+          "HandoffAccepted",
+          "HandbackRequested",
+          "HandbackCompleted"
         ],
         "title": "WorkflowEventType"
       },
@@ -19847,6 +20496,14 @@
     {
       "name": "a2a",
       "description": "Public API endpoints for a2a"
+    },
+    {
+      "name": "agent-llm-proxy",
+      "description": "Public API endpoints for agent-llm-proxy"
+    },
+    {
+      "name": "agent-platform-mcp",
+      "description": "Public API endpoints for agent-platform-mcp"
     }
   ]
 }

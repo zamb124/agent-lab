@@ -90,6 +90,16 @@ export function inferUiKind(raw) {
     if (on.includes('tool_call') || on.includes('tool call')) {
         return 'tool';
     }
+    if (on.startsWith('flows.handoff') || on.startsWith('flows.handback')) {
+        const phase =
+            attrs && typeof attrs['platform.handoff.phase'] === 'string'
+                ? attrs['platform.handoff.phase']
+                : '';
+        if (phase.length > 0) {
+            return `handoff_${phase}`;
+        }
+        return 'handoff';
+    }
     if (on.includes('interrupt')) {
         return 'interrupt';
     }

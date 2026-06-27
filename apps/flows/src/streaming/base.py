@@ -180,8 +180,11 @@ class BaseEmitter(ABC):
         meta: JsonObject = {"platform_interrupt": interrupt_payload}
         is_operator = interrupt.body.kind == InterruptKind.OPERATOR_TASK
         is_oauth = interrupt.body.kind == InterruptKind.OAUTH_REQUIRED
-        keep_stream_open = is_operator or is_oauth
+        is_handoff = interrupt.body.kind == InterruptKind.HANDOFF
+        keep_stream_open = is_operator or is_oauth or is_handoff
         if is_operator:
+            meta["platform_handoff_continue"] = True
+        if is_handoff:
             meta["platform_handoff_continue"] = True
         if is_oauth:
             meta["platform_oauth_continue"] = True

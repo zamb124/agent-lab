@@ -253,3 +253,5 @@ Git-бандл: `apps/flows/mcp_branding/` (`manifest.yaml`, `icons/`, `SOURCES.
 - `tests/flows/integration/test_mcp_branding_seed.py` — seed bundle, generic reuse, skip/force.
 
 Спецификация: https://modelcontextprotocol.io
+
+См. также **`humanitec_agent.mdc`** — Platform MCP (flows **отдаёт** flow как tools наружу); этот файл — MCP servers, которые flow **потребляет** внутри графа.

@@ -4,6 +4,8 @@ from collections import Counter
 from collections.abc import Iterable
 from typing import Any
 
+VENDOR_SKIP_MARKER = "apps/agent/desktop/vendor"
+
 LocalImport = dict[str, Any]
 
 
@@ -13,12 +15,19 @@ def _imported_module(node: ast.Import | ast.ImportFrom) -> str:
     return node.names[0].name
 
 
+def _should_skip_path(filepath: str) -> bool:
+    normalized = filepath.replace("\\", "/")
+    return VENDOR_SKIP_MARKER in normalized
+
+
 def find_local_imports(directory: str) -> list[LocalImport]:
     local_imports: list[LocalImport] = []
     for root, _, files in os.walk(directory):
         for file in files:
             if file.endswith(".py"):
                 filepath = os.path.join(root, file)
+                if _should_skip_path(filepath):
+                    continue
                 with open(filepath, encoding="utf-8") as f:
                     content = f.read()
                 tree = ast.parse(content, filename=filepath)

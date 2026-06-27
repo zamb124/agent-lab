@@ -62,7 +62,7 @@ from core.errors import (
 )
 from core.logging import get_logger
 from core.state import ExecutionState
-from core.state.interrupt import OperatorTaskInterrupt
+from core.state.interrupt import HandoffInterrupt, OperatorTaskInterrupt
 from core.state.mutation_policy import (
     should_skip_field_on_runtime_node_state_merge,
 )
@@ -398,6 +398,7 @@ class Flow:
 
         Автоматически определяет режим:
         - Resume: если есть state.interrupt и state.content (ответ пользователя)
+        - Handoff resume: если interrupt был HANDOFF, и дочерний вернул управление
         - Start: новый запуск с entry ноды
 
         Аргументы:
@@ -409,16 +410,17 @@ class Flow:
         await self._require_workflow_instance(state)
 
         if state.interrupt and state.content:
-            # Resume: есть interrupt и новый контент (ответ пользователя)
-            logger.info(f"Flow {self.flow_id}: resume with answer='{state.content[:50]}...'")
             ir = state.interrupt
-            if ir.correlation_id is not None and isinstance(
+            if isinstance(ir.body, HandoffInterrupt):
+                state.interrupt = None
+            elif ir.correlation_id is not None and isinstance(
                 ir.body, OperatorTaskInterrupt
             ):
                 state.hitl_handoff_correlation_id = str(ir.correlation_id)
-            state.interrupt = None
+                state.interrupt = None
+            else:
+                state.interrupt = None
         elif not state.current_nodes:
-            # Старт: новый запуск
             state.current_nodes = [self.entry]
 
         state.variables = {**self.variables, **state.variables}

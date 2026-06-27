@@ -90,6 +90,7 @@ def main() -> int:
         "apps/flows/tools",
         "core/eval",
         "apps/browser/engine/playwright_interactor.py",
+        "apps/agent/desktop/vendor",
     }
 
     candidates: list[Path] = []

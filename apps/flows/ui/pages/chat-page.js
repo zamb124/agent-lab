@@ -876,6 +876,13 @@ export class ChatPage extends PlatformPage {
         if (taskId.length > 0) {
             props.taskId = taskId;
         }
+        const traceId =
+            detail && typeof detail === 'object' && typeof detail.traceId === 'string' && detail.traceId.length > 0
+                ? detail.traceId
+                : '';
+        if (traceId.length > 0) {
+            props.traceId = traceId;
+        }
         this.openModal('flows.tracing', props);
     }
 

@@ -325,6 +325,7 @@ Cursor — `base64url(json({"ts": "<created_at.isoformat()>", "id": "<entity_id>
 - **Utility canon:** все «общие» утилиты (`formatFileSize`, `formatDurationSeconds`/`Ms`, `formatPlatformNumber`/`CurrencyRub`, `formatPlatformDate`/`DateTime`/`Time`, `escapeHtml`, `hashString31`/`hueFromString`/`indexFromSeed`/`initialsFromName`, `md5HexUtf8`, `sanitizeToolName`, `EMAIL_RE`/`isValidEmail`/`digitsOnly`/`isValidPhone`, `platformStorageKey`, `createMultipartFileUploadOp`) живут в `core/frontend/static/lib/utils/` и `core/frontend/static/lib/events/factories/_multipart-upload.js`. Локальные копии в `apps/<svc>/ui/**` запрещены. Локаль форматтеров — из `state.i18n.locale`, хардкод `'ru-RU'` / `'en-US'` запрещён. CI: `scripts/check_ui_canon.sh` п.19 → **`frontend.mdc`**.
 - **Mobile shell 2026 (Radical Reachability):** единый мобильный шелл на `≤767px` — `<platform-bottom-nav>` (Liquid Glass капсула первичной навигации) + `<platform-bottom-sheet-stack>` (вторичная сложность) + опционально `<platform-top-bar>` (sticky-header). Без гамбургер-меню, без мобильных левых drawer-ов. `<platform-sidebar>` принудительно скрыт на мобиле. Каждый `PlatformApp`-наследник декларативно описывает `static bottomNavItems`, `static bottomNavHideOnRoutes`, при необходимости `static topBarEnabled`. Route обязан иметь `titleKey: 'routes.<key>'`; i18n bundle сервиса — парные ключи `routes.*` и `bottom_nav.*` в ru+en. Новые «mobile-app-header» компоненты и локальные `position: fixed; bottom: 0` навигации в `apps/**` — запрещены. Платформенный sheet `kind: 'platform.service_switcher'` — единый узел профиля/сервисов/настроек/уведомлений/logout. Детали → **`frontend.mdc`**, **`ui_components.mdc`**, **`ui_factories.mdc`**.
 - **Pill canon полей (на ВСЕЙ платформе):** любое поле формы — **`<platform-field>`** (имя/email/url/password/query/description в любом сервисе, типизированные атрибуты CRM). `<glass-input>`/`<glass-textarea>` удалены. Сырые `<input>`/`<textarea>`/`<select>` в `apps/<svc>/ui/{pages,modals,components}/**` запрещены, кроме whitelist по `type` (`file|hidden|range|color|checkbox|radio|search`) и `data-canon` (`composer|mention|inline-edit|search-as-you-type|combobox`). Классы `form-input`/`field-pill-input` на сырой разметке в приложениях не освобождают от этого правила. Стили — только в **`field-pill.styles.js`**, токены **`--field-pill-*`** в **`tokens.css`**. Локальные `.form-*` / `.field-pill*` overrides в `apps/**` запрещены. Атрибут `flat` удалён. CI: **`make check-field-canon`** (`scripts/check_field_canon.sh`); `scripts/check_ui_canon.sh` п.17/18 (`*.mdc`: **`data-types.mdc`**, **`frontend.mdc`**, **`ui_components.mdc`**).
+- **HumanitecAgent / Platform MCP:** control plane и tunnel WS — `frontend` (`/frontend/api/agent/*`); исполнение flow как MCP tools — `flows` (`/flows/api/v1/agent/platform-mcp`, router из `apps/agent/platform_mcp.py`). Внешний MCP host может вызывать Platform MCP без desktop. Правки pairing/tunnel/audit → **`humanitec_agent.mdc`**; внешние MCP servers в llm_node → **`mcp.mdc`**.
 
 ## Навигация
 
@@ -338,6 +339,7 @@ Cursor — `base64url(json({"ts": "<created_at.isoformat()>", "id": "<entity_id>
 | Инвайты | `invites.mdc` |
 | Flows: сервис, ноды, триггеры, ресурсы | `flows.mdc` |
 | Runtime flows: ноды, tools, branches, FlowInterrupt | `flows_logic.mdc` |
+| Agent handoff / handback между flows | `handoff.mdc` |
 | ExecutionState | `execution_state.mdc` |
 | CRM | `crm.mdc` |
 | RAG | `rag.mdc` |
@@ -353,7 +355,8 @@ Cursor — `base64url(json({"ts": "<created_at.isoformat()>", "id": "<entity_id>
 | Типы файлов: реестр, MIME, accept | `file_types.mdc` |
 | Tools для flows | `tools.mdc` |
 | Eval sandbox, namespace, безопасность тулов | `eval.mdc` |
-| MCP серверы | `mcp.mdc` |
+| MCP серверы (внешние → flows) | `mcp.mdc` |
+| HumanitecAgent, Platform MCP, tunnel, pairing | `humanitec_agent.mdc` |
 | TaskIQ: воркеры, задачи, scheduler | `taskiq.mdc` |
 | Streaming, Redis Pub/Sub, Emitter | `streaming.mdc` |
 | Интеграции: A2A, OAuth, HTTP | `integrations.mdc` |

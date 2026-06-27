@@ -500,6 +500,7 @@ class TestS3WithDatabase:
 
         finally:
             await default_client.delete_file(test_key)
+            await default_client.close()
 
 
 class TestS3Configuration:

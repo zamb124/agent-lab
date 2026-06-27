@@ -3,6 +3,7 @@ Emitter - публикация A2A событий в Redis Pub/Sub.
 """
 
 import json
+from datetime import datetime, timezone
 from typing import override
 
 from core.clients.redis_client import RedisClient
@@ -13,6 +14,10 @@ from core.types import JsonObject, parse_json_object, require_json_object
 from .base import BaseEmitter, StreamEvent
 
 logger = get_logger(__name__)
+
+
+def _utc_now_iso() -> str:
+    return datetime.now(timezone.utc).isoformat()
 
 
 class Emitter(BaseEmitter):
@@ -71,6 +76,56 @@ class Emitter(BaseEmitter):
             json.dumps(event_dict, ensure_ascii=False),
         )
         logger.debug(f"[Emitter] Published {event_kind} to {channel}")
+
+    async def emit_handoff_initiated(
+        self,
+        target_flow_id: str,
+        target_flow_name: str,
+        handoff_reason: str | None,
+        depth: int,
+        child_session_id: str,
+        trace_id: str | None = None,
+    ) -> None:
+        """Публикует ui_event platform.handoff_initiated для UI."""
+        payload: JsonObject = {
+            "target_flow_id": target_flow_id,
+            "target_flow_name": target_flow_name,
+            "handoff_reason": handoff_reason or "",
+            "depth": depth,
+            "child_session_id": child_session_id,
+        }
+        if trace_id is not None:
+            payload["trace_id"] = trace_id
+        await self.emit_ui_event(
+            event_type="platform.handoff_initiated",
+            payload=payload,
+            timestamp=_utc_now_iso(),
+        )
+
+    async def emit_handback_completed(
+        self,
+        response: str,
+        handoff_depth: int,
+        child_flow_id: str,
+        child_flow_name: str,
+        parent_flow_name: str,
+        trace_id: str | None = None,
+    ) -> None:
+        """Публикует ui_event platform.handback_completed для UI."""
+        payload: JsonObject = {
+            "response": response,
+            "handoff_depth": handoff_depth,
+            "child_flow_id": child_flow_id,
+            "child_flow_name": child_flow_name,
+            "parent_flow_name": parent_flow_name,
+        }
+        if trace_id is not None:
+            payload["trace_id"] = trace_id
+        await self.emit_ui_event(
+            event_type="platform.handback_completed",
+            payload=payload,
+            timestamp=_utc_now_iso(),
+        )
 
     @override
     async def emit_ui_event(

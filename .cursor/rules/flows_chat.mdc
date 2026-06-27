@@ -22,6 +22,14 @@ alwaysApply: false
 
 Embed endpoint не является отдельным протоколом. Он только резолвит `embed_id -> flow_id/branch/company` и применяет embed-session auth/capabilities.
 
+## Agent handoff в чате
+
+- SSE: `platform_handoff_continue` — не финал stream (как operator HITL takeover); см. **`streaming.mdc`**.
+- UI push: `platform.handoff_initiated`, `platform.handback_completed` → карточки в `flows-chat-message.js` (`handoff` role, `input-required` kind=`handoff`).
+- Контракт interrupt body: `HandoffInterrupt` (`target_flow_id`, `target_name`, `handoff_reason`, `depth`).
+
+Подробно — **`handoff.mdc`**.
+
 ## Auth и public/system
 
 Embed-session JWT обязан быть связан с конкретным:

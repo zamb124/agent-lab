@@ -17,6 +17,9 @@ from fastapi.responses import (
 from fastapi.staticfiles import StaticFiles
 from starlette.routing import Route
 
+from apps.agent.api import router as agent_router
+from apps.agent.tunnel import router as agent_tunnel_router
+from apps.frontend.api.agent import router as agent_settings_router
 from apps.frontend.api.ai_providers import router as ai_providers_router
 from apps.frontend.api.api_keys import router as api_keys_router
 from apps.frontend.api.auth import router as auth_router
@@ -273,6 +276,13 @@ async def _seed_llm_model_scores(container: FrontendContainer) -> None:
 
 async def on_startup(app: FastAPI, container: FrontendContainer, settings: FrontendSettings) -> None:
     _ = settings
+    await container.redis_client.connect()
+    logger.info("frontend.redis.connected")
+
+    from apps.agent.tunnel_bus import start_tunnel_bus_listener
+
+    await start_tunnel_bus_listener(container.redis_client)
+
     if is_testing():
         return
     _ = await ensure_system_admin_membership(
@@ -289,9 +299,6 @@ async def on_startup(app: FastAPI, container: FrontendContainer, settings: Front
     await _seed_llm_model_scores(container)
     n = await container.billing_service.ensure_settlement_rules_materialized_for_all_companies()
     logger.info("Биллинг: правила settlement проверены/записаны для компаний: %s", n)
-
-    await container.redis_client.connect()
-    logger.info("frontend.redis.connected")
 
     PaymentProviderFactory.initialize()
     await PaymentProviderFactory.seed_access_tokens(container.shared_storage)
@@ -318,6 +325,9 @@ app = create_service_app(
     services_spa_index=Path(__file__).parent / "ui" / "index.html",
     pages_routers=[
         auth_router,
+        agent_router,
+        agent_settings_router,
+        agent_tunnel_router,
         companies_router,
         company_voice_providers_router,
         company_pronunciation_rules_router,
@@ -550,6 +560,26 @@ async def serve_llms_txt(container: ContainerDep) -> PlainTextResponse:
     _ = container
     base_url = get_frontend_public_base_url()
     return PlainTextResponse(content=_build_llms_txt(base_url=base_url))
+
+
+# HumanitecAgent: страница скачивания (до SPA catch-all)
+_agent_static_path = Path(__file__).parent.parent / "agent" / "static"
+if _agent_static_path.exists():
+    app.mount(
+        "/static/agent",
+        StaticFiles(directory=str(_agent_static_path)),
+        name="agent-static",
+    )
+
+
+@app.get("/agent")
+@app.get("/agent/")
+async def agent_download_page():
+    """Лендинг-страница скачивания HumanitecAgent."""
+    agent_html = _agent_static_path / "agent-download.html"
+    if agent_html.exists():
+        return FileResponse(agent_html, media_type="text/html; charset=utf-8")
+    raise HTTPException(status_code=404)
 
 
 # SPA-резерв (все неизвестные пути → index.html)

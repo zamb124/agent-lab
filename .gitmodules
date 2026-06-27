@@ -1,0 +1,4 @@
+[submodule "apps/agent/desktop/vendor/goose"]
+	path = apps/agent/desktop/vendor/goose
+	url = https://github.com/block/goose.git
+	# Pin: 4f7bf8c1e281863932b42b65577b4d7be04214b0 (parent repo records submodule commit)

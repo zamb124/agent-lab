@@ -71,6 +71,14 @@ import {
     searchProviderOrderPutOp,
     searchProviderDeleteOp,
 } from '../events/resources/settings.resource.js';
+import {
+    agentPairingCreateOp,
+    agentDevicesLoadOp,
+    agentDeviceRevokeOp,
+    agentReleasesStatusOp,
+    agentDevicePolicyPatchOp,
+    agentAuditLoadOp,
+} from '../events/resources/agent.resource.js';
 import { leadSubmitOp, leadRequestsList } from '../events/resources/leads.resource.js';
 import { tracingSpansList, tracingFacets, tracingTraceLoadOp } from '../events/resources/tracing.resource.js';
 import {
@@ -296,6 +304,12 @@ export class FrontendApp extends PlatformApp {
         searchProviderPutOp,
         searchProviderOrderPutOp,
         searchProviderDeleteOp,
+        agentPairingCreateOp,
+        agentDevicesLoadOp,
+        agentDeviceRevokeOp,
+        agentReleasesStatusOp,
+        agentDevicePolicyPatchOp,
+        agentAuditLoadOp,
         leadSubmitOp,
         leadRequestsList,
         tracingSpansList,

@@ -15,13 +15,9 @@ from pathlib import Path
 
 import pytest
 
+from tests.fixtures.s3 import require_s3_configured
+
 _TEST_IMAGE_PATH = Path(__file__).parent.parent / "2026-01-11 11.43.21.jpg"
-
-
-def _require_s3() -> None:
-    from core.files.s3_client import S3ClientFactory
-
-    S3ClientFactory.create_default_client()
 
 
 def _platform_auxiliary_spec(*, is_public: bool = True) -> str:
@@ -37,7 +33,7 @@ def _platform_auxiliary_spec(*, is_public: bool = True) -> str:
 
 @pytest.mark.asyncio
 async def test_frontend_upload_returns_file_response(frontend_client, auth_headers_system):
-    _require_s3()
+    require_s3_configured()
     r = await frontend_client.post(
         "/frontend/api/v1/files/",
         headers=auth_headers_system,
@@ -56,7 +52,7 @@ async def test_frontend_upload_returns_file_response(frontend_client, auth_heade
 
 @pytest.mark.asyncio
 async def test_frontend_upload_real_jpeg(frontend_client, auth_headers_system):
-    _require_s3()
+    require_s3_configured()
     assert _TEST_IMAGE_PATH.is_file()
     image_data = _TEST_IMAGE_PATH.read_bytes()
     r = await frontend_client.post(
@@ -73,7 +69,7 @@ async def test_frontend_upload_real_jpeg(frontend_client, auth_headers_system):
 
 @pytest.mark.asyncio
 async def test_frontend_download_round_trip(frontend_client, auth_headers_system):
-    _require_s3()
+    require_s3_configured()
     content = b"round-trip content check"
     upload = await frontend_client.post(
         "/frontend/api/v1/files/",
@@ -93,7 +89,7 @@ async def test_frontend_download_round_trip(frontend_client, auth_headers_system
 
 @pytest.mark.asyncio
 async def test_frontend_get_metadata(frontend_client, auth_headers_system):
-    _require_s3()
+    require_s3_configured()
     upload = await frontend_client.post(
         "/frontend/api/v1/files/",
         headers=auth_headers_system,
@@ -112,7 +108,7 @@ async def test_frontend_get_metadata(frontend_client, auth_headers_system):
 
 @pytest.mark.asyncio
 async def test_frontend_upload_empty_file_rejected(frontend_client, auth_headers_system):
-    _require_s3()
+    require_s3_configured()
     r = await frontend_client.post(
         "/frontend/api/v1/files/",
         headers=auth_headers_system,

@@ -19,6 +19,7 @@ class InterruptKind(StrEnum):
     USER_MESSAGE = "user_message"
     OPERATOR_TASK = "operator_task"
     OAUTH_REQUIRED = "oauth_required"
+    HANDOFF = "handoff"
 
 
 class HandoffMode(StrEnum):
@@ -69,8 +70,38 @@ class OAuthInterrupt(StrictBaseModel):
     service: str = Field(..., min_length=1)
 
 
+class HandoffInterrupt(StrictBaseModel):
+    """Передача управления дочернему flow — родитель suspended до handback."""
+
+    kind: Literal[InterruptKind.HANDOFF] = InterruptKind.HANDOFF
+    question: str = Field(..., min_length=1, description="Текст для UI конечного пользователя")
+    target_kind: Literal["internal", "external"] = Field(
+        default="internal",
+        description="internal — flow платформы; external — federated A2A handoff (ownership transfer)",
+    )
+    target_flow_id: str = Field(..., min_length=1)
+    target_branch_id: str = Field(default="default", min_length=1)
+    target_name: str = Field(..., min_length=1, description="Имя целевого flow для UI")
+    remote_flow_id: str | None = Field(
+        default=None,
+        min_length=1,
+        description="ID remote_flow из registry для target_kind=external",
+    )
+    variables: JsonObject = Field(
+        default_factory=dict,
+        description="Переменные, ЯВНО передаваемые дочернему flow",
+    )
+    handoff_context_resource_key: str | None = Field(
+        default=None,
+        min_length=1,
+        description="Opt-in HandoffContextResource для shared context policy",
+    )
+    reason: str | None = Field(default=None, description="Почему произошёл handoff")
+    depth: int = Field(default=0, ge=0, description="Глубина handoff-цепочки для UI")
+
+
 InterruptBody = Annotated[
-    UserMessageInterrupt | OperatorTaskInterrupt | OAuthInterrupt,
+    UserMessageInterrupt | OperatorTaskInterrupt | OAuthInterrupt | HandoffInterrupt,
     Field(discriminator="kind"),
 ]
 
@@ -142,6 +173,7 @@ __all__ = [
     "UserMessageInterrupt",
     "OperatorTaskInterrupt",
     "OAuthInterrupt",
+    "HandoffInterrupt",
     "InterruptBody",
     "InterruptSystemContext",
     "InterruptData",

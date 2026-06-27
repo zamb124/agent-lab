@@ -363,6 +363,14 @@ class FlowConfig(StrictBaseModel):
     updated_at: datetime | None = Field(default=None)
     hidden: bool = Field(default=False, description="Скрытый flow (не отображается в UI)")
 
+    depends_on_flow_ids: list[str] = Field(
+        default_factory=list,
+        description=(
+            "Bundle-only (flow.json): flow_id агентов-зависимостей. "
+            "При reload-from-bundle и company init ставятся до этого flow."
+        ),
+    )
+
     store_card_image_url: str | None = Field(
         default=None,
         description=(

@@ -21,6 +21,7 @@ BIN_DIR = RUNTIME_ROOT / "bin"
 DOTNET_CHANNEL = os.environ.get("DOTNET_CHANNEL", "10.0")
 GO_VERSION = os.environ.get("GO_VERSION", "1.26.1")
 NODE_MAJOR = int(os.environ.get("NODE_MAJOR", "24"))
+PNPM_VERSION = os.environ.get("PNPM_VERSION", "10.30.0")
 
 
 def _run(command: list[str], *, env: dict[str, str] | None = None) -> None:
@@ -76,13 +77,27 @@ def _symlink(source: Path, name: str) -> None:
 
 
 def _symlink_existing_command(name: str) -> None:
-    executable = shutil.which(name)
+    env = _runtime_path_env()
+    executable = shutil.which(name, path=env["PATH"])
     if executable is not None:
         _symlink(Path(executable), name)
 
 
-def _command_output(command: list[str]) -> str | None:
-    executable = shutil.which(command[0])
+def _runtime_path_env() -> dict[str, str]:
+    env = dict(os.environ)
+    env["PATH"] = f"{BIN_DIR}:{env.get('PATH', '')}"
+    cargo_home = RUNTIME_ROOT / "cargo"
+    rustup_home = RUNTIME_ROOT / "rustup"
+    if (cargo_home / "bin" / "cargo").is_file():
+        env["CARGO_HOME"] = str(cargo_home)
+    if rustup_home.is_dir():
+        env["RUSTUP_HOME"] = str(rustup_home)
+    return env
+
+
+def _command_output(command: list[str], *, env: dict[str, str] | None = None) -> str | None:
+    search_env = env if env is not None else _runtime_path_env()
+    executable = shutil.which(command[0], path=search_env["PATH"])
     if executable is None:
         return None
     completed = subprocess.run(
@@ -90,6 +105,7 @@ def _command_output(command: list[str]) -> str | None:
         check=False,
         capture_output=True,
         text=True,
+        env=search_env,
     )
     if completed.returncode != 0:
         return None
@@ -116,6 +132,28 @@ def _dotnet_ready() -> bool:
     if output is None:
         return False
     return any(line.startswith(f"{DOTNET_CHANNEL}.") for line in output.splitlines())
+
+
+def _pnpm_ready() -> bool:
+    return _command_output(["pnpm", "--version"]) is not None
+
+
+def _cargo_ready() -> bool:
+    return _command_output(["cargo", "--version"]) is not None
+
+
+def _rust_host_triple() -> str:
+    system = _runtime_os()
+    arch = _runtime_arch()
+    if system == "darwin":
+        if arch == "arm64":
+            return "aarch64-apple-darwin"
+        return "x86_64-apple-darwin"
+    if system == "linux":
+        if arch == "arm64":
+            return "aarch64-unknown-linux-gnu"
+        return "x86_64-unknown-linux-gnu"
+    raise RuntimeError(f"Unsupported OS for managed Rust toolchain: {system}")
 
 
 def _install_node() -> None:
@@ -189,10 +227,62 @@ def _install_dotnet() -> None:
     _symlink(install_dir / "dotnet", "dotnet")
 
 
+def _install_pnpm() -> None:
+    env = _runtime_path_env()
+    npm = shutil.which("npm", path=env["PATH"])
+    if npm is None:
+        raise RuntimeError("npm is required before pnpm install")
+    npm_prefix = RUNTIME_ROOT / "npm-global"
+    npm_prefix.mkdir(parents=True, exist_ok=True)
+    env["npm_config_prefix"] = str(npm_prefix)
+    _run([npm, "install", "-g", f"pnpm@{PNPM_VERSION}"], env=env)
+    pnpm_bin = npm_prefix / "bin" / "pnpm"
+    if not pnpm_bin.is_file():
+        raise RuntimeError(f"pnpm install did not produce {pnpm_bin}")
+    _symlink(pnpm_bin, "pnpm")
+
+
+def _install_rust() -> None:
+    cargo_home = RUNTIME_ROOT / "cargo"
+    rustup_home = RUNTIME_ROOT / "rustup"
+    cargo_home.mkdir(parents=True, exist_ok=True)
+    rustup_home.mkdir(parents=True, exist_ok=True)
+    env = _runtime_path_env()
+    env["CARGO_HOME"] = str(cargo_home)
+    env["RUSTUP_HOME"] = str(rustup_home)
+    env["PATH"] = f"{cargo_home / 'bin'}:{env['PATH']}"
+    host_triple = _rust_host_triple()
+    rustup_init = RUNTIME_ROOT / f"rustup-init-{host_triple}"
+    _download(
+        f"https://static.rust-lang.org/rustup/dist/{host_triple}/rustup-init",
+        rustup_init,
+    )
+    rustup_init.chmod(0o755)
+    _run(
+        [
+            str(rustup_init),
+            "-y",
+            "--no-modify-path",
+            "--default-toolchain",
+            "stable",
+            "--profile",
+            "minimal",
+        ],
+        env=env,
+    )
+    _symlink(cargo_home / "bin" / "cargo", "cargo")
+    _symlink(cargo_home / "bin" / "rustc", "rustc")
+
+
 def _print_versions() -> None:
-    env = dict(os.environ)
-    env["PATH"] = f"{BIN_DIR}:{env.get('PATH', '')}"
-    for command in (["node", "--version"], ["go", "version"], ["dotnet", "--list-sdks"]):
+    env = _runtime_path_env()
+    for command in (
+        ["node", "--version"],
+        ["go", "version"],
+        ["dotnet", "--list-sdks"],
+        ["pnpm", "--version"],
+        ["cargo", "--version"],
+    ):
         completed = subprocess.run(command, check=True, capture_output=True, text=True, env=env)
         print(completed.stdout.strip(), flush=True)
 
@@ -217,6 +307,17 @@ def main() -> None:
         _symlink_existing_command("dotnet")
     else:
         _install_dotnet()
+    if _pnpm_ready():
+        print("runtime-bootstrap: pnpm is ready", flush=True)
+        _symlink_existing_command("pnpm")
+    else:
+        _install_pnpm()
+    if _cargo_ready():
+        print("runtime-bootstrap: cargo is ready", flush=True)
+        _symlink_existing_command("cargo")
+        _symlink_existing_command("rustc")
+    else:
+        _install_rust()
     _print_versions()
 
 

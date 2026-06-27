@@ -2,6 +2,7 @@
 Типы для каналов коммуникации.
 """
 
+from dataclasses import dataclass
 from typing import TypeAlias
 
 from a2a.types import Message
@@ -14,6 +15,17 @@ from core.state import ExecutionTaskState, InterruptData
 from core.types import JsonObject
 
 ChannelRequestContext: TypeAlias = Context | JsonObject | None
+
+
+@dataclass(frozen=True)
+class FlowExecutionTarget:
+    """Явный target для TaskIQ kick после channel routing."""
+
+    flow_id: str
+    session_id: str
+    context_id: str
+    branch_id: str
+    is_resume: bool
 
 
 class FlowTaskResult(StrictBaseModel):
@@ -41,6 +53,10 @@ class PreparedTaskParams:
     user_id: str
     is_takeover_user_reply: bool
     takeover_work_item_id: str | None
+    is_handoff_user_reply: bool
+    handoff_child_session_id: str | None
+    handoff_child_flow_id: str | None
+    handoff_child_branch_id: str | None
 
     def __init__(
         self,
@@ -56,6 +72,10 @@ class PreparedTaskParams:
         user_id: str | None = None,
         is_takeover_user_reply: bool = False,
         takeover_work_item_id: str | None = None,
+        is_handoff_user_reply: bool = False,
+        handoff_child_session_id: str | None = None,
+        handoff_child_flow_id: str | None = None,
+        handoff_child_branch_id: str | None = None,
     ) -> None:
         self.task_id = task_id
         self.context_id = context_id
@@ -69,3 +89,7 @@ class PreparedTaskParams:
         self.user_id = user_id or context_id
         self.is_takeover_user_reply = is_takeover_user_reply
         self.takeover_work_item_id = takeover_work_item_id
+        self.is_handoff_user_reply = is_handoff_user_reply
+        self.handoff_child_session_id = handoff_child_session_id
+        self.handoff_child_flow_id = handoff_child_flow_id
+        self.handoff_child_branch_id = handoff_child_branch_id

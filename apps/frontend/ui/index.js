@@ -50,6 +50,7 @@ import './components/landing/landing-trust.js';
 import './components/landing/landing-roi-calculator.js';
 import './components/landing/landing-cases.js';
 import './components/landing/landing-floating-cta.js';
+import './components/landing/landing-agent-download-card.js';
 
 import './app/frontend-app.js';
 

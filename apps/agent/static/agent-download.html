@@ -1,0 +1,261 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="HumanitecAgent — AI-агент на вашем компьютере. Файлы, bash, браузер, platform flows.">
+    <title>Скачать HumanitecAgent</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+            background: #0D0D0D;
+            color: #FFFFFF;
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+        .hero {
+            text-align: center;
+            padding: 80px 24px 48px;
+            max-width: 800px;
+        }
+        .logo {
+            width: 80px;
+            height: 80px;
+            background: #0066FF;
+            border-radius: 20px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 36px;
+            font-weight: 700;
+            margin: 0 auto 32px;
+        }
+        h1 {
+            font-size: 40px;
+            font-weight: 700;
+            margin-bottom: 16px;
+            letter-spacing: -0.5px;
+        }
+        .subtitle {
+            font-size: 18px;
+            color: #999999;
+            margin-bottom: 40px;
+            line-height: 1.6;
+        }
+        .features {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+            gap: 20px;
+            max-width: 960px;
+            padding: 0 24px;
+            margin-bottom: 48px;
+        }
+        .feature {
+            background: #1A1A1A;
+            border: 1px solid #2A2A2A;
+            border-radius: 12px;
+            padding: 24px;
+        }
+        .feature-icon {
+            font-size: 28px;
+            margin-bottom: 12px;
+        }
+        .feature h3 {
+            font-size: 16px;
+            font-weight: 600;
+            margin-bottom: 8px;
+        }
+        .feature p {
+            font-size: 13px;
+            color: #999999;
+            line-height: 1.5;
+        }
+        .download-section {
+            text-align: center;
+            padding: 0 24px 80px;
+        }
+        .download-btn {
+            display: inline-block;
+            background: #0066FF;
+            color: #FFFFFF;
+            padding: 16px 48px;
+            border-radius: 12px;
+            font-size: 18px;
+            font-weight: 600;
+            text-decoration: none;
+            margin: 0 8px 16px;
+            transition: background 0.2s;
+        }
+        .download-btn:hover { background: #0052CC; }
+        .download-btn.secondary {
+            background: #1A1A1A;
+            border: 1px solid #2A2A2A;
+        }
+        .download-btn.secondary:hover { background: #2A2A2A; }
+        .other-platforms {
+            margin-top: 24px;
+            font-size: 14px;
+        }
+        .other-platforms summary {
+            color: #666666;
+            cursor: pointer;
+            margin-bottom: 12px;
+        }
+        .other-platforms ul {
+            list-style: none;
+        }
+        .other-platforms li {
+            margin: 8px 0;
+        }
+        .other-platforms a {
+            color: #0066FF;
+            text-decoration: none;
+            font-size: 14px;
+        }
+        .other-platforms a:hover { text-decoration: underline; }
+        .footer-links {
+            margin-top: 32px;
+            font-size: 13px;
+            color: #666666;
+        }
+        .footer-links a {
+            color: #0066FF;
+            text-decoration: none;
+            margin: 0 8px;
+        }
+        .release-banner {
+            max-width: 720px;
+            margin: 0 auto 24px;
+            padding: 12px 16px;
+            border-radius: 8px;
+            font-size: 14px;
+            text-align: center;
+        }
+        .release-banner[data-ready="false"] {
+            background: #2A1A1A;
+            border: 1px solid #553333;
+            color: #FFAAAA;
+        }
+        .release-banner[data-ready="true"] {
+            background: #142A1A;
+            border: 1px solid #335533;
+            color: #AAFFAA;
+        }
+        footer {
+            margin-top: auto;
+            padding: 32px;
+            text-align: center;
+            font-size: 12px;
+            color: #444444;
+        }
+    </style>
+</head>
+<body>
+    <div class="hero">
+        <div class="logo">H</div>
+        <h1>HumanitecAgent</h1>
+        <p class="subtitle">
+            AI-агент на вашем компьютере.<br>
+            Работает с файлами, запускает программы, подключается к Humanitec Platform.
+        </p>
+    </div>
+
+    <div class="features">
+        <div class="feature">
+            <div class="feature-icon">&#x1F4C1;</div>
+            <h3>Локальные файлы</h3>
+            <p>Читайте и редактируйте файлы на компьютере. Агент видит только то, что вы разрешили.</p>
+        </div>
+        <div class="feature">
+            <div class="feature-icon">&#x1F4BB;</div>
+            <h3>Shell и программы</h3>
+            <p>Запускайте bash, Python, git и другие инструменты. С whitelist и confirm-диалогами.</p>
+        </div>
+        <div class="feature">
+            <div class="feature-icon">&#x1F310;</div>
+            <h3>Platform flows</h3>
+            <p>Все сценарии Humanitec доступны как MCP tools прямо в чате агента.</p>
+        </div>
+        <div class="feature">
+            <div class="feature-icon">&#x1F512;</div>
+            <h3>Приватность</h3>
+            <p>Данные остаются на вашем компьютере. Агент работает локально, audit-логи на платформе.</p>
+        </div>
+    </div>
+
+    <div class="download-section" id="download">
+        <div id="release-banner" class="release-banner" hidden></div>
+        <div id="primary-buttons">
+            <!-- Заполняется JS по User-Agent -->
+        </div>
+        <details class="other-platforms">
+            <summary>Другие платформы</summary>
+            <ul>
+                <li><a href="/frontend/api/agent/download/windows">Windows (.msi)</a></li>
+                <li><a href="/frontend/api/agent/download/macos-arm64">macOS Apple Silicon (.dmg)</a></li>
+                <li><a href="/frontend/api/agent/download/macos-x64">macOS Intel (.dmg)</a></li>
+                <li><a href="/frontend/api/agent/download/linux-deb">Linux Debian/Ubuntu (.deb)</a></li>
+                <li><a href="/frontend/api/agent/download/linux-rpm">Linux Fedora/RHEL (.rpm)</a></li>
+                <li><a href="/frontend/api/agent/download/linux-appimage">Linux (AppImage)</a></li>
+            </ul>
+        </details>
+        <div class="footer-links">
+            Уже есть аккаунт? <a href="/login">Войти</a>
+        </div>
+    </div>
+
+    <footer>
+        HumanitecAgent — Built on Goose (Apache 2.0)&nbsp;|&nbsp;&copy; 2026 Humanitec
+    </footer>
+
+    <script>
+        var ua = navigator.userAgent || '';
+        var primary = document.getElementById('primary-buttons');
+        var buttons = '';
+
+        if (ua.indexOf('Mac') !== -1) {
+            // Проверяем ARM vs Intel
+            buttons += '<a href="/frontend/api/agent/download/macos-arm64" class="download-btn">Скачать для macOS</a>';
+        } else if (ua.indexOf('Win') !== -1) {
+            buttons += '<a href="/frontend/api/agent/download/windows" class="download-btn">Скачать для Windows</a>';
+        } else if (ua.indexOf('Linux') !== -1) {
+            buttons += '<a href="/frontend/api/agent/download/linux-deb" class="download-btn">Скачать для Linux (.deb)</a>';
+            buttons += '<a href="/frontend/api/agent/download/linux-appimage" class="download-btn secondary">AppImage</a>';
+        } else {
+            buttons += '<a href="/frontend/api/agent/download/macos-arm64" class="download-btn">macOS</a>';
+            buttons += '<a href="/frontend/api/agent/download/windows" class="download-btn">Windows</a>';
+            buttons += '<a href="/frontend/api/agent/download/linux-deb" class="download-btn">Linux</a>';
+        }
+
+        primary.innerHTML = buttons;
+
+        fetch('/frontend/api/agent/releases/status')
+            .then(function(response) { return response.json(); })
+            .then(function(status) {
+                var banner = document.getElementById('release-banner');
+                if (!banner || !status) {
+                    return;
+                }
+                banner.hidden = false;
+                banner.setAttribute('data-ready', status.ready ? 'true' : 'false');
+                if (status.ready) {
+                    banner.textContent = 'Доступен release ' + (status.latest_tag || '');
+                } else {
+                    banner.textContent = status.detail || 'Release ещё не опубликован';
+                }
+            })
+            .catch(function() {
+                var banner = document.getElementById('release-banner');
+                if (!banner) {
+                    return;
+                }
+                banner.hidden = false;
+                banner.setAttribute('data-ready', 'false');
+                banner.textContent = 'Не удалось проверить статус release';
+            });
+    </script>
+</body>
+</html>

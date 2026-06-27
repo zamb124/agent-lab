@@ -61,7 +61,7 @@ _TEST_SERVICE_ENV: dict[str, str] = {
 }
 
 TEST_DATABASE_ENV: dict[str, str] = {
-    "SERVER__PLATFORM_PUBLIC_BASE_URL": "http://testserver",
+    "SERVER__PLATFORM_PUBLIC_BASE_URL": "http://system.lvh.me:9004",
     "DATABASE__SHARED_URL": f"{_POSTGRES_TEST}/platform_shared",
     "DATABASE__FLOWS_URL": f"{_POSTGRES_TEST}/platform_agents",
     "DATABASE__CRM_URL": f"{_POSTGRES_TEST}/platform_crm",

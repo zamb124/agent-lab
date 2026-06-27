@@ -206,6 +206,10 @@ class NodeConfig(StrictBaseModel):
         ),
     )
     tags: list[str] = Field(default_factory=list, description="Группы/категории")
+    call_type: str = Field(
+        default="call",
+        description="Режим node-as-tool: call (обычный вызов) или handoff (HandoffInterrupt)",
+    )
 
     # Для llm_node
     prompt: str | None = Field(default=None, description="Системный промпт")

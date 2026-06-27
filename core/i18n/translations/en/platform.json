@@ -280,6 +280,10 @@
         "kind_agent": "Agent",
         "kind_interrupt": "Interrupt",
         "kind_flow": "Flow",
+        "kind_handoff": "Handoff",
+        "kind_handoff_initiated": "Handoff",
+        "kind_handoff_route_reply": "Handoff reply",
+        "kind_handoff_completed": "Handback",
         "kind_span": "Span",
         "detail_title": "Span details",
         "detail_attributes": "Attributes (JSON)"

@@ -280,6 +280,10 @@
         "kind_agent": "Агент",
         "kind_interrupt": "Прерывание",
         "kind_flow": "Flow",
+        "kind_handoff": "Handoff",
+        "kind_handoff_initiated": "Handoff",
+        "kind_handoff_route_reply": "Ответ в handoff",
+        "kind_handoff_completed": "Handback",
         "kind_span": "Span",
         "detail_title": "Детали span",
         "detail_attributes": "Атрибуты (JSON)"

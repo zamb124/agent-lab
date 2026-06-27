@@ -160,6 +160,8 @@ export class ChatMessages extends PlatformElement {
                             .toolResults=${asArray(message.toolResults)}
                             .browserPreviews=${asArray(message.browserPreviews)}
                             .inputRequired=${message.inputRequired}
+                            .handoff=${message.role === 'handoff' ? message : message.handoff || null}
+                            .handback=${message.role === 'handback' ? message : message.handback || null}
                             .operatorReply=${asString(message.operatorReply)}
                             .breakpoint=${message.breakpoint}
                             .files=${asArray(message.files)}

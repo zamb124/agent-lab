@@ -115,6 +115,8 @@ child state внутри parent projection. Child lifecycle events в parent —
 они двигают event sequence, но не коммитят global state до `InterruptRaised` или
 `SuperstepCommitted`.
 
+**Agent handoff:** ledger `HandoffInitiated`, `HandbackCompleted`; child session `{target_flow_id}:{parent_context_id}:handoff:{target_flow_id}`. → **`handoff.mdc`**
+
 ### `activity_tasks` и `activity_attempts`
 
 Durable journal внешних/недетерминированных операций разделён на стабильную команду

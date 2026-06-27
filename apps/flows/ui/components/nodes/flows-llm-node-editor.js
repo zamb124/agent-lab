@@ -1128,6 +1128,35 @@ export class FlowsLlmNodeEditor extends PlatformElement {
         `;
     }
 
+    _renderCallTypeSection() {
+        const callType = this.nodeConfig?.call_type === 'handoff' ? 'handoff' : 'call';
+        return html`
+            <section class="block">
+                ${this._sectionHeading(
+                    this.t('llm_node_editor.section_call_type'),
+                    'llm_node_editor.call_type_help',
+                )}
+                <div class="block-card">
+                    <platform-field
+                        type="select"
+                        .label=${this.t('llm_node_editor.field_call_type')}
+                        .value=${callType}
+                        .options=${[
+                            { value: 'call', label: this.t('llm_node_editor.call_type_call') },
+                            { value: 'handoff', label: this.t('llm_node_editor.call_type_handoff') },
+                        ]}
+                        @change=${(e) => {
+                            const v = e.detail?.value;
+                            if (v === 'call' || v === 'handoff') {
+                                this._emitPatch({ call_type: v });
+                            }
+                        }}
+                    ></platform-field>
+                </div>
+            </section>
+        `;
+    }
+
     _renderToolsSection() {
         if (this.nodeConfig?.structured_output) return '';
         const tools = Array.isArray(this.nodeConfig?.tools) ? this.nodeConfig.tools : [];
@@ -1189,6 +1218,7 @@ export class FlowsLlmNodeEditor extends PlatformElement {
                     ${this._renderMessagesFilterSection()}
                     ${this._renderOutputModeSection()}
                     ${this._renderReactSection()}
+                    ${this._renderCallTypeSection()}
                     ${this._renderToolsSection()}
                     ${this._renderOutputSchemaSection()}
                 </div>

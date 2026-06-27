@@ -1,4 +1,4 @@
-.PHONY: help runtime-bootstrap dev dev-up dev-down dev-logs dev-clean dev-minio-restart dev-bootstrap-postgres stress lint lint-ts lint-file mcp-branding-seed
+.PHONY: help runtime-bootstrap dev dev-up dev-down dev-logs dev-clean dev-minio-restart dev-bootstrap-postgres stress lint lint-ts lint-file mcp-branding-seed agent agent-ensure agent-release
 .PHONY: test-frontend test-rag test-crawl-llm-live
 .PHONY: check-ui-canon check-i18n check-i18n-keys check-inline-docs check-ui-factories check-command-rest-mirror check-core-frontend-canon check-embed-esm check-events-canon check-logging check-voice-resolver check-speakable-parity check-voice-canon check-field-canon check-rag-post-retrieval-rerank check-company-ai check-files-canon build-i18n
 .PHONY: clean-i18n-unused base
@@ -29,6 +29,10 @@ PLATFORM_RUNTIME_DIR ?= $(HOME)/.cache/agent-lab/runtimes
 PLATFORM_RUNTIME_BIN := $(PLATFORM_RUNTIME_DIR)/bin
 export PLATFORM_RUNTIME_DIR
 export PATH := $(PLATFORM_RUNTIME_BIN):$(PATH)
+ifneq ($(wildcard $(PLATFORM_RUNTIME_DIR)/cargo/bin/cargo),)
+export CARGO_HOME := $(PLATFORM_RUNTIME_DIR)/cargo
+export RUSTUP_HOME := $(PLATFORM_RUNTIME_DIR)/rustup
+endif
 
 runtime-bootstrap:
 	@uv run python scripts/bootstrap_runtimes.py
@@ -374,6 +378,14 @@ help:
 	@echo "  make test-down       - Остановить test-стек"
 	@echo ""
 	@echo "============================================================================"
+	@echo "HumanitecAgent (desktop, GitHub Releases):"
+	@echo "============================================================================"
+	@echo "  make agent           - Собрать все платформы + опубликовать GitHub Release"
+	@echo "  make agent-ensure    - Собрать артефакт текущей ОС, если ещё нет (для test)"
+	@echo "  make agent-build AGENT_PLATFORM=macos-arm64 - Одна платформа"
+	@echo "  make agent-ci-build AGENT_PLATFORM=linux-deb - То же для CI matrix"
+	@echo ""
+	@echo "============================================================================"
 	@echo "Канон UI / i18n / логирование:"
 	@echo "============================================================================"
 	@echo "  make check-events-canon - core lib + apps + ui-factories + REST-зеркало + i18n"
@@ -417,6 +429,7 @@ help:
 
 include mk/lint.mk
 include mk/app.mk
+include mk/agent.mk
 include mk/test.mk
 include mk/migrate.mk
 

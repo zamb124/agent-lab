@@ -128,6 +128,17 @@ export function inputRequiredFieldsFromA2a(message, resultMetadata) {
                     authUrl,
                 };
             }
+            if (body.kind === 'handoff') {
+                return {
+                    question: typeof body.question === 'string' ? body.question : question,
+                    interruptKind,
+                    authUrl,
+                    targetFlowId: typeof body.target_flow_id === 'string' ? body.target_flow_id : '',
+                    targetFlowName: typeof body.target_name === 'string' ? body.target_name : '',
+                    reason: typeof body.reason === 'string' ? body.reason : '',
+                    depth: typeof body.depth === 'number' ? body.depth : 0,
+                };
+            }
         }
     }
     return { question, interruptKind, authUrl };
@@ -430,6 +441,18 @@ function _artifactDataEvents(out, artifact, contextId, taskId) {
                             timestamp: typeof d.timestamp === 'string' ? d.timestamp : '',
                         },
                     },
+                });
+            }
+            if (d.type === 'platform.handoff_initiated') {
+                out.events.push({
+                    type: 'handoff_initiated',
+                    payload: { task_id: taskId, context_id: contextId, ...(d.payload || {}) },
+                });
+            }
+            if (d.type === 'platform.handback_completed') {
+                out.events.push({
+                    type: 'handback_completed',
+                    payload: { task_id: taskId, context_id: contextId, ...(d.payload || {}) },
                 });
             }
             out.traceEntries.push({

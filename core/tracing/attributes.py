@@ -44,6 +44,14 @@ ATTR_WORKFLOW_SESSION_ID = "platform.workflow.session_id"
 ATTR_WORKFLOW_EXECUTION_BRANCH_ID = "platform.workflow.execution_branch_id"
 ATTR_WORKFLOW_NODE_SCHEDULE_SEQUENCE = "platform.workflow.node_schedule_sequence"
 
+# Agent handoff между flows (не HITL handoff_mode)
+ATTR_HANDOFF_PARENT_SESSION_ID = "platform.handoff.parent_session_id"
+ATTR_HANDOFF_CHILD_SESSION_ID = "platform.handoff.child_session_id"
+ATTR_HANDOFF_TARGET_FLOW_ID = "platform.handoff.target_flow_id"
+ATTR_HANDOFF_DEPTH = "platform.handoff.depth"
+ATTR_HANDOFF_PHASE = "platform.handoff.phase"
+ATTR_HANDOFF_TRACE_ID = "platform.handoff.trace_id"
+
 # HITL
 ATTR_HITL_COMMAND_ID = "platform.hitl.command_id"
 ATTR_HITL_CORRELATION_ID = "platform.hitl.correlation_id"

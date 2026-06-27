@@ -121,6 +121,12 @@ class FlowSettings(BaseSettings):
         le=300,
         description="Интервал heartbeat status-update working для A2A SSE-стримов flows",
     )
+    handoff_max_depth: int = Field(
+        default=5,
+        ge=1,
+        le=32,
+        description="Максимальная глубина цепочки agent-to-agent handoff",
+    )
     graph_max_iterations: int = Field(
         default=100,
         ge=1,

@@ -9,43 +9,6 @@
   "paths": {},
   "components": {
     "schemas": {
-      "BoardStage": {
-        "properties": {
-          "id": {
-            "type": "string",
-            "minLength": 1,
-            "pattern": "^[a-z][a-z0-9_]*$",
-            "title": "Id",
-            "description": "Стабильный идентификатор стадии (snake_case)"
-          },
-          "label": {
-            "type": "string",
-            "minLength": 1,
-            "title": "Label",
-            "description": "Подпись колонки в UI"
-          },
-          "color": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Color",
-            "description": "Опциональный CSS-цвет"
-          }
-        },
-        "additionalProperties": false,
-        "type": "object",
-        "required": [
-          "id",
-          "label"
-        ],
-        "title": "BoardStage",
-        "description": "Стадия канбана задач.\n\nЗначение хранится в attributes.status у CRMEntity с entity_type=task."
-      },
       "Body_auth_callback_post_rag_api_auth_callback__provider_name__post": {
         "properties": {
           "code": {
@@ -85,50 +48,6 @@
           "state"
         ],
         "title": "Body_auth_callback_post_rag_api_auth_callback__provider_name__post"
-      },
-      "Body_upload_document_rag_api_v1_namespaces__namespace_id__documents_post": {
-        "properties": {
-          "file": {
-            "type": "string",
-            "contentMediaType": "application/octet-stream",
-            "title": "File"
-          },
-          "metadata": {
-            "type": "string",
-            "title": "Metadata",
-            "default": "{}"
-          }
-        },
-        "type": "object",
-        "required": [
-          "file"
-        ],
-        "title": "Body_upload_document_rag_api_v1_namespaces__namespace_id__documents_post"
-      },
-      "Body_upload_file_rag_api_v1_files__post": {
-        "properties": {
-          "file": {
-            "type": "string",
-            "contentMediaType": "application/octet-stream",
-            "title": "File"
-          },
-          "public": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Public"
-          }
-        },
-        "type": "object",
-        "required": [
-          "file"
-        ],
-        "title": "Body_upload_file_rag_api_v1_files__post"
       },
       "CalendarAttendee": {
         "properties": {
@@ -1093,155 +1012,6 @@
         "title": "DocumentProcessingStatus",
         "description": "Статус обработки документа в RAG.\n\nСтатусы:\n- pending: документ принят, ожидает обработки\n- processing: документ обрабатывается (парсинг, chunking, индексация)\n- completed: документ успешно проиндексирован\n- failed: ошибка при обработке\n\nПервичный ключ в БД — document_id (одна строка на документ)."
       },
-      "DocumentUploadResponse": {
-        "properties": {
-          "document_id": {
-            "type": "string",
-            "title": "Document Id"
-          },
-          "task_id": {
-            "type": "string",
-            "title": "Task Id"
-          },
-          "status": {
-            "type": "string",
-            "title": "Status"
-          },
-          "file": {
-            "$ref": "#/components/schemas/FileResponse"
-          }
-        },
-        "additionalProperties": false,
-        "type": "object",
-        "required": [
-          "document_id",
-          "task_id",
-          "status",
-          "file"
-        ],
-        "title": "DocumentUploadResponse"
-      },
-      "FileReadPreviewResponse": {
-        "properties": {
-          "text": {
-            "type": "string",
-            "title": "Text",
-            "description": "Извлечённый текст (может быть усечён для UI)"
-          },
-          "truncated": {
-            "type": "boolean",
-            "title": "Truncated",
-            "description": "Усечён ли текст по лимиту превью"
-          },
-          "page_count": {
-            "type": "integer",
-            "title": "Page Count",
-            "description": "Число страниц после чтения",
-            "default": 0
-          },
-          "detected_kind": {
-            "type": "string",
-            "title": "Detected Kind",
-            "description": "Тип файла по FileReader"
-          },
-          "content_type": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Content Type",
-            "description": "Content-Type после распознавания"
-          },
-          "warnings": {
-            "items": {
-              "type": "string"
-            },
-            "type": "array",
-            "title": "Warnings",
-            "description": "Предупреждения парсера"
-          },
-          "preview_note": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Preview Note",
-            "description": "Пояснение для пользователя (например для изображений)"
-          }
-        },
-        "type": "object",
-        "required": [
-          "text",
-          "truncated",
-          "detected_kind"
-        ],
-        "title": "FileReadPreviewResponse",
-        "description": "Текстовое превью содержимого файла (извлечение без vision для изображений)."
-      },
-      "FileResponse": {
-        "properties": {
-          "file_id": {
-            "type": "string",
-            "title": "File Id"
-          },
-          "original_name": {
-            "type": "string",
-            "title": "Original Name"
-          },
-          "content_type": {
-            "type": "string",
-            "title": "Content Type"
-          },
-          "file_size": {
-            "type": "integer",
-            "title": "File Size"
-          },
-          "url": {
-            "type": "string",
-            "title": "Url"
-          },
-          "checksum": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Checksum"
-          },
-          "is_public": {
-            "type": "boolean",
-            "title": "Is Public"
-          },
-          "created_at": {
-            "type": "string",
-            "format": "date-time",
-            "title": "Created At"
-          }
-        },
-        "type": "object",
-        "required": [
-          "file_id",
-          "original_name",
-          "content_type",
-          "file_size",
-          "url",
-          "is_public",
-          "created_at"
-        ],
-        "title": "FileResponse",
-        "description": "Публичное представление файла для API-ответов.\n\nНе содержит внутренних полей (s3_key, s3_bucket, s3_endpoint).\nИспользуется как return-тип всех file-эндпоинтов во всех сервисах."
-      },
       "GlobalSearchResponse": {
         "properties": {
           "results": {
@@ -1284,6 +1054,68 @@
         },
         "type": "object",
         "title": "HTTPValidationError"
+      },
+      "IndexFileRequest": {
+        "properties": {
+          "file_id": {
+            "type": "string",
+            "minLength": 1,
+            "title": "File Id"
+          },
+          "document_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Document Name"
+          },
+          "metadata": {
+            "additionalProperties": {
+              "$ref": "#/components/schemas/JsonValue"
+            },
+            "type": "object",
+            "title": "Metadata"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "file_id"
+        ],
+        "title": "IndexFileRequest"
+      },
+      "IndexFileResponse": {
+        "properties": {
+          "document_id": {
+            "type": "string",
+            "title": "Document Id"
+          },
+          "task_id": {
+            "type": "string",
+            "title": "Task Id"
+          },
+          "status": {
+            "type": "string",
+            "title": "Status"
+          },
+          "file_id": {
+            "type": "string",
+            "title": "File Id"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "document_id",
+          "task_id",
+          "status",
+          "file_id"
+        ],
+        "title": "IndexFileResponse"
       },
       "IngestTextRequest": {
         "properties": {
@@ -1600,14 +1432,6 @@
             },
             "type": "array",
             "title": "Automation Rules"
-          },
-          "pipeline_stage_presets": {
-            "additionalProperties": {
-              "$ref": "#/components/schemas/TaskBoardPreset"
-            },
-            "type": "object",
-            "title": "Пресеты колонок доски задач",
-            "description": "Ключ доски (task или task:<subtype>) → упорядоченные стадии. Пусто: резолвер CRM подставляет системный набор."
           },
           "suggests": {
             "$ref": "#/components/schemas/SuggestsSettings",
@@ -2486,26 +2310,6 @@
         ],
         "title": "SwitchCompanyRequest",
         "description": "Переключение активной компании пользователя"
-      },
-      "TaskBoardPreset": {
-        "properties": {
-          "stages": {
-            "items": {
-              "$ref": "#/components/schemas/BoardStage"
-            },
-            "type": "array",
-            "minItems": 1,
-            "title": "Stages",
-            "description": "Упорядоченные стадии слева направо"
-          }
-        },
-        "additionalProperties": false,
-        "type": "object",
-        "required": [
-          "stages"
-        ],
-        "title": "TaskBoardPreset",
-        "description": "Набор колонок доски задач для одного ключа доски (см. task_board_key в CRM)."
       },
       "TeamMemberResponse": {
         "properties": {

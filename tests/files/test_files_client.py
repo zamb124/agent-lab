@@ -9,6 +9,7 @@ import pytest
 from core.clients.files_client import FilesClient
 from core.files.create_spec import FileCreateSpec
 from tests.fixtures.auth import service_client_asgi_auth_context
+from tests.fixtures.s3 import require_s3_configured
 
 
 def _platform_auxiliary_spec() -> FileCreateSpec:
@@ -23,9 +24,7 @@ def _platform_auxiliary_spec() -> FileCreateSpec:
 
 @pytest.mark.asyncio
 async def test_files_client_create_via_frontend(frontend_client, auth_headers_system, unique_id: str):
-    from core.files.s3_client import S3ClientFactory
-
-    S3ClientFactory.create_default_client()
+    require_s3_configured()
     payload = f"client-{unique_id}".encode("utf-8")
 
     client = FilesClient()
@@ -48,11 +47,14 @@ async def test_files_client_create_via_frontend(frontend_client, auth_headers_sy
 
 
 @pytest.mark.asyncio
-async def test_files_client_register_s3(frontend_client, auth_headers_system, unique_id: str):
+async def test_files_client_register_s3(
+    frontend_client,
+    auth_headers_system,
+    s3_client,
+    unique_id: str,
+):
     from core.config import get_settings
-    from core.files.s3_client import S3ClientFactory
 
-    S3ClientFactory.create_default_client()
     settings = get_settings()
     bucket = settings.s3.default_bucket
     if bucket is None or bucket == "":
@@ -60,7 +62,6 @@ async def test_files_client_register_s3(frontend_client, auth_headers_system, un
 
     s3_key = f"test/files-client/{unique_id}.bin"
     payload = b"files client register"
-    s3_client = S3ClientFactory.create_default_client()
     _ = await s3_client.upload_bytes(payload, s3_key, content_type="application/octet-stream")
 
     client = FilesClient()

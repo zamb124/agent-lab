@@ -1,0 +1,18 @@
+{
+  "id": "humanitec",
+  "display_name": "HumanitecAgent",
+  "bundle_name": "HumanitecAgent",
+  "protocol_scheme": "humanitec",
+  "auth_callback_path": "auth/callback",
+  "pairing_path": "pairing",
+  "primary_color": "#0066FF",
+  "platform_mcp_path": "/flows/api/v1/agent/platform-mcp",
+  "default_frontend_base_url": "https://humanitec.ru",
+  "homepage": "https://humanitec.ru",
+  "maintainer": "Humanitec <support@humanitec.ru>",
+  "default_extensions": [
+    "platform_mcp",
+    "developer",
+    "computercontroller"
+  ]
+}

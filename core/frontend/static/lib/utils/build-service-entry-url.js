@@ -59,6 +59,25 @@ export function buildServiceEntryUrl(serviceId) {
     return `${window.location.protocol}//${hostname}:${targetPort}${servicePath}`;
 }
 
+/**
+ * @param {string} path — абсолютный path на frontend (например `/agent`)
+ * @returns {string}
+ */
+export function buildFrontendPublicPath(path) {
+    if (typeof path !== 'string' || path.length === 0 || !path.startsWith('/')) {
+        throw new Error('buildFrontendPublicPath: path must be a non-empty string starting with /');
+    }
+    const hostname = window.location.hostname;
+    if (!isLocalHost(hostname)) {
+        return path;
+    }
+    const targetPort = SERVICE_DEV_PORTS.frontend;
+    if (window.location.port === targetPort) {
+        return path;
+    }
+    return `${window.location.protocol}//${hostname}:${targetPort}${path}`;
+}
+
 export function isStandalonePwaMode() {
     const mq = window.matchMedia('(display-mode: standalone)');
     if (mq && mq.matches) return true;

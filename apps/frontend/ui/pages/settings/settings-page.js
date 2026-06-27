@@ -486,6 +486,9 @@ export class FrontendSettingsPage extends PlatformPage {
         _searchProviderOrder: { state: true },
         _modelScoreDrafts: { state: true },
         _modelScoreNew: { state: true },
+        _agentPairingCode: { state: true },
+        _agentPairingExpires: { state: true },
+        _agentPairingCountdown: { state: true },
     };
 
     constructor() {
@@ -507,6 +510,13 @@ export class FrontendSettingsPage extends PlatformPage {
         this._scoreUpsert = this.useOp('frontend/llm_model_score_upsert');
         this._scoreDelete = this.useOp('frontend/llm_model_score_delete');
         this._scoreRefreshCache = this.useOp('frontend/llm_model_scores_refresh_cache');
+        this._agentPairing = this.useOp('frontend/agent_pairing_create');
+        this._agentDevices = this.useOp('frontend/agent_devices_load');
+        this._agentRevoke = this.useOp('frontend/agent_device_revoke');
+        this._agentReleases = this.useOp('frontend/agent_releases_status');
+        this._agentPolicyPatch = this.useOp('frontend/agent_device_policy_patch');
+        this._agentAudit = this.useOp('frontend/agent_audit_load');
+        this._agentPairingTimerId = null;
         this._loaded = false;
         this._aiLoaded = false;
         this._searchLoaded = false;
@@ -525,6 +535,12 @@ export class FrontendSettingsPage extends PlatformPage {
         this._searchProviderOrder = [];
         this._modelScoreDrafts = {};
         this._modelScoreNew = { capability: 'llm_chat', provider: 'openrouter', model_id: '', score: 0, enabled: true, note: '' };
+        this._agentPairingCode = '';
+        this._agentPairingExpires = 0;
+        this._agentPairingCountdown = 0;
+        this._agentDevicesLoaded = false;
+        this._agentReleasesLoaded = false;
+        this._agentAuditLoaded = false;
     }
 
     updated() {
@@ -539,6 +555,18 @@ export class FrontendSettingsPage extends PlatformPage {
         if (!this._searchLoaded) {
             this._searchLoaded = true;
             this._searchLoad.run();
+        }
+        if (!this._agentDevicesLoaded) {
+            this._agentDevicesLoaded = true;
+            this._agentDevices.run();
+        }
+        if (!this._agentReleasesLoaded) {
+            this._agentReleasesLoaded = true;
+            this._agentReleases.run();
+        }
+        if (this._activeTab === 'agent' && !this._agentAuditLoaded) {
+            this._agentAuditLoaded = true;
+            this._agentAudit.run();
         }
         const company = this._load.lastResult;
         if (company && company.company_id === 'system' && !this._scoresLoaded) {
@@ -608,6 +636,10 @@ export class FrontendSettingsPage extends PlatformPage {
 
     _setTab(tab) {
         this._activeTab = tab;
+        if (tab === 'agent' && !this._agentAuditLoaded) {
+            this._agentAuditLoaded = true;
+            this._agentAudit.run();
+        }
     }
 
     _save() {
@@ -645,6 +677,7 @@ export class FrontendSettingsPage extends PlatformPage {
             { id: 'search_providers', label: this.t('settings_page.tab_search_providers') },
             ...(isSystem ? [{ id: 'model_scoring', label: this.t('settings_page.tab_model_scoring') }] : []),
             { id: 'security', label: this.t('settings_page.tab_security') },
+            { id: 'agent', label: this.t('settings_page.tab_agent') },
             { id: 'integrations', label: this.t('settings_page.tab_integrations') },
         ];
         return html`
@@ -1619,6 +1652,237 @@ export class FrontendSettingsPage extends PlatformPage {
         `;
     }
 
+    async _createAgentPairingCode() {
+        const result = await this._agentPairing.run();
+        if (!result || typeof result !== 'object') {
+            return;
+        }
+        const pairingCode = result.pairing_code;
+        const expiresIn = result.expires_in_seconds;
+        if (typeof pairingCode !== 'string' || typeof expiresIn !== 'number') {
+            throw new Error('agent pairing: invalid response shape');
+        }
+        this._agentPairingCode = pairingCode;
+        this._agentPairingExpires = expiresIn;
+        this._agentPairingCountdown = expiresIn;
+        if (this._agentPairingTimerId !== null) {
+            clearInterval(this._agentPairingTimerId);
+        }
+        this._agentPairingTimerId = setInterval(() => {
+            if (this._agentPairingCountdown <= 1) {
+                if (this._agentPairingTimerId !== null) {
+                    clearInterval(this._agentPairingTimerId);
+                    this._agentPairingTimerId = null;
+                }
+                this._agentPairingCountdown = 0;
+                this._agentPairingCode = '';
+                return;
+            }
+            this._agentPairingCountdown -= 1;
+        }, 1000);
+    }
+
+    async _copyAgentPairingCode() {
+        if (!this._agentPairingCode) {
+            return;
+        }
+        await navigator.clipboard.writeText(this._agentPairingCode);
+    }
+
+    _agentDeepLinkBase() {
+        return 'humanitec://pairing';
+    }
+
+    _agentAuthLoginUrl() {
+        const redirect = encodeURIComponent('humanitec://auth/callback');
+        return `/frontend/api/agent/login?redirect=${redirect}`;
+    }
+
+    _openAgentPairingDeepLink() {
+        if (!this._agentPairingCode) {
+            return;
+        }
+        const deepLink = `${this._agentDeepLinkBase()}?code=${encodeURIComponent(this._agentPairingCode)}`;
+        window.location.href = deepLink;
+    }
+
+    async _revokeAgentDevice(deviceId) {
+        if (typeof deviceId !== 'string' || !deviceId) {
+            throw new Error('agent device revoke: device_id required');
+        }
+        const confirmed = confirm(this.t('settings_page.agent.revoke_confirm'));
+        if (!confirmed) {
+            return;
+        }
+        await this._agentRevoke.run({ device_id: deviceId });
+    }
+
+    async _toggleAgentShell(device) {
+        if (!device || typeof device !== 'object') {
+            return;
+        }
+        const deviceId = device.device_id;
+        const policy = device.policy;
+        if (typeof deviceId !== 'string' || !deviceId || !policy || typeof policy !== 'object') {
+            return;
+        }
+        const nextPolicy = {
+            ...policy,
+            shell_enabled: !policy.shell_enabled,
+        };
+        await this._agentPolicyPatch.run({ device_id: deviceId, policy: nextPolicy });
+    }
+
+    _renderAgentReleaseBanner() {
+        const releasePayload = this._agentReleases.lastResult;
+        if (!releasePayload || typeof releasePayload !== 'object') {
+            return '';
+        }
+        if (releasePayload.ready === true) {
+            const latestTag = releasePayload.latest_tag;
+            const tagLabel = typeof latestTag === 'string' && latestTag ? latestTag : '';
+            return html`
+                <div class="section-help">
+                    ${this.t('settings_page.agent.release_ready')}${tagLabel ? html` · ${tagLabel}` : ''}
+                </div>
+            `;
+        }
+        const detail = releasePayload.detail;
+        const detailText = typeof detail === 'string' && detail ? detail : this.t('settings_page.agent.release_not_ready');
+        return html`<div class="section-help">${detailText}</div>`;
+    }
+
+    _agentAuditEventLabel(eventType) {
+        if (typeof eventType !== 'string' || !eventType) {
+            throw new Error('agent audit event_type required');
+        }
+        const key = `settings_page.agent.audit_event_${eventType.replace(/\./g, '_')}`;
+        const translated = this.t(key);
+        if (translated !== key) {
+            return translated;
+        }
+        return eventType;
+    }
+
+    _renderAgentAuditSection() {
+        const auditPayload = this._agentAudit.lastResult;
+        const auditBusy = this._agentAudit.busy;
+        const items = auditPayload && Array.isArray(auditPayload.items) ? auditPayload.items : [];
+        return html`
+            <section>
+                <h3>${this.t('settings_page.agent.audit_title')}</h3>
+                ${auditBusy ? html`<div class="empty"><glass-spinner></glass-spinner></div>` : ''}
+                ${!auditBusy && items.length === 0
+                    ? html`<div class="empty">${this.t('settings_page.agent.audit_empty')}</div>`
+                    : ''}
+                ${!auditBusy && items.length > 0 ? html`
+                    <div class="custom-provider-list">
+                        ${items.map((event) => html`
+                            <div class="custom-provider-card">
+                                <div class="meta">
+                                    <div class="title-line">${this._agentAuditEventLabel(event.event_type)}</div>
+                                    <div class="ref-line">${event.detail || ''}</div>
+                                    <div class="capability-line">
+                                        ${event.recorded_at
+                                            ? new Date(event.recorded_at).toLocaleString()
+                                            : ''}
+                                    </div>
+                                </div>
+                            </div>
+                        `)}
+                    </div>
+                ` : ''}
+            </section>
+        `;
+    }
+
+    _renderAgentTab() {
+        const devicesPayload = this._agentDevices.lastResult;
+        const items = devicesPayload && Array.isArray(devicesPayload.items) ? devicesPayload.items : [];
+        const pairingBusy = this._agentPairing.busy;
+        const devicesBusy = this._agentDevices.busy;
+
+        return html`
+            <section>
+                <div class="header">
+                    <h3>${this.t('settings_page.agent.title')}</h3>
+                    <button class="btn" ?disabled=${pairingBusy} @click=${() => this._createAgentPairingCode()}>
+                        ${this.t('settings_page.agent.connect_button')}
+                    </button>
+                </div>
+                <div class="section-help">${this.t('settings_page.agent.help')}</div>
+                ${this._renderAgentReleaseBanner()}
+                ${this._agentPairingCode ? html`
+                    <div class="info-grid form-narrow">
+                        <dt>${this.t('settings_page.agent.pairing_code')}</dt>
+                        <dd>
+                            ${this._agentPairingCode}
+                            <button class="btn btn-sm" @click=${() => this._copyAgentPairingCode()}>
+                                ${this.t('settings_page.agent.copy_pairing_code')}
+                            </button>
+                            <button class="btn btn-sm" @click=${() => this._openAgentPairingDeepLink()}>
+                                ${this.t('settings_page.agent.open_in_agent')}
+                            </button>
+                        </dd>
+                        <dt>${this.t('settings_page.agent.pairing_ttl')}</dt>
+                        <dd>${this._agentPairingCountdown}s</dd>
+                    </div>
+                ` : ''}
+                <div class="section-help">
+                    <a href=${this._agentAuthLoginUrl()}>${this.t('settings_page.agent.login_via_browser')}</a>
+                </div>
+                <div class="section-help">${this.t('settings_page.agent.download_hint')} <a href="/agent">${this.t('settings_page.agent.download_link')}</a></div>
+            </section>
+            <section>
+                <h3>${this.t('settings_page.agent.devices_title')}</h3>
+                ${devicesBusy ? html`<div class="empty"><glass-spinner></glass-spinner></div>` : ''}
+                ${!devicesBusy && items.length === 0 ? html`<div class="empty">${this.t('settings_page.agent.devices_empty')}</div>` : ''}
+                ${!devicesBusy && items.length > 0 ? html`
+                    <div class="custom-provider-list">
+                        ${items.map((device) => html`
+                            <div class="custom-provider-card">
+                                <div class="meta">
+                                    <div class="title-line">${device.device_name}</div>
+                                    <div class="ref-line">${device.hostname} · ${device.os}</div>
+                                    <div class="caps-line">
+                                        ${device.is_tunnel_online
+                                            ? this.t('settings_page.agent.status_online')
+                                            : this.t('settings_page.agent.status_offline')}
+                                        · ${device.is_active
+                                            ? this.t('settings_page.agent.status_active')
+                                            : this.t('settings_page.agent.status_revoked')}
+                                    </div>
+                                    <div class="caps-line">
+                                        ${this.t('settings_page.agent.policy_shell')}: ${device.policy?.shell_enabled
+                                            ? this.t('settings_page.agent.policy_enabled')
+                                            : this.t('settings_page.agent.policy_disabled')}
+                                        · ${this.t('settings_page.agent.policy_browser')}: ${device.policy?.browser_enabled
+                                            ? this.t('settings_page.agent.policy_enabled')
+                                            : this.t('settings_page.agent.policy_disabled')}
+                                    </div>
+                                </div>
+                                <div class="actions">
+                                    <glass-button
+                                        size="sm"
+                                        ?disabled=${this._agentPolicyPatch.busy || !device.is_active}
+                                        @click=${() => this._toggleAgentShell(device)}
+                                    >${this.t('settings_page.agent.toggle_shell')}</glass-button>
+                                    <glass-button
+                                        size="sm"
+                                        variant="danger"
+                                        ?disabled=${this._agentRevoke.busy || !device.is_active}
+                                        @click=${() => this._revokeAgentDevice(device.device_id)}
+                                    >${this.t('settings_page.agent.revoke')}</glass-button>
+                                </div>
+                            </div>
+                        `)}
+                    </div>
+                ` : ''}
+            </section>
+            ${this._renderAgentAuditSection()}
+        `;
+    }
+
     _renderSecurityTab() {
         return html`
             <div class="two-col">
@@ -1675,6 +1939,7 @@ export class FrontendSettingsPage extends PlatformPage {
             ${this._activeTab === 'search_providers' ? this._renderSearchProvidersTab() : ''}
             ${this._activeTab === 'model_scoring' ? this._renderModelScoringTab() : ''}
             ${this._activeTab === 'security' ? this._renderSecurityTab() : ''}
+            ${this._activeTab === 'agent' ? this._renderAgentTab() : ''}
             ${this._activeTab === 'integrations' ? this._renderIntegrationsTab() : ''}
             </div>
         `;

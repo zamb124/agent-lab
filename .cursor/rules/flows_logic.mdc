@@ -24,7 +24,7 @@ Flows исполняются как durable workflow runtime: `workflow_events` 
 | hitl_node | Пауза до исполнителя очереди (`HitlWorkItemService` → WorkItem `operator_handoff`) |
 | resource | Pass-through: `ResourceNode` не меняет `ExecutionState`; `node.resources` участвует в merge через `resource_resolver`, как у прочих нод |
 
-**HITL = WorkItem (operator_handoff).** Очереди/задачи оператора живут в ядре задач `WorkItem` (сервис **worktracker**, БД `platform_worktracker`, → **`worktracker.mdc`**); таблиц `operator_*` и API `/flows/api/v1/operator/*` больше нет. Тул **`hitl_operator_task`** и нода **`hitl_node`** бросают **`FlowInterrupt`** с **`OperatorTaskInterrupt`** (поле `work_item_id`) и через **`HitlWorkItemService`** (`apps/flows/src/services/hitl_work_item_service.py`, `build_hitl_handoff_command`/`HitlInterruptSnapshot` из `apps/flows/src/models/hitl_schemas.py`) создают `WorkItem(kind=operator_handoff, blocking=True)` с хуками `completed`→`/flows/api/v1/internal/work-items/completed` и `comment`→`/flows/api/v1/internal/work-items/comment`, очередь = `QueueAssignment(work_queue_slug)`. `InterruptManager.apply_interrupt` сохраняет `correlation_id`.
+**HITL = WorkItem (operator_handoff).** Термин **`handoff_mode`** здесь — режим HITL (`single_reply`/`takeover`), **не** agent handoff между flows (→ **`handoff.mdc`**). Очереди/задачи оператора живут в ядре задач `WorkItem` (сервис **worktracker**, БД `platform_worktracker`, → **`worktracker.mdc`**); таблиц `operator_*` и API `/flows/api/v1/operator/*` больше нет. Тул **`hitl_operator_task`** и нода **`hitl_node`** бросают **`FlowInterrupt`** с **`OperatorTaskInterrupt`** (поле `work_item_id`) и через **`HitlWorkItemService`** (`apps/flows/src/services/hitl_work_item_service.py`, `build_hitl_handoff_command`/`HitlInterruptSnapshot` из `apps/flows/src/models/hitl_schemas.py`) создают `WorkItem(kind=operator_handoff, blocking=True)` с хуками `completed`→`/flows/api/v1/internal/work-items/completed` и `comment`→`/flows/api/v1/internal/work-items/comment`, очередь = `QueueAssignment(work_queue_slug)`. `InterruptManager.apply_interrupt` сохраняет `correlation_id`.
 
 **Завершение и resume.** Оператор завершает задачу в worktracker (`POST /worktracker/api/v1/work-items/{id}/complete`); ядро диспатчит `completed`-хук → flows `internal/work-items/completed` → `HitlWorkItemService.resume_from_completion` → `process_flow_task(is_resume=True, content=resolution)`. Resume идемпотентен: `hitl_node` при повторном входе находит завершённый WorkItem по `correlation_id` (`find_by_completion_correlation`, `WorkItemState.DONE`) и идёт по исходящим рёбрам. Тяжёлый `context_data`/`interrupt_snapshot` живут в `hook.binding`.
 
@@ -175,7 +175,7 @@ output_mapping - куда пишем результат:
 
 Бросает `FlowInterrupt(question="...")` или `FlowInterrupt(body=UserMessageInterrupt(...)|OperatorTaskInterrupt(...)|OAuthInterrupt(...))` → выполнение останавливается → в `state.interrupt` попадает типизированный `InterruptData` (`body` + `system`).
 
-**OAuth auto-resume:** `OAuthInterrupt` (kind=`oauth_required`) с `auth_url`, `provider`, `service`. SSE `input-required` с `final=False`, `platform_oauth_continue=true`. После OAuth callback — `process_flow_task.kiq(is_resume=True, content="oauth_completed:...")` (по аналогии с `complete_handoff`). UI показывает кнопку авторизации; flow продолжается автоматически без участия юзера.
+**OAuth auto-resume:** `OAuthInterrupt` (kind=`oauth_required`) с `auth_url`, `provider`, `service`. SSE `input-required` с `final=False`, `platform_oauth_continue=true`. После OAuth callback — `process_flow_task.kiq(is_resume=True, content="oauth_completed:...")`. UI показывает кнопку авторизации; flow продолжается автоматически без участия юзера.
 
 ### State при interrupt
 
@@ -221,6 +221,16 @@ output_mapping - куда пишем результат:
 - Child messages/history живут в child workflow projection, не в `nested_states["child_flow"]`
 - Resume: ответ попадает в child projection, затем LLM child продолжает внутри своей durable history
 
+### Сценарий 5: Agent handoff (llm_node tools)
+
+    Parent LlmNode → handoff_to_flow → HandoffInterrupt → channel kickoff child
+    User replies → routed to child session (не parent)
+    Child → handback_to_parent → complete_handback → parent resume
+
+- Interrupt: `HandoffInterrupt` (`kind=handoff`), не `UserMessageInterrupt`.
+- Маршрутизация user reply — **channel layer** (`resolve_execution_target` в `create_task`), не worker patch.
+- Повторный handoff/handback в той же сессии — поддерживается (см. **`handoff.mdc`**).
+
 ### Как бросить interrupt
 
 В CodeNode/tool:
@@ -250,7 +260,9 @@ output_mapping - куда пишем результат:
 
 - apps/flows/src/runtime/nodes.py - все ноды
 - apps/flows/src/runtime/runners/llm_runner.py - LlmNode логика
-- apps/flows/src/tools/node_wrapper.py - NodeAsToolWrapper (interrupt для вложенных flow)
+- apps/flows/src/tools/node_wrapper.py - NodeAsToolWrapper (call_type handoff → HandoffInterrupt)
+- apps/flows/src/tools/handoff_tools.py - handoff_to_flow / handback_to_parent
+- apps/flows/src/services/handoff_orchestrator_service.py - orchestration, routing, handback
 - apps/flows/src/tools/registry.py - ToolRegistry
 - apps/flows/src/state/interrupt_manager.py - InterruptManager
 - apps/flows/src/triggers/ - триггеры (handlers, executor, registry)

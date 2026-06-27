@@ -284,7 +284,16 @@ def _iter_python_files() -> list[Path]:
         rel = p.relative_to(REPO_ROOT).as_posix()
         if any(
             rel.startswith(prefix)
-            for prefix in (".venv/", "node_modules/", "build/", ".git/", "coverage/", "dist/")
+            for prefix in (
+                ".venv/",
+                "node_modules/",
+                "build/",
+                ".git/",
+                "coverage/",
+                "dist/",
+                "target/",
+                "apps/agent/desktop/vendor/",
+            )
         ):
             continue
         out.append(p)

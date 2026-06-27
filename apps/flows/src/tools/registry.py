@@ -36,6 +36,7 @@ class NodeToolWrapperFactory(Protocol):
         node_config: NodeConfig,
         *,
         container: FlowRuntimeContainer | None = None,
+        call_type: str = "call",
     ) -> BaseTool: ...
 
 
@@ -347,4 +348,5 @@ class ToolRegistry:
         return self._node_tool_wrapper_cls(
             node_config=config,
             container=self.container,
+            call_type=config.call_type,
         )

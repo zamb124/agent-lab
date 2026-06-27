@@ -39,6 +39,7 @@ if TYPE_CHECKING:
     from apps.flows.src.models.registry_contracts import RegistryFlowSchema
     from apps.flows.src.runners.remote import RemoteCodeRunner
     from apps.flows.src.services.flow_discovery import FlowDiscoveryService
+    from apps.flows.src.services.handoff_orchestrator_service import HandoffOrchestratorService
     from apps.flows.src.services.hitl_work_item_service import HitlWorkItemService
     from apps.flows.src.services.lara_action_engine import LaraActionEngine
     from apps.flows.src.services.lara_facade import LaraFacade
@@ -317,6 +318,9 @@ class FlowRuntimeContainer(Protocol):
 
     @property
     def hitl_work_item_service(self) -> "HitlWorkItemService": ...
+
+    @property
+    def handoff_orchestrator_service(self) -> "HandoffOrchestratorService": ...
 
     @property
     def a2a_client(self) -> A2AClient: ...

@@ -43,6 +43,7 @@ const DEFAULT_LABELS = {
     interrupt_operator_banner: 'Waiting for an operator. The chat is on hold.',
     interrupt_oauth_banner: 'External service authorization required',
     interrupt_oauth_button: 'Authorize',
+    interrupt_handoff_banner: 'Control transferred to another agent',
     operator_reply_heading: 'Operator',
     streaming_placeholder: 'Generating a reply...',
     breakpoint_continue: 'Continue',
@@ -93,6 +94,8 @@ export class FlowsChatMessage extends PlatformElement {
         error: { type: String },
         errorI18nKey: { type: String },
         inputRequired: { type: Object },
+        handoff: { type: Object },
+        handback: { type: Object },
         operatorReply: { type: String },
         breakpoint: { type: Object },
         files: { type: Array },
@@ -783,6 +786,8 @@ export class FlowsChatMessage extends PlatformElement {
         this.error = '';
         this.errorI18nKey = '';
         this.inputRequired = null;
+        this.handoff = null;
+        this.handback = null;
         this.operatorReply = '';
         this.breakpoint = null;
         this.files = [];
@@ -845,6 +850,10 @@ export class FlowsChatMessage extends PlatformElement {
                 return this._label('role_operator', 'Operator');
             case 'system':
                 return this._label('role_system', 'System');
+            case 'handoff':
+                return this._label('chat_handoff.handoff_active', 'Active');
+            case 'handback':
+                return this._label('chat_handoff.handoff_returned', 'Returned');
             default:
                 return this.role || '';
         }
@@ -860,6 +869,10 @@ export class FlowsChatMessage extends PlatformElement {
                 return 'agent';
             case 'system':
                 return 'info';
+            case 'handoff':
+                return 'agent';
+            case 'handback':
+                return 'undo';
             default:
                 return 'chat';
         }
@@ -1107,11 +1120,25 @@ export class FlowsChatMessage extends PlatformElement {
             ? this._label('interrupt_oauth_banner', 'External service authorization required')
             : kind === 'operator_task'
               ? this._label('interrupt_operator_banner', 'Waiting for an operator. The chat is on hold.')
+              : kind === 'handoff'
+                ? this._label('interrupt_handoff_banner', 'Control transferred to another agent')
               : '';
+        const targetFlowName = asString(this.inputRequired.targetFlowName);
+        const handoffReason = asString(this.inputRequired.reason);
+        const handoffDepth = this.inputRequired.depth;
         const authUrl = asString(this.inputRequired.authUrl);
         return html`
             <div class="input-required">
                 ${banner ? html`<div class="input-required-banner">${banner}</div>` : nothing}
+                ${kind === 'handoff' && targetFlowName.length > 0
+                    ? html`<div class="input-required-handoff-target">${targetFlowName}</div>`
+                    : nothing}
+                ${kind === 'handoff' && handoffReason.length > 0
+                    ? html`<div class="input-required-handoff-reason">${handoffReason}</div>`
+                    : nothing}
+                ${kind === 'handoff' && typeof handoffDepth === 'number' && handoffDepth > 0
+                    ? html`<div class="input-required-handoff-depth">${this._label('chat_handoff.handoff_chain_depth', 'Chain depth: {depth}').replace('{depth}', String(handoffDepth))}</div>`
+                    : nothing}
                 ${kind === 'operator_task' && workItemId.length > 0
                     ? html`<platform-work-item-badge
                         work-item-id=${workItemId}
@@ -1351,9 +1378,24 @@ export class FlowsChatMessage extends PlatformElement {
 
     _showTracing() {
         const taskId = asString(this.taskId) || asString(this.traceTaskId);
+        const traceId = asString(this.handoff?.traceId || this.handback?.traceId);
         this.dispatchEvent(
             new CustomEvent('show-tracing', {
-                detail: { taskId },
+                detail: traceId.length > 0 ? { traceId } : { taskId },
+                bubbles: true,
+                composed: true,
+            }),
+        );
+    }
+
+    _showHandoffTrace() {
+        const traceId = asString(this.handoff?.traceId || this.handback?.traceId);
+        if (traceId.length === 0) {
+            return;
+        }
+        this.dispatchEvent(
+            new CustomEvent('show-tracing', {
+                detail: { traceId },
                 bubbles: true,
                 composed: true,
             }),
@@ -1441,6 +1483,86 @@ export class FlowsChatMessage extends PlatformElement {
         `;
     }
 
+    _renderHandoffCard() {
+        const card = this.handoff;
+        if (!isPlainObject(card)) {
+            return nothing;
+        }
+        const targetName = asString(card.targetFlowName || card.targetFlowId);
+        const reason = asString(card.reason);
+        const depth = card.depth;
+        const traceId = asString(card.traceId);
+        const title = formatLabel(
+            this._label('chat_handoff.handoff_initiated', 'Transferred control to agent «{targetName}»'),
+            { targetName },
+        );
+        return html`
+            <div class="handoff-card">
+                <div class="handoff-card-title">${title}</div>
+                ${reason.length > 0
+                    ? html`<div class="handoff-card-reason"><span class="handoff-card-label">${this._label('chat_handoff.handoff_reason_label', 'Reason')}</span> ${reason}</div>`
+                    : nothing}
+                ${typeof depth === 'number' && depth > 0
+                    ? html`<div class="handoff-card-depth">${formatLabel(this._label('chat_handoff.handoff_chain_depth', 'Chain depth: {depth}'), { depth: String(depth) })}</div>`
+                    : nothing}
+                ${traceId.length > 0
+                    ? html`<button type="button" class="handoff-trace-btn" @click=${this._showHandoffTrace}>${this._label('chat_handoff.open_trace', 'Open trace')}</button>`
+                    : nothing}
+            </div>
+        `;
+    }
+
+    _renderHandbackCard() {
+        const card = this.handback;
+        if (!isPlainObject(card)) {
+            return nothing;
+        }
+        const parentName = asString(card.parentFlowName || card.childFlowName);
+        const response = asString(card.response);
+        const traceId = asString(card.traceId);
+        const title = formatLabel(
+            this._label('chat_handoff.handback_completed', 'Returned control to agent «{parentName}»'),
+            { parentName },
+        );
+        return html`
+            <div class="handback-card">
+                <div class="handback-card-title">${title}</div>
+                ${response.length > 0
+                    ? html`<div class="handback-card-response"><span class="handback-card-label">${this._label('chat_handoff.handoff_result_label', 'Result')}</span> ${this._markdownTemplate(response)}</div>`
+                    : nothing}
+                ${traceId.length > 0
+                    ? html`<button type="button" class="handoff-trace-btn" @click=${this._showHandoffTrace}>${this._label('chat_handoff.open_trace', 'Open trace')}</button>`
+                    : nothing}
+            </div>
+        `;
+    }
+
+    _renderHandoffMessage() {
+        return html`
+            <div class="message handoff">
+                <div class=${classNames({ avatar: true, hidden: !this.showAvatar })}>
+                    <platform-icon name=${this._avatarIcon()} size="18"></platform-icon>
+                </div>
+                <div class="bubble handoff-bubble">
+                    ${this._renderHandoffCard()}
+                </div>
+            </div>
+        `;
+    }
+
+    _renderHandbackMessage() {
+        return html`
+            <div class="message handback">
+                <div class=${classNames({ avatar: true, hidden: !this.showAvatar })}>
+                    <platform-icon name=${this._avatarIcon()} size="18"></platform-icon>
+                </div>
+                <div class="bubble handback-bubble">
+                    ${this._renderHandbackCard()}
+                </div>
+            </div>
+        `;
+    }
+
     _renderMainText(role, text) {
         if (text.length === 0) {
             return nothing;
@@ -1453,6 +1575,12 @@ export class FlowsChatMessage extends PlatformElement {
 
     render() {
         const role = asString(this.role) || 'assistant';
+        if (role === 'handoff') {
+            return this._renderHandoffMessage();
+        }
+        if (role === 'handback') {
+            return this._renderHandbackMessage();
+        }
         const text = asString(this.content);
         const classes = classNames({
             message: true,

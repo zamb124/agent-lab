@@ -2,11 +2,17 @@
 
 from __future__ import annotations
 
+import os
 from typing import Literal
 
 from playwright.async_api import Page, expect
 
 from tests.ui.apps import ServiceUiSpec
+
+
+def ui_e2e_use_lvh_me() -> bool:
+    raw = os.environ.get("UI_E2E_USE_LVH_ME", "")
+    return raw.lower() in {"1", "true", "yes"}
 
 
 class AppUI:
@@ -20,6 +26,9 @@ class AppUI:
         return self._spec
 
     def _host(self) -> str:
+        if ui_e2e_use_lvh_me():
+            subdomain = self._spec.subdomain_prefix if self._spec.subdomain_prefix else "system"
+            return f"{subdomain}.lvh.me"
         if self._spec.subdomain_prefix:
             return f"{self._spec.subdomain_prefix}.localhost"
         return "localhost"

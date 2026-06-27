@@ -29,6 +29,8 @@ export class ChatMessage extends PlatformElement {
         error: { type: String },
         errorI18nKey: { type: String },
         inputRequired: { type: Object },
+        handoff: { type: Object },
+        handback: { type: Object },
         operatorReply: { type: String },
         breakpoint: { type: Object },
         files: { type: Array },
@@ -54,6 +56,8 @@ export class ChatMessage extends PlatformElement {
         this.error = '';
         this.errorI18nKey = null;
         this.inputRequired = null;
+        this.handoff = null;
+        this.handback = null;
         this.operatorReply = '';
         this.breakpoint = null;
         this.files = [];
@@ -116,6 +120,7 @@ export class ChatMessage extends PlatformElement {
             show_run_trace_title: this.t('run_trace.section_title'),
             interrupt_operator_banner: this.t('chat_message.interrupt_operator_banner'),
             interrupt_oauth_banner: this.t('chat_message.interrupt_oauth_banner'),
+            interrupt_handoff_banner: this.t('chat_message.interrupt_handoff_banner'),
             interrupt_oauth_button: this.t('chat_message.interrupt_oauth_button'),
             operator_reply_heading: this.t('chat_message.operator_reply_heading'),
             streaming_placeholder: this.t('chat_message.streaming_placeholder'),
@@ -176,6 +181,8 @@ export class ChatMessage extends PlatformElement {
                 .toolResults=${asArray(this.toolResults)}
                 .browserPreviews=${asArray(this.browserPreviews)}
                 .inputRequired=${this.inputRequired}
+                .handoff=${this.handoff}
+                .handback=${this.handback}
                 .operatorReply=${asString(this.operatorReply)}
                 .breakpoint=${this.breakpoint}
                 .files=${asArray(this.files)}

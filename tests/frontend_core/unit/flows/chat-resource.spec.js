@@ -362,3 +362,61 @@ describe('flows/chat extraReducer: run trace', () => {
         expect(getState().flowsChat.runTraceByContextId.ctx1).toEqual([]);
     });
 });
+
+describe('flows/chat extraReducer: handoff', () => {
+    function setupHandoff() {
+        const built = build();
+        built.bus.dispatch('flows/chat/session_init', { flowId: 'parent', contextId: 'ctx1' });
+        built.bus.dispatch('flows/chat/task_started', { task_id: 'tsk1', context_id: 'ctx1' });
+        built.bus.dispatch('flows/chat/input_required', {
+            task_id: 'tsk1',
+            context_id: 'ctx1',
+            result_metadata: { platform_interrupt: { body: { kind: 'handoff' } } },
+        });
+        return built;
+    }
+
+    it('handoff_initiated добавляет handoff card и обновляет assistant', () => {
+        const { bus, getState } = setupHandoff();
+        bus.dispatch('flows/chat/handoff_initiated', {
+            task_id: 'tsk1',
+            context_id: 'ctx1',
+            target_flow_id: 'child_flow',
+            target_flow_name: 'Child Agent',
+            handoff_reason: 'need specialist',
+            handoff_depth: 1,
+        });
+        const msgs = getState().flowsChat.messagesByContextId.ctx1.messages;
+        const assistant = msgs.find((m) => m.role === 'assistant' && m.taskId === 'tsk1');
+        expect(assistant.handoff).toBeTruthy();
+        expect(assistant.handoff.targetFlowId).toBe('child_flow');
+        expect(assistant.handoff.status).toBe('active');
+        const handoffMsg = msgs.find((m) => m.role === 'handoff');
+        expect(handoffMsg).toBeTruthy();
+        expect(handoffMsg.targetFlowName).toBe('Child Agent');
+    });
+
+    it('handback_completed помечает handoff returned и добавляет handback card', () => {
+        const { bus, getState } = setupHandoff();
+        bus.dispatch('flows/chat/handoff_initiated', {
+            task_id: 'tsk1',
+            context_id: 'ctx1',
+            target_flow_id: 'child_flow',
+            target_flow_name: 'Child Agent',
+            handoff_depth: 1,
+        });
+        bus.dispatch('flows/chat/handback_completed', {
+            task_id: 'tsk1',
+            context_id: 'ctx1',
+            response: 'resolved by child',
+            parent_flow_name: 'Parent Agent',
+            handoff_depth: 0,
+        });
+        const msgs = getState().flowsChat.messagesByContextId.ctx1.messages;
+        const assistant = msgs.find((m) => m.role === 'assistant' && m.taskId === 'tsk1');
+        expect(assistant.handoff.status).toBe('returned');
+        const handbackMsg = msgs.find((m) => m.role === 'handback');
+        expect(handbackMsg).toBeTruthy();
+        expect(handbackMsg.response).toBe('resolved by child');
+    });
+});

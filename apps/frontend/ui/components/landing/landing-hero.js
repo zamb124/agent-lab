@@ -325,15 +325,22 @@ export class LandingHero extends PlatformElement {
                 z-index: 3;
             }
             
-            .hero-cta {
+            .hero-cta-row {
                 position: absolute;
                 bottom: 38px;
                 left: 50%;
                 transform: translateX(-50%);
+                display: flex;
+                flex-wrap: wrap;
+                align-items: center;
+                justify-content: center;
+                gap: 12px;
+                z-index: 11;
+                max-width: calc(100% - 32px);
+            }
+
+            .hero-cta {
                 padding: 12px 24px;
-                background: var(--landing-primary, #5768FE);
-                color: var(--landing-on-primary, #FFFFFF);
-                border: none;
                 border-radius: 40px;
                 font-family: 'Fira Sans', sans-serif;
                 font-weight: 500;
@@ -342,14 +349,17 @@ export class LandingHero extends PlatformElement {
                 cursor: pointer;
                 transition: var(--motion-transition-interactive);
                 white-space: nowrap;
-                z-index: 11;
                 box-shadow: none;
                 text-align: center;
+                text-decoration: none;
+                background: var(--landing-primary, #5768FE);
+                color: var(--landing-on-primary, #FFFFFF);
+                border: none;
             }
             
             .hero-cta:hover {
                 background: #6877ff;
-                transform: translateX(-50%) translateY(-2px);
+                transform: translateY(-2px);
             }
             
             @media (max-width: 768px) {
@@ -421,13 +431,18 @@ export class LandingHero extends PlatformElement {
                     font-size: 18px;
                 }
             
-                .hero-cta {
+                .hero-cta-row {
                     position: static;
                     transform: none;
                     margin: 20px auto;
+                    flex-direction: column;
+                    width: min(100%, calc(100vw - 32px));
+                }
+
+                .hero-cta {
                     display: block;
+                    width: 100%;
                     white-space: normal;
-                    max-width: min(100%, calc(100vw - 32px));
                     box-sizing: border-box;
                     padding: 12px 16px;
                 }
@@ -455,7 +470,7 @@ export class LandingHero extends PlatformElement {
                 }
 
                 .hero-text-left { order: 5; }
-                .hero-cta { order: 6; }
+                .hero-cta-row { order: 6; }
                 .hero-text-right { order: 7; }
             }
             
@@ -492,8 +507,11 @@ export class LandingHero extends PlatformElement {
                     bottom: auto;
                 }
 
-                .hero-cta {
+                .hero-cta-row {
                     bottom: 36px;
+                }
+
+                .hero-cta {
                     font-size: 16px;
                     padding: 14px 32px;
                 }
@@ -534,8 +552,11 @@ export class LandingHero extends PlatformElement {
                     bottom: auto;
                 }
 
-                .hero-cta {
+                .hero-cta-row {
                     bottom: 40px;
+                }
+
+                .hero-cta {
                     font-size: 18px;
                     padding: 14px 28px;
                 }
@@ -747,9 +768,11 @@ export class LandingHero extends PlatformElement {
                     ${unsafeHTML(t('hero.trust_process'))}
                         </p>
                         
-                        <button class="hero-cta" @click=${this._handleCTA}>
-                            ${t('hero.start_button')}
-                        </button>
+                        <div class="hero-cta-row">
+                            <button type="button" class="hero-cta" @click=${this._handleCTA}>
+                                ${t('hero.start_button')}
+                            </button>
+                        </div>
                         
                 <p class="hero-text-right">
                     ${unsafeHTML(t('hero.evolution'))}

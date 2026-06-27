@@ -1,0 +1,45 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>HumanitecAgent pairing</title>
+  <style>
+    body { font-family: system-ui, sans-serif; margin: 24px; }
+    input { font-size: 24px; letter-spacing: 0.3em; width: 180px; }
+    button { margin-top: 12px; padding: 8px 16px; }
+    pre { margin-top: 16px; white-space: pre-wrap; }
+  </style>
+</head>
+<body>
+  <h1>HumanitecAgent</h1>
+  <p>Enter the 6-digit pairing code from platform Settings.</p>
+  <input id="pairing-code" data-humanitec-pairing-code maxlength="6" inputmode="numeric" autocomplete="one-time-code" />
+  <div>
+    <button id="pair-submit" data-humanitec-pair-submit>Pair device</button>
+  </div>
+  <pre id="pair-status"></pre>
+  <script>
+    const codeInput = document.getElementById('pairing-code');
+    const statusEl = document.getElementById('pair-status');
+    const agentApi = window.humanitecAgent;
+    if (!agentApi) {
+      statusEl.textContent = 'HumanitecAgent API is not available';
+      throw new Error('humanitecAgent preload API missing');
+    }
+    document.getElementById('pair-submit').addEventListener('click', async () => {
+      const pairingCode = codeInput.value.trim();
+      if (pairingCode.length !== 6) {
+        statusEl.textContent = 'Pairing code must be 6 digits';
+        return;
+      }
+      statusEl.textContent = 'Pairing...';
+      try {
+        await agentApi.pair(pairingCode);
+        statusEl.textContent = 'Paired successfully';
+      } catch (error) {
+        statusEl.textContent = String(error);
+      }
+    });
+  </script>
+</body>
+</html>

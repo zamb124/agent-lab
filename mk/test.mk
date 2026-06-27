@@ -1,4 +1,4 @@
-.PHONY: test test-all test-static test-up test-down test-reset test-cov test-cov-all test-cov-report test-unit test-ui test-ui-doc test-ui-components test-frontend-core test-frontend-core-canon test-frontend-core-unit test-frontend-core-browser test-profile check-strict-agent-architecture check-wider-repo-strictness
+.PHONY: test test-all test-static test-up test-down test-reset test-cov test-cov-all test-cov-report test-unit test-ui test-ui-doc test-ui-components test-frontend-core test-frontend-core-canon test-frontend-core-unit test-frontend-core-browser test-profile check-strict-agent-architecture check-wider-repo-strictness agent-ensure test-agent test-agent-e2e test-agent-desktop-e2e
 
 WORKERS ?= 5
 PYTEST_COMMAND_TIMEOUT_SECONDS ?= 5400
@@ -10,11 +10,15 @@ PYTHON_CHECK_PATHS ?= apps core
 RUFF_CHECK_ARGS ?= $(PYTHON_CHECK_PATHS)
 BASEDPYRIGHT_CHECK_ARGS ?= --level warning --warnings $(PYTHON_CHECK_PATHS)
 
-# E2E UI (pytest + Playwright) — не гонять в unit/cov без инфраструктуры
+# E2E UI (pytest + Playwright) — browser; agent desktop E2E только в phase 4 (-n0, Electron)
 _PYTEST_IGNORE_UI := --ignore=tests/ui
+_PYTEST_IGNORE_AGENT_DESKTOP := --ignore=tests/agent/desktop_e2e
 
 test-static:
 	@$(MAKE) --no-print-directory _lint-py
+	@uv run python scripts/check_agent_e2e_coverage.py
+	@uv run python scripts/check_agent_goose_tool_contract.py
+	@uv run python scripts/check_agent_test_no_monkeypatch.py
 
 check-strict-agent-architecture:
 	@uv run python scripts/check_strict_agent_architecture.py
@@ -96,6 +100,8 @@ test-frontend-core: test-frontend-core-canon test-frontend-core-unit test-fronte
 # Полный запуск: Python static -> фундамент UI -> unit параллельно -> retry упавших -> browser
 test:
 	@$(MAKE) --no-print-directory test-static
+	@$(MAKE) --no-print-directory runtime-bootstrap
+	@AGENT_ARTIFACT_MODE=release $(MAKE) --no-print-directory agent-ensure
 	@$(MAKE) --no-print-directory test-frontend-core
 	@$(MAKE) --no-print-directory test-up
 	@echo "=== 1/3 Запуск unit/API тестов в $(WORKERS) воркерах ==="
@@ -103,9 +109,12 @@ test:
 	phase1_rc=0; \
 	phase2_rc=0; \
 	phase3_rc=0; \
+	phase4a_rc=0; \
+	phase4c_rc=0; \
 	rm -f .pytest_cache/v/cache/lastfailed; \
 	uv run python scripts/pytest_with_timeout.py $(PYTEST_COMMAND_TIMEOUT_SECONDS) uv run pytest tests/ -n $(WORKERS) --max-worker-restart=$(PYTEST_MAX_WORKER_RESTART) \
 		$(_PYTEST_IGNORE_UI) \
+		$(_PYTEST_IGNORE_AGENT_DESKTOP) \
 		-m "not integration"; \
 	phase1_rc=$$?; \
 	if [ $$phase1_rc -ne 0 ]; then \
@@ -113,6 +122,7 @@ test:
 		echo "=== 2/3 Перезапуск упавших тестов (без параллелизации) ==="; \
 			uv run python scripts/run_pytest_lastfailed.py --timeout $(PYTEST_COMMAND_TIMEOUT_SECONDS) -- -n 1 --max-worker-restart=$(PYTEST_MAX_WORKER_RESTART) \
 				$(_PYTEST_IGNORE_UI) \
+				$(_PYTEST_IGNORE_AGENT_DESKTOP) \
 				-m "not integration" -v; \
 		phase2_rc=$$?; \
 		if [ $$phase2_rc -eq 0 ]; then \
@@ -124,16 +134,27 @@ test:
 	fi; \
 	if [ "$(RUN_UI_IN_TEST)" = "1" ]; then \
 		echo ""; \
-		echo "=== 3/3 Запуск E2E UI (pytest tests/ui/e2e) ==="; \
+		echo "=== 3/4 Запуск E2E UI (pytest tests/ui/e2e) ==="; \
 		uv run pytest tests/ui/e2e -v --timeout=180; \
 		phase3_rc=$$?; \
 	fi; \
-	if [ $$phase1_rc -ne 0 ] || [ $$phase2_rc -ne 0 ] || [ $$phase3_rc -ne 0 ]; then \
+	echo ""; \
+	echo "=== 4/4 HumanitecAgent (gates + release artifact + HTTP E2E + desktop E2E + settings UI) ==="; \
+	uv run python scripts/check_agent_e2e_coverage.py; \
+	uv run python scripts/check_agent_goose_tool_contract.py; \
+	uv run python scripts/check_agent_test_no_monkeypatch.py; \
+	AGENT_ARTIFACT_MODE=release uv run python scripts/agent_build.py ensure-local --artifact-mode release --version-sha "$$(git rev-parse HEAD)"; \
+	uv run pytest tests/agent/e2e tests/flows/api/test_agent_platform_mcp.py tests/frontend/api/test_humanitec_agent_api.py -n0 --timeout=180; \
+	phase4a_rc=$$?; \
+	RUN_UI_IN_TEST=1 UI_E2E_USE_LVH_ME=1 uv run pytest tests/agent/desktop_e2e tests/ui/e2e/test_frontend_settings_agent.py -n0 --timeout=900; \
+	phase4c_rc=$$?; \
+	if [ $$phase1_rc -ne 0 ] || [ $$phase2_rc -ne 0 ] || [ $$phase3_rc -ne 0 ] || [ $$phase4a_rc -ne 0 ] || [ $$phase4c_rc -ne 0 ]; then \
 		exit 1; \
 	fi
 
 test-all:
 	@$(MAKE) --no-print-directory test-static
+	@$(MAKE) --no-print-directory agent-ensure
 	@$(MAKE) --no-print-directory test-frontend-core
 	@$(MAKE) --no-print-directory test-up
 	@echo "=== 1/3 Запуск всех unit/API тестов в $(WORKERS) воркерах ==="
@@ -185,3 +206,22 @@ test-cov-report:
 	@echo "Генерация HTML отчета покрытия..."
 	uv run coverage html
 	@echo "Отчет сохранен в htmlcov/index.html"
+
+test-agent: test-up
+	uv run python scripts/check_agent_e2e_coverage.py
+	uv run python scripts/check_agent_goose_tool_contract.py
+	uv run python scripts/check_agent_test_no_monkeypatch.py
+	AGENT_ARTIFACT_MODE=release uv run python scripts/agent_build.py ensure-local --artifact-mode release --version-sha "$$(git rev-parse HEAD)"
+	RUN_UI_IN_TEST=1 UI_E2E_USE_LVH_ME=1 uv run pytest tests/agent tests/frontend/api/test_humanitec_agent_api.py tests/flows/api/test_agent_platform_mcp.py tests/ui/e2e/test_frontend_settings_agent.py -v -n0 --timeout=900
+
+test-agent-e2e: test-up
+	uv run pytest tests/agent/e2e -v -n0 --timeout=180
+
+test-agent-desktop-e2e: test-up
+	uv run python scripts/check_agent_e2e_coverage.py
+	uv run python scripts/check_agent_goose_tool_contract.py
+	AGENT_ARTIFACT_MODE=release uv run python scripts/agent_build.py ensure-local --artifact-mode release --version-sha "$$(git rev-parse HEAD)"
+	RUN_UI_IN_TEST=1 UI_E2E_USE_LVH_ME=1 uv run pytest tests/agent/desktop_e2e tests/ui/e2e/test_frontend_settings_agent.py -v -n0 --timeout=900
+
+test-agent-ui-e2e: test-up
+	UI_E2E_USE_LVH_ME=1 RUN_UI_IN_TEST=1 uv run pytest tests/ui/e2e/test_frontend_settings_agent.py -n0 --timeout=300

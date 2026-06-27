@@ -1,0 +1,124 @@
+---
+description: "HumanitecAgent: desktop, pairing, tunnel WS, Platform MCP (flows как MCP tools); интеграция для внешних MCP-клиентов"
+alwaysApply: false
+---
+# HumanitecAgent и Platform MCP
+
+HumanitecAgent — desktop-клиент (Goose fork) с доступом к flow компании и локальным MCP на ПК пользователя. **Код домена** — `apps/agent/`; **маршруты** монтируются в два сервиса по зоне ответственности (как A2A живёт в flows, а не в frontend).
+
+## Два HTTP-сurface
+
+| Surface | Сервис | Базовый path | Назначение |
+|---|---|---|---|
+| **Control plane** | `frontend` (:8002) | `/frontend/api/agent/*` | pairing, register, devices, policy, audit, download, releases |
+| **Tunnel WS** | `frontend` | `WS /frontend/api/agent/tunnel?token=` | исходящее соединение desktop → platform; ping/pong, локальный MCP proxy |
+| **Platform MCP** | `flows` (:8001) | `/flows/api/v1/agent/platform-mcp` | JSON-RPC: flow компании как MCP tools + proxy `device/mcp` на tunnel |
+| **A2A** | `flows` | `/flows/api/v1/a2a/*` | исполнение flow (тот же runtime, другой транспорт) |
+
+**Platform MCP не в frontend.** Router `apps/agent/platform_mcp.py` регистрируется в `apps/flows/main.py` (`agent_platform_mcp_router`), потому что `tools/call` → `A2AChannel.on_message_send`, `flow_repository`, durable runtime — всё в flows. Frontend только выдаёт `platform_mcp_url` при register (см. `_platform_mcp_url()` в `apps/agent/service.py`).
+
+```mermaid
+sequenceDiagram
+  participant User
+  participant Console as frontend control plane
+  participant Desktop as HumanitecAgent
+  participant Flows as flows Platform MCP
+  participant Local as Local MCP on PC
+
+  User->>Console: POST /pairing (session JWT)
+  Console-->>User: pairing_code 6 digits
+  Desktop->>Console: POST /register (pairing_code, device_id)
+  Console-->>Desktop: device JWT + platform_mcp_url
+  Desktop->>Console: WS /tunnel?token=device_jwt
+  Console-->>Desktop: policy frame
+  Desktop->>Flows: POST platform-mcp tools/list (device or user JWT)
+  Flows-->>Desktop: flow_{flow_id} tools
+  Desktop->>Flows: tools/call flow_{flow_id}
+  Flows->>Flows: A2AChannel run flow
+  Flows-->>Desktop: text + context_id
+  Flows->>Console: device/mcp via Redis bus
+  Console->>Desktop: mcp_request on tunnel
+  Desktop->>Local: JSON-RPC
+  Local-->>Desktop: result
+  Desktop-->>Console: mcp_response
+```
+
+## Pairing и device JWT
+
+1. **Pairing** — `POST /frontend/api/agent/pairing` (auth session). Redis `agent_pairing:{code}` → `{user_id, company_id}`, TTL из `agent.pairing_ttl_seconds`, rate limit `pairing_rate_limit_per_hour`.
+2. **Register** — `POST /frontend/api/agent/register` (anonymous). Одноразовый code → `AgentDeviceRecord` в shared storage + **device JWT** (`token_purpose=device`, `device_id`, `jti`).
+3. **Ответ register** — `device_id`, `token`, `platform_mcp_url` (always flows path), `expires_in`.
+
+Revoke: `DELETE /devices/{device_id}` → denylist device_id + active `jti`, `publish_tunnel_disconnect` через Redis bus.
+
+## Platform MCP — контракт для любого клиента
+
+Streamable HTTP, JSON-RPC 2.0, `Content-Type: application/json`. Auth: **session JWT** (browser) или **device JWT** (desktop) — тот же `Authorization`/cookie контекст компании.
+
+| Method | Назначение |
+|---|---|
+| `GET .../platform-mcp` | discover: `protocolVersion`, `serverInfo`, `capabilities.tools` |
+| `tools/list` | tools `flow_{flow_id}` по flow компании из `flow_repository` |
+| `tools/call` | `params.name=flow_{flow_id}`, `arguments.message` (обяз.), `arguments.context_id` (optional, continuity сессии A2A) |
+| `device/mcp` | proxy на локальный MCP desktop: `params.device_id`, `params.method`, `params.params` → tunnel bus |
+
+**tools/call** не REST: один POST body = один JSON-RPC. Исполнение — через `A2AChannel`, не прямой HTTP к A2A card URL.
+
+Пример (curl, session cookie):
+
+```http
+POST /flows/api/v1/agent/platform-mcp
+Cookie: auth_token=...
+{"jsonrpc":"2.0","id":1,"method":"tools/list"}
+
+POST /flows/api/v1/agent/platform-mcp
+{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"flow_my_flow","arguments":{"message":"Привет","context_id":"optional-uuid"}}}
+```
+
+Ответ `tools/call`: `result.content[].text`, `result.context_id` для следующего вызова.
+
+## Tunnel WS (только desktop)
+
+- URL: `wss://{company_host}/frontend/api/agent/tunnel?token={device_jwt}`
+- После accept: frame `{type:"policy", policy: DevicePolicy}`
+- Клиент → `ping` → `pong`; platform → `mcp_request` → клиент → `mcp_response`
+- Закрытие: `4401` invalid/revoked token, `4403` deactivated или policy blocks (shell/browser/roots all off)
+- Multi-pod: `apps/agent/tunnel_bus.py` — Redis pub/sub `platform:agent_tunnel_mcp_request|response|disconnect`; listener стартует и в `frontend`, и в `flows` startup
+
+Локальный MCP на ПК **не** exposed в internet — только через tunnel + `device/mcp` на Platform MCP.
+
+## Отличие от `mcp.mdc`
+
+| | Platform MCP (`humanitec_agent`) | MCP servers в flows (`mcp.mdc`) |
+|---|---|---|
+| Направление | Platform **отдаёт** flow как tools наружу | Flow **потребляет** внешние MCP servers |
+| Endpoint | `/flows/api/v1/agent/platform-mcp` | `/flows/api/v1/mcp/servers/*` |
+| Клиент | Desktop, Claude Desktop, любой MCP host | `llm_node`, `MCPNode`, `MCPClient` |
+| Конфиг | flows в БД компании | `MCPServerRepository` per company |
+
+Оба — JSON-RPC MCP, но разные роли; не смешивать API и не дублировать router.
+
+## Desktop (Goose)
+
+- Distro: `apps/agent/desktop/distro/humanitec.json` → `platform_mcp_path`, `default_extensions` (`platform_mcp`, …)
+- Branding: `apps/agent/desktop/scripts/apply_branding.sh`, `humanitecDistro.ts`
+- Releases: GitHub assets `HumanitecAgent-{platform}-{sha}.{ext}`, redirect `GET /frontend/api/agent/download/{platform}`
+- Config: `conf.json` → `agent.*` (`apps/agent/config.py`)
+
+## Prod-инварианты
+
+- Новый agent endpoint control plane → `apps/agent/api.py`, mount `frontend/main.py`, REST-зеркало UI factory если команда из Settings.
+- Platform MCP methods / flow tool shape → `apps/agent/platform_mcp.py`, mount только через `flows/main.py`.
+- Tunnel / bus / registry → `apps/agent/tunnel*.py`; denylist и audit → `apps/agent/service.py`.
+- **Zero-fallback:** invalid pairing, offline device, unknown flow — явная ошибка (HTTP 4xx / JSON-RPC error), не silent empty.
+- E2E prod path: HTTP `:9004`, WS real, Platform MCP `:9001` — см. `tests/agent/e2e/`, marker `agent_e2e`.
+
+## Файлы
+
+- `apps/agent/api.py`, `service.py`, `models.py`, `config.py` — control plane
+- `apps/agent/platform_mcp.py` — Platform MCP (mount flows)
+- `apps/agent/tunnel.py`, `tunnel_bus.py`, `tunnel_registry.py` — WS + cross-pod MCP
+- `apps/frontend/main.py` — agent + tunnel routers
+- `apps/flows/main.py` — platform MCP router + tunnel bus listener
+- `apps/frontend/ui/events/resources/agent.resource.js` — Settings UI factories
+- `tests/agent/`, `tests/flows/api/test_agent_platform_mcp.py`

@@ -1,5 +1,9 @@
 /conf.local.json
 
+# Локальный runtime cache и desktop release artifacts
+/.cache/
+/apps/agent/desktop/dist/
+
 # Helm ConfigMap: собирается из корневого conf.json + deploy/helm/agent-lab/files/app-conf.k8s-overlay.json
 deploy/helm/agent-lab/files/app-conf.json
 artifacts/*

@@ -1,0 +1,49 @@
+name: humanitec-agent-desktop-e2e
+
+on:
+  schedule:
+    - cron: "0 3 * * *"
+  workflow_dispatch:
+
+jobs:
+  desktop-e2e:
+    timeout-minutes: 120
+    runs-on: macos-14
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 9
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Python deps
+        run: uv sync
+
+      - name: Test stack
+        run: make test-up
+
+      - name: Build HumanitecAgent release
+        run: make agent-build AGENT_PLATFORM=macos-arm64 AGENT_ARTIFACT_MODE=release AGENT_VERSION_SHA=${{ github.sha }}
+
+      - name: Desktop E2E
+        env:
+          UI_E2E_USE_LVH_ME: "1"
+          RUN_UI_IN_TEST: "1"
+          AGENT_DESKTOP_E2E_BASE_URL: "http://system.lvh.me:9004"
+          AGENT_ARTIFACT_MODE: "release"
+          AGENT__RELEASES__SOURCE: "local"
+        run: make test-agent-desktop-e2e
+
+      - name: MCP flow HTTP E2E
+        run: make test-agent-mcp-flows-e2e

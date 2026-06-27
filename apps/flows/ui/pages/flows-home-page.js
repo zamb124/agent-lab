@@ -6,6 +6,7 @@ import { html, css } from 'lit';
 import { repeat } from 'lit/directives/repeat.js';
 import { PlatformPage } from '@platform/lib/base/PlatformPage.js';
 import { formatPlatformDateTime } from '@platform/lib/utils/format-platform-date.js';
+import { buildFrontendPublicPath } from '@platform/lib/utils/build-service-entry-url.js';
 import '@platform/lib/components/layout/page-header.js';
 import '@platform/lib/components/platform-icon.js';
 import '@platform/lib/components/platform-help-hint.js';
@@ -240,6 +241,9 @@ export class FlowsHomePage extends PlatformPage {
             .text-action {
                 padding: 0 var(--space-3);
             }
+            a.text-action {
+                text-decoration: none;
+            }
             .icon-action:hover,
             .text-action:hover {
                 color: var(--text-primary);
@@ -453,13 +457,14 @@ export class FlowsHomePage extends PlatformPage {
                 gap: var(--space-3);
             }
             .flow-card {
-                min-height: 186px;
                 overflow: hidden;
                 display: flex;
                 flex-direction: column;
             }
             .flow-media {
-                height: 86px;
+                aspect-ratio: 16 / 9;
+                flex-shrink: 0;
+                width: 100%;
                 display: flex;
                 align-items: center;
                 justify-content: center;
@@ -978,6 +983,10 @@ export class FlowsHomePage extends PlatformPage {
         `;
     }
 
+    _agentDownloadHref() {
+        return buildFrontendPublicPath('/agent');
+    }
+
     _renderHero() {
         return html`
             <section class="hero-band">
@@ -1008,6 +1017,15 @@ export class FlowsHomePage extends PlatformPage {
                             <platform-icon name="mcp" size="16"></platform-icon>
                             <span>${this.t('flows_home.hero_mcp')}</span>
                         </button>
+                        <a
+                            class="text-action"
+                            href=${this._agentDownloadHref()}
+                            title=${this.t('flows_home.hero_download_desc')}
+                            aria-label=${this.t('flows_home.hero_download')}
+                        >
+                            <platform-icon name="download" size="16"></platform-icon>
+                            <span>${this.t('flows_home.hero_download')}</span>
+                        </a>
                     </div>
                 </div>
                 <div class="hero-map" aria-hidden="true">

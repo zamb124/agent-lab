@@ -1,0 +1,23 @@
+{
+  "flow_id": "handoff_demo_parent",
+  "name": "Пример agent handoff",
+  "description": "Родительский ReAct-агент: handoff_to_flow передаёт управление дочернему flow (заказы и курьеры). Дочерний агент возвращает ticket_id и courier_name через handback_to_parent. В компанию ставятся оба flow.",
+  "tags": ["example", "handoff", "demo", "multi-agent"],
+  "depends_on_flow_ids": ["handoff_demo_child"],
+  "permission": ["admin", "developers"],
+  "entry": "main",
+  "nodes": {
+    "main": {
+      "type": "llm_node",
+      "prompt": "Ты родительский агент демо handoff.\n\nЕсли запрос про заказы, доставку или курьеров — вызывай handoff_to_flow.\n\nОБЯЗАТЕЛЬНО:\n- target_flow_id всегда ровно handoff_demo_child (другие id запрещены, не выдумывай имена вроде order_handler).\n- reason — кратко, зачем передаёшь управление.\n- variables — только известные order_id и customer_name (если нет — пустой объект или только то, что сказал пользователь).\n\nНа общие вопросы отвечай сам или через finish.",
+      "llm": { "provider": "humanitec_llm", "model": "auto", "temperature": 0.2 },
+      "tools": [
+        { "tool_id": "handoff_to_flow", "description": "Handoff в дочерний flow. target_flow_id=handoff_demo_child (строго этот id). Для заказов и курьеров." },
+        { "tool_id": "calculator", "description": "Калькулятор для простых вычислений", "code": "async def run(args, state):\n    try:\n        return {'result': str(eval(args.get('expression', '0')))}\n    except Exception as e:\n        return {'result': 'error: ' + str(e)}\n", "parameters_schema": { "type": "object", "properties": { "expression": { "type": "string", "description": "Математическое выражение" } }, "required": ["expression"] } },
+        { "tool_id": "finish", "description": "Завершить ответ" }
+      ]
+    }
+  },
+  "edges": [{ "from_node": "main", "to_node": null }],
+  "branches": {}
+}

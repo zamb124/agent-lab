@@ -1,0 +1,35 @@
+name: humanitec-agent-build-pr
+
+on:
+  pull_request:
+    paths:
+      - "apps/agent/**"
+      - "scripts/agent_build.py"
+      - "scripts/verify_agent_artifact.py"
+      - "mk/agent.mk"
+      - ".github/workflows/humanitec-agent-build*.yml"
+
+jobs:
+  placeholder-verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup uv
+        uses: astral-sh/setup-uv@v5
+
+      - name: Prepare build scripts
+        run: chmod +x apps/agent/desktop/scripts/build.sh apps/agent/desktop/scripts/apply_branding.sh
+
+      - name: Build and verify placeholder (all platforms)
+        env:
+          AGENT_ARTIFACT_MODE: placeholder
+          AGENT_VERSION_SHA: pr-${{ github.sha }}
+        run: |
+          for platform in windows macos-arm64 macos-x64 linux-deb linux-rpm linux-appimage; do
+            AGENT_PLATFORM="$platform" make agent-ci-build
+            uv run python scripts/verify_agent_artifact.py \
+              --platform "$platform" \
+              --version-sha "pr-${{ github.sha }}" \
+              --artifact-mode placeholder
+          done

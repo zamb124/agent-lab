@@ -12,22 +12,19 @@ from apps.sync.realtime.tasks import (
     _register_platform_file_record_for_call_recording,
 )
 from core.config import get_settings
-from core.files.s3_client import S3ClientFactory
-
-
-def _require_s3_client() -> None:
-    S3ClientFactory.create_default_client()
+from tests.fixtures.s3 import require_s3_configured
 
 
 @pytest.mark.asyncio
 async def test_call_recording_register_platform_file_then_download_ok(
     frontend_app,
+    s3_client_for_bucket,
     unique_id: str,
     company_id: str,
     sync_user_id: str,
     sync_auth_headers: dict[str, str],
 ) -> None:
-    _require_s3_client()
+    require_s3_configured()
     call_id = uuid.uuid4().hex
     recording_id = uuid.uuid4().hex
     s3_key = _call_recording_s3_object_key(
@@ -36,7 +33,10 @@ async def test_call_recording_register_platform_file_then_download_ok(
         recording_id=recording_id,
     )
     payload = b"sync-test-recording-bytes"
-    s3_client = S3ClientFactory.create_client_for_bucket(get_settings().s3.default_bucket)
+    bucket = get_settings().s3.default_bucket
+    if bucket == "":
+        pytest.fail("S3 default_bucket is required")
+    s3_client = s3_client_for_bucket(bucket)
     uploaded = await s3_client.upload_bytes(payload, s3_key, content_type="video/mp4")
     assert uploaded, "S3 upload_bytes вернул False"
     await s3_client.close()
@@ -62,7 +62,7 @@ async def test_call_recording_register_platform_file_then_download_ok(
         assert dl.status_code == 200, dl.text
         assert dl.content == payload
     finally:
-        cleanup = S3ClientFactory.create_client_for_bucket(get_settings().s3.default_bucket)
+        cleanup = s3_client_for_bucket(bucket)
         await cleanup.delete_file(s3_key)
         await cleanup.close()
         from apps.sync.container import get_sync_container

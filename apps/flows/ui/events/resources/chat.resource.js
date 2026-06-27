@@ -1763,6 +1763,62 @@ export const chatResource = createResourceCollection({
             return { ...next, streaming: false };
         }
 
+        if (type === 'flows/chat/handoff_initiated') {
+            const p = event.payload;
+            if (!p || typeof p !== 'object') return state;
+            const taskId = typeof p.task_id === 'string' ? p.task_id : null;
+            if (!taskId) return state;
+            const ctxHint = typeof p.context_id === 'string' ? p.context_id : null;
+            const handoff = {
+                status: 'active',
+                targetFlowId: typeof p.target_flow_id === 'string' ? p.target_flow_id : '',
+                targetFlowName: typeof p.target_flow_name === 'string'
+                    ? p.target_flow_name
+                    : (typeof p.target_flow_id === 'string' ? p.target_flow_id : ''),
+                depth: typeof p.depth === 'number' ? p.depth : 0,
+                reason: typeof p.handoff_reason === 'string' ? p.handoff_reason : '',
+                traceId: typeof p.trace_id === 'string' ? p.trace_id : '',
+            };
+            return _pushMessage(
+                _applyToBucketMessages(state, taskId,
+                    _setMessageFields(taskId, { handoff, streaming: false, activity: '' }),
+                    ctxHint
+                ),
+                state.currentContextId,
+                { id: `handoff_${taskId}_${handoff.targetFlowId}`, role: 'handoff', ...handoff },
+            );
+        }
+
+        if (type === 'flows/chat/handback_completed') {
+            const p = event.payload;
+            if (!p || typeof p !== 'object') return state;
+            const taskId = typeof p.task_id === 'string' ? p.task_id : null;
+            if (!taskId) return state;
+            const ctxHint = typeof p.context_id === 'string' ? p.context_id : null;
+            const handback = {
+                id: `handback_${taskId}`,
+                role: 'handback',
+                childFlowName: typeof p.child_flow_name === 'string' ? p.child_flow_name : '',
+                parentFlowName: typeof p.parent_flow_name === 'string' ? p.parent_flow_name : '',
+                response: typeof p.response === 'string' ? p.response : '',
+                depth: typeof p.handoff_depth === 'number' ? p.handoff_depth : 0,
+                traceId: typeof p.trace_id === 'string' ? p.trace_id : '',
+            };
+            const next = _applyToBucketMessages(state, taskId, (messages) => {
+                const updated = messages.map((message) => {
+                    if (message.role !== 'assistant' || !message.handoff) {
+                        return message;
+                    }
+                    return {
+                        ...message,
+                        handoff: { ...message.handoff, status: 'returned' },
+                    };
+                });
+                return [...updated, handback];
+            }, ctxHint);
+            return { ...next, streaming: false };
+        }
+
         return state;
     },
 });
