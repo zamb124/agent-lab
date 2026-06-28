@@ -505,6 +505,50 @@ if "@electron-forge/maker-wix" not in text:
   plugins:"""
     text = text.replace(makers_plugins_anchor, extra_makers, 1)
 
+# Notarization вынесена в build.sh (notarytool + stapler после forge).
+# goosed (~245MB extraResource) pre-sign до forge; osxSign пропускает его через optionsForFile.
+osx_sign_old = """if (process.env.APPLE_TEAM_ID) {
+  cfg.osxSign = {
+    keychain: process.env.KEYCHAIN_PATH || undefined,
+    entitlements: 'entitlements.plist',
+    'entitlements-inherit': 'entitlements.plist',
+  };
+  cfg.osxNotarize = {
+    appleId: process.env.APPLE_ID,
+    appleIdPassword: process.env.APPLE_ID_PASSWORD,
+    teamId: process.env.APPLE_TEAM_ID,
+  };
+}"""
+osx_sign_new = """if (process.env.APPLE_TEAM_ID) {
+  cfg.osxSign = {
+    keychain: process.env.KEYCHAIN_PATH || undefined,
+    entitlements: 'entitlements.plist',
+    'entitlements-inherit': 'entitlements.plist',
+    optionsForFile: (filePath) => {
+      const pathSep = require('path').sep;
+      if (filePath.includes(`${pathSep}Resources${pathSep}bin${pathSep}goosed`)) {
+        return { sign: false };
+      }
+      return {};
+    },
+  };
+}"""
+if "optionsForFile: (filePath)" not in text:
+    if osx_sign_old in text:
+        text = text.replace(osx_sign_old, osx_sign_new, 1)
+    elif "cfg.osxNotarize" in text:
+        raise SystemExit(
+            "forge.config.ts osxSign/osxNotarize block does not match expected anchor"
+        )
+elif "cfg.osxNotarize" in text:
+    osx_notarize_block = """
+  cfg.osxNotarize = {
+    appleId: process.env.APPLE_ID,
+    appleIdPassword: process.env.APPLE_ID_PASSWORD,
+    teamId: process.env.APPLE_TEAM_ID,
+  };"""
+    text = text.replace(osx_notarize_block, "", 1)
+
 forge_path.write_text(text, encoding="utf-8")
 
 app_ts_path = goose_desktop / "src" / "App.tsx"

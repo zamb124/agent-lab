@@ -175,6 +175,10 @@ run_desktop_forge() {
   cat "${forge_log}"
   if [[ "${forge_exit}" -ne 0 ]]; then
     echo "electron-forge ${forge_subcommand} failed with exit code ${forge_exit}; log: ${forge_log}" >&2
+    if [[ -f "${forge_log}" ]]; then
+      echo "Last 200 lines of ${forge_log}:" >&2
+      tail -n 200 "${forge_log}" >&2 || true
+    fi
     diagnose_desktop_build_state
     exit "${forge_exit}"
   fi
@@ -182,6 +186,10 @@ run_desktop_forge() {
     echo "electron-forge ${forge_subcommand} returned exit ${forge_exit} but ${DESKTOP_DIR}/out was not created" >&2
     echo "Searching for out/ directories under workspace:" >&2
     find "${GOOSE_UI_DIR}" -maxdepth 3 -name out -type d 2>/dev/null >&2 || true
+    if [[ -f "${forge_log}" ]]; then
+      echo "Last 200 lines of ${forge_log}:" >&2
+      tail -n 200 "${forge_log}" >&2 || true
+    fi
     diagnose_desktop_build_state
     exit 1
   fi
@@ -223,6 +231,12 @@ diagnose_desktop_build_state() {
   if [[ -d "${DESKTOP_DIR}/src/bin" ]]; then
     echo "  src/bin:" >&2
     ls -la "${DESKTOP_DIR}/src/bin" >&2 || true
+    if [[ -f "${DESKTOP_DIR}/src/bin/goosed" ]]; then
+      file "${DESKTOP_DIR}/src/bin/goosed" >&2 || true
+      if command -v codesign >/dev/null 2>&1; then
+        codesign -dv --verbose=4 "${DESKTOP_DIR}/src/bin/goosed" >&2 || true
+      fi
+    fi
   else
     echo "  missing src/bin" >&2
   fi
@@ -304,6 +318,128 @@ build_goosed_binary() {
   fi
 }
 
+macos_signing_enabled() {
+  if [[ -z "${APPLE_TEAM_ID:-}" ]]; then
+    return 1
+  fi
+  return 0
+}
+
+resolve_macos_signing_identity() {
+  if [[ -z "${KEYCHAIN_PATH:-}" ]]; then
+    echo "KEYCHAIN_PATH is required for macOS signing" >&2
+    exit 1
+  fi
+  local signing_identity=""
+  signing_identity="$(security find-identity -v -p codesigning "${KEYCHAIN_PATH}" \
+    | awk -F'"' '/Developer ID Application/ { print $2; exit }')"
+  if [[ -z "${signing_identity}" ]]; then
+    echo "Developer ID Application identity not found in keychain ${KEYCHAIN_PATH}" >&2
+    security find-identity -v -p codesigning "${KEYCHAIN_PATH}" >&2 || true
+    exit 1
+  fi
+  echo "${signing_identity}"
+}
+
+verify_macos_goosed_arch() {
+  local goosed_bin="${DESKTOP_DIR}/src/bin/goosed"
+  if [[ ! -f "${goosed_bin}" ]]; then
+    echo "goosed binary missing for arch verification: ${goosed_bin}" >&2
+    exit 1
+  fi
+  if ! command -v file >/dev/null 2>&1; then
+    echo "file command is required for macOS goosed arch verification" >&2
+    exit 1
+  fi
+  local file_output=""
+  file_output="$(file "${goosed_bin}")"
+  echo "goosed arch check: ${file_output}"
+  case "${PLATFORM}" in
+    macos-x64)
+      if ! grep -q 'x86_64' <<<"${file_output}"; then
+        echo "macos-x64 build requires x86_64 goosed binary, got: ${file_output}" >&2
+        exit 1
+      fi
+      ;;
+    macos-arm64)
+      if ! grep -q 'arm64' <<<"${file_output}"; then
+        echo "macos-arm64 build requires arm64 goosed binary, got: ${file_output}" >&2
+        exit 1
+      fi
+      ;;
+    *)
+      echo "Unsupported macOS platform for goosed arch verification: ${PLATFORM}" >&2
+      exit 1
+      ;;
+  esac
+}
+
+sign_macos_goosed_binary() {
+  if ! macos_signing_enabled; then
+    echo "macOS signing disabled — skipping goosed pre-sign"
+    return 0
+  fi
+  local goosed_bin="${DESKTOP_DIR}/src/bin/goosed"
+  local entitlements_path="${DESKTOP_DIR}/entitlements.plist"
+  if [[ ! -f "${goosed_bin}" ]]; then
+    echo "goosed binary missing before pre-sign: ${goosed_bin}" >&2
+    exit 1
+  fi
+  if [[ ! -f "${entitlements_path}" ]]; then
+    echo "entitlements.plist missing: ${entitlements_path}" >&2
+    exit 1
+  fi
+  verify_macos_goosed_arch
+  local signing_identity=""
+  signing_identity="$(resolve_macos_signing_identity)"
+  echo "Pre-signing goosed with identity: ${signing_identity}"
+  codesign --force --sign "${signing_identity}" \
+    --options runtime --timestamp \
+    --entitlements "${entitlements_path}" \
+    "${goosed_bin}"
+  codesign --verify --deep --strict "${goosed_bin}"
+  echo "goosed pre-sign complete"
+}
+
+notarize_macos_app_bundle() {
+  local app_path="$1"
+  if ! macos_signing_enabled; then
+    echo "macOS signing disabled — skipping notarization"
+    return 0
+  fi
+  if [[ -z "${APPLE_ID:-}" ]]; then
+    echo "APPLE_ID is required for macOS notarization" >&2
+    exit 1
+  fi
+  if [[ -z "${APPLE_ID_PASSWORD:-}" ]]; then
+    echo "APPLE_ID_PASSWORD is required for macOS notarization" >&2
+    exit 1
+  fi
+  if [[ ! -d "${app_path}" ]]; then
+    echo "macOS app bundle missing for notarization: ${app_path}" >&2
+    exit 1
+  fi
+  local zip_path=""
+  zip_path="$(mktemp -t humanitec-agent-notarize-XXXXXX).zip"
+  ditto -c -k --keepParent "${app_path}" "${zip_path}"
+  echo "Submitting ${app_path} for notarization"
+  xcrun notarytool submit "${zip_path}" \
+    --apple-id "${APPLE_ID}" \
+    --password "${APPLE_ID_PASSWORD}" \
+    --team-id "${APPLE_TEAM_ID}" \
+    --wait
+  rm -f "${zip_path}"
+  xcrun stapler staple "${app_path}"
+  echo "Notarization and stapling complete for ${app_path}"
+  if [[ "${AGENT_VERIFY_CODESIGN:-0}" == "1" ]]; then
+    if ! command -v spctl >/dev/null 2>&1; then
+      echo "spctl is required when AGENT_VERIFY_CODESIGN=1" >&2
+      exit 1
+    fi
+    spctl -a -vv "${app_path}"
+  fi
+}
+
 bundle_windows_runtime_dlls() {
   local bin_dir="${DESKTOP_DIR}/src/bin"
   local goosed_exe="${bin_dir}/goosed.exe"
@@ -352,6 +488,7 @@ build_release() {
         exit 1
       fi
       build_goosed_binary
+      sign_macos_goosed_binary
       install_desktop_node_modules
       prepare_desktop_binaries
       export MACOSX_DEPLOYMENT_TARGET="${MACOSX_DEPLOYMENT_TARGET:-12.0}"
@@ -374,6 +511,7 @@ build_release() {
         echo "Goose desktop package did not produce ${GOOSE_BUNDLE_NAME}.app" >&2
         exit 1
       fi
+      notarize_macos_app_bundle "${app_path}"
       if ! command -v hdiutil >/dev/null 2>&1; then
         echo "hdiutil is required to pack ${GOOSE_BUNDLE_NAME}.app into .dmg" >&2
         exit 1

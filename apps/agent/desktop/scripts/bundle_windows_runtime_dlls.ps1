@@ -32,17 +32,41 @@ function Resolve-MsvcCrtDirectory {
     if (-not (Test-Path -LiteralPath $redistRoot)) {
         throw "MSVC redist root missing: $redistRoot"
     }
-    $versionDir = Get-ChildItem -LiteralPath $redistRoot -Directory |
-        Sort-Object Name -Descending |
+
+    $crtCandidates = @()
+    foreach ($versionDir in Get-ChildItem -LiteralPath $redistRoot -Directory) {
+        $x64Root = Join-Path $versionDir.FullName 'x64'
+        if (-not (Test-Path -LiteralPath $x64Root)) {
+            continue
+        }
+        foreach ($crtDir in Get-ChildItem -LiteralPath $x64Root -Directory -Filter 'Microsoft.VC*.CRT') {
+            $crtCandidates += [PSCustomObject]@{
+                VersionDir = $versionDir.Name
+                CrtDir = $crtDir.FullName
+                CrtName = $crtDir.Name
+            }
+        }
+    }
+
+    if ($crtCandidates.Count -eq 0) {
+        $layout = Get-ChildItem -LiteralPath $redistRoot -Recurse -Directory -Filter 'Microsoft.VC*.CRT' |
+            ForEach-Object { $_.FullName }
+        $layoutHint = if ($layout) { ($layout -join '; ') } else { 'none' }
+        throw "No Microsoft.VC*.CRT directory under $redistRoot (found: $layoutHint)"
+    }
+
+    $selected = $crtCandidates |
+        Where-Object { Test-Path -LiteralPath (Join-Path $_.CrtDir 'vcruntime140.dll') } |
+        Sort-Object { [version]($_.VersionDir -replace '^v', '') } -Descending |
         Select-Object -First 1
-    if (-not $versionDir) {
-        throw "No MSVC redist version directory under $redistRoot"
+
+    if (-not $selected) {
+        $searched = ($crtCandidates | ForEach-Object { $_.CrtDir }) -join '; '
+        throw "No MSVC CRT directory with vcruntime140.dll. Candidates: $searched"
     }
-    $crtDir = Join-Path $versionDir.FullName 'x64\Microsoft.VC143.CRT'
-    if (-not (Test-Path -LiteralPath $crtDir)) {
-        throw "MSVC CRT directory missing: $crtDir"
-    }
-    return $crtDir
+
+    Write-Host "Using MSVC CRT: $($selected.CrtDir) ($($selected.CrtName), redist $($selected.VersionDir))"
+    return $selected.CrtDir
 }
 
 function Resolve-UcrtDirectory {

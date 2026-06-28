@@ -207,6 +207,14 @@ jobs:
           WINDOWS_CERTIFICATE_PASSWORD: ${{ secrets.WINDOWS_CERTIFICATE_PASSWORD }}
         run: make agent-ci-build
 
+      - name: Upload forge logs on failure
+        if: failure() && startsWith(matrix.platform, 'macos-')
+        uses: actions/upload-artifact@v4
+        with:
+          name: forge-logs-${{ matrix.platform }}
+          path: apps/agent/desktop/vendor/goose/ui/desktop/forge-*.log
+          if-no-files-found: ignore
+
       - name: Verify artifact branding
         shell: bash
         env:

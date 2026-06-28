@@ -201,6 +201,8 @@ make agent-ci-build AGENT_PLATFORM=macos-arm64 AGENT_ARTIFACT_MODE=release AGENT
 
 **DMG UX:** staging `.app` + symlink `Applications` перед `hdiutil create` (`build.sh`).
 
+**macOS signing pipeline (CI):** pre-sign `goosed` в `build.sh` → forge `osxSign` (без inline `osxNotarize`; `optionsForFile` skip pre-signed goosed) → `notarytool` + `stapler` в `build.sh` до `hdiutil`. Notarization **не** в forge — стабильнее для cross-packaging `macos-x64` на `macos-14`. При падении job — artifact `forge-*.log`.
+
 **Windows self-contained MSI:** `scripts/bundle_windows_runtime_dlls.ps1` копирует MSVC CRT + UCRT в `src/bin` рядом с `goosed.exe`; gate `dumpbin /dependents` до forge. Пользователю **не** нужен VC++ Redistributable. Child exit `3221225781` (`0xC0000135`) = missing DLL.
 
 **Prod download API:** репозиторий **private** → frontend обязан ходить в GitHub Releases API с PAT (`AGENT__RELEASES__GITHUB_TOKEN` в GitHub Secrets → `platform-secrets` → pod env). Без токена API отдаёт **404** (не 403); артефакты на Release при этом **не пропадают**. Деплой платформы билды не трогает.
@@ -212,12 +214,12 @@ make agent-ci-build AGENT_PLATFORM=macos-arm64 AGENT_ARTIFACT_MODE=release AGENT
 | Node | **22 LTS** — Node 24 рвёт `extract-zip` (postinstall electron, packager на macOS) |
 | pnpm | `pnpm install --frozen-lockfile` из **`vendor/goose/ui`** (monorepo root), не из `ui/desktop` |
 | macOS packager | `ELECTRON_PACKAGER_TMPDIR=$REPO_ROOT/.electron-packager-tmp` — staging на том же томе, что `out/` |
-| macos-x64 | раннер **`macos-14`** (не `macos-13`); кросс: `x86_64-apple-darwin` + forge `--arch x64` |
+| macos-x64 | раннер **`macos-14`** (не `macos-13`); кросс: `x86_64-apple-darwin` + forge `--arch x64`; notarize вне forge |
 | Verify rpm | `%{VENDOR}` часто `(none)` у maker-rpm — ок; брендинг по `%{NAME}` + `.desktop` |
 | Verify AppImage | не `strings` по squashfs — `--appimage-extract`, проверка `.desktop` |
-| Windows MSI | `bundle_windows_runtime_dlls.ps1` → CRT+UCRT в `resources/bin`; verify через `msiexec /a` |
+| Windows MSI | `bundle_windows_runtime_dlls.ps1` → CRT+UCRT в `resources/bin` (glob `Microsoft.VC*.CRT`, не только VC143); verify через `msiexec /a` |
 
-Цепочка release: `cargo build goosed` → (`bundle_windows_runtime_dlls` на Windows) → `apply_branding.sh` → `pnpm` → `electron-forge make` → verify → upload → `publish-release`.
+Цепочка release: `cargo build goosed` → (macOS: pre-sign goosed; Windows: `bundle_windows_runtime_dlls`) → `apply_branding.sh` → `pnpm` → `electron-forge make` → (macOS: notarytool + staple) → DMG/MSI → verify → upload → `publish-release`.
 
 ## Чек-листы типовых операций
 

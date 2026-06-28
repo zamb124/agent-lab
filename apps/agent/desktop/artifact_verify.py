@@ -183,6 +183,24 @@ def _verify_macos_release_dmg(path: Path, distro: HumanitecDistroConfig) -> None
                         + spctl_result.stderr.strip()
                         + spctl_result.stdout.strip()
                     )
+
+            goosed_bin = app_bundle / "Contents" / "Resources" / "bin" / "goosed"
+            if not goosed_bin.is_file():
+                raise ArtifactVerificationError(
+                    f"Missing goosed helper in app bundle: {goosed_bin}"
+                )
+            goosed_codesign_result = subprocess.run(
+                ["codesign", "--verify", "--deep", "--strict", str(goosed_bin)],
+                check=False,
+                capture_output=True,
+                text=True,
+            )
+            if goosed_codesign_result.returncode != 0:
+                raise ArtifactVerificationError(
+                    "goosed codesign verification failed: "
+                    + goosed_codesign_result.stderr.strip()
+                    + goosed_codesign_result.stdout.strip()
+                )
     finally:
         if mount_dir.is_dir() and any(mount_dir.iterdir()):
             detach_result = subprocess.run(
