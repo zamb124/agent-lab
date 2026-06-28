@@ -187,6 +187,7 @@ def test_apply_branding_script_patches_goose_desktop() -> None:
         assert '"name": "humanitecagent"' in package_payload
         assert "name: process.env.GOOSE_BUNDLE_NAME" in forge_payload
         assert "executableName: process.env.GOOSE_BUNDLE_NAME" in forge_payload
+        assert "tmpdir: process.env.ELECTRON_PACKAGER_TMPDIR" in forge_payload
         assert "name: 'humanitecagent'" in forge_payload
         assert "bin: 'HumanitecAgent'" in forge_payload
         assert "schemes: ['humanitec']" in forge_payload

@@ -100,28 +100,27 @@ require_desktop_make_dir() {
 }
 
 install_desktop_node_modules() {
+  if [[ ! -f "${GOOSE_UI_DIR}/pnpm-lock.yaml" ]]; then
+    echo "Goose UI lockfile missing: ${GOOSE_UI_DIR}/pnpm-lock.yaml" >&2
+    exit 1
+  fi
+  # Единый install для всех платформ из корня Goose UI monorepo: только так
+  # отрабатывает postinstall electron (onlyBuiltDependencies в ui/package.json)
+  # и в node_modules/electron/dist оказывается реальный бинарь, а не только locales.
+  pushd "${GOOSE_UI_DIR}" >/dev/null
+  pnpm install --frozen-lockfile
+  popd >/dev/null
+  require_electron_dist
   case "${PLATFORM}" in
     windows|linux-deb|linux-rpm|linux-appimage)
+      # Makers wix/appimage отсутствуют в lockfile Goose; добавляем их после
+      # frozen-install, когда electron уже корректно собран и не будет затронут.
       pushd "${DESKTOP_DIR}" >/dev/null
       pnpm add -D @electron-forge/maker-wix@^7.11.1 @reforged/maker-appimage@^5.2.0
-      pnpm install
       popd >/dev/null
-      ;;
-    macos-arm64|macos-x64)
-      if [[ ! -f "${GOOSE_UI_DIR}/pnpm-lock.yaml" ]]; then
-        echo "Goose UI lockfile missing: ${GOOSE_UI_DIR}/pnpm-lock.yaml" >&2
-        exit 1
-      fi
-      pushd "${GOOSE_UI_DIR}" >/dev/null
-      pnpm install --frozen-lockfile
-      popd >/dev/null
-      ;;
-    *)
-      echo "Unsupported platform for desktop node install: ${PLATFORM}" >&2
-      exit 1
+      require_electron_dist
       ;;
   esac
-  require_electron_dist
 }
 
 electron_dist_marker() {
@@ -168,7 +167,8 @@ run_desktop_forge() {
   local forge_exit=0
   pushd "${DESKTOP_DIR}" >/dev/null
   set +e
-  pnpm exec electron-forge "${forge_subcommand}" "$@" >"${forge_log}" 2>&1
+  DEBUG="${FORGE_DEBUG:-electron-forge:*,electron-packager,@electron/universal,@electron/osx-sign,@reforged/*}" \
+    pnpm exec electron-forge "${forge_subcommand}" "$@" >"${forge_log}" 2>&1
   forge_exit=$?
   set -e
   popd >/dev/null
@@ -179,7 +179,7 @@ run_desktop_forge() {
     exit "${forge_exit}"
   fi
   if [[ ! -d "${DESKTOP_DIR}/out" ]]; then
-    echo "electron-forge ${forge_subcommand} finished (exit 0) without ${DESKTOP_DIR}/out" >&2
+    echo "electron-forge ${forge_subcommand} returned exit ${forge_exit} but ${DESKTOP_DIR}/out was not created" >&2
     echo "Searching for out/ directories under workspace:" >&2
     find "${GOOSE_UI_DIR}" -maxdepth 3 -name out -type d 2>/dev/null >&2 || true
     diagnose_desktop_build_state
@@ -213,6 +213,8 @@ macos_package_arch() {
 
 diagnose_desktop_build_state() {
   echo "Desktop build diagnostics (${PLATFORM}):" >&2
+  echo "  disk usage:" >&2
+  df -h "${DESKTOP_DIR}" >&2 2>/dev/null || df -h >&2 2>/dev/null || true
   if [[ -d "${DESKTOP_DIR}" ]]; then
     ls -la "${DESKTOP_DIR}" >&2 || true
   else
@@ -319,6 +321,10 @@ build_release() {
       install_desktop_node_modules
       prepare_desktop_binaries
       export MACOSX_DEPLOYMENT_TARGET="${MACOSX_DEPLOYMENT_TARGET:-12.0}"
+      # Staging electron-packager на том же томе, что out/ (а не системный $TMPDIR
+      # на отдельном маленьком томе раннера), вне каталога проекта.
+      export ELECTRON_PACKAGER_TMPDIR="${REPO_ROOT}/.electron-packager-tmp"
+      mkdir -p "${ELECTRON_PACKAGER_TMPDIR}"
       local package_arch
       package_arch="$(macos_package_arch)"
       run_desktop_forge_macos_zip "${package_arch}"

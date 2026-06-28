@@ -412,6 +412,11 @@ packager_cfg_patch = (
     "let cfg = {\n"
     "  name: process.env.GOOSE_BUNDLE_NAME || 'Goose',\n"
     "  executableName: process.env.GOOSE_BUNDLE_NAME || 'Goose',\n"
+    # @electron/packager стейджит .app во временном каталоге, затем move в out/.
+    # По умолчанию это системный $TMPDIR; на GitHub macOS-раннере он на отдельном
+    # маленьком томе, и упаковка/move 245MB goosed там молча обрывались. Через
+    # ELECTRON_PACKAGER_TMPDIR build.sh указывает каталог на том же томе, что out/.
+    "  tmpdir: process.env.ELECTRON_PACKAGER_TMPDIR || undefined,\n"
     "  asar: true,"
 )
 if packager_name_marker not in text:
