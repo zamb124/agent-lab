@@ -117,9 +117,12 @@ jobs:
         run: chmod +x apps/agent/desktop/scripts/build.sh apps/agent/desktop/scripts/apply_branding.sh
 
       - name: Setup Node.js
+        # Node 24 ломает extract-zip: процесс выходит (exit 0) посреди распаковки
+        # zip — рвёт postinstall electron (dist остаётся с одними locales на
+        # Linux/Windows) и упаковку @electron/packager на macOS. Node 22 LTS — ок.
         uses: actions/setup-node@v4
         with:
-          node-version: "24"
+          node-version: "22"
 
       - name: Setup pnpm
         uses: pnpm/action-setup@v4
