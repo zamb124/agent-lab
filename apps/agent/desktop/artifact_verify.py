@@ -4,6 +4,7 @@
 
 from __future__ import annotations
 
+import os
 import plistlib
 import shutil
 import subprocess
@@ -227,7 +228,11 @@ def _verify_linux_rpm_release(path: Path, distro: HumanitecDistroConfig) -> None
     )
     if maintainer_result.returncode == 0:
         vendor = maintainer_result.stdout.strip()
-        if vendor and distro.maintainer.split("<")[0].strip() not in vendor:
+        # rpm печатает литерал "(none)" для незаданного тега; maker-rpm
+        # (electron-installer-redhat) не выставляет Vendor, поэтому VENDOR —
+        # необязательный сигнал. Реальный брендинг проверяется по %{NAME} и
+        # .desktop ниже. Сверяем Vendor только если он реально задан.
+        if vendor and vendor != "(none)" and distro.maintainer.split("<")[0].strip() not in vendor:
             raise ArtifactVerificationError(
                 f"rpm vendor {vendor!r} does not match maintainer {distro.maintainer!r}"
             )
@@ -262,18 +267,36 @@ def _verify_linux_appimage_release(path: Path, distro: HumanitecDistroConfig) ->
         raise ArtifactVerificationError("AppImage filename is not Humanitec-branded")
     if not path.name.endswith(".AppImage"):
         raise ArtifactVerificationError("AppImage extension mismatch")
-    if shutil.which("strings") is None:
-        return
-    strings_result = subprocess.run(
-        ["strings", str(path)],
-        check=False,
-        capture_output=True,
-        text=True,
-    )
-    if strings_result.returncode != 0:
-        return
-    if distro.display_name not in strings_result.stdout:
-        raise ArtifactVerificationError("AppImage payload missing Humanitec display name")
+    # AppImage type-2 = ELF-runtime + squashfs: содержимое сжато, поэтому `strings`
+    # по нему не находит брендинг. Распаковываем штатным `--appimage-extract`
+    # (без FUSE) и проверяем .desktop как для deb/rpm.
+    with tempfile.TemporaryDirectory(prefix="humanitec-agent-appimage-") as temp_dir:
+        os.chmod(path, 0o755)
+        extract_result = subprocess.run(
+            [str(path), "--appimage-extract"],
+            cwd=temp_dir,
+            check=False,
+            capture_output=True,
+            text=True,
+        )
+        if extract_result.returncode != 0:
+            raise ArtifactVerificationError(
+                "Failed to extract AppImage: "
+                + extract_result.stderr.strip()
+                + extract_result.stdout.strip()
+            )
+        squashfs_root = Path(temp_dir) / "squashfs-root"
+        desktop_files = list(squashfs_root.rglob("*.desktop"))
+        if not desktop_files:
+            raise ArtifactVerificationError("AppImage payload has no .desktop file")
+        desktop_content = desktop_files[0].read_text(encoding="utf-8")
+        if (
+            distro.display_name not in desktop_content
+            and distro.bundle_name not in desktop_content
+        ):
+            raise ArtifactVerificationError(
+                "AppImage .desktop file is missing Humanitec branding"
+            )
 
 
 def _verify_windows_release(path: Path, distro: HumanitecDistroConfig) -> None:

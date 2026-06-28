@@ -260,8 +260,20 @@ EOF
 }
 
 build_goosed_binary() {
+  # macos-x64 собирается на arm64-раннере (macos-14): Intel-раннер macos-13
+  # недоступен/висит в очереди. Под x86_64 нужен явный target и кросс-сборка;
+  # macos-arm64/linux/windows остаются нативной сборкой в target/release.
+  local cargo_target=""
+  if [[ "${PLATFORM}" == "macos-x64" ]]; then
+    cargo_target="x86_64-apple-darwin"
+  fi
   pushd "${VENDOR_DIR}" >/dev/null
-  cargo build --release -p goose-server
+  if [[ -n "${cargo_target}" ]]; then
+    rustup target add "${cargo_target}"
+    cargo build --release -p goose-server --target "${cargo_target}"
+  else
+    cargo build --release -p goose-server
+  fi
   popd >/dev/null
   mkdir -p "${DESKTOP_DIR}/src/bin"
   if is_windows_host; then
@@ -278,7 +290,11 @@ build_goosed_binary() {
     done
     shopt -u nullglob
   else
-    local goosed_bin="${VENDOR_DIR}/target/release/goosed"
+    local goosed_release_dir="${VENDOR_DIR}/target/release"
+    if [[ -n "${cargo_target}" ]]; then
+      goosed_release_dir="${VENDOR_DIR}/target/${cargo_target}/release"
+    fi
+    local goosed_bin="${goosed_release_dir}/goosed"
     if [[ ! -f "${goosed_bin}" ]]; then
       echo "Rust build did not produce goosed: ${goosed_bin}" >&2
       exit 1

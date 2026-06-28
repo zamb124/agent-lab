@@ -93,7 +93,10 @@ jobs:
           - platform: macos-arm64
             runs_on: macos-14
           - platform: macos-x64
-            runs_on: macos-13
+            # Intel-раннер macos-13 ретайрится/висит в очереди и не стартует.
+            # x86_64-артефакт кросс-собираем на arm64-раннере macos-14
+            # (rustup target x86_64-apple-darwin + electron-packager --arch x64).
+            runs_on: macos-14
           - platform: linux-deb
             runs_on: ubuntu-latest
           - platform: linux-rpm
