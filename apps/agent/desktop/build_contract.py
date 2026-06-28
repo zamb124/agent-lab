@@ -57,13 +57,33 @@ def asset_name_pattern(platform: str, bundle_name: str) -> str:
         raise ValueError(f"Unsupported platform: {platform!r}")
     patterns: dict[str, str] = {
         "windows": f"{bundle_name}-Setup-",
-        "macos-arm64": f"{bundle_name}-",
-        "macos-x64": f"{bundle_name}-",
+        "macos-arm64": f"{bundle_name}-macos-arm64-",
+        "macos-x64": f"{bundle_name}-macos-x64-",
         "linux-deb": "humanitec-agent_",
         "linux-rpm": "humanitec-agent-",
         "linux-appimage": f"{bundle_name}-",
     }
     return patterns[platform]
+
+
+def asset_file_suffix(platform: str) -> str:
+    if platform not in VALID_PLATFORMS:
+        raise ValueError(f"Unsupported platform: {platform!r}")
+    suffixes: dict[str, str] = {
+        "windows": ".msi",
+        "macos-arm64": ".dmg",
+        "macos-x64": ".dmg",
+        "linux-deb": ".deb",
+        "linux-rpm": ".rpm",
+        "linux-appimage": ".AppImage",
+    }
+    return suffixes[platform]
+
+
+def matches_release_asset_name(platform: str, asset_name: str, bundle_name: str) -> bool:
+    return asset_name.startswith(asset_name_pattern(platform, bundle_name)) and asset_name.endswith(
+        asset_file_suffix(platform)
+    )
 
 
 def artifact_filename(platform: str, version_sha: str, bundle_name: str) -> str:

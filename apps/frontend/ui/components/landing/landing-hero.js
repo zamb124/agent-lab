@@ -11,6 +11,7 @@ import {
     setPendingPublicSearchFiles,
 } from '../../utils/public-search-files.js';
 import { markPublicSearchLandingTransition } from '../../utils/public-search-transition.js';
+import { bindInputVisibleInVisualViewport } from '@platform/lib/utils/ensure-input-visible-in-visual-viewport.js';
 import '@platform/lib/components/platform-icon.js';
 
 const SEARCH_MODES = Object.freeze([
@@ -387,11 +388,11 @@ export class LandingHero extends PlatformElement {
                     position: static;
                     transform: none;
                     width: 100%;
-                    max-width: 480px;
-                    order: 4;
+                    max-width: none;
+                    order: 2;
                     border-radius: 24px;
                     padding: 8px;
-                    margin: 18px auto 0;
+                    margin: 12px 0 0;
                 }
 
                 .hero-search-main {
@@ -454,7 +455,7 @@ export class LandingHero extends PlatformElement {
                 .hero-container {
                     flex-direction: column;
                     justify-content: center;
-                    padding: 40px 20px;
+                    padding: 24px 12px;
                 }
 
                 .hero-title {
@@ -462,16 +463,43 @@ export class LandingHero extends PlatformElement {
                 }
 
                 .hero-subtitle {
-                    order: 2;
+                    order: 3;
                 }
 
                 .hero-image-wrapper {
-                    order: 3;
+                    order: 4;
                 }
 
                 .hero-text-left { order: 5; }
                 .hero-cta-row { order: 6; }
                 .hero-text-right { order: 7; }
+
+                :host-context(html[data-keyboard-visual='1']) .hero-image-wrapper,
+                :host-context(html[data-keyboard-visual='1']) .hero-text-left,
+                :host-context(html[data-keyboard-visual='1']) .hero-text-right,
+                :host-context(html[data-keyboard-visual='1']) .hero-cta-row {
+                    display: none;
+                }
+
+                :host-context(html[data-keyboard-visual='1']) .hero-title {
+                    font-size: min(48px, calc((100vw - 24px) / 5.2));
+                    margin-bottom: 4px;
+                }
+
+                :host-context(html[data-keyboard-visual='1']) .hero-subtitle {
+                    display: none;
+                }
+
+                :host-context(html[data-keyboard-visual='1']) .hero-search {
+                    position: sticky;
+                    top: calc(var(--vv-offset-top, 0px) + 72px);
+                    z-index: 20;
+                    margin-top: 8px;
+                }
+
+                :host-context(html[data-keyboard-visual='1']) .hero-container {
+                    padding-bottom: 12px;
+                }
             }
             
             @media (min-width: 769px) and (max-width: 1439px) {
@@ -569,6 +597,36 @@ export class LandingHero extends PlatformElement {
         this._searchQuery = '';
         this._searchMode = 'quick';
         this._selectedFiles = [];
+        /** @type {(() => void) | null} */
+        this._releaseSearchInputViewport = null;
+    }
+
+    firstUpdated(changedProperties) {
+        super.firstUpdated(changedProperties);
+        this._bindSearchInputViewport();
+    }
+
+    disconnectedCallback() {
+        if (this._releaseSearchInputViewport !== null) {
+            this._releaseSearchInputViewport();
+            this._releaseSearchInputViewport = null;
+        }
+        super.disconnectedCallback();
+    }
+
+    _bindSearchInputViewport() {
+        const root = this.renderRoot;
+        if (!root) {
+            return;
+        }
+        const input = root.querySelector('[data-role="hero-search-input"]');
+        if (!(input instanceof HTMLInputElement)) {
+            return;
+        }
+        if (this._releaseSearchInputViewport !== null) {
+            this._releaseSearchInputViewport();
+        }
+        this._releaseSearchInputViewport = bindInputVisibleInVisualViewport(input);
     }
 
     _handleCTA = () => {
@@ -708,6 +766,7 @@ export class LandingHero extends PlatformElement {
                     <span class="hero-search-icon"><platform-icon name="search" size="22"></platform-icon></span>
                     <input
                         type="search"
+                        data-role="hero-search-input"
                         autocomplete="off"
                         spellcheck="true"
                         .value=${this._searchQuery}

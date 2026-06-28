@@ -12,7 +12,11 @@ import httpx
 from fastapi import HTTPException
 
 from apps.agent.config import get_agent_settings
-from apps.agent.desktop.build_contract import asset_name_pattern, load_default_distro_config
+from apps.agent.desktop.build_contract import (
+    asset_name_pattern,
+    load_default_distro_config,
+    matches_release_asset_name,
+)
 from apps.agent.local_releases import (
     build_local_release_status,
     build_local_release_unavailable_status,
@@ -365,7 +369,7 @@ async def _fetch_latest_github_release() -> JsonObject:
 
 
 def _resolve_asset_url_from_release(release_payload: JsonObject, platform: str) -> str:
-    pattern = _asset_name_pattern(platform)
+    distro = load_default_distro_config()
     assets_raw = release_payload.get("assets")
     if not isinstance(assets_raw, list):
         raise HTTPException(status_code=404, detail=f"Релизный asset для платформы {platform!r} не найден")
@@ -374,7 +378,7 @@ def _resolve_asset_url_from_release(release_payload: JsonObject, platform: str) 
         if not isinstance(asset, dict):
             continue
         name = asset.get("name")
-        if not isinstance(name, str) or not name.startswith(pattern):
+        if not isinstance(name, str) or not matches_release_asset_name(platform, name, distro.bundle_name):
             continue
         download_url = asset.get("browser_download_url")
         if isinstance(download_url, str) and download_url:

@@ -12,6 +12,7 @@ import {
 import { takePublicSearchLandingTransition } from '../utils/public-search-transition.js';
 import { redirectToLogin } from '@platform/lib/utils/auth-redirect.js';
 import { marketingPageHostStyles } from '@platform/lib/styles/shared/marketing-section.styles.js';
+import { bindInputVisibleInVisualViewport } from '@platform/lib/utils/ensure-input-visible-in-visual-viewport.js';
 import '@platform/lib/components/platform-icon.js';
 import '../components/landing/landing-header.js';
 import '../components/landing/landing-footer.js';
@@ -24,6 +25,7 @@ const SEARCH_MODES = Object.freeze([
 const SEARCH_CHROME_HIDE_DELTA_PX = 50;
 const SEARCH_CHROME_SHOW_DELTA_PX = 14;
 const SEARCH_CHROME_TOP_VISIBLE_PX = 24;
+const MOBILE_SERP_MQ = '(max-width: 640px)';
 
 export class PublicSearchPage extends PlatformPage {
     static i18nNamespace = 'landing';
@@ -1370,63 +1372,52 @@ export class PublicSearchPage extends PlatformPage {
             }
 
             @media (max-width: 640px) {
-                .topbar {
-                    height: 64px;
-                    padding: 0 14px;
-                }
-
-                .top-actions {
-                    gap: 6px;
-                }
-
-                .locale-switch {
-                    min-height: 34px;
-                }
-
-                .locale-option {
-                    min-width: 30px;
-                    min-height: 26px;
-                    padding: 0 7px;
-                }
-
-                .theme-toggle,
-                .back-link {
-                    width: 36px;
-                    height: 36px;
-                    min-height: 36px;
-                    padding: 0;
-                    justify-content: center;
-                }
-
-                .search-head.is-active {
-                    top: 72px;
-                    padding: 10px 10px;
-                }
-
-                .brand-name {
-                    font-size: 20px;
-                }
-
-                .back-label {
-                    display: none;
-                }
-
                 .search-head {
-                    padding: 28px 14px 16px;
+                    padding: 0;
+                }
+
+                .search-head:not(.is-active) {
+                    padding: 20px 0 12px;
                 }
 
                 .search-title {
-                    font-size: 48px;
+                    font-size: 40px;
+                    padding: 0 12px;
+                    box-sizing: border-box;
                 }
 
                 .search-shell {
-                    border-radius: 24px;
-                    padding: 8px;
+                    width: 100%;
+                    max-width: none;
+                    border-radius: 0;
+                    padding: 8px 12px;
+                    box-shadow: none;
+                    border: 0;
+                    border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+                }
+
+                .search-head.is-active {
+                    position: sticky;
+                    top: calc(var(--vv-offset-top, 0px) + 64px);
+                    z-index: 16;
+                    padding: 0;
+                    margin: 0;
                 }
 
                 .search-head.is-active .search-shell {
-                    border-radius: 20px;
-                    padding: 8px;
+                    width: 100%;
+                    border-radius: 0;
+                    padding: 8px 12px;
+                    box-shadow: none;
+                    border: 0;
+                    border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+                }
+
+                .search-head.is-active.is-chrome-hidden .search-shell {
+                    opacity: 1;
+                    transform: none;
+                    filter: none;
+                    pointer-events: auto;
                 }
 
                 .search-line {
@@ -1439,24 +1430,26 @@ export class PublicSearchPage extends PlatformPage {
                 }
 
                 .tool-row {
-                    align-items: stretch;
-                    flex-direction: column;
-                }
-
-                .search-head.is-active .tool-row {
                     align-items: center;
                     flex-direction: row;
                     overflow-x: auto;
-                    padding-top: 8px;
+                    padding-top: 6px;
+                    gap: 8px;
+                }
+
+                .search-head.is-active .tool-row {
+                    padding-top: 6px;
                 }
 
                 .mode-group {
+                    flex: 1 1 auto;
                     overflow-x: auto;
                     padding-bottom: 2px;
                 }
 
                 .side-tools {
-                    justify-content: flex-start;
+                    flex-shrink: 0;
+                    justify-content: flex-end;
                 }
 
                 .file-name {
@@ -1464,17 +1457,112 @@ export class PublicSearchPage extends PlatformPage {
                 }
 
                 .results-wrap {
-                    width: calc(100vw - 20px);
-                    padding-top: 10px;
-                    padding-bottom: 42px;
+                    width: 100%;
+                    max-width: none;
+                    margin: 0;
+                    padding: 0 0 32px;
+                    gap: 0;
+                }
+
+                .primary-column,
+                .side-column {
+                    gap: 0;
+                }
+
+                .answer-panel,
+                .sources-panel,
+                .suggest-panel,
+                .provider-panel {
+                    border-radius: 0;
+                    border-left: 0;
+                    border-right: 0;
+                    border-top: 0;
+                    border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+                    box-shadow: none;
+                    backdrop-filter: none;
                 }
 
                 .answer-panel {
-                    padding: 18px;
+                    padding: 16px 12px;
+                    min-height: 0;
+                }
+
+                .sources-panel,
+                .provider-panel,
+                .suggest-panel {
+                    padding: 12px;
+                }
+
+                .panel-label {
+                    margin-bottom: 8px;
                 }
 
                 .answer-text {
                     font-size: 16px;
+                    line-height: 1.5;
+                }
+
+                .source-list {
+                    gap: 0;
+                    margin-top: 0;
+                }
+
+                .source-card {
+                    border-radius: 0;
+                    border: 0;
+                    border-bottom: 1px solid rgba(255, 255, 255, 0.07);
+                    background: transparent;
+                    padding: 14px 0;
+                    box-shadow: none;
+                }
+
+                .source-card:last-child {
+                    border-bottom: 0;
+                }
+
+                .source-card:hover {
+                    transform: none;
+                    background: rgba(255, 255, 255, 0.03);
+                }
+
+                .empty-shell {
+                    width: 100%;
+                    max-width: none;
+                    padding: 24px 12px 48px;
+                }
+
+                :host-context(html[data-keyboard-visual='1']) .search-head.is-active .tool-row {
+                    flex-wrap: nowrap;
+                    overflow-x: auto;
+                    -webkit-overflow-scrolling: touch;
+                }
+
+                :host-context(html[data-keyboard-visual='1']) .mode-chip {
+                    height: 30px;
+                    padding: 0 10px;
+                    font-size: 12px;
+                }
+
+                :host-context(html[data-theme="light"]) .search-shell,
+                :host-context(html[data-theme="light"]) .search-head.is-active .search-shell {
+                    border-bottom-color: rgba(16, 20, 34, 0.10);
+                    box-shadow: none;
+                }
+
+                :host-context(html[data-theme="light"]) .answer-panel,
+                :host-context(html[data-theme="light"]) .sources-panel,
+                :host-context(html[data-theme="light"]) .suggest-panel,
+                :host-context(html[data-theme="light"]) .provider-panel {
+                    border-bottom-color: rgba(16, 20, 34, 0.10);
+                }
+
+                :host-context(html[data-theme="light"]) .source-card {
+                    border-bottom-color: rgba(16, 20, 34, 0.08);
+                    background: transparent;
+                }
+
+                :host-context(html[data-theme="light"]) .source-card:hover {
+                    background: rgba(16, 20, 34, 0.03);
                 }
             }
         `,
@@ -1503,6 +1591,35 @@ export class PublicSearchPage extends PlatformPage {
         this._serpLoadBlocked = false;
         this._lastSerpCacheKey = '';
         this._handleWindowScroll = this._handleWindowScroll.bind(this);
+        /** @type {(() => void) | null} */
+        this._releaseSearchInputViewport = null;
+    }
+
+    firstUpdated(changedProperties) {
+        super.firstUpdated(changedProperties);
+        this._bindSearchInputViewport();
+    }
+
+    _bindSearchInputViewport() {
+        const root = this.renderRoot;
+        if (!root) {
+            return;
+        }
+        const input = root.querySelector('[data-role="public-search-input"]');
+        if (!(input instanceof HTMLInputElement)) {
+            return;
+        }
+        if (this._releaseSearchInputViewport !== null) {
+            this._releaseSearchInputViewport();
+        }
+        this._releaseSearchInputViewport = bindInputVisibleInVisualViewport(input);
+    }
+
+    _isMobileSerpViewport() {
+        if (typeof window === 'undefined') {
+            return false;
+        }
+        return window.matchMedia(MOBILE_SERP_MQ).matches;
     }
 
     connectedCallback() {
@@ -1520,6 +1637,10 @@ export class PublicSearchPage extends PlatformPage {
     disconnectedCallback() {
         super.disconnectedCallback();
         window.removeEventListener('scroll', this._handleWindowScroll);
+        if (this._releaseSearchInputViewport !== null) {
+            this._releaseSearchInputViewport();
+            this._releaseSearchInputViewport = null;
+        }
         if (this._scrollFrame !== 0) {
             window.cancelAnimationFrame(this._scrollFrame);
             this._scrollFrame = 0;
@@ -1555,6 +1676,15 @@ export class PublicSearchPage extends PlatformPage {
     _syncSearchChromeForScroll() {
         const stream = this._search.state.stream;
         const scrollY = Math.max(0, window.scrollY);
+        if (this._isMobileSerpViewport()) {
+            this._lastScrollY = scrollY;
+            this._scrollAnchorY = scrollY;
+            this._scrollDirection = 'still';
+            if (this._searchChromeHidden) {
+                this._searchChromeHidden = false;
+            }
+            return;
+        }
         if (!this._isStreamActive(stream) || scrollY <= SEARCH_CHROME_TOP_VISIBLE_PX) {
             this._lastScrollY = scrollY;
             this._scrollAnchorY = scrollY;
@@ -1821,6 +1951,7 @@ export class PublicSearchPage extends PlatformPage {
                     <span class="search-icon"><platform-icon name="search" size="22"></platform-icon></span>
                     <input
                         type="search"
+                        data-role="public-search-input"
                         autocomplete="off"
                         spellcheck="true"
                         .value=${this._query}
