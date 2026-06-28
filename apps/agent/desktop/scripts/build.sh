@@ -361,12 +361,16 @@ build_release() {
         exit 1
       fi
       rm -f "${OUTPUT_DIR}/${filename}"
+      dmg_staging="$(mktemp -d)"
+      cp -R "${app_path}" "${dmg_staging}/"
+      ln -s /Applications "${dmg_staging}/Applications"
       hdiutil create \
         -volname "${GOOSE_BUNDLE_NAME}" \
-        -srcfolder "${app_path}" \
+        -srcfolder "${dmg_staging}" \
         -ov \
         -format UDZO \
         "${OUTPUT_DIR}/${filename}"
+      rm -rf "${dmg_staging}"
       ;;
     linux-deb|linux-rpm|linux-appimage)
       if ! command -v pnpm >/dev/null 2>&1; then

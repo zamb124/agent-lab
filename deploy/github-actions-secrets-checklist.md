@@ -107,16 +107,21 @@ bash deploy/scripts/kubeconfig-for-github-actions.sh
 
 ## 4. HumanitecAgent desktop release (`humanitec-agent-build.yml`)
 
-Запускается **только вручную** (`workflow_dispatch` в GitHub Actions). Без секретов ниже macOS/Windows job'ы упадут; Linux-сборки пройдут.
+Запускается **только вручную** (`workflow_dispatch` в GitHub Actions). Без секретов ниже macOS/Windows job'ы собирают **unsigned** артефакты; Linux-сборки проходят как обычно.
 
 | Имя в GitHub | Назначение |
 |---|---|
-| `APPLE_ID` | macOS notarization |
-| `APPLE_ID_PASSWORD` | app-specific password |
-| `APPLE_TEAM_ID` | Apple Team ID |
-| `KEYCHAIN_PATH` | CI keychain для codesign |
+| `APPLE_ID` | Apple ID для notarization |
+| `APPLE_ID_PASSWORD` | App-specific password ([appleid.apple.com](https://appleid.apple.com)) |
+| `APPLE_TEAM_ID` | Apple Team ID (`MLL2V8KTV4` — тот же, что iOS/mobile в `conf.json`) |
+| `MACOS_CERTIFICATE_P12_BASE64` | Developer ID Application certificate (`.p12`, base64) |
+| `MACOS_CERTIFICATE_PASSWORD` | Пароль экспорта `.p12` |
 | `WINDOWS_CERTIFICATE_FILE` | Authenticode certificate (base64 или путь — как настроено в Goose forge) |
 | `WINDOWS_CERTIFICATE_PASSWORD` | пароль сертификата |
+
+**Не использовать для desktop:** `AUTH_APPLE_PRIVATE_KEY` (.p8) — Sign in with Apple на сайте, не codesign `.app`.
+
+`KEYCHAIN_PATH` создаётся на macOS-раннере в CI (не GitHub Secret). Подробности: [`apps/agent/desktop/docs/MACOS_SIGNING.md`](../apps/agent/desktop/docs/MACOS_SIGNING.md).
 
 Workflow использует `GITHUB_TOKEN` для публикации GitHub Release; отдельный PAT не нужен (`permissions: contents: write`).
 

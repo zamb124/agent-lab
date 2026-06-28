@@ -197,7 +197,9 @@ make agent-ci-build AGENT_PLATFORM=macos-arm64 AGENT_ARTIFACT_MODE=release AGENT
 
 **Release:** tag `humanitec-agent-{short_sha}` (или input `release_tag`); matrix skip если release уже есть — `force_rebuild=true` для пересборки. Артефакты → `apps/agent/desktop/dist/*` → GitHub Release (≥6 assets).
 
-**GitHub Secrets (подпись):** `APPLE_ID`, `APPLE_ID_PASSWORD`, `APPLE_TEAM_ID`, `KEYCHAIN_PATH`; Windows: `WINDOWS_CERTIFICATE_FILE`, `WINDOWS_CERTIFICATE_PASSWORD`.
+**GitHub Secrets (подпись):** `APPLE_ID`, `APPLE_ID_PASSWORD`, `APPLE_TEAM_ID`, `MACOS_CERTIFICATE_P12_BASE64`, `MACOS_CERTIFICATE_PASSWORD`; Windows: `WINDOWS_CERTIFICATE_FILE`, `WINDOWS_CERTIFICATE_PASSWORD`. Без macOS-секретов — unsigned `.dmg` (job не падает). **`AUTH_APPLE_PRIVATE_KEY`** (.p8) — Sign in with Apple OAuth (mobile/web), **не** codesign desktop. Developer ID — отдельный сертификат; чеклист: `apps/agent/desktop/docs/MACOS_SIGNING.md`.
+
+**DMG UX:** staging `.app` + symlink `Applications` перед `hdiutil create` (`build.sh`).
 
 **Prod download API:** репозиторий **private** → frontend обязан ходить в GitHub Releases API с PAT (`AGENT__RELEASES__GITHUB_TOKEN` в GitHub Secrets → `platform-secrets` → pod env). Без токена API отдаёт **404** (не 403); артефакты на Release при этом **не пропадают**. Деплой платформы билды не трогает.
 

@@ -59,25 +59,31 @@ Desktop dev override: `HUMANITEC_FRONTEND_BASE_URL=http://system.lvh.me:8002`.
 
 ## Toolchain
 
-- Node.js **24**
+- Node.js **22** LTS (CI; Node 24 ломает extract-zip/electron postinstall)
 - pnpm **>= 10.30**
 - Rust stable (goosed)
 - macOS x64: `bundle:intel` + `ELECTRON_ARCH=x64`
 
 ## Code signing (CI secrets)
 
-Передаются в matrix job `humanitec-agent-build`:
+Передаются в matrix job [`humanitec-agent-build.yml`](../../../.github/workflows/humanitec-agent-build.yml).  
+Подробный чеклист: [`docs/MACOS_SIGNING.md`](docs/MACOS_SIGNING.md).
 
 | Secret | Назначение |
 |--------|------------|
-| `APPLE_ID` | macOS notarization |
-| `APPLE_ID_PASSWORD` | app-specific password |
-| `APPLE_TEAM_ID` | Team ID |
-| `KEYCHAIN_PATH` | CI keychain |
+| `APPLE_ID` | Apple ID для notarization |
+| `APPLE_ID_PASSWORD` | App-specific password (не пароль Apple ID, не `.p8`) |
+| `APPLE_TEAM_ID` | Team ID (`MLL2V8KTV4` — тот же, что mobile/iOS) |
+| `MACOS_CERTIFICATE_P12_BASE64` | Developer ID Application `.p12` (base64) |
+| `MACOS_CERTIFICATE_PASSWORD` | Пароль экспорта `.p12` |
 | `WINDOWS_CERTIFICATE_FILE` | Authenticode cert |
 | `WINDOWS_CERTIFICATE_PASSWORD` | cert password |
 
-Goose `forge.config.ts` активирует `osxSign`/`osxNotarize` при `APPLE_TEAM_ID`.
+**Не путать с mobile:** `AUTH_APPLE_PRIVATE_KEY` (.p8) — Sign in with Apple OAuth, не codesign desktop.
+
+Goose [`forge.config.ts`](vendor/goose/ui/desktop/forge.config.ts) активирует `osxSign`/`osxNotarize` только когда CI импортировал `.p12` и выставил `APPLE_TEAM_ID` в env job (см. step Import macOS signing certificate). Без секретов macOS собирается **unsigned**.
+
+`KEYCHAIN_PATH` создаётся на раннере в `$RUNNER_TEMP/signing.keychain-db`, не хранится в GitHub Secrets.
 
 ## Download API
 
@@ -110,10 +116,11 @@ curl https://<host>/frontend/api/agent/releases/status
 | platform | prefix / pattern |
 |----------|------------------|
 | windows | `HumanitecAgent-Setup-` |
-| macos-arm64 / macos-x64 | `HumanitecAgent-` |
+| macos-arm64 | `HumanitecAgent-macos-arm64-` |
+| macos-x64 | `HumanitecAgent-macos-x64-` |
 | linux-deb | `humanitec-agent_` |
 | linux-rpm | `humanitec-agent-` |
-| linux-appimage | `HumanitecAgent-` |
+| linux-appimage | `HumanitecAgent-` (суффикс `.AppImage`) |
 
 ## Submodule pin
 

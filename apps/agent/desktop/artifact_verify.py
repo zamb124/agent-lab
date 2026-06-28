@@ -23,6 +23,16 @@ PLACEHOLDER_MARKER = "HumanitecAgent placeholder"
 MIN_RELEASE_BYTES = 512_000
 
 
+def _macos_codesign_verification_enabled() -> bool:
+    env_value = os.environ.get("AGENT_VERIFY_CODESIGN")
+    if env_value is None:
+        return False
+    stripped = env_value.strip()
+    if not stripped:
+        return False
+    return stripped == "1"
+
+
 class ArtifactVerificationError(Exception):
     pass
 
@@ -107,6 +117,17 @@ def _verify_macos_release_dmg(path: Path, distro: HumanitecDistroConfig) -> None
                 f"Expected app bundle {app_bundle.name!r}, found: {visible!r}"
             )
 
+        applications_link = mount_dir / "Applications"
+        if not applications_link.is_symlink():
+            raise ArtifactVerificationError(
+                "DMG must contain Applications symlink for drag-to-install UX"
+            )
+        applications_target = os.readlink(applications_link)
+        if applications_target != "/Applications":
+            raise ArtifactVerificationError(
+                f"Applications symlink must point to /Applications, got {applications_target!r}"
+            )
+
         info_plist_path = app_bundle / "Contents" / "Info.plist"
         if not info_plist_path.is_file():
             raise ArtifactVerificationError(f"Missing Info.plist in {app_bundle}")
@@ -131,6 +152,37 @@ def _verify_macos_release_dmg(path: Path, distro: HumanitecDistroConfig) -> None
                 + f"CFBundleName={bundle_name!r}, "
                 + f"expected {distro.display_name!r}/{distro.bundle_name!r}"
             )
+
+        if _macos_codesign_verification_enabled():
+            if shutil.which("codesign") is None:
+                raise ArtifactVerificationError(
+                    "codesign is required when AGENT_VERIFY_CODESIGN=1"
+                )
+            codesign_result = subprocess.run(
+                ["codesign", "--verify", "--deep", "--strict", str(app_bundle)],
+                check=False,
+                capture_output=True,
+                text=True,
+            )
+            if codesign_result.returncode != 0:
+                raise ArtifactVerificationError(
+                    "codesign verification failed: "
+                    + codesign_result.stderr.strip()
+                    + codesign_result.stdout.strip()
+                )
+            if shutil.which("spctl") is not None:
+                spctl_result = subprocess.run(
+                    ["spctl", "-a", "-vv", str(app_bundle)],
+                    check=False,
+                    capture_output=True,
+                    text=True,
+                )
+                if spctl_result.returncode != 0:
+                    raise ArtifactVerificationError(
+                        "Gatekeeper assessment failed: "
+                        + spctl_result.stderr.strip()
+                        + spctl_result.stdout.strip()
+                    )
     finally:
         if mount_dir.is_dir() and any(mount_dir.iterdir()):
             detach_result = subprocess.run(
