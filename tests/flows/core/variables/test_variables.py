@@ -6,8 +6,11 @@
 import pytest
 
 from apps.flows.src.container import get_container
-from core.db.repositories import Variable
 from core.variables import VariableResolutionError, VariableResolver
+from tests.fixtures.variables_helpers import (
+    delete_variable_via_service,
+    upsert_static_variable_via_service,
+)
 
 
 class TestVariableResolver:
@@ -886,16 +889,15 @@ class TestVariablesService:
         container = get_container()
         service = container.variables_service
 
-        # Создаём переменную
-        var = Variable(key="test_resolve_var", value="resolved_value")
-        await container.variable_repository.set(var)
+        await upsert_static_variable_via_service(
+            container, "test_resolve_var", "resolved_value"
+        )
 
         result = await service.resolve("@var:test_resolve_var")
 
         assert result == "resolved_value"
 
-        # Cleanup
-        await container.variable_repository.delete("test_resolve_var")
+        await delete_variable_via_service(container, "test_resolve_var")
 
     @pytest.mark.asyncio
     async def test_resolve_dict_with_vars(self, app):
@@ -903,9 +905,8 @@ class TestVariablesService:
         container = get_container()
         service = container.variables_service
 
-        # Создаём переменные
-        await container.variable_repository.set(Variable(key="company", value="TestCorp"))
-        await container.variable_repository.set(Variable(key="phone", value="123-456"))
+        await upsert_static_variable_via_service(container, "company", "TestCorp")
+        await upsert_static_variable_via_service(container, "phone", "123-456")
 
         data = {
             "company_name": "@var:company",
@@ -920,8 +921,8 @@ class TestVariablesService:
         assert result["static"] == "value"
 
         # Cleanup
-        await container.variable_repository.delete("company")
-        await container.variable_repository.delete("phone")
+        await delete_variable_via_service(container, "company")
+        await delete_variable_via_service(container, "phone")
 
     @pytest.mark.asyncio
     async def test_resolve_nested_dict(self, app):
@@ -929,7 +930,7 @@ class TestVariablesService:
         container = get_container()
         service = container.variables_service
 
-        await container.variable_repository.set(Variable(key="nested_var", value="nested_value"))
+        await upsert_static_variable_via_service(container, "nested_var", "nested_value")
 
         data = {
             "level1": {
@@ -941,7 +942,7 @@ class TestVariablesService:
 
         assert result["level1"]["level2"] == "nested_value"
 
-        await container.variable_repository.delete("nested_var")
+        await delete_variable_via_service(container, "nested_var")
 
     @pytest.mark.asyncio
     async def test_resolve_list(self, app):
@@ -949,7 +950,7 @@ class TestVariablesService:
         container = get_container()
         service = container.variables_service
 
-        await container.variable_repository.set(Variable(key="list_var", value="item"))
+        await upsert_static_variable_via_service(container, "list_var", "item")
 
         data = ["static", "@var:list_var", "another"]
 
@@ -957,7 +958,7 @@ class TestVariablesService:
 
         assert result == ["static", "item", "another"]
 
-        await container.variable_repository.delete("list_var")
+        await delete_variable_via_service(container, "list_var")
 
     @pytest.mark.asyncio
     async def test_resolve_missing_var_raises_error(self, app):

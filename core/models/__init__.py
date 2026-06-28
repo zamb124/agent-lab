@@ -6,7 +6,6 @@
 - identity_models.py - User, Company, AuthSession
 - i18n_models.py - Language, Translation
 - context_models.py - Context
-- variable_models.py - VariableDefinition
 """
 
 from core.models.base import FlexibleBaseModel, StrictBaseModel
@@ -39,7 +38,6 @@ from core.models.identity_models import (
     UserProviderRecord,
     UserStatus,
 )
-from core.models.variable_models import VariableDefinition
 from core.models.voice_models import VADSegment
 
 __all__ = [
@@ -58,7 +56,6 @@ __all__ = [
     "AuthResult",
     "Language",
     "Context",
-    "VariableDefinition",
     "VADSegment",
     "CalendarProvider",
     "CalendarEventSource",

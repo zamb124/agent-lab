@@ -1,23 +1,15 @@
 /**
- * flows-variables-modal — единая модалка переменных.
+ * flows-variables-modal — flow variables + embedded company variables panel.
  *
- * Контракт переменной симметричен на обоих уровнях: { key, value, secret }.
- *
- * Scope:
- *   - 'company' — глобальные переменные company-уровня. Источник: useResource('flows/variables').
- *   - 'flow'    — переменные конкретного flow. Источник: state.branchData.variables
- *                 (черновик editor'а). Финальная фиксация — общим Save в editor-header.
- *
- * Во flow-режиме рядом со «своими» переменными показываются глобальные
- * company-переменные (read-only, бейдж company): любой flow может ссылаться
- * на них через @var:name; при совпадении ключа flow-переменная перекрывает
- * company при выполнении.
+ * Flow variables — editor draft (VariableEntry).
+ * Company variables — shared platform-company-variables-panel (secrets API).
  */
 
 import { html, css } from 'lit';
 import { PlatformModal } from '@platform/lib/components/glass-modal.js';
 import { registerModalKind } from '@platform/lib/utils/modal-registry.js';
 import { platformConfirm } from '@platform/lib/components/platform-confirm-modal.js';
+import '@platform/lib/components/variables/platform-company-variables-panel.js';
 import './flows-variable-editor-modal.js';
 import '@platform/lib/components/platform-button.js';
 import '@platform/lib/components/platform-icon.js';
@@ -29,15 +21,19 @@ const SCOPE_FLOW = 'flow';
 
 function _normalizeFlowVar(raw) {
     if (raw === null || raw === undefined) {
-        return { value: '', secret: false };
+        return { value: '', secret: false, public: false, title: null, description: null, order: null };
     }
     if (typeof raw === 'object' && !Array.isArray(raw) && 'value' in raw) {
         return {
             value: raw.value,
             secret: Boolean(raw.secret),
+            public: Boolean(raw.public),
+            title: typeof raw.title === 'string' ? raw.title : null,
+            description: typeof raw.description === 'string' ? raw.description : null,
+            order: typeof raw.order === 'number' ? raw.order : null,
         };
     }
-    return { value: raw, secret: false };
+    return { value: raw, secret: false, public: false, title: null, description: null, order: null };
 }
 
 function _stringifyVarValue(value, secret) {
@@ -81,26 +77,13 @@ export class FlowsVariablesModal extends PlatformModal {
             }
             :host .modal.lg {
                 width: fit-content;
-                max-width: min(96vw, 960px);
+                max-width: min(96vw, 1100px);
                 min-width: 0;
-            }
-            :host .modal.fullscreen.lg {
-                width: min(96vw, 100vw - 1.5rem);
-                max-width: min(96vw, 100vw - 1.5rem);
-            }
-            :host .modal-content {
-                min-width: 0;
-                max-width: 100%;
-                overflow-x: auto;
-                -webkit-overflow-scrolling: touch;
             }
             .flows-vars-table {
-                width: max-content;
-                min-width: 100%;
-                max-width: 100%;
+                width: 100%;
                 border-collapse: collapse;
                 color: var(--text-secondary);
-                table-layout: auto;
             }
             .flows-vars-table th,
             .flows-vars-table td {
@@ -113,14 +96,7 @@ export class FlowsVariablesModal extends PlatformModal {
                 color: var(--text-tertiary);
                 font-size: var(--text-xs);
                 text-transform: uppercase;
-                letter-spacing: 0.05em;
-                font-weight: var(--font-medium);
             }
-            .flows-vars-table td:not(.actions) {
-                max-width: min(420px, 40vw);
-                overflow-wrap: anywhere;
-            }
-            .flows-vars-table td.actions { width: 1%; white-space: nowrap; text-align: right; }
             .flows-vars-empty { padding: var(--space-4); text-align: center; color: var(--text-tertiary); }
             .flows-vars-badge {
                 font-size: var(--text-xs);
@@ -130,7 +106,6 @@ export class FlowsVariablesModal extends PlatformModal {
                 color: var(--text-tertiary);
             }
             .flows-vars-badge.flow { color: var(--accent); border-color: var(--accent); }
-            .flows-vars-badge.company { color: var(--info, var(--accent)); border-color: var(--info, var(--accent)); }
             .flows-header-action-create {
                 width: 28px;
                 height: 28px;
@@ -140,23 +115,9 @@ export class FlowsVariablesModal extends PlatformModal {
                 padding: 0;
                 border: none;
                 border-radius: var(--radius-full, 50%);
-                flex-shrink: 0;
                 cursor: pointer;
                 color: var(--platform-btn-primary-text, #ffffff);
                 background: var(--platform-btn-primary-bg, #99a6f9);
-                box-shadow: var(--platform-btn-primary-shadow, none);
-                transition: var(--motion-transition-interactive);
-            }
-            .flows-header-action-create platform-icon {
-                display: flex;
-            }
-            .flows-header-action-create:hover:not(:disabled) {
-                background: var(--platform-btn-primary-bg-hover, #8794f0);
-                box-shadow: var(--platform-btn-primary-shadow-hover, 0 0 10px rgba(153, 166, 249, 0.6));
-            }
-            .flows-header-action-create:disabled {
-                opacity: 0.5;
-                cursor: not-allowed;
             }
         `,
     ];
@@ -166,7 +127,6 @@ export class FlowsVariablesModal extends PlatformModal {
         this.size = 'lg';
         this.scope = SCOPE_COMPANY;
         this.flowId = '';
-        this._companyVars = this.useResource('flows/variables', { autoload: true });
         this._editor = this.useOp('flows/editor');
     }
 
@@ -191,56 +151,23 @@ export class FlowsVariablesModal extends PlatformModal {
         }));
     }
 
-    _companyVariablesEntries() {
-        const items = this._companyVars.items;
-        return items.map((item) => ({
-            key: item.key,
-            value: item.value,
-            secret: Boolean(item.secret),
-            system: Boolean(item.system),
-            scope: SCOPE_COMPANY,
-        }));
-    }
-
-    _create() {
+    _createFlow() {
         this.openModal('flows.variable_editor', {
-            scope: this.scope,
             flowId: this.flowId,
         });
     }
 
     _editFlow(entry) {
         this.openModal('flows.variable_editor', {
-            scope: SCOPE_FLOW,
             flowId: this.flowId,
             variableKey: entry.key,
             variableValue: typeof entry.value === 'string' ? entry.value : JSON.stringify(entry.value),
             variableSecret: entry.secret,
+            variablePublic: entry.public,
+            variableTitle: entry.title ?? '',
+            variableDescription: entry.description ?? '',
+            variableOrder: entry.order === null || entry.order === undefined ? '' : String(entry.order),
         });
-    }
-
-    _editCompany(entry) {
-        this.openModal('flows.variable_editor', {
-            scope: SCOPE_COMPANY,
-            variableKey: entry.key,
-            variableValue: typeof entry.value === 'string' ? entry.value : JSON.stringify(entry.value),
-            variableSecret: entry.secret,
-        });
-    }
-
-    async _deleteCompany(entry) {
-        const ok = await platformConfirm(
-            this.t('variables_modal.delete_message', { key: entry.key }),
-            {
-                title: this.t('variables_modal.delete_title'),
-                variant: 'danger',
-                confirmVariant: 'danger',
-                confirmText: this.t('variables_modal.action_delete'),
-                cancelText: this.t('variables_modal.action_cancel'),
-            },
-        );
-        if (!ok) return;
-        await this._companyVars.remove(entry.key);
     }
 
     async _deleteFlow(entry) {
@@ -264,50 +191,29 @@ export class FlowsVariablesModal extends PlatformModal {
         this.toast('flows:toast.variable_applied', { type: 'success' });
     }
 
-    _renderRow(entry, scope) {
-        const isFlow = scope === SCOPE_FLOW;
-        const isCompanyEditable = scope === SCOPE_COMPANY && !entry.system;
+    _renderFlowRow(entry) {
         return html`
             <tr>
                 <td><code>${entry.key}</code></td>
                 <td>${entry.secret
                     ? html`<em>${this.t('variables_modal.value_secret')}</em>`
                     : _stringifyVarValue(entry.value, false)}</td>
-                <td>
-                    ${isFlow
-                        ? html`<span class="flows-vars-badge flow">${this.t('variables_modal.badge_flow')}</span>`
-                        : entry.system
-                            ? html`<span class="flows-vars-badge">${this.t('variables_modal.badge_system')}</span>`
-                            : html`<span class="flows-vars-badge company">${this.t('variables_modal.badge_company')}</span>`}
-                </td>
+                <td><span class="flows-vars-badge flow">${this.t('variables_modal.badge_flow')}</span></td>
                 <td class="actions">
-                    ${isFlow
-                        ? html`
-                            <platform-button @click=${() => this._editFlow(entry)}>
-                                <platform-icon name="edit" size="14"></platform-icon>
-                            </platform-button>
-                            <platform-button danger @click=${() => this._deleteFlow(entry)}>
-                                <platform-icon name="trash" size="14"></platform-icon>
-                            </platform-button>
-                        `
-                        : isCompanyEditable
-                            ? html`
-                                <platform-button @click=${() => this._editCompany(entry)}>
-                                    <platform-icon name="edit" size="14"></platform-icon>
-                                </platform-button>
-                                <platform-button danger @click=${() => this._deleteCompany(entry)}>
-                                    <platform-icon name="trash" size="14"></platform-icon>
-                                </platform-button>
-                            `
-                            : html``}
+                    <platform-button @click=${() => this._editFlow(entry)}>
+                        <platform-icon name="edit" size="14"></platform-icon>
+                    </platform-button>
+                    <platform-button danger @click=${() => this._deleteFlow(entry)}>
+                        <platform-icon name="trash" size="14"></platform-icon>
+                    </platform-button>
                 </td>
             </tr>
         `;
     }
 
-    _renderTable(rows, scope, emptyKey) {
+    _renderFlowTable(rows) {
         if (rows.length === 0) {
-            return html`<div class="flows-vars-empty">${this.t(emptyKey)}</div>`;
+            return html`<div class="flows-vars-empty">${this.t('variables_modal.empty_flow')}</div>`;
         }
         return html`
             <table class="flows-vars-table">
@@ -315,11 +221,11 @@ export class FlowsVariablesModal extends PlatformModal {
                     <tr>
                         <th>${this.t('variables_modal.col_key')}</th>
                         <th>${this.t('variables_modal.col_value')}</th>
-                        <th>${this.t('variables_modal.col_scope')}</th>
+                        <th>${this.t('variables_modal.col_source')}</th>
                         <th>${this.t('variables_modal.col_actions')}</th>
                     </tr>
                 </thead>
-                <tbody>${rows.map((entry) => this._renderRow(entry, scope))}</tbody>
+                <tbody>${rows.map((entry) => this._renderFlowRow(entry))}</tbody>
             </table>
         `;
     }
@@ -331,6 +237,9 @@ export class FlowsVariablesModal extends PlatformModal {
     }
 
     renderHeaderActions() {
+        if (this.scope !== SCOPE_FLOW) {
+            return '';
+        }
         const createLabel = this.t('variables_modal.action_create');
         return html`
             <button
@@ -338,7 +247,7 @@ export class FlowsVariablesModal extends PlatformModal {
                 class="flows-header-action-create"
                 title=${createLabel}
                 aria-label=${createLabel}
-                @click=${() => this._create()}
+                @click=${() => this._createFlow()}
             >
                 <platform-icon name="plus" size="16"></platform-icon>
             </button>
@@ -348,26 +257,21 @@ export class FlowsVariablesModal extends PlatformModal {
     renderBody() {
         if (this.scope === SCOPE_FLOW) {
             const flowRows = this._flowVariablesEntries();
-            const companyRows = this._companyVariablesEntries();
             return html`
                 <div class="flows-vars-hint">${this.t('variables_modal.hint_flow_overrides_company')}</div>
                 <section class="flows-vars-section">
                     <h3 class="flows-vars-section-title">${this.t('variables_modal.section_flow')}</h3>
-                    ${this._renderTable(flowRows, SCOPE_FLOW, 'variables_modal.empty_flow')}
+                    ${this._renderFlowTable(flowRows)}
                 </section>
                 <section class="flows-vars-section">
                     <h3 class="flows-vars-section-title">${this.t('variables_modal.section_company')}</h3>
-                    ${this._companyVars.loading && companyRows.length === 0
-                        ? html`<glass-spinner></glass-spinner>`
-                        : this._renderTable(companyRows, SCOPE_COMPANY, 'variables_modal.empty_company')}
+                    <platform-company-variables-panel compact show-help></platform-company-variables-panel>
                 </section>
             `;
         }
-        const companyRows = this._companyVariablesEntries();
-        if (this._companyVars.loading && companyRows.length === 0) {
-            return html`<glass-spinner></glass-spinner>`;
-        }
-        return this._renderTable(companyRows, SCOPE_COMPANY, 'variables_modal.empty_company');
+        return html`
+            <platform-company-variables-panel></platform-company-variables-panel>
+        `;
     }
 }
 

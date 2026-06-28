@@ -1,12 +1,31 @@
 /**
  * flows-variable-input — input с автодополнением по @var:NAME.
  *
- * Список переменных читается из `useResource('flows/variables').items`.
+ * Company variables — secrets/variables; system keys — platform-system-variables-catalog.
  */
 
 import { html, css } from 'lit';
 import { PlatformElement } from '@platform/lib/platform-element/index.js';
 import { asArray, asString } from '../../_helpers/flows-resolvers.js';
+import {
+    listSystemVariableKeys,
+} from '@platform/lib/components/variables/platform-system-variables-catalog.js';
+
+function _badgeLabel(item) {
+    if (item.source === 'system') {
+        return 'system';
+    }
+    if (item.secret) {
+        return 'secret';
+    }
+    if (item.expression) {
+        return 'expr';
+    }
+    if (item.scoped) {
+        return 'scoped';
+    }
+    return '';
+}
 
 export class FlowsVariableInput extends PlatformElement {
     static properties = {
@@ -35,11 +54,19 @@ export class FlowsVariableInput extends PlatformElement {
                 max-height: 200px; overflow-y: auto;
             }
             .suggestion {
+                display: flex; align-items: center; justify-content: space-between;
                 padding: var(--space-1) var(--space-2);
                 cursor: pointer; font-size: var(--text-sm);
                 color: var(--text-secondary);
             }
             .suggestion:hover { background: var(--glass-solid-medium); color: var(--text-primary); }
+            .badge {
+                font-size: var(--text-xs);
+                padding: 1px 5px;
+                border-radius: var(--radius-sm);
+                border: 1px solid var(--glass-border-subtle);
+                color: var(--text-tertiary);
+            }
         `,
     ];
 
@@ -48,7 +75,30 @@ export class FlowsVariableInput extends PlatformElement {
         this.value = '';
         this.placeholder = '';
         this._suggestions = [];
-        this._variables = this.useResource('flows/variables', { autoload: true });
+        this._variables = this.useResource('secrets/variables', { autoload: true });
+    }
+
+    _catalogItems() {
+        const companyItems = asArray(this._variables.items).map((item) => {
+            const base = item.payload?.base;
+            const expression = base?.value_kind === 'expression';
+            const scoped = Array.isArray(item.payload?.scopes) && item.payload.scopes.length > 0;
+            return {
+                key: item.variable_key,
+                secret: Boolean(item.secret),
+                expression,
+                scoped,
+                source: 'company',
+            };
+        });
+        const systemItems = listSystemVariableKeys().map((key) => ({
+            key,
+            secret: false,
+            expression: false,
+            scoped: false,
+            source: 'system',
+        }));
+        return [...companyItems, ...systemItems];
     }
 
     _onInput(e) {
@@ -58,9 +108,9 @@ export class FlowsVariableInput extends PlatformElement {
         const last = v.match(/@var:([A-Za-z0-9_]*)$/);
         if (last) {
             const prefix = last[1].toLowerCase();
-            const items = asArray(this._variables.items)
-                .filter((it) => it && typeof it.key === 'string' && it.key.toLowerCase().startsWith(prefix))
-                .slice(0, 8);
+            const items = this._catalogItems()
+                .filter((item) => item.key.toLowerCase().startsWith(prefix))
+                .slice(0, 10);
             this._suggestions = items;
         } else {
             this._suggestions = [];
@@ -85,9 +135,13 @@ export class FlowsVariableInput extends PlatformElement {
             ${this._suggestions.length > 0
                 ? html`
                     <div class="suggestions">
-                        ${this._suggestions.map((it) => html`
-                            <div class="suggestion" @mousedown=${() => this._select(it)}>
-                                @var:${it.key}
+                        ${this._suggestions.map((item) => html`
+                            <div class="suggestion" @mousedown=${() => this._select(item)}>
+                                <span>@var:${item.key}</span>
+                                ${(() => {
+                                    const badge = _badgeLabel(item);
+                                    return badge ? html`<span class="badge">${badge}</span>` : '';
+                                })()}
                             </div>
                         `)}
                     </div>

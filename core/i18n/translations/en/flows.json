@@ -71,6 +71,8 @@
     "action_create": "Create"
   },
   "variable_editor_modal": {
+    "title_create": "New flow variable",
+    "title_edit": "Edit flow variable",
     "field_key": "Key",
     "field_value": "Value",
     "field_secret": "Store as secret",
@@ -87,7 +89,8 @@
     "action_cancel": "Cancel",
     "col_key": "Key",
     "col_value": "Value",
-    "col_scope": "Scope",
+    "col_scope": "Source",
+    "col_source": "Source",
     "col_actions": "Actions",
     "value_secret": "(hidden)",
     "badge_system": "system",

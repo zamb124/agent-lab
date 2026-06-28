@@ -85,16 +85,16 @@ class TestE2EFlowCreationViaAPI:
     """E2E: Создание flow полностью через API."""
 
     @pytest.mark.asyncio
-    async def test_create_variable_via_api(self, client, auth_headers_system):
-        """1. Создаём переменную через API."""
-        response = await client.post(
-            "/flows/api/v1/variables/",
-            json={"key": "e2e_company_name", "value": "E2E Test Company", "secret": False},
-            headers=auth_headers_system,
+    async def test_create_variable_via_secrets_api(self, secrets_client):
+        """1. Создаём переменную через secrets API."""
+        from tests.fixtures.variables_helpers import upsert_static_variable_via_secrets_http
+
+        data = await upsert_static_variable_via_secrets_http(
+            secrets_client,
+            "e2e_company_name",
+            "E2E Test Company",
         )
-        assert response.status_code == 200
-        data = response.json()
-        assert data["key"] == "e2e_company_name"
+        assert data["variable_key"] == "e2e_company_name"
 
     @pytest.mark.asyncio
     async def test_create_tool_via_api(self, client, auth_headers_system):
@@ -123,15 +123,14 @@ class TestE2EFlowCreationViaAPI:
 
     @pytest.mark.asyncio
     async def test_create_and_execute_simple_flow_via_api(
-        self, client, auth_headers_system, unique_id
+        self, client, secrets_client, auth_headers_system, unique_id
     ):
         """3+4. Создаём flow (с переменной) и сразу выполняем его через API (один тест, чтобы избежать ordering issues при -n)."""
-        var_response = await client.post(
-            "/flows/api/v1/variables/",
-            json={"key": "e2e_company_name", "value": "E2E Test Company", "secret": False},
-            headers=auth_headers_system,
+        from tests.fixtures.variables_helpers import upsert_static_variable_via_secrets_http
+
+        _ = await upsert_static_variable_via_secrets_http(
+            secrets_client, "e2e_company_name", "E2E Test Company"
         )
-        assert var_response.status_code == 200, f"Failed to create variable: {var_response.text}"
         create_response = await client.post(
             "/flows/api/v1/flows/",
             json={
@@ -360,14 +359,17 @@ class TestE2EExternalAPIWithVarAuth:
     """E2E: External API с @var в авторизации."""
 
     @pytest.mark.asyncio
-    async def test_create_var_for_auth(self, client, auth_headers_system):
+    async def test_create_var_for_auth(self, secrets_client, auth_headers_system):
         """Создаём переменную для токена авторизации."""
-        response = await client.post(
-            "/flows/api/v1/variables/",
-            json={"key": "e2e_api_token", "value": "Bearer secret-e2e-token", "secret": True},
-            headers=auth_headers_system,
+        from tests.fixtures.variables_helpers import upsert_static_variable_via_secrets_http
+
+        _ = await upsert_static_variable_via_secrets_http(
+            secrets_client,
+            "e2e_api_token",
+            "Bearer secret-e2e-token",
+            secret=True,
+            shared_for_execution=True,
         )
-        assert response.status_code == 200
 
     @pytest.mark.asyncio
     async def test_create_flow_with_external_api_var_auth(self, client, auth_headers_system):
@@ -660,7 +662,7 @@ class TestE2EFullScenario:
     """E2E: Полный сценарий с созданием всего через API."""
 
     @pytest.mark.asyncio
-    async def test_full_e2e_scenario(self, client, unique_id, auth_headers_system):
+    async def test_full_e2e_scenario(self, client, secrets_client, unique_id, auth_headers_system):
         """
         Полный E2E сценарий:
         1. Создаём переменные
@@ -668,14 +670,12 @@ class TestE2EFullScenario:
         3. Создаём flow
         4. Выполняем с interrupt/resume
         """
-        await client.post(
-            "/flows/api/v1/variables/",
-            json={
-                "key": "e2e_full_greeting",
-                "value": "Добро пожаловать в E2E тест!",
-                "secret": False,
-            },
-            headers=auth_headers_system,
+        from tests.fixtures.variables_helpers import upsert_static_variable_via_secrets_http
+
+        _ = await upsert_static_variable_via_secrets_http(
+            secrets_client,
+            "e2e_full_greeting",
+            "Добро пожаловать в E2E тест!",
         )
         await client.post(
             "/flows/api/v1/tools/",

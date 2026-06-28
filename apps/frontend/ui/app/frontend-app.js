@@ -18,6 +18,9 @@ import { COMPANIES_EVENTS } from '@platform/lib/events/reducers/companies.js';
 import { platformFileCreateOp } from '@platform/lib/events/factories/platform-file-create.js';
 
 import { apiKeysResource } from '../events/resources/api-keys.resource.js';
+import { secretsVariablesResource } from '@platform/lib/events/resources/secrets-variables.resource.js';
+import { secretsVariablesResolveOp } from '@platform/lib/events/resources/secrets-variables-resolve.resource.js';
+import { secretsVariableVersionsLoadOp } from '@platform/lib/events/resources/secrets-variable-versions.resource.js';
 import {
     companyVoiceProvidersCatalogLoadOp,
     companyVoiceProvidersLoadOp,
@@ -158,6 +161,7 @@ import '../pages/select-company-page.js';
 import '../pages/dashboard-page.js';
 import '../pages/team/team-page.js';
 import '../pages/api-keys/api-keys-page.js';
+import '../pages/company-variables/company-variables-page.js';
 import '../pages/company-voice-providers/company-voice-providers-page.js';
 import '../pages/embed-configs-page.js';
 import '../pages/billing/billing-page.js';
@@ -191,6 +195,7 @@ const FRONTEND_ROUTES = [
     { key: 'platform_services',       path: 'services',                 parent: 'dashboard',   titleKey: 'routes.platform_services' },
     { key: 'team',                    path: 'team',                     parent: 'dashboard',   titleKey: 'routes.team' },
     { key: 'api-keys',                path: 'api-keys',                 parent: 'dashboard',   titleKey: 'routes.api-keys' },
+    { key: 'company-variables',       path: 'company-variables',        parent: 'dashboard',   titleKey: 'routes.company-variables' },
     { key: 'company-voice-providers', path: 'company-voice-providers',  parent: 'dashboard',   titleKey: 'routes.company-voice-providers' },
     { key: 'embed-configs',           path: 'embed-configs',            parent: 'dashboard',   titleKey: 'routes.embed-configs' },
     { key: 'billing',                 path: 'billing',                  parent: 'dashboard',   titleKey: 'routes.billing' },
@@ -260,6 +265,9 @@ export class FrontendApp extends PlatformApp {
 
     static factories = [
         apiKeysResource,
+        secretsVariablesResource,
+        secretsVariablesResolveOp,
+        secretsVariableVersionsLoadOp,
         companyVoiceProvidersCatalogLoadOp,
         companyVoiceProvidersLoadOp,
         companyVoiceProvidersUpsertOp,
@@ -689,6 +697,7 @@ export class FrontendApp extends PlatformApp {
             case 'platform_services': content = html`<platform-services-page></platform-services-page>`; break;
             case 'team':              content = html`<frontend-team-page></frontend-team-page>`; break;
             case 'api-keys':          content = html`<frontend-api-keys-page></frontend-api-keys-page>`; break;
+            case 'company-variables': content = html`<frontend-company-variables-page></frontend-company-variables-page>`; break;
             case 'company-voice-providers': content = html`<frontend-company-voice-providers-page></frontend-company-voice-providers-page>`; break;
             case 'embed-configs':     content = html`<frontend-embed-configs-page></frontend-embed-configs-page>`; break;
             case 'billing':           content = html`<frontend-billing-page></frontend-billing-page>`; break;

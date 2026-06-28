@@ -141,7 +141,7 @@
     },
     "greeting_node": {
       "type": "code",
-      "code": "async def run(args, state):\n    company = state.get('company_name', 'Компания')\n    state['response'] = f'Привет! Добро пожаловать в {company}!'\n    return state"
+      "code": "async def run(args, state):\n    greeting = state.get('demo_greeting') or state.get('company_name', 'Компания')\n    limit = state.get('order_limit', '100')\n    state['response'] = f'Привет! {greeting}! Лимит заказов: {limit}'\n    return state"
     },
     "prepare_user_data": {
       "type": "code",
@@ -319,6 +319,26 @@
       "title": null,
       "description": null,
       "order": null
+    },
+    "demo_greeting": {
+      "value": "@var:demo_greeting",
+      "public": false,
+      "description": "Scoped greeting (namespace sales → Welcome to Sales)"
+    },
+    "order_limit": {
+      "value": "@var:order_limit",
+      "public": false,
+      "description": "Scoped by order_mode (premium → unlimited)"
+    },
+    "signature": {
+      "value": "@var:signature",
+      "public": false,
+      "description": "Expression variable from company_name"
+    },
+    "base_url": {
+      "value": "@var:base_url",
+      "public": false,
+      "description": "Dependency demo: https://@var:host/v1"
     }
   },
   "branches": {

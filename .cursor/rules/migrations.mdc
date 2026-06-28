@@ -29,6 +29,7 @@ alwaysApply: false
 | worktracker | platform_worktracker | `migrations/worktracker/` | `DATABASE__WORKTRACKER_URL` |
 | tracing | platform_tracing | `migrations/tracing/` | `DATABASE__TRACING_URL` |
 | search | platform_search | `migrations/search/` | `DATABASE__SEARCH_URL` |
+| secrets | platform_secrets | `migrations/secrets/` | `DATABASE__SECRETS_URL` |
 
 **Таблицы по БД** (важно для baseline и JOIN):
 
@@ -64,7 +65,7 @@ migrations/
 ├── postgres/
 │   └── init.sql      # CREATE DATABASE + vector (entrypoint-initdb.d при новом томе);
 │                     # в проде — ConfigMap 10-postgres/configmap-init.yaml
-├── shared/  flows/  crm/  sync/  rag/  office/  tracing/
+├── shared/  flows/  crm/  sync/  rag/  office/  tracing/  secrets/
 │   ├── alembic.ini env.py versions/
 └── _legacy_removed/
 ```

@@ -13,22 +13,12 @@ import '@platform/lib/components/fields/platform-field.js';
 import '../components/editors/flows-code-editor.js';
 import { asObject, isPlainObject } from '../_helpers/flows-resolvers.js';
 
+import { listSystemVariableKeys } from '@platform/lib/components/variables/platform-system-variables-catalog.js';
+
 const TAB_KEYS = Object.freeze(['start', 'examples', 'fields', 'run']);
 const LANG_KEYS = Object.freeze(['curl', 'python', 'javascript']);
 const MODE_KEYS = Object.freeze(['stream', 'sync', 'async']);
-const SYSTEM_VARIABLE_KEYS = Object.freeze([
-    'user_id',
-    'user_name',
-    'user_email',
-    'user_first_name',
-    'user_last_name',
-    'company_id',
-    'company_name',
-    'active_namespace',
-    'user_language',
-    'interface_language_code',
-    'interface_language_name',
-]);
+const SYSTEM_VARIABLE_KEYS = Object.freeze(listSystemVariableKeys());
 const METHOD_ROWS = Object.freeze([
     ['message/stream', 'api_console.method_stream'],
     ['message/send', 'api_console.method_send'],

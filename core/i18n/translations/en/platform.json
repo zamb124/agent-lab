@@ -143,7 +143,9 @@
         "secret": "Secret",
         "empty": "No variables",
         "key_placeholder": "Name",
-        "value_placeholder": "Value"
+        "value_placeholder": "Value",
+        "company_variables_hint": "Local task or flow variables. Company secrets and scoped overrides live in Console.",
+        "company_variables_link": "Company variables"
     },
     "document_viewer": {
         "loading": "Loading file…",

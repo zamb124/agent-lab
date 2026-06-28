@@ -104,6 +104,10 @@ def patch_service_clients_asgi(
                 from apps.worktracker.main import app
 
                 _apps_cache[service] = app
+            elif service == "secrets":
+                from apps.secrets.main import app
+
+                _apps_cache[service] = app
             else:
                 return None
         except ImportError:
@@ -415,6 +419,28 @@ async def worktracker_app():
     from apps.worktracker.main import app
 
     yield app
+
+
+@pytest_asyncio.fixture
+async def secrets_app():
+    """FastAPI приложение secrets (ASGI)."""
+    from apps.secrets.main import app
+
+    yield app
+
+
+@pytest_asyncio.fixture
+async def secrets_client(secrets_app, setup_database_before_tests, auth_headers_system):
+    """HTTP клиент для Secrets API (ASGI transport)."""
+    _ = setup_database_before_tests
+    transport = ASGITransport(app=secrets_app)
+    async with secrets_app.router.lifespan_context(secrets_app):
+        async with AsyncClient(
+            transport=transport,
+            base_url="http://testserver",
+            headers=auth_headers_system,
+        ) as client:
+            yield client
 
 
 @pytest_asyncio.fixture

@@ -22,7 +22,6 @@ from .tool_runtime import router as tool_runtime_router
 from .tools import router as tools_router
 from .traces import router as traces_router
 from .triggers import router as triggers_router
-from .variables import router as variables_router
 from .voice_providers_catalog import router as flows_voice_providers_catalog_router
 
 api_v1_router = APIRouter()
@@ -41,7 +40,6 @@ api_v1_router.include_router(tasks_router, prefix="/tasks")
 api_v1_router.include_router(traces_router, prefix="/traces")
 api_v1_router.include_router(observability_logs_router, prefix="/observability/logs")
 api_v1_router.include_router(triggers_router)
-api_v1_router.include_router(variables_router, prefix="/variables")
 api_v1_router.include_router(prompts_router, prefix="/prompts")
 api_v1_router.include_router(code_router, prefix="/code")
 api_v1_router.include_router(company_router)

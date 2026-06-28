@@ -84,6 +84,29 @@
     "support_contacts": {
       "value": "@var:support_contacts",
       "public": false
+    },
+    "demo_greeting": {
+      "value": "@var:demo_greeting",
+      "public": false,
+      "title": "Приветствие",
+      "description": "Scoped company-переменная (namespace sales → Welcome to Sales)"
+    },
+    "signature": {
+      "value": "@var:signature",
+      "public": false,
+      "title": "Подпись",
+      "description": "Expression company-переменная (-- @var:company_name Support)"
+    },
+    "support_api_key": {
+      "value": "@var:support_api_key",
+      "public": false,
+      "title": "API ключ поддержки",
+      "description": "Secret shared_for_execution — инжектится в runtime, не в agent-card"
+    },
+    "demo_channel_hint": {
+      "value": "@var:demo_channel_hint",
+      "public": false,
+      "description": "Scoped по channel (telegram → telegram-channel)"
     }
   },
   "branches": {
@@ -108,6 +131,17 @@
         }
       },
       "variables_mode": "merge"
+    },
+    "variables_replace": {
+      "name": "Replace variables",
+      "description": "Демонстрация variables_mode=replace: только max_response_length=100",
+      "variables": {
+        "max_response_length": {
+          "value": "100",
+          "public": false
+        }
+      },
+      "variables_mode": "replace"
     },
     "no_subflow": {
       "name": "Без вложенного subflow",

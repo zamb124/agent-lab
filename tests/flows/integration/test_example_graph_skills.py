@@ -534,9 +534,8 @@ class TestDefaultSkill:
         result = await run_graph_flow(container=container, flow=flow, state=state)
 
         assert result.get("route") == "greeting"
-        # greeting_node устанавливает response с приветствием
         response = result.get("response", "")
-        assert "Добро пожаловать" in response or "GREETING" in response or "Привет" in response
+        assert "Welcome to Sales" in response or "Hello" in response or "GREETING" in response or "Привет" in response
 
     @pytest.mark.asyncio
     async def test_order_route_calculates_total(self, app, mock_llm_with_queue):

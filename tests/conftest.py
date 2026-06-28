@@ -450,6 +450,12 @@ async def setup_database_before_tests():
     if worktracker_db_url:
         admin_url = shared_db_url.rsplit("/", 1)[0] + "/postgres"
         await _ensure_postgres_database(admin_url, "platform_worktracker")
+    secrets_db_url = os.environ.get(
+        "DATABASE__SECRETS_URL", TEST_DATABASE_ENV.get("DATABASE__SECRETS_URL", "")
+    )
+    if secrets_db_url:
+        admin_url = shared_db_url.rsplit("/", 1)[0] + "/postgres"
+        await _ensure_postgres_database(admin_url, "platform_secrets")
     from core.db.migration_manifest import bootstrap_migration_registry
     from core.db.migrations import run_migrations_async
 

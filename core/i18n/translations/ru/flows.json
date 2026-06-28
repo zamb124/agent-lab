@@ -71,6 +71,8 @@
     "action_create": "Создать"
   },
   "variable_editor_modal": {
+    "title_create": "Новая переменная flow",
+    "title_edit": "Редактирование переменной flow",
     "field_key": "Ключ",
     "field_value": "Значение",
     "field_secret": "Хранить как секрет",
@@ -87,7 +89,8 @@
     "action_cancel": "Отмена",
     "col_key": "Ключ",
     "col_value": "Значение",
-    "col_scope": "Область",
+    "col_scope": "Источник",
+    "col_source": "Источник",
     "col_actions": "Действия",
     "value_secret": "(скрыто)",
     "badge_system": "system",

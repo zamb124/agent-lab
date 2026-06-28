@@ -359,16 +359,22 @@ async def test_mcp_tool_not_found_rpc_error(mcp_modes_stub, unique_id: str) -> N
 
 
 @pytest.mark.asyncio
-async def test_mcp_secret_var_resolved_in_headers(client, mcp_modes_stub, unique_id: str) -> None:
+async def test_mcp_secret_var_resolved_in_headers(client, mcp_modes_stub, unique_id: str, app) -> None:
     """Secret @var: резолвится в реальное значение при sync (не маска ***)."""
+    from apps.flows.src.container import get_container
+    from tests.fixtures.variables_helpers import upsert_static_variable_via_service
+
     url, state = mcp_modes_stub(MCPStubMode(tools=default_stub_tools()))
     server_id = f"secvar_{unique_id}"
     variable_key = f"mcp_secret_hdr_{unique_id}"
-    var_response = await client.post(
-        "/flows/api/v1/variables/",
-        json={"key": variable_key, "value": "super-secret-token", "secret": True},
+    container = get_container()
+    await upsert_static_variable_via_service(
+        container,
+        variable_key,
+        "super-secret-token",
+        secret=True,
+        shared_for_execution=True,
     )
-    assert var_response.status_code == 200
 
     create_response = await client.post(
         "/flows/api/v1/mcp/servers",
@@ -394,16 +400,22 @@ async def test_mcp_secret_var_resolved_in_headers(client, mcp_modes_stub, unique
 
 
 @pytest.mark.asyncio
-async def test_mcp_var_in_headers_resolved_before_request(client, mcp_modes_stub, unique_id: str) -> None:
+async def test_mcp_var_in_headers_resolved_before_request(client, mcp_modes_stub, unique_id: str, app) -> None:
     """@var: в headers резолвится через variables_service при sync."""
+    from apps.flows.src.container import get_container
+    from tests.fixtures.variables_helpers import upsert_static_variable_via_service
+
     url, state = mcp_modes_stub(MCPStubMode(tools=default_stub_tools()))
     server_id = f"varhdr_{unique_id}"
     variable_key = f"mcp_hdr_token_{unique_id}"
-    var_response = await client.post(
-        "/flows/api/v1/variables/",
-        json={"key": variable_key, "value": "resolved-secret", "secret": True},
+    container = get_container()
+    await upsert_static_variable_via_service(
+        container,
+        variable_key,
+        "resolved-secret",
+        secret=True,
+        shared_for_execution=True,
     )
-    assert var_response.status_code == 200
 
     create_response = await client.post(
         "/flows/api/v1/mcp/servers",

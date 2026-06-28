@@ -9,7 +9,7 @@
 #   Либо: make app --exclude NAME  (если цель --exclude не конфликтует с make).
 # Список имён: ключи SERVICES в scripts/run.py.
 APP_MAK_EX_FLAGS := ex x --ex --exclude -e --kill
-APP_MAK_SVC := flows frontend crm rag sync worktracker office scheduler-api browser search provider_litserve voice \
+APP_MAK_SVC := flows frontend crm rag sync worktracker office scheduler-api secrets browser search provider_litserve voice \
 	flows_worker rag_worker sync_worker crm_worker idle_worker scheduler
 ifneq (,$(findstring app,$(MAKECMDGOALS)))
 APP_MAK_EXTRAS := $(filter-out app,$(MAKECMDGOALS))

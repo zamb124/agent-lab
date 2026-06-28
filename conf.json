@@ -7,6 +7,7 @@
     "rag_service_url": "http://localhost:8004",
     "sync_service_url": "http://localhost:8005",
     "worktracker_service_url": "http://localhost:8021",
+    "secrets_service_url": "http://localhost:8022",
     "office_service_url": "http://localhost:8008",
     "browser_service_url": "http://localhost:8009",
     "search_service_url": "http://localhost:8010",
@@ -30,6 +31,7 @@
     "worktracker_url": "postgresql+asyncpg://platform_user:admin@localhost:54321/platform_worktracker",
     "tracing_url": "postgresql+asyncpg://platform_user:admin@localhost:54321/platform_tracing",
     "search_url": "postgresql+asyncpg://platform_user:admin@localhost:54321/platform_search",
+    "secrets_url": "postgresql+asyncpg://platform_user:admin@localhost:54321/platform_secrets",
     "redis_url": "redis://localhost:63791/0"
   },
   "tasks": {
@@ -166,6 +168,9 @@
     "telegram_community_url": "https://t.me/humanitecru",
     "yandex_metrika_id": null,
     "google_analytics_measurement_id": null
+  },
+  "secrets": {
+    "encryption_key": "dev-secrets-encryption-key-change-in-production"
   },
   "auth": {
     "enabled": true,
@@ -899,6 +904,18 @@
       },
       "auth": {
         "permissions_enabled": false
+      }
+    },
+    "secrets": {
+      "service_name": "secrets",
+      "server": {
+        "name": "secrets",
+        "host": "0.0.0.0",
+        "port": 8022,
+        "debug": true
+      },
+      "auth": {
+        "permissions_enabled": true
       }
     },
     "browser": {

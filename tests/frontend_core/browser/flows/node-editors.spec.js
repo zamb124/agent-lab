@@ -24,7 +24,7 @@ import {
 } from '../../../../apps/flows/ui/events/resources/code.resource.js';
 import { mcpServersResource, mcpServerSyncOp, mcpServerUpdateOp, mcpServerTestOp } from '../../../../apps/flows/ui/events/resources/mcp.resource.js';
 import { promptRenderOp } from '../../../../apps/flows/ui/events/resources/prompts.resource.js';
-import { variablesResource } from '../../../../apps/flows/ui/events/resources/variables.resource.js';
+import { secretsVariablesResource } from '@platform/lib/events/resources/secrets-variables.resource.js';
 import { toolsResource } from '../../../../apps/flows/ui/events/resources/tools.resource.js';
 import { exceptionAbsorbAllowNamesOp, executionLimitsOp } from '../../../../apps/flows/ui/events/resources/metadata.resource.js';
 
@@ -50,7 +50,7 @@ const FACTORIES = [
     codeValidateOp, codeExecuteOp,
     mcpServersResource, mcpServerSyncOp, mcpServerUpdateOp, mcpServerTestOp,
     promptRenderOp,
-    variablesResource,
+    secretsVariablesResource,
     toolsResource,
     exceptionAbsorbAllowNamesOp,
     executionLimitsOp,

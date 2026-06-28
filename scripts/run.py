@@ -130,6 +130,11 @@ SERVICES = {
         "app": "apps.scheduler.main:app",
         "port": "8006",
     },
+    "secrets": {
+        "type": "granian",
+        "app": "apps.secrets.main:app",
+        "port": "8022",
+    },
     "browser": {
         "type": "granian",
         "app": "apps.browser.main:app",

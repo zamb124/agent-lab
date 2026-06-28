@@ -1,0 +1,272 @@
+{
+  "variables": [
+    {
+      "variable_key": "company_name",
+      "payload": {
+        "base": {
+          "value_kind": "static",
+          "value": "Humanitec Demo"
+        },
+        "scopes": []
+      },
+      "secret": false,
+      "shared_for_execution": false,
+      "public": true,
+      "title": "Название компании",
+      "description": "Статическая company-переменная для @var: в example bundles"
+    },
+    {
+      "variable_key": "support_contacts",
+      "payload": {
+        "base": {
+          "value_kind": "static",
+          "value": "support@demo.example.com, +7 (495) 000-00-00"
+        },
+        "scopes": []
+      },
+      "secret": false,
+      "public": false,
+      "description": "Контакты поддержки для промптов example_react/example_graph"
+    },
+    {
+      "variable_key": "support_api_key",
+      "payload": {
+        "base": {
+          "value_kind": "static",
+          "value": "demo-shared-api-key-12345"
+        },
+        "scopes": []
+      },
+      "secret": true,
+      "shared_for_execution": true,
+      "public": false,
+      "description": "Секрет shared_for_execution: инжектится в runtime flow, не отдаётся в API"
+    },
+    {
+      "variable_key": "private_owner_token",
+      "payload": {
+        "base": {
+          "value_kind": "static",
+          "value": "owner-only-token-xyz"
+        },
+        "scopes": []
+      },
+      "secret": true,
+      "shared_for_execution": false,
+      "public": false,
+      "description": "Приватный секрет: резолвится только для created_by"
+    },
+    {
+      "variable_key": "demo_greeting",
+      "payload": {
+        "base": {
+          "value_kind": "static",
+          "value": "Hello"
+        },
+        "scopes": [
+          {
+            "value_kind": "static",
+            "value": "Welcome to Sales",
+            "priority": 10,
+            "match": [
+              {
+                "field": "namespace",
+                "op": "eq",
+                "value": "sales"
+              }
+            ]
+          }
+        ]
+      },
+      "secret": false,
+      "public": false,
+      "description": "Scoped override по namespace (sales → Welcome to Sales)"
+    },
+    {
+      "variable_key": "demo_user_tier",
+      "payload": {
+        "base": {
+          "value_kind": "static",
+          "value": "standard"
+        },
+        "scopes": [
+          {
+            "value_kind": "static",
+            "value": "premium",
+            "priority": 10,
+            "match": [
+              {
+                "field": "user_id",
+                "op": "eq",
+                "value": "demo-premium-user"
+              }
+            ]
+          }
+        ]
+      },
+      "secret": false,
+      "public": false,
+      "description": "Scoped override по user_id (demo-premium-user → premium)"
+    },
+    {
+      "variable_key": "demo_channel_hint",
+      "payload": {
+        "base": {
+          "value_kind": "static",
+          "value": "default-channel"
+        },
+        "scopes": [
+          {
+            "value_kind": "static",
+            "value": "telegram-channel",
+            "priority": 5,
+            "match": [
+              {
+                "field": "channel",
+                "op": "eq",
+                "value": "telegram"
+              }
+            ]
+          }
+        ]
+      },
+      "secret": false,
+      "public": false,
+      "description": "Scoped override по channel (telegram → telegram-channel)"
+    },
+    {
+      "variable_key": "order_mode",
+      "payload": {
+        "base": {
+          "value_kind": "static",
+          "value": "standard"
+        },
+        "scopes": [
+          {
+            "value_kind": "static",
+            "value": "premium",
+            "priority": 10,
+            "match": [
+              {
+                "field": "var",
+                "op": "eq",
+                "ref_key": "demo_user_tier",
+                "value": "premium"
+              }
+            ]
+          }
+        ]
+      },
+      "secret": false,
+      "public": false,
+      "description": "Scoped override по значению demo_user_tier (premium → premium mode)"
+    },
+    {
+      "variable_key": "order_limit",
+      "payload": {
+        "base": {
+          "value_kind": "static",
+          "value": "100"
+        },
+        "scopes": [
+          {
+            "value_kind": "static",
+            "value": "unlimited",
+            "priority": 10,
+            "match": [
+              {
+                "field": "var",
+                "op": "eq",
+                "ref_key": "order_mode",
+                "value": "premium"
+              }
+            ]
+          }
+        ]
+      },
+      "secret": false,
+      "public": false,
+      "description": "Scoped override по order_mode (premium → unlimited)"
+    },
+    {
+      "variable_key": "host",
+      "payload": {
+        "base": {
+          "value_kind": "static",
+          "value": "api.demo.example.com"
+        },
+        "scopes": []
+      },
+      "secret": false,
+      "public": false,
+      "description": "Базовый host для демонстрации @var: зависимостей"
+    },
+    {
+      "variable_key": "base_url",
+      "payload": {
+        "base": {
+          "value_kind": "static",
+          "value": "https://@var:host/v1"
+        },
+        "scopes": []
+      },
+      "secret": false,
+      "public": false,
+      "description": "Зависимость @var:host — топосорт при резолве"
+    },
+    {
+      "variable_key": "signature",
+      "payload": {
+        "base": {
+          "value_kind": "expression",
+          "expression": "-- @var:company_name Support"
+        },
+        "scopes": []
+      },
+      "secret": false,
+      "public": false,
+      "description": "Expression-переменная со ссылкой @var:company_name"
+    },
+    {
+      "variable_key": "google_service_account",
+      "payload": {
+        "base": {
+          "value_kind": "static",
+          "value": ""
+        },
+        "scopes": []
+      },
+      "secret": true,
+      "shared_for_execution": true,
+      "public": false,
+      "description": "Placeholder для Google Docs skill (Service Account JSON)"
+    },
+    {
+      "variable_key": "google_access_token",
+      "payload": {
+        "base": {
+          "value_kind": "static",
+          "value": ""
+        },
+        "scopes": []
+      },
+      "secret": true,
+      "shared_for_execution": true,
+      "public": false,
+      "description": "Placeholder для Google Docs skill (OAuth Bearer token)"
+    },
+    {
+      "variable_key": "google_impersonate_email",
+      "payload": {
+        "base": {
+          "value_kind": "static",
+          "value": ""
+        },
+        "scopes": []
+      },
+      "secret": false,
+      "public": false,
+      "description": "Placeholder для Google Docs domain-wide delegation email"
+    }
+  ]
+}

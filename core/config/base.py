@@ -31,6 +31,7 @@ from core.config.models import (
     PushConfig,
     RAGConfig,
     S3Config,
+    SecretsConfig,
     ServerConfig,
     SGRConfig,
     SpeechProvidersConfig,
@@ -88,6 +89,7 @@ class BaseSettings(PydanticBaseSettings):
     worker: WorkerConfig = Field(default_factory=WorkerConfig)
     logging: LoggingConfig = Field(default_factory=LoggingConfig)
     s3: S3Config = Field(default_factory=S3Config)
+    secrets: SecretsConfig = Field(default_factory=SecretsConfig)
     files: FilesConfig = Field(default_factory=FilesConfig)
     mcp_branding: MCPBrandingConfig = Field(default_factory=MCPBrandingConfig)
     mcp_catalog: MCPCatalogConfig = Field(default_factory=MCPCatalogConfig)

@@ -6,6 +6,7 @@ from pathlib import Path
 
 from apps.flows.src.container import get_container
 from apps.flows.src.container_contracts import as_flow_runtime_container
+from apps.flows.src.services.demo_company_variables import seed_demo_company_variables
 from apps.flows.src.services.flows_loader import FlowsLoader, load_tools_to_db
 from apps.flows.src.services.hitl_demo_queue import ensure_example_hitl_queue
 from apps.flows.src.services.mcp_catalog_provisioner import provision_mcp_catalog_for_company
@@ -126,6 +127,12 @@ async def init_company_resources(
             company_id=company_id,
             filter_public=(company_id != "system")
         )
+
+        seeded_variables = await seed_demo_company_variables(
+            container.variables_service,
+            company_id,
+        )
+        stats["demo_variables"] = seeded_variables
 
         await ensure_example_hitl_queue(container.work_item_service, company_id)
 

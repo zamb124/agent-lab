@@ -20,6 +20,7 @@ from core.config import get_settings
 from core.context import get_context
 from core.http import get_httpx_client
 from core.http.client import HttpRequestKwargs
+from core.internal_context_headers import build_internal_context_headers
 from core.logging import get_log_context, get_logger
 from core.types import JsonValue, require_json_value
 
@@ -75,6 +76,13 @@ class ServiceClient:
                 trace_id = context.trace_id
             if context.auth_token:
                 headers["Authorization"] = f"Bearer {context.auth_token}"
+            elif context.active_company is not None:
+                headers.update(
+                    build_internal_context_headers(
+                        company_id=context.active_company.company_id,
+                        user_id=context.user.user_id,
+                    )
+                )
             if context.active_company:
                 headers[COMPANY_ID_HEADER] = context.active_company.company_id
             if context.user:

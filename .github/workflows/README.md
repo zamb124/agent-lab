@@ -52,7 +52,7 @@ MicroK8s cluster
 
 | Secret | Назначение |
 |---|---|
-| `POSTGRES_PASSWORD` | Пароль PostgreSQL (общий для всех 7 сервисных БД) |
+| `POSTGRES_PASSWORD` | Пароль PostgreSQL (общий для всех сервисных БД платформы, см. `migrations/services.json` → `postgres.databases`) |
 | `AUTH_JWT_SECRET` | Подпись session JWT |
 | `SELECTEL_ACCESS_KEY` / `SELECTEL_SECRET_KEY` | Selectel S3 |
 | `LIVEKIT_API_KEY` / `LIVEKIT_API_SECRET` | LiveKit |

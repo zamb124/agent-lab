@@ -13,7 +13,6 @@ from core.db.repositories.embed_mapping_repository import EmbedMappingRepository
 from core.db.repositories.subdomain_repository import SubdomainMapping, SubdomainRepository
 from core.db.repositories.usage_repository import UsageRepository
 from core.db.repositories.user_repository import UserRepository
-from core.db.repositories.variable_repository import Variable, VariableData, VariableRepository
 
 __all__ = [
     "UserRepository",
@@ -21,9 +20,6 @@ __all__ = [
     "AuthSessionRepository",
     "SubdomainRepository",
     "SubdomainMapping",
-    "VariableRepository",
-    "Variable",
-    "VariableData",
     "UsageRepository",
     "EmbedConfigRepository",
     "EmbedMappingRepository",

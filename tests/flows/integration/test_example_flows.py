@@ -178,6 +178,15 @@ class TestExampleReactAgent:
         assert effective["variables"]["max_response_length"] == "2000"
 
     @pytest.mark.asyncio
+    async def test_skill_variables_replace_mode(self, flow_config, container):
+        """Skill 'variables_replace' заменяет все flow variables (variables_mode=replace)."""
+        skill = flow_config.branches["variables_replace"]
+        assert skill.variables_mode == "replace"
+        effective = container.flow_factory.apply_branch(flow_config, "variables_replace")
+        assert effective["variables"]["max_response_length"] == "100"
+        assert "company_name" not in effective["variables"]
+
+    @pytest.mark.asyncio
     async def test_skill_no_subflow_replaces_nodes(self, flow_config, container):
         """Skill 'no_subflow' заменяет nodes."""
         skill = flow_config.branches["no_subflow"]

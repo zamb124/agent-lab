@@ -36,7 +36,11 @@ async def resolve_mcp_client_variables(
     """Переменные для MCPClient: @var: headers и platform context propagation."""
     variables: dict[str, str] = {}
     if _mcp_headers_need_variables(server_config):
-        variables = await container.variables_service.get_company_variables_map()
+        resolved_map = await container.variables_service.get_company_variables_map()
+        variables = {
+            key: value if isinstance(value, str) else str(value)
+            for key, value in resolved_map.items()
+        }
     if server_config.propagate_platform_context:
         ctx = get_context()
         if ctx is None or ctx.active_company is None:

@@ -135,6 +135,23 @@
             "python": "${workspaceFolder}/.venv/bin/python"
         },
         {
+            "name": "Run: secrets",
+            "consoleTitle": "run.py: secrets 🔐",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "${workspaceFolder}/scripts/run.py",
+            "args": [
+                "secrets"
+            ],
+            "cwd": "${workspaceFolder}",
+            "console": "integratedTerminal",
+            "justMyCode": false,
+            "env": {
+                "PYTHONPATH": "${workspaceFolder}"
+            },
+            "python": "${workspaceFolder}/.venv/bin/python"
+        },
+        {
             "name": "Run: office",
             "consoleTitle": "run.py: office 📄",
             "type": "debugpy",
@@ -541,6 +558,7 @@
                 "Run: rag",
                 "Run: sync",
                 "Run: worktracker",
+                "Run: secrets",
                 "Run: office",
                 "Run: scheduler-api",
                 "Run: browser",

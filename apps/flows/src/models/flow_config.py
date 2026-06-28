@@ -72,7 +72,7 @@ class FlowVariableConfig(VariableEntry):
     Конфигурация переменной flow с метаданными.
 
     Контракт значения {value, secret} симметричен company-уровню
-    (`core.db.repositories.variable_repository.Variable`). При выполнении flow
+    (`core.variables.models.PlatformVariable`). При выполнении flow
     переменная по тому же ключу перекрывает company-переменную.
     """
 

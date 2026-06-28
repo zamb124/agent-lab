@@ -66,6 +66,8 @@ env в одном container spec: Kubernetes strategic-merge patch падает 
   value: postgresql+asyncpg://platform_user:$(POSTGRES_PASSWORD)@{{ .Values.appCommonEnv.postgresService }}:{{ .Values.appCommonEnv.postgresPort }}/platform_rag
 - name: DATABASE__WORKTRACKER_URL
   value: postgresql+asyncpg://platform_user:$(POSTGRES_PASSWORD)@{{ .Values.appCommonEnv.postgresService }}:{{ .Values.appCommonEnv.postgresPort }}/platform_worktracker
+- name: DATABASE__SECRETS_URL
+  value: postgresql+asyncpg://platform_user:$(POSTGRES_PASSWORD)@{{ .Values.appCommonEnv.postgresService }}:{{ .Values.appCommonEnv.postgresPort }}/platform_secrets
 - name: DATABASE__OFFICE_URL
   value: postgresql+asyncpg://platform_user:$(POSTGRES_PASSWORD)@{{ .Values.appCommonEnv.postgresService }}:{{ .Values.appCommonEnv.postgresPort }}/platform_office
 - name: DATABASE__TRACING_URL
@@ -100,6 +102,11 @@ env в одном container spec: Kubernetes strategic-merge patch падает 
 {{- if and $worktracker $worktracker.enabled }}
 - name: SERVER__WORKTRACKER_SERVICE_URL
   value: http://{{ $worktracker.serviceName }}:{{ $worktracker.port }}
+{{- end }}
+{{- $secrets := index .Values.applications "secrets" }}
+{{- if and $secrets $secrets.enabled }}
+- name: SERVER__SECRETS_SERVICE_URL
+  value: http://{{ $secrets.serviceName }}:{{ $secrets.port }}
 {{- end }}
 - name: SERVER__OFFICE_SERVICE_URL
   value: http://{{ .Values.applications.office.serviceName }}:{{ .Values.applications.office.port }}
@@ -156,6 +163,11 @@ env в одном container spec: Kubernetes strategic-merge patch падает 
     secretKeyRef:
       name: {{ .Values.platformSecretName }}
       key: auth-jwt-secret
+- name: SECRETS__ENCRYPTION_KEY
+  valueFrom:
+    secretKeyRef:
+      name: {{ .Values.platformSecretName }}
+      key: secrets-encryption-key
 - name: AUTH__PROVIDERS__YANDEX__CLIENT_ID
   valueFrom:
     secretKeyRef:

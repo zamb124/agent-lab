@@ -1,6 +1,7 @@
 {
   "name": "agent-lab",
   "private": true,
+  "license": "Elastic-2.0",
   "scripts": {
     "test:core-unit": "vitest run --config vitest.config.mjs --coverage",
     "test:core-unit:fast": "vitest run --config vitest.config.mjs",

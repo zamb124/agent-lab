@@ -592,11 +592,15 @@ async def test_reset_catalog_defaults_restores_snapshot_and_resyncs_tools(
     )
     _ = await persist_catalog_entry(container=container, entry=entry)
 
-    variable_response = await client.post(
-        "/flows/api/v1/variables/",
-        json={"key": variable_key, "value": "catalog-reset-secret", "secret": True},
+    from tests.fixtures.variables_helpers import upsert_static_variable_via_service
+
+    await upsert_static_variable_via_service(
+        get_container(),
+        variable_key,
+        "catalog-reset-secret",
+        secret=True,
+        shared_for_execution=True,
     )
-    assert variable_response.status_code == 200, variable_response.text
 
     with mcp_catalog_settings(auto_provision="all_verified"):
         _ = await provision_mcp_catalog_for_company(container=container)

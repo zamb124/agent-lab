@@ -6,11 +6,11 @@ from core.variables import (
     UnmatchedBracesError,
     VariableResolutionError,
     VariableResolver,
-    VariablesService,
     VarResolver,
     get_state,
     set_state_in_context,
 )
+from core.variables.service import VariablesService
 
 __all__ = [
     "VariableResolver",

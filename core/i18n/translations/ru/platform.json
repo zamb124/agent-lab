@@ -143,7 +143,9 @@
         "secret": "Секрет",
         "empty": "Нет переменных",
         "key_placeholder": "Имя",
-        "value_placeholder": "Значение"
+        "value_placeholder": "Значение",
+        "company_variables_hint": "Локальные переменные задачи или flow. Секреты компании и scoped overrides — в Console.",
+        "company_variables_link": "Переменные компании"
     },
     "document_viewer": {
         "loading": "Загружаем файл…",

@@ -1,139 +1,97 @@
 """
-Сервис для управления переменными и секретами компании.
-Поддерживает резолюцию @var:key ссылок.
+Единый фасад работы с переменными компании.
+
+`VariablesService` живёт в core и является единственной точкой доступа к переменным:
+- хранение/CRUD делегируется secrets-сервису через `SecretsClient` (значения секретов
+  шифруются и резолвятся лениво);
+- резолвинг (scoped overrides + expression + зависимости `@var:`) выполняет
+  `ResolutionEngine` на стороне потребителя по контексту исполнителя.
 """
 
 from __future__ import annotations
 
-import re
 from collections.abc import Mapping
-from typing import TYPE_CHECKING, overload
+from typing import overload
 
-from core.db.repositories.variable_repository import Variable
+from core.clients.secrets_client import SecretsClient
+from core.context import get_context
 from core.logging import get_logger
+from core.secrets.models import VariableResolveRequest, VariableWriteRequest
 from core.types import JsonArray, JsonObject, JsonValue
+from core.variables.engine import ResolutionEngine
+from core.variables.models import (
+    PlatformVariable,
+    ResolutionContext,
+    VariableValueKind,
+    VariableValuePayload,
+    VariableValueSpec,
+)
 from core.variables.resolver import VarResolver
-
-if TYPE_CHECKING:
-    from core.db.repositories.variable_repository import VariableRepository
 
 logger = get_logger(__name__)
 
 
 class VariablesService:
-    """Управление переменными компании с поддержкой ссылок @var:key"""
+    """Фасад переменных компании поверх secrets-сервиса и движка резолвинга."""
 
-    def __init__(self, variable_repository: VariableRepository):
-        """
-        Аргументы:
-            variable_repository: Репозиторий для работы с переменными
-        """
-        self._variable_repository: VariableRepository = variable_repository
+    def __init__(self, secrets_client: SecretsClient):
+        self._secrets_client: SecretsClient = secrets_client
 
-    async def set_var(
-        self,
-        key: str,
-        value: str,
-        is_secret: bool = False,
-        groups: list[str] | None = None,
-        description: str | None = None,
-    ) -> bool:
-        """
-        Сохраняет переменную компании.
-
-        Аргументы:
-            key: Ключ переменной
-            value: Значение
-            is_secret: Помечает как секрет (для UI)
-            groups: Список групп/тегов для организации переменных
-            description: Описание переменной
-
-        Возвращает:
-            True если сохранено
-        """
-        variable = Variable(
-            key=key,
-            value=value,
-            secret=is_secret,
-            groups=groups or [],
-            description=description or ""
+    @staticmethod
+    def _resolution_context() -> ResolutionContext:
+        context = get_context()
+        if context is None or context.active_company is None:
+            raise RuntimeError(
+                "VariablesService: требуется контекст запроса с активной компанией"
+            )
+        return ResolutionContext(
+            company_id=context.active_company.company_id,
+            user_id=context.user.user_id,
+            namespace=context.active_namespace,
+            channel=context.channel,
         )
 
-        result = await self._variable_repository.set(variable)
-        logger.info(f"Переменная сохранена: {key} (secret={is_secret}, groups={groups})")
-        return result
-
-    async def get_var(self, key: str) -> str | None:
-        """
-        Получает переменную компании.
-
-        Аргументы:
-            key: Ключ переменной
-        Возвращает:
-            Значение или None
-        """
-        variable = await self._variable_repository.get(key)
-
-        if variable:
-            return variable.value
-        return None
-
-    async def delete_var(self, key: str) -> bool:
-        """Удаляет переменную компании"""
-        return await self._variable_repository.delete(key)
-
-    async def list_vars(self) -> dict[str, Variable]:
-        """Получает все переменные компании"""
-        all_variables = await self._variable_repository.get_variables()
-
-        result: dict[str, Variable] = {}
-        for key, variable in all_variables.items():
-            result[key] = variable.model_copy(
-                update={"value": "***"} if variable.secret else {}
+    async def resolvable_definitions(
+        self, context: ResolutionContext
+    ) -> list[PlatformVariable]:
+        """Определения переменных компании, доступные исполнителю (секреты — по access policy)."""
+        response = await self._secrets_client.resolve_bundle(
+            VariableResolveRequest(
+                user_id=context.user_id,
+                namespace=context.namespace,
+                channel=context.channel,
             )
+        )
+        definitions: list[PlatformVariable] = []
+        for item in response.items:
+            if not item.resolvable or item.payload is None:
+                continue
+            definitions.append(
+                PlatformVariable(
+                    variable_key=item.variable_key,
+                    company_id=context.company_id,
+                    version=item.version,
+                    payload=item.payload,
+                    secret=item.secret,
+                    shared_for_execution=item.shared_for_execution,
+                    public=item.public,
+                )
+            )
+        return definitions
 
-        return result
-
-    async def resolve_variables(
+    async def resolve_for_run(
         self,
-        text: str,
-        context_vars: Mapping[str, JsonValue] | None = None
-    ) -> str:
-        """
-        Резолвит @var:key ссылки в тексте.
+        context: ResolutionContext,
+        seed: Mapping[str, JsonValue] | None = None,
+    ) -> dict[str, JsonValue]:
+        """Материализует плоский map переменных компании для запуска (по контексту)."""
+        definitions = await self.resolvable_definitions(context)
+        return ResolutionEngine.resolve(definitions, context, seed)
 
-        Аргументы:
-            text: Текст с возможными ссылками @var:key
-            context_vars: Дополнительные переменные из контекста
-
-        Возвращает:
-            Текст с подставленными значениями
-        """
-        if not text:
-            return text
-
-        variables_map = await self.get_company_variables_map()
-        if context_vars:
-            variables_map = {**variables_map, **context_vars}
-        return VarResolver.resolve_text(text, variables_map)
-
-    async def get_all_resolved_vars(self) -> dict[str, str]:
-        """
-        Получает все переменные компании с разрешенными ссылками.
-
-        Возвращает:
-            Словарь {key: resolved_value}
-        """
-        all_vars = await self.list_vars()
-
-        resolved: dict[str, str] = {}
-        for key, var_data in all_vars.items():
-            if var_data.secret:
-                resolved[key] = "***"
-            else:
-                resolved[key] = await self.resolve_variables(var_data.value, resolved)
-
-        return resolved
+    async def get_company_variables_map(self) -> dict[str, JsonValue]:
+        """Резолвнутый map переменных компании для текущего контекста запроса."""
+        context = self._resolution_context()
+        return await self.resolve_for_run(context)
 
     @overload
     async def resolve(self, value: JsonObject) -> JsonObject: ...
@@ -145,109 +103,55 @@ class VariablesService:
     async def resolve(self, value: JsonValue) -> JsonValue: ...
 
     async def resolve(self, value: JsonValue) -> JsonValue:
-        """
-        Резолвит значение:
-        - @var:key → загружает переменную компании
-        - обычное значение → возвращает как есть
-        - dict/list → рекурсивно резолвит все строки внутри
-
-        Возвращает:
-            Резолвнутое значение
-        """
+        """Рекурсивно резолвит @var:key в значении по переменным компании."""
         variables_map = await self.get_company_variables_map()
         return VarResolver.resolve_deep(value, variables_map)
 
-    async def get_company_variables_map(self) -> dict[str, str]:
-        """Возвращает словарь переменных компании в формате key -> value."""
-        all_variables = await self._variable_repository.get_variables()
-        return {key: variable.value for key, variable in all_variables.items()}
-
-    def extract_variable_keys(self, value: JsonValue) -> set[str]:
-        """
-        Извлекает все ключи переменных из значения.
-
-        Аргументы:
-            value: Значение (str, dict, list)
-
-        Возвращает:
-            Множество ключей переменных
-        """
-        keys: set[str] = set()
-
-        if isinstance(value, str):
-            if value.startswith("@var:"):
-                keys.add(value[5:])
-            else:
-                pattern = r'@var:(\w+)'
-                matches = re.findall(pattern, value)
-                keys.update(matches)
-
-        elif isinstance(value, dict):
-            for v in value.values():
-                keys.update(self.extract_variable_keys(v))
-
-        elif isinstance(value, list):
-            for item in value:
-                keys.update(self.extract_variable_keys(item))
-
-        return keys
-
-    async def add_tag_to_variable(self, var_key: str, tag: str) -> bool:
-        """
-        Добавляет тег к переменной (если переменная существует).
-
-        Аргументы:
-            var_key: Ключ переменной
-            tag: Тег для добавления
-
-        Возвращает:
-            True если тег добавлен
-        """
-        variable = await self._variable_repository.get(var_key)
-
-        if not variable:
-            logger.debug(f"Переменная {var_key} не найдена, пропускаем добавление тега {tag}")
-            return False
-
-        if tag not in variable.groups:
-            variable.groups.append(tag)
-            _ = await self._variable_repository.set(variable)
-            logger.info(f"Тег '{tag}' добавлен к переменной '{var_key}'")
-            return True
-        else:
-            logger.debug(f"Тег '{tag}' уже существует для переменной '{var_key}'")
-            return False
-
-    async def tag_variables_for_entity(
+    async def set_var(
         self,
-        entity_name: str,
-        data_sources: list[JsonValue],
-    ) -> int:
-        """
-        Добавляет теги к переменным используемым в сущности (агент/flow).
+        key: str,
+        value: JsonValue,
+        is_secret: bool = False,
+        groups: list[str] | None = None,
+        description: str | None = None,
+        *,
+        shared_for_execution: bool = False,
+        public: bool = False,
+    ) -> PlatformVariable:
+        """Создаёт/обновляет static-переменную компании (значение секрета шифруется)."""
+        request = VariableWriteRequest(
+            variable_key=key,
+            payload=VariableValuePayload(
+                base=VariableValueSpec(value_kind=VariableValueKind.STATIC, value=value)
+            ),
+            secret=is_secret,
+            shared_for_execution=shared_for_execution,
+            public=public,
+            groups=groups or [],
+            description=description or "",
+        )
+        return await self._secrets_client.upsert_variable(request)
 
-        Аргументы:
-            entity_name: Название сущности (имя агента или flow)
-            data_sources: Список источников данных для поиска @var: ссылок
+    async def upsert(self, request: VariableWriteRequest) -> PlatformVariable:
+        """Создаёт/обновляет переменную произвольной формы (scoped/expression)."""
+        return await self._secrets_client.upsert_variable(request)
 
-        Возвращает:
-            Количество переменных с добавленными тегами
-        """
-        all_var_keys: set[str] = set()
+    async def get_var(self, key: str) -> PlatformVariable | None:
+        """Возвращает переменную (значение секрета маскируется)."""
+        return await self._secrets_client.get_variable(key)
 
-        for source in data_sources:
-            if source:
-                all_var_keys.update(self.extract_variable_keys(source))
+    async def delete_var(self, key: str) -> bool:
+        return await self._secrets_client.delete_variable(key)
 
-        if not all_var_keys:
-            logger.debug(f"Не найдено переменных @var: для {entity_name}")
-            return 0
+    async def list_vars(self, *, limit: int = 1000, offset: int = 0) -> list[PlatformVariable]:
+        """Список переменных компании (значения секретов маскируются)."""
+        page = await self._secrets_client.list_variables(limit=limit, offset=offset)
+        return page.items
 
-        logger.info(f"Найдено {len(all_var_keys)} переменных для {entity_name}: {all_var_keys}")
+    async def secret_variable_keys(self) -> list[str]:
+        """Ключи секретных переменных компании (для аудита/маскирования; без значений)."""
+        page = await self._secrets_client.list_variables(limit=1000, offset=0)
+        return sorted(item.variable_key for item in page.items if item.secret)
 
-        tagged_count = 0
-        for var_key in all_var_keys:
-            if await self.add_tag_to_variable(var_key, entity_name):
-                tagged_count += 1
 
-        return tagged_count
+__all__ = ["VariablesService"]

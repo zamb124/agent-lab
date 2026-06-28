@@ -2,6 +2,7 @@
 name = "agent-lab"
 version = "0.1.0"
 description = "Agent Platform - платформа агентских систем"
+license = "Elastic-2.0"
 # Python 3.14 — single target. Локально на macOS: 3.14 GIL build (cp314). В Docker:
 # 3.14t free-threaded (cp314t), закрепляется в Dockerfile + Helm PYTHON_GIL=0.
 # requires-python оставляем диапазоном, чтобы оба ABI считались валидными.

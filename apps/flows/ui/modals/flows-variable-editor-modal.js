@@ -1,16 +1,8 @@
 /**
- * flows-variable-editor-modal — создание/редактирование одной переменной.
+ * flows-variable-editor-modal — создание/редактирование flow-level VariableEntry.
  *
- * Контракт переменной симметричен для обоих scope: { key, value, secret }.
- *
- * Отправка ветвится по `scope`:
- *   - 'company' — useResource('flows/variables').create({ key, value, secret })
- *                 (REST POST /flows/api/v1/variables идемпотентен по key).
- *   - 'flow'    — обновление черновика skillsData.variables через editor op
- *                 (`updateBranchData` + `setDirty`). A2A-поля
- *                 (public/title/description/order) сохраняются неизменными
- *                 при обновлении существующего ключа. Финальная фиксация —
- *                 общим Save в editor-header.
+ * Company variables редактируются через platform.company_variable_editor
+ * (core/frontend platform-company-variable-editor-modal).
  */
 
 import { html, css } from 'lit';
@@ -20,57 +12,74 @@ import '@platform/lib/components/platform-button.js';
 import '@platform/lib/components/fields/platform-field.js';
 import { isPlainObject } from '../_helpers/flows-resolvers.js';
 
-const SCOPE_COMPANY = 'company';
-const SCOPE_FLOW = 'flow';
-
 export class FlowsVariableEditorModal extends PlatformFormModal {
     static modalKind = 'flows.variable_editor';
     static i18nNamespace = 'flows';
 
     static properties = {
         ...PlatformFormModal.properties,
-        scope: { type: String },
         flowId: { type: String },
         variableKey: { type: String },
         variableValue: { type: String },
         variableSecret: { type: Boolean },
+        variablePublic: { type: Boolean },
+        variableTitle: { type: String },
+        variableDescription: { type: String },
+        variableOrder: { type: String },
         _key: { state: true },
         _value: { state: true },
         _secret: { state: true },
+        _public: { state: true },
+        _title: { state: true },
+        _description: { state: true },
+        _order: { state: true },
     };
 
     static styles = [
         ...(PlatformFormModal.styles ? [PlatformFormModal.styles] : []),
         css`
             .field { display: flex; flex-direction: column; gap: var(--space-1); margin-bottom: var(--space-3); }
+            .hint {
+                font-size: var(--text-sm);
+                color: var(--text-secondary);
+                margin-bottom: var(--space-3);
+                line-height: 1.4;
+            }
         `,
     ];
 
     constructor() {
         super();
-        this.scope = SCOPE_COMPANY;
         this.flowId = '';
         this.variableKey = '';
         this.variableValue = '';
         this.variableSecret = false;
+        this.variablePublic = false;
+        this.variableTitle = '';
+        this.variableDescription = '';
+        this.variableOrder = '';
         this._key = '';
         this._value = '';
         this._secret = false;
-        this._variables = this.useResource('flows/variables');
+        this._public = false;
+        this._title = '';
+        this._description = '';
+        this._order = '';
         this._editor = this.useOp('flows/editor');
     }
 
     updated(changed) {
         super.updated?.(changed);
-        if (changed.has('scope') && this.scope !== SCOPE_COMPANY && this.scope !== SCOPE_FLOW) {
-            throw new Error(`flows-variable-editor-modal: invalid scope "${this.scope}"`);
-        }
-        if (changed.has('scope') && this.scope === SCOPE_FLOW && !this.flowId) {
-            throw new Error('flows-variable-editor-modal: flowId required for scope="flow"');
+        if (!this.flowId) {
+            throw new Error('flows-variable-editor-modal: flowId required');
         }
         if (changed.has('variableKey')) this._key = this.variableKey;
         if (changed.has('variableValue')) this._value = this.variableValue;
         if (changed.has('variableSecret')) this._secret = Boolean(this.variableSecret);
+        if (changed.has('variablePublic')) this._public = Boolean(this.variablePublic);
+        if (changed.has('variableTitle')) this._title = this.variableTitle;
+        if (changed.has('variableDescription')) this._description = this.variableDescription;
+        if (changed.has('variableOrder')) this._order = this.variableOrder;
     }
 
     renderHeader() {
@@ -80,6 +89,7 @@ export class FlowsVariableEditorModal extends PlatformFormModal {
     renderBody() {
         const editing = this.variableKey.length > 0;
         return html`
+            <p class="hint">${this.t('variables_modal.hint_flow_overrides_company')}</p>
             <div class="field">
                 <platform-field
                     type="string"
@@ -119,6 +129,54 @@ export class FlowsVariableEditorModal extends PlatformFormModal {
                     }}
                 ></platform-field>
             </div>
+            <div class="field">
+                <platform-field
+                    type="boolean"
+                    mode="edit"
+                    .label=${this.t('api_console.var_field_public')}
+                    .value=${this._public}
+                    @change=${(e) => {
+                        this._public = Boolean(e.detail.value);
+                        this.isDirty = true;
+                    }}
+                ></platform-field>
+            </div>
+            <div class="field">
+                <platform-field
+                    type="string"
+                    mode="edit"
+                    .label=${this.t('api_console.var_field_title')}
+                    .value=${this._title}
+                    @change=${(e) => {
+                        this._title = typeof e.detail.value === 'string' ? e.detail.value : '';
+                        this.isDirty = true;
+                    }}
+                ></platform-field>
+            </div>
+            <div class="field">
+                <platform-field
+                    type="text"
+                    mode="edit"
+                    .label=${this.t('api_console.var_field_description')}
+                    .value=${this._description}
+                    @change=${(e) => {
+                        this._description = typeof e.detail.value === 'string' ? e.detail.value : '';
+                        this.isDirty = true;
+                    }}
+                ></platform-field>
+            </div>
+            <div class="field">
+                <platform-field
+                    type="string"
+                    mode="edit"
+                    .label=${this.t('api_console.var_field_order')}
+                    .value=${this._order}
+                    @change=${(e) => {
+                        this._order = typeof e.detail.value === 'string' ? e.detail.value : '';
+                        this.isDirty = true;
+                    }}
+                ></platform-field>
+            </div>
         `;
     }
 
@@ -134,17 +192,11 @@ export class FlowsVariableEditorModal extends PlatformFormModal {
 
     _onSubmit() {
         const key = this._key.trim();
-        if (key.length === 0) return;
-        if (this.scope === SCOPE_FLOW) {
-            this._submitFlow(key);
-        } else {
-            this._submitCompany(key);
+        if (key.length === 0) {
+            return;
         }
+        this._submitFlow(key);
         this.closeAfterSave();
-    }
-
-    _submitCompany(key) {
-        this._variables.create({ key, value: this._value, secret: this._secret });
     }
 
     _submitFlow(key) {
@@ -153,10 +205,22 @@ export class FlowsVariableEditorModal extends PlatformFormModal {
         const prevVars = isPlainObject(skillsData.variables) ? skillsData.variables : {};
         const prevRaw = prevVars[key];
         const prevConfig = isPlainObject(prevRaw) ? prevRaw : null;
+        const orderRaw = this._order.trim();
+        let order = null;
+        if (orderRaw !== '') {
+            order = Number(orderRaw);
+            if (Number.isNaN(order)) {
+                throw new Error('flows-variable-editor-modal: order must be number');
+            }
+        }
         const merged = {
             ...(prevConfig !== null ? prevConfig : {}),
             value: this._value,
             secret: this._secret,
+            public: this._public,
+            title: this._title.trim() === '' ? null : this._title.trim(),
+            description: this._description.trim() === '' ? null : this._description.trim(),
+            order,
         };
         const nextVars = { ...prevVars, [key]: merged };
         this._editor.updateBranchData({ data: { ...skillsData, variables: nextVars } });

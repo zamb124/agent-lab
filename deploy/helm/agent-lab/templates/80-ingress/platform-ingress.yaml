@@ -116,6 +116,17 @@ spec:
                   number: {{ $worktracker.port }}
           {{- end }}
 
+          {{- $secrets := index $.Values.applications "secrets" }}
+          {{- if and $secrets $secrets.enabled }}
+          - path: /secrets
+            pathType: Prefix
+            backend:
+              service:
+                name: {{ $secrets.serviceName }}
+                port:
+                  number: {{ $secrets.port }}
+          {{- end }}
+
           {{- if $.Values.applications.office.enabled }}
           - path: /documents
             pathType: Prefix

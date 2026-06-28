@@ -18,6 +18,7 @@ fi
 jq -n \
   --arg postgresPassword "${POSTGRES_PASSWORD:-}" \
   --arg authJwtSecret "${AUTH_JWT_SECRET:-}" \
+  --arg secretsEncryptionKey "${SECRETS_ENCRYPTION_KEY:-}" \
   --arg hfToken "${HF_TOKEN:-}" \
   --arg authYandexClientId "${AUTH_YANDEX_CLIENT_ID:-}" \
   --arg authYandexClientSecret "${AUTH_YANDEX_CLIENT_SECRET:-}" \
@@ -76,6 +77,7 @@ jq -n \
     create: true,
     postgresPassword: $postgresPassword,
     authJwtSecret: $authJwtSecret,
+    secretsEncryptionKey: $secretsEncryptionKey,
     hfToken: $hfToken,
     authYandexClientId: $authYandexClientId,
     authYandexClientSecret: $authYandexClientSecret,

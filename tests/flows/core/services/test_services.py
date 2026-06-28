@@ -13,7 +13,10 @@ from apps.flows.src.models import ExternalAgentStatus, FlowConfig, FlowType
 from apps.flows.src.runtime.flow import Flow
 from apps.flows.src.services.flow_discovery import FlowDiscoveryService
 from core.clients.a2a_client import A2AClient
-from core.db.repositories import Variable
+from tests.fixtures.variables_helpers import (
+    delete_variable_via_service,
+    upsert_static_variable_via_service,
+)
 
 
 class TestFlowFactory:
@@ -67,9 +70,7 @@ class TestFlowFactory:
         factory = container.flow_factory
 
         # Создаём переменную
-        await container.variable_repository.set(
-            Variable(key="factory_var", value="resolved!")
-        )
+        await upsert_static_variable_via_service(container, "factory_var", "resolved!")
 
         # Agent с @var:key
         flow_config = FlowConfig(
@@ -99,7 +100,7 @@ class TestFlowFactory:
 
         # Cleanup
         await container.flow_repository.delete("test_var_flow")
-        await container.variable_repository.delete("factory_var")
+        await delete_variable_via_service(container, "factory_var")
 
     @pytest.mark.asyncio
     async def test_flow_factory_unresolved_var_is_none(self, app):

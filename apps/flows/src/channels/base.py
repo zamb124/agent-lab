@@ -42,6 +42,7 @@ from apps.flows.src.container_contracts import FlowRuntimeContainer
 from apps.flows.src.durable_execution import (
     RunStartedPayload,
     UserInputAppliedPayload,
+    VariablesResolvedPayload,
     WorkflowEventPayload,
     WorkflowEventType,
     create_initial_state,
@@ -783,7 +784,8 @@ class BaseChannel(ABC):
             if runtime_flow is None:
                 raise ValueError(f"Flow не найден: {self.flow_id}")
 
-            # Переопределяем variables из metadata если переданы
+            # Переопределяем variables из metadata если переданы (request-scoped)
+            override_vars: JsonObject = {}
             request_variables_raw = params.metadata.get("variables") if params.metadata else None
             if request_variables_raw is not None:
                 request_variables = require_json_object(
@@ -792,7 +794,7 @@ class BaseChannel(ABC):
                 )
                 resolved_override_vars = await self._normalize_request_variables(request_variables)
                 # Извлекаем значения если они были в FlowVariableConfig формате
-                final_override_vars = {}
+                final_override_vars: JsonObject = {}
                 for key, value in resolved_override_vars.items():
                     if (
                         isinstance(value, dict)
@@ -804,11 +806,7 @@ class BaseChannel(ABC):
                         final_override_vars[key] = value
                 override_vars = final_override_vars
 
-                runtime_flow.variables = {**runtime_flow.variables, **override_vars}
-
             identity_vars = flow_variables_from_request_context(ctx)
-            if identity_vars:
-                runtime_flow.variables = {**runtime_flow.variables, **identity_vars}
 
             if state_is_new:
                 cfg_nodes_raw = (runtime_flow.config or {}).get("nodes") or {}
@@ -824,7 +822,32 @@ class BaseChannel(ABC):
             if params.files_data:
                 state.files = list(state.files) + params.files_data
 
-            state.variables = {**state.variables, **runtime_flow.variables}
+            # Детерминизм: переменные компании/flow материализуются один раз на старте.
+            # На resume/replay значения берутся из durable ledger (persisted state.variables),
+            # secrets-сервис повторно не опрашивается. Request-scoped override и identity
+            # переменные обновляются каждый запуск (отражают текущего исполнителя).
+            if state_is_new:
+                resolved_run_variables: JsonObject = dict(runtime_flow.variables)
+                resolved_run_variables.update(override_vars)
+                resolved_run_variables.update(identity_vars)
+                state.variables = {**state.variables, **resolved_run_variables}
+                company_secret_keys = await container.variables_service.secret_variable_keys()
+                secret_keys = sorted(set(company_secret_keys) & set(state.variables.keys()))
+                await self._save_state(
+                    params.session_id,
+                    state,
+                    event_type=WorkflowEventType.variables_resolved,
+                    payload=VariablesResolvedPayload(
+                        variable_keys=sorted(state.variables.keys()),
+                        secret_keys=secret_keys,
+                    ),
+                    snapshot=False,
+                )
+            else:
+                request_scoped_variables: JsonObject = dict(override_vars)
+                request_scoped_variables.update(identity_vars)
+                if request_scoped_variables:
+                    state.variables = {**state.variables, **request_scoped_variables}
 
             request_triggers_raw = params.metadata.get("triggers") if params.metadata else None
             if request_triggers_raw is not None:

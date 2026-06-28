@@ -21,6 +21,7 @@ SPA_FALLBACK_EXCLUDED_PREFIXES: tuple[str, ...] = (
     "/rag/",
     "/sync/",
     "/worktracker/",
+    "/secrets/",
     "/documents/",
     "/frontend/",
     "/browser/",
@@ -101,6 +102,7 @@ SKIP_PATHS = [
     "/search/health",
     "/voice/health*",
     "/worktracker/health",
+    "/secrets/health",
     "/debug/*",
     "/api/v1/payments/webhook/*",
     "/frontend/api/v1/payments/webhook/*",
@@ -473,6 +475,13 @@ ROUTE_RULES: list[RouteRule] = [
     RouteRule("/worktracker", auth_required=False, context_type="anonymous"),
     RouteRule("/worktracker/", auth_required=False, context_type="anonymous"),
     RouteRule("/worktracker/*", auth_required=False, context_type="anonymous"),
+
+    # Secrets Service
+    RouteRule("/secrets/api/v1/*", context_type="api", auth_required=True),
+    RouteRule("/secrets/api/auth/*", context_type="api", auth_required=True),
+    RouteRule("/secrets/api/push/vapid-public-key", context_type="anonymous", auth_required=False),
+    RouteRule("/secrets/api/push/*", context_type="api", auth_required=True),
+    RouteRule("/secrets/health", auth_required=False, context_type="anonymous"),
 
     # LitServe Service
     RouteRule("/litserve/ui/static/*", auth_required=False, context_type="anonymous"),

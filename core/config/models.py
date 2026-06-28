@@ -121,6 +121,10 @@ class DatabaseConfig(BaseModel):
         default=None,
         description="PostgreSQL platform_worktracker (ядро задач WorkItem)",
     )
+    secrets_url: str | None = Field(
+        default=None,
+        description="PostgreSQL platform_secrets (версионируемые переменные и секреты)",
+    )
     tracing_url: str | None = Field(
         default=None,
         description="PostgreSQL platform_tracing (spans); отдельно от shared",
@@ -151,6 +155,19 @@ class DatabaseConfig(BaseModel):
             "Защищает от висящих транзакций, удерживающих локи."
         ),
         ge=0,
+    )
+
+
+class SecretsConfig(BaseModel):
+    """Конфигурация микросервиса secrets.
+
+    ``encryption_key`` — отдельный от ``auth.jwt_secret_key`` ключ шифрования значений
+    секретных переменных. Zero-Guess: при попытке зашифровать без ключа сервис падает.
+    """
+
+    encryption_key: str | None = Field(
+        default=None,
+        description="Ключ шифрования значений секретных переменных (ENV SECRETS__ENCRYPTION_KEY)",
     )
 
 
@@ -281,6 +298,7 @@ class ServerConfig(BaseModel):
     scheduler_service_url: str | None = None
     office_service_url: str | None = None
     worktracker_service_url: str | None = None
+    secrets_service_url: str | None = None
     browser_service_url: str | None = None
     search_service_url: str | None = None
     provider_litserve_service_url: str | None = None
@@ -322,6 +340,7 @@ class ServerConfig(BaseModel):
         "code_runner_go": 8019,
         "code_runner_csharp": 8020,
         "worktracker": 8021,
+        "secrets": 8022,
     }
 
     def get_service_url(self, service: str | None = None) -> str:
@@ -361,6 +380,8 @@ class ServerConfig(BaseModel):
                 return self.office_service_url
             case "worktracker":
                 return self.worktracker_service_url
+            case "secrets":
+                return self.secrets_service_url
             case "browser":
                 return self.browser_service_url
             case "search":

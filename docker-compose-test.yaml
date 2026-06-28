@@ -186,6 +186,8 @@ services:
       - DATABASE__RAG_URL=postgresql+asyncpg://platform_user:admin@postgres-test:5432/platform_rag
       - DATABASE__OFFICE_URL=postgresql+asyncpg://platform_user:admin@postgres-test:5432/platform_office
       - DATABASE__TRACING_URL=postgresql+asyncpg://platform_user:admin@postgres-test:5432/platform_tracing
+      - DATABASE__SECRETS_URL=postgresql+asyncpg://platform_user:admin@postgres-test:5432/platform_secrets
+      - SECRETS__ENCRYPTION_KEY=test-secrets-encryption-key-fixed
       - DATABASE__REDIS_URL=redis://redis-test:6379/0
       - TASKS__BROKER_URL=redis://redis-test:6379/1
       - TESTING=true

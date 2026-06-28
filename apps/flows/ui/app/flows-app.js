@@ -25,7 +25,9 @@ import { resourcesBundleResource, resourceUpdateOp } from '../events/resources/r
 import { mcpServersResource, mcpServerUpdateOp, mcpServerSyncOp, mcpServerTestOp, mcpServerResetCatalogDefaultsOp, mcpBrandingLoadOp, mcpBrandingUpsertOp, mcpBrandingRemoveOp } from '../events/resources/mcp.resource.js';
 import { triggersListOp, triggerGetOp, triggerCreateOp, triggerUpdateOp,
          triggerRemoveOp, triggerVerifyOp, triggerReregisterOp, triggerTestOp } from '../events/resources/triggers.resource.js';
-import { variablesResource } from '../events/resources/variables.resource.js';
+import { secretsVariablesResource } from '@platform/lib/events/resources/secrets-variables.resource.js';
+import { secretsVariablesResolveOp } from '@platform/lib/events/resources/secrets-variables-resolve.resource.js';
+import { secretsVariableVersionsLoadOp } from '@platform/lib/events/resources/secrets-variable-versions.resource.js';
 import { nodesCatalogResource, nodeCatalogUpdateOp } from '../events/resources/nodes-catalog.resource.js';
 import { sessionsResource, sessionStateOp } from '../events/resources/sessions.resource.js';
 import { tracesBySessionOp, tracesByTaskOp, tracesByTraceOp } from '../events/resources/traces.resource.js';
@@ -180,7 +182,9 @@ export class FlowsApp extends PlatformApp {
         triggerVerifyOp,
         triggerReregisterOp,
         triggerTestOp,
-        variablesResource,
+        secretsVariablesResource,
+        secretsVariablesResolveOp,
+        secretsVariableVersionsLoadOp,
         nodesCatalogResource,
         nodeCatalogUpdateOp,
         sessionsResource,

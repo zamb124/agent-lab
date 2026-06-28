@@ -36,6 +36,11 @@
       "database_url_key": "worktracker_url"
     },
     {
+      "name": "secrets",
+      "models_module": "core.secrets.db_models",
+      "database_url_key": "secrets_url"
+    },
+    {
       "name": "tracing",
       "models_module": "core.db.models.tracing",
       "database_url_key": "tracing_url"
@@ -56,7 +61,8 @@
       "platform_office",
       "platform_worktracker",
       "platform_tracing",
-      "platform_search"
+      "platform_search",
+      "platform_secrets"
     ],
     "vector_extensions": ["platform_shared", "platform_crm", "platform_rag"]
   }

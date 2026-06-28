@@ -413,13 +413,12 @@ class AuthMiddleware(BaseHTTPMiddleware):
         context_factory: ContextFactory,
         trace_id: str,
     ) -> Context | None:
-        if rule.context_type != "anonymous":
-            return None
         path = request.url.path
         internal_path_prefixes = (
             "/search/api/v1/mcp",
             "/browser/api/v1/mcp",
             "/flows/api/v1/internal/",
+            "/secrets/api/v1/",
         )
         if not path.startswith(internal_path_prefixes):
             return None
@@ -444,7 +443,7 @@ class AuthMiddleware(BaseHTTPMiddleware):
             )
         return await context_factory.create(
             request,
-            "api",
+            rule.context_type,
             company,
             user,
             token_data=None,

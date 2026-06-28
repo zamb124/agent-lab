@@ -16,7 +16,6 @@ from core.db.models.platform import (
     Storage,
     Usage,
     Users,
-    Variables,
 )
 from core.db.models.rag import (
     DocumentProcessingStatus,
@@ -28,7 +27,6 @@ __all__ = [
     "Base",
     "Storage",
     "Users",
-    "Variables",
     "Usage",
     "Namespaces",
     "Spans",

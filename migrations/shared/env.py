@@ -1,7 +1,7 @@
 """
 Alembic env для shared БД.
 
-Управляет таблицами: storage, users, variables, usage, namespaces, push_subscriptions.
+Управляет таблицами: storage, users, usage, namespaces, push_subscriptions.
 """
 
 import asyncio
@@ -29,7 +29,6 @@ from core.db.models.platform import (  # noqa: F401 — регистрируют
     Storage,
     Usage,
     Users,
-    Variables,
 )
 
 config = context.config
@@ -41,7 +40,7 @@ if config.config_file_name is not None:
 target_metadata = Base.metadata
 
 MANAGED_TABLES = {
-    "storage", "users", "variables", "usage",
+    "storage", "users", "usage",
     "namespaces", "push_subscriptions",
     "calendar_events", "calendar_integrations", "integration_credentials",
     "scheduler_tasks", "platform_short_links", "api_keys",

@@ -132,6 +132,7 @@ MigrationDatabaseUrlKey: TypeAlias = Literal[
     "worktracker_url",
     "tracing_url",
     "search_url",
+    "secrets_url",
 ]
 PushSubscriptionKeys: TypeAlias = dict[str, str]
 TaskLabelMap: TypeAlias = dict[str, str]

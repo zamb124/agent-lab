@@ -1,7 +1,8 @@
 """
 Модели shared-базы данных.
 
-Таблицы platform БД: storage, users, variables, usage, namespaces, push_subscriptions.
+Таблицы platform БД: storage, users, usage, namespaces, push_subscriptions.
+Company variables — в platform_secrets (сервис secrets).
 """
 
 from datetime import datetime, timezone
@@ -112,39 +113,6 @@ class Users(Base):
     @override
     def __repr__(self) -> str:
         return f"<Users(key='{self.key}', updated_at='{self.updated_at}')>"
-
-
-class Variables(Base):
-    """
-    Таблица для переменных всех компаний.
-
-    Ключи имеют формат: company:{company_id}:var:{key}
-    """
-
-    __tablename__: str = "variables"
-
-    key: Mapped[str] = mapped_column(String, primary_key=True, index=True)
-    value: Mapped[JsonObject] = mapped_column(JSONB, nullable=False)
-    created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
-    )
-    updated_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True),
-        default=lambda: datetime.now(timezone.utc),
-        onupdate=lambda: datetime.now(timezone.utc),
-    )
-    expired_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
-
-    __table_args__: _TableArgs = (
-        UniqueConstraint("key", name="uq_variables_key"),
-        Index("ix_variables_key_prefix", "key"),
-        Index("ix_variables_updated_at", "updated_at"),
-        Index("ix_variables_expired_at", "expired_at"),
-    )
-
-    @override
-    def __repr__(self) -> str:
-        return f"<Variables(key='{self.key}', updated_at='{self.updated_at}')>"
 
 
 class Usage(Base):

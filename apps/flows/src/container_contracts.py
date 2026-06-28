@@ -58,7 +58,6 @@ if TYPE_CHECKING:
     from core.db.repositories.embed_config_repository import EmbedConfigRepository
     from core.db.repositories.embed_mapping_repository import EmbedMappingRepository
     from core.db.repositories.user_repository import UserRepository
-    from core.db.repositories.variable_repository import VariableRepository
     from core.files.file_repository import FileRepository
     from core.files.service import FilesService
     from core.integrations.oauth_service import OAuthService
@@ -386,6 +385,3 @@ class FlowRuntimeContainer(Protocol):
 
     @property
     def user_repository(self) -> UserRepository: ...
-
-    @property
-    def variable_repository(self) -> VariableRepository: ...

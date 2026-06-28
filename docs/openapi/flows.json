@@ -11793,7 +11793,7 @@
           "value"
         ],
         "title": "FlowVariableConfig",
-        "description": "Конфигурация переменной flow с метаданными.\n\nКонтракт значения {value, secret} симметричен company-уровню\n(`core.db.repositories.variable_repository.Variable`). При выполнении flow\nпеременная по тому же ключу перекрывает company-переменную."
+        "description": "Конфигурация переменной flow с метаданными. Company-переменные — через secrets-сервис (PlatformVariable); flow-переменная с тем же ключом перекрывает company при выполнении."
       },
       "FlowVoiceSessionQueryResponse": {
         "properties": {
@@ -15864,37 +15864,6 @@
         ],
         "title": "OffsetPage[ToolResponse]"
       },
-      "OffsetPage_VariableResponse_": {
-        "properties": {
-          "items": {
-            "items": {
-              "$ref": "#/components/schemas/VariableResponse"
-            },
-            "type": "array",
-            "title": "Items"
-          },
-          "total": {
-            "type": "integer",
-            "title": "Total"
-          },
-          "limit": {
-            "type": "integer",
-            "title": "Limit"
-          },
-          "offset": {
-            "type": "integer",
-            "title": "Offset"
-          }
-        },
-        "type": "object",
-        "required": [
-          "items",
-          "total",
-          "limit",
-          "offset"
-        ],
-        "title": "OffsetPage[VariableResponse]"
-      },
       "OperatorTaskInterrupt": {
         "properties": {
           "kind": {
@@ -19779,60 +19748,6 @@
           "publicKey"
         ],
         "title": "VapidPublicKeyResponse"
-      },
-      "VariableCreateRequest": {
-        "properties": {
-          "key": {
-            "type": "string",
-            "title": "Key"
-          },
-          "value": {
-            "type": "string",
-            "title": "Value"
-          },
-          "secret": {
-            "type": "boolean",
-            "title": "Secret",
-            "default": false
-          }
-        },
-        "additionalProperties": false,
-        "type": "object",
-        "required": [
-          "key",
-          "value"
-        ],
-        "title": "VariableCreateRequest",
-        "description": "Запрос на создание переменной"
-      },
-      "VariableResponse": {
-        "properties": {
-          "key": {
-            "type": "string",
-            "title": "Key"
-          },
-          "value": {
-            "$ref": "#/components/schemas/JsonValue"
-          },
-          "secret": {
-            "type": "boolean",
-            "title": "Secret"
-          },
-          "system": {
-            "type": "boolean",
-            "title": "System",
-            "default": false
-          }
-        },
-        "additionalProperties": false,
-        "type": "object",
-        "required": [
-          "key",
-          "value",
-          "secret"
-        ],
-        "title": "VariableResponse",
-        "description": "Ответ с данными переменной"
       },
       "VoiceProvidersCatalogDTO": {
         "properties": {

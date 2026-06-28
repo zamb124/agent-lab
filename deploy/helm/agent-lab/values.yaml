@@ -429,6 +429,31 @@ applications:
       limits:
         cpu: "1"
         memory: 1Gi
+  secrets:
+    nodeName: master
+    enabled: true
+    port: 8022
+    replicas: 1
+    serviceName: secrets
+    command:
+      - granian
+      - --interface
+      - asgi
+      - apps.secrets.main:app
+      - --host
+      - "0.0.0.0"
+      - --port
+      - "8022"
+      - --http
+      - auto
+      - --ws
+    resources:
+      requests:
+        cpu: 100m
+        memory: 256Mi
+      limits:
+        cpu: "1"
+        memory: 1Gi
   capability-gateway:
     nodeName: master
     enabled: true
@@ -826,6 +851,7 @@ platformSecrets:
   create: false
   postgresPassword: ""
   authJwtSecret: ""
+  secretsEncryptionKey: ""
   hfToken: ""
   authYandexClientId: ""
   authYandexClientSecret: ""

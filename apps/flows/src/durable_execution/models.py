@@ -45,6 +45,7 @@ class ExecutionBranchReason(StrEnum):
 class WorkflowEventType(StrEnum):
     run_started = "RunStarted"
     user_input_applied = "UserInputApplied"
+    variables_resolved = "VariablesResolved"
     state_projection_committed = "StateProjectionCommitted"
     superstep_started = "SuperstepStarted"
     node_scheduled = "NodeScheduled"
@@ -152,6 +153,17 @@ class UserInputAppliedPayload(DurableStrictBaseModel):
     task_id: str = Field(..., min_length=1)
     context_id: str = Field(..., min_length=1)
     is_resume: bool
+
+
+class VariablesResolvedPayload(DurableStrictBaseModel):
+    """Материализация переменных компании/flow на старте.
+
+    Значения попадают в `ExecutionState.variables` через `state_delta` (как все
+    переменные), здесь — только аудит ключей; секреты в payload не дублируются.
+    """
+
+    variable_keys: list[str] = Field(default_factory=list)
+    secret_keys: list[str] = Field(default_factory=list)
 
 
 class SuperstepStartedPayload(DurableStrictBaseModel):
@@ -335,6 +347,7 @@ WorkflowEventPayload: TypeAlias = (
     EmptyWorkflowEventPayload
     | RunStartedPayload
     | UserInputAppliedPayload
+    | VariablesResolvedPayload
     | SuperstepStartedPayload
     | NodeScheduledPayload
     | NodeWriteRecordedPayload
@@ -360,6 +373,7 @@ WorkflowEventPayload: TypeAlias = (
 _PAYLOAD_BY_EVENT_TYPE: dict[WorkflowEventType, type[DurableStrictBaseModel]] = {
     WorkflowEventType.run_started: RunStartedPayload,
     WorkflowEventType.user_input_applied: UserInputAppliedPayload,
+    WorkflowEventType.variables_resolved: VariablesResolvedPayload,
     WorkflowEventType.state_projection_committed: EmptyWorkflowEventPayload,
     WorkflowEventType.superstep_started: SuperstepStartedPayload,
     WorkflowEventType.node_scheduled: NodeScheduledPayload,

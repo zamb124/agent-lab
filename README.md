@@ -276,3 +276,14 @@ uv run pytest
 # Поднять локальную инфраструктуру (Postgres/Redis/MinIO)
 make dev-up
 ```
+
+## License
+
+Copyright (c) 2024-2026 Шведов Виктор Викторович.
+
+Исходный код платформы Humanitec распространяется под [Elastic License 2.0](LICENSE)
+(SPDX: `Elastic-2.0`). Это source-available лицензия, **не** OSI open source: запрещено
+предлагать продукт третьим лицам как hosted или managed service с существенной частью
+функциональности платформы.
+
+Сторонние компоненты и зависимости — в [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).

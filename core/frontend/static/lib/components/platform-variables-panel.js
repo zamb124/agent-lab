@@ -156,6 +156,21 @@ export class PlatformVariablesPanel extends PlatformElement {
             font-size: var(--text-sm);
             color: var(--text-tertiary);
         }
+        .company-vars-help {
+            margin-bottom: var(--space-2);
+            font-size: var(--text-xs);
+            color: var(--text-secondary);
+            line-height: 1.4;
+        }
+        .company-vars-help button {
+            border: none;
+            background: none;
+            padding: 0;
+            color: var(--accent);
+            cursor: pointer;
+            font: inherit;
+            text-decoration: underline;
+        }
     `;
 
     constructor() {
@@ -323,6 +338,12 @@ export class PlatformVariablesPanel extends PlatformElement {
         const entries = this._entries();
         const sectionTitle = typeof this.sectionTitle === 'string' ? this.sectionTitle.trim() : '';
         return html`
+            <p class="company-vars-help">
+                ${this.t('variables_panel.company_variables_hint')}
+                <button type="button" @click=${() => this.navigate('company-variables')}>
+                    ${this.t('variables_panel.company_variables_link')}
+                </button>
+            </p>
             ${sectionTitle.length > 0 ? html`
                 <div class="section-head">
                     <h4 class="section-title">${sectionTitle}</h4>

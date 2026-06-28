@@ -271,10 +271,6 @@ class VariableResolver:
                 variables.update(local_vars_clean)
             return variables
 
-        # Переменные компании
-        if context.company_variables:
-            variables.update(context.company_variables)
-
         # Переменные пользователя
         if context.user:
             variables.update(
@@ -287,14 +283,8 @@ class VariableResolver:
             if isinstance(email, str) and email:
                 variables["user_email"] = email
 
-        # Переменные агента
-        if context.flow_variables:
-            flow_vars: VariableDict = {}
-            for key, value in context.flow_variables.items():
-                flow_vars[key] = VariableResolver._flow_variable_payload_value(value)
-            variables.update(flow_vars)
-
-        # Локальные переменные (наивысший приоритет)
+        # Резолвнутые переменные компании/flow приходят единым map через local_vars
+        # (материализованный state.variables), без повторного сбора из контекста.
         if local_vars:
             request_vars_clean: VariableDict = {}
             for key, value in local_vars.items():

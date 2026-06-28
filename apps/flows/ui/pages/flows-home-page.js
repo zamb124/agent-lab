@@ -741,7 +741,7 @@ export class FlowsHomePage extends PlatformPage {
         this._sessions = this.useResource('flows/sessions');
         this._resources = this.useResource('flows/resources');
         this._mcpServers = this.useResource('flows/mcp_servers');
-        this._variables = this.useResource('flows/variables');
+        this._variables = this.useResource('secrets/variables');
         this._tools = this.useOp('flows/tools_all');
         this._bundles = this.useOp('flows/flow_store_bundles');
         this._integrations = this.useOp('flows/integrations_list');
@@ -1235,7 +1235,7 @@ export class FlowsHomePage extends PlatformPage {
     _renderConnectSection() {
         const resources = asArray(this._resources.items);
         const mcpCount = asArray(this._mcpServers.items).length;
-        const variablesCount = asArray(this._variables.items).filter((item) => isPlainObject(item) && item.system !== true).length;
+        const variablesCount = asArray(this._variables.items).length;
         const integrationsCount = resultItems(this._integrations.lastResult).length;
         const values = {
             mcp: String(mcpCount),

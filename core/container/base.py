@@ -37,6 +37,7 @@ from core.calendar.service import CalendarService
 from core.clients.documents_client import DocumentsClient
 from core.clients.rag_client import RagClient
 from core.clients.scheduler_client import SchedulerClient
+from core.clients.secrets_client import SecretsClient
 from core.clients.service_client import ServiceClient
 from core.config import get_settings
 from core.context import get_context
@@ -54,7 +55,6 @@ from core.db.repositories.pronunciation_rule_repository import (
 from core.db.repositories.subdomain_repository import SubdomainRepository
 from core.db.repositories.usage_repository import UsageRepository
 from core.db.repositories.user_repository import UserRepository
-from core.db.repositories.variable_repository import VariableRepository
 from core.db.storage import Storage
 from core.documents.placement import DocsBindResult, DocsPlacement
 from core.files.file_repository import FileRepository
@@ -246,9 +246,9 @@ class BaseContainer:
         return SubdomainRepository(storage=self.shared_storage)
 
     @lazy
-    def variable_repository(self) -> VariableRepository:
-        """VariableRepository для работы с переменными"""
-        return VariableRepository(storage=self.shared_storage)
+    def secrets_client(self) -> SecretsClient:
+        """SecretsClient для доступа к версионируемым переменным и секретам компании."""
+        return SecretsClient(service_client=self.service_client)
 
     @lazy
     def usage_repository(self) -> UsageRepository:
@@ -381,8 +381,8 @@ class BaseContainer:
 
     @lazy
     def variables_service(self) -> VariablesService:
-        """VariablesService для работы с переменными"""
-        return VariablesService(variable_repository=self.variable_repository)
+        """VariablesService — единый фасад переменных компании поверх secrets-сервиса."""
+        return VariablesService(secrets_client=self.secrets_client)
 
     @lazy
     def s3_factory(self):

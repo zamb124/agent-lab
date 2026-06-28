@@ -46,6 +46,8 @@ _lint-py:
 	uv run python scripts/check_agent_goose_tool_contract.py
 	@echo "=== lint: agent e2e no monkeypatch ==="
 	uv run python scripts/check_agent_test_no_monkeypatch.py
+	@echo "=== lint: variables legacy grep ==="
+	@bash scripts/check_variables_legacy.sh
 
 lint-file:
 	@test -n "$(FILE)" || (echo "usage: make lint FILE=<path>  или  make lint <path>" >&2; exit 1)

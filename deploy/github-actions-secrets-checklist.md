@@ -57,6 +57,7 @@ bash deploy/scripts/kubeconfig-for-github-actions.sh
 |---|
 | `POSTGRES_PASSWORD` |
 | `AUTH_JWT_SECRET` |
+| `SECRETS_ENCRYPTION_KEY` |
 | `SELECTEL_ACCESS_KEY` |
 | `SELECTEL_SECRET_KEY` |
 | `LIVEKIT_API_KEY` |

@@ -1,5 +1,4 @@
 from core.db import BaseRepository, Storage
-from core.db.repositories import VariableRepository
 
 from .evaluation_lab_repository import EvaluationLabRepository
 from .flow_repository import FlowRepository
@@ -32,7 +31,6 @@ __all__ = [
     "EvaluationLabRepository",
     "FlowRepository",
     "ToolRepository",
-    "VariableRepository",
     "MCPServerRepository",
     "ResourceRepository",
     "EvaluationSuites",

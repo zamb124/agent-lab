@@ -75,16 +75,6 @@ class Context(StrictBaseModel):
         title="Язык пользователя",
         description="Предпочитаемый язык интерфейса пользователя",
     )
-    flow_variables: JsonObject = Field(
-        default_factory=dict,
-        title="Переменные flow",
-        description="Переменные доступные во flow и агентах",
-    )
-    company_variables: JsonObject = Field(
-        default_factory=dict,
-        title="Переменные компании",
-        description="Переменные компании для использования в промптах",
-    )
     flow_config: JsonObject | None = Field(
         default=None,
         title="Конфигурация агента",
@@ -137,8 +127,6 @@ class Context(StrictBaseModel):
                 "channel": self.channel,
                 "flow_id": self.flow_id,
                 "host": self.host,
-                "flow_variables": self.flow_variables,
-                "company_variables": self.company_variables,
                 "metadata": self.metadata,
                 "language": self.language.value,
                 "trace_id": self.trace_id,

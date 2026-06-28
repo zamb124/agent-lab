@@ -49,7 +49,6 @@ from apps.flows.src.tools.node_wrapper import NodeAsToolWrapper
 from apps.flows.src.tools.registry import ToolRegistry
 from apps.flows.src.triggers.handlers.telegram import TelegramTriggerHandler
 from apps.flows.src.triggers.registry import TriggerRegistry
-from apps.flows.src.variables import VariablesService
 from core.capabilities import CAPABILITY_LANGUAGE_SET
 from core.clients.a2a_client import A2AClient
 from core.clients.loki_client import LokiClient
@@ -190,10 +189,7 @@ class FlowContainer(BaseContainer):
         )
 
     # rag_repository наследуется из BaseContainer (core/container/base.py)
-
-    @lazy
-    def variables_service(self) -> VariablesService:
-        return VariablesService(self.variable_repository)
+    # variables_service наследуется из BaseContainer (secrets_client + ResolutionEngine)
 
     @lazy
     def evaluation_lab_service(self) -> EvaluationLabService:

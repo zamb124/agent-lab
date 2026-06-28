@@ -12,11 +12,11 @@ flows:
   # Примеры для разработчиков (public для обучения)
   - id: example_react
     public: true
-    description: "ReAct агент: демонстрация tools, субагентов, interrupt, variables, skills"
+    description: "ReAct: tools, subflow, interrupt, variables (static/@var:/secret/scoped/expression/merge/replace), skills"
     
   - id: example_graph
     public: true
-    description: "Граф агент: демонстрация function нод, условных переходов, inline кода"
+    description: "Graph: function nodes, branching, variables (scoped-by-var/expression/@var:), inline code"
   
   # Внешние агенты
   - id: example_external

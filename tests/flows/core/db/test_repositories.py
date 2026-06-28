@@ -16,7 +16,6 @@ from apps.flows.src.models import (
     ToolReference,
 )
 from apps.flows.src.models.enums import NodeType
-from core.db.repositories import Variable
 from core.state import ExecutionState
 
 
@@ -142,50 +141,6 @@ class TestToolRepository:
         assert loaded.tool_id == "test_tool_repo"
 
         await repo.delete("test_tool_repo")
-
-
-class TestVariableRepository:
-    """Тесты VariableRepository."""
-
-    @pytest.mark.asyncio
-    async def test_set_and_get_variable(self, app):
-        """Сохранение и получение переменной."""
-        container = get_container()
-        repo = container.variable_repository
-
-        var = Variable(
-            key="test_var",
-            value="test_value",
-            description="Test variable",
-        )
-
-        await repo.set(var)
-        loaded = await repo.get("test_var")
-
-        assert loaded is not None
-        assert loaded.key == "test_var"
-        assert loaded.value == "test_value"
-
-        await repo.delete("test_var")
-
-    @pytest.mark.asyncio
-    async def test_get_variables(self, app):
-        """Получение всех переменных."""
-        container = get_container()
-        repo = container.variable_repository
-
-        # Создаём несколько переменных
-        await repo.set(Variable(key="var1", value="value1"))
-        await repo.set(Variable(key="var2", value="value2"))
-
-        all_vars = await repo.get_variables()
-
-        assert "var1" in all_vars
-        assert "var2" in all_vars
-
-        # Cleanup
-        await repo.delete("var1")
-        await repo.delete("var2")
 
 
 class TestDurableWorkflowRuntime:

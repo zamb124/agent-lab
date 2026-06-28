@@ -33,9 +33,6 @@ from core.db.models import (
 from core.db.models import (
     Users as UsersModel,
 )
-from core.db.models import (
-    Variables as VariablesModel,
-)
 from core.db.utils import get_rowcount
 from core.logging import get_logger
 from core.models.context_models import Context
@@ -52,7 +49,6 @@ class TableRoute(TypedDict):
 KNOWN_STORAGE_TABLES: Mapping[str, Table] = {
     "storage": cast(Table, StorageModel.__table__),
     "users": cast(Table, UsersModel.__table__),
-    "variables": cast(Table, VariablesModel.__table__),
     "usage": cast(Table, UsageModel.__table__),
     "namespaces": cast(Table, NamespacesModel.__table__),
 }
@@ -62,7 +58,6 @@ TABLE_ROUTING: Mapping[str, TableRoute] = {
     "user_providers:": {"table": "users", "company_specific": False},
     "auth_session:": {"table": "users", "company_specific": False},
     "auth_state:": {"table": "users", "company_specific": False},
-    "var:": {"table": "variables", "company_specific": False},
     "usage:": {"table": "usage", "company_specific": False},
     "namespace:": {"table": "namespaces", "company_specific": False},
     "_default": {"table": "storage", "company_specific": False},
