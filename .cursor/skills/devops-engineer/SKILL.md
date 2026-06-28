@@ -199,6 +199,8 @@ make agent-ci-build AGENT_PLATFORM=macos-arm64 AGENT_ARTIFACT_MODE=release AGENT
 
 **GitHub Secrets (подпись):** `APPLE_ID`, `APPLE_ID_PASSWORD`, `APPLE_TEAM_ID`, `KEYCHAIN_PATH`; Windows: `WINDOWS_CERTIFICATE_FILE`, `WINDOWS_CERTIFICATE_PASSWORD`.
 
+**Prod download API:** репозиторий **private** → frontend обязан ходить в GitHub Releases API с PAT (`AGENT__RELEASES__GITHUB_TOKEN` в GitHub Secrets → `platform-secrets` → pod env). Без токена API отдаёт **404** (не 403); артефакты на Release при этом **не пропадают**. Деплой платформы билды не трогает.
+
 **Нюансы (обязательно не ломать):**
 
 | Тема | Канон |

@@ -73,6 +73,7 @@ jq -n \
   --arg searchLinkupApiKey "${SEARCH__LINKUP__API_KEY:-}" \
   --arg searchSerperApiKey "${SEARCH__SERPER__API_KEY:-}" \
   --arg searchTavilyApiKey "${SEARCH__TAVILY__API_KEY:-}" \
+  --arg agentReleasesGithubToken "${AGENT__RELEASES__GITHUB_TOKEN:-}" \
   '{
     create: true,
     postgresPassword: $postgresPassword,
@@ -131,5 +132,6 @@ jq -n \
     searchTinyfishApiKey: $searchTinyfishApiKey,
     searchLinkupApiKey: $searchLinkupApiKey,
     searchSerperApiKey: $searchSerperApiKey,
-    searchTavilyApiKey: $searchTavilyApiKey
+    searchTavilyApiKey: $searchTavilyApiKey,
+    agentReleasesGithubToken: $agentReleasesGithubToken
   }'

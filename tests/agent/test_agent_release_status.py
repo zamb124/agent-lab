@@ -7,6 +7,7 @@ from fastapi import HTTPException
 
 from apps.agent.models import AgentReleaseAssetChecksum
 from apps.agent.service import (
+    _github_api_headers,
     _resolve_asset_url_from_release,
     build_agent_release_status_from_github_payload,
 )
@@ -119,3 +120,14 @@ def test_resolve_asset_url_missing_platform() -> None:
     with pytest.raises(HTTPException) as exc_info:
         _ = _resolve_asset_url_from_release(payload, "macos-arm64")
     assert exc_info.value.status_code == 404
+
+
+def test_github_api_headers_include_bearer_token(monkeypatch: pytest.MonkeyPatch) -> None:
+    from apps.agent.config import reset_agent_settings
+
+    monkeypatch.setenv("AGENT__RELEASES__GITHUB_TOKEN", "ghp_test_token")
+    reset_agent_settings()
+    headers = _github_api_headers()
+    assert headers["Authorization"] == "Bearer ghp_test_token"
+    reset_agent_settings()
+    monkeypatch.delenv("AGENT__RELEASES__GITHUB_TOKEN", raising=False)

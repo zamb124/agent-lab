@@ -503,6 +503,12 @@ env в одном container spec: Kubernetes strategic-merge patch падает 
       name: {{ .Values.platformSecretName }}
       key: search-tavily-api-key
       optional: true
+- name: AGENT__RELEASES__GITHUB_TOKEN
+  valueFrom:
+    secretKeyRef:
+      name: {{ .Values.platformSecretName }}
+      key: agent-releases-github-token
+      optional: true
 - name: OTEL_EXPORTER_OTLP_ENDPOINT
   value: http://alloy:4317
 - name: LOGGING__LOKI_QUERY_URL

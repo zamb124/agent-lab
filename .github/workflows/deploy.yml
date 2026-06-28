@@ -352,6 +352,7 @@ jobs:
           SEARCH__LINKUP__API_KEY: ${{ secrets.SEARCH__LINKUP__API_KEY }}
           SEARCH__SERPER__API_KEY: ${{ secrets.SEARCH__SERPER__API_KEY }}
           SEARCH__TAVILY__API_KEY: ${{ secrets.SEARCH__TAVILY__API_KEY }}
+          AGENT__RELEASES__GITHUB_TOKEN: ${{ secrets.AGENT__RELEASES__GITHUB_TOKEN || secrets.GHCR_PULL_TOKEN }}
           HELM_DELETE_ORPHAN_PLATFORM_SECRET: ${{ inputs.replace_orphan_platform_secret == true && '1' || '0' }}
         run: |
           set -euo pipefail

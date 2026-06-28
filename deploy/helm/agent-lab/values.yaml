@@ -906,5 +906,6 @@ platformSecrets:
   searchLinkupApiKey: ""
   searchSerperApiKey: ""
   searchTavilyApiKey: ""
+  agentReleasesGithubToken: ""
 
 platformSecretName: platform-secrets

@@ -13,7 +13,6 @@ from fastapi import HTTPException
 
 from apps.agent.config import get_agent_settings
 from apps.agent.desktop.build_contract import (
-    asset_name_pattern,
     load_default_distro_config,
     matches_release_asset_name,
 )
@@ -64,11 +63,6 @@ DEVICE_TOKEN_EXPIRES = 30 * 86400
 PAIRING_RATE_WINDOW_SECONDS = 3600
 
 
-def _asset_name_pattern(platform: str) -> str:
-    distro = load_default_distro_config()
-    return asset_name_pattern(platform, distro.bundle_name)
-
-
 def _device_storage_key(device_id: str) -> str:
     return f"{DEVICE_KEY_PREFIX}{device_id}"
 
@@ -98,6 +92,17 @@ def _github_api_base() -> str:
     if not stripped:
         return "https://api.github.com"
     return stripped.rstrip("/")
+
+
+def _github_api_headers() -> dict[str, str]:
+    settings = get_agent_settings()
+    headers = {"Accept": "application/vnd.github+json"}
+    token = settings.releases.github_token
+    if token is not None:
+        stripped = token.strip()
+        if stripped:
+            headers["Authorization"] = f"Bearer {stripped}"
+    return headers
 
 
 def _pairing_rate_key(user_id: str) -> str:
@@ -363,7 +368,7 @@ async def _fetch_latest_github_release() -> JsonObject:
     github_api = _github_api_base()
     url = f"{github_api}/repos/{owner}/{repo}/releases/latest"
     async with httpx.AsyncClient(timeout=15.0) as client:
-        response = await client.get(url, headers={"Accept": "application/vnd.github+json"})
+        response = await client.get(url, headers=_github_api_headers())
         _ = response.raise_for_status()
         return parse_json_object(response.text, "github.release")
 
@@ -422,7 +427,7 @@ async def _load_asset_checksums(release_payload: JsonObject) -> list[AgentReleas
     if checksums_url is None:
         return []
     async with httpx.AsyncClient(timeout=15.0) as client:
-        response = await client.get(checksums_url)
+        response = await client.get(checksums_url, headers=_github_api_headers())
         _ = response.raise_for_status()
         checksums_text = response.text
     checksums: list[AgentReleaseAssetChecksum] = []
@@ -492,6 +497,11 @@ async def fetch_latest_release_status() -> AgentReleaseStatusResponse:
         release_payload = await _fetch_latest_github_release()
     except httpx.HTTPStatusError as exc:
         detail = f"GitHub releases/latest вернул HTTP {exc.response.status_code}"
+        if exc.response.status_code == 404 and not settings.releases.github_token:
+            detail += (
+                ". Репозиторий private — задайте AGENT__RELEASES__GITHUB_TOKEN "
+                "(PAT с Contents: Read)"
+            )
         logger.warning(
             "agent.releases.unavailable",
             github_owner=owner,

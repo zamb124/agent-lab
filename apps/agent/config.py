@@ -19,6 +19,10 @@ class AgentReleaseSettings(BaseModel):
         default=None,
         description="Override GitHub API base; default https://api.github.com",
     )
+    github_token: str | None = Field(
+        default=None,
+        description="PAT для GitHub Releases API; обязателен для private repo",
+    )
     source: str = Field(
         default="github",
         description="github — GitHub Releases API; local — dist/ артефакт",
@@ -52,11 +56,13 @@ def get_agent_settings() -> AgentSettings:
         env_github_base = os.environ.get("AGENT__RELEASES__GITHUB_API_BASE_URL")
         env_github_owner = os.environ.get("AGENT__RELEASES__GITHUB_OWNER")
         env_github_repo = os.environ.get("AGENT__RELEASES__GITHUB_REPO")
+        env_github_token = os.environ.get("AGENT__RELEASES__GITHUB_TOKEN")
         env_release_source = os.environ.get("AGENT__RELEASES__SOURCE")
         if (
             env_github_base is not None
             or env_github_owner is not None
             or env_github_repo is not None
+            or env_github_token is not None
             or env_release_source is not None
         ):
             releases_raw = agent_section.get("releases")
@@ -70,6 +76,8 @@ def get_agent_settings() -> AgentSettings:
                 releases_section["github_owner"] = env_github_owner
             if env_github_repo is not None:
                 releases_section["github_repo"] = env_github_repo
+            if env_github_token is not None:
+                releases_section["github_token"] = env_github_token
             if env_release_source is not None:
                 releases_section["source"] = env_release_source
             agent_section["releases"] = releases_section
