@@ -356,6 +356,8 @@ def _verify_windows_release(path: Path, distro: HumanitecDistroConfig) -> None:
         raise ArtifactVerificationError("MSI filename is not Humanitec-branded")
     if path.suffix.lower() != ".msi":
         raise ArtifactVerificationError("Windows artifact must be .msi")
+    if sys.platform == "win32":
+        _verify_windows_release_msi_payload(path)
     if shutil.which("strings") is None:
         return
     strings_result = subprocess.run(
@@ -368,6 +370,57 @@ def _verify_windows_release(path: Path, distro: HumanitecDistroConfig) -> None:
         return
     if distro.bundle_name not in strings_result.stdout and distro.display_name not in strings_result.stdout:
         raise ArtifactVerificationError("MSI payload missing Humanitec branding strings")
+
+
+def _verify_windows_release_msi_payload(path: Path) -> None:
+    if shutil.which("msiexec") is None:
+        raise ArtifactVerificationError("msiexec is required for Windows MSI payload verification")
+
+    extract_root = Path(tempfile.mkdtemp(prefix="humanitec-agent-msi-"))
+    try:
+        extract_command = [
+            "msiexec",
+            "/a",
+            str(path.resolve()),
+            "/qn",
+            f"TARGETDIR={extract_root}",
+        ]
+        extract_result = subprocess.run(
+            extract_command,
+            check=False,
+            capture_output=True,
+            text=True,
+        )
+        if extract_result.returncode != 0:
+            raise ArtifactVerificationError(
+                "Failed to extract MSI for verification: "
+                + extract_result.stderr.strip()
+                + extract_result.stdout.strip()
+            )
+
+        goosed_candidates = list(extract_root.rglob("goosed.exe"))
+        if not goosed_candidates:
+            raise ArtifactVerificationError("MSI payload missing goosed.exe")
+
+        runtime_dll_names = ("vcruntime140.dll", "ucrtbase.dll")
+        for runtime_dll_name in runtime_dll_names:
+            runtime_candidates = list(extract_root.rglob(runtime_dll_name))
+            if not runtime_candidates:
+                raise ArtifactVerificationError(
+                    f"MSI payload missing bundled runtime DLL: {runtime_dll_name}"
+                )
+
+        goosed_bin_dir = goosed_candidates[0].parent
+        for runtime_dll_name in runtime_dll_names:
+            runtime_path = goosed_bin_dir / runtime_dll_name
+            if not runtime_path.is_file():
+                raise ArtifactVerificationError(
+                    "Bundled runtime DLL must live next to goosed.exe: "
+                    + f"{runtime_dll_name} expected in {goosed_bin_dir}"
+                )
+    finally:
+        if extract_root.is_dir():
+            shutil.rmtree(extract_root, ignore_errors=True)
 
 
 def verify_release_artifact(

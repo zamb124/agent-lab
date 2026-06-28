@@ -201,6 +201,8 @@ make agent-ci-build AGENT_PLATFORM=macos-arm64 AGENT_ARTIFACT_MODE=release AGENT
 
 **DMG UX:** staging `.app` + symlink `Applications` перед `hdiutil create` (`build.sh`).
 
+**Windows self-contained MSI:** `scripts/bundle_windows_runtime_dlls.ps1` копирует MSVC CRT + UCRT в `src/bin` рядом с `goosed.exe`; gate `dumpbin /dependents` до forge. Пользователю **не** нужен VC++ Redistributable. Child exit `3221225781` (`0xC0000135`) = missing DLL.
+
 **Prod download API:** репозиторий **private** → frontend обязан ходить в GitHub Releases API с PAT (`AGENT__RELEASES__GITHUB_TOKEN` в GitHub Secrets → `platform-secrets` → pod env). Без токена API отдаёт **404** (не 403); артефакты на Release при этом **не пропадают**. Деплой платформы билды не трогает.
 
 **Нюансы (обязательно не ломать):**
@@ -213,8 +215,9 @@ make agent-ci-build AGENT_PLATFORM=macos-arm64 AGENT_ARTIFACT_MODE=release AGENT
 | macos-x64 | раннер **`macos-14`** (не `macos-13`); кросс: `x86_64-apple-darwin` + forge `--arch x64` |
 | Verify rpm | `%{VENDOR}` часто `(none)` у maker-rpm — ок; брендинг по `%{NAME}` + `.desktop` |
 | Verify AppImage | не `strings` по squashfs — `--appimage-extract`, проверка `.desktop` |
+| Windows MSI | `bundle_windows_runtime_dlls.ps1` → CRT+UCRT в `resources/bin`; verify через `msiexec /a` |
 
-Цепочка release: `cargo build goosed` → `apply_branding.sh` → `pnpm` → `electron-forge make` → verify → upload → `publish-release`.
+Цепочка release: `cargo build goosed` → (`bundle_windows_runtime_dlls` на Windows) → `apply_branding.sh` → `pnpm` → `electron-forge make` → verify → upload → `publish-release`.
 
 ## Чек-листы типовых операций
 

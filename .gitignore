@@ -1,5 +1,10 @@
 /conf.local.json
 
+# Code signing (never commit)
+*.p12
+*.cer
+p12cert.p12
+
 # Локальный runtime cache и desktop release artifacts
 /.cache/
 /apps/agent/desktop/dist/

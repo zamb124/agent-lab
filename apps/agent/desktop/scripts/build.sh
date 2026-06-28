@@ -304,6 +304,24 @@ build_goosed_binary() {
   fi
 }
 
+bundle_windows_runtime_dlls() {
+  local bin_dir="${DESKTOP_DIR}/src/bin"
+  local goosed_exe="${bin_dir}/goosed.exe"
+  local bundle_script="${ROOT_DIR}/scripts/bundle_windows_runtime_dlls.ps1"
+  if [[ ! -f "${bundle_script}" ]]; then
+    echo "Windows runtime bundle script missing: ${bundle_script}" >&2
+    exit 1
+  fi
+  if [[ ! -f "${goosed_exe}" ]]; then
+    echo "goosed.exe missing before runtime bundle: ${goosed_exe}" >&2
+    exit 1
+  fi
+  powershell.exe -NoProfile -ExecutionPolicy Bypass \
+    -File "${bundle_script}" \
+    -DestDir "${bin_dir}" \
+    -GoosedExe "${goosed_exe}"
+}
+
 build_release() {
   if [[ ! -d "${VENDOR_DIR}" ]]; then
     echo "Goose vendor tree missing: ${VENDOR_DIR}" >&2
@@ -407,6 +425,7 @@ build_release() {
         exit 1
       fi
       build_goosed_binary
+      bundle_windows_runtime_dlls
       install_desktop_node_modules
       prepare_desktop_binaries
       run_desktop_forge_make "@electron-forge/maker-wix"
