@@ -65,8 +65,6 @@ WS `*_failed`: те же поля мерджатся в `payload` рядом с 
 
 После accept invite ответ `AcceptInviteResponse.subdomain` — клиент делает полную навигацию на subdomain dashboard. Перевыпуск JWT — тот же `rebind_session_to_company`.
 
-Редирект `/dashboard` → last-visited не-console сервис (`replaceLocationToLastVisitedNonFrontendService`) — только при query `post_login=1` (добавляется после OAuth callback и `POST /api/auth/login/demo`). Ручной переход на Console — без query, дашборд не покидается.
-
 ## Dependency Injection
 
 ### Контейнер и `@lazy`

@@ -3,11 +3,13 @@
  */
 import { html, css } from 'lit';
 import { PlatformPage } from '@platform/lib/base/PlatformPage.js';
+import { marketingPublicContentPageStyles } from '@platform/lib/styles/shared/marketing-section.styles.js';
 import '@platform/lib/embed-chat/platform-embed-chat-drawer.js';
 import '@platform/lib/components/platform-breadcrumbs.js';
-import '@platform/lib/components/glass-card.js';
-import '@platform/lib/components/glass-button.js';
+import '@platform/lib/components/platform-button.js';
 import '@platform/lib/components/glass-spinner.js';
+import '../components/landing/landing-header.js';
+import '../components/landing/landing-footer.js';
 
 export class LandingDigitalWorkersPage extends PlatformPage {
     static i18nNamespace = 'landing';
@@ -19,108 +21,87 @@ export class LandingDigitalWorkersPage extends PlatformPage {
 
     static styles = [
         PlatformPage.styles,
+        ...marketingPublicContentPageStyles,
         css`
-            :host {
-                display: block;
-                width: 100%;
-                box-sizing: border-box;
-                min-height: var(--app-vh, 100vh);
-                background: var(--landing-bg, #0f0f0f);
-                color: var(--landing-text, #ffffff);
+            .marketing-digital-workers {
+                max-width: var(--marketing-content-max-width);
             }
-            .wrap {
-                max-width: 1200px;
-                margin: 0 auto;
-                padding: 24px 20px 80px;
-                box-sizing: border-box;
-            }
+
             platform-breadcrumbs {
                 display: block;
                 margin-bottom: var(--space-6);
             }
-            .head {
-                text-align: center;
-                margin-bottom: var(--space-8);
-            }
-            h1 {
-                font-family: 'Fira Sans Condensed', sans-serif;
-                font-size: clamp(2rem, 5vw, 3rem);
-                font-weight: 600;
-                margin: 0 0 var(--space-4);
-                line-height: 1.15;
-            }
-            .lede {
-                font-family: 'Fira Sans', sans-serif;
-                font-size: var(--text-lg);
-                line-height: 1.6;
-                color: var(--landing-text-subtle, rgba(255, 255, 255, 0.72));
-                max-width: 42rem;
-                margin: 0 auto;
-            }
-            .disclaimer {
-                font-family: 'Fira Sans', sans-serif;
-                font-size: var(--text-sm);
-                line-height: 1.6;
-                color: var(--landing-text-faint, rgba(255, 255, 255, 0.55));
+
+            .marketing-digital-workers-disclaimer {
                 max-width: 48rem;
                 margin: 0 auto var(--space-10);
                 padding: var(--space-4);
                 border-radius: var(--radius-md);
-                border: 1px solid var(--landing-panel-border, rgba(255, 255, 255, 0.12));
-                background: var(--landing-panel-bg, rgba(255, 255, 255, 0.04));
+                border: 1px solid var(--glass-border-medium);
+                background: var(--glass-bg-subtle);
+                font-size: var(--text-sm);
+                line-height: var(--leading-relaxed);
+                color: var(--text-tertiary);
+                text-align: center;
             }
-            .grid {
+
+            .marketing-digital-workers-grid {
                 display: grid;
                 grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
                 gap: var(--space-6);
             }
-            .card-image {
+
+            .marketing-digital-workers-card {
+                overflow: hidden;
+                padding: 0;
+                display: flex;
+                flex-direction: column;
+            }
+
+            .marketing-digital-workers-card-image {
                 width: 100%;
                 aspect-ratio: 16 / 10;
                 object-fit: cover;
-                border-radius: var(--radius-md);
-                display: block;
-                background: var(--landing-panel-bg-strong, rgba(255, 255, 255, 0.06));
             }
-            .card-body {
-                padding: var(--space-4) 0 0;
+
+            .marketing-digital-workers-card-body {
+                padding: var(--space-6);
                 display: flex;
                 flex-direction: column;
-                gap: var(--space-3);
+                gap: var(--space-4);
                 flex: 1;
             }
-            .card-title {
+
+            .marketing-digital-workers-card-title {
                 font-size: var(--text-lg);
-                font-weight: 600;
+                font-weight: var(--font-semibold);
                 margin: 0;
+                color: var(--text-primary);
             }
-            .card-desc {
-                font-size: var(--text-sm);
-                color: var(--landing-text-subtle, rgba(255, 255, 255, 0.65));
+
+            .marketing-digital-workers-card-desc {
+                font-size: var(--text-base);
+                line-height: var(--leading-relaxed);
+                color: var(--text-secondary);
                 margin: 0;
-                line-height: 1.5;
                 flex: 1;
             }
-            .card-actions {
+
+            .marketing-digital-workers-card-actions {
                 display: flex;
                 flex-wrap: wrap;
-                gap: var(--space-2);
-                margin-top: var(--space-2);
+                gap: var(--space-3);
             }
-            .state-center {
-                display: flex;
-                flex-direction: column;
-                align-items: center;
-                justify-content: center;
-                gap: var(--space-4);
-                min-height: 200px;
-                font-family: 'Fira Sans', sans-serif;
-                color: var(--landing-text-subtle, rgba(255, 255, 255, 0.7));
+
+            .marketing-digital-workers-state {
+                display: grid;
+                place-items: center;
+                min-height: 12rem;
+                color: var(--text-secondary);
             }
-            .err {
-                color: #f87171;
-                text-align: center;
-                max-width: 36rem;
+
+            .marketing-digital-workers-state.is-error {
+                color: var(--error);
             }
         `,
     ];
@@ -256,62 +237,70 @@ export class LandingDigitalWorkersPage extends PlatformPage {
 
         return html`
             <landing-header></landing-header>
-            <div class="wrap">
-                <platform-breadcrumbs></platform-breadcrumbs>
-                <header class="head">
-                    <h1>${this.t('digital_workers.title')}</h1>
-                    <p class="lede">${this.t('digital_workers.subtitle')}</p>
-                </header>
-                <p class="disclaimer">${this.t('digital_workers.disclaimer')}</p>
+            <div class="marketing-page-container">
+                <div class="marketing-content marketing-digital-workers">
+                    <platform-breadcrumbs></platform-breadcrumbs>
+                    <header class="marketing-content-hero">
+                        <h1 class="marketing-content-title">${this.t('digital_workers.title')}</h1>
+                        <p class="marketing-content-lede">${this.t('digital_workers.subtitle')}</p>
+                    </header>
+                    <p class="marketing-digital-workers-disclaimer">${this.t('digital_workers.disclaimer')}</p>
 
-                ${busy && items.length === 0
-                    ? html`<div class="state-center"><glass-spinner></glass-spinner></div>`
-                    : ''}
-                ${err !== null && items.length === 0
-                    ? html`<div class="state-center err">${this.t('digital_workers.load_error')}</div>`
-                    : ''}
-                ${!busy && err === null && items.length === 0
-                    ? html`<div class="state-center">${this.t('digital_workers.empty')}</div>`
-                    : ''}
+                    ${busy && items.length === 0
+                        ? html`<div class="marketing-digital-workers-state"><glass-spinner></glass-spinner></div>`
+                        : ''}
+                    ${err !== null && items.length === 0
+                        ? html`<div class="marketing-digital-workers-state is-error">${this.t('digital_workers.load_error')}</div>`
+                        : ''}
+                    ${!busy && err === null && items.length === 0
+                        ? html`<div class="marketing-digital-workers-state">${this.t('digital_workers.empty')}</div>`
+                        : ''}
 
-                ${items.length > 0
-                    ? html`
-                          <div class="grid">
-                              ${items.map(
-                                  (card) => html`
-                                      <glass-card>
-                                          <img
-                                              class="card-image"
-                                              src=${card.landing_card_image_url}
-                                              alt=""
-                                              loading="lazy"
-                                          />
-                                          <div class="card-body">
-                                              <h2 class="card-title">${card.name}</h2>
-                                              <p class="card-desc">
-                                                  ${typeof card.greeting_message === 'string' && card.greeting_message !== ''
-                                                      ? card.greeting_message
-                                                      : this.t('digital_workers.card_fallback_desc')}
-                                              </p>
-                                              <div class="card-actions">
-                                                  <glass-button
-                                                      variant="primary"
-                                                      size="sm"
-                                                      @click=${() => this._tryAgent(card)}
-                                                  >
-                                                      ${this.t('digital_workers.cta_try')}
-                                                  </glass-button>
-                                                  <glass-button variant="secondary" size="sm" @click=${this._hire}>
-                                                      ${this.t('digital_workers.cta_hire')}
-                                                  </glass-button>
+                    ${items.length > 0
+                        ? html`
+                              <div class="marketing-digital-workers-grid">
+                                  ${items.map(
+                                      (card) => html`
+                                          <article class="marketing-content-card glass-medium marketing-digital-workers-card">
+                                              <img
+                                                  class="marketing-digital-workers-card-image"
+                                                  src=${card.landing_card_image_url}
+                                                  alt=""
+                                                  loading="lazy"
+                                              />
+                                              <div class="marketing-digital-workers-card-body">
+                                                  <h2 class="marketing-digital-workers-card-title">${card.name}</h2>
+                                                  <p class="marketing-digital-workers-card-desc">
+                                                      ${typeof card.greeting_message === 'string' &&
+                                                      card.greeting_message !== ''
+                                                          ? card.greeting_message
+                                                          : this.t('digital_workers.card_fallback_desc')}
+                                                  </p>
+                                                  <div class="marketing-digital-workers-card-actions">
+                                                      <platform-button
+                                                          variant="primary"
+                                                          density="compact"
+                                                          @click=${() => this._tryAgent(card)}
+                                                      >
+                                                          ${this.t('digital_workers.cta_try')}
+                                                      </platform-button>
+                                                      <platform-button
+                                                          variant="secondary"
+                                                          density="compact"
+                                                          @click=${this._hire}
+                                                      >
+                                                          ${this.t('digital_workers.cta_hire')}
+                                                      </platform-button>
+                                                  </div>
                                               </div>
-                                          </div>
-                                      </glass-card>
-                                  `,
-                              )}
-                          </div>
-                      `
-                    : ''}
+                                          </article>
+                                      `,
+                                  )}
+                              </div>
+                          `
+                        : ''}
+                </div>
+                <landing-footer></landing-footer>
             </div>
             <platform-embed-chat-drawer
                 flows-base-url=${this._flowsBaseUrl}

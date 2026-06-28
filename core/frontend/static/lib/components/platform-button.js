@@ -68,13 +68,19 @@ export class PlatformButton extends PlatformElement {
         /* Primary — violet */
         button.primary {
             color: var(--platform-btn-primary-text, #ffffff);
+            -webkit-text-fill-color: currentColor;
             background: var(--platform-btn-primary-bg, #99A6F9);
             box-shadow: var(--platform-btn-primary-shadow, none);
         }
 
         button.primary:hover:not(:disabled) {
+            color: var(--platform-btn-primary-text, #ffffff);
             background: var(--platform-btn-primary-bg-hover, #8794F0);
             box-shadow: var(--platform-btn-primary-shadow-hover, 0 0 10px rgba(153, 166, 249, 0.6));
+        }
+
+        ::slotted(*) {
+            -webkit-text-fill-color: currentColor;
         }
 
         /* Accent — orange */

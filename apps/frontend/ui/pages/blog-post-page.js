@@ -1,11 +1,13 @@
 /**
  * Публичная страница статьи блога.
  */
-import { html, css } from 'lit';
+import { html } from 'lit';
 import { unsafeHTML } from 'lit/directives/unsafe-html.js';
 import { PlatformPage } from '@platform/lib/base/PlatformPage.js';
+import { marketingPublicContentPageStyles } from '@platform/lib/styles/shared/marketing-section.styles.js';
 import { applyPublicDocumentMeta } from '../utils/public-document-meta.js';
 import '@platform/lib/components/glass-spinner.js';
+import '@platform/lib/components/platform-button.js';
 import '../components/landing/landing-header.js';
 import '../components/landing/landing-footer.js';
 
@@ -16,76 +18,7 @@ export class BlogPostPage extends PlatformPage {
         slug: { type: String },
     };
 
-    static styles = [
-        PlatformPage.styles,
-        css`
-            :host {
-                display: block;
-                min-height: var(--app-vh, 100vh);
-                background: var(--landing-bg, #0f0f0f);
-                color: var(--landing-text, #fff);
-            }
-            .wrap {
-                max-width: 820px;
-                margin: 0 auto;
-                padding: 100px 20px 80px;
-                box-sizing: border-box;
-            }
-            h1 {
-                font-family: 'Fira Sans Condensed', sans-serif;
-                font-size: clamp(28px, 4vw, 40px);
-                margin: 0 0 24px;
-                color: var(--landing-secondary, #e8e8e8);
-            }
-            .body {
-                font-family: 'Fira Sans', sans-serif;
-                font-size: 17px;
-                line-height: 1.65;
-                color: var(--landing-text-soft, rgba(232, 232, 232, 0.88));
-            }
-            .body :is(p, ul, ol) {
-                margin: 0 0 16px;
-            }
-            .toolbar {
-                margin-bottom: 28px;
-                display: flex;
-                flex-wrap: wrap;
-                gap: 12px;
-                align-items: center;
-            }
-            button.linkish {
-                background: transparent;
-                border: none;
-                color: var(--landing-primary, #5768fe);
-                font-family: 'Fira Sans', sans-serif;
-                font-size: 15px;
-                font-weight: 600;
-                cursor: pointer;
-                padding: 0;
-                text-decoration: underline;
-            }
-            .err {
-                color: #ff8a8a;
-                font-size: 15px;
-            }
-            .cta-row {
-                margin-top: 40px;
-                padding-top: 28px;
-                border-top: 1px solid var(--landing-panel-border, rgba(255, 255, 255, 0.12));
-            }
-            .cta-btn {
-                padding: 14px 28px;
-                border-radius: 40px;
-                border: none;
-                background: var(--landing-primary, #5768fe);
-                color: #fff;
-                font-family: 'Fira Sans', sans-serif;
-                font-size: 16px;
-                font-weight: 600;
-                cursor: pointer;
-            }
-        `,
-    ];
+    static styles = [PlatformPage.styles, ...marketingPublicContentPageStyles];
 
     constructor() {
         super();
@@ -165,27 +98,31 @@ export class BlogPostPage extends PlatformPage {
         const hasPost = post && typeof post === 'object' && typeof post.slug === 'string';
         return html`
             <landing-header></landing-header>
-            <div class="wrap">
-                <div class="toolbar">
-                    <button type="button" class="linkish" @click=${() => this.navigate('blog', {})}>
-                        ${this.t('blog_page.back')}
-                    </button>
+            <div class="marketing-page-container">
+                <div class="marketing-content">
+                    <p>
+                        <button type="button" class="marketing-text-link" @click=${() => this.navigate('blog', {})}>
+                            ${this.t('blog_page.back')}
+                        </button>
+                    </p>
+                    ${busy ? html`<glass-spinner></glass-spinner>` : null}
+                    ${err && !hasPost ? html`<p class="marketing-text-error">${this.t('blog_page.post_error')}</p>` : null}
+                    ${hasPost
+                        ? html`
+                              <header class="marketing-content-hero">
+                                  <h1 class="marketing-content-title">${this._title(post)}</h1>
+                              </header>
+                              <div class="marketing-prose body">${unsafeHTML(this._body(post))}</div>
+                              <div class="marketing-content-cta">
+                                  <platform-button variant="primary" @click=${() => this.navigate('digital-workers', {})}>
+                                      ${this.t('blog_page.cta_demo')}
+                                  </platform-button>
+                              </div>
+                          `
+                        : null}
                 </div>
-                ${busy ? html`<glass-spinner></glass-spinner>` : null}
-                ${err && !hasPost ? html`<p class="err">${this.t('blog_page.post_error')}</p>` : null}
-                ${hasPost
-                    ? html`
-                          <h1>${this._title(post)}</h1>
-                          <div class="body">${unsafeHTML(this._body(post))}</div>
-                          <div class="cta-row">
-                              <button type="button" class="cta-btn" @click=${() => this.navigate('digital-workers', {})}>
-                                  ${this.t('blog_page.cta_demo')}
-                              </button>
-                          </div>
-                      `
-                    : null}
+                <landing-footer></landing-footer>
             </div>
-            <landing-footer></landing-footer>
         `;
     }
 }

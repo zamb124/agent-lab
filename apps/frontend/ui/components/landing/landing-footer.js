@@ -46,7 +46,7 @@ export class LandingFooter extends PlatformElement {
             }
             
             .footer-email:hover {
-                color: var(--landing-primary);
+                color: var(--accent);
             }
             
             .footer-logo {
@@ -54,7 +54,7 @@ export class LandingFooter extends PlatformElement {
                 font-size: clamp(2rem, 12vw, 6.25rem);
                 font-weight: 500;
                 line-height: 1;
-                color: var(--landing-primary);
+                color: var(--accent);
                 margin: 0;
                 text-transform: capitalize;
                 white-space: nowrap;
@@ -95,7 +95,7 @@ export class LandingFooter extends PlatformElement {
             }
             
             .footer-link:hover {
-                color: var(--landing-primary);
+                color: var(--accent);
             }
             
             .footer-bottom {
@@ -128,7 +128,7 @@ export class LandingFooter extends PlatformElement {
             }
             
             .footer-legal-link:hover {
-                color: var(--landing-primary);
+                color: var(--accent);
             }
             
             @media (min-width: 768px) {

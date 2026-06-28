@@ -148,6 +148,7 @@ import '../pages/products/product-rag-page.js';
 import '../pages/products/product-crm-page.js';
 import '../pages/products/product-sync-page.js';
 import '../pages/products/product-documents-page.js';
+import '../pages/agent-download-page.js';
 import '../pages/legal-page.js';
 import '../pages/support-page.js';
 import '../pages/landing-digital-workers-page.js';
@@ -180,6 +181,7 @@ const FRONTEND_ROUTES = [
     { key: 'product-crm',             path: 'products/crm',             parent: 'landing',     titleKey: 'routes.product-crm' },
     { key: 'product-sync',            path: 'products/sync',            parent: 'landing',     titleKey: 'routes.product-sync' },
     { key: 'product-documents',       path: 'products/documents',       parent: 'landing',     titleKey: 'routes.product-documents' },
+    { key: 'agent-download',          path: 'agent',                    parent: 'landing',     titleKey: 'routes.agent-download' },
     { key: 'policy',                  path: 'policy',                   parent: 'landing',     titleKey: 'routes.policy' },
     { key: 'terms',                   path: 'terms',                    parent: 'landing',     titleKey: 'routes.terms' },
     { key: 'support',                 path: 'support',                  parent: 'landing',     titleKey: 'routes.support' },
@@ -211,6 +213,7 @@ const PUBLIC_ROUTE_KEYS = new Set([
     'landing',
     'search',
     'product-agents', 'product-rag', 'product-crm', 'product-sync', 'product-documents',
+    'agent-download',
     'policy', 'terms', 'support',
     'digital-workers',
     'blog', 'blog-post', 'about', 'roadmap',
@@ -221,6 +224,7 @@ const LANDING_ROUTE_KEYS = new Set([
     'landing',
     'search',
     'product-agents', 'product-rag', 'product-crm', 'product-sync', 'product-documents',
+    'agent-download',
     'policy', 'terms', 'support',
     'digital-workers',
     'blog', 'blog-post', 'about', 'roadmap',
@@ -233,6 +237,7 @@ const DOCUMENT_META_SKIP = new Set([
     'product-crm',
     'product-sync',
     'product-documents',
+    'agent-download',
     'blog-post',
 ]);
 
@@ -252,6 +257,7 @@ const FRONTEND_BOTTOM_NAV_HIDE_ON_ROUTES = [
     'landing',
     'search',
     'product-agents', 'product-rag', 'product-crm', 'product-sync', 'product-documents',
+    'agent-download',
     'policy', 'terms', 'support',
     'digital-workers',
     'blog', 'blog-post', 'about', 'roadmap',
@@ -675,6 +681,7 @@ export class FrontendApp extends PlatformApp {
             case 'product-crm':        return html`<product-crm-page></product-crm-page>`;
             case 'product-sync':       return html`<product-sync-page></product-sync-page>`;
             case 'product-documents':  return html`<product-documents-page></product-documents-page>`;
+            case 'agent-download':     return html`<agent-download-page></agent-download-page>`;
             case 'policy':             return html`<legal-page kind="policy"></legal-page>`;
             case 'terms':              return html`<legal-page kind="terms"></legal-page>`;
             case 'support':            return html`<support-page></support-page>`;

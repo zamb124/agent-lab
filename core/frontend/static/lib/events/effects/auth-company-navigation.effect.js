@@ -8,7 +8,6 @@
 
 import { CoreEvents } from '../contract.js';
 import { buildCompanySubdomainUrl } from '../../utils/company-url.js';
-import { POST_LOGIN_DASHBOARD_QUERY } from '../../utils/last-visited-service.js';
 
 const COMPANY_SWITCH_STORAGE_KEY = 'platform:company-switch';
 
@@ -63,7 +62,7 @@ export function createAuthCompanyNavigationEffect() {
             pathname === '/select-company'
             || pathname.startsWith('/select-company/')
         ) {
-            targetPath = `/dashboard?${POST_LOGIN_DASHBOARD_QUERY}=1`;
+            targetPath = '/dashboard';
         } else {
             targetPath = `${pathname}${search}${hash}`;
         }

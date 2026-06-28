@@ -14,6 +14,7 @@ const INTERNAL_HREF_TO_ROUTE = Object.freeze({
     '/products/crm':       'product-crm',
     '/products/sync':      'product-sync',
     '/products/documents': 'product-documents',
+    '/agent':              'agent-download',
     '/support':            'support',
     '/dashboard':          'dashboard',
     '/blog':               'blog',
@@ -36,7 +37,7 @@ export class LandingHeader extends PlatformElement {
                 max-width: 100%;
                 box-sizing: border-box;
                 overflow-x: clip;
-                background: var(--landing-header-bg, rgba(15, 15, 15, 0.9));
+                background: var(--marketing-header-bg);
                 backdrop-filter: blur(10px);
                 border-bottom: 1px solid var(--landing-panel-border, rgba(255, 255, 255, 0.1));
             }
@@ -105,7 +106,7 @@ export class LandingHeader extends PlatformElement {
             }
             
             .nav-link:hover {
-                color: var(--landing-primary, #5768FE);
+                color: var(--accent);
             }
             
             .nav-dropdown {
@@ -129,7 +130,7 @@ export class LandingHeader extends PlatformElement {
             }
             
             .nav-dropdown-trigger:hover {
-                color: var(--landing-primary, #5768FE);
+                color: var(--accent);
             }
             
             .nav-dropdown-trigger svg {
@@ -177,7 +178,7 @@ export class LandingHeader extends PlatformElement {
             
             .nav-dropdown-item:hover {
                 background: rgba(87, 104, 254, 0.15);
-                color: var(--landing-primary, #5768FE);
+                color: var(--accent);
             }
             
             .nav-dropdown-item-icon {
@@ -244,7 +245,7 @@ export class LandingHeader extends PlatformElement {
             }
             
             .lang-option:hover {
-                color: var(--landing-primary);
+                color: var(--accent);
             }
             
             .lang-separator {
@@ -265,15 +266,15 @@ export class LandingHeader extends PlatformElement {
             }
 
             .theme-toggle:hover {
-                color: var(--landing-primary, #5768FE);
-                border-color: var(--landing-primary, #5768FE);
+                color: var(--accent);
+                border-color: var(--accent);
                 transform: translateY(-1px);
             }
             
             .login-btn {
                 display: flex;
                 padding: 8px 20px;
-                background: var(--landing-primary);
+                background: var(--platform-btn-primary-bg);
                 border: none;
                 border-radius: 24px;
                 color: var(--landing-on-primary, #FFFFFF);
@@ -286,14 +287,14 @@ export class LandingHeader extends PlatformElement {
             }
             
             .login-btn:hover {
-                background: #6877ff;
+                background: var(--platform-btn-primary-bg-hover);
             }
             
             .dashboard-btn {
                 display: flex;
                 padding: 8px 20px;
                 background: transparent;
-                border: 1px solid var(--landing-primary);
+                border: 1px solid var(--accent);
                 border-radius: 24px;
                 color: var(--landing-secondary);
                 font-family: 'Fira Sans', sans-serif;
@@ -306,7 +307,7 @@ export class LandingHeader extends PlatformElement {
             }
             
             .dashboard-btn:hover {
-                background: var(--landing-primary);
+                background: var(--accent);
                 color: var(--landing-on-primary, #FFFFFF);
             }
             

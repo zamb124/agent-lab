@@ -102,6 +102,7 @@ INDEXABLE_PUBLIC_PATHS: tuple[str, ...] = (
     "/products/crm",
     "/products/sync",
     "/products/documents",
+    "/agent",
     "/demo/digital-workers",
     "/blog",
     "/about",
@@ -214,6 +215,7 @@ def _build_llms_txt(base_url: str) -> str:
         f"- Product NetWorkle: {base_url}/products/crm\n"
         f"- Product Sync: {base_url}/products/sync\n"
         f"- Product Documents: {base_url}/products/documents\n"
+        f"- HumanitecAgent Download: {base_url}/agent\n"
         f"- Product Documentation: {base_url}/documentation/\n"
         f"- Support: {base_url}/support\n"
         f"- Blog: {base_url}/blog\n"
@@ -562,7 +564,7 @@ async def serve_llms_txt(container: ContainerDep) -> PlainTextResponse:
     return PlainTextResponse(content=_build_llms_txt(base_url=base_url))
 
 
-# HumanitecAgent: страница скачивания (до SPA catch-all)
+# HumanitecAgent: статика (assets), страница /agent — SPA (agent-download-page)
 _agent_static_path = Path(__file__).parent.parent / "agent" / "static"
 if _agent_static_path.exists():
     app.mount(
@@ -570,16 +572,6 @@ if _agent_static_path.exists():
         StaticFiles(directory=str(_agent_static_path)),
         name="agent-static",
     )
-
-
-@app.get("/agent")
-@app.get("/agent/")
-async def agent_download_page():
-    """Лендинг-страница скачивания HumanitecAgent."""
-    agent_html = _agent_static_path / "agent-download.html"
-    if agent_html.exists():
-        return FileResponse(agent_html, media_type="text/html; charset=utf-8")
-    raise HTTPException(status_code=404)
 
 
 # SPA-резерв (все неизвестные пути → index.html)

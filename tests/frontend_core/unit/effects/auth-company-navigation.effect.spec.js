@@ -10,7 +10,7 @@ describe('authCompanyNavigationEffect', () => {
         vi.unstubAllGlobals();
     });
 
-    it('с /select-company переходит на /dashboard?post_login=1 того же subdomain', async () => {
+    it('с /select-company переходит на /dashboard того же subdomain', async () => {
         let href = 'https://system.humanitec.ru/select-company';
         const loc = {
             hostname: 'system.humanitec.ru',
@@ -46,7 +46,7 @@ describe('authCompanyNavigationEffect', () => {
             buildCtx(getState, dispatched),
         );
 
-        expect(href).toBe('https://system.humanitec.ru/dashboard?post_login=1');
+        expect(href).toBe('https://system.humanitec.ru/dashboard');
         expect(setItem).toHaveBeenCalled();
     });
 

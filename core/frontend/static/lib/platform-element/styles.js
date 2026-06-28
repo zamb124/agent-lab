@@ -16,22 +16,25 @@ export const baseStyles = css`
         display: none !important;
     }
 
-    /* Ссылки внутри Shadow DOM не наследуют reset.css у document — иначе UA / :visited дают низкий контраст в тёмной теме. */
-    :host a:any-link {
+    /*
+     * Ссылки внутри Shadow DOM не наследуют reset.css у document.
+     * Исключаем .btn и marketing-download-link — иначе accent-текст сливается с primary-фоном кнопки-ссылки.
+     */
+    :host a:any-link:not(.btn):not([class*='marketing-download-link']) {
         color: var(--accent);
         text-decoration: none;
         transition: color var(--duration-fast) var(--easing-default);
     }
 
-    :host a:any-link:hover {
+    :host a:any-link:not(.btn):not([class*='marketing-download-link']):hover {
         color: var(--accent-hover);
     }
 
-    :host a:any-link:visited {
+    :host a:any-link:not(.btn):not([class*='marketing-download-link']):visited {
         color: var(--accent);
     }
 
-    :host a:any-link:active {
+    :host a:any-link:not(.btn):not([class*='marketing-download-link']):active {
         color: var(--accent-active);
     }
 `;

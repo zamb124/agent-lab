@@ -11,7 +11,10 @@ import {
 } from '../utils/public-search-files.js';
 import { takePublicSearchLandingTransition } from '../utils/public-search-transition.js';
 import { redirectToLogin } from '@platform/lib/utils/auth-redirect.js';
+import { marketingPageHostStyles } from '@platform/lib/styles/shared/marketing-section.styles.js';
 import '@platform/lib/components/platform-icon.js';
+import '../components/landing/landing-header.js';
+import '../components/landing/landing-footer.js';
 
 const SEARCH_MODES = Object.freeze([
     { key: 'quick', icon: 'search', label: 'search_page.mode_quick' },
@@ -36,16 +39,21 @@ export class PublicSearchPage extends PlatformPage {
 
     static styles = [
         PlatformPage.styles,
+        marketingPageHostStyles,
         css`
             :host {
                 display: block;
                 min-height: var(--app-vh, 100vh);
-                color: #f5f5f3;
-                background:
-                    linear-gradient(180deg, rgba(12, 12, 12, 0.62) 0%, #0b0b0b 46%, #111 100%),
-                    url('/static/frontend/assets/images/main_img.png') center 18% / min(980px, 74vw) auto no-repeat,
-                    #0f0f0f;
-                font-family: 'Fira Sans', system-ui, sans-serif;
+            }
+
+            .marketing-page-container {
+                min-height: var(--app-vh, 100vh);
+                display: flex;
+                flex-direction: column;
+            }
+
+            .search-page-main {
+                flex: 1;
             }
 
             .page {
@@ -179,7 +187,7 @@ export class PublicSearchPage extends PlatformPage {
 
             .search-head.is-active {
                 position: sticky;
-                top: 60px;
+                top: 72px;
                 z-index: 16;
                 padding: 12px clamp(18px, 4vw, 56px);
                 background: transparent;
@@ -1170,48 +1178,6 @@ export class PublicSearchPage extends PlatformPage {
                 100% { background-position: -120% 0; }
             }
 
-            :host-context([data-theme="light"]) {
-                color: #12131a;
-                background:
-                    linear-gradient(180deg, rgba(247, 248, 252, 0.88) 0%, #f7f8fc 42%, #eef1fa 100%),
-                    url('/static/frontend/assets/images/main_img.png') center 18% / min(980px, 74vw) auto no-repeat,
-                    #f7f8fc;
-            }
-
-            :host-context([data-theme="light"]) .topbar {
-                background: rgba(247, 248, 252, 0.78);
-                border-color: rgba(16, 20, 34, 0.10);
-            }
-
-            :host-context([data-theme="light"]) .brand,
-            :host-context([data-theme="light"]) .search-title {
-                color: rgba(18, 19, 26, 0.94);
-            }
-
-            :host-context([data-theme="light"]) .back-link,
-            :host-context([data-theme="light"]) .theme-toggle,
-            :host-context([data-theme="light"]) .locale-switch {
-                color: rgba(30, 34, 48, 0.70);
-                background: rgba(255, 255, 255, 0.72);
-                border-color: rgba(16, 20, 34, 0.10);
-            }
-
-            :host-context([data-theme="light"]) .back-link:hover,
-            :host-context([data-theme="light"]) .theme-toggle:hover,
-            :host-context([data-theme="light"]) .locale-option:hover {
-                color: #12131a;
-                background: rgba(255, 255, 255, 0.92);
-            }
-
-            :host-context([data-theme="light"]) .locale-option {
-                color: rgba(30, 34, 48, 0.58);
-            }
-
-            :host-context([data-theme="light"]) .locale-option[aria-pressed='true'] {
-                color: #fff;
-                background: rgba(87, 104, 254, 0.84);
-            }
-
             :host-context([data-theme="light"]) .search-shell {
                 background: rgba(255, 255, 255, 0.86);
                 border-color: rgba(16, 20, 34, 0.12);
@@ -1433,7 +1399,7 @@ export class PublicSearchPage extends PlatformPage {
                 }
 
                 .search-head.is-active {
-                    top: 64px;
+                    top: 72px;
                     padding: 10px 10px;
                 }
 
@@ -1520,8 +1486,6 @@ export class PublicSearchPage extends PlatformPage {
         this._serpMore = this.useOp('frontend/public_search_serp_more');
         this._sourceDescribe = this.useOp('frontend/public_search_source_describe');
         this._route = this.select((state) => state.router);
-        this._localeSel = this.select((state) => state.i18n.locale);
-        this._themeSel = this.select((state) => state.theme.mode);
         this._query = '';
         this._mode = 'quick';
         this._selectedFiles = [];
@@ -1533,7 +1497,7 @@ export class PublicSearchPage extends PlatformPage {
         this._lastScrollY = 0;
         this._scrollAnchorY = 0;
         this._scrollDirection = 'still';
-        this.        _scrollFrame = 0;
+        this._scrollFrame = 0;
         this._serpObserver = null;
         this._serpObservedSentinel = null;
         this._serpLoadBlocked = false;
@@ -1720,28 +1684,6 @@ export class PublicSearchPage extends PlatformPage {
                 vars: { message: this._fileErrorMessage(error) },
             });
         }
-    }
-
-    _goHome() {
-        this.navigate('landing');
-    }
-
-    _setLocale(locale) {
-        if (locale !== 'ru' && locale !== 'en') {
-            throw new Error(`PublicSearchPage._setLocale: invalid locale "${locale}"`);
-        }
-        if (this._localeSel.value === locale) {
-            return;
-        }
-        this.setLocale(locale);
-    }
-
-    _toggleTheme() {
-        const mode = this._themeSel.value;
-        if (mode !== 'dark' && mode !== 'light') {
-            throw new Error(`PublicSearchPage._toggleTheme: invalid theme "${mode}"`);
-        }
-        this.setTheme(mode === 'dark' ? 'light' : 'dark');
     }
 
     _fileErrorMessage(error) {
@@ -2331,59 +2273,22 @@ export class PublicSearchPage extends PlatformPage {
     render() {
         const stream = this._search.state.stream;
         const active = this._isStreamActive(stream);
-        const locale = this._localeSel.value;
-        const themeMode = this._themeSel.value;
-        if (locale !== 'ru' && locale !== 'en') {
-            throw new Error(`PublicSearchPage.render: invalid locale "${locale}"`);
-        }
-        if (themeMode !== 'dark' && themeMode !== 'light') {
-            throw new Error(`PublicSearchPage.render: invalid theme "${themeMode}"`);
-        }
         const searchHeadClass = active
             ? `search-head is-active${this._searchChromeHidden ? ' is-chrome-hidden' : ''}`
             : 'search-head';
         return html`
-            <div class="page" data-entry=${this._entryAnimation}>
-                <header class="topbar">
-                    <button class="brand" type="button" @click=${this._goHome} aria-label=${this.t('search_page.home')}>
-                        <span class="brand-mark">H</span>
-                        <span class="brand-name">Humanitec</span>
-                    </button>
-                    <div class="top-actions">
-                        <div class="locale-switch" role="group" aria-label=${this.t('search_page.language_group')}>
-                            <button
-                                class="locale-option"
-                                type="button"
-                                aria-pressed=${locale === 'en' ? 'true' : 'false'}
-                                @click=${() => this._setLocale('en')}
-                            >en</button>
-                            <button
-                                class="locale-option"
-                                type="button"
-                                aria-pressed=${locale === 'ru' ? 'true' : 'false'}
-                                @click=${() => this._setLocale('ru')}
-                            >ru</button>
-                        </div>
-                        <button
-                            class="theme-toggle"
-                            type="button"
-                            title=${themeMode === 'dark' ? this.t('search_page.theme_light') : this.t('search_page.theme_dark')}
-                            aria-label=${themeMode === 'dark' ? this.t('search_page.theme_light') : this.t('search_page.theme_dark')}
-                            @click=${this._toggleTheme}
-                        >
-                            <platform-icon name=${themeMode === 'dark' ? 'sun' : 'moon'} size="17"></platform-icon>
-                        </button>
-                        <button class="back-link" type="button" @click=${this._goHome}>
-                            <platform-icon name="arrow-left" size="16"></platform-icon>
-                            <span class="back-label">${this.t('search_page.back')}</span>
-                        </button>
+            <landing-header></landing-header>
+            <div class="marketing-page-container">
+                <div class="search-page-main">
+                    <div class="page" data-entry=${this._entryAnimation}>
+                        <section class=${searchHeadClass}>
+                            <h1 class="search-title">${this.t('search_page.title')}</h1>
+                            ${this._renderComposer()}
+                        </section>
+                        ${this._renderBody(stream)}
                     </div>
-                </header>
-                <section class=${searchHeadClass}>
-                    <h1 class="search-title">${this.t('search_page.title')}</h1>
-                    ${this._renderComposer()}
-                </section>
-                ${this._renderBody(stream)}
+                </div>
+                <landing-footer></landing-footer>
             </div>
         `;
     }

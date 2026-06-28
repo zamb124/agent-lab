@@ -43,7 +43,9 @@
         "policy_description": "Политика конфиденциальности Humanitec: обработка персональных данных и права субъектов.",
         "terms_description": "Пользовательское соглашение Humanitec: условия использования платформы.",
         "support_title": "Поддержка Humanitec",
-        "support_description": "Связаться с поддержкой Humanitec: вопросы по платформе и внедрению."
+        "support_description": "Связаться с поддержкой Humanitec: вопросы по платформе и внедрению.",
+        "agent_download_title": "Скачать HumanitecAgent — desktop-клиент Humanitec",
+        "agent_download_description": "HumanitecAgent — AI-агент на вашем компьютере. Файлы, shell, браузер и platform flows через MCP."
     },
     "hero": {
         "subtitle": "Пять продуктов для автоматизации: AI Studio, Knowledge Base, NetWorkle, Sync и Документы",
@@ -396,5 +398,37 @@
         "q2_li2": "Расширение наблюдаемости и отчётности для администраторов",
         "q2_li3": "Развитие голосовых и мультимодальных сценариев совместно с Voice-сервисом",
         "note": "Сроки уточняются по мере приоритизации; актуальная версия для клиентов — через поддержку."
+    },
+    "agent_download_page": {
+        "hero_title": "HumanitecAgent",
+        "hero_description": "AI-агент на вашем компьютере. Работает с файлами, запускает программы, подключается к Humanitec Platform.",
+        "f1_title": "Локальные файлы",
+        "f1_desc": "Читайте и редактируйте файлы на компьютере. Агент видит только то, что вы разрешили.",
+        "f2_title": "Shell и программы",
+        "f2_desc": "Запускайте bash, Python, git и другие инструменты. С whitelist и confirm-диалогами.",
+        "f3_title": "Platform flows",
+        "f3_desc": "Все сценарии Humanitec доступны как MCP tools прямо в чате агента.",
+        "f4_title": "Приватность",
+        "f4_desc": "Данные остаются на вашем компьютере. Агент работает локально, audit-логи на платформе.",
+        "download_macos": "Скачать для macOS",
+        "download_windows": "Скачать для Windows",
+        "download_linux_deb": "Скачать для Linux (.deb)",
+        "download_linux_appimage": "AppImage",
+        "download_macos_short": "macOS",
+        "download_windows_short": "Windows",
+        "download_linux_short": "Linux",
+        "other_platforms": "Другие платформы",
+        "platform_windows": "Windows (.msi)",
+        "platform_macos_arm64": "macOS Apple Silicon (.dmg)",
+        "platform_macos_x64": "macOS Intel (.dmg)",
+        "platform_linux_deb": "Linux Debian/Ubuntu (.deb)",
+        "platform_linux_rpm": "Linux Fedora/RHEL (.rpm)",
+        "platform_linux_appimage": "Linux (AppImage)",
+        "release_ready": "Доступен release",
+        "release_not_ready": "Release ещё не опубликован",
+        "release_check_failed": "Не удалось проверить статус release",
+        "login_prompt": "Уже есть аккаунт?",
+        "login_link": "Войти",
+        "footer_note": "HumanitecAgent — Built on Goose (Apache 2.0)"
     }
 }

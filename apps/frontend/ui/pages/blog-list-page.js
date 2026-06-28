@@ -1,8 +1,9 @@
 /**
  * Публичный список статей блога.
  */
-import { html, css } from 'lit';
+import { html } from 'lit';
 import { PlatformPage } from '@platform/lib/base/PlatformPage.js';
+import { marketingPublicContentPageStyles } from '@platform/lib/styles/shared/marketing-section.styles.js';
 import '@platform/lib/components/glass-spinner.js';
 import '../components/landing/landing-header.js';
 import '../components/landing/landing-footer.js';
@@ -10,79 +11,7 @@ import '../components/landing/landing-footer.js';
 export class BlogListPage extends PlatformPage {
     static i18nNamespace = 'landing';
 
-    static styles = [
-        PlatformPage.styles,
-        css`
-            :host {
-                display: block;
-                min-height: var(--app-vh, 100vh);
-                background: var(--landing-bg, #0f0f0f);
-                color: var(--landing-text, #fff);
-            }
-            .wrap {
-                max-width: 960px;
-                margin: 0 auto;
-                padding: 100px 20px 80px;
-                box-sizing: border-box;
-            }
-            h1 {
-                font-family: 'Fira Sans Condensed', sans-serif;
-                font-size: clamp(32px, 5vw, 48px);
-                margin: 0 0 12px;
-                color: var(--landing-secondary, #e8e8e8);
-            }
-            .sub {
-                margin: 0 0 40px;
-                font-size: 17px;
-                color: var(--landing-text-subtle, rgba(232, 232, 232, 0.72));
-            }
-            ul {
-                list-style: none;
-                padding: 0;
-                margin: 0;
-                display: flex;
-                flex-direction: column;
-                gap: 16px;
-            }
-            li {
-                border: 1px solid var(--landing-panel-border, rgba(255, 255, 255, 0.12));
-                border-radius: 16px;
-                padding: 20px 22px;
-                background: var(--landing-panel-bg, rgba(255, 255, 255, 0.03));
-            }
-            .title {
-                font-family: 'Fira Sans Condensed', sans-serif;
-                font-size: 22px;
-                margin: 0 0 10px;
-                color: var(--landing-secondary, #e8e8e8);
-            }
-            .sum {
-                margin: 0 0 14px;
-                font-size: 15px;
-                line-height: 1.55;
-                color: var(--landing-text-soft, rgba(232, 232, 232, 0.78));
-            }
-            button.linkish {
-                background: transparent;
-                border: none;
-                color: var(--landing-primary, #5768fe);
-                font-family: 'Fira Sans', sans-serif;
-                font-size: 15px;
-                font-weight: 600;
-                cursor: pointer;
-                padding: 0;
-                text-decoration: underline;
-            }
-            .err {
-                color: #ff8a8a;
-                font-size: 15px;
-            }
-            .empty {
-                color: var(--landing-text-subtle, rgba(232, 232, 232, 0.65));
-                font-size: 16px;
-            }
-        `,
-    ];
+    static styles = [PlatformPage.styles, ...marketingPublicContentPageStyles];
 
     constructor() {
         super();
@@ -119,31 +48,37 @@ export class BlogListPage extends PlatformPage {
         }
         return html`
             <landing-header></landing-header>
-            <div class="wrap">
-                <h1>${this.t('blog_page.title')}</h1>
-                <p class="sub">${this.t('blog_page.subtitle')}</p>
-                ${busy ? html`<glass-spinner></glass-spinner>` : null}
-                ${err ? html`<p class="err">${this.t('blog_page.load_error')}</p>` : null}
-                ${!busy && !err && items.length === 0 ? html`<p class="empty">${this.t('blog_page.empty')}</p>` : null}
-                <ul>
-                    ${items.map(
-                        (row) => html`
-                            <li>
-                                <h2 class="title">${this._titleFor(row)}</h2>
-                                <p class="sum">${this._summaryFor(row)}</p>
-                                <button
-                                    type="button"
-                                    class="linkish"
-                                    @click=${() => this.navigate('blog-post', { slug: row.slug })}
-                                >
-                                    ${this.t('blog_page.read')}
-                                </button>
-                            </li>
-                        `,
-                    )}
-                </ul>
+            <div class="marketing-page-container">
+                <div class="marketing-content">
+                    <header class="marketing-content-hero">
+                        <h1 class="marketing-content-title">${this.t('blog_page.title')}</h1>
+                        <p class="marketing-content-lede">${this.t('blog_page.subtitle')}</p>
+                    </header>
+                    ${busy ? html`<glass-spinner></glass-spinner>` : null}
+                    ${err ? html`<p class="marketing-text-error">${this.t('blog_page.load_error')}</p>` : null}
+                    ${!busy && !err && items.length === 0
+                        ? html`<p class="marketing-text-muted">${this.t('blog_page.empty')}</p>`
+                        : null}
+                    <ul class="marketing-content-card-list">
+                        ${items.map(
+                            (row) => html`
+                                <li class="marketing-content-card glass-medium">
+                                    <h2 class="marketing-content-card-title">${this._titleFor(row)}</h2>
+                                    <p class="marketing-content-card-summary">${this._summaryFor(row)}</p>
+                                    <button
+                                        type="button"
+                                        class="marketing-text-link"
+                                        @click=${() => this.navigate('blog-post', { slug: row.slug })}
+                                    >
+                                        ${this.t('blog_page.read')}
+                                    </button>
+                                </li>
+                            `,
+                        )}
+                    </ul>
+                </div>
+                <landing-footer></landing-footer>
             </div>
-            <landing-footer></landing-footer>
         `;
     }
 }

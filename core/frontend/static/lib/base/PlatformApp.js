@@ -38,7 +38,6 @@ import { translate } from '../events/effects/i18n.effect.js';
 import { CoreAuthEvents } from '../events/effects/auth.effect.js';
 import { redirectToLogin } from '../utils/auth-redirect.js';
 import { nextModalLayerZIndex } from '../utils/modal-z-stack.js';
-import { serviceIdFromBaseUrl, setLastVisitedService } from '../utils/last-visited-service.js';
 import { registerFactory } from '../events/factory-registry.js';
 import { collectFactories } from '../events/factories/register.js';
 import {
@@ -284,12 +283,6 @@ export class PlatformApp extends PlatformElement {
     _handleAuthSideEffects() {
         const auth = this._authSelect ? this._authSelect.value : null;
         if (!auth) return;
-        if (auth.status === 'authenticated' && auth.user) {
-            const id = serviceIdFromBaseUrl(this.getBaseUrl());
-            if (id && id !== 'frontend') {
-                setLastVisitedService(id);
-            }
-        }
         if (
             auth.status === 'unauthenticated'
             && !this.rendersUnauthenticated()

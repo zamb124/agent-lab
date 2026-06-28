@@ -33,14 +33,20 @@ export const buttonStyles = css`
     
     /* Основная кнопка — фиолетовая */
     .btn-primary,
-    .btn.primary {
+    .btn.primary,
+    a.btn-primary:any-link,
+    a.btn.primary:any-link {
         color: var(--platform-btn-primary-text, #ffffff);
+        -webkit-text-fill-color: currentColor;
         background: var(--platform-btn-primary-bg, #99A6F9);
         box-shadow: var(--platform-btn-primary-shadow, none);
     }
     
     .btn-primary:hover:not(:disabled),
-    .btn.primary:hover:not(:disabled) {
+    .btn.primary:hover:not(:disabled),
+    a.btn-primary:any-link:hover,
+    a.btn.primary:any-link:hover {
+        color: var(--platform-btn-primary-text, #ffffff);
         background: var(--platform-btn-primary-bg-hover, #8794F0);
         box-shadow: var(--platform-btn-primary-shadow-hover, 0 0 10px rgba(153, 166, 249, 0.6));
     }

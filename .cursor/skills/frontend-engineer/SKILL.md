@@ -354,6 +354,8 @@ async _createEntity(payload) {
 
 Humanitec/Networkle — рабочий SaaS-инструмент, не лендинг. Первый экран страницы — полезный workspace: списки, карточки, редактор, фильтры, таблицы, панель действий. Запрещены hero-композиции, декоративные блоки, маркетинговые карточные секции и пустые «объясняющие» экраны вместо реального workflow.
 
+**Исключение — public marketing** (`/products/*`, главный `/`): та же core DS (`tokens.css`, `marketing-section.styles.js`, `<platform-button>`, glass tokens). Не создавать параллельный `--landing-*` stack; `landing.css` только aliases до полной миграции главной.
+
 ### Layout grammar
 
 - Десктопный базовый макет Figma — `1440x1024`, вертикальный scroll, рабочая область с плотной сеткой. Типовой ритм: `gap/padding 8/12/16/20/24/32`; брать через `--space-*`, а не literal px, кроме разовых geometry constraints.

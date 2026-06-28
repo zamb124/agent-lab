@@ -1,16 +1,13 @@
 /**
- * Страница legal — отображает Privacy Policy или Terms of Service по атрибуту kind.
- *
- * Контент берется из i18n-бандлов:
- *   privacy.json (namespace 'privacy')
- *   terms.json   (namespace 'terms')
- *
- * Структура бандла: title, updated, updated_at, section_1..N с {title, p1..p3?, list?}.
+ * Страница legal — Privacy Policy или Terms of Service по атрибуту kind.
  */
-import { html, css } from 'lit';
+import { html } from 'lit';
 import { PlatformPage } from '@platform/lib/base/PlatformPage.js';
-import '@platform/lib/components/glass-button.js';
-import '@platform/lib/components/platform-icon.js';
+import { marketingPublicContentPageStyles } from '@platform/lib/styles/shared/marketing-section.styles.js';
+import { applyPublicDocumentMeta } from '../utils/public-document-meta.js';
+import '../components/landing/landing-header.js';
+import '../components/landing/landing-footer.js';
+
 const PRIVACY_SECTIONS = 14;
 const TERMS_SECTIONS = 13;
 const PARAGRAPH_KEYS = ['p1', 'p2', 'p3'];
@@ -20,36 +17,30 @@ export class LegalPage extends PlatformPage {
         kind: { type: String },
     };
 
-    static styles = [
-        PlatformPage.styles,
-        css`
-            :host {
-                display: block;
-                max-width: 880px;
-                margin: 0 auto;
-                padding: var(--space-12) var(--space-6);
-                color: var(--text-primary);
-            }
-            .back-row {
-                margin-bottom: var(--space-8);
-                display: flex;
-                justify-content: flex-start;
-            }
-            h1 { font-size: var(--text-3xl); margin-bottom: var(--space-2); }
-            .updated { color: var(--text-secondary); font-size: var(--text-sm); margin-bottom: var(--space-8); }
-            section { margin-bottom: var(--space-8); }
-            section h2 { font-size: var(--text-xl); margin-bottom: var(--space-3); }
-            section p { color: var(--text-secondary); line-height: 1.7; margin-bottom: var(--space-3); }
-            section ul { padding-left: 20px; }
-            section li { color: var(--text-secondary); line-height: 1.7; margin-bottom: var(--space-2); }
-        `,
-    ];
+    static styles = [PlatformPage.styles, ...marketingPublicContentPageStyles];
 
     constructor() {
         super();
         this.kind = 'policy';
         this._localeSel = this.select((s) => s.i18n.locale);
         this._bundleSel = this.select((s) => s.i18n.translations[s.i18n.locale]);
+    }
+
+    connectedCallback() {
+        super.connectedCallback();
+        queueMicrotask(() => this._syncDocumentMeta());
+    }
+
+    _syncDocumentMeta() {
+        if (typeof window === 'undefined') return;
+        const origin = window.location.origin;
+        const path = this.kind === 'terms' ? '/terms' : '/policy';
+        applyPublicDocumentMeta({
+            title: this.t('title', undefined, this._ns()),
+            description: this.t('updated', undefined, this._ns()),
+            canonicalUrl: `${origin}${path}`,
+            ogImageUrl: `${origin}/static/frontend/assets/images/main_img.png`,
+        });
     }
 
     _ns() {
@@ -67,10 +58,6 @@ export class LegalPage extends PlatformPage {
         return bundle[ns][`section_${index}`] || null;
     }
 
-    _goHome() {
-        this.navigate('landing', {});
-    }
-
     _renderSection(index) {
         const ns = this._ns();
         const data = this._bundleSection(index);
@@ -78,15 +65,16 @@ export class LegalPage extends PlatformPage {
         return html`
             <section>
                 <h2>${this.t(`section_${index}.title`, undefined, ns)}</h2>
-                ${PARAGRAPH_KEYS.map((pk) =>
-                    typeof data[pk] === 'string'
-                        ? html`<p>${this.t(`section_${index}.${pk}`, undefined, ns)}</p>`
+                ${PARAGRAPH_KEYS.map((paragraphKey) =>
+                    typeof data[paragraphKey] === 'string'
+                        ? html`<p>${this.t(`section_${index}.${paragraphKey}`, undefined, ns)}</p>`
                         : null,
                 )}
                 ${Array.isArray(data.list)
                     ? html`<ul>
                           ${data.list.map(
-                              (_item, idx) => html`<li>${this.t(`section_${index}.list.${idx}`, undefined, ns) || data.list[idx]}</li>`,
+                              (_item, listIndex) =>
+                                  html`<li>${this.t(`section_${index}.list.${listIndex}`, undefined, ns) || data.list[listIndex]}</li>`,
                           )}
                       </ul>`
                     : null}
@@ -97,19 +85,19 @@ export class LegalPage extends PlatformPage {
     render() {
         const ns = this._ns();
         const total = this._sectionsCount();
-        const indices = Array.from({ length: total }, (_v, i) => i + 1);
+        const indices = Array.from({ length: total }, (_value, index) => index + 1);
         return html`
-            <div class="back-row">
-                <glass-button variant="ghost" @click=${this._goHome}>
-                    <platform-icon name="arrow-left" size="18"></platform-icon>
-                    ${this.t('support_page.back_home')}
-                </glass-button>
+            <landing-header></landing-header>
+            <div class="marketing-page-container">
+                <div class="marketing-content">
+                    <header class="marketing-content-hero">
+                        <h1 class="marketing-content-title">${this.t('title', undefined, ns)}</h1>
+                        <p class="updated">${this.t('updated', undefined, ns)} ${this.t('updated_at', undefined, ns)}</p>
+                    </header>
+                    <div class="marketing-prose">${indices.map((index) => this._renderSection(index))}</div>
+                </div>
+                <landing-footer></landing-footer>
             </div>
-            <h1>${this.t('title', undefined, ns)}</h1>
-            <p class="updated">
-                ${this.t('updated', undefined, ns)} ${this.t('updated_at', undefined, ns)}
-            </p>
-            ${indices.map((i) => this._renderSection(i))}
         `;
     }
 }

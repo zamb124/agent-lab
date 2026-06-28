@@ -1,16 +1,18 @@
 /**
  * Публичная страница поддержки: email + форма, отправка через mailto (без backend).
  */
-import { html, css } from 'lit';
+import { html } from 'lit';
 import { PlatformPage } from '@platform/lib/base/PlatformPage.js';
-
-import '@platform/lib/components/glass-button.js';
-import '@platform/lib/components/glass-card.js';
+import { marketingPublicContentPageStyles } from '@platform/lib/styles/shared/marketing-section.styles.js';
+import { applyPublicDocumentMeta } from '../utils/public-document-meta.js';
+import '@platform/lib/components/platform-button.js';
 import '@platform/lib/components/platform-icon.js';
 import '@platform/lib/components/fields/platform-field.js';
 import { isValidEmail } from '@platform/lib/utils/validators.js';
+import '../components/landing/landing-header.js';
+import '../components/landing/landing-footer.js';
 
-const SUPPORT_EMAIL = 'zambas124@gmail.com';
+const SUPPORT_EMAIL = 'helpme@humanitec.ru';
 const MAX_SUBJECT = 200;
 const MAX_MESSAGE = 12000;
 const MAX_MAILTO_HREF = 1950;
@@ -25,140 +27,7 @@ export class SupportPage extends PlatformPage {
         _status: { state: true },
     };
 
-    static styles = [
-        PlatformPage.styles,
-        css`
-            :host {
-                display: block;
-                min-height: 100%;
-                box-sizing: border-box;
-                max-width: 44rem;
-                margin: 0 auto;
-                padding: var(--space-10) var(--space-6) var(--space-16);
-                color: var(--text-primary);
-                background: var(--bg-gradient);
-            }
-            .back-row {
-                margin-bottom: var(--space-6);
-                display: flex;
-                justify-content: flex-start;
-            }
-            .page-head {
-                margin-bottom: var(--space-10);
-                text-align: center;
-            }
-            h1 {
-                font-size: clamp(var(--text-2xl), 4vw, var(--text-3xl));
-                font-weight: 600;
-                margin: 0 0 var(--space-3);
-                letter-spacing: -0.02em;
-            }
-            .lede {
-                color: var(--text-secondary);
-                margin: 0;
-                line-height: 1.6;
-                font-size: var(--text-base);
-                max-width: 36rem;
-                margin-left: auto;
-                margin-right: auto;
-            }
-            .stack {
-                display: flex;
-                flex-direction: column;
-                gap: var(--space-6);
-            }
-            .section-title {
-                font-size: var(--text-sm);
-                font-weight: 600;
-                text-transform: uppercase;
-                letter-spacing: 0.06em;
-                color: var(--text-tertiary);
-                margin: 0 0 var(--space-3);
-            }
-            .email-row {
-                display: flex;
-                align-items: flex-start;
-                gap: var(--space-4);
-            }
-            .email-row .icon-wrap {
-                flex-shrink: 0;
-                width: 40px;
-                height: 40px;
-                border-radius: var(--radius-md);
-                display: flex;
-                align-items: center;
-                justify-content: center;
-                background: rgba(87, 104, 254, 0.12);
-                border: 1px solid rgba(87, 104, 254, 0.25);
-                color: var(--accent);
-            }
-            .email-row a {
-                color: var(--accent);
-                font-size: var(--text-lg);
-                font-weight: 500;
-                word-break: break-all;
-            }
-            .email-row a:hover {
-                text-decoration: underline;
-            }
-            .field {
-                margin-bottom: var(--space-4);
-            }
-            .field:last-of-type {
-                margin-bottom: 0;
-            }
-            .field label {
-                display: block;
-                font-size: var(--text-sm);
-                color: var(--text-secondary);
-                margin-bottom: var(--space-1);
-            }
-            .req {
-                color: var(--warning, #c9a655);
-            }
-            .actions {
-                margin-top: var(--space-5);
-            }
-            .status {
-                font-size: var(--text-sm);
-                margin-top: var(--space-3);
-                min-height: 1.25em;
-            }
-            .status.is-error {
-                color: var(--error);
-            }
-            .status.is-ok {
-                color: #8fd68f;
-            }
-            .note {
-                font-size: var(--text-sm);
-                color: var(--text-tertiary);
-                margin-top: var(--space-4);
-                line-height: 1.5;
-            }
-            .support-form {
-                display: flex;
-                flex-direction: column;
-                gap: var(--space-5);
-            }
-            .doc-footer {
-                margin-top: var(--space-10);
-                padding-top: var(--space-6);
-                border-top: 1px solid var(--glass-border-subtle, rgba(255, 255, 255, 0.08));
-                text-align: center;
-            }
-            .doc-footer a {
-                color: var(--accent);
-                display: inline-flex;
-                align-items: center;
-                gap: var(--space-2);
-                font-size: var(--text-sm);
-            }
-            .doc-footer a:hover {
-                text-decoration: underline;
-            }
-        `,
-    ];
+    static styles = [PlatformPage.styles, ...marketingPublicContentPageStyles];
 
     constructor() {
         super();
@@ -166,6 +35,22 @@ export class SupportPage extends PlatformPage {
         this._subject = '';
         this._message = '';
         this._status = { kind: 'idle', i18nKey: '' };
+    }
+
+    connectedCallback() {
+        super.connectedCallback();
+        queueMicrotask(() => this._syncDocumentMeta());
+    }
+
+    _syncDocumentMeta() {
+        if (typeof window === 'undefined') return;
+        const origin = window.location.origin;
+        applyPublicDocumentMeta({
+            title: this.t('meta.support_title', {}, 'landing'),
+            description: this.t('meta.support_description', {}, 'landing'),
+            canonicalUrl: `${origin}/support`,
+            ogImageUrl: `${origin}/static/frontend/assets/images/main_img.png`,
+        });
     }
 
     _onReplyInput(e) {
@@ -180,21 +65,17 @@ export class SupportPage extends PlatformPage {
         this._message = e.detail.value;
     }
 
-    _goHome() {
-        this.navigate('landing', {});
-    }
-
     _validate() {
-        const s = this._subject.trim();
-        const m = this._message.trim();
-        if (!s) {
+        const subject = this._subject.trim();
+        const message = this._message.trim();
+        if (!subject) {
             return { i18nKey: 'support_page.err_subject' };
         }
-        if (!m) {
+        if (!message) {
             return { i18nKey: 'support_page.err_message' };
         }
-        const re = this._replyEmail.trim();
-        if (re.length > 0 && !isValidEmail(re)) {
+        const replyEmail = this._replyEmail.trim();
+        if (replyEmail.length > 0 && !isValidEmail(replyEmail)) {
             return { i18nKey: 'support_page.err_reply_email' };
         }
         return null;
@@ -209,10 +90,10 @@ export class SupportPage extends PlatformPage {
         }
         const subject = this._subject.trim().slice(0, MAX_SUBJECT);
         const message = this._message.trim().slice(0, MAX_MESSAGE);
-        const re = this._replyEmail.trim();
+        const replyEmail = this._replyEmail.trim();
         let bodyText = message;
-        if (re) {
-            bodyText = this.t('support_page.mail_line_contact', { email: re }) + '\n\n' + message;
+        if (replyEmail) {
+            bodyText = this.t('support_page.mail_line_contact', { email: replyEmail }) + '\n\n' + message;
         }
         const href =
             'mailto:' +
@@ -230,78 +111,80 @@ export class SupportPage extends PlatformPage {
     }
 
     render() {
-        const st = this._status;
-        const statusText = st.i18nKey.length > 0 ? this.t(st.i18nKey) : '';
+        const status = this._status;
+        const statusText = status.i18nKey.length > 0 ? this.t(status.i18nKey) : '';
         return html`
-            <div class="back-row">
-                <glass-button variant="ghost" @click=${this._goHome}>
-                    <platform-icon name="arrow-left" size="18"></platform-icon>
-                    ${this.t('support_page.back_home')}
-                </glass-button>
-            </div>
-            <div class="page-head">
-                <h1>${this.t('support_page.title')}</h1>
-                <p class="lede">${this.t('support_page.lede')}</p>
-            </div>
+            <landing-header></landing-header>
+            <div class="marketing-page-container">
+                <div class="marketing-content">
+                    <header class="marketing-content-hero">
+                        <h1 class="marketing-content-title">${this.t('support_page.title')}</h1>
+                        <p class="marketing-content-lede">${this.t('support_page.lede')}</p>
+                    </header>
 
-            <div class="stack">
-                <glass-card compact>
-                    <p class="section-title">${this.t('support_page.email_section_title')}</p>
-                    <div class="email-row">
-                        <div class="icon-wrap" aria-hidden="true">
-                            <platform-icon name="mail" size="20"></platform-icon>
-                        </div>
-                        <div>
-                            <a href="mailto:${SUPPORT_EMAIL}">${SUPPORT_EMAIL}</a>
-                        </div>
+                    <div class="marketing-content-stack">
+                        <section class="marketing-content-panel glass-medium marketing-content-panel-compact">
+                            <p class="marketing-content-section-label">${this.t('support_page.email_section_title')}</p>
+                            <div class="marketing-contact-row">
+                                <div class="marketing-contact-icon" aria-hidden="true">
+                                    <platform-icon name="mail" size="20"></platform-icon>
+                                </div>
+                                <div>
+                                    <a class="marketing-contact-link" href="mailto:${SUPPORT_EMAIL}">${SUPPORT_EMAIL}</a>
+                                </div>
+                            </div>
+                        </section>
+
+                        <section class="marketing-content-panel glass-medium">
+                            <p class="marketing-content-section-label">${this.t('support_page.form_section_title')}</p>
+                            <form class="marketing-form-stack" @submit=${this._submit}>
+                                <platform-field
+                                    type="string"
+                                    input-type="email"
+                                    mode="edit"
+                                    .label=${this.t('support_page.field_reply_email')}
+                                    .value=${this._replyEmail}
+                                    @change=${this._onReplyInput}
+                                ></platform-field>
+                                <platform-field
+                                    type="string"
+                                    mode="edit"
+                                    .label=${this.t('support_page.field_subject') + ' ' + this.t('support_page.required_mark')}
+                                    .value=${this._subject}
+                                    @change=${this._onSubjectInput}
+                                ></platform-field>
+                                <platform-field
+                                    type="text"
+                                    mode="edit"
+                                    .label=${this.t('support_page.field_message') + ' ' + this.t('support_page.required_mark')}
+                                    .value=${this._message}
+                                    @change=${this._onMessageInput}
+                                ></platform-field>
+                                <div class="marketing-form-actions">
+                                    <platform-button type="submit" variant="primary">
+                                        ${this.t('support_page.submit')}
+                                    </platform-button>
+                                </div>
+                                <p
+                                    class="marketing-form-status ${status.kind === 'error' ? 'is-error' : ''} ${status.kind === 'ok' ? 'is-ok' : ''}"
+                                    role="status"
+                                    aria-live="polite"
+                                >
+                                    ${statusText}
+                                </p>
+                                <p class="marketing-form-note">${this.t('support_page.note_mailto')}</p>
+                            </form>
+                        </section>
                     </div>
-                </glass-card>
 
-                <glass-card>
-                    <p class="section-title">${this.t('support_page.form_section_title')}</p>
-                    <form class="support-form" @submit=${this._submit}>
-                        <platform-field
-                            type="string"
-                            input-type="email"
-                            mode="edit"
-                            .label=${this.t('support_page.field_reply_email')}
-                            .value=${this._replyEmail}
-                            @change=${this._onReplyInput}
-                        ></platform-field>
-                        <platform-field
-                            type="string"
-                            mode="edit"
-                            .label=${this.t('support_page.field_subject') + ' ' + this.t('support_page.required_mark')}
-                            .value=${this._subject}
-                            @change=${this._onSubjectInput}
-                        ></platform-field>
-                        <platform-field
-                            type="text"
-                            mode="edit"
-                            .label=${this.t('support_page.field_message') + ' ' + this.t('support_page.required_mark')}
-                            .value=${this._message}
-                            @change=${this._onMessageInput}
-                        ></platform-field>
-                        <div class="actions">
-                            <glass-button type="submit">${this.t('support_page.submit')}</glass-button>
-                        </div>
-                        <p
-                            class="status ${st.kind === 'error' ? 'is-error' : ''} ${st.kind === 'ok' ? 'is-ok' : ''}"
-                            role="status"
-                            aria-live="polite"
-                        >
-                            ${statusText}
-                        </p>
-                        <p class="note">${this.t('support_page.note_mailto')}</p>
-                    </form>
-                </glass-card>
-            </div>
-
-            <div class="doc-footer">
-                <a class="doc" href="/documentation/">
-                    <platform-icon name="book-open" size="16"></platform-icon>
-                    <span>${this.t('support_page.doc_link')}</span>
-                </a>
+                    <footer class="marketing-content-aside">
+                        <a class="marketing-content-aside-link" href="/documentation/">
+                            <platform-icon name="book-open" size="16"></platform-icon>
+                            <span>${this.t('support_page.doc_link')}</span>
+                        </a>
+                    </footer>
+                </div>
+                <landing-footer></landing-footer>
             </div>
         `;
     }

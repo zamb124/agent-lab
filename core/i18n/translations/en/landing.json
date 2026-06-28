@@ -43,7 +43,9 @@
         "policy_description": "Humanitec privacy policy: personal data processing and data subject rights.",
         "terms_description": "Humanitec terms of service: platform usage rules.",
         "support_title": "Humanitec support",
-        "support_description": "Contact Humanitec support for platform and onboarding questions."
+        "support_description": "Contact Humanitec support for platform and onboarding questions.",
+        "agent_download_title": "Download HumanitecAgent — Humanitec desktop client",
+        "agent_download_description": "HumanitecAgent — AI agent on your computer. Files, shell, browser, and platform flows via MCP."
     },
     "hero": {
         "subtitle": "Five products for automation: AI Studio, Knowledge Base, NetWorkle, Sync, and Documents",
@@ -396,5 +398,37 @@
         "q2_li2": "Expanded observability for admins",
         "q2_li3": "Voice and multimodal journeys with the Voice service",
         "note": "Timelines evolve with prioritization; customers receive specifics via support."
+    },
+    "agent_download_page": {
+        "hero_title": "HumanitecAgent",
+        "hero_description": "An AI agent on your computer. Works with files, runs programs, and connects to Humanitec Platform.",
+        "f1_title": "Local files",
+        "f1_desc": "Read and edit files on your machine. The agent only sees what you allow.",
+        "f2_title": "Shell and apps",
+        "f2_desc": "Run bash, Python, git, and other tools with whitelist and confirm dialogs.",
+        "f3_title": "Platform flows",
+        "f3_desc": "All Humanitec scenarios are available as MCP tools in the agent chat.",
+        "f4_title": "Privacy",
+        "f4_desc": "Data stays on your computer. The agent runs locally; audit logs live on the platform.",
+        "download_macos": "Download for macOS",
+        "download_windows": "Download for Windows",
+        "download_linux_deb": "Download for Linux (.deb)",
+        "download_linux_appimage": "AppImage",
+        "download_macos_short": "macOS",
+        "download_windows_short": "Windows",
+        "download_linux_short": "Linux",
+        "other_platforms": "Other platforms",
+        "platform_windows": "Windows (.msi)",
+        "platform_macos_arm64": "macOS Apple Silicon (.dmg)",
+        "platform_macos_x64": "macOS Intel (.dmg)",
+        "platform_linux_deb": "Linux Debian/Ubuntu (.deb)",
+        "platform_linux_rpm": "Linux Fedora/RHEL (.rpm)",
+        "platform_linux_appimage": "Linux (AppImage)",
+        "release_ready": "Release available",
+        "release_not_ready": "Release is not published yet",
+        "release_check_failed": "Could not check release status",
+        "login_prompt": "Already have an account?",
+        "login_link": "Sign in",
+        "footer_note": "HumanitecAgent — Built on Goose (Apache 2.0)"
     }
 }

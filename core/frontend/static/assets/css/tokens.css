@@ -251,6 +251,9 @@
     --text-xl: 1.25rem;
     --text-2xl: 1.5rem;
     --text-3xl: 2rem;
+    --text-display-md: clamp(2.75rem, 5vw, 4.5rem);
+    --text-display-sm: clamp(2rem, 4vw, 2.25rem);
+    --text-section-title: clamp(1.75rem, 3vw, 2.25rem);
     
     --font-normal: 400;
     --font-medium: 500;
@@ -277,6 +280,31 @@
     --space-10: 2.5rem;
     --space-12: 3rem;
     --space-16: 4rem;
+    
+    /* ========== MARKETING / PRODUCT PAGES ========== */
+    
+    --marketing-page-bg: var(--bg-secondary);
+    --marketing-content-max-width: 75rem;
+    --marketing-narrow-max-width: 50rem;
+    --marketing-section-padding-y: var(--space-16);
+    --marketing-section-padding-x: var(--space-5);
+    --marketing-hero-padding-top: var(--space-16);
+    --marketing-hero-bg: var(--marketing-page-bg);
+    --marketing-hero-title-gradient: linear-gradient(
+        135deg,
+        var(--text-primary) 0%,
+        var(--text-secondary) 100%
+    );
+    --marketing-product-accent: var(--accent);
+    --marketing-product-accent-subtle: var(--accent-subtle);
+    --marketing-benefits-band-bg: var(--accent-subtle);
+    --marketing-benefits-band-border: var(--glass-border-subtle);
+    --marketing-shot-radius: var(--radius-xl);
+    --marketing-shot-shadow: var(--glass-shadow-ultra);
+    --marketing-shot-border: var(--glass-border-medium);
+    --marketing-hero-image-filter: drop-shadow(0 0 3.75rem var(--accent-subtle));
+    --marketing-header-bg: var(--glass-bg-strong);
+    --marketing-footer-bg: linear-gradient(180deg, var(--bg-secondary) 0%, var(--bg-primary) 100%);
     
     /* ========== РАДИУСЫ ========== */
     
@@ -926,6 +954,15 @@
     --worktracker-surface-padding: var(--space-4);
     --worktracker-surface-shadow: var(--glass-shadow-subtle);
     --worktracker-detail-inner-gap: var(--space-3);
+    
+    --marketing-page-bg: #f7f8fc;
+    --marketing-hero-bg:
+        radial-gradient(circle at 50% 18%, var(--accent-subtle), transparent 36%),
+        linear-gradient(180deg, #ffffff 0%, #f7f8fc 56%, #eef1fa 100%);
+    --marketing-hero-image-filter: drop-shadow(0 1.5rem 3.75rem var(--accent-subtle));
+    --marketing-header-bg: var(--glass-bg-strong);
+    --marketing-footer-bg: linear-gradient(180deg, #f7f8fc 0%, #eceff8 100%);
+    --marketing-benefits-band-bg: var(--accent-subtle);
     
     /* Семантические токены Sync (светлая тема) */
     --sync-bubble-own-bg: linear-gradient(135deg, rgba(153, 166, 249, 0.22) 0%, rgba(135, 148, 240, 0.14) 100%);

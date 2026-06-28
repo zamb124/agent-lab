@@ -1,101 +1,89 @@
 /**
- * Стили лендинга
- * Адаптивный лендинг для Humanitec
+ * Deprecated alias layer — canonical tokens live in tokens.css (core Design System).
+ * Маркетинговые страницы используют --marketing-* / --accent / --glass-* напрямую.
  */
 
-/* CSS переменные из макета */
 :root {
-    /* Цвета лендинга */
-    --landing-primary: #5768FE;
-    --landing-bg: #0F0F0F;
-    --landing-text: #FFFFFF;
-    --landing-secondary: #E8E8E8;
-    --landing-text-muted: #A0A0A0;
-    --landing-text-soft: rgba(232, 232, 232, 0.82);
-    --landing-text-subtle: rgba(232, 232, 232, 0.66);
-    --landing-text-faint: rgba(232, 232, 232, 0.48);
-    --landing-on-primary: #FFFFFF;
-    --landing-header-bg: rgba(15, 15, 15, 0.9);
-    --landing-dropdown-bg: rgba(30, 30, 30, 0.98);
-    --landing-mobile-menu-bg: #0F0F0F;
-    --landing-panel-bg: rgba(255, 255, 255, 0.04);
-    --landing-panel-bg-strong: rgba(255, 255, 255, 0.07);
-    --landing-panel-border: rgba(255, 255, 255, 0.12);
-    --landing-panel-border-strong: rgba(255, 255, 255, 0.18);
-    --landing-hero-bg: #0F0F0F;
-    --landing-hero-image-filter: drop-shadow(0 0 60px rgba(87, 104, 254, 0.4));
-    --landing-search-bg: rgba(29, 29, 29, 0.9);
-    --landing-search-shadow: 0 26px 90px rgba(0, 0, 0, 0.44);
-    --landing-elevated-shadow: 0 20px 56px rgba(0, 0, 0, 0.35);
-    --landing-footer-bg: linear-gradient(180deg, #0F0F0F 0%, #0a0a0a 100%);
-    --landing-section-gradient: linear-gradient(180deg, #0F0F0F 0%, #1a1a2e 50%, #0F0F0F 100%);
-    --landing-reviews-gradient: linear-gradient(180deg, #0F0F0F 0%, #16213e 100%);
-    
-    /* Шрифты */
-    --font-condensed: 'Fira Sans Condensed', sans-serif;
-    --font-main: 'Fira Sans', sans-serif;
-    
-    /* Breakpoints */
+    --landing-primary: var(--accent);
+    --landing-bg: var(--marketing-page-bg);
+    --landing-text: var(--text-primary);
+    --landing-secondary: var(--text-primary);
+    --landing-text-muted: var(--text-tertiary);
+    --landing-text-soft: var(--text-secondary);
+    --landing-text-subtle: var(--text-tertiary);
+    --landing-text-faint: var(--text-disabled);
+    --landing-on-primary: var(--text-inverse);
+    --landing-header-bg: var(--marketing-header-bg);
+    --landing-dropdown-bg: var(--glass-bg-strong);
+    --landing-mobile-menu-bg: var(--marketing-page-bg);
+    --landing-panel-bg: var(--glass-bg-subtle);
+    --landing-panel-bg-strong: var(--glass-bg-medium);
+    --landing-panel-border: var(--glass-border-medium);
+    --landing-panel-border-strong: var(--glass-border-strong);
+    --landing-hero-bg: var(--marketing-hero-bg);
+    --landing-hero-image-filter: var(--marketing-hero-image-filter);
+    --landing-search-bg: var(--glass-bg-strong);
+    --landing-search-shadow: var(--glass-shadow-ultra);
+    --landing-elevated-shadow: var(--glass-shadow-strong);
+    --landing-footer-bg: var(--marketing-footer-bg);
+    --landing-section-gradient: var(--marketing-hero-bg);
+    --landing-reviews-gradient: var(--marketing-footer-bg);
+
+    --font-condensed: var(--font-sans);
+    --font-main: var(--font-sans);
+
     --breakpoint-mobile: 428px;
     --breakpoint-tablet: 768px;
     --breakpoint-desktop: 1440px;
-    
-    /* Отступы (сначала mobile) */
+
     --section-padding: 40px 20px;
     --container-max-width: 428px;
-    
-    /* Размеры типографики (сначала mobile) */
+
     --h1-size: 80px;
     --h2-size: 40px;
     --h3-size: 24px;
     --body-size: 16px;
     --small-size: 14px;
-    
-    /* Effects */
+
     --blur-sm: 50px;
     --blur-md: 100px;
     --blur-lg: 150px;
-    
-    /* Transitions */
-    --transition-default: all 0.3s ease;
-    --transition-smooth: all 0.5s cubic-bezier(0.4, 0, 0.2, 1);
+
+    --transition-default: var(--motion-transition-interactive);
+    --transition-smooth: var(--motion-transition-surface);
 }
 
 [data-theme="light"] {
-    --landing-primary: #5768FE;
-    --landing-bg: #F7F8FC;
-    --landing-text: #12131A;
-    --landing-secondary: #1E2230;
-    --landing-text-muted: #646B7E;
-    --landing-text-soft: rgba(30, 34, 48, 0.82);
-    --landing-text-subtle: rgba(30, 34, 48, 0.64);
-    --landing-text-faint: rgba(30, 34, 48, 0.46);
-    --landing-on-primary: #FFFFFF;
-    --landing-header-bg: rgba(247, 248, 252, 0.86);
-    --landing-dropdown-bg: rgba(255, 255, 255, 0.96);
-    --landing-mobile-menu-bg: #F7F8FC;
-    --landing-panel-bg: rgba(255, 255, 255, 0.74);
-    --landing-panel-bg-strong: rgba(255, 255, 255, 0.88);
-    --landing-panel-border: rgba(16, 20, 34, 0.12);
-    --landing-panel-border-strong: rgba(16, 20, 34, 0.18);
-    --landing-hero-bg:
-        radial-gradient(circle at 50% 18%, rgba(87, 104, 254, 0.16), transparent 36%),
-        linear-gradient(180deg, #FFFFFF 0%, #F7F8FC 56%, #EEF1FA 100%);
-    --landing-hero-image-filter: drop-shadow(0 24px 60px rgba(87, 104, 254, 0.22));
-    --landing-search-bg: rgba(255, 255, 255, 0.84);
-    --landing-search-shadow: 0 24px 70px rgba(35, 43, 82, 0.16);
-    --landing-elevated-shadow: 0 20px 56px rgba(35, 43, 82, 0.12);
-    --landing-footer-bg: linear-gradient(180deg, #F7F8FC 0%, #ECEFF8 100%);
-    --landing-section-gradient: linear-gradient(180deg, #F7F8FC 0%, #EEF1FF 50%, #F7F8FC 100%);
-    --landing-reviews-gradient: linear-gradient(180deg, #F7F8FC 0%, #E9EDFF 100%);
+    --landing-primary: var(--accent);
+    --landing-bg: var(--marketing-page-bg);
+    --landing-text: var(--text-primary);
+    --landing-secondary: var(--text-primary);
+    --landing-text-muted: var(--text-tertiary);
+    --landing-text-soft: var(--text-secondary);
+    --landing-text-subtle: var(--text-tertiary);
+    --landing-text-faint: var(--text-disabled);
+    --landing-on-primary: var(--text-inverse);
+    --landing-header-bg: var(--marketing-header-bg);
+    --landing-dropdown-bg: var(--glass-bg-strong);
+    --landing-mobile-menu-bg: var(--marketing-page-bg);
+    --landing-panel-bg: var(--glass-bg-subtle);
+    --landing-panel-bg-strong: var(--glass-bg-medium);
+    --landing-panel-border: var(--glass-border-medium);
+    --landing-panel-border-strong: var(--glass-border-strong);
+    --landing-hero-bg: var(--marketing-hero-bg);
+    --landing-hero-image-filter: var(--marketing-hero-image-filter);
+    --landing-search-bg: var(--glass-bg-strong);
+    --landing-search-shadow: var(--glass-shadow-ultra);
+    --landing-elevated-shadow: var(--glass-shadow-strong);
+    --landing-footer-bg: var(--marketing-footer-bg);
+    --landing-section-gradient: var(--marketing-hero-bg);
+    --landing-reviews-gradient: var(--marketing-footer-bg);
 }
 
-/* Tablet */
 @media (min-width: 768px) {
     :root {
         --section-padding: 60px 40px;
         --container-max-width: 768px;
-        
         --h1-size: 150px;
         --h2-size: 60px;
         --h3-size: 32px;
@@ -103,12 +91,10 @@
     }
 }
 
-/* Desktop */
 @media (min-width: 1440px) {
     :root {
         --section-padding: 100px 80px;
         --container-max-width: 1440px;
-        
         --h1-size: 276px;
         --h2-size: 80px;
         --h3-size: 50px;
@@ -116,7 +102,6 @@
     }
 }
 
-/* Глобальные стили */
 * {
     margin: 0;
     padding: 0;
@@ -135,24 +120,15 @@ body {
     overflow-x: hidden;
 }
 
-/* Typography */
 h1, h2, h3, h4, h5, h6 {
     font-family: var(--font-condensed);
     font-weight: 500;
     line-height: 1.2;
 }
 
-h1 {
-    font-size: var(--h1-size);
-}
-
-h2 {
-    font-size: var(--h2-size);
-}
-
-h3 {
-    font-size: var(--h3-size);
-}
+h1 { font-size: var(--h1-size); }
+h2 { font-size: var(--h2-size); }
+h3 { font-size: var(--h3-size); }
 
 p {
     font-size: var(--body-size);
@@ -169,7 +145,6 @@ a:hover {
     color: var(--landing-primary);
 }
 
-/* Контейнеры */
 .container {
     max-width: var(--container-max-width);
     margin: 0 auto;
@@ -181,7 +156,6 @@ a:hover {
     position: relative;
 }
 
-/* Blur эффекты для фонов */
 .blur-bg {
     position: absolute;
     border-radius: 50%;
@@ -191,23 +165,22 @@ a:hover {
 }
 
 .blur-bg--primary {
-    background: rgba(87, 104, 254, 0.6);
+    background: var(--accent-subtle);
 }
 
 .blur-bg--white {
-    background: rgba(255, 255, 255, 0.2);
+    background: var(--glass-tint-medium);
 }
 
 .blur-bg--large {
     filter: blur(var(--blur-lg));
 }
 
-/* Кнопки (переопределение для лендинга) */
 .btn-primary {
-    background: var(--landing-primary);
-    color: var(--landing-secondary);
+    background: var(--platform-btn-primary-bg);
+    color: var(--platform-btn-primary-text);
     padding: 12px 24px;
-    border-radius: 40px;
+    border-radius: var(--btn-radius);
     font-family: var(--font-main);
     font-weight: 500;
     font-size: 20px;
@@ -220,16 +193,16 @@ a:hover {
 }
 
 .btn-primary:hover {
-    background: #6877ff;
+    background: var(--platform-btn-primary-bg-hover);
     transform: translateY(-2px);
 }
 
 .btn-transparent {
     background: transparent;
     color: var(--landing-secondary);
-    border: 1px solid var(--landing-secondary);
+    border: 1px solid var(--glass-border-medium);
     padding: 12px 24px;
-    border-radius: 40px;
+    border-radius: var(--btn-radius);
     font-family: var(--font-main);
     font-weight: 500;
     font-size: 20px;
@@ -238,22 +211,21 @@ a:hover {
 }
 
 .btn-transparent:hover {
-    background: rgba(87, 104, 254, 0.1);
-    border-color: var(--landing-primary);
+    background: var(--accent-subtle);
+    border-color: var(--accent);
 }
 
-/* Badge стили */
 .badge {
     display: inline-flex;
     align-items: center;
     gap: 8px;
     padding: 8px 16px;
-    background: rgba(255, 255, 255, 0.05);
-    border: 1px solid rgba(255, 255, 255, 0.1);
-    border-radius: 20px;
+    background: var(--glass-bg-subtle);
+    border: 1px solid var(--glass-border-medium);
+    border-radius: var(--radius-xl);
     font-size: 14px;
     white-space: nowrap;
-    backdrop-filter: blur(10px);
+    backdrop-filter: blur(var(--glass-blur-subtle));
 }
 
 @media (min-width: 768px) {
@@ -270,70 +242,30 @@ a:hover {
     }
 }
 
-/* Анимации */
 @keyframes float {
-    0%, 100% {
-        transform: translateY(0px);
-    }
-    50% {
-        transform: translateY(-10px);
-    }
+    0%, 100% { transform: translateY(0px); }
+    50% { transform: translateY(-10px); }
 }
 
 @keyframes fadeIn {
-    from {
-        opacity: 0;
-        transform: translateY(20px);
-    }
-    to {
-        opacity: 1;
-        transform: translateY(0);
-    }
+    from { opacity: 0; transform: translateY(20px); }
+    to { opacity: 1; transform: translateY(0); }
 }
 
 @keyframes slideIn {
-    from {
-        opacity: 0;
-        transform: translateX(-20px);
-    }
-    to {
-        opacity: 1;
-        transform: translateX(0);
-    }
+    from { opacity: 0; transform: translateX(-20px); }
+    to { opacity: 1; transform: translateX(0); }
 }
 
-.animate-float {
-    animation: float 3s ease-in-out infinite;
-}
+.animate-float { animation: float 3s ease-in-out infinite; }
+.animate-fade-in { animation: fadeIn 0.6s ease-out; }
+.animate-slide-in { animation: slideIn 0.6s ease-out; }
 
-.animate-fade-in {
-    animation: fadeIn 0.6s ease-out;
-}
-
-.animate-slide-in {
-    animation: slideIn 0.6s ease-out;
-}
-
-/* Утилиты */
-.text-primary {
-    color: var(--landing-primary);
-}
-
-.text-secondary {
-    color: var(--landing-secondary);
-}
-
-.text-muted {
-    color: var(--landing-text-muted);
-}
-
-.text-center {
-    text-align: center;
-}
-
-.text-uppercase {
-    text-transform: uppercase;
-}
+.text-primary { color: var(--landing-primary); }
+.text-secondary { color: var(--landing-secondary); }
+.text-muted { color: var(--landing-text-muted); }
+.text-center { text-align: center; }
+.text-uppercase { text-transform: uppercase; }
 
 .mt-1 { margin-top: 8px; }
 .mt-2 { margin-top: 16px; }
@@ -347,41 +279,20 @@ a:hover {
 .mb-4 { margin-bottom: 32px; }
 .mb-5 { margin-bottom: 48px; }
 
-/* Responsive утилиты */
-.mobile-only {
-    display: block;
-}
-
+.mobile-only { display: block; }
 .tablet-only,
-.desktop-only {
-    display: none;
-}
+.desktop-only { display: none; }
 
 @media (min-width: 768px) {
-    .mobile-only {
-        display: none;
-    }
-    
-    .tablet-only {
-        display: block;
-    }
+    .mobile-only { display: none; }
+    .tablet-only { display: block; }
 }
 
 @media (min-width: 1440px) {
-    .tablet-only {
-        display: none;
-    }
-    
-    .desktop-only {
-        display: block;
-    }
+    .tablet-only { display: none; }
+    .desktop-only { display: block; }
 }
 
-/*
- * Маркетинговые страницы (landing + продукты): класс вешает frontend-app на <html>.
- * В Android WebView reset.css рисует заметную полосу прокрутки у документа — скрываем её,
- * вертикальный скролл тачем/колёсом сохраняется.
- */
 html.frontend-landing-public {
     scrollbar-width: none;
     -ms-overflow-style: none;
