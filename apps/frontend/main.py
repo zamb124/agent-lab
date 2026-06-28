@@ -574,6 +574,23 @@ if _agent_static_path.exists():
     )
 
 
+def _frontend_spa_index_response() -> FileResponse:
+    index_path = ui_path / "index.html"
+    if not index_path.exists():
+        raise HTTPException(status_code=404, detail="Frontend UI not built yet")
+    return FileResponse(index_path)
+
+
+@app.get("/agent")
+@app.get("/agent/")
+@app.get("/frontend/agent")
+@app.get("/frontend/agent/")
+async def agent_download_spa_page(container: ContainerDep) -> FileResponse:
+    """HumanitecAgent download landing — SPA (agent-download-page)."""
+    _ = container
+    return _frontend_spa_index_response()
+
+
 # SPA-резерв (все неизвестные пути → index.html)
 @app.get("/")
 @app.get("/{full_path:path}")
@@ -597,7 +614,7 @@ async def serve_spa(container: ContainerDep, full_path: str = ""):
     if index_path.exists():
         return FileResponse(index_path)
 
-    return {"message": "Frontend UI not built yet"}
+    raise HTTPException(status_code=404, detail="Frontend UI not built yet")
 
 
 app.add_middleware(StaticCoreModuleCorsMiddleware)

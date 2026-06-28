@@ -192,6 +192,8 @@ ROUTE_RULES: list[RouteRule] = [
     # HumanitecAgent: скачивание, login, register (pairing code), tunnel WS
     RouteRule("/agent", auth_required=False, context_type="anonymous"),
     RouteRule("/agent/", auth_required=False, context_type="anonymous"),
+    RouteRule("/frontend/agent", auth_required=False, context_type="anonymous"),
+    RouteRule("/frontend/agent/", auth_required=False, context_type="anonymous"),
     RouteRule("/frontend/api/agent/login", auth_required=False, context_type="anonymous"),
     RouteRule("/frontend/api/agent/download/*", auth_required=False, context_type="anonymous"),
     RouteRule("/frontend/api/agent/releases/status", auth_required=False, context_type="anonymous"),

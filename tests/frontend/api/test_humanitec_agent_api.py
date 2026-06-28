@@ -33,9 +33,10 @@ async def _seed_agent_pairing(
 async def test_agent_landing_page_returns_html(frontend_client: AsyncClient) -> None:
     response = await frontend_client.get("/agent")
     assert response.status_code == 200
+    assert response.headers["content-type"].startswith("text/html")
     text = response.text
-    assert "HumanitecAgent" in text
-    assert "/frontend/api/agent/download/windows" in text
+    assert "<!DOCTYPE html>" in text
+    assert "/static/frontend/index.js" in text
 
 
 @pytest.mark.asyncio

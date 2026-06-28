@@ -305,6 +305,16 @@
     --marketing-hero-image-filter: drop-shadow(0 0 3.75rem var(--accent-subtle));
     --marketing-header-bg: var(--glass-bg-strong);
     --marketing-footer-bg: linear-gradient(180deg, var(--bg-secondary) 0%, var(--bg-primary) 100%);
+    --marketing-download-icon-windows: #0078d4;
+    --marketing-download-icon-windows-bg: color-mix(in srgb, #0078d4 16%, transparent);
+    --marketing-download-icon-apple: var(--text-primary);
+    --marketing-download-icon-apple-bg: var(--glass-bg-subtle);
+    --marketing-download-icon-ubuntu: #e95420;
+    --marketing-download-icon-ubuntu-bg: color-mix(in srgb, #e95420 16%, transparent);
+    --marketing-download-icon-fedora: #51a2da;
+    --marketing-download-icon-fedora-bg: color-mix(in srgb, #51a2da 16%, transparent);
+    --marketing-download-icon-linux: var(--accent);
+    --marketing-download-icon-linux-bg: var(--accent-subtle);
     
     /* ========== РАДИУСЫ ========== */
     

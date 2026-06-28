@@ -564,37 +564,6 @@ export const marketingDownloadStyles = css`
         background: var(--platform-btn-secondary-bg-hover);
     }
 
-    .marketing-other-platforms {
-        margin-top: var(--space-4);
-        font-size: var(--text-sm);
-        color: var(--text-secondary);
-    }
-
-    .marketing-other-platforms summary {
-        cursor: pointer;
-        margin-bottom: var(--space-3);
-        color: var(--text-tertiary);
-    }
-
-    .marketing-other-platforms ul {
-        list-style: none;
-        padding: 0;
-        margin: 0;
-    }
-
-    .marketing-other-platforms li {
-        margin: var(--space-2) 0;
-    }
-
-    .marketing-other-platforms a {
-        color: var(--accent);
-        text-decoration: none;
-    }
-
-    .marketing-other-platforms a:hover {
-        text-decoration: underline;
-    }
-
     .marketing-download-login {
         margin-top: var(--space-8);
         font-size: var(--text-base);
@@ -614,6 +583,276 @@ export const marketingDownloadStyles = css`
         margin-top: var(--space-6);
         font-size: var(--text-sm);
         color: var(--text-tertiary);
+    }
+`;
+
+export const marketingAgentDownloadStyles = css`
+    .marketing-download-hero-primary {
+        max-width: 40rem;
+        margin: 0 auto var(--space-4);
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: var(--space-4);
+    }
+
+    .marketing-download-hero-hint {
+        margin: 0;
+        font-size: var(--text-sm);
+        color: var(--text-tertiary);
+        line-height: var(--leading-relaxed);
+    }
+
+    .marketing-download-hero-cards {
+        width: 100%;
+        display: grid;
+        grid-template-columns: 1fr;
+        gap: var(--space-4);
+    }
+
+    @media (min-width: 640px) {
+        .marketing-download-hero-cards {
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+        }
+    }
+
+    a.marketing-download-hero-button,
+    a.marketing-download-hero-button:hover,
+    a.marketing-download-hero-button:visited,
+    a.marketing-download-hero-button:active {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        gap: var(--space-3);
+        min-width: min(100%, 20rem);
+        padding: var(--space-5) var(--space-10);
+        border-radius: var(--btn-radius);
+        font-size: var(--text-xl);
+        font-weight: var(--font-semibold);
+        text-decoration: none;
+        color: var(--platform-btn-primary-text);
+        -webkit-text-fill-color: currentColor;
+        background: var(--platform-btn-primary-bg);
+        box-shadow: var(--platform-btn-primary-shadow);
+        transition: var(--motion-transition-interactive);
+    }
+
+    a.marketing-download-hero-button:hover {
+        background: var(--platform-btn-primary-bg-hover);
+        box-shadow: var(--platform-btn-primary-shadow-hover);
+        transform: translateY(-2px);
+    }
+
+    a.marketing-download-platform-card,
+    a.marketing-download-platform-card:any-link {
+        position: relative;
+        display: flex;
+        flex-direction: column;
+        align-items: flex-start;
+        gap: var(--space-3);
+        padding: var(--space-6);
+        border-radius: var(--radius-xl);
+        text-decoration: none;
+        color: var(--text-primary);
+        transition: var(--motion-transition-interactive);
+        box-sizing: border-box;
+        min-height: 100%;
+    }
+
+    a.marketing-download-platform-card:hover {
+        transform: translateY(-3px);
+    }
+
+    a.marketing-download-platform-card--hero {
+        padding: var(--space-8);
+        text-align: left;
+    }
+
+    a.marketing-download-platform-card--recommended {
+        border-color: var(--accent);
+        box-shadow: 0 0 0 1px var(--accent-subtle), var(--platform-btn-primary-shadow);
+    }
+
+    .marketing-download-platform-card-badge {
+        position: absolute;
+        top: var(--space-4);
+        right: var(--space-4);
+        padding: var(--space-1) var(--space-3);
+        border-radius: var(--radius-full);
+        font-size: var(--text-xs);
+        font-weight: var(--font-semibold);
+        color: var(--accent);
+        background: var(--accent-subtle);
+        border: 1px solid var(--glass-border-medium);
+    }
+
+    .marketing-download-platform-card-icon-wrap {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        width: 4rem;
+        height: 4rem;
+        border-radius: var(--radius-lg);
+        border: 1px solid var(--glass-border-subtle);
+        background: var(--marketing-download-platform-icon-bg);
+    }
+
+    a.marketing-download-platform-card--hero .marketing-download-platform-card-icon-wrap {
+        width: 4.5rem;
+        height: 4.5rem;
+    }
+
+    .marketing-download-platform-card-icon-wrap--windows {
+        --marketing-download-platform-icon-color: var(--marketing-download-icon-windows);
+        --marketing-download-platform-icon-bg: var(--marketing-download-icon-windows-bg);
+    }
+
+    .marketing-download-platform-card-icon-wrap--apple {
+        --marketing-download-platform-icon-color: var(--marketing-download-icon-apple);
+        --marketing-download-platform-icon-bg: var(--marketing-download-icon-apple-bg);
+    }
+
+    .marketing-download-platform-card-icon-wrap--ubuntu {
+        --marketing-download-platform-icon-color: var(--marketing-download-icon-ubuntu);
+        --marketing-download-platform-icon-bg: var(--marketing-download-icon-ubuntu-bg);
+    }
+
+    .marketing-download-platform-card-icon-wrap--fedora {
+        --marketing-download-platform-icon-color: var(--marketing-download-icon-fedora);
+        --marketing-download-platform-icon-bg: var(--marketing-download-icon-fedora-bg);
+    }
+
+    .marketing-download-platform-card-icon-wrap--linux {
+        --marketing-download-platform-icon-color: var(--marketing-download-icon-linux);
+        --marketing-download-platform-icon-bg: var(--marketing-download-icon-linux-bg);
+    }
+
+    .marketing-download-platform-card-icon {
+        display: block;
+        width: 2rem;
+        height: 2rem;
+        background-color: var(--marketing-download-platform-icon-color);
+        -webkit-mask-image: var(--marketing-download-platform-icon-mask);
+        -webkit-mask-repeat: no-repeat;
+        -webkit-mask-position: center;
+        -webkit-mask-size: contain;
+        mask-image: var(--marketing-download-platform-icon-mask);
+        mask-repeat: no-repeat;
+        mask-position: center;
+        mask-size: contain;
+    }
+
+    a.marketing-download-platform-card--hero .marketing-download-platform-card-icon {
+        width: 2.25rem;
+        height: 2.25rem;
+    }
+
+    .marketing-download-hero-button-icon {
+        display: block;
+        width: 1.75rem;
+        height: 1.75rem;
+        background-color: var(--platform-btn-primary-text);
+        -webkit-mask-image: var(--marketing-download-platform-icon-mask);
+        -webkit-mask-repeat: no-repeat;
+        -webkit-mask-position: center;
+        -webkit-mask-size: contain;
+        mask-image: var(--marketing-download-platform-icon-mask);
+        mask-repeat: no-repeat;
+        mask-position: center;
+        mask-size: contain;
+    }
+
+    .marketing-download-platform-card-title {
+        font-size: var(--text-lg);
+        font-weight: var(--font-semibold);
+        line-height: var(--leading-snug);
+        color: var(--text-primary);
+    }
+
+    a.marketing-download-platform-card--hero .marketing-download-platform-card-title {
+        font-size: var(--text-xl);
+    }
+
+    .marketing-download-platform-card-subtitle {
+        font-size: var(--text-sm);
+        line-height: var(--leading-relaxed);
+        color: var(--text-secondary);
+        flex: 1;
+    }
+
+    .marketing-download-platform-card-action {
+        display: inline-flex;
+        align-items: center;
+        gap: var(--space-2);
+        margin-top: var(--space-2);
+        font-size: var(--text-sm);
+        font-weight: var(--font-medium);
+        color: var(--accent);
+    }
+
+    .marketing-download-scroll-trigger {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        gap: var(--space-2);
+        margin: var(--space-2) auto var(--space-10);
+        padding: var(--space-3) var(--space-6);
+        border: 1px solid var(--glass-border-medium);
+        border-radius: var(--radius-full);
+        background: var(--glass-bg-subtle);
+        color: var(--text-secondary);
+        font: inherit;
+        font-size: var(--text-sm);
+        font-weight: var(--font-medium);
+        cursor: pointer;
+        transition: var(--motion-transition-interactive);
+    }
+
+    .marketing-download-scroll-trigger:hover {
+        color: var(--text-primary);
+        border-color: var(--accent);
+        background: var(--accent-subtle);
+        transform: translateY(-1px);
+    }
+
+    .marketing-download-all-platforms {
+        max-width: var(--marketing-content-max-width);
+        margin: 0 auto;
+        padding: var(--space-12) var(--marketing-section-padding-x);
+        scroll-margin-top: calc(var(--space-16) + var(--space-4));
+    }
+
+    .marketing-download-all-platforms-title {
+        margin: 0 0 var(--space-8);
+        text-align: center;
+        font-size: var(--text-section-title);
+        font-weight: var(--font-semibold);
+        color: var(--text-primary);
+    }
+
+    .marketing-download-all-platforms-grid {
+        display: grid;
+        grid-template-columns: 1fr;
+        gap: var(--space-4);
+    }
+
+    @media (min-width: 640px) {
+        .marketing-download-all-platforms-grid {
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+        }
+    }
+
+    @media (min-width: 1024px) {
+        .marketing-download-all-platforms-grid {
+            grid-template-columns: repeat(3, minmax(0, 1fr));
+        }
+    }
+
+    .marketing-download-postscript {
+        max-width: var(--marketing-narrow-max-width);
+        margin: 0 auto;
+        padding: 0 var(--marketing-section-padding-x) var(--marketing-section-padding-y);
+        text-align: center;
     }
 `;
 
@@ -855,6 +1094,15 @@ export const marketingPublicContentPageStyles = [
     glassStyles,
     marketingPageHostStyles,
     marketingContentStyles,
+];
+
+export const marketingAgentDownloadPageStyles = [
+    glassStyles,
+    marketingPageHostStyles,
+    marketingHeroStyles,
+    marketingFeatureGridStyles,
+    marketingDownloadStyles,
+    marketingAgentDownloadStyles,
 ];
 
 export const marketingProductPageStyles = [

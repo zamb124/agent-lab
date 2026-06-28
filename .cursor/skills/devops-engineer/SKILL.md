@@ -1,6 +1,6 @@
 ---
 name: devops-engineer
-description: DevOps инженер платформы Humanitec. Знает SSH-доступ root@84.38.184.105 (master) и root@77.91.94.165 (GPU worker), полностью владеет MicroK8s + Helm-чартом deploy/helm/agent-lab/, observability стеком (Loki/Tempo/Grafana/Alloy), GPU-нодой и провайдером litserve. Использовать при операциях на проде, диагностике подов, помощи с инцидентами, изменении инфраструктуры, добавлении ингресса/деплоймента/PVC, бэкапе/restore Postgres, продлении TLS, или когда пользователь упоминает SSH/microk8s/kubectl/helm/cert-manager/postgres/redis/loki/tempo/grafana/ingress/litserve/GPU/прод/деплой.
+description: DevOps инженер платформы Humanitec. Знает SSH-доступ root@84.38.184.105 (master) и root@77.91.94.165 (GPU worker), полностью владеет MicroK8s + Helm-чартом deploy/helm/agent-lab/, observability стеком (Loki/Tempo/Grafana/Alloy), GPU-нодой и провайдером litserve, CI-сборкой HumanitecAgent desktop (6 платформ). Использовать при операциях на проде, диагностике подов, помощи с инцидентами, изменении инфраструктуры, добавлении ингресса/деплоймента/PVC, бэкапе/restore Postgres, продлении TLS, сборке/релизе HumanitecAgent, или когда пользователь упоминает SSH/microk8s/kubectl/helm/cert-manager/postgres/redis/loki/tempo/grafana/ingress/litserve/GPU/прод/деплой/humanitec-agent-build.
 ---
 
 # DevOps Engineer — Humanitec Platform
@@ -172,6 +172,45 @@ helm rollback agent-lab <REV> -n platform
 | `backup-postgres.sh` / `restore-postgres.sh` | pg_dumpall через kubectl exec | локально / master |
 
 При добавлении новой инфра-операции — **новый скрипт по тому же шаблону**, не разовая команда в чате/PR.
+
+## HumanitecAgent desktop (CI build)
+
+**Не K8s** — отдельный GitHub Actions workflow → GitHub Release с 6 инсталляторами.
+
+| Что | Путь |
+|---|---|
+| Workflow release | `.github/workflows/humanitec-agent-build.yml` |
+| Workflow PR smoke | `.github/workflows/humanitec-agent-build-pr.yml` (`placeholder`) |
+| Сборка / брендинг | `apps/agent/desktop/scripts/{build,apply_branding}.sh` |
+| Verify | `apps/agent/desktop/artifact_verify.py` → `scripts/verify_agent_artifact.py` |
+| Контракт брендинга | `apps/agent/desktop/distro/humanitec.json` |
+| Upstream UI | submodule `apps/agent/desktop/vendor/goose` (Goose Electron) |
+| Make-таргеты | `mk/agent.mk`: `agent-ci-build`, `agent-build`, `agent-verify-local` |
+
+**Matrix:** `windows` · `macos-arm64` · `macos-x64` · `linux-deb` · `linux-rpm` · `linux-appimage` (timeout job 180m; Windows — самый долгий).
+
+```bash
+gh workflow run humanitec-agent-build.yml -f artifact_mode=release -f force_rebuild=true
+gh run list --workflow=humanitec-agent-build.yml --limit 3
+make agent-ci-build AGENT_PLATFORM=macos-arm64 AGENT_ARTIFACT_MODE=release AGENT_VERSION_SHA=$(git rev-parse HEAD)
+```
+
+**Release:** tag `humanitec-agent-{short_sha}` (или input `release_tag`); matrix skip если release уже есть — `force_rebuild=true` для пересборки. Артефакты → `apps/agent/desktop/dist/*` → GitHub Release (≥6 assets).
+
+**GitHub Secrets (подпись):** `APPLE_ID`, `APPLE_ID_PASSWORD`, `APPLE_TEAM_ID`, `KEYCHAIN_PATH`; Windows: `WINDOWS_CERTIFICATE_FILE`, `WINDOWS_CERTIFICATE_PASSWORD`.
+
+**Нюансы (обязательно не ломать):**
+
+| Тема | Канон |
+|---|---|
+| Node | **22 LTS** — Node 24 рвёт `extract-zip` (postinstall electron, packager на macOS) |
+| pnpm | `pnpm install --frozen-lockfile` из **`vendor/goose/ui`** (monorepo root), не из `ui/desktop` |
+| macOS packager | `ELECTRON_PACKAGER_TMPDIR=$REPO_ROOT/.electron-packager-tmp` — staging на том же томе, что `out/` |
+| macos-x64 | раннер **`macos-14`** (не `macos-13`); кросс: `x86_64-apple-darwin` + forge `--arch x64` |
+| Verify rpm | `%{VENDOR}` часто `(none)` у maker-rpm — ок; брендинг по `%{NAME}` + `.desktop` |
+| Verify AppImage | не `strings` по squashfs — `--appimage-extract`, проверка `.desktop` |
+
+Цепочка release: `cargo build goosed` → `apply_branding.sh` → `pnpm` → `electron-forge make` → verify → upload → `publish-release`.
 
 ## Чек-листы типовых операций
 
