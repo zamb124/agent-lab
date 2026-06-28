@@ -124,14 +124,34 @@ install_desktop_node_modules() {
   require_electron_dist
 }
 
+electron_dist_marker() {
+  case "${PLATFORM}" in
+    macos-arm64|macos-x64) echo "Electron.app" ;;
+    windows) echo "electron.exe" ;;
+    linux-deb|linux-rpm|linux-appimage) echo "electron" ;;
+    *)
+      echo "Unsupported platform for electron dist check: ${PLATFORM}" >&2
+      exit 1
+      ;;
+  esac
+}
+
 require_electron_dist() {
-  local electron_app=""
-  electron_app="$(find "${GOOSE_UI_DIR}" -path "*/node_modules/electron/dist/Electron.app" -type d 2>/dev/null | head -n 1)"
-  if [[ -z "${electron_app}" ]]; then
+  local dist_dir=""
+  dist_dir="$(find "${GOOSE_UI_DIR}" -path "*/node_modules/electron/dist" -type d 2>/dev/null | head -n 1)"
+  if [[ -z "${dist_dir}" ]]; then
     echo "electron dist missing after pnpm install under ${GOOSE_UI_DIR}" >&2
+    diagnose_desktop_build_state
     exit 1
   fi
-  echo "electron dist ready: ${electron_app}"
+  local marker
+  marker="$(electron_dist_marker)"
+  if [[ ! -e "${dist_dir}/${marker}" ]]; then
+    echo "electron dist present but ${marker} missing in ${dist_dir}" >&2
+    ls -la "${dist_dir}" >&2 || true
+    exit 1
+  fi
+  echo "electron dist ready: ${dist_dir}/${marker}"
 }
 
 run_desktop_i18n_compile() {
@@ -145,18 +165,23 @@ run_desktop_forge() {
   shift
   local forge_log="${DESKTOP_DIR}/forge-${forge_subcommand}.log"
   run_desktop_i18n_compile
+  local forge_exit=0
   pushd "${DESKTOP_DIR}" >/dev/null
   set +e
-  pnpm exec electron-forge "${forge_subcommand}" "$@" 2>&1 | tee "${forge_log}"
-  local forge_exit="${PIPESTATUS[0]}"
+  pnpm exec electron-forge "${forge_subcommand}" "$@" >"${forge_log}" 2>&1
+  forge_exit=$?
   set -e
   popd >/dev/null
+  cat "${forge_log}"
   if [[ "${forge_exit}" -ne 0 ]]; then
     echo "electron-forge ${forge_subcommand} failed with exit code ${forge_exit}; log: ${forge_log}" >&2
+    diagnose_desktop_build_state
     exit "${forge_exit}"
   fi
   if [[ ! -d "${DESKTOP_DIR}/out" ]]; then
-    echo "electron-forge ${forge_subcommand} finished without out/; log: ${forge_log}" >&2
+    echo "electron-forge ${forge_subcommand} finished (exit 0) without ${DESKTOP_DIR}/out" >&2
+    echo "Searching for out/ directories under workspace:" >&2
+    find "${GOOSE_UI_DIR}" -maxdepth 3 -name out -type d 2>/dev/null >&2 || true
     diagnose_desktop_build_state
     exit 1
   fi
