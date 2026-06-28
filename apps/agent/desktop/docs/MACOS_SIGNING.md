@@ -48,7 +48,7 @@ Workflow [`.github/workflows/humanitec-agent-build.yml`](../../../../.github/wor
 2. `build.sh` — pipeline подписи в три шага:
    - **Pre-sign** `src/bin/goosed` (`codesign` + arch gate `file x86_64` / `arm64`) до `electron-forge make`.
    - **Package + sign `.app`** через forge (`osxSign` в Goose `forge.config.ts`; `goosed` пропускается через `optionsForFile`).
-   - **Notarize + staple** `.app` через `notarytool` + `stapler` в `build.sh` (не inline `osxNotarize` в forge).
+   - **Notarize + staple** `.app` через `notarytool submit` + `notarytool wait` с retry (transient network на GitHub runners) + `stapler` в `build.sh` (не inline `osxNotarize` в forge).
 3. `build.sh` — DMG с `.app` + symlink **Applications**.
 4. Verify — при подписи: `codesign --verify` на `.app` и `Resources/bin/goosed` + `spctl -a`.
 5. При падении macOS job — artifact `forge-*.log` из `vendor/goose/ui/desktop/`.

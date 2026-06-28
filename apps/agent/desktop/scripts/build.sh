@@ -423,11 +423,70 @@ notarize_macos_app_bundle() {
   zip_path="$(mktemp -t humanitec-agent-notarize-XXXXXX).zip"
   ditto -c -k --keepParent "${app_path}" "${zip_path}"
   echo "Submitting ${app_path} for notarization"
-  xcrun notarytool submit "${zip_path}" \
-    --apple-id "${APPLE_ID}" \
-    --password "${APPLE_ID_PASSWORD}" \
-    --team-id "${APPLE_TEAM_ID}" \
-    --wait
+
+  local submission_id=""
+  local submit_attempt=1
+  local submit_max_attempts="${NOTARY_SUBMIT_MAX_ATTEMPTS:-3}"
+  while [[ "${submit_attempt}" -le "${submit_max_attempts}" ]]; do
+    local submit_json=""
+    submit_json="$(mktemp -t humanitec-notary-submit-XXXXXX.json)"
+    set +e
+    xcrun notarytool submit "${zip_path}" \
+      --apple-id "${APPLE_ID}" \
+      --password "${APPLE_ID_PASSWORD}" \
+      --team-id "${APPLE_TEAM_ID}" \
+      --output-format json >"${submit_json}" 2>&1
+    local submit_exit=$?
+    set -e
+    if [[ "${submit_exit}" -eq 0 ]]; then
+      submission_id="$(uv run python -c 'import json,sys; print(json.load(open(sys.argv[1], encoding="utf-8"))["id"])' "${submit_json}")"
+      rm -f "${submit_json}"
+      echo "Notarization submission id: ${submission_id}"
+      break
+    fi
+    cat "${submit_json}" >&2 || true
+    rm -f "${submit_json}"
+    if [[ "${submit_attempt}" -eq "${submit_max_attempts}" ]]; then
+      echo "notarytool submit failed after ${submit_max_attempts} attempts" >&2
+      rm -f "${zip_path}"
+      exit 1
+    fi
+    local submit_backoff=$((submit_attempt * 30))
+    echo "notarytool submit failed (attempt ${submit_attempt}/${submit_max_attempts}); retrying in ${submit_backoff}s..." >&2
+    sleep "${submit_backoff}"
+    submit_attempt=$((submit_attempt + 1))
+  done
+
+  local wait_attempt=1
+  local wait_max_attempts="${NOTARY_WAIT_MAX_ATTEMPTS:-10}"
+  local wait_backoff=45
+  while [[ "${wait_attempt}" -le "${wait_max_attempts}" ]]; do
+    set +e
+    xcrun notarytool wait "${submission_id}" \
+      --apple-id "${APPLE_ID}" \
+      --password "${APPLE_ID_PASSWORD}" \
+      --team-id "${APPLE_TEAM_ID}"
+    local wait_exit=$?
+    set -e
+    if [[ "${wait_exit}" -eq 0 ]]; then
+      echo "Notarization accepted for submission ${submission_id}"
+      break
+    fi
+    if [[ "${wait_attempt}" -eq "${wait_max_attempts}" ]]; then
+      echo "notarytool wait failed after ${wait_max_attempts} attempts for submission ${submission_id}" >&2
+      xcrun notarytool log "${submission_id}" \
+        --apple-id "${APPLE_ID}" \
+        --password "${APPLE_ID_PASSWORD}" \
+        --team-id "${APPLE_TEAM_ID}" >&2 || true
+      rm -f "${zip_path}"
+      exit 1
+    fi
+    echo "notarytool wait failed (attempt ${wait_attempt}/${wait_max_attempts}, exit ${wait_exit}); retrying in ${wait_backoff}s..." >&2
+    sleep "${wait_backoff}"
+    wait_attempt=$((wait_attempt + 1))
+    wait_backoff=$((wait_backoff + 15))
+  done
+
   rm -f "${zip_path}"
   xcrun stapler staple "${app_path}"
   echo "Notarization and stapling complete for ${app_path}"

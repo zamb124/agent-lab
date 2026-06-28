@@ -152,6 +152,7 @@ function Test-SystemDllName {
         'setupapi.dll',
         'cfgmgr32.dll',
         'powrprof.dll',
+        'pdh.dll',
         'dbghelp.dll',
         'imm32.dll',
         'winmm.dll',
