@@ -391,6 +391,11 @@ jobs:
             --set-json "platformSecrets=$(bash deploy/scripts/helm_platform_secrets_json.sh)" \
             --wait --timeout 60m
 
+      - name: Remove stale monolithic Ingress platform
+        env:
+          PLATFORM_NS: ${{ env.K8S_NAMESPACE }}
+        run: bash deploy/scripts/helm_cleanup_stale_ingress.sh
+
       - name: Verify rollout (cluster-health.sh)
         env:
           PLATFORM_NS: ${{ env.K8S_NAMESPACE }}

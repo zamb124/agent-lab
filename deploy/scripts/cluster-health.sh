@@ -136,6 +136,14 @@ if [ -n "$INGRESS_LIST" ]; then
 else
   log_error "Ingress объектов нет"
 fi
+# Монолитный Ingress platform (до split на platform-services/frontend) не содержит /worktracker:
+# Traefik матчит /worktracker на catch-all frontend → WS 403 (health видит как fail, не 401/101).
+if $K get ingress platform -n "$PLATFORM_NS" >/dev/null 2>&1 \
+  && $K get ingress platform-services -n "$PLATFORM_NS" >/dev/null 2>&1; then
+  check_step \
+    "нет устаревшего Ingress platform (удалить: kubectl delete ingress platform -n $PLATFORM_NS)" \
+    "false"
+fi
 
 # 9. TLS сертификаты cert-manager
 log_section "9) Certificates"

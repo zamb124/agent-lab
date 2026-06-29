@@ -249,6 +249,7 @@ k8s-deploy: render-helm-app-conf require-image-tag
 	  "$${JSON_ARGS[@]}" \
 	  --wait --timeout $(HELM_WAIT_TIMEOUT) \
 	'
+	@PLATFORM_NS=$(K8S_NAMESPACE) bash deploy/scripts/helm_cleanup_stale_ingress.sh
 
 # Снимок состояния кластера: ноды, поды, сервисы, ingress, PVC.
 k8s-status:
