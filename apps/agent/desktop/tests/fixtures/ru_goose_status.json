@@ -1,0 +1,14 @@
+{
+  "groupedExtensionLoadingToast.askGoose": {
+    "defaultMessage": "Спросить goose"
+  },
+  "loadingGoose.streaming": {
+    "defaultMessage": "goose работает над этим…"
+  },
+  "goosehintsModal.dialogTitle": {
+    "defaultMessage": "Настроить подсказки проекта (.goosehints)"
+  },
+  "advancedSettings.externalGoosedSecret": {
+    "defaultMessage": "Секретный ключ, настроенный на сервере goosed (GOOSE_SERVER__SECRET_KEY)"
+  }
+}

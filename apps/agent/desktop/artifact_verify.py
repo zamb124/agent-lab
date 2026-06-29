@@ -10,6 +10,7 @@ import shutil
 import subprocess
 import sys
 import tempfile
+import time
 from pathlib import Path
 from typing import cast
 
@@ -21,6 +22,8 @@ from apps.agent.desktop.build_contract import (
 
 PLACEHOLDER_MARKER = "HumanitecAgent placeholder"
 MIN_RELEASE_BYTES = 512_000
+HDIUTIL_ATTACH_MAX_ATTEMPTS = 5
+HDIUTIL_ATTACH_RETRY_DELAY_SECONDS = 3.0
 
 
 def _macos_notarized_verification_enabled() -> bool:
@@ -45,6 +48,24 @@ def _macos_codesign_verification_enabled() -> bool:
 
 class ArtifactVerificationError(Exception):
     pass
+
+
+def _verify_macos_ui_branding_in_app_bundle(
+    app_bundle: Path,
+    distro: HumanitecDistroConfig,
+) -> None:
+    asar_path = app_bundle / "Contents" / "Resources" / "app.asar"
+    if not asar_path.is_file():
+        raise ArtifactVerificationError(f"Missing app.asar in {app_bundle}")
+    asar_bytes = asar_path.read_bytes()
+    if b"goose-docs.ai" in asar_bytes:
+        raise ArtifactVerificationError("Branded app.asar still references goose-docs.ai")
+    if distro.homepage.encode("utf-8") not in asar_bytes:
+        raise ArtifactVerificationError(f"app.asar missing homepage {distro.homepage!r}")
+    if distro.ui_product_name_lower.encode("utf-8") not in asar_bytes:
+        raise ArtifactVerificationError(
+            f"app.asar missing ui product label {distro.ui_product_name_lower!r}"
+        )
 
 
 def _require_file(path: Path) -> None:
@@ -90,6 +111,57 @@ def verify_placeholder_artifact(
             )
 
 
+def hdiutil_attach_error_is_retryable(stderr_text: str, stdout_text: str) -> bool:
+    combined = f"{stderr_text}\n{stdout_text}".lower()
+    retry_markers = (
+        "resource temporarily unavailable",
+        "try again",
+        "temporarily unavailable",
+    )
+    return any(marker in combined for marker in retry_markers)
+
+
+def _attach_dmg_readonly(
+    dmg_path: Path,
+    mount_dir: Path,
+    *,
+    max_attempts: int = HDIUTIL_ATTACH_MAX_ATTEMPTS,
+    retry_delay_seconds: float = HDIUTIL_ATTACH_RETRY_DELAY_SECONDS,
+) -> None:
+    attach_command = [
+        "hdiutil",
+        "attach",
+        "-nobrowse",
+        "-readonly",
+        "-mountpoint",
+        str(mount_dir),
+        str(dmg_path),
+    ]
+    last_stderr = ""
+    last_stdout = ""
+    for attempt_index in range(1, max_attempts + 1):
+        attach_result = subprocess.run(
+            attach_command,
+            check=False,
+            capture_output=True,
+            text=True,
+        )
+        if attach_result.returncode == 0:
+            return
+        last_stderr = attach_result.stderr.strip()
+        last_stdout = attach_result.stdout.strip()
+        if attempt_index >= max_attempts:
+            break
+        if not hdiutil_attach_error_is_retryable(last_stderr, last_stdout):
+            break
+        time.sleep(retry_delay_seconds)
+    raise ArtifactVerificationError(
+        "Failed to mount DMG: "
+        + last_stderr
+        + last_stdout
+    )
+
+
 def _verify_macos_release_dmg(path: Path, distro: HumanitecDistroConfig) -> None:
     if sys.platform != "darwin":
         raise ArtifactVerificationError("macOS release verification requires darwin host")
@@ -98,27 +170,7 @@ def _verify_macos_release_dmg(path: Path, distro: HumanitecDistroConfig) -> None
 
     mount_dir = Path(tempfile.mkdtemp(prefix="humanitec-agent-verify-"))
     try:
-        attach_command = [
-            "hdiutil",
-            "attach",
-            "-nobrowse",
-            "-readonly",
-            "-mountpoint",
-            str(mount_dir),
-            str(path),
-        ]
-        attach_result = subprocess.run(
-            attach_command,
-            check=False,
-            capture_output=True,
-            text=True,
-        )
-        if attach_result.returncode != 0:
-            raise ArtifactVerificationError(
-                "Failed to mount DMG: "
-                + attach_result.stderr.strip()
-                + attach_result.stdout.strip()
-            )
+        _attach_dmg_readonly(path, mount_dir)
 
         app_bundle = mount_dir / f"{distro.bundle_name}.app"
         if not app_bundle.is_dir():
@@ -212,6 +264,8 @@ def _verify_macos_release_dmg(path: Path, distro: HumanitecDistroConfig) -> None
                     + goosed_codesign_result.stderr.strip()
                     + goosed_codesign_result.stdout.strip()
                 )
+
+        _verify_macos_ui_branding_in_app_bundle(app_bundle, distro)
     finally:
         if mount_dir.is_dir() and any(mount_dir.iterdir()):
             detach_result = subprocess.run(

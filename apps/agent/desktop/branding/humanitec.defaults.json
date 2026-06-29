@@ -2,6 +2,8 @@
   "id": "humanitec",
   "display_name": "HumanitecAgent",
   "bundle_name": "HumanitecAgent",
+  "ui_product_name": "Humanitec",
+  "ui_product_name_lower": "humanitec",
   "protocol_scheme": "humanitec",
   "auth_callback_path": "auth/callback",
   "pairing_path": "pairing",

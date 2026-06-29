@@ -27,6 +27,8 @@ class HumanitecDistroConfig(BaseModel):
     id: str
     display_name: str
     bundle_name: str
+    ui_product_name: str
+    ui_product_name_lower: str
     protocol_scheme: str
     auth_callback_path: str
     pairing_path: str

@@ -6,11 +6,19 @@ import subprocess
 import uuid
 from pathlib import Path
 
-import pytest
+from apps.agent.desktop.artifact_verify import hdiutil_attach_error_is_retryable
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 BUILD_SCRIPT = REPO_ROOT / "apps" / "agent" / "desktop" / "scripts" / "build.sh"
 VERIFY_SCRIPT = REPO_ROOT / "scripts" / "verify_agent_artifact.py"
+
+
+def test_hdiutil_attach_error_is_retryable() -> None:
+    assert hdiutil_attach_error_is_retryable(
+        "hdiutil: attach failed - Resource temporarily unavailable",
+        "",
+    )
+    assert not hdiutil_attach_error_is_retryable("hdiutil: attach failed - corrupted", "")
 
 
 def test_verify_agent_artifact_cli_placeholder(tmp_path: Path) -> None:

@@ -157,12 +157,38 @@ def test_apply_branding_script_patches_goose_desktop() -> None:
 
     package_json = goose_desktop / "package.json"
     forge_config = goose_desktop / "forge.config.ts"
+    ui_branding_relative_paths = (
+        "src/components/BaseChat.tsx",
+        "src/components/LoadingGoose.tsx",
+        "src/components/onboarding/OnboardingGuard.tsx",
+        "src/i18n/messages/ru.json",
+        "src/main.ts",
+    )
     package_backup = package_json.read_text(encoding="utf-8")
     forge_backup = forge_config.read_text(encoding="utf-8")
     deb_backup = (goose_desktop / "forge.deb.desktop").read_text(encoding="utf-8")
     rpm_backup = (goose_desktop / "forge.rpm.desktop").read_text(encoding="utf-8")
+    ui_branding_backups = {
+        goose_desktop / relative_path: (goose_desktop / relative_path).read_text(encoding="utf-8")
+        for relative_path in ui_branding_relative_paths
+        if (goose_desktop / relative_path).is_file()
+    }
 
     try:
+        git_reset = subprocess.run(
+            ["git", "checkout", "--", *ui_branding_relative_paths],
+            cwd=str(goose_desktop),
+            check=False,
+            capture_output=True,
+            text=True,
+        )
+        if git_reset.returncode != 0:
+            raise AssertionError(
+                "git checkout failed before apply_branding\n"
+                f"stdout:\n{git_reset.stdout}\n"
+                f"stderr:\n{git_reset.stderr}"
+            )
+
         completed = subprocess.run(
             [str(APPLY_BRANDING_SCRIPT)],
             cwd=str(REPO_ROOT),
@@ -197,6 +223,26 @@ def test_apply_branding_script_patches_goose_desktop() -> None:
         defaults_payload = (goose_desktop / "humanitec.defaults.json").read_text(encoding="utf-8")
         assert '"platform_mcp_path": "/flows/api/v1/agent/platform-mcp"' in defaults_payload
         assert '"platform_mcp"' in defaults_payload
+
+        distro = load_default_distro_config()
+        base_chat_payload = (goose_desktop / "src" / "components" / "BaseChat.tsx").read_text(
+            encoding="utf-8"
+        )
+        loading_goose_payload = (
+            goose_desktop / "src" / "components" / "LoadingGoose.tsx"
+        ).read_text(encoding="utf-8")
+        ru_messages_payload = (
+            goose_desktop / "src" / "i18n" / "messages" / "ru.json"
+        ).read_text(encoding="utf-8")
+
+        assert "goose-docs.ai" not in base_chat_payload
+        assert "humanitecWatermarkIcon" in base_chat_payload
+        assert distro.ui_product_name_lower in base_chat_payload
+        assert "Humanitec is working on it…" in loading_goose_payload
+        assert "Спросить Humanitec" in ru_messages_payload
+        assert "Humanitec работает над этим" in ru_messages_payload
+        assert ".goosehints" in ru_messages_payload
+        assert "goosed (GOOSE_SERVER__SECRET_KEY)" in ru_messages_payload
     finally:
         _ = package_json.write_text(package_backup, encoding="utf-8")
         _ = forge_config.write_text(forge_backup, encoding="utf-8")
@@ -205,6 +251,8 @@ def test_apply_branding_script_patches_goose_desktop() -> None:
         defaults_path = goose_desktop / "humanitec.defaults.json"
         if defaults_path.is_file():
             defaults_path.unlink()
+        for ui_path, ui_backup in ui_branding_backups.items():
+            ui_path.write_text(ui_backup, encoding="utf-8")
 
 
 def test_artifact_ready_distinguishes_placeholder_from_release() -> None:

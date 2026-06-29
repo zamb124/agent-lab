@@ -82,6 +82,8 @@ defaults_payload = {
     "id": distro.id,
     "display_name": distro.display_name,
     "bundle_name": distro.bundle_name,
+    "ui_product_name": distro.ui_product_name,
+    "ui_product_name_lower": distro.ui_product_name_lower,
     "protocol_scheme": distro.protocol_scheme,
     "auth_callback_path": distro.auth_callback_path,
     "pairing_path": distro.pairing_path,
@@ -646,6 +648,10 @@ if ru_messages_path.is_file():
         json.dumps(ru_messages, ensure_ascii=False, indent=2) + "\n",
         encoding="utf-8",
     )
+
+from apps.agent.desktop.ui_branding import apply_ui_branding
+
+apply_ui_branding(goose_desktop, distro)
 
 print(
     f"Applied Humanitec branding: bundle={distro.bundle_name}, "

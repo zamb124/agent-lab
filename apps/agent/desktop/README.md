@@ -140,6 +140,22 @@ cd apps/agent/desktop/vendor/goose && git checkout 4f7bf8c1e281863932b42b65577b4
 
 Parent repo фиксирует commit submodule; floating `HEAD` без pin запрещён для release.
 
+## UI rebranding (Goose → Humanitec)
+
+[`scripts/apply_branding.sh`](scripts/apply_branding.sh) перед `electron-forge make` патчит vendor Goose:
+
+| Меняется | Источник |
+|---|---|
+| Installer / bundle id / protocol / icons | `distro/humanitec.json` |
+| Watermark, статусы чата, меню, ru.json | [`ui_branding.py`](ui_branding.py) |
+| Platform MCP, pairing, onboarding | `branding/*` + inline patches |
+
+Поля `ui_product_name` / `ui_product_name_lower` в [`distro/humanitec.json`](distro/humanitec.json) задают короткое имя в UI (`Humanitec` / `humanitec`). `display_name` / `bundle_name` остаются `HumanitecAgent` для `.app`, `.msi`, title bar.
+
+**Намеренно не переименовываются:** бинарь `goosed`, env `GOOSE_*`, файл `.goosehints`, ключи `goosehintsModal.*`, npm `@aaif/goose-sdk`.
+
+Проверки: `tests/agent/test_ui_branding.py`, расширенный `test_apply_branding_script_patches_goose_desktop`, grep `goose-docs.ai` в `app.asar` при macOS release verify.
+
 ## Manual checklist (Goose runtime)
 
 Сценарии D1–D15 и D-GOLD автоматизированы: `make test-agent-desktop-e2e`.  
