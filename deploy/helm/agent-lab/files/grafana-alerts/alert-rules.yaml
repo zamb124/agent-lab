@@ -353,7 +353,7 @@ groups:
               to: 0
             datasourceUid: loki
             model:
-              expr: 'sum(rate({service="search-worker"} | json | message="crawl.url.outcome" | crawl_outcome="failed" [15m])) / sum(rate({service="search-worker"} | json | message="crawl.url.outcome" [15m])) * 100'
+              expr: 'sum(rate({service="search-worker"} | json | message="crawl.url.outcome" | crawl_outcome=~"failed|enrichment_failed" [15m])) / sum(rate({service="search-worker"} | json | message="crawl.url.outcome" [15m])) * 100'
               refId: A
           - refId: C
             relativeTimeRange:

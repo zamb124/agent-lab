@@ -104,6 +104,21 @@ class TestLogQLExpressions:
                     f"11-crawl-indexing.json: LogQL message regex uses invalid \\\\. escape: {expr}"
                 )
 
+    def test_crawl_url_outcome_failure_filter_includes_enrichment_failed(self, dashboards):
+        crawl_dashboard = dashboards.get("11-crawl-indexing.json")
+        assert crawl_dashboard is not None
+        bare_failed = re.compile(r"crawl_outcome=\"failed\"")
+        includes_enrichment = re.compile(r"crawl_outcome=~\"[^\"]*enrichment_failed")
+        for panel in crawl_dashboard.get("panels", []):
+            for target in panel.get("targets", []):
+                expr = target.get("expr", "")
+                if "crawl.url.outcome" not in expr or "crawl_outcome" not in expr:
+                    continue
+                if bare_failed.search(expr) and not includes_enrichment.search(expr):
+                    raise AssertionError(
+                        f"11-crawl-indexing.json: crawl_outcome=failed without enrichment_failed: {expr}"
+                    )
+
     def test_unwrap_fields_use_underscores(self, dashboards):
         for name, db in dashboards.items():
             for panel in db.get("panels", []):

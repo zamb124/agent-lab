@@ -18,7 +18,7 @@ from apps.search.services.crawl.fetch_service import CrawlFetchService
 from apps.search.services.crawl.ingest_service import CrawlIngestService
 from apps.search.services.crawl.page_enrichment_service import CrawlPageEnrichmentService
 from apps.search.services.crawl.seed_loader import import_tranco_domains
-from apps.search.services.crawl.sitemap_parser import SitemapDiscoveryError, discover_sitemap_urls
+from apps.search.services.crawl.sitemap_parser import discover_sitemap_urls
 from apps.search_worker.broker import broker as search_worker_broker
 from apps.search_worker.tasks.task_names import (
     CRAWL_DISCOVER_DOMAIN_TASK_NAME,
@@ -216,7 +216,30 @@ class CrawlOrchestratorService:
                 max_sitemap_bytes=self._crawl_config.sitemap_max_bytes,
                 url_filter=url_filter,
             )
-        except SitemapDiscoveryError as exc:
+            stats = await self._crawl_url_repository.upsert_from_sitemap(crawl_domain_id, entries)
+            await self._crawl_domain_repository.mark_discovered(crawl_domain_id, datetime.now(UTC))
+            urls_discovered = stats.inserted + stats.updated
+            await self._crawl_job_repository.increment(
+                crawl_job_id,
+                urls_discovered=urls_discovered,
+            )
+            log_crawl_discover_completed(
+                crawl_profile_id=crawl_profile_id,
+                crawl_job_id=crawl_job_id,
+                crawl_domain_id=crawl_domain_id,
+                search_index_id=search_index_id,
+                domain=domain.domain,
+                urls_discovered=urls_discovered,
+                urls_inserted=stats.inserted,
+                urls_updated=stats.updated,
+            )
+            await self._enqueue_domain_fetch(
+                crawl_domain_id=crawl_domain_id,
+                crawl_job_id=crawl_job_id,
+                crawl_profile_id=crawl_profile_id,
+                url_budget=profile_bundle.profile.max_urls_per_domain_per_tick,
+            )
+        except Exception as exc:
             await self._crawl_domain_repository.schedule_next(
                 crawl_domain_id,
                 datetime.now(UTC)
@@ -234,29 +257,6 @@ class CrawlOrchestratorService:
                 exception_message=str(exc),
             )
             raise
-        stats = await self._crawl_url_repository.upsert_from_sitemap(crawl_domain_id, entries)
-        await self._crawl_domain_repository.mark_discovered(crawl_domain_id, datetime.now(UTC))
-        urls_discovered = stats.inserted + stats.updated
-        await self._crawl_job_repository.increment(
-            crawl_job_id,
-            urls_discovered=urls_discovered,
-        )
-        log_crawl_discover_completed(
-            crawl_profile_id=crawl_profile_id,
-            crawl_job_id=crawl_job_id,
-            crawl_domain_id=crawl_domain_id,
-            search_index_id=search_index_id,
-            domain=domain.domain,
-            urls_discovered=urls_discovered,
-            urls_inserted=stats.inserted,
-            urls_updated=stats.updated,
-        )
-        await self._enqueue_domain_fetch(
-            crawl_domain_id=crawl_domain_id,
-            crawl_job_id=crawl_job_id,
-            crawl_profile_id=crawl_profile_id,
-            url_budget=profile_bundle.profile.max_urls_per_domain_per_tick,
-        )
 
     async def fetch_one_url(
         self,
