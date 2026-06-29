@@ -7,6 +7,7 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+import re
 import shutil
 import subprocess
 import tempfile
@@ -28,6 +29,12 @@ from apps.agent.desktop.build_contract import (
 )
 
 NOTARY_FOLLOWUP_MAX_AGE_SECONDS_DEFAULT = 172_800
+MANIFEST_ASSET_NAME_PREFIX = "humanitec-agent-macos-notarize-"
+MANIFEST_ASSET_NAME_SUFFIX = ".json"
+NOTARY_SUBMISSION_ID_PATTERN = re.compile(
+    r"[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}",
+    re.IGNORECASE,
+)
 
 
 class MacosNotarizeStatus(StrEnum):
@@ -140,14 +147,42 @@ def build_fragment_for_submit(
     )
 
 
+def normalize_submission_id(raw: str) -> str:
+    stripped = raw.strip()
+    if not stripped:
+        raise ValueError("submission_id is required")
+    matches = NOTARY_SUBMISSION_ID_PATTERN.findall(stripped)
+    if not matches:
+        raise ValueError(f"submission_id does not contain a notary UUID: {raw!r}")
+    return str(matches[-1]).lower()
+
+
 def load_fragment(path: Path) -> MacosNotarizeFragment:
     payload = json.loads(path.read_text(encoding="utf-8"))
-    return MacosNotarizeFragment.model_validate(payload)
+    fragment = MacosNotarizeFragment.model_validate(payload)
+    normalized_submission_id = normalize_submission_id(fragment.submission_id)
+    if normalized_submission_id == fragment.submission_id:
+        return fragment
+    return fragment.model_copy(update={"submission_id": normalized_submission_id})
 
 
 def load_manifest(path: Path) -> MacosNotarizeManifest:
     payload = json.loads(path.read_text(encoding="utf-8"))
-    return MacosNotarizeManifest.model_validate(payload)
+    manifest = MacosNotarizeManifest.model_validate(payload)
+    updated_platforms: dict[str, MacosNotarizePlatformRecord] = {}
+    changed = False
+    for platform_name, record in manifest.platforms.items():
+        normalized_submission_id = normalize_submission_id(record.submission_id)
+        if normalized_submission_id != record.submission_id:
+            updated_platforms[platform_name] = record.model_copy(
+                update={"submission_id": normalized_submission_id}
+            )
+            changed = True
+        else:
+            updated_platforms[platform_name] = record
+    if changed:
+        return manifest.model_copy(update={"platforms": updated_platforms})
+    return manifest
 
 
 def write_manifest(path: Path, manifest: MacosNotarizeManifest) -> None:
@@ -216,6 +251,7 @@ def is_followup_active(manifest: MacosNotarizeManifest, *, now: datetime | None 
 
 
 def poll_submission_once(submission_id: str) -> NotaryPollResult:
+    normalized_submission_id = normalize_submission_id(submission_id)
     apple_id = _require_env("APPLE_ID")
     apple_id_password = _require_env("APPLE_ID_PASSWORD")
     apple_team_id = _require_env("APPLE_TEAM_ID")
@@ -226,7 +262,7 @@ def poll_submission_once(submission_id: str) -> NotaryPollResult:
             "xcrun",
             "notarytool",
             "info",
-            submission_id,
+            normalized_submission_id,
             "--apple-id",
             apple_id,
             "--password",
@@ -245,19 +281,22 @@ def poll_submission_once(submission_id: str) -> NotaryPollResult:
         if completed.returncode != 0:
             stderr_text = completed.stderr.strip()
             raise RuntimeError(
-                f"notarytool info failed for {submission_id}: {stderr_text}"
+                f"notarytool info failed for {normalized_submission_id}: {stderr_text}"
             )
         info_json_path.write_text(completed.stdout, encoding="utf-8")
         payload = json.loads(info_json_path.read_text(encoding="utf-8"))
         status_raw = payload.get("status")
         if not isinstance(status_raw, str) or not status_raw:
-            raise ValueError(f"notarytool info missing status for {submission_id}")
-        return NotaryPollResult(submission_id=submission_id, status=status_raw)
+            raise ValueError(
+                f"notarytool info missing status for {normalized_submission_id}"
+            )
+        return NotaryPollResult(submission_id=normalized_submission_id, status=status_raw)
     finally:
         info_json_path.unlink(missing_ok=True)
 
 
 def fetch_notary_submission_log(submission_id: str) -> str:
+    normalized_submission_id = normalize_submission_id(submission_id)
     apple_id = _require_env("APPLE_ID")
     apple_id_password = _require_env("APPLE_ID_PASSWORD")
     apple_team_id = _require_env("APPLE_TEAM_ID")
@@ -265,7 +304,7 @@ def fetch_notary_submission_log(submission_id: str) -> str:
         "xcrun",
         "notarytool",
         "log",
-        submission_id,
+        normalized_submission_id,
         "--apple-id",
         apple_id,
         "--password",
@@ -276,7 +315,7 @@ def fetch_notary_submission_log(submission_id: str) -> str:
     completed = subprocess.run(command, check=False, capture_output=True, text=True)
     if completed.returncode != 0:
         stderr_text = completed.stderr.strip()
-        raise RuntimeError(f"notarytool log failed for {submission_id}: {stderr_text}")
+        raise RuntimeError(f"notarytool log failed for {normalized_submission_id}: {stderr_text}")
     return completed.stdout
 
 
@@ -402,6 +441,68 @@ def _run_gh_command(args: list[str]) -> subprocess.CompletedProcess[str]:
     command = ["gh", *args]
     completed = subprocess.run(command, check=False, capture_output=True, text=True)
     return completed
+
+
+def list_release_asset_names(*, repo: str, release_tag: str) -> list[str]:
+    repo_slug = _github_repo_slug(repo)
+    view_command = [
+        "release",
+        "view",
+        release_tag,
+        "--repo",
+        repo_slug,
+        "--json",
+        "assets",
+    ]
+    completed = _run_gh_command(view_command)
+    if completed.returncode != 0:
+        stderr_text = completed.stderr.strip()
+        raise RuntimeError(f"gh release view failed for {release_tag}: {stderr_text}")
+    payload = json.loads(completed.stdout)
+    assets_raw = payload.get("assets")
+    if not isinstance(assets_raw, list):
+        raise ValueError(f"release {release_tag} assets payload invalid")
+    asset_names: list[str] = []
+    for asset_item in assets_raw:
+        if not isinstance(asset_item, dict):
+            continue
+        asset_name = asset_item.get("name")
+        if isinstance(asset_name, str) and asset_name:
+            asset_names.append(asset_name)
+    return asset_names
+
+
+def resolve_manifest_asset_name(
+    *,
+    repo: str,
+    release_tag: str,
+    version_sha: str | None = None,
+) -> str:
+    asset_names = list_release_asset_names(repo=repo, release_tag=release_tag)
+    manifest_assets = [
+        asset_name
+        for asset_name in asset_names
+        if asset_name.startswith(MANIFEST_ASSET_NAME_PREFIX)
+        and asset_name.endswith(MANIFEST_ASSET_NAME_SUFFIX)
+    ]
+    if not manifest_assets:
+        raise FileNotFoundError(
+            f"No macOS notarize manifest asset on release {release_tag!r}"
+        )
+    if version_sha is not None:
+        expected_name = macos_notarize_manifest_filename(version_sha)
+        if expected_name in manifest_assets:
+            return expected_name
+        raise FileNotFoundError(
+            f"Manifest asset {expected_name!r} not found on release {release_tag!r}; "
+            f"available: {', '.join(manifest_assets)}"
+        )
+    if len(manifest_assets) == 1:
+        return manifest_assets[0]
+    raise ValueError(
+        f"Multiple macOS notarize manifest assets on release {release_tag!r}: "
+        f"{', '.join(manifest_assets)}"
+    )
 
 
 def resolve_release_version_sha(*, repo: str, release_tag: str) -> str:
@@ -537,10 +638,14 @@ def download_manifest_from_release(
     *,
     repo: str,
     release_tag: str,
-    version_sha: str,
     work_dir: Path,
+    version_sha: str | None = None,
 ) -> MacosNotarizeManifest:
-    manifest_name = macos_notarize_manifest_filename(version_sha)
+    manifest_name = resolve_manifest_asset_name(
+        repo=repo,
+        release_tag=release_tag,
+        version_sha=version_sha,
+    )
     manifest_path = work_dir / manifest_name
     download_release_asset(
         repo=repo,
@@ -629,17 +734,17 @@ def supersede_release_manifest(
     *,
     repo: str,
     release_tag: str,
-    version_sha: str,
     work_dir: Path,
+    version_sha: str | None = None,
 ) -> MacosNotarizeManifest:
     manifest = download_manifest_from_release(
         repo=repo,
         release_tag=release_tag,
-        version_sha=version_sha,
         work_dir=work_dir,
+        version_sha=version_sha,
     )
     updated_manifest = mark_superseded(manifest)
-    manifest_path = work_dir / macos_notarize_manifest_filename(version_sha)
+    manifest_path = work_dir / macos_notarize_manifest_filename(manifest.version_sha)
     write_manifest(manifest_path, updated_manifest)
     upload_release_assets(
         repo=repo,
@@ -658,15 +763,14 @@ def followup_release(
 ) -> MacosNotarizeFollowupSummary:
     resolved_work_dir = work_dir if work_dir is not None else Path(tempfile.mkdtemp(prefix="humanitec-notarize-"))
     resolved_work_dir.mkdir(parents=True, exist_ok=True)
-    if version_sha is None:
-        version_sha = resolve_release_version_sha(repo=repo, release_tag=release_tag)
 
     manifest = download_manifest_from_release(
         repo=repo,
         release_tag=release_tag,
-        version_sha=version_sha,
         work_dir=resolved_work_dir,
+        version_sha=version_sha,
     )
+    version_sha = manifest.version_sha
     distro = load_default_distro_config()
     now = datetime.now(tz=UTC)
     updated_platforms: dict[str, MacosNotarizePlatformRecord] = {}
@@ -784,7 +888,17 @@ def discover_pending_release_tags(*, repo: str) -> list[str]:
             continue
         if not tag_name.startswith("humanitec-agent-"):
             continue
-        pending_tags.append(tag_name)
+        try:
+            release_work_dir = Path(tempfile.mkdtemp(prefix="humanitec-notarize-discover-"))
+            manifest = download_manifest_from_release(
+                repo=repo,
+                release_tag=tag_name,
+                work_dir=release_work_dir,
+            )
+        except (FileNotFoundError, RuntimeError, ValueError):
+            continue
+        if is_followup_active(manifest):
+            pending_tags.append(tag_name)
     return pending_tags
 
 

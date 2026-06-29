@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
+from unittest.mock import patch
 
 from apps.agent.desktop.build_contract import (
     load_default_distro_config,
@@ -19,9 +20,12 @@ from apps.agent.desktop.macos_notarize import (
     MacosNotarizePlatformRecord,
     MacosNotarizeStatus,
     build_fragment_for_submit,
+    discover_pending_release_tags,
     is_followup_active,
     mark_superseded,
     merge_platform_fragments,
+    normalize_submission_id,
+    resolve_manifest_asset_name,
     update_checksums_for_dmg,
     write_manifest,
 )
@@ -49,7 +53,11 @@ def test_merge_platform_fragments_builds_manifest(tmp_path: Path) -> None:
         fragment = build_fragment_for_submit(
             platform=platform_name,
             version_sha=version_sha,
-            submission_id=f"submission-{platform_name}",
+            submission_id=(
+                "903659f6-49e1-42d3-a507-951d750d97e2"
+                if platform_name == "macos-arm64"
+                else "70f95b5c-a515-4588-8f02-1e314eb6d0cb"
+            ),
             distro=distro,
         )
         fragment_path = tmp_path / macos_notarize_fragment_filename(
@@ -191,3 +199,161 @@ def test_build_fragment_for_submit() -> None:
     assert fragment.status == MacosNotarizeStatus.PENDING
     assert fragment.submission_id == "903659f6-49e1-42d3-a507-951d750d97e2"
     MacosNotarizeFragment.model_validate(fragment.model_dump(mode="json"))
+
+
+def test_normalize_submission_id_accepts_clean_uuid() -> None:
+    submission_id = "2a6e1f41-3384-430e-8840-764292f03d9c"
+    assert normalize_submission_id(submission_id) == submission_id
+
+
+def test_normalize_submission_id_extracts_uuid_from_log_blob() -> None:
+    corrupt = (
+        "Verifying signature before notarization\n"
+        "Notarization submission id: 2a6e1f41-3384-430e-8840-764292f03d9c\n"
+        "2a6e1f41-3384-430e-8840-764292f03d9c"
+    )
+    assert normalize_submission_id(corrupt) == "2a6e1f41-3384-430e-8840-764292f03d9c"
+
+
+def test_load_manifest_normalizes_corrupt_submission_id(tmp_path: Path) -> None:
+    from apps.agent.desktop.macos_notarize import load_manifest
+
+    manifest_path = tmp_path / "manifest.json"
+    manifest_path.write_text(
+        json.dumps(
+            {
+                "release_tag": "humanitec-agent-d719594",
+                "version_sha": "d71959406b132cffa0f6cc6087c9c8161bd6cfd7",
+                "deadline_utc": "2099-01-01T00:00:00Z",
+                "platforms": {
+                    "macos-arm64": {
+                        "platform": "macos-arm64",
+                        "version_sha": "d71959406b132cffa0f6cc6087c9c8161bd6cfd7",
+                        "submission_id": (
+                            "Submitting app\n"
+                            "2a6e1f41-3384-430e-8840-764292f03d9c"
+                        ),
+                        "submitted_at": "2026-06-29T11:21:23Z",
+                        "status": "pending",
+                        "app_bundle_asset": "HumanitecAgent-macos-arm64-d719594.app-bundle.zip",
+                        "dmg_asset": "HumanitecAgent-macos-arm64-d719594.dmg",
+                    },
+                },
+            },
+            indent=2,
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    manifest = load_manifest(manifest_path)
+    assert (
+        manifest.platforms["macos-arm64"].submission_id
+        == "2a6e1f41-3384-430e-8840-764292f03d9c"
+    )
+
+
+def test_resolve_manifest_asset_name_from_release_assets() -> None:
+    version_sha = "d71959406b132cffa0f6cc6087c9c8161bd6cfd7"
+    assets_payload = json.dumps(
+        {
+            "assets": [
+                {"name": "HumanitecAgent-macos-arm64-d719594.dmg"},
+                {"name": "humanitec-agent-macos-notarize-d719594.json"},
+            ]
+        }
+    )
+
+    class Completed:
+        returncode = 0
+        stdout = assets_payload
+        stderr = ""
+
+    with patch(
+        "apps.agent.desktop.macos_notarize._run_gh_command",
+        return_value=Completed(),
+    ):
+        asset_name = resolve_manifest_asset_name(
+            repo="zamb124/agent-lab",
+            release_tag="humanitec-agent-d719594",
+        )
+    assert asset_name == "humanitec-agent-macos-notarize-d719594.json"
+    with patch(
+        "apps.agent.desktop.macos_notarize._run_gh_command",
+        return_value=Completed(),
+    ):
+        explicit_name = resolve_manifest_asset_name(
+            repo="zamb124/agent-lab",
+            release_tag="humanitec-agent-d719594",
+            version_sha=version_sha,
+        )
+    assert explicit_name == "humanitec-agent-macos-notarize-d719594.json"
+
+
+def test_discover_pending_release_tags_filters_inactive_manifests() -> None:
+    active_manifest = MacosNotarizeManifest(
+        release_tag="humanitec-agent-d719594",
+        version_sha="d71959406b132cffa0f6cc6087c9c8161bd6cfd7",
+        deadline_utc="2099-01-01T00:00:00Z",
+        platforms={
+            "macos-arm64": MacosNotarizePlatformRecord(
+                platform="macos-arm64",
+                version_sha="d71959406b132cffa0f6cc6087c9c8161bd6cfd7",
+                submission_id="2a6e1f41-3384-430e-8840-764292f03d9c",
+                submitted_at="2026-06-29T11:21:23Z",
+                status=MacosNotarizeStatus.PENDING,
+                app_bundle_asset="HumanitecAgent-macos-arm64-d719594.app-bundle.zip",
+                dmg_asset="HumanitecAgent-macos-arm64-d719594.dmg",
+            ),
+        },
+    )
+    completed_manifest = active_manifest.model_copy(
+        update={
+            "release_tag": "humanitec-agent-deadbeef",
+            "platforms": {
+                "macos-arm64": active_manifest.platforms["macos-arm64"].model_copy(
+                    update={"status": MacosNotarizeStatus.COMPLETED}
+                ),
+            },
+        }
+    )
+    releases_payload = json.dumps(
+        [
+            {"tagName": "humanitec-agent-d719594", "isDraft": False},
+            {"tagName": "humanitec-agent-deadbeef", "isDraft": False},
+            {"tagName": "humanitec-agent-no-manifest", "isDraft": False},
+        ]
+    )
+
+    class ListCompleted:
+        returncode = 0
+        stdout = releases_payload
+        stderr = ""
+
+    def download_side_effect(
+        *,
+        repo: str,
+        release_tag: str,
+        work_dir: Path,
+        version_sha: str | None = None,
+    ) -> MacosNotarizeManifest:
+        _ = repo
+        _ = work_dir
+        _ = version_sha
+        if release_tag == "humanitec-agent-d719594":
+            return active_manifest
+        if release_tag == "humanitec-agent-deadbeef":
+            return completed_manifest
+        raise FileNotFoundError(release_tag)
+
+    with (
+        patch(
+            "apps.agent.desktop.macos_notarize._run_gh_command",
+            return_value=ListCompleted(),
+        ),
+        patch(
+            "apps.agent.desktop.macos_notarize.download_manifest_from_release",
+            side_effect=download_side_effect,
+        ),
+    ):
+        pending_tags = discover_pending_release_tags(repo="zamb124/agent-lab")
+    assert pending_tags == ["humanitec-agent-d719594"]

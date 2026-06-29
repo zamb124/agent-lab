@@ -42,7 +42,6 @@ from apps.agent.desktop.macos_notarize import (  # noqa: E402, I001
     discover_pending_release_tags,
     followup_release,
     merge_platform_fragments,
-    resolve_release_version_sha,
     supersede_release_manifest,
     write_manifest,
 )
@@ -247,14 +246,9 @@ def notarize_supersede_previous(
         if release_tag == current_release_tag:
             continue
         try:
-            release_version_sha = resolve_release_version_sha(
-                repo=repo,
-                release_tag=release_tag,
-            )
             _ = supersede_release_manifest(
                 repo=repo,
                 release_tag=release_tag,
-                version_sha=release_version_sha,
                 work_dir=work_dir / release_tag,
             )
             print(

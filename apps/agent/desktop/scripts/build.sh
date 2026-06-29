@@ -553,8 +553,8 @@ submit_macos_notarization() {
   zip_path="$(mktemp -t humanitec-agent-notarize-XXXXXX).zip"
   ditto -c -k --keepParent "${app_path}" "${zip_path}"
   zip_bytes="$(wc -c <"${zip_path}" | tr -d ' ')"
-  echo "Notarization zip ready: ${zip_path} (${zip_bytes} bytes)"
-  echo "Submitting ${app_path} for notarization"
+  echo "Notarization zip ready: ${zip_path} (${zip_bytes} bytes)" >&2
+  echo "Submitting ${app_path} for notarization" >&2
 
   local submission_id=""
   local submit_attempt=1
@@ -575,9 +575,9 @@ submit_macos_notarization() {
     if [[ "${submit_exit}" -eq 0 ]]; then
       submission_id="$(uv run python -c 'import json,sys; print(json.load(open(sys.argv[1], encoding="utf-8"))["id"])' "${submit_json}")"
       rm -f "${submit_json}" "${submit_stderr}"
-      echo "Notarization submission id: ${submission_id}"
+      echo "Notarization submission id: ${submission_id}" >&2
       rm -f "${zip_path}"
-      echo "${submission_id}"
+      printf '%s\n' "${submission_id}"
       return 0
     fi
     cat "${submit_stderr}" >&2 || true

@@ -39,10 +39,6 @@ def test_followup_keeps_pending_when_apple_in_progress(tmp_path: Path) -> None:
     manifest = _pending_manifest()
     with (
         patch(
-            "apps.agent.desktop.macos_notarize.resolve_release_version_sha",
-            return_value=manifest.version_sha,
-        ),
-        patch(
             "apps.agent.desktop.macos_notarize.download_manifest_from_release",
             return_value=manifest,
         ),
@@ -73,10 +69,6 @@ def test_followup_marks_expired_after_deadline(tmp_path: Path) -> None:
     )
     with (
         patch(
-            "apps.agent.desktop.macos_notarize.resolve_release_version_sha",
-            return_value=manifest.version_sha,
-        ),
-        patch(
             "apps.agent.desktop.macos_notarize.download_manifest_from_release",
             return_value=manifest,
         ),
@@ -96,10 +88,6 @@ def test_followup_marks_expired_after_deadline(tmp_path: Path) -> None:
 def test_followup_raises_on_rejected_submission(tmp_path: Path) -> None:
     manifest = _pending_manifest()
     with (
-        patch(
-            "apps.agent.desktop.macos_notarize.resolve_release_version_sha",
-            return_value=manifest.version_sha,
-        ),
         patch(
             "apps.agent.desktop.macos_notarize.download_manifest_from_release",
             return_value=manifest,

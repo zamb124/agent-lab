@@ -64,10 +64,11 @@ Release **не ждёт Apple**. Два workflow:
 
 Workflow `humanitec-agent-macos-notarize`:
 
-1. `notarytool info` по submission id из manifest.
-2. `Accepted` → download app-bundle → stapler → rebuild DMG → `gh release upload --clobber` → update `checksums.txt` → delete app-bundle zip.
-3. `Rejected` → workflow error, signed DMG остаётся.
-4. Deadline 48 ч (`NOTARY_FOLLOWUP_MAX_AGE_SECONDS=172800`) → `expired`, signed DMG остаётся.
+1. Скачивает manifest asset с release по имени `humanitec-agent-macos-notarize-*.json` (не по `targetCommitish` ветки).
+2. `notarytool info` по submission id из manifest.
+3. `Accepted` → download app-bundle → stapler → rebuild DMG → `gh release upload --clobber` → update `checksums.txt` → delete app-bundle zip.
+4. `Rejected` → workflow error, signed DMG остаётся.
+5. Deadline 48 ч (`NOTARY_FOLLOWUP_MAX_AGE_SECONDS=172800`) → `expired`, signed DMG остаётся.
 
 Локальный poll:
 
