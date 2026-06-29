@@ -3,10 +3,16 @@
 from __future__ import annotations
 
 import hashlib
+import time
 
 from core.clients.rag_client import RagClient
 from core.clients.service_client import ServiceClientError
 from core.crawl.enrichment_skip import compute_enriched_content_hash
+from core.crawl.logging_events import (
+    log_crawl_ingest_completed,
+    log_crawl_ingest_failed,
+    log_crawl_reingest_completed,
+)
 from core.crawl.models import (
     CrawlDomain,
     CrawlEnrichedPage,
@@ -32,6 +38,7 @@ class CrawlIngestService:
         domain: CrawlDomain,
         payload: CrawlIngestPayload,
         document_id: str | None = None,
+        emit_ingest_log: bool = True,
     ) -> str:
         fetched = payload.fetched
         if document_id is None:
@@ -45,13 +52,42 @@ class CrawlIngestService:
             payload=payload,
             fetched=fetched,
         )
-        response = await self._rag_client.ingest_text(
-            search_index.rag_namespace_id,
-            payload.ingest_markdown,
-            document_name=payload.ingest_title,
-            document_id=document_id,
-            metadata=metadata,
-        )
+        started_at = time.monotonic()
+        try:
+            response = await self._rag_client.ingest_text(
+                search_index.rag_namespace_id,
+                payload.ingest_markdown,
+                document_name=payload.ingest_title,
+                document_id=document_id,
+                metadata=metadata,
+            )
+        except Exception as exc:
+            ingest_duration_ms = int((time.monotonic() - started_at) * 1000)
+            log_crawl_ingest_failed(
+                crawl_profile_id=crawl_profile_id,
+                crawl_job_id=crawl_job_id,
+                search_index_id=search_index.search_index_id,
+                crawl_domain_id=domain.crawl_domain_id,
+                domain=domain.domain,
+                canonical_url=fetched.canonical_url,
+                ingest_duration_ms=ingest_duration_ms,
+                exception_type=type(exc).__name__,
+                exception_message=str(exc),
+            )
+            raise
+        ingest_duration_ms = int((time.monotonic() - started_at) * 1000)
+        if emit_ingest_log:
+            log_crawl_ingest_completed(
+                crawl_profile_id=crawl_profile_id,
+                crawl_job_id=crawl_job_id,
+                search_index_id=search_index.search_index_id,
+                crawl_domain_id=domain.crawl_domain_id,
+                domain=domain.domain,
+                document_id=response.document_id,
+                rag_namespace_id=search_index.rag_namespace_id,
+                ingest_duration_ms=ingest_duration_ms,
+                canonical_url=fetched.canonical_url,
+            )
         return response.document_id
 
     async def reingest_enriched_page(
@@ -74,15 +110,29 @@ class CrawlIngestService:
             error_message = str(exc)
             if not error_message.startswith("HTTP 404"):
                 raise
-        payload = CrawlIngestPayload(fetched=fetched, enriched_page=enriched_page)
-        return await self.ingest_page(
+        started_at = time.monotonic()
+        ingested_document_id = await self.ingest_page(
             search_index=search_index,
             crawl_job_id=crawl_job_id,
             crawl_profile_id=crawl_profile_id,
             domain=domain,
-            payload=payload,
+            payload=CrawlIngestPayload(fetched=fetched, enriched_page=enriched_page),
             document_id=document_id,
+            emit_ingest_log=False,
         )
+        ingest_duration_ms = int((time.monotonic() - started_at) * 1000)
+        log_crawl_reingest_completed(
+            crawl_profile_id=crawl_profile_id,
+            crawl_job_id=crawl_job_id,
+            search_index_id=search_index.search_index_id,
+            crawl_domain_id=domain.crawl_domain_id,
+            domain=domain.domain,
+            document_id=ingested_document_id,
+            rag_namespace_id=search_index.rag_namespace_id,
+            ingest_duration_ms=ingest_duration_ms,
+            canonical_url=fetched.canonical_url,
+        )
+        return ingested_document_id
 
     @staticmethod
     def _filter_metadata_to_rag_fields(filter_metadata: CrawlPageFilterMetadata) -> RAGMetadata:

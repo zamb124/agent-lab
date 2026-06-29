@@ -105,6 +105,10 @@ spec:
             - name: BROWSER__CDP_ENDPOINTS__CHROMIUM
               value: "http://127.0.0.1:9222"
             {{- end }}
+            {{- if eq $name "code-runner-python" }}
+            - name: CODE_RUNNER_PYTHON_WORKERS
+              value: "2"
+            {{- end }}
             {{- include "agentlab.appEnv" $ | nindent 12 }}
           ports:
             - name: http

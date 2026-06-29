@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import time
 import uuid
 
 from fastapi import APIRouter, HTTPException
@@ -20,8 +21,19 @@ from apps.browser.engine.types import (
     BrowserPage,
     ContextSignature,
 )
+from core.logging import get_logger
+from core.logging.attributes import (
+    EVENT_BROWSER_CRAWL_FETCH_COMPLETED,
+    EVENT_BROWSER_CRAWL_FETCH_FAILED,
+    LOG_CRAWL_CANONICAL_URL,
+    LOG_CRAWL_FETCH_DURATION_MS,
+    LOG_EXCEPTION_MESSAGE,
+    LOG_EXCEPTION_TYPE,
+    LOG_HTTP_STATUS_CODE,
+)
 
 router = APIRouter(prefix="/control/crawl", tags=["browser-crawl-fetch"])
+logger = get_logger(__name__)
 
 _CRAWL_ANTI_BOT_TIER = "gray"
 
@@ -74,6 +86,8 @@ async def crawl_fetch(
         restore_state_key=None,
         context_signature=sig,
     )
+    started_at = time.monotonic()
+    canonical_url = body.url
     try:
         _ = await runtime.control_adapter.start(acquire)
         page = await runtime.lease_manager.get_page_for_session(session_id)
@@ -97,12 +111,46 @@ async def crawl_fetch(
             ) from exc
         if fetched.html is None or not fetched.html.strip():
             raise HTTPException(status_code=502, detail="browser fetch returned empty html")
+        duration_ms = int((time.monotonic() - started_at) * 1000)
+        logger.info(
+            EVENT_BROWSER_CRAWL_FETCH_COMPLETED,
+            **{
+                LOG_CRAWL_CANONICAL_URL: fetched.final_url[:256],
+                LOG_CRAWL_FETCH_DURATION_MS: duration_ms,
+                LOG_HTTP_STATUS_CODE: fetched.status_code,
+            },
+        )
         return BrowserCrawlFetchResponse(
             final_url=fetched.final_url,
             status_code=fetched.status_code,
             html=fetched.html,
             anti_bot_signals=fetched.anti_bot_signals,
         )
+    except HTTPException as exc:
+        duration_ms = int((time.monotonic() - started_at) * 1000)
+        logger.error(
+            EVENT_BROWSER_CRAWL_FETCH_FAILED,
+            **{
+                LOG_CRAWL_CANONICAL_URL: canonical_url[:256],
+                LOG_CRAWL_FETCH_DURATION_MS: duration_ms,
+                LOG_HTTP_STATUS_CODE: exc.status_code,
+                LOG_EXCEPTION_TYPE: "HTTPException",
+                LOG_EXCEPTION_MESSAGE: str(exc.detail),
+            },
+        )
+        raise
+    except Exception as exc:
+        duration_ms = int((time.monotonic() - started_at) * 1000)
+        logger.error(
+            EVENT_BROWSER_CRAWL_FETCH_FAILED,
+            **{
+                LOG_CRAWL_CANONICAL_URL: canonical_url[:256],
+                LOG_CRAWL_FETCH_DURATION_MS: duration_ms,
+                LOG_EXCEPTION_TYPE: type(exc).__name__,
+                LOG_EXCEPTION_MESSAGE: str(exc),
+            },
+        )
+        raise
     finally:
         await runtime.lease_manager.kill_session(
             session_id,

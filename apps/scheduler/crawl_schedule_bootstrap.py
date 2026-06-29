@@ -10,6 +10,16 @@ from apps.search_worker.tasks.task_names import (
     CRAWL_RECLAIM_STALE_FETCHING_TASK_NAME,
 )
 from core.logging import get_logger
+from core.logging.attributes import (
+    EVENT_CRAWL_SCHEDULE_CREATED,
+    EVENT_CRAWL_SCHEDULE_EXISTS,
+    EVENT_CRAWL_SCHEDULE_RECONCILED,
+    EVENT_CRAWL_SCHEDULE_RESUMED,
+    LOG_CRAWL_SCHEDULE_RECREATE,
+    LOG_SCHEDULE_ID,
+    LOG_SCHEDULE_TASK_ID,
+    LOG_TASK_NAME,
+)
 from core.scheduler.models import (
     PlatformRedisScheduleSnapshot,
     PlatformScheduleCreateRequest,
@@ -83,10 +93,12 @@ async def _reconcile_crawl_cron_schedule(
         recreate_schedule=recreate_schedule,
     )
     logger.warning(
-        "%s cron schedule reconciled: schedule_task_id=%s recreate_schedule=%s",
-        log_label,
-        repaired.schedule_task_id,
-        recreate_schedule,
+        EVENT_CRAWL_SCHEDULE_RECONCILED,
+        **{
+            LOG_SCHEDULE_TASK_ID: repaired.schedule_task_id,
+            LOG_CRAWL_SCHEDULE_RECREATE: recreate_schedule,
+            LOG_TASK_NAME: task_name,
+        },
     )
     return repaired
 
@@ -119,7 +131,11 @@ async def _ensure_crawl_cron_schedule(
         if task.status == ScheduledTaskStatus.PENDING and match_task(task)
     ]
     if pending_tasks:
-        logger.info("%s schedule already exists, count=%s", log_label, len(pending_tasks))
+        logger.info(
+            EVENT_CRAWL_SCHEDULE_EXISTS,
+            count=len(pending_tasks),
+            **{LOG_TASK_NAME: task_name},
+        )
         _ = await _reconcile_crawl_cron_schedule(
             container=container,
             task=pending_tasks[0],
@@ -141,10 +157,12 @@ async def _ensure_crawl_cron_schedule(
             schedule_task_id=paused_tasks[0].schedule_task_id,
         )
         logger.info(
-            "%s schedule resumed: schedule_task_id=%s schedule_id=%s",
-            log_label,
-            resumed.schedule_task_id,
-            resumed.schedule_id,
+            EVENT_CRAWL_SCHEDULE_RESUMED,
+            **{
+                LOG_SCHEDULE_TASK_ID: resumed.schedule_task_id,
+                LOG_SCHEDULE_ID: resumed.schedule_id,
+                LOG_TASK_NAME: task_name,
+            },
         )
         _ = await _reconcile_crawl_cron_schedule(
             container=container,
@@ -170,10 +188,12 @@ async def _ensure_crawl_cron_schedule(
         ),
     )
     logger.info(
-        "%s schedule created: schedule_task_id=%s schedule_id=%s",
-        log_label,
-        created.schedule_task_id,
-        created.schedule_id,
+        EVENT_CRAWL_SCHEDULE_CREATED,
+        **{
+            LOG_SCHEDULE_TASK_ID: created.schedule_task_id,
+            LOG_SCHEDULE_ID: created.schedule_id,
+            LOG_TASK_NAME: task_name,
+        },
     )
 
 

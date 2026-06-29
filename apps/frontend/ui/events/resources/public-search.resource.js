@@ -16,6 +16,7 @@ const PUBLIC_SEARCH_SESSION_MODES = Object.freeze(new Set(['quick', 'deep', 'res
 const PUBLIC_SEARCH_ERROR_KINDS = Object.freeze(new Set([
     'search_timeout',
     'search_service_unavailable',
+    'search_runtime_unavailable',
     'search_stream_incomplete',
     'search_quota_exhausted',
     'search_failed',
@@ -573,6 +574,14 @@ function _errorMessage(error) {
     return String(error);
 }
 
+function _publicSearchRuntimeUnavailable(detail) {
+    return detail.includes('code_runner_python')
+        || detail.includes('code_runner_node')
+        || detail.includes('code_runner_go')
+        || detail.includes('code_runner_csharp')
+        || detail.includes('capability_gateway');
+}
+
 function _publicSearchErrorKind(detail, transportStatus, errorBody = null) {
     const message = _requireString(detail, 'public search error detail');
     if (message === 'search_quota_exhausted') {
@@ -596,6 +605,9 @@ function _publicSearchErrorKind(detail, transportStatus, errorBody = null) {
     if (message === 'A2A stream finished before search/serp/completed') {
         return 'search_stream_incomplete';
     }
+    if (_publicSearchRuntimeUnavailable(message)) {
+        return 'search_runtime_unavailable';
+    }
     if (transportStatus === 502 || transportStatus === 503) {
         return 'search_service_unavailable';
     }
@@ -608,6 +620,9 @@ function _publicSearchErrorStatus(kind, transportStatus) {
         return 504;
     }
     if (errorKind === 'search_service_unavailable') {
+        return 503;
+    }
+    if (errorKind === 'search_runtime_unavailable') {
         return 503;
     }
     if (errorKind === 'search_quota_exhausted') {

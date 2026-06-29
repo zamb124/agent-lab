@@ -208,7 +208,7 @@ CI (`.github/workflows/deploy.yml`, `workflow_dispatch` или push в `main`):
 
 ### Дашборды и алерты
 
-Дашборды provisioned как код (`deploy/helm/agent-lab/files/dashboards/`, ConfigMap `grafana-dashboards`): Platform Overview, HTTP Requests, Errors & Exceptions, TaskIQ Workers, LLM Usage, Traces, Log Volume, WebSocket / Realtime, Database, Security. Добавление: положить JSON в `files/dashboards/`, `make k8s-deploy` подхватит автоматически (новая ревизия ConfigMap → Grafana sidecar reload).
+Дашборды provisioned как код (`deploy/helm/agent-lab/files/dashboards/`, ConfigMap `grafana-dashboards`): Platform Overview, HTTP Requests, Errors & Exceptions, TaskIQ Workers, LLM Usage, Traces, Log Volume, WebSocket / Realtime, Database, Security, **Crawl / RuNet Indexing** (`11-crawl-indexing.json`, uid `crawl-indexing`). Добавление: положить JSON в `files/dashboards/`, `make k8s-deploy` подхватит автоматически (новая ревизия ConfigMap → Grafana sidecar reload).
 
 Alert rules — `deploy/helm/agent-lab/files/grafana-alerts/` (ConfigMap `grafana-alerts`). Unified alerting на LogQL: High Error Rate (>5%/5 мин, critical), Service Down (нет логов >2 мин, critical), High 5xx Rate (>1%/5 мин, warning), TaskIQ High Failure Rate (>5%/10 мин, warning), LLM Errors (>10/5 мин, warning), Log Contract Violations (>0/1 мин, critical), Slow HTTP P99 (>5000 мс/5 мин, warning), High DB Latency (P95 >1000 мс/5 мин, warning). Contact points (email/webhook) — placeholder; production настраивается через Grafana UI или `files/grafana-alerts/contact-points.yaml`.
 

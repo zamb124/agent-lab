@@ -5,8 +5,10 @@ from __future__ import annotations
 import asyncio
 import hashlib
 import re
+import time
 from typing import Literal
 
+import httpx
 import trafilatura
 from bs4 import BeautifulSoup
 
@@ -14,6 +16,7 @@ from apps.browser.contracts.crawl_fetch_types import BrowserCrawlFetchResponse
 from apps.search.db.crawl_repositories import canonicalize_url
 from core.clients.browser_fetch_client import BrowserFetchClient
 from core.crawl.errors import CrawlExtractTooShortError
+from core.crawl.logging_events import log_crawl_fetch_completed, log_crawl_fetch_failed
 from core.crawl.models import CrawlFetchResult, CrawlStructuralSignals
 from core.crawl.structural_signals import extract_structural_signals_from_html
 from core.http import get_httpx_client
@@ -40,24 +43,72 @@ class CrawlFetchService:
         min_extract_chars: int,
         browser_fallback_enabled: bool,
     ) -> CrawlFetchResult:
+        started_at = time.monotonic()
+        canonical_url = canonicalize_url(url)
         try:
-            return await _fetch_http_markdown(
+            result, http_status_code = await _fetch_http_markdown(
                 url,
                 timeout_seconds=timeout_seconds,
                 min_extract_chars=min_extract_chars,
             )
+            duration_ms = int((time.monotonic() - started_at) * 1000)
+            log_crawl_fetch_completed(
+                canonical_url=result.canonical_url,
+                fetch_transport=result.fetch_transport,
+                fetch_duration_ms=duration_ms,
+                extract_chars=len(result.markdown.strip()),
+                browser_fallback=False,
+                http_status_code=http_status_code,
+            )
+            return result
         except Exception as http_error:
             if not browser_fallback_enabled:
+                duration_ms = int((time.monotonic() - started_at) * 1000)
+                log_crawl_fetch_failed(
+                    canonical_url=canonical_url,
+                    fetch_duration_ms=duration_ms,
+                    browser_fallback=False,
+                    exception_type=type(http_error).__name__,
+                    exception_message=str(http_error),
+                    http_status_code=_http_status_from_error(http_error),
+                )
                 raise http_error from http_error
-            browser_response = await self._browser_fetch_client.fetch_html(
-                url,
-                timeout_ms=int(timeout_seconds * 1000),
-                service_timeout_seconds=self._browser_fetch_timeout_seconds,
-            )
-            return _build_crawl_fetch_result_from_html(
-                browser_response,
-                min_extract_chars=min_extract_chars,
-            )
+            try:
+                browser_response = await self._browser_fetch_client.fetch_html(
+                    url,
+                    timeout_ms=int(timeout_seconds * 1000),
+                    service_timeout_seconds=self._browser_fetch_timeout_seconds,
+                )
+                result = _build_crawl_fetch_result_from_html(
+                    browser_response,
+                    min_extract_chars=min_extract_chars,
+                )
+                duration_ms = int((time.monotonic() - started_at) * 1000)
+                log_crawl_fetch_completed(
+                    canonical_url=result.canonical_url,
+                    fetch_transport=result.fetch_transport,
+                    fetch_duration_ms=duration_ms,
+                    extract_chars=len(result.markdown.strip()),
+                    browser_fallback=True,
+                )
+                return result
+            except Exception as browser_error:
+                duration_ms = int((time.monotonic() - started_at) * 1000)
+                log_crawl_fetch_failed(
+                    canonical_url=canonical_url,
+                    fetch_duration_ms=duration_ms,
+                    browser_fallback=True,
+                    exception_type=type(browser_error).__name__,
+                    exception_message=str(browser_error),
+                    http_status_code=_http_status_from_error(browser_error),
+                )
+                raise browser_error from browser_error
+
+
+def _http_status_from_error(exc: BaseException) -> int | None:
+    if isinstance(exc, httpx.HTTPStatusError):
+        return exc.response.status_code
+    return None
 
 
 async def _fetch_http_markdown(
@@ -65,9 +116,10 @@ async def _fetch_http_markdown(
     *,
     timeout_seconds: float,
     min_extract_chars: int,
-) -> CrawlFetchResult:
+) -> tuple[CrawlFetchResult, int]:
     async with get_httpx_client(timeout=timeout_seconds, follow_redirects=True) as client:
         response = await client.get(url)
+        http_status_code = response.status_code
         _ = response.raise_for_status()
         final_url = str(response.url)
         try:
@@ -80,13 +132,14 @@ async def _fetch_http_markdown(
             content_type,
             final_url,
         )
-    return _build_crawl_fetch_result(
+    result = _build_crawl_fetch_result(
         final_url=final_url,
         markdown=markdown,
         structural_signals=structural_signals,
         min_extract_chars=min_extract_chars,
         fetch_transport="http",
     )
+    return result, http_status_code
 
 
 def _build_crawl_fetch_result_from_html(

@@ -1,0 +1,1111 @@
+{
+  "schemaVersion": 39,
+  "uid": "crawl-indexing",
+  "title": "Crawl / RuNet Indexing",
+  "tags": [
+    "crawl",
+    "search",
+    "runet",
+    "indexing"
+  ],
+  "timezone": "utc",
+  "refresh": "30s",
+  "time": {
+    "from": "now-6h",
+    "to": "now"
+  },
+  "templating": {
+    "list": [
+      {
+        "name": "service",
+        "type": "query",
+        "query": "label_values(service)",
+        "datasource": {
+          "type": "loki",
+          "uid": "loki"
+        },
+        "multi": true,
+        "includeAll": true,
+        "allValue": ".+",
+        "current": {
+          "text": [
+            "search-worker",
+            "search",
+            "browser",
+            "rag"
+          ],
+          "value": [
+            "search-worker",
+            "search",
+            "browser",
+            "rag"
+          ]
+        }
+      },
+      {
+        "name": "crawl_profile",
+        "type": "custom",
+        "query": "runet_platform",
+        "multi": false,
+        "includeAll": true,
+        "allValue": ".+",
+        "current": {
+          "text": "runet_platform",
+          "value": "runet_platform"
+        }
+      }
+    ]
+  },
+  "panels": [
+    {
+      "id": 1,
+      "title": "URLs Indexed / min",
+      "type": "timeseries",
+      "gridPos": {
+        "h": 6,
+        "w": 8,
+        "x": 0,
+        "y": 0
+      },
+      "datasource": {
+        "type": "loki",
+        "uid": "loki"
+      },
+      "targets": [
+        {
+          "expr": "sum(rate({service=~\"$service\"} | json | message=~\"crawl\\.url\\.outcome\" | crawl_profile_id=~\"$crawl_profile\" | crawl_outcome=\"indexed\" [2m])) * 60",
+          "legendFormat": "{{service}}",
+          "refId": "A",
+          "queryType": "range"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "min": 0,
+          "custom": {
+            "lineWidth": 2,
+            "fillOpacity": 10
+          }
+        }
+      }
+    },
+    {
+      "id": 2,
+      "title": "URLs Skipped / min",
+      "type": "timeseries",
+      "gridPos": {
+        "h": 6,
+        "w": 8,
+        "x": 8,
+        "y": 0
+      },
+      "datasource": {
+        "type": "loki",
+        "uid": "loki"
+      },
+      "targets": [
+        {
+          "expr": "sum(rate({service=~\"$service\"} | json | message=~\"crawl\\.url\\.outcome\" | crawl_profile_id=~\"$crawl_profile\" | crawl_outcome=\"skipped\" [2m])) * 60",
+          "legendFormat": "{{service}}",
+          "refId": "A",
+          "queryType": "range"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "min": 0,
+          "custom": {
+            "lineWidth": 2,
+            "fillOpacity": 10
+          }
+        }
+      }
+    },
+    {
+      "id": 3,
+      "title": "URL Failure Rate %",
+      "type": "timeseries",
+      "gridPos": {
+        "h": 6,
+        "w": 8,
+        "x": 16,
+        "y": 0
+      },
+      "datasource": {
+        "type": "loki",
+        "uid": "loki"
+      },
+      "targets": [
+        {
+          "expr": "sum(rate({service=~\"$service\"} | json | message=~\"crawl\\.url\\.outcome\" | crawl_profile_id=~\"$crawl_profile\" | crawl_outcome=\"failed\" [2m])) / sum(rate({service=~\"$service\"} | json | message=~\"crawl\\.url\\.outcome\" | crawl_profile_id=~\"$crawl_profile\" [2m])) * 100",
+          "legendFormat": "{{service}}",
+          "refId": "A",
+          "queryType": "range"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent",
+          "min": 0,
+          "custom": {
+            "lineWidth": 2,
+            "fillOpacity": 10
+          }
+        }
+      }
+    },
+    {
+      "id": 4,
+      "title": "Enrichment Success Rate %",
+      "type": "timeseries",
+      "gridPos": {
+        "h": 6,
+        "w": 8,
+        "x": 0,
+        "y": 12
+      },
+      "datasource": {
+        "type": "loki",
+        "uid": "loki"
+      },
+      "targets": [
+        {
+          "expr": "sum(rate({service=~\"$service\"} | json | message=~\"crawl\\.enrich\\.completed\" | crawl_profile_id=~\"$crawl_profile\" [2m])) / (sum(rate({service=~\"$service\"} | json | message=~\"crawl\\.enrich\\.completed|crawl\\.enrich\\.failed\" | crawl_profile_id=~\"$crawl_profile\" [2m])) + 1e-10) * 100",
+          "legendFormat": "{{service}}",
+          "refId": "A",
+          "queryType": "range"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent",
+          "min": 0,
+          "custom": {
+            "lineWidth": 2,
+            "fillOpacity": 10
+          }
+        }
+      }
+    },
+    {
+      "id": 5,
+      "title": "Crawl TaskIQ Tasks / min",
+      "type": "timeseries",
+      "gridPos": {
+        "h": 6,
+        "w": 8,
+        "x": 8,
+        "y": 12
+      },
+      "datasource": {
+        "type": "loki",
+        "uid": "loki"
+      },
+      "targets": [
+        {
+          "expr": "sum by (service) (rate({service=~\"$service\"} | json task_name=\"task.name\" | task_name=~\"crawl_.*\" | message=\"task_started\" [2m])) * 60",
+          "legendFormat": "{{service}}",
+          "refId": "A",
+          "queryType": "range"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "min": 0,
+          "custom": {
+            "lineWidth": 2,
+            "fillOpacity": 10
+          }
+        }
+      }
+    },
+    {
+      "id": 6,
+      "title": "Pending URLs (tick completed)",
+      "type": "timeseries",
+      "gridPos": {
+        "h": 6,
+        "w": 8,
+        "x": 16,
+        "y": 12
+      },
+      "datasource": {
+        "type": "loki",
+        "uid": "loki"
+      },
+      "targets": [
+        {
+          "expr": "last_over_time({service=~\"$service\"} | json | message=~\"crawl\\.tick\\.completed\" | crawl_profile_id=~\"$crawl_profile\" | unwrap pending_urls [5m])",
+          "legendFormat": "{{service}}",
+          "refId": "A",
+          "queryType": "range"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "min": 0,
+          "custom": {
+            "lineWidth": 2,
+            "fillOpacity": 10
+          }
+        }
+      }
+    },
+    {
+      "id": 7,
+      "title": "Tick Rate / min",
+      "type": "timeseries",
+      "gridPos": {
+        "h": 6,
+        "w": 12,
+        "x": 0,
+        "y": 24
+      },
+      "datasource": {
+        "type": "loki",
+        "uid": "loki"
+      },
+      "targets": [
+        {
+          "expr": "sum(rate({service=~\"$service\"} | json | message=~\"crawl\\.tick\\.completed\" | crawl_profile_id=~\"$crawl_profile\" [2m])) * 60",
+          "legendFormat": "{{service}}",
+          "refId": "A",
+          "queryType": "range"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "min": 0,
+          "custom": {
+            "lineWidth": 2,
+            "fillOpacity": 10
+          }
+        }
+      }
+    },
+    {
+      "id": 8,
+      "title": "Tick Failures / min",
+      "type": "timeseries",
+      "gridPos": {
+        "h": 6,
+        "w": 12,
+        "x": 12,
+        "y": 24
+      },
+      "datasource": {
+        "type": "loki",
+        "uid": "loki"
+      },
+      "targets": [
+        {
+          "expr": "sum(rate({service=~\"$service\"} | json | message=~\"crawl\\.tick\\.failed\" | crawl_profile_id=~\"$crawl_profile\" [2m])) * 60",
+          "legendFormat": "{{service}}",
+          "refId": "A",
+          "queryType": "range"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "min": 0,
+          "custom": {
+            "lineWidth": 2,
+            "fillOpacity": 10
+          }
+        }
+      }
+    },
+    {
+      "id": 9,
+      "title": "Domains Scheduled (avg per tick)",
+      "type": "timeseries",
+      "gridPos": {
+        "h": 6,
+        "w": 12,
+        "x": 0,
+        "y": 36
+      },
+      "datasource": {
+        "type": "loki",
+        "uid": "loki"
+      },
+      "targets": [
+        {
+          "expr": "avg_over_time({service=~\"$service\"} | json | message=~\"crawl\\.tick\\.completed\" | crawl_profile_id=~\"$crawl_profile\" | unwrap domains_scheduled [5m])",
+          "legendFormat": "{{service}}",
+          "refId": "A",
+          "queryType": "range"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "min": 0,
+          "custom": {
+            "lineWidth": 2,
+            "fillOpacity": 10
+          }
+        }
+      }
+    },
+    {
+      "id": 10,
+      "title": "Tick P95 Duration",
+      "type": "timeseries",
+      "gridPos": {
+        "h": 6,
+        "w": 12,
+        "x": 12,
+        "y": 36
+      },
+      "datasource": {
+        "type": "loki",
+        "uid": "loki"
+      },
+      "targets": [
+        {
+          "expr": "quantile_over_time(0.95, {service=~\"$service\"} | json task_name=\"task.name\" | task_name=\"crawl_orchestrator_tick\" | message=\"task_finished\" | unwrap task_duration_ms [5m])",
+          "legendFormat": "{{service}}",
+          "refId": "A",
+          "queryType": "range"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ms",
+          "min": 0,
+          "custom": {
+            "lineWidth": 2,
+            "fillOpacity": 10
+          }
+        }
+      }
+    },
+    {
+      "id": 11,
+      "title": "Discover Completed / min",
+      "type": "timeseries",
+      "gridPos": {
+        "h": 6,
+        "w": 12,
+        "x": 0,
+        "y": 48
+      },
+      "datasource": {
+        "type": "loki",
+        "uid": "loki"
+      },
+      "targets": [
+        {
+          "expr": "sum(rate({service=~\"$service\"} | json | message=~\"crawl\\.discover\\.completed\" | crawl_profile_id=~\"$crawl_profile\" [2m])) * 60",
+          "legendFormat": "{{service}}",
+          "refId": "A",
+          "queryType": "range"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "min": 0,
+          "custom": {
+            "lineWidth": 2,
+            "fillOpacity": 10
+          }
+        }
+      }
+    },
+    {
+      "id": 12,
+      "title": "Discover Failed / min",
+      "type": "timeseries",
+      "gridPos": {
+        "h": 6,
+        "w": 12,
+        "x": 12,
+        "y": 48
+      },
+      "datasource": {
+        "type": "loki",
+        "uid": "loki"
+      },
+      "targets": [
+        {
+          "expr": "sum(rate({service=~\"$service\"} | json | message=~\"crawl\\.discover\\.failed\" | crawl_profile_id=~\"$crawl_profile\" [2m])) * 60",
+          "legendFormat": "{{service}}",
+          "refId": "A",
+          "queryType": "range"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "min": 0,
+          "custom": {
+            "lineWidth": 2,
+            "fillOpacity": 10
+          }
+        }
+      }
+    },
+    {
+      "id": 13,
+      "title": "URLs Discovered / min",
+      "type": "timeseries",
+      "gridPos": {
+        "h": 6,
+        "w": 24,
+        "x": 0,
+        "y": 60
+      },
+      "datasource": {
+        "type": "loki",
+        "uid": "loki"
+      },
+      "targets": [
+        {
+          "expr": "sum(rate({service=~\"$service\"} | json | message=~\"crawl\\.discover\\.completed\" | crawl_profile_id=~\"$crawl_profile\" | unwrap urls_discovered [2m])) * 60",
+          "legendFormat": "{{service}}",
+          "refId": "A",
+          "queryType": "range"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "min": 0,
+          "custom": {
+            "lineWidth": 2,
+            "fillOpacity": 10
+          }
+        }
+      }
+    },
+    {
+      "id": 14,
+      "title": "Fetch Completed / min",
+      "type": "timeseries",
+      "gridPos": {
+        "h": 6,
+        "w": 8,
+        "x": 0,
+        "y": 72
+      },
+      "datasource": {
+        "type": "loki",
+        "uid": "loki"
+      },
+      "targets": [
+        {
+          "expr": "sum(rate({service=~\"$service\"} | json | message=~\"crawl\\.fetch\\.completed\" [2m])) * 60",
+          "legendFormat": "{{service}}",
+          "refId": "A",
+          "queryType": "range"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "min": 0,
+          "custom": {
+            "lineWidth": 2,
+            "fillOpacity": 10
+          }
+        }
+      }
+    },
+    {
+      "id": 15,
+      "title": "Fetch Failed / min",
+      "type": "timeseries",
+      "gridPos": {
+        "h": 6,
+        "w": 8,
+        "x": 8,
+        "y": 72
+      },
+      "datasource": {
+        "type": "loki",
+        "uid": "loki"
+      },
+      "targets": [
+        {
+          "expr": "sum(rate({service=~\"$service\"} | json | message=~\"crawl\\.fetch\\.failed\" [2m])) * 60",
+          "legendFormat": "{{service}}",
+          "refId": "A",
+          "queryType": "range"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "min": 0,
+          "custom": {
+            "lineWidth": 2,
+            "fillOpacity": 10
+          }
+        }
+      }
+    },
+    {
+      "id": 16,
+      "title": "Browser Fallback / min",
+      "type": "timeseries",
+      "gridPos": {
+        "h": 6,
+        "w": 8,
+        "x": 16,
+        "y": 72
+      },
+      "datasource": {
+        "type": "loki",
+        "uid": "loki"
+      },
+      "targets": [
+        {
+          "expr": "sum(rate({service=~\"$service\"} | json | message=~\"crawl\\.fetch\\.completed\" | browser_fallback=true [2m])) * 60",
+          "legendFormat": "{{service}}",
+          "refId": "A",
+          "queryType": "range"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "min": 0,
+          "custom": {
+            "lineWidth": 2,
+            "fillOpacity": 10
+          }
+        }
+      }
+    },
+    {
+      "id": 17,
+      "title": "URL Outcomes by Type",
+      "type": "timeseries",
+      "gridPos": {
+        "h": 6,
+        "w": 12,
+        "x": 0,
+        "y": 84
+      },
+      "datasource": {
+        "type": "loki",
+        "uid": "loki"
+      },
+      "targets": [
+        {
+          "expr": "sum by (crawl_outcome) (rate({service=~\"$service\"} | json | message=~\"crawl\\.url\\.outcome\" | crawl_profile_id=~\"$crawl_profile\" [2m])) * 60",
+          "legendFormat": "{{crawl_outcome}}",
+          "refId": "A",
+          "queryType": "range"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "min": 0,
+          "custom": {
+            "lineWidth": 2,
+            "fillOpacity": 10
+          }
+        }
+      }
+    },
+    {
+      "id": 18,
+      "title": "Fetch P95 by Transport",
+      "type": "timeseries",
+      "gridPos": {
+        "h": 6,
+        "w": 12,
+        "x": 12,
+        "y": 84
+      },
+      "datasource": {
+        "type": "loki",
+        "uid": "loki"
+      },
+      "targets": [
+        {
+          "expr": "quantile_over_time(0.95, {service=~\"$service\"} | json | message=~\"crawl\\.fetch\\.completed\" | unwrap fetch_duration_ms [5m]) by (fetch_transport)",
+          "legendFormat": "{{fetch_transport}}",
+          "refId": "A",
+          "queryType": "range"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ms",
+          "min": 0,
+          "custom": {
+            "lineWidth": 2,
+            "fillOpacity": 10
+          }
+        }
+      }
+    },
+    {
+      "id": 19,
+      "title": "Skip Reasons / min",
+      "type": "timeseries",
+      "gridPos": {
+        "h": 6,
+        "w": 24,
+        "x": 0,
+        "y": 96
+      },
+      "datasource": {
+        "type": "loki",
+        "uid": "loki"
+      },
+      "targets": [
+        {
+          "expr": "sum by (crawl_skip_reason) (rate({service=~\"$service\"} | json | message=~\"crawl\\.url\\.outcome\" | crawl_outcome=\"skipped\" | crawl_profile_id=~\"$crawl_profile\" [2m])) * 60",
+          "legendFormat": "{{crawl_skip_reason}}",
+          "refId": "A",
+          "queryType": "range"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "min": 0,
+          "custom": {
+            "lineWidth": 2,
+            "fillOpacity": 10
+          }
+        }
+      }
+    },
+    {
+      "id": 20,
+      "title": "Ingest Completed / min",
+      "type": "timeseries",
+      "gridPos": {
+        "h": 6,
+        "w": 12,
+        "x": 0,
+        "y": 108
+      },
+      "datasource": {
+        "type": "loki",
+        "uid": "loki"
+      },
+      "targets": [
+        {
+          "expr": "sum(rate({service=~\"$service\"} | json | message=~\"crawl\\.ingest\\.completed\" | crawl_profile_id=~\"$crawl_profile\" [2m])) * 60",
+          "legendFormat": "{{service}}",
+          "refId": "A",
+          "queryType": "range"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "min": 0,
+          "custom": {
+            "lineWidth": 2,
+            "fillOpacity": 10
+          }
+        }
+      }
+    },
+    {
+      "id": 21,
+      "title": "Ingest Failed / min",
+      "type": "timeseries",
+      "gridPos": {
+        "h": 6,
+        "w": 12,
+        "x": 12,
+        "y": 108
+      },
+      "datasource": {
+        "type": "loki",
+        "uid": "loki"
+      },
+      "targets": [
+        {
+          "expr": "sum(rate({service=~\"$service\"} | json | message=~\"crawl\\.ingest\\.failed\" | crawl_profile_id=~\"$crawl_profile\" [2m])) * 60",
+          "legendFormat": "{{service}}",
+          "refId": "A",
+          "queryType": "range"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "min": 0,
+          "custom": {
+            "lineWidth": 2,
+            "fillOpacity": 10
+          }
+        }
+      }
+    },
+    {
+      "id": 22,
+      "title": "Ingest P95 Duration",
+      "type": "timeseries",
+      "gridPos": {
+        "h": 6,
+        "w": 12,
+        "x": 0,
+        "y": 120
+      },
+      "datasource": {
+        "type": "loki",
+        "uid": "loki"
+      },
+      "targets": [
+        {
+          "expr": "quantile_over_time(0.95, {service=~\"$service\"} | json | message=~\"crawl\\.ingest\\.completed\" | crawl_profile_id=~\"$crawl_profile\" | unwrap ingest_duration_ms [5m])",
+          "legendFormat": "{{service}}",
+          "refId": "A",
+          "queryType": "range"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ms",
+          "min": 0,
+          "custom": {
+            "lineWidth": 2,
+            "fillOpacity": 10
+          }
+        }
+      }
+    },
+    {
+      "id": 23,
+      "title": "Reingest / min",
+      "type": "timeseries",
+      "gridPos": {
+        "h": 6,
+        "w": 12,
+        "x": 12,
+        "y": 120
+      },
+      "datasource": {
+        "type": "loki",
+        "uid": "loki"
+      },
+      "targets": [
+        {
+          "expr": "sum(rate({service=~\"$service\"} | json | message=~\"crawl\\.reingest\\.completed\" | crawl_profile_id=~\"$crawl_profile\" [2m])) * 60",
+          "legendFormat": "{{service}}",
+          "refId": "A",
+          "queryType": "range"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "min": 0,
+          "custom": {
+            "lineWidth": 2,
+            "fillOpacity": 10
+          }
+        }
+      }
+    },
+    {
+      "id": 24,
+      "title": "Enrich Completed / min",
+      "type": "timeseries",
+      "gridPos": {
+        "h": 6,
+        "w": 8,
+        "x": 0,
+        "y": 132
+      },
+      "datasource": {
+        "type": "loki",
+        "uid": "loki"
+      },
+      "targets": [
+        {
+          "expr": "sum(rate({service=~\"$service\"} | json | message=~\"crawl\\.enrich\\.completed\" | crawl_profile_id=~\"$crawl_profile\" [2m])) * 60",
+          "legendFormat": "{{service}}",
+          "refId": "A",
+          "queryType": "range"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "min": 0,
+          "custom": {
+            "lineWidth": 2,
+            "fillOpacity": 10
+          }
+        }
+      }
+    },
+    {
+      "id": 25,
+      "title": "Enrich Failed / min",
+      "type": "timeseries",
+      "gridPos": {
+        "h": 6,
+        "w": 8,
+        "x": 8,
+        "y": 132
+      },
+      "datasource": {
+        "type": "loki",
+        "uid": "loki"
+      },
+      "targets": [
+        {
+          "expr": "sum(rate({service=~\"$service\"} | json | message=~\"crawl\\.enrich\\.failed\" | crawl_profile_id=~\"$crawl_profile\" [2m])) * 60",
+          "legendFormat": "{{service}}",
+          "refId": "A",
+          "queryType": "range"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "min": 0,
+          "custom": {
+            "lineWidth": 2,
+            "fillOpacity": 10
+          }
+        }
+      }
+    },
+    {
+      "id": 26,
+      "title": "Enrich P99 Duration",
+      "type": "timeseries",
+      "gridPos": {
+        "h": 6,
+        "w": 8,
+        "x": 16,
+        "y": 132
+      },
+      "datasource": {
+        "type": "loki",
+        "uid": "loki"
+      },
+      "targets": [
+        {
+          "expr": "quantile_over_time(0.99, {service=~\"$service\"} | json | message=~\"crawl\\.enrich\\.completed\" | crawl_profile_id=~\"$crawl_profile\" | unwrap enrichment_duration_ms [5m])",
+          "legendFormat": "{{service}}",
+          "refId": "A",
+          "queryType": "range"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ms",
+          "min": 0,
+          "custom": {
+            "lineWidth": 2,
+            "fillOpacity": 10
+          }
+        }
+      }
+    },
+    {
+      "id": 27,
+      "title": "Seed Imported (rate)",
+      "type": "timeseries",
+      "gridPos": {
+        "h": 6,
+        "w": 12,
+        "x": 0,
+        "y": 144
+      },
+      "datasource": {
+        "type": "loki",
+        "uid": "loki"
+      },
+      "targets": [
+        {
+          "expr": "sum(rate({service=~\"$service\"} | json | message=~\"crawl\\.seed\\.completed\" | crawl_profile_id=~\"$crawl_profile\" | unwrap seed_imported [2m]))",
+          "legendFormat": "{{service}}",
+          "refId": "A",
+          "queryType": "range"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "min": 0,
+          "custom": {
+            "lineWidth": 2,
+            "fillOpacity": 10
+          }
+        }
+      }
+    },
+    {
+      "id": 28,
+      "title": "Reclaim Events / min",
+      "type": "timeseries",
+      "gridPos": {
+        "h": 6,
+        "w": 12,
+        "x": 12,
+        "y": 144
+      },
+      "datasource": {
+        "type": "loki",
+        "uid": "loki"
+      },
+      "targets": [
+        {
+          "expr": "sum(rate({service=~\"$service\"} | json | message=~\"crawl\\.reclaim\\.completed\" | crawl_profile_id=~\"$crawl_profile\" [2m])) * 60",
+          "legendFormat": "{{service}}",
+          "refId": "A",
+          "queryType": "range"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "min": 0,
+          "custom": {
+            "lineWidth": 2,
+            "fillOpacity": 10
+          }
+        }
+      }
+    },
+    {
+      "id": 29,
+      "title": "Crawl Task Failure Rate %",
+      "type": "timeseries",
+      "gridPos": {
+        "h": 6,
+        "w": 12,
+        "x": 0,
+        "y": 156
+      },
+      "datasource": {
+        "type": "loki",
+        "uid": "loki"
+      },
+      "targets": [
+        {
+          "expr": "sum by (service) (rate({service=~\"$service\"} | json task_name=\"task.name\" | task_name=~\"crawl_.*\" | message=\"task_failed\" [2m])) / sum by (service) (rate({service=~\"$service\"} | json task_name=\"task.name\" | task_name=~\"crawl_.*\" | message=\"task_started\" [2m])) * 100",
+          "legendFormat": "{{service}}",
+          "refId": "A",
+          "queryType": "range"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent",
+          "min": 0,
+          "custom": {
+            "lineWidth": 2,
+            "fillOpacity": 10
+          }
+        }
+      }
+    },
+    {
+      "id": 30,
+      "title": "Crawl Task Retries",
+      "type": "timeseries",
+      "gridPos": {
+        "h": 6,
+        "w": 12,
+        "x": 12,
+        "y": 156
+      },
+      "datasource": {
+        "type": "loki",
+        "uid": "loki"
+      },
+      "targets": [
+        {
+          "expr": "sum by (service) (rate({service=~\"$service\"} | json task_name=\"task.name\" | task_name=~\"crawl_.*\" | task_retry > 0 [2m]))",
+          "legendFormat": "{{service}}",
+          "refId": "A",
+          "queryType": "range"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "min": 0,
+          "custom": {
+            "lineWidth": 2,
+            "fillOpacity": 10
+          }
+        }
+      }
+    },
+    {
+      "id": 31,
+      "title": "Crawl Errors / sec",
+      "type": "timeseries",
+      "gridPos": {
+        "h": 6,
+        "w": 24,
+        "x": 0,
+        "y": 168
+      },
+      "datasource": {
+        "type": "loki",
+        "uid": "loki"
+      },
+      "targets": [
+        {
+          "expr": "sum(rate({service=~\"$service\"} | json | message=~\"crawl\\..*\" | level=\"ERROR\" [2m]))",
+          "legendFormat": "{{service}}",
+          "refId": "A",
+          "queryType": "range"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "min": 0,
+          "custom": {
+            "lineWidth": 2,
+            "fillOpacity": 10
+          }
+        }
+      }
+    },
+    {
+      "id": 32,
+      "title": "Recent Crawl Failures",
+      "type": "logs",
+      "gridPos": {
+        "h": 10,
+        "w": 24,
+        "x": 0,
+        "y": 180
+      },
+      "datasource": {
+        "type": "loki",
+        "uid": "loki"
+      },
+      "targets": [
+        {
+          "expr": "{service=~\"$service\"} | json | message=~\"crawl\\..*failed|crawl\\.url\\.outcome\" | crawl_outcome=\"failed\" | crawl_profile_id=~\"$crawl_profile\"",
+          "refId": "A",
+          "queryType": "logs"
+        }
+      ],
+      "options": {
+        "showTime": true,
+        "wrapLogMessage": true,
+        "sortOrder": "Descending"
+      }
+    }
+  ]
+}

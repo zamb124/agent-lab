@@ -344,7 +344,7 @@ export class LandingHeader extends PlatformElement {
                 display: none;
                 position: fixed;
                 inset: 0;
-                top: 71px;
+                top: var(--landing-header-height, 71px);
                 box-sizing: border-box;
                 padding: clamp(16px, 4vw, 28px) clamp(16px, 5vw, 24px) max(24px, env(safe-area-inset-bottom));
                 flex-direction: column;
@@ -354,8 +354,8 @@ export class LandingHeader extends PlatformElement {
                 background: var(--landing-mobile-menu-bg, #0f0f0f);
                 overflow-y: auto;
                 -webkit-overflow-scrolling: touch;
-                min-height: calc(100vh - 71px);
-                min-height: calc(100dvh - 71px);
+                min-height: calc(100vh - var(--landing-header-height, 71px));
+                min-height: calc(100dvh - var(--landing-header-height, 71px));
                 max-width: 100vw;
             }
             
@@ -700,12 +700,32 @@ export class LandingHeader extends PlatformElement {
     connectedCallback() {
         super.connectedCallback();
         this._handleOutsideClick = this._handleOutsideClick.bind(this);
+        this._syncLandingHeaderHeight = this._syncLandingHeaderHeight.bind(this);
         document.addEventListener('click', this._handleOutsideClick);
+    }
+
+    firstUpdated() {
+        this._headerResizeObserver = new ResizeObserver(() => {
+            this._syncLandingHeaderHeight();
+        });
+        this._headerResizeObserver.observe(this);
+        this._syncLandingHeaderHeight();
     }
 
     disconnectedCallback() {
         document.removeEventListener('click', this._handleOutsideClick);
+        if (this._headerResizeObserver !== undefined) {
+            this._headerResizeObserver.disconnect();
+        }
         super.disconnectedCallback();
+    }
+
+    _syncLandingHeaderHeight() {
+        const headerHeightPx = Math.ceil(this.getBoundingClientRect().height);
+        if (headerHeightPx <= 0) {
+            throw new Error('landing-header: header height must be positive');
+        }
+        document.documentElement.style.setProperty('--landing-header-height', `${headerHeightPx}px`);
     }
 
     _handleOutsideClick(e) {

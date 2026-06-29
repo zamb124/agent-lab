@@ -17,6 +17,7 @@ from apps.search_worker.tasks.task_names import (
     CRAWL_RECLAIM_STALE_FETCHING_TASK_NAME,
 )
 from core.context import clear_context, set_context
+from core.crawl.logging_events import log_crawl_reclaim_completed
 from core.crawl.models import CrawlOrchestratorTickResult, CrawlSeedSource, SeedImportRequest
 from core.types import JsonObject, require_json_object
 
@@ -214,6 +215,13 @@ async def crawl_reclaim_stale_fetching(
                     status="completed",
                 )
         pending_urls = await container.crawl_url_repository.count_pending_for_profile(crawl_profile_id)
+        log_crawl_reclaim_completed(
+            crawl_profile_id=crawl_profile_id,
+            stale_jobs_finished=stale_jobs,
+            reclaimed_fetching=reclaimed_fetching,
+            requeued_failed=requeued_failed,
+            pending_urls=pending_urls,
+        )
         if pending_urls > 0:
             tick_task = broker.find_task(CRAWL_ORCHESTRATOR_TICK_TASK_NAME)
             if tick_task is None:

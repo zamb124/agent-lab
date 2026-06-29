@@ -26,12 +26,9 @@ from core.crawl.taxonomy import (
     coerce_filter_metadata_for_taxonomy,
     validate_filter_metadata_against_taxonomy,
 )
-from core.logging import get_logger
 from core.search.index_models import SearchIndexCrawlTaxonomy
 from core.tracing.operation_span import traced_operation
 from core.types import JsonObject
-
-logger = get_logger(__name__)
 
 _ENRICHMENT_SYSTEM_PROMPT = (
     "You extract structured crawl index records from web page markdown.\n"
@@ -235,14 +232,6 @@ class CrawlPageEnrichmentService:
                     "llm_latency_ms": latency_ms,
                     "llm_model_used": used_model,
                 }
-            )
-            logger.info(
-                "crawl enrichment completed url=%s provider=%s model=%s chunks=%s latency_ms=%s",
-                url,
-                enrichment_provider,
-                used_model,
-                len(enriched_page.chunks),
-                latency_ms,
             )
             return enriched_page
 

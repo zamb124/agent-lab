@@ -97,6 +97,8 @@
         "error_timeout_text": "Query preparation exceeded the limit. The timeout is now higher, but this run needs to be retried.",
         "error_service_title": "Search service is unavailable",
         "error_service_text": "Could not connect to the search service. Make sure the service is running, then retry the query.",
+        "error_runtime_title": "Code execution service is unavailable",
+        "error_runtime_text": "Could not run the search preparation code. Retry the query in a few seconds.",
         "error_stream_title": "Search stream ended early",
         "error_stream_text": "The SSE session closed before the final answer arrived. Retry the query to open a new stream.",
         "error_generic_title": "Search did not complete",

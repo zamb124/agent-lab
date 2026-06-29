@@ -207,6 +207,17 @@ class LoggingConfig(BaseModel):
 
 `PlatformHttpErrorEnvelopeMiddleware` сливает в JSON-тело ответов с HTTP ≥ 400 поля `request_id`, `trace_id`, `service`. Если `company_id == "system"` (`request.state.company`) и заданы `logging.grafana_public_url` (без завершающего `/`) и `logging.grafana_loki_datasource_uid`, добавляется `observability.logs_explore_url` (LogQL по whitelist сервисов как в `core.clients.loki_client`; при наличии `trace_id` — фильтр по нему, иначе — `request_id`). Поля `observability` без доверенной выдачи сервер удаляет. Конструктор Explore — `core.observability.grafana_explore`. Клиент — `core/frontend/static/lib/events/http.js` (`HttpError`).
 
+## Crawl / RuNet indexing events
+
+Константы — `core/logging/attributes.py` (`EVENT_CRAWL_*`, `LOG_CRAWL_*`). Эмиссия — `core/crawl/logging_events.py` (orchestrator, fetch, ingest, enrichment, reclaim, bootstrap).
+
+Примеры LogQL (Grafana dashboard `crawl-indexing`):
+
+```logql
+sum by (crawl_outcome) (rate({service="search-worker"} | json | message="crawl.url.outcome" [2m])) * 60
+quantile_over_time(0.95, {service="search-worker"} | json | message="crawl.fetch.completed" | unwrap fetch_duration_ms [5m]) by (fetch_transport)
+```
+
 ## CI: `make check-logging` (`scripts/check_logging_canon.sh`)
 
 Exit 1 на нарушении:

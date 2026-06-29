@@ -77,3 +77,9 @@ Ownership: `apps/search` + `apps/search_worker` + `platform_search`.
 - Frontend proxy: `POST /frontend/api/crawl-report/domains/{crawl_domain_id}/run`
 - `crawl_urls.fetch_transport`: `http` | `browser` — UI badge в Crawl Report.
 - Job counters: `urls_enriched`, `urls_enrichment_failed`.
+
+## Crawl observability (Loki / Grafana)
+
+- Structured crawl events — `core/logging/attributes.py` (`crawl.tick.*`, `crawl.url.outcome`, `crawl.fetch.*`, `crawl.ingest.*`, `crawl.enrich.*`, …) и эмиссия через `core/crawl/logging_events.py`.
+- Grafana dashboard **Crawl / RuNet Indexing** (`deploy/helm/agent-lab/files/dashboards/11-crawl-indexing.json`, uid `crawl-indexing`): throughput, failures, fetch transport, ingest/enrichment latency, reclaim/seed, TaskIQ crawl tasks.
+- Loki `service` label: `search-worker` (pipeline), `browser` (fallback fetch), `rag` (ingest path), `scheduler-api` (cron schedules).

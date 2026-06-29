@@ -46,6 +46,8 @@ export class PublicSearchPage extends PlatformPage {
             :host {
                 display: block;
                 min-height: var(--app-vh, 100vh);
+                color: var(--landing-text, var(--text-primary));
+                background: var(--landing-bg, var(--marketing-page-bg));
             }
 
             .marketing-page-container {
@@ -189,13 +191,15 @@ export class PublicSearchPage extends PlatformPage {
 
             .search-head.is-active {
                 position: sticky;
-                top: 72px;
+                top: var(--landing-header-height, 72px);
                 z-index: 16;
                 padding: 12px clamp(18px, 4vw, 56px);
-                background: transparent;
+                background: var(--landing-bg, var(--marketing-page-bg));
                 border-bottom: 0;
                 backdrop-filter: none;
                 pointer-events: none;
+                gap: 0;
+                display: block;
             }
 
             .search-title {
@@ -224,9 +228,9 @@ export class PublicSearchPage extends PlatformPage {
             .search-shell {
                 width: min(920px, calc(100vw - 32px));
                 border-radius: 30px;
-                background: rgba(31, 31, 31, 0.92);
-                border: 1px solid rgba(255, 255, 255, 0.10);
-                box-shadow: 0 26px 80px rgba(0, 0, 0, 0.42);
+                background: var(--landing-search-bg, var(--glass-bg-strong));
+                border: 1px solid var(--landing-panel-border, var(--glass-border-medium));
+                box-shadow: var(--landing-search-shadow, var(--glass-shadow-ultra));
                 backdrop-filter: blur(28px);
                 padding: 10px;
                 box-sizing: border-box;
@@ -248,7 +252,7 @@ export class PublicSearchPage extends PlatformPage {
                 width: min(980px, calc(100vw - 32px));
                 border-radius: 24px;
                 padding: 8px;
-                box-shadow: 0 18px 54px rgba(0, 0, 0, 0.36);
+                box-shadow: var(--landing-elevated-shadow, var(--glass-shadow-strong));
                 pointer-events: auto;
             }
 
@@ -289,7 +293,7 @@ export class PublicSearchPage extends PlatformPage {
             .search-icon {
                 display: grid;
                 place-items: center;
-                color: rgba(245, 245, 243, 0.66);
+                color: var(--landing-text-subtle, var(--text-tertiary));
             }
 
             input[type='search'] {
@@ -298,7 +302,7 @@ export class PublicSearchPage extends PlatformPage {
                 border: 0;
                 outline: none;
                 background: transparent;
-                color: #fff;
+                color: var(--landing-text, var(--text-primary));
                 font: 500 20px/1.25 'Fira Sans', system-ui, sans-serif;
                 letter-spacing: 0;
             }
@@ -309,7 +313,7 @@ export class PublicSearchPage extends PlatformPage {
             }
 
             input[type='search']::placeholder {
-                color: rgba(245, 245, 243, 0.48);
+                color: var(--landing-text-faint, var(--text-disabled));
             }
 
             .send-button,
@@ -320,15 +324,15 @@ export class PublicSearchPage extends PlatformPage {
                 border-radius: 50%;
                 display: grid;
                 place-items: center;
-                color: #fff;
-                background: rgba(87, 104, 254, 0.95);
+                color: var(--landing-on-primary, var(--text-inverse));
+                background: var(--landing-primary, var(--accent));
                 cursor: pointer;
                 transition: transform 180ms ease, background 180ms ease, opacity 180ms ease;
             }
 
             .send-button:hover,
             .icon-tool:hover {
-                background: #6877ff;
+                background: color-mix(in srgb, var(--landing-primary, var(--accent)) 88%, white);
                 transform: translateY(-1px);
             }
 
@@ -372,8 +376,8 @@ export class PublicSearchPage extends PlatformPage {
                 align-items: center;
                 gap: 8px;
                 padding: 0 13px;
-                color: rgba(245, 245, 243, 0.72);
-                background: rgba(255, 255, 255, 0.06);
+                color: var(--landing-text-subtle, var(--text-tertiary));
+                background: var(--landing-panel-bg-strong, var(--glass-bg-medium));
                 font: 500 14px/1 'Fira Sans', system-ui, sans-serif;
                 cursor: pointer;
                 transition: background 180ms ease, color 180ms ease, transform 180ms ease;
@@ -388,22 +392,28 @@ export class PublicSearchPage extends PlatformPage {
             }
 
             .mode-chip:hover {
-                background: rgba(255, 255, 255, 0.12);
-                color: #fff;
+                background: var(--landing-panel-border-strong, var(--glass-border-strong));
+                color: var(--landing-text, var(--text-primary));
                 transform: translateY(-1px);
             }
 
             .mode-chip[aria-pressed='true'] {
-                color: #fff;
-                background: rgba(87, 104, 254, 0.34);
-                box-shadow: inset 0 0 0 1px rgba(137, 149, 255, 0.36);
+                color: var(--landing-on-primary, var(--text-inverse));
+                background: color-mix(in srgb, var(--landing-primary, var(--accent)) 36%, transparent);
+                box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--landing-primary, var(--accent)) 36%, transparent);
             }
 
             .icon-tool {
                 width: 36px;
                 height: 36px;
-                color: rgba(245, 245, 243, 0.76);
-                background: rgba(255, 255, 255, 0.07);
+                color: var(--landing-text-subtle, var(--text-tertiary));
+                background: var(--landing-panel-bg-strong, var(--glass-bg-medium));
+            }
+
+            .icon-tool:hover {
+                background: var(--landing-panel-border-strong, var(--glass-border-strong));
+                color: var(--landing-text, var(--text-primary));
+                transform: translateY(-1px);
             }
 
             .search-head.is-active .icon-tool {
@@ -516,8 +526,8 @@ export class PublicSearchPage extends PlatformPage {
             .sources-panel,
             .suggest-panel,
             .provider-panel {
-                border: 1px solid rgba(255, 255, 255, 0.08);
-                background: rgba(22, 22, 22, 0.82);
+                border: 1px solid var(--landing-panel-border, var(--glass-border-medium));
+                background: var(--landing-panel-bg, var(--glass-bg-subtle));
                 backdrop-filter: blur(20px);
                 border-radius: 20px;
                 box-sizing: border-box;
@@ -542,7 +552,7 @@ export class PublicSearchPage extends PlatformPage {
                 align-items: center;
                 gap: 8px;
                 margin: 0 0 10px;
-                color: rgba(245, 245, 243, 0.58);
+                color: var(--landing-text-muted, var(--text-tertiary));
                 font-size: 12px;
                 line-height: 1;
                 text-transform: uppercase;
@@ -565,7 +575,7 @@ export class PublicSearchPage extends PlatformPage {
             .answer-text {
                 margin: 0;
                 overflow-wrap: anywhere;
-                color: rgba(255, 255, 255, 0.92);
+                color: var(--landing-text, var(--text-primary));
                 font-size: 16px;
                 line-height: 1.56;
             }
@@ -769,7 +779,7 @@ export class PublicSearchPage extends PlatformPage {
                 min-height: 54px;
                 display: grid;
                 align-items: center;
-                color: rgba(245, 245, 243, 0.48);
+                color: var(--landing-text-faint, var(--text-disabled));
                 font-size: 16px;
                 line-height: 1.5;
             }
@@ -796,8 +806,8 @@ export class PublicSearchPage extends PlatformPage {
                 border-radius: 16px;
                 color: inherit;
                 text-decoration: none;
-                background: rgba(255, 255, 255, 0.045);
-                border: 1px solid rgba(255, 255, 255, 0.07);
+                background: var(--landing-panel-bg-strong, var(--glass-bg-medium));
+                border: 1px solid var(--landing-panel-border, var(--glass-border-subtle));
                 transition: transform 180ms ease, background 180ms ease, border-color 180ms ease;
                 animation: resultIn 320ms ease both;
             }
@@ -1112,7 +1122,12 @@ export class PublicSearchPage extends PlatformPage {
             .skeleton {
                 height: 86px;
                 border-radius: var(--radius-xl, 20px);
-                background: linear-gradient(90deg, rgba(255,255,255,0.05), rgba(255,255,255,0.12), rgba(255,255,255,0.05));
+                background: linear-gradient(
+                    90deg,
+                    var(--glass-border-subtle),
+                    var(--glass-border-medium),
+                    var(--glass-border-subtle)
+                );
                 background-size: 220% 100%;
                 animation: skeleton 1.2s ease infinite;
             }
@@ -1371,6 +1386,56 @@ export class PublicSearchPage extends PlatformPage {
                 }
             }
 
+            @media (max-width: 767px) {
+                .page.is-search-active {
+                    min-height: 0;
+                }
+
+                .search-page-main:has(.page.is-search-active) {
+                    flex: 0 1 auto;
+                }
+
+                .marketing-page-container:has(.page.is-search-active) {
+                    min-height: 0;
+                }
+
+                .search-head.is-active {
+                    position: static;
+                    top: auto;
+                    z-index: 16;
+                    padding: 0;
+                    margin: 0;
+                    gap: 0;
+                    display: block;
+                    width: 100%;
+                    background: var(--marketing-header-bg, var(--landing-search-bg));
+                }
+
+                .search-head.is-active .search-shell {
+                    animation: none;
+                    transform: none;
+                    transition: none;
+                    filter: none;
+                    will-change: auto;
+                    background: transparent;
+                    box-shadow: none;
+                    border: 0;
+                    border-bottom: 1px solid var(--landing-panel-border, var(--glass-border-medium));
+                }
+
+                .page[data-entry='landing'] .search-head.is-active .search-shell {
+                    animation: none;
+                }
+
+                .page[data-entry='landing'] .results-wrap {
+                    animation: none;
+                }
+
+                .results-wrap {
+                    padding-top: 0;
+                }
+            }
+
             @media (max-width: 640px) {
                 .search-head {
                     padding: 0;
@@ -1393,15 +1458,17 @@ export class PublicSearchPage extends PlatformPage {
                     padding: 8px 12px;
                     box-shadow: none;
                     border: 0;
-                    border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+                    border-bottom: 1px solid var(--landing-panel-border, var(--glass-border-medium));
+                    background: var(--marketing-header-bg, var(--landing-search-bg));
                 }
 
                 .search-head.is-active {
-                    position: sticky;
-                    top: calc(var(--vv-offset-top, 0px) + 64px);
+                    position: static;
+                    top: auto;
                     z-index: 16;
                     padding: 0;
                     margin: 0;
+                    gap: 0;
                 }
 
                 .search-head.is-active .search-shell {
@@ -1410,7 +1477,8 @@ export class PublicSearchPage extends PlatformPage {
                     padding: 8px 12px;
                     box-shadow: none;
                     border: 0;
-                    border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+                    border-bottom: 1px solid var(--landing-panel-border, var(--glass-border-medium));
+                    background: transparent;
                 }
 
                 .search-head.is-active.is-chrome-hidden .search-shell {
@@ -1477,9 +1545,10 @@ export class PublicSearchPage extends PlatformPage {
                     border-left: 0;
                     border-right: 0;
                     border-top: 0;
-                    border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+                    border-bottom: 1px solid var(--landing-panel-border, var(--glass-border-medium));
                     box-shadow: none;
                     backdrop-filter: none;
+                    background: var(--landing-bg, var(--marketing-page-bg));
                 }
 
                 .answer-panel {
@@ -1507,10 +1576,19 @@ export class PublicSearchPage extends PlatformPage {
                     margin-top: 0;
                 }
 
+                .source-list:has(> .skeleton) {
+                    gap: 10px;
+                    margin-top: 8px;
+                }
+
+                .source-list > .skeleton {
+                    border-radius: var(--radius-lg, 16px);
+                }
+
                 .source-card {
                     border-radius: 0;
                     border: 0;
-                    border-bottom: 1px solid rgba(255, 255, 255, 0.07);
+                    border-bottom: 1px solid var(--landing-panel-border, var(--glass-border-subtle));
                     background: transparent;
                     padding: 14px 0;
                     box-shadow: none;
@@ -1996,6 +2074,7 @@ export class PublicSearchPage extends PlatformPage {
         if (
             kind === 'search_timeout'
             || kind === 'search_service_unavailable'
+            || kind === 'search_runtime_unavailable'
             || kind === 'search_stream_incomplete'
             || kind === 'search_quota_exhausted'
             || kind === 'search_failed'
@@ -2013,6 +2092,9 @@ export class PublicSearchPage extends PlatformPage {
         if (errorKind === 'search_service_unavailable') {
             return 'search_page.error_service_title';
         }
+        if (errorKind === 'search_runtime_unavailable') {
+            return 'search_page.error_runtime_title';
+        }
         if (errorKind === 'search_stream_incomplete') {
             return 'search_page.error_stream_title';
         }
@@ -2029,6 +2111,9 @@ export class PublicSearchPage extends PlatformPage {
         }
         if (errorKind === 'search_service_unavailable') {
             return 'search_page.error_service_text';
+        }
+        if (errorKind === 'search_runtime_unavailable') {
+            return 'search_page.error_runtime_text';
         }
         if (errorKind === 'search_stream_incomplete') {
             return 'search_page.error_stream_text';
@@ -2407,13 +2492,14 @@ export class PublicSearchPage extends PlatformPage {
         const searchHeadClass = active
             ? `search-head is-active${this._searchChromeHidden ? ' is-chrome-hidden' : ''}`
             : 'search-head';
+        const pageClass = active ? 'page is-search-active' : 'page';
         return html`
             <landing-header></landing-header>
             <div class="marketing-page-container">
                 <div class="search-page-main">
-                    <div class="page" data-entry=${this._entryAnimation}>
+                    <div class=${pageClass} data-entry=${this._entryAnimation}>
                         <section class=${searchHeadClass}>
-                            <h1 class="search-title">${this.t('search_page.title')}</h1>
+                            ${active ? nothing : html`<h1 class="search-title">${this.t('search_page.title')}</h1>`}
                             ${this._renderComposer()}
                         </section>
                         ${this._renderBody(stream)}

@@ -15,6 +15,7 @@ set_settings(_search_worker_settings)
 from taskiq import TaskiqState  # noqa: E402
 
 from apps.search.container import get_search_container  # noqa: E402
+from core.crawl.logging_events import log_crawl_bootstrap  # noqa: E402
 from apps.search_worker.broker import broker as worker_app, recovery_handler  # noqa: E402
 from apps.search_worker.config import get_settings  # noqa: E402
 from core.billing import set_billing_service  # noqa: E402
@@ -49,9 +50,7 @@ async def search_worker_startup(state: TaskiqState) -> None:
         logger.info("worker.tracing_initialized", service="search_worker")
 
     bootstrap_result = await container.crawl_bootstrap_service.ensure_crawl_pipeline_ready()
-    logger.info(
-        "worker.crawl_bootstrap",
-        service="search_worker",
+    log_crawl_bootstrap(
         crawl_profile_id=bootstrap_result.crawl_profile_id,
         action=bootstrap_result.action,
         domain_count=bootstrap_result.domain_count,

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import time
 from collections.abc import Awaitable, Callable
 from datetime import UTC, datetime, timedelta
 from typing import Literal
@@ -32,6 +33,18 @@ from core.crawl.enrichment_skip import (
     should_skip_crawl_url_after_fetch,
 )
 from core.crawl.errors import CrawlExtractTooShortError
+from core.crawl.logging_events import (
+    log_crawl_discover_completed,
+    log_crawl_discover_failed,
+    log_crawl_domain_scheduled,
+    log_crawl_enrich_completed,
+    log_crawl_enrich_failed,
+    log_crawl_seed_completed,
+    log_crawl_tick_completed,
+    log_crawl_tick_failed,
+    log_crawl_tick_started,
+    log_crawl_url_outcome,
+)
 from core.crawl.models import (
     CrawlDomain,
     CrawlDomainRunResponse,
@@ -100,6 +113,13 @@ class CrawlOrchestratorService:
         job = await self._crawl_job_repository.start(crawl_profile_id, trigger, schedule_task_id)
         trace_id = f"crawl:tick:{job.crawl_job_id}"
         set_context(await self._build_system_context(trace_id))
+        search_index_id = profile_bundle.search_index.search_index_id
+        log_crawl_tick_started(
+            crawl_profile_id=crawl_profile_id,
+            crawl_job_id=job.crawl_job_id,
+            search_index_id=search_index_id,
+            crawl_trigger=trigger,
+        )
         try:
             await self.ensure_rag_namespace(profile_bundle.search_index)
             now = datetime.now(UTC)
@@ -148,6 +168,14 @@ class CrawlOrchestratorService:
                 )
             _ = await self._crawl_job_repository.finish(job.crawl_job_id, status="completed")
             pending_urls = await self._crawl_url_repository.count_pending_for_profile(crawl_profile_id)
+            log_crawl_tick_completed(
+                crawl_profile_id=crawl_profile_id,
+                crawl_job_id=job.crawl_job_id,
+                search_index_id=search_index_id,
+                crawl_trigger=trigger,
+                domains_scheduled=len(domains),
+                pending_urls=pending_urls,
+            )
             if pending_urls > 0:
                 await _enqueue_task(CRAWL_ORCHESTRATOR_TICK_TASK_NAME, crawl_profile_id)
             return {
@@ -156,8 +184,16 @@ class CrawlOrchestratorService:
                 "domains_scheduled": len(domains),
                 "status": "completed",
             }
-        except Exception:
+        except Exception as exc:
             _ = await self._crawl_job_repository.finish(job.crawl_job_id, status="failed")
+            log_crawl_tick_failed(
+                crawl_profile_id=crawl_profile_id,
+                crawl_job_id=job.crawl_job_id,
+                search_index_id=search_index_id,
+                crawl_trigger=trigger,
+                exception_type=type(exc).__name__,
+                exception_message=str(exc),
+            )
             raise
         finally:
             clear_context()
@@ -170,6 +206,7 @@ class CrawlOrchestratorService:
     ) -> None:
         profile_bundle = await self._crawl_profile_repository.get_with_index(crawl_profile_id)
         domain = await self._crawl_domain_repository.get(crawl_domain_id)
+        search_index_id = profile_bundle.search_index.search_index_id
         url_filter = build_url_filter(profile_bundle.profile, domain)
         try:
             entries = await discover_sitemap_urls(
@@ -187,12 +224,32 @@ class CrawlOrchestratorService:
                 last_error=str(exc),
                 status="error",
             )
+            log_crawl_discover_failed(
+                crawl_profile_id=crawl_profile_id,
+                crawl_job_id=crawl_job_id,
+                crawl_domain_id=crawl_domain_id,
+                search_index_id=search_index_id,
+                domain=domain.domain,
+                sitemap_error_kind=type(exc).__name__,
+                exception_message=str(exc),
+            )
             raise
         stats = await self._crawl_url_repository.upsert_from_sitemap(crawl_domain_id, entries)
         await self._crawl_domain_repository.mark_discovered(crawl_domain_id, datetime.now(UTC))
+        urls_discovered = stats.inserted + stats.updated
         await self._crawl_job_repository.increment(
             crawl_job_id,
-            urls_discovered=stats.inserted + stats.updated,
+            urls_discovered=urls_discovered,
+        )
+        log_crawl_discover_completed(
+            crawl_profile_id=crawl_profile_id,
+            crawl_job_id=crawl_job_id,
+            crawl_domain_id=crawl_domain_id,
+            search_index_id=search_index_id,
+            domain=domain.domain,
+            urls_discovered=urls_discovered,
+            urls_inserted=stats.inserted,
+            urls_updated=stats.updated,
         )
         await self._enqueue_domain_fetch(
             crawl_domain_id=crawl_domain_id,
@@ -238,6 +295,18 @@ class CrawlOrchestratorService:
                     enriched_content_hash=crawl_url.enriched_content_hash,
                 )
                 await self._crawl_job_repository.increment(crawl_job_id, urls_skipped=1)
+                log_crawl_url_outcome(
+                    crawl_profile_id=crawl_profile_id,
+                    crawl_job_id=crawl_job_id,
+                    crawl_domain_id=crawl_domain_id,
+                    crawl_url_id=crawl_url.crawl_url_id,
+                    search_index_id=profile_bundle.search_index.search_index_id,
+                    domain=domain.domain,
+                    canonical_url=crawl_url.canonical_url,
+                    crawl_outcome="skipped",
+                    crawl_skip_reason="content_unchanged",
+                    content_hash_changed=False,
+                )
             else:
                 await self._fetch_and_index_url(
                     crawl_url=crawl_url,
@@ -283,6 +352,7 @@ class CrawlOrchestratorService:
     ) -> None:
         profile = profile_bundle.profile
         prompt_version = self._crawl_config.enrichment.prompt_version
+        search_index_id = profile_bundle.search_index.search_index_id
         try:
             fetched = await self._fetch_service.fetch_markdown(
                 crawl_url.url,
@@ -305,6 +375,20 @@ class CrawlOrchestratorService:
                     enriched_content_hash=crawl_url.enriched_content_hash,
                 )
                 await self._crawl_job_repository.increment(crawl_job_id, urls_skipped=1)
+                log_crawl_url_outcome(
+                    crawl_profile_id=crawl_profile_id,
+                    crawl_job_id=crawl_job_id,
+                    crawl_domain_id=domain.crawl_domain_id,
+                    crawl_url_id=crawl_url.crawl_url_id,
+                    search_index_id=search_index_id,
+                    domain=domain.domain,
+                    canonical_url=fetched.canonical_url,
+                    crawl_outcome="skipped",
+                    crawl_skip_reason="content_unchanged",
+                    fetch_transport=fetched.fetch_transport,
+                    extract_chars=len(fetched.markdown.strip()),
+                    content_hash_changed=False,
+                )
                 return
             enriched_page = None
             payload = CrawlIngestPayload(fetched=fetched, enriched_page=enriched_page)
@@ -326,6 +410,20 @@ class CrawlOrchestratorService:
                 extract_structural_signals=fetched.structural_signals,
             )
             await self._crawl_job_repository.increment(crawl_job_id, urls_indexed=1)
+            log_crawl_url_outcome(
+                crawl_profile_id=crawl_profile_id,
+                crawl_job_id=crawl_job_id,
+                crawl_domain_id=domain.crawl_domain_id,
+                crawl_url_id=crawl_url.crawl_url_id,
+                search_index_id=search_index_id,
+                domain=domain.domain,
+                canonical_url=fetched.canonical_url,
+                crawl_outcome="indexed",
+                fetch_transport=fetched.fetch_transport,
+                extract_chars=len(fetched.markdown.strip()),
+                content_hash_changed=True,
+                document_id=document_id,
+            )
             if profile.llm_enrichment_enabled:
                 await _enqueue_task(
                     CRAWL_ENRICH_URL_TASK_NAME,
@@ -339,6 +437,17 @@ class CrawlOrchestratorService:
                 None,
             )
             await self._crawl_job_repository.increment(crawl_job_id, urls_skipped=1)
+            log_crawl_url_outcome(
+                crawl_profile_id=crawl_profile_id,
+                crawl_job_id=crawl_job_id,
+                crawl_domain_id=domain.crawl_domain_id,
+                crawl_url_id=crawl_url.crawl_url_id,
+                search_index_id=search_index_id,
+                domain=domain.domain,
+                canonical_url=crawl_url.canonical_url,
+                crawl_outcome="skipped",
+                crawl_skip_reason="extract_too_short",
+            )
         except Exception as exc:
             await self._crawl_url_repository.mark_failed(
                 crawl_url.crawl_url_id,
@@ -347,6 +456,20 @@ class CrawlOrchestratorService:
                 max_attempts=self._crawl_config.max_fetch_attempts,
             )
             await self._crawl_job_repository.increment(crawl_job_id, errors=1)
+            updated_url = await self._crawl_url_repository.get(crawl_url.crawl_url_id)
+            log_crawl_url_outcome(
+                crawl_profile_id=crawl_profile_id,
+                crawl_job_id=crawl_job_id,
+                crawl_domain_id=domain.crawl_domain_id,
+                crawl_url_id=crawl_url.crawl_url_id,
+                search_index_id=search_index_id,
+                domain=domain.domain,
+                canonical_url=crawl_url.canonical_url,
+                crawl_outcome="failed",
+                fetch_attempts=updated_url.fetch_attempts,
+                exception_type=type(exc).__name__,
+                exception_message=str(exc),
+            )
 
     async def enrich_one_url(
         self,
@@ -400,6 +523,7 @@ class CrawlOrchestratorService:
             structural_signals=structural_signals,
         )
         try:
+            enrich_started_at = time.monotonic()
             enriched_page = await self._page_enrichment_service.enrich_markdown(
                 markdown=extract_markdown,
                 url=url,
@@ -428,12 +552,63 @@ class CrawlOrchestratorService:
                 enrichment_snapshot=enrichment_snapshot_from_enriched_page(enriched_page),
             )
             await self._crawl_job_repository.increment(crawl_job_id, urls_enriched=1)
+            enrichment_duration_ms = int((time.monotonic() - enrich_started_at) * 1000)
+            enrichment_provider = self._crawl_config.enrichment.provider.strip()
+            log_crawl_enrich_completed(
+                crawl_profile_id=crawl_profile_id,
+                crawl_job_id=crawl_job_id,
+                crawl_url_id=crawl_url_id,
+                crawl_domain_id=crawl_url.crawl_domain_id,
+                search_index_id=profile_bundle.search_index.search_index_id,
+                domain=domain.domain,
+                canonical_url=canonical_url,
+                enrichment_provider=enrichment_provider,
+                enrichment_model=enriched_page.enrichment_model,
+                enrichment_chunk_count=len(enriched_page.chunks),
+                enrichment_prompt_version=enriched_page.enrichment_prompt_version,
+                enrichment_duration_ms=enrichment_duration_ms,
+            )
+            log_crawl_url_outcome(
+                crawl_profile_id=crawl_profile_id,
+                crawl_job_id=crawl_job_id,
+                crawl_domain_id=crawl_url.crawl_domain_id,
+                crawl_url_id=crawl_url_id,
+                search_index_id=profile_bundle.search_index.search_index_id,
+                domain=domain.domain,
+                canonical_url=canonical_url,
+                crawl_outcome="enriched",
+                document_id=crawl_url.document_id,
+            )
         except Exception as exc:
             await self._crawl_url_repository.mark_enrichment_failed(crawl_url_id, str(exc))
             await self._crawl_job_repository.increment(
                 crawl_job_id,
                 errors=1,
                 urls_enrichment_failed=1,
+            )
+            log_crawl_enrich_failed(
+                crawl_profile_id=crawl_profile_id,
+                crawl_job_id=crawl_job_id,
+                crawl_url_id=crawl_url_id,
+                crawl_domain_id=crawl_url.crawl_domain_id,
+                search_index_id=profile_bundle.search_index.search_index_id,
+                domain=domain.domain,
+                canonical_url=canonical_url,
+                exception_type=type(exc).__name__,
+                exception_message=str(exc),
+            )
+            log_crawl_url_outcome(
+                crawl_profile_id=crawl_profile_id,
+                crawl_job_id=crawl_job_id,
+                crawl_domain_id=crawl_url.crawl_domain_id,
+                crawl_url_id=crawl_url_id,
+                search_index_id=profile_bundle.search_index.search_index_id,
+                domain=domain.domain,
+                canonical_url=canonical_url,
+                crawl_outcome="enrichment_failed",
+                document_id=crawl_url.document_id,
+                exception_type=type(exc).__name__,
+                exception_message=str(exc),
             )
             raise
 
@@ -485,6 +660,13 @@ class CrawlOrchestratorService:
                 crawl_profile_id,
                 1,
             )
+        log_crawl_domain_scheduled(
+            crawl_profile_id=crawl_profile_id,
+            crawl_job_id=crawl_job_id,
+            crawl_domain_id=crawl_domain_id,
+            parallel_fetch_enqueued=parallel,
+            url_budget=url_budget,
+        )
 
     def _effective_refresh_interval(
         self,
@@ -550,13 +732,19 @@ class CrawlOrchestratorService:
     async def import_seed(self, body: SeedImportRequest) -> SeedImportResult:
         if body.seed_source != "tranco":
             raise ValueError(f"unsupported seed_source: {body.seed_source}")
-        return await import_tranco_domains(
+        result = await import_tranco_domains(
             body.crawl_profile_id,
             crawl_domain_repository=self._crawl_domain_repository,
             limit=body.tranco_limit,
             ru_com_whitelist=tuple(self._crawl_config.ru_com_whitelist),
             skip_categories=tuple(self._crawl_config.skip_categories),
         )
+        log_crawl_seed_completed(
+            crawl_profile_id=body.crawl_profile_id,
+            seed_imported=result.imported,
+            seed_skipped=result.skipped,
+        )
+        return result
 
     def _needs_discovery(self, domain: CrawlDomain, stale_after_seconds: int, now: datetime) -> bool:
         if domain.last_discovered_at is None:

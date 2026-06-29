@@ -259,5 +259,36 @@ else
   done
 fi
 
+# 18. Code runner python (рестарты / OOM)
+log_section "18) Code runner python (рестарты / OOM)"
+CODE_RUNNER_PYTHON_POD=$($K get pod -n "$PLATFORM_NS" -l app=code-runner-python \
+  -o jsonpath='{.items[0].metadata.name}' 2>/dev/null || true)
+if [ -z "$CODE_RUNNER_PYTHON_POD" ]; then
+  log_warn "под code-runner-python не найден — секция пропущена"
+else
+  RESTARTS=$($K get pod "$CODE_RUNNER_PYTHON_POD" -n "$PLATFORM_NS" \
+    -o jsonpath="{.status.containerStatuses[?(@.name=='code-runner-python')].restartCount}" 2>/dev/null || echo "")
+  LAST_REASON=$($K get pod "$CODE_RUNNER_PYTHON_POD" -n "$PLATFORM_NS" \
+    -o jsonpath="{.status.containerStatuses[?(@.name=='code-runner-python')].lastState.terminated.reason}" 2>/dev/null || echo "")
+  if [ -z "$RESTARTS" ]; then
+    log_error "code-runner-python pod: контейнер code-runner-python не найден"
+  elif [ "$RESTARTS" -le 3 ]; then
+    log_ok "code-runner-python рестартов: $RESTARTS (<= 3)"
+  else
+    log_error "code-runner-python рестартов: $RESTARTS (> 3 — death-loop?)"
+  fi
+  if [ -n "$LAST_REASON" ] && [ "$LAST_REASON" = "OOMKilled" ]; then
+    log_error "code-runner-python lastState: OOMKilled"
+  elif [ -n "$LAST_REASON" ]; then
+    log_warn "code-runner-python lastState reason: $LAST_REASON"
+  else
+    log_ok "code-runner-python lastState: clean"
+  fi
+  check_step_with_output \
+    "code-runner-python GET /health (in-cluster)" \
+    "$K exec -n $PLATFORM_NS $CODE_RUNNER_PYTHON_POD -- \
+      curl -fsS --max-time 15 http://127.0.0.1:8017/health >/dev/null"
+fi
+
 # Итог
 print_summary
