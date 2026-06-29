@@ -115,6 +115,19 @@ jobs:
         shell: bash
         run: test -f apps/agent/desktop/distro/humanitec.json
 
+      - name: Free disk space on Linux runner
+        if: runner.os == 'Linux'
+        shell: bash
+        run: |
+          set -euo pipefail
+          df -h
+          docker system prune -af --volumes || true
+          docker builder prune -af || true
+          if [ -d "/opt/hostedtoolcache" ]; then sudo rm -rf /opt/hostedtoolcache || true; fi
+          if [ -d "/usr/local/lib/android" ]; then sudo rm -rf /usr/local/lib/android || true; fi
+          if [ -d "/usr/share/dotnet" ]; then sudo rm -rf /usr/share/dotnet || true; fi
+          df -h
+
       - name: Prepare build scripts
         shell: bash
         run: chmod +x apps/agent/desktop/scripts/build.sh apps/agent/desktop/scripts/apply_branding.sh

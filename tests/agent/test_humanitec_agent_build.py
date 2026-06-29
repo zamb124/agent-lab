@@ -20,6 +20,7 @@ from apps.agent.desktop.build_contract import (
     asset_name_pattern,
     load_default_distro_config,
 )
+from apps.agent.desktop.ui_branding import verify_no_goose_docs_urls
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 DESKTOP_ROOT = REPO_ROOT / "apps" / "agent" / "desktop"
@@ -243,6 +244,7 @@ def test_apply_branding_script_patches_goose_desktop() -> None:
         assert "Humanitec работает над этим" in ru_messages_payload
         assert ".goosehints" in ru_messages_payload
         assert "goosed (GOOSE_SERVER__SECRET_KEY)" in ru_messages_payload
+        verify_no_goose_docs_urls(goose_desktop)
     finally:
         _ = package_json.write_text(package_backup, encoding="utf-8")
         _ = forge_config.write_text(forge_backup, encoding="utf-8")

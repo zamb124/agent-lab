@@ -21,6 +21,17 @@ PROTECTED_MESSAGE_SUBSTRINGS: tuple[str, ...] = (
 
 GOOSEHINTS_MESSAGE_KEY_PREFIX = "goosehintsModal."
 
+GOOSE_DOCS_URL_REPLACEMENTS: tuple[tuple[str, str], ...] = (
+    ("https://goose-docs.ai/", "{homepage}/"),
+    ("https://goose-docs.ai", "{homepage}"),
+    ("http://goose-docs.ai/", "{homepage}/"),
+    ("http://goose-docs.ai", "{homepage}"),
+)
+
+DESKTOP_UI_SOURCE_SUFFIXES: frozenset[str] = frozenset(
+    {".ts", ".tsx", ".js", ".jsx", ".json", ".md"}
+)
+
 PROTECTED_MESSAGE_PATTERN = re.compile(
     "|".join(re.escape(fragment) for fragment in PROTECTED_MESSAGE_SUBSTRINGS)
 )
@@ -237,6 +248,43 @@ def patch_forge_usage_descriptions(goose_desktop: Path, distro: HumanitecDistroC
     )
 
 
+def iter_desktop_branding_source_paths(goose_desktop: Path) -> list[Path]:
+    source_paths: list[Path] = []
+    forge_path = goose_desktop / "forge.config.ts"
+    if forge_path.is_file():
+        source_paths.append(forge_path)
+    src_root = goose_desktop / "src"
+    if src_root.is_dir():
+        for file_path in src_root.rglob("*"):
+            if file_path.is_file() and file_path.suffix in DESKTOP_UI_SOURCE_SUFFIXES:
+                source_paths.append(file_path)
+    return source_paths
+
+
+def patch_goose_docs_urls(goose_desktop: Path, distro: HumanitecDistroConfig) -> None:
+    homepage = distro.homepage.rstrip("/")
+    url_replacements = {
+        source: target.format(homepage=homepage)
+        for source, target in GOOSE_DOCS_URL_REPLACEMENTS
+    }
+    for file_path in iter_desktop_branding_source_paths(goose_desktop):
+        text = file_path.read_text(encoding="utf-8")
+        modified = False
+        for source, target in url_replacements.items():
+            if source in text:
+                text = text.replace(source, target)
+                modified = True
+        if modified:
+            _ = file_path.write_text(text, encoding="utf-8")
+
+
+def verify_no_goose_docs_urls(goose_desktop: Path) -> None:
+    for file_path in iter_desktop_branding_source_paths(goose_desktop):
+        text = file_path.read_text(encoding="utf-8")
+        if "goose-docs.ai" in text:
+            raise ValueError(f"{file_path} still references goose-docs.ai")
+
+
 def patch_ru_i18n_messages(goose_desktop: Path, distro: HumanitecDistroConfig) -> None:
     ru_messages_path = goose_desktop / "src" / "i18n" / "messages" / "ru.json"
     if not ru_messages_path.is_file():
@@ -265,11 +313,11 @@ def verify_patched_desktop_ui_sources(
     goose_desktop: Path,
     distro: HumanitecDistroConfig,
 ) -> None:
+    verify_no_goose_docs_urls(goose_desktop)
+
     base_chat_text = (goose_desktop / "src" / "components" / "BaseChat.tsx").read_text(
         encoding="utf-8"
     )
-    if "goose-docs.ai" in base_chat_text:
-        raise ValueError("BaseChat.tsx still references goose-docs.ai")
     if distro.ui_product_name_lower not in base_chat_text:
         raise ValueError("BaseChat.tsx missing Humanitec watermark label")
 
@@ -294,4 +342,5 @@ def apply_ui_branding(goose_desktop: Path, distro: HumanitecDistroConfig) -> Non
     patch_main_process_ui_strings(goose_desktop, distro)
     patch_forge_usage_descriptions(goose_desktop, distro)
     patch_ru_i18n_messages(goose_desktop, distro)
+    patch_goose_docs_urls(goose_desktop, distro)
     verify_patched_desktop_ui_sources(goose_desktop, distro)
