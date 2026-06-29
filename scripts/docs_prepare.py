@@ -1,8 +1,8 @@
 """
-Перед сборкой Zensical: заглушки README для docs/scenarios, отдельные деревья
-build/documentation-ru и build/documentation-en (без index.md в репозитории сценариев).
-В сборке теги остаются только внутренней группировкой исходников:
-…/service/<tag>/slug → …/service/slug, чтобы навигация документации была без лишних уровней.
+Перед сборкой Zensical: деревья build/documentation-ru и build/documentation-en.
+Исходники сценариев: docs/scenarios/<service>/<tag>/<slug>/README.md.
+В сборке тег — только группировка на hub-страницах; URL: …/scenarios/<service>/<slug>/.
+Навигация и learning paths — docs/scenarios/taxonomy.yaml.
 """
 
 from __future__ import annotations
@@ -11,50 +11,33 @@ import html
 import json
 import re
 import shutil
+from dataclasses import dataclass
 from pathlib import Path
+
+from scenario_taxonomy import (
+    ScenarioTaxonomy,
+    load_scenario_taxonomy,
+    service_label,
+    tag_label,
+)
 
 SCENARIOS_ROOT = "scenarios"
 ROOT_MARKDOWN_PAGES = ("quickstart.md",)
-
-_SERVICE_NAV_LABEL: dict[str, str] = {
-    "sync": "Sync",
-    "flows": "Flows",
-    "platform": "Основные инструкции",
-    "crm": "NetWorkle",
-    "rag": "RAG",
-    "frontend": "Frontend",
-}
-
-_SERVICE_NAV_LABEL_EN: dict[str, str] = {
-    "sync": "Sync",
-    "flows": "Flows",
-    "platform": "Platform Basics",
-    "crm": "NetWorkle",
-    "rag": "RAG",
-    "frontend": "Frontend",
-}
-
-_SERVICE_SCENARIO_INTRO_RU: dict[str, str] = {
-    "platform": "Базовые инструкции для нового пользователя: вход, Dashboard, список сервисов и меню аккаунта.",
-    "flows": "Пошаговые инструкции по Flows: главная сервиса, запуск агента в чате, создание и редактирование flow, операции published flow и Evaluation Lab.",
-}
-
-_SERVICE_SCENARIO_INTRO_EN: dict[str, str] = {
-    "platform": "Basic instructions for a new user: entry, Dashboard, service list, and account menu.",
-    "flows": "Step-by-step Flows instructions: service home, agent chat, creating and editing flows, published-flow operations, and Evaluation Lab.",
-}
-
-_TAG_NAV_LABEL: dict[str, str] = {
-    "general": "Общее",
-    "spaces": "Пространства",
-}
+CURATED_README_MIN_BODY = 80
 
 RU_BUILD = Path("build/documentation-ru")
 EN_BUILD = Path("build/documentation-en")
 
-DEFAULT_SCENARIO_TAG = "general"
 _CRM_BRAND_RE = re.compile(r"(?<![A-Za-z0-9])CRM(?![A-Za-z0-9])")
 _CRM_BRAND_TOKEN_RE = re.compile(r"(?<!Amo)CRM")
+
+
+@dataclass(frozen=True)
+class ScenarioEntry:
+    src_dir: Path
+    service: str
+    tag: str
+    slug: str
 
 
 def _brand_display_text(value: str) -> str:
@@ -76,93 +59,6 @@ def _brand_openapi_json(value):
 
 def _repo_root() -> Path:
     return Path(__file__).resolve().parents[1]
-
-
-def _title_from_readme(readme: Path) -> str:
-    try:
-        text = readme.read_text(encoding="utf-8")
-    except OSError:
-        return readme.parent.name
-    for line in text.splitlines():
-        line = line.strip()
-        if line.startswith("#"):
-            title = line.lstrip("#").strip()
-            if title:
-                return title[:200]
-    return readme.parent.name
-
-
-def _service_label(name: str) -> str:
-    return _SERVICE_NAV_LABEL.get(name, name.replace("_", " ").title())
-
-
-def _service_label_en(name: str) -> str:
-    return _SERVICE_NAV_LABEL_EN.get(name, name.replace("_", " ").replace("-", " ").title())
-
-
-def _service_intro_ru(service: str, title: str) -> str:
-    return _SERVICE_SCENARIO_INTRO_RU.get(service, f"Пошаговые инструкции интерфейса {title}.")
-
-
-def _service_intro_en(service: str) -> str:
-    return _SERVICE_SCENARIO_INTRO_EN.get(service, "Step-by-step UI instructions with screenshots.")
-
-
-def _tag_label(name: str) -> str:
-    return _TAG_NAV_LABEL.get(name, name.replace("_", " ").title())
-
-
-def _tag_has_scenario_slugs(tag_dir: Path) -> bool:
-    for slug_dir in tag_dir.iterdir():
-        if slug_dir.is_dir() and (slug_dir / "README.md").is_file():
-            return True
-    return False
-
-
-def _service_has_scenario_slugs(service_dir: Path) -> bool:
-    for tag_dir in service_dir.iterdir():
-        if not tag_dir.is_dir():
-            continue
-        if _tag_has_scenario_slugs(tag_dir):
-            return True
-    return False
-
-
-def _ensure_scenario_readme_stubs(docs_dir: Path) -> None:
-    root = docs_dir / SCENARIOS_ROOT
-    if not root.is_dir():
-        return
-
-    for service_dir in sorted(p for p in root.iterdir() if p.is_dir()):
-        if service_dir.name.startswith("."):
-            continue
-        service = service_dir.name
-        svc_label = _service_label(service)
-        svc_readme = service_dir / "README.md"
-        if not svc_readme.is_file() and _service_has_scenario_slugs(service_dir):
-            svc_readme.write_text(
-                f"# Инструкции {svc_label}\n\n"
-                f"Пошаговые инструкции по интерфейсу продукта {svc_label}, сгруппированные по темам ниже. "
-                f"Этот файл создан автоматически при подготовке документации (`make doc`); при необходимости замените текст.\n",
-                encoding="utf-8",
-            )
-
-        for tag_dir in sorted(p for p in service_dir.iterdir() if p.is_dir()):
-            if tag_dir.name.startswith("."):
-                continue
-            tag = tag_dir.name
-            tag_readme = tag_dir / "README.md"
-            if tag_readme.is_file():
-                continue
-            if not _tag_has_scenario_slugs(tag_dir):
-                continue
-            tag_human = _tag_label(tag)
-            tag_readme.write_text(
-                f"# {tag_human} ({svc_label})\n\n"
-                f"Инструкции по теме «{tag_human}». "
-                f"Файл создан автоматически при подготовке документации (`make doc`); отредактируйте при необходимости.\n",
-                encoding="utf-8",
-            )
 
 
 def _readme_body_after_h1(text: str, fallback_title: str) -> tuple[str, str]:
@@ -193,15 +89,16 @@ def _write_index_md_from_readme(readme: Path, out: Path) -> None:
     out.write_text(f"---\ntitle: {title_json}\n---\n\n{body}", encoding="utf-8")
 
 
-def _dest_parts_for_scenario(service: str, tag: str, slug_name: str) -> tuple[str, ...]:
-    _ = tag
+def _dest_parts_for_scenario(service: str, slug_name: str) -> tuple[str, ...]:
     return (service, slug_name)
 
 
-def _collect_scenario_slug_readmes(scenarios_root: Path) -> dict[tuple[str, ...], Path]:
-    out: dict[tuple[str, ...], Path] = {}
+def _collect_scenario_entries(scenarios_root: Path) -> dict[tuple[str, ...], ScenarioEntry]:
+    out: dict[tuple[str, ...], ScenarioEntry] = {}
     for service_dir in sorted(p for p in scenarios_root.iterdir() if p.is_dir() and not p.name.startswith(".")):
         service = service_dir.name
+        if service == "taxonomy.yaml":
+            continue
         for tag_dir in sorted(p for p in service_dir.iterdir() if p.is_dir() and not p.name.startswith(".")):
             tag = tag_dir.name
             for slug_dir in sorted(p for p in tag_dir.iterdir() if p.is_dir() and not p.name.startswith(".")):
@@ -209,12 +106,18 @@ def _collect_scenario_slug_readmes(scenarios_root: Path) -> dict[tuple[str, ...]
                 if not readme.is_file():
                     continue
                 slug_name = slug_dir.name
-                parts = _dest_parts_for_scenario(service, tag, slug_name)
+                parts = _dest_parts_for_scenario(service, slug_name)
                 if parts in out:
                     raise ValueError(
-                        f"Коллизия пути сценариев в сборке: {Path(*parts)!s} — {out[parts]} и {slug_dir}"
+                        f"Коллизия пути сценариев в сборке: {Path(*parts)!s} — "
+                        f"{out[parts].src_dir} и {slug_dir}"
                     )
-                out[parts] = slug_dir
+                out[parts] = ScenarioEntry(
+                    src_dir=slug_dir,
+                    service=service,
+                    tag=tag,
+                    slug=slug_name,
+                )
     return out
 
 
@@ -237,37 +140,25 @@ def _title_from_index_md(index_path: Path) -> str:
     return index_path.parent.name
 
 
-def _is_leaf_scenario_build_dir(d: Path) -> bool:
-    if not (d / "index.md").is_file():
-        return False
-    for sub in d.iterdir():
-        if not sub.is_dir() or sub.name.startswith("."):
-            continue
-        if sub.name == "screenshots":
-            continue
-        if (sub / "index.md").is_file():
-            return False
-    return True
+def _service_intro_from_readme(scenarios_src: Path, service: str, fallback: str) -> str:
+    readme = scenarios_src / service / "README.md"
+    if not readme.is_file():
+        return fallback
+    _, body = _readme_body_after_h1(readme.read_text(encoding="utf-8"), service)
+    plain = re.sub(r"\[([^\]]+)\]\([^)]+\)", r"\1", body)
+    plain = re.sub(r"!\[[^\]]*\]\([^)]+\)", "", plain)
+    plain = re.sub(r"\s+", " ", plain).strip()
+    if len(plain) >= CURATED_README_MIN_BODY:
+        return plain
+    return fallback
 
 
-def _is_tag_container_build_dir(d: Path) -> bool:
-    if not d.is_dir() or (d / "index.md").is_file():
-        return False
-    for sub in d.iterdir():
-        if not sub.is_dir() or sub.name.startswith("."):
-            continue
-        if (sub / "index.md").is_file():
-            return True
-    return False
-
-
-def _write_hub_index(
+def _write_grouped_hub_index(
     out: Path,
+    *,
     title: str,
     intro: str,
-    links: list[tuple[str, str]],
-    *,
-    heading: str = "Инструкции",
+    sections: list[tuple[str, list[tuple[str, str]]]],
     hero_image: str | None = None,
     hero_alt: str | None = None,
 ) -> None:
@@ -283,108 +174,244 @@ def _write_hub_index(
     if hero_image is not None:
         alt = hero_alt or title
         lines.extend([f"![{alt}]({hero_image})", ""])
-    lines.extend([f"## {heading}", "", '<div class="docs-link-grid">'])
-    for label, href in sorted(links, key=lambda x: x[0].lower()):
-        label_html = html.escape(label)
-        href_html = html.escape(href, quote=True)
-        lines.append(
-            f'  <a class="docs-link-card" href="{href_html}">'
-            f"<span>{label_html}</span>"
-            "</a>"
-        )
-    lines.extend(["</div>", ""])
+    for section_title, links in sections:
+        if not links:
+            continue
+        lines.extend([f"## {section_title}", "", '<div class="docs-link-grid">'])
+        for label, href in links:
+            label_html = html.escape(label)
+            href_html = html.escape(href, quote=True)
+            lines.append(
+                f'  <a class="docs-link-card" href="{href_html}">'
+                f"<span>{label_html}</span>"
+                "</a>"
+            )
+        lines.extend(["</div>", ""])
     out.parent.mkdir(parents=True, exist_ok=True)
     out.write_text("\n".join(lines), encoding="utf-8")
 
 
-def _write_ru_scenarios_root_index(scenarios_dst: Path) -> None:
+def _grouped_sections_for_service(
+    taxonomy: ScenarioTaxonomy,
+    service: str,
+    entries: list[ScenarioEntry],
+    scenarios_dst: Path,
+    *,
+    language: str,
+) -> list[tuple[str, list[tuple[str, str]]]]:
+    spec = taxonomy.services.get(service)
+    if spec is None:
+        links = []
+        for entry in sorted(entries, key=lambda e: e.slug):
+            idx = scenarios_dst / service / entry.slug / "index.md"
+            if idx.is_file():
+                links.append((_title_from_index_md(idx), f"{entry.slug}/"))
+        if not links:
+            return []
+        heading = "Pages" if language == "en" else "Инструкции"
+        return [(heading, links)]
+
+    by_tag: dict[str, list[ScenarioEntry]] = {}
+    for entry in entries:
+        by_tag.setdefault(entry.tag, []).append(entry)
+
+    ordered_tags = sorted(
+        spec.tags.keys(),
+        key=lambda tag_key: (spec.tags[tag_key].order, tag_key),
+    )
+
+    sections: list[tuple[str, list[tuple[str, str]]]] = []
+    featured = spec.featured_slug
+    if featured is not None:
+        featured_idx = scenarios_dst / service / featured / "index.md"
+        if featured_idx.is_file():
+            featured_heading = "Start here" if language == "en" else "С чего начать"
+            sections.append(
+                (
+                    featured_heading,
+                    [(_title_from_index_md(featured_idx), f"{featured}/")],
+                )
+            )
+
+    for tag_key in ordered_tags:
+        tag_entries = by_tag.get(tag_key, [])
+        if not tag_entries:
+            continue
+        links: list[tuple[str, str]] = []
+        for entry in sorted(tag_entries, key=lambda e: e.slug):
+            if featured is not None and entry.slug == featured:
+                continue
+            idx = scenarios_dst / service / entry.slug / "index.md"
+            if not idx.is_file():
+                continue
+            links.append((_title_from_index_md(idx), f"{entry.slug}/"))
+        if not links:
+            continue
+        section_title = tag_label(taxonomy, service, tag_key, language=language)
+        sections.append((section_title, links))
+
+    return sections
+
+
+def _write_scenario_hub_indices(
+    taxonomy: ScenarioTaxonomy,
+    scenarios_src: Path,
+    scenarios_dst: Path,
+    entries: dict[tuple[str, ...], ScenarioEntry],
+    *,
+    language: str,
+) -> None:
     if not scenarios_dst.is_dir():
         return
 
-    links: list[tuple[str, str]] = []
-    for svc_dir in sorted(p for p in scenarios_dst.iterdir() if p.is_dir() and not p.name.startswith(".")):
-        idx = svc_dir / "index.md"
-        if idx.is_file():
-            links.append((_service_label(svc_dir.name), f"{svc_dir.name}/"))
+    by_service: dict[str, list[ScenarioEntry]] = {}
+    for entry in entries.values():
+        by_service.setdefault(entry.service, []).append(entry)
 
-    if not links:
+    for service in taxonomy.service_order:
+        service_entries = by_service.get(service, [])
+        if not service_entries:
+            continue
+        svc_dir = scenarios_dst / service
+        if not svc_dir.is_dir():
+            continue
+        title = service_label(taxonomy, service, language=language)
+        spec = taxonomy.services[service]
+        fallback_intro = spec.intro_en if language == "en" else spec.intro_ru
+        intro = _service_intro_from_readme(scenarios_src, service, fallback_intro)
+        sections = _grouped_sections_for_service(
+            taxonomy,
+            service,
+            service_entries,
+            scenarios_dst,
+            language=language,
+        )
+        if not sections:
+            continue
+        hero_image = "screenshots/001.png" if (svc_dir / "screenshots" / "001.png").is_file() else None
+        _write_grouped_hub_index(
+            svc_dir / "index.md",
+            title=title,
+            intro=intro,
+            sections=sections,
+            hero_image=hero_image,
+            hero_alt=f"{title}: service home",
+        )
+
+    root_links: list[tuple[str, str]] = []
+    for service in taxonomy.service_order:
+        idx = scenarios_dst / service / "index.md"
+        if idx.is_file():
+            root_links.append((service_label(taxonomy, service, language=language), f"{service}/"))
+
+    if not root_links:
         return
 
-    _write_hub_index(
+    root_title = "Instructions" if language == "en" else "Инструкции"
+    root_intro = (
+        "Step-by-step UI instructions with screenshots from E2E tests."
+        if language == "en"
+        else "Проверенные пользовательские инструкции с шагами и скриншотами интерфейса."
+    )
+    _write_grouped_hub_index(
         scenarios_dst / "index.md",
-        "Инструкции",
-        "Проверенные пользовательские инструкции с шагами и скриншотами интерфейса.",
-        links,
+        title=root_title,
+        intro=root_intro,
+        sections=[("Services" if language == "en" else "Сервисы", root_links)],
     )
 
 
-def _write_ru_scenario_hub_indices(scenarios_dst: Path) -> None:
-    if not scenarios_dst.is_dir():
+def _write_scenarios_pages_file(taxonomy: ScenarioTaxonomy, scenarios_dst: Path) -> None:
+    nav_lines = ["nav:"]
+    for service in taxonomy.service_order:
+        idx = scenarios_dst / service / "index.md"
+        if idx.is_file():
+            nav_lines.append(f"  - {service}/index.md")
+    if len(nav_lines) <= 1:
         return
-    for svc_dir in sorted(p for p in scenarios_dst.iterdir() if p.is_dir() and not p.name.startswith(".")):
-        service = svc_dir.name
-        links: list[tuple[str, str]] = []
-        for child in sorted((x for x in svc_dir.iterdir() if x.is_dir() and not x.name.startswith(".")), key=lambda p: p.name):
-            idx = child / "index.md"
-            if _is_leaf_scenario_build_dir(child):
-                if not idx.is_file():
-                    continue
-                links.append((_title_from_index_md(idx), f"{child.name}/"))
-            elif _is_tag_container_build_dir(child):
-                links.append((_tag_label(child.name), f"{child.name}/"))
-        if not links:
-            continue
-        title = _service_label(service)
-        intro = _service_intro_ru(service, title)
-        hero_image = "screenshots/001.png" if (svc_dir / "screenshots" / "001.png").is_file() else None
-        _write_hub_index(
-            svc_dir / "index.md",
-            title,
-            intro,
-            links,
-            hero_image=hero_image,
-            hero_alt=f"{title}: главная страница сервиса",
-        )
-
-    for svc_dir in sorted(p for p in scenarios_dst.iterdir() if p.is_dir() and not p.name.startswith(".")):
-        service = svc_dir.name
-        svc_label = _service_label(service)
-        for tag_dir in sorted(
-            (x for x in svc_dir.iterdir() if x.is_dir() and not x.name.startswith(".")),
-            key=lambda p: p.name,
-        ):
-            if not _is_tag_container_build_dir(tag_dir):
-                continue
-            tag_name = tag_dir.name
-            links_t: list[tuple[str, str]] = []
-            for slug_child in sorted(
-                (x for x in tag_dir.iterdir() if x.is_dir() and not x.name.startswith(".")),
-                key=lambda p: p.name,
-            ):
-                sidx = slug_child / "index.md"
-                if not sidx.is_file():
-                    continue
-                links_t.append((_title_from_index_md(sidx), f"{slug_child.name}/"))
-            if not links_t:
-                continue
-            tag_title = _tag_label(tag_name)
-            intro_t = f"Инструкции в группе «{tag_title}» ({svc_label})."
-            _write_hub_index(tag_dir / "index.md", tag_title, intro_t, links_t)
-
-    _write_ru_scenarios_root_index(scenarios_dst)
+    (scenarios_dst / ".pages").write_text("\n".join(nav_lines) + "\n", encoding="utf-8")
 
 
-def _populate_ru_scenario_index_tree(scenarios_src: Path, scenarios_dst: Path) -> None:
+def _populate_scenario_index_tree(
+    taxonomy: ScenarioTaxonomy,
+    scenarios_src: Path,
+    scenarios_dst: Path,
+    *,
+    language: str,
+) -> None:
     scenarios_dst.mkdir(parents=True, exist_ok=True)
-    mapping = _collect_scenario_slug_readmes(scenarios_src)
+    entries = _collect_scenario_entries(scenarios_src)
     _copy_service_screenshots(scenarios_src, scenarios_dst)
-    for parts in sorted(mapping, key=lambda t: (len(t), t)):
-        src_dir = mapping[parts]
+    for parts in sorted(entries, key=lambda t: (len(t), t)):
+        entry = entries[parts]
         dst_dir = scenarios_dst.joinpath(*parts)
         dst_dir.mkdir(parents=True, exist_ok=True)
-        _write_index_md_from_readme(src_dir / "README.md", dst_dir / "index.md")
-        _copy_screenshots(src_dir, dst_dir)
-    _write_ru_scenario_hub_indices(scenarios_dst)
+        readme = entry.src_dir / "README.md"
+        if language == "en":
+            en_readme = entry.src_dir / "README.en.md"
+            if en_readme.is_file():
+                readme = en_readme
+        _write_index_md_from_readme(readme, dst_dir / "index.md")
+        _copy_screenshots(entry.src_dir, dst_dir)
+    _write_scenario_hub_indices(taxonomy, scenarios_src, scenarios_dst, entries, language=language)
+    _write_scenarios_pages_file(taxonomy, scenarios_dst)
+
+
+def _write_start_here_page(out: Path, taxonomy: ScenarioTaxonomy, *, language: str) -> None:
+    if language == "en":
+        title = "Start here"
+        page_intro = (
+            "Pick a learning path below. Each path links to existing step-by-step instructions "
+            "with screenshots — no duplicate content on this page."
+        )
+        paths_heading = "Learning paths"
+    else:
+        title = "Начни отсюда"
+        page_intro = (
+            "Выберите маршрут ниже. Каждый маршрут ведёт к готовым пошаговым инструкциям "
+            "со скриншотами — на этой странице нет дублирования контента."
+        )
+        paths_heading = "Маршруты обучения"
+
+    sections: list[tuple[str, list[tuple[str, str]]]] = []
+    for path in taxonomy.learning_paths:
+        path_label = path.label_en if language == "en" else path.label_ru
+        path_intro = path.intro_en if language == "en" else path.intro_ru
+        links: list[tuple[str, str]] = []
+        for step in path.steps:
+            step_label = step.label_en if language == "en" else step.label_ru
+            links.append((step_label, step.href))
+        section_body = f"{path_intro}\n\n"
+        sections.append((f"{path_label}\n\n{section_body.strip()}", links))
+
+    title_json = json.dumps(title, ensure_ascii=False)
+    lines = [
+        "---",
+        f"title: {title_json}",
+        "---",
+        "",
+        page_intro,
+        "",
+        f"## {paths_heading}",
+        "",
+    ]
+    for path in taxonomy.learning_paths:
+        path_label = path.label_en if language == "en" else path.label_ru
+        path_intro = path.intro_en if language == "en" else path.intro_ru
+        lines.extend([f"### {path_label}", "", path_intro, "", '<div class="docs-link-grid">'])
+        for step in path.steps:
+            step_label = step.label_en if language == "en" else step.label_ru
+            label_html = html.escape(step_label)
+            href_html = html.escape(step.href, quote=True)
+            lines.append(
+                f'  <a class="docs-link-card" href="{href_html}">'
+                f"<span>{label_html}</span>"
+                "</a>"
+            )
+        lines.extend(["</div>", ""])
+
+    out.parent.mkdir(parents=True, exist_ok=True)
+    out.write_text("\n".join(lines), encoding="utf-8")
 
 
 def _copy_optional_subdir(src_root: Path, name: str, dst_root: Path) -> None:
@@ -433,7 +460,7 @@ def _remove_legacy_en_scenarios_mirror(docs_dir: Path) -> None:
         shutil.rmtree(legacy)
 
 
-def _prepare_ru_build_tree(docs_dir: Path, ru_dir: Path) -> None:
+def _prepare_ru_build_tree(docs_dir: Path, ru_dir: Path, taxonomy: ScenarioTaxonomy) -> None:
     if ru_dir.exists():
         shutil.rmtree(ru_dir)
     ru_dir.mkdir(parents=True)
@@ -443,18 +470,37 @@ def _prepare_ru_build_tree(docs_dir: Path, ru_dir: Path) -> None:
         raise FileNotFoundError(f"Нет корневой страницы документации: {index_src}")
     shutil.copy2(index_src, ru_dir / "index.md")
     _copy_root_markdown_pages(docs_dir, ru_dir)
-
-    guides_src = docs_dir / "guides"
-    if guides_src.is_dir():
-        shutil.copytree(guides_src, ru_dir / "guides", dirs_exist_ok=False)
+    _write_start_here_page(ru_dir / "start-here.md", taxonomy, language="ru")
 
     scenarios_src = docs_dir / SCENARIOS_ROOT
     scenarios_dst = ru_dir / SCENARIOS_ROOT
     if scenarios_src.is_dir():
-        _populate_ru_scenario_index_tree(scenarios_src, scenarios_dst)
+        _populate_scenario_index_tree(taxonomy, scenarios_src, scenarios_dst, language="ru")
 
     _copy_openapi_subdir(docs_dir, ru_dir)
     _copy_optional_subdir(docs_dir, "assets", ru_dir)
+
+
+def _prepare_en_build_tree(docs_dir: Path, en_dir: Path, taxonomy: ScenarioTaxonomy) -> None:
+    if en_dir.exists():
+        shutil.rmtree(en_dir)
+    en_dir.mkdir(parents=True)
+
+    en_src = docs_dir / "en"
+    en_index = en_src / "index.md"
+    if not en_index.is_file():
+        raise FileNotFoundError(f"Нет английской корневой страницы: {en_index}")
+    shutil.copy2(en_index, en_dir / "index.md")
+    _copy_root_markdown_pages(en_src, en_dir)
+    _write_start_here_page(en_dir / "start-here.md", taxonomy, language="en")
+
+    _copy_openapi_subdir(docs_dir, en_dir)
+    _copy_optional_subdir(docs_dir, "assets", en_dir)
+
+    scenarios_src = docs_dir / SCENARIOS_ROOT
+    scenarios_dst = en_dir / SCENARIOS_ROOT
+    if scenarios_src.is_dir():
+        _populate_scenario_index_tree(taxonomy, scenarios_src, scenarios_dst, language="en")
 
 
 def _copy_screenshots(src_slug_dir: Path, dst_slug_dir: Path) -> None:
@@ -480,102 +526,10 @@ def _copy_service_screenshots(scenarios_src: Path, scenarios_dst: Path) -> None:
         shutil.copytree(shots, dst_shots)
 
 
-def _build_en_scenarios_from_readmes(scenarios_src: Path, en_scenarios_out: Path) -> None:
-    if en_scenarios_out.exists():
-        shutil.rmtree(en_scenarios_out)
-    if not scenarios_src.is_dir():
-        return
-
-    mapping = _collect_scenario_slug_readmes(scenarios_src)
-    _copy_service_screenshots(scenarios_src, en_scenarios_out)
-    for dest_parts, src_dir in sorted(mapping.items(), key=lambda item: item[0]):
-        readme = src_dir / "README.en.md"
-        if not readme.is_file():
-            readme = src_dir / "README.md"
-        out_dir = en_scenarios_out.joinpath(*dest_parts)
-        out_dir.mkdir(parents=True, exist_ok=True)
-        _write_index_md_from_readme(readme, out_dir / "index.md")
-        _copy_screenshots(src_dir, out_dir)
-
-    if not mapping:
-        return
-
-    missing_parents: set[Path] = set()
-    for idx in en_scenarios_out.rglob("index.md"):
-        d = idx.parent
-        cur = d.parent
-        while cur != en_scenarios_out:
-            if not (cur / "index.md").is_file():
-                missing_parents.add(cur)
-            cur = cur.parent
-
-    for d in sorted(missing_parents, key=lambda p: len(p.parts), reverse=True):
-        if (d / "index.md").is_file():
-            continue
-        subdirs = sorted(
-            x
-            for x in d.iterdir()
-            if x.is_dir() and not x.name.startswith(".") and (x / "index.md").is_file()
-        )
-        if not subdirs:
-            continue
-        title = _service_label_en(d.name)
-        links = [(_title_from_index_md(sub / "index.md"), f"{sub.name}/") for sub in subdirs]
-        hero_image = "screenshots/001.png" if (d / "screenshots" / "001.png").is_file() else None
-        _write_hub_index(
-            d / "index.md",
-            title,
-            _service_intro_en(d.name),
-            links,
-            heading="Pages",
-            hero_image=hero_image,
-            hero_alt=f"{title}: service home page",
-        )
-
-    services = sorted(
-        x.name
-        for x in en_scenarios_out.iterdir()
-        if x.is_dir() and not x.name.startswith(".") and any(x.rglob("index.md"))
-    )
-    if not services:
-        return
-    _write_hub_index(
-        en_scenarios_out / "index.md",
-        "E2E instructions",
-        "Step-by-step UI instructions with screenshots generated from the same tests as the Russian documentation.",
-        [(_service_label_en(svc), f"{svc}/") for svc in services],
-        heading="Services",
-    )
-
-
-def _prepare_en_build_tree(docs_dir: Path, en_dir: Path) -> None:
-    if en_dir.exists():
-        shutil.rmtree(en_dir)
-    en_dir.mkdir(parents=True)
-
-    en_src = docs_dir / "en"
-    en_index = en_src / "index.md"
-    if not en_index.is_file():
-        raise FileNotFoundError(f"Нет английской корневой страницы: {en_index}")
-    shutil.copy2(en_index, en_dir / "index.md")
-    _copy_root_markdown_pages(en_src, en_dir)
-
-    guides_en = en_src / "guides"
-    if guides_en.is_dir():
-        shutil.copytree(guides_en, en_dir / "guides", dirs_exist_ok=False)
-
-    _copy_openapi_subdir(docs_dir, en_dir)
-    _copy_optional_subdir(docs_dir, "assets", en_dir)
-
-    _build_en_scenarios_from_readmes(docs_dir / SCENARIOS_ROOT, en_dir / SCENARIOS_ROOT)
-
-
 def _generate_api_docs(ru_dir: Path, en_dir: Path) -> None:
-    """Генерирует документацию API из OpenAPI схем."""
     import sys
     from pathlib import Path as PathLib
 
-    # Добавляем текущую директорию в sys.path для импорта openapi_to_markdown
     current_dir = PathLib(__file__).resolve().parent
     if str(current_dir) not in sys.path:
         sys.path.insert(0, str(current_dir))
@@ -587,9 +541,9 @@ def _generate_api_docs(ru_dir: Path, en_dir: Path) -> None:
 
     try:
         generate_markdown()
-        logger.info("✅ Документация API сгенерирована")
+        logger.info("Документация API сгенерирована")
     except Exception as e:
-        logger.warning(f"⚠️ Не удалось сгенерировать документацию API: {e}")
+        logger.warning(f"Не удалось сгенерировать документацию API: {e}")
 
 
 def _markdown_without_frontmatter(text: str) -> str:
@@ -649,7 +603,8 @@ def _page_url_for_markdown(path: Path, docs_root: Path, base_url: str) -> str:
 def _iter_llms_pages(docs_root: Path) -> list[Path]:
     pages = []
     for path in sorted(docs_root.rglob("*.md")):
-        if any(part.startswith(".") for part in path.relative_to(docs_root).parts):
+        rel_parts = path.relative_to(docs_root).parts
+        if any(part.startswith(".") for part in rel_parts):
             continue
         pages.append(path)
     return pages
@@ -661,9 +616,9 @@ def _generate_llms_files(docs_root: Path, language: str, base_url: str) -> None:
 
     title = "Humanitec Documentation" if language == "en" else "Документация Humanitec"
     description = (
-        "Reference documentation for the Humanitec platform: quickstart, API, guides, and UI instructions."
+        "Reference documentation for the Humanitec platform: quickstart, start here, API, and UI instructions."
         if language == "en"
-        else "Справочная документация платформы Humanitec: быстрый старт, API, руководства и UI-инструкции."
+        else "Справочная документация платформы Humanitec: быстрый старт, маршруты обучения, API и UI-инструкции."
     )
     pages = _iter_llms_pages(docs_root)
 
@@ -709,14 +664,13 @@ def main() -> None:
         raise FileNotFoundError(f"Нет каталога документации: {docs_dir}")
 
     _remove_legacy_en_scenarios_mirror(docs_dir)
-    _ensure_scenario_readme_stubs(docs_dir)
+    taxonomy = load_scenario_taxonomy(root)
 
     ru_path = root / RU_BUILD
     en_path = root / EN_BUILD
-    _prepare_ru_build_tree(docs_dir, ru_path)
-    _prepare_en_build_tree(docs_dir, en_path)
+    _prepare_ru_build_tree(docs_dir, ru_path, taxonomy)
+    _prepare_en_build_tree(docs_dir, en_path, taxonomy)
 
-    # Генерация документации API
     _generate_api_docs(ru_path, en_path)
     _generate_llms_files(ru_path, "ru", "https://humanitec.ru/documentation/")
     _generate_llms_files(en_path, "en", "https://humanitec.ru/documentation/en/")

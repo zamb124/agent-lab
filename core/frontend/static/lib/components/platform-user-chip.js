@@ -18,7 +18,7 @@
  * i18n namespace: 'platform'.
  */
 
-import { html, css } from 'lit';
+import { html, css } from '../lit-shim.js';
 import { PlatformElement } from '../platform-element/index.js';
 import { TEAM_EVENTS } from '../events/reducers/team.js';
 import { resolveAvatarImageSrc } from '../utils/placeholder-avatar.js';

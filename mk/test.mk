@@ -52,7 +52,7 @@ test-unit: test-up
 # E2E UI: pytest + Playwright + фикстуры из tests/fixtures (нужны test-up)
 test-ui: test-up
 	@echo "Запуск E2E UI (pytest tests/ui/e2e)..."
-	uv run pytest tests/ui/e2e -v --timeout=180
+	UI_E2E_USE_LVH_ME=1 uv run pytest tests/ui/e2e -v --timeout=180
 
 # E2E UI + статическая документация (README в docs/scenarios из scenario_doc)
 test-ui-doc: test-ui

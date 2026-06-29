@@ -44,7 +44,10 @@ async def flows_api_create_flow(
     await flows_api_delete_flow(origin, auth_token, str(payload["flow_id"]))
     async with _flows_client(origin, auth_token) as client:
         response = await client.post("/flows/api/v1/flows", json=payload)
-    response.raise_for_status()
+    if response.status_code >= 400:
+        raise AssertionError(
+            f"POST /flows/api/v1/flows failed: {response.status_code} {response.text}"
+        )
     return response.json()
 
 
@@ -68,21 +71,17 @@ def flows_graph_payload(flow_id: str, *, name: str, description: str = "") -> di
             "start": {
                 "type": "code",
                 "name": "Start",
-                "config": {
-                    "code": "async def run(args, state):\n    return state\n",
-                    "language": "python",
-                },
+                "code": "async def run(args, state):\n    return state\n",
+                "language": "python",
             },
             "end": {
                 "type": "code",
                 "name": "End",
-                "config": {
-                    "code": "async def run(args, state):\n    return state\n",
-                    "language": "python",
-                },
+                "code": "async def run(args, state):\n    return state\n",
+                "language": "python",
             },
         },
-        "edges": [{"from": "start", "to": "end"}],
+        "edges": [{"from_node": "start", "to_node": "end"}],
         "variables": {},
         "tags": ["docs", "scenario"],
         "branches": {},
@@ -246,6 +245,13 @@ async def flows_set_selected_llm_config(page: Page, config: dict[str, Any]) -> N
 
 
 async def flows_publish_editor(page: Page) -> None:
+    panel = page.locator("flows-floating-panel[show-backdrop]").first
+    if await panel.count() > 0:
+        close_button = panel.locator('button.panel-btn').filter(
+            has=page.locator('platform-icon[name="close"]')
+        ).first
+        await close_button.click(timeout=5_000)
+        await expect(panel).to_be_hidden(timeout=5_000)
     button = page.locator("flows-editor-header button.header-btn.primary").first
     await expect(button).to_be_visible(timeout=30_000)
     await expect(button).to_be_enabled(timeout=30_000)

@@ -45,10 +45,10 @@ description: "Modern Humanitec documentation hub: quickstart, API reference, gui
     <h2>Instructions</h2>
     <p>UI checks, steps, and screenshots generated from instruction README files.</p>
   </a>
-  <a class="docs-card" href="guides/">
-    <span class="docs-card-kicker">Guides</span>
-    <h2>Guides</h2>
-    <p>Overview pages and entry points for product teams.</p>
+  <a class="docs-card" href="start-here/">
+    <span class="docs-card-kicker">Start</span>
+    <h2>Start here</h2>
+    <p>Curated paths for new users, developers, and teams using Sync.</p>
   </a>
 </div>
 

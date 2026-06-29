@@ -1,11 +1,7 @@
 # Инструкции Flows
 
-Пошаговые инструкции по интерфейсу продукта Flows: главная сервиса, запуск агента в чате, создание и редактирование flow, операционный контур published flow и Evaluation Lab.
+Пошаговые инструкции по интерфейсу Flows: главная сервиса, чат агента, редактор графа, API Console, операции с published flow и Evaluation Lab.
 
 ![Главная страница Flows](screenshots/001.png)
 
-- [Общее](general/README.md)
-- [Чат](chat/run-flow-chat/README.md)
-- [Editor](editor/README.md)
-- [Операции](operations/operate-published-flow/README.md)
-- [Evaluation Lab](evaluation/README.md)
+Начните с [обзора главной страницы](flows-home-overview/), затем откройте нужную тему в hub ниже после сборки документации (`make doc`).

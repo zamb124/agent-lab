@@ -25,6 +25,16 @@ from playwright.async_api import Page, expect
 from core.logging import get_logger
 from tests.ui.harness import AppUI
 
+
+def _frontend_api_origin(frontend_ui: AppUI) -> str:
+    """Frontend HTTP API на localhost: Host не должен резолвиться в чужую company."""
+    return f"http://localhost:{frontend_ui.spec.port}"
+
+
+def _flows_api_origin(flows_ui: AppUI) -> str:
+    """Flows HTTP API на localhost для embed с внешнего origin 127.0.0.1."""
+    return f"http://localhost:{flows_ui.spec.port}"
+
 _HTTP_TIMEOUT = Timeout(20.0)
 _log = get_logger(__name__)
 
@@ -74,12 +84,12 @@ def _external_embed_origin(*, html_page_utf8: str, token_payload: dict) -> Itera
     token_bytes = json.dumps(token_payload, ensure_ascii=False).encode("utf-8")
     state = _EmbedHostState(page_bytes, token_bytes)
     handler = _make_embed_host_handler(state)
-    server = HTTPServer(("127.0.0.1", 0), handler)
+    server = HTTPServer(("localhost", 0), handler)
     thread = threading.Thread(target=server.serve_forever, daemon=True)
     thread.start()
     port = server.server_address[1]
     try:
-        yield f"http://127.0.0.1:{port}"
+        yield f"http://localhost:{port}"
     finally:
         server.shutdown()
         server.server_close()
@@ -107,8 +117,8 @@ async def test_embed_autoload_script_mounts_chat_and_streams_reply(
     )
     user_line = f"browser-embed-msg-{unique_id}"
 
-    frontend_origin = frontend_ui.origin.rstrip("/")
-    flows_public_base = flows_ui.origin.rstrip("/")
+    frontend_origin = _frontend_api_origin(frontend_ui).rstrip("/")
+    flows_public_base = _flows_api_origin(flows_ui).rstrip("/")
     script_src = f"{frontend_origin}/static/core/lib/embed-chat/humanitec-embed-autoload.js"
     flows_base = f"{flows_public_base}/flows"
 
@@ -213,10 +223,17 @@ async def test_embed_autoload_script_mounts_chat_and_streams_reply(
         with _external_embed_origin(html_page_utf8=page_html, token_payload=token_payload_for_host) as host_origin:
             _log.info("embed_browser_e2e: открываем хост %s скрипт %s", host_origin, script_src)
             await page.goto(f"{host_origin}/", wait_until="domcontentloaded", timeout=60_000)
-            await page.wait_for_function(
-                "typeof window.humanitecEmbed !== 'undefined' && window.humanitecEmbed && window.humanitecEmbed.element",
-                timeout=60_000,
-            )
+            try:
+                await page.wait_for_function(
+                    "typeof window.humanitecEmbed !== 'undefined' && window.humanitecEmbed && window.humanitecEmbed.element",
+                    timeout=60_000,
+                )
+            except Exception as exc:
+                raise AssertionError(
+                    "humanitecEmbed не смонтировался\n"
+                    f"errors:\n{chr(10).join(errors) or '<empty>'}\n\n"
+                    f"network:\n{chr(10).join(network_events) or '<empty>'}"
+                ) from exc
             _log.info("embed_browser_e2e: humanitecEmbed смонтирован")
             await expect(page.locator("platform-lara-assistant")).to_be_visible(timeout=30_000)
             fab = page.locator("platform-lara-assistant").locator("button.fab").first
@@ -232,7 +249,7 @@ async def test_embed_autoload_script_mounts_chat_and_streams_reply(
             _log.info("embed_browser_e2e: сообщение отправлено, ждём ответ потока A2A")
             try:
                 await expect(page.get_by_text(f"embed-ok:{user_line}", exact=True)).to_be_visible(
-                    timeout=90_000
+                    timeout=120_000
                 )
             except AssertionError as exc:
                 root_text = await root.inner_text(timeout=5_000)

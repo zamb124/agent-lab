@@ -23,6 +23,7 @@
 - code_runner_go_service: Go runner (порт 9019)
 - code_runner_csharp_service: C# runner (порт 9020)
 - worktracker_service: Worktracker сервис (порт 9021)
+- secrets_service: Secrets/Variables сервис (порт 9022)
 """
 
 import os
@@ -75,6 +76,9 @@ _CODE_RUNNER_CSHARP_SERVER_PID = "/tmp/platform_test_code_runner_csharp_server.p
 _WORKTRACKER_SERVER_LOCK = "/tmp/platform_test_worktracker_server.lock"
 _WORKTRACKER_SERVER_PID = "/tmp/platform_test_worktracker_server.pid"
 
+_SECRETS_SERVER_LOCK = "/tmp/platform_test_secrets_server.lock"
+_SECRETS_SERVER_PID = "/tmp/platform_test_secrets_server.pid"
+
 
 # Общие env переменные для всех сервисов (те же БД, что в conftest и миграциях)
 _COMMON_TEST_ENV = {
@@ -98,6 +102,7 @@ _COMMON_TEST_ENV = {
     "SERVER__CODE_RUNNER_GO_SERVICE_URL": "http://localhost:9019",
     "SERVER__CODE_RUNNER_CSHARP_SERVICE_URL": "http://localhost:9020",
     "SERVER__WORKTRACKER_SERVICE_URL": "http://localhost:9021",
+    "SERVER__SECRETS_SERVICE_URL": "http://localhost:9022",
     "VOICE__STT__PROVIDER": "mock",
     "VOICE__STT__MOCK_TRANSCRIPT_TEXT": "Тестовая транскрипция sync worker",
     "CALLS__LIVEKIT_URL": "ws://localhost:7890",
@@ -132,7 +137,7 @@ def _with_mock_llm_lane(base_env: dict[str, str], lane: str) -> dict[str, str]:
 
 
 @pytest.fixture(scope="session")
-def flows_service():
+def flows_service(secrets_service):
     """
     Сервис flows как реальный HTTP на порту 9001.
 
@@ -146,6 +151,7 @@ def flows_service():
     - Redis (порт 63792)
     - TaskIQ worker (должен быть запущен отдельно)
     """
+    _ = secrets_service
     manager = SessionServerManager(
         name="Flows",
         lock_file=_FLOWS_SERVER_LOCK,
@@ -455,6 +461,28 @@ def worktracker_http_service(setup_database_before_tests):
         pid_file=_WORKTRACKER_SERVER_PID,
         app_path="apps.worktracker.main:app",
         port=9021,
+        startup_wait=12.0,
+        env=_COMMON_TEST_ENV,
+    )
+
+    with manager.start():
+        yield
+
+
+@pytest.fixture(scope="session")
+def secrets_service(setup_database_before_tests):
+    """
+    Secrets сервис как реальный HTTP сервер на порту 9022.
+
+    Нужен UI/E2E flows с @var: ссылками на company variables.
+    """
+    _ = setup_database_before_tests
+    manager = SessionServerManager(
+        name="Secrets",
+        lock_file=_SECRETS_SERVER_LOCK,
+        pid_file=_SECRETS_SERVER_PID,
+        app_path="apps.secrets.main:app",
+        port=9022,
         startup_wait=12.0,
         env=_COMMON_TEST_ENV,
     )

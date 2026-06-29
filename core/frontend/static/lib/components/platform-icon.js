@@ -46,7 +46,7 @@ export class PlatformIcon extends PlatformElement {
         this.filled = false;
         this.colored = false;
         this.fileIcon = false;
-        this._iconCacheSelect = this.select((s) => s.icon);
+        this._iconSvgSelect = this.select((state) => this._selectIconSvg(state));
     }
 
     updated(changed) {
@@ -55,6 +55,7 @@ export class PlatformIcon extends PlatformElement {
         }
         if (changed.has('name') || changed.has('fileIcon')) {
             this._requestLoad();
+            this.requestUpdate();
         }
     }
 
@@ -62,35 +63,46 @@ export class PlatformIcon extends PlatformElement {
         this._requestLoad();
     }
 
-    _requestLoad() {
-        if (!this.name) return;
-        const iconState = this._iconCacheSelect.value || { uiCache: {}, fileCache: {} };
+    _selectIconSvg(state) {
+        if (!this.name) {
+            return '';
+        }
         if (this.fileIcon) {
             try {
                 const basename = resolveFileIconBasename(this.name);
-                if (iconState.fileCache[basename]) return;
+                const svg = state.icon.fileCache[basename];
+                return typeof svg === 'string' ? svg : '';
+            } catch {
+                return '';
+            }
+        }
+        const svg = state.icon.uiCache[this.name];
+        return typeof svg === 'string' ? svg : '';
+    }
+
+    _requestLoad() {
+        if (!this.name) {
+            return;
+        }
+        const cachedSvg = this._iconSvgSelect.value;
+        if (typeof cachedSvg === 'string' && cachedSvg.length > 0) {
+            return;
+        }
+        if (this.fileIcon) {
+            try {
+                const basename = resolveFileIconBasename(this.name);
                 this.dispatch(ICON_EVENTS.FILE_LOAD_REQUESTED, { basename });
             } catch (err) {
                 console.warn(`[platform-icon] file icon "${this.name}":`, err.message);
             }
             return;
         }
-        if (iconState.uiCache[this.name]) return;
         this.dispatch(ICON_EVENTS.UI_LOAD_REQUESTED, { name: this.name });
     }
 
     _resolveSvg() {
-        if (!this.name) return '';
-        const iconState = this._iconCacheSelect.value || { uiCache: {}, fileCache: {} };
-        if (this.fileIcon) {
-            try {
-                const basename = resolveFileIconBasename(this.name);
-                return iconState.fileCache[basename] || '';
-            } catch {
-                return '';
-            }
-        }
-        return iconState.uiCache[this.name] || '';
+        const svg = this._iconSvgSelect.value;
+        return typeof svg === 'string' ? svg : '';
     }
 
     render() {

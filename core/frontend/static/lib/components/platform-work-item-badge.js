@@ -9,8 +9,8 @@ import { html, css } from '../lit-shim.js';
 import { PlatformElement } from '../platform-element/index.js';
 import { openWorkItemDetail } from '../utils/work-item-deeplink.js';
 import { formatPlatformDate } from '../utils/format-platform-date.js';
-import '@platform/lib/components/platform-icon.js';
-import '@platform/lib/components/platform-user-chip.js';
+import './platform-icon.js';
+import './platform-user-chip.js';
 import './platform-work-item-preview.js';
 
 const ALLOWED_SIZES = new Set(['sm', 'md']);

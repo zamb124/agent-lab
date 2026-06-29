@@ -10,10 +10,21 @@ installNativeAppShellWindowOpenPatch();
 
 const MOBILE_SHELL_MQ = '(max-width: 767px)';
 
+/** @type {{ vh: number|null, vw: number|null, offsetTop: number|null, keyboard: boolean|null }} */
+let _lastAppliedViewport = {
+    vh: null,
+    vw: null,
+    offsetTop: null,
+    keyboard: null,
+};
+
+let _viewportRafPending = false;
+
 function applyVisualViewportCssVars() {
     const root = document.documentElement;
     const mq = window.matchMedia(MOBILE_SHELL_MQ);
     if (!mq.matches) {
+        _lastAppliedViewport = { vh: null, vw: null, offsetTop: null, keyboard: null };
         root.style.removeProperty('--app-vh');
         root.style.removeProperty('--app-vw');
         root.style.removeProperty('--vv-offset-top');
@@ -22,18 +33,39 @@ function applyVisualViewportCssVars() {
     }
     const vv = window.visualViewport;
     if (!vv || typeof vv.height !== 'number') {
+        _lastAppliedViewport = { vh: null, vw: null, offsetTop: null, keyboard: null };
         root.style.removeProperty('--app-vh');
         root.style.removeProperty('--app-vw');
         root.style.removeProperty('--vv-offset-top');
         root.removeAttribute('data-keyboard-visual');
         return;
     }
-    root.style.setProperty('--app-vh', `${Math.round(vv.height)}px`);
-    root.style.setProperty('--app-vw', `${Math.round(vv.width)}px`);
-    root.style.setProperty('--vv-offset-top', `${Math.round(vv.offsetTop)}px`);
-
+    const vh = Math.round(vv.height);
+    const vw = Math.round(vv.width);
+    const offsetTop = Math.round(vv.offsetTop);
     const innerH = window.innerHeight;
     const keyboardLikely = innerH > 0 && innerH - vv.height > 80;
+
+    if (
+        _lastAppliedViewport.vh === vh
+        && _lastAppliedViewport.vw === vw
+        && _lastAppliedViewport.offsetTop === offsetTop
+        && _lastAppliedViewport.keyboard === keyboardLikely
+    ) {
+        return;
+    }
+
+    _lastAppliedViewport = {
+        vh,
+        vw,
+        offsetTop,
+        keyboard: keyboardLikely,
+    };
+
+    root.style.setProperty('--app-vh', `${vh}px`);
+    root.style.setProperty('--app-vw', `${vw}px`);
+    root.style.setProperty('--vv-offset-top', `${offsetTop}px`);
+
     if (keyboardLikely) {
         root.setAttribute('data-keyboard-visual', '1');
     } else {
@@ -60,6 +92,17 @@ function applyVisualViewportCssVars() {
     }
 }
 
+function scheduleVisualViewportCssVars() {
+    if (_viewportRafPending) {
+        return;
+    }
+    _viewportRafPending = true;
+    requestAnimationFrame(() => {
+        _viewportRafPending = false;
+        applyVisualViewportCssVars();
+    });
+}
+
 /**
  * Идемпотентный запуск: один раз на загрузку страницы (импорт из app-loader).
  */
@@ -74,7 +117,7 @@ export function initPlatformViewportAppVh() {
 
     const mq = window.matchMedia(MOBILE_SHELL_MQ);
     const onVisualViewport = () => {
-        applyVisualViewportCssVars();
+        scheduleVisualViewportCssVars();
     };
 
     mq.addEventListener('change', onVisualViewport);

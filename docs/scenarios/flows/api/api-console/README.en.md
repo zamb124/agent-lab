@@ -78,7 +78,8 @@ The `A2A fields` tab explains why each field exists.
 Important details:
 
 - `metadata.branch` selects the graph branch. When the UI is on base, the API receives `default`.
-- `metadata.variables` sends data into the flow run and is not used to select the branch.
+- `metadata.variables.branch_id` does not select the branch. It is a normal runtime variable; the
+  backend only copies it to `target_branch_id` when `target_branch_id` is absent.
 - `metadata.version` selects a flow version, but query `?v=...` wins.
 - `metadata.execution_mode` on `message/send`, with `async` or `background`, enables asynchronous run.
 - `metadata.breakpoints` and `metadata.triggers` are for editor/debug/trigger runtime; most public

@@ -1,0 +1,317 @@
+# Единый реестр навигации UI-инструкций (docs/scenarios).
+# tag в @pytest.mark.scenario должен быть зарегистрирован здесь.
+
+service_order:
+  - platform
+  - sync
+  - flows
+  - crm
+  - rag
+  - frontend
+  - office
+
+learning_paths:
+  - id: new-user
+    label_ru: Новый пользователь
+    label_en: New user
+    intro_ru: >-
+      Если вы впервые на Humanitec — пройдите эти шаги по порядку: войти на сайт,
+      открыть Dashboard и разобраться с меню аккаунта.
+    intro_en: >-
+      First time on Humanitec? Follow these steps in order: sign in, open the Dashboard,
+      and learn the account menu.
+    steps:
+      - label_ru: Основные инструкции — вход, Dashboard и меню
+        label_en: Platform basics — sign-in, Dashboard, and user menu
+        href: scenarios/platform/main-dashboard-user-menu/
+      - label_ru: Sync — полная инструкция по чату
+        label_en: Sync — complete chat guide
+        href: scenarios/sync/sync-complete-guide/
+
+  - id: developer
+    label_ru: Разработчик
+    label_en: Developer
+    intro_ru: >-
+      Минимальный путь для интеграции: быстрый старт с A2A, затем справочник API
+      и инструкция по API Console в Flows.
+    intro_en: >-
+      Minimum integration path: A2A quickstart, API reference, and the Flows API Console guide.
+    steps:
+      - label_ru: Быстрый старт — первый запрос к агенту
+        label_en: Quickstart — first agent request
+        href: quickstart/
+      - label_ru: Flows — API Console и A2A
+        label_en: Flows — API Console and A2A
+        href: scenarios/flows/api-console/
+      - label_ru: Справочник API
+        label_en: API reference
+        href: api/
+
+  - id: sync-team
+    label_ru: Команда в Sync
+    label_en: Team in Sync
+    intro_ru: >-
+      Для команд, которые работают в чате: сначала длинная инструкция по сервису,
+      затем короткие маршруты по каналам, сообщениям и звонкам.
+    intro_en: >-
+      For teams using chat: start with the full service guide, then short routes
+      for channels, messages, and calls.
+    steps:
+      - label_ru: Sync — полная инструкция
+        label_en: Sync — complete guide
+        href: scenarios/sync/sync-complete-guide/
+      - label_ru: Создание канала
+        label_en: Create a channel
+        href: scenarios/sync/create-topic-channel/
+      - label_ru: Отправка сообщения
+        label_en: Send a message
+        href: scenarios/sync/send-message-in-channel/
+      - label_ru: Звонок из канала
+        label_en: Start a channel call
+        href: scenarios/sync/channel-call-overlay/
+
+  - id: office-documents
+    label_ru: Документы Office
+    label_en: Office documents
+    intro_ru: >-
+      Работа с документами на /documents: от первого пространства и каталога
+      до редактирования в OnlyOffice и публикации ссылки.
+    intro_en: >-
+      Working with documents at /documents: from the first workspace and catalog
+      to OnlyOffice editing and sharing a public link.
+    steps:
+      - label_ru: Office — полная инструкция
+        label_en: Office — complete guide
+        href: scenarios/office/documents-complete-guide/
+      - label_ru: Каталоги и пространство
+        label_en: Workspaces and catalogs
+        href: scenarios/office/workspace-and-catalogs/
+      - label_ru: Создание и загрузка документов
+        label_en: Create and upload documents
+        href: scenarios/office/create-and-upload-documents/
+      - label_ru: Редактирование в OnlyOffice
+        label_en: Edit in OnlyOffice
+        href: scenarios/office/edit-in-onlyoffice/
+      - label_ru: Каталоги и пространство
+        label_en: Workspaces and catalogs
+        href: scenarios/office/workspace-and-catalogs/
+
+services:
+  platform:
+    label_ru: Основные инструкции
+    label_en: Platform Basics
+    intro_ru: >-
+      Базовые шаги для нового пользователя: вход на сайт, Dashboard, список сервисов
+      и меню аккаунта.
+    intro_en: >-
+      Basic steps for a new user: site entry, Dashboard, service list, and account menu.
+    featured_slug: main-dashboard-user-menu
+    tags:
+      onboarding:
+        label_ru: Первые шаги
+        label_en: First steps
+        order: 1
+
+  sync:
+    label_ru: Sync
+    label_en: Sync
+    intro_ru: >-
+      Рабочий чат команды: пространства, каналы, личные диалоги, треды, файлы,
+      упоминания, настройки и звонки.
+    intro_en: >-
+      Team chat: spaces, channels, direct messages, threads, files, mentions, settings, and calls.
+    featured_slug: sync-complete-guide
+    tags:
+      general:
+        label_ru: Краткие маршруты
+        label_en: Short routes
+        order: 0
+      spaces:
+        label_ru: Пространства
+        label_en: Spaces
+        order: 1
+      channels:
+        label_ru: Каналы
+        label_en: Channels
+        order: 2
+      chat:
+        label_ru: Сообщения и чат
+        label_en: Messages and chat
+        order: 3
+      direct:
+        label_ru: Личные сообщения
+        label_en: Direct messages
+        order: 4
+      threads:
+        label_ru: Треды
+        label_en: Threads
+        order: 5
+      files:
+        label_ru: Файлы
+        label_en: Files
+        order: 6
+      settings:
+        label_ru: Настройки и профиль
+        label_en: Settings and profile
+        order: 7
+      calls:
+        label_ru: Звонки
+        label_en: Calls
+        order: 8
+      navigation:
+        label_ru: Навигация и ссылки
+        label_en: Navigation and links
+        order: 9
+      mobile:
+        label_ru: Мобильный интерфейс
+        label_en: Mobile UI
+        order: 10
+
+  flows:
+    label_ru: Flows
+    label_en: Flows
+    intro_ru: >-
+      ИИ-агенты и графы: главная сервиса, чат агента, редактор flow, API Console,
+      операции с published flow и Evaluation Lab.
+    intro_en: >-
+      AI agents and graphs: service home, agent chat, flow editor, API Console,
+      published-flow operations, and Evaluation Lab.
+    featured_slug: flows-home-overview
+    tags:
+      general:
+        label_ru: Обзор сервиса
+        label_en: Service overview
+        order: 0
+      chat:
+        label_ru: Чат агента
+        label_en: Agent chat
+        order: 1
+      editor:
+        label_ru: Редактор
+        label_en: Editor
+        order: 2
+      api:
+        label_ru: API Console
+        label_en: API Console
+        order: 3
+      operations:
+        label_ru: Операции
+        label_en: Operations
+        order: 4
+      evaluation:
+        label_ru: Evaluation Lab
+        label_en: Evaluation Lab
+        order: 5
+      agent-download:
+        label_ru: Скачивание HumanitecAgent
+        label_en: HumanitecAgent download
+        order: 6
+
+  crm:
+    label_ru: NetWorkle
+    label_en: NetWorkle
+    intro_ru: >-
+      Записная книжка и CRM: оболочка сервиса и настройки. Подробные сценарии
+      по сущностям и графу — в следующих итерациях.
+    intro_en: >-
+      CRM notebook and settings shell. Detailed entity and graph scenarios are coming next.
+    featured_slug: crm-shell
+    tags:
+      general:
+        label_ru: Общее
+        label_en: General
+        order: 1
+
+  rag:
+    label_ru: RAG
+    label_en: RAG
+    intro_ru: >-
+      Семантический поиск и документы. Сейчас — оболочка сервиса; пошаговые сценарии
+      загрузки и поиска добавляются через tests/ui.
+    intro_en: >-
+      Semantic search and documents. Service shell is documented; upload and search
+      scenarios are added via tests/ui.
+    featured_slug: rag-shell
+    tags:
+      general:
+        label_ru: Общее
+        label_en: General
+        order: 1
+
+  frontend:
+    label_ru: Frontend
+    label_en: Frontend
+    intro_ru: >-
+      Платформенная оболочка, настройки HumanitecAgent и ссылки на desktop-клиент.
+    intro_en: >-
+      Platform shell, HumanitecAgent settings, and desktop client download links.
+    featured_slug: frontend-shell
+    tags:
+      general:
+        label_ru: Общее
+        label_en: General
+        order: 1
+      settings-agent:
+        label_ru: HumanitecAgent в настройках
+        label_en: HumanitecAgent settings
+        order: 2
+      agent-download:
+        label_ru: Скачивание HumanitecAgent
+        label_en: HumanitecAgent download
+        order: 3
+
+  office:
+    label_ru: Office
+    label_en: Office
+    intro_ru: >-
+      Документы и file explorer на маршруте /documents: пространства, каталоги,
+      загрузка, редактор OnlyOffice, доступ и публичные ссылки.
+    intro_en: >-
+      Documents and file explorer at /documents: workspaces, catalogs, upload,
+      OnlyOffice editor, access control, and public links.
+    featured_slug: documents-complete-guide
+    tags:
+      getting-started:
+        label_ru: С чего начать
+        label_en: Getting started
+        order: 1
+      catalogs:
+        label_ru: Каталоги и пространство
+        label_en: Catalogs and workspace
+        order: 2
+      documents:
+        label_ru: Документы
+        label_en: Documents
+        order: 3
+      explorer:
+        label_ru: Проводник
+        label_en: Explorer
+        order: 4
+      views:
+        label_ru: Представления
+        label_en: Views
+        order: 5
+      access:
+        label_ru: Доступ и участники
+        label_en: Access and members
+        order: 6
+      editor:
+        label_ru: Редактор
+        label_en: Editor
+        order: 7
+      rag:
+        label_ru: Семантический поиск
+        label_en: Semantic search
+        order: 8
+      trash:
+        label_ru: Корзина
+        label_en: Trash
+        order: 9
+      public:
+        label_ru: Публичные ссылки
+        label_en: Public links
+        order: 10
+      mobile:
+        label_ru: Мобильная версия
+        label_en: Mobile
+        order: 11

@@ -78,7 +78,8 @@ Agent Card и push notification config.
 Главные нюансы:
 
 - `metadata.branch` выбирает ветку графа. Если выбрать base в UI, API получает `default`.
-- `metadata.variables` передает данные в запуск flow и не используется для выбора ветки.
+- `metadata.variables.branch_id` не выбирает ветку. Это обычная runtime-переменная; backend только
+  копирует ее в `target_branch_id`, если `target_branch_id` не был передан явно.
 - `metadata.version` выбирает версию flow, но query `?v=...` имеет приоритет.
 - `metadata.execution_mode` в `message/send` со значением `async` или `background` включает
   асинхронный запуск.

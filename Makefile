@@ -440,6 +440,7 @@ doc:
 	@echo "Локальная сборка документации (Zensical RU + EN)..."
 	rm -rf documentation-dist build/documentation-ru build/documentation-en build/zensical-en-out
 	uv run python scripts/extract_openapi.py
+	uv run python scripts/check_scenario_docs_quality.py --warnings-ok
 	uv run python scripts/docs_prepare.py
 	uv run python scripts/check_docs_locale_parity.py
 	uv run --group docs zensical build --clean --config-file zensical.ru.toml

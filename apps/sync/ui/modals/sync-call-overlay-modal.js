@@ -113,6 +113,8 @@ export class SyncCallOverlayModal extends PlatformModal {
                 padding-left: env(safe-area-inset-left, 0px);
                 touch-action: manipulation;
                 --call-overlay-chrome: 200px;
+                --call-ctrl-size: 52px;
+                --call-ctrl-size-compact: 48px;
             }
             :host([open]) {
                 display: flex !important;
@@ -475,8 +477,11 @@ export class SyncCallOverlayModal extends PlatformModal {
             }
 
             .ctrl {
-                width: 52px;
-                height: 52px;
+                width: var(--call-ctrl-size);
+                height: var(--call-ctrl-size);
+                min-width: var(--call-ctrl-size);
+                min-height: var(--call-ctrl-size);
+                flex-shrink: 0;
                 border-radius: 50%;
                 border: none;
                 background: rgba(255, 255, 255, 0.12);
@@ -491,7 +496,6 @@ export class SyncCallOverlayModal extends PlatformModal {
             .ctrl.active { background: rgba(255, 255, 255, 0.92); color: #000; }
             .ctrl[disabled] { opacity: 0.35; cursor: not-allowed; }
             .ctrl.hangup {
-                width: 60px; height: 60px;
                 background: var(--color-error, #ef4444);
             }
             .ctrl.hangup:hover { background: #dc2626; }
@@ -570,6 +574,31 @@ export class SyncCallOverlayModal extends PlatformModal {
                 background: rgba(234, 179, 8, 0.12);
                 border: 1px solid rgba(234, 179, 8, 0.35);
                 border-radius: var(--radius-md, 10px);
+            }
+
+            /* platform-field в оверлее всегда на тёмном фоне; без локальных токенов текст enum — цвет light-theme. */
+            .menu platform-field,
+            .menu-devices-inline platform-field {
+                display: block;
+                margin-bottom: var(--space-2);
+                --field-pill-bg: rgba(255, 255, 255, 0.08);
+                --field-pill-border: rgba(255, 255, 255, 0.18);
+                --field-pill-input-color: rgba(255, 255, 255, 0.95);
+                --field-pill-input-size: var(--text-sm);
+                --field-pill-input-weight: var(--font-normal);
+                --field-pill-padding-y: 8px;
+                --field-pill-padding-x: 10px;
+                --field-pill-radius: var(--radius-md, 8px);
+                --field-pill-number-spin-height: 36px;
+                --field-pill-muted-color: rgba(255, 255, 255, 0.45);
+                --text-primary: rgba(255, 255, 255, 0.95);
+                --text-secondary: rgba(255, 255, 255, 0.65);
+                --text-tertiary: rgba(255, 255, 255, 0.55);
+                --glass-solid-medium: rgba(28, 28, 36, 0.98);
+                --glass-solid-subtle: rgba(255, 255, 255, 0.1);
+                --glass-border-subtle: rgba(255, 255, 255, 0.18);
+                --accent-subtle: rgba(99, 102, 241, 0.28);
+                --field-pill-enum-list-z: 110;
             }
 
             .error-bar {
@@ -683,13 +712,11 @@ export class SyncCallOverlayModal extends PlatformModal {
                 flex-wrap: wrap;
                 justify-content: center;
             }
-            .controls--compact .ctrl:not(.hangup) {
-                width: 48px;
-                height: 48px;
-            }
-            .controls--compact .ctrl.hangup {
-                width: 54px;
-                height: 54px;
+            .controls--compact .ctrl {
+                width: var(--call-ctrl-size-compact);
+                height: var(--call-ctrl-size-compact);
+                min-width: var(--call-ctrl-size-compact);
+                min-height: var(--call-ctrl-size-compact);
             }
             .menu-row-btn {
                 display: flex;
@@ -2079,6 +2106,7 @@ export class SyncCallOverlayModal extends PlatformModal {
             <platform-field
                 type="enum"
                 mode="edit"
+                pill-density="compact"
                 .value=${this._activeDeviceId('audioinput')}
                 .config=${this._deviceEnumConfig('audioinput')}
                 @change=${this._onAudioInputChange}
@@ -2088,6 +2116,7 @@ export class SyncCallOverlayModal extends PlatformModal {
                 <platform-field
                     type="enum"
                     mode="edit"
+                    pill-density="compact"
                     .value=${this._activeDeviceId('videoinput')}
                     .config=${this._deviceEnumConfig('videoinput')}
                     @change=${this._onVideoInputChange}
@@ -2098,6 +2127,7 @@ export class SyncCallOverlayModal extends PlatformModal {
                 <platform-field
                     type="enum"
                     mode="edit"
+                    pill-density="compact"
                     .value=${this._activeDeviceId('audiooutput')}
                     .config=${this._deviceEnumConfig('audiooutput')}
                     @change=${this._onAudioOutputChange}

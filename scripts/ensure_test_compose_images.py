@@ -328,6 +328,14 @@ def _ensure_agent_lab_base(registry: str) -> str:
 
 def _ensure_image(spec: ImageSpec, registry: str, *, try_pull: bool) -> str:
     image_ref = _image_ref(registry, spec.repository_suffix, spec.tag)
+    if _local_image_exists(image_ref):
+        print(f"[ensure] local {image_ref}")
+        return image_ref
+    latest_ref = _image_ref(registry, spec.repository_suffix, "latest")
+    if spec.tag != "latest" and _local_image_exists(latest_ref):
+        print(f"[ensure] retag local {latest_ref} -> {image_ref}")
+        _run(["docker", "tag", latest_ref, image_ref])
+        return image_ref
     if try_pull:
         for candidate in _pull_candidates(registry, spec):
             if not _try_pull_image(candidate):
@@ -375,8 +383,8 @@ def main() -> int:
 
     if dirty:
         print(
-            "[ensure] git tree dirty — GHCR pull first (pytest runs from host); "
-            "set TEST_IMAGES_FORCE_BUILD=1 to force local docker build"
+            "[ensure] git tree dirty — reuse local GHCR tags when present, "
+            "else pull; set TEST_IMAGES_FORCE_BUILD=1 to build code images locally"
         )
     elif force_build:
         print("[ensure] TEST_IMAGES_FORCE_BUILD=1 — code images will be built locally")

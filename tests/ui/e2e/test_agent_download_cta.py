@@ -32,6 +32,7 @@ async def test_landing_hero_agent_download_link(
     page = ui_page_anonymous
     await page.goto(f"{frontend_ui.origin}/", wait_until="domcontentloaded")
     await expect(page.locator("frontend-app")).to_be_visible(timeout=30_000)
+    await scenario.step("Главная страница лендинга открыта", page, label_en="Landing home page opened")
     download_link = page.locator('landing-agent-download-card a[href="/agent"]')
     await expect(download_link).to_be_visible(timeout=30_000)
     await expect(
@@ -61,6 +62,7 @@ async def test_flows_home_agent_download_link(
     await page.goto(f"{flows_ui.origin}/flows/", wait_until="domcontentloaded")
     await expect(page.locator("flows-app")).to_be_visible(timeout=30_000)
     await expect(page.locator("flows-home-page")).to_be_visible(timeout=30_000)
+    await scenario.step("Flows home открыта", page, label_en="Flows home opened")
     download_link = page.locator('flows-home-page a.text-action[href*="/agent"]')
     await expect(download_link).to_be_visible(timeout=30_000)
     await expect(

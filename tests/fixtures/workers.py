@@ -56,6 +56,7 @@ _PLATFORM_TEST_HTTP_PORTS = (
     9018,
     9019,
     9020,
+    9022,
 )
 
 

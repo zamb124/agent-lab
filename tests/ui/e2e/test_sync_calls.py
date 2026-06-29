@@ -83,6 +83,11 @@ async def test_call_join_page_shows_error_for_invalid_token(
     page: Page,
 ) -> None:
     await page.goto(f"{sync_ui.origin}/sync/join/invalid-token-e2e", wait_until="domcontentloaded")
+    await scenario.step(
+        "Открыта страница входа по ссылке звонка",
+        page,
+        label_en="Call join page opened from link",
+    )
     await expect(page.locator("sync-call-join-page .error-text")).to_contain_text(
         re.compile(
             r"Ссылка не найдена или истекла|Не удалось загрузить информацию о звонке|"
@@ -90,7 +95,11 @@ async def test_call_join_page_shows_error_for_invalid_token(
         ),
         timeout=30_000,
     )
-    await scenario.step("Сообщение об ошибке для неверной ссылки", page)
+    await scenario.step(
+        "Сообщение об ошибке для неверной ссылки",
+        page,
+        label_en="Error message for invalid join link",
+    )
 
 
 @pytest.mark.scenario(

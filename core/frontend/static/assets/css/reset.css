@@ -65,6 +65,13 @@ body.platform-shell {
     overscroll-behavior: none;
 }
 
+body.platform-shell::before,
+body.platform-shell::after {
+    display: none;
+    animation: none;
+    filter: none;
+}
+
 /*
  * Узкая ширина: высота документа = var(--app-vh) из visualViewport (viewport-app-vh.js).
  * Иначе на iOS Safari height: 100% цепляется к layout viewport (полный экран), а shell — к

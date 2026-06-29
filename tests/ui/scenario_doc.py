@@ -372,6 +372,9 @@ class ScenarioRecorder:
     def finalize(self) -> None:
         if self.disabled():
             return
+        # Неполный прогон (failed E2E) не должен затирать готовую инструкцию.
+        if len(self.steps) < 2:
+            return
         self.out_dir.mkdir(parents=True, exist_ok=True)
         lines: list[str] = [
             f"# {self.title}",

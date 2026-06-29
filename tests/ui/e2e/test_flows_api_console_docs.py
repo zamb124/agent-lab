@@ -6,9 +6,11 @@ import json
 import re
 from typing import Any
 
+import httpx
 import pytest
 from playwright.async_api import Page, expect
 
+from tests.fixtures.variables_helpers import upsert_static_variable_via_secrets_http
 from tests.ui.e2e.flows_e2e_helpers import (
     flows_api_create_flow,
     flows_click_platform_button,
@@ -516,11 +518,25 @@ async def test_flows_api_console_documentation_scenario(
     flows_ui: AppUI,
     ui_page_system: Page,
     auth_token_system: str,
+    auth_headers_system: dict[str, str],
+    secrets_service: object,
     taskiq_worker: object,
     unique_id: str,
 ) -> None:
-    _ = taskiq_worker
+    _ = secrets_service, taskiq_worker
     flow_id = flows_doc_flow_id("doc_api_console", unique_id)
+    async with httpx.AsyncClient(
+        base_url="http://localhost:9022",
+        headers=auth_headers_system,
+        timeout=60.0,
+    ) as secrets_client:
+        await upsert_static_variable_via_secrets_http(
+            secrets_client,
+            "external_api_token",
+            "e2e-api-console-token",
+            secret=True,
+            shared_for_execution=True,
+        )
     await flows_api_create_flow(
         flows_ui.origin,
         auth_token_system,

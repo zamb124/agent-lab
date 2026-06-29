@@ -1,3 +1,11 @@
-# Frontend: вкладка HumanitecAgent в настройках
+# Frontend: HumanitecAgent tab in settings
 
-Страница настроек открывается, вкладка HumanitecAgent доступна.
+Settings page opens and the HumanitecAgent tab is available.
+
+## Step 1. Platform settings page opened
+
+![Platform settings page opened](screenshots/001.png)
+
+## Step 2. HumanitecAgent tab is visible in settings
+
+![HumanitecAgent tab is visible in settings](screenshots/002.png)

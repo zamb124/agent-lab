@@ -2,7 +2,7 @@
  * Компонент Glass Spinner
  * Индикатор загрузки
  */
-import { html, css } from 'lit';
+import { html, css } from '../lit-shim.js';
 import { PlatformElement } from '../platform-element/index.js';
 
 export class GlassSpinner extends PlatformElement {

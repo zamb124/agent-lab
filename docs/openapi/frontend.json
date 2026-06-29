@@ -118,30 +118,6 @@
         }
       }
     },
-    "/frontend/api/agent/releases/status": {
-      "get": {
-        "tags": [
-          "agent",
-          "agent",
-          "agent",
-          "public"
-        ],
-        "summary": "Agent Releases Status",
-        "operationId": "agent_releases_status_frontend_api_agent_releases_status_get",
-        "responses": {
-          "200": {
-            "description": "Successful Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/AgentReleaseStatusResponse"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
     "/frontend/api/agent/discover": {
       "get": {
         "tags": [
@@ -179,6 +155,134 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/AgentDiscoverResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/frontend/api/agent/register-with-auth": {
+      "post": {
+        "tags": [
+          "agent",
+          "agent",
+          "agent",
+          "public"
+        ],
+        "summary": "Register Agent Device With Auth",
+        "operationId": "register_agent_device_with_auth_frontend_api_agent_register_with_auth_post",
+        "parameters": [
+          {
+            "name": "origin",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Opt-in override публичного origin (lvh.me dev)",
+              "title": "Origin"
+            },
+            "description": "Opt-in override публичного origin (lvh.me dev)"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DeviceRegisterWithAuthRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DeviceRegisterResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/frontend/api/agent/register": {
+      "post": {
+        "tags": [
+          "agent",
+          "agent",
+          "agent",
+          "public"
+        ],
+        "summary": "Register Agent Device",
+        "operationId": "register_agent_device_frontend_api_agent_register_post",
+        "parameters": [
+          {
+            "name": "origin",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Opt-in override публичного origin (lvh.me dev)",
+              "title": "Origin"
+            },
+            "description": "Opt-in override публичного origin (lvh.me dev)"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DeviceRegisterRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DeviceRegisterResponse"
                 }
               }
             }
@@ -337,6 +441,30 @@
         }
       }
     },
+    "/frontend/api/agent/releases/status": {
+      "get": {
+        "tags": [
+          "agent",
+          "agent",
+          "agent",
+          "public"
+        ],
+        "summary": "Agent Releases Status",
+        "operationId": "agent_releases_status_frontend_api_agent_releases_status_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AgentReleaseStatusResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/frontend/api/agent/audit": {
       "get": {
         "tags": [
@@ -366,134 +494,6 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/AgentAuditListResponse"
-                }
-              }
-            }
-          },
-          "422": {
-            "description": "Validation Error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/frontend/api/agent/register-with-auth": {
-      "post": {
-        "tags": [
-          "agent",
-          "agent",
-          "agent",
-          "public"
-        ],
-        "summary": "Register Agent Device With Auth",
-        "operationId": "register_agent_device_with_auth_frontend_api_agent_register_with_auth_post",
-        "parameters": [
-          {
-            "name": "origin",
-            "in": "query",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "description": "Opt-in override публичного origin (lvh.me dev)",
-              "title": "Origin"
-            },
-            "description": "Opt-in override публичного origin (lvh.me dev)"
-          }
-        ],
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/DeviceRegisterWithAuthRequest"
-              }
-            }
-          }
-        },
-        "responses": {
-          "200": {
-            "description": "Successful Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/DeviceRegisterResponse"
-                }
-              }
-            }
-          },
-          "422": {
-            "description": "Validation Error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/frontend/api/agent/register": {
-      "post": {
-        "tags": [
-          "agent",
-          "agent",
-          "agent",
-          "public"
-        ],
-        "summary": "Register Agent Device",
-        "operationId": "register_agent_device_frontend_api_agent_register_post",
-        "parameters": [
-          {
-            "name": "origin",
-            "in": "query",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "description": "Opt-in override публичного origin (lvh.me dev)",
-              "title": "Origin"
-            },
-            "description": "Opt-in override публичного origin (lvh.me dev)"
-          }
-        ],
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/DeviceRegisterRequest"
-              }
-            }
-          }
-        },
-        "responses": {
-          "200": {
-            "description": "Successful Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/DeviceRegisterResponse"
                 }
               }
             }

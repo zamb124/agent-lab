@@ -22,6 +22,7 @@ extra_javascript = [
 homepage = "/"
 platform_home_title = "На главную"
 nav_docs_title = "Документация"
+nav_start_here_title = "Начни отсюда"
 nav_quickstart_title = "Быстрый старт"
 nav_api_title = "API"
 nav_instructions_title = "Инструкции"

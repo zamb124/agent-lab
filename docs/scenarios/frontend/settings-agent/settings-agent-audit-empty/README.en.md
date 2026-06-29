@@ -1,3 +1,15 @@
-# Frontend: пустой audit HumanitecAgent
+# Frontend: empty HumanitecAgent audit log
 
-На вкладке HumanitecAgent показывается пустой audit log.
+The HumanitecAgent tab shows an empty audit log.
+
+## Step 1. Platform settings page opened
+
+![Platform settings page opened](screenshots/001.png)
+
+## Step 2. HumanitecAgent settings tab opened
+
+![HumanitecAgent settings tab opened](screenshots/002.png)
+
+## Step 3. Empty audit log is visible
+
+![Empty audit log is visible](screenshots/003.png)

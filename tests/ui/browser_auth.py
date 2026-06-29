@@ -1,4 +1,4 @@
-"""Cookie auth_token для Playwright на localhost (тот же механизм, что AuthMiddleware)."""
+"""Cookie auth_token для Playwright (тот же механизм, что AuthMiddleware)."""
 
 from __future__ import annotations
 
@@ -6,8 +6,15 @@ from playwright.async_api import BrowserContext
 
 AUTH_TOKEN_COOKIE = "auth_token"
 
-# Один токен на нескольких host, иначе cookie с domain=localhost не уйдёт на system.localhost (CRM/RAG).
-_COOKIE_HOSTS = ("localhost", "system.localhost", "company2.localhost")
+# localhost: Domain=localhost покрывает *.localhost (см. core.utils.domain.get_cookie_domain).
+# lvh.me: .lvh.me покрывает system/company2 и сервисы на разных портах.
+# Оба набора — чтобы UI_E2E_USE_LVH_ME мог включаться отдельными модулями без потери auth.
+_COOKIE_HOSTS = (
+    "localhost",
+    "system.localhost",
+    "company2.localhost",
+    ".lvh.me",
+)
 
 
 async def add_auth_token_cookie(context: BrowserContext, token: str) -> None:

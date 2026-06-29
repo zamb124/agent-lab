@@ -37,7 +37,8 @@ FROM_SPEC_RE = re.compile(r"""\bfrom\s+(['"])([^'"]+)\1""")
 IMPORT_SIDE_RE = re.compile(r"""^\s*import\s+['"]([^'"]+)['"]\s*;?\s*$""", re.MULTILINE)
 
 BARE_LIT_RE = re.compile(r"""\bfrom\s+['"]lit(?:/[^'"]*)?['"]""")
-BARE_PLATFORM_RE = re.compile(r"""\bfrom\s+['"]@platform/[^'"]+['"]""")
+BARE_PLATFORM_FROM_RE = re.compile(r"""\bfrom\s+['"]@platform/[^'"]+['"]""")
+BARE_PLATFORM_SIDE_RE = re.compile(r"""^\s*import\s+['"]@platform/[^'"]+['"]\s*;?\s*$""", re.MULTILINE)
 
 ERRORS: list[str] = []
 
@@ -113,9 +114,9 @@ def _scan_closure() -> None:
                         "(нужны относительные пути к assets/js/lit или общему lib/lit-shim)"
                     )
                     break
-        if BARE_PLATFORM_RE.search(clean):
+        if BARE_PLATFORM_FROM_RE.search(clean) or BARE_PLATFORM_SIDE_RE.search(clean):
             for i, line in enumerate(clean.splitlines(), start=1):
-                if BARE_PLATFORM_RE.search(line):
+                if BARE_PLATFORM_FROM_RE.search(line) or BARE_PLATFORM_SIDE_RE.search(line):
                     fail(
                         f"{cur.relative_to(ROOT)}:{i}: bare import @platform "
                         "(на внешнем сайте нужен только ./ ../ к статике)"

@@ -39,16 +39,31 @@ export const islandStyles = css`
         height: 100%;
         display: flex;
         flex-direction: column;
+        border-radius: var(--island-radius, var(--radius-2xl));
+        overflow: hidden;
+        isolation: isolate;
+    }
+
+    .island-surface {
+        position: absolute;
+        inset: 0;
+        z-index: 0;
+        pointer-events: none;
         background: var(--island-bg, var(--glass-solid-medium));
         backdrop-filter: blur(var(--island-blur, var(--glass-blur-strong)));
         -webkit-backdrop-filter: blur(var(--island-blur, var(--glass-blur-strong)));
         border: 1px solid var(--island-border, var(--glass-border-medium));
-        border-radius: var(--island-radius, var(--radius-2xl));
+        border-radius: inherit;
         box-shadow: var(--island-shadow, var(--glass-shadow-medium)), var(--glass-inner-glow-subtle);
-        overflow: hidden;
-        isolation: isolate;
         background-clip: padding-box;
-        -webkit-mask-image: -webkit-radial-gradient(white, black);
+        transform: translate3d(0, 0, 0);
+        backface-visibility: hidden;
+        contain: strict;
+    }
+
+    .island.is-scrolling .island-surface {
+        backdrop-filter: none;
+        -webkit-backdrop-filter: none;
     }
 
     .island-header-glow {
@@ -65,7 +80,6 @@ export const islandStyles = css`
             transparent 100%
         );
         pointer-events: none;
-        z-index: 0;
     }
 
     .island-content {
@@ -78,6 +92,8 @@ export const islandStyles = css`
         overflow-y: auto;
         overflow-x: hidden;
         overscroll-behavior: contain;
+        contain: paint;
+        -webkit-overflow-scrolling: touch;
     }
 
     :host([padding="none"]) .island-content {
@@ -97,7 +113,7 @@ export const islandStyles = css`
     }
 
     /* Светлая тема */
-    :host-context([data-theme="light"]) .island {
+    :host-context([data-theme="light"]) .island-surface {
         background: rgba(255, 255, 255, 0.9);
         border-color: rgba(15, 23, 42, 0.08);
     }
@@ -113,6 +129,10 @@ export const islandStyles = css`
     /* ========== MOBILE FULLSCREEN ========== */
     @media (max-width: 767px) {
         .island {
+            border-radius: 0;
+        }
+
+        .island-surface {
             border-radius: 0;
             border: none;
             box-shadow: none;

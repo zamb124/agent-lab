@@ -11793,7 +11793,7 @@
           "value"
         ],
         "title": "FlowVariableConfig",
-        "description": "Конфигурация переменной flow с метаданными. Company-переменные — через secrets-сервис (PlatformVariable); flow-переменная с тем же ключом перекрывает company при выполнении."
+        "description": "Конфигурация переменной flow с метаданными.\n\nКонтракт значения {value, secret} симметричен company-уровню\n(`core.variables.models.PlatformVariable`). При выполнении flow\nпеременная по тому же ключу перекрывает company-переменную."
       },
       "FlowVoiceSessionQueryResponse": {
         "properties": {
@@ -19749,6 +19749,28 @@
         ],
         "title": "VapidPublicKeyResponse"
       },
+      "VariablesResolvedPayload": {
+        "properties": {
+          "variable_keys": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Variable Keys"
+          },
+          "secret_keys": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Secret Keys"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "title": "VariablesResolvedPayload",
+        "description": "Материализация переменных компании/flow на старте.\n\nЗначения попадают в `ExecutionState.variables` через `state_delta` (как все\nпеременные), здесь — только аудит ключей; секреты в payload не дублируются."
+      },
       "VoiceProvidersCatalogDTO": {
         "properties": {
           "stt_tts_provider_ids": {
@@ -20200,6 +20222,9 @@
                 "$ref": "#/components/schemas/UserInputAppliedPayload"
               },
               {
+                "$ref": "#/components/schemas/VariablesResolvedPayload"
+              },
+              {
                 "$ref": "#/components/schemas/SuperstepStartedPayload"
               },
               {
@@ -20306,6 +20331,7 @@
         "enum": [
           "RunStarted",
           "UserInputApplied",
+          "VariablesResolved",
           "StateProjectionCommitted",
           "SuperstepStarted",
           "NodeScheduled",

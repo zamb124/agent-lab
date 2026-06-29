@@ -174,9 +174,15 @@ async def test_integration(mock_llm_redis, flows_client, unique_id):
 
 ### Сценарии и документация
 
-Фикстура `scenario` (`tests/ui/scenario_doc.py`). Маркер `@pytest.mark.scenario(service="sync"|"flows"|...)`; опционально `tag="..."` (по умолчанию `general`). Путь: `docs/scenarios/<service>/<tag>/<slug>/`. В статической документации тег `general` не даёт уровня — сценарий в `/documentation/scenarios/<service>/<slug>/`. Сегмент `slug` — из `doc_slug` (латиница/цифры/`_`/`-`) или `nodeid` pytest. `doc_slug` не должен совпадать с именем другого тега того же `service` (коллизия при схлопывании `general`). Заголовок — `title`/`description` маркера или docstring. Шаги: `await scenario.step("Подпись", page)` (со скриншотом) или без `page`. Отключить: `UI_SCENARIO_DOCS=0`.
+Фикстура `scenario` (`tests/ui/scenario_doc.py`). Маркер `@pytest.mark.scenario(service="sync"|"flows"|...)`; **`tag`** обязан быть в [`docs/scenarios/taxonomy.yaml`](../docs/scenarios/taxonomy.yaml) (по умолчанию `general`). Путь в репозитории: `docs/scenarios/<service>/<tag>/<slug>/`. В опубликованной документации **все теги схлопываются**: URL `/documentation/scenarios/<service>/<slug>/`; группировка по тегам — на hub-странице сервиса. **`doc_slug`** — из маркера (kebab-case, уникален внутри `service`) или `nodeid` pytest.
 
-**Локализация:** ручные EN-страницы — `docs/en/guides/`. E2E может писать `README.en.md` рядом с `README.md` при паре `title_en`/`description_en` в маркере; у каждого `await scenario.step(...)` тогда нужен `label_en="..."` (иначе `ValueError`). RU-сайт `index.md` — из `README.md` в `build/documentation-ru/`; EN — из `README.en.md` в `build/documentation-en/scenarios/` (`scripts/docs_prepare.py`). Сборка: `make doc`.
+**Качество:** `scripts/check_scenario_docs_quality.py` (в `make doc`) — минимум 2 секции `## Шаг`, минимум 1 `screenshots/*.png`, валидный `tag` в taxonomy.
+
+**Стиль шага:** одно действие = один шаг; перед скриншотом — зачем и что видно на экране (эталон: `docs/scenarios/sync/general/sync-complete-guide/README.md`).
+
+**Локализация:** при `title_en`/`description_en` в маркере — `label_en` у **каждого** `scenario.step(..., page)` (иначе `ValueError`). E2E пишет `README.en.md` рядом с `README.md`. Сборка: `make doc` / `make test-ui-doc`. Краткий гайд: [`tests/ui/README.md`](../tests/ui/README.md), [`doc-sources.md`](../doc-sources.md).
+
+Отключить генерацию: `UI_SCENARIO_DOCS=0`.
 
 ### Компонентные UI-тесты (Lit)
 
