@@ -56,6 +56,7 @@ type HumanitecAgentApi = {
   pair: (pairingCode: string) => Promise<unknown>;
   openSettings: () => Promise<void>;
   distro: () => Promise<{ display_name: string; primary_color: string } | null>;
+  resyncExtensions: () => Promise<void>;
 };
 
 function resolveHumanitecAgentApi(): HumanitecAgentApi | null {
@@ -195,6 +196,10 @@ export default function HumanitecOnboardingGuard({ children }: HumanitecOnboardi
         providerId: nextCredentials.llm_provider_id,
         modelId: nextCredentials.llm_model_id,
       });
+      const agentApi = resolveHumanitecAgentApi();
+      if (agentApi !== null) {
+        await agentApi.resyncExtensions();
+      }
       setPhase('ready');
     } catch (error) {
       setLlmSetupError(error instanceof Error ? error.message : String(error));

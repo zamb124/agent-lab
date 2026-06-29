@@ -11,6 +11,7 @@ import {
   type HumanitecAgentCredentials,
 } from './humanitecAgentStore';
 import { HumanitecTunnelClient } from './humanitecTunnelClient';
+import { resolveHumanitecEnvTemplates } from './humanitecEnvTemplate';
 
 type AgentLlmBundlePayload = {
   provider_id: string;
@@ -349,6 +350,18 @@ export async function initHumanitecAgentRuntime(): Promise<void> {
 
   ipcMain.handle('humanitec-agent:extensions-resync', async () => {
     notifyExtensionsResync();
+  });
+
+  ipcMain.handle('humanitec-agent:resolve-env-templates', (_event, templates: string[]) => {
+    if (!Array.isArray(templates)) {
+      throw new Error('templates must be an array');
+    }
+    for (const template of templates) {
+      if (typeof template !== 'string') {
+        throw new Error('template must be a string');
+      }
+    }
+    return resolveHumanitecEnvTemplates(templates);
   });
 
   ipcMain.handle('humanitec-agent:distro', async () => {

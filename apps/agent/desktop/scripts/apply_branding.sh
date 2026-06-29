@@ -110,6 +110,9 @@ for runtime_name in (
     "humanitecExtensionOrder.ts",
     "humanitecTestSelectors.ts",
     "humanitecLlmSetup.ts",
+    "humanitecEnvTemplate.ts",
+    "humanitecBundledExtensionsSync.ts",
+    "humanitecExtensionsResync.ts",
     "HumanitecOnboardingGuard.tsx",
 ):
     runtime_source = branding_dir / runtime_name
@@ -199,7 +202,7 @@ if "headers?: { [key: string]: string };" not in bundled_ts_text:
     bundled_ts_text = bundled_ts_text.replace(headers_type_anchor, headers_type_patch, 1)
     bundled_ts_modified = True
 
-if "headers: bundledExt.headers" not in bundled_ts_text:
+if "headers: bundledExt.headers" not in bundled_ts_text and "resolveStreamableHttpBundledConfig" not in bundled_ts_text:
     if streamable_case_anchor not in bundled_ts_text:
         raise SystemExit("bundled-extensions.ts streamable_http case anchor missing")
     bundled_ts_text = bundled_ts_text.replace(streamable_case_anchor, streamable_case_patch, 1)
@@ -207,6 +210,209 @@ if "headers: bundledExt.headers" not in bundled_ts_text:
 
 if bundled_ts_modified:
     bundled_ts_path.write_text(bundled_ts_text, encoding="utf-8")
+
+bundled_ts_text = bundled_ts_path.read_text(encoding="utf-8")
+humanitec_sync_import = (
+    "import {\n"
+    "  bundledStreamableHttpNeedsResync,\n"
+    "  resolveStreamableHttpBundledConfig,\n"
+    "} from '../../../humanitecBundledExtensionsSync';"
+)
+if "humanitecBundledExtensionsSync" not in bundled_ts_text:
+    import_anchor = "import bundledExtensionsData from './bundled-extensions.json';"
+    if import_anchor not in bundled_ts_text:
+        raise SystemExit("bundled-extensions.ts bundledExtensionsData import anchor missing")
+    bundled_ts_text = bundled_ts_text.replace(import_anchor, humanitec_sync_import + "\n" + import_anchor, 1)
+    bundled_ts_modified = True
+
+sync_signature_old = (
+    "  addExtensionFn: (name: string, config: ExtensionConfig, enabled: boolean) => Promise<void>\n"
+    "): Promise<void> {"
+)
+sync_signature_new = (
+    "  addExtensionFn: (name: string, config: ExtensionConfig, enabled: boolean) => Promise<void>,\n"
+    "  removeExtensionFn: (id: string) => Promise<void>,\n"
+    "): Promise<void> {"
+)
+if sync_signature_new not in bundled_ts_text:
+    if sync_signature_old not in bundled_ts_text:
+        raise SystemExit("bundled-extensions.ts syncBundledExtensions signature anchor missing")
+    bundled_ts_text = bundled_ts_text.replace(sync_signature_old, sync_signature_new, 1)
+    bundled_ts_modified = True
+
+skip_existing_anchor = (
+    "      if (existingExt && isBundledExtension(existingExt)) {\n"
+    "        continue;\n"
+    "      }"
+)
+skip_existing_patch = (
+    "      if (existingExt && isBundledExtension(existingExt)) {\n"
+    "        if (\n"
+    "          bundledExt.type === 'streamable_http' &&\n"
+    "          bundledStreamableHttpNeedsResync(existingExt, bundledExt.uri, bundledExt.headers)\n"
+    "        ) {\n"
+    "          await removeExtensionFn(bundledExt.id);\n"
+    "        } else {\n"
+    "          continue;\n"
+    "        }\n"
+    "      }"
+)
+if "bundledStreamableHttpNeedsResync" not in bundled_ts_text:
+    if skip_existing_anchor not in bundled_ts_text:
+        raise SystemExit("bundled-extensions.ts skip-existing anchor missing")
+    bundled_ts_text = bundled_ts_text.replace(skip_existing_anchor, skip_existing_patch, 1)
+    bundled_ts_modified = True
+
+streamable_resolve_anchor = """        case 'streamable_http':
+          extConfig = {
+            type: bundledExt.type,
+            name: bundledExt.name,
+            description: bundledExt.description,
+            display_name: bundledExt.display_name,
+            timeout: bundledExt.timeout,"""
+streamable_resolve_patch = """        case 'streamable_http': {
+          const resolvedStreamableConfig = await resolveStreamableHttpBundledConfig(
+            bundledExt.uri || '',
+            bundledExt.headers,
+          );
+          extConfig = {
+            type: bundledExt.type,
+            name: bundledExt.name,
+            description: bundledExt.description,
+            display_name: bundledExt.display_name,
+            timeout: bundledExt.timeout,"""
+if "resolveStreamableHttpBundledConfig" not in bundled_ts_text:
+    if streamable_resolve_anchor not in bundled_ts_text:
+        raise SystemExit("bundled-extensions.ts streamable_http case anchor missing")
+    bundled_ts_text = bundled_ts_text.replace(streamable_resolve_anchor, streamable_resolve_patch, 1)
+    bundled_ts_modified = True
+
+streamable_uri_anchor = "            uri: bundledExt.uri || '',\n            headers: bundledExt.headers,"
+streamable_uri_patch = (
+    "            uri: resolvedStreamableConfig.uri,\n"
+    "            headers: resolvedStreamableConfig.headers,"
+)
+if "resolvedStreamableConfig.uri" not in bundled_ts_text:
+    if streamable_uri_anchor not in bundled_ts_text:
+        raise SystemExit("bundled-extensions.ts streamable uri anchor missing")
+    bundled_ts_text = bundled_ts_text.replace(streamable_uri_anchor, streamable_uri_patch, 1)
+    bundled_ts_modified = True
+
+streamable_case_close_anchor = "            bundled: true,\n          };\n      }"
+streamable_case_close_patch = "            bundled: true,\n          };\n          break;\n        }\n      }"
+if "resolvedStreamableConfig.uri" in bundled_ts_text and "break;\n        }" not in bundled_ts_text:
+    if streamable_case_close_anchor not in bundled_ts_text:
+        raise SystemExit("bundled-extensions.ts streamable case close anchor missing")
+    bundled_ts_text = bundled_ts_text.replace(streamable_case_close_anchor, streamable_case_close_patch, 1)
+    bundled_ts_modified = True
+
+if bundled_ts_modified:
+    bundled_ts_path.write_text(bundled_ts_text, encoding="utf-8")
+
+config_context_path = goose_desktop / "src" / "components" / "ConfigContext.tsx"
+config_context_text = config_context_path.read_text(encoding="utf-8")
+config_context_modified = False
+config_resync_import = "import { installHumanitecExtensionsResyncListener } from '../humanitecExtensionsResync';"
+if "installHumanitecExtensionsResyncListener" not in config_context_text:
+    config_import_anchor = "import { nameToKey } from './settings/extensions/utils';"
+    if config_import_anchor not in config_context_text:
+        raise SystemExit("ConfigContext.tsx extensions utils import anchor missing")
+    config_context_text = config_context_text.replace(
+        config_import_anchor,
+        config_import_anchor + "\n" + config_resync_import,
+        1,
+    )
+    config_context_modified = True
+
+config_sync_call_old = "        await syncBundledExtensions(extensions, addExtensionForSync);"
+config_sync_call_new = "        await syncBundledExtensions(extensions, addExtensionForSync, removeExtensionForSync);"
+if config_sync_call_new not in config_context_text and config_sync_call_old in config_context_text:
+    config_context_text = config_context_text.replace(config_sync_call_old, config_sync_call_new, 1)
+    config_context_modified = True
+
+if "syncBundledExtensionsFromConfig" not in config_context_text:
+    get_providers_anchor = "  const getProviders = useCallback(async (forceRefresh = false): Promise<ProviderDetails[]> => {"
+    if get_providers_anchor not in config_context_text:
+        raise SystemExit("ConfigContext.tsx getProviders anchor missing")
+    sync_helper_block = """
+  const syncBundledExtensionsFromConfig = useCallback(async () => {
+    const extensionsResponse = await getConfiguredExtensions();
+    let extensions = extensionsResponse.extensions;
+    const addExtensionForSync = async (
+      _name: string,
+      config: ExtensionConfig,
+      enabled: boolean
+    ) => {
+      await addConfigExtension(config, enabled);
+    };
+    const removeExtensionForSync = async (configKey: string) => {
+      await removeConfigExtension(configKey);
+    };
+    extensions = await pruneDeprecatedBundledExtensions(extensions, removeExtensionForSync);
+    await syncBundledExtensions(extensions, addExtensionForSync, removeExtensionForSync);
+    const refreshedResponse = await getConfiguredExtensions();
+    setExtensionsList(refreshedResponse.extensions);
+    setExtensionWarnings(extensionsResponse.warnings || []);
+  }, []);
+"""
+    config_context_text = config_context_text.replace(get_providers_anchor, sync_helper_block + get_providers_anchor, 1)
+    config_context_modified = True
+
+config_mount_old = """      // Load extensions
+      try {
+        const extensionsResponse = await getConfiguredExtensions();
+        let extensions = extensionsResponse.extensions;
+
+        // Always sync bundled extensions from bundled-extensions.json
+        // This ensures:
+        // 1. Fresh installs get the default extensions (developer, computercontroller, etc.)
+        // 2. Existing users get NEW bundled extensions added in subsequent releases
+        // The syncBundledExtensions function skips extensions that already exist and are marked as bundled
+        // Platform extensions (code_execution, todo, etc.) are handled by the backend
+        const addExtensionForSync = async (
+          _name: string,
+          config: ExtensionConfig,
+          enabled: boolean
+        ) => {
+          await addConfigExtension(config, enabled);
+        };
+        const removeExtensionForSync = async (configKey: string) => {
+          await removeConfigExtension(configKey);
+        };
+        extensions = await pruneDeprecatedBundledExtensions(extensions, removeExtensionForSync);
+        await syncBundledExtensions(extensions, addExtensionForSync, removeExtensionForSync);
+        // Reload extensions after sync
+        const refreshedResponse = await getConfiguredExtensions();
+        extensions = refreshedResponse.extensions;
+
+        setExtensionsList(extensions);
+        setExtensionWarnings(extensionsResponse.warnings || []);
+      } catch (error) {
+        console.error('Failed to load extensions:', error);
+      }
+    })();
+  }, []);"""
+config_mount_new = """      // Load extensions
+      try {
+        await syncBundledExtensionsFromConfig();
+      } catch (error) {
+        console.error('Failed to load extensions:', error);
+      }
+    })();
+  }, [syncBundledExtensionsFromConfig]);
+
+  useEffect(() => {
+    return installHumanitecExtensionsResyncListener(() => {
+      void syncBundledExtensionsFromConfig();
+    });
+  }, [syncBundledExtensionsFromConfig]);"""
+if "installHumanitecExtensionsResyncListener" in config_context_text and "syncBundledExtensionsFromConfig" in config_context_text:
+    if config_mount_new not in config_context_text and config_mount_old in config_context_text:
+        config_context_text = config_context_text.replace(config_mount_old, config_mount_new, 1)
+        config_context_modified = True
+
+if config_context_modified:
+    config_context_path.write_text(config_context_text, encoding="utf-8")
 
 bundled_ts_text = bundled_ts_path.read_text(encoding="utf-8")
 reorder_import = "import { reorderHumanitecBundledExtensions } from '../../../humanitecExtensionOrder';"
@@ -254,7 +460,7 @@ streamable_display_patch = """            description: bundledExt.description,
             headers: bundledExt.headers,
             bundled: true,
           };"""
-if "display_name: bundledExt.display_name" not in bundled_ts_text:
+if "display_name: bundledExt.display_name" not in bundled_ts_text and "resolveStreamableHttpBundledConfig" not in bundled_ts_text:
     if streamable_display_anchor not in bundled_ts_text:
         raise SystemExit("bundled-extensions.ts streamable display_name anchor missing")
     bundled_ts_text = bundled_ts_text.replace(streamable_display_anchor, streamable_display_patch, 1)
@@ -275,6 +481,8 @@ preload_patch = """contextBridge.exposeInMainWorld('humanitecAgent', {
   openSettings: () => ipcRenderer.invoke('humanitec-agent:open-settings'),
   distro: () => ipcRenderer.invoke('humanitec-agent:distro'),
   resyncExtensions: () => ipcRenderer.invoke('humanitec-agent:extensions-resync'),
+  resolveEnvTemplates: (templates: string[]) =>
+    ipcRenderer.invoke('humanitec-agent:resolve-env-templates', templates),
   onPlatformMcpEnvUpdated: (callback: (payload: { platform_mcp_url: string }) => void) => {
     ipcRenderer.on('humanitec-agent:platform-mcp-env-updated', (_event, payload) => callback(payload));
   },
@@ -291,7 +499,7 @@ if "exposeInMainWorld('humanitecAgent'" not in preload_text:
         1,
     )
     preload_path.write_text(preload_text, encoding="utf-8")
-elif "resyncExtensions" not in preload_text or "openSettings" not in preload_text:
+elif "resyncExtensions" not in preload_text or "openSettings" not in preload_text or "resolveEnvTemplates" not in preload_text:
     old_humanitec_block_start = preload_text.find("contextBridge.exposeInMainWorld('humanitecAgent', {")
     if old_humanitec_block_start == -1:
         raise SystemExit("preload.ts humanitecAgent block missing")
@@ -650,7 +858,10 @@ if ru_messages_path.is_file():
     )
 
 from apps.agent.desktop.ui_branding import apply_ui_branding
+from apps.agent.desktop.goosed_branding import apply_goosed_branding
 
+vendor_goose = goose_desktop.parent.parent
+apply_goosed_branding(vendor_goose, distro)
 apply_ui_branding(goose_desktop, distro)
 
 print(

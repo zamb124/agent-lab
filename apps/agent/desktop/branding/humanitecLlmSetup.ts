@@ -14,13 +14,54 @@ export type HumanitecLlmSetupParams = {
   modelId: string;
 };
 
-function buildHumanitecProviderRequest(params: HumanitecLlmSetupParams): UpdateCustomProviderRequest {
+type AgentOpenAIModelsResponse = {
+  data: Array<{ id: string }>;
+};
+
+async function fetchHumanitecLlmModelIds(params: HumanitecLlmSetupParams): Promise<string[]> {
+  const modelsUrl = `${params.apiBaseUrl.replace(/\/+$/, '')}/models`;
+  const response = await fetch(modelsUrl, {
+    headers: {
+      Authorization: `Bearer ${params.deviceToken}`,
+    },
+  });
+  if (!response.ok) {
+    const detail = await response.text();
+    throw new Error(`Humanitec models fetch failed: HTTP ${response.status} ${detail}`);
+  }
+  const body = (await response.json()) as AgentOpenAIModelsResponse;
+  if (!Array.isArray(body.data)) {
+    throw new Error('Humanitec models response missing data');
+  }
+  const modelIds: string[] = [];
+  const seenModelIds = new Set<string>();
+  for (const item of body.data) {
+    if (typeof item.id !== 'string' || !item.id.trim()) {
+      continue;
+    }
+    const normalizedModelId = item.id.trim();
+    if (seenModelIds.has(normalizedModelId)) {
+      continue;
+    }
+    seenModelIds.add(normalizedModelId);
+    modelIds.push(normalizedModelId);
+  }
+  if (modelIds.length === 0) {
+    throw new Error('Humanitec models catalog is empty');
+  }
+  return modelIds;
+}
+
+async function buildHumanitecProviderRequest(
+  params: HumanitecLlmSetupParams,
+): Promise<UpdateCustomProviderRequest> {
+  const modelIds = await fetchHumanitecLlmModelIds(params);
   return {
     engine: 'openai_compatible',
     display_name: 'Humanitec',
     api_url: params.apiBaseUrl,
     api_key: params.deviceToken,
-    models: [params.modelId],
+    models: modelIds,
     supports_streaming: true,
     requires_auth: true,
     headers: {
@@ -65,7 +106,7 @@ export async function isHumanitecLlmConfigured(
 export async function ensureHumanitecLlmConfigured(
   params: HumanitecLlmSetupParams,
 ): Promise<void> {
-  const providerRequest = buildHumanitecProviderRequest(params);
+  const providerRequest = await buildHumanitecProviderRequest(params);
   const providers = await acpListProviderDetails();
   const existingProvider = providers.find((entry) =>
     isHumanitecProviderEntry(entry, params.providerId),

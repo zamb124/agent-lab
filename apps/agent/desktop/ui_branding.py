@@ -10,7 +10,7 @@ from pathlib import Path
 from typing import TypedDict
 
 from apps.agent.desktop.build_contract import HumanitecDistroConfig
-from core.types import JsonObject, parse_json_object
+from core.types import JsonObject, parse_json_object, require_json_object
 
 PROTECTED_MESSAGE_SUBSTRINGS: tuple[str, ...] = (
     ".goosehints",
@@ -64,14 +64,13 @@ def replace_ui_product_name_in_text(text: str, *, ui_product_name: str) -> str:
 
 
 def parse_i18n_messages(raw_payload: object, source_label: str) -> I18nMessages:
-    if not isinstance(raw_payload, dict):
-        raise ValueError(f"{source_label} must be a JSON object")
+    raw_object_map = require_json_object(raw_payload, field_name=source_label)
     parsed_messages: I18nMessages = {}
-    for message_key, message_entry in raw_payload.items():
-        if not isinstance(message_key, str):
-            raise ValueError(f"{source_label} keys must be strings")
-        if not isinstance(message_entry, dict):
-            continue
+    for message_key, message_entry_raw in raw_object_map.items():
+        message_entry = require_json_object(
+            message_entry_raw,
+            field_name=f"{source_label}[{message_key}]",
+        )
         default_message = message_entry.get("defaultMessage")
         if not isinstance(default_message, str):
             continue
@@ -89,10 +88,7 @@ def apply_ui_product_name_to_i18n_messages(
         if should_skip_i18n_message_key(message_key):
             patched_messages[message_key] = message_entry
             continue
-        default_message = message_entry.get("defaultMessage")
-        if not isinstance(default_message, str):
-            patched_messages[message_key] = message_entry
-            continue
+        default_message = message_entry["defaultMessage"]
         patched_messages[message_key] = {
             "defaultMessage": replace_ui_product_name_in_text(
                 default_message,
@@ -286,14 +282,20 @@ def verify_no_goose_docs_urls(goose_desktop: Path) -> None:
 
 
 def patch_ru_i18n_messages(goose_desktop: Path, distro: HumanitecDistroConfig) -> None:
-    ru_messages_path = goose_desktop / "src" / "i18n" / "messages" / "ru.json"
-    if not ru_messages_path.is_file():
+    patch_i18n_messages_file(
+        goose_desktop / "src" / "i18n" / "messages" / "ru.json",
+        distro,
+    )
+
+
+def patch_i18n_messages_file(messages_path: Path, distro: HumanitecDistroConfig) -> None:
+    if not messages_path.is_file():
         return
     merged_messages: JsonObject = parse_json_object(
-        ru_messages_path.read_text(encoding="utf-8"),
-        field_name=str(ru_messages_path),
+        messages_path.read_text(encoding="utf-8"),
+        field_name=str(messages_path),
     )
-    parsed_messages = parse_i18n_messages(merged_messages, str(ru_messages_path))
+    parsed_messages = parse_i18n_messages(merged_messages, str(messages_path))
     patched_messages = apply_ui_product_name_to_i18n_messages(
         parsed_messages,
         ui_product_name=distro.ui_product_name,
@@ -303,10 +305,51 @@ def patch_ru_i18n_messages(goose_desktop: Path, distro: HumanitecDistroConfig) -
         if not isinstance(existing_entry, dict):
             continue
         existing_entry["defaultMessage"] = message_entry["defaultMessage"]
-    _ = ru_messages_path.write_text(
+    _ = messages_path.write_text(
         json.dumps(merged_messages, ensure_ascii=False, indent=2) + "\n",
         encoding="utf-8",
     )
+
+
+def patch_i18n_message_files(goose_desktop: Path, distro: HumanitecDistroConfig) -> None:
+    messages_dir = goose_desktop / "src" / "i18n" / "messages"
+    if not messages_dir.is_dir():
+        return
+    for locale_path in sorted(messages_dir.glob("*.json")):
+        patch_i18n_messages_file(locale_path, distro)
+
+
+def patch_prompts_settings_section(goose_desktop: Path, distro: HumanitecDistroConfig) -> None:
+    prompts_settings_path = goose_desktop / "src" / "components" / "settings" / "PromptsSettingsSection.tsx"
+    _replace_in_file_text(
+        prompts_settings_path,
+        {
+            "Customize the prompts that define goose's behavior in different contexts.": (
+                f"Customize the prompts that define {distro.ui_product_name}'s behavior in different contexts."
+            ),
+        },
+        required_any=(f"{distro.ui_product_name}'s behavior",),
+    )
+
+
+def patch_extension_catalog_descriptions(goose_desktop: Path, distro: HumanitecDistroConfig) -> None:
+    replacements = {
+        "Teach goose your preferences as you go.": (
+            f"Teach {distro.ui_product_name} your preferences as you go."
+        ),
+    }
+    for relative_path in (
+        "src/built-in-extensions.json",
+        "src/components/settings/extensions/bundled-extensions.json",
+    ):
+        file_path = goose_desktop / relative_path
+        if not file_path.is_file():
+            continue
+        _replace_in_file_text(
+            file_path,
+            replacements,
+            required_any=(f"Teach {distro.ui_product_name} your preferences",),
+        )
 
 
 def verify_patched_desktop_ui_sources(
@@ -330,8 +373,7 @@ def verify_patched_desktop_ui_sources(
         parsed_messages = parse_i18n_messages(merged_messages, str(ru_messages_path))
         goosehints_entry = parsed_messages.get("goosehintsModal.dialogTitle")
         if goosehints_entry is not None:
-            goosehints_title = goosehints_entry.get("defaultMessage")
-            if goosehints_title is not None and ".goosehints" not in goosehints_title:
+            if ".goosehints" not in goosehints_entry["defaultMessage"]:
                 raise ValueError("goosehintsModal.dialogTitle lost .goosehints reference")
 
 
@@ -341,6 +383,8 @@ def apply_ui_branding(goose_desktop: Path, distro: HumanitecDistroConfig) -> Non
     patch_onboarding_guard_messages(goose_desktop, distro)
     patch_main_process_ui_strings(goose_desktop, distro)
     patch_forge_usage_descriptions(goose_desktop, distro)
-    patch_ru_i18n_messages(goose_desktop, distro)
+    patch_i18n_message_files(goose_desktop, distro)
+    patch_prompts_settings_section(goose_desktop, distro)
+    patch_extension_catalog_descriptions(goose_desktop, distro)
     patch_goose_docs_urls(goose_desktop, distro)
     verify_patched_desktop_ui_sources(goose_desktop, distro)

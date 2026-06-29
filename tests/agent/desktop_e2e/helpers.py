@@ -251,6 +251,11 @@ async def assert_humanitec_preload_api(page: Page) -> None:
     )
     if not has_resync:
         raise AssertionError("humanitecAgent.resyncExtensions missing")
+    has_resolve = await page.evaluate(
+        "typeof window.humanitecAgent.resolveEnvTemplates === 'function'"
+    )
+    if not has_resolve:
+        raise AssertionError("humanitecAgent.resolveEnvTemplates missing")
 
 
 async def send_chat_message(page: Page, message: str) -> None:

@@ -15,9 +15,11 @@ from tests.agent.fixtures.local_releases import require_local_release_asset_name
 
 @pytest.mark.asyncio
 async def test_r_d1_download_local_release_redirect(
+    frontend_service: None,
     agent_frontend_http_client: AsyncClient,
     agent_local_release_artifact: Path,
 ) -> None:
+    _ = frontend_service
     reset_agent_settings()
     _ = require_local_release_asset_name(agent_local_release_artifact)
     response = await agent_frontend_http_client.get(

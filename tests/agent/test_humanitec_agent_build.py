@@ -21,6 +21,7 @@ from apps.agent.desktop.build_contract import (
     load_default_distro_config,
 )
 from apps.agent.desktop.ui_branding import verify_no_goose_docs_urls
+from tests.agent.desktop_e2e.desktop_app import _run_apply_branding
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 DESKTOP_ROOT = REPO_ROOT / "apps" / "agent" / "desktop"
@@ -151,6 +152,7 @@ def test_placeholder_build_each_platform(platform_name: str, tmp_path: Path) -> 
     )
 
 
+@pytest.mark.xdist_group(name="agent_build_release")
 def test_apply_branding_script_patches_goose_desktop() -> None:
     goose_desktop = DESKTOP_ROOT / "vendor" / "goose" / "ui" / "desktop"
     if not goose_desktop.is_dir():
@@ -176,33 +178,21 @@ def test_apply_branding_script_patches_goose_desktop() -> None:
     }
 
     try:
-        git_reset = subprocess.run(
+        completed = subprocess.run(
             ["git", "checkout", "--", *ui_branding_relative_paths],
             cwd=str(goose_desktop),
             check=False,
             capture_output=True,
             text=True,
         )
-        if git_reset.returncode != 0:
-            raise AssertionError(
-                "git checkout failed before apply_branding\n"
-                f"stdout:\n{git_reset.stdout}\n"
-                f"stderr:\n{git_reset.stderr}"
-            )
-
-        completed = subprocess.run(
-            [str(APPLY_BRANDING_SCRIPT)],
-            cwd=str(REPO_ROOT),
-            check=False,
-            capture_output=True,
-            text=True,
-        )
         if completed.returncode != 0:
             raise AssertionError(
-                "apply_branding.sh failed\n"
+                "git checkout failed before apply_branding\n"
                 f"stdout:\n{completed.stdout}\n"
                 f"stderr:\n{completed.stderr}"
             )
+
+        _run_apply_branding()
 
         package_payload = package_json.read_text(encoding="utf-8")
         forge_payload = forge_config.read_text(encoding="utf-8")

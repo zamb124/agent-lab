@@ -147,14 +147,15 @@ Parent repo фиксирует commit submodule; floating `HEAD` без pin за
 | Меняется | Источник |
 |---|---|
 | Installer / bundle id / protocol / icons | `distro/humanitec.json` |
-| Watermark, статусы чата, меню, ru.json | [`ui_branding.py`](ui_branding.py) |
+| Watermark, статусы чата, меню, i18n | [`ui_branding.py`](ui_branding.py) |
+| goosed prompt templates (`system.md`, fallbacks) | [`goosed_branding.py`](goosed_branding.py) + `branding/prompts/*` |
 | Platform MCP, pairing, onboarding | `branding/*` + inline patches |
 
 Поля `ui_product_name` / `ui_product_name_lower` в [`distro/humanitec.json`](distro/humanitec.json) задают короткое имя в UI (`Humanitec` / `humanitec`). `display_name` / `bundle_name` остаются `HumanitecAgent` для `.app`, `.msi`, title bar.
 
 **Намеренно не переименовываются:** бинарь `goosed`, env `GOOSE_*`, файл `.goosehints`, ключи `goosehintsModal.*`, npm `@aaif/goose-sdk`.
 
-Проверки: `tests/agent/test_ui_branding.py`, расширенный `test_apply_branding_script_patches_goose_desktop`, grep `goose-docs.ai` в `app.asar` при macOS release verify.
+Проверки: `tests/agent/test_ui_branding.py`, `tests/agent/test_goosed_branding.py`, расширенный `test_apply_branding_script_patches_goose_desktop`, grep `goose-docs.ai` в `app.asar` при macOS release verify.
 
 ## Manual checklist (Goose runtime)
 
