@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { Button } from './components/ui/button';
 import { defineMessages, useIntl } from './i18n';
-import { ensureHumanitecLlmConfigured, isHumanitecLlmConfigured } from './humanitecLlmSetup';
+import { ensureHumanitecLlmConfigured } from './humanitecLlmSetup';
 
 const i18n = defineMessages({
   title: {
@@ -188,14 +188,6 @@ export default function HumanitecOnboardingGuard({ children }: HumanitecOnboardi
   const runLlmSetup = useCallback(async (nextCredentials: HumanitecAgentCredentialsPayload) => {
     setPhase('llm_setup');
     setLlmSetupError(null);
-    const configured = await isHumanitecLlmConfigured(
-      nextCredentials.llm_provider_id,
-      nextCredentials.llm_model_id,
-    );
-    if (configured) {
-      setPhase('ready');
-      return;
-    }
     try {
       await ensureHumanitecLlmConfigured({
         apiBaseUrl: nextCredentials.llm_api_base_url,

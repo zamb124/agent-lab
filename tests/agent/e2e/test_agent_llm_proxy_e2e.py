@@ -5,6 +5,7 @@ from __future__ import annotations
 import pytest
 from httpx import AsyncClient
 
+from core.ai.providers import HUMANITEC_LLM_AUTO_MODEL
 from tests.agent._helpers import (
     AGENT_API_PREFIX,
     LLM_CHAT_COMPLETIONS_PATH,
@@ -36,7 +37,8 @@ async def test_e2e_llm_proxy_models_list_auto(
     body = response.json()
     assert body["object"] == "list"
     model_ids = {item["id"] for item in body["data"] if isinstance(item, dict)}
-    assert model_ids == {"auto"}
+    assert HUMANITEC_LLM_AUTO_MODEL in model_ids
+    assert all(isinstance(model_id, str) and model_id for model_id in model_ids)
 
 
 @pytest.mark.real_taskiq

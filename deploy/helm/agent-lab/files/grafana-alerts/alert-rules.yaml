@@ -353,7 +353,7 @@ groups:
               to: 0
             datasourceUid: loki
             model:
-              expr: 'sum(rate({service="search-worker"} | json | message=~"crawl\\.url\\.outcome" | crawl_outcome="failed" [15m])) / sum(rate({service="search-worker"} | json | message=~"crawl\\.url\\.outcome" [15m])) * 100'
+              expr: 'sum(rate({service="search-worker"} | json | message="crawl.url.outcome" | crawl_outcome="failed" [15m])) / sum(rate({service="search-worker"} | json | message="crawl.url.outcome" [15m])) * 100'
               refId: A
           - refId: C
             relativeTimeRange:
@@ -395,7 +395,7 @@ groups:
               to: 0
             datasourceUid: loki
             model:
-              expr: 'sum(rate({service="search-worker"} | json | message=~"crawl\\.enrich\\.failed" [15m])) / (sum(rate({service="search-worker"} | json | message=~"crawl\\.enrich\\.(completed|failed)" [15m])) + 1e-10) * 100'
+              expr: 'sum(rate({service="search-worker"} | json | message="crawl.enrich.failed" [15m])) / (sum(rate({service="search-worker"} | json | message=~"crawl[.]enrich[.](completed|failed)" [15m])) + 1e-10) * 100'
               refId: A
           - refId: C
             relativeTimeRange:
@@ -437,7 +437,7 @@ groups:
               to: 0
             datasourceUid: loki
             model:
-              expr: 'sum(rate({service="search-worker"} | json | message=~"crawl\\.discover\\.failed" [5m])) * 60'
+              expr: 'sum(rate({service="search-worker"} | json | message="crawl.discover.failed" [5m])) * 60'
               refId: A
           - refId: C
             relativeTimeRange:

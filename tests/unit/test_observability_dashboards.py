@@ -58,14 +58,10 @@ class TestLogQLExpressions:
         """
         Loki | json parser превращает http.status_code в http_status_code.
         LogQL с точками в именах полей (например `json | http.status_code >= 500`) — баг.
-        Исключаем строковые литералы (message="foo.bar") и regex ({svc=~".+"}).
+        Строковые литералы message="crawl.url.outcome" допустимы.
         """
-        # Ищем поля с точкой вне строковых литералов и regex
         dot_field_pattern = re.compile(
-            r"\|\s+json\s+\|"           # начало: | json |
-            r"[^|]*?"                    # любые символы до следующего |
-            r"\b[a-z_]+\.[a-z_]+\b"     # field.subfield
-            r"(?![\"'])"               # не за которым следует кавычка
+            r"\|\s+([a-z_]+\.[a-z_]+)\s*(=|>|<|!|~|>=|<=)"
         )
         for name, db in dashboards.items():
             for panel in db.get("panels", []):
@@ -75,8 +71,38 @@ class TestLogQLExpressions:
                         continue
                     matches = dot_field_pattern.findall(expr)
                     assert not matches, (
-                        f"{name}: LogQL contains dot-notation after | json: {expr}"
+                        f"{name}: LogQL contains dot-notation field after | json: {expr}"
                     )
+
+    def test_crawl_task_finished_unwrap_is_aggregated(self, dashboards):
+        """task_finished + unwrap без агрегации превышает лимит 500 series в Loki."""
+        crawl_dashboard = dashboards.get("11-crawl-indexing.json")
+        assert crawl_dashboard is not None
+        for panel in crawl_dashboard.get("panels", []):
+            for target in panel.get("targets", []):
+                expr = target.get("expr", "")
+                if "message=\"task_finished\"" not in expr or "unwrap task_duration_ms" not in expr:
+                    continue
+                assert re.search(r"\b(max|avg|sum|min|count)\s+by\s*\(", expr), (
+                    f"11-crawl-indexing.json: task_finished unwrap must be aggregated: {expr}"
+                )
+
+    def test_no_invalid_backslash_dot_in_message_regex(self, dashboards):
+        """
+        Loki RE2 в LogQL не принимает \\. внутри message=~"..." (invalid char escape).
+        Для dotted event names используйте message="crawl.url.outcome" или [.] в regex.
+        """
+        invalid_escape_pattern = re.compile(r"message=~\"[^\"]*\\\.")
+        crawl_dashboard = dashboards.get("11-crawl-indexing.json")
+        assert crawl_dashboard is not None
+        for panel in crawl_dashboard.get("panels", []):
+            for target in panel.get("targets", []):
+                expr = target.get("expr", "")
+                if "message=~" not in expr:
+                    continue
+                assert not invalid_escape_pattern.search(expr), (
+                    f"11-crawl-indexing.json: LogQL message regex uses invalid \\\\. escape: {expr}"
+                )
 
     def test_unwrap_fields_use_underscores(self, dashboards):
         for name, db in dashboards.items():
@@ -133,21 +159,32 @@ class TestAlertRules:
 
     def test_alert_conditions_use_loki(self):
         dot_field_pattern = re.compile(
-            r"\|\s+json\s+\|[^|]*?\b[a-z_]+\.[a-z_]+\b(?![\"'])"
+            r"\|\s+([a-z_]+\.[a-z_]+)\s*(=|>|<|!|~|>=|<=)"
         )
+        invalid_escape_pattern = re.compile(r"message=~\"[^\"]*\\\.")
+        crawl_alert_uids = {
+            "crawl-url-failure-rate-high",
+            "crawl-enrichment-failure-spike",
+            "crawl-sitemap-errors",
+        }
         path = ALERTS_DIR / "alert-rules.yaml"
         with open(path, encoding="utf-8") as f:
             data = yaml.safe_load(f)
         for group in data.get("groups", []):
             for rule in group.get("rules", []):
                 for q in rule.get("data", []):
-                    if q.get("datasourceUid") == LOKI_DATASOURCE_UID:
-                        expr = q.get("model", {}).get("expr", "")
-                        if "| json" in expr:
-                            matches = dot_field_pattern.findall(expr)
-                            assert not matches, (
-                                f"Alert {rule['uid']}: dot notation after | json: {expr}"
-                            )
+                    if q.get("datasourceUid") != LOKI_DATASOURCE_UID:
+                        continue
+                    expr = q.get("model", {}).get("expr", "")
+                    if "| json" in expr:
+                        matches = dot_field_pattern.findall(expr)
+                        assert not matches, (
+                            f"Alert {rule['uid']}: dot notation field after | json: {expr}"
+                        )
+                    if rule.get("uid") in crawl_alert_uids and "message=~" in expr:
+                        assert not invalid_escape_pattern.search(expr), (
+                            f"Alert {rule['uid']}: message regex uses invalid \\\\. escape: {expr}"
+                        )
 
     def test_contact_points_loadable(self):
         path = ALERTS_DIR / "contact-points.yaml"

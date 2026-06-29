@@ -21,7 +21,14 @@ from pydantic import BaseModel, ConfigDict
 from apps.agent.device_auth import require_active_device_bearer
 from apps.flows.src.dependencies import ContainerDep
 from core.ai.models import ResolvedAIModel
-from core.ai.providers import HUMANITEC_LLM_AUTO_MODEL, HUMANITEC_LLM_PROVIDER, AICapability
+from core.ai.providers import (
+    HUMANITEC_LLM_AUTO_MODEL,
+    HUMANITEC_LLM_PROVIDER,
+    PLATFORM_FREE_MODEL_CANDIDATE_PROVIDER_SLUGS,
+    AICapability,
+    humanitec_llms_model_ref,
+    split_humanitec_llms_model_ref,
+)
 from core.ai.requirements import AISelection
 from core.ai.resolver import COST_ORIGIN_PLATFORM, resolve_ai_model
 from core.ai.runtime import create_llm_client_from_ai_model, should_use_platform_default_free_pool
@@ -78,21 +85,112 @@ class AgentOpenAIModelsResponse(BaseModel):
     data: list[AgentOpenAIModelItem]
 
 
-def _resolve_agent_llm_model() -> ResolvedAIModel:
+def _agent_llm_option_value(option: str | JsonObject) -> str | None:
+    if isinstance(option, str):
+        normalized = option.strip()
+        return normalized if normalized else None
+    value = option.get("value")
+    if isinstance(value, str):
+        normalized = value.strip()
+        return normalized if normalized else None
+    return None
+
+
+def _resolve_agent_llm_model(requested_model: str) -> ResolvedAIModel:
+    if requested_model == HUMANITEC_LLM_AUTO_MODEL:
+        resolved = resolve_ai_model(
+            AICapability.LLM_CHAT,
+            selection=AISelection(
+                provider=HUMANITEC_LLM_PROVIDER,
+                model=HUMANITEC_LLM_AUTO_MODEL,
+            ),
+            include_platform_default=False,
+        )
+        if resolved is None:
+            raise HTTPException(
+                status_code=503,
+                detail="humanitec_llm недоступен для компании",
+            )
+        return resolved
+
+    parsed_ref = split_humanitec_llms_model_ref(requested_model)
+    if parsed_ref is None:
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                "model должен быть 'auto' или provider-prefixed "
+                + "модель '<provider>:<model_id>'"
+            ),
+        )
+    provider, model_id = parsed_ref
     resolved = resolve_ai_model(
         AICapability.LLM_CHAT,
-        selection=AISelection(
-            provider=HUMANITEC_LLM_PROVIDER,
-            model=HUMANITEC_LLM_AUTO_MODEL,
-        ),
+        selection=AISelection(provider=provider, model=model_id),
         include_platform_default=False,
     )
     if resolved is None:
         raise HTTPException(
             status_code=503,
-            detail="humanitec_llm недоступен для компании",
+            detail=f"LLM модель {requested_model!r} недоступна для компании",
         )
     return resolved
+
+
+async def _read_agent_llm_model_ids(container: ContainerDep) -> list[str]:
+    model_ids: list[str] = []
+    seen: set[str] = set()
+
+    def append_model_id(model_id: str) -> None:
+        if model_id in seen:
+            return
+        seen.add(model_id)
+        model_ids.append(model_id)
+
+    append_model_id(HUMANITEC_LLM_AUTO_MODEL)
+
+    configured_providers = container.llm_models_service.get_configured_providers_by_capability(
+        AICapability.LLM_CHAT,
+    )
+    for provider in configured_providers:
+        if provider == HUMANITEC_LLM_PROVIDER:
+            continue
+        if provider not in PLATFORM_FREE_MODEL_CANDIDATE_PROVIDER_SLUGS:
+            continue
+        catalog_records = await container.ai_model_catalog_repository.list_by_provider_capability(
+            provider,
+            AICapability.LLM_CHAT,
+        )
+        for record in catalog_records:
+            append_model_id(humanitec_llms_model_ref(record.provider, record.model_id))
+
+    if len(model_ids) == 1:
+        humanitec_llm_options = await container.llm_models_service.get_model_ids_by_provider_capability(
+            HUMANITEC_LLM_PROVIDER,
+            AICapability.LLM_CHAT,
+        )
+        for option in humanitec_llm_options:
+            option_value = _agent_llm_option_value(option)
+            if option_value is not None:
+                append_model_id(option_value)
+
+    if not model_ids:
+        raise HTTPException(
+            status_code=503,
+            detail="agent LLM model catalog недоступен",
+        )
+    return model_ids
+
+
+def _validate_requested_agent_model(requested_model: str, allowed_model_ids: set[str]) -> str:
+    normalized = requested_model.strip()
+    if not normalized:
+        raise HTTPException(status_code=400, detail="model обязателен")
+    if normalized not in allowed_model_ids:
+        raise HTTPException(
+            status_code=400,
+            detail=f"model {normalized!r} недоступен для HumanitecAgent",
+        )
+    return normalized
 
 
 async def _prepare_agent_llm_billing(*, resolved: ResolvedAIModel) -> bool:
@@ -498,12 +596,15 @@ async def agent_llm_models(
 ) -> AgentOpenAIModelsResponse:
     await require_active_device_bearer(request, container)
     _ = require_context()
+    model_ids = await _read_agent_llm_model_ids(container)
+    created_at = int(time.time())
     return AgentOpenAIModelsResponse(
         data=[
             AgentOpenAIModelItem(
-                id=HUMANITEC_LLM_AUTO_MODEL,
-                created=int(time.time()),
+                id=model_id,
+                created=created_at,
             )
+            for model_id in model_ids
         ]
     )
 
@@ -524,13 +625,15 @@ async def agent_llm_chat_completions(
     if not body.messages:
         raise HTTPException(status_code=400, detail="messages обязателен")
 
-    resolved = _resolve_agent_llm_model()
+    model_ids = await _read_agent_llm_model_ids(container)
+    requested_model = _validate_requested_agent_model(body.model, set(model_ids))
+    resolved = _resolve_agent_llm_model(requested_model)
     try:
         allow_platform_paid_fallback = await _prepare_agent_llm_billing(resolved=resolved)
     except BillingBalanceBlockedError as exc:
         raise HTTPException(status_code=403, detail=str(exc)) from exc
 
-    response_model_id = HUMANITEC_LLM_AUTO_MODEL
+    response_model_id = requested_model
     logger.info(
         "agent.llm_proxy.request",
         requested_model=body.model,

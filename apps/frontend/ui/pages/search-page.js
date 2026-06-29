@@ -190,16 +190,19 @@ export class PublicSearchPage extends PlatformPage {
             }
 
             .search-head.is-active {
-                position: sticky;
-                top: var(--landing-header-height, 72px);
+                position: static;
                 z-index: 16;
-                padding: 12px clamp(18px, 4vw, 56px);
+                padding: 12px clamp(18px, 4vw, 56px) 8px;
                 background: var(--landing-bg, var(--marketing-page-bg));
                 border-bottom: 0;
                 backdrop-filter: none;
                 pointer-events: none;
                 gap: 0;
                 display: block;
+            }
+
+            .page.is-search-active .results-wrap {
+                padding-top: 12px;
             }
 
             .search-title {
@@ -1045,7 +1048,7 @@ export class PublicSearchPage extends PlatformPage {
                 display: grid;
                 gap: 10px;
                 position: sticky;
-                top: 148px;
+                top: calc(var(--landing-header-height, 72px) + 16px);
             }
 
             .provider-panel,
@@ -1371,6 +1374,20 @@ export class PublicSearchPage extends PlatformPage {
                 border-color: rgba(16, 20, 34, 0.10);
             }
 
+            @media (min-width: 768px) {
+                .page[data-entry='landing'] .search-head.is-active .search-shell {
+                    animation: none;
+                    transform: none;
+                    filter: none;
+                }
+
+                .page[data-entry='landing'] .results-wrap {
+                    animation: none;
+                    transform: none;
+                    filter: none;
+                }
+            }
+
             @media (max-width: 980px) {
                 .search-title {
                     font-size: 72px;
@@ -1400,13 +1417,8 @@ export class PublicSearchPage extends PlatformPage {
                 }
 
                 .search-head.is-active {
-                    position: static;
-                    top: auto;
-                    z-index: 16;
                     padding: 0;
                     margin: 0;
-                    gap: 0;
-                    display: block;
                     width: 100%;
                     background: var(--marketing-header-bg, var(--landing-search-bg));
                 }

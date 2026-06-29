@@ -18,29 +18,21 @@
     "list": [
       {
         "name": "service",
-        "type": "query",
-        "query": "label_values(service)",
-        "datasource": {
-          "type": "loki",
-          "uid": "loki"
-        },
-        "multi": true,
-        "includeAll": true,
-        "allValue": ".+",
+        "type": "custom",
+        "query": "search-worker",
+        "multi": false,
+        "includeAll": false,
         "current": {
-          "text": [
-            "search-worker",
-            "search",
-            "browser",
-            "rag"
-          ],
-          "value": [
-            "search-worker",
-            "search",
-            "browser",
-            "rag"
-          ]
-        }
+          "text": "search-worker",
+          "value": "search-worker"
+        },
+        "options": [
+          {
+            "selected": true,
+            "text": "search-worker",
+            "value": "search-worker"
+          }
+        ]
       },
       {
         "name": "crawl_profile",
@@ -59,7 +51,7 @@
   "panels": [
     {
       "id": 1,
-      "title": "URLs Indexed / min",
+      "title": "URLs Indexed / Enriched / min",
       "type": "timeseries",
       "gridPos": {
         "h": 6,
@@ -73,9 +65,15 @@
       },
       "targets": [
         {
-          "expr": "sum(rate({service=~\"$service\"} | json | message=~\"crawl\\.url\\.outcome\" | crawl_profile_id=~\"$crawl_profile\" | crawl_outcome=\"indexed\" [2m])) * 60",
-          "legendFormat": "{{service}}",
+          "expr": "sum(rate({service=~\"$service\"} | json | message=\"crawl.url.outcome\" | crawl_profile_id=~\"$crawl_profile\" | crawl_outcome=\"indexed\" [2m])) * 60",
+          "legendFormat": "indexed",
           "refId": "A",
+          "queryType": "range"
+        },
+        {
+          "expr": "sum(rate({service=~\"$service\"} | json | message=\"crawl.url.outcome\" | crawl_profile_id=~\"$crawl_profile\" | crawl_outcome=\"enriched\" [2m])) * 60",
+          "legendFormat": "enriched",
+          "refId": "B",
           "queryType": "range"
         }
       ],
@@ -106,7 +104,7 @@
       },
       "targets": [
         {
-          "expr": "sum(rate({service=~\"$service\"} | json | message=~\"crawl\\.url\\.outcome\" | crawl_profile_id=~\"$crawl_profile\" | crawl_outcome=\"skipped\" [2m])) * 60",
+          "expr": "sum(rate({service=~\"$service\"} | json | message=\"crawl.url.outcome\" | crawl_profile_id=~\"$crawl_profile\" | crawl_outcome=\"skipped\" [2m])) * 60",
           "legendFormat": "{{service}}",
           "refId": "A",
           "queryType": "range"
@@ -139,8 +137,8 @@
       },
       "targets": [
         {
-          "expr": "sum(rate({service=~\"$service\"} | json | message=~\"crawl\\.url\\.outcome\" | crawl_profile_id=~\"$crawl_profile\" | crawl_outcome=\"failed\" [2m])) / sum(rate({service=~\"$service\"} | json | message=~\"crawl\\.url\\.outcome\" | crawl_profile_id=~\"$crawl_profile\" [2m])) * 100",
-          "legendFormat": "{{service}}",
+          "expr": "sum(rate({service=~\"$service\"} | json | message=\"crawl.url.outcome\" | crawl_profile_id=~\"$crawl_profile\" | crawl_outcome=\"failed\" [2m])) / (sum(rate({service=~\"$service\"} | json | message=\"crawl.url.outcome\" | crawl_profile_id=~\"$crawl_profile\" [2m])) + 1e-10) * 100",
+          "legendFormat": "failure rate %",
           "refId": "A",
           "queryType": "range"
         }
@@ -172,8 +170,8 @@
       },
       "targets": [
         {
-          "expr": "sum(rate({service=~\"$service\"} | json | message=~\"crawl\\.enrich\\.completed\" | crawl_profile_id=~\"$crawl_profile\" [2m])) / (sum(rate({service=~\"$service\"} | json | message=~\"crawl\\.enrich\\.completed|crawl\\.enrich\\.failed\" | crawl_profile_id=~\"$crawl_profile\" [2m])) + 1e-10) * 100",
-          "legendFormat": "{{service}}",
+          "expr": "sum(rate({service=~\"$service\"} | json | message=\"crawl.enrich.completed\" | crawl_profile_id=~\"$crawl_profile\" [2m])) / (sum(rate({service=~\"$service\"} | json | message=~\"crawl[.]enrich[.](completed|failed)\" | crawl_profile_id=~\"$crawl_profile\" [2m])) + 1e-10) * 100",
+          "legendFormat": "success %",
           "refId": "A",
           "queryType": "range"
         }
@@ -205,7 +203,7 @@
       },
       "targets": [
         {
-          "expr": "sum by (service) (rate({service=~\"$service\"} | json task_name=\"task.name\" | task_name=~\"crawl_.*\" | message=\"task_started\" [2m])) * 60",
+          "expr": "sum by (service) (rate({service=~\"$service\"} | json | message=\"task_started\" | task_name=~\"crawl_.*\" [2m])) * 60",
           "legendFormat": "{{service}}",
           "refId": "A",
           "queryType": "range"
@@ -225,6 +223,7 @@
     {
       "id": 6,
       "title": "Pending URLs (tick completed)",
+      "description": "Последний snapshot pending backlog после tick. 0 — очередь пуста (норма при активном enrich).",
       "type": "timeseries",
       "gridPos": {
         "h": 6,
@@ -238,7 +237,7 @@
       },
       "targets": [
         {
-          "expr": "last_over_time({service=~\"$service\"} | json | message=~\"crawl\\.tick\\.completed\" | crawl_profile_id=~\"$crawl_profile\" | unwrap pending_urls [5m])",
+          "expr": "max by (service) (last_over_time({service=~\"$service\"} | json | message=\"crawl.tick.completed\" | crawl_profile_id=~\"$crawl_profile\" | unwrap pending_urls [5m]))",
           "legendFormat": "{{service}}",
           "refId": "A",
           "queryType": "range"
@@ -271,7 +270,7 @@
       },
       "targets": [
         {
-          "expr": "sum(rate({service=~\"$service\"} | json | message=~\"crawl\\.tick\\.completed\" | crawl_profile_id=~\"$crawl_profile\" [2m])) * 60",
+          "expr": "sum(rate({service=~\"$service\"} | json | message=\"crawl.tick.completed\" | crawl_profile_id=~\"$crawl_profile\" [2m])) * 60",
           "legendFormat": "{{service}}",
           "refId": "A",
           "queryType": "range"
@@ -304,7 +303,7 @@
       },
       "targets": [
         {
-          "expr": "sum(rate({service=~\"$service\"} | json | message=~\"crawl\\.tick\\.failed\" | crawl_profile_id=~\"$crawl_profile\" [2m])) * 60",
+          "expr": "sum(rate({service=~\"$service\"} | json | message=\"crawl.tick.failed\" | crawl_profile_id=~\"$crawl_profile\" [2m])) * 60",
           "legendFormat": "{{service}}",
           "refId": "A",
           "queryType": "range"
@@ -337,7 +336,7 @@
       },
       "targets": [
         {
-          "expr": "avg_over_time({service=~\"$service\"} | json | message=~\"crawl\\.tick\\.completed\" | crawl_profile_id=~\"$crawl_profile\" | unwrap domains_scheduled [5m])",
+          "expr": "avg by (service) (avg_over_time({service=~\"$service\"} | json | message=\"crawl.tick.completed\" | crawl_profile_id=~\"$crawl_profile\" | unwrap domains_scheduled [5m]))",
           "legendFormat": "{{service}}",
           "refId": "A",
           "queryType": "range"
@@ -370,7 +369,7 @@
       },
       "targets": [
         {
-          "expr": "quantile_over_time(0.95, {service=~\"$service\"} | json task_name=\"task.name\" | task_name=\"crawl_orchestrator_tick\" | message=\"task_finished\" | unwrap task_duration_ms [5m])",
+          "expr": "max by (service) (quantile_over_time(0.95, {service=~\"$service\"} | json | message=\"task_finished\" | task_name=\"crawl_orchestrator_tick\" | unwrap task_duration_ms [5m]))",
           "legendFormat": "{{service}}",
           "refId": "A",
           "queryType": "range"
@@ -390,6 +389,7 @@
     {
       "id": 11,
       "title": "Discover Completed / min",
+      "description": "Пусто, если домены в fetch-backlog: discovery не вызывается, пока есть pending URL.",
       "type": "timeseries",
       "gridPos": {
         "h": 6,
@@ -403,7 +403,7 @@
       },
       "targets": [
         {
-          "expr": "sum(rate({service=~\"$service\"} | json | message=~\"crawl\\.discover\\.completed\" | crawl_profile_id=~\"$crawl_profile\" [2m])) * 60",
+          "expr": "sum(rate({service=~\"$service\"} | json | message=\"crawl.discover.completed\" | crawl_profile_id=~\"$crawl_profile\" [2m])) * 60",
           "legendFormat": "{{service}}",
           "refId": "A",
           "queryType": "range"
@@ -436,7 +436,7 @@
       },
       "targets": [
         {
-          "expr": "sum(rate({service=~\"$service\"} | json | message=~\"crawl\\.discover\\.failed\" | crawl_profile_id=~\"$crawl_profile\" [2m])) * 60",
+          "expr": "sum(rate({service=~\"$service\"} | json | message=\"crawl.discover.failed\" | crawl_profile_id=~\"$crawl_profile\" [2m])) * 60",
           "legendFormat": "{{service}}",
           "refId": "A",
           "queryType": "range"
@@ -469,7 +469,7 @@
       },
       "targets": [
         {
-          "expr": "sum(rate({service=~\"$service\"} | json | message=~\"crawl\\.discover\\.completed\" | crawl_profile_id=~\"$crawl_profile\" | unwrap urls_discovered [2m])) * 60",
+          "expr": "sum(rate({service=~\"$service\"} | json | message=\"crawl.discover.completed\" | crawl_profile_id=~\"$crawl_profile\" | unwrap urls_discovered [2m])) * 60",
           "legendFormat": "{{service}}",
           "refId": "A",
           "queryType": "range"
@@ -502,7 +502,7 @@
       },
       "targets": [
         {
-          "expr": "sum(rate({service=~\"$service\"} | json | message=~\"crawl\\.fetch\\.completed\" [2m])) * 60",
+          "expr": "sum(rate({service=~\"$service\"} | json | message=\"crawl.fetch.completed\" [2m])) * 60",
           "legendFormat": "{{service}}",
           "refId": "A",
           "queryType": "range"
@@ -535,7 +535,7 @@
       },
       "targets": [
         {
-          "expr": "sum(rate({service=~\"$service\"} | json | message=~\"crawl\\.fetch\\.failed\" [2m])) * 60",
+          "expr": "sum(rate({service=~\"$service\"} | json | message=\"crawl.fetch.failed\" [2m])) * 60",
           "legendFormat": "{{service}}",
           "refId": "A",
           "queryType": "range"
@@ -568,7 +568,7 @@
       },
       "targets": [
         {
-          "expr": "sum(rate({service=~\"$service\"} | json | message=~\"crawl\\.fetch\\.completed\" | browser_fallback=true [2m])) * 60",
+          "expr": "sum(rate({service=~\"$service\"} | json | message=\"crawl.fetch.completed\" | browser_fallback=\"true\" [2m])) * 60",
           "legendFormat": "{{service}}",
           "refId": "A",
           "queryType": "range"
@@ -601,7 +601,7 @@
       },
       "targets": [
         {
-          "expr": "sum by (crawl_outcome) (rate({service=~\"$service\"} | json | message=~\"crawl\\.url\\.outcome\" | crawl_profile_id=~\"$crawl_profile\" [2m])) * 60",
+          "expr": "sum by (crawl_outcome) (rate({service=~\"$service\"} | json | message=\"crawl.url.outcome\" | crawl_profile_id=~\"$crawl_profile\" [2m])) * 60",
           "legendFormat": "{{crawl_outcome}}",
           "refId": "A",
           "queryType": "range"
@@ -634,7 +634,7 @@
       },
       "targets": [
         {
-          "expr": "quantile_over_time(0.95, {service=~\"$service\"} | json | message=~\"crawl\\.fetch\\.completed\" | unwrap fetch_duration_ms [5m]) by (fetch_transport)",
+          "expr": "quantile_over_time(0.95, {service=~\"$service\"} | json | message=\"crawl.fetch.completed\" | unwrap fetch_duration_ms [5m]) by (fetch_transport)",
           "legendFormat": "{{fetch_transport}}",
           "refId": "A",
           "queryType": "range"
@@ -667,7 +667,7 @@
       },
       "targets": [
         {
-          "expr": "sum by (crawl_skip_reason) (rate({service=~\"$service\"} | json | message=~\"crawl\\.url\\.outcome\" | crawl_outcome=\"skipped\" | crawl_profile_id=~\"$crawl_profile\" [2m])) * 60",
+          "expr": "sum by (crawl_skip_reason) (rate({service=~\"$service\"} | json | message=\"crawl.url.outcome\" | crawl_outcome=\"skipped\" | crawl_profile_id=~\"$crawl_profile\" [2m])) * 60",
           "legendFormat": "{{crawl_skip_reason}}",
           "refId": "A",
           "queryType": "range"
@@ -700,7 +700,7 @@
       },
       "targets": [
         {
-          "expr": "sum(rate({service=~\"$service\"} | json | message=~\"crawl\\.ingest\\.completed\" | crawl_profile_id=~\"$crawl_profile\" [2m])) * 60",
+          "expr": "sum(rate({service=~\"$service\"} | json | message=\"crawl.ingest.completed\" | crawl_profile_id=~\"$crawl_profile\" [2m])) * 60",
           "legendFormat": "{{service}}",
           "refId": "A",
           "queryType": "range"
@@ -733,7 +733,7 @@
       },
       "targets": [
         {
-          "expr": "sum(rate({service=~\"$service\"} | json | message=~\"crawl\\.ingest\\.failed\" | crawl_profile_id=~\"$crawl_profile\" [2m])) * 60",
+          "expr": "sum(rate({service=~\"$service\"} | json | message=\"crawl.ingest.failed\" | crawl_profile_id=~\"$crawl_profile\" [2m])) * 60",
           "legendFormat": "{{service}}",
           "refId": "A",
           "queryType": "range"
@@ -766,7 +766,7 @@
       },
       "targets": [
         {
-          "expr": "quantile_over_time(0.95, {service=~\"$service\"} | json | message=~\"crawl\\.ingest\\.completed\" | crawl_profile_id=~\"$crawl_profile\" | unwrap ingest_duration_ms [5m])",
+          "expr": "max by (service) (quantile_over_time(0.95, {service=~\"$service\"} | json | message=\"crawl.ingest.completed\" | crawl_profile_id=~\"$crawl_profile\" | unwrap ingest_duration_ms [5m]))",
           "legendFormat": "{{service}}",
           "refId": "A",
           "queryType": "range"
@@ -799,7 +799,7 @@
       },
       "targets": [
         {
-          "expr": "sum(rate({service=~\"$service\"} | json | message=~\"crawl\\.reingest\\.completed\" | crawl_profile_id=~\"$crawl_profile\" [2m])) * 60",
+          "expr": "sum(rate({service=~\"$service\"} | json | message=\"crawl.reingest.completed\" | crawl_profile_id=~\"$crawl_profile\" [2m])) * 60",
           "legendFormat": "{{service}}",
           "refId": "A",
           "queryType": "range"
@@ -832,7 +832,7 @@
       },
       "targets": [
         {
-          "expr": "sum(rate({service=~\"$service\"} | json | message=~\"crawl\\.enrich\\.completed\" | crawl_profile_id=~\"$crawl_profile\" [2m])) * 60",
+          "expr": "sum(rate({service=~\"$service\"} | json | message=\"crawl.enrich.completed\" | crawl_profile_id=~\"$crawl_profile\" [2m])) * 60",
           "legendFormat": "{{service}}",
           "refId": "A",
           "queryType": "range"
@@ -865,7 +865,7 @@
       },
       "targets": [
         {
-          "expr": "sum(rate({service=~\"$service\"} | json | message=~\"crawl\\.enrich\\.failed\" | crawl_profile_id=~\"$crawl_profile\" [2m])) * 60",
+          "expr": "sum(rate({service=~\"$service\"} | json | message=\"crawl.enrich.failed\" | crawl_profile_id=~\"$crawl_profile\" [2m])) * 60",
           "legendFormat": "{{service}}",
           "refId": "A",
           "queryType": "range"
@@ -898,7 +898,7 @@
       },
       "targets": [
         {
-          "expr": "quantile_over_time(0.99, {service=~\"$service\"} | json | message=~\"crawl\\.enrich\\.completed\" | crawl_profile_id=~\"$crawl_profile\" | unwrap enrichment_duration_ms [5m])",
+          "expr": "max by (service) (quantile_over_time(0.99, {service=~\"$service\"} | json | message=\"crawl.enrich.completed\" | crawl_profile_id=~\"$crawl_profile\" | unwrap enrichment_duration_ms [5m]))",
           "legendFormat": "{{service}}",
           "refId": "A",
           "queryType": "range"
@@ -931,7 +931,7 @@
       },
       "targets": [
         {
-          "expr": "sum(rate({service=~\"$service\"} | json | message=~\"crawl\\.seed\\.completed\" | crawl_profile_id=~\"$crawl_profile\" | unwrap seed_imported [2m]))",
+          "expr": "sum(rate({service=~\"$service\"} | json | message=\"crawl.seed.completed\" | crawl_profile_id=~\"$crawl_profile\" | unwrap seed_imported [2m]))",
           "legendFormat": "{{service}}",
           "refId": "A",
           "queryType": "range"
@@ -964,7 +964,7 @@
       },
       "targets": [
         {
-          "expr": "sum(rate({service=~\"$service\"} | json | message=~\"crawl\\.reclaim\\.completed\" | crawl_profile_id=~\"$crawl_profile\" [2m])) * 60",
+          "expr": "sum(rate({service=~\"$service\"} | json | message=\"crawl.reclaim.completed\" | crawl_profile_id=~\"$crawl_profile\" [2m])) * 60",
           "legendFormat": "{{service}}",
           "refId": "A",
           "queryType": "range"
@@ -997,7 +997,7 @@
       },
       "targets": [
         {
-          "expr": "sum by (service) (rate({service=~\"$service\"} | json task_name=\"task.name\" | task_name=~\"crawl_.*\" | message=\"task_failed\" [2m])) / sum by (service) (rate({service=~\"$service\"} | json task_name=\"task.name\" | task_name=~\"crawl_.*\" | message=\"task_started\" [2m])) * 100",
+          "expr": "sum by (service) (rate({service=~\"$service\"} | json | message=\"task_failed\" | task_name=~\"crawl_.*\" [2m])) / (sum by (service) (rate({service=~\"$service\"} | json | message=\"task_started\" | task_name=~\"crawl_.*\" [2m])) + 1e-10) * 100",
           "legendFormat": "{{service}}",
           "refId": "A",
           "queryType": "range"
@@ -1030,7 +1030,7 @@
       },
       "targets": [
         {
-          "expr": "sum by (service) (rate({service=~\"$service\"} | json task_name=\"task.name\" | task_name=~\"crawl_.*\" | task_retry > 0 [2m]))",
+          "expr": "sum by (service) (rate({service=~\"$service\"} | json | message=\"task_started\" | task_name=~\"crawl_.*\" | task_retry > 0 [2m]))",
           "legendFormat": "{{service}}",
           "refId": "A",
           "queryType": "range"
@@ -1063,7 +1063,7 @@
       },
       "targets": [
         {
-          "expr": "sum(rate({service=~\"$service\"} | json | message=~\"crawl\\..*\" | level=\"ERROR\" [2m]))",
+          "expr": "sum(rate({service=~\"$service\"} | json | message=~\"crawl[.].*\" | level=\"ERROR\" [2m]))",
           "legendFormat": "{{service}}",
           "refId": "A",
           "queryType": "range"
@@ -1096,7 +1096,7 @@
       },
       "targets": [
         {
-          "expr": "{service=~\"$service\"} | json | message=~\"crawl\\..*failed|crawl\\.url\\.outcome\" | crawl_outcome=\"failed\" | crawl_profile_id=~\"$crawl_profile\"",
+          "expr": "{service=~\"$service\"} | json | message=~\"crawl[.](.*failed|url[.]outcome)\" | crawl_outcome=\"failed\" | crawl_profile_id=~\"$crawl_profile\"",
           "refId": "A",
           "queryType": "logs"
         }
