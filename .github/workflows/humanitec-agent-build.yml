@@ -289,6 +289,8 @@ jobs:
 
       - name: Supersede previous macOS notarize manifests
         if: needs.resolve-release.outputs.skip_build != 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
           uv run python scripts/agent_build.py notarize-supersede-previous \
