@@ -126,3 +126,15 @@ bash deploy/scripts/kubeconfig-for-github-actions.sh
 Workflow использует `GITHUB_TOKEN` для публикации GitHub Release; отдельный PAT не нужен (`permissions: contents: write`).
 
 Release tag по умолчанию: `humanitec-agent-{short_sha}` (тот же short SHA, что Helm `image.tag` после Deploy).
+
+Phase 1 публикует signed macOS `.dmg` сразу и шлёт submit в Apple (`AGENT_MACOS_NOTARIZE=submit-only`).
+
+## 5. HumanitecAgent macOS notarize follow-up (`humanitec-agent-macos-notarize.yml`)
+
+Триггеры: cron каждые 30 мин, успешный `humanitec-agent-build`, `workflow_dispatch`.
+
+Те же Apple/macOS secrets, что в §4. Без них job пропускается.
+
+До 48 ч после release: poll Apple → stapler → replace `.dmg` в том же GitHub Release (`--clobber`).
+
+Локально: `make agent-notarize-followup AGENT_RELEASE_TAG=humanitec-agent-<short_sha>`.

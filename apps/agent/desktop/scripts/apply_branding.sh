@@ -524,6 +524,7 @@ osx_sign_new = """if (process.env.APPLE_TEAM_ID) {
     keychain: process.env.KEYCHAIN_PATH || undefined,
     entitlements: 'entitlements.plist',
     'entitlements-inherit': 'entitlements.plist',
+    continueOnError: false,
     optionsForFile: (filePath) => {
       const pathSep = require('path').sep;
       if (filePath.includes(`${pathSep}Resources${pathSep}bin${pathSep}goosed`)) {
@@ -548,6 +549,13 @@ elif "cfg.osxNotarize" in text:
     teamId: process.env.APPLE_TEAM_ID,
   };"""
     text = text.replace(osx_notarize_block, "", 1)
+
+if "continueOnError: false" not in text and "optionsForFile: (filePath)" in text:
+    text = text.replace(
+        "'entitlements-inherit': 'entitlements.plist',",
+        "'entitlements-inherit': 'entitlements.plist',\n    continueOnError: false,",
+        1,
+    )
 
 forge_path.write_text(text, encoding="utf-8")
 

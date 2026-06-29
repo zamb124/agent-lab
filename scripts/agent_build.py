@@ -12,6 +12,7 @@ import hashlib
 import platform
 import subprocess
 import sys
+import tempfile
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
@@ -34,6 +35,16 @@ from apps.agent.desktop.build_contract import (  # noqa: E402, I001
     artifact_path as contract_artifact_path,
     asset_name_pattern,
     load_default_distro_config,
+    macos_notarize_manifest_filename,
+)
+from apps.agent.desktop.macos_notarize import (  # noqa: E402, I001
+    MacosNotarizeFollowupSummary,
+    discover_pending_release_tags,
+    followup_release,
+    merge_platform_fragments,
+    resolve_release_version_sha,
+    supersede_release_manifest,
+    write_manifest,
 )
 
 
@@ -213,6 +224,77 @@ def ensure_local(*, artifact_mode: str, version_sha: str) -> Path | None:
     )
 
 
+def notarize_merge_manifest(*, release_tag: str, version_sha: str, dist_dir: Path) -> Path:
+    manifest = merge_platform_fragments(
+        release_tag=release_tag,
+        version_sha=version_sha,
+        dist_dir=dist_dir,
+    )
+    manifest_path = dist_dir / macos_notarize_manifest_filename(version_sha)
+    write_manifest(manifest_path, manifest)
+    print(f"agent-build: merged macOS notarize manifest: {manifest_path}", flush=True)
+    return manifest_path
+
+
+def notarize_supersede_previous(
+    *,
+    repo: str,
+    current_release_tag: str,
+) -> None:
+    release_tags = discover_pending_release_tags(repo=repo)
+    work_dir = Path(tempfile.mkdtemp(prefix="humanitec-notarize-supersede-"))
+    for release_tag in release_tags:
+        if release_tag == current_release_tag:
+            continue
+        try:
+            release_version_sha = resolve_release_version_sha(
+                repo=repo,
+                release_tag=release_tag,
+            )
+            _ = supersede_release_manifest(
+                repo=repo,
+                release_tag=release_tag,
+                version_sha=release_version_sha,
+                work_dir=work_dir / release_tag,
+            )
+            print(
+                f"agent-build: superseded pending notarization manifest for {release_tag}",
+                flush=True,
+            )
+        except (FileNotFoundError, RuntimeError, ValueError) as exc:
+            print(f"agent-build: skip supersede {release_tag}: {exc}", flush=True)
+
+
+def notarize_followup(*, repo: str, release_tag: str, version_sha: str | None = None) -> MacosNotarizeFollowupSummary:
+    summary = followup_release(
+        repo=repo,
+        release_tag=release_tag,
+        version_sha=version_sha,
+    )
+    print(
+        "agent-build: notarize followup "
+        + f"completed={summary.platforms_completed} "
+        + f"pending={summary.platforms_pending} "
+        + f"rejected={summary.platforms_rejected} "
+        + f"expired={summary.platforms_expired}",
+        flush=True,
+    )
+    return summary
+
+
+def notarize_followup_all_pending(*, repo: str) -> list[MacosNotarizeFollowupSummary]:
+    release_tags = discover_pending_release_tags(repo=repo)
+    summaries: list[MacosNotarizeFollowupSummary] = []
+    for release_tag in release_tags:
+        try:
+            summary = notarize_followup(repo=repo, release_tag=release_tag)
+        except (FileNotFoundError, RuntimeError, ValueError) as exc:
+            print(f"agent-build: skip {release_tag}: {exc}", flush=True)
+            continue
+        summaries.append(summary)
+    return summaries
+
+
 def publish_release(*, release_tag: str, version_sha: str) -> None:
     distro = load_default_distro_config()
     missing: list[str] = []
@@ -327,6 +409,37 @@ def _parse_args(argv: list[str]) -> argparse.Namespace:
     publish_parser.add_argument("--tag", required=True)
     publish_parser.add_argument("--version-sha", required=True)
 
+    merge_manifest_parser = subparsers.add_parser(
+        "notarize-merge-manifest",
+        help="Merge macOS notarize fragments into release manifest JSON",
+    )
+    merge_manifest_parser.add_argument("--release-tag", required=True)
+    merge_manifest_parser.add_argument("--version-sha", required=True)
+    merge_manifest_parser.add_argument(
+        "--dist-dir",
+        default=str(DIST_DIR),
+    )
+
+    followup_parser = subparsers.add_parser(
+        "notarize-followup",
+        help="Poll Apple notarization and replace macOS DMG assets on release",
+    )
+    followup_parser.add_argument("--repo", required=True)
+    followup_parser.add_argument("--release-tag", default="")
+    followup_parser.add_argument("--version-sha", default="")
+    followup_parser.add_argument(
+        "--all-pending",
+        action="store_true",
+        help="Process recent humanitec-agent-* releases with pending manifest",
+    )
+
+    supersede_parser = subparsers.add_parser(
+        "notarize-supersede-previous",
+        help="Mark pending macOS notarize manifests on older releases as superseded",
+    )
+    supersede_parser.add_argument("--repo", required=True)
+    supersede_parser.add_argument("--current-release-tag", required=True)
+
     return parser.parse_args(argv)
 
 
@@ -354,6 +467,34 @@ def main(argv: list[str] | None = None) -> int:
         return 0
     if command == "publish-release":
         publish_release(release_tag=str(args.tag), version_sha=str(args.version_sha))
+        return 0
+    if command == "notarize-merge-manifest":
+        _ = notarize_merge_manifest(
+            release_tag=str(args.release_tag),
+            version_sha=str(args.version_sha),
+            dist_dir=Path(str(args.dist_dir)),
+        )
+        return 0
+    if command == "notarize-followup":
+        if bool(args.all_pending):
+            _ = notarize_followup_all_pending(repo=str(args.repo))
+            return 0
+        release_tag = str(args.release_tag).strip()
+        if not release_tag:
+            raise ValueError("--release-tag is required unless --all-pending is set")
+        version_sha_arg = str(args.version_sha).strip()
+        version_sha = version_sha_arg if version_sha_arg else None
+        _ = notarize_followup(
+            repo=str(args.repo),
+            release_tag=release_tag,
+            version_sha=version_sha,
+        )
+        return 0
+    if command == "notarize-supersede-previous":
+        notarize_supersede_previous(
+            repo=str(args.repo),
+            current_release_tag=str(args.current_release_tag),
+        )
         return 0
     raise ValueError(f"Unsupported command: {command!r}")
 

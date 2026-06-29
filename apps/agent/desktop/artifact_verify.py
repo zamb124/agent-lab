@@ -23,6 +23,16 @@ PLACEHOLDER_MARKER = "HumanitecAgent placeholder"
 MIN_RELEASE_BYTES = 512_000
 
 
+def _macos_notarized_verification_enabled() -> bool:
+    env_value = os.environ.get("AGENT_VERIFY_MACOS_NOTARIZED")
+    if env_value is None:
+        return False
+    stripped = env_value.strip()
+    if not stripped:
+        return False
+    return stripped == "1"
+
+
 def _macos_codesign_verification_enabled() -> bool:
     env_value = os.environ.get("AGENT_VERIFY_CODESIGN")
     if env_value is None:
@@ -170,19 +180,20 @@ def _verify_macos_release_dmg(path: Path, distro: HumanitecDistroConfig) -> None
                     + codesign_result.stderr.strip()
                     + codesign_result.stdout.strip()
                 )
-            if shutil.which("spctl") is not None:
-                spctl_result = subprocess.run(
-                    ["spctl", "-a", "-vv", str(app_bundle)],
-                    check=False,
-                    capture_output=True,
-                    text=True,
-                )
-                if spctl_result.returncode != 0:
-                    raise ArtifactVerificationError(
-                        "Gatekeeper assessment failed: "
-                        + spctl_result.stderr.strip()
-                        + spctl_result.stdout.strip()
+            if _macos_notarized_verification_enabled():
+                if shutil.which("spctl") is not None:
+                    spctl_result = subprocess.run(
+                        ["spctl", "-a", "-vv", str(app_bundle)],
+                        check=False,
+                        capture_output=True,
+                        text=True,
                     )
+                    if spctl_result.returncode != 0:
+                        raise ArtifactVerificationError(
+                            "Gatekeeper assessment failed: "
+                            + spctl_result.stderr.strip()
+                            + spctl_result.stdout.strip()
+                        )
 
             goosed_bin = app_bundle / "Contents" / "Resources" / "bin" / "goosed"
             if not goosed_bin.is_file():

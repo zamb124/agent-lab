@@ -1,0 +1,91 @@
+name: humanitec-agent-macos-notarize
+
+concurrency:
+  group: humanitec-agent-notarize-followup-${{ github.repository }}
+  cancel-in-progress: false
+
+on:
+  schedule:
+    - cron: "*/30 * * * *"
+  workflow_run:
+    workflows:
+      - humanitec-agent-build
+    types:
+      - completed
+  workflow_dispatch:
+    inputs:
+      release_tag:
+        description: "Optional release tag; empty = poll all recent pending manifests"
+        required: false
+        default: ""
+        type: string
+
+jobs:
+  notarize-followup:
+    if: >
+      github.event_name != 'workflow_run' ||
+      github.event.workflow_run.conclusion == 'success'
+    runs-on: macos-14
+    timeout-minutes: 120
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup uv
+        uses: astral-sh/setup-uv@v5
+
+      - name: Import macOS signing certificate
+        shell: bash
+        env:
+          MACOS_CERTIFICATE_P12_BASE64: ${{ secrets.MACOS_CERTIFICATE_P12_BASE64 }}
+          MACOS_CERTIFICATE_PASSWORD: ${{ secrets.MACOS_CERTIFICATE_PASSWORD }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_ID_PASSWORD: ${{ secrets.APPLE_ID_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+        run: |
+          set -euo pipefail
+          if [[ -z "${MACOS_CERTIFICATE_P12_BASE64}" ]]; then
+            echo "macOS signing secrets not configured — skip notarize followup"
+            echo "SKIP_NOTARIZE_FOLLOWUP=1" >> "${GITHUB_ENV}"
+            exit 0
+          fi
+          for required in MACOS_CERTIFICATE_PASSWORD APPLE_ID APPLE_ID_PASSWORD APPLE_TEAM_ID; do
+            if [[ -z "${!required}" ]]; then
+              echo "::error::macOS notarize followup: secret ${required} is required"
+              exit 1
+            fi
+          done
+          KEYCHAIN_PATH="${RUNNER_TEMP}/signing.keychain-db"
+          echo "KEYCHAIN_PATH=${KEYCHAIN_PATH}" >> "${GITHUB_ENV}"
+          echo "APPLE_ID=${APPLE_ID}" >> "${GITHUB_ENV}"
+          echo "APPLE_ID_PASSWORD=${APPLE_ID_PASSWORD}" >> "${GITHUB_ENV}"
+          echo "APPLE_TEAM_ID=${APPLE_TEAM_ID}" >> "${GITHUB_ENV}"
+          security create-keychain -p "" "${KEYCHAIN_PATH}"
+          security set-keychain-settings -lut 21600 "${KEYCHAIN_PATH}"
+          security unlock-keychain -p "" "${KEYCHAIN_PATH}"
+          echo "${MACOS_CERTIFICATE_P12_BASE64}" | base64 --decode > "${RUNNER_TEMP}/cert.p12"
+          security import "${RUNNER_TEMP}/cert.p12" -k "${KEYCHAIN_PATH}" \
+            -P "${MACOS_CERTIFICATE_PASSWORD}" -T /usr/bin/codesign -T /usr/bin/productsign -T /usr/bin/stapler
+          security list-keychains -d user -s "${KEYCHAIN_PATH}"
+          security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "" "${KEYCHAIN_PATH}"
+
+      - name: Run macOS notarize followup
+        if: env.SKIP_NOTARIZE_FOLLOWUP != '1'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          NOTARY_FOLLOWUP_MAX_AGE_SECONDS: "172800"
+        run: |
+          set -euo pipefail
+          chmod +x apps/agent/desktop/scripts/macos-notarize-followup.sh
+          RELEASE_TAG="${{ github.event.inputs.release_tag }}"
+          if [[ -n "${RELEASE_TAG}" ]]; then
+            apps/agent/desktop/scripts/macos-notarize-followup.sh \
+              --repo "${{ github.repository }}" \
+              --release-tag "${RELEASE_TAG}"
+          else
+            apps/agent/desktop/scripts/macos-notarize-followup.sh \
+              --repo "${{ github.repository }}" \
+              --all-pending
+          fi

@@ -325,6 +325,34 @@ macos_signing_enabled() {
   return 0
 }
 
+macos_notarize_mode() {
+  echo "${AGENT_MACOS_NOTARIZE:-0}"
+}
+
+macos_notarize_sync_enabled() {
+  if ! macos_signing_enabled; then
+    return 1
+  fi
+  if [[ "$(macos_notarize_mode)" != "1" ]]; then
+    return 1
+  fi
+  return 0
+}
+
+macos_notarize_submit_only_enabled() {
+  if ! macos_signing_enabled; then
+    return 1
+  fi
+  if [[ "$(macos_notarize_mode)" != "submit-only" ]]; then
+    return 1
+  fi
+  return 0
+}
+
+macos_notarization_enabled() {
+  macos_notarize_sync_enabled || macos_notarize_submit_only_enabled
+}
+
 resolve_macos_signing_identity() {
   if [[ -z "${KEYCHAIN_PATH:-}" ]]; then
     echo "KEYCHAIN_PATH is required for macOS signing" >&2
@@ -380,7 +408,7 @@ sign_macos_goosed_binary() {
     return 0
   fi
   local goosed_bin="${DESKTOP_DIR}/src/bin/goosed"
-  local entitlements_path="${DESKTOP_DIR}/entitlements.plist"
+  local entitlements_path="${ROOT_DIR}/distro/goosed.entitlements.plist"
   if [[ ! -f "${goosed_bin}" ]]; then
     echo "goosed binary missing before pre-sign: ${goosed_bin}" >&2
     exit 1
@@ -401,12 +429,264 @@ sign_macos_goosed_binary() {
   echo "goosed pre-sign complete"
 }
 
-notarize_macos_app_bundle() {
+assert_macos_app_ready_for_notarization() {
   local app_path="$1"
-  if ! macos_signing_enabled; then
-    echo "macOS signing disabled — skipping notarization"
+  if ! command -v codesign >/dev/null 2>&1; then
+    echo "codesign is required before macOS notarization" >&2
+    exit 1
+  fi
+  echo "Verifying ${app_path} signature before notarization"
+  codesign --verify --deep --strict "${app_path}"
+  local goosed_in_app="${app_path}/Contents/Resources/bin/goosed"
+  if [[ ! -f "${goosed_in_app}" ]]; then
+    echo "goosed missing in app bundle before notarization: ${goosed_in_app}" >&2
+    exit 1
+  fi
+  codesign --verify --deep --strict "${goosed_in_app}"
+}
+
+macos_app_bundle_asset_name() {
+  uv run python - "${DISTRO_JSON}" "${PLATFORM}" "${VERSION_SHA}" "${REPO_ROOT}" <<'PY'
+import sys
+from pathlib import Path
+
+distro_path = Path(sys.argv[1])
+platform_name = sys.argv[2]
+version_sha = sys.argv[3]
+repo_root = Path(sys.argv[4])
+sys.path.insert(0, str(repo_root))
+from apps.agent.desktop.build_contract import load_distro_config, macos_app_bundle_asset_filename
+
+distro = load_distro_config(distro_path)
+print(macos_app_bundle_asset_filename(platform_name, version_sha, distro.bundle_name))
+PY
+}
+
+macos_notarize_fragment_name() {
+  uv run python - "${DISTRO_JSON}" "${PLATFORM}" "${VERSION_SHA}" "${REPO_ROOT}" <<'PY'
+import sys
+from pathlib import Path
+
+distro_path = Path(sys.argv[1])
+platform_name = sys.argv[2]
+version_sha = sys.argv[3]
+repo_root = Path(sys.argv[4])
+sys.path.insert(0, str(repo_root))
+from apps.agent.desktop.build_contract import load_distro_config, macos_notarize_fragment_filename
+
+distro = load_distro_config(distro_path)
+print(macos_notarize_fragment_filename(platform_name, version_sha, distro.bundle_name))
+PY
+}
+
+export_macos_app_bundle_zip() {
+  local app_path="$1"
+  local zip_path="$2"
+  ditto -c -k --keepParent "${app_path}" "${zip_path}"
+}
+
+package_macos_dmg() {
+  local app_path="$1"
+  local dmg_path="$2"
+  local volume_name="$3"
+  if ! command -v hdiutil >/dev/null 2>&1; then
+    echo "hdiutil is required to pack ${volume_name}.app into .dmg" >&2
+    exit 1
+  fi
+  rm -f "${dmg_path}"
+  local dmg_staging=""
+  dmg_staging="$(mktemp -d)"
+  cp -R "${app_path}" "${dmg_staging}/"
+  ln -s /Applications "${dmg_staging}/Applications"
+  hdiutil create \
+    -volname "${volume_name}" \
+    -srcfolder "${dmg_staging}" \
+    -ov \
+    -format UDZO \
+    "${dmg_path}"
+  rm -rf "${dmg_staging}"
+}
+
+write_macos_notarize_fragment() {
+  local submission_id="$1"
+  local app_bundle_asset="$2"
+  local dmg_asset="$3"
+  local fragment_path=""
+  fragment_path="${OUTPUT_DIR}/$(macos_notarize_fragment_name)"
+  uv run python - "${fragment_path}" "${PLATFORM}" "${VERSION_SHA}" "${submission_id}" "${app_bundle_asset}" "${dmg_asset}" "${REPO_ROOT}" <<'PY'
+import json
+import sys
+from datetime import UTC, datetime
+from pathlib import Path
+
+fragment_path = Path(sys.argv[1])
+platform_name = sys.argv[2]
+version_sha = sys.argv[3]
+submission_id = sys.argv[4]
+app_bundle_asset = sys.argv[5]
+dmg_asset = sys.argv[6]
+repo_root = Path(sys.argv[7])
+sys.path.insert(0, str(repo_root))
+from apps.agent.desktop.macos_notarize import MacosNotarizeFragment, MacosNotarizeStatus
+
+submitted_at = datetime.now(tz=UTC).replace(microsecond=0).isoformat().replace("+00:00", "Z")
+fragment = MacosNotarizeFragment(
+    platform=platform_name,
+    version_sha=version_sha,
+    submission_id=submission_id,
+    submitted_at=submitted_at,
+    status=MacosNotarizeStatus.PENDING,
+    app_bundle_asset=app_bundle_asset,
+    dmg_asset=dmg_asset,
+)
+fragment_path.parent.mkdir(parents=True, exist_ok=True)
+fragment_path.write_text(json.dumps(fragment.model_dump(mode="json"), indent=2) + "\n", encoding="utf-8")
+print(fragment_path)
+PY
+}
+
+submit_macos_notarization() {
+  local app_path="$1"
+  assert_macos_app_ready_for_notarization "${app_path}"
+  local zip_path=""
+  local zip_bytes=""
+  zip_path="$(mktemp -t humanitec-agent-notarize-XXXXXX).zip"
+  ditto -c -k --keepParent "${app_path}" "${zip_path}"
+  zip_bytes="$(wc -c <"${zip_path}" | tr -d ' ')"
+  echo "Notarization zip ready: ${zip_path} (${zip_bytes} bytes)"
+  echo "Submitting ${app_path} for notarization"
+
+  local submission_id=""
+  local submit_attempt=1
+  local submit_max_attempts="${NOTARY_SUBMIT_MAX_ATTEMPTS:-3}"
+  while [[ "${submit_attempt}" -le "${submit_max_attempts}" ]]; do
+    local submit_json=""
+    local submit_stderr=""
+    submit_json="$(mktemp -t humanitec-notary-submit-XXXXXX.json)"
+    submit_stderr="$(mktemp -t humanitec-notary-submit-XXXXXX.err)"
+    set +e
+    xcrun notarytool submit "${zip_path}" \
+      --apple-id "${APPLE_ID}" \
+      --password "${APPLE_ID_PASSWORD}" \
+      --team-id "${APPLE_TEAM_ID}" \
+      --output-format json >"${submit_json}" 2>"${submit_stderr}"
+    local submit_exit=$?
+    set -e
+    if [[ "${submit_exit}" -eq 0 ]]; then
+      submission_id="$(uv run python -c 'import json,sys; print(json.load(open(sys.argv[1], encoding="utf-8"))["id"])' "${submit_json}")"
+      rm -f "${submit_json}" "${submit_stderr}"
+      echo "Notarization submission id: ${submission_id}"
+      rm -f "${zip_path}"
+      echo "${submission_id}"
+      return 0
+    fi
+    cat "${submit_stderr}" >&2 || true
+    cat "${submit_json}" >&2 || true
+    rm -f "${submit_json}" "${submit_stderr}"
+    if [[ "${submit_attempt}" -eq "${submit_max_attempts}" ]]; then
+      echo "notarytool submit failed after ${submit_max_attempts} attempts" >&2
+      rm -f "${zip_path}"
+      exit 1
+    fi
+    local submit_backoff=$((submit_attempt * 30))
+    echo "notarytool submit failed (attempt ${submit_attempt}/${submit_max_attempts}); retrying in ${submit_backoff}s..." >&2
+    sleep "${submit_backoff}"
+    submit_attempt=$((submit_attempt + 1))
+  done
+}
+
+handle_macos_notarization() {
+  local app_path="$1"
+  local dmg_asset="$2"
+  if macos_notarize_submit_only_enabled; then
+    if [[ -z "${APPLE_ID:-}" ]]; then
+      echo "APPLE_ID is required for macOS submit-only notarization" >&2
+      exit 1
+    fi
+    if [[ -z "${APPLE_ID_PASSWORD:-}" ]]; then
+      echo "APPLE_ID_PASSWORD is required for macOS submit-only notarization" >&2
+      exit 1
+    fi
+    local app_bundle_asset=""
+    app_bundle_asset="$(macos_app_bundle_asset_name)"
+    local app_bundle_zip="${OUTPUT_DIR}/${app_bundle_asset}"
+    export_macos_app_bundle_zip "${app_path}" "${app_bundle_zip}"
+    echo "Stored app bundle for async notarization: ${app_bundle_zip}"
+    local submission_id=""
+    submission_id="$(submit_macos_notarization "${app_path}")"
+    write_macos_notarize_fragment "${submission_id}" "${app_bundle_asset}" "${dmg_asset}"
     return 0
   fi
+  if macos_notarize_sync_enabled; then
+    notarize_macos_app_bundle_sync "${app_path}"
+    return 0
+  fi
+  echo "macOS notarization skipped (AGENT_MACOS_NOTARIZE=${AGENT_MACOS_NOTARIZE:-0})."
+}
+
+poll_notary_submission_until_complete() {
+  local submission_id="$1"
+  local max_wait_seconds="${NOTARY_MAX_WAIT_SECONDS:-5400}"
+  local poll_interval="${NOTARY_POLL_INTERVAL_SECONDS:-60}"
+  local elapsed=0
+  while [[ "${elapsed}" -lt "${max_wait_seconds}" ]]; do
+    local info_json=""
+    info_json="$(mktemp -t humanitec-notary-info-XXXXXX.json)"
+    local info_stderr=""
+    info_stderr="$(mktemp -t humanitec-notary-info-XXXXXX.err)"
+    set +e
+    xcrun notarytool info "${submission_id}" \
+      --apple-id "${APPLE_ID}" \
+      --password "${APPLE_ID_PASSWORD}" \
+      --team-id "${APPLE_TEAM_ID}" \
+      --output-format json >"${info_json}" 2>"${info_stderr}"
+    local info_exit=$?
+    set -e
+    if [[ "${info_exit}" -ne 0 ]]; then
+      cat "${info_stderr}" >&2 || true
+      rm -f "${info_json}" "${info_stderr}"
+      echo "notarytool info failed for ${submission_id} (network?), retrying in ${poll_interval}s..." >&2
+      sleep "${poll_interval}"
+      elapsed=$((elapsed + poll_interval))
+      continue
+    fi
+    rm -f "${info_stderr}"
+    local notary_status=""
+    notary_status="$(uv run python -c 'import json,sys; print(json.load(open(sys.argv[1], encoding="utf-8"))["status"])' "${info_json}")"
+    rm -f "${info_json}"
+    echo "Notarization status for ${submission_id}: ${notary_status} (elapsed ${elapsed}s / max ${max_wait_seconds}s)"
+    case "${notary_status}" in
+      Accepted)
+        return 0
+        ;;
+      Invalid|Rejected)
+        echo "Notarization rejected for ${submission_id}" >&2
+        xcrun notarytool log "${submission_id}" \
+          --apple-id "${APPLE_ID}" \
+          --password "${APPLE_ID_PASSWORD}" \
+          --team-id "${APPLE_TEAM_ID}" >&2 || true
+        exit 1
+        ;;
+      "In Progress")
+        sleep "${poll_interval}"
+        elapsed=$((elapsed + poll_interval))
+        ;;
+      *)
+        echo "Unexpected notary status '${notary_status}' for ${submission_id}" >&2
+        exit 1
+        ;;
+    esac
+  done
+  echo "Notarization timed out after ${max_wait_seconds}s for ${submission_id}" >&2
+  xcrun notarytool log "${submission_id}" \
+    --apple-id "${APPLE_ID}" \
+    --password "${APPLE_ID_PASSWORD}" \
+    --team-id "${APPLE_TEAM_ID}" >&2 || true
+  exit 1
+}
+
+notarize_macos_app_bundle_sync() {
+  local app_path="$1"
   if [[ -z "${APPLE_ID:-}" ]]; then
     echo "APPLE_ID is required for macOS notarization" >&2
     exit 1
@@ -419,84 +699,23 @@ notarize_macos_app_bundle() {
     echo "macOS app bundle missing for notarization: ${app_path}" >&2
     exit 1
   fi
-  local zip_path=""
-  zip_path="$(mktemp -t humanitec-agent-notarize-XXXXXX).zip"
-  ditto -c -k --keepParent "${app_path}" "${zip_path}"
-  echo "Submitting ${app_path} for notarization"
-
   local submission_id=""
-  local submit_attempt=1
-  local submit_max_attempts="${NOTARY_SUBMIT_MAX_ATTEMPTS:-3}"
-  while [[ "${submit_attempt}" -le "${submit_max_attempts}" ]]; do
-    local submit_json=""
-    submit_json="$(mktemp -t humanitec-notary-submit-XXXXXX.json)"
-    set +e
-    xcrun notarytool submit "${zip_path}" \
-      --apple-id "${APPLE_ID}" \
-      --password "${APPLE_ID_PASSWORD}" \
-      --team-id "${APPLE_TEAM_ID}" \
-      --output-format json >"${submit_json}" 2>&1
-    local submit_exit=$?
-    set -e
-    if [[ "${submit_exit}" -eq 0 ]]; then
-      submission_id="$(uv run python -c 'import json,sys; print(json.load(open(sys.argv[1], encoding="utf-8"))["id"])' "${submit_json}")"
-      rm -f "${submit_json}"
-      echo "Notarization submission id: ${submission_id}"
-      break
-    fi
-    cat "${submit_json}" >&2 || true
-    rm -f "${submit_json}"
-    if [[ "${submit_attempt}" -eq "${submit_max_attempts}" ]]; then
-      echo "notarytool submit failed after ${submit_max_attempts} attempts" >&2
-      rm -f "${zip_path}"
-      exit 1
-    fi
-    local submit_backoff=$((submit_attempt * 30))
-    echo "notarytool submit failed (attempt ${submit_attempt}/${submit_max_attempts}); retrying in ${submit_backoff}s..." >&2
-    sleep "${submit_backoff}"
-    submit_attempt=$((submit_attempt + 1))
-  done
-
-  local wait_attempt=1
-  local wait_max_attempts="${NOTARY_WAIT_MAX_ATTEMPTS:-10}"
-  local wait_backoff=45
-  while [[ "${wait_attempt}" -le "${wait_max_attempts}" ]]; do
-    set +e
-    xcrun notarytool wait "${submission_id}" \
-      --apple-id "${APPLE_ID}" \
-      --password "${APPLE_ID_PASSWORD}" \
-      --team-id "${APPLE_TEAM_ID}"
-    local wait_exit=$?
-    set -e
-    if [[ "${wait_exit}" -eq 0 ]]; then
-      echo "Notarization accepted for submission ${submission_id}"
-      break
-    fi
-    if [[ "${wait_attempt}" -eq "${wait_max_attempts}" ]]; then
-      echo "notarytool wait failed after ${wait_max_attempts} attempts for submission ${submission_id}" >&2
-      xcrun notarytool log "${submission_id}" \
-        --apple-id "${APPLE_ID}" \
-        --password "${APPLE_ID_PASSWORD}" \
-        --team-id "${APPLE_TEAM_ID}" >&2 || true
-      rm -f "${zip_path}"
-      exit 1
-    fi
-    echo "notarytool wait failed (attempt ${wait_attempt}/${wait_max_attempts}, exit ${wait_exit}); retrying in ${wait_backoff}s..." >&2
-    sleep "${wait_backoff}"
-    wait_attempt=$((wait_attempt + 1))
-    wait_backoff=$((wait_backoff + 15))
-  done
-
-  rm -f "${zip_path}"
+  submission_id="$(submit_macos_notarization "${app_path}")"
+  poll_notary_submission_until_complete "${submission_id}"
   xcrun stapler staple "${app_path}"
   echo "Notarization and stapling complete for ${app_path}"
-  if [[ "${AGENT_VERIFY_CODESIGN:-0}" == "1" ]]; then
+  if [[ "${AGENT_VERIFY_MACOS_NOTARIZED:-0}" == "1" ]]; then
     if ! command -v spctl >/dev/null 2>&1; then
-      echo "spctl is required when AGENT_VERIFY_CODESIGN=1" >&2
+      echo "spctl is required when AGENT_VERIFY_MACOS_NOTARIZED=1" >&2
       exit 1
     fi
     spctl -a -vv "${app_path}"
   fi
+}
+
+notarize_macos_app_bundle() {
+  local app_path="$1"
+  notarize_macos_app_bundle_sync "${app_path}"
 }
 
 bundle_windows_runtime_dlls() {
@@ -570,22 +789,8 @@ build_release() {
         echo "Goose desktop package did not produce ${GOOSE_BUNDLE_NAME}.app" >&2
         exit 1
       fi
-      notarize_macos_app_bundle "${app_path}"
-      if ! command -v hdiutil >/dev/null 2>&1; then
-        echo "hdiutil is required to pack ${GOOSE_BUNDLE_NAME}.app into .dmg" >&2
-        exit 1
-      fi
-      rm -f "${OUTPUT_DIR}/${filename}"
-      dmg_staging="$(mktemp -d)"
-      cp -R "${app_path}" "${dmg_staging}/"
-      ln -s /Applications "${dmg_staging}/Applications"
-      hdiutil create \
-        -volname "${GOOSE_BUNDLE_NAME}" \
-        -srcfolder "${dmg_staging}" \
-        -ov \
-        -format UDZO \
-        "${OUTPUT_DIR}/${filename}"
-      rm -rf "${dmg_staging}"
+      handle_macos_notarization "${app_path}" "${filename}"
+      package_macos_dmg "${app_path}" "${OUTPUT_DIR}/${filename}" "${GOOSE_BUNDLE_NAME}"
       ;;
     linux-deb|linux-rpm|linux-appimage)
       if ! command -v pnpm >/dev/null 2>&1; then

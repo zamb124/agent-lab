@@ -110,3 +110,28 @@ def artifact_path(
 ) -> Path:
     resolved_distro = distro if distro is not None else load_default_distro_config()
     return dist_dir / artifact_filename(platform, version_sha, resolved_distro.bundle_name)
+
+
+MACOS_PLATFORMS: tuple[str, ...] = ("macos-arm64", "macos-x64")
+
+
+def macos_app_bundle_asset_filename(
+    platform: str,
+    version_sha: str,
+    bundle_name: str,
+) -> str:
+    if platform not in MACOS_PLATFORMS:
+        raise ValueError(f"Unsupported macOS platform: {platform!r}")
+    return f"{bundle_name}-{platform}-{version_sha}.app-bundle.zip"
+
+
+def macos_notarize_fragment_filename(platform: str, version_sha: str, bundle_name: str) -> str:
+    if platform not in MACOS_PLATFORMS:
+        raise ValueError(f"Unsupported macOS platform: {platform!r}")
+    return f"{bundle_name}-{platform}-{version_sha}.notarize-fragment.json"
+
+
+def macos_notarize_manifest_filename(version_sha: str) -> str:
+    if not version_sha:
+        raise ValueError("version_sha is required")
+    return f"humanitec-agent-macos-notarize-{version_sha[:7]}.json"

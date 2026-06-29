@@ -1,4 +1,4 @@
-.PHONY: agent agent-ensure agent-submodule agent-build agent-build-all agent-verify-local agent-publish agent-ci-build agent-release agent-release-placeholder
+.PHONY: agent agent-ensure agent-submodule agent-build agent-build-all agent-build-macos-local agent-notarize-followup agent-verify-local agent-publish agent-ci-build agent-release agent-release-placeholder
 
 AGENT_PLATFORMS := windows macos-arm64 macos-x64 linux-deb linux-rpm linux-appimage
 AGENT_ARTIFACT_MODE ?= placeholder
@@ -30,6 +30,29 @@ agent-build-all: agent-submodule
 	@uv run python scripts/agent_build.py build-all \
 		--artifact-mode $(AGENT_ARTIFACT_MODE) \
 		--version-sha $(AGENT_VERSION_SHA)
+
+# macOS release + notarization на локальной машине (не в CI)
+agent-build-macos-local: agent-submodule
+	@chmod +x apps/agent/desktop/scripts/build.sh apps/agent/desktop/scripts/build-macos-local.sh apps/agent/desktop/scripts/apply_branding.sh
+	@if [ -n "$(AGENT_PLATFORM)" ]; then \
+		apps/agent/desktop/scripts/build-macos-local.sh --platform "$(AGENT_PLATFORM)" --version-sha "$(AGENT_VERSION_SHA)"; \
+	else \
+		apps/agent/desktop/scripts/build-macos-local.sh --version-sha "$(AGENT_VERSION_SHA)"; \
+	fi
+
+# Async Apple notarization followup (poll + replace macOS DMG on release)
+agent-notarize-followup:
+	@chmod +x apps/agent/desktop/scripts/macos-notarize-followup.sh
+	@if [ -z "$(AGENT_RELEASE_TAG)" ]; then \
+		apps/agent/desktop/scripts/macos-notarize-followup.sh \
+			--repo "$${GITHUB_REPOSITORY:-zamb124/agent-lab}" \
+			--all-pending; \
+	else \
+		apps/agent/desktop/scripts/macos-notarize-followup.sh \
+			--repo "$${GITHUB_REPOSITORY:-zamb124/agent-lab}" \
+			--release-tag "$(AGENT_RELEASE_TAG)" \
+			--version-sha "$(AGENT_VERSION_SHA)"; \
+	fi
 
 # Локальная копия CI matrix: build + verify_agent_artifact для всех 6 платформ
 agent-verify-local: runtime-bootstrap agent-submodule

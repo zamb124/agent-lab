@@ -198,6 +198,7 @@ jobs:
           AGENT_PLATFORM: ${{ matrix.platform }}
           AGENT_VERSION_SHA: ${{ needs.resolve-release.outputs.version_sha }}
           AGENT_ARTIFACT_MODE: ${{ env.AGENT_ARTIFACT_MODE }}
+          AGENT_MACOS_NOTARIZE: ${{ startsWith(matrix.platform, 'macos-') && (env.AGENT_MACOS_SIGNING == '1' && 'submit-only' || '0') || '' }}
           MACOSX_DEPLOYMENT_TARGET: ${{ startsWith(matrix.platform, 'macos-') && '12.0' || '' }}
           APPLE_ID: ${{ env.APPLE_ID }}
           APPLE_ID_PASSWORD: ${{ env.APPLE_ID_PASSWORD }}
@@ -220,6 +221,7 @@ jobs:
         env:
           AGENT_PLATFORM: ${{ matrix.platform }}
           AGENT_VERSION_SHA: ${{ needs.resolve-release.outputs.version_sha }}
+          AGENT_MACOS_NOTARIZE: ${{ startsWith(matrix.platform, 'macos-') && (env.AGENT_MACOS_SIGNING == '1' && 'submit-only' || '0') || '' }}
           AGENT_VERIFY_CODESIGN: ${{ env.AGENT_MACOS_SIGNING }}
         run: |
           uv run python scripts/verify_agent_artifact.py \
@@ -243,6 +245,14 @@ jobs:
     permissions:
       contents: write
     steps:
+      - name: Checkout repository
+        if: needs.resolve-release.outputs.skip_build != 'true'
+        uses: actions/checkout@v4
+
+      - name: Setup uv
+        if: needs.resolve-release.outputs.skip_build != 'true'
+        uses: astral-sh/setup-uv@v5
+
       - name: Promote existing release to latest
         if: needs.resolve-release.outputs.skip_build == 'true'
         env:
@@ -260,12 +270,42 @@ jobs:
           path: release-assets
           merge-multiple: true
 
+      - name: Merge macOS notarize manifest
+        if: needs.resolve-release.outputs.skip_build != 'true'
+        shell: bash
+        env:
+          RELEASE_TAG: ${{ needs.resolve-release.outputs.release_tag }}
+          VERSION_SHA: ${{ needs.resolve-release.outputs.version_sha }}
+        run: |
+          set -euo pipefail
+          if compgen -G "release-assets/*.notarize-fragment.json" > /dev/null; then
+            uv run python scripts/agent_build.py notarize-merge-manifest \
+              --release-tag "${RELEASE_TAG}" \
+              --version-sha "${VERSION_SHA}" \
+              --dist-dir release-assets
+          else
+            echo "No macOS notarize fragments — skip manifest merge"
+          fi
+
+      - name: Supersede previous macOS notarize manifests
+        if: needs.resolve-release.outputs.skip_build != 'true'
+        run: |
+          set -euo pipefail
+          uv run python scripts/agent_build.py notarize-supersede-previous \
+            --repo "${{ github.repository }}" \
+            --current-release-tag "${{ needs.resolve-release.outputs.release_tag }}"
+
       - name: Publish GitHub Release
         if: needs.resolve-release.outputs.skip_build != 'true'
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ needs.resolve-release.outputs.release_tag }}
           name: HumanitecAgent ${{ needs.resolve-release.outputs.release_tag }}
+          body: |
+            HumanitecAgent release for commit ${{ needs.resolve-release.outputs.version_sha }}.
+
+            macOS `.dmg` files are signed immediately. Apple notarization runs asynchronously
+            (up to 48 hours); notarized DMG assets replace the signed ones automatically when ready.
           files: release-assets/**/*
           make_latest: true
           draft: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.publish_draft == 'true' }}
@@ -287,6 +327,13 @@ jobs:
           if [[ "${ASSET_COUNT}" -lt 6 ]]; then
             echo "::error::Expected at least 6 platform assets, got ${ASSET_COUNT}"
             exit 1
+          fi
+          MANIFEST_ASSETS="$(gh release view "${TAG}" --repo "${GITHUB_REPOSITORY}" --json assets --jq '[.assets[].name | select(startswith("humanitec-agent-macos-notarize-") and endswith(".json"))] | length')"
+          APP_BUNDLE_ASSETS="$(gh release view "${TAG}" --repo "${GITHUB_REPOSITORY}" --json assets --jq '[.assets[].name | select(endswith(".app-bundle.zip"))] | length')"
+          echo "macOS notarize manifest assets: ${MANIFEST_ASSETS}"
+          echo "macOS app-bundle staging assets: ${APP_BUNDLE_ASSETS}"
+          if [[ "${MANIFEST_ASSETS}" -ge 1 && "${APP_BUNDLE_ASSETS}" -lt 2 ]]; then
+            echo "::warning::Expected two macOS app-bundle staging assets when manifest is present"
           fi
           LATEST_TAG="$(curl -sf "https://api.github.com/repos/${GITHUB_REPOSITORY}/releases/latest" | jq -r .tag_name)"
           echo "releases/latest tag: ${LATEST_TAG}"

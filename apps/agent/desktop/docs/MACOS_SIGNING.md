@@ -40,20 +40,91 @@ gh secret set MACOS_CERTIFICATE_P12_BASE64 < <(base64 -i DeveloperID.p12)
 
 Все пять секретов должны быть заданы вместе. Если `MACOS_CERTIFICATE_P12_BASE64` пуст — CI собирает **unsigned** `.dmg` (job не падает).
 
-## 4. CI поведение
+## 4. Async notarization pipeline (CI)
 
-Workflow [`.github/workflows/humanitec-agent-build.yml`](../../../../.github/workflows/humanitec-agent-build.yml):
+Release **не ждёт Apple**. Два workflow:
 
-1. Step **Import macOS signing certificate** — создаёт `$RUNNER_TEMP/signing.keychain-db`, импортирует `.p12`.
-2. `build.sh` — pipeline подписи в три шага:
-   - **Pre-sign** `src/bin/goosed` (`codesign` + arch gate `file x86_64` / `arm64`) до `electron-forge make`.
-   - **Package + sign `.app`** через forge (`osxSign` в Goose `forge.config.ts`; `goosed` пропускается через `optionsForFile`).
-   - **Notarize + staple** `.app` через `notarytool submit` + `notarytool wait` с retry (transient network на GitHub runners) + `stapler` в `build.sh` (не inline `osxNotarize` в forge).
-3. `build.sh` — DMG с `.app` + symlink **Applications**.
-4. Verify — при подписи: `codesign --verify` на `.app` и `Resources/bin/goosed` + `spctl -a`.
-5. При падении macOS job — artifact `forge-*.log` из `vendor/goose/ui/desktop/`.
+| Workflow | Назначение |
+|---|---|
+| [`humanitec-agent-build.yml`](../../../../.github/workflows/humanitec-agent-build.yml) | Sign + DMG + `notarytool submit` (без poll) + publish всех 6 платформ |
+| [`humanitec-agent-macos-notarize.yml`](../../../../.github/workflows/humanitec-agent-macos-notarize.yml) | Каждые 30 мин (до 48 ч): poll Apple → stapler → replace `.dmg` в том же release |
 
-## 5. Пересборка release
+### Phase 1 — build (`AGENT_MACOS_NOTARIZE=submit-only`)
+
+1. Pre-sign `goosed`, forge `osxSign`.
+2. `notarytool submit` — один submit на platform на release (без blocking wait).
+3. Signed `.dmg` публикуется сразу (Gatekeeper может требовать ПКМ→Открыть до notarize).
+4. Internal assets в release (не попадают в download API):
+   - `HumanitecAgent-macos-*-{sha}.app-bundle.zip` — тот же `.app`, что отправлен в Apple (для stapler).
+   - `humanitec-agent-macos-notarize-{short_sha}.json` — manifest pending/completed.
+
+При новом release pending manifest предыдущих releases помечается `superseded` (Apple cancel API **не существует**).
+
+### Phase 2 — follow-up (до 48 ч)
+
+Workflow `humanitec-agent-macos-notarize`:
+
+1. `notarytool info` по submission id из manifest.
+2. `Accepted` → download app-bundle → stapler → rebuild DMG → `gh release upload --clobber` → update `checksums.txt` → delete app-bundle zip.
+3. `Rejected` → workflow error, signed DMG остаётся.
+4. Deadline 48 ч (`NOTARY_FOLLOWUP_MAX_AGE_SECONDS=172800`) → `expired`, signed DMG остаётся.
+
+Локальный poll:
+
+```bash
+make agent-notarize-followup AGENT_RELEASE_TAG=humanitec-agent-c38f05e
+# или все pending:
+make agent-notarize-followup
+```
+
+### Локальная sync-сборка (dev)
+
+Полный цикл submit + poll + staple в одном `make` (не для CI):
+
+```bash
+export APPLE_ID='your@email.com'
+export APPLE_ID_PASSWORD='xxxx-xxxx-xxxx-xxxx'
+export APPLE_TEAM_ID='MLL2V8KTV4'
+
+make agent-build-macos-local AGENT_VERSION_SHA=$(git rev-parse HEAD)
+```
+
+Скрипт [`build-macos-local.sh`](../scripts/build-macos-local.sh) — `AGENT_MACOS_NOTARIZE=1`, polling через `notarytool info`.
+
+## 5. Проверка статуса Apple
+
+Веб-UI очереди notarization **нет**. Только CLI:
+
+```bash
+xcrun notarytool history \
+  --apple-id "$APPLE_ID" \
+  --password "$APPLE_ID_PASSWORD" \
+  --team-id "$APPLE_TEAM_ID"
+```
+
+## 6. Verify flags
+
+| Env | Когда |
+|---|---|
+| `AGENT_VERIFY_CODESIGN=1` | CI после sign — `codesign --verify` |
+| `AGENT_VERIFY_MACOS_NOTARIZED=1` | После staple — `spctl -a -vv` |
+
+## 7. Prod download
+
+Скачивание с `https://humanitec.ru/agent` — через GitHub Releases API.  
+Private repo: секрет `AGENT__RELEASES__GITHUB_TOKEN`.
+
+API `AgentReleaseStatusResponse.macos_notarization_pending=true` — manifest ещё в release, DMG может быть signed-only.
+
+```bash
+codesign -dv --verbose=4 /Applications/HumanitecAgent.app
+spctl -a -vv /Applications/HumanitecAgent.app
+xattr -l /Applications/HumanitecAgent.app
+```
+
+Ожидаемый Authority: **Developer ID Application: …**
+
+## 8. Пересборка release
 
 ```bash
 gh workflow run humanitec-agent-build.yml \
@@ -61,18 +132,3 @@ gh workflow run humanitec-agent-build.yml \
   -f force_rebuild=true \
   -f publish_draft=false
 ```
-
-## 6. Проверка на Mac после скачивания
-
-```bash
-codesign -dv --verbose=4 /Applications/HumanitecAgent.app
-spctl -a -vv /Applications/HumanitecAgent.app
-xattr -l /Applications/HumanitecAgent.app   # без com.apple.quarantine после notarize
-```
-
-Ожидаемый Authority: **Developer ID Application: …**
-
-## 7. Prod download
-
-Скачивание с `https://humanitec.ru/agent` — через GitHub Releases API.  
-Private repo: секрет `AGENT__RELEASES__GITHUB_TOKEN` (Deploy → `platform-secrets` → frontend pod).

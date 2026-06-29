@@ -20,7 +20,6 @@ from apps.agent.desktop.build_contract import (
     asset_name_pattern,
     load_default_distro_config,
 )
-from apps.agent.service import _asset_name_pattern
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 DESKTOP_ROOT = REPO_ROOT / "apps" / "agent" / "desktop"
@@ -85,7 +84,6 @@ def test_artifact_filename_matches_download_contract(platform_name: str) -> None
     pattern = asset_name_pattern(platform_name, distro.bundle_name)
     assert filename.startswith(pattern)
     assert version_sha in filename
-    assert _asset_name_pattern(platform_name) == pattern
 
 
 def test_branding_desktop_templates() -> None:

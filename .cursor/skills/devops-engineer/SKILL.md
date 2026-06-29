@@ -201,7 +201,7 @@ make agent-ci-build AGENT_PLATFORM=macos-arm64 AGENT_ARTIFACT_MODE=release AGENT
 
 **DMG UX:** staging `.app` + symlink `Applications` перед `hdiutil create` (`build.sh`).
 
-**macOS signing pipeline (CI):** pre-sign `goosed` в `build.sh` → forge `osxSign` (без inline `osxNotarize`; `optionsForFile` skip pre-signed goosed) → `notarytool` + `stapler` в `build.sh` до `hdiutil`. Notarization **не** в forge — стабильнее для cross-packaging `macos-x64` на `macos-14`. При падении job — artifact `forge-*.log`.
+**macOS signing pipeline:** CI Phase 1 — pre-sign goosed → forge sign → DMG + `notarytool submit` (`AGENT_MACOS_NOTARIZE=submit-only`, без poll). Phase 2 — workflow [`humanitec-agent-macos-notarize.yml`](../../.github/workflows/humanitec-agent-macos-notarize.yml): poll до 48 ч → stapler → replace DMG в release. Локальный полный sync: **`make agent-build-macos-local`**. Followup: **`make agent-notarize-followup`**. Чеклист: `apps/agent/desktop/docs/MACOS_SIGNING.md`.
 
 **Windows self-contained MSI:** `scripts/bundle_windows_runtime_dlls.ps1` копирует MSVC CRT + UCRT в `src/bin` рядом с `goosed.exe`; gate `dumpbin /dependents` до forge. Пользователю **не** нужен VC++ Redistributable. Child exit `3221225781` (`0xC0000135`) = missing DLL.
 

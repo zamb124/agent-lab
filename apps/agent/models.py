@@ -176,6 +176,7 @@ class AgentReleaseStatusResponse(BaseModel):
     github_repo: str
     detail: str | None = None
     asset_checksums: list[AgentReleaseAssetChecksum] = Field(default_factory=list)
+    macos_notarization_pending: bool = False
 
 
 class AgentDiscoverResponse(BaseModel):

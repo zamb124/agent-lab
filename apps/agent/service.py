@@ -443,6 +443,21 @@ async def _load_asset_checksums(release_payload: JsonObject) -> list[AgentReleas
     return checksums
 
 
+def _release_has_pending_macos_notarization(release_payload: JsonObject) -> bool:
+    assets_raw = release_payload.get("assets")
+    if not isinstance(assets_raw, list):
+        return False
+    for asset in assets_raw:
+        if not isinstance(asset, dict):
+            continue
+        asset_name = asset.get("name")
+        if not isinstance(asset_name, str):
+            continue
+        if asset_name.startswith("humanitec-agent-macos-notarize-") and asset_name.endswith(".json"):
+            return True
+    return False
+
+
 def build_agent_release_status_from_github_payload(
     release_payload: JsonObject,
     *,
@@ -478,6 +493,7 @@ def build_agent_release_status_from_github_payload(
         github_owner=github_owner,
         github_repo=github_repo,
         asset_checksums=asset_checksums,
+        macos_notarization_pending=_release_has_pending_macos_notarization(release_payload),
     )
 
 

@@ -69,9 +69,46 @@ def test_release_status_ready_with_checksums() -> None:
     assert status.ready is True
     assert status.latest_tag == "humanitec-agent-v0.2.0"
     assert len(status.asset_checksums) == 1
+    assert status.macos_notarization_pending is False
 
 
-def test_resolve_asset_url_macos_ignores_appimage_listed_first() -> None:
+def test_release_status_ready_with_pending_macos_notarization_manifest() -> None:
+    payload: JsonObject = {
+        "tag_name": "humanitec-agent-v0.2.0",
+        "draft": False,
+        "assets": [
+            {"name": "HumanitecAgent-macos-arm64-deadbeef.dmg"},
+            {"name": "humanitec-agent-macos-notarize-deadbee.json"},
+        ],
+    }
+    status = build_agent_release_status_from_github_payload(
+        payload,
+        github_owner="zamb124",
+        github_repo="agent-lab",
+        asset_checksums=[],
+    )
+    assert status.ready is True
+    assert status.macos_notarization_pending is True
+
+
+def test_resolve_asset_url_ignores_internal_app_bundle_zip() -> None:
+    version_sha = "077d469f78e574fe8b34f66adf77312402a3d5"
+    dmg_name = f"HumanitecAgent-macos-arm64-{version_sha}.dmg"
+    internal_name = f"HumanitecAgent-macos-arm64-{version_sha}.app-bundle.zip"
+    payload: JsonObject = {
+        "assets": [
+            {
+                "name": internal_name,
+                "browser_download_url": "https://github.example/internal",
+            },
+            {
+                "name": dmg_name,
+                "browser_download_url": "https://github.example/dmg",
+            },
+        ],
+    }
+    url = _resolve_asset_url_from_release(payload, "macos-arm64")
+    assert url == "https://github.example/dmg"
     version_sha = "077d469f78e574fe8b34f66adf77312402a3d5"
     appimage_name = f"HumanitecAgent-{version_sha}.AppImage"
     dmg_name = f"HumanitecAgent-macos-arm64-{version_sha}.dmg"
