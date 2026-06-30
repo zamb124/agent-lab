@@ -403,6 +403,7 @@
     },
     "agent_download_page": {
         "hero_title": "HumanitecAgent",
+        "hero_visual_alt": "HumanitecAgent screenshot: desktop chat and workspace",
         "hero_description": "An AI agent on your computer. Works with files, runs programs, and connects to Humanitec Platform.",
         "f1_title": "Local files",
         "f1_desc": "Read and edit files on your machine. The agent only sees what you allow.",

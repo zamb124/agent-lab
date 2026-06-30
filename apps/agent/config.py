@@ -37,6 +37,12 @@ class AgentSettings(BaseModel):
     tunnel_online_ttl_seconds: int = Field(default=120, ge=30, le=3600)
     pairing_rate_limit_per_hour: int = Field(default=20, ge=1, le=200)
     register_rate_limit_per_hour: int = Field(default=60, ge=1, le=500)
+    session_ttl_seconds: int = Field(
+        default=86400,
+        ge=300,
+        le=2592000,
+        description="TTL sticky A2A context_id Platform MCP сессии (MCP-сессия + flow), сек",
+    )
 
 
 _agent_settings: AgentSettings | None = None

@@ -17,3 +17,5 @@ export const landSyncAbilityUrl = `${LAND_IMAGE_BASE}/sync_ability-image_ru.png`
 export const landDocumentsHeroUrl = `${LAND_IMAGE_BASE}/documents_1.png`;
 export const landDocumentsShot2Url = `${LAND_IMAGE_BASE}/documents_2.png`;
 export const landDocumentsShot3Url = `${LAND_IMAGE_BASE}/documents_3.png`;
+
+export const landHumanitecAgentHeroUrl = `${LAND_IMAGE_BASE}/humanitec_agent.png`;

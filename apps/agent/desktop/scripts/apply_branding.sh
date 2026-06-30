@@ -149,8 +149,8 @@ if not isinstance(bundled_extensions, list):
 platform_mcp_entry = {
     "id": "platform_mcp",
     "name": "platform_mcp",
-    "display_name": "Humanitec Platform MCP",
-    "description": "Flows компании через Platform MCP endpoint Humanitec.",
+    "display_name": "Humanitec",
+    "description": "Flows и инструменты компании Humanitec.",
     "enabled": True,
     "type": "streamable_http",
     "uri": "${HUMANITEC_PLATFORM_MCP_URL}",

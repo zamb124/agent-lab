@@ -17,7 +17,7 @@ BUNDLED_EXTENSIONS_PATH = (
     REPO_ROOT
     / "apps/agent/desktop/vendor/goose/ui/desktop/src/components/settings/extensions/bundled-extensions.json"
 )
-HUMANITEC_PLATFORM_MCP_DISPLAY_NAME = "Humanitec Platform MCP"
+HUMANITEC_PLATFORM_MCP_DISPLAY_NAME = "Humanitec"
 
 
 async def create_pairing_code(

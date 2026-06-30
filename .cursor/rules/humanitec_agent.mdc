@@ -12,7 +12,7 @@ HumanitecAgent — desktop-клиент (Goose fork) с доступом к flow
 |---|---|---|---|
 | **Control plane** | `frontend` (:8002) | `/frontend/api/agent/*` | pairing, register, devices, policy, audit, download, releases |
 | **Tunnel WS** | `frontend` | `WS /frontend/api/agent/tunnel?token=` | исходящее соединение desktop → platform; ping/pong, локальный MCP proxy |
-| **Platform MCP** | `flows` (:8001) | `/flows/api/v1/agent/platform-mcp` | JSON-RPC: flow компании как MCP tools + proxy `device/mcp` на tunnel |
+| **Platform MCP** | `flows` (:8001) | `/flows/api/v1/agent/platform-mcp` | Streamable HTTP MCP: lifecycle + flow компании (`flow_*`) и каталог тулов компании (`tool_*`) как MCP tools + proxy `device/mcp` на tunnel |
 | **A2A** | `flows` | `/flows/api/v1/a2a/*` | исполнение flow (тот же runtime, другой транспорт) |
 
 **Platform MCP не в frontend.** Router `apps/agent/platform_mcp.py` регистрируется в `apps/flows/main.py` (`agent_platform_mcp_router`), потому что `tools/call` → `A2AChannel.on_message_send`, `flow_repository`, durable runtime — всё в flows. Frontend только выдаёт `platform_mcp_url` при register (см. `_platform_mcp_url()` в `apps/agent/service.py`).
@@ -53,29 +53,45 @@ Revoke: `DELETE /devices/{device_id}` → denylist device_id + active `jti`, `pu
 
 ## Platform MCP — контракт для любого клиента
 
-Streamable HTTP, JSON-RPC 2.0, `Content-Type: application/json`. Auth: **session JWT** (browser) или **device JWT** (desktop) — тот же `Authorization`/cookie контекст компании.
+Полноценный Streamable HTTP MCP-сервер, JSON-RPC 2.0, `Content-Type: application/json`. Auth: **session JWT** (browser) или **device JWT** (desktop) — тот же `Authorization`/cookie контекст компании.
 
 | Method | Назначение |
 |---|---|
-| `GET .../platform-mcp` | discover: `protocolVersion`, `serverInfo`, `capabilities.tools` |
-| `tools/list` | tools `flow_{flow_id}` по flow компании из `flow_repository` |
-| `tools/call` | `params.name=flow_{flow_id}`, `arguments.message` (обяз.), `arguments.context_id` (optional, continuity сессии A2A) |
+| `GET .../platform-mcp` | discover JSON (`protocolVersion`, `serverInfo`, `capabilities.tools`). `Accept: text/event-stream` → `405` (server push нет) |
+| `initialize` | lifecycle handshake; `result` = `protocolVersion`/`capabilities`/`serverInfo`; ответ несёт заголовок `Mcp-Session-Id: <uuid>` |
+| `ping` | `result: {}` |
+| `notifications/*` (и любое сообщение без `id`) | `202 Accepted`, пустое тело, без JSON-RPC ответа |
+| `tools/list` | `flow_{flow_id}` (flow компании из `flow_repository`, тег `[Flow]`) + `tool_{tool_id}` (каталог тулов компании: builtin `tool_registry` + `tool_repository`, тег `[Tool]`) |
+| `tools/call` | `params.name`: `flow_*` → `A2AChannel` (sticky A2A `context_id`); `tool_*` → `tool_registry.materialize` + `tool.run` |
 | `device/mcp` | proxy на локальный MCP desktop: `params.device_id`, `params.method`, `params.params` → tunnel bus |
+| прочее (с `id`) | JSON-RPC error `-32601` |
 
-**tools/call** не REST: один POST body = один JSON-RPC. Исполнение — через `A2AChannel`, не прямой HTTP к A2A card URL.
+**Нотификация vs запрос** детектится по наличию ключа `id` (`has_id = "id" in message`), `id` не подставляется.
+
+**tools/list — live relist:** список считается из репозиториев на каждый вызов. Server push/SSE нет; обновление состава в агенте — через ресинк/переподключение. Выбор активных тулов/flow — нативно в desktop-агенте (enable/disable Goose), серверного allowlist/`DevicePolicy` для этого нет.
+
+**Sticky-сессия flow:** сервер хранит стабильный A2A `context_id` на пару (`Mcp-Session-Id`, `flow_id`) в Redis (`agent_mcp_session:{session}:flow:{flow_id}`, TTL `agent.session_ttl_seconds`, дефолт 24ч). При `tools/call flow_*` без `arguments.context_id` берётся sticky (или создаётся и сохраняется); `arguments.context_id` переопределяет и обновляет sticky. Без заголовка `Mcp-Session-Id` — деградация до per-call context_id (без stickiness).
+
+**Имена тулов:** `flow_{flow_id}` и `tool_{sanitize(tool_id)}` (через `sanitize_tool_name`); сервер держит индекс `mcp_tool_name → tool_id` для диспетчеризации `tools/call`. `tool_*` исполняется с пустым `ExecutionState`; `FlowInterrupt`/`ValueError` → JSON-RPC `-32000`.
+
+**tools/call** не REST: один POST body = один JSON-RPC. Flow исполняется через `A2AChannel`, не прямой HTTP к A2A card URL.
 
 Пример (curl, session cookie):
 
 ```http
 POST /flows/api/v1/agent/platform-mcp
 Cookie: auth_token=...
-{"jsonrpc":"2.0","id":1,"method":"tools/list"}
+{"jsonrpc":"2.0","id":1,"method":"initialize","params":{}}
 
 POST /flows/api/v1/agent/platform-mcp
-{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"flow_my_flow","arguments":{"message":"Привет","context_id":"optional-uuid"}}}
+{"jsonrpc":"2.0","id":2,"method":"tools/list"}
+
+POST /flows/api/v1/agent/platform-mcp
+Mcp-Session-Id: <uuid из initialize>
+{"jsonrpc":"2.0","id":3,"method":"tools/call","params":{"name":"flow_my_flow","arguments":{"message":"Привет"}}}
 ```
 
-Ответ `tools/call`: `result.content[].text`, `result.context_id` для следующего вызова.
+Ответ `tools/call flow_*`: `result.content[].text`, `result.context_id`, `result.task_state`. Ответ `tools/call tool_*`: `result.content[].text` (JSON-результат тула).
 
 ## Tunnel WS (только desktop)
 
@@ -101,7 +117,7 @@ POST /flows/api/v1/agent/platform-mcp
 ## Desktop (Goose)
 
 - Distro: `apps/agent/desktop/distro/humanitec.json` → `platform_mcp_path`, `default_extensions` (`platform_mcp`, …)
-- Branding: `apps/agent/desktop/scripts/apply_branding.sh`, `humanitecDistro.ts`
+- Branding: `apps/agent/desktop/scripts/apply_branding.sh`, `humanitecDistro.ts`. Расширение `platform_mcp` отображается как **«Humanitec»** (`display_name`); `id`/`name` `platform_mcp` и env-шаблоны `uri`/`headers` не менять
 - Releases: GitHub assets `HumanitecAgent-{platform}-{sha}.{ext}`, redirect `GET /frontend/api/agent/download/{platform}`; tag `humanitec-agent-{short_sha}` публикуется автоматически после успешного Deploy (`humanitec-agent-build.yml`, `workflow_run`); `releases/latest` = последний prod
 - Config: `conf.json` → `agent.*` (`apps/agent/config.py`)
 

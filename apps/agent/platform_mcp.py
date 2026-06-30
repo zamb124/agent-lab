@@ -1,14 +1,20 @@
 """
 Platform MCP endpoint для HumanitecAgent.
 
-Flow компании доступны как MCP tools через streamable HTTP.
+Полноценный Streamable HTTP MCP-сервер: lifecycle (initialize/ping/notifications),
+flow компании как tools ``flow_{flow_id}`` и каталог тулов компании как
+``tool_{tool_id}``. Session continuity flow — через sticky A2A context_id,
+привязанный к ``Mcp-Session-Id`` MCP-сессии.
 """
 
+import json
 import uuid
 
 from a2a.types import Message, MessageSendParams, Part, Role, TextPart
-from fastapi import APIRouter, HTTPException, Request
+from fastapi import APIRouter, HTTPException, Request, Response
+from fastapi.responses import JSONResponse
 
+from apps.agent.config import get_agent_settings
 from apps.agent.device_auth import reject_revoked_device_bearer_if_present
 from apps.agent.service import (
     build_flow_mcp_tools,
@@ -18,34 +24,40 @@ from apps.agent.tunnel_bus import send_mcp_request_to_device
 from apps.flows.src.channels.a2a import A2AChannel
 from apps.flows.src.container_contracts import as_flow_runtime_container
 from apps.flows.src.dependencies import ContainerDep as FlowsContainerDep
+from apps.flows.src.runtime.exceptions import FlowInterrupt
+from apps.flows.src.tools.base import sanitize_tool_name
 from core.context import get_context, require_context
 from core.logging import get_logger
+from core.state import ExecutionState
 from core.types import JsonObject, JsonValue, parse_json_object, require_json_object
 
 logger = get_logger(__name__)
 router = APIRouter(tags=["agent-platform-mcp"])
+
+_PROTOCOL_VERSION = "2024-11-05"
+_SERVER_INFO: JsonObject = {"name": "Humanitec Platform MCP", "version": "1.0.0"}
+_SERVER_CAPABILITIES: JsonObject = {"tools": {}}
+_MCP_SESSION_HEADER = "Mcp-Session-Id"
 
 
 async def _reject_revoked_device_bearer(request: Request, container: FlowsContainerDep) -> None:
     await reject_revoked_device_bearer_if_present(request, container)
 
 
-@router.get("/agent/platform-mcp", tags=["agent-platform-mcp", "public"])
+@router.get("/agent/platform-mcp", tags=["agent-platform-mcp", "public"], response_model=None)
 async def platform_mcp_discover(
     request: Request,
     container: FlowsContainerDep,
-) -> JsonObject:
+) -> JsonObject | Response:
     await _reject_revoked_device_bearer(request, container)
     _ = container
+    accept_header = request.headers.get("accept", "")
+    if "text/event-stream" in accept_header.lower():
+        return Response(status_code=405)
     return {
-        "protocolVersion": "2024-11-05",
-        "serverInfo": {
-            "name": "Humanitec Platform MCP",
-            "version": "1.0.0",
-        },
-        "capabilities": {
-            "tools": {},
-        },
+        "protocolVersion": _PROTOCOL_VERSION,
+        "serverInfo": _SERVER_INFO,
+        "capabilities": _SERVER_CAPABILITIES,
     }
 
 
@@ -65,7 +77,96 @@ async def _list_company_flow_tools(container: FlowsContainerDep) -> list[JsonObj
                 "description": flow_config.description,
             }
         )
-    return build_flow_mcp_tools(flow_payloads)
+    flow_tools = build_flow_mcp_tools(flow_payloads)
+    for flow_tool in flow_tools:
+        description = flow_tool.get("description")
+        flow_tool["description"] = f"[Flow] {description}" if isinstance(description, str) else "[Flow]"
+    return flow_tools
+
+
+def _unique_mcp_tool_name(base: str, seen: set[str]) -> str:
+    if base not in seen:
+        return base
+    suffix = 2
+    while f"{base}_{suffix}" in seen:
+        suffix += 1
+    return f"{base}_{suffix}"
+
+
+async def _list_company_catalog_tools(
+    container: FlowsContainerDep,
+) -> tuple[list[JsonObject], dict[str, str]]:
+    """Каталог тулов компании как MCP tools ``tool_{tool_id}`` + индекс name -> tool_id."""
+    registry = container.tool_registry
+    registry.register_builtin_tools()
+
+    tools: list[JsonObject] = []
+    name_to_tool_id: dict[str, str] = {}
+    seen: set[str] = set()
+
+    for tool_id, tool in registry.list_all().items():
+        if not tool.listed_in_platform_tool_docs:
+            continue
+        mcp_name = _unique_mcp_tool_name(f"tool_{sanitize_tool_name(tool_id)}", seen)
+        seen.add(mcp_name)
+        name_to_tool_id[mcp_name] = tool_id
+        tools.append(
+            {
+                "name": mcp_name,
+                "description": f"[Tool] {tool.description}",
+                "inputSchema": tool.parameters,
+            }
+        )
+
+    for tool_ref in await container.tool_repository.list(limit=10000):
+        if tool_ref.tool_id in name_to_tool_id.values():
+            continue
+        mcp_name = _unique_mcp_tool_name(f"tool_{sanitize_tool_name(tool_ref.tool_id)}", seen)
+        seen.add(mcp_name)
+        name_to_tool_id[mcp_name] = tool_ref.tool_id
+        description = tool_ref.description or f"Platform tool {tool_ref.tool_id}"
+        tools.append(
+            {
+                "name": mcp_name,
+                "description": f"[Tool] {description}",
+                "inputSchema": tool_ref.effective_parameters_schema(),
+            }
+        )
+
+    return tools, name_to_tool_id
+
+
+def _session_context_key(mcp_session_id: str, flow_id: str) -> str:
+    return f"agent_mcp_session:{mcp_session_id}:flow:{flow_id}"
+
+
+async def _resolve_flow_context_id(
+    container: FlowsContainerDep,
+    *,
+    mcp_session_id: str | None,
+    flow_id: str,
+    explicit_context_id: str | None,
+) -> str | None:
+    """Sticky A2A context_id по (MCP-сессия + flow). explicit переопределяет sticky."""
+    ttl_seconds = get_agent_settings().session_ttl_seconds
+    if explicit_context_id is not None:
+        if mcp_session_id is not None:
+            _ = await container.redis_client.set(
+                _session_context_key(mcp_session_id, flow_id),
+                explicit_context_id,
+                ttl=ttl_seconds,
+            )
+        return explicit_context_id
+    if mcp_session_id is None:
+        logger.info("agent.platform_mcp.no_session_header", flow_id=flow_id)
+        return None
+    key = _session_context_key(mcp_session_id, flow_id)
+    existing = await container.redis_client.get(key)
+    if existing:
+        return existing
+    new_context_id = str(uuid.uuid4())
+    _ = await container.redis_client.set(key, new_context_id, ttl=ttl_seconds)
+    return new_context_id
 
 
 def _extract_task_text(task_payload: JsonObject) -> str:
@@ -179,11 +280,129 @@ async def _execute_flow_tool_call(
     return response_text, resolved_context_id, task_state
 
 
-@router.post("/agent/platform-mcp", tags=["agent-platform-mcp", "public"])
+def _rpc_error(rpc_id: JsonValue, code: int, message: str) -> JsonObject:
+    return {"jsonrpc": "2.0", "id": rpc_id, "error": {"code": code, "message": message}}
+
+
+async def _handle_flow_tools_call(
+    request: Request,
+    container: FlowsContainerDep,
+    *,
+    rpc_id: JsonValue,
+    tool_name: str,
+    arguments: JsonObject,
+) -> JsonObject:
+    flow_id = tool_name.removeprefix("flow_")
+    user_message = arguments.get("message")
+    if not isinstance(user_message, str) or not user_message.strip():
+        return _rpc_error(rpc_id, -32602, "arguments.message is required")
+    context_id_raw = arguments.get("context_id")
+    explicit_context_id: str | None = None
+    if isinstance(context_id_raw, str) and context_id_raw.strip():
+        explicit_context_id = context_id_raw.strip()
+    logger.info("agent.platform_mcp.tools_call", flow_id=flow_id)
+    active_context = require_context()
+    active_company = active_context.active_company
+    if active_company is None:
+        raise HTTPException(status_code=400, detail="Компания не выбрана")
+    mcp_session_id = request.headers.get(_MCP_SESSION_HEADER)
+    sticky_context_id = await _resolve_flow_context_id(
+        container,
+        mcp_session_id=mcp_session_id,
+        flow_id=flow_id,
+        explicit_context_id=explicit_context_id,
+    )
+    try:
+        response_text, used_context_id, task_state = await _execute_flow_tool_call(
+            container,
+            flow_id=flow_id,
+            user_message=user_message.strip(),
+            context_id=sticky_context_id,
+        )
+    except HTTPException as exc:
+        return _rpc_error(rpc_id, -32000, str(exc.detail))
+    except ValueError as exc:
+        return _rpc_error(rpc_id, -32000, str(exc))
+    if mcp_session_id is not None and used_context_id != sticky_context_id:
+        _ = await container.redis_client.set(
+            _session_context_key(mcp_session_id, flow_id),
+            used_context_id,
+            ttl=get_agent_settings().session_ttl_seconds,
+        )
+    await record_agent_audit_event_redis(
+        container.redis_client,
+        company_id=active_company.company_id,
+        event_type="agent.platform_mcp.tools_call",
+        actor_user_id=active_context.user.user_id,
+        device_id=None,
+        detail=f"flow_id={flow_id}",
+    )
+    return {
+        "jsonrpc": "2.0",
+        "id": rpc_id,
+        "result": {
+            "content": [{"type": "text", "text": response_text}],
+            "isError": False,
+            "context_id": used_context_id,
+            "task_state": task_state,
+        },
+    }
+
+
+async def _handle_catalog_tools_call(
+    container: FlowsContainerDep,
+    *,
+    rpc_id: JsonValue,
+    tool_name: str,
+    arguments: JsonObject,
+) -> JsonObject:
+    _, name_to_tool_id = await _list_company_catalog_tools(container)
+    tool_id = name_to_tool_id.get(tool_name)
+    if tool_id is None:
+        return _rpc_error(rpc_id, -32602, "Unsupported tool name")
+    active_context = require_context()
+    active_company = active_context.active_company
+    if active_company is None:
+        raise HTTPException(status_code=400, detail="Компания не выбрана")
+    logger.info("agent.platform_mcp.tools_call", tool_id=tool_id)
+    tool_context_id = str(uuid.uuid4())
+    state = ExecutionState.create(
+        task_id=str(uuid.uuid4()),
+        context_id=tool_context_id,
+        user_id=active_context.user.user_id,
+        session_id=f"platform_mcp_tool:{tool_context_id}",
+    )
+    try:
+        tool = await container.tool_registry.materialize({"tool_id": tool_id})
+        result = await tool.run(arguments, state)
+    except FlowInterrupt:
+        return _rpc_error(rpc_id, -32000, f"Tool {tool_id!r} требует HITL и не поддержан в Platform MCP")
+    except ValueError as exc:
+        return _rpc_error(rpc_id, -32000, str(exc))
+    result_text = result if isinstance(result, str) else json.dumps(result, ensure_ascii=False)
+    await record_agent_audit_event_redis(
+        container.redis_client,
+        company_id=active_company.company_id,
+        event_type="agent.platform_mcp.tools_call",
+        actor_user_id=active_context.user.user_id,
+        device_id=None,
+        detail=f"tool_id={tool_id}",
+    )
+    return {
+        "jsonrpc": "2.0",
+        "id": rpc_id,
+        "result": {
+            "content": [{"type": "text", "text": result_text}],
+            "isError": False,
+        },
+    }
+
+
+@router.post("/agent/platform-mcp", tags=["agent-platform-mcp", "public"], response_model=None)
 async def platform_mcp_message(
     request: Request,
     container: FlowsContainerDep,
-) -> JsonObject:
+) -> JsonObject | Response:
     await _reject_revoked_device_bearer(request, container)
     raw_body = await request.body()
     if not raw_body:
@@ -191,17 +410,37 @@ async def platform_mcp_message(
 
     message = parse_json_object(raw_body.decode("utf-8"), "agent.platform_mcp.message")
     method = message.get("method")
+    has_id = "id" in message
     rpc_id: JsonValue = message.get("id")
-    if rpc_id is None:
-        rpc_id = 1
+
+    if not has_id or (isinstance(method, str) and method.startswith("notifications/")):
+        return Response(status_code=202)
+
+    if method == "initialize":
+        return JSONResponse(
+            content={
+                "jsonrpc": "2.0",
+                "id": rpc_id,
+                "result": {
+                    "protocolVersion": _PROTOCOL_VERSION,
+                    "capabilities": _SERVER_CAPABILITIES,
+                    "serverInfo": _SERVER_INFO,
+                },
+            },
+            headers={_MCP_SESSION_HEADER: str(uuid.uuid4())},
+        )
+
+    if method == "ping":
+        return {"jsonrpc": "2.0", "id": rpc_id, "result": {}}
 
     if method == "tools/list":
-        tools = await _list_company_flow_tools(container)
+        flow_tools = await _list_company_flow_tools(container)
+        catalog_tools, _ = await _list_company_catalog_tools(container)
         return {
             "jsonrpc": "2.0",
             "id": rpc_id,
             "result": {
-                "tools": tools,
+                "tools": [*flow_tools, *catalog_tools],
             },
         }
 
@@ -209,89 +448,30 @@ async def platform_mcp_message(
         params_raw = message.get("params")
         params = require_json_object(params_raw, "agent.platform_mcp.params") if params_raw is not None else {}
         tool_name = params.get("name")
-        if not isinstance(tool_name, str) or not tool_name.startswith("flow_"):
-            return {
-                "jsonrpc": "2.0",
-                "id": rpc_id,
-                "error": {
-                    "code": -32602,
-                    "message": "Unsupported tool name",
-                },
-            }
-        flow_id = tool_name.removeprefix("flow_")
+        if not isinstance(tool_name, str) or not tool_name:
+            return _rpc_error(rpc_id, -32602, "Unsupported tool name")
         arguments_raw = params.get("arguments")
         arguments = (
             require_json_object(arguments_raw, "agent.platform_mcp.arguments")
             if arguments_raw is not None
             else {}
         )
-        user_message = arguments.get("message")
-        if not isinstance(user_message, str) or not user_message.strip():
-            return {
-                "jsonrpc": "2.0",
-                "id": rpc_id,
-                "error": {
-                    "code": -32602,
-                    "message": "arguments.message is required",
-                },
-            }
-        context_id_raw = arguments.get("context_id")
-        resolved_context_id: str | None = None
-        if isinstance(context_id_raw, str) and context_id_raw.strip():
-            resolved_context_id = context_id_raw.strip()
-        logger.info("agent.platform_mcp.tools_call", flow_id=flow_id)
-        active_context = require_context()
-        active_company = active_context.active_company
-        if active_company is None:
-            raise HTTPException(status_code=400, detail="Компания не выбрана")
-        try:
-            response_text, used_context_id, task_state = await _execute_flow_tool_call(
+        if tool_name.startswith("flow_"):
+            return await _handle_flow_tools_call(
+                request,
                 container,
-                flow_id=flow_id,
-                user_message=user_message.strip(),
-                context_id=resolved_context_id,
+                rpc_id=rpc_id,
+                tool_name=tool_name,
+                arguments=arguments,
             )
-        except HTTPException as exc:
-            return {
-                "jsonrpc": "2.0",
-                "id": rpc_id,
-                "error": {
-                    "code": -32000,
-                    "message": str(exc.detail),
-                },
-            }
-        except ValueError as exc:
-            return {
-                "jsonrpc": "2.0",
-                "id": rpc_id,
-                "error": {
-                    "code": -32000,
-                    "message": str(exc),
-                },
-            }
-        await record_agent_audit_event_redis(
-            container.redis_client,
-            company_id=active_company.company_id,
-            event_type="agent.platform_mcp.tools_call",
-            actor_user_id=active_context.user.user_id,
-            device_id=None,
-            detail=f"flow_id={flow_id}",
-        )
-        return {
-            "jsonrpc": "2.0",
-            "id": rpc_id,
-            "result": {
-                "content": [
-                    {
-                        "type": "text",
-                        "text": response_text,
-                    }
-                ],
-                "isError": False,
-                "context_id": used_context_id,
-                "task_state": task_state,
-            },
-        }
+        if tool_name.startswith("tool_"):
+            return await _handle_catalog_tools_call(
+                container,
+                rpc_id=rpc_id,
+                tool_name=tool_name,
+                arguments=arguments,
+            )
+        return _rpc_error(rpc_id, -32602, "Unsupported tool name")
 
     if method == "device/mcp":
         params_raw = message.get("params")

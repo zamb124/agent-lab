@@ -28,4 +28,4 @@ export function humanitecExtensionDisplayRank(extensionId: string): number {
   return 1;
 }
 
-export const HUMANITEC_PLATFORM_MCP_DISPLAY_NAME = 'Humanitec Platform MCP';
+export const HUMANITEC_PLATFORM_MCP_DISPLAY_NAME = 'Humanitec';

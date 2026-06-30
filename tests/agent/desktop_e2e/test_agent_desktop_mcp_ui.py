@@ -43,7 +43,7 @@ async def test_mcp_ui_01_first_launch_bundled_order(
     humanitec_desktop_process_factory,
 ) -> None:
     extensions = read_bundled_extensions()
-    assert extensions[0]["display_name"] == "Humanitec Platform MCP"
+    assert extensions[0]["display_name"] == "Humanitec"
     desktop = humanitec_desktop_process_factory()
     try:
         desktop.start()

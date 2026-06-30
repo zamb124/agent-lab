@@ -1,11 +1,12 @@
 /**
  * Публичная страница скачивания HumanitecAgent (/agent).
  */
-import { html, css } from 'lit';
+import { html } from 'lit';
 import { PlatformPage } from '@platform/lib/base/PlatformPage.js';
 import { marketingAgentDownloadPageStyles } from '@platform/lib/styles/shared/marketing-section.styles.js';
 import '@platform/lib/components/platform-icon.js';
 import { applyPublicDocumentMeta } from '../utils/public-document-meta.js';
+import { landHumanitecAgentHeroUrl } from '../utils/land-product-images.js';
 import {
     AGENT_DOWNLOAD_BASE,
     AGENT_PLATFORM_CATALOG,
@@ -19,15 +20,7 @@ import '../components/landing/landing-footer.js';
 export class AgentDownloadPage extends PlatformPage {
     static i18nNamespace = 'landing';
 
-    static styles = [
-        PlatformPage.styles,
-        marketingAgentDownloadPageStyles,
-        css`
-            .marketing-hero-logo-only .marketing-hero-shot {
-                display: none;
-            }
-        `,
-    ];
+    static styles = [PlatformPage.styles, marketingAgentDownloadPageStyles];
 
     constructor() {
         super();
@@ -61,7 +54,7 @@ export class AgentDownloadPage extends PlatformPage {
             title: this.t('meta.agent_download_title'),
             description: this.t('meta.agent_download_description'),
             canonicalUrl: `${origin}/agent`,
-            ogImageUrl: `${origin}/static/core/assets/service_logos/humanitec_agent_logo.svg`,
+            ogImageUrl: `${origin}${landHumanitecAgentHeroUrl}`,
         });
     }
 
@@ -223,18 +216,18 @@ export class AgentDownloadPage extends PlatformPage {
         return html`
             <landing-header></landing-header>
             <div class="marketing-page-container">
-                <section class="marketing-hero marketing-hero-logo-only">
-                    <div class="marketing-download-logo">
+                <section class="marketing-hero">
+                    <h1 class="marketing-hero-title">${this._pt('hero_title')}</h1>
+                    <div class="marketing-hero-shot">
                         <img
-                            src="/static/core/assets/service_logos/humanitec_agent_logo.svg"
-                            alt=${this._pt('hero_title')}
-                            width="48"
-                            height="48"
+                            src=${landHumanitecAgentHeroUrl}
+                            alt=${this._pt('hero_visual_alt')}
+                            width="1200"
+                            height="967"
                             loading="eager"
                             decoding="async"
                         />
                     </div>
-                    <h1 class="marketing-hero-title">${this._pt('hero_title')}</h1>
                     <p class="marketing-hero-description">${this._pt('hero_description')}</p>
                     ${this._renderReleaseBanner()}
                     <div class="marketing-download-hero-primary">${this._renderHeroPrimary()}</div>
