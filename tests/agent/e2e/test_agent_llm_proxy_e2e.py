@@ -75,6 +75,44 @@ async def test_e2e_llm_proxy_chat_completions(
     assert isinstance(message, dict)
     assert isinstance(message.get("content"), str)
     assert message["content"].strip()
+    usage = body["usage"]
+    assert isinstance(usage, dict)
+    assert set(usage) >= {"prompt_tokens", "completion_tokens", "total_tokens"}
+    assert usage["total_tokens"] == usage["prompt_tokens"] + usage["completion_tokens"]
+    assert usage["cost"] == 0.0
+
+
+@pytest.mark.real_taskiq
+async def test_e2e_llm_proxy_chat_completions_stream(
+    flows_client_http: AsyncClient,
+    agent_frontend_http_client: AsyncClient,
+    auth_token: str,
+    unique_id: str,
+    mock_llm_with_queue,
+    flows_service: None,
+) -> None:
+    _ = flows_service
+    await mock_llm_with_queue([{"type": "text", "content": "Streamed hello"}])
+    _device_id, device_token = await pair_and_register_device(
+        agent_frontend_http_client,
+        auth_cookie=auth_token,
+        unique_id=f"llm-stream-{unique_id}",
+    )
+    response = await flows_client_http.post(
+        LLM_CHAT_COMPLETIONS_PATH,
+        headers={"Authorization": f"Bearer {device_token}"},
+        json={
+            "model": "auto",
+            "messages": [{"role": "user", "content": "Hello from agent llm stream"}],
+            "stream": True,
+        },
+    )
+    assert response.status_code == 200
+    assert response.headers["content-type"].startswith("text/event-stream")
+    text = response.text
+    assert "Streamed hello" in text
+    assert '"usage"' in text
+    assert text.rstrip().endswith("data: [DONE]")
 
 
 async def test_e2e_llm_proxy_requires_device_bearer(

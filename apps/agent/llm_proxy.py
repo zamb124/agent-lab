@@ -13,6 +13,7 @@ import uuid
 from collections.abc import AsyncIterator
 from typing import ClassVar, Literal
 
+import httpx
 from a2a.types import TaskArtifactUpdateEvent, TaskStatusUpdateEvent, TextPart
 from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import JSONResponse, StreamingResponse
@@ -259,6 +260,7 @@ def _build_chat_completion_body(
     content: str,
     tool_calls: list[JsonObject] | None,
     finish_reason: str,
+    usage: JsonObject,
 ) -> JsonObject:
     message_body: JsonObject = {"role": "assistant", "content": content}
     if tool_calls:
@@ -275,6 +277,7 @@ def _build_chat_completion_body(
                 "finish_reason": finish_reason,
             }
         ],
+        "usage": usage,
     }
 
 
@@ -302,6 +305,44 @@ def _build_chat_completion_chunk(
 
 def _sse_line(payload: JsonObject) -> bytes:
     return f"data: {json.dumps(payload, ensure_ascii=False)}\n\n".encode("utf-8")
+
+
+def _is_rate_limit_error(exc: Exception) -> bool:
+    if isinstance(exc, httpx.HTTPStatusError):
+        return exc.response.status_code == 429
+    if isinstance(exc, RuntimeError):
+        error_text = str(exc).lower()
+        return (
+            "cooldown" in error_text
+            or "нет доступных" in error_text
+            or "free-pool" in error_text
+        )
+    return False
+
+
+def _agent_llm_error_message(exc: Exception, model: str) -> str:
+    if _is_rate_limit_error(exc):
+        return (
+            f"Превышен лимит запросов для модели {model}. "
+            "Попробуйте позже или выберите модель auto."
+        )
+    return "Модель временно недоступна, попробуйте ещё раз или смените модель."
+
+
+def _build_usage_payload(
+    *,
+    input_tokens: int,
+    output_tokens: int,
+    cost_origin: str,
+) -> JsonObject:
+    usage: JsonObject = {
+        "prompt_tokens": input_tokens,
+        "completion_tokens": output_tokens,
+        "total_tokens": input_tokens + output_tokens,
+    }
+    if cost_origin == COST_ORIGIN_PLATFORM:
+        usage["cost"] = 0.0
+    return usage
 
 
 def _parse_tool_calls(raw_tool_calls: JsonValue | None) -> list[LLMToolCall] | None:
@@ -475,6 +516,10 @@ async def _stream_agent_llm_sse(
         )
     )
 
+    stream_error: Exception | None = None
+    finish_reason = "stop"
+    tool_calls_json: list[JsonObject] | None = None
+
     async with tracer.llm_call_span(
         body.model,
         len(a2a_messages),
@@ -483,84 +528,99 @@ async def _stream_agent_llm_sse(
     ) as llm_span:
         tracer.record_llm_request(llm_span, openai_messages, tools_schema, None)
 
-        async for event in llm.stream(
-            a2a_messages,
-            tools=tools_schema,
-            max_tokens=body.max_tokens,
-            temperature=body.temperature,
-            llm_context=_AGENT_LLM_CONTEXT,
-        ):
-            if isinstance(event, TaskArtifactUpdateEvent):
-                if event.artifact and event.artifact.parts:
-                    artifact_name = event.artifact.name
-                    for part in event.artifact.parts:
-                        root = part.root
-                        if not isinstance(root, TextPart):
-                            continue
-                        if artifact_name == "reasoning":
-                            continue
-                        if root.text:
-                            content_parts.append(root.text)
-                            yield _sse_line(
-                                _build_chat_completion_chunk(
-                                    completion_id=completion_id,
-                                    model_id=response_model_id,
-                                    delta={"content": root.text},
+        try:
+            async for event in llm.stream(
+                a2a_messages,
+                tools=tools_schema,
+                max_tokens=body.max_tokens,
+                temperature=body.temperature,
+                llm_context=_AGENT_LLM_CONTEXT,
+            ):
+                if isinstance(event, TaskArtifactUpdateEvent):
+                    if event.artifact and event.artifact.parts:
+                        artifact_name = event.artifact.name
+                        for part in event.artifact.parts:
+                            root = part.root
+                            if not isinstance(root, TextPart):
+                                continue
+                            if artifact_name == "reasoning":
+                                continue
+                            if root.text:
+                                content_parts.append(root.text)
+                                yield _sse_line(
+                                    _build_chat_completion_chunk(
+                                        completion_id=completion_id,
+                                        model_id=response_model_id,
+                                        delta={"content": root.text},
+                                    )
                                 )
-                            )
-            if isinstance(event, TaskStatusUpdateEvent) and event.status:
-                if event.status.message and event.status.message.metadata:
-                    metadata = require_json_object(
-                        event.status.message.metadata,
-                        "agent.llm_proxy.stream.metadata",
-                    )
-                    metadata_tool_calls = metadata.get("tool_calls")
-                    if metadata_tool_calls:
-                        tool_calls_raw = require_json_array(
-                            metadata_tool_calls,
-                            "agent.llm_proxy.stream.metadata.tool_calls",
+                if isinstance(event, TaskStatusUpdateEvent) and event.status:
+                    if event.status.message and event.status.message.metadata:
+                        metadata = require_json_object(
+                            event.status.message.metadata,
+                            "agent.llm_proxy.stream.metadata",
                         )
-                    md_model = metadata.get("model")
-                    if isinstance(md_model, str) and md_model.strip():
-                        resolved_llm_model = md_model.strip()
-                    md_provider = metadata.get("provider")
-                    if isinstance(md_provider, str) and md_provider.strip():
-                        resolved_llm_provider = md_provider.strip()
-                    md_source = metadata.get("source")
-                    if isinstance(md_source, str) and md_source.strip():
-                        resolved_llm_source = md_source.strip()
-                    usage_raw = metadata.get("usage")
-                    if isinstance(usage_raw, dict):
-                        usage = require_json_object(usage_raw, "agent.llm_proxy.stream.metadata.usage")
-                        raw_input_tokens = usage.get("input_tokens", 0)
-                        raw_output_tokens = usage.get("output_tokens", 0)
-                        if isinstance(raw_input_tokens, bool) or not isinstance(raw_input_tokens, int):
-                            raise ValueError("usage.input_tokens must be an integer")
-                        if isinstance(raw_output_tokens, bool) or not isinstance(raw_output_tokens, int):
-                            raise ValueError("usage.output_tokens must be an integer")
-                        input_tokens = raw_input_tokens
-                        output_tokens = raw_output_tokens
+                        metadata_tool_calls = metadata.get("tool_calls")
+                        if metadata_tool_calls:
+                            tool_calls_raw = require_json_array(
+                                metadata_tool_calls,
+                                "agent.llm_proxy.stream.metadata.tool_calls",
+                            )
+                        md_model = metadata.get("model")
+                        if isinstance(md_model, str) and md_model.strip():
+                            resolved_llm_model = md_model.strip()
+                        md_provider = metadata.get("provider")
+                        if isinstance(md_provider, str) and md_provider.strip():
+                            resolved_llm_provider = md_provider.strip()
+                        md_source = metadata.get("source")
+                        if isinstance(md_source, str) and md_source.strip():
+                            resolved_llm_source = md_source.strip()
+                        usage_raw = metadata.get("usage")
+                        if isinstance(usage_raw, dict):
+                            usage = require_json_object(
+                                usage_raw, "agent.llm_proxy.stream.metadata.usage"
+                            )
+                            raw_input_tokens = usage.get("input_tokens", 0)
+                            raw_output_tokens = usage.get("output_tokens", 0)
+                            if isinstance(raw_input_tokens, bool) or not isinstance(
+                                raw_input_tokens, int
+                            ):
+                                raise ValueError("usage.input_tokens must be an integer")
+                            if isinstance(raw_output_tokens, bool) or not isinstance(
+                                raw_output_tokens, int
+                            ):
+                                raise ValueError("usage.output_tokens must be an integer")
+                            input_tokens = raw_input_tokens
+                            output_tokens = raw_output_tokens
 
-        parsed_tool_calls = _parse_tool_calls(tool_calls_raw if tool_calls_raw else None)
-        tool_calls_json = (
-            [
-                require_json_object(
-                    tool_call.model_dump(mode="json", exclude_none=True),
-                    "agent.llm_proxy.stream.tool_call",
+            parsed_tool_calls = _parse_tool_calls(tool_calls_raw if tool_calls_raw else None)
+            tool_calls_json = (
+                [
+                    require_json_object(
+                        tool_call.model_dump(mode="json", exclude_none=True),
+                        "agent.llm_proxy.stream.tool_call",
+                    )
+                    for tool_call in parsed_tool_calls
+                ]
+                if parsed_tool_calls
+                else None
+            )
+            finish_reason = "tool_calls" if tool_calls_json else "stop"
+            if tool_calls_json:
+                yield _sse_line(
+                    _build_chat_completion_chunk(
+                        completion_id=completion_id,
+                        model_id=response_model_id,
+                        delta={"tool_calls": tool_calls_json},
+                    )
                 )
-                for tool_call in parsed_tool_calls
-            ]
-            if parsed_tool_calls
-            else None
-        )
-        finish_reason = "tool_calls" if tool_calls_json else "stop"
-        if tool_calls_json:
-            yield _sse_line(
-                _build_chat_completion_chunk(
-                    completion_id=completion_id,
-                    model_id=response_model_id,
-                    delta={"tool_calls": tool_calls_json},
-                )
+        except Exception as exc:
+            stream_error = exc
+            logger.warning(
+                "agent.llm_proxy.stream_failed",
+                requested_model=body.model,
+                error=str(exc),
+                error_type=type(exc).__name__,
             )
 
         llm_duration = (time.time() - llm_start) * 1000
@@ -568,7 +628,7 @@ async def _stream_agent_llm_sse(
             llm_span,
             input_tokens=input_tokens,
             output_tokens=output_tokens,
-            has_tool_calls=bool(parsed_tool_calls),
+            has_tool_calls=bool(tool_calls_json),
             duration_ms=llm_duration,
             response_content="".join(content_parts),
             tool_calls=tool_calls_json,
@@ -577,6 +637,41 @@ async def _stream_agent_llm_sse(
             candidate_source=resolved_llm_source,
             cost_origin=resolved.cost_origin,
         )
+
+    if stream_error is not None:
+        finish_reason = "stop"
+        yield _sse_line(
+            _build_chat_completion_chunk(
+                completion_id=completion_id,
+                model_id=response_model_id,
+                delta={"content": _agent_llm_error_message(stream_error, response_model_id)},
+            )
+        )
+    elif not content_parts and not tool_calls_json:
+        yield _sse_line(
+            _build_chat_completion_chunk(
+                completion_id=completion_id,
+                model_id=response_model_id,
+                delta={
+                    "content": "Модель не вернула ответ. Попробуйте ещё раз или смените модель."
+                },
+            )
+        )
+
+    yield _sse_line(
+        {
+            "id": completion_id,
+            "object": "chat.completion.chunk",
+            "created": int(time.time()),
+            "model": response_model_id,
+            "choices": [],
+            "usage": _build_usage_payload(
+                input_tokens=input_tokens,
+                output_tokens=output_tokens,
+                cost_origin=resolved.cost_origin,
+            ),
+        }
+    )
 
     yield _sse_line(
         _build_chat_completion_chunk(
@@ -652,19 +747,32 @@ async def agent_llm_chat_completions(
             media_type="text/event-stream",
         )
 
-    (
-        content,
-        tool_calls_json,
-        _input_tokens,
-        _output_tokens,
-        _provider,
-        _model,
-        _source,
-    ) = await _run_agent_llm_call(
-        body=body,
-        resolved=resolved,
-        allow_platform_paid_fallback=allow_platform_paid_fallback,
-    )
+    try:
+        (
+            content,
+            tool_calls_json,
+            input_tokens,
+            output_tokens,
+            _provider,
+            _model,
+            _source,
+        ) = await _run_agent_llm_call(
+            body=body,
+            resolved=resolved,
+            allow_platform_paid_fallback=allow_platform_paid_fallback,
+        )
+    except Exception as exc:
+        logger.warning(
+            "agent.llm_proxy.call_failed",
+            requested_model=body.model,
+            error=str(exc),
+            error_type=type(exc).__name__,
+        )
+        status_code = 429 if _is_rate_limit_error(exc) else 502
+        raise HTTPException(
+            status_code=status_code,
+            detail=_agent_llm_error_message(exc, response_model_id),
+        ) from exc
     completion_id = f"chatcmpl-{uuid.uuid4().hex}"
     finish_reason = "tool_calls" if tool_calls_json else "stop"
     return JSONResponse(
@@ -674,5 +782,10 @@ async def agent_llm_chat_completions(
             content=content,
             tool_calls=tool_calls_json,
             finish_reason=finish_reason,
+            usage=_build_usage_payload(
+                input_tokens=input_tokens,
+                output_tokens=output_tokens,
+                cost_origin=resolved.cost_origin,
+            ),
         )
     )

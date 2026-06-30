@@ -2,15 +2,23 @@
 
 from __future__ import annotations
 
+from collections.abc import AsyncIterator
 from unittest.mock import AsyncMock, MagicMock
 
+import httpx
 import pytest
 from fastapi import HTTPException
 
 from apps.agent.llm_proxy import (
+    AgentOpenAIChatCompletionsRequest,
+    AgentOpenAIChatMessage,
+    _agent_llm_error_message,
     _agent_llm_option_value,
+    _build_usage_payload,
+    _is_rate_limit_error,
     _read_agent_llm_model_ids,
     _resolve_agent_llm_model,
+    _stream_agent_llm_sse,
     _validate_requested_agent_model,
 )
 from core.ai.models import AIModelRecord, ResolvedAIModel
@@ -144,3 +152,95 @@ def test_resolve_agent_llm_model_provider_prefixed_uses_direct_provider(
     monkeypatch.setattr("apps.agent.llm_proxy.resolve_ai_model", fake_resolve_ai_model)
     resolved = _resolve_agent_llm_model("openrouter:qwen/qwen3-coder:free")
     assert resolved == expected
+
+
+def test_is_rate_limit_error_detects_429_and_cooldown() -> None:
+    request = httpx.Request("POST", "https://openrouter.ai/api/v1/chat/completions")
+    response = httpx.Response(429, request=request)
+    assert _is_rate_limit_error(
+        httpx.HTTPStatusError("429", request=request, response=response)
+    )
+    assert _is_rate_limit_error(RuntimeError("LLM stream: нет доступных model candidates"))
+    assert not _is_rate_limit_error(ValueError("weird"))
+    ok_response = httpx.Response(500, request=request)
+    assert not _is_rate_limit_error(
+        httpx.HTTPStatusError("500", request=request, response=ok_response)
+    )
+
+
+def test_agent_llm_error_message_rate_limit_and_generic() -> None:
+    request = httpx.Request("POST", "https://openrouter.ai/api/v1/chat/completions")
+    response = httpx.Response(429, request=request)
+    rate_limited = _agent_llm_error_message(
+        httpx.HTTPStatusError("429", request=request, response=response),
+        "openrouter:qwen/qwen3-coder:free",
+    )
+    assert "Превышен лимит запросов" in rate_limited
+    assert "openrouter:qwen/qwen3-coder:free" in rate_limited
+    generic = _agent_llm_error_message(ValueError("weird"), "auto")
+    assert "временно недоступна" in generic
+
+
+def test_build_usage_payload_platform_includes_zero_cost() -> None:
+    usage = _build_usage_payload(input_tokens=3, output_tokens=5, cost_origin="platform")
+    assert usage == {
+        "prompt_tokens": 3,
+        "completion_tokens": 5,
+        "total_tokens": 8,
+        "cost": 0.0,
+    }
+    company_usage = _build_usage_payload(input_tokens=1, output_tokens=2, cost_origin="company")
+    assert "cost" not in company_usage
+    assert company_usage["total_tokens"] == 3
+
+
+class _RateLimitedStreamLLM:
+    llm_provider: str = "openrouter"
+
+    async def stream(self, *args: object, **kwargs: object) -> AsyncIterator[object]:
+        _ = args, kwargs
+        request = httpx.Request("POST", "https://openrouter.ai/api/v1/chat/completions")
+        response = httpx.Response(429, request=request)
+        for _never in ():
+            yield _never
+        raise httpx.HTTPStatusError("429 Too Many Requests", request=request, response=response)
+
+
+def _rate_limited_client_factory(*args: object, **kwargs: object) -> _RateLimitedStreamLLM:
+    _ = args, kwargs
+    return _RateLimitedStreamLLM()
+
+
+@pytest.mark.asyncio
+async def test_stream_agent_llm_sse_emits_rate_limit_error(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        "apps.agent.llm_proxy.create_llm_client_from_ai_model",
+        _rate_limited_client_factory,
+    )
+    resolved = ResolvedAIModel(
+        capability=AICapability.LLM_CHAT,
+        provider="openrouter",
+        model="qwen/qwen3-coder:free",
+        cost_origin="platform",
+    )
+    body = AgentOpenAIChatCompletionsRequest(
+        model="openrouter:qwen/qwen3-coder:free",
+        messages=[AgentOpenAIChatMessage(role="user", content="hi")],
+        stream=True,
+    )
+    chunks = [
+        chunk
+        async for chunk in _stream_agent_llm_sse(
+            body=body,
+            resolved=resolved,
+            allow_platform_paid_fallback=True,
+            response_model_id="openrouter:qwen/qwen3-coder:free",
+        )
+    ]
+    text = b"".join(chunks).decode("utf-8")
+    assert "Превышен лимит запросов" in text
+    assert '"usage"' in text
+    assert '"finish_reason": "stop"' in text
+    assert "data: [DONE]" in text
