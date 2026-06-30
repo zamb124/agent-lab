@@ -257,20 +257,13 @@ skip_existing_patch = (
     "        }\n"
     "      }"
 )
-if "bundledStreamableHttpNeedsResync" not in bundled_ts_text:
+if "bundledStreamableHttpNeedsResync(existingExt" not in bundled_ts_text:
     if skip_existing_anchor not in bundled_ts_text:
         raise SystemExit("bundled-extensions.ts skip-existing anchor missing")
     bundled_ts_text = bundled_ts_text.replace(skip_existing_anchor, skip_existing_patch, 1)
     bundled_ts_modified = True
 
-streamable_resolve_anchor = """        case 'streamable_http':
-          extConfig = {
-            type: bundledExt.type,
-            name: bundledExt.name,
-            description: bundledExt.description,
-            display_name: bundledExt.display_name,
-            timeout: bundledExt.timeout,"""
-streamable_resolve_patch = """        case 'streamable_http': {
+streamable_case_final = """        case 'streamable_http': {
           const resolvedStreamableConfig = await resolveStreamableHttpBundledConfig(
             bundledExt.uri || '',
             bundledExt.headers,
@@ -280,31 +273,67 @@ streamable_resolve_patch = """        case 'streamable_http': {
             name: bundledExt.name,
             description: bundledExt.description,
             display_name: bundledExt.display_name,
-            timeout: bundledExt.timeout,"""
-if "resolveStreamableHttpBundledConfig" not in bundled_ts_text:
-    if streamable_resolve_anchor not in bundled_ts_text:
-        raise SystemExit("bundled-extensions.ts streamable_http case anchor missing")
-    bundled_ts_text = bundled_ts_text.replace(streamable_resolve_anchor, streamable_resolve_patch, 1)
-    bundled_ts_modified = True
-
-streamable_uri_anchor = "            uri: bundledExt.uri || '',\n            headers: bundledExt.headers,"
-streamable_uri_patch = (
-    "            uri: resolvedStreamableConfig.uri,\n"
-    "            headers: resolvedStreamableConfig.headers,"
+            timeout: bundledExt.timeout,
+            uri: resolvedStreamableConfig.uri,
+            headers: resolvedStreamableConfig.headers,
+            bundled: true,
+          };
+          break;
+        }"""
+streamable_case_variants = (
+    """        case 'streamable_http':
+          extConfig = {
+            type: bundledExt.type,
+            name: bundledExt.name,
+            description: bundledExt.description,
+            display_name: bundledExt.display_name,
+            timeout: bundledExt.timeout,
+            uri: bundledExt.uri || '',
+            headers: bundledExt.headers,
+            bundled: true,
+          };""",
+    """        case 'streamable_http':
+          extConfig = {
+            type: bundledExt.type,
+            name: bundledExt.name,
+            description: bundledExt.description,
+            timeout: bundledExt.timeout,
+            uri: bundledExt.uri || '',
+            headers: bundledExt.headers,
+            bundled: true,
+          };""",
+    """        case 'streamable_http': {
+          const resolvedStreamableConfig = await resolveStreamableHttpBundledConfig(
+            bundledExt.uri || '',
+            bundledExt.headers,
+          );
+          extConfig = {
+            type: bundledExt.type,
+            name: bundledExt.name,
+            description: bundledExt.description,
+            timeout: bundledExt.timeout,
+            uri: resolvedStreamableConfig.uri,
+            headers: resolvedStreamableConfig.headers,
+            bundled: true,
+          };
+          break;
+        }""",
 )
-if "resolvedStreamableConfig.uri" not in bundled_ts_text:
-    if streamable_uri_anchor not in bundled_ts_text:
-        raise SystemExit("bundled-extensions.ts streamable uri anchor missing")
-    bundled_ts_text = bundled_ts_text.replace(streamable_uri_anchor, streamable_uri_patch, 1)
-    bundled_ts_modified = True
+if "await resolveStreamableHttpBundledConfig(" not in bundled_ts_text:
+    streamable_case_replaced = False
+    for streamable_case_anchor in streamable_case_variants:
+        if streamable_case_anchor in bundled_ts_text:
+            bundled_ts_text = bundled_ts_text.replace(streamable_case_anchor, streamable_case_final, 1)
+            streamable_case_replaced = True
+            bundled_ts_modified = True
+            break
+    if not streamable_case_replaced:
+        raise SystemExit("bundled-extensions.ts streamable_http case anchor missing")
 
-streamable_case_close_anchor = "            bundled: true,\n          };\n      }"
-streamable_case_close_patch = "            bundled: true,\n          };\n          break;\n        }\n      }"
-if "resolvedStreamableConfig.uri" in bundled_ts_text and "break;\n        }" not in bundled_ts_text:
-    if streamable_case_close_anchor not in bundled_ts_text:
-        raise SystemExit("bundled-extensions.ts streamable case close anchor missing")
-    bundled_ts_text = bundled_ts_text.replace(streamable_case_close_anchor, streamable_case_close_patch, 1)
-    bundled_ts_modified = True
+if "await resolveStreamableHttpBundledConfig(" not in bundled_ts_text:
+    raise SystemExit("bundled-extensions.ts Humanitec streamable_http sync patch incomplete")
+if "bundledStreamableHttpNeedsResync(existingExt" not in bundled_ts_text:
+    raise SystemExit("bundled-extensions.ts Humanitec skip-existing sync patch incomplete")
 
 if bundled_ts_modified:
     bundled_ts_path.write_text(bundled_ts_text, encoding="utf-8")
