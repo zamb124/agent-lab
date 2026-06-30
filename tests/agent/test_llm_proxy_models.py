@@ -7,6 +7,17 @@ from unittest.mock import AsyncMock, MagicMock
 
 import httpx
 import pytest
+from a2a.types import (
+    Artifact,
+    Message,
+    Part,
+    Role,
+    TaskArtifactUpdateEvent,
+    TaskState,
+    TaskStatus,
+    TaskStatusUpdateEvent,
+    TextPart,
+)
 from fastapi import HTTPException
 
 from apps.agent.llm_proxy import (
@@ -243,4 +254,91 @@ async def test_stream_agent_llm_sse_emits_rate_limit_error(
     assert "Превышен лимит запросов" in text
     assert '"usage"' in text
     assert '"finish_reason": "stop"' in text
+    assert "data: [DONE]" in text
+
+
+class _RecordingStreamLLM:
+    llm_provider: str = "openrouter"
+
+    def __init__(self) -> None:
+        self.captured_llm_context: object = "unset"
+
+    async def stream(
+        self,
+        messages: object,
+        *,
+        tools: object = None,
+        max_tokens: object = None,
+        temperature: object = None,
+        llm_context: object = None,
+        **kwargs: object,
+    ) -> AsyncIterator[object]:
+        _ = messages, tools, max_tokens, temperature, kwargs
+        self.captured_llm_context = llm_context
+        yield TaskArtifactUpdateEvent(
+            context_id="ctx-test",
+            task_id="task-test",
+            artifact=Artifact(
+                artifact_id="artifact-test",
+                parts=[Part(root=TextPart(text="Hello from passthrough"))],
+            ),
+            append=True,
+            last_chunk=True,
+        )
+        yield TaskStatusUpdateEvent(
+            context_id="ctx-test",
+            task_id="task-test",
+            status=TaskStatus(
+                state=TaskState.completed,
+                message=Message(
+                    message_id="msg-test",
+                    role=Role.agent,
+                    parts=[Part(root=TextPart(text="Hello from passthrough"))],
+                    metadata={"usage": {"input_tokens": 7, "output_tokens": 3}},
+                ),
+            ),
+            final=False,
+        )
+
+
+@pytest.mark.asyncio
+async def test_stream_agent_llm_sse_does_not_run_platform_context_layer(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    recording_llm = _RecordingStreamLLM()
+
+    def _recording_client_factory(*args: object, **kwargs: object) -> _RecordingStreamLLM:
+        _ = args, kwargs
+        return recording_llm
+
+    monkeypatch.setattr(
+        "apps.agent.llm_proxy.create_llm_client_from_ai_model",
+        _recording_client_factory,
+    )
+    resolved = ResolvedAIModel(
+        capability=AICapability.LLM_CHAT,
+        provider="openrouter",
+        model="qwen/qwen3-coder:free",
+        cost_origin="platform",
+    )
+    body = AgentOpenAIChatCompletionsRequest(
+        model="openrouter:qwen/qwen3-coder:free",
+        messages=[AgentOpenAIChatMessage(role="user", content="hi")],
+        stream=True,
+    )
+    chunks = [
+        chunk
+        async for chunk in _stream_agent_llm_sse(
+            body=body,
+            resolved=resolved,
+            allow_platform_paid_fallback=True,
+            response_model_id="openrouter:qwen/qwen3-coder:free",
+        )
+    ]
+    assert recording_llm.captured_llm_context is None
+    text = b"".join(chunks).decode("utf-8")
+    assert "Hello from passthrough" in text
+    assert "временно недоступна" not in text
+    assert '"prompt_tokens": 7' in text
+    assert '"completion_tokens": 3' in text
     assert "data: [DONE]" in text

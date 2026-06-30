@@ -47,8 +47,6 @@ from core.types import JsonArray, JsonObject, JsonValue, require_json_array, req
 logger = get_logger(__name__)
 router = APIRouter(tags=["agent-llm-proxy"])
 
-_AGENT_LLM_CONTEXT: JsonObject = {"profile": "off", "budget": "max"}
-
 
 class AgentOpenAIChatMessage(BaseModel):
     model_config: ClassVar[ConfigDict] = ConfigDict(extra="ignore")
@@ -396,7 +394,6 @@ async def _run_agent_llm_call(
             tools=tools_schema,
             max_tokens=body.max_tokens,
             temperature=body.temperature,
-            llm_context=_AGENT_LLM_CONTEXT,
         ):
             if isinstance(event, TaskArtifactUpdateEvent):
                 if event.artifact and event.artifact.parts:
@@ -534,7 +531,6 @@ async def _stream_agent_llm_sse(
                 tools=tools_schema,
                 max_tokens=body.max_tokens,
                 temperature=body.temperature,
-                llm_context=_AGENT_LLM_CONTEXT,
             ):
                 if isinstance(event, TaskArtifactUpdateEvent):
                     if event.artifact and event.artifact.parts:
