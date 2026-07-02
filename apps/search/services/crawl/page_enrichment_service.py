@@ -175,7 +175,7 @@ class CrawlPageEnrichmentService:
             resolved,
             temperature=0.0,
             max_tokens=4096,
-            allow_platform_paid_fallback=False,
+            allow_platform_paid_fallback=True,
         )
         if not isinstance(llm_client, LLMClient):
             raise RuntimeError("crawl page enrichment requires LLMClient")

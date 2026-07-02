@@ -246,14 +246,14 @@ async def stream_once(
                     # Логируем первые и последние сообщения для отладки
                     if openai_messages:
                         first_content = openai_messages[0].get("content")
-                        logger.error(
+                        logger.debug(
                             "llm.api_error.first_message",
                             role=openai_messages[0].get("role"),
                             content_length=len(first_content) if isinstance(first_content, str) else 0,
                         )
                         if len(openai_messages) > 1:
                             last_content = openai_messages[-1].get("content")
-                            logger.error(
+                            logger.debug(
                                 "llm.api_error.last_message",
                                 role=openai_messages[-1].get("role"),
                                 content_length=len(last_content) if isinstance(last_content, str) else 0,

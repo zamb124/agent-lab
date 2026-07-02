@@ -519,12 +519,15 @@ async def control_observe(
         # Observe должен работать на "готовой" странице: domcontentloaded достаточно.
         # `networkidle` на Lightpanda и на сайтах с трекерами может не наступать (или падать),
         # а observe не должен зависеть от аналитики/рекламы.
-        await page.wait_for_load_state("domcontentloaded", timeout=10_000)
+        try:
+            await page.wait_for_load_state("domcontentloaded", timeout=10_000)
 
-        # Каноничный LLM-friendly snapshot: строим строго через JS в странице (page.evaluate),
-        # без зависимости от Playwright accessibility API и без тяжёлых «сырьевых» деревьев.
-        ax = await dom_accessibility_tree_dict_from_page(page)
-        snap_text, refs = build_interactive_snapshot_with_refs(ax)
+            # Каноничный LLM-friendly snapshot: строим строго через JS в странице (page.evaluate),
+            # без зависимости от Playwright accessibility API и без тяжёлых «сырьевых» деревьев.
+            ax = await dom_accessibility_tree_dict_from_page(page)
+            snap_text, refs = build_interactive_snapshot_with_refs(ax)
+        except PlaywrightError as exc:
+            raise HTTPException(status_code=502, detail=f"observe playwright error for {session_id}: {exc}") from exc
         snapshot: ControlSnapshotResponse = {
             "schema": "browser.control.snapshot.v1",
             "mode": "interactive",
@@ -575,6 +578,8 @@ async def control_action(
                 meta={"transport": "http", "path": f"/control/sessions/{session_id}/action"},
             )
             return out
+        except PlaywrightError as exc:
+            raise HTTPException(status_code=502, detail=f"action playwright error for {session_id}: {exc}") from exc
         except BrowserCapabilityError as exc:
             _log_control_event(
                 op="control.action",
@@ -638,9 +643,12 @@ async def control_click(
         except KeyError as exc:
             raise HTTPException(status_code=409, detail=str(exc)) from exc
         loc = _locator_from_ref(page, refs, body.ref)
-        await loc.wait_for(state="visible", timeout=body.timeout_ms)
-        inter, profile, rnd = _interaction_for_session(runtime, session_id)
-        await inter.click(page, loc, profile=profile, rnd=rnd, timeout_ms=body.timeout_ms)
+        try:
+            await loc.wait_for(state="visible", timeout=body.timeout_ms)
+            inter, profile, rnd = _interaction_for_session(runtime, session_id)
+            await inter.click(page, loc, profile=profile, rnd=rnd, timeout_ms=body.timeout_ms)
+        except PlaywrightError as exc:
+            raise HTTPException(status_code=502, detail=f"click playwright error for {session_id}: {exc}") from exc
         out: ControlOkResponse = {"ok": True}
         _log_control_event(
             op="control.click",
@@ -855,17 +863,20 @@ async def control_fill(
         except KeyError as exc:
             raise HTTPException(status_code=409, detail=str(exc)) from exc
         loc = _locator_from_ref(page, refs, body.ref)
-        await loc.wait_for(state="visible", timeout=body.timeout_ms)
-        inter, profile, rnd = _interaction_for_session(runtime, session_id)
-        await inter.type_text(
-            page,
-            loc,
-            body.text,
-            profile=profile,
-            rnd=rnd,
-            timeout_ms=body.timeout_ms,
-            typing_delay_ms=body.typing_delay_ms,
-        )
+        try:
+            await loc.wait_for(state="visible", timeout=body.timeout_ms)
+            inter, profile, rnd = _interaction_for_session(runtime, session_id)
+            await inter.type_text(
+                page,
+                loc,
+                body.text,
+                profile=profile,
+                rnd=rnd,
+                timeout_ms=body.timeout_ms,
+                typing_delay_ms=body.typing_delay_ms,
+            )
+        except PlaywrightError as exc:
+            raise HTTPException(status_code=502, detail=f"fill playwright error for {session_id}: {exc}") from exc
         out: ControlOkResponse = {"ok": True}
         _log_control_event(
             op="control.fill",
@@ -914,10 +925,13 @@ async def control_wait(
             raise HTTPException(status_code=404, detail=str(exc)) from exc
         except RuntimeError as exc:
             raise HTTPException(status_code=409, detail=str(exc)) from exc
-        if body.load_state is not None:
-            await page.wait_for_load_state(body.load_state, timeout=body.timeout_ms)
-        if body.selector is not None:
-            _ = await page.wait_for_selector(body.selector, timeout=body.timeout_ms)
+        try:
+            if body.load_state is not None:
+                await page.wait_for_load_state(body.load_state, timeout=body.timeout_ms)
+            if body.selector is not None:
+                _ = await page.wait_for_selector(body.selector, timeout=body.timeout_ms)
+        except PlaywrightError as exc:
+            raise HTTPException(status_code=502, detail=f"wait playwright error for {session_id}: {exc}") from exc
         if body.load_state is None and body.selector is None:
             raise HTTPException(status_code=422, detail="Нужно задать selector и/или load_state")
         out: ControlOkResponse = {"ok": True}
@@ -950,9 +964,13 @@ async def control_session_status(
         except Exception:
             title = ""
     takeover = await runtime.lease_manager.human_takeover_for_session(session_id)
+    try:
+        page_url = page.url
+    except PlaywrightError:
+        page_url = ""
     return ControlSessionStatusResponse(
         session_id=session_id,
-        url=page.url,
+        url=page_url,
         title=title,
         closed=closed,
         human_takeover=takeover is not None,

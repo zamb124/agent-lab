@@ -116,7 +116,11 @@ class AccessLogMiddleware(BaseHTTPMiddleware):
                     LOG_REQUEST_ID: request_id,
                 },
             )
-            raise
+            return Response(
+                "Internal server error",
+                status_code=500,
+                headers={REQUEST_ID_HEADER: request_id, TRACE_ID_HEADER: trace_id},
+            )
         finally:
             duration_ms = round((time.perf_counter() - start) * 1000.0, 3)
             if status_code is not None and status_code != 500:
