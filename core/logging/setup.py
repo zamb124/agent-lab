@@ -247,7 +247,7 @@ def _silence_noisy_loggers(custom_levels: dict[str, str]) -> None:
     Уравнивает обработку чужих логгеров: handlers сбрасываются, propagate
     включается, чтобы запись попала в root и пошла через единый formatter.
     """
-    intercepted = {"granian", "_granian", "taskiq", "httpx", "httpcore", "sqlalchemy"}
+    intercepted = {"granian", "_granian", "taskiq", "httpx", "httpcore", "sqlalchemy", "trafilatura"}
     manager = logging.Logger.manager
 
     for name, logger in list(manager.loggerDict.items()):

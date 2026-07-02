@@ -1531,7 +1531,7 @@ class CalendarSyncConfig(BaseModel):
     """Конфигурация фоновой синхронизации календаря."""
 
     enabled: bool = True
-    cron: str = "*/1 * * * *"
+    cron: str = "*/15 * * * *"
     lookback_days: int = 7
     lookahead_months: int = 3
     batch_size: int = 100
@@ -1539,7 +1539,7 @@ class CalendarSyncConfig(BaseModel):
     max_parallel_integrations: int = 10
     notification_dedup_ttl_seconds: int = 86400
     sync_meeting_reminder_enabled: bool = True
-    sync_meeting_reminder_cron: str = "*/1 * * * *"
+    sync_meeting_reminder_cron: str = "*/15 * * * *"
     sync_meeting_reminder_limit: int = 500
 
 

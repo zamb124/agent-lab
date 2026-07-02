@@ -26,10 +26,12 @@ storage_config:
     directory: /loki/chunks
 
 limits_config:
-  retention_period: 336h  # 14 дней
+  retention_period: 168h  # 7 дней
 
 compactor:
   working_directory: /loki/compactor
   retention_enabled: true
+  retention_delete_delay: 2h
+  retention_delete_worker_count: 50
   compaction_interval: 10m
   delete_request_store: filesystem

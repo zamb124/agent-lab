@@ -40,6 +40,8 @@ spec:
     metadata:
       labels:
         app: loki
+      annotations:
+        checksum/loki-config: {{ .Files.Get "files/loki.yaml" | sha256sum }}
     spec:
 {{- include "agentlab.nodeSchedule" (list . .Values.observability.loki.nodeName) | nindent 6 }}
       containers:

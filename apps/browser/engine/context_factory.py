@@ -122,9 +122,13 @@ class ContextFactory:
 
     async def new_page(self, context: BrowserContextHandle) -> BrowserPage:
         async with self._lock:
-            page = await context.new_page()
-
-            return page
+            try:
+                page = await context.new_page()
+                return page
+            except Exception as exc:
+                if is_target_closed_error(exc):
+                    await _safe_context_close(context)
+                raise
 
     async def close_page(self, page: BrowserPage) -> None:
         await _safe_page_close(page)

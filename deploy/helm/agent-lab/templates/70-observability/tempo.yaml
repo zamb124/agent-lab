@@ -46,6 +46,8 @@ spec:
     metadata:
       labels:
         app: tempo
+      annotations:
+        checksum/tempo-config: {{ .Files.Get "files/tempo.yaml" | sha256sum }}
     spec:
 {{- include "agentlab.nodeSchedule" (list . .Values.observability.tempo.nodeName) | nindent 6 }}
       containers:

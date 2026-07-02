@@ -690,7 +690,7 @@ workers:
         memory: 256Mi
       limits:
         cpu: "1"
-        memory: 2Gi
+        memory: 3Gi
   search-worker:
     nodeName: master
     enabled: true

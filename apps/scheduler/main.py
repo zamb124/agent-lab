@@ -504,7 +504,7 @@ async def on_startup(app: FastAPI, container: SchedulerContainer, settings: Sche
         container=container,
         config_enabled=not is_testing(),
         task_name=LLM_MODELS_SYNC_TASK_NAME,
-        interval_seconds=60,
+        interval_seconds=3600,
         payload={"system_task": LLM_MODELS_SYNC_PAYLOAD_MARKER},
         log_label="LLM models sync",
         run_now_on_start=True,
