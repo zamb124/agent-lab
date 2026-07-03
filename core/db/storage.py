@@ -359,7 +359,10 @@ class Storage:
             expired_at = datetime.now(timezone.utc) + timedelta(seconds=ttl)
         else:
             permanent_prefixes = [
+                "ai_model_catalog:",
                 "company:",
+                "embed_mapping:",
+                "file:",
                 "subdomain:",
                 "user:",
                 "auth_session:",
