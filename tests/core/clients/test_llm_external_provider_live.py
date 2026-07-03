@@ -343,7 +343,7 @@ async def test_live_provider_catalog_records_normalize_algorithm(provider: str) 
                 assert record.is_free is expected_free
         if "tools" in record.supported_parameters:
             assert record.supports_tools is True
-        if "response_format" in record.supported_parameters or "structured_outputs" in record.supported_parameters:
+        if "structured_outputs" in record.supported_parameters or "json_schema" in record.supported_parameters:
             assert record.supports_structured_output is True
 
 

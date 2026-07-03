@@ -67,7 +67,7 @@ async def _reconcile_crawl_cron_schedule(
     task_name: str,
     cron: str,
     payload: JsonObject,
-    log_label: str,
+    _log_label: str,
 ) -> PlatformScheduledTask:
     expected_payload = _canonical_crawl_task_payload(task.schedule_task_id, payload)
     recreate_schedule = False
@@ -142,7 +142,7 @@ async def _ensure_crawl_cron_schedule(
             task_name=task_name,
             cron=cron,
             payload=payload,
-            log_label=log_label,
+            _log_label=log_label,
         )
         return
 
@@ -170,7 +170,7 @@ async def _ensure_crawl_cron_schedule(
             task_name=task_name,
             cron=cron,
             payload=payload,
-            log_label=log_label,
+            _log_label=log_label,
         )
         return
 

@@ -52,6 +52,7 @@ class BrowserRuntimeIntegrationConfig(BaseModel):
     )
     e2e_lightpanda: bool = Field(default=False)
     e2e_lightpanda_cdp_url: str = Field(default="")
+    crawl_fetch_max_inflight: int = Field(default=5, ge=1)
 
 
 class BrowserSettings(BaseSettings):
@@ -143,4 +144,5 @@ def settings_to_runtime_view(settings: HasBrowserRuntimeConfig) -> BrowserRuntim
         reaper_interval_sec=cfg.reaper_interval_sec,
         max_contexts=cfg.max_contexts,
         session_state_ttl_sec=cfg.session_state_ttl_sec,
+        crawl_fetch_max_inflight=cfg.crawl_fetch_max_inflight,
     )

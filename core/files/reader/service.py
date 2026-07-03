@@ -48,6 +48,7 @@ from core.files.media.transcriber import MediaTranscriber
 from core.files.models import FileRecord, FileResponse
 from core.files.reader.exceptions import FileReadError
 from core.files.reader.models import (
+    CompressionMode,
     FileReadKind,
     FileReadResult,
     FileTypeInfo,
@@ -582,6 +583,68 @@ class FileReader:
         else:
             raw, name = await self.resolve_source(source, file_name, opts)
         return await self._read_resolved(raw, name, opts)
+
+
+async def run_vision_on_image_bytes(
+    raw: bytes,
+    *,
+    file_name: str,
+    mime: str,
+    prompt: str,
+    vision_model: str | None = None,
+    compression: CompressionMode = CompressionMode.NEVER,
+    trace_name: str = "core.files.reader.vision",
+) -> str:
+    """Запускает vision LLM на переданных байтах изображения, возвращает извлечённый текст."""
+    from core.files.reader.vision import prepare_visual_payload
+
+    payload, payload_mime = prepare_visual_payload(
+        raw, file_name=file_name, mime=mime, compression=compression
+    )
+    b64 = base64.b64encode(payload).decode("utf-8")
+    message = Message(
+        message_id=str(uuid.uuid4()),
+        role=Role.user,
+        parts=[
+            Part(root=TextPart(text=prompt)),
+            Part(
+                root=FilePart(
+                    file=FileWithBytes(
+                        bytes=b64,
+                        mime_type=payload_mime,
+                        name=file_name,
+                    )
+                )
+            ),
+        ],
+    )
+    resolved_llm = resolve_vision_ai_model(vision_model)
+    llm = create_vision_llm_client(resolved_llm)
+    actx = get_context()
+    if actx is None or actx.active_company is None:
+        raise ValueError("Контекст с active_company обязателен для vision-чтения изображения")
+    if not str(actx.user.user_id).strip():
+        raise ValueError(
+            "Контекст с user обязателен для vision-чтения изображения (биллинг и уведомления)"
+        )
+    if resolved_llm.cost_origin != COST_ORIGIN_COMPANY:
+        await get_billing_service().require_balance_for_billable_operation(
+            actx.active_company.company_id,
+            str(actx.user.user_id).strip(),
+            operation_code=BALANCE_BLOCK_OPERATION_VISION,
+            notification_service="frontend",
+        )
+    async with traced_operation(
+        trace_name,
+        event_type="llm.vision",
+        operation_category="llm",
+        billing_usage_type=UsageType.LLM_REQUEST.value,
+        billing_resource_name=resolved_llm.billing_resource_name,
+        billing_quantity=1,
+        billing_pending_settlement=True,
+    ):
+        vision_result = await llm.invoke([message], json_output=False)
+    return str(vision_result)
 
 
 async def _read_image_impl(

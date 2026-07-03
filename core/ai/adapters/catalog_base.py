@@ -304,8 +304,7 @@ class BaseModelCatalogAdapter(AIProviderAdapter, ABC):
 
         supports_tools = "tools" in supported_parameters or "tool_choice" in supported_parameters
         supports_structured_output = (
-            "response_format" in supported_parameters
-            or "structured_outputs" in supported_parameters
+            "structured_outputs" in supported_parameters
             or "json_schema" in supported_parameters
         )
         is_free = self._pricing_is_free(item)

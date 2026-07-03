@@ -44,7 +44,7 @@ class AIModelRecord(BaseModel):
 
     @property
     def supports_json_schema(self) -> bool:
-        return self.supports_structured_output or "response_format" in self.supported_parameters
+        return self.supports_structured_output
 
     @property
     def supports_vision(self) -> bool:

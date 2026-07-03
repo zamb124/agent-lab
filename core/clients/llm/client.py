@@ -874,6 +874,12 @@ class LLMClient:
                 text_for_json,
                 "llm.structured_output",
             )
+            if not isinstance(structured_payload, dict):
+                raise ValueError(
+                    "llm.structured_output: ожидается JSON object (dict), "
+                    + f"но получен {type(structured_payload).__name__}. "
+                    + "LLM вернула невалидную структуру вместо объекта по схеме response_format."
+                )
             return response_model.model_validate(structured_payload)
 
         return Message(

@@ -8,6 +8,188 @@ from pydantic import BaseModel, Field
 
 from core.files.file_ref import FileRef, file_id_from_download_url
 
+# ---------------------------------------------------------------------------
+# Константы
+# ---------------------------------------------------------------------------
+
+MAX_READ_BUDGET: int = 100_000
+"""Максимальный бюджет символов на один read-вызов (100K chars)."""
+
+TRUNCATION_MARKER: str = "\n…[truncated]"
+"""Маркер, добавляемый при обрезании текста по бюджету."""
+
+DEFAULT_VIRTUAL_PAGE_SIZE: int = 4_000
+"""Размер виртуальной страницы для сплошных форматов (txt/csv/json/html/docx без нативных страниц)."""
+
+VISION_FULL_READ_MAX_PAGES: int = 20
+"""Порог страниц PDF, выше которого vision применяется лениво только к запрошенным страницам."""
+
+# ---------------------------------------------------------------------------
+# Enums: режимы контента, layout, лейн чтения, причина остановки, сжатие
+# ---------------------------------------------------------------------------
+
+
+class ContentMode(StrEnum):
+    """Режим отображения контента в результате чтения."""
+
+    FULL = "full"
+    SUMMARY = "summary"
+    VISION = "vision"
+    STT = "stt"
+    HYBRID = "hybrid"
+
+
+class PageLayoutKind(StrEnum):
+    """Тип разбиения на страницы."""
+
+    NATIVE = "native"
+    VIRTUAL = "virtual"
+
+
+class ReadLane(StrEnum):
+    """Канал чтения: текст / vision / STT / гибрид."""
+
+    TEXT = "text"
+    VISION = "vision"
+    STT = "stt"
+    HYBRID = "hybrid"
+
+
+class StopReason(StrEnum):
+    """Причина остановки итеративного чтения."""
+
+    COMPLETE = "complete"
+    PAGE_END_REACHED = "page_end_reached"
+    BUDGET_EXHAUSTED = "budget_exhausted"
+    OUT_OF_RANGE = "out_of_range"
+    ERROR = "error"
+
+
+class CompressionMode(StrEnum):
+    """Режим сжатия изображений перед отправкой в vision-модель."""
+
+    NEVER = "never"
+    BEFORE_LLM = "before_llm"
+    ON_ERROR = "on_error"
+
+
+# ---------------------------------------------------------------------------
+# Вспомогательные модели render-слоя
+# ---------------------------------------------------------------------------
+
+
+class PageLayout(BaseModel):
+    """Метаданные разбиения на страницы."""
+
+    kind: PageLayoutKind
+    pages_total: int = Field(ge=0)
+    page_size: int = Field(ge=0, description="Размер виртуальной страницы; 0 для нативных.")
+
+
+class UniversalPage(BaseModel):
+    """Единая страница после нормализации (native или virtual)."""
+
+    index: int = Field(ge=0)
+    label: str = ""
+    text: str = ""
+    content_mode: ContentMode
+
+
+class PageResult(BaseModel):
+    """Одна страница в финальном FileResult (с учётом бюджета и суммаризации)."""
+
+    page: int = Field(ge=0)
+    label: str
+    content_mode: ContentMode
+    span_chars: int = Field(ge=0)
+    truncated: bool = False
+    result: str
+
+
+class Continuation(BaseModel):
+    """Инструкция продолжения чтения для следующего вызова."""
+
+    file_id: str | None = None
+    next_page_start: int = Field(default=0, ge=0)
+    has_more: bool = False
+    next_actions: list[str] = Field(default_factory=list)
+
+
+class ReadFileArgs(BaseModel):
+    """Аргументы чтения файла (не путать с ReadOptions — это параметры пагинации и суммаризации)."""
+
+    page_start: int = Field(default=0, ge=0)
+    page_end: int = Field(default=-1, description="-1 = до конца.")
+    page_summarizations: bool = False
+    summarization_prompt: str = ""
+    summarization_model: str = ""
+    vision_prompt: str = ""
+    compression: CompressionMode = CompressionMode.NEVER
+    names: list[str] = Field(default_factory=list)
+    budget: int = Field(default=MAX_READ_BUDGET, ge=0)
+
+
+# ---------------------------------------------------------------------------
+# Основные модели extract и result
+# ---------------------------------------------------------------------------
+
+
+class FileExtract(BaseModel):
+    """Нормализованный экстракт файла перед рендерингом в FileResult."""
+
+    file_id: str | None = None
+    file_name: str
+    kind: FileReadKind
+    mime_type: str = "application/octet-stream"
+    read_lane: ReadLane
+    page_layout: PageLayout
+    pages: list[UniversalPage] = Field(default_factory=list)
+    content_chars_total: int = Field(default=0, ge=0)
+    warnings: list[str] = Field(default_factory=list)
+    source_checksum: str | None = None
+
+
+class FileResult(BaseModel):
+    """Финальный результат чтения — то, что получает LLM."""
+
+    file_name: str
+    file_id: str | None = None
+    success: bool
+    error: str = ""
+    warnings: list[str] = Field(default_factory=list)
+    kind: FileReadKind
+    mime_type: str = "application/octet-stream"
+    read_lane: ReadLane
+    page_layout: PageLayout
+    pages_total: int = Field(default=0, ge=0)
+    content_chars_total: int = Field(default=0, ge=0)
+    page_start: int = Field(default=0, ge=0)
+    pages_processed: int = Field(default=0, ge=0)
+    complete: bool = False
+    truncated: bool = False
+    stop_reason: StopReason
+    page_summarizations_used: bool = False
+    results: list[PageResult] = Field(default_factory=list)
+    continuation: Continuation
+
+
+class ReadFileEnvelope(BaseModel):
+    """Конверт для единого ответа read_file: несколько файлов за один вызов."""
+
+    success: bool
+    tool: str
+    files_processed: int = Field(ge=0)
+    names: list[str] = Field(default_factory=list)
+    budget: int = Field(ge=0)
+    result_chars_returned: int = Field(ge=0)
+    files: list[FileResult] = Field(default_factory=list)
+    warnings: list[str] = Field(default_factory=list)
+
+
+# ---------------------------------------------------------------------------
+# Существующие модели (ниже без изменений)
+# ---------------------------------------------------------------------------
+
 
 class FileReadKind(StrEnum):
     TEXT = "text"

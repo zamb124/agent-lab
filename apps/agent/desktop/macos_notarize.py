@@ -15,6 +15,7 @@ import urllib.request
 from datetime import UTC, datetime, timedelta
 from enum import StrEnum
 from pathlib import Path
+from typing import ClassVar, cast
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -46,7 +47,7 @@ class MacosNotarizeStatus(StrEnum):
 
 
 class MacosNotarizePlatformRecord(BaseModel):
-    model_config = ConfigDict(extra="forbid")
+    model_config: ClassVar[ConfigDict] = ConfigDict(extra="forbid")
 
     platform: str
     version_sha: str
@@ -58,7 +59,7 @@ class MacosNotarizePlatformRecord(BaseModel):
 
 
 class MacosNotarizeManifest(BaseModel):
-    model_config = ConfigDict(extra="forbid")
+    model_config: ClassVar[ConfigDict] = ConfigDict(extra="forbid")
 
     release_tag: str
     version_sha: str
@@ -67,7 +68,7 @@ class MacosNotarizeManifest(BaseModel):
 
 
 class MacosNotarizeFragment(BaseModel):
-    model_config = ConfigDict(extra="forbid")
+    model_config: ClassVar[ConfigDict] = ConfigDict(extra="forbid")
 
     platform: str
     version_sha: str
@@ -79,14 +80,14 @@ class MacosNotarizeFragment(BaseModel):
 
 
 class NotaryPollResult(BaseModel):
-    model_config = ConfigDict(extra="forbid")
+    model_config: ClassVar[ConfigDict] = ConfigDict(extra="forbid")
 
     submission_id: str
     status: str
 
 
 class MacosNotarizeFollowupSummary(BaseModel):
-    model_config = ConfigDict(extra="forbid")
+    model_config: ClassVar[ConfigDict] = ConfigDict(extra="forbid")
 
     release_tag: str
     platforms_completed: list[str] = Field(default_factory=list)
@@ -154,11 +155,12 @@ def normalize_submission_id(raw: str) -> str:
     matches = NOTARY_SUBMISSION_ID_PATTERN.findall(stripped)
     if not matches:
         raise ValueError(f"submission_id does not contain a notary UUID: {raw!r}")
-    return str(matches[-1]).lower()
+    last_match: str = cast(str, matches[-1])
+    return last_match.lower()
 
 
 def load_fragment(path: Path) -> MacosNotarizeFragment:
-    payload = json.loads(path.read_text(encoding="utf-8"))
+    payload: dict[str, object] = cast(dict[str, object], json.loads(path.read_text(encoding="utf-8")))
     fragment = MacosNotarizeFragment.model_validate(payload)
     normalized_submission_id = normalize_submission_id(fragment.submission_id)
     if normalized_submission_id == fragment.submission_id:
@@ -167,7 +169,7 @@ def load_fragment(path: Path) -> MacosNotarizeFragment:
 
 
 def load_manifest(path: Path) -> MacosNotarizeManifest:
-    payload = json.loads(path.read_text(encoding="utf-8"))
+    payload: dict[str, object] = cast(dict[str, object], json.loads(path.read_text(encoding="utf-8")))
     manifest = MacosNotarizeManifest.model_validate(payload)
     updated_platforms: dict[str, MacosNotarizePlatformRecord] = {}
     changed = False
@@ -186,8 +188,8 @@ def load_manifest(path: Path) -> MacosNotarizeManifest:
 
 
 def write_manifest(path: Path, manifest: MacosNotarizeManifest) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(
+    _ = path.parent.mkdir(parents=True, exist_ok=True)
+    _ = path.write_text(
         json.dumps(manifest.model_dump(mode="json"), indent=2) + "\n",
         encoding="utf-8",
     )
@@ -283,9 +285,9 @@ def poll_submission_once(submission_id: str) -> NotaryPollResult:
             raise RuntimeError(
                 f"notarytool info failed for {normalized_submission_id}: {stderr_text}"
             )
-        info_json_path.write_text(completed.stdout, encoding="utf-8")
-        payload = json.loads(info_json_path.read_text(encoding="utf-8"))
-        status_raw = payload.get("status")
+        _ = info_json_path.write_text(completed.stdout, encoding="utf-8")
+        payload: dict[str, object] = cast(dict[str, object], json.loads(info_json_path.read_text(encoding="utf-8")))
+        status_raw: object = payload.get("status")
         if not isinstance(status_raw, str) or not status_raw:
             raise ValueError(
                 f"notarytool info missing status for {normalized_submission_id}"
@@ -340,7 +342,7 @@ def rebuild_dmg(*, app_bundle_path: Path, dmg_path: Path, volume_name: str) -> N
         dmg_path.unlink()
     staging_dir = Path(tempfile.mkdtemp(prefix="humanitec-dmg-staging-"))
     try:
-        shutil.copytree(app_bundle_path, staging_dir / app_bundle_path.name)
+        _ = shutil.copytree(app_bundle_path, staging_dir / app_bundle_path.name)
         applications_link = staging_dir / "Applications"
         applications_link.symlink_to("/Applications")
         command = [
@@ -402,7 +404,7 @@ def update_checksums_for_dmg(
             updated_lines.append(f"{existing_digest}  {asset_name}")
     if not replaced:
         updated_lines.append(f"{digest}  {dmg_asset_name}")
-    checksums_path.write_text("\n".join(updated_lines) + "\n", encoding="utf-8")
+    _ = checksums_path.write_text("\n".join(updated_lines) + "\n", encoding="utf-8")
 
 
 def extract_app_bundle_from_zip(
@@ -458,15 +460,16 @@ def list_release_asset_names(*, repo: str, release_tag: str) -> list[str]:
     if completed.returncode != 0:
         stderr_text = completed.stderr.strip()
         raise RuntimeError(f"gh release view failed for {release_tag}: {stderr_text}")
-    payload = json.loads(completed.stdout)
-    assets_raw = payload.get("assets")
+    payload: dict[str, object] = cast(dict[str, object], json.loads(completed.stdout))
+    assets_raw: object = payload.get("assets")
     if not isinstance(assets_raw, list):
         raise ValueError(f"release {release_tag} assets payload invalid")
+    asset_list: list[object] = cast(list[object], assets_raw)
     asset_names: list[str] = []
-    for asset_item in assets_raw:
+    for asset_item in asset_list:
         if not isinstance(asset_item, dict):
             continue
-        asset_name = asset_item.get("name")
+        asset_name: object = asset_item.get("name")  # pyright: ignore[reportUnknownMemberType, reportUnknownVariableType]
         if isinstance(asset_name, str) and asset_name:
             asset_names.append(asset_name)
     return asset_names
@@ -495,13 +498,13 @@ def resolve_manifest_asset_name(
             return expected_name
         raise FileNotFoundError(
             f"Manifest asset {expected_name!r} not found on release {release_tag!r}; "
-            f"available: {', '.join(manifest_assets)}"
+            + f"available: {', '.join(manifest_assets)}"
         )
     if len(manifest_assets) == 1:
         return manifest_assets[0]
     raise ValueError(
         f"Multiple macOS notarize manifest assets on release {release_tag!r}: "
-        f"{', '.join(manifest_assets)}"
+        + f"{', '.join(manifest_assets)}"
     )
 
 
@@ -520,8 +523,8 @@ def resolve_release_version_sha(*, repo: str, release_tag: str) -> str:
     if completed.returncode != 0:
         stderr_text = completed.stderr.strip()
         raise RuntimeError(f"gh release view failed for {release_tag}: {stderr_text}")
-    payload = json.loads(completed.stdout)
-    target_commitish = payload.get("targetCommitish")
+    payload: dict[str, object] = cast(dict[str, object], json.loads(completed.stdout))
+    target_commitish: object = payload.get("targetCommitish")
     if not isinstance(target_commitish, str) or not target_commitish:
         raise ValueError(f"release {release_tag} missing targetCommitish")
     return target_commitish
@@ -558,7 +561,7 @@ def download_release_asset(
     if not downloaded_path.is_file():
         raise FileNotFoundError(f"Downloaded asset missing: {downloaded_path}")
     if downloaded_path != destination:
-        shutil.move(str(downloaded_path), str(destination))
+        _ = shutil.move(str(downloaded_path), str(destination))
 
 
 def upload_release_assets(
@@ -604,16 +607,17 @@ def delete_release_assets(
     if completed.returncode != 0:
         stderr_text = completed.stderr.strip()
         raise RuntimeError(f"gh release view failed for {release_tag}: {stderr_text}")
-    payload = json.loads(completed.stdout)
-    assets_raw = payload.get("assets")
+    payload: dict[str, object] = cast(dict[str, object], json.loads(completed.stdout))
+    assets_raw: object = payload.get("assets")
     if not isinstance(assets_raw, list):
         raise ValueError(f"release {release_tag} assets payload invalid")
+    asset_list: list[object] = cast(list[object], assets_raw)
     asset_ids_by_name: dict[str, int] = {}
-    for asset_item in assets_raw:
+    for asset_item in asset_list:
         if not isinstance(asset_item, dict):
             continue
-        asset_name = asset_item.get("name")
-        asset_id = asset_item.get("id")
+        asset_name: object = asset_item.get("name")  # pyright: ignore[reportUnknownMemberType, reportUnknownVariableType]
+        asset_id: object = asset_item.get("id")  # pyright: ignore[reportUnknownMemberType, reportUnknownVariableType]
         if isinstance(asset_name, str) and isinstance(asset_id, int):
             asset_ids_by_name[asset_name] = asset_id
     for asset_name in asset_names:
@@ -873,15 +877,16 @@ def discover_pending_release_tags(*, repo: str) -> list[str]:
     if completed.returncode != 0:
         stderr_text = completed.stderr.strip()
         raise RuntimeError(f"gh release list failed: {stderr_text}")
-    releases_raw = json.loads(completed.stdout)
+    releases_raw: object = cast(object, json.loads(completed.stdout))
     if not isinstance(releases_raw, list):
         raise ValueError("gh release list returned unexpected payload")
+    release_list: list[object] = cast(list[object], releases_raw)
     pending_tags: list[str] = []
-    for release_item in releases_raw:
+    for release_item in release_list:
         if not isinstance(release_item, dict):
             continue
-        tag_name = release_item.get("tagName")
-        is_draft = release_item.get("isDraft")
+        tag_name: object = release_item.get("tagName")  # pyright: ignore[reportUnknownMemberType, reportUnknownVariableType]
+        is_draft: object = release_item.get("isDraft")  # pyright: ignore[reportUnknownMemberType, reportUnknownVariableType]
         if not isinstance(tag_name, str) or not tag_name:
             continue
         if is_draft is True:
@@ -909,7 +914,7 @@ def fetch_release_body_note(*, repo: str, release_tag: str) -> str:
     if completed.returncode != 0:
         stderr_text = completed.stderr.strip()
         raise RuntimeError(f"gh release view failed for {release_tag}: {stderr_text}")
-    payload = json.loads(completed.stdout)
+    payload: dict[str, object] = cast(dict[str, object], json.loads(completed.stdout))
     body = payload.get("body")
     if isinstance(body, str):
         return body
@@ -918,5 +923,5 @@ def fetch_release_body_note(*, repo: str, release_tag: str) -> str:
 
 def http_download(url: str, destination: Path) -> None:
     destination.parent.mkdir(parents=True, exist_ok=True)
-    with urllib.request.urlopen(url) as response, destination.open("wb") as handle:
-        shutil.copyfileobj(response, handle)
+    with urllib.request.urlopen(url) as response, destination.open("wb") as handle:  # pyright: ignore[reportAny]
+        shutil.copyfileobj(response, handle)  # pyright: ignore[reportAny]

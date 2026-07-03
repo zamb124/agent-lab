@@ -70,7 +70,7 @@ def _taxonomy() -> SearchIndexCrawlTaxonomy:
     )
 
 
-def test_resolve_enrichment_llm_uses_humanitec_free_pool() -> None:
+def test_resolve_enrichment_llm_structured_output_requirements() -> None:
     service = CrawlPageEnrichmentService(
         SearchCrawlEnrichmentConfig(provider=HUMANITEC_LLM_PROVIDER, model="auto"),
     )
@@ -102,7 +102,7 @@ def test_resolve_enrichment_llm_uses_humanitec_free_pool() -> None:
 
 
 @pytest.mark.asyncio
-async def test_invoke_enrichment_llm_disables_paid_fallback() -> None:
+async def test_invoke_enrichment_llm_allows_paid_fallback() -> None:
     service = CrawlPageEnrichmentService(
         SearchCrawlEnrichmentConfig(provider=HUMANITEC_LLM_PROVIDER, model="auto"),
     )
@@ -145,5 +145,5 @@ async def test_invoke_enrichment_llm_disables_paid_fallback() -> None:
         )
 
     create_client_mock.assert_called_once()
-    assert create_client_mock.call_args.kwargs["allow_platform_paid_fallback"] is False
+    assert create_client_mock.call_args.kwargs["allow_platform_paid_fallback"] is True
     assert enriched.enrichment_model == "openrouter:qwen/qwen-2.5-7b-instruct:free"

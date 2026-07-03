@@ -127,8 +127,8 @@ def _record_sort_key(record: PlatformFreeModelRecord) -> tuple[float, int, int, 
         record.context_length or 0,
         int("tools" in record.supported_parameters),
         int(
-            "response_format" in record.supported_parameters
-            or "structured_outputs" in record.supported_parameters
+            "structured_outputs" in record.supported_parameters
+            or "json_schema" in record.supported_parameters
         ),
         _FREE_REASON_PRIORITY.get(record.free_reason, 0),
         record.created or 0,

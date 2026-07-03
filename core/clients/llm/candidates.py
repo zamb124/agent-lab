@@ -36,13 +36,13 @@ def candidate_supports_request(
     if has_response_format and (
         (
             strict_metadata
-            and "response_format" not in candidate.supported_parameters
             and "structured_outputs" not in candidate.supported_parameters
+            and "json_schema" not in candidate.supported_parameters
         )
         or (
             candidate.supported_parameters
-            and "response_format" not in candidate.supported_parameters
             and "structured_outputs" not in candidate.supported_parameters
+            and "json_schema" not in candidate.supported_parameters
         )
     ):
         return False

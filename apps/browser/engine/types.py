@@ -246,3 +246,4 @@ class BrowserRuntimeSettingsView:
     reaper_interval_sec: int
     max_contexts: int
     session_state_ttl_sec: int
+    crawl_fetch_max_inflight: int

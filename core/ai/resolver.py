@@ -214,6 +214,11 @@ def _validate_resolved_requirements(
             f"capability {resolved.capability.value}: resolved model "
             + f"{resolved.provider}:{resolved.model} is not free"
         )
+    if requirements.structured_output and resolved.model_record is not None and not resolved.model_record.supports_json_schema:
+        raise ValueError(
+            f"capability {resolved.capability.value}: resolved model "
+            + f"{resolved.provider}:{resolved.model} does not support structured output"
+        )
 
 
 def _resolve_explicit_llm_selection(
