@@ -13,6 +13,7 @@ import ast
 import json
 import logging
 import time
+from collections.abc import Generator
 
 import pytest
 
@@ -81,6 +82,22 @@ def _find_voice_resolver_caplog_record(
 def _stub_company_cache(company_id: str, *, kind: VoiceKind, row: _CompanyOverrideRow | None) -> None:
     """Положить готовое значение в TTL-кэш, чтобы не ходить в БД."""
     _company_cache[(company_id, kind)] = (time.monotonic() + 3600, row)
+
+
+@pytest.fixture(scope="module", autouse=True)
+def _voice_resolver_info_logging() -> Generator[None, None, None]:
+    """structlog при LOGGING__LEVEL=WARNING не пишет INFO — для caplog-тестов поднимаем уровень."""
+    from core.config import get_settings
+    from core.logging.setup import reset_logging_for_tests, setup_logging
+
+    settings = get_settings()
+    warning_config = settings.logging
+    info_config = warning_config.model_copy(update={"level": "INFO"})
+    reset_logging_for_tests()
+    setup_logging("pytest-voice-resolver", info_config)
+    yield
+    reset_logging_for_tests()
+    setup_logging("pytest", warning_config)
 
 
 @pytest.fixture(autouse=True)

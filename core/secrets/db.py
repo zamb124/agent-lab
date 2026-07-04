@@ -9,6 +9,8 @@ from sqlalchemy.ext.asyncio import (
     create_async_engine,
 )
 
+from core.db.sqlalchemy_pool import sqlalchemy_async_engine_pool_kwargs
+
 
 class SecretsDatabase:
     """Engine + session factory для версионируемого хранилища переменных."""
@@ -17,8 +19,7 @@ class SecretsDatabase:
         self._engine: AsyncEngine = create_async_engine(
             db_url,
             echo=False,
-            pool_size=5,
-            max_overflow=10,
+            **sqlalchemy_async_engine_pool_kwargs(),
         )
         self._session_factory: async_sessionmaker[AsyncSession] = async_sessionmaker(
             bind=self._engine,

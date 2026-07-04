@@ -18,6 +18,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import math
 import os
 import signal
 import socket
@@ -46,10 +47,16 @@ from core.capabilities import (
 )
 from core.test_scope import TEST_SCOPE_DEFAULT_ENV, TEST_SCOPE_STATIC_E2E
 from core.types import JsonObject, JsonValue, require_json_object, require_json_value
-from tests.fixtures.test_database_env import TEST_DATABASE_ENV
+from tests.fixtures.test_database_env import (
+    TEST_DATABASE_ENV,
+    TEST_HS256_JWT_SECRET,
+    TEST_LIVEKIT_API_SECRET,
+    TEST_OFFICE_JWT_SECRET,
+)
 
 STACK_MANIFEST_PATH = Path("/tmp/platform_test_stack.json")
 STACK_LOG_DIR = Path("/tmp/platform_test_stack")
+BASELINE_PYTEST_WORKERS = 10
 
 _TASKIQ_REDIS_URL = "redis://localhost:63792/1"
 _TASKIQ_CONSUMER_GROUP = "taskiq"
@@ -81,7 +88,7 @@ COMMON_TEST_ENV: dict[str, str] = {
     "SERVER__WORKTRACKER_SERVICE_URL": "http://localhost:9021",
     "SERVER__SECRETS_SERVICE_URL": "http://localhost:9022",
     "SERVER__OFFICE_SERVICE_URL": "http://localhost:9008",
-    "OFFICE__JWT_SECRET": "test-onlyoffice-jwt-secret",
+    "OFFICE__JWT_SECRET": TEST_OFFICE_JWT_SECRET,
     "OFFICE__DOCUMENT_SERVER_PUBLIC_URL": "http://localhost:18088",
     "OFFICE__CALLBACK_PUBLIC_BASE_URL": "http://host.docker.internal:9008",
     "SERVER__DOCUMENT_SERVER_DEV_UPSTREAM_URL": "http://localhost:18088",
@@ -90,7 +97,7 @@ COMMON_TEST_ENV: dict[str, str] = {
     "CALLS__LIVEKIT_URL": "ws://localhost:7890",
     "CALLS__LIVEKIT_PUBLIC_URL": "http://localhost:7890",
     "CALLS__LIVEKIT_API_KEY": "devkey",
-    "CALLS__LIVEKIT_API_SECRET": "secret",
+    "CALLS__LIVEKIT_API_SECRET": TEST_LIVEKIT_API_SECRET,
     "S3__ENABLED": "true",
     "S3__DEFAULT_BUCKET": "test-bucket",
     "S3__BUCKETS__TEST-BUCKET__ENDPOINT_URL": "http://localhost:19002",
@@ -153,14 +160,51 @@ class ExternalReadiness:
     readiness_timeout: float
 
 
-GRANIAN_SERVICES: tuple[GranianService, ...] = (
+def _bootstrap_parent_test_env() -> None:
+    """Probe-токены подписываются в родительском процессе test_stack — env как у дочерних сервисов."""
+    import core.config.base
+
+    os.environ.setdefault("TESTING", "true")
+    for key, value in TEST_DATABASE_ENV.items():
+        os.environ.setdefault(key, value)
+    core.config.base._settings_instance = None
+
+
+def resolve_pytest_workers() -> int:
+    raw = os.environ.get("WORKERS", "10").strip()
+    if raw == "auto":
+        return BASELINE_PYTEST_WORKERS
+    return int(raw)
+
+
+def stack_scale_factor(pytest_workers: int | None = None) -> float:
+    workers = pytest_workers if pytest_workers is not None else resolve_pytest_workers()
+    if workers <= BASELINE_PYTEST_WORKERS:
+        return 1.0
+    return workers / BASELINE_PYTEST_WORKERS
+
+
+def scale_stack_workers(baseline: int, pytest_workers: int | None = None) -> int:
+    workers = pytest_workers if pytest_workers is not None else resolve_pytest_workers()
+    if workers <= BASELINE_PYTEST_WORKERS:
+        return baseline
+    return max(baseline, math.ceil(baseline * workers / BASELINE_PYTEST_WORKERS))
+
+
+def _scaled_code_runner_python_workers(pytest_workers: int | None = None) -> int:
+    return scale_stack_workers(12, pytest_workers)
+
+
+def build_granian_services(pytest_workers: int | None = None) -> tuple[GranianService, ...]:
+    code_runner_workers = _scaled_code_runner_python_workers(pytest_workers)
+    return (
     GranianService(name="secrets", app_path="apps.secrets.main:app", port=9022, readiness_timeout=90.0),
     GranianService(
         name="flows",
         app_path="apps.flows.main:app",
         port=9001,
         readiness_timeout=180.0,
-        workers=2,
+        workers=scale_stack_workers(2, pytest_workers),
     ),
     GranianService(name="rag", app_path="apps.rag.main:app", port=9002, readiness_timeout=120.0),
     GranianService(name="crm", app_path="apps.crm.main:app", port=9003, readiness_timeout=120.0),
@@ -181,7 +225,7 @@ GRANIAN_SERVICES: tuple[GranianService, ...] = (
         app_path="apps.search.main:app",
         port=9010,
         readiness_timeout=120.0,
-        workers=2,
+        workers=scale_stack_workers(2, pytest_workers),
         env={
             "SEARCH__TINYFISH__API_KEY": "",
             "SEARCH__TINYFISH__ENABLED": "false",
@@ -214,16 +258,16 @@ GRANIAN_SERVICES: tuple[GranianService, ...] = (
         app_path="apps.capability_gateway.main:app",
         port=9016,
         readiness_timeout=120.0,
-        workers=6,
+        workers=scale_stack_workers(6, pytest_workers),
     ),
     GranianService(
         name="code_runner_python",
         app_path="apps.code_runner_python.main:app",
         port=9017,
         readiness_timeout=120.0,
-        workers=12,
+        workers=code_runner_workers,
         env={
-            "CODE_RUNNER_PYTHON_WORKERS": "12",
+            "CODE_RUNNER_PYTHON_WORKERS": str(code_runner_workers),
         },
     ),
     GranianService(
@@ -250,14 +294,16 @@ GRANIAN_SERVICES: tuple[GranianService, ...] = (
         port=9021,
         readiness_timeout=90.0,
     ),
-)
+    )
 
-TASKIQ_WORKER_SERVICES: tuple[TaskiqWorkerService, ...] = (
+
+def build_taskiq_worker_services(pytest_workers: int | None = None) -> tuple[TaskiqWorkerService, ...]:
+    return (
     TaskiqWorkerService(
         name="flows_worker",
         worker_module="apps.flows_worker.worker:worker_app",
         stream_name="flows_worker",
-        workers=4,
+        workers=scale_stack_workers(4, pytest_workers),
         readiness_timeout=120.0,
     ),
     TaskiqWorkerService(
@@ -282,7 +328,7 @@ TASKIQ_WORKER_SERVICES: tuple[TaskiqWorkerService, ...] = (
         name="sync_worker",
         worker_module="apps.sync_worker.worker:worker_app",
         stream_name="sync",
-        workers=2,
+        workers=scale_stack_workers(2, pytest_workers),
         readiness_timeout=120.0,
         env={
             "SERVER__SYNC_SERVICE_URL": "http://127.0.0.1:9005",
@@ -298,7 +344,20 @@ TASKIQ_WORKER_SERVICES: tuple[TaskiqWorkerService, ...] = (
         workers=1,
         readiness_timeout=120.0,
     ),
-)
+    )
+
+
+def _stack_capacity_snapshot(
+    granian_services: tuple[GranianService, ...],
+    taskiq_services: tuple[TaskiqWorkerService, ...],
+) -> dict[str, int]:
+    capacity: dict[str, int] = {}
+    for service in granian_services:
+        capacity[service.name] = service.workers
+    for service in taskiq_services:
+        capacity[service.name] = service.workers
+    return capacity
+
 
 EXTERNAL_READINESS: tuple[ExternalReadiness, ...] = (
     ExternalReadiness(
@@ -651,10 +710,19 @@ def _terminate_process_group(pid: int, *, graceful_timeout: float = 3.0) -> None
         pass
 
 
-def _write_manifest(processes: list[StackProcess]) -> None:
+def _write_manifest(
+    processes: list[StackProcess],
+    *,
+    granian_services: tuple[GranianService, ...],
+    taskiq_services: tuple[TaskiqWorkerService, ...],
+) -> None:
+    pytest_workers = resolve_pytest_workers()
     manifest = {
         "created_at": datetime.now(UTC).isoformat(),
         "controller_pid": os.getpid(),
+        "pytest_workers_requested": pytest_workers,
+        "stack_scale_factor": stack_scale_factor(pytest_workers),
+        "stack_capacity": _stack_capacity_snapshot(granian_services, taskiq_services),
         "processes": [vars(stack_process) for stack_process in processes],
     }
     STACK_MANIFEST_PATH.write_text(
@@ -690,36 +758,41 @@ def _port_listening(port: int) -> bool:
 
 
 def cmd_up() -> int:
+    _bootstrap_parent_test_env()
     cmd_down(quiet=True)
 
+    pytest_workers = resolve_pytest_workers()
+    granian_services = build_granian_services(pytest_workers)
+    taskiq_services = build_taskiq_worker_services(pytest_workers)
     started: list[tuple[str, subprocess.Popen[bytes]]] = []
     processes: list[StackProcess] = []
 
-    for granian_service in GRANIAN_SERVICES:
+    for granian_service in granian_services:
         process, stack_process = _spawn_granian(granian_service)
         started.append((granian_service.name, process))
         processes.append(stack_process)
-    for taskiq_service in TASKIQ_WORKER_SERVICES:
+    for taskiq_service in taskiq_services:
         process, stack_process = _spawn_taskiq(taskiq_service)
         started.append((taskiq_service.name, process))
         processes.append(stack_process)
 
     process_by_name = dict(started)
     print(
-        f"test_stack: запущено {len(GRANIAN_SERVICES)} granian + "
-        f"{len(TASKIQ_WORKER_SERVICES)} taskiq процессов, ожидание readiness..."
+        f"test_stack: WORKERS={pytest_workers} scale={stack_scale_factor(pytest_workers):.2f}; "
+        f"запущено {len(granian_services)} granian + "
+        f"{len(taskiq_services)} taskiq процессов, ожидание readiness..."
     )
 
     errors: list[str] = []
     with ThreadPoolExecutor(max_workers=len(processes) + len(EXTERNAL_READINESS)) as pool:
         futures = []
-        for granian_service in GRANIAN_SERVICES:
+        for granian_service in granian_services:
             futures.append(
                 pool.submit(
                     _wait_granian_ready, granian_service, process_by_name[granian_service.name]
                 )
             )
-        for taskiq_service in TASKIQ_WORKER_SERVICES:
+        for taskiq_service in taskiq_services:
             futures.append(
                 pool.submit(
                     _wait_taskiq_ready, taskiq_service, process_by_name[taskiq_service.name]
@@ -749,7 +822,11 @@ def cmd_up() -> int:
             _terminate_process_group(process.pid)
         return 1
 
-    _write_manifest(processes)
+    _write_manifest(
+        processes,
+        granian_services=granian_services,
+        taskiq_services=taskiq_services,
+    )
     print(f"test_stack: стек готов, манифест {STACK_MANIFEST_PATH}")
     return 0
 

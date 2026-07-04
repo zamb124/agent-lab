@@ -13,6 +13,14 @@ URL PostgreSQL для pytest и дочерних процессов (uvicorn, Ta
 
 _POSTGRES_TEST = "postgresql+asyncpg://platform_user:admin@localhost:54322"
 
+# HS256 в PyJWT требует >=32 байт для platform auth / execution tokens.
+TEST_HS256_JWT_SECRET = "platform-test-hs256-jwt-secret-32b!"
+# LiveKit и OnlyOffice в docker-compose-test жёстко на "secret" / "test-onlyoffice-jwt-secret".
+TEST_LIVEKIT_API_SECRET = "secret"
+TEST_OFFICE_JWT_SECRET = "test-onlyoffice-jwt-secret"
+if len(TEST_HS256_JWT_SECRET) < 32:
+    raise ValueError("TEST_HS256_JWT_SECRET must be at least 32 bytes for HS256 tests")
+
 # Subprocess (TaskIQ worker и т.д.) не наследует os.environ из conftest целиком: те же ключи,
 # что выставляются в tests/conftest.py через setdefault, должны быть в TEST_DATABASE_ENV.
 _TEST_SERVICE_ENV: dict[str, str] = {
@@ -76,8 +84,10 @@ TEST_DATABASE_ENV: dict[str, str] = {
     "DATABASE__TRACING_URL": f"{_POSTGRES_TEST}/platform_tracing",
     "DATABASE__REDIS_URL": "redis://localhost:63792/0",
     "TASKS__BROKER_URL": "redis://localhost:63792/1",
+    "AUTH__JWT_SECRET_KEY": TEST_HS256_JWT_SECRET,
+    "OFFICE__JWT_SECRET": TEST_OFFICE_JWT_SECRET,
     "CALLS__LIVEKIT_URL": "ws://localhost:7890",
     "CALLS__LIVEKIT_API_KEY": "devkey",
-    "CALLS__LIVEKIT_API_SECRET": "secret",
+    "CALLS__LIVEKIT_API_SECRET": TEST_LIVEKIT_API_SECRET,
     **_TEST_SERVICE_ENV,
 }

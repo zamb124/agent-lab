@@ -43,6 +43,8 @@ uv run python analyze_imports.py
 
 ### Параллельная безопасность (pytest-xdist)
 
+**WORKERS:** дефолт `10` (`WORKERS ?= 10` в `mk/test.mk`). Override: `make test WORKERS=5` или `WORKERS=auto` (auto → baseline 10). `make test-up` передаёт `WORKERS` в `scripts/test_stack.py` — стек масштабируется пропорционально baseline.
+
 Запуск с `-n N` (без `--dist=loadgroup`). Каждый gw — отдельный процесс. БД, Redis, MinIO — общие; HTTP-сервисы и TaskIQ-воркеры — **один общий стек** (`make test-up` → `scripts/test_stack.py up`).
 
 - Захардкоженные идентификаторы (`task_id="my-task"`, `flow_id="test_flow"`) запрещены — все ID содержат `unique_id`.
@@ -212,15 +214,19 @@ async def test_integration(mock_llm_redis, flows_client, unique_id):
 2. `docker-compose-test.yaml` — Postgres, Redis, MinIO, …
 3. `scripts/db_test_reset` — TRUNCATE + Redis FLUSHDB; при неубиваемых backend'ах Postgres (`BgworkerShutdown`, `pg_terminate_backend` не снимает lock'и) — один `docker restart agentlab_postgres_test` и повтор drain
 4. `scripts/test_migrate` — Alembic upgrade + сид `system`-компании
-5. `scripts/test_stack.py up` — все HTTP-сервисы (9001–9022) и TaskIQ-воркеры; манифест `/tmp/platform_test_stack.json`
+5. `scripts/test_stack.py up` — все HTTP-сервисы (9001–9022) и TaskIQ-воркеры; манифест `/tmp/platform_test_stack.json` (поля `pytest_workers_requested`, `stack_scale_factor`, `stack_capacity`)
 
-**Ёмкость sandbox под `-n5`:** `flows` granian `workers=2`, `search` `workers=2`, `capability_gateway` `workers=6`, `code_runner_python` granian `workers=12` + `CODE_RUNNER_PYTHON_WORKERS=12`, `flows_worker` TaskIQ `workers=4`. Иначе при полном прогоне — `ServiceClientError`/`ReadTimeout` к `code_runner_python`, `NodeWallClockTimeoutError` в public_search и `TaskiqResultTimeoutError` на параллельных tool/flow тестах.
+**Масштабирование стека:** baseline калиброван под `WORKERS=10`. `stack_scale_factor = WORKERS / 10` (min 1.0). Масштабируются: `flows` granian, `search`, `capability_gateway`, `code_runner_python` (+ `CODE_RUNNER_PYTHON_WORKERS`), `flows_worker`, `sync_worker`. Команда: `make test WORKERS=12` поднимает согласованный стек (`WORKERS=$(WORKERS) test_stack up`).
+
+**Ёмкость sandbox (baseline `WORKERS=10`):** `flows` granian `workers=2`, `search` `workers=2`, `capability_gateway` `workers=6`, `code_runner_python` granian `workers=12` + `CODE_RUNNER_PYTHON_WORKERS=12`, `flows_worker` TaskIQ `workers=4`, `sync_worker` `workers=2`. При `WORKERS=15` — `ceil(baseline * 15/10)`. Иначе при полном прогоне — `ServiceClientError`/`ReadTimeout` к `code_runner_python`, `NodeWallClockTimeoutError` в public_search и `TaskiqResultTimeoutError` на параллельных tool/flow тестах.
 
 **TaskIQ wait в тестах:** `tests/flows/integration/test_taskiq_integration.py` ждёт результат worker'а до 60 с (`_TASKIQ_WAIT_RESULT_TIMEOUT_SECONDS`), не 10 с — под нагрузкой `-n5` очередь flows_worker + code_runner иначе даёт ложный timeout.
 
 **real_taskiq и xdist:** тесты с маркером `real_taskiq` получают `xdist_group("real_taskiq")` — не исполняются параллельно между pytest-воркерами (один общий flows_worker, гонки на `.kiq()`/`tasks/get`).
 
-**Sandbox xdist group:** `_is_sandbox_runtime_test()` дополнительно получает `xdist_group("code_sandbox")` — все sandbox/code-runner тесты на одном pytest-воркере без параллели. Иначе под `-n5` несколько воркеров одновременно бьют в `code_runner_python` (HTTP timeout 60s в testing) и дают flaky `ServiceClientError`.
+**Sandbox xdist group:** `_is_sandbox_runtime_test()` дополнительно получает `xdist_group("code_sandbox")` — все sandbox/code-runner тесты на одном pytest-воркере без параллели. Иначе под `-n10` несколько воркеров одновременно бьют в `code_runner_python` (HTTP timeout 60s в testing) и дают flaky `ServiceClientError`. Рост `WORKERS` не ускоряет serial-группы `code_sandbox` и `real_taskiq` — см. `xdist_bottleneck` в workers profile.
+
+**DB pool в тестах:** `core/db/sqlalchemy_pool` — prod `5+10`, `pool_timeout=30`; `TESTING=true` (стек) `1+2`, `pool_timeout=60`; pytest-xdist `1+0`, `pool_timeout=30`. QueuePool ждёт свободное соединение до `pool_timeout`, затем `TimeoutError`; `TooManyConnectionsError` — лимит Postgres, не пула. Test Postgres: `max_connections=450` (`docker-compose-test.yaml`). Канон для `core/db/database.py` и `apps/*/db/base.py`.
 
 **A2A tasks/get poll:** пока задача в `working`, `result` может быть `null` — poll-циклы в тестах пропускают такие ответы, не падают через `require_jsonrpc_result`.
 
@@ -251,14 +257,18 @@ tests/
 ```bash
 make test-up              # docker + reset + migrate + test_stack up
 make test-down            # test_stack down + compose stop
-make test                 # полный прогон (фазы unit + retry + agent E2E) + DB profile после phase 1
+make test                 # полный прогон (фазы unit + retry + agent E2E) + DB/workers profile после phase 1
+make test WORKERS=8       # 8 pytest-воркеров + масштабированный test_stack
 DB_PROFILE=0 make test    # без pg_stat reset/collect/report
+PYTEST_WORKERS_PROFILE=0 make test  # без отчёта параллелизма
 make test-profile         # asyncio FileLock/event loop (/tmp/platform_test_runtime_profile_merged.json)
 make test-network         # только @pytest.mark.network (реальный интернет)
 uv run pytest tests/ -n 5 -m "not integration and not network and not agent_build_release" --ignore=tests/agent/e2e
 ```
 
 **DB profile (default-on, `DB_PROFILE ?= 1` в `mk/test.mk`):** server-side Postgres на test `:54322` (10 БД). После `test-up` — `pg_stat_statements_reset()`; после phase 1 pytest — collect + terminal summary (KPI, top queries, delta vs previous run) + `reports/db_test_profile/latest/report.html`. Opt-out: `DB_PROFILE=0 make test`. `pg_stat_statements` в collect фильтруется по `dbid` текущей БД (не cluster-wide). Phase 2 retry / integration в stats phase 1 не входят. Пороги: `DB_PROFILE_SLOW_MS`, `DB_PROFILE_SLOW_TOTAL_MS`, `DB_PROFILE_TOP_N`, `DB_PROFILE_TERMINAL_TOP_N`. Terminal уважает `NO_COLOR=1`. Test Postgres с `auto_explain` — пересоздать контейнер после обновления compose: `docker-compose -f docker-compose-test.yaml up -d --force-recreate postgres-test` (порог логирования планов в compose: 100ms; для локального профиля можно снизить через `-c auto_explain.log_min_duration=50ms` в override).
+
+**Pytest workers profile (default-on, `PYTEST_WORKERS_PROFILE ?= 1` в `mk/test.mk`):** после phase 1 pytest — collect + terminal summary (KPI, issues, recommendations, delta vs previous run) + `reports/pytest_workers_profile/latest/report.html`. Общий `PROFILE_RUN_ID` связывает DB profile и workers profile одним прогоном. Opt-out: `PYTEST_WORKERS_PROFILE=0 make test`. Issues: `stack_undersized`, `phase1_failed`, `likely_parallelism_failure`, `xdist_bottleneck`, `worker_restart_risk`. Источники: `WORKERS`, `.pytest_cache/.../lastfailed`, `/tmp/platform_test_stack.json`, junit phase 1 (`--junitxml=reports/pytest_workers_profile/<run_id>/junit.xml`). Phase 2 retry / integration не входят в snapshot.
 
 Фаза 1 `make test` **исключает** `tests/agent/e2e` (статический `test_e2e_static` scope + `-n0` только в фазе 4) и `@pytest.mark.agent_build_release`.
 

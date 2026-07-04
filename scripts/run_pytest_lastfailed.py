@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import re
 import subprocess
 import sys
@@ -60,8 +61,10 @@ def main(argv: list[str] | None = None) -> int:
         print(f"  {nodeid}")
 
     command = ["uv", "run", "pytest", *nodeids, *pytest_args]
+    child_env = dict(os.environ)
+    child_env.setdefault("LOGGING__LEVEL", "WARNING")
     try:
-        completed = subprocess.run(command, timeout=args.timeout, check=False)
+        completed = subprocess.run(command, timeout=args.timeout, check=False, env=child_env)
     except subprocess.TimeoutExpired:
         print(f"Strict pytest lastfailed rerun timed out after {args.timeout:g} seconds.", file=sys.stderr)
         return 124

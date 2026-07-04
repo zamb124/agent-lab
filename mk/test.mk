@@ -1,7 +1,8 @@
 .PHONY: test test-until-fail test-all test-static test-up test-down test-reset test-cov test-cov-all test-cov-report test-unit test-network test-ui test-ui-doc test-ui-components test-frontend-core test-frontend-core-canon test-frontend-core-unit test-frontend-core-browser test-profile check-strict-agent-architecture check-wider-repo-strictness agent-ensure test-agent test-agent-e2e test-agent-desktop-e2e
 
-WORKERS ?= 5
+WORKERS ?= 10
 DB_PROFILE ?= 1
+PYTEST_WORKERS_PROFILE ?= 1
 PYTEST_COMMAND_TIMEOUT_SECONDS ?= 5400
 PYTEST_MAX_WORKER_RESTART ?= 2
 RUN_UI_IN_TEST ?= 0
@@ -42,7 +43,7 @@ test-up: runtime-bootstrap
 	@echo "Применение Alembic-миграций всех сервисных деревьев..."
 	@uv run python -m scripts.test_migrate
 	@echo "Старт стека сервисов (granian + TaskIQ) через test_stack..."
-	@uv run python -m scripts.test_stack up
+	@WORKERS=$(WORKERS) uv run python -m scripts.test_stack up
 
 # Ручной сброс тестовой БД и Redis без поднятия контейнеров.
 test-reset:
@@ -128,13 +129,24 @@ test:
 	fi
 	@echo "=== 1/4 Запуск unit/API тестов в $(WORKERS) воркерах ==="
 	@set +e; \
+	export LOGGING__LEVEL=WARNING; \
+	PROFILE_RUN_ID=""; \
+	if [ "$(DB_PROFILE)" = "1" ] || [ "$(PYTEST_WORKERS_PROFILE)" = "1" ]; then \
+		PROFILE_RUN_ID=$$(date +%Y%m%dT%H%M%S); \
+		mkdir -p reports/pytest_workers_profile/$$PROFILE_RUN_ID; \
+	fi; \
 	phase1_rc=0; \
 	phase2_rc=0; \
 	phase3_rc=0; \
 	phase4a_rc=0; \
 	phase4c_rc=0; \
 	rm -f .pytest_cache/v/cache/lastfailed; \
+	JUNIT_XML_ARG=""; \
+	if [ "$(PYTEST_WORKERS_PROFILE)" = "1" ]; then \
+		JUNIT_XML_ARG="--junitxml=reports/pytest_workers_profile/$$PROFILE_RUN_ID/junit.xml"; \
+	fi; \
 	uv run python scripts/pytest_with_timeout.py $(PYTEST_COMMAND_TIMEOUT_SECONDS) uv run pytest tests/ -n $(WORKERS) --max-worker-restart=$(PYTEST_MAX_WORKER_RESTART) \
+		$$JUNIT_XML_ARG \
 		$(_PYTEST_IGNORE_UI) \
 		$(_PYTEST_IGNORE_AGENT_DESKTOP) \
 		$(_PYTEST_IGNORE_AGENT_E2E) \
@@ -143,10 +155,17 @@ test:
 	if [ "$(DB_PROFILE)" = "1" ]; then \
 		echo ""; \
 		echo "=== DB profile: collect + report (phase 1) ==="; \
-		DB_RUN_ID=$$(date +%Y%m%dT%H%M%S); \
-		uv run python -m scripts.db_test_profile collect --run-id $$DB_RUN_ID; \
-		uv run python -m scripts.db_test_profile report --run-id $$DB_RUN_ID; \
+		uv run python -m scripts.db_test_profile collect --run-id $$PROFILE_RUN_ID; \
+		uv run python -m scripts.db_test_profile report --run-id $$PROFILE_RUN_ID; \
 		echo "DB profile: terminal summary above; HTML reports/db_test_profile/latest/report.html"; \
+	fi; \
+	if [ "$(PYTEST_WORKERS_PROFILE)" = "1" ]; then \
+		echo ""; \
+		echo "=== Pytest workers profile: collect + report (phase 1) ==="; \
+		uv run python -m scripts.pytest_workers_profile collect --run-id $$PROFILE_RUN_ID \
+			--workers $(WORKERS) --exit-code $$phase1_rc; \
+		uv run python -m scripts.pytest_workers_profile report --run-id $$PROFILE_RUN_ID; \
+		echo "Pytest workers profile: terminal summary above; HTML reports/pytest_workers_profile/latest/report.html"; \
 	fi; \
 	if [ $$phase1_rc -ne 0 ]; then \
 		echo ""; \
@@ -195,7 +214,8 @@ test-until-fail:
 	@$(MAKE) --no-print-directory test-up
 	@echo "=== pytest phase 1 (exit on first failure, -x) ==="
 	@rm -f /tmp/platform_test_pytest_controller.pid .pytest_cache/v/cache/lastfailed
-	@uv run python scripts/pytest_with_timeout.py $(PYTEST_COMMAND_TIMEOUT_SECONDS) uv run pytest tests/ -n $(WORKERS) --max-worker-restart=$(PYTEST_MAX_WORKER_RESTART) \
+	@export LOGGING__LEVEL=WARNING; \
+	uv run python scripts/pytest_with_timeout.py $(PYTEST_COMMAND_TIMEOUT_SECONDS) uv run pytest tests/ -n $(WORKERS) --max-worker-restart=$(PYTEST_MAX_WORKER_RESTART) \
 		-x -v --tb=short \
 		$(_PYTEST_IGNORE_UI) \
 		$(_PYTEST_IGNORE_AGENT_DESKTOP) \
@@ -209,6 +229,7 @@ test-all:
 	@$(MAKE) --no-print-directory test-up
 	@echo "=== 1/4 Запуск всех unit/API тестов в $(WORKERS) воркерах ==="
 	@set +e; \
+	export LOGGING__LEVEL=WARNING; \
 	phase1_rc=0; \
 	phase2_rc=0; \
 	phase3_rc=0; \

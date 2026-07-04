@@ -621,7 +621,7 @@ class CsharpSandboxExecutor:
                 )
                 chunks.append("        };")
                 chunks.append("    }")
-            used_methods = {"Call"}
+            used_methods: set[str] = {"Call"} if namespace == "tools" else set()
             for method, capability_name in sorted(grouped[namespace].items()):
                 csharp_method = self._csharp_member_name(method)
                 if csharp_method in used_methods:

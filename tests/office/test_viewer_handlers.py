@@ -89,7 +89,7 @@ async def test_text_handler_urls_use_browser_base_not_docker_internal() -> None:
         editor_lang="ru",
         callback_public_base_url="http://host.docker.internal:8008",
         document_server_public_url="http://localhost:8002",
-        jwt_secret="test-secret",
+        jwt_secret="test-onlyoffice-jwt-secret",
         download_token_ttl_seconds=3600,
         browser_public_base_url=browser_public_base_url(request),
         browser_document_server_url="http://system.lvh.me:8008",

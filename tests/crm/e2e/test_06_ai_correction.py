@@ -84,6 +84,14 @@ async def _analyze_note(
 _META: dict[str, object] = {"dates_mentioned": [], "places_mentioned": [], "key_topics": []}
 
 
+async def _queue_note_analyze_mock(
+    mock_llm_redis: MockLlmRedisFactory,
+    response_item: dict[str, object],
+) -> None:
+    """note-analyze через real TaskIQ может сделать несколько LLM-вызовов подряд."""
+    await mock_llm_redis([response_item, response_item, response_item])
+
+
 @pytest.mark.real_taskiq
 class TestAICorrection:
     """Корректировка извлеченных AI данных"""
@@ -92,7 +100,7 @@ class TestAICorrection:
     async def test_correct_extracted_entity(self, crm_client: AsyncClient, mock_llm_redis: MockLlmRedisFactory, unique_id: str, auth_headers_system: dict[str, str],
     ):
         """Пользователь правит entity после AI анализа"""
-        await mock_llm_redis([{
+        await _queue_note_analyze_mock(mock_llm_redis, {
             "type": "text",
             "content": json.dumps({
                 "note": {
@@ -111,7 +119,7 @@ class TestAICorrection:
                 "relationships": [],
                 "metadata": _META,
             })
-        }])
+        })
 
         note_resp = await crm_client.post("/crm/api/v1/entities/", json={
             "entity_type": "note",
@@ -183,7 +191,7 @@ class TestAICorrection:
     async def test_delete_incorrect_entity(self, crm_client: AsyncClient, mock_llm_redis: MockLlmRedisFactory, unique_id: str, auth_headers_system: dict[str, str],
     ):
         """Удаление ошибочно извлеченной entity"""
-        await mock_llm_redis([{
+        await _queue_note_analyze_mock(mock_llm_redis, {
             "type": "text",
             "content": json.dumps({
                 "note": {
@@ -206,7 +214,7 @@ class TestAICorrection:
                 "relationships": [],
                 "metadata": _META,
             })
-        }])
+        })
 
         note_resp = await crm_client.post("/crm/api/v1/entities/", json={
             "entity_type": "note",
@@ -283,7 +291,7 @@ class TestAICorrection:
     async def test_update_note_after_ai_analysis(self, crm_client: AsyncClient, mock_llm_redis: MockLlmRedisFactory, unique_id: str, auth_headers_system: dict[str, str],
     ):
         """Корректировка самой заметки после AI анализа"""
-        await mock_llm_redis([{
+        await _queue_note_analyze_mock(mock_llm_redis, {
             "type": "text",
             "content": json.dumps({
                 "note": {
@@ -296,7 +304,7 @@ class TestAICorrection:
                 "relationships": [],
                 "metadata": _META,
             })
-        }])
+        })
 
         note_resp = await crm_client.post("/crm/api/v1/entities/", json={
             "entity_type": "note",

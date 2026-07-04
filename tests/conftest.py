@@ -71,7 +71,9 @@ os.environ.setdefault("VOICE__STT__PROVIDER", "mock")
 os.environ.setdefault("VOICE__STT__MOCK_TRANSCRIPT_TEXT", "Тестовая транскрипция sync worker")
 os.environ.setdefault("S3__DEFAULT_BUCKET", "test-bucket")
 os.environ.setdefault("S3__BUCKETS__TEST-BUCKET__ENDPOINT_URL", "http://localhost:19002")
-os.environ.setdefault("OFFICE__JWT_SECRET", "test-onlyoffice-jwt-secret")
+from tests.fixtures.test_database_env import TEST_HS256_JWT_SECRET  # noqa: E402
+
+os.environ.setdefault("AUTH__JWT_SECRET_KEY", TEST_HS256_JWT_SECRET)
 os.environ.setdefault("OFFICE__DOCUMENT_SERVER_PUBLIC_URL", "http://localhost:18088")
 os.environ.setdefault("OFFICE__CALLBACK_PUBLIC_BASE_URL", "http://host.docker.internal:9008")
 os.environ["SERVER__DOCUMENT_SERVER_DEV_UPSTREAM_URL"] = os.environ[
@@ -91,6 +93,12 @@ os.environ.setdefault("LLM__OPENROUTER__API_KEY", "sk-test-key")
 import core.config.base  # noqa: E402
 
 core.config.base._settings_instance = None
+
+from core.config import get_settings  # noqa: E402
+from core.logging.setup import setup_logging  # noqa: E402
+
+setup_logging("pytest", get_settings().logging)
+
 import apps.flows_worker.broker as platform_broker_module  # noqa: E402
 from apps.flows.main import app as fastapi_app  # noqa: E402
 from apps.flows.src.tasks.flow_tasks import process_flow_task  # noqa: E402

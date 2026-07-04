@@ -43,6 +43,7 @@ from core.config.llm_openai_compat import (
 from core.config.models import RAGProviderConfig, YandexLLMProviderConfig
 from core.config.testing import is_testing
 from core.db.models import VectorDocument
+from core.db.sqlalchemy_pool import sqlalchemy_async_engine_pool_kwargs
 from core.db.utils import get_rowcount
 from core.files.reader import FileReader
 from core.files.reader.models import FileReadKind, FileReadResult, ReadPage
@@ -108,8 +109,7 @@ class PgVectorProvider(BaseRAGProvider):
         self._engine: AsyncEngine = create_async_engine(
             db_url,
             echo=False,
-            pool_size=5,
-            max_overflow=10,
+            **sqlalchemy_async_engine_pool_kwargs(),
         )
         self._session_factory: async_sessionmaker[AsyncSession] = async_sessionmaker(
             bind=self._engine,

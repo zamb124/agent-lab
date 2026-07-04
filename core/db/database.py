@@ -20,6 +20,7 @@ from sqlalchemy.ext.asyncio import (
 )
 
 from core.config import get_settings
+from core.db.sqlalchemy_pool import sqlalchemy_async_engine_pool_kwargs
 from core.logging import get_logger
 from core.types import JsonObject
 
@@ -101,33 +102,17 @@ async def get_engine(db_url: str | None = None) -> AsyncEngine:
 
     logger.debug(f"Создаем engine для event loop {loop_id}, db_url={db_url[:50]}...")
 
-    is_testing = os.environ.get("PYTEST_CURRENT_TEST") is not None
+    pool_config = sqlalchemy_async_engine_pool_kwargs()
     connect_args = _build_connect_args(db_url)
-
-    if is_testing:
-        # В тестах используем маленький пул чтобы не превысить max_connections PostgreSQL
-        # при параллельном запуске тестов (pytest-xdist)
-        engine = create_async_engine(
-            db_url,
-            echo=False,
-            pool_size=2,
-            max_overflow=3,
-            pool_pre_ping=True,
-            pool_recycle=300,
-            connect_args=connect_args,
-        )
-        logger.debug(f"Engine создан с маленьким пулом для тестов (loop {loop_id})")
-    else:
-        engine = create_async_engine(
-            db_url,
-            echo=False,
-            pool_pre_ping=True,
-            pool_recycle=3600,
-            pool_size=5,
-            max_overflow=10,
-            connect_args=connect_args,
-        )
-        logger.debug(f"Engine создан (loop {loop_id})")
+    engine = create_async_engine(
+        db_url,
+        echo=False,
+        pool_pre_ping=True,
+        pool_recycle=300 if os.environ.get("PYTEST_CURRENT_TEST") is not None else 3600,
+        connect_args=connect_args,
+        **pool_config,
+    )
+    logger.debug("Engine создан (loop %s), pool=%s", loop_id, pool_config)
 
     _engines[cache_key] = engine
     return engine

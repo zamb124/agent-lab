@@ -14,7 +14,8 @@ async def close_all_open_aiohttp_sessions() -> int:
     """Закрывает все открытые ClientSession, найденные через gc."""
     closed_count = 0
     for obj in cast(list[object], gc.get_objects()):
-        if isinstance(obj, aiohttp.ClientSession) and not obj.closed:
+        # type(obj) is — без isinstance: gc обходит torch-объекты, isinstance даёт FutureWarning.
+        if type(obj) is aiohttp.ClientSession and not obj.closed:
             await obj.close()
             closed_count += 1
     return closed_count

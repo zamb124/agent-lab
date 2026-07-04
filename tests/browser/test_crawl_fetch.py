@@ -2,7 +2,8 @@
 
 from __future__ import annotations
 
-from unittest.mock import AsyncMock, MagicMock, patch
+import asyncio
+from unittest.mock import MagicMock, patch
 
 import pytest
 from fastapi import HTTPException
@@ -29,12 +30,13 @@ async def test_crawl_fetch_returns_429_when_concurrency_limit_exceeded() -> None
     container = MagicMock()
     container.browser_runtime = runtime
 
+    async def _wait_for_timeout(coro: object, /, **kwargs: object) -> None:
+        if asyncio.iscoroutine(coro):
+            coro.close()
+        raise TimeoutError
+
     with patch.object(crawl_fetch_module, "_crawl_fetch_semaphore", return_value=_BlockedSemaphore()):
-        with patch.object(
-            crawl_fetch_module.asyncio,
-            "wait_for",
-            side_effect=TimeoutError,
-        ):
+        with patch.object(crawl_fetch_module.asyncio, "wait_for", side_effect=_wait_for_timeout):
             with pytest.raises(HTTPException) as exc_info:
                 await crawl_fetch_module.crawl_fetch(
                     BrowserCrawlFetchRequest(url="https://example.com/page"),
