@@ -413,6 +413,9 @@ class TestTaskIQAPIIntegration:
     @pytest.mark.timeout(45)
     async def test_a2a_endpoint_uses_taskiq(self, client, setup_api_flow, unique_id):
         """A2A endpoint использует TaskIQ внутри."""
+        import asyncio
+
+        await asyncio.sleep(0.15)
         flow_id = setup_api_flow
         task_id = str(uuid.uuid4())
         context_id = f"a2a-taskiq-{unique_id}-{uuid.uuid4().hex[:8]}"

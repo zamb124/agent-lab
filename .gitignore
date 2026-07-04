@@ -54,6 +54,7 @@ docs/video/*.mov
 /tmp/
 /reports/db_test_profile/
 /reports/postgres-test-logs/
+/reports/coverage/
 /data/
 /apps/provider_litserve/data/
 /scripts/logs/agents.log

@@ -255,7 +255,9 @@ class MessageRepository(BaseSyncRepository[SyncMessage]):
                 return None
             if not isinstance(root_id, str):
                 raise ValueError("thread root query returned non-string message_id.")
-            return await self.get(root_id)
+            stmt = select(self.model_class).where(self.id_column == root_id)
+            root_result = await session.execute(stmt)
+            return root_result.scalar_one_or_none()
 
     async def list_contents(self, message_id: str) -> list[MessageContentModel]:
         """Контент-блоки сообщения."""

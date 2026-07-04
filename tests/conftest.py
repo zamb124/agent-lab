@@ -285,6 +285,10 @@ def _sandbox_xdist_group(nodeid: str) -> str:
     return "code_sandbox"
 
 
+def _is_sync_db_test(nodeid: str) -> bool:
+    return nodeid.startswith("tests/sync/db/")
+
+
 @pytest.hookimpl(tryfirst=True)
 def pytest_collection_modifyitems(items: list[pytest.Item]) -> None:
     """Регистрация маркеров для xdist и sandbox.
@@ -298,6 +302,10 @@ def pytest_collection_modifyitems(items: list[pytest.Item]) -> None:
             item.add_marker(pytest.mark.xdist_group("real_taskiq"))
             if item.get_closest_marker("timeout") is None:
                 item.add_marker(pytest.mark.timeout(120, func_only=True))
+        elif _is_sync_db_test(item.nodeid):
+            item.add_marker(pytest.mark.xdist_group("sync_db"))
+            if item.get_closest_marker("timeout") is None:
+                item.add_marker(pytest.mark.timeout(60, func_only=True))
         elif _is_sandbox_runtime_test(item.nodeid):
             item.add_marker(pytest.mark.xdist_group(_sandbox_xdist_group(item.nodeid)))
             if item.get_closest_marker("timeout") is None:

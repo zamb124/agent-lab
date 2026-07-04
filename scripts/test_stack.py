@@ -195,6 +195,14 @@ def _scaled_code_runner_python_workers(pytest_workers: int | None = None) -> int
     return scale_stack_workers(12, pytest_workers)
 
 
+def _test_flows_worker_concurrency(pytest_workers: int | None = None) -> int:
+    """Один consumer flows_worker под xdist: меньше гонок projection hash в durable ledger."""
+    workers = pytest_workers if pytest_workers is not None else resolve_pytest_workers()
+    if workers > 1:
+        return 1
+    return 4
+
+
 def build_granian_services(pytest_workers: int | None = None) -> tuple[GranianService, ...]:
     code_runner_workers = _scaled_code_runner_python_workers(pytest_workers)
     return (
@@ -303,7 +311,7 @@ def build_taskiq_worker_services(pytest_workers: int | None = None) -> tuple[Tas
         name="flows_worker",
         worker_module="apps.flows_worker.worker:worker_app",
         stream_name="flows_worker",
-        workers=scale_stack_workers(4, pytest_workers),
+        workers=_test_flows_worker_concurrency(pytest_workers),
         readiness_timeout=120.0,
     ),
     TaskiqWorkerService(
@@ -317,7 +325,7 @@ def build_taskiq_worker_services(pytest_workers: int | None = None) -> tuple[Tas
         name="search_worker",
         worker_module="apps.search_worker.worker:worker_app",
         stream_name="search",
-        workers=1,
+        workers=scale_stack_workers(2, pytest_workers),
         readiness_timeout=120.0,
         env={
             "CRAWL__MIN_EXTRACT_CHARS": "50",
@@ -531,10 +539,16 @@ def _probe_code_runner_python_execute() -> str | None:
 
 def _run_sandbox_execute_probes() -> list[str]:
     errors: list[str] = []
-    for probe in (_probe_capability_gateway_manifest, _probe_code_runner_python_execute):
-        failure = probe()
-        if failure is not None:
-            errors.append(failure)
+    for attempt in range(3):
+        if attempt > 0:
+            time.sleep(1.0)
+        errors = []
+        for probe in (_probe_capability_gateway_manifest, _probe_code_runner_python_execute):
+            failure = probe()
+            if failure is not None:
+                errors.append(failure)
+        if not errors:
+            return []
     return errors
 
 

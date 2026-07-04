@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import base64
+import time
 import uuid
 from io import BytesIO
 from typing import Any, cast
@@ -191,11 +192,23 @@ async def _state_file(
 
 
 async def _download_flow_file(flows_client_http, headers: dict[str, str], file_id: str) -> bytes:
-    response = await flows_client_http.get(
-        f"/frontend/api/v1/files/download/{file_id}", headers=headers
+    deadline = time.monotonic() + 30.0
+    last_status = 0
+    last_body = ""
+    while time.monotonic() < deadline:
+        response = await flows_client_http.get(
+            f"/frontend/api/v1/files/download/{file_id}", headers=headers
+        )
+        if response.status_code == 200:
+            return response.content
+        last_status = response.status_code
+        last_body = response.text
+        if response.status_code != 404:
+            break
+        await asyncio.sleep(0.2)
+    raise AssertionError(
+        f"download {file_id!r} failed: status={last_status}, body={last_body}"
     )
-    assert response.status_code == 200, response.text
-    return response.content
 
 
 @pytest.mark.asyncio

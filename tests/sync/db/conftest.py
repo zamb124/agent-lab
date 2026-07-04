@@ -1,5 +1,5 @@
-"""Sync DB repository tests: под нагрузкой -n10 операции с БД/S3 дольше глобальных 5s."""
+"""Sync DB repository tests.
 
-import pytest
-
-pytestmark = pytest.mark.timeout(30)
+Таймаут и xdist_group sync_db — в tests/conftest.py::pytest_collection_modifyitems
+(pytestmark в conftest.py на тесты не наследуется).
+"""

@@ -6,6 +6,7 @@ import pytest
 
 from apps.search.config import SearchCrawlConfig
 from apps.search.services.crawl.bootstrap_service import CrawlBootstrapService
+from apps.search_worker.tasks.task_names import CRAWL_IMPORT_SEED_DOMAINS_TASK_NAME
 from core.crawl.models import CrawlDomainSeed, CrawlProfileCreateRequest
 from core.search.index_models import SearchIndexCreateRequest
 from tests.search.conftest import make_search_index_slug
@@ -67,6 +68,49 @@ async def test_bootstrap_skips_seed_when_domains_exist(
     assert result.domain_count == before_count
     after_count = await search_container.crawl_domain_repository.count_for_profile(crawl_profile_id)
     assert after_count == before_count
+
+
+@pytest.mark.asyncio
+async def test_bootstrap_queues_tranco_seed_when_profile_empty(
+    search_container,
+    search_system_context,
+    unique_id,
+    monkeypatch,
+):
+    _ = search_system_context
+    crawl_profile_id = await _create_empty_profile(search_container, unique_id)
+    queued: list[tuple[str, tuple[object, ...], dict[str, object]]] = []
+
+    async def _capture_kiq(task_name: str, *args: object, **kwargs: object) -> None:
+        queued.append((task_name, args, kwargs))
+
+    monkeypatch.setattr(
+        "apps.search.services.crawl.bootstrap_service._kiq_task",
+        _capture_kiq,
+    )
+
+    bootstrap = CrawlBootstrapService(
+        crawl_profile_repository=search_container.crawl_profile_repository,
+        crawl_domain_repository=search_container.crawl_domain_repository,
+        crawl_url_repository=search_container.crawl_url_repository,
+        crawl_job_repository=search_container.crawl_job_repository,
+        crawl_config=SearchCrawlConfig(
+            default_crawl_profile_id=crawl_profile_id,
+            bootstrap_tranco_on_empty=True,
+            tranco_seed_limit=5,
+        ),
+    )
+    result = await bootstrap.ensure_crawl_pipeline_ready()
+
+    assert result.action == "queued_seed"
+    assert result.domain_count == 0
+    assert len(queued) == 1
+    task_name, args, kwargs = queued[0]
+    _ = kwargs
+    assert task_name == CRAWL_IMPORT_SEED_DOMAINS_TASK_NAME
+    assert args[0] == crawl_profile_id
+    assert args[1] == "tranco"
+    assert args[2] == 5
 
 
 @pytest.mark.asyncio

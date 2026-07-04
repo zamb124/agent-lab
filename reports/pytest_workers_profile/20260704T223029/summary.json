@@ -1,0 +1,83 @@
+{
+  "run_id": "20260704T223029",
+  "pytest_workers": "10",
+  "pytest_workers_numeric": 10,
+  "phase1_passed": false,
+  "phase1_exit_code": 1,
+  "failed_count": 10,
+  "parallelism_suspect_count": 1,
+  "phase1_wall_time_seconds": null,
+  "max_worker_restart": 2,
+  "stack_scale_factor": 2.0,
+  "stack_capacity": {
+    "secrets": 1,
+    "flows": 4,
+    "rag": 1,
+    "crm": 1,
+    "frontend": 1,
+    "sync": 1,
+    "office": 1,
+    "search": 4,
+    "provider_litserve": 1,
+    "voice": 1,
+    "capability_gateway": 12,
+    "code_runner_python": 24,
+    "code_runner_node": 1,
+    "code_runner_go": 1,
+    "code_runner_csharp": 1,
+    "worktracker": 1,
+    "flows_worker": 8,
+    "rag_worker": 1,
+    "search_worker": 1,
+    "sync_worker": 4,
+    "crm_worker": 1
+  },
+  "xdist_counts": {
+    "total_phase1_estimate": 1589,
+    "code_sandbox_estimate": 105,
+    "real_taskiq_estimate": 12,
+    "parallelizable_estimate": 1472
+  },
+  "failed_nodeids": [
+    "tests/capabilities/test_code_runner_services.py::test_all_manifest_capabilities_have_sdk_methods_in_every_language",
+    "tests/crm/e2e/test_04_attachments.py::TestAttachments::test_attachments_survive_entity_update",
+    "tests/crm/e2e/test_04_attachments.py::TestAttachments::test_delete_attachment",
+    "tests/crm/e2e/test_04_attachments.py::TestAttachments::test_multiple_entities_same_attachment_type",
+    "tests/crm/e2e/test_06_ai_correction.py::TestAICorrection::test_correct_extracted_entity",
+    "tests/crm/e2e/test_06_ai_correction.py::TestAICorrection::test_update_note_after_ai_analysis",
+    "tests/sync/db/test_message_repository_extended.py::test_get_thread_root_chain",
+    "tests/sync/db/test_message_repository_extended.py::test_list_by_channel_pagination",
+    "tests/sync/db/test_thread_repository.py::test_thread_list_by_channel_order",
+    "tests/sync/db/test_thread_repository.py::test_thread_list_empty_channel"
+  ],
+  "issues": [
+    {
+      "severity": "error",
+      "code": "phase1_failed",
+      "message": "pytest phase 1 завершился с exit_code=1",
+      "nodeid": null,
+      "pattern": null
+    },
+    {
+      "severity": "warn",
+      "code": "likely_parallelism_failure",
+      "message": "AssertionError: {'diff': [], 'duration_ms': 1204, 'error': 'RuntimeError: code_runner_csharp/csharp/compile: csharp artifact build failed:   Определение проектов для восстановления...\n    Восстановлен",
+      "nodeid": "tests.capabilities.test_code_runner_services::test_all_manifest_capabilities_have_sdk_methods_in_every_language",
+      "pattern": "code_runner"
+    }
+  ],
+  "recommendations": [
+    "Дождитесь phase 2 retry или запустите: make test с меньшим WORKERS",
+    "Попробуйте WORKERS=5 или снизьте на 1–2 воркера"
+  ],
+  "issue_count_error": 1,
+  "issue_count_warn": 1,
+  "delta_vs_previous": {
+    "has_previous": true,
+    "previous_run_id": "20260704T221316",
+    "failed_count_delta": -87,
+    "parallelism_suspect_count_delta": 0,
+    "phase1_wall_time_seconds_delta": null,
+    "issue_count_error_delta": 0
+  }
+}

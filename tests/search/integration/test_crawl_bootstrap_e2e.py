@@ -1,31 +1,22 @@
 """Crawl bootstrap end-to-end via real TaskIQ search worker."""
 
-import asyncio
-import time
-
 import pytest
 
-from apps.search.config import SearchCrawlConfig
-from apps.search.services.crawl.bootstrap_service import CrawlBootstrapService
+from apps.search_worker.tasks.crawl_tasks import crawl_import_seed_domains
 from core.crawl.models import CrawlProfileCreateRequest
 from core.search.index_models import SearchIndexCreateRequest
+from tests.fixtures.taskiq_timeouts import TASKIQ_WAIT_RESULT_TIMEOUT_SECONDS
 from tests.search.conftest import make_search_index_slug
 
 pytestmark = [
+    pytest.mark.integration,
+    pytest.mark.network,
     pytest.mark.real_taskiq,
-    pytest.mark.timeout(120, func_only=True),
+    pytest.mark.timeout(300, func_only=True),
 ]
 
-
-async def _poll_domain_count(crawl_domain_repository, crawl_profile_id: str, *, deadline: float) -> int:
-    while time.monotonic() < deadline:
-        count = await crawl_domain_repository.count_for_profile(crawl_profile_id)
-        if count > 0:
-            return count
-        await asyncio.sleep(1.0)
-    raise AssertionError(
-        f"crawl bootstrap timeout: no domains for profile {crawl_profile_id!r}"
-    )
+_TRANCO_IMPORT_LIMIT = 15
+_TASKIQ_WAIT_SECONDS = max(TASKIQ_WAIT_RESULT_TIMEOUT_SECONDS, 180)
 
 
 @pytest.mark.asyncio
@@ -35,6 +26,10 @@ async def test_bootstrap_queues_tranco_import_via_search_worker(
     search_system_context,
     unique_id,
 ):
+    """search_worker исполняет crawl_import_seed_domains (Tranco HTTP).
+
+    Постановка в очередь через CrawlBootstrapService — tests/search/integration/test_crawl_bootstrap_service.py.
+    """
     _ = search_worker, search_system_context
     search_index_id = make_search_index_slug(unique_id)
     crawl_profile_id = f"cr_{search_index_id}"[:64]
@@ -57,26 +52,17 @@ async def test_bootstrap_queues_tranco_import_via_search_worker(
     )
     assert await search_container.crawl_domain_repository.count_for_profile(crawl_profile_id) == 0
 
-    bootstrap = CrawlBootstrapService(
-        crawl_profile_repository=search_container.crawl_profile_repository,
-        crawl_domain_repository=search_container.crawl_domain_repository,
-        crawl_url_repository=search_container.crawl_url_repository,
-        crawl_job_repository=search_container.crawl_job_repository,
-        crawl_config=SearchCrawlConfig(
-            default_crawl_profile_id=crawl_profile_id,
-            bootstrap_tranco_on_empty=True,
-            tranco_seed_limit=5,
-        ),
-    )
-    result = await bootstrap.ensure_crawl_pipeline_ready()
-    assert result.action == "queued_seed"
-    assert result.domain_count == 0
-
-    domain_count = await _poll_domain_count(
-        search_container.crawl_domain_repository,
+    task = await crawl_import_seed_domains.kiq(
         crawl_profile_id,
-        deadline=time.monotonic() + 90.0,
+        "tranco",
+        _TRANCO_IMPORT_LIMIT,
     )
+    worker_result = await task.wait_result(timeout=_TASKIQ_WAIT_SECONDS)
+    assert not worker_result.is_err, f"tranco import task failed: {worker_result.error}"
+    import_payload = worker_result.return_value
+    assert import_payload["imported"] >= 1, import_payload
+
+    domain_count = await search_container.crawl_domain_repository.count_for_profile(crawl_profile_id)
     assert domain_count >= 1
 
     page = await search_container.crawl_domain_repository.list_page(

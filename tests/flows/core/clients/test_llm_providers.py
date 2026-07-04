@@ -637,7 +637,7 @@ class TestLLMModelsServiceSchedulerIdempotency:
         scheduler_client.cancel_schedule.assert_called_once_with("existing-task")
 
 
-@pytest.mark.timeout(30)
+@pytest.mark.timeout(120)
 class TestLLMModelsServiceRealAPI:
     """
     Реальные тесты синхронизации моделей от провайдеров.

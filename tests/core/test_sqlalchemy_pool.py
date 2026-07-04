@@ -36,8 +36,8 @@ def test_sqlalchemy_async_engine_pool_kwargs_pytest_worker(
     monkeypatch.setenv("PYTEST_XDIST_WORKER", "gw0")
     assert sqlalchemy_async_engine_pool_kwargs() == {
         "pool_size": 1,
-        "max_overflow": 0,
-        "pool_timeout": 30.0,
+        "max_overflow": 2,
+        "pool_timeout": 60.0,
     }
 
 

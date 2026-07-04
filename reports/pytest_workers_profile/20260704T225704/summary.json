@@ -1,0 +1,105 @@
+{
+  "run_id": "20260704T225704",
+  "pytest_workers": "10",
+  "pytest_workers_numeric": 10,
+  "phase1_passed": false,
+  "phase1_exit_code": 1,
+  "failed_count": 12,
+  "parallelism_suspect_count": 4,
+  "phase1_wall_time_seconds": null,
+  "max_worker_restart": 2,
+  "stack_scale_factor": 1.0,
+  "stack_capacity": {
+    "secrets": 1,
+    "flows": 2,
+    "rag": 1,
+    "crm": 1,
+    "frontend": 1,
+    "sync": 1,
+    "office": 1,
+    "search": 2,
+    "provider_litserve": 1,
+    "voice": 1,
+    "capability_gateway": 6,
+    "code_runner_python": 12,
+    "code_runner_node": 1,
+    "code_runner_go": 1,
+    "code_runner_csharp": 1,
+    "worktracker": 1,
+    "flows_worker": 4,
+    "rag_worker": 1,
+    "search_worker": 1,
+    "sync_worker": 2,
+    "crm_worker": 1
+  },
+  "xdist_counts": {
+    "total_phase1_estimate": 1589,
+    "code_sandbox_estimate": 105,
+    "real_taskiq_estimate": 12,
+    "parallelizable_estimate": 1472
+  },
+  "failed_nodeids": [
+    "tests/flows/core/clients/test_llm_providers.py::TestLLMModelsServiceRealAPI::test_sync_all_providers_real_api",
+    "tests/flows/integration/test_overrides_e2e.py::TestCodeNodeOverrides::test_function_code_override_changes_behavior",
+    "tests/flows/integration/test_overrides_e2e.py::TestGraphOverridesE2E::test_conditional_edge_override",
+    "tests/flows/integration/test_public_search_mcp_flow.py::test_public_search_with_file_reads_file_before_search",
+    "tests/flows/integration/test_react_mode_combinations.py::TestExplicitModeWithExitOnly::test_multiple_tools_then_exit",
+    "tests/flows/integration/test_taskiq_integration.py::TestTaskIQAPIIntegration::test_a2a_endpoint_uses_taskiq",
+    "tests/flows/integration/test_tool_node.py::TestCodeNodeDynamicDataAgent::test_tool_modifies_state_for_next_tool",
+    "tests/search/integration/test_crawl_bootstrap_e2e.py::test_bootstrap_queues_tranco_import_via_search_worker",
+    "tests/sync/db/test_message_repository_extended.py::test_get_thread_root_chain",
+    "tests/sync/db/test_message_repository_extended.py::test_list_by_channel_pagination",
+    "tests/sync/db/test_thread_repository.py::test_thread_list_by_channel_order",
+    "tests/sync/db/test_thread_repository.py::test_thread_list_empty_channel"
+  ],
+  "issues": [
+    {
+      "severity": "error",
+      "code": "phase1_failed",
+      "message": "pytest phase 1 завершился с exit_code=1",
+      "nodeid": null,
+      "pattern": null
+    },
+    {
+      "severity": "warn",
+      "code": "likely_parallelism_failure",
+      "message": "core.clients.service_client.ServiceClientError: Ошибка запроса к code_runner_python:",
+      "nodeid": "tests.flows.integration.test_react_mode_combinations.TestExplicitModeWithExitOnly::test_multiple_tools_then_exit",
+      "pattern": "service_client_error"
+    },
+    {
+      "severity": "warn",
+      "code": "likely_parallelism_failure",
+      "message": "core.clients.service_client.ServiceClientError: Ошибка запроса к code_runner_python:",
+      "nodeid": "tests.flows.integration.test_overrides_e2e.TestCodeNodeOverrides::test_function_code_override_changes_behavior",
+      "pattern": "service_client_error"
+    },
+    {
+      "severity": "warn",
+      "code": "likely_parallelism_failure",
+      "message": "core.clients.service_client.ServiceClientError: Ошибка запроса к code_runner_python:",
+      "nodeid": "tests.flows.integration.test_tool_node.TestCodeNodeDynamicDataAgent::test_tool_modifies_state_for_next_tool",
+      "pattern": "service_client_error"
+    },
+    {
+      "severity": "warn",
+      "code": "likely_parallelism_failure",
+      "message": "core.clients.service_client.ServiceClientError: Ошибка запроса к code_runner_python:",
+      "nodeid": "tests.flows.integration.test_overrides_e2e.TestGraphOverridesE2E::test_conditional_edge_override",
+      "pattern": "service_client_error"
+    }
+  ],
+  "recommendations": [
+    "Дождитесь phase 2 retry или запустите: make test с меньшим WORKERS"
+  ],
+  "issue_count_error": 1,
+  "issue_count_warn": 4,
+  "delta_vs_previous": {
+    "has_previous": true,
+    "previous_run_id": "20260704T223029",
+    "failed_count_delta": 2,
+    "parallelism_suspect_count_delta": 3,
+    "phase1_wall_time_seconds_delta": null,
+    "issue_count_error_delta": 0
+  }
+}

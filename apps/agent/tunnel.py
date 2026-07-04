@@ -100,15 +100,15 @@ async def agent_tunnel_websocket(
             message_payload = parse_json_object(raw_message, "agent.tunnel.message")
             message_type = message_payload.get("type")
             if message_type == "ping":
+                await mark_device_tunnel_online(container, device_id=device_id)
                 pong: JsonObject = {"type": "pong", "device_id": device_id}
                 await websocket.send_text(json.dumps(pong))
-                await mark_device_tunnel_online(container, device_id=device_id)
                 continue
 
             mcp_reply = handle_device_mcp_message(device_id, message_payload)
             if mcp_reply is not None:
-                await websocket.send_text(json.dumps(mcp_reply))
                 await mark_device_tunnel_online(container, device_id=device_id)
+                await websocket.send_text(json.dumps(mcp_reply))
                 continue
 
             if message_type == "mcp_response":

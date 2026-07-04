@@ -39,9 +39,9 @@ def resolve_sqlalchemy_pool_config() -> SqlAlchemyPoolConfig:
 
 
 def sqlalchemy_async_engine_pool_kwargs() -> SqlAlchemyAsyncEnginePoolKwargs:
-    """pytest-xdist: один idle connection на engine; TESTING-стек — компактный пул."""
+    """pytest-xdist: компактный пул; overflow=2 — вложенные session() в одном call-stack."""
     if _pytest_parallel_worker():
-        return {"pool_size": 1, "max_overflow": 0, "pool_timeout": 30.0}
+        return {"pool_size": 1, "max_overflow": 2, "pool_timeout": 60.0}
     pool_config = resolve_sqlalchemy_pool_config()
     return {
         "pool_size": pool_config.pool_size,

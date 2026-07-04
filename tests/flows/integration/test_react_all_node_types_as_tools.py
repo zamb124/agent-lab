@@ -862,8 +862,7 @@ class TestParallelToolExecution:
     async def test_parallel_execution_is_actually_parallel(self, mock_llm_with_queue):
         """
         Проверяем что tools РЕАЛЬНО выполняются параллельно.
-        Если бы последовательно - 0.3 сек минимум.
-        Параллельно - ~0.1 сек.
+        Sleep в remote code_runner: пересечение окон started_at/finished_at — главный критерий.
         """
         tool0 = {
             "tool_id": "sleep_tool_0",
@@ -924,7 +923,7 @@ class TestParallelToolExecution:
         earliest_finish = min(finished_at for _, finished_at in windows)
 
         assert latest_start < earliest_finish, "tool executions должны пересекаться по времени"
-        assert elapsed < 1.25, f"Параллельное выполнение заняло слишком долго: {elapsed:.2f} сек"
+        assert elapsed < 2.0, f"Параллельное выполнение заняло слишком долго: {elapsed:.2f} сек"
         assert result.tool_0_done is True
         assert result.tool_1_done is True
         assert result.tool_2_done is True

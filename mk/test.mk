@@ -3,6 +3,7 @@
 WORKERS ?= 10
 DB_PROFILE ?= 1
 PYTEST_WORKERS_PROFILE ?= 1
+TEST_COVERAGE ?= 1
 PYTEST_COMMAND_TIMEOUT_SECONDS ?= 5400
 PYTEST_MAX_WORKER_RESTART ?= 2
 RUN_UI_IN_TEST ?= 0
@@ -16,6 +17,19 @@ BASEDPYRIGHT_CHECK_ARGS ?= --level warning --warnings $(PYTHON_CHECK_PATHS)
 _PYTEST_IGNORE_UI := --ignore=tests/ui
 _PYTEST_IGNORE_AGENT_DESKTOP := --ignore=tests/agent/desktop_e2e
 _PYTEST_IGNORE_AGENT_E2E := --ignore=tests/agent/e2e
+
+# xdist_group (code_sandbox, real_taskiq, sync_db) учитывается только с --dist loadgroup.
+_PYTEST_XDIST := --dist loadgroup -n $(WORKERS) --max-worker-restart=$(PYTEST_MAX_WORKER_RESTART)
+
+# Coverage (default-on): TEST_COVERAGE=0 make test
+COV_RUN_ID := $(if $(filter 1,$(TEST_COVERAGE)),$(shell date +%Y%m%dT%H%M%S),)
+ifeq ($(TEST_COVERAGE),1)
+_COV_ARGS := --cov=apps --cov=core
+_COV_ARGS_APPEND := --cov=apps --cov=core --cov-append
+else
+_COV_ARGS :=
+_COV_ARGS_APPEND :=
+endif
 
 test-static:
 	@$(MAKE) --no-print-directory _lint-py
@@ -56,14 +70,14 @@ test-down:
 # Запуск unit/API тестов параллельно (без browser тестов)
 test-unit: test-up
 	@echo "Запуск unit/API тестов в $(WORKERS) воркерах..."
-	uv run python scripts/pytest_with_timeout.py $(PYTEST_COMMAND_TIMEOUT_SECONDS) uv run pytest tests/ -n $(WORKERS) --max-worker-restart=$(PYTEST_MAX_WORKER_RESTART) \
+	uv run python scripts/pytest_with_timeout.py $(PYTEST_COMMAND_TIMEOUT_SECONDS) uv run pytest tests/ $(_PYTEST_XDIST) \
 		$(_PYTEST_IGNORE_UI) \
 		-m "not integration and not network"
 
 # Live-тесты с реальными HTTP-запросами в интернет (маркер network) — вне дефолтного прогона
 test-network: test-up
 	@echo "Запуск network-тестов (реальные HTTP-запросы в интернет)..."
-	uv run pytest tests/ -m "network" -n $(WORKERS) --max-worker-restart=$(PYTEST_MAX_WORKER_RESTART) \
+	uv run pytest tests/ -m "network" $(_PYTEST_XDIST) \
 		$(_PYTEST_IGNORE_UI) \
 		$(_PYTEST_IGNORE_AGENT_DESKTOP)
 
@@ -80,7 +94,7 @@ test-ui-doc: test-ui
 # Opt-in: asyncio loop slow callbacks + FileLock waits (см. scripts/run_pytest_profile.py).
 test-profile: test-up
 	@echo "Runtime profile: FileLock + event loop (отчёт /tmp/platform_test_runtime_profile_merged.json)..."
-	uv run python scripts/run_pytest_profile.py tests/ -n $(WORKERS) --max-worker-restart=$(PYTEST_MAX_WORKER_RESTART) \
+	uv run python scripts/run_pytest_profile.py tests/ $(_PYTEST_XDIST) \
 		$(_PYTEST_IGNORE_UI) \
 		-m "not integration and not network" -q
 
@@ -106,7 +120,15 @@ test-frontend-core-canon:
 test-frontend-core-unit: runtime-bootstrap
 	@echo "Layer 2/3: pure-node unit (Vitest)..."
 	@npm ci --silent
-	@npm run test:core-unit
+	@if [ "$(TEST_COVERAGE)" = "1" ]; then \
+		test -n "$(COV_RUN_ID)"; \
+		mkdir -p reports/coverage/$(COV_RUN_ID)/js; \
+		npx vitest run --config vitest.config.mjs --coverage \
+			--coverage.reportsDirectory=reports/coverage/$(COV_RUN_ID)/js \
+			--coverage.reporter=text --coverage.reporter=lcov --coverage.reporter=html; \
+	else \
+		npm run test:core-unit:fast; \
+	fi
 
 test-frontend-core-browser: runtime-bootstrap
 	@echo "Layer 3/3: браузерные тесты (Web Test Runner + Playwright)..."
@@ -121,7 +143,7 @@ test:
 	@$(MAKE) --no-print-directory test-static
 	@$(MAKE) --no-print-directory runtime-bootstrap
 	@AGENT_ARTIFACT_MODE=release $(MAKE) --no-print-directory agent-ensure
-	@$(MAKE) --no-print-directory test-frontend-core
+	@$(MAKE) --no-print-directory test-frontend-core TEST_COVERAGE=$(TEST_COVERAGE) COV_RUN_ID=$(COV_RUN_ID)
 	@$(MAKE) --no-print-directory test-up
 	@if [ "$(DB_PROFILE)" = "1" ]; then \
 		echo "=== DB profile: reset pg_stat_statements ==="; \
@@ -135,6 +157,11 @@ test:
 		PROFILE_RUN_ID=$$(date +%Y%m%dT%H%M%S); \
 		mkdir -p reports/pytest_workers_profile/$$PROFILE_RUN_ID; \
 	fi; \
+	if [ "$(TEST_COVERAGE)" = "1" ]; then \
+		echo "=== Test coverage: reset (run $(COV_RUN_ID)) ==="; \
+		uv run python -m scripts.test_coverage_report reset --run-id $(COV_RUN_ID) --workers $(WORKERS); \
+		export COVERAGE_FILE=reports/coverage/$(COV_RUN_ID)/.coverage; \
+	fi; \
 	phase1_rc=0; \
 	phase2_rc=0; \
 	phase3_rc=0; \
@@ -145,11 +172,12 @@ test:
 	if [ "$(PYTEST_WORKERS_PROFILE)" = "1" ]; then \
 		JUNIT_XML_ARG="--junitxml=reports/pytest_workers_profile/$$PROFILE_RUN_ID/junit.xml"; \
 	fi; \
-	uv run python scripts/pytest_with_timeout.py $(PYTEST_COMMAND_TIMEOUT_SECONDS) uv run pytest tests/ -n $(WORKERS) --max-worker-restart=$(PYTEST_MAX_WORKER_RESTART) \
+	uv run python scripts/pytest_with_timeout.py $(PYTEST_COMMAND_TIMEOUT_SECONDS) uv run pytest tests/ $(_PYTEST_XDIST) \
 		$$JUNIT_XML_ARG \
 		$(_PYTEST_IGNORE_UI) \
 		$(_PYTEST_IGNORE_AGENT_DESKTOP) \
 		$(_PYTEST_IGNORE_AGENT_E2E) \
+		$(_COV_ARGS) \
 		-m "not integration and not network and not agent_build_release"; \
 	phase1_rc=$$?; \
 	if [ "$(DB_PROFILE)" = "1" ]; then \
@@ -174,6 +202,7 @@ test:
 				$(_PYTEST_IGNORE_UI) \
 				$(_PYTEST_IGNORE_AGENT_DESKTOP) \
 				$(_PYTEST_IGNORE_AGENT_E2E) \
+				$(_COV_ARGS_APPEND) \
 				-m "not integration and not network and not agent_build_release" -v; \
 		phase2_rc=$$?; \
 		if [ $$phase2_rc -eq 0 ]; then \
@@ -186,7 +215,7 @@ test:
 	if [ "$(RUN_UI_IN_TEST)" = "1" ]; then \
 		echo ""; \
 		echo "=== 3/4 Запуск E2E UI (pytest tests/ui/e2e) ==="; \
-		uv run pytest tests/ui/e2e -v --timeout=180; \
+		uv run pytest tests/ui/e2e -v --timeout=180 $(_COV_ARGS_APPEND); \
 		phase3_rc=$$?; \
 	fi; \
 	echo ""; \
@@ -196,11 +225,16 @@ test:
 	uv run python scripts/check_agent_test_no_monkeypatch.py; \
 	AGENT_ARTIFACT_MODE=release uv run python scripts/agent_build.py ensure-local --artifact-mode release --version-sha "$$(git rev-parse HEAD)"; \
 	rm -f /tmp/platform_test_pytest_controller.pid; \
-	uv run pytest tests/agent/e2e tests/flows/api/test_agent_platform_mcp.py tests/frontend/api/test_humanitec_agent_api.py -n0 --timeout=180; \
+	uv run pytest tests/agent/e2e tests/flows/api/test_agent_platform_mcp.py tests/frontend/api/test_humanitec_agent_api.py -n0 --timeout=180 $(_COV_ARGS_APPEND); \
 	phase4a_rc=$$?; \
 	rm -f /tmp/platform_test_pytest_controller.pid; \
-	RUN_UI_IN_TEST=1 UI_E2E_USE_LVH_ME=1 uv run pytest tests/agent/desktop_e2e tests/ui/e2e/test_frontend_settings_agent.py -n0 --timeout=900; \
+	RUN_UI_IN_TEST=1 UI_E2E_USE_LVH_ME=1 uv run pytest tests/agent/desktop_e2e tests/ui/e2e/test_frontend_settings_agent.py -n0 --timeout=900 $(_COV_ARGS_APPEND); \
 	phase4c_rc=$$?; \
+	if [ "$(TEST_COVERAGE)" = "1" ]; then \
+		echo ""; \
+		echo "=== Test coverage: report (run $(COV_RUN_ID)) ==="; \
+		uv run python -m scripts.test_coverage_report report --run-id $(COV_RUN_ID); \
+	fi; \
 	if [ $$phase1_rc -ne 0 ] || [ $$phase2_rc -ne 0 ] || [ $$phase3_rc -ne 0 ] || [ $$phase4a_rc -ne 0 ] || [ $$phase4c_rc -ne 0 ]; then \
 		exit 1; \
 	fi
@@ -215,7 +249,7 @@ test-until-fail:
 	@echo "=== pytest phase 1 (exit on first failure, -x) ==="
 	@rm -f /tmp/platform_test_pytest_controller.pid .pytest_cache/v/cache/lastfailed
 	@export LOGGING__LEVEL=WARNING; \
-	uv run python scripts/pytest_with_timeout.py $(PYTEST_COMMAND_TIMEOUT_SECONDS) uv run pytest tests/ -n $(WORKERS) --max-worker-restart=$(PYTEST_MAX_WORKER_RESTART) \
+	uv run python scripts/pytest_with_timeout.py $(PYTEST_COMMAND_TIMEOUT_SECONDS) uv run pytest tests/ $(_PYTEST_XDIST) \
 		-x -v --tb=short \
 		$(_PYTEST_IGNORE_UI) \
 		$(_PYTEST_IGNORE_AGENT_DESKTOP) \
@@ -234,7 +268,7 @@ test-all:
 	phase2_rc=0; \
 	phase3_rc=0; \
 	rm -f .pytest_cache/v/cache/lastfailed; \
-	uv run python scripts/pytest_with_timeout.py $(PYTEST_COMMAND_TIMEOUT_SECONDS) uv run pytest tests/ -n $(WORKERS) --max-worker-restart=$(PYTEST_MAX_WORKER_RESTART) \
+	uv run python scripts/pytest_with_timeout.py $(PYTEST_COMMAND_TIMEOUT_SECONDS) uv run pytest tests/ $(_PYTEST_XDIST) \
 		$(_PYTEST_IGNORE_UI); \
 	phase1_rc=$$?; \
 	if [ $$phase1_rc -ne 0 ]; then \
@@ -260,14 +294,14 @@ test-all:
 
 test-cov: test-up
 	@echo "Запуск тестов с покрытием в $(WORKERS) воркерах (без browser)..."
-	uv run python scripts/pytest_with_timeout.py $(PYTEST_COMMAND_TIMEOUT_SECONDS) uv run pytest tests/ -n $(WORKERS) --max-worker-restart=$(PYTEST_MAX_WORKER_RESTART) \
+	uv run python scripts/pytest_with_timeout.py $(PYTEST_COMMAND_TIMEOUT_SECONDS) uv run pytest tests/ $(_PYTEST_XDIST) \
 		$(_PYTEST_IGNORE_UI) \
 		-m "not integration and not network" \
 		--cov=apps --cov=core --cov-report=term-missing --cov-report=html:htmlcov
 
 test-cov-all: test-up
 	@echo "Запуск всех тестов с покрытием..."
-	uv run python scripts/pytest_with_timeout.py $(PYTEST_COMMAND_TIMEOUT_SECONDS) uv run pytest tests/ -n $(WORKERS) --max-worker-restart=$(PYTEST_MAX_WORKER_RESTART) \
+	uv run python scripts/pytest_with_timeout.py $(PYTEST_COMMAND_TIMEOUT_SECONDS) uv run pytest tests/ $(_PYTEST_XDIST) \
 		$(_PYTEST_IGNORE_UI) \
 		--cov=apps --cov=core --cov-report=term-missing --cov-report=html:htmlcov
 	uv run pytest tests/ui/e2e -v --timeout=180 \

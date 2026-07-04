@@ -139,8 +139,8 @@ async def crawl_enrich_url(
 @broker.task(
     task_name=CRAWL_IMPORT_SEED_DOMAINS_TASK_NAME,
     queue_name="search",
-    retry_on_error=False,
-    max_retries=0,
+    retry_on_error=True,
+    max_retries=2,
 )
 async def crawl_import_seed_domains(
     crawl_profile_id: str,

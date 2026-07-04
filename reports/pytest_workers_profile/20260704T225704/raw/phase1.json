@@ -1,0 +1,323 @@
+{
+  "run_id": "20260704T225704",
+  "collected_at": "2026-07-04T20:14:58.081849+00:00",
+  "pytest_workers": "10",
+  "pytest_workers_numeric": 10,
+  "phase1_exit_code": 1,
+  "max_worker_restart": 2,
+  "phase1_wall_time_seconds": null,
+  "failed_nodeids": [
+    "tests/flows/core/clients/test_llm_providers.py::TestLLMModelsServiceRealAPI::test_sync_all_providers_real_api",
+    "tests/flows/integration/test_overrides_e2e.py::TestCodeNodeOverrides::test_function_code_override_changes_behavior",
+    "tests/flows/integration/test_overrides_e2e.py::TestGraphOverridesE2E::test_conditional_edge_override",
+    "tests/flows/integration/test_public_search_mcp_flow.py::test_public_search_with_file_reads_file_before_search",
+    "tests/flows/integration/test_react_mode_combinations.py::TestExplicitModeWithExitOnly::test_multiple_tools_then_exit",
+    "tests/flows/integration/test_taskiq_integration.py::TestTaskIQAPIIntegration::test_a2a_endpoint_uses_taskiq",
+    "tests/flows/integration/test_tool_node.py::TestCodeNodeDynamicDataAgent::test_tool_modifies_state_for_next_tool",
+    "tests/search/integration/test_crawl_bootstrap_e2e.py::test_bootstrap_queues_tranco_import_via_search_worker",
+    "tests/sync/db/test_message_repository_extended.py::test_get_thread_root_chain",
+    "tests/sync/db/test_message_repository_extended.py::test_list_by_channel_pagination",
+    "tests/sync/db/test_thread_repository.py::test_thread_list_by_channel_order",
+    "tests/sync/db/test_thread_repository.py::test_thread_list_empty_channel"
+  ],
+  "junit_failures": [
+    {
+      "nodeid": "tests.flows.core.clients.test_llm_providers.TestLLMModelsServiceRealAPI::test_sync_all_providers_real_api",
+      "message": "Failed: Timeout (>30.0s) from pytest-timeout.",
+      "parallelism_suspect": false,
+      "suspect_pattern": null
+    },
+    {
+      "nodeid": "tests.flows.integration.test_public_search_mcp_flow::test_public_search_with_file_reads_file_before_search",
+      "message": "AssertionError: data: {\"jsonrpc\": \"2.0\", \"id\": \"public-search-file-668d22b1\", \"result\": {\"artifact\": {\"artifactId\": \"4a2703c3-44e3-4383-b3e2-d3b84a093f5f\", \"name\": \"node_start_prepare_search_inputs\", \"parts\": [{\"data\": {\"event\": \"node_start\", \"node_id\": \"prepare_search_inputs\", \"node_type\": \"code\"}, \"kind\": \"data\"}]}, \"contextId\": \"ctx-668d22b1\", \"kind\": \"artifact-update\", \"taskId\": \"e83a9b6c-6735-4230-acd0-29235c08a080\"}}\n  \n  data: {\"jsonrpc\": \"2.0\", \"id\": \"public-search-file-668d22b1\", \"resul",
+      "parallelism_suspect": false,
+      "suspect_pattern": null
+    },
+    {
+      "nodeid": "tests.flows.integration.test_taskiq_integration.TestTaskIQAPIIntegration::test_a2a_endpoint_uses_taskiq",
+      "message": "AssertionError: assert 'result' in {'error': {'code': -32000, 'message': 'Projection hash mismatch for taskiq_api_flow_fed88323_7bc80cf0:a2a-taskiq-fed88323-498ba5b4: expected 2048852c42a9db31b31379bc18b68e33f1b0c7aa36362207fd9d23d7d494d2ba, got 385ef9f571c21cb1f9508253d3e46c3df86ac9a9ae6b1ac1a41bd83b0594a7c6'}, 'id': '1', 'jsonrpc': '2.0'}",
+      "parallelism_suspect": false,
+      "suspect_pattern": null
+    },
+    {
+      "nodeid": "tests.flows.integration.test_react_mode_combinations.TestExplicitModeWithExitOnly::test_multiple_tools_then_exit",
+      "message": "core.clients.service_client.ServiceClientError: Ошибка запроса к code_runner_python:",
+      "parallelism_suspect": true,
+      "suspect_pattern": "service_client_error"
+    },
+    {
+      "nodeid": "tests.flows.integration.test_overrides_e2e.TestCodeNodeOverrides::test_function_code_override_changes_behavior",
+      "message": "core.clients.service_client.ServiceClientError: Ошибка запроса к code_runner_python:",
+      "parallelism_suspect": true,
+      "suspect_pattern": "service_client_error"
+    },
+    {
+      "nodeid": "tests.flows.integration.test_tool_node.TestCodeNodeDynamicDataAgent::test_tool_modifies_state_for_next_tool",
+      "message": "core.clients.service_client.ServiceClientError: Ошибка запроса к code_runner_python:",
+      "parallelism_suspect": true,
+      "suspect_pattern": "service_client_error"
+    },
+    {
+      "nodeid": "tests.search.integration.test_crawl_bootstrap_e2e::test_bootstrap_queues_tranco_import_via_search_worker",
+      "message": "AssertionError: crawl bootstrap timeout: no domains for profile 'cr_idx_e66511ad'",
+      "parallelism_suspect": false,
+      "suspect_pattern": null
+    },
+    {
+      "nodeid": "tests.flows.integration.test_overrides_e2e.TestGraphOverridesE2E::test_conditional_edge_override",
+      "message": "core.clients.service_client.ServiceClientError: Ошибка запроса к code_runner_python:",
+      "parallelism_suspect": true,
+      "suspect_pattern": "service_client_error"
+    },
+    {
+      "nodeid": "tests.sync.db.test_message_repository_extended::test_get_thread_root_chain",
+      "message": "Failed: Timeout (>5.0s) from pytest-timeout.",
+      "parallelism_suspect": false,
+      "suspect_pattern": null
+    },
+    {
+      "nodeid": "tests.sync.db.test_message_repository_extended::test_list_by_channel_pagination",
+      "message": "Failed: Timeout (>5.0s) from pytest-timeout.",
+      "parallelism_suspect": false,
+      "suspect_pattern": null
+    },
+    {
+      "nodeid": "tests.sync.db.test_thread_repository::test_thread_list_by_channel_order",
+      "message": "Failed: Timeout (>5.0s) from pytest-timeout.",
+      "parallelism_suspect": false,
+      "suspect_pattern": null
+    },
+    {
+      "nodeid": "tests.sync.db.test_thread_repository::test_thread_list_empty_channel",
+      "message": "Failed: Timeout (>5.0s) from pytest-timeout.",
+      "parallelism_suspect": false,
+      "suspect_pattern": null
+    }
+  ],
+  "stack_manifest": {
+    "created_at": "2026-07-04T19:57:03.748042+00:00",
+    "controller_pid": 37233,
+    "pytest_workers_requested": 10,
+    "stack_scale_factor": 1.0,
+    "stack_capacity": {
+      "secrets": 1,
+      "flows": 2,
+      "rag": 1,
+      "crm": 1,
+      "frontend": 1,
+      "sync": 1,
+      "office": 1,
+      "search": 2,
+      "provider_litserve": 1,
+      "voice": 1,
+      "capability_gateway": 6,
+      "code_runner_python": 12,
+      "code_runner_node": 1,
+      "code_runner_go": 1,
+      "code_runner_csharp": 1,
+      "worktracker": 1,
+      "flows_worker": 4,
+      "rag_worker": 1,
+      "search_worker": 1,
+      "sync_worker": 2,
+      "crm_worker": 1
+    },
+    "processes": [
+      {
+        "name": "secrets",
+        "kind": "granian",
+        "pid": 37235,
+        "port": 9022,
+        "stream_name": null,
+        "log_file": "/tmp/platform_test_stack/secrets.log",
+        "err_file": "/tmp/platform_test_stack/secrets.err"
+      },
+      {
+        "name": "flows",
+        "kind": "granian",
+        "pid": 37236,
+        "port": 9001,
+        "stream_name": null,
+        "log_file": "/tmp/platform_test_stack/flows.log",
+        "err_file": "/tmp/platform_test_stack/flows.err"
+      },
+      {
+        "name": "rag",
+        "kind": "granian",
+        "pid": 37237,
+        "port": 9002,
+        "stream_name": null,
+        "log_file": "/tmp/platform_test_stack/rag.log",
+        "err_file": "/tmp/platform_test_stack/rag.err"
+      },
+      {
+        "name": "crm",
+        "kind": "granian",
+        "pid": 37238,
+        "port": 9003,
+        "stream_name": null,
+        "log_file": "/tmp/platform_test_stack/crm.log",
+        "err_file": "/tmp/platform_test_stack/crm.err"
+      },
+      {
+        "name": "frontend",
+        "kind": "granian",
+        "pid": 37239,
+        "port": 9004,
+        "stream_name": null,
+        "log_file": "/tmp/platform_test_stack/frontend.log",
+        "err_file": "/tmp/platform_test_stack/frontend.err"
+      },
+      {
+        "name": "sync",
+        "kind": "granian",
+        "pid": 37240,
+        "port": 9005,
+        "stream_name": null,
+        "log_file": "/tmp/platform_test_stack/sync.log",
+        "err_file": "/tmp/platform_test_stack/sync.err"
+      },
+      {
+        "name": "office",
+        "kind": "granian",
+        "pid": 37241,
+        "port": 9008,
+        "stream_name": null,
+        "log_file": "/tmp/platform_test_stack/office.log",
+        "err_file": "/tmp/platform_test_stack/office.err"
+      },
+      {
+        "name": "search",
+        "kind": "granian",
+        "pid": 37242,
+        "port": 9010,
+        "stream_name": null,
+        "log_file": "/tmp/platform_test_stack/search.log",
+        "err_file": "/tmp/platform_test_stack/search.err"
+      },
+      {
+        "name": "provider_litserve",
+        "kind": "granian",
+        "pid": 37243,
+        "port": 9014,
+        "stream_name": null,
+        "log_file": "/tmp/platform_test_stack/provider_litserve.log",
+        "err_file": "/tmp/platform_test_stack/provider_litserve.err"
+      },
+      {
+        "name": "voice",
+        "kind": "granian",
+        "pid": 37244,
+        "port": 9015,
+        "stream_name": null,
+        "log_file": "/tmp/platform_test_stack/voice.log",
+        "err_file": "/tmp/platform_test_stack/voice.err"
+      },
+      {
+        "name": "capability_gateway",
+        "kind": "granian",
+        "pid": 37245,
+        "port": 9016,
+        "stream_name": null,
+        "log_file": "/tmp/platform_test_stack/capability_gateway.log",
+        "err_file": "/tmp/platform_test_stack/capability_gateway.err"
+      },
+      {
+        "name": "code_runner_python",
+        "kind": "granian",
+        "pid": 37246,
+        "port": 9017,
+        "stream_name": null,
+        "log_file": "/tmp/platform_test_stack/code_runner_python.log",
+        "err_file": "/tmp/platform_test_stack/code_runner_python.err"
+      },
+      {
+        "name": "code_runner_node",
+        "kind": "granian",
+        "pid": 37247,
+        "port": 9018,
+        "stream_name": null,
+        "log_file": "/tmp/platform_test_stack/code_runner_node.log",
+        "err_file": "/tmp/platform_test_stack/code_runner_node.err"
+      },
+      {
+        "name": "code_runner_go",
+        "kind": "granian",
+        "pid": 37248,
+        "port": 9019,
+        "stream_name": null,
+        "log_file": "/tmp/platform_test_stack/code_runner_go.log",
+        "err_file": "/tmp/platform_test_stack/code_runner_go.err"
+      },
+      {
+        "name": "code_runner_csharp",
+        "kind": "granian",
+        "pid": 37249,
+        "port": 9020,
+        "stream_name": null,
+        "log_file": "/tmp/platform_test_stack/code_runner_csharp.log",
+        "err_file": "/tmp/platform_test_stack/code_runner_csharp.err"
+      },
+      {
+        "name": "worktracker",
+        "kind": "granian",
+        "pid": 37250,
+        "port": 9021,
+        "stream_name": null,
+        "log_file": "/tmp/platform_test_stack/worktracker.log",
+        "err_file": "/tmp/platform_test_stack/worktracker.err"
+      },
+      {
+        "name": "flows_worker",
+        "kind": "taskiq",
+        "pid": 37251,
+        "port": null,
+        "stream_name": "flows_worker",
+        "log_file": "/tmp/platform_test_stack/flows_worker.log",
+        "err_file": "/tmp/platform_test_stack/flows_worker.err"
+      },
+      {
+        "name": "rag_worker",
+        "kind": "taskiq",
+        "pid": 37255,
+        "port": null,
+        "stream_name": "rag",
+        "log_file": "/tmp/platform_test_stack/rag_worker.log",
+        "err_file": "/tmp/platform_test_stack/rag_worker.err"
+      },
+      {
+        "name": "search_worker",
+        "kind": "taskiq",
+        "pid": 37263,
+        "port": null,
+        "stream_name": "search",
+        "log_file": "/tmp/platform_test_stack/search_worker.log",
+        "err_file": "/tmp/platform_test_stack/search_worker.err"
+      },
+      {
+        "name": "sync_worker",
+        "kind": "taskiq",
+        "pid": 37269,
+        "port": null,
+        "stream_name": "sync",
+        "log_file": "/tmp/platform_test_stack/sync_worker.log",
+        "err_file": "/tmp/platform_test_stack/sync_worker.err"
+      },
+      {
+        "name": "crm_worker",
+        "kind": "taskiq",
+        "pid": 37271,
+        "port": null,
+        "stream_name": "crm",
+        "log_file": "/tmp/platform_test_stack/crm_worker.log",
+        "err_file": "/tmp/platform_test_stack/crm_worker.err"
+      }
+    ]
+  },
+  "xdist_counts": {
+    "total_phase1_estimate": 1589,
+    "code_sandbox_estimate": 105,
+    "real_taskiq_estimate": 12,
+    "parallelizable_estimate": 1472
+  }
+}
