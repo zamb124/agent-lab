@@ -541,15 +541,16 @@ async def on_startup(app: FastAPI, container: SchedulerContainer, settings: Sche
         cron="0 4 * * *",
         log_label="Platform schedules Redis GC",
     )
-    await _ensure_idle_interval_schedule(
-        container=container,
-        config_enabled=not is_testing(),
-        task_name=REDIS_INVENTORY_TASK_NAME,
-        interval_seconds=settings.database.redis_inventory_interval_seconds,
-        payload={},
-        log_label="Redis inventory metrics",
-        run_now_on_start=True,
-    )
+    if not is_testing():
+        await _ensure_idle_interval_schedule(
+            container=container,
+            config_enabled=True,
+            task_name=REDIS_INVENTORY_TASK_NAME,
+            interval_seconds=settings.database.redis_inventory_interval_seconds,
+            payload={},
+            log_label="Redis inventory metrics",
+            run_now_on_start=True,
+        )
     await _ensure_calendar_schedule(
         container=container,
         config_enabled=settings.mcp_catalog.enabled and not is_testing(),
