@@ -50,6 +50,7 @@ async def _wait_spans(
     filter_agent_id: str | None = None,
     timeout: float = 8.0,
     interval: float = 0.05,
+    required_operation_substrings: tuple[str, ...] = (),
 ) -> list[TraceSpanRecord]:
     """Ожидание появления spans в БД вместо фиксированной паузы."""
     deadline = time.monotonic() + timeout
@@ -66,7 +67,15 @@ async def _wait_spans(
                 spans = raw[:10]
         last = spans
         if last:
-            return last
+            if required_operation_substrings:
+                span_names = [span.operation_name for span in last]
+                if all(
+                    any(substring in span_name for span_name in span_names)
+                    for substring in required_operation_substrings
+                ):
+                    return last
+            else:
+                return last
         await asyncio.sleep(interval)
     return last
 
@@ -403,7 +412,13 @@ class TestGraphFlowTracing:
         result = response.json()
         task_id = result.get("result", {}).get("id")
 
-        spans = await _wait_spans(container, task_id, "example_graph")
+        spans = await _wait_spans(
+            container,
+            task_id,
+            "example_graph",
+            timeout=30.0,
+            required_operation_substrings=("classifier", "order"),
+        )
 
         span_names = [s.operation_name for s in spans]
 
@@ -475,7 +490,13 @@ class TestGraphFlowTracing:
         result = response.json()
         task_id = result.get("result", {}).get("id")
 
-        spans = await _wait_spans(container, task_id, "example_graph")
+        spans = await _wait_spans(
+            container,
+            task_id,
+            "example_graph",
+            timeout=30.0,
+            required_operation_substrings=("classifier", "complaint"),
+        )
 
         span_names = [s.operation_name for s in spans]
 
@@ -538,7 +559,13 @@ class TestGraphFlowTracing:
         result = response.json()
         task_id = result.get("result", {}).get("id")
 
-        spans = await _wait_spans(container, task_id, "example_graph")
+        spans = await _wait_spans(
+            container,
+            task_id,
+            "example_graph",
+            timeout=30.0,
+            required_operation_substrings=("classifier", "general"),
+        )
 
         span_names = [s.operation_name for s in spans]
 

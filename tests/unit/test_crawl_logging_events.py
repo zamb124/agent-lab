@@ -2,14 +2,14 @@
 
 from __future__ import annotations
 
-import logging
-
 import pytest
 
+import core.crawl.logging_events as crawl_logging_events
 from core.crawl.logging_events import log_crawl_url_outcome
-from core.logging import enter_request_scope, exit_request_scope
+from core.logging import enter_request_scope, exit_request_scope, get_logger
 from core.logging.attributes import EVENT_CRAWL_URL_OUTCOME
 from core.logging.setup import reset_logging_for_tests, setup_logging
+from core.types import JsonObject
 
 
 @pytest.fixture
@@ -26,17 +26,22 @@ def crawl_log_scope():
     reset_logging_for_tests()
 
 
+def _log_event_name(entry: JsonObject) -> str | None:
+    event = entry.get("event")
+    if isinstance(event, str):
+        return event
+    message = entry.get("message")
+    if isinstance(message, str):
+        return message
+    return None
+
+
 def test_log_crawl_url_outcome_emits_event(crawl_log_scope: None) -> None:
-    captured: list[str] = []
+    from structlog.testing import capture_logs
 
-    class _CaptureHandler(logging.Handler):
-        def emit(self, record: logging.LogRecord) -> None:
-            captured.append(record.getMessage())
-
-    root_logger = logging.getLogger()
-    handler = _CaptureHandler()
-    root_logger.addHandler(handler)
-    try:
+    with capture_logs() as captured_entries:
+        # capture_logs переконфигурирует processors; перепривязываем module logger.
+        crawl_logging_events.logger = get_logger("platform.crawl")
         log_crawl_url_outcome(
             crawl_profile_id="runet_platform",
             crawl_job_id="job-1",
@@ -51,9 +56,9 @@ def test_log_crawl_url_outcome_emits_event(crawl_log_scope: None) -> None:
             content_hash_changed=True,
             document_id="runet:abc",
         )
-        combined = "\n".join(captured)
-        assert EVENT_CRAWL_URL_OUTCOME in combined
-        assert "runet_platform" in combined
-        assert "crawl_outcome" in combined
-    finally:
-        root_logger.removeHandler(handler)
+    assert any(_log_event_name(entry) == EVENT_CRAWL_URL_OUTCOME for entry in captured_entries)
+    indexed_entry = next(
+        entry for entry in captured_entries if _log_event_name(entry) == EVENT_CRAWL_URL_OUTCOME
+    )
+    assert indexed_entry.get("crawl_profile_id") == "runet_platform"
+    assert indexed_entry.get("crawl_outcome") == "indexed"

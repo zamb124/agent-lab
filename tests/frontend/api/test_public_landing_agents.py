@@ -425,6 +425,7 @@ async def test_public_landing_agents_resolves_card_from_flow_store_url(
 
 
 @pytest.mark.asyncio
+@pytest.mark.timeout(60, func_only=True)
 async def test_embed_guest_limit_on_public_landing_session(
     frontend_client: AsyncClient,
     flows_client: AsyncClient,

@@ -28,6 +28,8 @@ check-wider-repo-strictness:
 	@uv run python scripts/audit_wider_repo_strictness.py
 
 test-up: runtime-bootstrap
+	@echo "Preflight: остановка предыдущего test_stack (granian + TaskIQ)..."
+	@uv run python -m scripts.test_stack down 2>/dev/null || true
 	@echo "Preflight: зачистка stale pytest/granian/taskiq/code-runner процессов..."
 	@uv run python -m scripts.test_process_preflight_cleanup
 	@uv run python scripts/ensure_test_compose_images.py

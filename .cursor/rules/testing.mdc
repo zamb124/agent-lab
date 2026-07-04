@@ -210,9 +210,21 @@ async def test_integration(mock_llm_redis, flows_client, unique_id):
 
 1. `scripts/test_process_preflight_cleanup` — зачистка stale процессов
 2. `docker-compose-test.yaml` — Postgres, Redis, MinIO, …
-3. `scripts/db_test_reset` — TRUNCATE + Redis FLUSHDB
+3. `scripts/db_test_reset` — TRUNCATE + Redis FLUSHDB; при неубиваемых backend'ах Postgres (`BgworkerShutdown`, `pg_terminate_backend` не снимает lock'и) — один `docker restart agentlab_postgres_test` и повтор drain
 4. `scripts/test_migrate` — Alembic upgrade + сид `system`-компании
 5. `scripts/test_stack.py up` — все HTTP-сервисы (9001–9022) и TaskIQ-воркеры; манифест `/tmp/platform_test_stack.json`
+
+**Ёмкость sandbox под `-n5`:** `flows` granian `workers=2`, `search` `workers=2`, `capability_gateway` `workers=6`, `code_runner_python` granian `workers=12` + `CODE_RUNNER_PYTHON_WORKERS=12`, `flows_worker` TaskIQ `workers=4`. Иначе при полном прогоне — `ServiceClientError`/`ReadTimeout` к `code_runner_python`, `NodeWallClockTimeoutError` в public_search и `TaskiqResultTimeoutError` на параллельных tool/flow тестах.
+
+**TaskIQ wait в тестах:** `tests/flows/integration/test_taskiq_integration.py` ждёт результат worker'а до 60 с (`_TASKIQ_WAIT_RESULT_TIMEOUT_SECONDS`), не 10 с — под нагрузкой `-n5` очередь flows_worker + code_runner иначе даёт ложный timeout.
+
+**real_taskiq и xdist:** тесты с маркером `real_taskiq` получают `xdist_group("real_taskiq")` — не исполняются параллельно между pytest-воркерами (один общий flows_worker, гонки на `.kiq()`/`tasks/get`).
+
+**Sandbox xdist buckets:** `_is_sandbox_runtime_test()` дополнительно получает `xdist_group("code_sandbox_{0|1|2}")` (SHA256 nodeid % 3) — три непересекающиеся очереди вместо полной сериализации ~966 sandbox-тестов. Снижает гонки `code_runner_python` под `-n5` без удвоения времени прогона.
+
+**A2A tasks/get poll:** пока задача в `working`, `result` может быть `null` — poll-циклы в тестах пропускают такие ответы, не падают через `require_jsonrpc_result`.
+
+**Tracing `_wait_spans`:** не возвращать при первом span — для graph-path тестов ждать `required_operation_substrings` (classifier + branch processor) до 30 с.
 
 Команды: `make test-up`, `make test-down`, `uv run python -m scripts.test_stack status`.
 

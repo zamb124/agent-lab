@@ -119,6 +119,7 @@ class GranianService:
     readiness_timeout: float
     env: dict[str, str] = field(default_factory=dict)
     readiness_path: str = "/health"
+    workers: int = 1
 
 
 @dataclass(frozen=True)
@@ -144,7 +145,13 @@ class ExternalReadiness:
 
 GRANIAN_SERVICES: tuple[GranianService, ...] = (
     GranianService(name="secrets", app_path="apps.secrets.main:app", port=9022, readiness_timeout=90.0),
-    GranianService(name="flows", app_path="apps.flows.main:app", port=9001, readiness_timeout=180.0),
+    GranianService(
+        name="flows",
+        app_path="apps.flows.main:app",
+        port=9001,
+        readiness_timeout=180.0,
+        workers=2,
+    ),
     GranianService(name="rag", app_path="apps.rag.main:app", port=9002, readiness_timeout=120.0),
     GranianService(name="crm", app_path="apps.crm.main:app", port=9003, readiness_timeout=120.0),
     GranianService(
@@ -164,6 +171,7 @@ GRANIAN_SERVICES: tuple[GranianService, ...] = (
         app_path="apps.search.main:app",
         port=9010,
         readiness_timeout=120.0,
+        workers=2,
         env={
             "SEARCH__TINYFISH__API_KEY": "",
             "SEARCH__TINYFISH__ENABLED": "false",
@@ -196,12 +204,17 @@ GRANIAN_SERVICES: tuple[GranianService, ...] = (
         app_path="apps.capability_gateway.main:app",
         port=9016,
         readiness_timeout=120.0,
+        workers=6,
     ),
     GranianService(
         name="code_runner_python",
         app_path="apps.code_runner_python.main:app",
         port=9017,
         readiness_timeout=120.0,
+        workers=12,
+        env={
+            "CODE_RUNNER_PYTHON_WORKERS": "12",
+        },
     ),
     GranianService(
         name="code_runner_node",
@@ -234,7 +247,7 @@ TASKIQ_WORKER_SERVICES: tuple[TaskiqWorkerService, ...] = (
         name="flows_worker",
         worker_module="apps.flows_worker.worker:worker_app",
         stream_name="flows_worker",
-        workers=2,
+        workers=4,
         readiness_timeout=120.0,
     ),
     TaskiqWorkerService(
@@ -309,7 +322,7 @@ def _granian_command(service: GranianService) -> list[str]:
         "auto",
         "--ws",
         "--workers",
-        "1",
+        str(service.workers),
         "--runtime-threads",
         "1",
         "--log-level",
@@ -448,18 +461,20 @@ def _wait_granian_ready(
     while time.monotonic() < deadline:
         exit_code = process.poll()
         if exit_code is not None:
-            _, err_path = _log_paths(service.name)
+            log_path, err_path = _log_paths(service.name)
             return (
                 f"{service.name}: процесс завершился (exit_code={exit_code}) до readiness.\n"
-                f"stderr tail:\n{_tail_file(err_path)}"
+                f"stderr tail:\n{_tail_file(err_path)}\n"
+                f"stdout tail:\n{_tail_file(log_path)}"
             )
         if _http_ready(url):
             return None
         time.sleep(0.25)
-    _, err_path = _log_paths(service.name)
+    log_path, err_path = _log_paths(service.name)
     return (
         f"{service.name}: readiness {url} не прошёл за {service.readiness_timeout}s.\n"
-        f"stderr tail:\n{_tail_file(err_path)}"
+        f"stderr tail:\n{_tail_file(err_path)}\n"
+        f"stdout tail:\n{_tail_file(log_path)}"
     )
 
 

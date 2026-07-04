@@ -11,6 +11,7 @@ from __future__ import annotations
 import argparse
 import os
 import shutil
+import sys
 import tempfile
 import time
 from dataclasses import dataclass
@@ -257,10 +258,20 @@ def _cleanup_runtime_dirs(candidates: dict[int, Candidate]) -> int:
     return removed
 
 
+def _ports_still_listening() -> dict[int, set[int]]:
+    by_pid = _listening_test_ports_by_pid()
+    busy: dict[int, set[int]] = {}
+    for pid, ports in by_pid.items():
+        if pid in _protected_pids():
+            continue
+        busy[pid] = ports
+    return busy
+
+
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--dry-run", action="store_true")
-    parser.add_argument("--grace-seconds", type=float, default=1.0)
+    parser.add_argument("--grace-seconds", type=float, default=3.0)
     args = parser.parse_args()
 
     candidates = _collect_candidates()
@@ -278,14 +289,29 @@ def main() -> int:
         return 0
 
     killed, alive = _terminate(candidates, grace_seconds=args.grace_seconds)
-    time.sleep(0.1)
+    time.sleep(0.25)
     runtime_dirs_removed = _cleanup_runtime_dirs(candidates)
     markers_removed = _cleanup_markers()
+    busy_ports = _ports_still_listening()
     print(
         "test_process_preflight_cleanup: "
         f"killed={killed}, alive={alive}, "
         f"runtime_dirs_removed={runtime_dirs_removed}, markers_removed={markers_removed}"
     )
+    if busy_ports:
+        print("test_process_preflight_cleanup: тестовые HTTP-порты всё ещё заняты:", file=sys.stderr)
+        for pid, ports in sorted(busy_ports.items()):
+            try:
+                command = _command(psutil.Process(pid))
+            except (psutil.NoSuchProcess, psutil.AccessDenied):
+                command = ""
+            short_command = command[:220]
+            port_list = ",".join(str(port) for port in sorted(ports))
+            print(
+                f"  pid={pid} ports={port_list} cmd={short_command!r}",
+                file=sys.stderr,
+            )
+        return 1
     if alive:
         return 1
     return 0

@@ -34,6 +34,20 @@ def result_text(result: dict[str, object]) -> str:
     return json.dumps(result, ensure_ascii=False)
 
 
+def require_jsonrpc_result(body: dict[str, object]) -> dict[str, object]:
+    result = body.get("result")
+    if not isinstance(result, dict):
+        raise AssertionError(f"JSON-RPC result отсутствует или не object: {body}")
+    return result
+
+
+def optional_jsonrpc_result(body: dict[str, object]) -> dict[str, object] | None:
+    result = body.get("result")
+    if isinstance(result, dict):
+        return result
+    return None
+
+
 async def send_sync(
     client: AsyncClient,
     flow_id: str,
@@ -258,7 +272,7 @@ class TestRealTaskiqWorkerPath:
             },
         )
         assert submit.status_code == 200, submit.text
-        submitted_id = submit.json()["result"]["id"]
+        submitted_id = require_jsonrpc_result(submit.json())["id"]
 
         final_state = None
         for _ in range(120):
@@ -272,10 +286,14 @@ class TestRealTaskiqWorkerPath:
                 },
             )
             assert poll.status_code == 200, poll.text
-            state = poll.json()["result"]["status"]["state"]
+            poll_result = optional_jsonrpc_result(poll.json())
+            if poll_result is None:
+                await asyncio.sleep(0.5)
+                continue
+            state = poll_result["status"]["state"]
             if state in ("completed", "input-required", "failed", "canceled", "rejected"):
                 final_state = state
-                assert answer in result_text(poll.json()["result"])
+                assert answer in result_text(poll_result)
                 break
             await asyncio.sleep(0.5)
         assert final_state == "completed"

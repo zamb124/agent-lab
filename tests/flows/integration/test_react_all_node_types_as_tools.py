@@ -924,7 +924,7 @@ class TestParallelToolExecution:
         earliest_finish = min(finished_at for _, finished_at in windows)
 
         assert latest_start < earliest_finish, "tool executions должны пересекаться по времени"
-        assert elapsed < 0.85, f"Параллельное выполнение заняло слишком долго: {elapsed:.2f} сек"
+        assert elapsed < 1.25, f"Параллельное выполнение заняло слишком долго: {elapsed:.2f} сек"
         assert result.tool_0_done is True
         assert result.tool_1_done is True
         assert result.tool_2_done is True

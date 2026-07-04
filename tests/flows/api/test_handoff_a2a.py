@@ -324,7 +324,11 @@ class TestHandoffA2A:
 
         parent_state = await container.workflow_runtime.get_state(f"{fid_a}:{context_id}")
         assert parent_state is not None
-        assert parent_state.handoff_depth >= 1
+        assert parent_state.response == "parent a final"
+        assert len(parent_state.child_workflows) >= 1
+        child_b_key = f"{fid_b}:{context_id}:handoff:{fid_b}"
+        assert child_b_key in parent_state.child_workflows
+        assert parent_state.child_workflows[child_b_key].status == "completed"
 
     @pytest.mark.asyncio
     async def test_k6_handoff_max_depth_exceeded(

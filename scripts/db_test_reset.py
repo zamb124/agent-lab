@@ -13,6 +13,8 @@
 Канон:
   - TRUNCATE всех user-таблиц (кроме alembic_version) во всех 7 service-БД
   - `pg_terminate_backend` всех сторонних сессий перед TRUNCATE
+  - если backend завис в `BgworkerShutdown` и terminate не снимает lock'и —
+    один `docker restart agentlab_postgres_test` и повтор drain
   - `session_replication_role = replica` — отключает FK-триггеры, TRUNCATE <5s
   - TRUNCATE ... RESTART IDENTITY CASCADE одним запросом
   - FLUSHDB Redis DB 0/1 — убирает `mock_llm:*`, `session:*`, `taskiq:*` ключи
@@ -26,6 +28,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import subprocess
 import sys
 from datetime import UTC, datetime
 from pathlib import Path
@@ -45,9 +48,13 @@ _TEST_POSTGRES_HOSTS = {"localhost", "127.0.0.1"}
 _DEFAULT_POSTGRES_DSN = "postgresql://platform_user:admin@localhost:54322"
 _DEFAULT_REDIS_HOST = "localhost"
 _TEST_INFRA_EPOCH_FILE = Path("/tmp/platform_test_infra_epoch")
+_TEST_POSTGRES_CONTAINER = "agentlab_postgres_test"
 _TRUNCATE_ATTEMPTS = 5
 _TRUNCATE_RETRY_SLEEP_SECONDS = 0.2
-_TERMINATE_WAIT_SECONDS = 2.0
+_TERMINATE_WAIT_SECONDS = 5.0
+_SESSION_DRAIN_ATTEMPTS = 20
+_POSTGRES_RESTART_READY_ATTEMPTS = 60
+_POSTGRES_RESTART_READY_SLEEP_SECONDS = 0.5
 
 
 def _quote_ident(name: str) -> str:
@@ -101,7 +108,6 @@ async def _terminate_other_sessions(conn: asyncpg.Connection) -> int:
     Возвращает суммарное число терминированных.
     """
     total = 0
-    # Терминируем всех других.
     rows = await conn.fetch(
         """
         SELECT pid
@@ -118,8 +124,6 @@ async def _terminate_other_sessions(conn: asyncpg.Connection) -> int:
         if terminated:
             total += 1
 
-    # Коротко ждём, пока сторонние lock'и исчезнут. Долгий rollback покрывает
-    # retry/fallback ниже; здесь нельзя зависать на stale backend'е.
     if total:
         attempts = max(1, int(_TERMINATE_WAIT_SECONDS / 0.05))
         for _ in range(attempts):
@@ -138,6 +142,93 @@ async def _terminate_other_sessions(conn: asyncpg.Connection) -> int:
                 break
             await asyncio.sleep(0.05)
     return total
+
+
+def _restart_test_postgres_container() -> None:
+    """Перезапускает тестовый Postgres — единственный способ снять backend в BgworkerShutdown."""
+    result = subprocess.run(
+        ["docker", "restart", _TEST_POSTGRES_CONTAINER],
+        capture_output=True,
+        text=True,
+        timeout=120,
+        check=False,
+    )
+    if result.returncode != 0:
+        stderr = (result.stderr or "").strip()
+        stdout = (result.stdout or "").strip()
+        detail = stderr or stdout or f"exit_code={result.returncode}"
+        raise RuntimeError(
+            f"db_test_reset: не удалось перезапустить {_TEST_POSTGRES_CONTAINER!r}: {detail}"
+        )
+    print(
+        f"db_test_reset: перезапущен {_TEST_POSTGRES_CONTAINER!r} "
+        "(неубиваемые backend'и после pg_terminate_backend)"
+    )
+
+
+async def _wait_test_postgres_ready(
+    *,
+    user: str | None,
+    password: str | None,
+    host: str | None,
+    port: int | None,
+    database: str,
+) -> None:
+    last_error: Exception | None = None
+    for _ in range(_POSTGRES_RESTART_READY_ATTEMPTS):
+        try:
+            conn = await asyncpg.connect(
+                user=user,
+                password=password,
+                host=host,
+                port=port,
+                database=database,
+            )
+        except (asyncpg.PostgresError, OSError, ConnectionError) as exc:
+            last_error = exc
+            await asyncio.sleep(_POSTGRES_RESTART_READY_SLEEP_SECONDS)
+            continue
+        try:
+            await conn.execute("SELECT 1")
+        finally:
+            await conn.close()
+        return
+    if last_error is None:
+        raise RuntimeError(
+            f"db_test_reset: Postgres не поднялся после restart ({_TEST_POSTGRES_CONTAINER!r})"
+        )
+    raise RuntimeError(
+        f"db_test_reset: Postgres не поднялся после restart ({_TEST_POSTGRES_CONTAINER!r}): "
+        f"{last_error}"
+    ) from last_error
+
+
+async def _drain_other_sessions(conn: asyncpg.Connection, *, db_name: str) -> int:
+    """Терминирует чужие backend'и до полного исчезновения granted lock'ов."""
+    total = 0
+    for _ in range(_SESSION_DRAIN_ATTEMPTS):
+        killed = await _terminate_other_sessions(conn)
+        total += killed
+        locks = await conn.fetch(
+            """
+            SELECT 1
+            FROM pg_locks l
+            LEFT JOIN pg_stat_activity a ON l.pid = a.pid
+            WHERE l.pid <> pg_backend_pid()
+              AND l.granted = true
+              AND a.datname = current_database()
+            LIMIT 1
+            """
+        )
+        if not locks:
+            return total
+        await asyncio.sleep(0.25)
+    remaining = await _print_lock_diagnostics(conn, db_name)
+    raise RuntimeError(
+        f"db_test_reset: не удалось снять lock'и в {db_name!r} "
+        f"после terminate (pids={remaining}). Остановите test_stack: "
+        "uv run python -m scripts.test_stack down"
+    )
 
 
 async def _print_lock_diagnostics(conn: asyncpg.Connection, db_name: str) -> list[int]:
@@ -232,8 +323,13 @@ async def _delete_tables_fallback(
     await conn.execute("SET statement_timeout = '5s'")
 
 
-async def _truncate_database(base_dsn: str, db_name: str) -> int:
-    """Truncate всех user-таблиц одной БД. Возвращает количество таблиц.
+async def _truncate_database(
+    base_dsn: str,
+    db_name: str,
+    *,
+    postgres_restarted: bool,
+) -> tuple[int, bool]:
+    """Truncate всех user-таблиц одной БД. Возвращает (число таблиц, postgres_restarted).
 
     Принцип: каждый TRUNCATE <5s (statement_timeout + lock_timeout = 5s).
     Для надёжности:
@@ -258,18 +354,34 @@ async def _truncate_database(base_dsn: str, db_name: str) -> int:
         )
     except asyncpg.InvalidCatalogNameError:
         print(f"  [{db_name}] БД отсутствует, пропуск")
-        return 0
+        return 0, postgres_restarted
 
     try:
-        # Убиваем все сессии, которые держат relation lock'и.
-        # Повторяем, пока не перестанут убиваться.
         total_killed = 0
-        for _ in range(3):
-            killed = await _terminate_other_sessions(conn)
-            if killed:
-                total_killed += killed
-            else:
+        for drain_attempt in range(2):
+            try:
+                total_killed = await _drain_other_sessions(conn, db_name=db_name)
                 break
+            except RuntimeError:
+                if drain_attempt == 1 or postgres_restarted:
+                    raise
+                await conn.close()
+                _restart_test_postgres_container()
+                await _wait_test_postgres_ready(
+                    user=user,
+                    password=password,
+                    host=host,
+                    port=port,
+                    database=db_name,
+                )
+                postgres_restarted = True
+                conn = await asyncpg.connect(
+                    user=user,
+                    password=password,
+                    host=host,
+                    port=port,
+                    database=db_name,
+                )
         if total_killed:
             print(f"  [{db_name}] завершено сторонних сессий: {total_killed}")
 
@@ -285,7 +397,7 @@ async def _truncate_database(base_dsn: str, db_name: str) -> int:
         tables = [row["table_name"] for row in rows]
         if not tables:
             print(f"  [{db_name}] нет user-таблиц, пропуск")
-            return 0
+            return 0, postgres_restarted
 
         # `session_replication_role = replica` отключает FK enforcement.
         # TRUNCATE ... CASCADE не проверяет FK и не ждёт блокировок.
@@ -299,7 +411,7 @@ async def _truncate_database(base_dsn: str, db_name: str) -> int:
             await _delete_tables_fallback(conn, db_name=db_name, tables=tables)
         mode = "TRUNCATE" if truncated else "DELETE fallback"
         print(f"  [{db_name}] {mode}: {len(tables)} таблиц")
-        return len(tables)
+        return len(tables), postgres_restarted
     finally:
         await conn.close()
 
@@ -324,8 +436,14 @@ async def _main() -> int:
     print(f"Сброс тестовой БД: postgres={urlparse(base_dsn).hostname}:{urlparse(base_dsn).port}")
     databases = _load_database_names()
     total_tables = 0
+    postgres_restarted = False
     for db_name in databases:
-        total_tables += await _truncate_database(base_dsn, db_name)
+        table_count, postgres_restarted = await _truncate_database(
+            base_dsn,
+            db_name,
+            postgres_restarted=postgres_restarted,
+        )
+        total_tables += table_count
     print(f"Postgres: очищено {total_tables} таблиц в {len(databases)} БД")
 
     print(f"Сброс тестового Redis: {redis_host}:{redis_port}")

@@ -9,6 +9,7 @@ TaskIQ worker запускается автоматически для тест�
 """
 
 import asyncio
+import hashlib
 import os
 import sys
 import uuid
@@ -267,6 +268,13 @@ def _is_sandbox_runtime_test(nodeid: str) -> bool:
     return any(nodeid.startswith(prefix) for prefix in _CODE_RUNNER_TEST_PREFIXES)
 
 
+def _sandbox_xdist_group(nodeid: str) -> str:
+    """Три непересекающихся очереди sandbox-тестов под -n5 (меньше гонок code_runner)."""
+    digest = hashlib.sha256(nodeid.encode("utf-8")).hexdigest()
+    bucket = int(digest[:8], 16) % 3
+    return f"code_sandbox_{bucket}"
+
+
 @pytest.hookimpl(tryfirst=True)
 def pytest_collection_modifyitems(items: list[pytest.Item]) -> None:
     """Регистрация маркеров для xdist и sandbox.
@@ -277,9 +285,11 @@ def pytest_collection_modifyitems(items: list[pytest.Item]) -> None:
     """
     for item in items:
         if item.get_closest_marker("real_taskiq"):
+            item.add_marker(pytest.mark.xdist_group("real_taskiq"))
             if item.get_closest_marker("timeout") is None:
                 item.add_marker(pytest.mark.timeout(120, func_only=True))
         elif _is_sandbox_runtime_test(item.nodeid):
+            item.add_marker(pytest.mark.xdist_group(_sandbox_xdist_group(item.nodeid)))
             if item.get_closest_marker("timeout") is None:
                 item.add_marker(pytest.mark.timeout(180, func_only=True))
 
