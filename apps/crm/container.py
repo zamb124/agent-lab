@@ -40,6 +40,7 @@ from apps.crm.services.suggest_service import SuggestService
 from apps.crm.services.task_service import TaskService
 from apps.crm.services.user_person_service import UserPersonService
 from core.clients.a2a_client import A2AClient
+from core.clients.redis_client import RedisClient
 from core.config import get_settings
 from core.container import BaseContainer, ContainerRegistry, lazy
 from core.logging import get_logger
@@ -130,9 +131,13 @@ class CRMContainer(BaseContainer):
         )
 
     @lazy
-    def daily_summary_cache_service(self) -> DailySummaryCacheService:
+    def redis_client(self) -> RedisClient:
         settings = get_settings()
-        return DailySummaryCacheService(redis_url=settings.database.redis_url)
+        return RedisClient(settings.database.redis_url)
+
+    @lazy
+    def daily_summary_cache_service(self) -> DailySummaryCacheService:
+        return DailySummaryCacheService(redis_client=self.redis_client)
 
     @lazy
     def daily_summary_artifact_service(self) -> DailySummaryArtifactService:

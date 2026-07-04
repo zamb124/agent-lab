@@ -15,12 +15,11 @@ Session Lock Middleware для TaskIQ.
 """
 
 import asyncio
-from collections.abc import Awaitable
-from typing import Protocol, cast, override
+from typing import override
 
-import redis.asyncio as redis_async
 from taskiq import TaskiqMessage, TaskiqMiddleware, TaskiqResult
 
+from core.clients.redis_client import RedisClient
 from core.config import get_settings
 from core.logging import get_logger
 from core.tasks.message_contract import (
@@ -42,33 +41,6 @@ LOCK_WAIT_MAX_MS = 2000  # Максимальная задержка
 LOCK_WAIT_TIMEOUT_SECONDS = 60  # Таймаут ожидания
 
 
-class _SessionLockRedisClient(Protocol):
-    def set(
-        self,
-        name: str,
-        value: str,
-        *,
-        nx: bool,
-        ex: int,
-    ) -> Awaitable[bool | None]: ...
-
-    def delete(self, name: str) -> Awaitable[int]: ...
-
-
-class _SessionLockRedisFromUrl(Protocol):
-    def __call__(
-        self,
-        url: str,
-        *,
-        decode_responses: bool,
-    ) -> _SessionLockRedisClient: ...
-
-
-def _session_lock_redis_client(redis_url: str) -> _SessionLockRedisClient:
-    redis_from_url = cast(_SessionLockRedisFromUrl, redis_async.from_url)
-    return redis_from_url(redis_url, decode_responses=True)
-
-
 class SessionLockMiddleware(TaskiqMiddleware):
     """
     Middleware для последовательного выполнения задач одной сессии.
@@ -79,14 +51,16 @@ class SessionLockMiddleware(TaskiqMiddleware):
 
     def __init__(self) -> None:
         super().__init__()
-        self._redis_client: _SessionLockRedisClient | None = None
+        self._redis_client: RedisClient | None = None
         self._locks_held: set[str] = set()
 
-    async def _get_redis(self) -> _SessionLockRedisClient:
+    async def _get_redis(self) -> RedisClient:
         """Получить Redis клиент (lazy initialization)"""
         if self._redis_client is None:
             settings = get_settings()
-            self._redis_client = _session_lock_redis_client(settings.database.redis_url)
+            client = RedisClient(settings.database.redis_url)
+            await client.connect()
+            self._redis_client = client
         return self._redis_client
 
     def _get_lock_key(self, session_id: str) -> str:
@@ -98,19 +72,13 @@ class SessionLockMiddleware(TaskiqMiddleware):
         redis_client = await self._get_redis()
         lock_key = self._get_lock_key(session_id)
 
-        # SETNX + expire атомарно
-        acquired = await redis_client.set(
-            lock_key,
-            "locked",
-            nx=True,  # SET если не существует
-            ex=LOCK_TTL_SECONDS,  # TTL в секундах
-        )
+        acquired = await redis_client.set_nx(lock_key, "locked", LOCK_TTL_SECONDS)
 
         if acquired:
             self._locks_held.add(session_id)
             logger.debug("session_lock.acquired", session_id=session_id)
 
-        return bool(acquired)
+        return acquired
 
     async def _wait_for_lock(self, session_id: str) -> bool:
         """

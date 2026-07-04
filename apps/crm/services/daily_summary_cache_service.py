@@ -5,40 +5,17 @@
 from __future__ import annotations
 
 import json
-from collections.abc import Awaitable
 from datetime import UTC, datetime
-from typing import Protocol
-from typing import cast as type_cast
 
-import redis.asyncio as redis_async
-
+from core.clients.redis_client import RedisClient
 from core.types import JsonObject, parse_json_object
-
-
-class _DailySummaryRedis(Protocol):
-    def get(self, name: str) -> Awaitable[str | None]: ...
-
-    def set(self, name: str, value: str, *, ex: int, nx: bool = False) -> Awaitable[bool | None]: ...
-
-    def exists(self, *names: str) -> Awaitable[int]: ...
-
-    def delete(self, *names: str) -> Awaitable[int]: ...
-
-
-class _RedisFromUrl(Protocol):
-    def __call__(self, url: str, *, decode_responses: bool) -> _DailySummaryRedis: ...
-
-
-def _redis_client(redis_url: str) -> _DailySummaryRedis:
-    redis_from_url = type_cast(_RedisFromUrl, redis_async.Redis.from_url)
-    return redis_from_url(redis_url, decode_responses=True)
 
 
 class DailySummaryCacheService:
     """Хранит состояние daily summary и lock в Redis."""
 
-    def __init__(self, redis_url: str) -> None:
-        self._redis: _DailySummaryRedis = _redis_client(redis_url)
+    def __init__(self, redis_client: RedisClient) -> None:
+        self._redis: RedisClient = redis_client
 
     @staticmethod
     def _normalize_namespace(namespace: str | None) -> str:
@@ -81,8 +58,12 @@ class DailySummaryCacheService:
         ttl_seconds: int = 60 * 60 * 24 * 7,
     ) -> None:
         key = self._state_key(company_id=company_id, namespace=namespace, date_str=date_str)
-        ok = await self._redis.set(key, json.dumps(state, ensure_ascii=False), ex=ttl_seconds)
-        if ok is not True:
+        ok = await self._redis.set(
+            key,
+            json.dumps(state, ensure_ascii=False),
+            ttl=ttl_seconds,
+        )
+        if not ok:
             raise RuntimeError("Redis SET daily summary state returned false")
 
     async def is_revalidating(self, company_id: str, namespace: str | None, date_str: str) -> bool:
@@ -98,8 +79,7 @@ class DailySummaryCacheService:
         ttl_seconds: int = 60 * 10,
     ) -> bool:
         key = self._revalidating_key(company_id=company_id, namespace=namespace, date_str=date_str)
-        ok = await self._redis.set(key, datetime.now(UTC).isoformat(), ex=ttl_seconds, nx=True)
-        return ok is True
+        return await self._redis.set_nx(key, datetime.now(UTC).isoformat(), ttl_seconds)
 
     async def clear_revalidating(
         self, company_id: str, namespace: str | None, date_str: str
@@ -115,8 +95,7 @@ class DailySummaryCacheService:
         ttl_seconds: int = 60 * 3,
     ) -> bool:
         key = self._lock_key(company_id=company_id, namespace=namespace, date_str=date_str)
-        ok = await self._redis.set(key, "1", ex=ttl_seconds, nx=True)
-        return ok is True
+        return await self._redis.set_nx(key, "1", ttl_seconds)
 
     async def release_rebuild_lock(
         self, company_id: str, namespace: str | None, date_str: str
@@ -187,8 +166,12 @@ class DailySummaryCacheService:
         ttl_seconds: int = 60 * 60 * 24 * 7,
     ) -> None:
         key = self._period_state_key(company_id, namespace, date_from, date_to)
-        ok = await self._redis.set(key, json.dumps(state, ensure_ascii=False), ex=ttl_seconds)
-        if ok is not True:
+        ok = await self._redis.set(
+            key,
+            json.dumps(state, ensure_ascii=False),
+            ttl=ttl_seconds,
+        )
+        if not ok:
             raise RuntimeError("Redis SET period summary state returned false")
 
     async def is_period_revalidating(
@@ -211,8 +194,7 @@ class DailySummaryCacheService:
         ttl_seconds: int = 60 * 10,
     ) -> bool:
         key = self._period_revalidating_key(company_id, namespace, date_from, date_to)
-        ok = await self._redis.set(key, datetime.now(UTC).isoformat(), ex=ttl_seconds, nx=True)
-        return ok is True
+        return await self._redis.set_nx(key, datetime.now(UTC).isoformat(), ttl_seconds)
 
     async def clear_period_revalidating(
         self,
@@ -233,8 +215,7 @@ class DailySummaryCacheService:
         ttl_seconds: int = 60 * 5,
     ) -> bool:
         key = self._period_lock_key(company_id, namespace, date_from, date_to)
-        ok = await self._redis.set(key, "1", ex=ttl_seconds, nx=True)
-        return ok is True
+        return await self._redis.set_nx(key, "1", ttl_seconds)
 
     async def release_period_rebuild_lock(
         self,

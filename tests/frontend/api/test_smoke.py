@@ -46,7 +46,7 @@ async def test_redis_connection(container):
     redis = container.redis_client
 
     # Простой ping
-    await redis.set("test_key", "test_value")
+    await redis.set("test_key", "test_value", ttl=60)
     value = await redis.get("test_key")
 
     assert value == "test_value"

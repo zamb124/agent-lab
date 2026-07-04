@@ -14,7 +14,7 @@ class InMemoryRedis:
     async def get(self, key: str) -> str | None:
         return self._store.get(key)
 
-    async def set(self, key: str, value: str, ttl: int | None = None) -> bool:
+    async def set(self, key: str, value: str, *, ttl: int) -> bool:
         _ = ttl
         self._store[key] = value
         return True

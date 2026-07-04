@@ -24,6 +24,10 @@ spec:
             - --save
             - "60"
             - "1"
+            - --maxmemory
+            - 3gb
+            - --maxmemory-policy
+            - allkeys-lru
             - --loglevel
             - notice
             - --appendonly

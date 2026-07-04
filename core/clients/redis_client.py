@@ -118,6 +118,24 @@ class _RedisSdkConnection:
         command = type_cast(Callable[..., Awaitable[int]], self._raw.delete)
         return await command(*keys)
 
+    async def exists(self, *keys: str) -> int:
+        command = type_cast(Callable[..., Awaitable[int]], self._raw.exists)
+        return await command(*keys)
+
+    async def scan_keys(self, match: str, *, count: int = 500) -> list[str]:
+        scan_command = type_cast(
+            Callable[..., Awaitable[tuple[int, list[str]]]],
+            self._raw.scan,
+        )
+        cursor = 0
+        keys: list[str] = []
+        while True:
+            cursor, batch = await scan_command(cursor, match=match, count=count)
+            keys.extend(batch)
+            if cursor == 0:
+                break
+        return keys
+
     async def eval(self, script: str, numkeys: int, *keys_and_args: JsonValue) -> JsonValue:
         command = type_cast(Callable[..., Awaitable[JsonValue]], self._raw.eval)
         return await command(script, numkeys, *keys_and_args)
@@ -274,8 +292,10 @@ class RedisClient:
             return lua_result
         raise RedisOperationError(f"getdel({key}) lua вернул non-string: {type(lua_result).__name__}")
 
-    async def set(self, key: str, value: str, ttl: int | None = None) -> bool:
-        """Устанавливает значение по ключу с auto-reconnect; ``True`` при успехе."""
+    async def set(self, key: str, value: str, *, ttl: int) -> bool:
+        """Устанавливает значение по ключу с обязательным TTL (секунды)."""
+        if ttl <= 0:
+            raise ValueError("ttl must be a positive number of seconds")
         if not await self._ensure_connected():
             return False
 
@@ -348,6 +368,30 @@ class RedisClient:
         except (RedisError, OSError, asyncio.TimeoutError) as e:
             raise RedisOperationError(f"delete({keys}): {e}") from e
 
+    async def exists(self, *keys: str) -> int:
+        """Проверяет существование ключей (EXISTS)."""
+        if not keys:
+            return 0
+        if not await self._ensure_connected():
+            return 0
+        try:
+            client = self._require_client()
+            return await client.exists(*keys)
+        except (RedisError, OSError, asyncio.TimeoutError) as e:
+            logger.error(f"RedisClient: ошибка EXISTS {keys}: {e}")
+            return 0
+
+    async def scan_keys(self, match: str, *, count: int = 500) -> list[str]:
+        """SCAN по шаблону; возвращает все совпавшие ключи."""
+        if not await self._ensure_connected():
+            return []
+        try:
+            client = self._require_client()
+            return await client.scan_keys(match, count=count)
+        except (RedisError, OSError, asyncio.TimeoutError) as e:
+            logger.error(f"RedisClient: ошибка SCAN match={match}: {e}")
+            return []
+
     async def eval(self, script: str, numkeys: int, *keys_and_args: JsonValue) -> JsonValue:
         """Выполняет Lua-скрипт (атомарные read-modify-write на стороне Redis)."""
         if not await self._ensure_connected():
@@ -355,20 +399,36 @@ class RedisClient:
         client = self._require_client()
         return require_json_value(await client.eval(script, numkeys, *keys_and_args), "redis.eval")
 
-    async def rpush(self, key: str, *values: str) -> int:
+    async def rpush(self, key: str, *values: str, ttl_seconds: int) -> int:
         """
-        Добавляет значения в конец списка (RPUSH).
+        Добавляет значения в конец списка (RPUSH) и выставляет TTL на ключ.
 
-        Операция записи в ledger поднимает ``RedisOperationError``, чтобы
-        вызывающий код не считал, что событие записано, когда Redis недоступен.
+        Операция записи поднимает ``RedisOperationError``, чтобы вызывающий код
+        не считал, что событие записано, когда Redis недоступен.
         """
+        if ttl_seconds <= 0:
+            raise ValueError("ttl_seconds must be a positive number of seconds")
+        if not values:
+            raise ValueError("rpush requires at least one value")
         if not await self._ensure_connected():
             raise RedisOperationError(f"rpush({key}): Redis недоступен после retry")
         try:
             client = self._require_client()
-            return await client.rpush(key, *values)
+            pushed = await client.rpush(key, *values)
         except (RedisError, OSError, asyncio.TimeoutError) as e:
             raise RedisOperationError(f"rpush({key}): {e}") from e
+        expire_script = (
+            "if redis.call('EXPIRE', KEYS[1], tonumber(ARGV[1])) == 0 then "
+            "return redis.error_reply('EXPIRE failed') end return 1"
+        )
+        try:
+            client = self._require_client()
+            expire_ok = await client.eval(expire_script, 1, key, ttl_seconds)
+        except (RedisError, OSError, asyncio.TimeoutError) as e:
+            raise RedisOperationError(f"rpush_expire({key}): {e}") from e
+        if expire_ok != 1:
+            raise RedisOperationError(f"rpush_expire({key}): unexpected eval result")
+        return pushed
 
     async def lrange(self, key: str, start: int, end: int) -> list[str]:
         """Возвращает срез списка (LRANGE), включая обе границы."""

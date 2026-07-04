@@ -158,6 +158,22 @@ class SchedulerTaskRepository:
             result = await session.execute(stmt)
             return result.scalar() or 0
 
+    async def list_all_schedule_ids(self) -> frozenset[str]:
+        """Все непустые schedule_id из scheduler_tasks (любой статус)."""
+        session_factory = await get_session_factory(self._db_url)
+        async with session_factory() as session:
+            result = await session.execute(
+                select(SchedulerTaskRecord.schedule_id).where(
+                    SchedulerTaskRecord.schedule_id.isnot(None)
+                )
+            )
+            rows = result.scalars().all()
+            schedule_ids: list[str] = []
+            for schedule_id in rows:
+                if schedule_id is not None and schedule_id.strip() != "":
+                    schedule_ids.append(schedule_id)
+            return frozenset(schedule_ids)
+
     async def update_status(
         self,
         company_id: str,

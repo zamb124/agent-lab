@@ -48,6 +48,8 @@ _lint-py:
 	uv run python scripts/check_agent_test_no_monkeypatch.py
 	@echo "=== lint: variables legacy grep ==="
 	@bash scripts/check_variables_legacy.sh
+	@echo "=== lint: redis ttl canon ==="
+	uv run python scripts/check_redis_ttl_canon.py
 
 lint-file:
 	@test -n "$(FILE)" || (echo "usage: make lint FILE=<path>  или  make lint <path>" >&2; exit 1)

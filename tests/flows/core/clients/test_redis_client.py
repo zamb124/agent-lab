@@ -39,7 +39,7 @@ class TestRedisClient:
         key = "test_key_123"
         value = "test_value"
 
-        success = await redis_client.set(key, value)
+        success = await redis_client.set(key, value, ttl=60)
         assert success is True
 
         result = await redis_client.get(key)
@@ -72,7 +72,7 @@ class TestRedisClient:
         key = "test_key_delete"
         value = "test_value"
 
-        await redis_client.set(key, value)
+        await redis_client.set(key, value, ttl=60)
         result = await redis_client.get(key)
         assert result == value
 
@@ -93,9 +93,9 @@ class TestRedisClient:
         key2 = "test_key_delete_2"
         key3 = "test_key_delete_3"
 
-        await redis_client.set(key1, "value1")
-        await redis_client.set(key2, "value2")
-        await redis_client.set(key3, "value3")
+        await redis_client.set(key1, "value1", ttl=60)
+        await redis_client.set(key2, "value2", ttl=60)
+        await redis_client.set(key3, "value3", ttl=60)
 
         deleted = await redis_client.delete(key1, key2, key3)
         assert deleted == 3

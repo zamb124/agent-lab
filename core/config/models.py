@@ -1510,6 +1510,16 @@ class TracingConfig(BaseModel):
     retention_days: int = 30
 
 
+def _default_stream_maxlen_by_queue() -> dict[str, int]:
+    return {
+        "search": 50_000,
+        "idle": 20_000,
+        "crm": 20_000,
+        "rag": 20_000,
+        "flows_worker": 10_000,
+    }
+
+
 class TasksConfig(BaseModel):
     """Конфигурация TaskIQ"""
 
@@ -1524,6 +1534,14 @@ class TasksConfig(BaseModel):
             "Верхняя граница повторов SimpleRetryMiddleware, когда у задачи нет метки max_retries "
             "(fallback через labels таска)."
         ),
+    )
+    stream_maxlen_by_queue: dict[str, int] = Field(
+        default_factory=_default_stream_maxlen_by_queue,
+        description="XADD maxlen per TaskIQ queue (approximate trim). Пустое значение очереди — без trim.",
+    )
+    stream_maxlen_default: int | None = Field(
+        default=None,
+        description="maxlen для очередей вне stream_maxlen_by_queue; None — без trim.",
     )
 
 

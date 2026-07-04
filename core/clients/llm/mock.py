@@ -87,9 +87,12 @@ if decoded == nil or #decoded == 0 then
   return '__MOCK_LLM_QUEUE_EXHAUSTED__'
 end
 local head = table.remove(decoded, 1)
-redis.call('SET', KEYS[1], cjson.encode(decoded))
+redis.call('SET', KEYS[1], cjson.encode(decoded), 'KEEPTTL')
 return cjson.encode(head)
 """
+
+# TTL очереди mock-ответов и журнала capture в Redis (test scope).
+_MOCK_LLM_REDIS_TTL_SECONDS = 24 * 60 * 60
 
 
 class MockLLM:
@@ -254,7 +257,9 @@ class MockLLM:
         }
         try:
             _ = await self._redis_client.rpush(
-                mock_llm_capture_key(scope), json.dumps(record, ensure_ascii=False)
+                mock_llm_capture_key(scope),
+                json.dumps(record, ensure_ascii=False),
+                ttl_seconds=_MOCK_LLM_REDIS_TTL_SECONDS,
             )
         except Exception as exc:
             logger.warning(
@@ -927,7 +932,11 @@ async def setup_mock_responses_redis(
     in-process ASGI) читает её по тому же scope из своего request-контекста.
     """
     key = mock_llm_responses_key(test_scope)
-    _ = await redis_client.set(key, json.dumps(response_queue))
+    _ = await redis_client.set(
+        key,
+        json.dumps(response_queue),
+        ttl=_MOCK_LLM_REDIS_TTL_SECONDS,
+    )
     logger.info("mock_llm.redis_responses_written", count=len(response_queue), key=key)
 
 

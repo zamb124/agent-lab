@@ -80,6 +80,18 @@ class _CachedWorkflowHead:
     status: WorkflowStatus
 
 
+# Скользящий TTL projection-кэша (14 суток). Terminal-сессии удаляются из Redis сразу.
+_WORKFLOW_PROJECTION_CACHE_TTL_SECONDS = 14 * 24 * 60 * 60
+
+_TERMINAL_WORKFLOW_STATUSES: frozenset[WorkflowStatus] = frozenset(
+    {
+        WorkflowStatus.completed,
+        WorkflowStatus.failed,
+        WorkflowStatus.canceled,
+    }
+)
+
+
 class DurableWorkflowRuntime:
     """Runtime проекции состояния на append-only workflow events."""
 
@@ -1043,8 +1055,12 @@ class DurableWorkflowRuntime:
                 f"Projection hash mismatch for {session_id}: "
                 + f"expected {head_state_hash}, got {computed_hash}"
             )
+        cache_key = self._cache_key(company_id, session_id)
+        if status in _TERMINAL_WORKFLOW_STATUSES:
+            _ = await self._redis.delete(cache_key)
+            return
         _ = await self._redis.set(
-            self._cache_key(company_id, session_id),
+            cache_key,
             json.dumps(
                 {
                     "session_id": session_id,
@@ -1057,6 +1073,7 @@ class DurableWorkflowRuntime:
                 ensure_ascii=False,
                 separators=(",", ":"),
             ),
+            ttl=_WORKFLOW_PROJECTION_CACHE_TTL_SECONDS,
         )
 
     @staticmethod

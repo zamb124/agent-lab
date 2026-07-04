@@ -43,12 +43,13 @@ redis:
   image: redis:7-alpine
   storage: 10Gi
   resources:
+    # RDB на диске ~1.9–2.5 Gi; при старте пик RSS + AOF rewrite. 2Gi limits → OOMKilled (exit 137).
     requests:
       cpu: 200m
-      memory: 512Mi
+      memory: 2Gi
     limits:
       cpu: "1"
-      memory: 2Gi
+      memory: 4Gi
 
 # ConfigMap app-conf собирается make render-helm-app-conf из conf.json + overlay.
 # Межсервисные URL в кластере выставляются ENV SERVER__*_SERVICE_URL в templates/_helpers.tpl.
@@ -596,11 +597,11 @@ workers:
       ]
     resources:
       requests:
-        cpu: 200m
-        memory: 512Mi
+        cpu: 500m
+        memory: 1Gi
       limits:
-        cpu: "2"
-        memory: 4Gi
+        cpu: "3"
+        memory: 6Gi
   scheduler:
     nodeName: master
     enabled: true
@@ -741,15 +742,13 @@ litserve:
   # Отключить: embeddingUseBf16: "false"
   embeddingUseBf16: "true"
   resources:
-    # Память: GigaAM v3, Silero TTS/VAD, Qwen3-Reranker-0.6B, Qwen3-Embedding-0.6B.
-    # Пара 0.6B снижает пик RSS vs 4B/8B; limits с запасом под суммарный RSS воркеров.
-    # allocatable памяти ноды (kubelet) должен быть >= limits.memory, иначе Pod Pending.
+    # Фактический RSS ~3.4 Gi на gpu-worker (32 Gi allocatable). requests должны влезать в ноду.
     requests:
       cpu: "2"
-      memory: 28Gi
+      memory: 20Gi
     limits:
       cpu: "8"
-      memory: 52Gi
+      memory: 28Gi
 
 # NVIDIA k8s-device-plugin DaemonSet публикует nvidia.com/gpu в Allocatable.
 # Host-драйвер и containerd drop-in ставит deploy/scripts/bootstrap-gpu-worker.sh.

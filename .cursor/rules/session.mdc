@@ -46,7 +46,7 @@ await container.workflow_runtime.save_state(
 - `workflow_snapshots` — materialized anchors для быстрого rehydrate, не отдельная бизнес-истина.
 - `workflow_instances` — текущий head/projection metadata: branch, sequence, hash, status.
 - `execution_branches` — линии выполнения для fork/rewind/retry.
-- Redis — disposable projection cache. Потеря Redis не должна терять историю.
+- Redis — disposable projection cache (TTL 14d, delete on terminal). Потеря Redis не должна терять историю.
 
 ## Правила
 

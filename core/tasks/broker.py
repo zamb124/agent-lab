@@ -72,6 +72,14 @@ def _task_recovery_redis_client(broker_url: str) -> _TaskRecoveryRedisClient:
     return redis_from_url(broker_url, decode_responses=True)
 
 
+def _stream_maxlen_for_queue(queue_name: str) -> int | None:
+    settings = get_settings()
+    tasks_config = settings.tasks
+    if queue_name in tasks_config.stream_maxlen_by_queue:
+        return tasks_config.stream_maxlen_by_queue[queue_name]
+    return tasks_config.stream_maxlen_default
+
+
 def create_broker(
     queue_name: str | None = None,
     *,
@@ -117,8 +125,23 @@ def create_broker(
         no_result_on_retry=True,
     )
 
+    stream_maxlen = _stream_maxlen_for_queue(effective_queue)
+
+    if stream_maxlen is not None:
+        stream_broker = RedisStreamBroker(
+            url=broker_url,
+            queue_name=effective_queue,
+            maxlen=stream_maxlen,
+            approximate=True,
+        )
+    else:
+        stream_broker = RedisStreamBroker(
+            url=broker_url,
+            queue_name=effective_queue,
+        )
+
     broker = (
-        RedisStreamBroker(url=broker_url, queue_name=effective_queue)
+        stream_broker
         .with_result_backend(result_backend)
         .with_middlewares(
             build_logging_middleware(

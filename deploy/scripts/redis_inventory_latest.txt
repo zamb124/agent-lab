@@ -1,0 +1,20 @@
+# Redis inventory snapshot (prod redis-0, 2026-07-04 post-cleanup)
+
+## Summary
+
+| Phase | used_memory | db0 keys | search XLEN |
+|-------|-------------|----------|-------------|
+| Before fixes | ~1.95G | 331 (292 projection TTL=-1) | 3_076_601 |
+| After db0 cleanup | ~1.94G | ~16 | — |
+| After db1 XTRIM | **~121M** | ~16 | **50_015** |
+
+## Actions applied
+
+1. `redis_cleanup_domain_db0.sh` — deleted 292 `flows:workflow_projection:*`, 23 orphan `platform_schedules:*` on db0.
+2. `redis_trim_taskiq_streams.sh` — XTRIM search→50k, idle/crm/rag→20k.
+
+## Next
+
+- Deploy flows/workers with `maxlen` in `create_broker` + projection TTL (Helm CI).
+- `redis_smoke_projection_ttl.sh` after deploy.
+- Helm apply redis StatefulSet `maxmemory 3gb` + `allkeys-lru`.

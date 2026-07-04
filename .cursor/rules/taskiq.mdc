@@ -124,6 +124,27 @@ await process_flow_task.kiq(
 
 Масштабирование: `docker-compose up --scale flows_worker=4`. Каждый воркер получает свою задачу через `XREADGROUP` (Redis consumer groups), FIFO per session гарантирует `SessionLockMiddleware`.
 
+## Stream retention
+
+Память db1 в основном — Redis Streams. Защита в два слоя:
+
+1. **`maxlen` в `RedisStreamBroker`** (`core/tasks/broker.py::create_broker`) — approximate trim при каждом `XADD`. Дефолты в `TasksConfig.stream_maxlen_by_queue`:
+
+| Очередь | maxlen |
+|---|---|
+| `search` | 50_000 |
+| `idle`, `crm`, `rag` | 20_000 |
+| `flows_worker` | 10_000 |
+| `sync` | без trim (нет в map) |
+
+2. **Одноразовый trim на проде** — только через `deploy/scripts/redis_trim_taskiq_streams.sh` (не ручной `redis-cli`).
+
+`platform_schedules:*` (lists) — без per-key TTL. GC: idle-задача `platform_schedules_gc_tick` (cron `0 4 * * *`, scheduler bootstrap) сверяет `platform_schedules:data:{schedule_id}` с `scheduler_tasks.schedule_id` в Postgres.
+
+Result backend TTL: `result_ex_time=3600` (1 ч) в `create_broker`.
+
+Runbook: `deploy/scripts/README.md`.
+
 ## КРИТИЧНЫЕ ПРАВИЛА
 
 1. Брокер — **только** из модуля воркера (`apps.<name>_worker.broker` / `apps.sync.realtime.broker`). Свой `RedisStreamBroker` запрещён.

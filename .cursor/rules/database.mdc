@@ -180,6 +180,35 @@ class User(BaseModel):
     user_id: str = Field(title="ID", readonly=True, placeholder="user_123")
 ```
 
+## Redis (доменный кэш)
+
+Два URL в конфиге (`configuration.mdc`, `taskiq.mdc`):
+
+| ENV | Назначение |
+|---|---|
+| `DATABASE__REDIS_URL` | Доменный кэш, locks, projection cache, pub/sub UI events |
+| `TASKS__BROKER_URL` | TaskIQ Redis Streams, result backend, `platform_schedules` |
+
+### TTL-only для `DATABASE__REDIS_URL`
+
+Любая запись ключей — только через `core.clients.redis_client.RedisClient`:
+
+- `set(key, value, *, ttl)` — **обязательный** положительный `ttl` (секунды).
+- `set_nx` / `setex` — TTL обязателен по контракту метода.
+- `rpush(key, *values, ttl_seconds=...)` — после RPUSH выставляет EXPIRE.
+- Прямой `redis.from_url` / `Redis.from_url` в `apps/` и `core/` запрещён (allowlist: session lock, invites, TaskIQ broker, WS manager, CRM daily summary, sync presence) — CI `scripts/check_redis_ttl_canon.py`.
+
+Исключения:
+
+- **Pub/Sub** (`publish` / `subscribe`) — не ключи, TTL не применим.
+- **TaskIQ** (`TASKS__BROKER_URL`) — отдельный retention runbook; не писать туда из прикладного кода.
+
+### Workflow projection cache
+
+Ключ `flows:workflow_projection:{company_id}:{session_id}` — disposable cache поверх Postgres ledger (`session.mdc`). TTL 14 суток (скользящий при append); при terminal status (`completed`/`failed`/`canceled`) ключ удаляется. Источник истины — `workflow_events`, не Redis.
+
+Инвентаризация ключей на кластере: `bash deploy/scripts/redis_key_inventory.sh`.
+
 ## Storage — только для репозиториев
 
 Использовать `Storage` напрямую из прикладного кода запрещено: `await container.storage.get("flow:my_flow")` — нет; `await container.flow_repository.get("my_flow")` — да.
