@@ -21,12 +21,12 @@ from apps.agent.desktop.build_contract import (
 from apps.agent.desktop.build_contract import (
     load_default_distro_config,
 )
-from scripts.agent_build import detect_host_platform, ensure_local
+from apps.agent.local_releases import resolve_local_release_artifact_path
+from scripts.agent_build import detect_host_platform
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
 DESKTOP_ROOT = REPO_ROOT / "apps" / "agent" / "desktop"
 DIST_DIR = DESKTOP_ROOT / "dist"
-APPLY_BRANDING = DESKTOP_ROOT / "scripts" / "apply_branding.sh"
 
 
 @dataclass(frozen=True)
@@ -56,11 +56,12 @@ def _git_head_sha() -> str:
 
 
 def _run_apply_branding() -> None:
-    """Desktop E2E идёт строго -n0: сборка branding не конкурирует между процессами."""
-    if not APPLY_BRANDING.is_file():
-        raise FileNotFoundError(f"apply_branding.sh missing: {APPLY_BRANDING}")
+    """Только для тестов сборки/branding. Pytest fixtures не вызывают."""
+    apply_branding = DESKTOP_ROOT / "scripts" / "apply_branding.sh"
+    if not apply_branding.is_file():
+        raise FileNotFoundError(f"apply_branding.sh missing: {apply_branding}")
     completed = subprocess.run(
-        [str(APPLY_BRANDING)],
+        [str(apply_branding)],
         cwd=str(REPO_ROOT),
         check=False,
         capture_output=True,
@@ -75,22 +76,18 @@ def _run_apply_branding() -> None:
 
 
 def ensure_humanitec_desktop_release_artifact() -> Path:
-    artifact_mode = "release"
+    """Read-only verify: артефакт собирает make agent-ensure до pytest, не fixture."""
     configured_mode = __import__("os").environ.get("AGENT_ARTIFACT_MODE")
     if configured_mode is not None and configured_mode != "release":
         raise ValueError(
             f"desktop E2E requires AGENT_ARTIFACT_MODE=release, got {configured_mode!r}"
         )
-    _run_apply_branding()
-    version_sha = _git_head_sha()
-    artifact = ensure_local(artifact_mode=artifact_mode, version_sha=version_sha)
-    if artifact is None:
-        raise FileNotFoundError("HumanitecAgent release artifact was not built")
+    host_platform = detect_host_platform()
+    artifact = resolve_local_release_artifact_path(host_platform)
     if is_placeholder_artifact(artifact):
         raise ArtifactVerificationError(
             f"placeholder artifact forbidden for desktop E2E: {artifact}"
         )
-    host_platform = detect_host_platform()
     distro = load_default_distro_config()
     verify_release_artifact(
         artifact,

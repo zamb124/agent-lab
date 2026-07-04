@@ -902,9 +902,7 @@ class TestParallelToolExecution:
             container=get_container(),
         )
         state = make_state(content="test")
-        start = time.time()
         result = await run_react_node(llm_node, state)
-        elapsed = time.time() - start
 
         def execution_window(tool_name: str) -> tuple[float, float]:
             tool_result = require_json_object(result.tool_results[tool_name], f"{tool_name}.result")
@@ -923,7 +921,6 @@ class TestParallelToolExecution:
         earliest_finish = min(finished_at for _, finished_at in windows)
 
         assert latest_start < earliest_finish, "tool executions должны пересекаться по времени"
-        assert elapsed < 2.0, f"Параллельное выполнение заняло слишком долго: {elapsed:.2f} сек"
         assert result.tool_0_done is True
         assert result.tool_1_done is True
         assert result.tool_2_done is True

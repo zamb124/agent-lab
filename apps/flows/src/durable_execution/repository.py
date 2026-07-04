@@ -49,6 +49,29 @@ class WorkflowConcurrencyError(RuntimeError):
     """Raised when a workflow append races with a newer committed head."""
 
 
+class WorkflowProjectionMismatchError(RuntimeError):
+    """Canonical state_json hash does not match persisted head_state_hash."""
+
+    session_id: str
+    expected_hash: str
+    computed_hash: str
+
+    def __init__(
+        self,
+        *,
+        session_id: str,
+        expected_hash: str,
+        computed_hash: str,
+    ) -> None:
+        self.session_id = session_id
+        self.expected_hash = expected_hash
+        self.computed_hash = computed_hash
+        super().__init__(
+            f"Projection hash mismatch for {session_id}: "
+            + f"expected {expected_hash}, got {computed_hash}"
+        )
+
+
 class NonIdempotentActivityReplayBlockedError(RuntimeError):
     """Raised when non-idempotent work would be repeated without an explicit command."""
 

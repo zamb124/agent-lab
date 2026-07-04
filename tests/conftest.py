@@ -289,6 +289,29 @@ def _is_sync_db_test(nodeid: str) -> bool:
     return nodeid.startswith("tests/sync/db/")
 
 
+def _is_agent_artifact_test(nodeid: str) -> bool:
+    """Тесты, читающие dist/ release артефакт (make agent-ensure). Сериализация read + build."""
+    if nodeid.startswith("tests/agent/test_agent_release_smoke.py"):
+        return True
+    if nodeid.startswith("tests/frontend/api/test_humanitec_agent_api.py"):
+        return True
+    if nodeid.startswith("tests/agent/test_humanitec_agent_build.py::test_artifact_ready"):
+        return True
+    return False
+
+
+def _is_public_search_quota_test(nodeid: str) -> bool:
+    return nodeid.startswith("tests/frontend/api/test_public_search_session.py")
+
+
+def _is_billing_storage_test(nodeid: str) -> bool:
+    return nodeid.startswith("tests/core/billing/test_billing_prices_production_like_integration.py")
+
+
+def _is_crm_e2e_test(nodeid: str) -> bool:
+    return nodeid.startswith("tests/crm/e2e/")
+
+
 @pytest.hookimpl(tryfirst=True)
 def pytest_collection_modifyitems(items: list[pytest.Item]) -> None:
     """Регистрация маркеров для xdist и sandbox.
@@ -304,6 +327,15 @@ def pytest_collection_modifyitems(items: list[pytest.Item]) -> None:
                 item.add_marker(pytest.mark.timeout(120, func_only=True))
         elif _is_sync_db_test(item.nodeid):
             item.add_marker(pytest.mark.xdist_group("sync_db"))
+            if item.get_closest_marker("timeout") is None:
+                item.add_marker(pytest.mark.timeout(60, func_only=True))
+        elif _is_agent_artifact_test(item.nodeid):
+            item.add_marker(pytest.mark.xdist_group("agent_artifact"))
+        elif _is_public_search_quota_test(item.nodeid):
+            item.add_marker(pytest.mark.xdist_group("public_search_quota"))
+        elif _is_billing_storage_test(item.nodeid):
+            item.add_marker(pytest.mark.xdist_group("billing_storage"))
+        elif _is_crm_e2e_test(item.nodeid):
             if item.get_closest_marker("timeout") is None:
                 item.add_marker(pytest.mark.timeout(60, func_only=True))
         elif _is_sandbox_runtime_test(item.nodeid):

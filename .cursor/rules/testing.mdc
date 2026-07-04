@@ -228,6 +228,14 @@ async def test_integration(mock_llm_redis, flows_client, unique_id):
 
 **sync_db xdist group:** `tests/sync/db/**` — `xdist_group("sync_db")` + `timeout=60` (глобальный `pytest.ini` `timeout=5`; `pytestmark` в `conftest.py` на тесты не наследуется). Session fixture `sync_database` гоняет Alembic на воркере — под `-n10` без группы и с 5s лимитом даёт ложные timeout.
 
+**HumanitecAgent artifact (read-only в pytest):** единственный writer — `AGENT_ARTIFACT_MODE=release make agent-ensure` до pytest (`mk/test.mk`). Fixture `agent_local_release_artifact` только verify через `resolve_local_release_artifact_path()`; **запрещён** `apply_branding` из pytest. `apply_branding.sh` держит mkdir-lock `apps/agent/desktop/.branding.lock.d`. `xdist_group("agent_artifact")`: `test_agent_release_smoke`, `test_humanitec_agent_api`, `test_artifact_ready_*`.
+
+**Shared Redis xdist groups:** `public_search_quota` — `tests/frontend/api/test_public_search_session.py` (один quota key); `billing_storage` — `tests/core/billing/test_billing_prices_production_like_integration.py` (глобальный `billing:resource_base_prices_json`). Тесты settle/charge используют изолированный `BillingService(shared_storage=None)`.
+
+**CRM e2e timeout:** `tests/crm/e2e/**` — `timeout=60` func_only (poll semantic search до 9s).
+
+**Permissions integration:** HTTP только для `permissions_enabled=false` (default conf). Checker matrix — `tests/flows/core/auth/test_permissions.py`; enabled channel checks — `tests/flows/core/auth/test_channel_permissions.py` (`flows_permissions_enabled` harness). Запрещён `monkeypatch` на `permissions_enabled`.
+
 **DB pool в тестах:** `core/db/sqlalchemy_pool` — prod `5+10`, `pool_timeout=30`; `TESTING=true` (стек) `1+2`, `pool_timeout=60`; pytest-xdist `1+2`, `pool_timeout=60` (overflow для вложенных `session()` в одном call-stack). QueuePool ждёт свободное соединение до `pool_timeout`, затем `TimeoutError`; `TooManyConnectionsError` — лимит Postgres, не пула. Test Postgres: `max_connections=450` (`docker-compose-test.yaml`). Канон для `core/db/database.py` и `apps/*/db/base.py`.
 
 **A2A tasks/get poll:** пока задача в `working`, `result` может быть `null` — poll-циклы в тестах пропускают такие ответы, не падают через `require_jsonrpc_result`.

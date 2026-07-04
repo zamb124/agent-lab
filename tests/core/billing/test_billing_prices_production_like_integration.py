@@ -80,6 +80,18 @@ def _free_search_mult() -> float:
     return float(DEFAULT_TARIFF_PRICES[TariffPlan.FREE]["search"]["*"])
 
 
+def _isolated_production_billing(frontend_container) -> BillingService:
+    """Прайс из PRODUCTION_LIKE_BASE без чтения глобального shared_storage (xdist-safe)."""
+    return BillingService(
+        frontend_container.company_repository,
+        frontend_container.user_repository,
+        frontend_container.usage_repository,
+        tariff_prices=DEFAULT_TARIFF_PRICES,
+        resource_base_prices=PRODUCTION_LIKE_BASE,
+        shared_storage=None,
+    )
+
+
 @pytest.mark.asyncio
 async def test_static_catalog_matches_platform_default() -> None:
     assert default_billing_resource_base_prices() == PRODUCTION_LIKE_BASE
@@ -87,7 +99,7 @@ async def test_static_catalog_matches_platform_default() -> None:
 
 @pytest.mark.asyncio
 async def test_production_like_llm_star_unit_cost(frontend_container, system_user_id) -> None:
-    billing = frontend_container.billing_service
+    billing = _isolated_production_billing(frontend_container)
     company = await frontend_container.company_repository.get("system")
     assert company is not None
     unit = await billing.get_resource_cost_for_company(company, "llm:gpt-4o")
@@ -96,7 +108,7 @@ async def test_production_like_llm_star_unit_cost(frontend_container, system_use
 
 @pytest.mark.asyncio
 async def test_tool_category_not_billed(frontend_container, system_user_id) -> None:
-    billing = frontend_container.billing_service
+    billing = _isolated_production_billing(frontend_container)
     company = await frontend_container.company_repository.get("system")
     assert company is not None
     assert await billing.get_resource_cost_for_company(company, "tool:any_id") == 0.0
@@ -108,7 +120,7 @@ async def test_search_provider_category_uses_search_tariff_bucket(
     unique_id,
     system_user_id,
 ) -> None:
-    billing = frontend_container.billing_service
+    billing = _isolated_production_billing(frontend_container)
     cid = f"search_{unique_id}"
     company = Company(
         company_id=cid,
@@ -156,7 +168,7 @@ async def test_search_provider_company_origin_records_zero_cost_usage(
         attributes={trace_attr.ATTR_BILLING_COST_ORIGIN: "company"},
     )
 
-    billing = frontend_container.billing_service
+    billing = _isolated_production_billing(frontend_container)
     n = await billing.settle_pending_span_in_job(
         span=span,
         settlement=SpanBillingSettlement(frontend_container.shared_storage),
@@ -238,7 +250,7 @@ async def test_resource_name_split_only_first_colon_for_category(
 
 @pytest.mark.asyncio
 async def test_tariff_plan_basic_multiplier(frontend_container, unique_id, system_user_id) -> None:
-    billing = frontend_container.billing_service
+    billing = _isolated_production_billing(frontend_container)
     cid = f"basic_{unique_id}"
     company = Company(
         company_id=cid,
@@ -257,7 +269,7 @@ async def test_tariff_plan_basic_multiplier(frontend_container, unique_id, syste
 
 @pytest.mark.asyncio
 async def test_tariff_plan_premium_lowers_multiplier(frontend_container, unique_id, system_user_id) -> None:
-    billing = frontend_container.billing_service
+    billing = _isolated_production_billing(frontend_container)
     cid = f"prem_{unique_id}"
     company = Company(
         company_id=cid,
@@ -430,7 +442,7 @@ async def test_settle_span_rule_charge_cost_matches_unit_times_quantity_livekit(
     fresh = await frontend_container.company_repository.get(cid)
     assert fresh is not None
 
-    billing = frontend_container.billing_service
+    billing = _isolated_production_billing(frontend_container)
     unit = await billing.get_resource_cost_for_company(fresh, "livekit:room_minute")
     qty = 4
     expected = unit * qty
@@ -483,7 +495,7 @@ async def test_settle_span_rule_charge_llm_tokens_attr_production_base(
     fresh = await frontend_container.company_repository.get(cid)
     assert fresh is not None
 
-    billing = frontend_container.billing_service
+    billing = _isolated_production_billing(frontend_container)
     tokens = 10_000
     unit = await billing.get_resource_cost_for_company(fresh, "llm:*")
     expected = unit * tokens
@@ -539,7 +551,7 @@ async def test_settle_pending_first_win_single_usage_high_priority_rule(
     fresh = await frontend_container.company_repository.get(cid)
     assert fresh is not None
 
-    billing = frontend_container.billing_service
+    billing = _isolated_production_billing(frontend_container)
     doc = SettlementRulesDocument(
         application_mode=SettlementApplicationMode.FIRST_WIN,
         rules=[

@@ -48,6 +48,7 @@ from .repository import (
     DurableWorkflowRepository,
     NonIdempotentActivityReplayBlockedError,
     WorkflowConcurrencyError,
+    WorkflowProjectionMismatchError,
 )
 from .state_delta import apply_state_delta, build_state_delta
 
@@ -93,6 +94,7 @@ __all__ = [
     "WorkflowEventType",
     "WorkflowExecutionPosition",
     "WorkflowConcurrencyError",
+    "WorkflowProjectionMismatchError",
     "WorkflowStatus",
     "WorkflowStateEventSpec",
     "apply_state_delta",

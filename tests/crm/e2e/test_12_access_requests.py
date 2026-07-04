@@ -4,6 +4,7 @@
 User Story: Запросы доступа к чужим/скрытым entities.
 """
 
+import asyncio
 from typing import cast
 
 import pytest
@@ -132,13 +133,16 @@ class TestAccessRequests:
             "entity_type": "note",
             "name": f"Note {unique_id}",
         }, headers=auth_headers_system)
+        assert entity_resp.status_code == 200
         entity_id = _entity_id(entity_resp)
 
-        _ = await crm_client.post("/crm/api/v1/access-requests", json={
+        request_resp = await crm_client.post("/crm/api/v1/access-requests", json={
             "resource_type": "entity",
             "resource_id": entity_id,
             "message": f"Запрос {unique_id}",
         }, headers=auth_headers_system)
+        assert request_resp.status_code == 200
+        access_request_id = _access_request_id(request_resp)
 
         list_resp = await crm_client.get(
             "/crm/api/v1/access-requests?status=pending",
@@ -147,9 +151,34 @@ class TestAccessRequests:
         assert list_resp.status_code == 200
 
         requests = object_list(_http_json(list_resp).get("items"))
-        pending: list[dict[str, object]] = []
-        for request_row in requests:
-            message_value = request_row.get("message")
-            if isinstance(message_value, str) and unique_id in message_value:
-                pending.append(request_row)
-        assert len(pending) >= 1
+        matched = [
+            request_row
+            for request_row in requests
+            if object_str(request_row.get("access_request_id"), field="access_request_id")
+            == access_request_id
+        ]
+        if len(matched) >= 1:
+            assert object_str(matched[0].get("status"), field="status") == "pending"
+            return
+
+        for _attempt in range(20):
+            await asyncio.sleep(0.1)
+            list_resp = await crm_client.get(
+                "/crm/api/v1/access-requests?status=pending",
+                headers=auth_headers_system,
+            )
+            assert list_resp.status_code == 200
+            requests = object_list(_http_json(list_resp).get("items"))
+            matched = [
+                request_row
+                for request_row in requests
+                if object_str(request_row.get("access_request_id"), field="access_request_id")
+                == access_request_id
+            ]
+            if len(matched) >= 1:
+                assert object_str(matched[0].get("status"), field="status") == "pending"
+                return
+
+        raise AssertionError(
+            f"pending access request {access_request_id!r} not found in list after create"
+        )

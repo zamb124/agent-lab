@@ -33,6 +33,7 @@ from apps.flows.src.durable_execution.repository import (
     DurableWorkflowRepository,
     NonIdempotentActivityReplayBlockedError,
     WorkflowConcurrencyError,
+    WorkflowProjectionMismatchError,
     WorkflowStateTransitionWrite,
 )
 from apps.flows.src.durable_execution.state_delta import apply_state_delta, build_state_delta
@@ -226,7 +227,7 @@ class DurableWorkflowRuntime:
         await self._cache_projection(
             company_id=company_id,
             session_id=session_id,
-            state=state,
+            state_json=self._dump_state(state),
             head_sequence=int(refreshed_instance.head_sequence),
             head_state_hash=head_state_hash,
             execution_branch_id=refreshed_instance.active_execution_branch_id,
@@ -302,7 +303,7 @@ class DurableWorkflowRuntime:
             await self._cache_projection(
                 company_id=company_id,
                 session_id=session_id,
-                state=state,
+                state_json=state_json,
                 head_sequence=result.sequence,
                 head_state_hash=result.state_hash,
                 execution_branch_id=result.execution_branch_id,
@@ -370,7 +371,7 @@ class DurableWorkflowRuntime:
         await self._cache_projection(
             company_id=company_id,
             session_id=session_id,
-            state=st,
+            state_json=state_json,
             head_sequence=result.sequence,
             head_state_hash=result.state_hash,
             execution_branch_id=result.execution_branch_id,
@@ -433,12 +434,12 @@ class DurableWorkflowRuntime:
             expected_head_sequence=expected_head_sequence,
             expected_execution_branch_id=expected_execution_branch_id,
         )
-        last_state = states[-1]
+        last_transition = transitions[-1]
         last_result = results[-1]
         await self._cache_projection(
             company_id=company_id,
             session_id=session_id,
-            state=last_state,
+            state_json=last_transition.state_json,
             head_sequence=last_result.sequence,
             head_state_hash=last_result.state_hash,
             execution_branch_id=last_result.execution_branch_id,
@@ -498,7 +499,7 @@ class DurableWorkflowRuntime:
         await self._cache_projection(
             company_id=company_id,
             session_id=session_id,
-            state=st,
+            state_json=state_json,
             head_sequence=result.sequence,
             head_state_hash=result.state_hash,
             execution_branch_id=result.execution_branch_id,
@@ -664,7 +665,7 @@ class DurableWorkflowRuntime:
                 await self._cache_projection(
                     company_id=company_id,
                     session_id=session_id,
-                    state=state,
+                    state_json=self._dump_state(state),
                     head_sequence=result.sequence,
                     head_state_hash=result.state_hash,
                     execution_branch_id=result.execution_branch_id,
@@ -700,7 +701,7 @@ class DurableWorkflowRuntime:
         await self._cache_projection(
             company_id=company_id,
             session_id=session_id,
-            state=state,
+            state_json=self._dump_state(state),
             head_sequence=result.sequence,
             head_state_hash=result.state_hash,
             execution_branch_id=result.execution_branch_id,
@@ -736,7 +737,7 @@ class DurableWorkflowRuntime:
             await self._cache_projection(
                 company_id=company_id,
                 session_id=session_id,
-                state=target,
+                state_json=self._dump_state(target),
                 head_sequence=result.sequence,
                 head_state_hash=result.state_hash,
                 execution_branch_id=result.execution_branch_id,
@@ -832,7 +833,7 @@ class DurableWorkflowRuntime:
         await self._cache_projection(
             company_id=company_id,
             session_id=session_id,
-            state=retry_state,
+            state_json=self._dump_state(retry_state),
             head_sequence=result.sequence,
             head_state_hash=result.state_hash,
             execution_branch_id=result.execution_branch_id,
@@ -1029,7 +1030,7 @@ class DurableWorkflowRuntime:
             await self._cache_projection(
                 company_id=record.company_id,
                 session_id=record.session_id,
-                state=state,
+                state_json=state_json,
                 head_sequence=result.sequence,
                 head_state_hash=result.state_hash,
                 execution_branch_id=result.execution_branch_id,
@@ -1042,18 +1043,18 @@ class DurableWorkflowRuntime:
         *,
         company_id: str,
         session_id: str,
-        state: ExecutionState,
+        state_json: JsonObject,
         head_sequence: int,
         head_state_hash: str,
         execution_branch_id: str,
         status: WorkflowStatus = WorkflowStatus.running,
     ) -> None:
-        state_json = self._dump_state(state)
         computed_hash = hash_state_json(state_json)
         if computed_hash != head_state_hash:
-            raise ValueError(
-                f"Projection hash mismatch for {session_id}: "
-                + f"expected {head_state_hash}, got {computed_hash}"
+            raise WorkflowProjectionMismatchError(
+                session_id=session_id,
+                expected_hash=head_state_hash,
+                computed_hash=computed_hash,
             )
         cache_key = self._cache_key(company_id, session_id)
         if status in _TERMINAL_WORKFLOW_STATUSES:

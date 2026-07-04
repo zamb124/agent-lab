@@ -255,21 +255,45 @@ async def test_execute_reembed_tick_full_run_embeds_chunk(
     frontend_container, rag_provider_pgvector, unique_id
 ) -> None:
     """End-to-end: execute_reembed_tick через настоящий контейнер и фабрику pgvector."""
+    from core.config import get_settings
+    from core.rag.constants import RAG_IN_PROCESS_PROVIDER_ID
+    from core.rag.factory import get_rag_provider
+    from core.rag.providers.pgvector_provider import PgVectorProvider
+
+    settings = get_settings()
+    assert settings.rag.ttl.reembed_enabled is True, (
+        "reembed_enabled must be true; set RAG__TTL__REEMBED_ENABLED=true"
+    )
+
     cid = f"co_e2e_{unique_id}"
     chunk_id = f"e2e_chunk_{unique_id}"
     ns = f"ns_e2e_{unique_id}"
     await _seed_solvent_company(frontend_container, cid=cid, balance=50.0)
+
+    company = await frontend_container.company_repository.get(cid)
+    assert company is not None
+    assert company.balance > 0
+
     sf = rag_provider_pgvector._session_factory
     await _insert_stale_chunk(
         sf, chunk_id=chunk_id, namespace_id=ns, company_id=cid, content="e2e content",
     )
+    stale_model, stale_has_emb, stale_exists = await _chunk_state(sf, chunk_id)
+    assert stale_exists is True
+    assert stale_has_emb is False
+    assert stale_model is None
+
+    provider_raw = get_rag_provider(RAG_IN_PROCESS_PROVIDER_ID)
+    assert isinstance(provider_raw, PgVectorProvider)
+    assert provider_raw.embedding_model_name() == rag_provider_pgvector.embedding_model_name()
 
     result = await execute_reembed_tick(
         container=frontend_container,
         channel="test_worker_e2e",
         schedule_task_id=f"e2e_{unique_id}",
     )
-    assert result["skipped"] is False
+    if result["skipped"]:
+        pytest.fail(f"execute_reembed_tick skipped unexpectedly: {result}")
     assert result["reembedded"] >= 1
     assert isinstance(result.get("by_company_written"), dict)
     assert result["by_company_written"].get(cid, 0) >= 1

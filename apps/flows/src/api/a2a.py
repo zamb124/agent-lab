@@ -25,6 +25,7 @@ from apps.flows.src.channels.a2a import A2AChannel
 from apps.flows.src.container import FlowContainer
 from apps.flows.src.container_contracts import as_flow_runtime_container
 from apps.flows.src.dependencies import ContainerDep
+from apps.flows.src.durable_execution.repository import WorkflowProjectionMismatchError
 from apps.flows.src.models import BranchCreateRequest, BranchUpdateRequest, FlowConfig
 from apps.flows.src.services.embed_target_resolver import EmbedTarget, resolve_embed_target
 from core.context import get_context
@@ -727,6 +728,26 @@ async def _json_rpc_handler_internal(
                 err_message = str(e)
             return _sse_error_response(rpc_id, err_code, err_message)
         return {"jsonrpc": "2.0", "id": rpc_id, "error": err}
+    except WorkflowProjectionMismatchError as e:
+        logger.error(
+            "workflow_projection_mismatch",
+            session_id=e.session_id,
+            expected_hash=e.expected_hash,
+            computed_hash=e.computed_hash,
+        )
+        projection_error = {
+            "code": -32051,
+            "message": str(e),
+            "data": {
+                "error_code": "projection_hash_mismatch",
+                "session_id": e.session_id,
+                "expected_hash": e.expected_hash,
+                "computed_hash": e.computed_hash,
+            },
+        }
+        if method in _STREAM_METHODS:
+            return _sse_error_response(rpc_id, -32051, str(e))
+        return {"jsonrpc": "2.0", "id": rpc_id, "error": projection_error}
     except Exception as e:
         logger.exception(f"Error handling {method}: {e}")
         if method in _STREAM_METHODS:

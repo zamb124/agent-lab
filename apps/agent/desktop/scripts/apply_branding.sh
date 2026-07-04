@@ -2,6 +2,25 @@
 set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+
+BRANDING_LOCK_DIR="${ROOT_DIR}/.branding.lock.d"
+_release_branding_lock() {
+  rmdir "${BRANDING_LOCK_DIR}" 2>/dev/null || true
+}
+_acquire_branding_lock() {
+  local waited=0
+  while ! mkdir "${BRANDING_LOCK_DIR}" 2>/dev/null; do
+    if (( waited >= 600 )); then
+      echo "apply_branding: timeout waiting for branding lock: ${BRANDING_LOCK_DIR}" >&2
+      exit 1
+    fi
+    sleep 1
+    waited=$((waited + 1))
+  done
+  trap '_release_branding_lock' EXIT INT TERM
+}
+_acquire_branding_lock
+
 DISTRO_JSON="${ROOT_DIR}/distro/humanitec.json"
 BRANDING_DIR="${ROOT_DIR}/branding"
 GOOSE_DESKTOP="${ROOT_DIR}/vendor/goose/ui/desktop"

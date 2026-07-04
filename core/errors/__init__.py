@@ -274,10 +274,17 @@ class ToolExecutionError(ExecutionError):
     message: str = "Ошибка выполнения инструмента"
 
     def __init__(self, tool_id: str, error: Exception, *, code: str | None = None) -> None:
+        payload: JsonObject = {"tool_id": tool_id, "original_error": str(error)}
+        stage_suffix = ""
+        if isinstance(error, CodeExecutionRuntimeError):
+            payload["stage"] = error.payload["stage"]
+            payload["runner_service"] = error.payload["service"]
+            payload["runner_language"] = error.payload["language"]
+            stage_suffix = f" [{error.payload['stage']}]"
         super().__init__(
-            message=f"Ошибка выполнения инструмента '{tool_id}': {str(error)}",
+            message=f"Ошибка выполнения инструмента '{tool_id}'{stage_suffix}: {str(error)}",
             code=code,
-            payload={"tool_id": tool_id, "original_error": str(error)},
+            payload=payload,
         )
 
 

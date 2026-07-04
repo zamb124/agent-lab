@@ -247,9 +247,12 @@ def test_apply_branding_script_patches_goose_desktop() -> None:
             ui_path.write_text(ui_backup, encoding="utf-8")
 
 
-def test_artifact_ready_distinguishes_placeholder_from_release() -> None:
+def test_artifact_ready_distinguishes_placeholder_from_release(
+    agent_local_release_artifact: Path,
+) -> None:
     from scripts.agent_build import artifact_ready
 
+    artifact = agent_local_release_artifact
     completed = subprocess.run(
         ["git", "rev-parse", "HEAD"],
         cwd=str(REPO_ROOT),
@@ -263,13 +266,6 @@ def test_artifact_ready_distinguishes_placeholder_from_release() -> None:
     platform_name = _native_platform()
     if platform_name is None:
         raise RuntimeError("Unsupported host OS for artifact_ready contract test")
-    distro = load_default_distro_config()
-    artifact = DIST_DIR / artifact_filename(platform_name, version_sha, distro.bundle_name)
-    if not artifact.is_file():
-        raise FileNotFoundError(
-            f"Expected local artifact for contract test: {artifact}. "
-            "Run placeholder build for current HEAD first."
-        )
     if is_placeholder_artifact(artifact):
         if artifact_ready(platform_name, version_sha, artifact_mode="release"):
             raise AssertionError("placeholder artifact must not satisfy release artifact_ready")

@@ -1,5 +1,6 @@
 """Тесты DSL-фильтрации и поиска через POST /entities/query."""
 
+import asyncio
 from datetime import date
 from typing import cast
 
@@ -7,6 +8,7 @@ import pytest
 from httpx import AsyncClient, Response
 
 from tests.crm.e2e._json_helpers import json_object, object_dict, object_list, object_str
+from tests.fixtures.crm_test_setup import wait_for_crm_semantic_search_hit
 
 
 def _http_json(response: Response) -> dict[str, object]:
@@ -412,19 +414,34 @@ class TestSearchContract:
         unique_id: str,
         auth_headers_system: dict[str, str],
     ) -> None:
-        _ = await crm_client.post(
+        marker = f"search_modes_{unique_id}"
+        create_response = await crm_client.post(
             "/crm/api/v1/entities/",
             json={
                 "entity_type": "note",
-                "name": f"Search {unique_id}",
-                "description": f"Score payload {unique_id}",
+                "name": f"Search {marker}",
+                "description": f"Score payload {marker}",
             },
             headers=auth_headers_system,
         )
+        assert create_response.status_code == 200
+
+        await wait_for_crm_semantic_search_hit(
+            crm_client,
+            auth_headers_system,
+            query=marker,
+            entity_type="note",
+        )
+
         for mode in ("hybrid", "text", "semantic"):
             response = await crm_client.post(
                 "/crm/api/v1/entities/query",
-                json={"query": unique_id, "search_mode": mode, "limit": 20},
+                json={
+                    "query": marker,
+                    "search_mode": mode,
+                    "entity_type": "note",
+                    "limit": 20,
+                },
                 headers=auth_headers_system,
             )
             assert response.status_code == 200
@@ -434,7 +451,9 @@ class TestSearchContract:
                 raise AssertionError("has_more must be a bool")
             assert has_more is False
             assert payload.get("next_cursor") is None
-            for item in _query_items(response):
+            items = _query_items(response)
+            assert len(items) >= 1, f"search_mode={mode} must return at least one hit for {marker!r}"
+            for item in items:
                 assert "score" in item
                 assert "match_type" in item
 
