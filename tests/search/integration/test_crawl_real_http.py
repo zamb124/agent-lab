@@ -11,7 +11,7 @@ from core.crawl.models import CrawlDomainSeed, CrawlProfileCreateRequest
 from core.search.index_models import SearchIndexCreateRequest
 from tests.search.conftest import make_search_index_slug
 
-pytestmark = pytest.mark.timeout(180, func_only=True)
+pytestmark = [pytest.mark.timeout(180, func_only=True), pytest.mark.network]
 
 REAL_CRAWL_DOMAIN = "example.com"
 REAL_CRAWL_QUERY = "documentation examples"

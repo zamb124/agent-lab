@@ -55,6 +55,7 @@ async def test_soak_100_acquire_fetch_release() -> None:
         reaper_interval_sec=60,
         max_contexts=50,
         session_state_ttl_sec=3600,
+        crawl_fetch_max_inflight=5,
     )
     facade = build_test_facade(view)
     fr = BrowserFetchRequest(

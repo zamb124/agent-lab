@@ -9,3 +9,7 @@ The HumanitecAgent tab shows the desktop release status block.
 ## Step 2. HumanitecAgent settings tab opened
 
 ![HumanitecAgent settings tab opened](screenshots/002.png)
+
+## Step 3. Release status block is visible
+
+![Release status block is visible](screenshots/003.png)

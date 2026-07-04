@@ -588,40 +588,37 @@ class TestKnowledgeImportE2E:
         chunk_marker = f"KN_E2E_MEET_NOTE_{unique_id}"
         note_title = f"Заметка контейнер {unique_id}"
         meeting_name = f"Встреча E2E {unique_id}"
+        payload: dict[str, object] = {
+            "note": {
+                "entity_type": "note",
+                "name": note_title,
+                "description": f"Текст чанка {chunk_marker}",
+            },
+            "entities": [
+                {
+                    "entity_type": "meeting",
+                    "name": meeting_name,
+                    "description": "Онлайн звонок",
+                    "attributes": {"origin": "knowledge_import"},
+                },
+            ],
+            "relationships": [
+                {
+                    "source_type": "note",
+                    "source_name": note_title,
+                    "target_type": "meeting",
+                    "target_name": meeting_name,
+                    "relationship_type": "mentions",
+                    "weight": 1.0,
+                    "confidence": 0.9,
+                },
+            ],
+            "metadata": _META,
+        }
         await mock_llm_redis(
             [
-                {
-                    "type": "text",
-                    "content": json.dumps(
-                        {
-                            "note": {
-                                "entity_type": "note",
-                                "name": note_title,
-                                "description": f"Текст чанка {chunk_marker}",
-                            },
-                            "entities": [
-                                {
-                                    "entity_type": "meeting",
-                                    "name": meeting_name,
-                                    "description": "Онлайн звонок",
-                                    "attributes": {"origin": "knowledge_import"},
-                                },
-                            ],
-                            "relationships": [
-                                {
-                                    "source_type": "note",
-                                    "source_name": note_title,
-                                    "target_type": "meeting",
-                                    "target_name": meeting_name,
-                                    "relationship_type": "mentions",
-                                    "weight": 1.0,
-                                    "confidence": 0.9,
-                                },
-                            ],
-                            "metadata": _META,
-                        }
-                    ),
-                }
+                {"type": "text", "content": json.dumps(payload)},
+                {"type": "text", "content": json.dumps(payload)},
             ]
         )
         await _ensure_import_namespace(crm_client, auth_headers_system, ns)

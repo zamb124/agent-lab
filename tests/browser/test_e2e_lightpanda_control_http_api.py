@@ -24,7 +24,6 @@ from httpx import ASGITransport, AsyncClient
 
 from tests.browser.e2e_step_metrics import e2e_lightpanda_cdp_url, e2e_lightpanda_enabled
 
-pytestmark = pytest.mark.xdist_group("browser_cdp")
 
 
 def _build_browser_app(*, cdp_url: str) -> object:

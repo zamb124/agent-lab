@@ -22,6 +22,7 @@ from core.http import get_httpx_client
 from core.http.client import HttpRequestKwargs
 from core.internal_context_headers import build_internal_context_headers
 from core.logging import get_log_context, get_logger
+from core.test_scope import TEST_SCOPE_HEADER, resolve_test_scope
 from core.types import JsonValue, require_json_value
 
 logger = get_logger(__name__)
@@ -99,6 +100,10 @@ class ServiceClient:
             headers[TRACE_ID_HEADER] = trace_id
         if isinstance(request_id, str) and request_id:
             headers[REQUEST_ID_HEADER] = request_id
+
+        test_scope = resolve_test_scope()
+        if test_scope is not None:
+            headers[TEST_SCOPE_HEADER] = test_scope
 
         return headers
 

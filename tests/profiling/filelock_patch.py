@@ -65,9 +65,3 @@ def install_filelock_patch() -> None:
 
     filelock.FileLock = ProfiledFileLock
     _patched = True
-
-    import tests.fixtures.search_runet as search_runet_mod
-    import tests.fixtures.workers as workers_mod
-
-    workers_mod.FileLock = ProfiledFileLock
-    search_runet_mod.FileLock = ProfiledFileLock

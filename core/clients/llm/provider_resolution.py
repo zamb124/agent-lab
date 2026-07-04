@@ -20,9 +20,13 @@ from core.ai.providers import (
     PROVIDER_LITSERVE,
 )
 from core.config.base import BaseSettings
-from core.config.llm_openai_compat import yandex_llm_openai_root_from_provider_cfg
+from core.config.llm_openai_compat import (
+    collect_provider_api_keys,
+    yandex_llm_openai_root_from_provider_cfg,
+)
 from core.config.models import (
     BothubProviderConfig,
+    CailaProviderConfig,
     DeepInfraProviderConfig,
     GitHubModelsProviderConfig,
     GoogleLLMProviderConfig,
@@ -50,6 +54,7 @@ _OpenAICompatibleProviderConfig = (
     | GitHubModelsProviderConfig
     | HuggingFaceProviderConfig
     | DeepInfraProviderConfig
+    | CailaProviderConfig
 )
 
 
@@ -75,6 +80,8 @@ def _configured_provider_config(
         return settings.llm.huggingface
     if provider == "deepinfra":
         return settings.llm.deepinfra
+    if provider == "caila":
+        return settings.llm.caila
     return None
 
 
@@ -200,6 +207,7 @@ def _github_default_headers(settings: BaseSettings) -> dict[str, str]:
 def _provider_display_name(provider: str) -> str:
     return {
         "bothub": "Bothub",
+        "caila": "Caila",
         "deepinfra": "DeepInfra",
         "github": "GitHub Models",
         "google": "Google LLM",
@@ -216,7 +224,9 @@ def _configured_openai_compatible_provider(
     provider: str,
 ) -> _OpenAICompatibleProviderConfig:
     provider_config = _configured_provider_config(settings, provider)
-    if provider_config is None or not provider_config.api_key:
+    if provider_config is None:
+        raise ValueError(f"{_provider_display_name(provider)} конфиг не задан")
+    if not collect_provider_api_keys(provider_config):
         raise ValueError(f"{_provider_display_name(provider)} API key не настроен")
     return provider_config
 
@@ -371,7 +381,7 @@ def _resolve_llm_call_config(
             folder_id = str(yandex_config.folder_id).strip()
             candidate_model = normalize_yandex_resource_model_uri(candidate_model, folder_id)
             default_headers = _yandex_auth_headers(
-                api_key=str(yandex_config.api_key),
+                api_key=collect_provider_api_keys(yandex_config)[0],
                 folder_id=folder_id,
             )
     elif resolved_provider == "custom_openai_compatible":
@@ -381,7 +391,7 @@ def _resolve_llm_call_config(
         )
 
     if provider_config is not None:
-        resolved_api_key = str(provider_config.api_key).strip()
+        resolved_api_key = collect_provider_api_keys(provider_config)[0]
     return config.model_copy(
         update={
             "provider": resolved_provider,
@@ -442,7 +452,9 @@ def _platform_free_pool_provider_is_configured(
     if provider not in PLATFORM_FREE_MODEL_CANDIDATE_PROVIDER_SLUGS:
         return False
     provider_config = _configured_provider_config(settings, provider)
-    if provider_config is None or not provider_config.api_key:
+    if provider_config is None:
+        return False
+    if not collect_provider_api_keys(provider_config):
         return False
     if provider in ACCOUNT_FREE_TIER_LLM_PROVIDER_SLUGS:
         smoke_model = provider_config.smoke_model

@@ -281,8 +281,9 @@ async def on_startup(app: FastAPI, container: FrontendContainer, settings: Front
     await container.redis_client.connect()
     logger.info("frontend.redis.connected")
 
-    from apps.agent.tunnel_bus import start_tunnel_bus_listener
+    from apps.agent.tunnel_bus import configure_tunnel_bus_storage, start_tunnel_bus_listener
 
+    configure_tunnel_bus_storage(container.shared_storage)
     await start_tunnel_bus_listener(container.redis_client)
 
     if is_testing():

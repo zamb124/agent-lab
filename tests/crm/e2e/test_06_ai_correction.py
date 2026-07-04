@@ -15,7 +15,6 @@ from httpx import AsyncClient, Response
 
 from tests.crm.e2e._json_helpers import (
     json_object,
-    mock_llm_queue_with_analyze_spare,
     object_dict,
     object_list,
     object_str,
@@ -93,7 +92,7 @@ class TestAICorrection:
     async def test_correct_extracted_entity(self, crm_client: AsyncClient, mock_llm_redis: MockLlmRedisFactory, unique_id: str, auth_headers_system: dict[str, str],
     ):
         """Пользователь правит entity после AI анализа"""
-        await mock_llm_redis(mock_llm_queue_with_analyze_spare([{
+        await mock_llm_redis([{
             "type": "text",
             "content": json.dumps({
                 "note": {
@@ -112,7 +111,7 @@ class TestAICorrection:
                 "relationships": [],
                 "metadata": _META,
             })
-        }]))
+        }])
 
         note_resp = await crm_client.post("/crm/api/v1/entities/", json={
             "entity_type": "note",
@@ -184,7 +183,7 @@ class TestAICorrection:
     async def test_delete_incorrect_entity(self, crm_client: AsyncClient, mock_llm_redis: MockLlmRedisFactory, unique_id: str, auth_headers_system: dict[str, str],
     ):
         """Удаление ошибочно извлеченной entity"""
-        await mock_llm_redis(mock_llm_queue_with_analyze_spare([{
+        await mock_llm_redis([{
             "type": "text",
             "content": json.dumps({
                 "note": {
@@ -207,7 +206,7 @@ class TestAICorrection:
                 "relationships": [],
                 "metadata": _META,
             })
-        }]))
+        }])
 
         note_resp = await crm_client.post("/crm/api/v1/entities/", json={
             "entity_type": "note",
@@ -284,7 +283,7 @@ class TestAICorrection:
     async def test_update_note_after_ai_analysis(self, crm_client: AsyncClient, mock_llm_redis: MockLlmRedisFactory, unique_id: str, auth_headers_system: dict[str, str],
     ):
         """Корректировка самой заметки после AI анализа"""
-        await mock_llm_redis(mock_llm_queue_with_analyze_spare([{
+        await mock_llm_redis([{
             "type": "text",
             "content": json.dumps({
                 "note": {
@@ -297,7 +296,7 @@ class TestAICorrection:
                 "relationships": [],
                 "metadata": _META,
             })
-        }]))
+        }])
 
         note_resp = await crm_client.post("/crm/api/v1/entities/", json={
             "entity_type": "note",

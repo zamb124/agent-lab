@@ -61,6 +61,7 @@ from core.tasks.message_contract import (
     task_message_string_label,
     task_message_string_labels,
 )
+from core.test_scope import LOG_TEST_SCOPE
 from core.types import JsonValue, TaskLabelMap
 
 _LABEL_TRACE_ID = "trace_id"
@@ -70,6 +71,7 @@ _LABEL_NAMESPACE = "namespace"
 _LABEL_SESSION_ID = "session_id"
 _LABEL_REQUEST_ID = "request_id"
 _LABEL_SERVICE_NAME = "service_name"
+_LABEL_TEST_SCOPE = LOG_TEST_SCOPE
 _LOG_LABEL_KEYS = frozenset(
     {
         _LABEL_TRACE_ID,
@@ -79,6 +81,7 @@ _LOG_LABEL_KEYS = frozenset(
         _LABEL_SESSION_ID,
         _LABEL_REQUEST_ID,
         _LABEL_SERVICE_NAME,
+        _LABEL_TEST_SCOPE,
     }
 )
 
@@ -126,7 +129,13 @@ class LoggingMiddleware(TaskiqMiddleware):
             settings = get_settings()
             labels[_LABEL_SERVICE_NAME] = settings.server.name
 
-        for key in (_LABEL_USER_ID, _LABEL_COMPANY_ID, _LABEL_NAMESPACE, _LABEL_SESSION_ID):
+        for key in (
+            _LABEL_USER_ID,
+            _LABEL_COMPANY_ID,
+            _LABEL_NAMESPACE,
+            _LABEL_SESSION_ID,
+            _LABEL_TEST_SCOPE,
+        ):
             if _label_present(labels, key):
                 continue
             value = log_ctx.get(key)
@@ -177,6 +186,9 @@ class LoggingMiddleware(TaskiqMiddleware):
         session_id = self._optional_label(labels, _LABEL_SESSION_ID)
         if session_id is not None:
             scope_extra[LOG_SESSION_ID] = session_id
+        test_scope = self._optional_label(labels, _LABEL_TEST_SCOPE)
+        if test_scope is not None:
+            scope_extra[_LABEL_TEST_SCOPE] = test_scope
         token = enter_request_scope(
             request_id=request_id,
             trace_id=trace_id,

@@ -63,6 +63,7 @@ class CompanyResolvedLLM(_FrozenModel):
     provider: str
     model: str
     api_key: str | None = None
+    api_keys: tuple[str, ...] | None = None
     base_url: str | None = None
     folder_id: str | None = None
     extra_request_headers: dict[str, str] | None = None
@@ -339,6 +340,10 @@ def resolve_company_llm(
         )
 
     api_key = _decrypt_or_none(override.api_key_encrypted)
+    extra_decrypted = [
+        _decrypt_or_none(k) for k in (override.api_key_encrypted_extra or [])
+    ]
+    extra_keys = [k for k in extra_decrypted if k]
     has_byok = bool(api_key) or bool(override.base_url)
     cost_origin = COST_ORIGIN_COMPANY if has_byok else COST_ORIGIN_PLATFORM
 
@@ -353,6 +358,7 @@ def resolve_company_llm(
         provider=override.provider,
         model=str(model).strip(),
         api_key=api_key,
+        api_keys=tuple(extra_keys) if extra_keys else None,
         base_url=override.base_url,
         folder_id=override.folder_id,
         extra_request_headers=dict(override.extra_request_headers or {}) or None,

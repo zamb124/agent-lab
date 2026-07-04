@@ -23,11 +23,21 @@ type DeviceRegisterResponsePayload = {
   device_id: string;
   token: string;
   platform_mcp_url: string;
+  toolkits_url: string;
   frontend_base_url: string;
   tunnel_ws_url: string;
   company_id: string;
   company_subdomain: string | null;
   llm: AgentLlmBundlePayload;
+};
+
+type HumanitecToolkitCatalogItemPayload = {
+  toolkit_id: string;
+  name: string;
+  description: string;
+  default_enabled: boolean;
+  position: number;
+  mcp_url: string;
 };
 
 const DEV_PROBE_ORIGINS = [
@@ -92,6 +102,9 @@ function credentialsFromRegisterBody(body: DeviceRegisterResponsePayload): Human
   if (typeof body.llm !== 'object' || body.llm === null) {
     throw new Error('register response missing llm bundle');
   }
+  if (typeof body.toolkits_url !== 'string' || !body.toolkits_url) {
+    throw new Error('register response toolkits_url is required');
+  }
   if (typeof body.llm.api_base_url !== 'string' || !body.llm.api_base_url) {
     throw new Error('register response llm.api_base_url is required');
   }
@@ -107,6 +120,7 @@ function credentialsFromRegisterBody(body: DeviceRegisterResponsePayload): Human
     frontend_base_url: body.frontend_base_url,
     tunnel_ws_url: body.tunnel_ws_url,
     platform_mcp_url: body.platform_mcp_url,
+    toolkits_url: body.toolkits_url,
     company_id: body.company_id,
     company_subdomain: body.company_subdomain,
     llm_api_base_url: body.llm.api_base_url,
@@ -122,8 +136,27 @@ function applyPlatformMcpEnv(credentials: HumanitecAgentCredentials): void {
   for (const window of BrowserWindow.getAllWindows()) {
     window.webContents.send('humanitec-agent:platform-mcp-env-updated', {
       platform_mcp_url: credentials.platform_mcp_url,
+      toolkits_url: credentials.toolkits_url,
     });
   }
+}
+
+async function fetchHumanitecToolkitsCatalog(
+  credentials: HumanitecAgentCredentials,
+): Promise<HumanitecToolkitCatalogItemPayload[]> {
+  const response = await fetch(credentials.toolkits_url, {
+    headers: {
+      Authorization: `Bearer ${credentials.token}`,
+    },
+  });
+  if (!response.ok) {
+    throw new Error(`toolkits catalog failed: HTTP ${response.status}`);
+  }
+  const body = (await response.json()) as HumanitecToolkitCatalogItemPayload[];
+  if (!Array.isArray(body)) {
+    throw new Error('toolkits catalog response must be an array');
+  }
+  return body;
 }
 
 function notifyExtensionsResync(): void {
@@ -225,6 +258,9 @@ export async function startHumanitecTunnel(
     log: (message) => console.log(`[HumanitecAgent] ${message}`),
     onPolicy: (policy) => {
       console.log('[HumanitecAgent] tunnel policy', policy);
+    },
+    onToolkitsUpdated: () => {
+      notifyExtensionsResync();
     },
     onDisconnected: (code, reason) => {
       console.log(`[HumanitecAgent] tunnel disconnected ${code} ${reason}`);
@@ -346,6 +382,14 @@ export async function initHumanitecAgentRuntime(): Promise<void> {
 
   ipcMain.handle('humanitec-agent:open-pairing', async () => {
     openHumanitecPairingWindow();
+  });
+
+  ipcMain.handle('humanitec-agent:fetch-toolkits-catalog', async () => {
+    const credentials = loadHumanitecAgentCredentials(app.getPath('userData'));
+    if (credentials === null) {
+      throw new Error('HumanitecAgent credentials missing');
+    }
+    return fetchHumanitecToolkitsCatalog(credentials);
   });
 
   ipcMain.handle('humanitec-agent:extensions-resync', async () => {

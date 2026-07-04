@@ -10,7 +10,7 @@ from core.crawl.models import CrawlProfileCreateRequest
 from core.search.index_models import SearchIndexCreateRequest
 from tests.search.conftest import make_search_index_slug
 
-pytestmark = pytest.mark.timeout(120, func_only=True)
+pytestmark = [pytest.mark.timeout(120, func_only=True), pytest.mark.network]
 
 
 @pytest.mark.asyncio

@@ -9,6 +9,7 @@ from __future__ import annotations
 from core.ai.providers import LLM_PROVIDER_DEFAULT_BASE_URLS
 from core.config.models import (
     BothubProviderConfig,
+    CailaProviderConfig,
     DeepInfraProviderConfig,
     GitHubModelsProviderConfig,
     GoogleLLMProviderConfig,
@@ -31,6 +32,7 @@ _LLMProviderConfig = (
     | GitHubModelsProviderConfig
     | HuggingFaceProviderConfig
     | DeepInfraProviderConfig
+    | CailaProviderConfig
 )
 
 _LLM_KEY_PLACEHOLDERS: frozenset[str] = frozenset(
@@ -45,6 +47,7 @@ _LLM_KEY_PLACEHOLDERS: frozenset[str] = frozenset(
         "YOUR_GITHUB_MODELS_API_KEY",
         "YOUR_HUGGINGFACE_API_KEY",
         "YOUR_DEEPINFRA_API_KEY",
+        "YOUR_CAILA_API_KEY",
     }
 )
 
@@ -80,6 +83,8 @@ def _active_llm_provider_block(
         return p, llm.huggingface
     if p == "deepinfra":
         return p, llm.deepinfra
+    if p == "caila":
+        return p, llm.caila
     raise ValueError(
         f"llm.provider={p!r} не поддержан для OpenAI-совместимого API."
     )
@@ -109,7 +114,39 @@ def llm_provider_block(
         return llm.huggingface
     if p == "deepinfra":
         return llm.deepinfra
+    if p == "caila":
+        return llm.caila
     raise ValueError(f"provider={p!r} не поддержан для OpenAI-совместимого API.")
+
+
+def collect_provider_api_keys(cfg: _LLMProviderConfig) -> list[str]:
+    """Все нормализованные API ключи из provider config блока (может быть пустым).
+
+    Единая точка нормализации для всей платформы: ``api_key`` становится первым
+    элементом, затем добавляются ``api_keys`` без дубликатов. Placeholder'ы и
+    пустые строки фильтруются.
+    """
+    keys: list[str] = []
+    main_key = _norm_api_key(cfg.api_key)
+    if main_key:
+        keys.append(main_key)
+    if cfg.api_keys:
+        for k in cfg.api_keys:
+            nk = _norm_api_key(k)
+            if nk and nk not in keys:
+                keys.append(nk)
+    return keys
+
+
+def resolve_provider_api_keys(llm: LLMConfig, provider: str) -> list[str]:
+    """Все активные API ключи провайдера (основной api_key + дополнительные api_keys)."""
+    cfg = llm_provider_block(llm, provider)
+    if cfg is None:
+        raise ValueError(f"Конфиг провайдера не задан для provider={provider!r}")
+    keys = collect_provider_api_keys(cfg)
+    if not keys:
+        raise ValueError(f"Нужен хотя бы один api_key для provider={provider!r}.")
+    return keys
 
 
 def resolve_llm_api_key_for_openai_compatible_calls(llm: LLMConfig) -> str:
@@ -117,34 +154,27 @@ def resolve_llm_api_key_for_openai_compatible_calls(llm: LLMConfig) -> str:
     p, cfg = _active_llm_provider_block(llm)
     if cfg is None:
         raise ValueError(f"Конфиг провайдера не задан для llm.provider={p!r}")
-    k = _norm_api_key(cfg.api_key)
-    if not k:
+    keys = collect_provider_api_keys(cfg)
+    if not keys:
         raise ValueError(f"Нужен непустой api_key для llm.provider={p!r} (эмбеддинги).")
-    return k
+    return keys[0]
 
 
 def resolve_provider_api_key_for_openai_compatible_calls(llm: LLMConfig, provider: str) -> str:
     """API key for an explicit OpenAI-compatible provider slug."""
-    p = provider.strip().lower()
-    cfg = llm_provider_block(llm, p)
-    if cfg is None:
-        raise ValueError(f"Конфиг провайдера не задан для provider={p!r}")
-    k = _norm_api_key(cfg.api_key)
-    if not k:
-        raise ValueError(f"Нужен непустой api_key для provider={p!r}.")
-    return k
+    return resolve_provider_api_keys(llm, provider)[0]
 
 
 def yandex_provider_http_headers(cfg: YandexLLMProviderConfig) -> dict[str, str]:
     """Заголовки Yandex по подблоку ``llm.yandex`` (без требования ``llm.provider``)."""
-    k = _norm_api_key(cfg.api_key)
-    if not k:
+    keys = collect_provider_api_keys(cfg)
+    if not keys:
         raise ValueError("Нужен непустой api_key в конфиге Yandex LLM")
     fid = cfg.folder_id
     if fid is None or not fid.strip():
         raise ValueError("Нужен непустой folder_id в конфиге Yandex LLM")
     return {
-        "Authorization": f"Api-Key {k}",
+        "Authorization": f"Api-Key {keys[0]}",
         "x-folder-id": fid.strip(),
     }
 

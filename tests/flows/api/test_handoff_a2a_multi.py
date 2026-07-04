@@ -182,7 +182,6 @@ class TestHandoffMultiCycleA2A:
                 "tool": "handback_to_parent",
                 "args": {"response": "from a", "variables": {"agent": "a", "result": "ok-a"}},
             },
-            "child a finished",
             {
                 "type": "tool_call",
                 "tool": "handoff_to_flow",
@@ -194,7 +193,6 @@ class TestHandoffMultiCycleA2A:
                 "tool": "handback_to_parent",
                 "args": {"response": "from b", "variables": {"agent": "b", "result": "ok-b"}},
             },
-            "child b finished",
             "parent after both handbacks",
         ])
 

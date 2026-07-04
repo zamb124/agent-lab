@@ -43,13 +43,23 @@ jq -n \
   --arg onlyofficeJwtSecret "${ONLYOFFICE_JWT_SECRET:-}" \
   --arg grafanaAdminPassword "${GRAFANA_ADMIN_PASSWORD:-}" \
   --arg llmOpenrouterApiKey "${LLM__OPENROUTER__API_KEY:-${LLM_OPENROUTER_API_KEY:-}}" \
+  --arg llmOpenrouterApiKeys "${LLM__OPENROUTER__API_KEYS:-}" \
   --arg llmBothubApiKey "${LLM__BOTHUB__API_KEY:-${LLM_BOTHUB_API_KEY:-}}" \
+  --arg llmBothubApiKeys "${LLM__BOTHUB__API_KEYS:-}" \
   --arg llmGroqApiKey "${LLM__GROQ__API_KEY:-}" \
+  --arg llmGroqApiKeys "${LLM__GROQ__API_KEYS:-}" \
   --arg llmGoogleApiKey "${LLM__GOOGLE__API_KEY:-}" \
+  --arg llmGoogleApiKeys "${LLM__GOOGLE__API_KEYS:-}" \
   --arg llmGithubApiKey "${LLM__GITHUB__API_KEY:-}" \
+  --arg llmGithubApiKeys "${LLM__GITHUB__API_KEYS:-}" \
   --arg llmHuggingfaceApiKey "${LLM__HUGGINGFACE__API_KEY:-}" \
+  --arg llmHuggingfaceApiKeys "${LLM__HUGGINGFACE__API_KEYS:-}" \
   --arg llmDeepinfraApiKey "${LLM__DEEPINFRA__API_KEY:-}" \
+  --arg llmDeepinfraApiKeys "${LLM__DEEPINFRA__API_KEYS:-}" \
+  --arg llmCailaApiKey "${LLM__CAILA__API_KEY:-}" \
+  --arg llmCailaApiKeys "${LLM__CAILA__API_KEYS:-}" \
   --arg llmYandexApiKey "${LLM__YANDEX__API_KEY:-}" \
+  --arg llmYandexApiKeys "${LLM__YANDEX__API_KEYS:-}" \
   --arg llmYandexFolderId "${LLM__YANDEX__FOLDER_ID:-}" \
   --arg sttCloudRuApiKey "${STT_CLOUD_RU_API_KEY:-}" \
   --arg sttYandexApiKey "${STT_YANDEX_API_KEY:-}" \
@@ -103,13 +113,23 @@ jq -n \
     onlyofficeJwtSecret: $onlyofficeJwtSecret,
     grafanaAdminPassword: $grafanaAdminPassword,
     llmOpenrouterApiKey: $llmOpenrouterApiKey,
+    llmOpenrouterApiKeys: $llmOpenrouterApiKeys,
     llmBothubApiKey: $llmBothubApiKey,
+    llmBothubApiKeys: $llmBothubApiKeys,
     llmGroqApiKey: $llmGroqApiKey,
+    llmGroqApiKeys: $llmGroqApiKeys,
     llmGoogleApiKey: $llmGoogleApiKey,
+    llmGoogleApiKeys: $llmGoogleApiKeys,
     llmGithubApiKey: $llmGithubApiKey,
+    llmGithubApiKeys: $llmGithubApiKeys,
     llmHuggingfaceApiKey: $llmHuggingfaceApiKey,
+    llmHuggingfaceApiKeys: $llmHuggingfaceApiKeys,
     llmDeepinfraApiKey: $llmDeepinfraApiKey,
+    llmDeepinfraApiKeys: $llmDeepinfraApiKeys,
+    llmCailaApiKey: $llmCailaApiKey,
+    llmCailaApiKeys: $llmCailaApiKeys,
     llmYandexApiKey: $llmYandexApiKey,
+    llmYandexApiKeys: $llmYandexApiKeys,
     llmYandexFolderId: $llmYandexFolderId,
     sttCloudRuApiKey: $sttCloudRuApiKey,
     sttYandexApiKey: $sttYandexApiKey,

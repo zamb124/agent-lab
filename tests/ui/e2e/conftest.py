@@ -5,6 +5,14 @@ from __future__ import annotations
 import pytest
 
 from core.logging import get_logger
+from tests.fixtures.e2e_scope import bind_static_e2e_scope
+
+
+@pytest.fixture(autouse=True)
+def platform_test_scope():
+    """Статический scope фазы UI E2E: запросы браузера не несут X-Test-Scope."""
+    with bind_static_e2e_scope() as scope:
+        yield scope
 
 
 @pytest.fixture

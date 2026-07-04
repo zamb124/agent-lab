@@ -761,7 +761,13 @@
             "audit_event_agent_device_registered": "Device registered",
             "audit_event_agent_device_revoked": "Device revoked",
             "audit_event_agent_device_policy_updated": "Device policy updated",
-            "audit_event_agent_mcp_tools_call": "Platform MCP tool call"
+            "audit_event_agent_mcp_tools_call": "Platform MCP tool call",
+            "toolkits_title": "Agent tool groups",
+            "toolkits_help": "Each group appears in HumanitecAgent as a separate extension. Users enable or disable groups in the agent settings.",
+            "toolkits_empty": "No tool groups configured yet",
+            "toolkits_default": "Default",
+            "toolkits_flows": "Flows",
+            "toolkits_tools": "Tools"
         },
         "ai_providers": {
             "section_context": "Default LLM context",

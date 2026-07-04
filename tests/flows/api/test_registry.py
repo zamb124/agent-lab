@@ -146,6 +146,7 @@ def test_humanitec_llm_available_with_account_free_tier_provider(monkeypatch):
             github=None,
             huggingface=None,
             deepinfra=None,
+            caila=None,
             openai=None,
             yandex=None,
             platform_free_pool=SimpleNamespace(

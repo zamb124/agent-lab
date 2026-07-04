@@ -15,7 +15,6 @@ from httpx import AsyncClient, Response
 
 from tests.crm.e2e._json_helpers import (
     json_object,
-    mock_llm_queue_with_analyze_spare,
     object_dict,
     object_list,
     object_str,
@@ -58,7 +57,7 @@ async def _analyze_note(
     if mock_llm_redis is not None or mock_responses is not None:
         if mock_llm_redis is None or mock_responses is None:
             raise ValueError("mock_llm_redis and mock_responses must be passed together")
-        await mock_llm_redis(mock_llm_queue_with_analyze_spare(mock_responses))
+        await mock_llm_redis(mock_responses)
     elif prepare_mock is not None:
         await prepare_mock()
     body: dict[str, object] = {

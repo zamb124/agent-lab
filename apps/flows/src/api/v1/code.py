@@ -1096,6 +1096,10 @@ def _compute_diff(old: JsonObject, new: JsonObject, path: str = "") -> list[Diff
         "terminal_task_state",
         "terminal_task_error",
         "llm_context_memory_cursor",
+        "handoff_depth",
+        "handoff_trace_id",
+        "handoff_parent_session_id",
+        "handback_return_variables",
     }
     all_keys = set(old.keys()) | set(new.keys())
 

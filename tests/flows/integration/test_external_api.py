@@ -378,14 +378,15 @@ class TestFlowWithExternalAPI:
     @pytest.mark.asyncio
     async def test_flow_with_external_api_node(self, app, monkeypatch):
         """Agent с ExternalAPINode."""
-        import httpx
-
+        from apps.flows.src.clients.external_api_client import ExternalAPIClient
         from apps.flows.src.container import get_container
 
-        async def mock_request(self, *args, **kwargs):
+        async def mock_request(self, method, url, **kwargs):
+            import httpx
+
             return httpx.Response(200, json={"status": "completed", "data": {"processed": True}})
 
-        monkeypatch.setattr(httpx.AsyncClient, "request", mock_request)
+        monkeypatch.setattr(ExternalAPIClient, "_request_with_proxy_fallback", mock_request)
         container = get_container()
         flow_config = FlowConfig(
             flow_id="external_api_flow",

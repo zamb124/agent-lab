@@ -19,6 +19,7 @@ OPENAI_COMPATIBLE_LLM_PROVIDER_ORDER: tuple[str, ...] = (
     "github",
     "huggingface",
     "deepinfra",
+    "caila",
     "openai",
     "yandex",
 )
@@ -62,6 +63,7 @@ LLM_FREE_MODEL_DISCOVERY_POLICY_BY_PROVIDER: dict[str, str] = {
     "github": "account_free_tier",
     "huggingface": "account_free_tier",
     "deepinfra": "no_verified_free_policy",
+    "caila": "no_verified_free_policy",
     "openai": "no_verified_free_policy",
     "yandex": "no_verified_free_policy",
 }
@@ -76,6 +78,7 @@ LLM_PROVIDER_DEFAULT_BASE_URLS: dict[str, str] = {
     "github": "https://models.github.ai/inference",
     "huggingface": "https://router.huggingface.co/v1",
     "deepinfra": "https://api.deepinfra.com/v1/openai",
+    "caila": "https://caila.io/api/openai/v1",
 }
 
 LLM_PROVIDER_DEFAULT_MODELS_URLS: dict[str, str] = {
@@ -88,6 +91,7 @@ LLM_PROVIDER_DEFAULT_MODELS_URLS: dict[str, str] = {
     "github": "https://models.github.ai/catalog/models",
     "huggingface": "https://router.huggingface.co/v1/models",
     "deepinfra": "https://api.deepinfra.com/v1/openai/models",
+    "caila": "https://caila.io/api/openai/v1/models",
 }
 
 LLM_PROVIDER_SMOKE_MODELS: dict[str, str] = {
@@ -99,6 +103,7 @@ LLM_PROVIDER_SMOKE_MODELS: dict[str, str] = {
     "github": "openai/gpt-4o-mini",
     "huggingface": "meta-llama/Llama-3.2-1B-Instruct:fastest",
     "deepinfra": "deepseek-ai/DeepSeek-V3",
+    "caila": "gpt-4o-mini",
 }
 
 LLM_PROVIDER_DETECTION_HOSTS: dict[str, tuple[str, ...]] = {
@@ -111,6 +116,7 @@ LLM_PROVIDER_DETECTION_HOSTS: dict[str, tuple[str, ...]] = {
     "github": ("models.github.ai",),
     "huggingface": ("router.huggingface.co",),
     "deepinfra": ("api.deepinfra.com",),
+    "caila": ("caila.io",),
 }
 
 GITHUB_MODELS_API_VERSION = "2026-03-10"

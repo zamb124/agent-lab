@@ -400,7 +400,7 @@ class TestVariablesE2E:
 
     @pytest.mark.asyncio
     async def test_var_reference_in_metadata_recursive_resolution(
-        self, client, flow_id, mock_llm_with_queue, sync_tools, app
+        self, client, flow_id, mock_llm_with_queue, sync_tools, app, unique_id: str
     ):
         """
         7. Проверяет рекурсивный резолв @var: ссылок в metadata.
@@ -414,11 +414,13 @@ class TestVariablesE2E:
         from tests.fixtures.variables_helpers import upsert_static_variable_via_service
 
         container = get_container()
+        base_url_key = f"base_url_e2e_{unique_id}"
+        api_endpoint_key = f"api_endpoint_e2e_{unique_id}"
         await upsert_static_variable_via_service(
-            container, "base_url", "https://api.example.com"
+            container, base_url_key, "https://api.example.com"
         )
         await upsert_static_variable_via_service(
-            container, "api_endpoint", "@var:base_url/v1"
+            container, api_endpoint_key, f"@var:{base_url_key}/v1"
         )
 
         # Настраиваем mock LLM ответ
@@ -441,7 +443,7 @@ class TestVariablesE2E:
                         context_id=context_id,
                         metadata={
                             "variables": {
-                                "api_endpoint": "@var:api_endpoint",  # Ссылка на переменную, которая содержит другую ссылку
+                                "api_endpoint": f"@var:{api_endpoint_key}",
                                 "company_name": "TestCompany",
                             }
                         },
@@ -467,7 +469,7 @@ class TestVariablesE2E:
 
     @pytest.mark.asyncio
     async def test_var_reference_in_json_metadata_recursive_resolution(
-        self, client, flow_id, mock_llm_with_queue, sync_tools, app
+        self, client, flow_id, mock_llm_with_queue, sync_tools, app, unique_id: str
     ):
         """
         8. Проверяет рекурсивный резолв @var: ссылок внутри JSON объектов в metadata.
@@ -482,10 +484,13 @@ class TestVariablesE2E:
         from tests.fixtures.variables_helpers import upsert_static_variable_via_service
 
         container = get_container()
-        await upsert_static_variable_via_service(container, "db_host", "localhost")
-        await upsert_static_variable_via_service(container, "db_port", "5432")
+        db_host_key = f"db_host_e2e_{unique_id}"
+        db_port_key = f"db_port_e2e_{unique_id}"
+        db_connection_key = f"db_connection_e2e_{unique_id}"
+        await upsert_static_variable_via_service(container, db_host_key, "localhost")
+        await upsert_static_variable_via_service(container, db_port_key, "5432")
         await upsert_static_variable_via_service(
-            container, "db_connection", "@var:db_host:@var:db_port"
+            container, db_connection_key, f"@var:{db_host_key}:@var:{db_port_key}"
         )
 
         # Настраиваем mock LLM ответ
@@ -509,9 +514,9 @@ class TestVariablesE2E:
                         metadata={
                             "variables": {
                                 "db_config": {
-                                    "host": "@var:db_host",
-                                    "port": "@var:db_port",
-                                    "connection": "@var:db_connection",  # Ссылка, которая содержит другие ссылки
+                                    "host": f"@var:{db_host_key}",
+                                    "port": f"@var:{db_port_key}",
+                                    "connection": f"@var:{db_connection_key}",
                                 },
                                 "company_name": "TestCompany",
                             }

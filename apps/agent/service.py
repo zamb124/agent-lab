@@ -292,6 +292,19 @@ def _platform_mcp_url(frontend_base_url: str | None = None) -> str:
     return f"{base.rstrip('/')}/flows/api/v1/agent/platform-mcp"
 
 
+def build_toolkit_mcp_url_for_frontend(
+    toolkit_id: str,
+    frontend_base_url: str | None = None,
+) -> str:
+    base = frontend_base_url if frontend_base_url is not None else get_frontend_public_base_url()
+    return f"{base.rstrip('/')}/flows/api/v1/agent/platform-mcp/{toolkit_id}"
+
+
+def build_toolkits_catalog_url_for_frontend(frontend_base_url: str | None = None) -> str:
+    base = frontend_base_url if frontend_base_url is not None else get_frontend_public_base_url()
+    return f"{base.rstrip('/')}/flows/api/v1/agent/toolkits"
+
+
 def _llm_api_url(frontend_base_url: str | None = None) -> str:
     base = frontend_base_url if frontend_base_url is not None else get_frontend_public_base_url()
     return f"{base.rstrip('/')}/flows/api/v1/agent/llm/v1"
@@ -336,6 +349,7 @@ def build_device_register_response(
         device_id=device_id,
         token=token,
         platform_mcp_url=_platform_mcp_url(base),
+        toolkits_url=build_toolkits_catalog_url_for_frontend(base),
         frontend_base_url=base,
         tunnel_ws_url=build_tunnel_ws_url(base),
         company_id=company_id,
@@ -355,6 +369,7 @@ async def fetch_agent_discover(
     return AgentDiscoverResponse(
         frontend_base_url=frontend_base_url,
         platform_mcp_url=_platform_mcp_url(frontend_base_url),
+        toolkits_url=build_toolkits_catalog_url_for_frontend(frontend_base_url),
         tunnel_ws_url=build_tunnel_ws_url(frontend_base_url),
         llm_api_url=_llm_api_url(frontend_base_url),
         releases=releases,

@@ -11,6 +11,11 @@ from pydantic import Field
 from apps.flows.src.dependencies import ContainerDep
 from apps.flows.src.models import FlowConfig, ToolReference
 from apps.flows.src.models.enums import ReactToolRole
+from apps.flows.src.services.agent_toolkit_service import (
+    get_toolkit_ids_for_flow,
+    get_toolkit_ids_for_tool,
+    set_tool_toolkit_membership,
+)
 from apps.flows.src.tools.base import BaseTool
 from core.logging import get_logger
 from core.models import StrictBaseModel
@@ -34,6 +39,7 @@ class ToolCreateRequest(StrictBaseModel):
     parameters_schema: JsonObject
     tags: list[str] | None = None
     react_role: str | None = None
+    agent_toolkit_ids: list[str] = Field(default_factory=list)
 
 
 class ToolResponse(StrictBaseModel):
@@ -56,12 +62,21 @@ class ToolResponse(StrictBaseModel):
     mcp_schema_hash: str | None = None
     mcp_schema_version: str | None = None
     mcp_output_schema: JsonObject | None = None
+    agent_toolkit_ids: list[str] = Field(default_factory=list)
 
 
 _TOOLS_MAX_LIMIT = 2000
 
 
-def _tool_response_from_reference(t: ToolReference) -> ToolResponse:
+async def _toolkit_ids_for_tool(container: ContainerDep, tool_id: str) -> list[str]:
+    return await get_toolkit_ids_for_tool(container.agent_toolkit_repository, tool_id)
+
+
+async def _toolkit_ids_for_flow(container: ContainerDep, flow_id: str) -> list[str]:
+    return await get_toolkit_ids_for_flow(container.agent_toolkit_repository, flow_id)
+
+
+def _tool_response_from_reference(t: ToolReference, *, agent_toolkit_ids: list[str]) -> ToolResponse:
     return ToolResponse(
         tool_id=t.tool_id,
         title=t.title,
@@ -80,6 +95,7 @@ def _tool_response_from_reference(t: ToolReference) -> ToolResponse:
         mcp_schema_hash=t.mcp_schema_hash,
         mcp_schema_version=t.mcp_schema_version,
         mcp_output_schema=t.mcp_output_schema,
+        agent_toolkit_ids=agent_toolkit_ids,
     )
 
 
@@ -124,8 +140,14 @@ async def list_tools(
         container.tool_repository.list(limit=limit, offset=offset),
         container.tool_repository.count_all(),
     )
+    response_items: list[ToolResponse] = []
+    for tool_row in tools:
+        toolkit_ids = await _toolkit_ids_for_tool(container, tool_row.tool_id)
+        response_items.append(
+            _tool_response_from_reference(tool_row, agent_toolkit_ids=toolkit_ids)
+        )
     return OffsetPage[ToolResponse](
-        items=[_tool_response_from_reference(t) for t in tools],
+        items=response_items,
         total=total,
         limit=limit,
         offset=offset,
@@ -151,7 +173,8 @@ async def list_all_tools_and_flows(
     items: list[ToolResponse] = []
     seen_tool_ids: set[str] = set()
     for t in tools_list:
-        items.append(_tool_response_from_reference(t))
+        toolkit_ids = await _toolkit_ids_for_tool(container, t.tool_id)
+        items.append(_tool_response_from_reference(t, agent_toolkit_ids=toolkit_ids))
         seen_tool_ids.add(t.tool_id)
 
     registry = container.tool_registry
@@ -167,7 +190,9 @@ async def list_all_tools_and_flows(
         registry_only_count += 1
 
     for flow_row in flows_list:
-        items.append(_flow_response(flow_row))
+        flow_toolkit_ids = await _toolkit_ids_for_flow(container, flow_row.flow_id)
+        flow_item = _flow_response(flow_row)
+        items.append(flow_item.model_copy(update={"agent_toolkit_ids": flow_toolkit_ids}))
 
     page = items[offset : offset + limit]
     return OffsetPage[ToolResponse](
@@ -183,36 +208,14 @@ async def get_tool(tool_id: str, container: ContainerDep) -> ToolResponse:
     """Получает tool по ID; при отсутствии в репозитории — flow с тем же id."""
     tool = await container.tool_repository.get(tool_id)
     if tool is not None:
-        return ToolResponse(
-            tool_id=tool.tool_id,
-            title=tool.title,
-            description=tool.description,
-            code=tool.code,
-            language=tool.language,
-            entrypoint=tool.entrypoint,
-            parameters_schema=tool.parameters_schema,
-            tags=tool.tags or ["misc"],
-            permission=tool.permission,
-            item_type="tool",
-            react_role=tool.react_role.value,
-            code_mode=tool.code_mode.value,
-            mcp_server_id=tool.mcp_server_id,
-            mcp_tool_name=tool.mcp_tool_name,
-            mcp_schema_hash=tool.mcp_schema_hash,
-            mcp_schema_version=tool.mcp_schema_version,
-            mcp_output_schema=tool.mcp_output_schema,
-        )
+        toolkit_ids = await _toolkit_ids_for_tool(container, tool.tool_id)
+        return _tool_response_from_reference(tool, agent_toolkit_ids=toolkit_ids)
     flow_cfg = await container.flow_repository.get(tool_id)
     if flow_cfg is None:
         raise HTTPException(status_code=404, detail="Tool not found")
-    return ToolResponse(
-        tool_id=flow_cfg.flow_id,
-        title=flow_cfg.name,
-        description=flow_cfg.description,
-        tags=list(flow_cfg.tags) if flow_cfg.tags else ["flow"],
-        permission=list(flow_cfg.permission) if flow_cfg.permission else None,
-        item_type="flow",
-    )
+    flow_toolkit_ids = await _toolkit_ids_for_flow(container, flow_cfg.flow_id)
+    flow_item = _flow_response(flow_cfg)
+    return flow_item.model_copy(update={"agent_toolkit_ids": flow_toolkit_ids})
 
 
 @router.post("/", response_model=ToolResponse)
@@ -243,17 +246,15 @@ async def create_tool(request: ToolCreateRequest, container: ContainerDep) -> To
     )
 
     _ = await container.tool_repository.set(ref)
-
-    return ToolResponse(
+    await set_tool_toolkit_membership(
+        container.agent_toolkit_repository,
         tool_id=ref.tool_id,
-        title=ref.title,
-        description=ref.description,
-        code=ref.code,
-        language=ref.language,
-        entrypoint=ref.entrypoint,
-        parameters_schema=ref.parameters_schema,
-        tags=ref.tags,
-        react_role=ref.react_role.value,
+        toolkit_ids=list(request.agent_toolkit_ids),
+    )
+
+    return _tool_response_from_reference(
+        ref,
+        agent_toolkit_ids=list(request.agent_toolkit_ids),
     )
 
 

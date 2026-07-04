@@ -12,14 +12,41 @@ import pytest
 import pytest_asyncio
 from httpx import AsyncClient
 
-from tests.agent._helpers import FRONTEND_HTTP_BASE, pair_and_register_device
+from tests.agent._helpers import (
+    AGENT_TEST_PUBLIC_ORIGIN,
+    agent_base_url_from_token,
+    pair_and_register_device,
+)
 from tests.agent._realtime_helpers import connect_agent_tunnel_ws
 
 
 @pytest_asyncio.fixture
-async def agent_frontend_http_client(auth_token: str) -> AsyncIterator[AsyncClient]:
+async def agent_base_url(
+    auth_token: str,
+    frontend_container,
+    test_company_subdomains_initialized,
+) -> str:
+    _ = test_company_subdomains_initialized
+    return await agent_base_url_from_token(auth_token, frontend_container)
+
+
+@pytest_asyncio.fixture
+async def agent_base_url_company2(
+    auth_token_company2: str,
+    frontend_container,
+    test_company_subdomains_initialized,
+) -> str:
+    _ = test_company_subdomains_initialized
+    return await agent_base_url_from_token(auth_token_company2, frontend_container)
+
+
+@pytest_asyncio.fixture
+async def agent_frontend_http_client(
+    auth_token: str,
+    agent_base_url: str,
+) -> AsyncIterator[AsyncClient]:
     async with AsyncClient(
-        base_url=FRONTEND_HTTP_BASE,
+        base_url=agent_base_url,
         follow_redirects=False,
         cookies={"auth_token": auth_token},
     ) as client:
@@ -28,14 +55,20 @@ async def agent_frontend_http_client(auth_token: str) -> AsyncIterator[AsyncClie
 
 @pytest_asyncio.fixture
 async def agent_frontend_http_anon() -> AsyncIterator[AsyncClient]:
-    async with AsyncClient(base_url=FRONTEND_HTTP_BASE, follow_redirects=False) as client:
+    async with AsyncClient(
+        base_url=AGENT_TEST_PUBLIC_ORIGIN,
+        follow_redirects=False,
+    ) as client:
         yield client
 
 
 @pytest_asyncio.fixture
-async def agent_frontend_http_company2(auth_token_company2: str) -> AsyncIterator[AsyncClient]:
+async def agent_frontend_http_company2(
+    auth_token_company2: str,
+    agent_base_url_company2: str,
+) -> AsyncIterator[AsyncClient]:
     async with AsyncClient(
-        base_url=FRONTEND_HTTP_BASE,
+        base_url=agent_base_url_company2,
         follow_redirects=False,
         cookies={"auth_token": auth_token_company2},
     ) as client:

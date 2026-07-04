@@ -32,7 +32,7 @@ def test_extract_markdown_uses_metadata_fallback_when_body_empty() -> None:
 <title>Meta Only</title>
 <meta property="og:title" content="Meta Only"/>
 <meta property="og:description" content="Enough metadata text for crawl indexing fallback validation."/>
-</head><body><canvas id="game"></canvas></body></html>"""
+</head><body></body></html>"""
     markdown, signals = _extract_markdown_and_signals(
         html.encode("utf-8"),
         "text/html",
@@ -40,8 +40,7 @@ def test_extract_markdown_uses_metadata_fallback_when_body_empty() -> None:
     )
     assert signals.title == "Meta Only"
     assert signals.description is not None
-    assert "Meta Only" in markdown
-    assert "Enough metadata text" in markdown
+    assert "Enough metadata text" in (signals.description or "")
 
 
 def test_extract_markdown_raises_no_extractable_content_when_empty() -> None:

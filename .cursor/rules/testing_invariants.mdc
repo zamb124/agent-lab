@@ -50,7 +50,7 @@ alwaysApply: false
 
 ## Параллельный запуск
 
-`unique_id` везде, где возможны коллизии; `xdist_group`/session-фикстуры по **`testing.mdc`**; без голого глобального состояния и фиксированных `"test-1"`. TaskIQ — таймауты и `@pytest.mark.real_taskiq` по канону.
+`unique_id` везде, где возможны коллизии; `test_scope` и session-фикстуры по **`testing.mdc`**; без голого глобального состояния и фиксированных `"test-1"`. TaskIQ — таймауты и `@pytest.mark.real_taskiq` по канону.
 
 ## Ссылки
 

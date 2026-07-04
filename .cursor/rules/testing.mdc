@@ -43,19 +43,19 @@ uv run python analyze_imports.py
 
 ### Параллельная безопасность (pytest-xdist)
 
-Запуск с `-n N --dist=loadgroup`. Каждый gw — отдельный процесс. БД, Redis, MinIO — общие.
+Запуск с `-n N` (без `--dist=loadgroup`). Каждый gw — отдельный процесс. БД, Redis, MinIO — общие; HTTP-сервисы и TaskIQ-воркеры — **один общий стек** (`make test-up` → `scripts/test_stack.py up`).
 
 - Захардкоженные идентификаторы (`task_id="my-task"`, `flow_id="test_flow"`) запрещены — все ID содержат `unique_id`.
-- Захардкоженные порты, временные файлы, Redis-ключи без `unique_id`/xdist-суффикса запрещены (исключение: session-фикстуры с `FileLock`).
-- Тесты с эксклюзивным доступом к общему ресурсу — обязательно в `xdist_group` (маркер или `pytest_collection_modifyitems`).
-- `@pytest.mark.real_taskiq` → группа `real_taskiq_<lane>`: `flows_llm` (tests/crm + tests/flows + tests/frontend — общая очередь `mock_llm:responses:flows`, т.к. CRM analyze идёт через A2A на flows), `sync`, `rag`; ключ Redis задаёт `_real_taskiq_mock_llm_lane` и `MOCK_LLM_REDIS_KEY` в fixtures.
+- Захардкоженные порты, временные файлы, Redis-ключи без `unique_id`/scope запрещены.
+- **MockLLM** маршрутизируется по `test_scope` (`mock_llm:responses:<scope>`), а не по gw/lane. Scope прокидывается через `X-Test-Scope` (HTTP), TaskIQ labels и autouse `platform_test_scope`. E2E browser/desktop (`-n0`) — статический scope `test_e2e_static` (`TEST_SCOPE_DEFAULT` в стеке + `bind_static_e2e_scope`).
 - `time.sleep` для ожидания асинхронного результата запрещён — только `asyncio.wait_for`/`asyncio.sleep` с поллингом или `await` с таймаутом.
+- **FileLock / SessionServerManager / SessionWorkerManager в фикстурах запрещены.** Единственный владелец процессов — `make test-up`. pytest только проверяет readiness (`require_http_service`, `require_taskiq_worker`).
 
 ### Идемпотентность фикстур
 
-- Session-фикстуры при xdist выполняются **по разу на gw-worker** (не глобально). Повторные `create_bucket`, `run_migrations`, `load_flows_to_db` не должны падать.
-- Teardown session-фикстур не должен разрушать ресурсы, нужные другим gw-workers. Координация — через `FileLock` и ref-counting (`SessionWorkerManager`).
-- DB setup fixture отвечает только за схему/миграции БД. Она не имеет права убивать HTTP/service порты, чистить service pid/ref-count/envsig markers или управлять sandbox-сервисами. Жизненный цикл сервисов принадлежит `SessionServerManager`, который сам проверяет signature/readiness и освобождает только свой конкретный stale-процесс.
+- Session-фикстуры при xdist выполняются **по разу на gw-worker** (не глобально).
+- Миграции и сид `system`-компании — в `make test-up` (`scripts/test_migrate.py`), не в pytest. `setup_database_before_tests` — быстрый assert «head == current», без локов.
+- Teardown session-фикстур не убивает granian/taskiq процессы стека.
 
 ### Чистота тестового тела
 
@@ -69,9 +69,13 @@ uv run python analyze_imports.py
 
 Тест не должен мутировать чужие данные без `unique_id`-изоляции. Каждая сущность в БД/Redis с `unique_id` в идентификаторе.
 
+**Demo company variables (`company_id=system`):** не перезаписывать seed-ключи (`base_url`, `api_endpoint`, …) без teardown. E2E на demo seed — `ensure_demo_company_variables_seeded` (autouse в `test_variables_scenarios_e2e.py`); мутации variables — только уникальные ключи (`base_url_e2e_{unique_id}`), не канонические demo keys.
+
 ## Timeout и cleanup
 
 Жёсткий лимит — `pytest-timeout` (`timeout`, `timeout_method`, `timeout_func_only` в `pytest.ini`). По истечении тест прерывается (при `timeout_method=thread` через `os._exit`, teardown может не выполниться). `timeout_func_only=true` считает время **тела** теста (фаза call), не тяжёлых фикстур. Глобально 5 с; `@pytest.mark.real_taskiq` без своего `@pytest.mark.timeout` — 120 с (`pytest_collection_modifyitems`). Override — `@pytest.mark.timeout(300)`; отключить — `@pytest.mark.timeout(0)` или `PYTEST_TIMEOUT=0` / `pytest -o timeout=0`. Встроенный `faulthandler_timeout` отключён (только печатает стеки, не останавливает).
+
+**Sandbox runtime timeout (180 с):** `_is_sandbox_runtime_test()` в `tests/conftest.py` автоматически ставит `@pytest.mark.timeout(180, func_only=True)` для `tests/capabilities/**`, `tests/flows/integration/**`, `tests/flows/e2e/**` и точечных code-runner префиксов. Эти пакеты autouse-зависят от HTTP `sandbox_services` (capability_gateway + code_runner_* на 9016–9020); глобальные 5 с дают ложные timeout, а не сигнал о зависании runner.
 
 **Redis / `notification_manager`:** при `TESTING=true` в `core/app/factory.py` shutdown **не** вызывает `notification_manager.stop_redis_listener()`, иначе следующий тест в том же gw получает `Redis client not initialized`. Сессионная фикстура `platform_notification_manager_redis` поднимает listener один раз на worker.
 
@@ -107,12 +111,13 @@ async def test_example(app, mock_llm_with_queue, unique_id):
 | `flows_client` / `rag_client` / `crm_client` / `frontend_client` / `voice_client` | function | ASGI клиенты для unit-тестов API соответствующего сервиса |
 | `voice_app` | function | ASGI приложение voice с mock-провайдерами (`VOICE__{STT,TTS,VAD}__PROVIDER=mock`) |
 | `flows_client_http` / `office_client_http` / `worktracker_client_http` | function | HTTP клиенты для E2E (см. `tests/fixtures/clients.py`) |
-| `flows_service` / `rag_service` / `crm_service` / `frontend_service` / `worktracker_service` | session | Реальные HTTP серверы (`tests/fixtures/services.py`, порты 9001–9021) |
+| `flows_service` / `rag_service` / `crm_service` / `frontend_service` / `worktracker_service` | session | Readiness-проверки готового стека (`tests/fixtures/services.py`, порты 9001–9022); процессы стартует `make test-up` |
 | `all_services` | session | Все сервисы + dict URL |
 | `mock_llm` / `mock_llm_with_queue` | function | MockLLM с default_response / фабрика очереди ответов |
-| `mock_llm_redis` | function | Очередь ответов MockLLM в реальном Redis (ключ `mock_llm:responses`) для worker / межпроцессной доставки |
+| `mock_llm_redis` | function | Очередь ответов MockLLM в Redis `mock_llm:responses:<test_scope>` (scope из `platform_test_scope`) |
+| `platform_test_scope` | function autouse | Уникальный `test_<hex>` в лог-контексте и HTTP-клиентах (`X-Test-Scope`) |
 | `state` / `state_with_content` / `make_test_state` | function | ExecutionState (пустой / с content / фабрика) |
-| `taskiq_worker` / `rag_worker` / `taskiq_scheduler` | session | Subprocess воркеров и scheduler |
+| `taskiq_worker` / `rag_worker` / `taskiq_scheduler` | session | Readiness TaskIQ (`require_taskiq_worker`); subprocess только у `taskiq_scheduler` |
 | `crm_semantic_rag_stack` | function | `rag_service` + `rag_worker` (семантика CRM) |
 | `inline_tools` | function | Словарь inline tools |
 | `auth_headers_system` / `_system_user2` / `_company2` / `_company2_user2` | function | Заголовки для cross-company тестов |
@@ -148,19 +153,19 @@ async def test_integration(mock_llm_redis, flows_client, unique_id):
     await mock_llm_redis([{"type": "text", "content": "Ответ"}])
 ```
 
-`@pytest.mark.real_taskiq` отключает `sync_tools` — tools идут через реальный worker и Redis pub/sub.
+`@pytest.mark.real_taskiq` отключает `sync_tools` — tools идут через реальный worker и Redis pub/sub. Очередь mock привязана к `test_scope` теста, параллельный прогон без lane.
 
-**Полный E2E flows** (webhook → `process_flow_task` → LLM из `mock_llm:responses` → channel HTTP): маркер `real_taskiq` **не** использовать. Оставляем `sync_tools`: `process_flow_task.kiq` выполняется in-process, очередь mock читается из Redis; `TESTING=true` должен идти через `core.ai.runtime` mock route и `configure_mock_llm_redis(container.redis_client)`.
+**Полный E2E flows** (webhook → `process_flow_task` → LLM из `mock_llm:responses:<scope>` → channel HTTP): маркер `real_taskiq` **не** использовать. Оставляем `sync_tools`: `process_flow_task.kiq` выполняется in-process, очередь mock читается из Redis; `TESTING=true` должен идти через `core.ai.runtime` mock route и `configure_mock_llm_redis(container.redis_client)`.
 
-В `tests/fixtures/workers.py` worker запускается с **`-w 1`**, чтобы не было гонок за одним ключом `mock_llm:responses`.
+`flows_worker` стека запускается с **`-w 2`** (`scripts/test_stack.py`).
 
 ## Sync / Browser / Office / FileWriter / Audio
 
-- **Sync** (`tests/sync/`): только реальные фикстуры — PostgreSQL, Redis, TaskIQ worker (для `messages.transcribe_*` и `sync_finalize_recording_task`). Запрещено подменять `op_*` из `apps/sync/realtime/operations.py`, репозитории или WS через `monkeypatch`/`unittest.mock`. Единственное явное исключение — `@patch("core.push.service.webpush")` в `tests/sync/test_sync_notification_delivery.py` (Web Push требует device tokens и VAPID-ключей, физически невозможно в CI). `sync_db_clean` — no-op (БД между тестами не очищается; полагаемся на уникальные id). Тесты `tests/sync/` без `real_taskiq` автоматически в `xdist_group("sync_db")`.
-- **Browser Runtime** (`tests/browser/`): unit без Playwright/CDP — `BROWSER_RUNTIME_SKIP_DB=1` отключает session-фикстуры БД и Redis-listener. Интеграция (`@pytest.mark.integration`, `BROWSER__CDP_URL`) и soak (`@pytest.mark.slow`) — полноценный стек, без `BROWSER_RUNTIME_SKIP_DB`. E2E против Lightpanda — `BROWSER__E2E_LIGHTPANDA=1`, `BROWSER__E2E_LIGHTPANDA_CDP_URL` или `BROWSER__CDP_URL`, `xdist_group("browser_cdp")`.
-- **Office** (`tests/office/`): BFF с реальной `platform_office` и MinIO; healthcheck к Document Server (`@pytest.mark.integration`). В `docker-compose-test.yaml` сервис `onlyoffice-documentserver` на порте хоста 18088. Фикстуры `office_app`, `office_client`. См. `office.mdc`.
+- **Sync** (`tests/sync/`): только реальные фикстуры — PostgreSQL, Redis, TaskIQ worker (для `messages.transcribe_*` и `sync_finalize_recording_task`). Запрещено подменять `op_*` из `apps/sync/realtime/operations.py`, репозитории или WS через `monkeypatch`/`unittest.mock`. Единственное явное исключение — `@patch("core.push.service.webpush")` в `tests/sync/test_sync_notification_delivery.py` (Web Push требует device tokens и VAPID-ключей, физически невозможно в CI). `sync_db_clean` — no-op (БД между тестами не очищается; полагаемся на уникальные id).
+- **Browser Runtime** (`tests/browser/`): unit без Playwright/CDP — `BROWSER_RUNTIME_SKIP_DB=1` отключает session-фикстуры БД и Redis-listener. Интеграция (`@pytest.mark.integration`, `BROWSER__CDP_URL`) и soak (`@pytest.mark.slow`) — полноценный стек, без `BROWSER_RUNTIME_SKIP_DB`. E2E против Lightpanda — `BROWSER__E2E_LIGHTPANDA=1`, `BROWSER__E2E_LIGHTPANDA_CDP_URL` или `BROWSER__CDP_URL`.
+- **Office** (`tests/office/`): BFF с реальной `platform_office` и MinIO; healthcheck к Document Server (`@pytest.mark.integration`). В `docker-compose-test.yaml` сервис `onlyoffice-documentserver` на порте хоста 18088. Локальный `make test-up`: `OFFICE__CALLBACK_PUBLIC_BASE_URL=http://host.docker.internal:9008` (DS в Docker достучится до office granian). Фикстуры `office_app`, `office_client`. См. `office.mdc`.
 - **Worktracker** (`tests/worktracker/`): строгие интеграционные тесты WorkItem без моков (кроме MockLLM в cross-flows HITL). БД `platform_worktracker` (PostgreSQL 54322), Redis `63792`. Фикстуры: `tests/worktracker/conftest.py` — `worktracker_client` (ASGI), `worktracker_service` / `worktracker_repository`, `worktracker_client_http` (порт 9021), `worktracker_ui_events_listener`. `patch_service_clients_asgi` знает сервис `worktracker`. Структура: `api/` (REST `/worktracker/api/v1/*`), `integration/` (service, repository, realtime, hooks, HITL cross-flows), `unit/` (модели, helpers), `e2e/` (HTTP smoke). Изоляция — `unique_id`. См. `worktracker.mdc`.
-- **FileWriter** (`tests/core/files/test_file_writer_network.py`): реальные HTTP GET к `picsum.photos`, маркеры `integration` и `network`, `@pytest.mark.timeout(180, func_only=True)`. Исключить из прогона: `pytest -m "not network"`. Каталог `tests/core/files/file_writer_output/` очищается в `pytest_sessionstart` (`tests/core/files/conftest.py`); в `.gitignore`.
+- **FileWriter** (`tests/core/files/test_file_writer_network.py`): реальные HTTP GET к `picsum.photos`, маркеры `integration` и `network`, `@pytest.mark.timeout(180, func_only=True)`. Исключить из дефолтного прогона: `pytest -m "not integration and not network"` или отдельно `make test-network`. Каталог `tests/core/files/file_writer_output/` очищается в `pytest_sessionstart` (`tests/core/files/conftest.py`); в `.gitignore`.
 - **Тестовый WAV:** `minimal_wav_silence` в `tests/fixtures/audio_bytes.py` — валидный PCM без ffmpeg-транскода; используется в sync (голос/STT) и CRM e2e voice. Не дублировать.
 
 ## E2E UI
@@ -199,25 +204,25 @@ async def test_integration(mock_llm_redis, flows_client, unique_id):
 
 **Регрессия архитектуры UI:** после правок в `apps/*/ui/index.html`, import map, базовых классах (`PlatformElement`, `PlatformModal`, `*App`) или массовой замене импортов — `npm run test:ui-components`; при затронутых shell или маршрутах SPA — `pytest tests/ui/`. Быстрый статический контроль — `make check-ui-canon`.
 
+## Тестовый стек (supervisor)
+
+Единственный владелец granian + TaskIQ процессов — **`make test-up`**:
+
+1. `scripts/test_process_preflight_cleanup` — зачистка stale процессов
+2. `docker-compose-test.yaml` — Postgres, Redis, MinIO, …
+3. `scripts/db_test_reset` — TRUNCATE + Redis FLUSHDB
+4. `scripts/test_migrate` — Alembic upgrade + сид `system`-компании
+5. `scripts/test_stack.py up` — все HTTP-сервисы (9001–9022) и TaskIQ-воркеры; манифест `/tmp/platform_test_stack.json`
+
+Команды: `make test-up`, `make test-down`, `uv run python -m scripts.test_stack status`.
+
+pytest **не** стартует и **не** убивает сервисы. Фикстуры `*_service` / `*_worker` — `GET /health` или consumer в Redis stream; при недоступности — `pytest.fail("… выполните make test-up")`.
+
 ## Worker фикстуры
 
-Для новых воркеров — `SessionWorkerManager` из `tests/fixtures/workers.py` (reference counting для xdist, FileLock, автоматическая остановка):
+`taskiq_worker`, `rag_worker`, `search_worker`, `sync_worker`, `crm_worker` — только readiness (`tests/fixtures/workers.py`).
 
-```python
-@pytest.fixture(scope="session")
-def my_worker():
-    manager = SessionWorkerManager(
-        name="MyWorker",
-        lock_file="/tmp/my_worker.lock",
-        pid_file="/tmp/my_worker.pid",
-        command=[sys.executable, "-m", "my_app.worker"],
-        env={"TESTING": "true", ...},
-        cleanup_patterns=["my_app.worker"],
-        startup_wait=3.0,
-    )
-    with manager.start() as process:
-        yield process
-```
+Исключение: `taskiq_scheduler` — subprocess на время сессии (scheduler не входит в стек).
 
 ## Структура `tests/`
 
@@ -232,17 +237,18 @@ tests/
 ## Команды
 
 ```bash
-docker compose -f docker-compose-test.yaml up -d
-uv run pytest tests/
-uv run pytest tests/ --cov=apps/flows/src --cov-report=term
-uv run pytest tests/flows/api/test_a2a.py::TestA2A::test_message_send -v -s
-make test                 # автоматический lifecycle compose-test
-make test WORKERS=2 2>&1 | tee logs/make-test.log
+make test-up              # docker + reset + migrate + test_stack up
+make test-down            # test_stack down + compose stop
+make test                 # полный прогон (фазы unit + retry + agent E2E)
+make test-network         # только @pytest.mark.network (реальный интернет)
+uv run pytest tests/ -n 5 -m "not integration and not network and not agent_build_release" --ignore=tests/agent/e2e
 ```
 
-## Внешние зависимости и автомиграции
+Фаза 1 `make test` **исключает** `tests/agent/e2e` (статический `test_e2e_static` scope + `-n0` только в фазе 4) и `@pytest.mark.agent_build_release`.
 
-- Фикстура `setup_database_before_tests` (session, `tests/conftest.py`) сравнивает Alembic head (файлы) с current (БД) для каждого сервиса из `migrations/services.json`. Расхождение → `upgrade head` для отстающих. Нет `alembic_version` → полный дроп + upgrade всех. Никаких ручных проверок таблиц — новая миграция подхватывается автоматически.
+## Внешние зависимости и миграции
+
+- Миграции и сид `system`-компании — **`make test-up`** (`scripts/test_migrate.py`). Фикстура `setup_database_before_tests` только assert «head == current»; при расхождении — `pytest.fail` с подсказкой `make test-up`.
 - **CRM E2E (`tests/crm/e2e`):** `DATABASE__CRM_URL` из `tests/fixtures/test_database_env.py` (PostgreSQL 54322, БД `platform_crm`). После новых миграций — `uv run python -m scripts.db_migrate upgrade --service crm`.
 - `test_a2a_sample` — URL тестового A2A sample; `docker-compose-test.yaml` сервис `test-a2a-agent` на порте хоста **18052**.
 - `tests/fixtures/services.py` задаёт `PUSH__ENABLED` и VAPID-ключи для E2E push-тестов.
@@ -257,8 +263,8 @@ make test WORKERS=2 2>&1 | tee logs/make-test.log
 - [ ] Стиль/инварианты, `unique_id` во всех ключах — см. `testing_invariants.mdc`
 - [ ] Нет своих фикстур для сервисов/клиентов/воркеров
 - [ ] Нет моков внутренних компонентов (кроме MockLLM)
-- [ ] Интеграция с worker — `@pytest.mark.real_taskiq` + `mock_llm_redis`
-- [ ] Новые worker фикстуры — `SessionWorkerManager`
+- [ ] Интеграция с worker — `@pytest.mark.real_taskiq` + `mock_llm_redis` + уникальный `test_scope`
+- [ ] Перед pytest: `make test-up` (стек готов)
 
 ## Agent handoff (flows)
 

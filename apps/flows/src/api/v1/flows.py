@@ -33,6 +33,10 @@ from apps.flows.src.models import (
     branch_payload_to_config,
 )
 from apps.flows.src.models.flow_speech_settings import FlowSpeechSettings
+from apps.flows.src.services.agent_toolkit_service import (
+    get_toolkit_ids_for_flow,
+    set_flow_toolkit_membership,
+)
 from apps.flows.src.services.flow_dataflow_inspector import (
     inspect_flow_dataflow,
 )
@@ -535,6 +539,7 @@ class FlowCreateRequest(BaseModel):
     resources: dict[str, ResourceReference] = Field(default_factory=dict)
     store_card_image_url: str | None = None
     speech: FlowSpeechSettings | None = None
+    agent_toolkit_ids: list[str] = Field(default_factory=list)
 
     @field_validator("store_card_image_url", mode="before")
     @classmethod
@@ -599,11 +604,17 @@ class FlowResponse(BaseModel):
 
     speech: JsonObject | None = None
 
+    agent_toolkit_ids: list[str] = Field(default_factory=list)
+
 
 class FlowVoiceSessionQueryResponse(BaseModel):
     """Query-параметры для WS voice-сессии (effective flow + branch speech)."""
 
     query: dict[str, str]
+
+
+async def _flow_agent_toolkit_ids(container: ContainerDep, flow_id: str) -> list[str]:
+    return await get_toolkit_ids_for_flow(container.agent_toolkit_repository, flow_id)
 
 
 class ReloadFlowFromBundleResponse(BaseModel):
@@ -850,6 +861,7 @@ async def list_flows(
                     source=f.source,
                     has_bundle_update=bundle_update_flags.get(f.flow_id, False),
                     store_card_image_url=f.store_card_image_url,
+                    agent_toolkit_ids=await _flow_agent_toolkit_ids(container, f.flow_id),
                     entry=f.entry,
                     nodes=f.nodes,
                     edges=f.edges,
@@ -868,6 +880,7 @@ async def list_flows(
                     tags=f.tags,
                     hidden=f.hidden,
                     source=f.source,
+                    agent_toolkit_ids=await _flow_agent_toolkit_ids(container, f.flow_id),
                     has_bundle_update=bundle_update_flags.get(f.flow_id, False),
                     store_card_image_url=f.store_card_image_url,
                     url=f.url,
@@ -1066,6 +1079,11 @@ async def create_flow(request: FlowCreateRequest, container: ContainerDep) -> Fl
     )
 
     _ = await container.flow_repository.set(flow_config)
+    await set_flow_toolkit_membership(
+        container.agent_toolkit_repository,
+        flow_id=flow_config.flow_id,
+        toolkit_ids=list(request.agent_toolkit_ids),
+    )
 
     branches_response = {
         branch_id: _branch_config_to_response(branch_cfg)
@@ -1089,6 +1107,7 @@ async def create_flow(request: FlowCreateRequest, container: ContainerDep) -> Fl
         source=flow_config.source,
         store_card_image_url=flow_config.store_card_image_url,
         speech=_speech_to_json(flow_config.speech),
+        agent_toolkit_ids=list(request.agent_toolkit_ids),
     )
 
 
@@ -1179,6 +1198,7 @@ async def get_flow(flow_id: str, container: ContainerDep) -> FlowResponse:
             has_bundle_update=bundle_update,
             store_card_image_url=flow_cfg.store_card_image_url,
             speech=_speech_to_json(flow_cfg.speech),
+            agent_toolkit_ids=await _flow_agent_toolkit_ids(container, flow_cfg.flow_id),
         )
     except HTTPException:
         raise
@@ -1412,6 +1432,11 @@ async def update_flow(
     )
 
     _ = await container.flow_repository.set(flow_config)
+    await set_flow_toolkit_membership(
+        container.agent_toolkit_repository,
+        flow_id=flow_id,
+        toolkit_ids=list(request.agent_toolkit_ids),
+    )
 
     ctx = get_context()
     if ctx and ctx.user and ctx.user.user_id:
@@ -1446,6 +1471,7 @@ async def update_flow(
         source=flow_config.source,
         store_card_image_url=flow_config.store_card_image_url,
         speech=_speech_to_json(flow_config.speech),
+        agent_toolkit_ids=list(request.agent_toolkit_ids),
     )
 
 
@@ -1641,6 +1667,7 @@ async def get_version(
         source=version_cfg.source or "manual",
         store_card_image_url=version_cfg.store_card_image_url,
         speech=_speech_to_json(version_cfg.speech),
+        agent_toolkit_ids=await _flow_agent_toolkit_ids(container, version_cfg.flow_id),
     )
 
 

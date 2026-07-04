@@ -1,4 +1,4 @@
-"""Реестр Lit-SPA сервисов для E2E: порты совпадают с tests/fixtures/services.py (SessionServerManager)."""
+"""Реестр Lit-SPA сервисов для E2E: порты совпадают со стеком scripts/test_stack.py."""
 
 from __future__ import annotations
 

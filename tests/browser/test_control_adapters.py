@@ -25,6 +25,7 @@ def _minimal_view() -> BrowserRuntimeSettingsView:
         reaper_interval_sec=60,
         max_contexts=50,
         session_state_ttl_sec=3600,
+        crawl_fetch_max_inflight=5,
     )
 
 

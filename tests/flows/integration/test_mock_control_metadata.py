@@ -104,7 +104,7 @@ class TestPerNodeLlmMock:
             branch="orders_only",
             mock={
                 "nodes": {
-                    "complaint_processor": [{"type": "text", "content": complaint_answer}]
+                    "general_processor": [{"type": "text", "content": complaint_answer}]
                 }
             },
         )

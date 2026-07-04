@@ -57,7 +57,7 @@ def test_distro_config_branding_fields() -> None:
     assert distro.bundle_name == "HumanitecAgent"
     assert distro.protocol_scheme == "humanitec"
     assert distro.platform_mcp_path == "/flows/api/v1/agent/platform-mcp"
-    assert "platform_mcp" in distro.default_extensions
+    assert distro.default_extensions == ["developer", "computercontroller"]
 
 
 def test_distro_fields_in_release_artifact(tmp_path: Path) -> None:
@@ -75,7 +75,7 @@ def test_distro_fields_in_release_artifact(tmp_path: Path) -> None:
     assert "protocol_scheme=humanitec" in content
     assert f"{distro.protocol_scheme}://" == "humanitec://"
     assert distro.platform_mcp_path == "/flows/api/v1/agent/platform-mcp"
-    assert "platform_mcp" in distro.default_extensions
+    assert distro.default_extensions == ["developer", "computercontroller"]
 
 
 @pytest.mark.parametrize("platform_name", VALID_PLATFORMS)
@@ -152,7 +152,6 @@ def test_placeholder_build_each_platform(platform_name: str, tmp_path: Path) -> 
     )
 
 
-@pytest.mark.xdist_group(name="agent_build_release")
 def test_apply_branding_script_patches_goose_desktop() -> None:
     goose_desktop = DESKTOP_ROOT / "vendor" / "goose" / "ui" / "desktop"
     if not goose_desktop.is_dir():
@@ -213,7 +212,8 @@ def test_apply_branding_script_patches_goose_desktop() -> None:
         assert "x-scheme-handler/humanitec" in deb_payload
         defaults_payload = (goose_desktop / "humanitec.defaults.json").read_text(encoding="utf-8")
         assert '"platform_mcp_path": "/flows/api/v1/agent/platform-mcp"' in defaults_payload
-        assert '"platform_mcp"' in defaults_payload
+        assert '"developer"' in defaults_payload
+        assert '"computercontroller"' in defaults_payload
 
         distro = load_default_distro_config()
         base_chat_payload = (goose_desktop / "src" / "components" / "BaseChat.tsx").read_text(
@@ -298,7 +298,6 @@ def _native_platform() -> str | None:
 
 @pytest.mark.agent_build_release
 @pytest.mark.timeout(3600)
-@pytest.mark.xdist_group(name="agent_build_release")
 def test_release_build_native_platform(tmp_path: Path) -> None:
     platform_name = _native_platform()
     if platform_name is None:

@@ -8,6 +8,7 @@ LitServe и прямые provider HTTP clients здесь не использу�
 from __future__ import annotations
 
 import json
+import os
 import time
 import uuid
 from collections.abc import AsyncIterator
@@ -46,6 +47,8 @@ from core.types import JsonArray, JsonObject, JsonValue, require_json_array, req
 
 logger = get_logger(__name__)
 router = APIRouter(tags=["agent-llm-proxy"])
+
+AGENT_LLM_PROXY_USE_MOCK_AUTO_ENV = "AGENT_LLM_PROXY_USE_MOCK_AUTO"
 
 
 class AgentOpenAIChatMessage(BaseModel):
@@ -95,7 +98,23 @@ def _agent_llm_option_value(option: str | JsonObject) -> str | None:
     return None
 
 
+def _resolve_agent_llm_auto_mock_bridge(requested_model: str) -> ResolvedAIModel | None:
+    """Узкий testing-bridge: auto → mock только при AGENT_LLM_PROXY_USE_MOCK_AUTO=1 (стек E2E)."""
+    if requested_model != HUMANITEC_LLM_AUTO_MODEL:
+        return None
+    if os.environ.get(AGENT_LLM_PROXY_USE_MOCK_AUTO_ENV) != "1":
+        return None
+    return resolve_ai_model(
+        AICapability.LLM_CHAT,
+        selection=AISelection(provider="mock", model="mock-gpt-4"),
+        include_platform_default=False,
+    )
+
+
 def _resolve_agent_llm_model(requested_model: str) -> ResolvedAIModel:
+    bridged = _resolve_agent_llm_auto_mock_bridge(requested_model)
+    if bridged is not None:
+        return bridged
     if requested_model == HUMANITEC_LLM_AUTO_MODEL:
         resolved = resolve_ai_model(
             AICapability.LLM_CHAT,

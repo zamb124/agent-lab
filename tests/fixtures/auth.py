@@ -301,6 +301,20 @@ async def auth_headers_company2_user2(auth_token_company2_user2):
     return {"Authorization": f"Bearer {auth_token_company2_user2}"}
 
 
+@pytest_asyncio.fixture(scope="session")
+async def test_company_subdomains_initialized(
+    frontend_container,
+    auth_token_system,
+    auth_token_company2,
+) -> None:
+    """Subdomain + SubdomainRepository для system/company2 (Host routing в agent/UI E2E)."""
+    from tests.ui.subdomain_setup import ensure_ui_subdomain_mappings
+
+    _ = auth_token_system
+    _ = auth_token_company2
+    await ensure_ui_subdomain_mappings(frontend_container)
+
+
 @contextmanager
 def service_client_asgi_auth_context(auth_headers: dict[str, str]):
     """

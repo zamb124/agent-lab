@@ -13,6 +13,7 @@ from core.context import get_context
 from core.http import get_httpx_client
 from core.logging import get_logger
 from core.models import StrictBaseModel
+from core.test_scope import TEST_SCOPE_HEADER, resolve_test_scope
 from core.types import (
     JsonObject,
     JsonValue,
@@ -183,6 +184,10 @@ class A2AClient:
                 request_headers["X-Trace-Id"] = context.trace_id
             if context.language and "Accept-Language" not in request_headers:
                 request_headers["Accept-Language"] = context.language.value
+
+        test_scope = resolve_test_scope()
+        if test_scope is not None and TEST_SCOPE_HEADER not in request_headers:
+            request_headers[TEST_SCOPE_HEADER] = test_scope
 
         logger.debug(f"A2A send_task to {url}: {content[:100]}...")
 

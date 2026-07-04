@@ -8,8 +8,10 @@ Worker компилирует исходный код один раз по artif
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import json
 import os
+import shutil
 import sys
 import tempfile
 import textwrap
@@ -56,8 +58,11 @@ class _PythonWorker:
                     process.stdout.readline(),
                     timeout=float(request.wall_time_limit_seconds),
                 )
+            except asyncio.CancelledError:
+                await asyncio.shield(self._restart())
+                raise
             except TimeoutError as exc:
-                await self._restart()
+                await asyncio.shield(self._restart())
                 return code_execution_failed_response(
                     request,
                     service=SERVICE_NAME,
@@ -67,7 +72,7 @@ class _PythonWorker:
                     traceback_text="".join(traceback.format_exception(exc)),
                 )
             except Exception as exc:
-                await self._restart()
+                await asyncio.shield(self._restart())
                 return code_execution_failed_response(
                     request,
                     service=SERVICE_NAME,
@@ -77,7 +82,7 @@ class _PythonWorker:
                     traceback_text="".join(traceback.format_exception(exc)),
                 )
             if not line:
-                await self._restart()
+                await asyncio.shield(self._restart())
                 return code_execution_failed_response(
                     request,
                     service=SERVICE_NAME,
@@ -88,7 +93,7 @@ class _PythonWorker:
             try:
                 return CodeExecutionResponse.model_validate_json(line.decode("utf-8"))
             except Exception as exc:
-                await self._restart()
+                await asyncio.shield(self._restart())
                 return code_execution_failed_response(
                     request,
                     service=SERVICE_NAME,
@@ -112,8 +117,11 @@ class _PythonWorker:
                     process.stdout.readline(),
                     timeout=float(request.wall_time_limit_seconds),
                 )
+            except asyncio.CancelledError:
+                await asyncio.shield(self._restart())
+                raise
             except TimeoutError as exc:
-                await self._restart()
+                await asyncio.shield(self._restart())
                 return code_validation_failed_response(
                     request,
                     service=SERVICE_NAME,
@@ -123,7 +131,7 @@ class _PythonWorker:
                     traceback_text="".join(traceback.format_exception(exc)),
                 )
             except Exception as exc:
-                await self._restart()
+                await asyncio.shield(self._restart())
                 return code_validation_failed_response(
                     request,
                     service=SERVICE_NAME,
@@ -133,7 +141,7 @@ class _PythonWorker:
                     traceback_text="".join(traceback.format_exception(exc)),
                 )
             if not line:
-                await self._restart()
+                await asyncio.shield(self._restart())
                 return code_validation_failed_response(
                     request,
                     service=SERVICE_NAME,
@@ -144,7 +152,7 @@ class _PythonWorker:
             try:
                 return CodeValidationResponse.model_validate_json(line.decode("utf-8"))
             except Exception as exc:
-                await self._restart()
+                await asyncio.shield(self._restart())
                 return code_validation_failed_response(
                     request,
                     service=SERVICE_NAME,
@@ -176,8 +184,18 @@ class _PythonWorker:
         self._process = None
         if process is None or process.returncode is not None:
             return
-        process.kill()
-        _ = await process.wait()
+        with contextlib.suppress(ProcessLookupError):
+            process.kill()
+        with contextlib.suppress(TimeoutError):
+            _ = await asyncio.wait_for(process.wait(), timeout=2.0)
+            return
+        with contextlib.suppress(ProcessLookupError):
+            process.kill()
+        with contextlib.suppress(TimeoutError):
+            _ = await asyncio.wait_for(process.wait(), timeout=2.0)
+
+    async def close(self) -> None:
+        await self._restart()
 
 
 class PythonSandboxExecutor:
@@ -285,6 +303,12 @@ class PythonSandboxExecutor:
         if raw is None:
             return max(2, min(8, (os.cpu_count() or 2)))
         return max(1, int(raw))
+
+    async def aclose(self) -> None:
+        workers = list(self._workers)
+        self._workers = []
+        _ = await asyncio.gather(*(worker.close() for worker in workers), return_exceptions=True)
+        shutil.rmtree(self._runtime_dir, ignore_errors=True)
 
     def _verify_execution_request(
         self,

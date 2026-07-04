@@ -130,7 +130,6 @@ async def test_universal_agent_code_focus_skill_merges_prompt() -> None:
 
 
 @pytest.mark.asyncio
-@pytest.mark.xdist_group(name="universal_agent_llm")
 async def test_universal_agent_calculator_tool(
     mock_llm_with_queue: MockLLMQueue,
     unique_id: str,
@@ -159,7 +158,6 @@ async def test_universal_agent_calculator_tool(
 
 
 @pytest.mark.asyncio
-@pytest.mark.xdist_group(name="universal_agent_llm")
 async def test_universal_agent_ask_user_interrupt(
     mock_llm_with_queue: MockLLMQueue,
     unique_id: str,
@@ -188,7 +186,6 @@ async def test_universal_agent_ask_user_interrupt(
 
 
 @pytest.mark.asyncio
-@pytest.mark.xdist_group(name="universal_agent_llm")
 async def test_universal_agent_code_focus_skill_runs_calculator(
     mock_llm_with_queue: MockLLMQueue,
     unique_id: str,
@@ -216,7 +213,6 @@ async def test_universal_agent_code_focus_skill_runs_calculator(
 
 
 @pytest.mark.asyncio
-@pytest.mark.xdist_group(name="universal_agent_llm")
 async def test_universal_agent_with_rag_create_namespace(
     mock_llm_with_queue: MockLLMQueue,
     unique_id: str,
@@ -253,7 +249,6 @@ async def test_universal_agent_with_rag_create_namespace(
 
 
 @pytest.mark.asyncio
-@pytest.mark.xdist_group(name="universal_agent_llm")
 async def test_universal_agent_with_rag_ingest_and_search(
     mock_llm_with_queue: MockLLMQueue,
     unique_id: str,

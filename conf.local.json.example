@@ -61,6 +61,9 @@
     "deepinfra": {
       "api_key": "YOUR_DEEPINFRA_API_KEY"
     },
+    "caila": {
+      "api_key": "YOUR_CAILA_API_KEY"
+    },
     "model_scoring": {
       "seed_enabled": true,
       "force_seed_refresh": false

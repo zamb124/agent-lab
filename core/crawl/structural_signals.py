@@ -300,6 +300,10 @@ def extract_structural_signals_from_html(html: str, *, page_url: str = "") -> Cr
     if title is None:
         title = html_title
 
+    description = _meta_content(soup, prop="og:description")
+    if description is None:
+        description = _meta_content(soup, name="description")
+
     date_published = json_ld.date_published
     if date_published is None:
         date_published = _parse_iso_date(_meta_content(soup, prop="article:published_time"))
@@ -355,6 +359,7 @@ def extract_structural_signals_from_html(html: str, *, page_url: str = "") -> Cr
 
     return CrawlStructuralSignals(
         title=title,
+        description=description,
         date_published=date_published,
         date_modified=date_modified,
         author=author,

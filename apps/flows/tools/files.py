@@ -4,90 +4,35 @@
 read_file — чтение вложений; create_file — FileWriter() + create_file (процесс настроен через FileWriter.configure_process_upload при старте).
 """
 
-import re
 from typing import ClassVar, Literal
-from urllib.parse import quote
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from apps.flows.src.files.state_file_refs import upsert_state_file, with_document_capability
+from apps.flows.src.files.state_file_refs import upsert_state_file
 from apps.flows.src.runtime_helpers.state_utils import find_file, push_ui_event
 from apps.flows.src.tools.decorator import tool
 from apps.flows.tools.tool_access import STANDARD_USER_TOOL_GROUPS
-from core.clients.service_client import NAMESPACE_HEADER, ServiceClient, ServiceClientError
-from core.context import resolve_namespace_or_raise
 from core.files.file_ref import FileRef
 from core.files.models import FileResponse
-from core.files.reader import FileReader, FileReadError
+from core.files.reader.engine import read_files_to_envelope
+from core.files.reader.models import (
+    MAX_READ_BUDGET,
+    CompressionMode,
+    Continuation,
+    FileReadKind,
+    FileResult,
+    PageLayout,
+    PageLayoutKind,
+    ReadFileArgs,
+    ReadFileEnvelope,
+    ReadLane,
+    StopReason,
+)
 from core.files.writer import FileWriteError, FileWriter
 from core.state import ExecutionState
 from core.types import JsonObject, require_json_object
 
 JsonDict = JsonObject
-OFFICE_EXT_RE = r"\.(docx?|odt|rtf|txt|pdf|xlsx?|ods|csv|pptx?|odp)$"
-OFFICE_MIME_RE = r"(pdf|word|excel|spreadsheet|presentation|powerpoint|officedocument|opendocument|text/csv|text/plain)"
-
-
-def _context_namespace() -> str:
-    return resolve_namespace_or_raise()
-
-
-def _is_office_file(item: FileRef) -> bool:
-    original_name = item.original_name.lower()
-    content_type = item.content_type.lower()
-    return re.search(OFFICE_EXT_RE, original_name) is not None or re.search(OFFICE_MIME_RE, content_type) is not None
-
-
-async def _sync_office_file_before_read(state: ExecutionState, item: FileRef) -> tuple[FileRef, str | None]:
-    if item.file_id is None or not _is_office_file(item):
-        return item, None
-
-    namespace = _context_namespace()
-    document = item.capabilities.document
-
-    if document is not None:
-        raw = require_json_object(
-            document.model_dump(mode="json", exclude_none=True),
-            "FileRef.capabilities.document",
-        )
-    else:
-        try:
-            candidate = await ServiceClient().post(
-                "office",
-                "/documents/api/v1/documents/from-file",
-                json={"file_id": item.file_id, "title": item.original_name},
-                headers={NAMESPACE_HEADER: namespace},
-            )
-        except ServiceClientError:
-            return item, None
-        raw = require_json_object(candidate, "office.documents.from_file")
-
-    binding_id_value = raw["binding_id"]
-    if not isinstance(binding_id_value, str) or not binding_id_value.strip():
-        raise ValueError("office.documents.binding_id must be a non-empty string")
-    binding_id = binding_id_value
-    try:
-        synced = await ServiceClient().post(
-            "office",
-            f"/documents/api/v1/documents/{quote(binding_id, safe='')}/sync",
-            headers={NAMESPACE_HEADER: namespace},
-            timeout=30.0,
-        )
-    except ServiceClientError as exc:
-        return item, f"Не удалось синхронизировать открытый редактор documents перед чтением: {exc}"
-    synced_payload = require_json_object(synced, "office.documents.sync")
-    raw = {**raw, **synced_payload}
-
-    enriched = with_document_capability(item, raw, namespace)
-    upsert_state_file(state, enriched)
-    _ = push_ui_event(
-        state,
-        event_type="files.updated",
-        payload={"files": [enriched.to_json_object()]},
-        source="documents",
-        correlation_id=binding_id,
-    )
-    return enriched, None
 
 _CREATE_FILE_TOOL_DESCRIPTION = """
 Создаёт файл в хранилище платформы и возвращает ссылку на скачивание.
@@ -133,23 +78,6 @@ file_size, checksum (если есть), is_public.
 """.strip()
 
 
-class ReadFileArgs(BaseModel):
-    model_config: ClassVar[ConfigDict] = ConfigDict(extra="forbid", str_strip_whitespace=True)
-
-    file_name: str | None = Field(
-        None,
-        description="Имя вложения как в state.files[].original_name; не передавай — будет взято последнее вложение в списке (обычно последняя загрузка пользователя).",
-    )
-    include_asset_bytes: bool = Field(
-        False,
-        description="Включать ли картинки/вложения из PDF в ответ как base64 (увеличивает размер ответа).",
-    )
-    vision_prompt: str | None = Field(
-        None,
-        description="Для изображений: инструкция для vision-анализа содержимого.",
-    )
-
-
 class CreateFileArgs(BaseModel):
     model_config: ClassVar[ConfigDict] = ConfigDict(extra="forbid", str_strip_whitespace=True)
 
@@ -168,54 +96,110 @@ class CreateFileArgs(BaseModel):
     )
 
 
+def _resolve_file_refs_for_read(
+    state: ExecutionState,
+    names: list[str],
+) -> tuple[list[FileRef], list[FileResult]]:
+    """Разрешает имена в FileRefs. Возвращает (найденные, ошибки для ненайденных)."""
+    all_files = state.files
+    file_refs: list[FileRef] = []
+    errors: list[FileResult] = []
+    for name in names:
+        finfo = find_file(all_files, name)
+        if finfo is None:
+            errors.append(
+                FileResult(
+                    file_name=name,
+                    success=False,
+                    error=f"Файл '{name}' не найден. Доступные: {[file_ref.original_name for file_ref in all_files]}",
+                    kind=FileReadKind.UNKNOWN,
+                    read_lane=ReadLane.TEXT,
+                    page_layout=PageLayout(kind=PageLayoutKind.VIRTUAL, page_size=0, pages_total=0),
+                    pages_total=0,
+                    stop_reason=StopReason.ERROR,
+                    continuation=Continuation(),
+                )
+            )
+        else:
+            file_refs.append(finfo)
+    return file_refs, errors
+
+
 @tool(
     name="read_file",
     description=(
-        "Читает вложение из state.files. Передаёшь file_name (как в записи original_name) — tool сам находит объект файла в state "
-        "и вызывает FileReader.read. Если file_name не указан, берётся последний файл в state.files (порядок: файлы нод графа, затем вложения по мере добавления в диалоге). "
-        "include_asset_bytes — base64 вложений в ответе PDF (тяжело). "
-        "vision_prompt — для картинок: инструкция vision-модели."
+        "Читает вложения из state.files по списку имён names. "
+        "Передаёшь список original_name — tool находит объекты файлов в state "
+        "и вызывает движок чтения. Если names не указан, берутся все файлы в state.files."
     ),
     tags=["files", "ocr", "document"],
     parameters_model=ReadFileArgs,
     permission=list(STANDARD_USER_TOOL_GROUPS),
 )
 async def read_file(
-    file_name: str | None = None,
-    include_asset_bytes: bool = False,
-    vision_prompt: str | None = None,
+    names: list[str] | None = None,
+    page_start: int = 0,
+    page_end: int = -1,
+    page_summarizations: bool = False,
+    summarization_prompt: str = "",
+    summarization_model: str = "",
+    vision_prompt: str = "",
+    compression: CompressionMode | None = None,
+    budget: int = MAX_READ_BUDGET,
     *,
     state: ExecutionState,
-) -> JsonDict:
-    files = state.files
-    if not files:
+) -> JsonObject:
+    all_files = state.files
+    if not all_files:
         return {"success": False, "error": "Нет файлов для чтения"}
 
-    finfo = find_file(files, file_name)
-    if finfo is None:
-        return {
-            "success": False,
-            "error": f"Файл не найден. Доступные: {[file_ref.original_name for file_ref in files]}",
-        }
-
-    finfo, sync_error = await _sync_office_file_before_read(state, finfo)
-    if sync_error is not None:
-        return {"success": False, "error": sync_error}
-
-    reader = FileReader()
-    try:
-        result = await reader.read(
-            finfo,
-            include_asset_bytes=include_asset_bytes,
+    if names:
+        file_refs, errors = _resolve_file_refs_for_read(state, names)
+        args = ReadFileArgs(
+            names=names,
+            page_start=page_start,
+            page_end=page_end,
+            page_summarizations=page_summarizations,
+            summarization_prompt=summarization_prompt,
+            summarization_model=summarization_model,
             vision_prompt=vision_prompt,
+            compression=compression if compression is not None else CompressionMode.NEVER,
+            budget=budget,
         )
-    except FileReadError as exc:
-        return {"success": False, "error": str(exc)}
+    else:
+        file_refs = list(all_files)
+        errors = []
+        taken_names = [file_ref.original_name for file_ref in file_refs]
+        args = ReadFileArgs(
+            names=taken_names,
+            page_start=page_start,
+            page_end=page_end,
+            page_summarizations=page_summarizations,
+            summarization_prompt=summarization_prompt,
+            summarization_model=summarization_model,
+            vision_prompt=vision_prompt,
+            compression=compression if compression is not None else CompressionMode.NEVER,
+            budget=budget,
+        )
 
-    return {
-        "success": True,
-        **require_json_object(result.model_dump(mode="json"), "read_file.result"),
-    }
+    if not file_refs and errors:
+        envelope = ReadFileEnvelope(
+            success=True,
+            tool="read_file",
+            files_processed=len(errors),
+            names=args.names,
+            budget=args.budget,
+            result_chars_returned=0,
+            files=errors,
+        )
+    elif file_refs:
+        envelope = await read_files_to_envelope(file_refs, args, tool_name="read_file")
+        if errors:
+            envelope = envelope.model_copy(update={"files": errors + envelope.files, "files_processed": envelope.files_processed + len(errors)})
+    else:
+        return {"success": False, "error": "Нет файлов для чтения"}
+
+    return require_json_object(envelope.model_dump(mode="json"), "read_file.result")
 
 
 @tool(

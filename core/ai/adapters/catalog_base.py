@@ -26,6 +26,7 @@ from core.config.llm_openai_compat import (
 )
 from core.config.models import (
     BothubProviderConfig,
+    CailaProviderConfig,
     DeepInfraProviderConfig,
     GitHubModelsProviderConfig,
     GoogleLLMProviderConfig,
@@ -53,6 +54,7 @@ _ConfiguredLLMProvider = (
     | GitHubModelsProviderConfig
     | HuggingFaceProviderConfig
     | DeepInfraProviderConfig
+    | CailaProviderConfig
 )
 
 _DIMENSION_RE = re.compile(
@@ -501,6 +503,8 @@ class BaseModelCatalogAdapter(AIProviderAdapter, ABC):
             return llm.huggingface
         if self.provider == "deepinfra":
             return llm.deepinfra
+        if self.provider == "caila":
+            return llm.caila
         if self.provider == "openai":
             return llm.openai
         if self.provider == "yandex":

@@ -18,7 +18,6 @@ from core.models.billing_models import TariffPlan
 from core.models.identity_models import Company
 from core.models.payment_models import PaymentProviderType
 
-pytestmark = pytest.mark.xdist_group("billing_global_resource_base_prices_json")
 
 
 @pytest_asyncio.fixture

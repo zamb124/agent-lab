@@ -23,6 +23,7 @@ function createWebSocket(url: string): WebSocketLike {
 export type HumanitecTunnelClientOptions = {
   credentials: HumanitecAgentCredentials;
   onPolicy?: (policy: Record<string, unknown>) => void;
+  onToolkitsUpdated?: () => void;
   onDisconnected?: (code: number, reason: string) => void;
   log?: (message: string) => void;
 };
@@ -107,6 +108,10 @@ export class HumanitecTunnelClient {
         throw new Error('humanitec tunnel policy frame invalid');
       }
       this.options.onPolicy?.(policy as Record<string, unknown>);
+      return;
+    }
+    if (frameType === 'toolkits_updated') {
+      this.options.onToolkitsUpdated?.();
       return;
     }
     if (frameType === 'pong') {

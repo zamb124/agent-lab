@@ -99,6 +99,14 @@ def reject_mcp_response(request_id: str, error_detail: str) -> bool:
     return True
 
 
+async def push_toolkits_updated_to_tunnel(device_id: str) -> None:
+    websocket = _tunnel_sockets.get(device_id)
+    if websocket is None:
+        return
+    outbound = {"type": "toolkits_updated"}
+    await websocket.send_text(json.dumps(outbound))
+
+
 async def push_device_policy_to_tunnel(device_id: str, policy: DevicePolicy) -> None:
     websocket = _tunnel_sockets.get(device_id)
     if websocket is None:

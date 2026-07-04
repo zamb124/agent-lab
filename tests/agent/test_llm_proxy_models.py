@@ -28,6 +28,7 @@ from apps.agent.llm_proxy import (
     _build_usage_payload,
     _is_rate_limit_error,
     _read_agent_llm_model_ids,
+    _resolve_agent_llm_auto_mock_bridge,
     _resolve_agent_llm_model,
     _stream_agent_llm_sse,
     _validate_requested_agent_model,
@@ -133,6 +134,37 @@ def test_resolve_agent_llm_model_auto_uses_humanitec_llm(
         return expected
 
     monkeypatch.setattr("apps.agent.llm_proxy.resolve_ai_model", fake_resolve_ai_model)
+    resolved = _resolve_agent_llm_model(HUMANITEC_LLM_AUTO_MODEL)
+    assert resolved == expected
+
+
+def test_resolve_agent_llm_auto_mock_bridge_uses_mock_when_env_set(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    expected = ResolvedAIModel(
+        capability=AICapability.LLM_CHAT,
+        provider="mock",
+        model="mock-gpt-4",
+        cost_origin="platform",
+    )
+
+    def fake_resolve_ai_model(
+        capability: AICapability,
+        selection: object | None = None,
+        requirements: object | None = None,
+        *,
+        include_platform_default: bool = True,
+    ) -> ResolvedAIModel | None:
+        _ = capability, requirements, include_platform_default
+        assert selection is not None
+        assert getattr(selection, "provider") == "mock"
+        assert getattr(selection, "model") == "mock-gpt-4"
+        return expected
+
+    monkeypatch.setenv("AGENT_LLM_PROXY_USE_MOCK_AUTO", "1")
+    monkeypatch.setattr("apps.agent.llm_proxy.resolve_ai_model", fake_resolve_ai_model)
+    bridged = _resolve_agent_llm_auto_mock_bridge(HUMANITEC_LLM_AUTO_MODEL)
+    assert bridged == expected
     resolved = _resolve_agent_llm_model(HUMANITEC_LLM_AUTO_MODEL)
     assert resolved == expected
 

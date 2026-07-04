@@ -17,7 +17,7 @@ def test_read_file_tool_metadata() -> None:
     assert "read_file" in read_file.description or "Читает" in read_file.description
     params = read_file.parameters
     props = require_json_object(params.get("properties", {}), "read_file.parameters.properties")
-    assert "file_name" in props
+    assert "names" in props
 
 
 @pytest.mark.asyncio
@@ -40,15 +40,18 @@ async def test_read_file_integration_txt(tmp_path: Path) -> None:
     )
     result = require_json_object(
         await read_file.run(
-            {"file_name": "a.txt", "include_asset_bytes": False},
+            {"names": ["a.txt"]},
             state,
         ),
         "read_file.result",
     )
     assert result["success"] is True
-    pages = require_json_array(result["pages"], "read_file.result.pages")
-    page = require_json_object(pages[0], "read_file.result.pages[0]")
-    assert page["text"] == "hello"
+    files = require_json_array(result["files"], "read_file.result.files")
+    file_result = require_json_object(files[0], "read_file.result.files[0]")
+    assert file_result["success"] is True
+    results = require_json_array(file_result["results"], "read_file.result.files[0].results")
+    page = require_json_object(results[0], "read_file.result.files[0].results[0]")
+    assert page["result"] == "hello"
 
 
 @pytest.mark.asyncio
@@ -73,13 +76,13 @@ async def test_read_file_matches_unicode_combining_marks(tmp_path: Path) -> None
     )
     result = require_json_object(
         await read_file.run(
-            {"file_name": requested_name, "include_asset_bytes": False},
+            {"names": [requested_name]},
             state,
         ),
         "read_file.result",
     )
     assert result["success"] is True
-    assert result["file_name"] == actual_name
-    pages = require_json_array(result["pages"], "read_file.result.pages")
-    page = require_json_object(pages[0], "read_file.result.pages[0]")
-    assert page["text"] == "contract"
+    files = require_json_array(result["files"], "read_file.result.files")
+    file_result = require_json_object(files[0], "read_file.result.files[0]")
+    assert file_result["file_name"] == actual_name
+    assert file_result["success"] is True

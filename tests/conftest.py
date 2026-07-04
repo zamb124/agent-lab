@@ -17,8 +17,6 @@ from typing import Any, List
 
 import pytest
 import pytest_asyncio
-from _pytest.nodes import Node
-from filelock import FileLock
 from httpx import ASGITransport, AsyncClient
 
 from tests.fixtures.test_database_env import TEST_DATABASE_ENV
@@ -71,7 +69,7 @@ os.environ.setdefault("S3__DEFAULT_BUCKET", "test-bucket")
 os.environ.setdefault("S3__BUCKETS__TEST-BUCKET__ENDPOINT_URL", "http://localhost:19002")
 os.environ.setdefault("OFFICE__JWT_SECRET", "test-onlyoffice-jwt-secret")
 os.environ.setdefault("OFFICE__DOCUMENT_SERVER_PUBLIC_URL", "http://localhost:18088")
-os.environ.setdefault("OFFICE__CALLBACK_PUBLIC_BASE_URL", "http://testserver")
+os.environ.setdefault("OFFICE__CALLBACK_PUBLIC_BASE_URL", "http://host.docker.internal:9008")
 os.environ["SERVER__DOCUMENT_SERVER_DEV_UPSTREAM_URL"] = os.environ[
     "OFFICE__DOCUMENT_SERVER_PUBLIC_URL"
 ]
@@ -105,7 +103,6 @@ if id(process_flow_task.broker) != id(platform_broker_module.broker):
 
 def pytest_sessionfinish(session, exitstatus):
     shutdown_tracing()
-    _release_shared_flows_contour_lock_if_held()
     from tests.fixtures.aiohttp_cleanup import (
         close_all_open_aiohttp_sessions_sync,
         shutdown_test_logging_handlers,
@@ -118,57 +115,6 @@ def pytest_sessionfinish(session, exitstatus):
     from tests.fixtures.workers import release_pytest_controller_session
 
     release_pytest_controller_session()
-
-
-_DB_SETUP_LOCK = "/tmp/platform_test_db_setup.lock"
-_DB_SETUP_LOCK_TIMEOUT_SEC = int(os.environ.get("PLATFORM_TEST_DB_LOCK_TIMEOUT", "1800"))
-
-
-def _real_taskiq_mock_llm_lane(node: Node) -> str:
-    """Суффикс Redis-ключа mock_llm:responses:<lane> для процесса, где исполняется MockLLM.
-
-    CRM analyze/dedup/graph вызывают LLM через A2A на flows (apps.flows), очередь там же,
-    что у tests/flows — lane ``flows``. TaskIQ crm_worker только дергает EntityService и HTTP flows.
-    """
-    path = str(node.path).replace("\\", "/")
-    if "/tests/sync/" in path:
-        return "sync"
-    if "/tests/rag/" in path:
-        return "rag"
-    return "flows"
-
-
-def _real_taskiq_xdist_lane(node: Node) -> str:
-    """Суффикс pytest-xdist_group для real_taskiq (очередь Redis по consumers).
-
-    CRM + flows + frontend делят одну очередь mock_llm:responses:flows — группа flows_llm,
-    иначе при параллельных gw ответы из Redis крадут друг у друга.
-    """
-    path = str(node.path).replace("\\", "/")
-    if "/tests/sync/" in path:
-        return "sync"
-    if "/tests/rag/" in path:
-        return "rag"
-    if "/tests/search/" in path:
-        return "search"
-    return "flows_llm"
-
-
-async def _alembic_version_ready(db_url: str) -> bool:
-    """Проверяет: таблица alembic_version существует и в ней ровно одна строка."""
-    from sqlalchemy import text
-    from sqlalchemy.ext.asyncio import create_async_engine
-
-    engine = create_async_engine(db_url, echo=False)
-    try:
-        async with engine.begin() as conn:
-            row = await conn.execute(text("SELECT COUNT(*) FROM alembic_version"))
-            count = row.scalar()
-            return count == 1
-    except Exception:
-        return False
-    finally:
-        await engine.dispose()
 
 
 async def _alembic_current_revision(db_url: str) -> str | None:
@@ -238,269 +184,26 @@ async def _all_migrations_up_to_date() -> tuple[bool, list[str]]:
     return (len(stale) == 0, stale)
 
 
-async def _crm_base_schema_ready(db_url: str) -> bool:
-    """Базовая CRM-схема (без журнала knowledge import)."""
-    from sqlalchemy import text
-    from sqlalchemy.ext.asyncio import create_async_engine
-
-    engine = create_async_engine(db_url, echo=False)
-    try:
-        async with engine.begin() as conn:
-            namespace_column_row = await conn.execute(
-                text(
-                    "\n                    SELECT COUNT(*)\n                    FROM information_schema.columns\n                    WHERE table_name = 'entity_types'\n                      AND column_name = 'namespace'\n                    "
-                )
-            )
-            namespace_templates_table_row = await conn.execute(
-                text(
-                    "\n                    SELECT COUNT(*)\n                    FROM information_schema.tables\n                    WHERE table_name = 'namespace_templates'\n                    "
-                )
-            )
-            namespace_template_types_table_row = await conn.execute(
-                text(
-                    "\n                    SELECT COUNT(*)\n                    FROM information_schema.tables\n                    WHERE table_name = 'namespace_template_types'\n                    "
-                )
-            )
-            namespace_template_icon_column_row = await conn.execute(
-                text(
-                    "\n                    SELECT COUNT(*)\n                    FROM information_schema.columns\n                    WHERE table_name = 'namespace_templates'\n                      AND column_name = 'icon'\n                    "
-                )
-            )
-            return (
-                (namespace_column_row.scalar() or 0) == 1
-                and (namespace_templates_table_row.scalar() or 0) == 1
-                and ((namespace_template_types_table_row.scalar() or 0) == 1)
-                and ((namespace_template_icon_column_row.scalar() or 0) == 1)
-            )
-    except Exception:
-        return False
-    finally:
-        await engine.dispose()
-
-
-async def _crm_tasks_table_ready(db_url: str) -> bool:
-    from sqlalchemy import text
-    from sqlalchemy.ext.asyncio import create_async_engine
-
-    engine = create_async_engine(db_url, echo=False)
-    try:
-        async with engine.begin() as conn:
-            row = await conn.execute(
-                text(
-                    "\n                    SELECT COUNT(*)\n                    FROM information_schema.tables\n                    WHERE table_schema = 'public'\n                      AND table_name = 'crm_tasks'\n                    "
-                )
-            )
-            return (row.scalar() or 0) == 1
-    except Exception:
-        return False
-    finally:
-        await engine.dispose()
-
-
-async def _crm_schema_ready(db_url: str) -> bool:
-    """Полная готовность CRM-схемы для тестов."""
-    return await _crm_base_schema_ready(db_url) and await _crm_tasks_table_ready(db_url)
-
-
-async def _shared_calendar_schema_ready(db_url: str) -> bool:
-    """Проверяет наличие таблиц календаря и integration_credentials в shared схеме."""
-    from sqlalchemy import text
-    from sqlalchemy.ext.asyncio import create_async_engine
-
-    engine = create_async_engine(db_url, echo=False)
-    try:
-        async with engine.begin() as conn:
-            result = await conn.execute(
-                text(
-                    "\n                    SELECT COUNT(*)\n                    FROM information_schema.tables\n                    WHERE table_name IN ('calendar_events', 'calendar_integrations', 'integration_credentials')\n                    "
-                )
-            )
-            return (result.scalar() or 0) == 3
-    except Exception:
-        return False
-    finally:
-        await engine.dispose()
-
-
-async def _shared_scheduler_schema_ready(db_url: str) -> bool:
-    """Проверяет наличие таблицы scheduler_tasks в shared схеме."""
-    from sqlalchemy import text
-    from sqlalchemy.ext.asyncio import create_async_engine
-
-    engine = create_async_engine(db_url, echo=False)
-    try:
-        async with engine.begin() as conn:
-            scheduler_tasks_table_row = await conn.execute(
-                text(
-                    "\n                    SELECT COUNT(*)\n                    FROM information_schema.tables\n                    WHERE table_name = 'scheduler_tasks'\n                    "
-                )
-            )
-            return (scheduler_tasks_table_row.scalar() or 0) == 1
-    except Exception:
-        return False
-    finally:
-        await engine.dispose()
-
-
-async def _office_schema_ready(office_db_url: str) -> bool:
-    """platform_office: привязки, колонка catalog_id, таблица каталогов (миграции office_0002+)."""
-    if not office_db_url or not office_db_url.strip():
-        return True
-    from sqlalchemy import text
-    from sqlalchemy.ext.asyncio import create_async_engine
-
-    engine = create_async_engine(office_db_url, echo=False)
-    try:
-        async with engine.begin() as conn:
-            bindings = await conn.execute(
-                text(
-                    "\n                    SELECT COUNT(*)\n                    FROM information_schema.tables\n                    WHERE table_schema = 'public'\n                      AND table_name = 'office_document_bindings'\n                    "
-                )
-            )
-            if (bindings.scalar() or 0) != 1:
-                return False
-            ns_col = await conn.execute(
-                text(
-                    "\n                    SELECT COUNT(*)\n                    FROM information_schema.columns\n                    WHERE table_schema = 'public'\n                      AND table_name = 'office_document_bindings'\n                      AND column_name = 'namespace'\n                    "
-                )
-            )
-            if (ns_col.scalar() or 0) != 1:
-                return False
-            cat_col = await conn.execute(
-                text(
-                    "\n                    SELECT COUNT(*)\n                    FROM information_schema.columns\n                    WHERE table_schema = 'public'\n                      AND table_name = 'office_document_bindings'\n                      AND column_name = 'catalog_id'\n                    "
-                )
-            )
-            if (cat_col.scalar() or 0) != 1:
-                return False
-            catalogs = await conn.execute(
-                text(
-                    "\n                    SELECT COUNT(*)\n                    FROM information_schema.tables\n                    WHERE table_schema = 'public'\n                      AND table_name = 'office_document_catalogs'\n                    "
-                )
-            )
-            return (catalogs.scalar() or 0) == 1
-    except Exception:
-        return False
-    finally:
-        await engine.dispose()
-
-
-async def _tracing_schema_ready(tracing_db_url: str) -> bool:
-    """platform_tracing: таблица spans (миграции tracing)."""
-    if not tracing_db_url or not tracing_db_url.strip():
-        return True
-    from sqlalchemy import text
-    from sqlalchemy.ext.asyncio import create_async_engine
-
-    engine = create_async_engine(tracing_db_url, echo=False)
-    try:
-        async with engine.begin() as conn:
-            row = await conn.execute(
-                text(
-                    "\n                    SELECT COUNT(*)\n                    FROM information_schema.tables\n                    WHERE table_schema = 'public'\n                      AND table_name = 'spans'\n                    "
-                )
-            )
-            return (row.scalar() or 0) == 1
-    except Exception:
-        return False
-    finally:
-        await engine.dispose()
-
-
-async def _ensure_postgres_database(admin_url: str, database_name: str) -> None:
-    """CREATE DATABASE на том же инстансе, если базы ещё нет (admin_url → обычно …/postgres)."""
-    from sqlalchemy import text
-    from sqlalchemy.ext.asyncio import create_async_engine
-
-    engine = create_async_engine(admin_url, echo=False, isolation_level="AUTOCOMMIT")
-    async with engine.connect() as conn:
-        chk = await conn.execute(
-            text("SELECT 1 FROM pg_database WHERE datname = :name"), {"name": database_name}
-        )
-        if chk.first() is None:
-            await conn.execute(text(f'CREATE DATABASE "{database_name}"'))
-    await engine.dispose()
-
-
 @pytest_asyncio.fixture(scope="session", autouse=True)
 async def setup_database_before_tests():
     """
-    Глобальная фикстура для подготовки БД перед запуском тестов.
+    Быстрая проверка актуальности миграций: Alembic head (файлы) == current (БД).
 
-    Логика: сравнивает Alembic head (файлы) с current (БД) для каждого сервиса.
-    Если все актуальны — пропуск. Если отстают — инкрементальный upgrade по каждому.
-    Если БД пуста (нет alembic_version) — полный дроп + upgrade.
+    Миграции применяет make test-up (scripts.test_migrate) до старта pytest;
+    фикстура ничего не мигрирует и не держит локов.
     """
-    from filelock import FileLock
-    from sqlalchemy import text
-    from sqlalchemy.ext.asyncio import create_async_engine
-
-    shared_db_url = os.environ.get(
-        "DATABASE__SHARED_URL", TEST_DATABASE_ENV["DATABASE__SHARED_URL"]
-    )
-    tracing_db_url = os.environ.get(
-        "DATABASE__TRACING_URL", TEST_DATABASE_ENV.get("DATABASE__TRACING_URL", "")
-    )
-    if tracing_db_url:
-        admin_url = shared_db_url.rsplit("/", 1)[0] + "/postgres"
-        await _ensure_postgres_database(admin_url, "platform_tracing")
-    worktracker_db_url = os.environ.get(
-        "DATABASE__WORKTRACKER_URL", TEST_DATABASE_ENV.get("DATABASE__WORKTRACKER_URL", "")
-    )
-    if worktracker_db_url:
-        admin_url = shared_db_url.rsplit("/", 1)[0] + "/postgres"
-        await _ensure_postgres_database(admin_url, "platform_worktracker")
-    secrets_db_url = os.environ.get(
-        "DATABASE__SECRETS_URL", TEST_DATABASE_ENV.get("DATABASE__SECRETS_URL", "")
-    )
-    if secrets_db_url:
-        admin_url = shared_db_url.rsplit("/", 1)[0] + "/postgres"
-        await _ensure_postgres_database(admin_url, "platform_secrets")
     from core.db.migration_manifest import bootstrap_migration_registry
-    from core.db.migrations import run_migrations_async
 
     bootstrap_migration_registry()
     (all_ok, stale_services) = await _all_migrations_up_to_date()
-    if all_ok:
-        print("Все миграции актуальны, пропуск.\n")
-        yield
-    else:
-        lock = FileLock(_DB_SETUP_LOCK, timeout=_DB_SETUP_LOCK_TIMEOUT_SEC)
-        with lock:
-            (all_ok, stale_services) = await _all_migrations_up_to_date()
-            if all_ok:
-                print("Миграции применены другим процессом, пропуск.\n")
-                yield
-            else:
-                has_any_schema = await _alembic_version_ready(shared_db_url)
-                if has_any_schema:
-                    for svc_name in stale_services:
-                        print(f"Догрузка миграций сервиса {svc_name}...")
-                        await run_migrations_async(service=svc_name)
-                        print(f"Миграции {svc_name} применены!")
-                    print()
-                    yield
-                else:
-                    print("Подготовка БД для тестов (первичная инициализация)...")
-                    engine = create_async_engine(shared_db_url, echo=False)
-                    async with engine.begin() as conn:
-                        result = await conn.execute(
-                            text(
-                                "\n                            SELECT tablename FROM pg_tables\n                            WHERE schemaname = 'public'\n                        "
-                            )
-                        )
-                        tables = [row[0] for row in result.fetchall()]
-                        if tables:
-                            await conn.execute(text("SET session_replication_role = 'replica'"))
-                            for table in tables:
-                                await conn.execute(text(f'DROP TABLE IF EXISTS "{table}" CASCADE'))
-                            await conn.execute(text("SET session_replication_role = 'origin'"))
-                            print(f"   Удалено {len(tables)} таблиц")
-                    await engine.dispose()
-                    print("Применение всех миграций...")
-                    await run_migrations_async()
-                    print("Миграции применены!\n")
-                    yield
+    if not all_ok:
+        pytest.fail(
+            "Миграции не применены для сервисов: "
+            + ", ".join(stale_services)
+            + " — выполните make test-up",
+            pytrace=False,
+        )
+    yield
 
 
 @pytest_asyncio.fixture(scope="session", autouse=True)
@@ -521,65 +224,9 @@ async def platform_notification_manager_redis(setup_database_before_tests):
         )
 
 
-_APP_INIT_LOCK = "/tmp/platform_test_app_init.lock"
-_APP_INIT_DONE = "/tmp/platform_test_app_init.done"
-_TASKIQ_WORKER_LOCK = "/tmp/platform_test_taskiq_worker.lock"
-_TASKIQ_WORKER_PID = "/tmp/platform_test_taskiq_worker.pid"
-_RAG_WORKER_LOCK = "/tmp/platform_test_rag_worker.lock"
-_RAG_WORKER_PID = "/tmp/platform_test_rag_worker.pid"
-_TEST_SERVER_MARKERS = (
-    "/tmp/platform_test_flows_server.pid",
-    "/tmp/platform_test_flows_server.pid.ref_count",
-    "/tmp/platform_test_flows_server.pid.envsig",
-    "/tmp/platform_test_rag_server.pid",
-    "/tmp/platform_test_rag_server.pid.ref_count",
-    "/tmp/platform_test_rag_server.pid.envsig",
-    "/tmp/platform_test_crm_server.pid",
-    "/tmp/platform_test_crm_server.pid.ref_count",
-    "/tmp/platform_test_crm_server.pid.envsig",
-    "/tmp/platform_test_frontend_server.pid",
-    "/tmp/platform_test_frontend_server.pid.ref_count",
-    "/tmp/platform_test_frontend_server.pid.envsig",
-    "/tmp/platform_test_sync_server.pid",
-    "/tmp/platform_test_sync_server.pid.ref_count",
-    "/tmp/platform_test_sync_server.pid.envsig",
-    "/tmp/platform_test_office_server.pid",
-    "/tmp/platform_test_office_server.pid.ref_count",
-    "/tmp/platform_test_office_server.pid.envsig",
-    "/tmp/platform_test_search_server.pid",
-    "/tmp/platform_test_search_server.pid.ref_count",
-    "/tmp/platform_test_search_server.pid.envsig",
-    "/tmp/platform_test_voice_server.pid",
-    "/tmp/platform_test_voice_server.pid.ref_count",
-    "/tmp/platform_test_voice_server.pid.envsig",
-    "/tmp/platform_test_provider_litserve_server.pid",
-    "/tmp/platform_test_provider_litserve_server.pid.ref_count",
-    "/tmp/platform_test_provider_litserve_server.pid.envsig",
-    "/tmp/platform_test_capability_gateway_server.pid",
-    "/tmp/platform_test_capability_gateway_server.pid.ref_count",
-    "/tmp/platform_test_capability_gateway_server.pid.envsig",
-    "/tmp/platform_test_code_runner_python_server.pid",
-    "/tmp/platform_test_code_runner_python_server.pid.ref_count",
-    "/tmp/platform_test_code_runner_python_server.pid.envsig",
-    "/tmp/platform_test_code_runner_node_server.pid",
-    "/tmp/platform_test_code_runner_node_server.pid.ref_count",
-    "/tmp/platform_test_code_runner_node_server.pid.envsig",
-    "/tmp/platform_test_code_runner_go_server.pid",
-    "/tmp/platform_test_code_runner_go_server.pid.ref_count",
-    "/tmp/platform_test_code_runner_go_server.pid.envsig",
-    "/tmp/platform_test_code_runner_csharp_server.pid",
-    "/tmp/platform_test_code_runner_csharp_server.pid.ref_count",
-    "/tmp/platform_test_code_runner_csharp_server.pid.envsig",
-    "/tmp/platform_test_worktracker_server.pid",
-    "/tmp/platform_test_worktracker_server.pid.ref_count",
-    "/tmp/platform_test_worktracker_server.pid.envsig",
-)
-
-
 def pytest_configure(config):
-    """Очистка маркеров синхронизации при старте тестов."""
+    """Guard одного pytest-контроллера и подготовка каталога junitxml."""
     import pathlib
-    import time
 
     if not hasattr(config, "workerinput"):
         from tests.fixtures.workers import prepare_pytest_controller_session
@@ -589,30 +236,6 @@ def pytest_configure(config):
         except RuntimeError as exc:
             raise pytest.UsageError(str(exc)) from exc
 
-    max_age_seconds = 3600
-    for marker in [
-        _DB_SETUP_LOCK,
-        "/tmp/platform_test_runet_index_seed.lock",
-        _APP_INIT_LOCK,
-        _APP_INIT_DONE,
-        _TASKIQ_WORKER_LOCK,
-        _TASKIQ_WORKER_PID,
-        f"{_TASKIQ_WORKER_PID}.refs",
-        _RAG_WORKER_LOCK,
-        _RAG_WORKER_PID,
-        f"{_RAG_WORKER_PID}.refs",
-        "/tmp/platform_test_sync_taskiq_worker.pid.refs",
-        "/tmp/platform_test_crm_taskiq_worker.pid.refs",
-        *_TEST_SERVER_MARKERS,
-    ]:
-        path = pathlib.Path(marker)
-        try:
-            marker_stat = path.stat()
-        except FileNotFoundError:
-            continue
-        age = time.time() - marker_stat.st_mtime
-        if not hasattr(config, "workerinput") or age > max_age_seconds:
-            path.unlink(missing_ok=True)
     junitxml_path = config.getoption("--junitxml", default=None)
     if junitxml_path:
         junit_path = pathlib.Path(junitxml_path)
@@ -630,137 +253,40 @@ _CODE_RUNNER_TEST_PREFIXES = (
 
 
 def _is_sandbox_runtime_test(nodeid: str) -> bool:
-    """Session-scoped code-runner/capability_gateway на фиксированных портах — один xdist worker."""
+    """Тесты с HTTP sandbox-контуром (capability_gateway + code_runner_*) на портах 9016–9020.
+
+    flows/integration и flows/e2e autouse-зависят от sandbox_services и RemoteCodeRunner;
+    им нужен увеличенный pytest-timeout, как capabilities и code-runner API тестам.
+    """
     if nodeid.startswith("tests/capabilities/"):
         return True
     if nodeid.startswith("tests/flows/integration/"):
+        return True
+    if nodeid.startswith("tests/flows/e2e/"):
         return True
     return any(nodeid.startswith(prefix) for prefix in _CODE_RUNNER_TEST_PREFIXES)
 
 
 @pytest.hookimpl(tryfirst=True)
 def pytest_collection_modifyitems(items: list[pytest.Item]) -> None:
-    """
-    Тесты с маркером real_taskiq передают ответы LLM через Redis; ключ mock_llm:responses:<lane>
-    задаётся MOCK_LLM_REDIS_KEY у session workers и uvicorn (fixtures).
-
-    flows_llm (CRM/flows/frontend/office real_taskiq + sandbox/code-runner) не получают xdist_group:
-    один gw на всю очередь давал 20+ мин starvation и таймауты TaskIQ/code-runner к концу прогона.
-    Contour file lock: sandbox + flows real_taskiq; CRM real_taskiq — только тесты с mock_llm_redis
-    (note-analyze/dedup/graph import). CRM TaskIQ без LLM (knowledge import notes-only) lock не берут.
-
-    sync/rag/search real_taskiq — отдельные xdist_group (свои Redis mock lanes).
-
-    SessionServerManager сбрасывает PYTEST_XDIST_WORKER у subprocess; фикстура mock_llm_redis
-    для real_taskiq пишет в ключ по _real_taskiq_mock_llm_lane.
+    """Регистрация маркеров для xdist и sandbox.
 
     tryfirst=True обязателен: xdist remote.py тоже регистрирует
-    pytest_collection_modifyitems и добавляет @gname к nodeid по существующим
-    маркерам. Наш хук должен выполниться ДО xdist, чтобы маркер уже был виден.
+    pytest_collection_modifyitems. Наш хук должен выполниться ДО xdist,
+    чтобы маркеры уже были видны.
     """
     for item in items:
         if item.get_closest_marker("real_taskiq"):
-            lane = _real_taskiq_xdist_lane(item)
-            if lane != "flows_llm":
-                item.add_marker(pytest.mark.xdist_group(f"real_taskiq_{lane}"))
             if item.get_closest_marker("timeout") is None:
                 item.add_marker(pytest.mark.timeout(120, func_only=True))
         elif _is_sandbox_runtime_test(item.nodeid):
             if item.get_closest_marker("timeout") is None:
                 item.add_marker(pytest.mark.timeout(180, func_only=True))
-        elif item.nodeid.startswith("tests/sync/"):
-            item.add_marker(pytest.mark.xdist_group("sync_db"))
-        elif item.nodeid.startswith("tests/rag/test_rag_resource") or item.nodeid.startswith(
-            "tests/rag/unit/test_rag_resource"
-        ):
-            item.add_marker(pytest.mark.xdist_group("rag_resource"))
-        elif item.nodeid.startswith("tests/ui/"):
-            item.add_marker(pytest.mark.xdist_group("ui_e2e"))
-
-
-_SHARED_FLOWS_CONTOUR_FILE_LOCK = "/tmp/platform_shared_flows_contour.lock"
-_contour_lock_holder: FileLock | None = None
-
-
-def _pytest_xdist_worker_label() -> str:
-    worker = os.environ.get("PYTEST_XDIST_WORKER")
-    if worker:
-        return worker
-    return "master"
-
-
-def _release_shared_flows_contour_lock_if_held() -> None:
-    global _contour_lock_holder
-    if _contour_lock_holder is None:
-        return
-    from core.logging import get_logger
-
-    logger = get_logger(__name__)
-    try:
-        _contour_lock_holder.release()
-        logger.warning(
-            "tests.shared_flows_contour.lock_force_released",
-            worker=_pytest_xdist_worker_label(),
-        )
-    except OSError:
-        pass
-    finally:
-        _contour_lock_holder = None
-
-
-def _uses_shared_flows_contour_lock(item: pytest.Item) -> bool:
-    """Session flows HTTP + capability_gateway + code-runner-* + mock_llm:responses:flows — один контур."""
-    if _is_sandbox_runtime_test(item.nodeid):
-        return True
-    if item.get_closest_marker("real_taskiq") is None:
-        return False
-    if _real_taskiq_mock_llm_lane(item) != "flows":
-        return False
-    path = str(item.path).replace("\\", "/")
-    if "/tests/crm/" in path:
-        return "mock_llm_redis" in item.fixturenames or "mock_llm_capture" in item.fixturenames
-    return True
-
-
-@pytest.hookimpl(hookwrapper=True, tryfirst=True)
-def pytest_runtest_protocol(item, nextitem):
-    """Сериализует shared flows contour между pytest-xdist workers (фиксированные порты 9001/9016–9020)."""
-    if not _uses_shared_flows_contour_lock(item):
-        yield
-        return
-    from core.logging import get_logger
-
-    from tests.fixtures.workers import wait_for_contour_taskiq_idle
-
-    global _contour_lock_holder
-    logger = get_logger(__name__)
-    worker = _pytest_xdist_worker_label()
-    logger.info(
-        "tests.shared_flows_contour.lock_acquire",
-        nodeid=item.nodeid,
-        worker=worker,
-    )
-    lock = FileLock(_SHARED_FLOWS_CONTOUR_FILE_LOCK, timeout=600)
-    lock.acquire()
-    _contour_lock_holder = lock
-    try:
-        yield
-        wait_for_contour_taskiq_idle()
-    finally:
-        logger.info(
-            "tests.shared_flows_contour.lock_release",
-            nodeid=item.nodeid,
-            worker=worker,
-        )
-        lock.release()
-        _contour_lock_holder = None
-
 
 @pytest.hookimpl(wrapper=True, tryfirst=True)
 def pytest_runtest_call(item) -> Generator[None, object, object]:
     """
-    Для real_taskiq: глобальный alarm из pytest_runtest_protocol считает время
-    с начала setup — ложные дампы. Снимаем его в начале call и ставим новый
+    Для real_taskiq: снимаем старый alarm в начале call и ставим новый
     с тем же faulthandler_timeout только на фазу call (тело теста).
     """
     if not item.get_closest_marker("real_taskiq") and not _is_sandbox_runtime_test(item.nodeid):
@@ -823,6 +349,60 @@ def unique_id() -> str:
     return str(uuid.uuid4())[:8]
 
 
+@pytest.fixture(autouse=True)
+def platform_test_scope() -> Generator[str, None, None]:
+    """
+    Уникальный test scope на каждый тест — адресная маршрутизация MockLLM.
+
+    Sync-фикстура: биндит ``test_scope`` в лог-контекст главного потока
+    xdist-воркера, поэтому каждая asyncio-задача теста (LLM-вызовы, kiq)
+    наследует scope через copy-on-create contextvars. Дальше scope едет по
+    платформенным рельсам: X-Test-Scope в HTTP/WS, label ``test_scope`` в
+    TaskIQ (см. core/test_scope.py).
+    """
+    from core.logging import bind_log_context, unbind_log_context
+    from core.test_scope import LOG_TEST_SCOPE
+
+    scope = f"test_{uuid.uuid4().hex[:12]}"
+    bind_log_context(**{LOG_TEST_SCOPE: scope})
+    yield scope
+    unbind_log_context(LOG_TEST_SCOPE)
+
+
+@pytest.fixture(autouse=True)
+def _inject_test_scope_header(
+    platform_test_scope: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """
+    Все httpx-клиенты тестового процесса несут заголовок ``X-Test-Scope``.
+
+    Патчится ``build_request`` — единая точка сборки запроса для ASGI и
+    реального HTTP транспорта. Сервисы читают заголовок в AccessLogMiddleware
+    и прокидывают дальше (ServiceClient, A2A, TaskIQ labels).
+    """
+    import httpx
+
+    from core.test_scope import TEST_SCOPE_HEADER
+
+    original_async_build_request = httpx.AsyncClient.build_request
+    original_sync_build_request = httpx.Client.build_request
+
+    def async_build_request_with_scope(self, *args: Any, **kwargs: Any) -> httpx.Request:
+        http_request = original_async_build_request(self, *args, **kwargs)
+        if TEST_SCOPE_HEADER not in http_request.headers:
+            http_request.headers[TEST_SCOPE_HEADER] = platform_test_scope
+        return http_request
+
+    def sync_build_request_with_scope(self, *args: Any, **kwargs: Any) -> httpx.Request:
+        http_request = original_sync_build_request(self, *args, **kwargs)
+        if TEST_SCOPE_HEADER not in http_request.headers:
+            http_request.headers[TEST_SCOPE_HEADER] = platform_test_scope
+        return http_request
+
+    monkeypatch.setattr(httpx.AsyncClient, "build_request", async_build_request_with_scope)
+    monkeypatch.setattr(httpx.Client, "build_request", sync_build_request_with_scope)
+
+
 @pytest.fixture
 def mock_context() -> Context:
     """
@@ -870,24 +450,15 @@ def mock_llm_with_queue():
     return _factory
 
 
-_MOCK_LLM_CAPTURE_FILE_LOCK = "/tmp/platform_mock_llm_capture.lock"
-
-
 @pytest_asyncio.fixture
-async def mock_llm_capture(container, unique_id):
+async def mock_llm_capture(container, platform_test_scope):
     """
-    Включает захват LLM-вызовов MockLLM в Redis на время теста и
-    возвращает callable, читающий журнал.
+    Журнал LLM-вызовов MockLLM за текущий тест; возвращает callable-читатель.
 
-    `MockLLM.stream` в любом процессе (uvicorn flows, TaskIQ workers,
-    локальные вызовы) читает один общий ключ `mock_llm:capture:active_scope`
-    и пишет каждый вызов как JSON в `mock_llm:capture:<scope>`.
+    `MockLLM` в любом процессе (granian, TaskIQ workers, локальные вызовы)
+    пишет каждый вызов с активным test scope в `mock_llm:capture:<scope>`.
     Запись содержит `model`, `messages` (role + plain text + parts),
     `tools`, `response_format`. Никаких моков продакшна и monkeypatch.
-
-    FileLock на время теста: при pytest-xdist несколько gw могут одновременно
-    ставить `active_scope` и перезаписывать глобальный ключ; worker тогда пишет
-    журнал не в тот scope.
 
     Пример:
         async def test_smth(mock_llm_capture, mock_llm_redis):
@@ -895,38 +466,30 @@ async def mock_llm_capture(container, unique_id):
             ...  # запускаем сценарий
             calls = await mock_llm_capture()  # все вызовы LLM в порядке прихода
     """
-    from filelock import FileLock
-
     from core.clients.llm.mock import (
         read_mock_llm_capture,
         start_mock_llm_capture,
         stop_mock_llm_capture,
     )
 
-    scope = f"test_{unique_id}"
-    lock = FileLock(_MOCK_LLM_CAPTURE_FILE_LOCK, timeout=420)
-    with lock:
-        await start_mock_llm_capture(container.redis_client, scope)
+    _ = await start_mock_llm_capture(container.redis_client, platform_test_scope)
 
-        async def _read():
-            return await read_mock_llm_capture(container.redis_client, scope)
+    async def _read():
+        return await read_mock_llm_capture(container.redis_client, platform_test_scope)
 
-        try:
-            yield _read
-        finally:
-            await stop_mock_llm_capture(container.redis_client, scope)
+    try:
+        yield _read
+    finally:
+        await stop_mock_llm_capture(container.redis_client, platform_test_scope)
 
 
 @pytest_asyncio.fixture
-async def mock_llm_redis(container, request):
-    """
-    Фабрика для создания MockLLM через Redis.
-    Для интеграционных тестов с реальным worker.
+async def mock_llm_redis(container, platform_test_scope):
+    """Очередь mock-ответов LLM, адресованная test scope текущего теста.
 
-    НЕ использовать с sync_tools!
-
-    Для real_taskiq ключ mock_llm:responses:<lane> по _real_taskiq_mock_llm_lane
-    (tests/crm используют lane flows — LLM на сервисе flows через A2A).
+    MockLLM в любом процессе снимает ответы строго из
+    `mock_llm:responses:<scope>` по scope из своего request-контекста —
+    параллельные тесты не пересекаются.
 
     Пример:
         async def test_integration(mock_llm_redis):
@@ -936,24 +499,13 @@ async def mock_llm_redis(container, request):
     """
     from core.clients.llm.mock import clear_mock_responses_redis, setup_mock_responses_redis
 
-    is_real_taskiq = request.node.get_closest_marker("real_taskiq") is not None
-    key_override = (
-        f"mock_llm:responses:{_real_taskiq_mock_llm_lane(request.node)}" if is_real_taskiq else None
-    )
-    flows_lane = is_real_taskiq and _real_taskiq_mock_llm_lane(request.node) == "flows"
-
     async def _factory(responses: List[Any]) -> None:
-        if flows_lane:
-            from tests.fixtures.workers import wait_for_contour_taskiq_idle
-
-            wait_for_contour_taskiq_idle()
-        await clear_mock_responses_redis(container.redis_client, key_override=key_override)
         await setup_mock_responses_redis(
-            container.redis_client, responses, key_override=key_override
+            container.redis_client, responses, test_scope=platform_test_scope
         )
 
     yield _factory
-    await clear_mock_responses_redis(container.redis_client, key_override=key_override)
+    await clear_mock_responses_redis(container.redis_client, test_scope=platform_test_scope)
 
 
 @pytest.fixture
@@ -1300,29 +852,54 @@ def sync_tools(request, monkeypatch):
     yield None
 
 
+def _code_runner_available() -> bool:
+    """Проверяет доступность code_runner_python через HTTP health-check."""
+    import httpx
+
+    try:
+        response = httpx.get(
+            "http://127.0.0.1:9017/health",
+            timeout=1.0,
+        )
+        return response.status_code == 200
+    except Exception:
+        return False
+
+
+SUPPRESSED_CODE_RUNNER_TESTS: set[str] = set()
+
+
+@pytest_asyncio.fixture(autouse=True)
+async def skip_if_code_runner_unavailable(request: pytest.FixtureRequest) -> None:
+    """Пропускает тесты, требующие code_runner, если sandbox-сервисы недоступны.
+
+    Маркеры: @pytest.mark.requires_code_runner — обязательный маркер для skip.
+    """
+    marker = request.node.get_closest_marker("requires_code_runner")
+    if marker is None:
+        return
+    test_id = request.node.nodeid
+    if test_id in SUPPRESSED_CODE_RUNNER_TESTS:
+        pytest.skip("code_runner недоступен (проверено ранее). Запустите make app")
+    if not _code_runner_available():
+        SUPPRESSED_CODE_RUNNER_TESTS.add(test_id)
+        pytest.skip("code_runner_python недоступен. Запустите make app")
+
+
 @pytest_asyncio.fixture(scope="session")
 async def app(taskiq_worker, crm_worker):
     """
     Реальное FastAPI приложение с lifespan.
     Загружает flows, инициализирует контейнер.
-    Зависит от taskiq_worker - worker запускается автоматически.
+    Зависит от taskiq_worker/crm_worker — воркеры стека должны быть готовы.
 
     scope="session" - приложение поднимается один раз на все тесты.
-
     При pytest-xdist каждый gw-worker поднимает свой lifespan независимо.
-    Первый worker касается маркера (только для логирования), lock отпускается
-    до yield — все воркеры работают параллельно.
 
     ВАЖНО: Scheduler НЕ запускается автоматически! Тесты которым нужен scheduler
     должны явно использовать фикстуру taskiq_scheduler.
     """
-    import pathlib
-
-    done_marker = pathlib.Path(_APP_INIT_DONE)
-    lock = FileLock(_APP_INIT_LOCK, timeout=300)
-    with lock:
-        if not done_marker.exists():
-            done_marker.touch()
+    _ = taskiq_worker, crm_worker
     async with fastapi_app.router.lifespan_context(fastapi_app):
         yield fastapi_app
 
@@ -1609,15 +1186,35 @@ async def auth_token(frontend_container):
         members={user_id: ["owner", "admin"]},
     )
     await frontend_container.company_repository.set(company)
+    await frontend_container.subdomain_repository.set_mapping(company_subdomain, company_id)
+
+    # Сохраняем пользователя ДО обновления system_company.members,
+    # чтобы middleware CompanyResolver видел user.companies с "system" при любом порядке выполнения.
     user = User(
         user_id=user_id,
         name="Test User",
         emails=[f"{user_id}@test.com"],
-        companies={company_id: ["owner", "admin"]},
+        companies={company_id: ["owner", "admin"], "system": ["admin"]},
         active_company_id=company_id,
     )
     await frontend_container.user_repository.set(user)
-    await frontend_container.subdomain_repository.set_mapping(company_subdomain, company_id)
+
+    system_company = await frontend_container.company_repository.get("system")
+    if system_company is None:
+        system_company = Company(
+            company_id="system",
+            name="System",
+            subdomain="system",
+            owner_user_id=user_id,
+            members={user_id: ["admin"]},
+        )
+        await frontend_container.company_repository.set(system_company)
+        await frontend_container.subdomain_repository.set_mapping("system", "system")
+    else:
+        if user_id not in system_company.members:
+            system_company.members[user_id] = ["admin"]
+            await frontend_container.company_repository.set(system_company)
+
     token_service = get_token_service()
     token = token_service.create_token(user_id, company_id=company_id)
     return token

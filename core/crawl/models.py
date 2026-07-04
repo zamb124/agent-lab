@@ -70,6 +70,7 @@ class SitemapEntry(StrictBaseModel):
 
 class CrawlStructuralSignals(StrictBaseModel):
     title: str | None = None
+    description: str | None = None
     date_published: date | None = None
     date_modified: date | None = None
     author: str | None = None

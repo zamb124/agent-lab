@@ -14,8 +14,10 @@ from core.errors import FrozenStateFieldError
 from core.state import ExecutionState
 from core.state.mutation_policy import (
     FROZEN_STATE_FIELDS,
+    FIELDS_COPY_FROM_RUNTIME_NODE_STATE,
     USER_TOOL_PARALLEL_STATE_MERGE_FIELDS,
     assert_frozen_fields_unchanged,
+    should_skip_field_on_runtime_node_state_merge,
     snapshot_frozen_fields,
     user_code_state_mutation_guard,
 )
@@ -105,3 +107,8 @@ def test_parallel_merge_allowlist_excludes_identity() -> None:
 
 def test_messages_not_in_frozen_set() -> None:
     assert "messages" not in FROZEN_STATE_FIELDS
+
+
+def test_runtime_node_merge_propagates_handback_terminal_state() -> None:
+    assert "terminal_task_state" in FIELDS_COPY_FROM_RUNTIME_NODE_STATE
+    assert not should_skip_field_on_runtime_node_state_merge("terminal_task_state")

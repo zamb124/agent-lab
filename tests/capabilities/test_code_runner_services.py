@@ -30,7 +30,13 @@ from core.capabilities import (
 
 pytestmark = pytest.mark.timeout(180)
 TOOLS_PACKAGE_ROOT = Path(__file__).resolve().parents[2] / "apps" / "flows" / "tools"
+SRC_TOOLS_PACKAGE_ROOT = Path(__file__).resolve().parents[2] / "apps" / "flows" / "src" / "tools"
 BUNDLES_ROOT = Path(__file__).resolve().parents[2] / "apps" / "flows" / "bundles"
+
+_TOOL_PACKAGE_SCAN_ROOTS: tuple[tuple[Path, str], ...] = (
+    (TOOLS_PACKAGE_ROOT, "apps.flows.tools"),
+    (SRC_TOOLS_PACKAGE_ROOT, "apps.flows.src.tools"),
+)
 
 RUNNER_BY_LANGUAGE: dict[CapabilityLanguage, tuple[str, str]] = {
     "python": ("code_runner_python", "/code-runner-python/api/v1/execute"),
@@ -60,18 +66,19 @@ def _documented_builtin_tool_ids() -> set[str]:
 
 def _decorated_tool_specs() -> set[tuple[str, str]]:
     specs: set[tuple[str, str]] = set()
-    for path in sorted(TOOLS_PACKAGE_ROOT.glob("*.py")):
-        if path.name in {"__init__.py", "builtin_specs.py"}:
-            continue
-        tree = ast.parse(path.read_text(encoding="utf-8"))
-        module_name = f"apps.flows.tools.{path.stem}"
-        for node in tree.body:
-            if not isinstance(node, (ast.AsyncFunctionDef, ast.FunctionDef)):
+    for package_root, module_prefix in _TOOL_PACKAGE_SCAN_ROOTS:
+        for path in sorted(package_root.glob("*.py")):
+            if path.name in {"__init__.py", "builtin_specs.py"}:
                 continue
-            for decorator in node.decorator_list:
-                if isinstance(decorator, ast.Call) and getattr(decorator.func, "id", None) == "tool":
-                    specs.add((module_name, node.name))
-                    break
+            tree = ast.parse(path.read_text(encoding="utf-8"))
+            module_name = f"{module_prefix}.{path.stem}"
+            for node in tree.body:
+                if not isinstance(node, (ast.AsyncFunctionDef, ast.FunctionDef)):
+                    continue
+                for decorator in node.decorator_list:
+                    if isinstance(decorator, ast.Call) and getattr(decorator.func, "id", None) == "tool":
+                        specs.add((module_name, node.name))
+                        break
     return specs
 
 

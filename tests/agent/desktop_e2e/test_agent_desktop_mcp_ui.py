@@ -19,23 +19,68 @@ from tests.agent.desktop_e2e.helpers import (
 )
 
 
-def test_mcp_bld_01_bundled_extensions_platform_mcp_first() -> None:
+def test_mcp_bld_01_bundled_extensions_without_static_platform_mcp() -> None:
     extensions = read_bundled_extensions()
-    assert extensions[0]["id"] == "platform_mcp"
+    extension_ids = {item.get("id") for item in extensions}
+    assert "platform_mcp" not in extension_ids
 
 
-def test_mcp_bld_02_default_extensions_platform_mcp_first() -> None:
+def test_mcp_bld_02_default_extensions_without_platform_mcp() -> None:
     distro = load_default_distro_config()
-    assert distro.default_extensions[0] == "platform_mcp"
+    assert "platform_mcp" not in distro.default_extensions
+    assert "developer" in distro.default_extensions
+    assert "computercontroller" in distro.default_extensions
 
 
-def test_mcp_bld_03_platform_mcp_streamable_http_config() -> None:
-    extensions = read_bundled_extensions()
-    platform_mcp = extensions[0]
-    assert platform_mcp["type"] == "streamable_http"
-    headers = platform_mcp["headers"]
-    assert isinstance(headers, dict)
-    assert headers["Authorization"] == "Bearer ${HUMANITEC_DEVICE_TOKEN}"
+@pytest.mark.asyncio
+async def test_mcp_bld_03_preload_exposes_toolkits_catalog_api(
+    humanitec_desktop_process_factory,
+) -> None:
+    desktop = humanitec_desktop_process_factory()
+    try:
+        desktop.start()
+        async with async_playwright() as playwright:
+            browser = await connect_desktop_browser(playwright, desktop)
+            page = await find_main_app_page(browser)
+            await assert_humanitec_preload_api(page)
+            has_fetch = await page.evaluate(
+                "typeof window.humanitecAgent.fetchToolkitsCatalog === 'function'"
+            )
+            assert has_fetch is True
+    finally:
+        desktop.stop()
+
+
+@pytest.mark.asyncio
+async def test_mcp_bld_04_platform_humanitec_core_after_pairing(
+    agent_frontend_http_client,
+    auth_token: str,
+    humanitec_desktop_process_factory,
+) -> None:
+    from tests.agent.desktop_e2e.goosed_helpers import goosed_get_config_extensions
+
+    desktop = humanitec_desktop_process_factory()
+    try:
+        desktop.start()
+        async with async_playwright() as playwright:
+            browser = await connect_desktop_browser(playwright, desktop)
+            page = await find_main_app_page(browser)
+            await pair_desktop_via_deep_link(
+                desktop,
+                agent_frontend_http_client,
+                auth_token,
+            )
+            extensions = await goosed_get_config_extensions(page)
+            names: list[str] = []
+            for entry in extensions:
+                config = entry.get("config")
+                if isinstance(config, dict):
+                    name = config.get("name")
+                    if isinstance(name, str):
+                        names.append(name)
+            assert "platform_humanitec_core" in names
+    finally:
+        desktop.stop()
 
 
 @pytest.mark.asyncio
@@ -43,7 +88,7 @@ async def test_mcp_ui_01_first_launch_bundled_order(
     humanitec_desktop_process_factory,
 ) -> None:
     extensions = read_bundled_extensions()
-    assert extensions[0]["display_name"] == "Humanitec"
+    assert extensions[0]["display_name"] == "Developer"
     desktop = humanitec_desktop_process_factory()
     try:
         desktop.start()

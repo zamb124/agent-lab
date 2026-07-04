@@ -63,6 +63,7 @@ def _patch_oauth_config(monkeypatch) -> None:
 
     settings = get_settings()
     auth = AuthConfig(
+        jwt_secret_key="test-secret-key-32-bytes-minimum-!",
         providers={
             "google": AuthProviderConfig(
                 client_id="test-client-id",

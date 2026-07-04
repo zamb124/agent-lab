@@ -2,10 +2,13 @@
 
 from __future__ import annotations
 
+import json
+
 import pytest
 from httpx import AsyncClient
 
 from core.ai.providers import HUMANITEC_LLM_AUTO_MODEL
+from core.types import JsonObject, require_json_object
 from tests.agent._helpers import (
     AGENT_API_PREFIX,
     LLM_CHAT_COMPLETIONS_PATH,
@@ -110,7 +113,26 @@ async def test_e2e_llm_proxy_chat_completions_stream(
     assert response.status_code == 200
     assert response.headers["content-type"].startswith("text/event-stream")
     text = response.text
-    assert "Streamed hello" in text
+    streamed_content = ""
+    for line in text.splitlines():
+        if not line.startswith("data: ") or line == "data: [DONE]":
+            continue
+        chunk = require_json_object(json.loads(line.removeprefix("data: ")), "agent.llm_proxy.sse.chunk")
+        choices_raw = chunk.get("choices")
+        if not isinstance(choices_raw, list):
+            continue
+        for choice_item in choices_raw:
+            if not isinstance(choice_item, dict):
+                continue
+            choice = require_json_object(choice_item, "agent.llm_proxy.sse.choice")
+            delta_raw = choice.get("delta")
+            if not isinstance(delta_raw, dict):
+                continue
+            delta: JsonObject = require_json_object(delta_raw, "agent.llm_proxy.sse.delta")
+            content = delta.get("content")
+            if isinstance(content, str):
+                streamed_content += content
+    assert streamed_content == "Streamed hello"
     assert '"usage"' in text
     assert text.rstrip().endswith("data: [DONE]")
 

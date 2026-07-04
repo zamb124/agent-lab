@@ -86,7 +86,8 @@ bash deploy/scripts/kubeconfig-for-github-actions.sh
 | `PUSH__FCM_CREDENTIALS_JSON` / `PUSH__FCM_PROJECT_ID` |
 | `LLM__OPENROUTER__API_KEY` / `LLM__BOTHUB__API_KEY` |
 | `LLM__GROQ__API_KEY` / `LLM__GOOGLE__API_KEY` / `LLM__GITHUB__API_KEY` |
-| `LLM__HUGGINGFACE__API_KEY` / `LLM__DEEPINFRA__API_KEY` / `LLM__YANDEX__API_KEY` / `LLM__YANDEX__FOLDER_ID` |
+| `LLM__HUGGINGFACE__API_KEY` / `LLM__DEEPINFRA__API_KEY` / `LLM__CAILA__API_KEY` / `LLM__YANDEX__API_KEY` / `LLM__YANDEX__FOLDER_ID` |
+| `LLM__OPENROUTER__API_KEYS` / `LLM__BOTHUB__API_KEYS` / `LLM__GROQ__API_KEYS` / `LLM__GOOGLE__API_KEYS` / `LLM__GITHUB__API_KEYS` / `LLM__HUGGINGFACE__API_KEYS` / `LLM__DEEPINFRA__API_KEYS` / `LLM__CAILA__API_KEYS` / `LLM__YANDEX__API_KEYS` | (опционально) дополнительные API ключи для ротации внутри одного провайдера. JSON-массив: `'["sk-1","sk-2","sk-3"]'`. Каждый ключ создаёт отдельного кандидата в free-pool; cooldown одного ключа не блокирует другие ключи того же провайдера. |
 | `STT__CLOUD_RU__API_KEY` |
 | `VOICE__STT__YANDEX__API_KEY` / `VOICE__STT__YANDEX__FOLDER_ID` |
 | `VOICE__STT__SBER__CLIENT_ID` / `VOICE__STT__SBER__CLIENT_SECRET` |

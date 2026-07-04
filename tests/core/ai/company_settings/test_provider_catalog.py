@@ -94,3 +94,56 @@ def test_company_rerank_override_requires_model_for_enabled_provider() -> None:
     assert aip.rerank is not None
     assert aip.rerank.provider == "openrouter"
     assert aip.rerank.model == "openrouter/rerank-test"
+
+
+def test_company_llm_override_accepts_api_key_encrypted_extra() -> None:
+    aip = CompanyAIProviders.model_validate(
+        {
+            "llm_chat": {
+                "provider": "openrouter",
+                "api_key_encrypted": "enc-main",
+                "api_key_encrypted_extra": ["enc-extra-1", "enc-extra-2"],
+            }
+        },
+    )
+    assert aip.llm_chat is not None
+    assert aip.llm_chat.api_key_encrypted == "enc-main"
+    assert aip.llm_chat.api_key_encrypted_extra == ["enc-extra-1", "enc-extra-2"]
+
+
+def test_company_llm_override_rejects_api_key_encrypted_extra_on_custom_provider() -> None:
+    from core.ai.company_settings.schema import (
+        CompanyCustomOpenAICompatibleProvider,
+    )
+
+    with pytest.raises(ValidationError):
+        _ = CompanyAIProviders.model_validate(
+            {
+                "custom_providers": [
+                    CompanyCustomOpenAICompatibleProvider(
+                        id="custom1",
+                        label="My Custom",
+                        base_url="https://my.llm/v1",
+                        api_key_encrypted="enc-custom",
+                        capabilities=["llm_chat"],
+                        model_by_capability={"llm_chat": "model-a"},
+                    ).model_dump(mode="json")
+                ],
+                "llm_chat": {
+                    "provider": "custom:custom1",
+                    "api_key_encrypted_extra": ["should-fail"],
+                },
+            }
+        )
+
+
+def test_company_llm_override_rejects_api_key_encrypted_extra_on_humanitec_llm() -> None:
+    with pytest.raises(ValidationError):
+        _ = CompanyAIProviders.model_validate(
+            {
+                "llm_chat": {
+                    "provider": "humanitec_llm",
+                    "api_key_encrypted_extra": ["should-fail"],
+                }
+            }
+        )

@@ -506,9 +506,10 @@ class TestDefaultSkill:
         ("жалоба", "complaint"),
         ("вопрос", "general"),
         ("привет", "greeting"),
-        ("кот", "cat"),
-        ("cat", "cat"),
-        ("кошка", "cat"),
+        # cat-маршрут дергает реальный catfact.ninja через http_node
+        pytest.param("кот", "cat", marks=pytest.mark.network),
+        pytest.param("cat", "cat", marks=pytest.mark.network),
+        pytest.param("кошка", "cat", marks=pytest.mark.network),
     ])
     async def test_all_routes_work(self, app, mock_llm_with_queue, input_text, expected_route):
         """Все маршруты работают корректно."""

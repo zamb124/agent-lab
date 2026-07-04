@@ -82,12 +82,12 @@ _FORBIDDEN_METADATA_KEYS: tuple[str, ...] = (
 _VENDOR_URL_RE = re.compile(
     r"https?://(api\.openai\.com|openrouter\.ai|bothub\.chat|llm\.api\.cloud\.yandex\.net|"
     r"huggingface\.co|router\.huggingface\.co|api\.groq\.com|generativelanguage\.googleapis\.com|"
-    r"models\.github\.ai|api\.deepinfra\.com)"
+    r"models\.github\.ai|api\.deepinfra\.com|caila\.io)"
 )
 
 
 _PROVIDER_LITERALS_RE = re.compile(
-    r"['\"](openrouter|openai|bothub|yandex|provider_litserve|custom_openai_compatible)['\"]"
+    r"['\"](openrouter|openai|bothub|yandex|provider_litserve|custom_openai_compatible|caila)['\"]"
 )
 
 

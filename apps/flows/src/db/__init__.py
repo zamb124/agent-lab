@@ -1,5 +1,6 @@
 from core.db import BaseRepository, Storage
 
+from .agent_toolkit_repository import AgentToolkitRepository
 from .evaluation_lab_repository import EvaluationLabRepository
 from .flow_repository import FlowRepository
 from .mcp_repository import MCPServerRepository
@@ -27,6 +28,7 @@ from .tool_repository import ToolRepository
 __all__ = [
     "Storage",
     "BaseRepository",
+    "AgentToolkitRepository",
     "NodeRepository",
     "EvaluationLabRepository",
     "FlowRepository",

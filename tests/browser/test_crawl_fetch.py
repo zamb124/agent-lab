@@ -71,6 +71,6 @@ async def test_browser_fetch_client_uses_networkidle_wait_policy() -> None:
 
     assert len(captured) == 1
     body = captured[0]["json"]
-    assert body["wait_policy"] == "networkidle"
+    assert body["wait_policy"] == "domcontentloaded"
     parsed = BrowserCrawlFetchRequest.model_validate(body)
-    assert "stylesheet" not in parsed.block_resource_types
+    assert set(parsed.block_resource_types) == {"image", "media", "font", "stylesheet"}

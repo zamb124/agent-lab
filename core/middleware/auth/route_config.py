@@ -196,6 +196,7 @@ ROUTE_RULES: list[RouteRule] = [
     RouteRule("/frontend/agent/", auth_required=False, context_type="anonymous"),
     RouteRule("/frontend/api/agent/login", auth_required=False, context_type="anonymous"),
     RouteRule("/frontend/api/agent/download/*", auth_required=False, context_type="anonymous"),
+    RouteRule("/frontend/api/agent/releases/artifact/*", auth_required=False, context_type="anonymous"),
     RouteRule("/frontend/api/agent/releases/status", auth_required=False, context_type="anonymous"),
     RouteRule("/frontend/api/agent/discover", auth_required=False, context_type="anonymous"),
     RouteRule("/frontend/api/agent/register", auth_required=False, context_type="anonymous"),

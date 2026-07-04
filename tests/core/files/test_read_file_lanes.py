@@ -1,38 +1,23 @@
-"""read_file lanes: specialized tools, vision, hybrid, STT."""
+"""read_file lanes: engine auto-detects lane per file type."""
 
 from __future__ import annotations
 
 import pytest
 
-from apps.flows.tools.files import (
-    read_docx,
-    read_docx_hybrid,
-    read_image_vision,
-    read_pdf_hybrid,
-    read_pdf_text,
-    read_pdf_via_vision,
-    read_text,
-    read_xlsx,
-)
-from core.files.reader import VISION_FULL_READ_MAX_PAGES, ContentMode, ReadLane
-from core.files.reader.extract_cache import load_vision_page
+from apps.flows.tools.files import read_file
+from core.files.reader import ContentMode, ReadLane
 from core.state import ExecutionState
 from core.types import require_json_object
 from tests.core.files.corpus.manifest import POSITIVE
-from tests.core.files.corpus.read_helpers import (
-    store_corpus_bytes_in_files_service,
-    store_corpus_in_files_service,
-)
+from tests.core.files.corpus.read_helpers import store_corpus_in_files_service
 from tests.fixtures.s3 import require_s3_configured
 
-_SPECIALIZED = (
-    (read_text, ReadLane.TEXT, "fake-text.txt"),
-    (read_pdf_text, ReadLane.TEXT, "pdf/DA-1p.pdf"),
-    (read_xlsx, ReadLane.TEXT, "stanley-cups.xlsx"),
-    (read_docx, ReadLane.TEXT, "simple.docx"),
-    (read_pdf_via_vision, ReadLane.VISION, "pdf/multi-column-2p.pdf"),
-    (read_pdf_hybrid, ReadLane.HYBRID, "pdf/multi-column-2p.pdf"),
-    (read_image_vision, ReadLane.VISION, "img/example.jpg"),
+_AUTO_DETECT = (
+    ("fake-text.txt", ReadLane.TEXT),
+    ("pdf/DA-1p.pdf", ReadLane.TEXT),
+    ("stanley-cups.xlsx", ReadLane.TEXT),
+    ("simple.docx", ReadLane.TEXT),
+    ("img/example.jpg", ReadLane.VISION),
 )
 
 
@@ -47,26 +32,25 @@ def _state_with(file_ref) -> ExecutionState:
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize(("tool", "expected_lane", "relative_path"), _SPECIALIZED)
+@pytest.mark.parametrize(("relative_path", "expected_lane"), _AUTO_DETECT)
 @pytest.mark.timeout(300)
 @pytest.mark.usefixtures("file_reader_billing_service")
-async def test_specialized_tool_forces_read_lane(
-    tool,
-    expected_lane: ReadLane,
+async def test_read_file_auto_detects_lane(
     relative_path: str,
+    expected_lane: ReadLane,
     frontend_container,
     unique_id: str,
     mock_llm_with_queue,
 ) -> None:
     require_s3_configured()
     entry = next(e for e in POSITIVE if e.relative_path == relative_path)
-    if entry.uses_vision_llm or expected_lane in (ReadLane.VISION, ReadLane.HYBRID):
+    if entry.uses_vision_llm or expected_lane == ReadLane.VISION:
         mock_llm_with_queue(["MOCK_VISION"])
     file_ref = await store_corpus_in_files_service(frontend_container, entry, unique_id=unique_id)
     state = _state_with(file_ref)
     payload = require_json_object(
-        await tool.run({"names": [file_ref.original_name]}, state),
-        f"{tool.name}.result",
+        await read_file.run({"names": [file_ref.original_name]}, state),
+        "read_file.lane",
     )
     assert payload["files"][0]["read_lane"] == expected_lane.value
 
@@ -74,108 +58,75 @@ async def test_specialized_tool_forces_read_lane(
 @pytest.mark.asyncio
 @pytest.mark.timeout(120)
 @pytest.mark.usefixtures("file_reader_billing_service")
-async def test_read_text_on_image_fails(
+async def test_read_file_on_image_auto_uses_vision(
     frontend_container,
     unique_id: str,
     mock_llm_with_queue,
 ) -> None:
     require_s3_configured()
     entry = next(e for e in POSITIVE if e.relative_path == "img/example.jpg")
+    mock_llm_with_queue(["MOCK_VISION"])
     file_ref = await store_corpus_in_files_service(frontend_container, entry, unique_id=unique_id)
     state = _state_with(file_ref)
     payload = require_json_object(
-        await read_text.run({"names": [file_ref.original_name]}, state),
-        "read_text.image",
+        await read_file.run({"names": [file_ref.original_name]}, state),
+        "read_file.image",
     )
-    assert payload["files"][0]["success"] is False
-    assert payload["files"][0]["stop_reason"] == "error"
+    file_result = payload["files"][0]
+    assert file_result["success"] is True
+    assert file_result["read_lane"] == ReadLane.VISION.value
 
 
 @pytest.mark.asyncio
 @pytest.mark.timeout(300)
 @pytest.mark.usefixtures("file_reader_billing_service")
-async def test_pdf_vision_full_read_small_pdf(
+async def test_read_file_pdf_text_page_range(
     frontend_container,
     unique_id: str,
-    mock_llm_with_queue,
 ) -> None:
     require_s3_configured()
     entry = next(e for e in POSITIVE if e.relative_path == "pdf/multi-column-2p.pdf")
-    mock_llm_with_queue(["MOCK_VISION", "MOCK_VISION"])
     file_ref = await store_corpus_in_files_service(frontend_container, entry, unique_id=unique_id)
     state = _state_with(file_ref)
     payload = require_json_object(
-        await read_pdf_via_vision.run(
+        await read_file.run(
             {"names": [file_ref.original_name], "page_start": 0, "page_end": 1},
             state,
         ),
-        "read_pdf_via_vision.full",
+        "read_file.pdf_range",
     )
     file_result = payload["files"][0]
     assert file_result["success"] is True
-    assert file_result["read_lane"] == "vision"
     assert len(file_result["results"]) >= 1
 
 
 @pytest.mark.asyncio
 @pytest.mark.timeout(300)
 @pytest.mark.usefixtures("file_reader_billing_service")
-async def test_pdf_vision_lazy_mode_caches_requested_pages(
+async def test_read_file_large_pdf_text_extraction(
     frontend_container,
     unique_id: str,
-    mock_llm_with_queue,
 ) -> None:
     require_s3_configured()
-    lazy_path = "pdf/layout-parser-paper.pdf"
-    mock_llm_with_queue(["MOCK_VISION"])
-    file_ref = await store_corpus_bytes_in_files_service(
-        frontend_container, relative_path=lazy_path
-    )
-    state = _state_with(file_ref)
-
-    payload = require_json_object(
-        await read_pdf_via_vision.run(
-            {"names": [file_ref.original_name], "page_start": 0, "page_end": 0},
-            state,
-        ),
-        "read_pdf_via_vision.lazy",
-    )
-    file_result = payload["files"][0]
-    assert file_result["success"] is True
-    assert file_result["pages_total"] > VISION_FULL_READ_MAX_PAGES
-    assert any("vision применён только к запрошенным страницам" in w for w in file_result["warnings"])
-    assert file_result["results"][0]["page"] == 0
-
-    cached = await load_vision_page(file_id=file_ref.file_id, checksum=None, page=0)
-    assert cached is not None
-    assert "MOCK_VISION" in cached
-
-
-@pytest.mark.asyncio
-@pytest.mark.timeout(180)
-@pytest.mark.usefixtures("file_reader_billing_service")
-async def test_docx_hybrid_without_images_falls_back_to_text_with_warning(
-    frontend_container,
-    unique_id: str,
-    mock_llm_with_queue,
-) -> None:
-    require_s3_configured()
-    entry = next(e for e in POSITIVE if e.relative_path == "simple.docx")
+    entry = next(e for e in POSITIVE if e.relative_path == "pdf/DA-1p.pdf")
     file_ref = await store_corpus_in_files_service(frontend_container, entry, unique_id=unique_id)
     state = _state_with(file_ref)
     payload = require_json_object(
-        await read_docx_hybrid.run({"names": [file_ref.original_name]}, state),
-        "read_docx_hybrid.simple",
+        await read_file.run(
+            {"names": [file_ref.original_name], "page_start": 0, "page_end": 0},
+            state,
+        ),
+        "read_file.pdf_page0",
     )
     file_result = payload["files"][0]
     assert file_result["success"] is True
-    assert any("hybrid недоступен" in w for w in file_result["warnings"])
+    assert file_result["results"][0]["page"] == 0
 
 
 @pytest.mark.asyncio
 @pytest.mark.timeout(180)
 @pytest.mark.usefixtures("file_reader_billing_service")
-async def test_audio_read_uses_stt_lane(
+async def test_read_file_audio_uses_stt_lane(
     frontend_container,
     unique_id: str,
 ) -> None:
@@ -183,7 +134,6 @@ async def test_audio_read_uses_stt_lane(
     entry = next(e for e in POSITIVE if e.relative_path == "CantinaBand3.wav")
     file_ref = await store_corpus_in_files_service(frontend_container, entry, unique_id=unique_id)
     state = _state_with(file_ref)
-    from apps.flows.tools.files import read_file
 
     payload = require_json_object(
         await read_file.run({"names": [file_ref.original_name]}, state),

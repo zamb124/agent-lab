@@ -1088,6 +1088,11 @@ class LlmNodeRunner(BaseLlmNodeRunner):
                                 await self._emit_pending_ui_events(emitter, state)
                                 await self._checkpoint_state(state)
 
+                                if state.terminal_task_state == "handback":
+                                    final_response = state.response or ""
+                                    InterruptManager.clear_interrupt_path(state)
+                                    break
+
                             except FlowInterrupt as e:
                                 interrupted_tc = e.tool_call or tool_calls[0]
                                 logger.info(

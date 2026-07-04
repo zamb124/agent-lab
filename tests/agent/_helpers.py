@@ -20,6 +20,16 @@ LLM_MODELS_PATH = "/flows/api/v1/agent/llm/v1/models"
 LLM_CHAT_COMPLETIONS_PATH = "/flows/api/v1/agent/llm/v1/chat/completions"
 
 
+async def agent_base_url_from_token(auth_token: str, frontend_container) -> str:
+    company_id = company_id_from_auth_token(auth_token)
+    company = await frontend_container.company_repository.get(company_id)
+    if company is None:
+        raise AssertionError(f"company {company_id} not found")
+    if not company.subdomain:
+        raise AssertionError(f"company {company_id} has no subdomain")
+    return f"http://{company.subdomain}.lvh.me:9004"
+
+
 async def create_pairing_via_http(
     client: AsyncClient,
     *,
@@ -136,12 +146,38 @@ async def assert_audit_event_in_redis(
     raise AssertionError(f"audit event {event_type!r} not found for company {company_id}")
 
 
+async def ensure_agent_test_toolkit(
+    flows_client: AsyncClient,
+    auth_headers: dict[str, str],
+    unique_id: str,
+) -> str:
+    toolkit_id = f"agent_test_{unique_id}"
+    response = await flows_client.post(
+        "/flows/api/v1/agent/toolkits/manage",
+        headers=auth_headers,
+        json={
+            "toolkit_id": toolkit_id,
+            "name": f"Agent test {unique_id}",
+            "description": "Temporary toolkit for agent MCP tests",
+            "default_enabled": True,
+            "position": 999,
+            "flow_ids": [],
+            "tool_ids": ["calculator"],
+        },
+    )
+    if response.status_code == 409:
+        return toolkit_id
+    assert response.status_code == 200, response.text
+    return toolkit_id
+
+
 async def ensure_example_react_flow(
     flows_client_http: AsyncClient,
     auth_headers: dict[str, str],
     unique_id: str,
 ) -> str:
     flow_id = f"agent_mcp_{unique_id}"
+    toolkit_id = await ensure_agent_test_toolkit(flows_client_http, auth_headers, unique_id)
     response = await flows_client_http.post(
         "/flows/api/v1/flows/",
         headers=auth_headers,
@@ -149,6 +185,7 @@ async def ensure_example_react_flow(
             "flow_id": flow_id,
             "name": f"Agent MCP {unique_id}",
             "entry": "main",
+            "agent_toolkit_ids": [toolkit_id],
             "nodes": {
                 "main": {
                     "type": "llm_node",

@@ -301,11 +301,23 @@ env в одном container spec: Kubernetes strategic-merge patch падает 
       name: {{ .Values.platformSecretName }}
       key: llm-bothub-api-key
       optional: true
+- name: LLM__BOTHUB__API_KEYS
+  valueFrom:
+    secretKeyRef:
+      name: {{ .Values.platformSecretName }}
+      key: llm-bothub-api-keys
+      optional: true
 - name: LLM__OPENROUTER__API_KEY
   valueFrom:
     secretKeyRef:
       name: {{ .Values.platformSecretName }}
       key: llm-openrouter-api-key
+      optional: true
+- name: LLM__OPENROUTER__API_KEYS
+  valueFrom:
+    secretKeyRef:
+      name: {{ .Values.platformSecretName }}
+      key: llm-openrouter-api-keys
       optional: true
 - name: LLM__GROQ__API_KEY
   valueFrom:
@@ -313,11 +325,23 @@ env в одном container spec: Kubernetes strategic-merge patch падает 
       name: {{ .Values.platformSecretName }}
       key: llm-groq-api-key
       optional: true
+- name: LLM__GROQ__API_KEYS
+  valueFrom:
+    secretKeyRef:
+      name: {{ .Values.platformSecretName }}
+      key: llm-groq-api-keys
+      optional: true
 - name: LLM__GOOGLE__API_KEY
   valueFrom:
     secretKeyRef:
       name: {{ .Values.platformSecretName }}
       key: llm-google-api-key
+      optional: true
+- name: LLM__GOOGLE__API_KEYS
+  valueFrom:
+    secretKeyRef:
+      name: {{ .Values.platformSecretName }}
+      key: llm-google-api-keys
       optional: true
 - name: LLM__GITHUB__API_KEY
   valueFrom:
@@ -325,11 +349,23 @@ env в одном container spec: Kubernetes strategic-merge patch падает 
       name: {{ .Values.platformSecretName }}
       key: llm-github-api-key
       optional: true
+- name: LLM__GITHUB__API_KEYS
+  valueFrom:
+    secretKeyRef:
+      name: {{ .Values.platformSecretName }}
+      key: llm-github-api-keys
+      optional: true
 - name: LLM__HUGGINGFACE__API_KEY
   valueFrom:
     secretKeyRef:
       name: {{ .Values.platformSecretName }}
       key: llm-huggingface-api-key
+      optional: true
+- name: LLM__HUGGINGFACE__API_KEYS
+  valueFrom:
+    secretKeyRef:
+      name: {{ .Values.platformSecretName }}
+      key: llm-huggingface-api-keys
       optional: true
 - name: LLM__DEEPINFRA__API_KEY
   valueFrom:
@@ -337,11 +373,35 @@ env в одном container spec: Kubernetes strategic-merge patch падает 
       name: {{ .Values.platformSecretName }}
       key: llm-deepinfra-api-key
       optional: true
+- name: LLM__DEEPINFRA__API_KEYS
+  valueFrom:
+    secretKeyRef:
+      name: {{ .Values.platformSecretName }}
+      key: llm-deepinfra-api-keys
+      optional: true
+- name: LLM__CAILA__API_KEY
+  valueFrom:
+    secretKeyRef:
+      name: {{ .Values.platformSecretName }}
+      key: llm-caila-api-key
+      optional: true
+- name: LLM__CAILA__API_KEYS
+  valueFrom:
+    secretKeyRef:
+      name: {{ .Values.platformSecretName }}
+      key: llm-caila-api-keys
+      optional: true
 - name: LLM__YANDEX__API_KEY
   valueFrom:
     secretKeyRef:
       name: {{ .Values.platformSecretName }}
       key: llm-yandex-api-key
+      optional: true
+- name: LLM__YANDEX__API_KEYS
+  valueFrom:
+    secretKeyRef:
+      name: {{ .Values.platformSecretName }}
+      key: llm-yandex-api-keys
       optional: true
 - name: LLM__YANDEX__FOLDER_ID
   valueFrom:

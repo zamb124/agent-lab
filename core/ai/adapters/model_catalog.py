@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from core.ai.adapters.base import AIProviderAdapter
+from core.ai.adapters.caila import CailaModelCatalogAdapter
 from core.ai.adapters.huggingface import HuggingFaceModelCatalogAdapter
 from core.ai.adapters.openai_compatible import OpenAICompatibleModelCatalogAdapter
 from core.ai.adapters.openrouter import OpenRouterModelCatalogAdapter
@@ -17,6 +18,7 @@ def create_model_catalog_adapter_registry(
     special_adapters: tuple[AIProviderAdapter, ...] = (
         OpenRouterModelCatalogAdapter(resolved_settings),
         HuggingFaceModelCatalogAdapter(resolved_settings),
+        CailaModelCatalogAdapter(resolved_settings),
     )
     special_providers = frozenset(adapter.provider for adapter in special_adapters)
     adapters: list[AIProviderAdapter] = [*special_adapters]

@@ -109,3 +109,110 @@ def test_free_model_policy_is_explicit_for_every_provider():
     assert PLATFORM_FREE_MODEL_CANDIDATE_PROVIDER_SLUGS == (
         ZERO_PRICE_LLM_PROVIDER_SLUGS | ACCOUNT_FREE_TIER_LLM_PROVIDER_SLUGS
     )
+
+
+def test_candidate_key_includes_api_key_hash():
+    from core.ai.llm_config import LLMCallConfig
+    from core.clients.llm.candidates import candidate_key
+
+    c1 = LLMCallConfig(
+        provider="openrouter",
+        model="model-a",
+        base_url="https://example.com/v1",
+        api_key="sk-key-a",
+    )
+    c2 = LLMCallConfig(
+        provider="openrouter",
+        model="model-a",
+        base_url="https://example.com/v1",
+        api_key="sk-key-b",
+    )
+    c3 = LLMCallConfig(
+        provider="openrouter",
+        model="model-a",
+        base_url="https://example.com/v1",
+    )
+
+    key1 = candidate_key(c1)
+    key2 = candidate_key(c2)
+    key3 = candidate_key(c3)
+
+    assert key1 != key2
+    assert "nokey" in key3
+    assert "openrouter:https://example.com/v1:model-a:" in key1
+    assert "openrouter:https://example.com/v1:model-a:" in key2
+
+
+def test_resolve_provider_api_keys_collects_main_and_extra_keys():
+    from core.config.llm_openai_compat import resolve_provider_api_keys
+    from core.config.models import (
+        LLMConfig,
+        OpenRouterProviderConfig,
+    )
+
+    llm = LLMConfig(
+        provider="humanitec_llm",
+        openrouter=OpenRouterProviderConfig(
+            api_key="sk-main",
+            api_keys=["sk-extra-1", "sk-extra-2"],
+            base_url="https://openrouter.ai/api/v1",
+        ),
+    )
+    keys = resolve_provider_api_keys(llm, "openrouter")
+    assert keys == ["sk-main", "sk-extra-1", "sk-extra-2"]
+
+
+def test_resolve_provider_api_keys_deduplicates():
+    from core.config.llm_openai_compat import resolve_provider_api_keys
+    from core.config.models import (
+        LLMConfig,
+        OpenRouterProviderConfig,
+    )
+
+    llm = LLMConfig(
+        provider="humanitec_llm",
+        openrouter=OpenRouterProviderConfig(
+            api_key="sk-main",
+            api_keys=["sk-main", "sk-extra"],
+            base_url="https://openrouter.ai/api/v1",
+        ),
+    )
+    keys = resolve_provider_api_keys(llm, "openrouter")
+    assert keys == ["sk-main", "sk-extra"]
+
+
+def test_resolve_provider_api_keys_only_api_key():
+    from core.config.llm_openai_compat import resolve_provider_api_keys
+    from core.config.models import (
+        LLMConfig,
+        OpenRouterProviderConfig,
+    )
+
+    llm = LLMConfig(
+        provider="humanitec_llm",
+        openrouter=OpenRouterProviderConfig(
+            api_key="sk-main",
+            base_url="https://openrouter.ai/api/v1",
+        ),
+    )
+    keys = resolve_provider_api_keys(llm, "openrouter")
+    assert keys == ["sk-main"]
+
+
+def test_resolve_provider_api_keys_filters_empty_and_placeholders():
+    from core.config.llm_openai_compat import resolve_provider_api_keys
+    from core.config.models import (
+        LLMConfig,
+        OpenRouterProviderConfig,
+    )
+
+    llm = LLMConfig(
+        provider="humanitec_llm",
+        openrouter=OpenRouterProviderConfig(
+            api_key="sk-main",
+            api_keys=["", "YOUR_OPENROUTER_API_KEY", "sk-extra"],
+            base_url="https://openrouter.ai/api/v1",
+        ),
+    )
+    keys = resolve_provider_api_keys(llm, "openrouter")
+    assert keys == ["sk-main", "sk-extra"]

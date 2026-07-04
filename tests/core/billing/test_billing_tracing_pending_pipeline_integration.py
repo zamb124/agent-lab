@@ -20,8 +20,6 @@ from core.billing.span_billing_settlement import SpanBillingSettlement
 from core.models.billing_models import UsageType
 from core.tracing.models import TraceSpanWrite
 
-pytestmark = pytest.mark.xdist_group("billing_global_resource_base_prices_json")
-
 
 @pytest.mark.asyncio
 async def test_list_spans_pending_billing_limit_invalid(frontend_container) -> None:

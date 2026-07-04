@@ -203,6 +203,8 @@ class FlowsLoader:
 
         nodes = await self._load_nodes_with_prompts(bundle_dir, raw_config)
         nodes = self._apply_defaults(nodes)
+        if not self._tools_cache:
+            await self.load_tools_cache()
         nodes = self._inline_tools_in_nodes(nodes)
 
         edges = require_json_array(raw_config.get("edges", []), "flow.edges")

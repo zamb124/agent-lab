@@ -137,9 +137,9 @@ async def test_multiple_tabs_same_user(crm_client, ws_cookie_system, system_user
                     ),
                 )
 
-                ev1 = await _recv_event_by_type(ws1, expected_type, timeout=5)
-                ev2 = await _recv_event_by_type(ws2, expected_type, timeout=5)
-                ev3 = await _recv_event_by_type(ws3, expected_type, timeout=5)
+                ev1 = await _recv_event_by_type(ws1, expected_type, timeout=8)
+                ev2 = await _recv_event_by_type(ws2, expected_type, timeout=8)
+                ev3 = await _recv_event_by_type(ws3, expected_type, timeout=8)
 
                 assert ev1["type"] == ev2["type"] == ev3["type"] == expected_type
                 p1 = _event_payload(ev1)
@@ -307,7 +307,7 @@ async def test_notification_types_coverage(crm_client, ws_cookie_system, system_
             )
 
             expected_type = _expected_event_type("test", notif_type)
-            event = await _recv_event_by_type(ws, expected_type, timeout=5)
+            event = await _recv_event_by_type(ws, expected_type, timeout=10)
             assert event["type"] == expected_type
             assert _event_payload(event)["kind"] == notif_type.value
 

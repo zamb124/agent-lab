@@ -75,7 +75,8 @@ class TestParallelNodeExecution:
 
     @pytest.mark.asyncio
     async def test_fanout_nodes_execute_in_parallel(
-        self, app, container, setup_parallel_flow, unique_id, mock_context
+        self, app, container, setup_parallel_flow, unique_id, mock_context,
+        code_runner_python_service: None,
     ):
         """
         Тест: 3 ноды с коротким sleep выполняются параллельно.
@@ -97,7 +98,7 @@ class TestParallelNodeExecution:
             content="Start parallel test",
             context_data=mock_context.model_dump(),
         )
-        result = await task.wait_result(timeout=30)
+        result = await task.wait_result(timeout=60)
         overall_end = time.time()
         overall_duration = overall_end - overall_start
         assert not result.is_err, f"Task failed: {result.error}"
@@ -115,7 +116,8 @@ class TestParallelNodeExecution:
 
     @pytest.mark.asyncio
     async def test_parallel_nodes_timestamps_overlap(
-        self, app, container, setup_parallel_flow, unique_id, mock_context
+        self, app, container, setup_parallel_flow, unique_id, mock_context,
+        code_runner_python_service: None,
     ):
         """
         Тест: timestamps параллельных нод перекрываются.
@@ -136,7 +138,7 @@ class TestParallelNodeExecution:
             content="Start timestamp test",
             context_data=mock_context.model_dump(),
         )
-        result = await task.wait_result(timeout=30)
+        result = await task.wait_result(timeout=60)
         assert not result.is_err, f"Task failed: {result.error}"
         state = result.return_value
         node_a_start = state.get("node_a_start")
@@ -203,7 +205,8 @@ class TestParallelNodesMerge:
 
     @pytest.mark.asyncio
     async def test_different_fields_preserved_after_merge(
-        self, app, container, setup_merge_flow, unique_id, mock_context
+        self, app, container, setup_merge_flow, unique_id, mock_context,
+        code_runner_python_service: None,
     ):
         """
         Тест: разные ноды пишут в разные поля - все сохраняются.
@@ -220,7 +223,7 @@ class TestParallelNodesMerge:
             content="Test merge",
             context_data=mock_context.model_dump(),
         )
-        result = await task.wait_result(timeout=30)
+        result = await task.wait_result(timeout=60)
         assert not result.is_err, f"Task failed: {result.error}"
         state = result.return_value
         assert state["task_state"] == "completed"

@@ -4,9 +4,11 @@ HTTP-тесты HumanitecAgent API на frontend сервисе.
 
 import json
 import uuid
+from typing import cast
 
 import pytest
 from httpx import AsyncClient
+from starlette.websockets import WebSocket
 
 from apps.agent.models import AgentDeviceRecord
 from apps.agent.service import DEVICE_KEY_PREFIX, PAIRING_CODE_PREFIX
@@ -63,7 +65,9 @@ async def test_agent_login_authenticated(
     assert response.status_code == 200
     text = response.text
     assert token_data.email in text or "пользователь" in text
-    assert "/frontend/api/agent/auth/device-token" in text
+    # Авторизованный login редиректит в приложение с session token в query
+    assert "humanitec://auth/callback?token=" in text
+    assert "Открыть HumanitecAgent" in text
 
 
 @pytest.mark.asyncio
@@ -431,7 +435,7 @@ async def test_revoke_blocks_tunnel_reconnect(
 
     tunnel_socket = _RejectedWebSocket()
     await agent_tunnel_websocket(
-        tunnel_socket,
+        cast(WebSocket, cast(object, tunnel_socket)),
         frontend_container,
         token=device_token,
     )
@@ -670,7 +674,7 @@ async def test_agent_tunnel_ping_pong(
 
     tunnel_socket = _TunnelWebSocket()
     await agent_tunnel_websocket(
-        tunnel_socket,
+        cast(WebSocket, cast(object, tunnel_socket)),
         frontend_container,
         token=device_token,
     )

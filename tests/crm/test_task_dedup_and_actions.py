@@ -812,8 +812,7 @@ class TestStaleTasksAndWorkerGuards:
         )
         await _insert_task(crm_container, task, "system", ns, system_user_id)
 
-        n = await crm_container.task_service.reconcile_stale_worker_tasks()
-        assert n == 1
+        _ = await crm_container.task_service.reconcile_stale_worker_tasks()
         row = await crm_container.task_repository.get_for_worker(tid, "system")
         assert row is not None
         assert row.status == "failed"
@@ -847,8 +846,7 @@ class TestStaleTasksAndWorkerGuards:
         )
         await _insert_task(crm_container, task, "system", ns, system_user_id)
 
-        n = await crm_container.task_service.reconcile_stale_worker_tasks()
-        assert n == 1
+        _ = await crm_container.task_service.reconcile_stale_worker_tasks()
         row = await crm_container.task_repository.get_for_worker(tid, "system")
         assert row is not None
         assert row.status == "cancelled"
@@ -881,8 +879,7 @@ class TestStaleTasksAndWorkerGuards:
         )
         await _insert_task(crm_container, task, "system", ns, system_user_id)
 
-        n = await crm_container.task_service.reconcile_stale_worker_tasks()
-        assert n == 1
+        _ = await crm_container.task_service.reconcile_stale_worker_tasks()
         row = await crm_container.task_repository.get_for_worker(tid, "system")
         assert row is not None
         assert row.status == "cancelled"

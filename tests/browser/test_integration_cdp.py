@@ -68,6 +68,7 @@ async def test_acquire_fetch_release() -> None:
             reaper_interval_sec=60,
             max_contexts=50,
             session_state_ttl_sec=3600,
+            crawl_fetch_max_inflight=5,
         )
         facade = build_test_facade(view)
         session_id = f"sess-{uid}"
@@ -106,6 +107,7 @@ async def test_control_adapter_navigate_disables_arbitrary_action_after_fetch() 
             reaper_interval_sec=60,
             max_contexts=50,
             session_state_ttl_sec=3600,
+            crawl_fetch_max_inflight=5,
         )
         facade = build_test_facade(view)
         session_id = f"sess-vis-{uid}"
@@ -147,6 +149,7 @@ async def test_save_restore_roundtrip() -> None:
             reaper_interval_sec=60,
             max_contexts=50,
             session_state_ttl_sec=3600,
+            crawl_fetch_max_inflight=5,
         )
         facade = build_test_facade(view)
         session_id = f"sess-{uid}"

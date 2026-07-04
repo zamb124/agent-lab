@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import logging
+
 import pytest
 
 from core.crawl.logging_events import log_crawl_url_outcome
@@ -24,8 +26,17 @@ def crawl_log_scope():
     reset_logging_for_tests()
 
 
-def test_log_crawl_url_outcome_emits_event(crawl_log_scope: None, caplog: pytest.LogCaptureFixture) -> None:
-    with caplog.at_level(logging.INFO):
+def test_log_crawl_url_outcome_emits_event(crawl_log_scope: None) -> None:
+    captured: list[str] = []
+
+    class _CaptureHandler(logging.Handler):
+        def emit(self, record: logging.LogRecord) -> None:
+            captured.append(record.getMessage())
+
+    root_logger = logging.getLogger()
+    handler = _CaptureHandler()
+    root_logger.addHandler(handler)
+    try:
         log_crawl_url_outcome(
             crawl_profile_id="runet_platform",
             crawl_job_id="job-1",
@@ -40,6 +51,9 @@ def test_log_crawl_url_outcome_emits_event(crawl_log_scope: None, caplog: pytest
             content_hash_changed=True,
             document_id="runet:abc",
         )
-    assert EVENT_CRAWL_URL_OUTCOME in caplog.text
-    assert "runet_platform" in caplog.text
-    assert "crawl_outcome" in caplog.text
+        combined = "\n".join(captured)
+        assert EVENT_CRAWL_URL_OUTCOME in combined
+        assert "runet_platform" in combined
+        assert "crawl_outcome" in combined
+    finally:
+        root_logger.removeHandler(handler)

@@ -267,6 +267,12 @@
       "models_url": "https://api.deepinfra.com/v1/openai/models",
       "smoke_model": "deepseek-ai/DeepSeek-V3"
     },
+    "caila": {
+      "api_key": "YOUR_CAILA_API_KEY",
+      "base_url": "https://caila.io/api/openai/v1",
+      "models_url": "https://caila.io/api/openai/v1/models",
+      "smoke_model": "gpt-4o-mini"
+    },
     "yandex": {
       "api_key": "YOUR_YANDEX_API_KEY",
       "folder_id": "b1go18q7gmbn3vmrqp0f",

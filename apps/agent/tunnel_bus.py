@@ -10,9 +10,11 @@ import os
 import uuid
 from typing import TYPE_CHECKING
 
+from apps.agent.device_query import list_active_device_ids_for_company
 from apps.agent.tunnel_registry import (
     disconnect_tunnel_device,
     is_tunnel_socket_registered,
+    push_toolkits_updated_to_tunnel,
     register_pending_mcp_response,
     register_tunnel_socket,
     reject_mcp_response,
@@ -22,6 +24,7 @@ from apps.agent.tunnel_registry import (
     unregister_tunnel_socket,
 )
 from core.clients.redis_client import RedisClient
+from core.db.storage import Storage
 from core.logging import get_logger
 from core.types import JsonObject, parse_json_object
 from core.utils.background import run_with_log_context
@@ -34,8 +37,16 @@ logger = get_logger(__name__)
 TUNNEL_MCP_REQUEST_CHANNEL = "platform:agent_tunnel_mcp_request"
 TUNNEL_MCP_RESPONSE_CHANNEL = "platform:agent_tunnel_mcp_response"
 TUNNEL_DISCONNECT_CHANNEL = "platform:agent_tunnel_disconnect"
+TUNNEL_TOOLKITS_UPDATED_CHANNEL = "platform:agent_tunnel_toolkits_updated"
 
 POD_INSTANCE_ID = os.environ.get("HOSTNAME", f"frontend-{uuid.uuid4().hex[:8]}")
+
+_tunnel_bus_storage: Storage | None = None
+
+
+def configure_tunnel_bus_storage(storage: Storage) -> None:
+    global _tunnel_bus_storage
+    _tunnel_bus_storage = storage
 
 
 def get_pod_instance_id() -> str:
@@ -80,6 +91,7 @@ async def _tunnel_bus_loop(redis_client: RedisClient) -> None:
         TUNNEL_MCP_REQUEST_CHANNEL,
         TUNNEL_MCP_RESPONSE_CHANNEL,
         TUNNEL_DISCONNECT_CHANNEL,
+        TUNNEL_TOOLKITS_UPDATED_CHANNEL,
     )
     logger.info("agent.tunnel_bus.listener_started", pod_instance_id=get_pod_instance_id())
     try:
@@ -103,6 +115,9 @@ async def _tunnel_bus_loop(redis_client: RedisClient) -> None:
                 continue
             if channel == TUNNEL_DISCONNECT_CHANNEL:
                 await _handle_bus_disconnect(data)
+                continue
+            if channel == TUNNEL_TOOLKITS_UPDATED_CHANNEL:
+                await _handle_bus_toolkits_updated(data)
     except asyncio.CancelledError:
         raise
     finally:
@@ -110,6 +125,7 @@ async def _tunnel_bus_loop(redis_client: RedisClient) -> None:
             TUNNEL_MCP_REQUEST_CHANNEL,
             TUNNEL_MCP_RESPONSE_CHANNEL,
             TUNNEL_DISCONNECT_CHANNEL,
+            TUNNEL_TOOLKITS_UPDATED_CHANNEL,
         )
         await pubsub.aclose()
         logger.info("agent.tunnel_bus.listener_stopped", pod_instance_id=get_pod_instance_id())
@@ -183,6 +199,18 @@ async def _handle_bus_disconnect(raw_message: str) -> None:
     if not isinstance(device_id, str) or not device_id:
         return
     await disconnect_tunnel_device(device_id)
+
+
+async def _handle_bus_toolkits_updated(raw_message: str) -> None:
+    payload = _parse_bus_message(raw_message, "agent.tunnel_bus.toolkits_updated")
+    company_id = payload.get("company_id")
+    if not isinstance(company_id, str) or not company_id:
+        return
+    if _tunnel_bus_storage is None:
+        return
+    device_ids = await list_active_device_ids_for_company(_tunnel_bus_storage, company_id)
+    for device_id in device_ids:
+        await push_toolkits_updated_to_tunnel(device_id)
 
 
 async def _publish_mcp_response(

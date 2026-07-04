@@ -65,6 +65,8 @@ FIELDS_COPY_FROM_RUNTIME_NODE_STATE: frozenset[str] = USER_CODE_OVERRIDABLE_FROZ
     "prompt_history",
     "llm_context_memory_cursor",
     "scheduled_tasks",
+    # handback_to_parent в llm_node: channel смотрит terminal_task_state после flow.run
+    "terminal_task_state",
 }
 
 # Снимок после user/eval-кода: не сравниваем поля, которые inline-код и тулзы

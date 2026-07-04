@@ -1,13 +1,24 @@
 """FastAPI entrypoint code-runner-python."""
 
+from fastapi import FastAPI
+
 from apps.code_runner_python.api.v1.execute import router as execute_router
 from apps.code_runner_python.api.v1.validate import router as validate_router
 from apps.code_runner_python.config import (
     CodeRunnerPythonSettings,
     get_code_runner_python_settings,
 )
-from apps.code_runner_python.container import get_code_runner_python_container
+from apps.code_runner_python.container import (
+    CodeRunnerPythonContainer,
+    get_code_runner_python_container,
+)
 from core.app import create_service_app
+
+
+async def on_shutdown(_app: FastAPI, container: CodeRunnerPythonContainer) -> None:
+    if "_cached_executor" in container.__dict__:
+        await container.executor.aclose()
+
 
 app = create_service_app(
     service_name="code_runner_python",
@@ -27,6 +38,7 @@ app = create_service_app(
     mount_repo_documentation=False,
     include_platform_pwa=False,
     documentation_gateway_prefix="code-runner-python",
+    on_shutdown=on_shutdown,
 )
 
 

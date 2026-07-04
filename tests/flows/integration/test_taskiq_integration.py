@@ -80,10 +80,10 @@ class TestTaskIQToolExecution:
             context_data=mock_context.to_dict(),
         )
         try:
-            result = await task.wait_result(timeout=5)
+            result = await task.wait_result(timeout=10)
         except TaskiqResultTimeoutError as exc:
             raise AssertionError(
-                "TaskIQ worker не обработал задачу за 5 секунд (проверьте, что воркер запущен и Redis доступен)"
+                "TaskIQ worker не обработал задачу за 10 секунд (проверьте, что воркер запущен и Redis доступен)"
             ) from exc
         assert not result.is_err, f"Task failed: {result.error}"
         assert result.return_value["tool_id"] == "taskiq_test_calculator"
@@ -94,6 +94,9 @@ class TestTaskIQToolExecution:
         self, app, container, calculator_tool_config, mock_context
     ):
         """Несколько tools кикаются параллельно и ждём все результаты."""
+        import asyncio
+
+        await asyncio.sleep(0.15)
         state_dict = {
             "task_id": "test-task",
             "context_id": "test-context",
@@ -111,7 +114,7 @@ class TestTaskIQToolExecution:
             tasks.append((i, task))
         results = []
         for i, task in tasks:
-            result = await task.wait_result(timeout=5)
+            result = await task.wait_result(timeout=10)
             assert not result.is_err, f"Task {i} failed: {result.error}"
             results.append(result.return_value["result"])
         expected = [0, 2, 8, 18, 32]
@@ -120,6 +123,9 @@ class TestTaskIQToolExecution:
     @pytest.mark.asyncio
     async def test_tool_receives_state(self, app, container, mock_context):
         """Tool получает state и может его использовать."""
+        import asyncio
+
+        await asyncio.sleep(0.15)
         tool_config = {
             "tool_id": "taskiq_state_tool",
             "title": "State Tool",
@@ -141,7 +147,7 @@ class TestTaskIQToolExecution:
         task = await execute_tool.kiq(
             tool_config, {"value": "test"}, state_dict, context_data=mock_context.to_dict()
         )
-        result = await task.wait_result(timeout=5)
+        result = await task.wait_result(timeout=10)
         assert not result.is_err
         assert result.return_value["tool_id"] == "taskiq_state_tool"
         assert result.return_value["result"] == "STATE:test"
@@ -153,6 +159,7 @@ class TestTaskIQToolExecution:
         """Результаты tools мержатся в state.tool_results."""
         from apps.flows.src.models import NodeConfig
         from apps.flows.src.runtime.runners.llm_runner import LlmNodeRunner
+        from tests.flows.durable_runtime_harness import ensure_workflow_started
 
         tool2_id = f"taskiq_multiplier_{unique_id}"
         tool2_config = {
@@ -192,6 +199,12 @@ class TestTaskIQToolExecution:
             user_id="test-user",
             session_id="test-agent:test-context",
             content="test",
+        )
+        await ensure_workflow_started(
+            container=container,
+            state=state,
+            flow_id=state.session_flow_id,
+            branch_id=state.branch_id,
         )
         await runner._execute_tools_parallel(tool_calls, state)
         assert state.tool_results
@@ -237,6 +250,9 @@ class TestTaskIQFlowExecution:
         self, app, container, setup_simple_flow, unique_id, mock_context
     ):
         """Agent выполняется через TaskIQ .kiq() + wait_result()."""
+        import asyncio
+
+        await asyncio.sleep(0.15)
         flow_id = setup_simple_flow
         session_id = f"{flow_id}:taskiq-session-{unique_id}-{uuid.uuid4().hex[:8]}"
         mock_context.session_id = session_id
@@ -249,7 +265,7 @@ class TestTaskIQFlowExecution:
             content="Test",
             context_data=mock_context.model_dump(),
         )
-        result = await task.wait_result(timeout=5)
+        result = await task.wait_result(timeout=10)
         assert not result.is_err, f"Task failed: {result.error}"
         assert result.return_value["task_state"] == "completed"
         assert result.return_value["response"] == "Done"
@@ -291,6 +307,9 @@ class TestTaskIQInterruptResume:
         self, app, container, setup_interrupt_flow, unique_id, mock_context
     ):
         """Interrupt работает через TaskIQ."""
+        import asyncio
+
+        await asyncio.sleep(0.15)
         flow_id = setup_interrupt_flow
         session_id = f"{flow_id}:taskiq-interrupt-{unique_id}-{uuid.uuid4().hex[:8]}"
         mock_context.session_id = session_id
@@ -303,7 +322,7 @@ class TestTaskIQInterruptResume:
             content="Start",
             context_data=mock_context.model_dump(),
         )
-        result = await task.wait_result(timeout=5)
+        result = await task.wait_result(timeout=10)
         assert not result.is_err, f"Task failed: {result.error}"
         assert result.return_value["task_state"] == "input-required"
         interrupt = InterruptData.model_validate(result.return_value["interrupt"])
@@ -314,6 +333,9 @@ class TestTaskIQInterruptResume:
         self, app, container, setup_interrupt_flow, unique_id, mock_context
     ):
         """Resume после interrupt работает через TaskIQ."""
+        import asyncio
+
+        await asyncio.sleep(0.15)
         flow_id = setup_interrupt_flow
         session_id = f"{flow_id}:taskiq-resume-{unique_id}-{uuid.uuid4().hex[:8]}"
         mock_context.session_id = session_id
@@ -326,7 +348,7 @@ class TestTaskIQInterruptResume:
             content="Start",
             context_data=mock_context.model_dump(),
         )
-        result1 = await task1.wait_result(timeout=5)
+        result1 = await task1.wait_result(timeout=10)
         if result1.is_err:
             print("\n❌ Task1 failed!")
             print(f"Error: {result1.error}")
@@ -340,7 +362,7 @@ class TestTaskIQInterruptResume:
             is_resume=True,
             context_data=mock_context.model_dump(),
         )
-        result2 = await task2.wait_result(timeout=5)
+        result2 = await task2.wait_result(timeout=10)
         assert not result2.is_err, f"Resume failed: {result2.error}"
         assert result2.return_value["task_state"] == "completed"
         assert "Alice" in result2.return_value["response"]

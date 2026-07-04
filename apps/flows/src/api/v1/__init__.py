@@ -2,6 +2,7 @@
 
 from fastapi import APIRouter
 
+from .agent_toolkits import router as agent_toolkits_router
 from .browser_preview import router as browser_preview_router
 from .certificate import router as certificate_router
 from .code import router as code_router
@@ -26,6 +27,7 @@ from .voice_providers_catalog import router as flows_voice_providers_catalog_rou
 
 api_v1_router = APIRouter()
 
+api_v1_router.include_router(agent_toolkits_router)
 api_v1_router.include_router(flows_voice_providers_catalog_router)
 api_v1_router.include_router(lara_actions_router)
 api_v1_router.include_router(flows_router, prefix="/flows")

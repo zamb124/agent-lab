@@ -145,8 +145,9 @@ async def on_startup(_app: FastAPI, container: FlowContainer, settings: FlowSett
                 logger.error("Failed to connect to Redis on startup")
                 raise
 
-    from apps.agent.tunnel_bus import start_tunnel_bus_listener
+    from apps.agent.tunnel_bus import configure_tunnel_bus_storage, start_tunnel_bus_listener
 
+    configure_tunnel_bus_storage(container.storage)
     await start_tunnel_bus_listener(container.redis_client)
 
     if settings.server.env == "development" and not is_testing():

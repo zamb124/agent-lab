@@ -31,7 +31,7 @@ import uuid
 
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 
-from core.config import get_settings
+from core.config import get_settings, is_testing
 from core.context import clear_context, set_context
 from core.logging import (
     bind_log_context,
@@ -51,6 +51,7 @@ from core.models.context_models import Context
 from core.models.i18n_models import Language
 from core.models.identity_models import User
 from core.observability.error_payload import try_merge_platform_error_into_dict
+from core.test_scope import LOG_TEST_SCOPE, TEST_SCOPE_HEADER
 from core.types import JsonObject, parse_json_object
 from core.websocket.auth import get_user_from_websocket
 from core.websocket.command_router import (
@@ -237,6 +238,10 @@ async def notifications_endpoint(websocket: WebSocket) -> None:
     connection_trace_id = f"ws:{uuid.uuid4().hex}"
 
     connection_scope_extra: dict[str, str] = {"ws.connection_kind": "notifications"}
+    if is_testing():
+        test_scope_raw = websocket.headers.get(TEST_SCOPE_HEADER)
+        if test_scope_raw and test_scope_raw.strip():
+            connection_scope_extra[LOG_TEST_SCOPE] = test_scope_raw.strip()
     scope_token = enter_request_scope(
         request_id=connection_request_id,
         trace_id=connection_trace_id,

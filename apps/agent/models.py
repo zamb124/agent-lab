@@ -108,6 +108,7 @@ class DeviceRegisterResponse(BaseModel):
     device_id: str
     token: str = Field(description="Device JWT (30 дней)")
     platform_mcp_url: str = Field(description="URL Platform MCP endpoint для Goose")
+    toolkits_url: str = Field(description="URL каталога групп инструментов HumanitecAgent")
     frontend_base_url: str = Field(description="Публичный origin frontend для API и deep links")
     tunnel_ws_url: str = Field(description="WebSocket URL tunnel HumanitecAgent")
     company_id: str = Field(description="ID компании, привязанной при pairing")
@@ -186,6 +187,7 @@ class AgentDiscoverResponse(BaseModel):
 
     frontend_base_url: str
     platform_mcp_url: str
+    toolkits_url: str
     tunnel_ws_url: str
     llm_api_url: str
     releases: AgentReleaseStatusResponse

@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from httpx import AsyncClient
 
+from tests.agent._helpers import ensure_agent_test_toolkit
+
 ASK_USER_INLINE_CODE = (
     "\nfrom apps.flows.src.runtime.exceptions import FlowInterrupt\n\n"
     "async def run(args, state):\n"
@@ -38,13 +40,21 @@ async def _create_flow(
     nodes: dict[str, object],
     description: str | None = None,
     entry: str = "main",
+    unique_id: str,
+    toolkit_id: str | None = None,
 ) -> str:
+    resolved_toolkit_id = (
+        toolkit_id
+        if toolkit_id is not None
+        else await ensure_agent_test_toolkit(flows_client, auth_headers, unique_id)
+    )
     payload: dict[str, object] = {
         "flow_id": flow_id,
         "name": name,
         "entry": entry,
         "nodes": nodes,
         "edges": [{"from_node": entry, "to_node": None}],
+        "agent_toolkit_ids": [resolved_toolkit_id],
     }
     if description is not None:
         payload["description"] = description
@@ -68,6 +78,7 @@ async def ensure_react_flow(
         auth_headers,
         flow_id=flow_id,
         name=f"Agent MCP React {unique_id}",
+        unique_id=unique_id,
         nodes={
             "main": {
                 "type": "llm_node",
@@ -92,6 +103,7 @@ async def ensure_react_flow_with_description(
         flow_id=flow_id,
         name=f"Agent MCP Desc {unique_id}",
         description=description,
+        unique_id=unique_id,
         nodes={
             "main": {
                 "type": "llm_node",
@@ -114,6 +126,7 @@ async def ensure_interrupt_flow(
         flow_id=flow_id,
         name=f"Agent MCP Interrupt {unique_id}",
         description="Flow with ask_user interrupt for Platform MCP two-call resume",
+        unique_id=unique_id,
         nodes={
             "main": {
                 "type": "llm_node",
@@ -149,6 +162,7 @@ async def ensure_tool_only_flow(
         auth_headers,
         flow_id=flow_id,
         name=f"Agent MCP Tool {unique_id}",
+        unique_id=unique_id,
         nodes={
             "main": {
                 "type": "llm_node",
@@ -182,11 +196,13 @@ async def ensure_multi_node_flow(
     unique_id: str,
 ) -> str:
     flow_id = f"agent_mcp_multi_{unique_id}"
+    toolkit_id = await ensure_agent_test_toolkit(flows_client, auth_headers, unique_id)
     payload: dict[str, object] = {
         "flow_id": flow_id,
         "name": f"Agent MCP Multi {unique_id}",
         "entry": "first",
         "description": "Two sequential llm nodes",
+        "agent_toolkit_ids": [toolkit_id],
         "nodes": {
             "first": {
                 "type": "llm_node",
@@ -225,6 +241,7 @@ async def ensure_failed_flow(
         flow_id=flow_id,
         name=f"Agent MCP Failed {unique_id}",
         entry="fail",
+        unique_id=unique_id,
         nodes={
             "fail": {
                 "type": "code",
@@ -241,11 +258,14 @@ async def ensure_handoff_parent_child(
 ) -> tuple[str, str]:
     child_fid = f"agent_mcp_handoff_child_{unique_id}"
     parent_fid = f"agent_mcp_handoff_parent_{unique_id}"
+    toolkit_id = await ensure_agent_test_toolkit(flows_client, auth_headers, unique_id)
     await _create_flow(
         flows_client,
         auth_headers,
         flow_id=child_fid,
         name=f"Handoff Child {unique_id}",
+        unique_id=unique_id,
+        toolkit_id=toolkit_id,
         nodes={
             "main": {
                 "type": "llm_node",
@@ -262,6 +282,8 @@ async def ensure_handoff_parent_child(
         auth_headers,
         flow_id=parent_fid,
         name=f"Handoff Parent {unique_id}",
+        unique_id=unique_id,
+        toolkit_id=toolkit_id,
         nodes={
             "main": {
                 "type": "llm_node",
@@ -303,4 +325,22 @@ async def ensure_handoff_demo_bundles(
         headers=auth_headers,
     )
     assert child.status_code == 200, child.text
+    toolkit_id = await ensure_agent_test_toolkit(
+        flows_client,
+        auth_headers,
+        "handoff_demo",
+    )
+    update_response = await flows_client.put(
+        f"/flows/api/v1/agent/toolkits/manage/{toolkit_id}",
+        headers=auth_headers,
+        json={
+            "name": "Handoff demo E2E",
+            "description": "Toolkit for handoff_demo_parent/child bundle flows",
+            "default_enabled": True,
+            "position": 999,
+            "flow_ids": [parent_fid, child_fid],
+            "tool_ids": ["calculator"],
+        },
+    )
+    assert update_response.status_code == 200, update_response.text
     return parent_fid, child_fid

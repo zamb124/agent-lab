@@ -14,6 +14,7 @@ from apps.flows.src.container_state import (
     set_current_container,
 )
 from apps.flows.src.db import (
+    AgentToolkitRepository,
     EvaluationLabRepository,
     FlowRepository,
     NodeRepository,
@@ -94,6 +95,10 @@ class FlowContainer(BaseContainer):
     @lazy
     def tool_repository(self) -> ToolRepository:
         return ToolRepository(storage=self.storage)
+
+    @lazy
+    def agent_toolkit_repository(self) -> AgentToolkitRepository:
+        return AgentToolkitRepository(storage=self.storage)
 
     @lazy
     def durable_workflow_repository(self) -> DurableWorkflowRepository:

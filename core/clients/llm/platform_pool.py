@@ -22,6 +22,7 @@ from core.clients.llm.provider_resolution import _resolve_headers_vars, _resolve
 from core.clients.redis_client import RedisClient
 from core.config import get_settings
 from core.config.base import BaseSettings
+from core.config.llm_openai_compat import resolve_provider_api_keys
 from core.types import JsonObject
 
 if TYPE_CHECKING:
@@ -34,11 +35,13 @@ def _candidate_from_platform_free_record(
     record: PlatformFreeModelRecord,
     *,
     settings: BaseSettings,
+    api_key: str | None = None,
 ) -> LLMCallConfig:
     return _resolve_llm_call_config(
         LLMCallConfig(
             provider=record.provider,
             model=record.id,
+            api_key=api_key,
             source=PLATFORM_FREE_MODEL_SOURCE,
             supported_parameters=frozenset(record.supported_parameters),
             input_modalities=frozenset(record.input_modalities),
@@ -207,14 +210,20 @@ async def _expand_humanitec_llms_config(
     model = _humanitec_llms_model(config, settings)
     candidates: list[LLMCallConfig] = []
     if model == HUMANITEC_LLM_AUTO_MODEL:
-        candidates.extend(
-            _with_authoring_overrides(
-                _candidate_from_platform_free_record(record, settings=settings),
-                config,
-                state=state,
-            )
-            for record in records
-        )
+        for record in records:
+            api_keys = resolve_provider_api_keys(settings.llm, record.provider)
+            for api_key in api_keys:
+                candidates.append(
+                    _with_authoring_overrides(
+                        _candidate_from_platform_free_record(
+                            record,
+                            settings=settings,
+                            api_key=api_key,
+                        ),
+                        config,
+                        state=state,
+                    )
+                )
         if include_paid_fallback:
             candidates.append(
                 _with_authoring_overrides(
@@ -232,12 +241,18 @@ async def _expand_humanitec_llms_config(
             "humanitec_llm model не найден в verified free-pool cache: "
             + f"{provider}:{model_id}. Обновите llm.platform_free_pool cache."
         )
+    api_keys = resolve_provider_api_keys(settings.llm, provider)
     return [
         _with_authoring_overrides(
-            _candidate_from_platform_free_record(record, settings=settings),
+            _candidate_from_platform_free_record(
+                record,
+                settings=settings,
+                api_key=api_key,
+            ),
             config,
             state=state,
         )
+        for api_key in api_keys
     ]
 
 
@@ -315,7 +330,15 @@ def _make_platform_default_candidate_resolver(
         candidates: list[LLMCallConfig] = []
         records = await _read_platform_free_records()
         for record in records:
-            candidates.append(_candidate_from_platform_free_record(record, settings=settings))
+            api_keys = resolve_provider_api_keys(settings.llm, record.provider)
+            for api_key in api_keys:
+                candidates.append(
+                    _candidate_from_platform_free_record(
+                        record,
+                        settings=settings,
+                        api_key=api_key,
+                    )
+                )
 
         if include_paid_fallback:
             candidates.append(_platform_paid_fallback_candidate(settings))

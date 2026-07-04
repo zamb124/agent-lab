@@ -18,10 +18,26 @@ from tests.agent.desktop_e2e.electron_launcher import (
     HumanitecDesktopLaunchConfig,
     HumanitecDesktopProcess,
 )
+from tests.fixtures.e2e_scope import bind_static_e2e_scope
+
+
+@pytest.fixture(autouse=True)
+def platform_test_scope():
+    """Статический scope фазы desktop E2E: запросы Electron не несут X-Test-Scope."""
+    with bind_static_e2e_scope() as scope:
+        yield scope
+
 
 def pytest_collection_modifyitems(items: list[pytest.Item]) -> None:
     for item in items:
         item.add_marker(pytest.mark.timeout(900))
+
+    if not os.environ.get("AGENT_DESKTOP_E2E_RUN"):
+        skip_desktop = pytest.mark.skip(reason="AGENT_DESKTOP_E2E_RUN not set")
+        for item in items:
+            path = str(item.fspath) if hasattr(item, "fspath") else ""
+            if "/desktop_e2e/" in path:
+                item.add_marker(skip_desktop)
 
 
 @pytest.fixture(scope="session", autouse=True)

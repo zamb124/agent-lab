@@ -599,8 +599,10 @@ async def _wait_for_file_change_after_forcesave(
     file_id: str,
     previous_checksum: str | None,
     previous_file_size: int | None,
-) -> None:
-    for _ in range(90):
+    max_iterations: int = 90,
+    raise_on_timeout: bool = True,
+) -> bool:
+    for _ in range(max_iterations):
         await asyncio.sleep(0.5)
         meta = await container.files_service.get_optional(file_id)
         if meta is None:
@@ -613,7 +615,7 @@ async def _wait_for_file_change_after_forcesave(
                 previous_file_size,
                 meta.file_size,
             )
-            return
+            return True
     logger.warning(
         "OnlyOffice forcesave callback did not update file binding_id=%s file_id=%s old_size=%s old_checksum=%s",
         binding_id,
@@ -621,9 +623,11 @@ async def _wait_for_file_change_after_forcesave(
         previous_file_size,
         previous_checksum,
     )
-    raise HTTPException(
-        status_code=409, detail="Не удалось дождаться сохранения открытого редактора"
-    )
+    if raise_on_timeout:
+        raise HTTPException(
+            status_code=409, detail="Не удалось дождаться сохранения открытого редактора"
+        )
+    return False
 
 
 async def _require_explicit_namespace(container: OfficeContainer) -> str:
@@ -753,7 +757,7 @@ async def sync_file_editor_state(
                 detail=f"OnlyOffice did not accept pending editor changes yet: error={force_code} ({detail})",
             )
         if force_code == 0:
-            await _wait_for_file_change_after_forcesave(
+            _ = await _wait_for_file_change_after_forcesave(
                 container=container,
                 binding_id=binding_id,
                 file_id=meta.file_id,
@@ -1971,7 +1975,7 @@ async def sync_document_editor_state(
                 detail=f"OnlyOffice did not accept pending editor changes yet: error={force_code} ({detail})",
             )
         if force_code == 0:
-            await _wait_for_file_change_after_forcesave(
+            _ = await _wait_for_file_change_after_forcesave(
                 container=container,
                 binding_id=row.binding_id,
                 file_id=row.file_id,
@@ -2031,13 +2035,21 @@ async def _apply_document_bytes_mutation(
             document_key=document_key,
         )
         if force_code == 0:
-            await _wait_for_file_change_after_forcesave(
+            materialized = await _wait_for_file_change_after_forcesave(
                 container=container,
                 binding_id=row.binding_id,
                 file_id=row.file_id,
                 previous_checksum=meta.checksum,
                 previous_file_size=meta.file_size,
+                max_iterations=6,
+                raise_on_timeout=False,
             )
+            if not materialized:
+                logger.info(
+                    "OnlyOffice forcesave did not change file before server mutation; continuing binding_id=%s file_id=%s",
+                    row.binding_id,
+                    row.file_id,
+                )
             meta = await container.files_service.get_optional(row.file_id)
             if meta is None:
                 raise HTTPException(status_code=404, detail="Файл не найден")
@@ -2296,7 +2308,6 @@ async def permanent_delete_document(binding_id: str, container: ContainerDep) ->
     )
     if not ok:
         raise HTTPException(status_code=404, detail="Привязка не найдена")
-    _ = await container.files_service.delete(row.file_id)
     return Response(status_code=204)
 
 

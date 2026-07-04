@@ -14,7 +14,8 @@ from core.capabilities import (
     issue_execution_token,
 )
 from core.files.file_ref import FileRef
-from core.files.reader import ReadFileArgs, read_files_to_envelope
+from core.files.reader.engine import read_files_to_envelope
+from core.files.reader.models import ReadFileArgs
 from core.files.reader.extract_cache import (
     extract_cache_key,
     load_file_extract,
@@ -229,11 +230,11 @@ async def test_capability_files_read_returns_single_file_result(
     assert response.status == "ok"
     body = require_json_object(response.result, "files.read.result")
 
-    assert "files_processed" not in body
-    assert body["success"] is True
-    assert body["file_id"] == file_ref.file_id
-    assert body["results"]
-    assert body["page_layout"]["kind"] in ("native", "virtual")
+    assert body["source_file_id"] == file_ref.file_id
+    assert body["page_count"] >= 1
+    assert isinstance(body["pages"], list)
+    assert body["pages"]
+    assert body["detected_kind"] in ("spreadsheet", "tabular", "document", "text", "image", "pdf")
 
 
 @pytest.mark.asyncio

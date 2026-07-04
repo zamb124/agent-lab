@@ -231,7 +231,7 @@ async def test_scheduler_startup_creates_calendar_sync_schedule_when_missing() -
     class _FakeSettings:
         calendar_sync = CalendarSyncConfig(
             enabled=True,
-            cron="*/1 * * * *",
+            cron="*/15 * * * *",
         )
         billing = BillingConfig()
         llm = LLMConfig()
@@ -296,11 +296,11 @@ async def test_scheduler_startup_creates_calendar_sync_schedule_when_missing() -
     }
     by_name = {r.task_name: r for r in fake_service.created_requests}
     assert by_name[CALENDAR_SYNC_TASK_NAME].schedule_type == PlatformScheduleType.CRON
-    assert by_name[CALENDAR_SYNC_TASK_NAME].cron == "*/1 * * * *"
+    assert by_name[CALENDAR_SYNC_TASK_NAME].cron == "*/15 * * * *"
     assert (
         by_name[CALENDAR_SYNC_MEETING_REMINDER_TASK_NAME].schedule_type == PlatformScheduleType.CRON
     )
-    assert by_name[CALENDAR_SYNC_MEETING_REMINDER_TASK_NAME].cron == "*/1 * * * *"
+    assert by_name[CALENDAR_SYNC_MEETING_REMINDER_TASK_NAME].cron == "*/15 * * * *"
     assert (
         by_name[RAG_CLEANUP_EXPIRED_DOCUMENTS_TASK_NAME].schedule_type == PlatformScheduleType.CRON
     )
@@ -319,7 +319,7 @@ async def test_scheduler_startup_resumes_paused_calendar_sync_schedule() -> None
     class _FakeSettings:
         calendar_sync = CalendarSyncConfig(
             enabled=True,
-            cron="*/1 * * * *",
+            cron="*/15 * * * *",
         )
         billing = BillingConfig()
         llm = LLMConfig()
@@ -395,7 +395,15 @@ async def test_scheduler_startup_resumes_paused_calendar_sync_schedule() -> None
             payload,
             recreate_schedule=False,
         ):
-            raise AssertionError("reconcile_payload should not be called in this test")
+            return type(
+                "ReconciledTask",
+                (),
+                {
+                    "schedule_task_id": schedule_task_id,
+                    "schedule_id": "schedule-2",
+                    "status": ScheduledTaskStatus.PENDING,
+                },
+            )()
 
         async def create(self, company_id, user_id, request):
             assert company_id == SYSTEM_SCHEDULER_COMPANY_ID

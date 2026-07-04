@@ -17,7 +17,6 @@ from pathlib import Path
 import pytest
 from httpx import ASGITransport, AsyncClient
 
-pytestmark = pytest.mark.xdist_group("browser_cdp")
 
 URL = "https://duckduckgo.com/"
 ACTION_TIMEOUT_MS = 10_000

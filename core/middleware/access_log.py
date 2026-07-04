@@ -24,6 +24,7 @@ from starlette.responses import Response
 from starlette.routing import Route
 from starlette.types import ASGIApp
 
+from core.config import is_testing
 from core.logging import (
     bind_log_context,
     enter_request_scope,
@@ -44,6 +45,7 @@ from core.logging.attributes import (
     LOG_HTTP_USER_AGENT,
     LOG_REQUEST_ID,
 )
+from core.test_scope import LOG_TEST_SCOPE, TEST_SCOPE_HEADER
 from core.types import JsonObject
 
 REQUEST_ID_HEADER = "X-Request-Id"
@@ -91,6 +93,10 @@ class AccessLogMiddleware(BaseHTTPMiddleware):
             service_name=self._service_name,
         )
         bind_log_context(**scope_extra)
+        if is_testing():
+            test_scope_raw = request.headers.get(TEST_SCOPE_HEADER)
+            if test_scope_raw and test_scope_raw.strip():
+                bind_log_context(**{LOG_TEST_SCOPE: test_scope_raw.strip()})
 
         start = time.perf_counter()
         status_code: int | None = None

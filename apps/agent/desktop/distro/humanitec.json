@@ -13,7 +13,6 @@
   "homepage": "https://humanitec.ru",
   "maintainer": "Humanitec <support@humanitec.ru>",
   "default_extensions": [
-    "platform_mcp",
     "developer",
     "computercontroller"
   ]

@@ -1547,6 +1547,7 @@ class OpenAIProviderConfig(BaseModel):
     """Конфигурация OpenAI провайдера"""
 
     api_key: str | None = Field(default=None)
+    api_keys: list[str] | None = Field(default=None)
     base_url: str | None = Field(default=None)
     models_url: str | None = Field(default=None)
     smoke_model: str | None = Field(default=LLM_PROVIDER_SMOKE_MODELS["openai"])
@@ -1556,6 +1557,7 @@ class OpenRouterProviderConfig(BaseModel):
     """Конфигурация OpenRouter провайдера"""
 
     api_key: str | None = Field(default=None)
+    api_keys: list[str] | None = Field(default=None)
     base_url: str = Field(default=LLM_PROVIDER_DEFAULT_BASE_URLS["openrouter"])
     models_url: str = Field(default=LLM_PROVIDER_DEFAULT_MODELS_URLS["openrouter"])
     site_url: str = Field(default="https://platform.local")
@@ -1567,6 +1569,7 @@ class BothubProviderConfig(BaseModel):
     """Конфигурация Bothub провайдера"""
 
     api_key: str | None = Field(default=None)
+    api_keys: list[str] | None = Field(default=None)
     base_url: str = Field(default=LLM_PROVIDER_DEFAULT_BASE_URLS["bothub"])
     models_url: str = Field(default=LLM_PROVIDER_DEFAULT_MODELS_URLS["bothub"])
     smoke_model: str | None = Field(default=LLM_PROVIDER_SMOKE_MODELS["bothub"])
@@ -1576,6 +1579,7 @@ class GroqProviderConfig(BaseModel):
     """OpenAI-compatible Groq Cloud provider."""
 
     api_key: str | None = Field(default=None)
+    api_keys: list[str] | None = Field(default=None)
     base_url: str = Field(default=LLM_PROVIDER_DEFAULT_BASE_URLS["groq"])
     models_url: str = Field(default=LLM_PROVIDER_DEFAULT_MODELS_URLS["groq"])
     smoke_model: str = Field(default=LLM_PROVIDER_SMOKE_MODELS["groq"])
@@ -1585,6 +1589,7 @@ class GoogleLLMProviderConfig(BaseModel):
     """Google Gemini API через OpenAI-compatible chat endpoint и native models catalog."""
 
     api_key: str | None = Field(default=None)
+    api_keys: list[str] | None = Field(default=None)
     base_url: str = Field(default=LLM_PROVIDER_DEFAULT_BASE_URLS["google"])
     models_url: str = Field(default=LLM_PROVIDER_DEFAULT_MODELS_URLS["google"])
     smoke_model: str = Field(default=LLM_PROVIDER_SMOKE_MODELS["google"])
@@ -1594,6 +1599,7 @@ class GitHubModelsProviderConfig(BaseModel):
     """GitHub Models REST API provider."""
 
     api_key: str | None = Field(default=None)
+    api_keys: list[str] | None = Field(default=None)
     base_url: str = Field(default=LLM_PROVIDER_DEFAULT_BASE_URLS["github"])
     models_url: str = Field(default=LLM_PROVIDER_DEFAULT_MODELS_URLS["github"])
     smoke_model: str = Field(default=LLM_PROVIDER_SMOKE_MODELS["github"])
@@ -1604,6 +1610,7 @@ class HuggingFaceProviderConfig(BaseModel):
     """Hugging Face Inference Providers OpenAI-compatible router."""
 
     api_key: str | None = Field(default=None)
+    api_keys: list[str] | None = Field(default=None)
     base_url: str = Field(default=LLM_PROVIDER_DEFAULT_BASE_URLS["huggingface"])
     models_url: str = Field(default=LLM_PROVIDER_DEFAULT_MODELS_URLS["huggingface"])
     smoke_model: str = Field(default=LLM_PROVIDER_SMOKE_MODELS["huggingface"])
@@ -1613,15 +1620,27 @@ class DeepInfraProviderConfig(BaseModel):
     """DeepInfra OpenAI-compatible provider."""
 
     api_key: str | None = Field(default=None)
+    api_keys: list[str] | None = Field(default=None)
     base_url: str = Field(default=LLM_PROVIDER_DEFAULT_BASE_URLS["deepinfra"])
     models_url: str = Field(default=LLM_PROVIDER_DEFAULT_MODELS_URLS["deepinfra"])
     smoke_model: str = Field(default=LLM_PROVIDER_SMOKE_MODELS["deepinfra"])
+
+
+class CailaProviderConfig(BaseModel):
+    """Caila OpenAI-compatible provider (100+ моделей через единый API)."""
+
+    api_key: str | None = Field(default=None)
+    api_keys: list[str] | None = Field(default=None)
+    base_url: str = Field(default=LLM_PROVIDER_DEFAULT_BASE_URLS["caila"])
+    models_url: str = Field(default=LLM_PROVIDER_DEFAULT_MODELS_URLS["caila"])
+    smoke_model: str = Field(default=LLM_PROVIDER_SMOKE_MODELS["caila"])
 
 
 class YandexLLMProviderConfig(BaseModel):
     """Yandex Cloud Foundation Models (OpenAI-совместимый endpoint): Api-Key + x-folder-id."""
 
     api_key: str | None = Field(default=None)
+    api_keys: list[str] | None = Field(default=None)
     folder_id: str | None = Field(
         default=None,
         description="Идентификатор каталога Yandex Cloud (заголовок x-folder-id)",
@@ -1750,7 +1769,7 @@ class LLMConfig(BaseModel):
         default=HUMANITEC_LLM_PROVIDER,
         description=(
             "Провайдер: humanitec_llm, openai, openrouter, bothub, "
-            "yandex, groq, google, github, huggingface, deepinfra"
+            "yandex, groq, google, github, huggingface, deepinfra, caila"
         ),
     )
     default_model: str = Field(default=HUMANITEC_LLM_AUTO_MODEL)
@@ -1770,6 +1789,7 @@ class LLMConfig(BaseModel):
     github: GitHubModelsProviderConfig | None = Field(default=None)
     huggingface: HuggingFaceProviderConfig | None = Field(default=None)
     deepinfra: DeepInfraProviderConfig | None = Field(default=None)
+    caila: CailaProviderConfig | None = Field(default=None)
     models: dict[str, ModelConfig] = Field(default_factory=dict)
     default_strategy: Literal["configured", "platform_free_pool"] = Field(
         default="platform_free_pool",

@@ -647,7 +647,6 @@ class TestExampleReactE2E:
         assert result.current_nodes == []  # Agent завершен
 
     @pytest.mark.asyncio
-    @pytest.mark.xdist_group(name="calculator")
     async def test_flow_with_calculator_tool(self, app, mock_llm_with_queue, unique_id):
         """Агент использует calculator tool."""
         mock_llm_with_queue(

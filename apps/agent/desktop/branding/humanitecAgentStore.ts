@@ -7,6 +7,7 @@ export type HumanitecAgentCredentials = {
   frontend_base_url: string;
   tunnel_ws_url: string;
   platform_mcp_url: string;
+  toolkits_url: string;
   company_id: string;
   company_subdomain: string | null;
   llm_api_base_url: string;
@@ -40,6 +41,10 @@ export function loadHumanitecAgentCredentials(userDataPath: string): HumanitecAg
   requireCredentialString(parsed, 'frontend_base_url');
   requireCredentialString(parsed, 'tunnel_ws_url');
   requireCredentialString(parsed, 'platform_mcp_url');
+  if (typeof parsed.toolkits_url !== 'string' || !parsed.toolkits_url) {
+    parsed.toolkits_url = `${parsed.frontend_base_url.replace(/\/+$/, '')}/flows/api/v1/agent/toolkits`;
+  }
+  requireCredentialString(parsed, 'toolkits_url');
   requireCredentialString(parsed, 'company_id');
   requireCredentialString(parsed, 'llm_api_base_url');
   requireCredentialString(parsed, 'llm_provider_id');

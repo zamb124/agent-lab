@@ -2,14 +2,28 @@
 
 Центральное место для всех pytest фикстур платформы.
 
+## Владение процессами
+
+Все процессы тестового стека (granian HTTP-сервисы 9001-9022 и TaskIQ-воркеры)
+стартует **`make test-up`** через супервизор `scripts/test_stack.py` — единственный
+владелец процессов. pytest ничего не запускает и не убивает: ни FileLock,
+ни pid/ref-count файлов, ни pkill в фикстурах нет.
+
+- `scripts/test_stack.py up` — параллельный старт всех процессов + параллельное
+  ожидание readiness; манифест `/tmp/platform_test_stack.json`, логи
+  `/tmp/platform_test_stack/<name>.{log,err}`.
+- `scripts/test_stack.py down` / `status` — остановка/диагностика по манифесту.
+- Миграции применяет `scripts/test_migrate.py` (тоже из `make test-up`).
+
 ## Структура
 
 ```
 tests/fixtures/
-├── __init__.py           # Экспорты основных классов
-├── workers.py            # SessionWorkerManager, SessionServerManager
-├── services.py           # Фикстуры для запуска сервисов как HTTP серверов
+├── __init__.py           # Докстринг модулей
+├── workers.py            # Readiness-фикстуры TaskIQ-воркеров + taskiq_scheduler
+├── services.py           # Readiness-фикстуры HTTP-сервисов стека
 ├── clients.py            # HTTP клиенты для тестирования API
+├── e2e_scope.py          # Статический test scope для -n0 E2E-фаз
 └── README.md             # Этот файл
 ```
 
@@ -46,28 +60,18 @@ async def test_agents_e2e(agents_client_http):
 
 ### Сервисы (из `services.py`)
 
-Session-scoped фикстуры, запускают реальные HTTP серверы:
+Session-scoped readiness-проверки HTTP-сервисов стека (`GET /health`):
 
-- `agents_service` - Agents сервис на порту 8000
-- `rag_service` - RAG сервис на порту 8004
-- `crm_service` - CRM сервис на порту 8003
-- `frontend_service` - Frontend сервис на порту 8001
-- `all_services` - Запускает все сервисы сразу
+- `flows_service` (9001), `rag_service` (9002), `crm_service` (9003),
+  `frontend_service` (9004), `sync_service` (9005), `office_service` (9008),
+  `search_service` (9010), `provider_litserve_service` (9014),
+  `voice_service` (9015), `capability_gateway_service` (9016),
+  `code_runner_*_service` (9017-9020), `worktracker_http_service` (9021),
+  `secrets_service` (9022)
+- `sandbox_services` — контур capability_gateway + code-runner-*
+- `all_services` — проверка всех сервисов сразу
 
-**Особенности:**
-- Запускаются один раз на всю сессию тестов
-- Переиспользуются между параллельными pytest worker'ами (pytest-xdist)
-- Автоматически останавливаются после завершения тестов
-- Используют тестовую конфигурацию (БД, Redis на тестовых портах)
-
-**Пример:**
-```python
-def test_with_real_server(rag_service):
-    # RAG сервер уже запущен на порту 8004
-    import requests
-    response = requests.get("http://localhost:8004/rag/api/v1/providers")
-    assert response.status_code == 200
-```
+Если сервис недоступен — `pytest.fail("... выполните make test-up")`.
 
 ### HTTP Клиенты (из `clients.py`)
 
@@ -80,265 +84,79 @@ def test_with_real_server(rag_service):
 - `crm_client` - клиент для CRM API (зависит от `rag_service`)
 - `frontend_client` - клиент для Frontend API
 
-**Использование:**
-```python
-async def test_api(rag_client):
-    response = await rag_client.get("/rag/api/v1/providers")
-    assert response.status_code == 200
-```
-
 #### HTTP (для E2E тестов)
 
-Используют реальные HTTP серверы:
+Используют реальные HTTP серверы стека:
 
 - `flows_client_http` - клиент к Flows на localhost:9001
 - `office_client_http` - клиент к Office на localhost:9008
 
-**Использование:**
-```python
-async def test_e2e(flows_client_http):
-    response = await flows_client_http.get("/flows/api/v1/flows/")
-    assert response.status_code == 200
-```
-
 ### Workers (из `workers.py`)
 
-Session-scoped фикстуры для worker процессов:
+Session-scoped readiness-проверки TaskIQ-воркеров стека (consumer в
+Redis Stream группы `taskiq`):
 
-- `taskiq_worker` - TaskIQ worker для async задач
-- `rag_worker` - RAG Worker для обработки документов
+- `taskiq_worker` — flows_worker (stream `flows_worker`)
+- `rag_worker` — rag_worker (stream `rag`)
+- `search_worker` — search_worker (stream `search`)
+- `sync_worker` — sync_worker (stream `sync`)
+- `crm_worker` — crm_worker (stream `crm`)
+- `taskiq_scheduler` — единственное исключение: subprocess на время сессии
+  (scheduler не входит в стек, его тики мешали бы остальным тестам)
 
 **Использование:**
 ```python
 @pytest.mark.real_taskiq  # Маркер для тестов с реальным TaskIQ
 async def test_with_worker(rag_worker):
-    # Worker уже запущен и готов обрабатывать задачи
     from apps.rag_worker.tasks.indexing_tasks import index_document_profile_task
 
-    task = await index_document_profile_task.kiq(
-        company_id="system",
-        namespace_id="test",
-        s3_key="test.txt",
-        document_name="test.txt",
-        metadata={"document_id": "doc-1"},
-        index_profile_id="<uuid профиля компании>",
-    )
-
+    task = await index_document_profile_task.kiq(...)
     result = await task.wait_result(timeout=10)
     assert result["status"] == "completed"
 ```
 
+## Изоляция тестов
+
+- Данные — через `unique_id`.
+- MockLLM — через test scope: autouse-фикстура `platform_test_scope` генерирует
+  `test_<hex>`, он едет по платформе как `X-Test-Scope`/TaskIQ label, MockLLM
+  читает строго свою очередь `mock_llm:responses:<scope>`.
+- E2E-фазы `-n0` (Playwright/Electron) используют статический scope
+  `TEST_SCOPE_STATIC_E2E` (`tests/fixtures/e2e_scope.py` + env
+  `TEST_SCOPE_DEFAULT` у сервисов стека).
+
 ## Конфигурация окружения
 
-Все сервисы используют **единую тестовую конфигурацию** из `services.py`:
-
-```python
-from tests.fixtures.test_database_env import TEST_DATABASE_ENV
-
-_COMMON_TEST_ENV = {
-    **TEST_DATABASE_ENV,
-    "TESTING": "true",
-    "DATABASE__REDIS_URL": "redis://localhost:63792/0",
-    "TASKS__BROKER_URL": "redis://localhost:63792/1",
-    "AUTH__PERMISSIONS_ENABLED": "false",
-    "SERVER__DEFAULT_TENANT_ID": "test_tenant",
-    "S3__DEFAULT_BUCKET": "test-bucket",
-    "RAG__ENABLED": "true",
-    "RAG__DEFAULT_PROVIDER": "pgvector",
-    "RAG__PROVIDERS__PGVECTOR__ENABLED": "true",
-    "RAG__PROVIDERS__PGVECTOR__HOST": "localhost",
-    "RAG__PROVIDERS__PGVECTOR__PORT": "5433",
-    "LLM__OPENROUTER__API_KEY": "sk-test-key",
-}
-```
-
-## Архитектура
-
-### SessionServerManager
-
-Универсальный менеджер для запуска HTTP серверов в тестах:
-
-```python
-from tests.fixtures.workers import SessionServerManager
-
-manager = SessionServerManager(
-    name="MyService",
-    lock_file="/tmp/my_service.lock",
-    pid_file="/tmp/my_service.pid",
-    app_path="apps.myservice.main:app",
-    port=8005,
-    startup_wait=2.0,
-    env={"TESTING": "true"}
-)
-
-with manager.start():
-    # Сервер запущен на порту 8005
-    yield
-# Сервер автоматически остановлен
-```
-
-**Особенности:**
-- Reference counting для корректной работы с pytest-xdist
-- File lock для синхронизации между параллельными worker'ами
-- Автоматическая очистка старых процессов
-- Логи в `/tmp/{service}_server_test.log`
-
-### SessionWorkerManager
-
-Универсальный менеджер для запуска worker процессов:
-
-```python
-from tests.fixtures.workers import SessionWorkerManager
-
-manager = SessionWorkerManager(
-    name="MyWorker",
-    lock_file="/tmp/my_worker.lock",
-    pid_file="/tmp/my_worker.pid",
-    command=[sys.executable, "-m", "my_worker"],
-    env={"TESTING": "true"},
-    cleanup_patterns=["my_worker.*"],
-    startup_wait=3.0
-)
-
-with manager.start() as process:
-    # Worker запущен
-    yield process
-# Worker автоматически остановлен
-```
-
-## Зависимости фикстур
-
-```
-all_services
-├── agents_service (8000)
-├── rag_service (8004)
-├── crm_service (8003)
-└── frontend_service (8001)
-
-crm_client (ASGI)
-├── app (agents service)
-├── rag_app (RAG ASGI app)
-└── rag_service (RAG HTTP server для inter-service communication)
-
-rag_client (ASGI)
-├── rag_app (RAG ASGI app)
-└── rag_worker (для обработки документов)
-
-flows_client_http → flows_service
-office_client_http → office_service
-```
+Единая конфигурация стека — `scripts/test_stack.py::COMMON_TEST_ENV`
+(база — `tests/fixtures/test_database_env.py::TEST_DATABASE_ENV`).
 
 ## Добавление нового сервиса
 
-### 1. Добавь фикстуру в `services.py`:
-
-```python
-_MY_SERVICE_LOCK = "/tmp/platform_test_my_service.lock"
-_MY_SERVICE_PID = "/tmp/platform_test_my_service.pid"
-
-@pytest.fixture(scope="session")
-def my_service():
-    """My Service как реальный HTTP сервер на порту 8010."""
-    manager = SessionServerManager(
-        name="MyService",
-        lock_file=_MY_SERVICE_LOCK,
-        pid_file=_MY_SERVICE_PID,
-        app_path="apps.myservice.main:app",
-        port=8010,
-        startup_wait=2.0,
-        env=_COMMON_TEST_ENV
-    )
-    
-    with manager.start():
-        yield
-```
-
-### 2. Добавь клиенты в `clients.py`:
-
-```python
-# ASGI client
-@pytest_asyncio.fixture
-async def my_service_client():
-    """HTTP клиент для My Service API (ASGI transport)."""
-    from apps.myservice.main import app
-    
-    transport = ASGITransport(app=app)
-    async with AsyncClient(transport=transport, base_url="http://testserver") as client:
-        yield client
-
-# HTTP client
-@pytest_asyncio.fixture
-async def my_service_client_http(my_service):
-    """HTTP клиент для My Service API (реальный HTTP)."""
-    async with AsyncClient(base_url="http://localhost:8010") as client:
-        yield client
-```
-
-### 3. Используй в тестах:
-
-```python
-async def test_my_service(my_service_client):
-    response = await my_service_client.get("/api/v1/health")
-    assert response.status_code == 200
-```
+1. Добавь `GranianService`/`TaskiqWorkerService` в декларативную таблицу
+   `scripts/test_stack.py` (порт, app path, env, readiness timeout).
+2. Добавь readiness-фикстуру в `services.py`/`workers.py`
+   (`require_http_service` / `require_taskiq_worker`).
+3. При необходимости добавь клиента в `clients.py`.
+4. Добавь порт/команду в `scripts/test_process_preflight_cleanup.py`.
 
 ## Best Practices
 
-1. **Unit тесты** - используй ASGI клиенты (`rag_client`, `crm_client`)
-   - Быстрые, не требуют реальных серверов
-   - Изолированные, тестируют конкретный сервис
-
-2. **Integration тесты** - используй комбинацию ASGI клиентов и HTTP сервисов
-   - Например, `crm_client` (ASGI) + `rag_service` (HTTP)
-   - Тестируют взаимодействие между сервисами
-
-3. **E2E тесты** - используй HTTP клиенты (`flows_client_http`, `office_client_http`) или pytest Playwright (`tests/ui/e2e`)
-   - Полная интеграция всей платформы
-   - Тестируют реальные пользовательские сценарии
-
-4. **Параллельное выполнение** - все фикстуры поддерживают pytest-xdist
-   - Используй `-n auto` для параллельного запуска
-   - Сервисы и worker'ы переиспользуются между pytest worker'ами
-
-5. **Cleanup** - фикстуры автоматически очищают ресурсы
-   - Не нужно вручную останавливать сервисы
-   - PID файлы и lock файлы удаляются автоматически
+1. **Unit тесты** - используй ASGI клиенты (`rag_client`, `crm_client`).
+2. **Integration тесты** - комбинация ASGI клиентов и HTTP сервисов стека.
+3. **E2E тесты** - HTTP клиенты (`flows_client_http`) или Playwright (`tests/ui/e2e`).
+4. **Параллельность** - тесты изолируются данными (`unique_id`) и test scope,
+   а не последовательностью; никаких lock'ов и `xdist_group`.
 
 ## Troubleshooting
 
-### Сервис не запускается
+### Сервис не запущен
 
-Проверь логи:
 ```bash
-tail -f /tmp/rag_server_test.log
-tail -f /tmp/rag_server_test_err.log
+uv run python -m scripts.test_stack status
+tail -f /tmp/platform_test_stack/<name>.err
+make test-up
 ```
 
-### Порт уже занят
+### Порт занят посторонним процессом
 
-Убей старые процессы:
-```bash
-pkill -9 -f "uvicorn.*apps.rag.main:app"
-rm /tmp/platform_test_rag_server.*
-```
-
-### Worker не обрабатывает задачи
-
-Проверь что используется маркер `@pytest.mark.real_taskiq`:
-```python
-@pytest.mark.real_taskiq
-async def test_with_worker(rag_worker):
-    # Этот тест будет использовать реальный worker
-    pass
-```
-
-### Фикстура не найдена
-
-Убедись что pytest_plugins настроен в `tests/conftest.py`:
-```python
-pytest_plugins = [
-    "tests.fixtures.services",
-    "tests.fixtures.clients",
-]
-```
-
+`make test-up` выполняет preflight-зачистку (`scripts/test_process_preflight_cleanup.py`).

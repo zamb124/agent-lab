@@ -45,7 +45,6 @@ from core.config.models import (
 )
 from core.llm_context import LLMContextBudget, LLMContextProfile, LLMContextRetrievalPolicy
 
-pytestmark = pytest.mark.xdist_group(name="llm_candidate_fallback")
 
 
 @dataclass(frozen=True)
@@ -1070,3 +1069,46 @@ def test_explicit_platform_provider_accepts_humanitec_llms_fallback() -> None:
     assert client.llm_provider == "openrouter"
     assert client.model == "primary/model"
     assert client._candidate_resolver is not None
+
+
+def test_platform_free_pool_provider_is_configured_with_api_keys_only() -> None:
+    from core.clients.llm.provider_resolution import _platform_free_pool_provider_is_configured
+
+    old_settings = get_settings()
+    settings = BaseSettings(
+        testing=False,
+        llm=LLMConfig(
+            provider="humanitec_llm",
+            openrouter=OpenRouterProviderConfig(
+                api_keys=["sk-extra"],
+                base_url="https://openrouter.ai/api/v1",
+            ),
+            platform_free_pool=PlatformFreePoolConfig(enabled=True),
+        ),
+    )
+    try:
+        set_settings(settings)
+        assert _platform_free_pool_provider_is_configured(settings, "openrouter") is True
+    finally:
+        set_settings(old_settings)
+
+
+def test_platform_free_pool_provider_not_configured_without_keys() -> None:
+    from core.clients.llm.provider_resolution import _platform_free_pool_provider_is_configured
+
+    old_settings = get_settings()
+    settings = BaseSettings(
+        testing=False,
+        llm=LLMConfig(
+            provider="humanitec_llm",
+            openrouter=OpenRouterProviderConfig(
+                base_url="https://openrouter.ai/api/v1",
+            ),
+            platform_free_pool=PlatformFreePoolConfig(enabled=True),
+        ),
+    )
+    try:
+        set_settings(settings)
+        assert _platform_free_pool_provider_is_configured(settings, "openrouter") is False
+    finally:
+        set_settings(old_settings)

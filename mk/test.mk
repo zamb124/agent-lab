@@ -1,4 +1,4 @@
-.PHONY: test test-until-fail test-all test-static test-up test-down test-reset test-cov test-cov-all test-cov-report test-unit test-ui test-ui-doc test-ui-components test-frontend-core test-frontend-core-canon test-frontend-core-unit test-frontend-core-browser test-profile check-strict-agent-architecture check-wider-repo-strictness agent-ensure test-agent test-agent-e2e test-agent-desktop-e2e
+.PHONY: test test-until-fail test-all test-static test-up test-down test-reset test-cov test-cov-all test-cov-report test-unit test-network test-ui test-ui-doc test-ui-components test-frontend-core test-frontend-core-canon test-frontend-core-unit test-frontend-core-browser test-profile check-strict-agent-architecture check-wider-repo-strictness agent-ensure test-agent test-agent-e2e test-agent-desktop-e2e
 
 WORKERS ?= 5
 PYTEST_COMMAND_TIMEOUT_SECONDS ?= 5400
@@ -28,18 +28,25 @@ check-wider-repo-strictness:
 	@uv run python scripts/audit_wider_repo_strictness.py
 
 test-up: runtime-bootstrap
+	@echo "Preflight: зачистка stale pytest/granian/taskiq/code-runner процессов..."
+	@uv run python -m scripts.test_process_preflight_cleanup
 	@uv run python scripts/ensure_test_compose_images.py
 	docker-compose -f docker-compose-test.yaml --env-file $(DOCKER_COMPOSE_ENV_FILE) up -d --pull $(DOCKER_COMPOSE_PULL) postgres-test redis-test minio-test onlyoffice-documentserver provider_litserve test-a2a-agent livekit-test livekit-egress-test livekit-cli-test loki-test tempo-test alloy-test grafana-test
 	@echo "Ожидание готовности сервисов (postgres, redis, minio, onlyoffice, provider_litserve, test-a2a-agent, livekit, livekit-egress, livekit-cli, loki, tempo, alloy, grafana)..."
 	@sleep 7
 	@echo "Сброс тестовой БД (TRUNCATE managed таблиц + Redis FLUSHDB)..."
 	@uv run python -m scripts.db_test_reset
+	@echo "Применение Alembic-миграций всех сервисных деревьев..."
+	@uv run python -m scripts.test_migrate
+	@echo "Старт стека сервисов (granian + TaskIQ) через test_stack..."
+	@uv run python -m scripts.test_stack up
 
 # Ручной сброс тестовой БД и Redis без поднятия контейнеров.
 test-reset:
 	@uv run python -m scripts.db_test_reset
 
 test-down:
+	@uv run python -m scripts.test_stack down
 	docker-compose -f docker-compose-test.yaml --env-file $(DOCKER_COMPOSE_ENV_FILE) stop postgres-test redis-test minio-test onlyoffice-documentserver provider_litserve test-a2a-agent livekit-test livekit-egress-test livekit-cli-test loki-test tempo-test alloy-test grafana-test
 
 # Запуск unit/API тестов параллельно (без browser тестов)
@@ -47,7 +54,14 @@ test-unit: test-up
 	@echo "Запуск unit/API тестов в $(WORKERS) воркерах..."
 	uv run python scripts/pytest_with_timeout.py $(PYTEST_COMMAND_TIMEOUT_SECONDS) uv run pytest tests/ -n $(WORKERS) --max-worker-restart=$(PYTEST_MAX_WORKER_RESTART) \
 		$(_PYTEST_IGNORE_UI) \
-		-m "not integration"
+		-m "not integration and not network"
+
+# Live-тесты с реальными HTTP-запросами в интернет (маркер network) — вне дефолтного прогона
+test-network: test-up
+	@echo "Запуск network-тестов (реальные HTTP-запросы в интернет)..."
+	uv run pytest tests/ -m "network" -n $(WORKERS) --max-worker-restart=$(PYTEST_MAX_WORKER_RESTART) \
+		$(_PYTEST_IGNORE_UI) \
+		$(_PYTEST_IGNORE_AGENT_DESKTOP)
 
 # E2E UI: pytest + Playwright + фикстуры из tests/fixtures (нужны test-up)
 test-ui: test-up
@@ -64,7 +78,7 @@ test-profile: test-up
 	@echo "Runtime profile: FileLock + event loop (отчёт /tmp/platform_test_runtime_profile_merged.json)..."
 	uv run python scripts/run_pytest_profile.py tests/ -n $(WORKERS) --max-worker-restart=$(PYTEST_MAX_WORKER_RESTART) \
 		$(_PYTEST_IGNORE_UI) \
-		-m "not integration" -q
+		-m "not integration and not network" -q
 
 # Компонентные Lit-тесты (Web Test Runner, без реального бэкенда)
 test-ui-components: runtime-bootstrap
@@ -116,7 +130,8 @@ test:
 	uv run python scripts/pytest_with_timeout.py $(PYTEST_COMMAND_TIMEOUT_SECONDS) uv run pytest tests/ -n $(WORKERS) --max-worker-restart=$(PYTEST_MAX_WORKER_RESTART) \
 		$(_PYTEST_IGNORE_UI) \
 		$(_PYTEST_IGNORE_AGENT_DESKTOP) \
-		-m "not integration"; \
+		$(_PYTEST_IGNORE_AGENT_E2E) \
+		-m "not integration and not network and not agent_build_release"; \
 	phase1_rc=$$?; \
 	if [ $$phase1_rc -ne 0 ]; then \
 		echo ""; \
@@ -124,7 +139,8 @@ test:
 			uv run python scripts/run_pytest_lastfailed.py --timeout $(PYTEST_COMMAND_TIMEOUT_SECONDS) -- -n 1 --max-worker-restart=$(PYTEST_MAX_WORKER_RESTART) \
 				$(_PYTEST_IGNORE_UI) \
 				$(_PYTEST_IGNORE_AGENT_DESKTOP) \
-				-m "not integration" -v; \
+				$(_PYTEST_IGNORE_AGENT_E2E) \
+				-m "not integration and not network and not agent_build_release" -v; \
 		phase2_rc=$$?; \
 		if [ $$phase2_rc -eq 0 ]; then \
 			phase1_rc=0; \
@@ -167,7 +183,7 @@ test-until-fail:
 		$(_PYTEST_IGNORE_UI) \
 		$(_PYTEST_IGNORE_AGENT_DESKTOP) \
 		$(_PYTEST_IGNORE_AGENT_E2E) \
-		-m "not integration"
+		-m "not integration and not network"
 
 test-all:
 	@$(MAKE) --no-print-directory test-static
@@ -208,7 +224,7 @@ test-cov: test-up
 	@echo "Запуск тестов с покрытием в $(WORKERS) воркерах (без browser)..."
 	uv run python scripts/pytest_with_timeout.py $(PYTEST_COMMAND_TIMEOUT_SECONDS) uv run pytest tests/ -n $(WORKERS) --max-worker-restart=$(PYTEST_MAX_WORKER_RESTART) \
 		$(_PYTEST_IGNORE_UI) \
-		-m "not integration" \
+		-m "not integration and not network" \
 		--cov=apps --cov=core --cov-report=term-missing --cov-report=html:htmlcov
 
 test-cov-all: test-up

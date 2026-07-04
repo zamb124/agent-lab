@@ -42,6 +42,18 @@ async def ensure_demo_sales_namespace(container) -> None:
         clear_context()
 
 
+@pytest.fixture(autouse=True)
+async def ensure_demo_company_variables_seeded(container) -> None:
+    """Идемпотентный demo seed перед каждым тестом — защита от загрязнения shared keys."""
+    from apps.flows.src.services.demo_company_variables import seed_demo_company_variables
+
+    set_context(_system_context())
+    try:
+        _ = await seed_demo_company_variables(container.variables_service, "system")
+    finally:
+        clear_context()
+
+
 @pytest.mark.asyncio
 async def test_demo_seed_resolves_company_name(container, app) -> None:
     set_context(_system_context())

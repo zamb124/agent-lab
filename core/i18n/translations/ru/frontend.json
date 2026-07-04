@@ -761,7 +761,13 @@
             "audit_event_agent_device_registered": "Устройство зарегистрировано",
             "audit_event_agent_device_revoked": "Устройство отключено",
             "audit_event_agent_device_policy_updated": "Политика устройства обновлена",
-            "audit_event_agent_mcp_tools_call": "Вызов Platform MCP"
+            "audit_event_agent_mcp_tools_call": "Вызов Platform MCP",
+            "toolkits_title": "Группы инструментов агента",
+            "toolkits_help": "Каждая группа появляется в HumanitecAgent как отдельное расширение. Пользователь включает и выключает группы в настройках агента.",
+            "toolkits_empty": "Группы инструментов ещё не настроены",
+            "toolkits_default": "По умолчанию",
+            "toolkits_flows": "Flows",
+            "toolkits_tools": "Tools"
         },
         "ai_providers": {
             "section_context": "Контекст LLM по умолчанию",

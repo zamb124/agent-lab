@@ -1058,7 +1058,6 @@ class TestPaymentModels:
 
 
 @pytest.mark.asyncio
-@pytest.mark.xdist_group("yoomoney_token_storage")
 class TestYooMoneyTokenStorage:
 
     async def test_save_and_load_token(self, frontend_container):
@@ -1256,7 +1255,6 @@ class TestYooMoneyOAuthAuthorize:
 
 
 @pytest.mark.asyncio
-@pytest.mark.xdist_group("yoomoney_token_storage")
 class TestYooMoneyOAuthCallback:
 
     async def test_callback_without_code_400(
@@ -1340,7 +1338,6 @@ class TestYooMoneyOAuthCallback:
 
 
 @pytest.mark.asyncio
-@pytest.mark.xdist_group("yoomoney_token_storage")
 class TestSyncPendingTransactions:
 
     async def test_sync_finds_completed_transaction(

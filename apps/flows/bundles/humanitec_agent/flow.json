@@ -4,7 +4,6 @@
   "description": "Курируемый ассистент HumanitecAgent: поиск, CRM, файлы и браузер через Platform MCP.",
   "tags": ["humanitec", "agent", "assistant"],
   "permission": [],
-  "exposed_to_agent": true,
   "entry": "main",
   "nodes": {
     "main": {

@@ -56,6 +56,7 @@ REQUIRED_FUNCTIONS: dict[Path, tuple[str, ...]] = {
         "test_f13_settings_agent_download_href",
         "test_f14_settings_agent_release_banner_lvh_origin",
         "test_f15_settings_agent_pairing_code_ttl",
+        "test_f16_settings_agent_toolkits_section",
     ),
     REPO_ROOT / "tests/agent/e2e/test_agent_llm_proxy_e2e.py": (
         "test_e2e_llm_proxy_models_list_auto",
@@ -152,7 +153,10 @@ REQUIRED_FUNCTIONS: dict[Path, tuple[str, ...]] = {
         "test_goose_cfg_02_disable_developer_reflected_in_tools",
     ),
     REPO_ROOT / "tests/agent/desktop_e2e/test_agent_desktop_mcp_ui.py": (
-        "test_mcp_bld_01_bundled_extensions_platform_mcp_first",
+        "test_mcp_bld_01_bundled_extensions_without_static_platform_mcp",
+        "test_mcp_bld_02_default_extensions_without_platform_mcp",
+        "test_mcp_bld_03_preload_exposes_toolkits_catalog_api",
+        "test_mcp_bld_04_platform_humanitec_core_after_pairing",
         "test_mcp_ui_01_first_launch_bundled_order",
         "test_mcp_ui_03_chat_mcp_picker_order",
         "test_mcp_ui_04_flow_tools_visible_via_platform_mcp",

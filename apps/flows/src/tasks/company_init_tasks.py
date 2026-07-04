@@ -6,6 +6,7 @@ from pathlib import Path
 
 from apps.flows.src.container import get_container
 from apps.flows.src.container_contracts import as_flow_runtime_container
+from apps.flows.src.services.agent_toolkit_service import bootstrap_agent_toolkits_from_registry
 from apps.flows.src.services.demo_company_variables import seed_demo_company_variables
 from apps.flows.src.services.flows_loader import FlowsLoader, load_tools_to_db
 from apps.flows.src.services.hitl_demo_queue import ensure_example_hitl_queue
@@ -127,6 +128,13 @@ async def init_company_resources(
             company_id=company_id,
             filter_public=(company_id != "system")
         )
+
+        toolkits_loaded = await bootstrap_agent_toolkits_from_registry(
+            container.agent_toolkit_repository,
+            registry_path,
+            filter_public=(company_id != "system"),
+        )
+        stats["agent_toolkits"] = toolkits_loaded
 
         seeded_variables = await seed_demo_company_variables(
             container.variables_service,

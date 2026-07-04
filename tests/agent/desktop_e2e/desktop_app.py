@@ -10,8 +10,6 @@ import tempfile
 from dataclasses import dataclass
 from pathlib import Path
 
-from filelock import FileLock
-
 from apps.agent.desktop.artifact_verify import (
     ArtifactVerificationError,
     is_placeholder_artifact,
@@ -29,7 +27,6 @@ REPO_ROOT = Path(__file__).resolve().parents[3]
 DESKTOP_ROOT = REPO_ROOT / "apps" / "agent" / "desktop"
 DIST_DIR = DESKTOP_ROOT / "dist"
 APPLY_BRANDING = DESKTOP_ROOT / "scripts" / "apply_branding.sh"
-_APPLY_BRANDING_LOCK = "/tmp/platform_apply_branding.lock"
 
 
 @dataclass(frozen=True)
@@ -59,23 +56,22 @@ def _git_head_sha() -> str:
 
 
 def _run_apply_branding() -> None:
+    """Desktop E2E идёт строго -n0: сборка branding не конкурирует между процессами."""
     if not APPLY_BRANDING.is_file():
         raise FileNotFoundError(f"apply_branding.sh missing: {APPLY_BRANDING}")
-    lock = FileLock(_APPLY_BRANDING_LOCK, timeout=600)
-    with lock:
-        completed = subprocess.run(
-            [str(APPLY_BRANDING)],
-            cwd=str(REPO_ROOT),
-            check=False,
-            capture_output=True,
-            text=True,
+    completed = subprocess.run(
+        [str(APPLY_BRANDING)],
+        cwd=str(REPO_ROOT),
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+    if completed.returncode != 0:
+        raise RuntimeError(
+            "apply_branding.sh failed\n"
+            f"stdout:\n{completed.stdout}\n"
+            f"stderr:\n{completed.stderr}"
         )
-        if completed.returncode != 0:
-            raise RuntimeError(
-                "apply_branding.sh failed\n"
-                f"stdout:\n{completed.stdout}\n"
-                f"stderr:\n{completed.stderr}"
-            )
 
 
 def ensure_humanitec_desktop_release_artifact() -> Path:

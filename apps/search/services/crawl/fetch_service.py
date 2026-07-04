@@ -15,7 +15,7 @@ from bs4 import BeautifulSoup
 from apps.browser.contracts.crawl_fetch_types import BrowserCrawlFetchResponse
 from apps.search.db.crawl_repositories import canonicalize_url
 from core.clients.browser_fetch_client import BrowserFetchClient
-from core.crawl.errors import CrawlExtractTooShortError
+from core.crawl.errors import CrawlExtractTooShortError, CrawlNoExtractableContentError
 from core.crawl.logging_events import log_crawl_fetch_completed, log_crawl_fetch_failed
 from core.crawl.models import CrawlFetchResult, CrawlStructuralSignals
 from core.crawl.structural_signals import extract_structural_signals_from_html
@@ -220,7 +220,10 @@ def _extract_markdown_and_signals(
             tag.decompose()
         extracted = soup.get_text(separator="\n", strip=True)
     if not extracted or not extracted.strip():
-        raise ValueError("html page has no extractable text")
+        markdown_fallback = _markdown_from_structural_signals(structural_signals)
+        if markdown_fallback is not None:
+            return markdown_fallback, structural_signals
+        raise CrawlNoExtractableContentError(page_url)
     return extracted, structural_signals
 
 
@@ -246,3 +249,15 @@ def _extract_heading_trail(markdown: str) -> list[str]:
             _ = trail.pop()
         trail.append(title)
     return trail[-3:]
+
+
+def _markdown_from_structural_signals(signals: CrawlStructuralSignals) -> str | None:
+    """Собирает markdown из title и description структурных сигналов."""
+    if not signals.title and not signals.description:
+        return None
+    parts: list[str] = []
+    if signals.title:
+        parts.append(f"# {signals.title}")
+    if signals.description:
+        parts.append(signals.description)
+    return "\n".join(parts)

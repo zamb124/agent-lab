@@ -35,6 +35,10 @@ flows:
   - id: handoff_demo_parent
     public: true
     description: "Multi-agent handoff: родитель передаёт управление дочернему flow через handoff_to_flow и получает structured handback"
+
+  - id: humanitec_agent
+    public: true
+    description: "Курируемый ассистент HumanitecAgent: поиск, CRM, файлы и браузер через Platform MCP"
   
   # CRM агенты
   - id: crm
@@ -158,6 +162,75 @@ tools:
   - id: system_diagnostic
     public: false
     description: "Системная диагностика"
+
+# Группы инструментов HumanitecAgent (Platform MCP extensions)
+# public: true — копируются в новые компании при init
+agent_toolkits:
+  - id: humanitec_core
+    public: true
+    name: Humanitec
+    description: "Базовый ассистент HumanitecAgent и поиск по платформе"
+    default_enabled: true
+    position: 0
+    flow_ids:
+      - humanitec_agent
+    tool_ids:
+      - calculator
+      - rag_search
+      - index_search
+      - runet_search
+
+  - id: networkle
+    public: true
+    name: NetWorkle
+    description: "CRM NetWorkle: поиск сущностей и карточки"
+    default_enabled: false
+    position: 10
+    flow_ids: []
+    tool_ids:
+      - crm_search_entities
+      - crm_get_entity
+
+  - id: docs
+    public: true
+    name: DOCS
+    description: "Поиск по документации Humanitec и NetWorkle"
+    default_enabled: false
+    position: 20
+    flow_ids: []
+    tool_ids:
+      - docs_search
+
+  - id: lara
+    public: true
+    name: Lara
+    description: "Мультисервисный ассистент Lara"
+    default_enabled: false
+    position: 30
+    flow_ids:
+      - lara
+    tool_ids: []
+
+  - id: files
+    public: true
+    name: Files
+    description: "Чтение файлов компании"
+    default_enabled: false
+    position: 40
+    flow_ids: []
+    tool_ids:
+      - read_file
+
+  - id: browser
+    public: true
+    name: Browser
+    description: "Поиск и чтение веб-страниц"
+    default_enabled: false
+    position: 50
+    flow_ids: []
+    tool_ids:
+      - browser_duckduckgo_links
+      - browser_page_markdown
 
 # Общие настройки по умолчанию
 defaults:

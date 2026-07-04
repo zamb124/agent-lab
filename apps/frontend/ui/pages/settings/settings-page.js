@@ -516,6 +516,7 @@ export class FrontendSettingsPage extends PlatformPage {
         this._agentReleases = this.useOp('frontend/agent_releases_status');
         this._agentPolicyPatch = this.useOp('frontend/agent_device_policy_patch');
         this._agentAudit = this.useOp('frontend/agent_audit_load');
+        this._agentToolkits = this.useOp('frontend/agent_toolkits_load');
         this._agentPairingTimerId = null;
         this._loaded = false;
         this._aiLoaded = false;
@@ -541,6 +542,7 @@ export class FrontendSettingsPage extends PlatformPage {
         this._agentDevicesLoaded = false;
         this._agentReleasesLoaded = false;
         this._agentAuditLoaded = false;
+        this._agentToolkitsLoaded = false;
     }
 
     updated() {
@@ -567,6 +569,10 @@ export class FrontendSettingsPage extends PlatformPage {
         if (this._activeTab === 'agent' && !this._agentAuditLoaded) {
             this._agentAuditLoaded = true;
             this._agentAudit.run();
+        }
+        if (this._activeTab === 'agent' && !this._agentToolkitsLoaded) {
+            this._agentToolkitsLoaded = true;
+            this._agentToolkits.run();
         }
         const company = this._load.lastResult;
         if (company && company.company_id === 'system' && !this._scoresLoaded) {
@@ -1879,7 +1885,41 @@ export class FrontendSettingsPage extends PlatformPage {
                     </div>
                 ` : ''}
             </section>
+            ${this._renderAgentToolkitsSection()}
             ${this._renderAgentAuditSection()}
+        `;
+    }
+
+    _renderAgentToolkitsSection() {
+        const toolkits = Array.isArray(this._agentToolkits.lastResult) ? this._agentToolkits.lastResult : [];
+        const toolkitsBusy = this._agentToolkits.busy;
+        return html`
+            <section>
+                <h3>${this.t('settings_page.agent.toolkits_title')}</h3>
+                <div class="section-help">${this.t('settings_page.agent.toolkits_help')}</div>
+                ${toolkitsBusy ? html`<div class="empty"><glass-spinner></glass-spinner></div>` : ''}
+                ${!toolkitsBusy && toolkits.length === 0 ? html`<div class="empty">${this.t('settings_page.agent.toolkits_empty')}</div>` : ''}
+                ${!toolkitsBusy && toolkits.length > 0 ? html`
+                    <div class="custom-provider-list">
+                        ${toolkits.map((toolkit) => html`
+                            <div class="custom-provider-card">
+                                <div class="meta">
+                                    <div class="title-line">${toolkit.name}</div>
+                                    <div class="ref-line">${toolkit.toolkit_id}</div>
+                                    <div class="caps-line">${toolkit.description}</div>
+                                    <div class="caps-line">
+                                        ${this.t('settings_page.agent.toolkits_default')}: ${toolkit.default_enabled
+                                            ? this.t('settings_page.agent.policy_enabled')
+                                            : this.t('settings_page.agent.policy_disabled')}
+                                        · ${this.t('settings_page.agent.toolkits_flows')}: ${Array.isArray(toolkit.flow_ids) ? toolkit.flow_ids.length : 0}
+                                        · ${this.t('settings_page.agent.toolkits_tools')}: ${Array.isArray(toolkit.tool_ids) ? toolkit.tool_ids.length : 0}
+                                    </div>
+                                </div>
+                            </div>
+                        `)}
+                    </div>
+                ` : ''}
+            </section>
         `;
     }
 

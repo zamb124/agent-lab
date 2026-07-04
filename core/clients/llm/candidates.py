@@ -2,11 +2,18 @@
 
 from __future__ import annotations
 
+import hashlib
+
 from core.ai.llm_config import LLMCallConfig
 
 
 def candidate_key(candidate: LLMCallConfig) -> str:
-    return f"{candidate.provider}:{candidate.base_url}:{candidate.model}"
+    key_hash = (
+        hashlib.sha256(candidate.api_key.encode()).hexdigest()[:12]
+        if candidate.api_key
+        else "nokey"
+    )
+    return f"{candidate.provider}:{candidate.base_url}:{candidate.model}:{key_hash}"
 
 
 def candidate_capability_metadata_is_strict(candidate: LLMCallConfig) -> bool:

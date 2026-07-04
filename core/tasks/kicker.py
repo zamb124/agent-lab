@@ -30,6 +30,7 @@ from taskiq.kicker import AsyncKicker
 
 from core.config import get_settings
 from core.logging import get_log_context
+from core.test_scope import LOG_TEST_SCOPE
 from core.types import JsonValue
 
 _LABEL_REQUEST_ID = "request_id"
@@ -39,6 +40,7 @@ _LABEL_USER_ID = "user_id"
 _LABEL_COMPANY_ID = "company_id"
 _LABEL_NAMESPACE = "namespace"
 _LABEL_SESSION_ID = "session_id"
+_LABEL_TEST_SCOPE = LOG_TEST_SCOPE
 
 
 def build_log_labels(
@@ -82,7 +84,13 @@ def build_log_labels(
         _LABEL_TRACE_ID: trace_id,
         _LABEL_SERVICE_NAME: effective_service,
     }
-    for key in (_LABEL_USER_ID, _LABEL_COMPANY_ID, _LABEL_NAMESPACE, _LABEL_SESSION_ID):
+    for key in (
+        _LABEL_USER_ID,
+        _LABEL_COMPANY_ID,
+        _LABEL_NAMESPACE,
+        _LABEL_SESSION_ID,
+        _LABEL_TEST_SCOPE,
+    ):
         value = log_ctx.get(key)
         if isinstance(value, str) and value.strip():
             labels[key] = value.strip()

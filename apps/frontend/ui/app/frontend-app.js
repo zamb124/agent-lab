@@ -81,6 +81,7 @@ import {
     agentReleasesStatusOp,
     agentDevicePolicyPatchOp,
     agentAuditLoadOp,
+    agentToolkitsLoadOp,
 } from '../events/resources/agent.resource.js';
 import { leadSubmitOp, leadRequestsList } from '../events/resources/leads.resource.js';
 import { tracingSpansList, tracingFacets, tracingTraceLoadOp } from '../events/resources/tracing.resource.js';
@@ -324,6 +325,7 @@ export class FrontendApp extends PlatformApp {
         agentReleasesStatusOp,
         agentDevicePolicyPatchOp,
         agentAuditLoadOp,
+        agentToolkitsLoadOp,
         leadSubmitOp,
         leadRequestsList,
         tracingSpansList,

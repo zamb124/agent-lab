@@ -25,6 +25,7 @@ INLINE_CALCULATOR = {
 
 
 @pytest.mark.asyncio
+@pytest.mark.requires_code_runner
 class TestReasoningInAgent:
     """Тесты reasoning в flow с llm_node."""
 

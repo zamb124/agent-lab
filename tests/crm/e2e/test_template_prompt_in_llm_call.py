@@ -89,9 +89,7 @@ def _empty_analyze_response_for(note_title: str) -> dict[str, object]:
 
 
 def _analyze_mock_redis_queue(note_title: str) -> list[object]:
-    from tests.crm.e2e._json_helpers import mock_llm_queue_with_analyze_spare
-
-    return mock_llm_queue_with_analyze_spare([_empty_analyze_response_for(note_title)])
+    return [_empty_analyze_response_for(note_title)]
 
 
 async def _create_namespace_from_template(

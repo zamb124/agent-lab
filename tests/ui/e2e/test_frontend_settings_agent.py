@@ -541,3 +541,40 @@ async def test_f15_settings_agent_pairing_code_ttl(
     ttl_text = await ttl_line.inner_text()
     assert ttl_text.endswith("s")
     assert int(ttl_text.replace("s", "").strip()) > 0
+
+
+@pytest.mark.scenario(
+    service="frontend",
+    tag="settings-agent",
+    doc_slug="settings-agent-toolkits",
+    title="Frontend: группы инструментов HumanitecAgent",
+    title_en="Frontend: HumanitecAgent toolkits section",
+    description="Вкладка HumanitecAgent показывает список групп инструментов платформы.",
+    description_en="HumanitecAgent tab shows platform toolkit groups list.",
+)
+@pytest.mark.asyncio
+@pytest.mark.e2e
+@pytest.mark.timeout(180)
+async def test_f16_settings_agent_toolkits_section(
+    scenario: ScenarioRecorder,
+    frontend_ui: AppUI,
+    ui_page_system: Page,
+) -> None:
+    await _open_settings_agent_tab(scenario, ui_page_system, origin=frontend_ui.origin)
+    toolkits_heading = ui_page_system.locator("frontend-settings-page h3").filter(
+        has_text=re.compile(r"Группы инструментов|Agent toolkits")
+    )
+    await expect(toolkits_heading).to_be_visible(timeout=30_000)
+    await scenario.step(
+        "Секция групп инструментов агента видна",
+        ui_page_system,
+        label_en="Agent toolkits section is visible",
+    )
+    await expect(
+        ui_page_system.locator("frontend-settings-page .custom-provider-card").first
+    ).to_be_visible(timeout=30_000)
+    await scenario.step(
+        "Список групп инструментов отображается",
+        ui_page_system,
+        label_en="Toolkit groups list is rendered",
+    )

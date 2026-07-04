@@ -579,7 +579,8 @@ async def test_goose_ext_01_bundled_order_persisted_after_restart(
     from tests.agent.desktop_e2e.helpers import assert_platform_mcp_first_in_settings, read_bundled_extensions
 
     extensions = read_bundled_extensions()
-    assert extensions[0]["id"] == "platform_mcp"
+    extension_ids = {item.get("id") for item in extensions}
+    assert "platform_mcp" not in extension_ids
     desktop = humanitec_desktop_process_factory()
     try:
         desktop.start()

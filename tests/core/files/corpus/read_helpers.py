@@ -9,7 +9,7 @@ import pytest
 from core.files.checksum import compute_content_checksum_sha256
 from core.files.file_ref import FileRef
 from core.files.reader.models import (
-    DEFAULT_READ_BUDGET,
+    MAX_READ_BUDGET,
     FileExtract,
     FileReadKind,
     FileReadResult,
@@ -96,7 +96,7 @@ async def build_corpus_extract(
 def read_args_for(entry: CorpusFile, **overrides: object) -> ReadFileArgs:
     base = {
         "names": [entry.path.name],
-        "budget": DEFAULT_READ_BUDGET,
+        "budget": MAX_READ_BUDGET,
     }
     base.update(overrides)
     return ReadFileArgs.model_validate(base)

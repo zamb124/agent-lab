@@ -113,6 +113,8 @@ for runtime_name in (
     "humanitecEnvTemplate.ts",
     "humanitecBundledExtensionsSync.ts",
     "humanitecExtensionsResync.ts",
+    "humanitecToolkitsCatalog.ts",
+    "humanitecToolkitsSync.ts",
     "HumanitecOnboardingGuard.tsx",
 ):
     runtime_source = branding_dir / runtime_name
@@ -146,26 +148,9 @@ bundled_extensions_path = goose_desktop / "src" / "components" / "settings" / "e
 bundled_extensions = json.loads(bundled_extensions_path.read_text(encoding="utf-8"))
 if not isinstance(bundled_extensions, list):
     raise SystemExit("bundled-extensions.json must be a list")
-platform_mcp_entry = {
-    "id": "platform_mcp",
-    "name": "platform_mcp",
-    "display_name": "Humanitec",
-    "description": "Flows и инструменты компании Humanitec.",
-    "enabled": True,
-    "type": "streamable_http",
-    "uri": "${HUMANITEC_PLATFORM_MCP_URL}",
-    "headers": {
-        "Authorization": "Bearer ${HUMANITEC_DEVICE_TOKEN}",
-    },
-    "timeout": 300,
-    "bundled": True,
-    "humanitec_primary": True,
-    "priority": 0,
-}
 bundled_extensions = [
     item for item in bundled_extensions if not (isinstance(item, dict) and item.get("id") == "platform_mcp")
 ]
-bundled_extensions.insert(0, platform_mcp_entry)
 bundled_extensions_path.write_text(json.dumps(bundled_extensions, indent=2) + "\n", encoding="utf-8")
 
 bundled_ts_path = goose_desktop / "src" / "components" / "settings" / "extensions" / "bundled-extensions.ts"

@@ -20,7 +20,6 @@ from core.utils.tokens import TokenType, get_token_service
 # Без сериализации параллельные воркеры делят ключ и чужой clean_public_search_quota
 # сбрасывает счётчик в середине прогона. xdist_group держит все тесты файла на одном
 # воркере, где function-scoped clean_public_search_quota даёт чистую изоляцию.
-pytestmark = pytest.mark.xdist_group("public_search_quota")
 
 _TEST_CLIENT_HOST = "127.0.0.1"
 

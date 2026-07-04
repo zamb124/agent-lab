@@ -18,9 +18,16 @@ def _init_company_skip_mcp_network_sync(monkeypatch):
     async def _noop_sync(**_kwargs: object) -> dict[str, int]:
         return {"servers": 0, "tools": 0}
 
+    async def _noop_seed_demo_variables(*_args: object, **_kwargs: object) -> int:
+        return 0
+
     monkeypatch.setattr(
         "apps.flows.src.tasks.company_init_tasks.sync_auto_mcp_servers_for_company",
         _noop_sync,
+    )
+    monkeypatch.setattr(
+        "apps.flows.src.tasks.company_init_tasks.seed_demo_company_variables",
+        _noop_seed_demo_variables,
     )
 
 
@@ -258,4 +265,110 @@ async def test_system_vs_company_loading(container, unique_id: str):
         f"✅ System имеет больше или равно агентов: "
         f"{system_agents_count} >= {company_agents_count}"
     )
+
+
+@pytest.mark.asyncio
+async def test_init_company_resources_bootstraps_public_agent_toolkits(
+    container,
+    unique_id: str,
+) -> None:
+    from apps.flows.src.tasks.company_init_tasks import init_company_resources
+    from core.context import Context, clear_context, set_context
+    from core.models.identity_models import Company, User
+
+    test_company_id = f"test_toolkits_{unique_id}"
+    clear_context()
+
+    result = await init_company_resources(
+        company_id=test_company_id,
+        company_name=f"Toolkits {unique_id}",
+        subdomain=f"toolkits-{unique_id}",
+    )
+
+    assert result["status"] == "completed"
+    assert result["agent_toolkits"] == 6
+
+    test_context = Context(
+        user=User(user_id="test_user", name="Test User"),
+        active_company=Company(
+            company_id=test_company_id,
+            name=f"Toolkits {unique_id}",
+            subdomain=f"toolkits-{unique_id}",
+        ),
+        session_id="test_session",
+        channel="test",
+    )
+    set_context(test_context)
+    try:
+        toolkit = await container.agent_toolkit_repository.get("humanitec_core")
+        assert toolkit is not None
+        assert toolkit.default_enabled is True
+        assert "humanitec_agent" in toolkit.flow_ids
+        public_ids = {
+            "humanitec_core",
+            "networkle",
+            "docs",
+            "lara",
+            "files",
+            "browser",
+        }
+        toolkits = await container.agent_toolkit_repository.list(limit=100)
+        loaded_ids = {item.toolkit_id for item in toolkits}
+        assert public_ids.issubset(loaded_ids)
+    finally:
+        clear_context()
+
+
+@pytest.mark.asyncio
+async def test_init_company_resources_rebootstrap_preserves_toolkit_membership(
+    container,
+    unique_id: str,
+) -> None:
+    from apps.flows.src.tasks.company_init_tasks import init_company_resources
+    from core.context import Context, clear_context, set_context
+    from core.models.identity_models import Company, User
+
+    test_company_id = f"test_toolkits_merge_{unique_id}"
+    extra_flow = f"extra_flow_{unique_id}"
+    clear_context()
+
+    await init_company_resources(
+        company_id=test_company_id,
+        company_name=f"Toolkits merge {unique_id}",
+        subdomain=f"toolkits-merge-{unique_id}",
+    )
+
+    test_context = Context(
+        user=User(user_id="test_user", name="Test User"),
+        active_company=Company(
+            company_id=test_company_id,
+            name=f"Toolkits merge {unique_id}",
+            subdomain=f"toolkits-merge-{unique_id}",
+        ),
+        session_id="test_session",
+        channel="test",
+    )
+    set_context(test_context)
+    try:
+        toolkit = await container.agent_toolkit_repository.get("humanitec_core")
+        assert toolkit is not None
+        updated = toolkit.model_copy(update={"flow_ids": [*toolkit.flow_ids, extra_flow]})
+        _ = await container.agent_toolkit_repository.set(updated)
+    finally:
+        clear_context()
+
+    await init_company_resources(
+        company_id=test_company_id,
+        company_name=f"Toolkits merge {unique_id}",
+        subdomain=f"toolkits-merge-{unique_id}",
+    )
+
+    set_context(test_context)
+    try:
+        merged = await container.agent_toolkit_repository.get("humanitec_core")
+        assert merged is not None
+        assert extra_flow in merged.flow_ids
+        assert "humanitec_agent" in merged.flow_ids
+    finally:
+        clear_context()
 

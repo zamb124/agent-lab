@@ -107,7 +107,7 @@ async def test_read_image_vision_heic_from_corpus(
         pytest.skip(entry.skip_reason)
     mock_llm_with_queue(["MOCK_VISION"])
     file_ref = await store_corpus_in_files_service(frontend_container, entry, unique_id=unique_id)
-    from apps.flows.tools.files import read_image_vision
+    from apps.flows.tools.files import read_file
 
     state = ExecutionState.create(
         task_id="vision_task",
@@ -117,15 +117,14 @@ async def test_read_image_vision_heic_from_corpus(
         files=[file_ref],
     )
     payload = require_json_object(
-        await read_image_vision.run(
+        await read_file.run(
             {
                 "names": [file_ref.original_name],
                 "compression": "before_llm",
-                "shrink_on_error": True,
             },
             state,
         ),
-        "read_image_vision.heic",
+        "read_file.heic",
     )
     assert payload["files"][0]["success"] is True
     assert payload["files"][0]["read_lane"] == "vision"
@@ -143,7 +142,7 @@ async def test_read_image_vision_shrink_on_error_flag_accepted(
     entry = next(e for e in POSITIVE if e.relative_path == "img/example.jpg")
     mock_llm_with_queue(["MOCK_VISION"])
     file_ref = await store_corpus_in_files_service(frontend_container, entry, unique_id=unique_id)
-    from apps.flows.tools.files import read_image_vision
+    from apps.flows.tools.files import read_file
 
     state = ExecutionState.create(
         task_id="vision_task2",
@@ -154,14 +153,13 @@ async def test_read_image_vision_shrink_on_error_flag_accepted(
     )
     for shrink in (True, False):
         payload = require_json_object(
-            await read_image_vision.run(
+            await read_file.run(
                 {
                     "names": [file_ref.original_name],
                     "compression": "never",
-                    "shrink_on_error": shrink,
                 },
                 state,
             ),
-            f"read_image_vision.shrink_{shrink}",
+            f"read_file.shrink_{shrink}",
         )
         assert payload["files"][0]["success"] is True

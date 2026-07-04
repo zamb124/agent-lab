@@ -4,7 +4,6 @@ Mock LLM для тестов.
 
 import asyncio
 import json
-import os
 import uuid
 from collections.abc import AsyncGenerator, Awaitable, Callable
 from typing import TypeAlias, TypeVar, overload
@@ -40,6 +39,7 @@ from core.clients.llm.structured_output import resolve_structured_output_source_
 from core.clients.redis_client import RedisClient
 from core.llm_context import LLMContextBlock, LLMContextSourceRegistry
 from core.logging import get_logger
+from core.test_scope import resolve_test_scope
 from core.types import (
     JsonArray,
     JsonObject,
@@ -55,41 +55,26 @@ T = TypeVar("T", bound=BaseModel)
 MockLLMQueuedResponse: TypeAlias = str | JsonObject
 
 
-def _mock_redis_key() -> str:
-    """Ключ Redis для mock LLM ответов.
-
-    При MOCK_LLM_REDIS_KEY (полное имя ключа, например mock_llm:responses:flows)
-    процесс читает ту же очередь, что выставила фикстура mock_llm_redis для
-    session-воркеров TaskIQ и uvicorn тестовых сервисов.
-
-    Иначе уникальный ключ на pytest-xdist gw для in-process тестов без общего lane.
-    """
-    explicit = os.environ.get("MOCK_LLM_REDIS_KEY", "").strip()
-    if explicit:
-        return explicit
-    worker = os.environ.get("PYTEST_XDIST_WORKER", "")
-    if worker:
-        return f"mock_llm:responses:{worker}"
-    return "mock_llm:responses"
+def mock_llm_responses_key(test_scope: str) -> str:
+    """Ключ Redis очереди mock-ответов для конкретного test scope."""
+    if not test_scope.strip():
+        raise ValueError("mock_llm_responses_key: test_scope не должен быть пустым")
+    return f"mock_llm:responses:{test_scope.strip()}"
 
 
-def _mock_capture_key(scope: str) -> str:
-    """
-    Ключ Redis для журнала вызовов MockLLM (захват `messages`).
+def mock_llm_capture_key(test_scope: str) -> str:
+    """Ключ Redis журнала вызовов MockLLM для конкретного test scope."""
+    if not test_scope.strip():
+        raise ValueError("mock_llm_capture_key: test_scope не должен быть пустым")
+    return f"mock_llm:capture:{test_scope.strip()}"
 
-    `scope` — произвольная метка теста (UUID4); фикстура `mock_llm_capture`
-    использует одну метку на тест и кладёт её в Redis (см.
-    `_MOCK_CAPTURE_SCOPE_KEY`), а `MockLLM.stream` читает её и пишет
-    каждый вызов в `mock_llm:capture:<scope>` как отдельный элемент списка.
-
-    Без активной метки журнал не ведётся.
-    """
-    return f"mock_llm:capture:{scope}"
-
-
-_MOCK_CAPTURE_SCOPE_KEY = "mock_llm:capture:active_scope"
 
 _global_mock_registry: dict[str, "MockLLM"] = {}
+
+# Маркер «очередь была настроена, но исчерпана»: ключ с пустым массивом
+# сохраняется, чтобы отличать исчерпание (ошибка теста) от отсутствия очереди
+# (тест не использует Redis-мок — допустим паттерн/дефолтный ответ).
+_MOCK_LLM_QUEUE_EXHAUSTED_MARKER = "__MOCK_LLM_QUEUE_EXHAUSTED__"
 
 # Атомарно: один элемент JSON-массива за вызов (несколько async LLM на одном ключе).
 _MOCK_LLM_REDIS_POP_SCRIPT = """
@@ -99,15 +84,10 @@ if not raw_payload then
 end
 local decoded = cjson.decode(raw_payload)
 if decoded == nil or #decoded == 0 then
-  redis.call('DEL', KEYS[1])
-  return nil
+  return '__MOCK_LLM_QUEUE_EXHAUSTED__'
 end
 local head = table.remove(decoded, 1)
-if #decoded == 0 then
-  redis.call('DEL', KEYS[1])
-else
-  redis.call('SET', KEYS[1], cjson.encode(decoded))
-end
+redis.call('SET', KEYS[1], cjson.encode(decoded))
 return cjson.encode(head)
 """
 
@@ -187,11 +167,32 @@ class MockLLM:
         self._default_response = "Mock LLM ответ"
 
     async def _get_redis_response(self) -> MockLLMQueuedResponse | None:
-        """Получает ответ из Redis (межпроцессная очередь)."""
+        """Получает ответ из Redis (межпроцессная очередь).
+
+        При _redis_key_override (Mock Control System) читается строго заданный
+        ключ. Иначе ключ выводится из test scope текущего запроса
+        (`mock_llm:responses:<scope>`); без scope Redis-очередь не используется.
+        """
         if not self._redis_client:
             return None
 
-        key = self._redis_key_override or _mock_redis_key()
+        if self._redis_key_override is not None:
+            return await self._pop_single_redis_key(self._redis_key_override)
+
+        test_scope = resolve_test_scope()
+        if test_scope is None:
+            return None
+        return await self._pop_single_redis_key(mock_llm_responses_key(test_scope))
+
+    async def _pop_single_redis_key(self, key: str) -> MockLLMQueuedResponse | None:
+        """Атомарно снимает один элемент из Redis-ключа (Lua POP).
+
+        None — очередь не настроена (ключа нет). Исчерпание настроенной
+        очереди — ошибка (fail-closed): молчаливый паттерн-ответ маскировал бы
+        недобор ответов в тесте.
+        """
+        if not self._redis_client:
+            raise RuntimeError("_pop_single_redis_key вызван без Redis-клиента")
         try:
             redis_response_payload = await self._redis_client.eval(
                 _MOCK_LLM_REDIS_POP_SCRIPT, 1, key
@@ -200,6 +201,8 @@ class MockLLM:
                 return None
             if not isinstance(redis_response_payload, str):
                 raise ValueError("mock_llm redis response must be a JSON string")
+            if redis_response_payload == _MOCK_LLM_QUEUE_EXHAUSTED_MARKER:
+                raise ValueError(f"MockLLM queue exhausted: {key}")
             redis_response = parse_json_value(redis_response_payload, "mock_llm.redis_response")
             if isinstance(redis_response, str):
                 logger.info("mock_llm.redis_response_popped")
@@ -224,9 +227,10 @@ class MockLLM:
         model: str | None = None,
     ) -> None:
         """
-        Если фикстура теста выставила активный capture-scope в Redis,
-        пишет в журнал `mock_llm:capture:<scope>` запись об одном вызове
-        MockLLM (`messages`, `tools`, `response_format`, `model`).
+        Пишет в журнал `mock_llm:capture:<test_scope>` запись об одном вызове
+        MockLLM (`messages`, `tools`, `response_format`, `model`). Scope
+        берётся из лог-контекста текущего запроса; вне test scope журнал
+        не ведётся.
 
         `messages` нормализуются как plain text + role + metadata (ключи
         tool_calls / tool_call_id / system / usage). FilePart-ы выписываются
@@ -235,20 +239,8 @@ class MockLLM:
         """
         if not self._redis_client:
             return
-        try:
-            scope = await self._redis_client.get(_MOCK_CAPTURE_SCOPE_KEY)
-        except Exception as exc:
-            logger.warning(
-                "mock_llm.capture_scope_read_failed",
-                error=str(exc),
-                error_type=type(exc).__name__,
-            )
-            raise
+        scope = resolve_test_scope()
         if scope is None:
-            return
-        if isinstance(scope, bytes):
-            scope = scope.decode("utf-8")
-        if not scope:
             return
 
         normalized_messages = [
@@ -262,7 +254,7 @@ class MockLLM:
         }
         try:
             _ = await self._redis_client.rpush(
-                _mock_capture_key(scope), json.dumps(record, ensure_ascii=False)
+                mock_llm_capture_key(scope), json.dumps(record, ensure_ascii=False)
             )
         except Exception as exc:
             logger.warning(
@@ -889,17 +881,14 @@ def configure_mock_llm_redis(
 ) -> MockLLM | None:
     """Настраивает MockLLM для чтения из Redis.
 
-    При MOCK_LLM_REDIS_KEY процесс читает общую session-очередь (flows/crm worker,
-    session uvicorn). strict=True: исчерпание очереди — ошибка, без паттерн-ответа.
+    Очередь ответов адресуется test scope текущего запроса
+    (`mock_llm:responses:<scope>`), поэтому один процесс безопасно обслуживает
+    параллельные тесты без общих ключей и скана.
     """
     mock_llm = get_global_mock_llm(model)
     if mock_llm:
-        explicit_key = os.environ.get("MOCK_LLM_REDIS_KEY", "").strip()
-        if explicit_key:
-            _ = mock_llm.bind_redis_queue(redis_client, explicit_key, strict=True)
-        else:
-            _ = mock_llm.set_redis_client(redis_client)
-        logger.info("mock_llm.redis_configured", redis_key=explicit_key or "auto")
+        _ = mock_llm.set_redis_client(redis_client)
+        logger.info("mock_llm.redis_configured")
     return mock_llm
 
 
@@ -929,21 +918,15 @@ async def setup_mock_responses_redis(
     redis_client: RedisClient,
     response_queue: list[MockLLMQueuedResponse],
     *,
-    key_override: str | None = None,
+    test_scope: str,
 ) -> None:
     """
-    Записывает mock ответы в Redis для межпроцессного обмена.
+    Записывает mock ответы в Redis-очередь конкретного test scope.
 
-    Тест вызывает эту функцию, Worker читает ответы из Redis.
-    Это позволяет тестам контролировать ответы даже когда Worker
-    в отдельном subprocess.
-
-    key_override: если задан, используется вместо автоматического ключа.
-    Для real_taskiq фикстура mock_llm_redis задаёт ключ mock_llm:responses:<lane>;
-    у соответствующего worker и uvicorn в TEST окружение задаёт MOCK_LLM_REDIS_KEY
-    на тот же ключ (PYTEST_XDIST_WORKER снят у subprocess).
+    Тест пишет очередь, а MockLLM в любом процессе (granian, TaskIQ worker,
+    in-process ASGI) читает её по тому же scope из своего request-контекста.
     """
-    key = key_override or _mock_redis_key()
+    key = mock_llm_responses_key(test_scope)
     _ = await redis_client.set(key, json.dumps(response_queue))
     logger.info("mock_llm.redis_responses_written", count=len(response_queue), key=key)
 
@@ -951,39 +934,33 @@ async def setup_mock_responses_redis(
 async def clear_mock_responses_redis(
     redis_client: RedisClient,
     *,
-    key_override: str | None = None,
+    test_scope: str,
 ) -> None:
-    """Очищает mock ответы из Redis."""
-    key = key_override or _mock_redis_key()
-    _ = await redis_client.delete(key)
+    """Удаляет очередь mock-ответов test scope из Redis."""
+    _ = await redis_client.delete(mock_llm_responses_key(test_scope))
 
 
 async def start_mock_llm_capture(redis_client: RedisClient, scope: str) -> str:
     """
-    Включает запись каждого вызова MockLLM (`messages`, `tools`,
-    `response_format`, `model`) в Redis-список `mock_llm:capture:<scope>`.
-
-    Действует процессно-глобально: пока стоит ключ `mock_llm:capture:active_scope`,
-    `MockLLM.stream` пишет в `mock_llm:capture:<scope>`. Снимается через
-    `stop_mock_llm_capture`. Возвращает имя ключа списка.
+    Готовит журнал вызовов MockLLM для test scope: очищает список
+    `mock_llm:capture:<scope>`. Сама запись включается автоматически —
+    MockLLM пишет журнал для любого вызова с активным test scope.
     """
     if not scope:
         raise ValueError("start_mock_llm_capture: scope не должен быть пустым")
-    list_key = _mock_capture_key(scope)
+    list_key = mock_llm_capture_key(scope)
     _ = await redis_client.delete(list_key)
-    _ = await redis_client.set(_MOCK_CAPTURE_SCOPE_KEY, scope)
     return list_key
 
 
 async def stop_mock_llm_capture(redis_client: RedisClient, scope: str) -> None:
-    """Снимает активный capture-scope и удаляет его список."""
-    _ = await redis_client.delete(_MOCK_CAPTURE_SCOPE_KEY)
-    _ = await redis_client.delete(_mock_capture_key(scope))
+    """Удаляет журнал вызовов MockLLM для test scope."""
+    _ = await redis_client.delete(mock_llm_capture_key(scope))
 
 
 async def read_mock_llm_capture(redis_client: RedisClient, scope: str) -> list[JsonObject]:
     """Возвращает все записанные за scope вызовы MockLLM в порядке прихода."""
-    capture_payloads = await redis_client.lrange(_mock_capture_key(scope), 0, -1)
+    capture_payloads = await redis_client.lrange(mock_llm_capture_key(scope), 0, -1)
     captured_calls: list[JsonObject] = []
     for capture_item in capture_payloads or []:
         captured_calls.append(parse_json_object(capture_item, "mock_llm.capture[]"))

@@ -22,8 +22,6 @@ from core.models.identity_models import Company
 from core.tracing import attributes as trace_attr
 from core.tracing.models import BillingSettlementSpan
 
-pytestmark = pytest.mark.xdist_group("billing_global_resource_base_prices_json")
-
 
 def _settlement_span(
     *,
