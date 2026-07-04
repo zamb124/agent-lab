@@ -54,6 +54,22 @@ async def agent_frontend_http_client(
 
 
 @pytest_asyncio.fixture
+async def agent_frontend_http_client_system(
+    auth_token_system: str,
+    frontend_container,
+    test_company_subdomains_initialized,
+) -> AsyncIterator[AsyncClient]:
+    _ = test_company_subdomains_initialized
+    base_url = await agent_base_url_from_token(auth_token_system, frontend_container)
+    async with AsyncClient(
+        base_url=base_url,
+        follow_redirects=False,
+        cookies={"auth_token": auth_token_system},
+    ) as client:
+        yield client
+
+
+@pytest_asyncio.fixture
 async def agent_frontend_http_anon() -> AsyncIterator[AsyncClient]:
     async with AsyncClient(
         base_url=AGENT_TEST_PUBLIC_ORIGIN,

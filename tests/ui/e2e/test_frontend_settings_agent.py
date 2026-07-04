@@ -6,12 +6,19 @@ import os
 import re
 
 import pytest
+import pytest_asyncio
 from playwright.async_api import Page, expect
 
+from tests.agent._helpers import reset_company_agent_ui_state
 from tests.ui.harness import AppUI
 from tests.ui.scenario_doc import ScenarioRecorder
 
 os.environ.setdefault("UI_E2E_USE_LVH_ME", "1")
+
+
+@pytest_asyncio.fixture
+async def system_agent_settings_empty(frontend_container) -> None:
+    await reset_company_agent_ui_state(frontend_container, company_id="system")
 
 
 async def _open_settings_page(scenario: ScenarioRecorder, frontend_ui: AppUI, page: Page) -> None:
@@ -30,7 +37,6 @@ async def _open_settings_agent_tab(
     scenario: ScenarioRecorder,
     page: Page,
     *,
-    origin: str,
     frontend_ui: AppUI,
 ) -> None:
     await _open_settings_page(scenario, frontend_ui, page)
@@ -110,7 +116,6 @@ async def test_f2_settings_agent_connect_section(
     await _open_settings_agent_tab(
         scenario,
         ui_page_system,
-        origin=frontend_ui.origin,
         frontend_ui=frontend_ui,
     )
     await scenario.step(
@@ -147,11 +152,11 @@ async def test_f3_settings_agent_devices_empty(
     scenario: ScenarioRecorder,
     frontend_ui: AppUI,
     ui_page_system: Page,
+    system_agent_settings_empty: None,
 ) -> None:
     await _open_settings_agent_tab(
         scenario,
         ui_page_system,
-        origin=frontend_ui.origin,
         frontend_ui=frontend_ui,
     )
     await scenario.step(
@@ -188,11 +193,11 @@ async def test_f4_settings_agent_audit_empty(
     scenario: ScenarioRecorder,
     frontend_ui: AppUI,
     ui_page_system: Page,
+    system_agent_settings_empty: None,
 ) -> None:
     await _open_settings_agent_tab(
         scenario,
         ui_page_system,
-        origin=frontend_ui.origin,
         frontend_ui=frontend_ui,
     )
     await scenario.step(
@@ -233,7 +238,6 @@ async def test_f5_settings_agent_pairing_code(
     await _open_settings_agent_tab(
         scenario,
         ui_page_system,
-        origin=frontend_ui.origin,
         frontend_ui=frontend_ui,
     )
     await scenario.step(
@@ -277,7 +281,6 @@ async def test_f6_settings_agent_download_link(
     await _open_settings_agent_tab(
         scenario,
         ui_page_system,
-        origin=frontend_ui.origin,
         frontend_ui=frontend_ui,
     )
     download_link = ui_page_system.locator('frontend-settings-page a[href="/agent"]')
@@ -312,7 +315,6 @@ async def test_f7_settings_agent_release_banner(
     await _open_settings_agent_tab(
         scenario,
         ui_page_system,
-        origin=frontend_ui.origin,
         frontend_ui=frontend_ui,
     )
     await scenario.step(
@@ -355,7 +357,6 @@ async def test_f8_settings_agent_help_text(
     await _open_settings_agent_tab(
         scenario,
         ui_page_system,
-        origin=frontend_ui.origin,
         frontend_ui=frontend_ui,
     )
     await scenario.step(
@@ -384,16 +385,16 @@ async def test_f8_settings_agent_help_text(
 async def test_f9_settings_agent_devices_after_pair(
     frontend_ui: AppUI,
     ui_page_system: Page,
-    agent_frontend_http_client,
-    auth_token: str,
+    agent_frontend_http_client_system,
+    auth_token_system: str,
     unique_id: str,
 ) -> None:
     from tests.agent._helpers import pair_and_register_device
 
     device_name = f"Device {unique_id}"
     await pair_and_register_device(
-        agent_frontend_http_client,
-        auth_cookie=auth_token,
+        agent_frontend_http_client_system,
+        auth_cookie=auth_token_system,
         unique_id=unique_id,
     )
     await ui_page_system.goto(f"{frontend_ui.origin}/settings", wait_until="domcontentloaded")
@@ -420,27 +421,32 @@ async def test_f13_settings_agent_download_href(
 async def test_f10_settings_agent_revoke_device(
     frontend_ui: AppUI,
     ui_page_system: Page,
-    agent_frontend_http_client,
-    auth_token: str,
+    agent_frontend_http_client_system,
+    auth_token_system: str,
     unique_id: str,
 ) -> None:
     from tests.agent._helpers import pair_and_register_device
 
     await pair_and_register_device(
-        agent_frontend_http_client,
-        auth_cookie=auth_token,
+        agent_frontend_http_client_system,
+        auth_cookie=auth_token_system,
         unique_id=unique_id,
     )
     await ui_page_system.goto(f"{frontend_ui.origin}/settings", wait_until="domcontentloaded")
     await _open_settings_agent_tab_raw(ui_page_system, origin=frontend_ui.origin)
+    device_card = ui_page_system.locator("frontend-settings-page .custom-provider-card").filter(
+        has_text=f"Device {unique_id}"
+    )
     ui_page_system.once("dialog", lambda dialog: dialog.accept())
-    revoke_button = ui_page_system.locator("frontend-settings-page glass-button").filter(
+    revoke_button = device_card.locator("glass-button").filter(
         has_text=re.compile(r"Отозвать|Revoke")
-    ).first
+    )
     await expect(revoke_button).to_be_visible(timeout=30_000)
     await revoke_button.click()
     await expect(
-        ui_page_system.get_by_text(re.compile(r"Отключено|Revoked|Offline"))
+        device_card.locator(".caps-line").filter(
+            has_text=re.compile(r"Revoked|Отключено")
+        )
     ).to_be_visible(timeout=30_000)
 
 
@@ -450,33 +456,32 @@ async def test_f10_settings_agent_revoke_device(
 async def test_f11_settings_agent_policy_shell_toggle(
     frontend_ui: AppUI,
     ui_page_system: Page,
-    agent_frontend_http_client,
-    auth_token: str,
+    agent_frontend_http_client_system,
+    auth_token_system: str,
     unique_id: str,
 ) -> None:
     from tests.agent._helpers import pair_and_register_device
 
     await pair_and_register_device(
-        agent_frontend_http_client,
-        auth_cookie=auth_token,
+        agent_frontend_http_client_system,
+        auth_cookie=auth_token_system,
         unique_id=unique_id,
     )
     await ui_page_system.goto(f"{frontend_ui.origin}/settings", wait_until="domcontentloaded")
     await _open_settings_agent_tab_raw(ui_page_system, origin=frontend_ui.origin)
-    toggle_shell = ui_page_system.locator("frontend-settings-page glass-button").filter(
+    device_card = ui_page_system.locator("frontend-settings-page .custom-provider-card").filter(
+        has_text=f"Device {unique_id}"
+    )
+    toggle_shell = device_card.locator("glass-button").filter(
         has_text=re.compile(r"Shell|shell")
-    ).first
+    )
     await expect(toggle_shell).to_be_visible(timeout=30_000)
-    shell_line_before = ui_page_system.locator("frontend-settings-page .caps-line").filter(
+    shell_line_before = device_card.locator(".caps-line").filter(
         has_text=re.compile(r"Shell MCP")
-    ).first
+    )
     before_text = await shell_line_before.inner_text()
     await toggle_shell.click()
-    await expect(
-        ui_page_system.get_by_text(re.compile(r"Device policy updated|Политика устройства обновлена"))
-    ).to_be_visible(timeout=30_000)
-    after_text = await shell_line_before.inner_text()
-    assert before_text != after_text
+    await expect(shell_line_before).not_to_have_text(before_text, timeout=30_000)
 
 
 @pytest.mark.asyncio
@@ -485,21 +490,25 @@ async def test_f11_settings_agent_policy_shell_toggle(
 async def test_f12_settings_agent_audit_after_register(
     frontend_ui: AppUI,
     ui_page_system: Page,
-    agent_frontend_http_client,
-    auth_token: str,
+    agent_frontend_http_client_system,
+    auth_token_system: str,
     unique_id: str,
 ) -> None:
     from tests.agent._helpers import pair_and_register_device
 
     await pair_and_register_device(
-        agent_frontend_http_client,
-        auth_cookie=auth_token,
+        agent_frontend_http_client_system,
+        auth_cookie=auth_token_system,
         unique_id=unique_id,
     )
     await ui_page_system.goto(f"{frontend_ui.origin}/settings", wait_until="domcontentloaded")
     await _open_settings_agent_tab_raw(ui_page_system, origin=frontend_ui.origin)
     await expect(
-        ui_page_system.get_by_text(re.compile(r"Device registered|Устройство зарегистрировано"))
+        ui_page_system.locator("frontend-settings-page .custom-provider-card").filter(
+            has_text=re.compile(r"Device registered|Устройство зарегистрировано")
+        ).filter(
+            has_text=f"Device {unique_id}"
+        )
     ).to_be_visible(timeout=30_000)
 
 
@@ -560,9 +569,13 @@ async def test_f16_settings_agent_toolkits_section(
     frontend_ui: AppUI,
     ui_page_system: Page,
 ) -> None:
-    await _open_settings_agent_tab(scenario, ui_page_system, origin=frontend_ui.origin)
+    await _open_settings_agent_tab(
+        scenario,
+        ui_page_system,
+        frontend_ui=frontend_ui,
+    )
     toolkits_heading = ui_page_system.locator("frontend-settings-page h3").filter(
-        has_text=re.compile(r"Группы инструментов|Agent toolkits")
+        has_text=re.compile(r"Группы инструментов|Agent tool groups")
     )
     await expect(toolkits_heading).to_be_visible(timeout=30_000)
     await scenario.step(

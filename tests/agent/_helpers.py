@@ -8,6 +8,12 @@ import json
 
 from httpx import AsyncClient
 
+from apps.agent.models import AgentDeviceRecord
+from apps.agent.service import (
+    DEVICE_KEY_PREFIX,
+    TUNNEL_ONLINE_PREFIX,
+    _audit_storage_key,
+)
 from core.utils.tokens import get_token_service
 
 AGENT_API_PREFIX = "/frontend/api/agent"
@@ -198,3 +204,20 @@ async def ensure_example_react_flow(
     )
     assert response.status_code == 200, response.text
     return flow_id
+
+
+async def reset_company_agent_ui_state(frontend_container, *, company_id: str) -> None:
+    """Очистить devices и audit компании перед UI-сценариями с пустым состоянием."""
+    records = await frontend_container.shared_storage.get_all_by_prefix(
+        DEVICE_KEY_PREFIX,
+        limit=1000,
+        force_global=True,
+    )
+    for storage_key, raw_value in records.items():
+        device = AgentDeviceRecord.model_validate_json(raw_value)
+        if device.company_id != company_id:
+            continue
+        await frontend_container.shared_storage.delete(storage_key, force_global=True)
+        tunnel_key = f"{TUNNEL_ONLINE_PREFIX}{device.device_id}"
+        await frontend_container.shared_storage.delete(tunnel_key, force_global=True)
+    await frontend_container.redis_client.delete(_audit_storage_key(company_id))
