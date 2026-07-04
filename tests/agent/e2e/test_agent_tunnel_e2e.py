@@ -293,15 +293,22 @@ async def test_e2e_tunnel_online_ttl_refresh_after_ping(
         unique_id=unique_id,
     )
     tunnel_online_key = f"{TUNNEL_ONLINE_PREFIX}{device_id}"
+
+    async def _is_tunnel_online_via_api() -> bool:
+        list_response = await agent_frontend_http_client.get(f"{AGENT_API_PREFIX}/devices")
+        assert list_response.status_code == 200
+        items = list_response.json()["items"]
+        device_item = next(item for item in items if item["device_id"] == device_id)
+        return device_item["is_tunnel_online"] is True
+
     async with connect_agent_tunnel_ws(device_token) as websocket:
         await wait_tunnel_json(websocket, expected_type="policy", timeout=5.0)
+        assert await _is_tunnel_online_via_api() is True
         await frontend_container.shared_storage.delete(tunnel_online_key, force_global=True)
-        online_before = await frontend_container.shared_storage.get(tunnel_online_key, force_global=True)
-        assert online_before is None
+        assert await _is_tunnel_online_via_api() is False
         await websocket.send(json.dumps({"type": "ping"}))
         await wait_tunnel_json(websocket, expected_type="pong", timeout=5.0)
-        online_after = await frontend_container.shared_storage.get(tunnel_online_key, force_global=True)
-        assert online_after is not None
+        assert await _is_tunnel_online_via_api() is True
 
 
 @pytest.mark.asyncio

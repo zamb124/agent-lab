@@ -57,6 +57,7 @@ async def _backfill_missing_colors(
             entity_type.namespace,
             assigned_color,
         )
+        entity_type.color = assigned_color
         updated = True
     return updated
 
@@ -80,13 +81,7 @@ async def _list_entity_types_offset_page(
             offset=offset,
         )
     parent_maps = await _parent_maps_for_types(repo, types)
-    if await _backfill_missing_colors(types, repo):
-        types = await repo.list_by_company(
-            namespace=namespace,
-            limit=limit,
-            offset=offset,
-        )
-        parent_maps = await _parent_maps_for_types(repo, types)
+    _ = await _backfill_missing_colors(types, repo)
     items = [_entity_type_to_response(t, parent_maps[t.namespace]) for t in types]
     return OffsetPage[EntityTypeResponse](
         items=items,

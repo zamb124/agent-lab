@@ -12,8 +12,7 @@ from core.identity.integration_external_author import (
     IntegrationExternalAuthorService,
     integration_external_author_storage_key,
 )
-from core.identity.system_bootstrap import ensure_system_company_exists
-from core.models.identity_models import User
+from core.models.identity_models import Company, User
 from tests.crm.e2e._json_helpers import json_object
 
 pytestmark = pytest.mark.timeout(30, func_only=True)
@@ -24,11 +23,13 @@ async def test_resolve_creates_user_and_mapping(
     crm_container: CRMContainer,
     unique_id: str,
 ) -> None:
-    _ = await ensure_system_company_exists(
-        company_repository=crm_container.company_repository,
-        subdomain_repository=crm_container.subdomain_repository,
+    company_id = f"ext_author_co_{unique_id}"
+    company = Company(
+        company_id=company_id,
+        name=f"External Author Test {unique_id}",
+        members={},
     )
-    company_id = "system"
+    _ = await crm_container.company_repository.set(company)
     provider = "amocrm"
     account = f"sub_{unique_id}"
     ext = "999001"

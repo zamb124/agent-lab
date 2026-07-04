@@ -9,9 +9,11 @@ from datetime import UTC, datetime
 from typing import cast as type_cast
 from typing import override
 
-from sqlalchemy import delete, func, select
+from sqlalchemy import and_, delete, func, or_, select
 from sqlalchemy import update as sa_update
+from sqlalchemy.orm import load_only
 
+from apps.crm.db import entity_type_catalog_cache
 from apps.crm.db.base import BaseCRMRepository
 from apps.crm.db.models import EntityType
 from core.db.utils import get_rowcount
@@ -19,6 +21,30 @@ from core.logging import get_logger
 from core.types import JsonObject
 
 logger = get_logger(__name__)
+
+_CATALOG_LOAD_ONLY = (
+    EntityType.type_id,
+    EntityType.namespace,
+    EntityType.parent_type_id,
+    EntityType.name,
+    EntityType.prompt,
+    EntityType.required_fields,
+    EntityType.optional_fields,
+    EntityType.is_system,
+    EntityType.extractable,
+    EntityType.icon,
+    EntityType.color,
+    EntityType.is_event,
+    EntityType.check_duplicates,
+    EntityType.weight_coefficient,
+    EntityType.public_fields,
+    EntityType.is_context_anchor,
+    EntityType.is_voice_target,
+    EntityType.auto_resolve_suggests,
+    EntityType.description,
+    EntityType.company_id,
+    EntityType.created_at,
+)
 
 
 class EntityTypeRepository(BaseCRMRepository[EntityType]):
@@ -34,6 +60,42 @@ class EntityTypeRepository(BaseCRMRepository[EntityType]):
     def id_field(self) -> str:
         return "type_id"
 
+    @staticmethod
+    def _invalidate_catalog_cache(company_id: str) -> None:
+        entity_type_catalog_cache.invalidate_company(company_id)
+
+    def _list_stmt(
+        self,
+        *,
+        effective_company_id: str,
+        namespace: str | None,
+        include_system: bool,
+        catalog_only: bool,
+    ):
+        stmt = select(EntityType).where(EntityType.company_id == effective_company_id)
+        if namespace is not None:
+            stmt = stmt.where(EntityType.namespace == namespace)
+        if not include_system:
+            stmt = stmt.where(EntityType.is_system.is_(False))
+        if catalog_only:
+            stmt = stmt.options(load_only(*_CATALOG_LOAD_ONLY))
+        return stmt.order_by(EntityType.is_system.desc(), EntityType.type_id.asc())
+
+    @staticmethod
+    def _keyset_after_cursor(last: EntityType):
+        if last.is_system:
+            return or_(
+                EntityType.is_system.is_(False),
+                and_(
+                    EntityType.is_system.is_(True),
+                    EntityType.type_id > last.type_id,
+                ),
+            )
+        return and_(
+            EntityType.is_system.is_(False),
+            EntityType.type_id > last.type_id,
+        )
+
     async def list_by_company(
         self,
         include_system: bool = True,
@@ -42,21 +104,61 @@ class EntityTypeRepository(BaseCRMRepository[EntityType]):
         company_id: str | None = None,
         limit: int = 200,
         offset: int = 0,
+        catalog_only: bool = False,
     ) -> list[EntityType]:
         effective_company_id = company_id if company_id is not None else self._get_company_id()
         async with self._db.session() as session:
-            stmt = select(EntityType).where(EntityType.company_id == effective_company_id)
-            if namespace is not None:
-                stmt = stmt.where(EntityType.namespace == namespace)
-            if not include_system:
-                stmt = stmt.where(EntityType.is_system.is_(False))
-            stmt = (
-                stmt.order_by(EntityType.is_system.desc(), EntityType.type_id.asc())
-                .limit(limit)
-                .offset(offset)
-            )
+            stmt = self._list_stmt(
+                effective_company_id=effective_company_id,
+                namespace=namespace,
+                include_system=include_system,
+                catalog_only=catalog_only,
+            ).limit(limit).offset(offset)
             result = await session.execute(stmt)
             return list(result.scalars().all())
+
+    async def _fetch_all_pages(
+        self,
+        *,
+        effective_company_id: str,
+        namespace: str | None,
+        include_system: bool,
+        catalog_only: bool,
+        page_limit: int,
+    ) -> list[EntityType]:
+        total = await self.count_all_for_company(namespace=namespace, company_id=effective_company_id)
+        if total == 0:
+            return []
+        if total <= page_limit:
+            return await self.list_by_company(
+                include_system=include_system,
+                namespace=namespace,
+                company_id=effective_company_id,
+                limit=total,
+                offset=0,
+                catalog_only=catalog_only,
+            )
+
+        items: list[EntityType] = []
+        cursor: EntityType | None = None
+        while True:
+            async with self._db.session() as session:
+                stmt = self._list_stmt(
+                    effective_company_id=effective_company_id,
+                    namespace=namespace,
+                    include_system=include_system,
+                    catalog_only=catalog_only,
+                ).limit(page_limit)
+                if cursor is not None:
+                    stmt = stmt.where(self._keyset_after_cursor(cursor))
+                result = await session.execute(stmt)
+                page = list(result.scalars().all())
+            if not page:
+                return items
+            items.extend(page)
+            if len(page) < page_limit:
+                return items
+            cursor = page[-1]
 
     async def get_parent_type_id_map_for_namespace(self, namespace: str) -> dict[str, str | None]:
         """type_id -> parent_type_id в рамках одного namespace."""
@@ -76,41 +178,59 @@ class EntityTypeRepository(BaseCRMRepository[EntityType]):
     async def count_all_for_company(
         self,
         namespace: str | None = None,
+        *,
+        company_id: str | None = None,
     ) -> int:
-        company_id = self._get_company_id()
+        effective_company_id = company_id if company_id is not None else self._get_company_id()
         async with self._db.session() as session:
             stmt = (
                 select(func.count())
                 .select_from(EntityType)
-                .where(EntityType.company_id == company_id)
+                .where(EntityType.company_id == effective_company_id)
             )
             if namespace is not None:
                 stmt = stmt.where(EntityType.namespace == namespace)
             result = await session.execute(stmt)
-            return result.scalar() or 0
+            scalar = result.scalar()
+            if scalar is None:
+                raise RuntimeError("count_all_for_company: COUNT returned NULL")
+            return int(scalar)
 
     async def load_all_entity_types_for_company(
         self,
         *,
         namespace: str | None = None,
         page_limit: int = 200,
+        company_id: str | None = None,
+        catalog_only: bool = True,
     ) -> list[EntityType]:
         if page_limit < 1:
             raise ValueError("page_limit must be positive")
-        offset = 0
-        items: list[EntityType] = []
-        while True:
-            page = await self.list_by_company(
-                namespace=namespace,
-                limit=page_limit,
-                offset=offset,
-            )
-            if not page:
-                return items
-            items.extend(page)
-            if len(page) < page_limit:
-                return items
-            offset += page_limit
+        effective_company_id = company_id if company_id is not None else self._get_company_id()
+        cached = entity_type_catalog_cache.get_cached(effective_company_id, namespace)
+        if cached is not None:
+            return list(cached)
+        items = await self._fetch_all_pages(
+            effective_company_id=effective_company_id,
+            namespace=namespace,
+            include_system=True,
+            catalog_only=catalog_only,
+            page_limit=page_limit,
+        )
+        entity_type_catalog_cache.put_cached(effective_company_id, namespace, items)
+        return list(items)
+
+    async def list_catalog_by_namespace(
+        self,
+        namespace: str,
+        *,
+        company_id: str | None = None,
+    ) -> list[EntityType]:
+        return await self.load_all_entity_types_for_company(
+            namespace=namespace,
+            company_id=company_id,
+            catalog_only=True,
+        )
 
     async def get_by_type_id(
         self,
@@ -201,6 +321,7 @@ class EntityTypeRepository(BaseCRMRepository[EntityType]):
             )
             _ = await session.execute(stmt)
             await session.commit()
+        self._invalidate_catalog_cache(company_id)
 
     async def merge_optional_fields_if_absent(
         self,
@@ -230,6 +351,7 @@ class EntityTypeRepository(BaseCRMRepository[EntityType]):
                     current[key] = value
             entity_type.optional_fields = current
             await session.commit()
+        self._invalidate_catalog_cache(company_id)
 
     async def update_color(self, type_id: str, namespace: str, color: str) -> None:
         company_id = self._get_company_id()
@@ -245,6 +367,7 @@ class EntityTypeRepository(BaseCRMRepository[EntityType]):
             )
             _ = await session.execute(stmt)
             await session.commit()
+        self._invalidate_catalog_cache(company_id)
 
     async def create_custom_type(
         self,
@@ -307,6 +430,12 @@ class EntityTypeRepository(BaseCRMRepository[EntityType]):
         )
         return await self.create(clone)
 
+    @override
+    async def create(self, entity: EntityType) -> EntityType:
+        created = await super().create(entity)
+        self._invalidate_catalog_cache(created.company_id)
+        return created
+
     async def delete_entity_type_scoped(
         self,
         type_id: str,
@@ -323,4 +452,7 @@ class EntityTypeRepository(BaseCRMRepository[EntityType]):
             )
             result = await session.execute(stmt)
             await session.commit()
-            return get_rowcount(result) > 0
+            deleted = get_rowcount(result) > 0
+        if deleted:
+            self._invalidate_catalog_cache(effective_company_id)
+        return deleted

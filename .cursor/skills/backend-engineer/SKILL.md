@@ -28,14 +28,16 @@ AI-layer — только `core.ai`: provider specs, shared model catalog, resol
 
 ## Проверки
 
-После правок кода:
+После правок кода — **обязательно до завершения задачи**, не после ответа пользователю:
 
 ```bash
-make lint FILE=<изменённый-файл>   # точечно
-make lint                          # всё перед PR
-make lint-ts                       # только frontend
+uv run ruff check <изменённые-py-файлы>   # или apps core при широких правках
+uv run basedpyright --level warning --warnings apps core   # минимум; warnings = fail в test-static
+make lint <path>                            # точечно: ruff + basedpyright на файл
+make lint                                   # всё перед PR
+make lint-ts                                # только frontend
 ```
 
 После узкой правки — целевой `pytest`. После архитектурного рефакторинга — `make test`. Если менялись gate/coverage/тест-инфра или пользователь просил coverage — `make test-cov`.
 
-Готово только если ruff зелёный, basedpyright `errorCount == 0`, `analyze_imports.py` показывает `Total local imports: 0`, тесты зелёные.
+**Задача не завершена**, пока: ruff зелёный; `basedpyright --level warning --warnings apps core` exit 0 (0 errors **и** 0 warnings в gate); `analyze_imports.py` → `Total local imports: 0`; релевантные тесты зелёные.

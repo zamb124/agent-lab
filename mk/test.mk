@@ -1,6 +1,7 @@
 .PHONY: test test-until-fail test-all test-static test-up test-down test-reset test-cov test-cov-all test-cov-report test-unit test-network test-ui test-ui-doc test-ui-components test-frontend-core test-frontend-core-canon test-frontend-core-unit test-frontend-core-browser test-profile check-strict-agent-architecture check-wider-repo-strictness agent-ensure test-agent test-agent-e2e test-agent-desktop-e2e
 
 WORKERS ?= 5
+DB_PROFILE ?= 1
 PYTEST_COMMAND_TIMEOUT_SECONDS ?= 5400
 PYTEST_MAX_WORKER_RESTART ?= 2
 RUN_UI_IN_TEST ?= 0
@@ -121,7 +122,11 @@ test:
 	@AGENT_ARTIFACT_MODE=release $(MAKE) --no-print-directory agent-ensure
 	@$(MAKE) --no-print-directory test-frontend-core
 	@$(MAKE) --no-print-directory test-up
-	@echo "=== 1/3 Запуск unit/API тестов в $(WORKERS) воркерах ==="
+	@if [ "$(DB_PROFILE)" = "1" ]; then \
+		echo "=== DB profile: reset pg_stat_statements ==="; \
+		uv run python -m scripts.db_test_profile reset; \
+	fi
+	@echo "=== 1/4 Запуск unit/API тестов в $(WORKERS) воркерах ==="
 	@set +e; \
 	phase1_rc=0; \
 	phase2_rc=0; \
@@ -135,9 +140,17 @@ test:
 		$(_PYTEST_IGNORE_AGENT_E2E) \
 		-m "not integration and not network and not agent_build_release"; \
 	phase1_rc=$$?; \
+	if [ "$(DB_PROFILE)" = "1" ]; then \
+		echo ""; \
+		echo "=== DB profile: collect + report (phase 1) ==="; \
+		DB_RUN_ID=$$(date +%Y%m%dT%H%M%S); \
+		uv run python -m scripts.db_test_profile collect --run-id $$DB_RUN_ID; \
+		uv run python -m scripts.db_test_profile report --run-id $$DB_RUN_ID; \
+		echo "DB profile: terminal summary above; HTML reports/db_test_profile/latest/report.html"; \
+	fi; \
 	if [ $$phase1_rc -ne 0 ]; then \
 		echo ""; \
-		echo "=== 2/3 Перезапуск упавших тестов (без параллелизации) ==="; \
+		echo "=== 2/4 Перезапуск упавших тестов (без параллелизации) ==="; \
 			uv run python scripts/run_pytest_lastfailed.py --timeout $(PYTEST_COMMAND_TIMEOUT_SECONDS) -- -n 1 --max-worker-restart=$(PYTEST_MAX_WORKER_RESTART) \
 				$(_PYTEST_IGNORE_UI) \
 				$(_PYTEST_IGNORE_AGENT_DESKTOP) \
@@ -149,7 +162,7 @@ test:
 		fi; \
 	else \
 		echo ""; \
-		echo "=== 2/3 Перезапуск упавших тестов пропущен: первая фаза зелёная ==="; \
+		echo "=== 2/4 Перезапуск упавших тестов пропущен: первая фаза зелёная ==="; \
 	fi; \
 	if [ "$(RUN_UI_IN_TEST)" = "1" ]; then \
 		echo ""; \
@@ -163,8 +176,10 @@ test:
 	uv run python scripts/check_agent_goose_tool_contract.py; \
 	uv run python scripts/check_agent_test_no_monkeypatch.py; \
 	AGENT_ARTIFACT_MODE=release uv run python scripts/agent_build.py ensure-local --artifact-mode release --version-sha "$$(git rev-parse HEAD)"; \
+	rm -f /tmp/platform_test_pytest_controller.pid; \
 	uv run pytest tests/agent/e2e tests/flows/api/test_agent_platform_mcp.py tests/frontend/api/test_humanitec_agent_api.py -n0 --timeout=180; \
 	phase4a_rc=$$?; \
+	rm -f /tmp/platform_test_pytest_controller.pid; \
 	RUN_UI_IN_TEST=1 UI_E2E_USE_LVH_ME=1 uv run pytest tests/agent/desktop_e2e tests/ui/e2e/test_frontend_settings_agent.py -n0 --timeout=900; \
 	phase4c_rc=$$?; \
 	if [ $$phase1_rc -ne 0 ] || [ $$phase2_rc -ne 0 ] || [ $$phase3_rc -ne 0 ] || [ $$phase4a_rc -ne 0 ] || [ $$phase4c_rc -ne 0 ]; then \
@@ -192,7 +207,7 @@ test-all:
 	@$(MAKE) --no-print-directory agent-ensure
 	@$(MAKE) --no-print-directory test-frontend-core
 	@$(MAKE) --no-print-directory test-up
-	@echo "=== 1/3 Запуск всех unit/API тестов в $(WORKERS) воркерах ==="
+	@echo "=== 1/4 Запуск всех unit/API тестов в $(WORKERS) воркерах ==="
 	@set +e; \
 	phase1_rc=0; \
 	phase2_rc=0; \
@@ -203,7 +218,7 @@ test-all:
 	phase1_rc=$$?; \
 	if [ $$phase1_rc -ne 0 ]; then \
 		echo ""; \
-		echo "=== 2/3 Перезапуск упавших тестов (без параллелизации) ==="; \
+		echo "=== 2/4 Перезапуск упавших тестов (без параллелизации) ==="; \
 			uv run python scripts/run_pytest_lastfailed.py --timeout $(PYTEST_COMMAND_TIMEOUT_SECONDS) -- -n 1 --max-worker-restart=$(PYTEST_MAX_WORKER_RESTART) \
 				$(_PYTEST_IGNORE_UI) -v; \
 		phase2_rc=$$?; \
@@ -212,7 +227,7 @@ test-all:
 		fi; \
 	else \
 		echo ""; \
-		echo "=== 2/3 Перезапуск упавших тестов пропущен: первая фаза зелёная ==="; \
+		echo "=== 2/4 Перезапуск упавших тестов пропущен: первая фаза зелёная ==="; \
 	fi; \
 	echo ""; \
 	echo "=== 3/3 Запуск E2E UI (pytest tests/ui/e2e) ==="; \

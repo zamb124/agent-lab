@@ -8,9 +8,11 @@ TaskIQ worker запускается автоматически для тест�
 Фикстуры сервисов и клиентов загружаются из tests/fixtures/ через pytest_plugins.
 """
 
-import asyncio
-import hashlib
 import os
+
+os.environ.setdefault("LOGGING__LEVEL", "WARNING")
+
+import asyncio
 import sys
 import uuid
 from collections.abc import Generator
@@ -33,6 +35,7 @@ pytest_plugins = [
     "tests.fixtures.mcp_registry_stub",
     "tests.fixtures.embed_e2e",
     "tests.agent.fixtures.local_releases",
+    "tests.agent.fixtures.e2e",
     "tests.profiling.plugin",
 ]
 
@@ -269,10 +272,9 @@ def _is_sandbox_runtime_test(nodeid: str) -> bool:
 
 
 def _sandbox_xdist_group(nodeid: str) -> str:
-    """Три непересекающихся очереди sandbox-тестов под -n5 (меньше гонок code_runner)."""
-    digest = hashlib.sha256(nodeid.encode("utf-8")).hexdigest()
-    bucket = int(digest[:8], 16) % 3
-    return f"code_sandbox_{bucket}"
+    """Единая очередь sandbox-тестов: один pytest-воркер, без параллели code_runner."""
+    _ = nodeid
+    return "code_sandbox"
 
 
 @pytest.hookimpl(tryfirst=True)

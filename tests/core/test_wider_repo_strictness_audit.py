@@ -1,9 +1,13 @@
+import pytest
+
 from scripts.audit_wider_repo_strictness import (
     collect_getattr_findings,
     collect_text_findings,
     strict_text_debt,
     unclassified_getattr_debt,
 )
+
+pytestmark = pytest.mark.timeout(30, func_only=True)
 
 
 def test_wider_repo_getattr_defaults_are_classified() -> None:

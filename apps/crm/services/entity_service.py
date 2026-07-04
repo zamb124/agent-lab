@@ -3179,12 +3179,16 @@ class EntityService:
             return NOTE_ROOT_ENTITY_TYPE_ID
         return NOTE_ROOT_ENTITY_TYPE_ID
 
-    async def _collect_note_family_type_ids(self, namespace: str) -> set[str]:
+    async def _collect_note_family_type_ids(
+        self,
+        namespace: str,
+        *,
+        entity_types: list[EntityType] | None = None,
+    ) -> set[str]:
         """Возвращает множество type_id, принадлежащих ветке note (включая note и дочерние типы)."""
-        all_types = await self._entity_type_repo.list_by_company(
-            include_system=True,
-            namespace=namespace,
-        )
+        all_types = entity_types
+        if all_types is None:
+            all_types = await self._entity_type_repo.list_catalog_by_namespace(namespace)
         children_by_parent: dict[str | None, list[str]] = {}
         for et in all_types:
             children_by_parent.setdefault(et.parent_type_id, []).append(et.type_id)
@@ -3259,7 +3263,7 @@ class EntityService:
         """
         namespace = self._resolve_namespace_for_write(request.namespace)
         await self._ensure_namespace_exists(namespace)
-        entity_types = await self._load_all_entity_types_for_namespace(namespace)
+        entity_types = await self._entity_type_repo.list_catalog_by_namespace(namespace)
         relationship_types = await self._relationship_type_repo.get_with_prompts()
 
         prompt = self._build_composite_prompt(
@@ -3440,21 +3444,7 @@ class EntityService:
         return ai_result
 
     async def _load_all_entity_types_for_namespace(self, namespace: str) -> list[EntityType]:
-        page_limit = 200
-        offset = 0
-        collected: list[EntityType] = []
-        while True:
-            batch = await self._entity_type_repo.list_by_company(
-                namespace=namespace,
-                limit=page_limit,
-                offset=offset,
-            )
-            if not batch:
-                return collected
-            collected.extend(batch)
-            if len(batch) < page_limit:
-                return collected
-            offset += page_limit
+        return await self._entity_type_repo.list_catalog_by_namespace(namespace)
 
     def _build_composite_prompt(
         self,
@@ -3798,7 +3788,10 @@ class EntityService:
         if not isinstance(entities_data, list):
             entities_data = []
         entity_list: list[AIExtractedEntity] = []
-        note_family_type_ids = await self._collect_note_family_type_ids(namespace)
+        note_family_type_ids = await self._collect_note_family_type_ids(
+            namespace,
+            entity_types=entity_types,
+        )
         note_family_lc = {str(t).lower() for t in note_family_type_ids}
         for i, raw_ent in enumerate(cast(list[object], entities_data)):
             ent_payload = _as_json_object(raw_ent)

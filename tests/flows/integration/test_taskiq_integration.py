@@ -22,10 +22,9 @@ from apps.flows.src.tasks.flow_tasks import process_flow_task
 from apps.flows.src.tasks.tool_tasks import execute_tool
 from core.clients.llm import LLMToolCall
 from core.state import ExecutionState, InterruptData
+from tests.fixtures.taskiq_timeouts import TASKIQ_WAIT_RESULT_TIMEOUT_SECONDS
 
 pytestmark = pytest.mark.real_taskiq
-
-_TASKIQ_WAIT_RESULT_TIMEOUT_SECONDS = 60
 
 
 @pytest.fixture(autouse=True)
@@ -82,10 +81,10 @@ class TestTaskIQToolExecution:
             context_data=mock_context.to_dict(),
         )
         try:
-            result = await task.wait_result(timeout=_TASKIQ_WAIT_RESULT_TIMEOUT_SECONDS)
+            result = await task.wait_result(timeout=TASKIQ_WAIT_RESULT_TIMEOUT_SECONDS)
         except TaskiqResultTimeoutError as exc:
             raise AssertionError(
-                f"TaskIQ worker не обработал задачу за {_TASKIQ_WAIT_RESULT_TIMEOUT_SECONDS} секунд "
+                f"TaskIQ worker не обработал задачу за {TASKIQ_WAIT_RESULT_TIMEOUT_SECONDS} секунд "
                 "(проверьте, что воркер запущен и Redis доступен)"
             ) from exc
         assert not result.is_err, f"Task failed: {result.error}"
@@ -117,7 +116,7 @@ class TestTaskIQToolExecution:
             tasks.append((i, task))
         results = []
         for i, task in tasks:
-            result = await task.wait_result(timeout=_TASKIQ_WAIT_RESULT_TIMEOUT_SECONDS)
+            result = await task.wait_result(timeout=TASKIQ_WAIT_RESULT_TIMEOUT_SECONDS)
             assert not result.is_err, f"Task {i} failed: {result.error}"
             results.append(result.return_value["result"])
         expected = [0, 2, 8, 18, 32]
@@ -150,7 +149,7 @@ class TestTaskIQToolExecution:
         task = await execute_tool.kiq(
             tool_config, {"value": "test"}, state_dict, context_data=mock_context.to_dict()
         )
-        result = await task.wait_result(timeout=_TASKIQ_WAIT_RESULT_TIMEOUT_SECONDS)
+        result = await task.wait_result(timeout=TASKIQ_WAIT_RESULT_TIMEOUT_SECONDS)
         assert not result.is_err
         assert result.return_value["tool_id"] == "taskiq_state_tool"
         assert result.return_value["result"] == "STATE:test"
@@ -268,7 +267,7 @@ class TestTaskIQFlowExecution:
             content="Test",
             context_data=mock_context.model_dump(),
         )
-        result = await task.wait_result(timeout=_TASKIQ_WAIT_RESULT_TIMEOUT_SECONDS)
+        result = await task.wait_result(timeout=TASKIQ_WAIT_RESULT_TIMEOUT_SECONDS)
         assert not result.is_err, f"Task failed: {result.error}"
         assert result.return_value["task_state"] == "completed"
         assert result.return_value["response"] == "Done"
@@ -325,7 +324,7 @@ class TestTaskIQInterruptResume:
             content="Start",
             context_data=mock_context.model_dump(),
         )
-        result = await task.wait_result(timeout=_TASKIQ_WAIT_RESULT_TIMEOUT_SECONDS)
+        result = await task.wait_result(timeout=TASKIQ_WAIT_RESULT_TIMEOUT_SECONDS)
         assert not result.is_err, f"Task failed: {result.error}"
         assert result.return_value["task_state"] == "input-required"
         interrupt = InterruptData.model_validate(result.return_value["interrupt"])
@@ -351,7 +350,7 @@ class TestTaskIQInterruptResume:
             content="Start",
             context_data=mock_context.model_dump(),
         )
-        result1 = await task1.wait_result(timeout=_TASKIQ_WAIT_RESULT_TIMEOUT_SECONDS)
+        result1 = await task1.wait_result(timeout=TASKIQ_WAIT_RESULT_TIMEOUT_SECONDS)
         if result1.is_err:
             print("\n❌ Task1 failed!")
             print(f"Error: {result1.error}")
@@ -365,7 +364,7 @@ class TestTaskIQInterruptResume:
             is_resume=True,
             context_data=mock_context.model_dump(),
         )
-        result2 = await task2.wait_result(timeout=_TASKIQ_WAIT_RESULT_TIMEOUT_SECONDS)
+        result2 = await task2.wait_result(timeout=TASKIQ_WAIT_RESULT_TIMEOUT_SECONDS)
         assert not result2.is_err, f"Resume failed: {result2.error}"
         assert result2.return_value["task_state"] == "completed"
         assert "Alice" in result2.return_value["response"]

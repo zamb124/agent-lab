@@ -33,6 +33,7 @@ from core.db.models import (
 from core.db.models import (
     Users as UsersModel,
 )
+from core.db.request_scope_kv_cache import invalidate_key, lookup_memoized, set_memoized
 from core.db.utils import get_rowcount
 from core.logging import get_logger
 from core.models.context_models import Context
@@ -234,11 +235,21 @@ class Storage:
         final_key, company_id = self._get_company_key(key, force_global)
         table_name = self._get_table_name(key, company_id)
 
+        memo = lookup_memoized(table_name, final_key, for_update=for_update)
+        if memo.hit:
+            return memo.value
+
         if db_session:
-            return await self._get_with_session(final_key, table_name, db_session, for_update=for_update)
+            resolved = await self._get_with_session(final_key, table_name, db_session, for_update=for_update)
+            if not for_update and resolved is not None:
+                set_memoized(table_name, final_key, resolved)
+            return resolved
 
         async with self.get_session() as session:
-            return await self._get_with_session(final_key, table_name, session, for_update=for_update)
+            resolved = await self._get_with_session(final_key, table_name, session, for_update=for_update)
+            if not for_update and resolved is not None:
+                set_memoized(table_name, final_key, resolved)
+            return resolved
 
     async def _get_with_session(
         self,
@@ -335,12 +346,15 @@ class Storage:
         table_name = self._get_table_name(key, company_id)
 
         if db_session:
-            return await self._set_with_session(final_key, value, ttl, table_name, db_session)
+            result = await self._set_with_session(final_key, value, ttl, table_name, db_session)
+            invalidate_key(table_name, final_key)
+            return result
 
         async with self.get_session() as session:
             result = await self._set_with_session(final_key, value, ttl, table_name, session)
             await session.commit()
             await session.flush()  # Убеждаемся что изменения видны
+            invalidate_key(table_name, final_key)
             return result
 
     async def _set_with_session(
@@ -417,12 +431,15 @@ class Storage:
         table_name = self._get_table_name(key, company_id)
 
         if db_session:
-            return await self._delete_with_session(final_key, table_name, db_session)
+            result = await self._delete_with_session(final_key, table_name, db_session)
+            invalidate_key(table_name, final_key)
+            return result
 
         async with self.get_session() as session:
             result = await self._delete_with_session(final_key, table_name, session)
             await session.commit()
             await session.flush()  # Убеждаемся что изменения видны
+            invalidate_key(table_name, final_key)
             return result
 
     async def _delete_with_session(

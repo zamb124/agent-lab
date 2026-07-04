@@ -14,12 +14,20 @@ services:
       - "54322:5432"
     volumes:
       - ./migrations/postgres/init.sql:/docker-entrypoint-initdb.d/01-init-databases.sql:ro
+      - ./reports/postgres-test-logs:/var/log/postgresql
     command: >
       postgres
       -c max_connections=300
-      -c shared_preload_libraries=pg_stat_statements
+      -c shared_preload_libraries=pg_stat_statements,auto_explain
       -c pg_stat_statements.track=all
       -c pg_stat_statements.max=10000
+      -c auto_explain.log_min_duration=100ms
+      -c auto_explain.log_analyze=true
+      -c auto_explain.log_buffers=true
+      -c auto_explain.log_format=json
+      -c auto_explain.log_nested_statements=true
+      -c logging_collector=on
+      -c log_directory=/var/log/postgresql
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U platform_user -d platform_shared"]
       interval: 5s

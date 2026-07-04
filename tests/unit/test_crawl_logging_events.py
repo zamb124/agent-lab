@@ -5,6 +5,7 @@ from __future__ import annotations
 import pytest
 
 import core.crawl.logging_events as crawl_logging_events
+from core.config.models import LoggingConfig
 from core.crawl.logging_events import log_crawl_url_outcome
 from core.logging import enter_request_scope, exit_request_scope, get_logger
 from core.logging.attributes import EVENT_CRAWL_URL_OUTCOME
@@ -15,7 +16,7 @@ from core.types import JsonObject
 @pytest.fixture
 def crawl_log_scope():
     reset_logging_for_tests()
-    setup_logging("search_worker")
+    setup_logging("search_worker", LoggingConfig(level="INFO"))
     token = enter_request_scope(
         request_id="test-request-id",
         trace_id="crawl:test:job",

@@ -61,19 +61,7 @@ class NamespaceTemplateService:
         return context.active_company.company_id
 
     async def _load_company_types(self) -> list[EntityType]:
-        items: list[EntityType] = []
-        offset = 0
-        while True:
-            page = await self._entity_type_repo.list_by_company(
-                limit=self._PAGE_LIMIT,
-                offset=offset,
-            )
-            if not page:
-                return items
-            items.extend(page)
-            if len(page) < self._PAGE_LIMIT:
-                return items
-            offset += self._PAGE_LIMIT
+        return await self._entity_type_repo.load_all_entity_types_for_company(catalog_only=False)
 
     async def _ensure_template_db_core_note_task_rows(self, template_key: str) -> None:
         """Идемпотентно добавляет в шаблон строки note и task, если их ещё нет."""

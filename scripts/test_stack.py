@@ -30,12 +30,22 @@ from datetime import UTC, datetime
 from pathlib import Path
 from urllib.error import HTTPError, URLError
 from urllib.parse import urlparse
-from urllib.request import urlopen
+from urllib.request import Request, urlopen
 
 import redis
 import redis.exceptions as redis_exceptions
 
+from core.capabilities import (
+    CapabilityExecutionContext,
+    CapabilityExecutionTokenClaims,
+    CapabilityManifest,
+    CodeExecutionRequest,
+    execution_token_exp,
+    issue_execution_token,
+    locked_down_code_sandbox_policy,
+)
 from core.test_scope import TEST_SCOPE_DEFAULT_ENV, TEST_SCOPE_STATIC_E2E
+from core.types import JsonObject, JsonValue, require_json_object, require_json_value
 from tests.fixtures.test_database_env import TEST_DATABASE_ENV
 
 STACK_MANIFEST_PATH = Path("/tmp/platform_test_stack.json")
@@ -363,6 +373,112 @@ def _http_ready(url: str) -> bool:
         return False
 
 
+def _http_get_json(url: str, *, timeout_seconds: float) -> JsonValue:
+    with urlopen(url, timeout=timeout_seconds) as response:
+        status_code = int(response.status)
+        if status_code < 200 or status_code >= 300:
+            raise HTTPError(url, status_code, response.reason, response.headers, None)
+        return require_json_value(json.loads(response.read().decode("utf-8")), field_name="response")
+
+
+def _http_post_json(url: str, payload: JsonObject, *, timeout_seconds: float) -> JsonValue:
+    request = Request(
+        url,
+        data=json.dumps(payload).encode("utf-8"),
+        headers={
+            "Content-Type": "application/json",
+            "X-Request-Id": "test-stack-probe",
+            "X-Trace-Id": "test-stack-probe-trace",
+        },
+        method="POST",
+    )
+    with urlopen(request, timeout=timeout_seconds) as response:
+        status_code = int(response.status)
+        if status_code < 200 or status_code >= 300:
+            raise HTTPError(url, status_code, response.reason, response.headers, None)
+        return require_json_value(json.loads(response.read().decode("utf-8")), field_name="response")
+
+
+def _probe_capability_gateway_manifest() -> str | None:
+    url = "http://127.0.0.1:9016/capability-gateway/api/v1/capabilities/manifest"
+    try:
+        payload = require_json_object(
+            _http_get_json(url, timeout_seconds=10.0),
+            field_name="capability_gateway_manifest",
+        )
+        if "version" not in payload:
+            return f"capability_gateway manifest probe: unexpected payload {payload!r}"
+    except (HTTPError, URLError, TimeoutError, OSError, json.JSONDecodeError) as exc:
+        return f"capability_gateway manifest probe failed: {exc}"
+    return None
+
+
+def _probe_code_runner_python_execute() -> str | None:
+    claims = CapabilityExecutionTokenClaims(
+        company_id="system",
+        user_id="test_stack_probe_user",
+        flow_id="test_stack_probe_flow",
+        branch_id="main",
+        session_id="test_stack_probe_flow:test_stack_probe_context",
+        task_id="test_stack_probe_task",
+        context_id="test_stack_probe_context",
+        channel="a2a",
+        request_id="test-stack-code-runner-probe",
+        exp=execution_token_exp(300),
+    )
+    wall_time_limit_seconds = 30
+    request = CodeExecutionRequest(
+        kind="node",
+        language="python",
+        code='async def run(args, state):\n    return {"probe": "ok"}\n',
+        entrypoint=None,
+        wall_time_limit_seconds=wall_time_limit_seconds,
+        sandbox=locked_down_code_sandbox_policy(
+            wall_time_limit_seconds=wall_time_limit_seconds,
+            cpu_time_limit_seconds=wall_time_limit_seconds,
+            memory_limit_mb=256,
+            filesystem_limit_mb=64,
+            stdout_stderr_limit_bytes=1_048_576,
+        ),
+        args={},
+        state={},
+        context=CapabilityExecutionContext(
+            execution_token=issue_execution_token(claims),
+            company_id=claims.company_id,
+            user_id=claims.user_id,
+            flow_id=claims.flow_id,
+            branch_id=claims.branch_id,
+            session_id=claims.session_id,
+            task_id=claims.task_id,
+            context_id=claims.context_id,
+            channel=claims.channel,
+            request_id=claims.request_id,
+            trace_id="test-stack-code-runner-probe-trace",
+        ),
+        capability_manifest=CapabilityManifest(version="test-stack-probe", capabilities=[]),
+    )
+    url = "http://127.0.0.1:9017/code-runner-python/api/v1/execute"
+    try:
+        payload = require_json_object(
+            _http_post_json(url, request.model_dump(mode="json"), timeout_seconds=30.0),
+            field_name="code_runner_execute_response",
+        )
+        if payload.get("status") != "completed":
+            return f"code_runner_python execute probe failed: {payload!r}"
+    except (HTTPError, URLError, TimeoutError, OSError, json.JSONDecodeError) as exc:
+        return f"code_runner_python execute probe failed: {exc}"
+    return None
+
+
+def _run_sandbox_execute_probes() -> list[str]:
+    errors: list[str] = []
+    for probe in (_probe_capability_gateway_manifest, _probe_code_runner_python_execute):
+        failure = probe()
+        if failure is not None:
+            errors.append(failure)
+    return errors
+
+
 def _redis_client(redis_url: str) -> redis.Redis:
     parsed = urlparse(redis_url)
     if parsed.hostname is None or parsed.port is None:
@@ -619,6 +735,15 @@ def cmd_up() -> int:
     if errors:
         print("test_stack: readiness FAILED, останавливаю стек:", file=sys.stderr)
         for error_text in errors:
+            print(f"\n--- {error_text}", file=sys.stderr)
+        for _, process in started:
+            _terminate_process_group(process.pid)
+        return 1
+
+    probe_errors = _run_sandbox_execute_probes()
+    if probe_errors:
+        print("test_stack: sandbox execute probes FAILED, останавливаю стек:", file=sys.stderr)
+        for error_text in probe_errors:
             print(f"\n--- {error_text}", file=sys.stderr)
         for _, process in started:
             _terminate_process_group(process.pid)

@@ -40,22 +40,6 @@ packages = ["apps", "core"]
 "core/files/writer/fonts/NotoSans-Regular.ttf" = "core/files/writer/fonts/NotoSans-Regular.ttf"
 "core/files/writer/fonts/OFL.txt" = "core/files/writer/fonts/OFL.txt"
 
-[tool.pytest.ini_options]
-asyncio_mode = "auto"
-asyncio_default_fixture_loop_scope = "session"
-asyncio_default_test_loop_scope = "session"
-markers = [
-    "unit: unit tests",
-    "integration: integration tests that require external services",
-    "e2e: end-to-end tests",
-    "slow: slow tests that take longer to run",
-    "real_taskiq: тесты с реальным TaskIQ worker",
-    "timeout: тесты с таймаутом выполнения",
-    "schemathesis: автоматические тесты API на основе OpenAPI схемы",
-    "agent_e2e: HumanitecAgent protocol E2E через HTTP/WS",
-    "agent_desktop_e2e: HumanitecAgent desktop install/pairing E2E",
-]
-
 [tool.ruff]
 line-length = 100
 target-version = "py314"

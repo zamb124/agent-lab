@@ -1,5 +1,8 @@
 """
-Фикстуры HumanitecAgent E2E.
+Фикстуры HumanitecAgent E2E (HTTP/tunnel).
+
+Загружаются через pytest_plugins в tests/conftest.py, не через tests/agent/conftest.py:
+иначе при совместном сборе tests/agent/* и tests/ui/* pytest регистрирует модуль дважды.
 """
 
 from __future__ import annotations
@@ -8,7 +11,6 @@ import os
 from collections.abc import AsyncIterator
 from typing import Any
 
-import pytest
 import pytest_asyncio
 from httpx import AsyncClient
 

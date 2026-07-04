@@ -531,31 +531,28 @@ class TestAnalysisDraftPipeline:
         )
         note_id = object_str(_http_json(note_resp).get("entity_id"), field="entity_id")
 
-        await mock_llm_redis(
-            [
-                {
-                    "type": "text",
-                    "content": json.dumps(
-                        _analyze_body(
-                            note={
-                                "entity_type": "note",
-                                "name": note_name,
-                                "description": "Краткое содержание для однократного apply",
-                            },
-                            entities=[
-                                {
-                                    "entity_type": "task",
-                                    "name": f"Задача {unique_id}",
-                                    "description": "Одиночная задача в черновике для apply",
-                                    "attributes": {},
-                                },
-                            ],
-                            relationships=[],
-                        )
-                    ),
-                }
-            ]
-        )
+        analyze_response_item = {
+            "type": "text",
+            "content": json.dumps(
+                _analyze_body(
+                    note={
+                        "entity_type": "note",
+                        "name": note_name,
+                        "description": "Краткое содержание для однократного apply",
+                    },
+                    entities=[
+                        {
+                            "entity_type": "task",
+                            "name": f"Задача {unique_id}",
+                            "description": "Одиночная задача в черновике для apply",
+                            "attributes": {},
+                        },
+                    ],
+                    relationships=[],
+                )
+            ),
+        }
+        await mock_llm_redis([analyze_response_item, analyze_response_item, analyze_response_item])
 
         _ = await _analyze_note(crm_client, auth_headers_system, note_id)
 

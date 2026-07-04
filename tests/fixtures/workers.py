@@ -54,6 +54,7 @@ def claim_pytest_controller_session() -> None:
                 f"(pid={existing_pid}). Дождитесь завершения make test "
                 "или завершите процесс вручную."
             )
+        _PLATFORM_TEST_CONTROLLER_PID.unlink(missing_ok=True)
     _PLATFORM_TEST_CONTROLLER_PID.write_text(str(os.getpid()), encoding="utf-8")
 
 

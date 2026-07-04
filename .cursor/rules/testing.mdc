@@ -220,7 +220,7 @@ async def test_integration(mock_llm_redis, flows_client, unique_id):
 
 **real_taskiq и xdist:** тесты с маркером `real_taskiq` получают `xdist_group("real_taskiq")` — не исполняются параллельно между pytest-воркерами (один общий flows_worker, гонки на `.kiq()`/`tasks/get`).
 
-**Sandbox xdist buckets:** `_is_sandbox_runtime_test()` дополнительно получает `xdist_group("code_sandbox_{0|1|2}")` (SHA256 nodeid % 3) — три непересекающиеся очереди вместо полной сериализации ~966 sandbox-тестов. Снижает гонки `code_runner_python` под `-n5` без удвоения времени прогона.
+**Sandbox xdist group:** `_is_sandbox_runtime_test()` дополнительно получает `xdist_group("code_sandbox")` — все sandbox/code-runner тесты на одном pytest-воркере без параллели. Иначе под `-n5` несколько воркеров одновременно бьют в `code_runner_python` (HTTP timeout 60s в testing) и дают flaky `ServiceClientError`.
 
 **A2A tasks/get poll:** пока задача в `working`, `result` может быть `null` — poll-циклы в тестах пропускают такие ответы, не падают через `require_jsonrpc_result`.
 
@@ -251,10 +251,14 @@ tests/
 ```bash
 make test-up              # docker + reset + migrate + test_stack up
 make test-down            # test_stack down + compose stop
-make test                 # полный прогон (фазы unit + retry + agent E2E)
+make test                 # полный прогон (фазы unit + retry + agent E2E) + DB profile после phase 1
+DB_PROFILE=0 make test    # без pg_stat reset/collect/report
+make test-profile         # asyncio FileLock/event loop (/tmp/platform_test_runtime_profile_merged.json)
 make test-network         # только @pytest.mark.network (реальный интернет)
 uv run pytest tests/ -n 5 -m "not integration and not network and not agent_build_release" --ignore=tests/agent/e2e
 ```
+
+**DB profile (default-on, `DB_PROFILE ?= 1` в `mk/test.mk`):** server-side Postgres на test `:54322` (10 БД). После `test-up` — `pg_stat_statements_reset()`; после phase 1 pytest — collect + terminal summary (KPI, top queries, delta vs previous run) + `reports/db_test_profile/latest/report.html`. Opt-out: `DB_PROFILE=0 make test`. `pg_stat_statements` в collect фильтруется по `dbid` текущей БД (не cluster-wide). Phase 2 retry / integration в stats phase 1 не входят. Пороги: `DB_PROFILE_SLOW_MS`, `DB_PROFILE_SLOW_TOTAL_MS`, `DB_PROFILE_TOP_N`, `DB_PROFILE_TERMINAL_TOP_N`. Terminal уважает `NO_COLOR=1`. Test Postgres с `auto_explain` — пересоздать контейнер после обновления compose: `docker-compose -f docker-compose-test.yaml up -d --force-recreate postgres-test` (порог логирования планов в compose: 100ms; для локального профиля можно снизить через `-c auto_explain.log_min_duration=50ms` в override).
 
 Фаза 1 `make test` **исключает** `tests/agent/e2e` (статический `test_e2e_static` scope + `-n0` только в фазе 4) и `@pytest.mark.agent_build_release`.
 

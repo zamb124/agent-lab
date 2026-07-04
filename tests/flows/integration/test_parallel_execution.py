@@ -16,6 +16,7 @@ import pytest
 
 from apps.flows.src.models import FlowConfig
 from apps.flows.src.tasks.flow_tasks import process_flow_task
+from tests.fixtures.taskiq_timeouts import TASKIQ_WAIT_RESULT_TIMEOUT_SECONDS
 
 pytestmark = pytest.mark.real_taskiq
 
@@ -98,7 +99,7 @@ class TestParallelNodeExecution:
             content="Start parallel test",
             context_data=mock_context.model_dump(),
         )
-        result = await task.wait_result(timeout=60)
+        result = await task.wait_result(timeout=TASKIQ_WAIT_RESULT_TIMEOUT_SECONDS)
         overall_end = time.time()
         overall_duration = overall_end - overall_start
         assert not result.is_err, f"Task failed: {result.error}"
@@ -138,7 +139,7 @@ class TestParallelNodeExecution:
             content="Start timestamp test",
             context_data=mock_context.model_dump(),
         )
-        result = await task.wait_result(timeout=60)
+        result = await task.wait_result(timeout=TASKIQ_WAIT_RESULT_TIMEOUT_SECONDS)
         assert not result.is_err, f"Task failed: {result.error}"
         state = result.return_value
         node_a_start = state.get("node_a_start")
@@ -223,7 +224,7 @@ class TestParallelNodesMerge:
             content="Test merge",
             context_data=mock_context.model_dump(),
         )
-        result = await task.wait_result(timeout=60)
+        result = await task.wait_result(timeout=TASKIQ_WAIT_RESULT_TIMEOUT_SECONDS)
         assert not result.is_err, f"Task failed: {result.error}"
         state = result.return_value
         assert state["task_state"] == "completed"

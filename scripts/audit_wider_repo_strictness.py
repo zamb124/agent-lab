@@ -116,7 +116,7 @@ DOMAIN_STRATEGY_TEXT_RULES: tuple[tuple[re.Pattern[str], str], ...] = (
         "browser media API compatibility strategy",
     ),
     (
-        re.compile(r"offline fallback|Cache Storage|avatar|i18n|translation|label|icon", re.IGNORECASE),
+        re.compile(r"offline fallback|Cache Storage|avatar|i18n|translation|\blabels?\b|icon", re.IGNORECASE),
         "presentation/offline UX strategy",
     ),
 )
@@ -258,6 +258,20 @@ def _classify_text_marker(path: Path, line: str) -> tuple[Decision, str, str]:
             "domain_strategy",
             "cache read availability",
             "cache read may degrade while atomic Redis commands fail closed",
+        )
+    if rel == "apps/scheduler/dispatch.py":
+        return (
+            "domain_strategy",
+            "TaskIQ queue dispatch",
+            "scheduler routes scheduled kicks to the broker of the target queue_name label",
+        )
+    if rel == "core/config/models.py" and (
+        "max_retries" in line or "SimpleRetryMiddleware" in line or "fallback через labels" in line
+    ):
+        return (
+            "domain_strategy",
+            "TaskIQ retry middleware",
+            "default max_retries when task labels omit explicit retry budget",
         )
     if rel == "core/clients/stt_client.py":
         return (

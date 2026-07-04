@@ -10,21 +10,24 @@ alwaysApply: true
 
 ## Lint gate (обязательно после правок кода)
 
-После **любых** изменений в `core/`, `apps/`, `tests/`, UI или i18n — перед завершением задачи запускай линтеры:
+После **любых** изменений в `core/`, `apps/`, `tests/`, `scripts/`, UI или i18n — **перед завершением задачи агент обязан сам запустить линтер и дождаться зелёного exit code**. Не считать задачу выполненной, пока линтер не прогнан.
 
 | Объём | Команда |
 |---|---|
 | Всё | `make lint` |
 | Только frontend | `make lint-ts` |
-| Один файл | `make lint FILE=<path>` или `make lint <path>` |
+| Python (минимум перед завершением backend-задачи) | `uv run basedpyright --level warning --warnings apps core` |
+| Один файл | `make lint <path>` или `make lint FILE=<path>` |
 
 `make lint` = python (`ruff`, `basedpyright`, architecture gates, `analyze_imports.py`) + `make lint-ts`.
 
 `make lint-ts` = `check-events-canon`, `check-field-canon`, `check-logging`.
 
-Точечный `make lint FILE=...`: `.py` → ruff + basedpyright на файл; `.js` → `make lint-ts`.
+Точечный `make lint <path>`: `.py` → ruff + basedpyright на файл; `.js` → `make lint-ts`.
 
-`make test` на старте гоняет только python-часть линтеров; перед PR нужен полный `make lint`.
+**CI gate:** `make test` → `test-static` → `basedpyright --level warning --warnings apps core` — **warnings = fail** (не только errors). Точечный lint на один файл не заменяет полный basedpyright на `apps core`, если менялись файлы вне точечного пути.
+
+`make test` на старте гоняет python-часть линтеров; перед PR нужен полный `make lint`.
 
 После архитектурного рефакторинга — дополнительно целевой или полный `make test`.
 
