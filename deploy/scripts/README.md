@@ -1,48 +1,20 @@
-# Deploy scripts — Redis runbook
+# Deploy scripts
 
-Операции на кластере `platform/redis-0`. Требуют `kubectl` или SSH + `microk8s kubectl`.
+## Redis observability
 
-## Инвентаризация
+Мониторинг Redis — Grafana dashboard **Redis** (папка Platform). Метрики пишет idle-задача `redis_inventory_tick` каждые 15 мин (structured logs в Loki).
 
-```bash
-bash deploy/scripts/redis_key_inventory.sh
-# или еженедельно:
-bash deploy/scripts/redis_weekly_inventory.sh
-```
+Панели: `used_memory`, `DBSIZE` db0/db1, `XLEN` TaskIQ streams, ключи без TTL, top prefixes, `platform_schedules`.
 
-Артефакт: `deploy/scripts/redis_inventory_latest.txt`.
+Retention в коде:
 
-## Smoke после деплоя TTL-фиксов
+- TaskIQ streams — `TasksConfig.stream_maxlen_by_queue` в `create_broker()`
+- `platform_schedules:*` — GC `platform_schedules_gc_tick` (cron `0 4 * * *`)
+- Доменные ключи — обязательный TTL в `RedisClient.set()`
 
-```bash
-bash deploy/scripts/redis_smoke_projection_ttl.sh
-```
+## Алерт памяти Redis pod (>75% limit)
 
-Проверяет, что sample `flows:workflow_projection:*` на db0 имеют `TTL > 0`.
-
-## Очистка легаси db0
-
-```bash
-DRY_RUN=1 bash deploy/scripts/redis_cleanup_domain_db0.sh
-bash deploy/scripts/redis_cleanup_domain_db0.sh
-```
-
-Удаляет бессрочные `flows:workflow_projection:*` и orphan `platform_schedules:*` на db0.
-
-## TaskIQ stream trim (db1)
-
-```bash
-DRY_RUN=1 bash deploy/scripts/redis_trim_taskiq_streams.sh
-bash deploy/scripts/redis_trim_taskiq_streams.sh
-```
-
-Одноразовый `XTRIM` по политике: search=50k, idle/crm/rag=20k, flows_worker=10k.
-
-Постоянный retention — `TasksConfig.stream_maxlen_by_queue` в `create_broker()`.
-
-## Алерт памяти Redis (>75% limit)
-
-Grafana Explore (метрики kube-state-metrics / cAdvisor):
+Grafana Explore (kube-state-metrics / cAdvisor):
 
 ```promql
 container_memory_working_set_bytes{namespace="platform",pod="redis-0",container="redis"}
@@ -51,7 +23,7 @@ container_spec_memory_limit_bytes{namespace="platform",pod="redis-0",container="
 > 0.75
 ```
 
-Helm: `maxmemory 3gb` + `allkeys-lru` в StatefulSet (страховка при OOM).
+Helm: `maxmemory 3gb` + `allkeys-lru` в StatefulSet.
 
 ## Два Redis URL
 

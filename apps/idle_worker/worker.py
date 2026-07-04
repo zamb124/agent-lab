@@ -118,6 +118,7 @@ import apps.idle_worker.tasks.llm_models_tasks as _llm_models_tasks  # noqa: E40
 import apps.idle_worker.tasks.platform_free_models_tasks as _platform_free_models_tasks  # noqa: E402
 import apps.idle_worker.tasks.payment_sync_tasks as _payment_sync_tasks  # noqa: E402
 import apps.idle_worker.tasks.platform_schedules_gc_tasks as _platform_schedules_gc_tasks  # noqa: E402
+import apps.idle_worker.tasks.redis_inventory_tasks as _redis_inventory_tasks  # noqa: E402
 import apps.idle_worker.tasks.push_notification_tasks as _push_notification_tasks  # noqa: E402
 import apps.idle_worker.tasks.span_billing_settlement_tasks as _span_billing_settlement_tasks  # noqa: E402
 
@@ -129,6 +130,7 @@ _TASK_REGISTRATION_MODULES = (
     _llm_models_tasks,
     _platform_free_models_tasks,
     _platform_schedules_gc_tasks,
+    _redis_inventory_tasks,
     _payment_sync_tasks,
     _push_notification_tasks,
     _span_billing_settlement_tasks,

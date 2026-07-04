@@ -201,13 +201,13 @@ class User(BaseModel):
 Исключения:
 
 - **Pub/Sub** (`publish` / `subscribe`) — не ключи, TTL не применим.
-- **TaskIQ** (`TASKS__BROKER_URL`) — отдельный retention runbook; не писать туда из прикладного кода.
+- **TaskIQ** (`TASKS__BROKER_URL`) — retention через `stream_maxlen_by_queue`; мониторинг — Grafana dashboard **Redis** + `redis_inventory_tick`.
 
 ### Workflow projection cache
 
 Ключ `flows:workflow_projection:{company_id}:{session_id}` — disposable cache поверх Postgres ledger (`session.mdc`). TTL 14 суток (скользящий при append); при terminal status (`completed`/`failed`/`canceled`) ключ удаляется. Источник истины — `workflow_events`, не Redis.
 
-Инвентаризация ключей на кластере: `bash deploy/scripts/redis_key_inventory.sh`.
+Инвентаризация Redis: idle-задача `redis_inventory_tick` (каждые 15 мин) + Grafana dashboard **Redis** (Platform). Structured logs: `redis.inventory.*` в Loki.
 
 ## Storage — только для репозиториев
 

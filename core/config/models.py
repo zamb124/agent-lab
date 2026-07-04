@@ -134,6 +134,11 @@ class DatabaseConfig(BaseModel):
         description="PostgreSQL platform_search (search_indexes, crawl state)",
     )
     redis_url: str = "redis://localhost:8099"
+    redis_inventory_interval_seconds: int = Field(
+        default=900,
+        description="Интервал idle-задачи redis_inventory_tick (секунды).",
+        ge=60,
+    )
     statement_timeout_ms: int = Field(
         default=30_000,
         description=(

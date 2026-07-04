@@ -42,6 +42,7 @@ RAG_CLEANUP_ORPHAN_COMPANY_CHUNKS_TASK_NAME = "rag_cleanup_orphan_company_chunks
 FILE_RETENTION_PURGE_TASK_NAME = "file_retention_purge_tick"
 FILE_RETENTION_BACKFILL_TASK_NAME = "file_retention_backfill_tick"
 PLATFORM_SCHEDULES_GC_TASK_NAME = "platform_schedules_gc_tick"
+REDIS_INVENTORY_TASK_NAME = "redis_inventory_tick"
 MCP_CATALOG_CRAWL_TASK_NAME = "mcp_catalog_crawl_task"
 MCP_CATALOG_RESYNC_TOOLS_TASK_NAME = "mcp_catalog_resync_tools_task"
 CRM_RECONCILE_DAILY_SUMMARY_CRON = "0 * * * *"
@@ -539,6 +540,15 @@ async def on_startup(app: FastAPI, container: SchedulerContainer, settings: Sche
         task_name=PLATFORM_SCHEDULES_GC_TASK_NAME,
         cron="0 4 * * *",
         log_label="Platform schedules Redis GC",
+    )
+    await _ensure_idle_interval_schedule(
+        container=container,
+        config_enabled=not is_testing(),
+        task_name=REDIS_INVENTORY_TASK_NAME,
+        interval_seconds=settings.database.redis_inventory_interval_seconds,
+        payload={},
+        log_label="Redis inventory metrics",
+        run_now_on_start=True,
     )
     await _ensure_calendar_schedule(
         container=container,

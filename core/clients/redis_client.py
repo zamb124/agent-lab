@@ -5,6 +5,7 @@ Redis клиент для кэширования, сессий и Pub/Sub stream
 import asyncio
 import time
 from collections.abc import AsyncIterator, Awaitable, Callable
+from dataclasses import dataclass
 from typing import Protocol, TypedDict
 from typing import cast as type_cast
 from urllib.parse import urlparse
@@ -16,6 +17,13 @@ from core.logging import get_logger
 from core.types import JsonValue, require_json_value
 
 logger = get_logger(__name__)
+
+
+@dataclass(frozen=True)
+class RedisMemoryInfo:
+    used_memory_bytes: int
+    used_memory_rss_bytes: int
+    maxmemory_bytes: int | None
 
 
 class RedisOperationError(RuntimeError):
@@ -51,6 +59,16 @@ class _RedisGetMessageCommand(Protocol):
 class _RedisPubSubMessage(TypedDict):
     type: str
     data: str
+
+
+class _RedisPipeline(Protocol):
+    def ttl(self, key: str) -> object: ...
+
+    def execute(self) -> Awaitable[list[object]]: ...
+
+
+class _RedisPipelineFactory(Protocol):
+    def __call__(self, *, transaction: bool) -> _RedisPipeline: ...
 
 
 class _RedisSdkPubSub:
@@ -136,6 +154,60 @@ class _RedisSdkConnection:
                 break
         return keys
 
+    async def scan_all_keys(self, *, count: int = 500) -> list[str]:
+        scan_command = type_cast(
+            Callable[..., Awaitable[tuple[int, list[str]]]],
+            self._raw.scan,
+        )
+        cursor = 0
+        keys: list[str] = []
+        while True:
+            cursor, batch = await scan_command(cursor, count=count)
+            keys.extend(batch)
+            if cursor == 0:
+                break
+        return keys
+
+    async def dbsize(self) -> int:
+        command = type_cast(Callable[[], Awaitable[int]], self._raw.dbsize)
+        return await command()
+
+    async def ttl(self, key: str) -> int:
+        command = type_cast(Callable[[str], Awaitable[int]], self._raw.ttl)
+        return await command(key)
+
+    async def xlen(self, stream: str) -> int:
+        command = type_cast(Callable[[str], Awaitable[int]], self._raw.xlen)
+        return await command(stream)
+
+    async def memory_usage(self, key: str) -> int | None:
+        command = type_cast(Callable[[str], Awaitable[int | None]], self._raw.memory_usage)
+        return await command(key)
+
+    async def info_memory(self) -> RedisMemoryInfo:
+        command = type_cast(
+            Callable[..., Awaitable[dict[str, str | int | float]]],
+            self._raw.info,
+        )
+        info_payload = await command(section="memory")
+        used_memory = info_payload.get("used_memory")
+        used_memory_rss = info_payload.get("used_memory_rss")
+        maxmemory = info_payload.get("maxmemory")
+        if not isinstance(used_memory, int):
+            raise RedisOperationError("info memory: used_memory missing or not int")
+        if not isinstance(used_memory_rss, int):
+            raise RedisOperationError("info memory: used_memory_rss missing or not int")
+        maxmemory_bytes: int | None
+        if isinstance(maxmemory, int) and maxmemory > 0:
+            maxmemory_bytes = maxmemory
+        else:
+            maxmemory_bytes = None
+        return RedisMemoryInfo(
+            used_memory_bytes=used_memory,
+            used_memory_rss_bytes=used_memory_rss,
+            maxmemory_bytes=maxmemory_bytes,
+        )
+
     async def eval(self, script: str, numkeys: int, *keys_and_args: JsonValue) -> JsonValue:
         command = type_cast(Callable[..., Awaitable[JsonValue]], self._raw.eval)
         return await command(script, numkeys, *keys_and_args)
@@ -155,6 +227,10 @@ class _RedisSdkConnection:
     def pubsub(self) -> _RedisSdkPubSub:
         command = type_cast(Callable[[], PubSub], self._raw.pubsub)
         return _RedisSdkPubSub(command())
+
+    def pipeline(self) -> _RedisPipeline:
+        pipeline_factory = type_cast(_RedisPipelineFactory, self._raw.pipeline)
+        return pipeline_factory(transaction=False)
 
 
 class RedisClient:
@@ -391,6 +467,92 @@ class RedisClient:
         except (RedisError, OSError, asyncio.TimeoutError) as e:
             logger.error(f"RedisClient: ошибка SCAN match={match}: {e}")
             return []
+
+    async def _read_command[T](
+        self,
+        operation_name: str,
+        command: Callable[[_RedisSdkConnection], Awaitable[T]],
+    ) -> T:
+        if not await self._ensure_connected():
+            raise RedisOperationError(f"{operation_name}: Redis недоступен после retry")
+        try:
+            client = self._require_client()
+            return await command(client)
+        except (RedisError, OSError, asyncio.TimeoutError) as primary_error:
+            if not await self._ensure_connected():
+                raise RedisOperationError(
+                    f"{operation_name}: Redis недоступен после retry"
+                ) from primary_error
+            try:
+                client = self._require_client()
+                return await command(client)
+            except (RedisError, OSError, asyncio.TimeoutError) as retry_error:
+                raise RedisOperationError(f"{operation_name}: {retry_error}") from retry_error
+
+    async def scan_all_keys(self, *, count: int = 500) -> list[str]:
+        """SCAN всех ключей текущей БД."""
+        return await self._read_command(
+            "scan_all_keys",
+            lambda client: client.scan_all_keys(count=count),
+        )
+
+    async def dbsize(self) -> int:
+        """Количество ключей в текущей БД (DBSIZE)."""
+        return await self._read_command("dbsize", lambda client: client.dbsize())
+
+    async def ttl(self, key: str) -> int:
+        """TTL ключа в секундах (-2 отсутствует, -1 без expiry)."""
+        return await self._read_command("ttl", lambda client: client.ttl(key))
+
+    async def ttl_batch(self, keys: list[str]) -> list[int]:
+        """TTL для списка ключей одним pipeline."""
+        if not keys:
+            return []
+        if not await self._ensure_connected():
+            raise RedisOperationError("ttl_batch: Redis недоступен после retry")
+        try:
+            client = self._require_client()
+            pipeline = client.pipeline()
+            for key in keys:
+                _ = pipeline.ttl(key)
+            ttl_results = await pipeline.execute()
+        except (RedisError, OSError, asyncio.TimeoutError) as primary_error:
+            if not await self._ensure_connected():
+                raise RedisOperationError(
+                    "ttl_batch: Redis недоступен после retry"
+                ) from primary_error
+            try:
+                client = self._require_client()
+                pipeline = client.pipeline()
+                for key in keys:
+                    _ = pipeline.ttl(key)
+                ttl_results = await pipeline.execute()
+            except (RedisError, OSError, asyncio.TimeoutError) as retry_error:
+                raise RedisOperationError(f"ttl_batch: {retry_error}") from retry_error
+        parsed: list[int] = []
+        for ttl_value in ttl_results:
+            if not isinstance(ttl_value, int):
+                raise RedisOperationError("ttl_batch: non-int ttl in pipeline result")
+            parsed.append(ttl_value)
+        return parsed
+
+    async def xlen(self, stream: str) -> int:
+        """Длина Redis Stream (XLEN)."""
+        return await self._read_command("xlen", lambda client: client.xlen(stream))
+
+    async def memory_usage(self, key: str) -> int | None:
+        """Память ключа в байтах (MEMORY USAGE); None если ключ отсутствует."""
+        return await self._read_command(
+            "memory_usage",
+            lambda client: client.memory_usage(key),
+        )
+
+    async def info_memory(self) -> RedisMemoryInfo:
+        """INFO memory: used_memory, used_memory_rss, maxmemory."""
+        return await self._read_command(
+            "info_memory",
+            lambda client: client.info_memory(),
+        )
 
     async def eval(self, script: str, numkeys: int, *keys_and_args: JsonValue) -> JsonValue:
         """Выполняет Lua-скрипт (атомарные read-modify-write на стороне Redis)."""
