@@ -55,6 +55,8 @@ Resources merge-ятся слоями flow → branch → node. Code-ресур�
 
 Entry point: если `entrypoint` не задан в конфиге ноды/tool, runner вызывает первую функцию, объявленную в source. `run` — имя из примеров, не обязательное требование.
 
+Доступ к state в inline-коде: в Python и JS первичен атрибутный стиль — `state.session_id` (чтение), `state.my_field = value` (запись любого нового поля); `state["key"]` и `state.get(...)` работают на том же объекте и нужны для динамических ключей или имён, совпадающих с методами dict. Чтение отсутствующего поля в Python — `AttributeError`. В Go и C# state — map/dictionary, доступ по ключу. Генерируй Python/JS-примеры в атрибутном стиле.
+
 Все языки получают один manifest capabilities. Доступные namespace/methods бери из `code_inline_documentation_md`, а не из догадок.
 
 При ошибке runner возвращает structured error payload: `language`, `service`, `stage`, `message`, `exception_type`, `traceback`, `stdout`, `stderr`, `request_id`, `trace_id`. Если помогаешь чинить ошибку, проси/используй этот payload целиком.

@@ -580,6 +580,9 @@ class CapabilityRegistry:
             "The structured `capabilities` and `namespaces` fields in this response are the backend source for editor autocomplete.",
             "If `entrypoint` is omitted, the runner executes the first function declared in the source. "
             + "Node/tool configs may set any valid language function name via `entrypoint`.",
+            "State access: Python and JS use attribute style (`state.session_id`, `state.my_field = value`; "
+            + '`state["key"]` and `state.get(...)` also work on the same object); Go and C# use map access '
+            + '`state["key"]`. Reading a missing field in Python raises `AttributeError`.',
         ]
         if language is not None:
             lines.extend(["", "Entry point:", "", *self._entrypoint_block(language)])
@@ -840,6 +843,7 @@ class CapabilityRegistry:
                 "```python",
                 "async def run(args, state):",
                 '    result = await tools.calculator(expression="2+2")',
+                "    state.calculation = result",
                 '    return {"result": result}',
                 "```",
             ]

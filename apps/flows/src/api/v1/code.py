@@ -164,7 +164,12 @@ def _runtime_globals() -> list[GlobalVariable]:
         GlobalVariable(
             name="state",
             type="изменяемый execution state",
-            doc="Execution state flow, общий для нод. Пользовательский код может записывать сюда результаты нод.",
+            doc=(
+                "Execution state flow, общий для нод. Пользовательский код может записывать сюда результаты нод. "
+                "Python и JS: атрибутный доступ — state.session_id, state.my_field = value "
+                "(state[\"key\"] и state.get(...) тоже работают); Go и C#: map-доступ state[\"key\"]. "
+                "Чтение отсутствующего поля в Python — AttributeError."
+            ),
             perspective=["editor", "flow", "tool", "node"],
             tags=["runtime", "state"],
         ),
@@ -368,7 +373,7 @@ def _capability_templates(language: CapabilityLanguage) -> list[CodeTemplate]:
         "python": (
             "async def run(args, state):\n"
             '    calc = await tools.calculator(expression=args["expression"])\n'
-            '    state["calculation"] = calc\n'
+            "    state.calculation = calc\n"
             '    return {"calculation": calc}\n'
         ),
         "javascript": (

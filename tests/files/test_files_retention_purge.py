@@ -1,5 +1,10 @@
 """
 Retention, backfill и purge для unified Files API.
+
+Backfill/purge — глобальные batch-операции по shared таблице: параллельные
+xdist-воркеры обрабатывают строки друг друга. Parallel-safe контракт: ассерты
+только по собственной записи (уникальный file_id), сходимость — повторными
+batch-вызовами; глобальных чисток БД нет.
 """
 
 from __future__ import annotations
@@ -45,7 +50,7 @@ def test_resolve_retention_ttl_custom_seconds():
 
 
 @pytest.mark.asyncio
-async def test_backfill_sets_retention_fields(app, file_db_clean, unique_id: str):
+async def test_backfill_sets_retention_fields(app, unique_id: str):
     _ = app
     from apps.frontend.container import get_frontend_container
     require_s3_configured()
@@ -61,8 +66,11 @@ async def test_backfill_sets_retention_fields(app, file_db_clean, unique_id: str
     _ = await repo.set(stale)
 
     backfill = FileRetentionBackfillService(repo)
-    batch = await backfill.backfill_batch(limit=50)
-    assert batch.updated >= 1
+    for _ in range(100):
+        _ = await backfill.backfill_batch(limit=200)
+        loaded = await container.files_service.get(record.file_id)
+        if loaded.retention_kind:
+            break
 
     loaded = await container.files_service.get(record.file_id)
     assert loaded.retention_kind is not None
@@ -70,7 +78,7 @@ async def test_backfill_sets_retention_fields(app, file_db_clean, unique_id: str
 
 
 @pytest.mark.asyncio
-async def test_purge_deletes_expired_file(app, file_db_clean, unique_id: str):
+async def test_purge_deletes_expired_file(app, unique_id: str):
     _ = app
     from apps.frontend.container import get_frontend_container
     require_s3_configured()
@@ -92,8 +100,15 @@ async def test_purge_deletes_expired_file(app, file_db_clean, unique_id: str):
     _ = await repo.set(expired)
 
     purge = FilePurgeService(repo)
-    batch = await purge.purge_expired_batch()
-    assert batch.purged_count >= 1
+    purged_own = False
+    for _ in range(100):
+        _ = await purge.purge_expired_batch()
+        try:
+            _ = await container.files_service.get(record.file_id)
+        except ValueError:
+            purged_own = True
+            break
+    assert purged_own, f"file {record.file_id} was not purged"
 
     with pytest.raises(ValueError, match="file not found"):
         await container.files_service.get(record.file_id)

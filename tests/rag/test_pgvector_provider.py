@@ -16,7 +16,7 @@ import uuid
 from typing import Any
 
 import pytest
-from sqlalchemy import func, select
+from sqlalchemy import func, or_, select
 
 from core.db.models import VectorDocument
 from core.rag.models import RAGSearchOptions
@@ -1020,6 +1020,35 @@ async def test_fetch_stale_chunks_rejects_zero_limit(rag_provider_pgvector):
 
 
 # -- Orphan-cleanup: delete_orphan_company_chunks --
+#
+# Операция глобальная (batch по всем orphan-строкам shared таблицы) и работает
+# конкурентно с другими xdist-воркерами: чужой тест может удалить наши orphan-строки
+# раньше нас, а наш вызов может удалить чужие. Parallel-safe контракт:
+# ассертим только собственные строки (уникальный suffix) и верхнюю границу limit,
+# сходимость достигаем повторными batch-вызовами (семантика maintenance-тика).
+
+
+async def _count_orphan_rows_for_suffix(session_factory, suffix: str) -> int:
+    async with session_factory() as session:
+        result = await session.execute(
+            select(VectorDocument.id).where(
+                VectorDocument.id.like(f"orphan_%_{suffix}"),
+                or_(
+                    VectorDocument.company_id.is_(None),
+                    VectorDocument.company_id == "",
+                ),
+            )
+        )
+        return len(result.all())
+
+
+async def _delete_orphans_until_suffix_gone(provider, session_factory, suffix: str) -> None:
+    """Повторяет глобальный batch-delete, пока собственные orphan-строки не исчезнут."""
+    for _ in range(200):
+        if await _count_orphan_rows_for_suffix(session_factory, suffix) == 0:
+            return
+        _ = await provider.delete_orphan_company_chunks(limit=1000)
+    raise AssertionError(f"orphan rows with suffix {suffix} were not deleted after 200 batches")
 
 
 @pytest.mark.asyncio
@@ -1038,8 +1067,7 @@ async def test_delete_orphan_company_chunks_removes_null_and_empty(
                              company_id="", content="drop empty",
                              embedding_model=None)
 
-    deleted = await rag_provider_pgvector.delete_orphan_company_chunks(limit=100)
-    assert deleted >= 2
+    await _delete_orphans_until_suffix_gone(rag_provider_pgvector, sf, rag_company_id)
 
     async with sf() as session:
         ids_left = {
@@ -1059,28 +1087,36 @@ async def test_delete_orphan_company_chunks_removes_null_and_empty(
 async def test_delete_orphan_company_chunks_respects_limit(
     rag_provider_pgvector, ns_name, rag_company_id
 ):
+    """Limit — верхняя граница на batch; удаление собственных строк проверяем сходимостью."""
     sf = rag_provider_pgvector._session_factory
     for i in range(3):
         await _insert_vector_row(sf, id_=f"orphan_{i}_{rag_company_id}", namespace_id=ns_name,
                                  company_id=None, content=f"c{i}",
                                  embedding_model=None)
+    assert await _count_orphan_rows_for_suffix(sf, rag_company_id) == 3
     deleted_first = await rag_provider_pgvector.delete_orphan_company_chunks(limit=2)
-    assert deleted_first == 2
-    deleted_rest = await rag_provider_pgvector.delete_orphan_company_chunks(limit=10)
-    assert deleted_rest >= 1
+    assert 0 <= deleted_first <= 2
+    await _delete_orphans_until_suffix_gone(rag_provider_pgvector, sf, rag_company_id)
+    assert await _count_orphan_rows_for_suffix(sf, rag_company_id) == 0
 
 
 @pytest.mark.asyncio
-async def test_delete_orphan_company_chunks_returns_zero_when_empty(
+async def test_delete_orphan_company_chunks_keeps_owned_rows(
     rag_provider_pgvector, ns_name, rag_company_id
 ):
+    """Строки с company_id не считаются orphan и переживают cleanup."""
     sf = rag_provider_pgvector._session_factory
     await _insert_vector_row(sf, id_=f"only_keep_{rag_company_id}", namespace_id=ns_name,
                              company_id=rag_company_id, content="keep",
                              embedding_model=None)
-    await rag_provider_pgvector.delete_orphan_company_chunks(limit=100)
-    deleted = await rag_provider_pgvector.delete_orphan_company_chunks(limit=100)
-    assert deleted == 0
+    _ = await rag_provider_pgvector.delete_orphan_company_chunks(limit=1000)
+    async with sf() as session:
+        row = (
+            await session.execute(
+                select(VectorDocument.id).where(VectorDocument.id == f"only_keep_{rag_company_id}")
+            )
+        ).first()
+    assert row is not None
 
 
 @pytest.mark.asyncio

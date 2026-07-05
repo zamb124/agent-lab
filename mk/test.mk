@@ -18,8 +18,8 @@ _PYTEST_IGNORE_UI := --ignore=tests/ui
 _PYTEST_IGNORE_AGENT_DESKTOP := --ignore=tests/agent/desktop_e2e
 _PYTEST_IGNORE_AGENT_E2E := --ignore=tests/agent/e2e
 
-# xdist_group (code_sandbox, real_taskiq, sync_db) учитывается только с --dist loadgroup.
-_PYTEST_XDIST := --dist loadgroup -n $(WORKERS) --max-worker-restart=$(PYTEST_MAX_WORKER_RESTART)
+# Все тесты параллельны: xdist_group/сериализация запрещены (testing.mdc, «Parallel-safe контракты»).
+_PYTEST_XDIST := -n $(WORKERS) --max-worker-restart=$(PYTEST_MAX_WORKER_RESTART)
 
 # Coverage (default-on): TEST_COVERAGE=0 make test
 COV_RUN_ID := $(if $(filter 1,$(TEST_COVERAGE)),$(shell date +%Y%m%dT%H%M%S),)

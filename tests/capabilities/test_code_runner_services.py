@@ -333,7 +333,7 @@ async def test_capability_manifest_and_docs_are_served_by_gateway(sandbox_servic
         builtin_tool_capability_names = {
             f"tools.{tool_id}" for tool_id in _documented_builtin_tool_ids()
         }
-        assert capability_names >= {
+        base_capability_names = {
             "files.create",
             "files.get_bytes",
             "http.request",
@@ -343,8 +343,12 @@ async def test_capability_manifest_and_docs_are_served_by_gateway(sandbox_servic
             "voice.synthesize_speech",
             "tools.calculator",
         }
-        assert capability_names >= tool_capability_names
-        assert capability_names >= builtin_tool_capability_names
+        # Parallel-safe контракт: manifest и docs — два снапшота в разные моменты
+        # времени; эфемерные тулы параллельных тестов (cross_language_tool_ids и др.)
+        # появляются/исчезают между запросами. Сравниваем только стабильный набор.
+        stable_capability_names = base_capability_names | builtin_tool_capability_names
+        assert capability_names >= stable_capability_names
+        assert tool_capability_names >= builtin_tool_capability_names
         assert "tools.call" not in capability_names
         assert "tools.call_builtin" not in capability_names
 
@@ -363,14 +367,14 @@ async def test_capability_manifest_and_docs_are_served_by_gateway(sandbox_servic
             assert "### Returns" in markdown
             assert "Input JSON Schema" in markdown
             assert "Output JSON Schema" in markdown
-            for capability_name in capability_names:
+            for capability_name in stable_capability_names:
                 assert f"## `{capability_name}`" in markdown
             capability_docs = {
                 item["capability_name"]: item
                 for item in docs_payload["capabilities"]
             }
             namespace_docs = {item["name"]: item for item in docs_payload["namespaces"]}
-            assert capability_docs.keys() >= capability_names
+            assert capability_docs.keys() >= stable_capability_names
             assert "files" in namespace_docs
             assert "tools" in namespace_docs
             assert "flow_state" in namespace_docs
@@ -662,6 +666,59 @@ async def test_python_runner_accepts_future_annotations_import(sandbox_services)
     assert body["status"] == "completed", body
     assert body["result"] == {"ok": 42}
     assert body["state"] == {"value": 42}
+
+
+@pytest.mark.asyncio
+async def test_python_state_supports_attribute_access_and_dict_protocol(sandbox_services) -> None:
+    """Контракт state в Python sandbox: state.session_id (чтение), state.new_field = ... (запись
+    произвольного поля) и dict-протокол (state["key"], state.get) работают на одном объекте."""
+    payload = _request(
+        "python",
+        "async def run(args, state):\n"
+        "    sid = state.session_id\n"
+        "    state.reply_text = 'sid: ' + sid\n"
+        "    state['bracket_written'] = state.get('session_id')\n"
+        "    return {'sid': sid, 'same_object': state['reply_text'] == state.reply_text}\n",
+        state={"session_id": "test_flow:test_context"},
+    )
+    async with AsyncClient(timeout=30.0) as client:
+        response = await client.post(
+            f"{sandbox_services['code_runner_python']}/code-runner-python/api/v1/execute",
+            json=payload,
+            headers={"X-Request-Id": "test-request-id", "X-Trace-Id": "test-trace-id"},
+        )
+    response.raise_for_status()
+    body = response.json()
+    assert body["status"] == "completed", body
+    assert body["result"] == {"sid": "test_flow:test_context", "same_object": True}
+    assert body["state"] == {
+        "session_id": "test_flow:test_context",
+        "reply_text": "sid: test_flow:test_context",
+        "bracket_written": "test_flow:test_context",
+    }
+
+
+@pytest.mark.asyncio
+async def test_python_state_missing_attribute_raises_attribute_error(sandbox_services) -> None:
+    """Чтение отсутствующего поля state — AttributeError на stage user (Zero-Guess, без тихого None)."""
+    payload = _request(
+        "python",
+        "async def run(args, state):\n"
+        "    return state.absent_field\n",
+        state={"session_id": "test_flow:test_context"},
+    )
+    async with AsyncClient(timeout=30.0) as client:
+        response = await client.post(
+            f"{sandbox_services['code_runner_python']}/code-runner-python/api/v1/execute",
+            json=payload,
+            headers={"X-Request-Id": "test-request-id", "X-Trace-Id": "test-trace-id"},
+        )
+    response.raise_for_status()
+    body = response.json()
+    assert body["status"] == "failed", body
+    assert body["error"]["exception_type"] == "AttributeError"
+    assert body["error"]["stage"] == "user"
+    assert "absent_field" in body["error"]["message"]
 
 
 @pytest.mark.asyncio

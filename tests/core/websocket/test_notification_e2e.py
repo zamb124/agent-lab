@@ -273,7 +273,8 @@ async def test_notification_with_action_url(crm_client, ws_cookie_system, system
             ),
         )
 
-        event = await _recv_event_by_type(ws, expected_type, timeout=5)
+        event = await _recv_event_by_payload_title(ws, "Задача завершена", timeout=20)
+        assert event["type"] == expected_type
         payload = _event_payload(event)
         assert payload["action_url"] == "/crm/tasks/task_123"
         assert _payload_data(payload)["task_id"] == "task_123"

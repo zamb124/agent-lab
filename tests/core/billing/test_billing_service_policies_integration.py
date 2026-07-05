@@ -66,7 +66,16 @@ async def test_can_use_resource_company_missing_in_db(frontend_container, system
 
 @pytest.mark.asyncio
 async def test_can_use_resource_insufficient_balance(frontend_container, unique_id, system_user_id) -> None:
-    billing = frontend_container.billing_service
+    """Изолированный BillingService со своим прайсом (shared_storage=None):
+    без записи глобального billing:resource_base_prices_json — parallel-safe."""
+    billing = BillingService(
+        frontend_container.company_repository,
+        frontend_container.user_repository,
+        frontend_container.usage_repository,
+        tariff_prices=DEFAULT_TARIFF_PRICES,
+        resource_base_prices={"llm": {"*": 9999.0}},
+        shared_storage=None,
+    )
     cid = f"poor_{unique_id}"
     company = Company(
         company_id=cid,
@@ -80,21 +89,9 @@ async def test_can_use_resource_insufficient_balance(frontend_container, unique_
     await frontend_container.company_repository.set(company)
     user = await frontend_container.user_repository.get(system_user_id)
     assert user is not None
-    global_key = "billing:resource_base_prices_json"
-    prev_global = await frontend_container.shared_storage.get(global_key, force_global=True)
-    key = company_resource_prices_storage_key(cid)
-    try:
-        await frontend_container.shared_storage.set(global_key, "{}", force_global=True)
-        await frontend_container.shared_storage.set(key, json.dumps({"llm": {"*": 9999.0}}), force_global=True)
-        ok, reason = await billing.can_use_resource(user, company, "llm:any", quantity=1)
-        assert ok is False
-        assert "Недостаточно" in reason or "недостаточно" in reason
-    finally:
-        await frontend_container.shared_storage.delete(key, force_global=True)
-        if prev_global is not None:
-            await frontend_container.shared_storage.set(global_key, prev_global, force_global=True)
-        else:
-            await frontend_container.shared_storage.delete(global_key, force_global=True)
+    ok, reason = await billing.can_use_resource(user, company, "llm:any", quantity=1)
+    assert ok is False
+    assert "Недостаточно" in reason or "недостаточно" in reason
 
 
 @pytest.mark.asyncio
@@ -151,21 +148,19 @@ async def test_tool_billing_category_always_zero_even_with_storage_override(
     await frontend_container.shared_storage.delete(key, force_global=True)
 
 
-@pytest.mark.asyncio
-async def test_get_effective_resource_base_prices_invalid_global_json_raises(
-    frontend_container,
-) -> None:
-    billing = frontend_container.billing_service
-    await frontend_container.shared_storage.set(
-        "billing:resource_base_prices_json",
-        '"not-an-object"',
-        force_global=True,
-    )
-    try:
-        with pytest.raises(ValueError, match="must be a JSON object"):
-            await billing.get_effective_resource_base_prices()
-    finally:
-        await frontend_container.shared_storage.delete("billing:resource_base_prices_json", force_global=True)
+def test_merge_resource_base_price_override_invalid_json_raises() -> None:
+    """Невалидный override валится на parse (общий путь global и company merge).
+
+    Без записи глобального ключа: невалидный billing:resource_base_prices_json
+    в shared storage ломал бы параллельные тесты, читающие effective-прайс."""
+    from core.billing.service import _merge_resource_base_price_override
+
+    with pytest.raises(ValueError, match="must be a JSON object"):
+        _merge_resource_base_price_override(
+            {"llm": {"*": 1.0}},
+            '"not-an-object"',
+            "billing:resource_base_prices_json",
+        )
 
 
 @pytest.mark.asyncio
@@ -183,17 +178,13 @@ async def test_get_effective_resource_base_prices_for_company_invalid_override_r
         await frontend_container.shared_storage.delete(key, force_global=True)
 
 
-@pytest.mark.asyncio
-async def test_load_settlement_rules_document_invalid_storage_json_raises(
-    frontend_container,
-) -> None:
-    billing = frontend_container.billing_service
-    await frontend_container.shared_storage.set(STORAGE_SETTLEMENT_RULES_JSON, "[]", force_global=True)
-    try:
-        with pytest.raises(ValueError, match="корень должен"):
-            await billing.load_settlement_rules_document()
-    finally:
-        await frontend_container.shared_storage.delete(STORAGE_SETTLEMENT_RULES_JSON, force_global=True)
+def test_parse_settlement_rules_invalid_root_raises() -> None:
+    """Парсер правил settlement валится на не-объекте (тот же путь, что
+    load_settlement_rules_document): без записи глобального storage-ключа."""
+    from core.billing.settlement_rules import parse_settlement_rules_json
+
+    with pytest.raises(ValueError, match="корень должен"):
+        parse_settlement_rules_json("[]")
 
 
 @pytest.mark.asyncio

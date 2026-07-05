@@ -118,7 +118,11 @@ def sync_db_url() -> str:
 
 @pytest_asyncio.fixture(scope="session")
 async def sync_database(sync_db_url: str) -> AsyncIterator[SyncDatabase]:
-    """Создаёт SyncDatabase; схема только через Alembic (дерево migrations/sync)."""
+    """Создаёт SyncDatabase; схема применяется заранее в make test-up (scripts.test_migrate).
+
+    Фикстура ничего не мигрирует: параллельные xdist-воркеры не должны конкурировать
+    за Alembic. Актуальность head проверяет session-фикстура setup_database_before_tests.
+    """
     import core.config.base as config_base
 
     os.environ["DATABASE__SYNC_URL"] = sync_db_url
@@ -127,13 +131,6 @@ async def sync_database(sync_db_url: str) -> AsyncIterator[SyncDatabase]:
     from apps.sync.container import reset_sync_container
 
     reset_sync_container()
-
-    from core.db.migration_manifest import bootstrap_migration_registry
-    from core.db.migrations import run_migrations_async
-
-    bootstrap_migration_registry()
-    await run_migrations_async(service="shared")
-    await run_migrations_async(service="sync")
 
     db = SyncDatabase(sync_db_url)
 

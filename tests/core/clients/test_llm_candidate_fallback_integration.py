@@ -3,10 +3,8 @@
 Эти тесты намеренно проходят через реальный путь httpx/OpenAI-compatible.
 Локальный сервер ниже — маленький детерминированный endpoint, а не патченный клиент.
 
-Короткие таймауты первого токена (10–50 ms) делают тесты чувствительными к CPU
-starvation: на одном xdist-worker'е они стабильны, при параллельном запуске
-рядом с другими тяжёлыми тестами таймеры срываются. Группируем модуль на
-один worker через ``xdist_group``.
+Короткие first_token_timeout используются только там, где таймаут ДОЛЖЕН
+сработать (проверка fallback) — parallel-safe под xdist без сериализации.
 """
 
 from __future__ import annotations
@@ -44,7 +42,6 @@ from core.config.models import (
     PlatformFreePoolPaidFallbackConfig,
 )
 from core.llm_context import LLMContextBudget, LLMContextProfile, LLMContextRetrievalPolicy
-
 
 
 @dataclass(frozen=True)

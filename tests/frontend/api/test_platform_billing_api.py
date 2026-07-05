@@ -19,7 +19,6 @@ from core.models.identity_models import Company
 from core.models.payment_models import PaymentProviderType
 
 
-
 @pytest_asyncio.fixture
 async def frontend_client_system(frontend_app, auth_token_system):
     async with AsyncClient(
@@ -48,6 +47,9 @@ async def test_platform_billing_prices_system(frontend_client_system):
 
 @pytest.mark.asyncio
 async def test_platform_billing_put_prices_roundtrip(frontend_client_system, frontend_container):
+    """Единственный тест на платформе, который пишет глобальный
+    billing:resource_base_prices_json (single-owner => parallel-safe).
+    Merge-семантика прайса покрыта unit-тестами _merge_resource_base_price_override."""
     key = "billing:resource_base_prices_json"
     await frontend_container.shared_storage.delete(key, force_global=True)
 
@@ -212,10 +214,10 @@ async def test_platform_billing_company_prices_include_tariff_unit_price(
     unique_id,
     system_user_id,
 ):
+    """Ассерты только по company-level override (уникальный cid): parallel-safe,
+    глобальный ключ billing:resource_base_prices_json не трогаем."""
     cid = f"co_price_tariff_{unique_id}"
-    global_key = "billing:resource_base_prices_json"
     company_key = company_resource_prices_storage_key(cid)
-    prev_global = await frontend_container.shared_storage.get(global_key, force_global=True)
     company = Company(
         company_id=cid,
         name="Price tariff",
@@ -226,11 +228,6 @@ async def test_platform_billing_company_prices_include_tariff_unit_price(
     )
     await frontend_container.company_repository.set(company)
     try:
-        await frontend_container.shared_storage.set(
-            global_key,
-            json.dumps({"llm": {"*": 0.02}}),
-            force_global=True,
-        )
         await frontend_container.shared_storage.set(
             company_key,
             json.dumps({"llm": {"gpt-test": 0.03}}),
@@ -243,17 +240,12 @@ async def test_platform_billing_company_prices_include_tariff_unit_price(
         assert response.status_code == 200
         data = response.json()
         assert data["static_base"]["llm"]["*"] > 0
-        assert data["effective"]["llm"]["*"] == pytest.approx(0.02)
         assert data["effective"]["llm"]["gpt-test"] == pytest.approx(0.03)
         assert data["tariff_plan"] == "basic"
         assert data["tariff_multipliers"]["llm"]["*"] == pytest.approx(1.25)
         assert data["unit_effective"]["llm"]["gpt-test"] == pytest.approx(0.03 * 1.25)
     finally:
         await frontend_container.shared_storage.delete(company_key, force_global=True)
-        if prev_global is not None:
-            await frontend_container.shared_storage.set(global_key, prev_global, force_global=True)
-        else:
-            await frontend_container.shared_storage.delete(global_key, force_global=True)
 
 
 @pytest.mark.asyncio

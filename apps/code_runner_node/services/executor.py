@@ -186,7 +186,7 @@ class NodeSandboxExecutor:
 
     def __init__(self) -> None:
         self._workers: list[_NodeWorker] = []
-        self._next_worker: int = 0
+        self._idle_workers: asyncio.Queue[_NodeWorker] = asyncio.Queue()
         self._pool_lock: asyncio.Lock = asyncio.Lock()
         self._runtime_dir: Path = Path(tempfile.mkdtemp(prefix="code-runner-node-runtime-"))
         self._worker_path: Path = self._runtime_dir / "node_worker.mjs"
@@ -219,7 +219,16 @@ class NodeSandboxExecutor:
             },
         ):
             try:
-                worker = await self._select_worker()
+                worker = await self._acquire_worker()
+            except Exception as exc:
+                return self._failed_response(
+                    request=request,
+                    stage="runtime",
+                    message=str(exc),
+                    exception_type=type(exc).__name__,
+                    traceback_text="".join(traceback.format_exception(exc)),
+                )
+            try:
                 return await worker.invoke(request)
             except Exception as exc:
                 return self._failed_response(
@@ -229,6 +238,8 @@ class NodeSandboxExecutor:
                     exception_type=type(exc).__name__,
                     traceback_text="".join(traceback.format_exception(exc)),
                 )
+            finally:
+                self._release_worker(worker)
 
     async def validate(self, request: CodeValidationRequest) -> CodeValidationResponse:
         security_error = self._verify_validation_request(request)
@@ -257,7 +268,16 @@ class NodeSandboxExecutor:
             },
         ):
             try:
-                worker = await self._select_worker()
+                worker = await self._acquire_worker()
+            except Exception as exc:
+                return self._failed_validation_response(
+                    request=request,
+                    stage="runtime",
+                    message=str(exc),
+                    exception_type=type(exc).__name__,
+                    traceback_text="".join(traceback.format_exception(exc)),
+                )
+            try:
                 return await worker.validate(request)
             except Exception as exc:
                 return self._failed_validation_response(
@@ -267,8 +287,15 @@ class NodeSandboxExecutor:
                     exception_type=type(exc).__name__,
                     traceback_text="".join(traceback.format_exception(exc)),
                 )
+            finally:
+                self._release_worker(worker)
 
-    async def _select_worker(self) -> _NodeWorker:
+    async def _acquire_worker(self) -> _NodeWorker:
+        """Берёт первый свободный worker из очереди.
+
+        Очередь свободных worker-ов вместо round-robin: длинный запрос не блокирует
+        запросы, которые round-robin назначил бы на тот же worker (head-of-line blocking).
+        """
         async with self._pool_lock:
             if not self._workers:
                 node_bin = resolve_runtime_executable("node", override_env=NODE_BIN_ENV)
@@ -285,9 +312,12 @@ class NodeSandboxExecutor:
                     _NodeWorker(node_bin=node_bin, worker_path=self._worker_path, gateway_url=gateway_url)
                     for _ in range(count)
                 ]
-            worker = self._workers[self._next_worker % len(self._workers)]
-            self._next_worker += 1
-            return worker
+                for pooled_worker in self._workers:
+                    self._idle_workers.put_nowait(pooled_worker)
+        return await self._idle_workers.get()
+
+    def _release_worker(self, worker: _NodeWorker) -> None:
+        self._idle_workers.put_nowait(worker)
 
     def _worker_count(self) -> int:
         raw = os.environ.get(WORKER_POOL_ENV)

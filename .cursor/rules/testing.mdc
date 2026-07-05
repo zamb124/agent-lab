@@ -45,7 +45,7 @@ uv run python analyze_imports.py
 
 **WORKERS:** дефолт `10` (`WORKERS ?= 10` в `mk/test.mk`). Override: `make test WORKERS=5` или `WORKERS=auto` (auto → baseline 10). `make test-up` передаёт `WORKERS` в `scripts/test_stack.py` — стек масштабируется пропорционально baseline.
 
-Запуск с `--dist loadgroup -n N` (`_PYTEST_XDIST` в `mk/test.mk`). `xdist_group` сериализует `code_sandbox`, `real_taskiq`, `sync_db` на одном gw. Каждый gw — отдельный процесс. БД, Redis, MinIO — общие; HTTP-сервисы и TaskIQ-воркеры — **один общий стек** (`make test-up` → `scripts/test_stack.py up`).
+Запуск с `-n N` (`_PYTEST_XDIST` в `mk/test.mk`). **Все тесты параллельны: `xdist_group`, lock'и и любая сериализация тестов запрещены.** Flaky от shared state чинится архитектурно: уникальные идентификаторы, single-owner для глобальных singleton-ключей, eventual-convergence контракты для глобальных batch-операций (см. «Parallel-safe контракты» ниже). Каждый gw — отдельный процесс. БД, Redis, MinIO — общие; HTTP-сервисы и TaskIQ-воркеры — **один общий стек** (`make test-up` → `scripts/test_stack.py up`).
 
 - Захардкоженные идентификаторы (`task_id="my-task"`, `flow_id="test_flow"`) запрещены — все ID содержат `unique_id`.
 - Захардкоженные порты, временные файлы, Redis-ключи без `unique_id`/scope запрещены.
@@ -75,7 +75,7 @@ uv run python analyze_imports.py
 
 ## Timeout и cleanup
 
-Жёсткий лимит — `pytest-timeout` (`timeout`, `timeout_method`, `timeout_func_only` в `pytest.ini`). По истечении тест прерывается (при `timeout_method=thread` через `os._exit`, teardown может не выполниться). `timeout_func_only=true` считает время **тела** теста (фаза call), не тяжёлых фикстур. Глобально 5 с; `@pytest.mark.real_taskiq` без своего `@pytest.mark.timeout` — 120 с (`pytest_collection_modifyitems`). Override — `@pytest.mark.timeout(300)`; отключить — `@pytest.mark.timeout(0)` или `PYTEST_TIMEOUT=0` / `pytest -o timeout=0`. Встроенный `faulthandler_timeout` отключён (только печатает стеки, не останавливает).
+Жёсткий лимит — `pytest-timeout` (`timeout`, `timeout_method`, `timeout_func_only` в `pytest.ini`). По истечении тест прерывается (при `timeout_method=thread` через `os._exit`, teardown может не выполниться). Глобально 5 с с `timeout_func_only=true` (только фаза call). `@pytest.mark.real_taskiq` без своего `@pytest.mark.timeout` — **180 с, func_only=False** (setup+body: `crm_client` под `-n10` и shared Postgres иначе ERROR на setup >5s). Override — `@pytest.mark.timeout(300)`; отключить — `@pytest.mark.timeout(0)` или `PYTEST_TIMEOUT=0` / `pytest -o timeout=0`. Встроенный `faulthandler_timeout` отключён (только печатает стеки, не останавливает).
 
 **Sandbox runtime timeout (180 с):** `_is_sandbox_runtime_test()` в `tests/conftest.py` автоматически ставит `@pytest.mark.timeout(180, func_only=True)` для `tests/capabilities/**`, `tests/flows/integration/**`, `tests/flows/e2e/**` и точечных code-runner префиксов. Эти пакеты autouse-зависят от HTTP `sandbox_services` (capability_gateway + code_runner_* на 9016–9020); глобальные 5 с дают ложные timeout, а не сигнал о зависании runner.
 
@@ -222,17 +222,20 @@ async def test_integration(mock_llm_redis, flows_client, unique_id):
 
 **TaskIQ wait в тестах:** `tests/flows/integration/test_taskiq_integration.py` ждёт результат worker'а до 60 с (`_TASKIQ_WAIT_RESULT_TIMEOUT_SECONDS`), не 10 с — под нагрузкой `-n5` очередь flows_worker + code_runner иначе даёт ложный timeout.
 
-**real_taskiq и xdist:** тесты с маркером `real_taskiq` получают `xdist_group("real_taskiq")` — не исполняются параллельно между pytest-воркерами (один общий flows_worker, гонки на `.kiq()`/`tasks/get`).
+### Parallel-safe контракты (вместо xdist_group)
 
-**Sandbox xdist group:** `_is_sandbox_runtime_test()` дополнительно получает `xdist_group("code_sandbox")` — все sandbox/code-runner тесты на одном pytest-воркере без параллели. Иначе под `-n10` несколько воркеров одновременно бьют в `code_runner_python` (HTTP timeout 60s в testing) и дают flaky `ServiceClientError`. Рост `WORKERS` не ускоряет serial-группы `code_sandbox` и `real_taskiq` — см. `xdist_bottleneck` в workers profile.
+`xdist_group` и любые lock'и в тестах **запрещены**. Каждый источник shared state имеет архитектурный parallel-safe паттерн:
 
-**sync_db xdist group:** `tests/sync/db/**` — `xdist_group("sync_db")` + `timeout=60` (глобальный `pytest.ini` `timeout=5`; `pytestmark` в `conftest.py` на тесты не наследуется). Session fixture `sync_database` гоняет Alembic на воркере — под `-n10` без группы и с 5s лимитом даёт ложные timeout.
+- **code_runner IPC:** executor'ы python/node раздают запросы через очередь свободных worker'ов (`_acquire_worker`/`_release_worker`, `asyncio.Queue`), а не round-robin — длинный запрос не блокирует остальные (head-of-line blocking). Ёмкость масштабируется `WORKERS` (см. «Масштабирование стека»).
+- **Глобальный singleton-ключ (single-owner):** платформенный глобальный storage-ключ пишет ровно ОДИН тест на всю платформу; остальные сценарии покрываются unit-тестами чистых функций или изолированными сервисами. Примеры: `billing:resource_base_prices_json` — только `test_platform_billing_put_prices_roundtrip` (merge-семантика — unit `_merge_resource_base_price_override`; политики — изолированный `BillingService(shared_storage=None)`); `yoomoney:access_token` — только `test_access_token_storage_lifecycle` (sync-тесты ставят токен через `provider.set_access_token`, без storage); `billing:settlement_rules_json` — только `test_load_settlement_rules_for_company_ignores_legacy_global_json`.
+- **Глобальные batch-операции (eventual convergence):** reembed/orphan-cleanup (`vector_documents`), files backfill/purge — глобальные batch'и: параллельный воркер может обработать наши строки раньше нас. Тест ассертит только СВОИ строки (уникальный suffix/id) и сходимость за ограниченное число batch-вызовов; глобальные счётчики (`deleted >= N`, `reembedded >= 1`) не ассертятся. Глобальные чистки таблиц из фикстур (`file_db_clean`-стиль `DELETE ... LIKE 'file:%'`) запрещены.
+- **Per-client квоты:** ключ квоты производен от `request.client.host` — тест получает уникальный client IP через `ASGITransport(app, client=(ip, port))` (`test_public_search_session.py`), свой redis-ключ на тест.
+- **Состав команды/членов компании:** не ассертить полный состав `system` (session-фикстуры других gw добавляют участников). Сравнение множеств — только на выделенной компании теста (`test_team_members_consistent_across_services`).
+- **Миграции:** только `make test-up` (`scripts/test_migrate.py`). Никакой pytest-фикстуре нельзя гонять Alembic (в т.ч. `tests/sync/conftest.py::sync_database` — verify-only через `setup_database_before_tests`).
 
-**HumanitecAgent artifact (read-only в pytest):** единственный writer — `AGENT_ARTIFACT_MODE=release make agent-ensure` до pytest (`mk/test.mk`). Fixture `agent_local_release_artifact` только verify через `resolve_local_release_artifact_path()`; **запрещён** `apply_branding` из pytest. `apply_branding.sh` держит mkdir-lock `apps/agent/desktop/.branding.lock.d`. `xdist_group("agent_artifact")`: `test_agent_release_smoke`, `test_humanitec_agent_api`, `test_artifact_ready_*`.
+**HumanitecAgent artifact (read-only в pytest):** единственный writer — `AGENT_ARTIFACT_MODE=release make agent-ensure` до pytest (`mk/test.mk`). Fixture `agent_local_release_artifact` только verify через `resolve_local_release_artifact_path()`; **запрещён** `apply_branding` из pytest. `apply_branding.sh` держит mkdir-lock `apps/agent/desktop/.branding.lock.d`.
 
-**Shared Redis xdist groups:** `public_search_quota` — `tests/frontend/api/test_public_search_session.py` (один quota key); `billing_storage` — `tests/core/billing/test_billing_prices_production_like_integration.py` (глобальный `billing:resource_base_prices_json`). Тесты settle/charge используют изолированный `BillingService(shared_storage=None)`.
-
-**CRM e2e timeout:** `tests/crm/e2e/**` — `timeout=60` func_only (poll semantic search до 9s).
+**Timeout-политика по пакетам (`pytest_collection_modifyitems`):** `real_taskiq` — 180 c func_only=False; `tests/sync/db/**` — 60 c; RAG global maintenance — 120 c func_only=False; `tests/crm/e2e/**` — 60 c **func_only=False** (setup `crm_client` + poll до 9s в одном бюджете; иначе setup >5s убивает xdist-gw); notification WS e2e — 120 c; sandbox runtime — 180 c.
 
 **Permissions integration:** HTTP только для `permissions_enabled=false` (default conf). Checker matrix — `tests/flows/core/auth/test_permissions.py`; enabled channel checks — `tests/flows/core/auth/test_channel_permissions.py` (`flows_permissions_enabled` harness). Запрещён `monkeypatch` на `permissions_enabled`.
 

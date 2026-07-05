@@ -11,7 +11,11 @@ import uuid
 
 import pytest
 
-from core.billing.service import BillingService, company_resource_prices_storage_key
+from core.billing.service import (
+    BillingService,
+    _merge_resource_base_price_override,
+    company_resource_prices_storage_key,
+)
 from core.billing.settlement_rules import (
     SettlementApplicationMode,
     SettlementRulesDocument,
@@ -287,39 +291,45 @@ async def test_tariff_plan_premium_lowers_multiplier(frontend_container, unique_
     assert unit == pytest.approx(0.0001 * mult)
 
 
-@pytest.mark.asyncio
-async def test_global_storage_override_merges_llm_only(frontend_container, system_user_id) -> None:
-    billing = frontend_container.billing_service
-    key = "billing:resource_base_prices_json"
-    prev = await frontend_container.shared_storage.get(key, force_global=True)
-    try:
-        await frontend_container.shared_storage.set(
-            key,
-            json.dumps({"llm": {"*": 0.01}}),
-            force_global=True,
-        )
-        company = await frontend_container.company_repository.get("system")
-        assert company is not None
-        assert await billing.get_resource_cost_for_company(company, "llm:x") == pytest.approx(
-            0.01 * _free_llm_mult()
-        )
-        assert await billing.get_resource_cost_for_company(company, "livekit:room_minute") == pytest.approx(
-            0.01 * _free_livekit_mult()
-        )
-    finally:
-        if prev is not None:
-            await frontend_container.shared_storage.set(key, prev, force_global=True)
-        else:
-            await frontend_container.shared_storage.delete(key, force_global=True)
+def test_global_override_merge_semantics_llm_only() -> None:
+    """Merge global override поверх static: без записи глобального storage-ключа
+    (единственный владелец billing:resource_base_prices_json —
+    tests/frontend/api/test_platform_billing_api.py::test_platform_billing_put_prices_roundtrip)."""
+    merged = copy.deepcopy(PRODUCTION_LIKE_BASE)
+    _merge_resource_base_price_override(
+        merged,
+        json.dumps({"llm": {"*": 0.01}}),
+        "billing:resource_base_prices_json",
+    )
+    assert merged["llm"]["*"] == pytest.approx(0.01)
+    assert merged["livekit"]["room_minute"] == pytest.approx(0.01)
+    assert merged["search"]["tavily"] == pytest.approx(0.05)
+
+
+def test_company_override_merge_semantics_over_global_and_static() -> None:
+    """Приоритет merge: static < global < company. Чистая функция, без storage."""
+    merged = copy.deepcopy(PRODUCTION_LIKE_BASE)
+    _merge_resource_base_price_override(
+        merged,
+        json.dumps({"llm": {"*": 0.02}, "livekit": {"*": 0.07}}),
+        "billing:resource_base_prices_json",
+    )
+    _merge_resource_base_price_override(
+        merged,
+        json.dumps({"livekit": {"room_minute": 0.33}}),
+        "billing:company:x:resource_base_prices_json",
+    )
+    assert merged["llm"]["*"] == pytest.approx(0.02)
+    assert merged["livekit"]["room_minute"] == pytest.approx(0.33)
+    assert merged["livekit"]["*"] == pytest.approx(0.07)
 
 
 @pytest.mark.asyncio
-async def test_company_override_merges_over_global_and_static(
+async def test_company_override_unit_cost_via_company_storage_key(
     frontend_container, unique_id, system_user_id
 ) -> None:
+    """Company-level override через уникальный company-ключ (parallel-safe, global не трогаем)."""
     billing = frontend_container.billing_service
-    global_key = "billing:resource_base_prices_json"
-    prev_g = await frontend_container.shared_storage.get(global_key, force_global=True)
     cid = f"merge_{unique_id}"
     ckey = company_resource_prices_storage_key(cid)
     company = Company(
@@ -334,28 +344,15 @@ async def test_company_override_merges_over_global_and_static(
     assert fresh is not None
     try:
         await frontend_container.shared_storage.set(
-            global_key,
-            json.dumps({"llm": {"*": 0.02}, "livekit": {"*": 0.07}}),
-            force_global=True,
-        )
-        await frontend_container.shared_storage.set(
             ckey,
             json.dumps({"livekit": {"room_minute": 0.33}}),
             force_global=True,
         )
-        assert await billing.get_resource_cost_for_company(fresh, "llm:x") == pytest.approx(0.02 * _free_llm_mult())
         assert await billing.get_resource_cost_for_company(fresh, "livekit:room_minute") == pytest.approx(
             0.33 * _free_livekit_mult()
         )
-        assert await billing.get_resource_cost_for_company(fresh, "livekit:unknown_op") == pytest.approx(
-            0.07 * _free_livekit_mult()
-        )
     finally:
         await frontend_container.shared_storage.delete(ckey, force_global=True)
-        if prev_g is not None:
-            await frontend_container.shared_storage.set(global_key, prev_g, force_global=True)
-        else:
-            await frontend_container.shared_storage.delete(global_key, force_global=True)
 
 
 @pytest.mark.asyncio

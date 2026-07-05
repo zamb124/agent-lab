@@ -279,42 +279,31 @@ def _is_sandbox_runtime_test(nodeid: str) -> bool:
     return any(nodeid.startswith(prefix) for prefix in _CODE_RUNNER_TEST_PREFIXES)
 
 
-def _sandbox_xdist_group(nodeid: str) -> str:
-    """Единая очередь sandbox-тестов: один pytest-воркер, без параллели code_runner."""
-    _ = nodeid
-    return "code_sandbox"
-
-
 def _is_sync_db_test(nodeid: str) -> bool:
     return nodeid.startswith("tests/sync/db/")
-
-
-def _is_agent_artifact_test(nodeid: str) -> bool:
-    """Тесты, читающие dist/ release артефакт (make agent-ensure). Сериализация read + build."""
-    if nodeid.startswith("tests/agent/test_agent_release_smoke.py"):
-        return True
-    if nodeid.startswith("tests/frontend/api/test_humanitec_agent_api.py"):
-        return True
-    if nodeid.startswith("tests/agent/test_humanitec_agent_build.py::test_artifact_ready"):
-        return True
-    return False
-
-
-def _is_public_search_quota_test(nodeid: str) -> bool:
-    return nodeid.startswith("tests/frontend/api/test_public_search_session.py")
-
-
-def _is_billing_storage_test(nodeid: str) -> bool:
-    return nodeid.startswith("tests/core/billing/test_billing_prices_production_like_integration.py")
 
 
 def _is_crm_e2e_test(nodeid: str) -> bool:
     return nodeid.startswith("tests/crm/e2e/")
 
 
+def _is_rag_global_maintenance_test(nodeid: str) -> bool:
+    """Reembed/orphan maintenance на shared vector_documents: глобальные batch-операции."""
+    if nodeid.startswith("tests/core/rag/test_execute_reembed_tick_integration.py"):
+        return True
+    if nodeid.startswith("tests/rag/test_pgvector_provider.py"):
+        return "delete_orphan_company_chunks" in nodeid
+    return False
+
+
+def _is_notification_ws_e2e_test(nodeid: str) -> bool:
+    return nodeid.startswith("tests/core/websocket/test_notification_e2e.py")
+
+
 @pytest.hookimpl(tryfirst=True)
 def pytest_collection_modifyitems(items: list[pytest.Item]) -> None:
-    """Регистрация маркеров для xdist и sandbox.
+    """Timeout-политика по типам тестов. Никаких xdist_group: все тесты параллельны,
+    изоляция достигается уникальными идентификаторами и parallel-safe контрактами.
 
     tryfirst=True обязателен: xdist remote.py тоже регистрирует
     pytest_collection_modifyitems. Наш хук должен выполниться ДО xdist,
@@ -322,24 +311,25 @@ def pytest_collection_modifyitems(items: list[pytest.Item]) -> None:
     """
     for item in items:
         if item.get_closest_marker("real_taskiq"):
-            item.add_marker(pytest.mark.xdist_group("real_taskiq"))
             if item.get_closest_marker("timeout") is None:
-                item.add_marker(pytest.mark.timeout(120, func_only=True))
+                # func_only=False: setup crm_client/rag_worker под WORKERS=10 и shared Postgres
+                # регулярно >5s; глобальный pytest.ini timeout=5 иначе даёт ERROR на setup.
+                item.add_marker(pytest.mark.timeout(180, func_only=False))
         elif _is_sync_db_test(item.nodeid):
-            item.add_marker(pytest.mark.xdist_group("sync_db"))
             if item.get_closest_marker("timeout") is None:
                 item.add_marker(pytest.mark.timeout(60, func_only=True))
-        elif _is_agent_artifact_test(item.nodeid):
-            item.add_marker(pytest.mark.xdist_group("agent_artifact"))
-        elif _is_public_search_quota_test(item.nodeid):
-            item.add_marker(pytest.mark.xdist_group("public_search_quota"))
-        elif _is_billing_storage_test(item.nodeid):
-            item.add_marker(pytest.mark.xdist_group("billing_storage"))
+        elif _is_rag_global_maintenance_test(item.nodeid):
+            if item.get_closest_marker("timeout") is None:
+                item.add_marker(pytest.mark.timeout(120, func_only=False))
         elif _is_crm_e2e_test(item.nodeid):
             if item.get_closest_marker("timeout") is None:
-                item.add_marker(pytest.mark.timeout(60, func_only=True))
+                # func_only=False: setup crm_client под -n10 и shared Postgres >5s;
+                # signal-timeout на setup убивает gw целиком → каскад ERROR.
+                item.add_marker(pytest.mark.timeout(60, func_only=False))
+        elif _is_notification_ws_e2e_test(item.nodeid):
+            if item.get_closest_marker("timeout") is None:
+                item.add_marker(pytest.mark.timeout(120, func_only=True))
         elif _is_sandbox_runtime_test(item.nodeid):
-            item.add_marker(pytest.mark.xdist_group(_sandbox_xdist_group(item.nodeid)))
             if item.get_closest_marker("timeout") is None:
                 item.add_marker(pytest.mark.timeout(180, func_only=True))
 

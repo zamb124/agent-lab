@@ -863,24 +863,29 @@ class TestParallelToolExecution:
         """
         Проверяем что tools РЕАЛЬНО выполняются параллельно.
         Sleep в remote code_runner: пересечение окон started_at/finished_at — главный критерий.
+
+        Sleep 1.5s — parallel-safe контракт: под общим стеком (-n10) старт окна
+        сдвигается на jitter планирования (холодный спавн sandbox worker-а, ожидание
+        свободного worker-а); окно должно быть заметно длиннее этого jitter-а,
+        иначе тест меряет нагрузку стека, а не параллельность диспатча.
         """
         tool0 = {
             "tool_id": "sleep_tool_0",
             "description": "Sleep tool 0",
             "parameters_schema": {"type": "object", "properties": {}, "required": []},
-            "code": "\nimport asyncio\nimport time\nasync def run(args, state):\n    started_at = time.time()\n    await asyncio.sleep(0.2)\n    finished_at = time.time()\n    state['tool_0_done'] = True\n    return {'idx': 0, 'done': True, 'started_at': started_at, 'finished_at': finished_at}\n",
+            "code": "\nimport asyncio\nimport time\nasync def run(args, state):\n    started_at = time.time()\n    await asyncio.sleep(1.5)\n    finished_at = time.time()\n    state['tool_0_done'] = True\n    return {'idx': 0, 'done': True, 'started_at': started_at, 'finished_at': finished_at}\n",
         }
         tool1 = {
             "tool_id": "sleep_tool_1",
             "description": "Sleep tool 1",
             "parameters_schema": {"type": "object", "properties": {}, "required": []},
-            "code": "\nimport asyncio\nimport time\nasync def run(args, state):\n    started_at = time.time()\n    await asyncio.sleep(0.2)\n    finished_at = time.time()\n    state['tool_1_done'] = True\n    return {'idx': 1, 'done': True, 'started_at': started_at, 'finished_at': finished_at}\n",
+            "code": "\nimport asyncio\nimport time\nasync def run(args, state):\n    started_at = time.time()\n    await asyncio.sleep(1.5)\n    finished_at = time.time()\n    state['tool_1_done'] = True\n    return {'idx': 1, 'done': True, 'started_at': started_at, 'finished_at': finished_at}\n",
         }
         tool2 = {
             "tool_id": "sleep_tool_2",
             "description": "Sleep tool 2",
             "parameters_schema": {"type": "object", "properties": {}, "required": []},
-            "code": "\nimport asyncio\nimport time\nasync def run(args, state):\n    started_at = time.time()\n    await asyncio.sleep(0.2)\n    finished_at = time.time()\n    state['tool_2_done'] = True\n    return {'idx': 2, 'done': True, 'started_at': started_at, 'finished_at': finished_at}\n",
+            "code": "\nimport asyncio\nimport time\nasync def run(args, state):\n    started_at = time.time()\n    await asyncio.sleep(1.5)\n    finished_at = time.time()\n    state['tool_2_done'] = True\n    return {'idx': 2, 'done': True, 'started_at': started_at, 'finished_at': finished_at}\n",
         }
         tools = [tool0, tool1, tool2]
         mock_llm_with_queue(

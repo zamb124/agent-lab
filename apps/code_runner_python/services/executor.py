@@ -203,7 +203,7 @@ class PythonSandboxExecutor:
 
     def __init__(self) -> None:
         self._workers: list[_PythonWorker] = []
-        self._next_worker: int = 0
+        self._idle_workers: asyncio.Queue[_PythonWorker] = asyncio.Queue()
         self._pool_lock: asyncio.Lock = asyncio.Lock()
         self._runtime_dir: Path = Path(tempfile.mkdtemp(prefix="code-runner-python-runtime-"))
         self._worker_path: Path = self._runtime_dir / "python_worker.py"
@@ -236,7 +236,16 @@ class PythonSandboxExecutor:
             },
         ):
             try:
-                worker = await self._select_worker()
+                worker = await self._acquire_worker()
+            except Exception as exc:
+                return self._failed_response(
+                    request=request,
+                    stage="runtime",
+                    message=str(exc),
+                    exception_type=type(exc).__name__,
+                    traceback_text="".join(traceback.format_exception(exc)),
+                )
+            try:
                 return await worker.invoke(request)
             except Exception as exc:
                 return self._failed_response(
@@ -246,6 +255,8 @@ class PythonSandboxExecutor:
                     exception_type=type(exc).__name__,
                     traceback_text="".join(traceback.format_exception(exc)),
                 )
+            finally:
+                self._release_worker(worker)
 
     async def validate(self, request: CodeValidationRequest) -> CodeValidationResponse:
         security_error = self._verify_validation_request(request)
@@ -274,7 +285,16 @@ class PythonSandboxExecutor:
             },
         ):
             try:
-                worker = await self._select_worker()
+                worker = await self._acquire_worker()
+            except Exception as exc:
+                return self._failed_validation_response(
+                    request=request,
+                    stage="runtime",
+                    message=str(exc),
+                    exception_type=type(exc).__name__,
+                    traceback_text="".join(traceback.format_exception(exc)),
+                )
+            try:
                 return await worker.validate(request)
             except Exception as exc:
                 return self._failed_validation_response(
@@ -284,8 +304,15 @@ class PythonSandboxExecutor:
                     exception_type=type(exc).__name__,
                     traceback_text="".join(traceback.format_exception(exc)),
                 )
+            finally:
+                self._release_worker(worker)
 
-    async def _select_worker(self) -> _PythonWorker:
+    async def _acquire_worker(self) -> _PythonWorker:
+        """Берёт первый свободный worker из очереди.
+
+        Очередь свободных worker-ов вместо round-robin: длинный запрос не блокирует
+        запросы, которые round-robin назначил бы на тот же worker (head-of-line blocking).
+        """
         async with self._pool_lock:
             if not self._workers:
                 gateway_url = get_settings().server.get_service_url("capability_gateway")
@@ -294,9 +321,12 @@ class PythonSandboxExecutor:
                     _PythonWorker(worker_path=self._worker_path, gateway_url=gateway_url)
                     for _ in range(count)
                 ]
-            worker = self._workers[self._next_worker % len(self._workers)]
-            self._next_worker += 1
-            return worker
+                for pooled_worker in self._workers:
+                    self._idle_workers.put_nowait(pooled_worker)
+        return await self._idle_workers.get()
+
+    def _release_worker(self, worker: _PythonWorker) -> None:
+        self._idle_workers.put_nowait(worker)
 
     def _worker_count(self) -> int:
         raw = os.environ.get(WORKER_POOL_ENV)
@@ -446,6 +476,26 @@ class PythonSandboxExecutor:
                         raise ValueError("FlowInterrupt: question or body is required")
                     self.extra = dict(kwargs)
                     super().__init__(self.body.get("question", "Flow interrupted"))
+
+
+            class ExecutionStateView(dict):
+                # Контракт state inline-кода: атрибутный доступ к ключам поверх dict
+                # (state.session_id и state["session_id"] — один объект), как у
+                # in-process ExecutionState и у объекта state в JS-runner.
+                def __getattr__(self, name):
+                    try:
+                        return self[name]
+                    except KeyError:
+                        raise AttributeError(f"state has no field: {{name}}") from None
+
+                def __setattr__(self, name, value):
+                    self[name] = value
+
+                def __delattr__(self, name):
+                    try:
+                        del self[name]
+                    except KeyError:
+                        raise AttributeError(f"state has no field: {{name}}") from None
 
 
             def manifest_capability_names():
@@ -805,7 +855,7 @@ class PythonSandboxExecutor:
                     current_request = json.loads(raw_line)
                     if "args" not in current_request and "state" not in current_request:
                         return json.dumps(validate_request(current_request), ensure_ascii=False, separators=(",", ":"))
-                    state = dict(current_request["state"])
+                    state = ExecutionStateView(current_request["state"])
                     current_request["state"] = state
                     args = dict(current_request["args"])
 

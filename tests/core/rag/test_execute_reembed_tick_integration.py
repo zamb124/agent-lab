@@ -70,6 +70,41 @@ async def _chunk_state(session_factory, chunk_id: str) -> tuple[str | None, bool
     return row.embedding_model, row.embedding is not None, True
 
 
+async def _run_rounds_until_chunk_embedded(
+    *,
+    frontend_container,
+    provider,
+    chunk_id: str,
+    target: str,
+    schedule_task_id: str,
+) -> None:
+    """Гоняет reembed-раунды до эмбеддинга собственного чанка.
+
+    Раунд глобальный (batch по всем stale-чанкам shared таблицы): параллельный
+    воркер может заэмбеддить наш чанк раньше нас — written нашего раунда тогда 0.
+    Parallel-safe контракт: сходимость состояния собственного чанка.
+    """
+    sf = provider._session_factory
+    for _ in range(20):
+        model, has_emb, exists = await _chunk_state(sf, chunk_id)
+        assert exists is True
+        if model == target and has_emb:
+            return
+        _, _ = await _run_reembed_round(
+            provider=provider,
+            company_repository=frontend_container.company_repository,
+            user_repository=frontend_container.user_repository,
+            batch_size=2000,
+            target_embedding_model=target,
+            schedule_task_id=schedule_task_id,
+            channel="test_worker",
+        )
+    model, has_emb, _ = await _chunk_state(sf, chunk_id)
+    raise AssertionError(
+        f"chunk {chunk_id} not reembedded after 20 rounds: model={model}, has_embedding={has_emb}"
+    )
+
+
 @pytest.mark.asyncio
 async def test_run_reembed_round_embeds_chunk_for_solvent_company(
     frontend_container, rag_provider_pgvector, unique_id
@@ -84,17 +119,13 @@ async def test_run_reembed_round_embeds_chunk_for_solvent_company(
     )
     target = rag_provider_pgvector.embedding_model_name()
 
-    written, by_company_written = await _run_reembed_round(
+    await _run_rounds_until_chunk_embedded(
+        frontend_container=frontend_container,
         provider=rag_provider_pgvector,
-        company_repository=frontend_container.company_repository,
-        user_repository=frontend_container.user_repository,
-        batch_size=2000,
-        target_embedding_model=target,
+        chunk_id=chunk_id,
+        target=target,
         schedule_task_id=f"t_{unique_id}",
-        channel="test_worker",
     )
-    assert written >= 1
-    assert by_company_written.get(cid, 0) >= 1
     model, has_emb, exists = await _chunk_state(sf, chunk_id)
     assert exists is True
     assert model == target
@@ -214,14 +245,12 @@ async def test_run_reembed_round_one_bad_company_does_not_fail_others(
     await _insert_stale_chunk(sf, chunk_id=chunk_good, namespace_id=ns,
                               company_id=cid_good, content="good group")
     target = rag_provider_pgvector.embedding_model_name()
-    _, _ = await _run_reembed_round(
+    await _run_rounds_until_chunk_embedded(
+        frontend_container=frontend_container,
         provider=rag_provider_pgvector,
-        company_repository=frontend_container.company_repository,
-        user_repository=frontend_container.user_repository,
-        batch_size=2000,
-        target_embedding_model=target,
+        chunk_id=chunk_good,
+        target=target,
         schedule_task_id=f"t_{unique_id}",
-        channel="test_worker",
     )
     bad_model, _, _ = await _chunk_state(sf, chunk_bad)
     good_model, good_has_emb, _ = await _chunk_state(sf, chunk_good)
@@ -287,18 +316,23 @@ async def test_execute_reembed_tick_full_run_embeds_chunk(
     assert isinstance(provider_raw, PgVectorProvider)
     assert provider_raw.embedding_model_name() == rag_provider_pgvector.embedding_model_name()
 
-    result = await execute_reembed_tick(
-        container=frontend_container,
-        channel="test_worker_e2e",
-        schedule_task_id=f"e2e_{unique_id}",
-    )
-    if result["skipped"]:
-        pytest.fail(f"execute_reembed_tick skipped unexpectedly: {result}")
-    assert result["reembedded"] >= 1
-    assert isinstance(result.get("by_company_written"), dict)
-    assert result["by_company_written"].get(cid, 0) >= 1
-    target = result.get("target_embedding_model")
-    assert target is not None
+    # Тик глобальный: параллельный воркер может заэмбеддить наш чанк раньше —
+    # тогда reembedded нашего тика 0. Parallel-safe контракт: сходимость
+    # состояния собственного чанка за ограниченное число тиков.
+    target = rag_provider_pgvector.embedding_model_name()
+    for _ in range(20):
+        result = await execute_reembed_tick(
+            container=frontend_container,
+            channel="test_worker_e2e",
+            schedule_task_id=f"e2e_{unique_id}",
+        )
+        if result["skipped"]:
+            pytest.fail(f"execute_reembed_tick skipped unexpectedly: {result}")
+        assert isinstance(result.get("by_company_written"), dict)
+        assert result.get("target_embedding_model") == target
+        model, has_emb, _ = await _chunk_state(sf, chunk_id)
+        if model == target and has_emb:
+            break
     model, has_emb, _ = await _chunk_state(sf, chunk_id)
     assert model == target
     assert has_emb is True
@@ -319,11 +353,17 @@ async def test_orphan_cleanup_tick_removes_orphan_company_chunks(
     await _insert_stale_chunk(sf, chunk_id=chunk_empty, namespace_id=ns,
                               company_id="", content="empty")
 
-    result = await rag_cleanup_orphan_company_chunks_tick(
-        schedule_task_id=f"orph_{unique_id}",
-    )
-    assert result["skipped"] is False
-    assert result["deleted"] >= 2
+    # Cleanup глобальный: чужой параллельный batch может удалить наши строки
+    # раньше нас (deleted нашего тика тогда < 2). Сходимость собственных строк.
+    for _ in range(50):
+        result = await rag_cleanup_orphan_company_chunks_tick(
+            schedule_task_id=f"orph_{unique_id}",
+        )
+        assert result["skipped"] is False
+        _, _, exists_null = await _chunk_state(sf, chunk_null)
+        _, _, exists_empty = await _chunk_state(sf, chunk_empty)
+        if not exists_null and not exists_empty:
+            break
 
     _, _, exists_null = await _chunk_state(sf, chunk_null)
     _, _, exists_empty = await _chunk_state(sf, chunk_empty)

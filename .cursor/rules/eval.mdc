@@ -56,8 +56,19 @@ flows runtime / code API
 ```python
 async def run(args, state):
     result = await files.get_bytes(file_id=args["file_id"])
+    state.last_file_id = args["file_id"]
     return {"result": result}
 ```
+
+**Контракт `state` в Python sandbox** — тот же DX, что был у in-process `ExecutionState`, и тот же, что у объекта `state` в JS-runner:
+
+- Атрибутный стиль — первичный: `state.session_id` (чтение), `state.my_field = value` (запись любого нового поля без дополнительного синтаксиса).
+- Dict-протокол работает на том же объекте: `state["key"]`, `state.get(...)`, `key in state` — запасной стиль для динамических ключей и имён, совпадающих с методами dict (`get`, `items`, `keys`).
+- Чтение отсутствующего поля — `AttributeError` (Zero-Guess, без тихого `None`).
+- Вложенные структуры — обычные dict (`state.variables` — dict, дальше `["key"]`).
+- Реализация — `ExecutionStateView(dict)` в worker bootstrap `apps/code_runner_python/services/executor.py`: одна обёртка при разборе запроса, без копий и преобразований; JSON-сериализация ответа и identity `result is state` не меняются.
+
+`args` — обычный dict во всех языках.
 
 ### JavaScript / TypeScript
 

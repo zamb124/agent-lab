@@ -51,7 +51,7 @@ async def test_projection_cache_sets_ttl_on_running() -> None:
     await runtime._cache_projection(  # noqa: SLF001
         company_id="company-1",
         session_id="flow:ctx-1",
-        state=state,
+        state_json=state_json,
         head_sequence=1,
         head_state_hash=computed_hash,
         execution_branch_id="branch-1",
@@ -79,7 +79,7 @@ async def test_projection_cache_deleted_on_terminal() -> None:
     await runtime._cache_projection(  # noqa: SLF001
         company_id="company-1",
         session_id="flow:ctx-1",
-        state=state,
+        state_json=state_json,
         head_sequence=2,
         head_state_hash=computed_hash,
         execution_branch_id="branch-1",

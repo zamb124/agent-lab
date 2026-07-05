@@ -22,7 +22,6 @@ from core.tracing.models import BillingSettlementSpan
 from core.types import JsonObject
 
 
-
 def _settlement_span(
     *,
     span_id: str,
