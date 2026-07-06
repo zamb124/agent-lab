@@ -24,6 +24,10 @@ from core.models.embed_models import (
     EmbedMapping,
     EmbedStatus,
 )
+from core.models.flow_chat_settings import (
+    EmbedChatPolicyOverride,
+    compact_embed_chat_policy_override,
+)
 from core.models.identity_models import Company, User
 from core.pagination import OffsetPage
 from core.types import JsonObject
@@ -151,10 +155,7 @@ def _embed_config_to_response(config: EmbedConfig) -> "EmbedConfigResponse":
         theme=config.theme,
         position=config.position,
         show_launcher=config.show_launcher,
-        show_reasoning=config.show_reasoning,
-        show_tool_calls=config.show_tool_calls,
         primary_color=config.primary_color,
-        greeting_message=config.greeting_message,
         assistant_title=config.assistant_title,
         interface_locale=config.interface_locale,
         placeholder=config.placeholder,
@@ -165,6 +166,7 @@ def _embed_config_to_response(config: EmbedConfig) -> "EmbedConfigResponse":
         guest_max_user_messages=config.guest_max_user_messages,
         voice_enabled=config.voice_enabled,
         voice_default_on=config.voice_default_on,
+        chat_override=compact_embed_chat_policy_override(config.chat_override),
         preview_share_link=config.preview_share_link,
         usage_count=config.usage_count,
         last_used_at=config.last_used_at,
@@ -182,10 +184,7 @@ class CreateEmbedConfigRequest(BaseModel):
     theme: str = Field(default="dark", description="Тема оформления")
     position: str = Field(default="bottom-right", description="Позиция на странице")
     show_launcher: bool = Field(default=True, description="Показывать встроенную кнопку запуска")
-    show_reasoning: bool = Field(default=False, description="Показывать reasoning")
-    show_tool_calls: bool = Field(default=False, description="Показывать tool calls")
     primary_color: str = Field(default="#6366f1", description="Основной цвет")
-    greeting_message: str | None = Field(default=None, description="Приветственное сообщение")
     assistant_title: str | None = Field(default=None, description="Имя ассистента в шапке")
     interface_locale: str = Field(default="auto", description="Язык интерфейса embed-чата (auto, ru, en)")
     placeholder: str = Field(
@@ -208,6 +207,10 @@ class CreateEmbedConfigRequest(BaseModel):
         default=False,
         description="Автоматически включать голосовой режим при открытии виджета",
     )
+    chat_override: EmbedChatPolicyOverride | None = Field(
+        default=None,
+        description="Частичное переопределение FlowChatSettings для виджета; null — наследовать flow",
+    )
 
 class UpdateEmbedConfigRequest(BaseModel):
     """Запрос на обновление конфигурации виджета"""
@@ -219,10 +222,7 @@ class UpdateEmbedConfigRequest(BaseModel):
     theme: str | None = None
     position: str | None = None
     show_launcher: bool | None = None
-    show_reasoning: bool | None = None
-    show_tool_calls: bool | None = None
     primary_color: str | None = None
-    greeting_message: str | None = None
     assistant_title: str | None = None
     interface_locale: str | None = None
     placeholder: str | None = None
@@ -233,6 +233,7 @@ class UpdateEmbedConfigRequest(BaseModel):
     guest_max_user_messages: int | None = None
     voice_enabled: bool | None = None
     voice_default_on: bool | None = None
+    chat_override: EmbedChatPolicyOverride | None = None
 
 class EmbedConfigResponse(BaseModel):
     """Ответ с конфигурацией виджета"""
@@ -245,10 +246,7 @@ class EmbedConfigResponse(BaseModel):
     theme: str
     position: str
     show_launcher: bool
-    show_reasoning: bool
-    show_tool_calls: bool
     primary_color: str
-    greeting_message: str | None
     assistant_title: str | None
     interface_locale: str
     placeholder: str
@@ -259,6 +257,7 @@ class EmbedConfigResponse(BaseModel):
     guest_max_user_messages: int | None
     voice_enabled: bool
     voice_default_on: bool
+    chat_override: EmbedChatPolicyOverride | None
     preview_share_link: bool
     usage_count: int
     last_used_at: datetime | None
@@ -371,10 +370,7 @@ async def create_embed_config(
         theme=request_data.theme,
         position=request_data.position,
         show_launcher=request_data.show_launcher,
-        show_reasoning=request_data.show_reasoning,
-        show_tool_calls=request_data.show_tool_calls,
         primary_color=request_data.primary_color,
-        greeting_message=request_data.greeting_message,
         assistant_title=request_data.assistant_title,
         interface_locale=interface_locale,
         placeholder=request_data.placeholder,
@@ -385,6 +381,7 @@ async def create_embed_config(
         guest_max_user_messages=request_data.guest_max_user_messages,
         voice_enabled=request_data.voice_enabled,
         voice_default_on=request_data.voice_default_on,
+        chat_override=compact_embed_chat_policy_override(request_data.chat_override),
         preview_share_link=False,
         created_by=user.user_id,
     )
@@ -494,20 +491,10 @@ async def update_embed_config(
         if request_data.show_launcher is None:
             raise HTTPException(status_code=400, detail="show_launcher не может быть null")
         config.show_launcher = request_data.show_launcher
-    if "show_reasoning" in fields:
-        if request_data.show_reasoning is None:
-            raise HTTPException(status_code=400, detail="show_reasoning не может быть null")
-        config.show_reasoning = request_data.show_reasoning
-    if "show_tool_calls" in fields:
-        if request_data.show_tool_calls is None:
-            raise HTTPException(status_code=400, detail="show_tool_calls не может быть null")
-        config.show_tool_calls = request_data.show_tool_calls
     if "primary_color" in fields:
         if request_data.primary_color is None:
             raise HTTPException(status_code=400, detail="primary_color не может быть null")
         config.primary_color = request_data.primary_color
-    if "greeting_message" in fields:
-        config.greeting_message = request_data.greeting_message
     if "assistant_title" in fields:
         config.assistant_title = request_data.assistant_title
     if "interface_locale" in fields:
@@ -546,6 +533,8 @@ async def update_embed_config(
         if request_data.voice_default_on is None:
             raise HTTPException(status_code=400, detail="voice_default_on не может быть null")
         config.voice_default_on = request_data.voice_default_on
+    if "chat_override" in fields:
+        config.chat_override = compact_embed_chat_policy_override(request_data.chat_override)
 
     _validate_landing_catalog_fields(
         landing_visible=config.landing_visible,

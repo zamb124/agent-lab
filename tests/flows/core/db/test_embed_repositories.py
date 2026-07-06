@@ -31,10 +31,7 @@ async def test_embed_config_repository_basic(storage):
         status=EmbedStatus.ACTIVE,
         theme="dark",
         position="bottom-right",
-        show_reasoning=True,
-        show_tool_calls=False,
         primary_color="#6366f1",
-        greeting_message="Hello!",
         placeholder="Type here...",
         branding=True,
         created_by="test_user",
@@ -53,8 +50,7 @@ async def test_embed_config_repository_basic(storage):
     assert loaded_config.branch_id == "default"
     assert loaded_config.allowed_origins == ["https://example.com"]
     assert loaded_config.status == EmbedStatus.ACTIVE
-    assert loaded_config.show_reasoning is True
-    assert loaded_config.show_tool_calls is False
+    assert loaded_config.placeholder == "Type here..."
     assert loaded_config.usage_count == 0
 
     # Обновляем

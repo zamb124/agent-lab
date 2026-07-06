@@ -28,6 +28,7 @@ from core.urn import extract_resource_id
 from core.variables.models import VariableEntry, normalize_variables_map
 
 from .enums import MergeMode
+from .flow_chat_settings import FlowChatSettings
 from .flow_speech_settings import FlowSpeechSettings
 from .resource import ResourceReference
 from .trigger_config import TriggerConfig
@@ -388,6 +389,11 @@ class FlowConfig(StrictBaseModel):
     speech: FlowSpeechSettings | None = Field(
         default=None,
         description="Профиль речи (STT/TTS/VAD) без секретов; tier ниже explicit SpeechOverride, выше company",
+    )
+
+    chat: FlowChatSettings = Field(
+        default_factory=FlowChatSettings,
+        description="Политика поведения чат-компонента для пользователей flow (доставляется через chat-profile)",
     )
 
     # Триггеры flow — точки входа (telegram, cron, webhook, email)

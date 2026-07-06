@@ -14,9 +14,10 @@ from apps.flows.src.services.embed_target_resolver import resolve_embed_target
 
 
 class EmbedDynamicCorsMiddleware(BaseHTTPMiddleware):
-    """Обрабатывает CORS только для /flows/api/v1/embed/{embed_id}."""
+    """Обрабатывает CORS для /flows/api/v1/embed/{embed_id} и его chat-profile."""
 
     _EMBED_PREFIX: str = "/flows/api/v1/embed/"
+    _EMBED_SUBPATHS: frozenset[str] = frozenset({"chat-profile"})
 
     def __init__(self, app: ASGIApp, *, container: FlowContainer) -> None:
         super().__init__(app)
@@ -63,9 +64,12 @@ class EmbedDynamicCorsMiddleware(BaseHTTPMiddleware):
         suffix = path[len(cls._EMBED_PREFIX):].strip("/")
         if not suffix:
             return None
-        if "/" in suffix:
-            return None
-        return suffix
+        if "/" not in suffix:
+            return suffix
+        embed_id, _, subpath = suffix.partition("/")
+        if embed_id and subpath in cls._EMBED_SUBPATHS:
+            return embed_id
+        return None
 
 
 def _is_origin_allowed(origin: str, allowed_origins: list[str]) -> bool:
@@ -77,6 +81,6 @@ def _is_origin_allowed(origin: str, allowed_origins: list[str]) -> bool:
 def _apply_cors_headers(response: Response, origin: str) -> None:
     response.headers["Access-Control-Allow-Origin"] = origin
     response.headers["Access-Control-Allow-Credentials"] = "true"
-    response.headers["Access-Control-Allow-Methods"] = "POST, OPTIONS"
+    response.headers["Access-Control-Allow-Methods"] = "GET, POST, OPTIONS"
     response.headers["Access-Control-Allow-Headers"] = "Authorization, Content-Type, X-Platform-Namespace"
     response.headers["Vary"] = "Origin"

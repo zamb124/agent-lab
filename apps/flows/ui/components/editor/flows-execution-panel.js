@@ -1,87 +1,49 @@
 /**
  * flows-execution-panel — плавающая панель «Запуск агента» в редакторе.
  *
- * Видна, пока `state.flowsEditor.executionPanelOpen === true`. Источники state:
+ * Тонкий хост единого чат-компонента: вкладка Chat — это
+ * `<platform-chat display="panel" profile="editor_test">` (весь чат, файлы,
+ * voice/TTS и SSE A2A живут внутри компонента; в editor_test виден весь runtime
+ * независимо от политики flow). Панель добавляет только editor-специфику:
  *   - useOp('flows/editor') — режим, currentBranchId, previewExecutionState.breakpoints;
- *   - useResource('flows/chat') — currentContextId/currentTaskId/streaming, сообщения;
- *   - useOp('flows/chat_send') / useOp('flows/chat_cancel') — SSE A2A
- *     (`POST /flows/api/v1/{flow_id}` с `message/stream` / `tasks/cancel`);
- *   - useSlice('flows/execution_ui') — persistContext.
+ *   - useSlice('flows/execution_ui') — persistContext (→ fresh-context-per-turn);
+ *   - breakpoints уходят metadata через `.getSendMetadata`;
+ *   - события `chat-run-event` (flows/run/*) диспатчатся в bus — канвас
+ *     подсвечивает ноды, agentExecutionRunning синхронизируется.
  *
- * Вкладка Chat: лента `chat-message` из `flows/chat` (тот же bucket, что и SSE).
+ * Панель скрывается display:none (не unmount) — история чата живёт, пока открыт
+ * редактор; голосовой дуплекс при скрытии останавливается.
  * Разворот — кнопка в шапке: `position: fixed` + `nextModalLayerZIndex()`, иначе z-index
  * не выходит из `canvas-host` и панель свойств (`flows-floating-panel`, до 25100) перекрывает.
- * Снизу — `--flows-exec-fab-gutter`, чтобы поле ввода не заезжало на FAB embed-ассистента.
+ * Снизу — `--flows-exec-fab-gutter`, чтобы поле ввода не заезжало на FAB чат-виджета.
  * Кнопки State / Tracing открывают модалки `flows.state`, `flows.tracing`.
- * «Сбросить чат» вызывает `flows/chat` `resetSession` (и `tasks/cancel` при активном стриме).
- * Голосовой режим (микрофон у поля ввода): та же связка voice WS + A2A, что на странице чата,
- * через `apps/flows/ui/_helpers/flow-voice-session.js`.
  */
 
 import { html, css, nothing } from 'lit';
-import { repeat } from 'lit/directives/repeat.js';
 import { PlatformElement } from '@platform/lib/platform-element/index.js';
 import { nextModalLayerZIndex } from '@platform/lib/utils/modal-z-stack.js';
 import '@platform/lib/components/platform-icon.js';
 import '@platform/lib/components/platform-switch.js';
 import '@platform/lib/components/platform-help-hint.js';
 import '@platform/lib/components/glass-button.js';
+import '@platform/lib/chat/platform-chat.js';
+import { resolveVoiceHttpOrigin } from '@platform/lib/voice/voice-http-origin.js';
 import '../chat/flows-chat-run-trace.js';
-import '../chat/chat-message.js';
-import '../chat/chat-input.js';
-import '../chat/chat-files-panel.js';
 import {
-    asArray,
     asObject,
     asString,
     authActiveCompanyId,
     deriveRunPanelStatus,
     isPlainObject,
 } from '../../_helpers/flows-resolvers.js';
-import { collectCurrentChatFiles } from '../../_helpers/chat-files.js';
 import { resolveFlowsChatTaskId } from '../../_helpers/resolve-flows-chat-task-id.js';
-import { buildFlowSessionFileCreateSpecJson } from '@platform/lib/utils/file-create-spec.js';
-import {
-    createFlowVoiceSession,
-    disposeFlowVoiceSession,
-    fetchFlowVoiceWsQuery,
-    flowsVoiceAuxiliaryHttpHeadersStub,
-    formatFlowVoiceConnectErrorDetail,
-    normalizeFlowVoiceSttLanguage,
-    resolveFlowVoiceHttpOrigin,
-} from '../../_helpers/flow-voice-session.js';
-import { relayA2aVoiceStreamRpcFrame } from '../../_helpers/relay-voice-a2a-to-chat.js';
-import {
-    readTtsOutputEnabled,
-    toggleTtsOutputEnabled,
-    TTS_OUTPUT_CHANGED_EVENT,
-    TTS_OUTPUT_STORAGE_KEY,
-} from '@platform/lib/voice/tts-output-pref.js';
-import { VoiceMediaSession } from '@platform/lib/voice/voice-media-session.js';
-import {
-    clearStreamTtsTarget,
-    primeStreamTtsPlaybackFromUserGesture,
-    setStreamTtsTarget,
-    stopStreamTtsPlayback,
-} from '@platform/lib/voice/stream-tts-registry.js';
 
-const ACCEPT_FILE_TYPES = '*/*';
 const EMPTY_TRACE = Object.freeze([]);
 const PANEL_VIEWPORT_MARGIN = 12;
 const PANEL_MIN_WIDTH = 360;
 const PANEL_MIN_HEIGHT = 320;
 const PANEL_DEFAULT_HEIGHT = 620;
 const PANEL_COLLAPSED_HEIGHT = 64;
-
-function _executionFileToUploadFile(raw) {
-    if (typeof File === 'undefined') {
-        throw new Error('flows-execution-panel: File API is unavailable');
-    }
-    if (!(raw instanceof File)) {
-        throw new Error('flows-execution-panel: chat-input must pass File instances');
-    }
-    return raw;
-}
 
 export class FlowsExecutionPanel extends PlatformElement {
     static i18nNamespace = 'flows';
@@ -92,15 +54,13 @@ export class FlowsExecutionPanel extends PlatformElement {
         _panelTab: { type: String, state: true },
         _layoutExpanded: { type: Boolean, state: true },
         _collapsed: { type: Boolean, state: true },
-        _voiceOn: { type: Boolean, state: true },
-        _voiceStatus: { type: String, state: true },
     };
 
     static styles = [
         PlatformElement.styles,
         css`
             :host {
-                /* Зазор под FAB embed-чата (56px + bottom 16px + запас), см. platform-embed-chat-drawer .fab */
+                /* Зазор под FAB чат-виджета (56px + bottom 16px + запас), см. platform-chat display="drawer" .fab */
                 --flows-exec-fab-gutter: calc(56px + max(16px, env(safe-area-inset-bottom, 0px)) + 12px);
                 position: absolute;
                 top: 12px;
@@ -114,6 +74,9 @@ export class FlowsExecutionPanel extends PlatformElement {
                 max-width: none;
                 min-height: 0;
                 pointer-events: none;
+            }
+            :host([data-panel-closed]) {
+                display: none;
             }
             :host([data-layout-expanded]) {
                 position: fixed;
@@ -350,12 +313,12 @@ export class FlowsExecutionPanel extends PlatformElement {
                 gap: var(--space-2);
                 overflow: hidden;
             }
-            .tab-panel[data-tab='chat'] .execution-chat-input {
-                flex-shrink: 0;
-                margin-top: auto;
+            .tab-panel[hidden] {
+                display: none;
             }
-            chat-input.execution-chat-input {
-                padding: 0;
+            .tab-panel platform-chat {
+                flex: 1;
+                min-height: 0;
             }
             .trace-panel-inner {
                 flex: 1;
@@ -384,16 +347,6 @@ export class FlowsExecutionPanel extends PlatformElement {
                 line-height: 1.5;
                 margin: 0;
             }
-            .message-feed {
-                flex: 1;
-                min-height: 0;
-                overflow-x: hidden;
-                overflow-y: auto;
-                display: flex;
-                flex-direction: column;
-                gap: var(--space-3);
-                padding: var(--space-2) 2px var(--space-2) 0;
-            }
             .persist-wrap {
                 display: inline-flex;
                 align-items: center;
@@ -410,13 +363,7 @@ export class FlowsExecutionPanel extends PlatformElement {
         this.branchId = 'base';
         this._panelTab = 'chat';
         this._editor = this.useOp('flows/editor');
-        this._chat = this.useResource('flows/chat');
-        this._send = this.useOp('flows/chat_send');
-        this._cancel = this.useOp('flows/chat_cancel');
-        this._upload = this.useOp('platform/file_create');
         this._ui = this.useSlice('flows/execution_ui');
-        this._lastChatCtx = '';
-        this._lastChatLen = 0;
         this._layoutExpanded = false;
         this._collapsed = false;
         this._panelRect = null;
@@ -426,139 +373,124 @@ export class FlowsExecutionPanel extends PlatformElement {
         this._boundPanelPointerMove = (e) => this._onPanelPointerMove(e);
         this._boundPanelPointerUp = () => this._endPanelPointerInteraction();
         this._boundPanelViewportResize = () => this._clampFloatingPanelToViewport();
-        this._voiceOn = false;
-        this._voiceStatus = 'idle';
-        /** @type {import('@platform/lib/voice/voice-media-session.js').VoiceMediaSession | null} */
-        this._voiceMedia = null;
-        /** @type {import('@platform/lib/voice/voice-agent-bridge.js').VoiceAgentBridge | null} */
-        this._voiceBridge = null;
-        /** @type {(() => void) | null} */
-        this._voiceA2aSettledHandler = null;
-        /** @type {((e: Event) => void) | null} */
-        this._voiceA2aAbortedHandler = null;
         this._activeCompanySel = this.select((s) => authActiveCompanyId(s));
         this._localeSel = this.select((s) => s.i18n.locale);
-        /** @type {InstanceType<typeof VoiceMediaSession> | null} */
-        this._ttsOnlyMedia = null;
-        this._ttsOnlyStreamStarting = false;
-        this._onTtsExecPref = () => {
-            if (!readTtsOutputEnabled()) {
-                this._disposeTtsOnlyStream();
-            }
-            this.requestUpdate();
-        };
-        this._onTtsExecStorage = (e) => {
-            if (e.storageArea === window.localStorage && e.key === TTS_OUTPUT_STORAGE_KEY) {
-                if (!readTtsOutputEnabled()) {
-                    this._disposeTtsOnlyStream();
-                }
-                this.requestUpdate();
-            }
-        };
+        this._voiceBaseUrl =
+            typeof window !== 'undefined' && typeof window.location !== 'undefined'
+                ? resolveVoiceHttpOrigin()
+                : '';
     }
 
     connectedCallback() {
         super.connectedCallback();
-        this.useEvent('flows/chat/compose_edit', (ev) => {
-            const p = ev.payload && typeof ev.payload === 'object' ? ev.payload : null;
-            const text = p && typeof p.text === 'string' ? p.text : '';
-            if (text === '') {
-                return;
-            }
-            void this.updateComplete.then(() => {
-                this._chatInputElement().setDraft(text);
-            });
-        });
         if (typeof window !== 'undefined') {
-            window.addEventListener(TTS_OUTPUT_CHANGED_EVENT, this._onTtsExecPref);
-            window.addEventListener('storage', this._onTtsExecStorage);
             window.addEventListener('resize', this._boundPanelViewportResize);
         }
     }
 
     disconnectedCallback() {
         this._endPanelPointerInteraction();
-        this._disposeTtsOnlyStream();
-        if (this._voiceOn) {
-            const m = this._voiceMedia;
-            const b = this._voiceBridge;
-            this._voiceMedia = null;
-            this._voiceBridge = null;
-            this._voiceOn = false;
-            this._voiceStatus = 'idle';
-            void disposeFlowVoiceSession(m, b);
-        }
         if (typeof window !== 'undefined') {
-            window.removeEventListener(TTS_OUTPUT_CHANGED_EVENT, this._onTtsExecPref);
-            window.removeEventListener('storage', this._onTtsExecStorage);
             window.removeEventListener('resize', this._boundPanelViewportResize);
         }
         super.disconnectedCallback();
     }
 
-    _chatInputElement() {
-        const input = this.renderRoot?.querySelector('chat-input');
-        if (
-            !input
-            || typeof input.setDraft !== 'function'
-            || typeof input.clear !== 'function'
-        ) {
-            throw new Error('flows-execution-panel: chat-input missing');
-        }
-        return input;
+    /** @returns {import('@platform/lib/chat/platform-chat.js').PlatformChat|null} */
+    _platformChat() {
+        const el = this.renderRoot?.querySelector('platform-chat');
+        return el || null;
+    }
+
+    _chatRuntimeState() {
+        const chat = this._platformChat();
+        return chat ? asObject(chat.runtimeState) : {};
     }
 
     updated(changedProperties) {
-        const editorStateForVoice = asObject(this._editor.state);
-        if (!editorStateForVoice.executionPanelOpen && this._voiceOn) {
-            void this._stopExecPanelVoice();
-        }
-        if (
-            (changedProperties.has('flowId') || changedProperties.has('branchId')) &&
-            this._voiceOn
-        ) {
-            void this._stopExecPanelVoice();
-        }
-        if ((changedProperties.has('flowId') || changedProperties.has('branchId')) && !this._voiceOn) {
-            this._disposeTtsOnlyStream();
+        const editorState = asObject(this._editor.state);
+        const isOpen = Boolean(editorState.executionPanelOpen);
+        if (isOpen) {
+            this.removeAttribute('data-panel-closed');
+        } else {
+            this.setAttribute('data-panel-closed', '');
+            const chat = this._platformChat();
+            if (chat) {
+                void chat.stopVoice();
+            }
         }
         super.updated(changedProperties);
-        if (this._panelTab !== 'chat') {
+    }
+
+    _onChatRunEvent(e) {
+        const detail = isPlainObject(e.detail) ? e.detail : null;
+        if (!detail || typeof detail.type !== 'string') {
             return;
         }
-        const chatState = asObject(this._chat.state);
-        const ctx = typeof chatState.currentContextId === 'string' ? chatState.currentContextId : '';
-        if (ctx !== this._lastChatCtx) {
-            this._lastChatCtx = ctx;
-            this._lastChatLen = this._panelChatMessages().length;
-            this._scrollChatFeedBottom();
-            return;
+        const payload = isPlainObject(detail.payload) ? detail.payload : {};
+        this.dispatch(detail.type, payload, { source: 'http' });
+        if (detail.type === 'flows/run/flow_started') {
+            this._editor.setAgentExecutionRunning({ running: true });
         }
-        const n = this._panelChatMessages().length;
-        const grew = n > this._lastChatLen;
-        this._lastChatLen = n;
-        if (grew || Boolean(chatState.streaming)) {
-            this._scrollChatFeedBottom();
+        if (detail.type === 'flows/run/flow_done') {
+            this._editor.setAgentExecutionRunning({ running: false });
         }
     }
 
-    _scrollChatFeedBottom() {
-        requestAnimationFrame(() => {
-            const root = this.renderRoot;
-            if (!root || typeof root.querySelector !== 'function') {
-                return;
-            }
-            const el = root.querySelector('.message-feed');
-            if (el) {
-                el.scrollTop = el.scrollHeight;
-            }
+    _onChatShowTracing(e) {
+        this._openTracingModalFromDetail(e.detail);
+    }
+
+    _onChatShowLogs(e) {
+        const detail = isPlainObject(e.detail) ? e.detail : {};
+        const sessionId = asString(detail.sessionId);
+        if (sessionId.length === 0) {
+            return;
+        }
+        const props = { sessionId };
+        const taskId = asString(detail.taskId);
+        if (taskId.length > 0) {
+            props.taskId = taskId;
+        }
+        this.openModal('flows.logs', props);
+    }
+
+    _onChatShowDurableHistory(e) {
+        const detail = isPlainObject(e.detail) ? e.detail : {};
+        const sessionId = asString(detail.sessionId);
+        if (sessionId.length === 0) {
+            return;
+        }
+        this.openModal('flows.durable_history', { sessionId });
+    }
+
+    /** Вместо window.open (default поведение bubble) — платформенная модалка предпросмотра браузера. */
+    _onBrowserPreviewOpen(e) {
+        e.preventDefault();
+        const detail = isPlainObject(e.detail) ? e.detail : {};
+        this.openModal('flows.browser_preview', {
+            viewerUrl: asString(detail.viewerUrl),
+            sessionId: asString(detail.sessionId),
+            currentUrl: asString(detail.currentUrl),
+            status: asString(detail.status),
         });
     }
 
+    /** metadata верхнего уровня A2A message/stream: breakpoints превью редактора. */
+    _sendMetadataForRun() {
+        const editorState = asObject(this._editor.state);
+        const preview = editorState.previewExecutionState;
+        const bps = preview && preview.breakpoints;
+        if (Array.isArray(bps) && bps.length > 0) {
+            return { breakpoints: bps };
+        }
+        return {};
+    }
+
     _panelChatMessages() {
-        const chatState = asObject(this._chat.state);
+        const chatState = this._chatRuntimeState();
         const ctx = typeof chatState.currentContextId === 'string' ? chatState.currentContextId : null;
-        if (!ctx) {
+        if (!ctx || !isPlainObject(chatState.messagesByContextId)) {
             return [];
         }
         const bucket = chatState.messagesByContextId[ctx];
@@ -568,30 +500,10 @@ export class FlowsExecutionPanel extends PlatformElement {
         return bucket.messages;
     }
 
-    _ensureContextId() {
-        const chatState = this._chat.state;
-        const ctx = chatState && typeof chatState.currentContextId === 'string'
-            ? chatState.currentContextId
-            : null;
-        if (ctx && ctx.length > 0) return ctx;
-        this._chat.initSession({ flowId: this.flowId, contextId: `editor_${Date.now()}` });
-        const after = this._chat.state;
-        if (!after || typeof after.currentContextId !== 'string' || after.currentContextId.length === 0) {
-            throw new Error('flows-execution-panel: failed to init chat context');
-        }
-        return after.currentContextId;
-    }
-
     _lastAssistantMessage() {
-        const chatState = this._chat.state;
-        const ctx = chatState && typeof chatState.currentContextId === 'string'
-            ? chatState.currentContextId
-            : null;
-        if (!ctx) return null;
-        const bucket = chatState.messagesByContextId[ctx];
-        if (!bucket || !Array.isArray(bucket.messages)) return null;
-        for (let i = bucket.messages.length - 1; i >= 0; i--) {
-            const m = bucket.messages[i];
+        const messages = this._panelChatMessages();
+        for (let i = messages.length - 1; i >= 0; i--) {
+            const m = messages[i];
             if (m && m.role === 'assistant') return m;
         }
         return null;
@@ -599,23 +511,12 @@ export class FlowsExecutionPanel extends PlatformElement {
 
     /** Ассистент текущего task_id (чтобы не показывать ответ прошлого запуска до первого чанка). */
     _activeAssistantMessage() {
-        const chatState = asObject(this._chat.state);
-        const ctx = typeof chatState.currentContextId === 'string'
-            ? chatState.currentContextId
-            : null;
-        if (!ctx) {
-            return null;
-        }
-        const tid = typeof chatState.currentTaskId === 'string'
-            ? chatState.currentTaskId
-            : null;
-        const bucket = chatState.messagesByContextId[ctx];
-        if (!bucket || !Array.isArray(bucket.messages)) {
-            return null;
-        }
+        const chatState = this._chatRuntimeState();
+        const tid = typeof chatState.currentTaskId === 'string' ? chatState.currentTaskId : null;
+        const messages = this._panelChatMessages();
         if (tid) {
-            for (let i = bucket.messages.length - 1; i >= 0; i -= 1) {
-                const m = bucket.messages[i];
+            for (let i = messages.length - 1; i >= 0; i -= 1) {
+                const m = messages[i];
                 if (m && m.role === 'assistant' && m.taskId === tid) {
                     return m;
                 }
@@ -625,10 +526,8 @@ export class FlowsExecutionPanel extends PlatformElement {
     }
 
     _currentRunTrace() {
-        const chatState = asObject(this._chat.state);
-        const ctx = typeof chatState.currentContextId === 'string'
-            ? chatState.currentContextId
-            : null;
+        const chatState = this._chatRuntimeState();
+        const ctx = typeof chatState.currentContextId === 'string' ? chatState.currentContextId : null;
         if (!ctx) {
             return EMPTY_TRACE;
         }
@@ -641,23 +540,6 @@ export class FlowsExecutionPanel extends PlatformElement {
             return EMPTY_TRACE;
         }
         return list;
-    }
-
-    _currentFiles() {
-        return collectCurrentChatFiles(this._chat.state, this._panelChatMessages());
-    }
-
-    _onFilesPanelUpdated(e) {
-        const detail = isPlainObject(e.detail) ? e.detail : {};
-        const files = asArray(detail.files);
-        if (files.length === 0) {
-            return;
-        }
-        const contextId = asString(this._chat.state?.currentContextId);
-        if (contextId.length === 0) {
-            return;
-        }
-        this._chat.updateFiles({ contextId, files });
     }
 
     _onPersistChange(e) {
@@ -814,7 +696,6 @@ export class FlowsExecutionPanel extends PlatformElement {
             'glass-button',
             'platform-switch',
             'platform-help-hint',
-            'chat-files-panel',
             '.resize-handle',
         ].join(',')));
     }
@@ -940,306 +821,6 @@ export class FlowsExecutionPanel extends PlatformElement {
         }
     }
 
-    async _uploadExecutionFiles(files) {
-        if (!Array.isArray(files)) {
-            throw new Error('flows-execution-panel: files must be an array');
-        }
-        const contextId = this._ensureContextId();
-        if (typeof this.flowId !== 'string' || this.flowId.length === 0) {
-            throw new Error('flows-execution-panel: flowId required for file upload');
-        }
-        const sessionId = `${this.flowId}:${contextId}`;
-        const spec = buildFlowSessionFileCreateSpecJson({
-            flowId: this.flowId,
-            sessionId,
-            isPublic: false,
-        });
-        const uploaded = [];
-        for (const raw of files) {
-            const file = _executionFileToUploadFile(raw);
-            const result = await this._upload.run({ file, spec });
-            if (!result || typeof result.file_id !== 'string' || result.file_id.length === 0) {
-                throw new Error('flows execution: platform/file_create must return file_id');
-            }
-            if (typeof result.original_name !== 'string' || result.original_name.length === 0) {
-                throw new Error('flows execution: platform/file_create must return original_name');
-            }
-            if (typeof result.content_type !== 'string' || result.content_type.length === 0) {
-                throw new Error('flows execution: platform/file_create must return content_type');
-            }
-            if (typeof result.file_size !== 'number') {
-                throw new Error('flows execution: platform/file_create must return file_size');
-            }
-            if (typeof result.url !== 'string' || result.url.length === 0) {
-                throw new Error('flows execution: platform/file_create must return url');
-            }
-            uploaded.push({
-                file_id: result.file_id,
-                original_name: result.original_name,
-                url: result.url,
-                content_type: result.content_type,
-                file_size: result.file_size,
-            });
-        }
-        return uploaded;
-    }
-
-    _uploadedFileToPart(file) {
-        if (!file || typeof file.original_name !== 'string' || file.original_name.length === 0) {
-            throw new Error('flows execution: uploaded file original_name is required');
-        }
-        if (typeof file.content_type !== 'string' || file.content_type.length === 0) {
-            throw new Error('flows execution: uploaded file content_type is required');
-        }
-        if (typeof file.url !== 'string' || file.url.length === 0) {
-            throw new Error('flows execution: uploaded file url is required');
-        }
-        return {
-            kind: 'file',
-            file: {
-                name: file.original_name,
-                mimeType: file.content_type,
-                uri: file.url,
-            },
-        };
-    }
-
-    async _onRun(event) {
-        if (!this.flowId) return;
-        const editorState = asObject(this._editor.state);
-        const chatStateBefore = asObject(this._chat.state);
-        if (this._send.busy || editorState.agentExecutionRunning || chatStateBefore.streaming) {
-            return;
-        }
-
-        const detail = event && typeof event === 'object' && isPlainObject(event.detail)
-            ? event.detail
-            : null;
-        if (!detail || typeof detail.message !== 'string' || !Array.isArray(detail.files)) {
-            throw new Error('flows-execution-panel: chat-input send detail required');
-        }
-        const ui = this._ui.value;
-        const text = detail.message.trim();
-        const files = detail.files;
-        if (text.length === 0 && files.length === 0) return;
-
-        const hasContext = Boolean(chatStateBefore.currentContextId);
-        if (!ui.persistContext || !hasContext) {
-            this._chat.resetSession({});
-        }
-        const contextId = this._ensureContextId();
-
-        this._editor.setAgentExecutionRunning({ running: true });
-        try {
-            stopStreamTtsPlayback();
-
-            const uploadedFiles = await this._uploadExecutionFiles(files);
-            const fileParts = uploadedFiles.map((file) => this._uploadedFileToPart(file));
-            const userMessage = {
-                id: `user_${Date.now()}`,
-                role: 'user',
-                content: text,
-                timestamp: new Date().toISOString(),
-                files: uploadedFiles,
-            };
-            this._chat.addUserMessage({ contextId, message: userMessage });
-
-            const parts = text.length > 0
-                ? [{ kind: 'text', text }, ...fileParts]
-                : fileParts;
-
-            const a2aMessage = {
-                messageId: `${Date.now()}_${Math.random().toString(36).slice(2, 11)}`,
-                role: 'user',
-                parts,
-                contextId,
-            };
-
-            const metadata = {};
-            if (this.branchId && this.branchId !== 'base') {
-                metadata.branch = this.branchId;
-            }
-            const preview = editorState.previewExecutionState;
-            const bps = preview && preview.breakpoints;
-            if (Array.isArray(bps) && bps.length > 0) {
-                metadata.breakpoints = bps;
-            }
-            const params = { message: a2aMessage };
-            if (Object.keys(metadata).length > 0) {
-                params.metadata = metadata;
-            }
-
-            if (readTtsOutputEnabled() && !this._voiceOn) {
-                primeStreamTtsPlaybackFromUserGesture();
-                this._primeExecTtsOnlyStreamFromUserGesture();
-                await this._awaitExecTtsOnlyReady();
-            }
-
-            await this._send.run({ flow_id: this.flowId, params });
-        } finally {
-            this._editor.setAgentExecutionRunning({ running: false });
-        }
-    }
-
-    _disposeTtsOnlyStream() {
-        const m = this._ttsOnlyMedia;
-        this._ttsOnlyMedia = null;
-        this._ttsOnlyStreamStarting = false;
-        clearStreamTtsTarget();
-        if (m) {
-            try {
-                m.close();
-            } catch {
-                /* noop */
-            }
-        }
-    }
-
-    _primeExecTtsOnlyStreamFromUserGesture() {
-        if (!readTtsOutputEnabled() || this._voiceOn) {
-            return;
-        }
-        const companyId = asString(this._activeCompanySel.value);
-        if (companyId === '' || !this.flowId) {
-            return;
-        }
-        const localeRaw = asString(this._localeSel.value);
-        if (this._ttsOnlyMedia !== null && this._ttsOnlyMedia.isConnected) {
-            this._ttsOnlyMedia.primePlaybackFromUserGesture();
-            setStreamTtsTarget(this._ttsOnlyMedia, readTtsOutputEnabled);
-            return;
-        }
-        if (this._ttsOnlyStreamStarting) {
-            const m = this._ttsOnlyMedia;
-            if (m && typeof m.primePlaybackFromUserGesture === 'function') {
-                m.primePlaybackFromUserGesture();
-            }
-            if (m) {
-                setStreamTtsTarget(m, readTtsOutputEnabled);
-            }
-            return;
-        }
-        this._disposeTtsOnlyStream();
-        this._ttsOnlyStreamStarting = true;
-        const voiceBaseUrl = resolveFlowVoiceHttpOrigin();
-        const wsBase = voiceBaseUrl.replace(/^http/, 'ws');
-        const sessionId = `tts_${Date.now()}_${Math.random().toString(36).slice(2, 10)}`;
-
-        void (async () => {
-            /** @type {InstanceType<typeof VoiceMediaSession>|null} */
-            let media = null;
-            try {
-                const serverQuery = await fetchFlowVoiceWsQuery({
-                    flowId: this.flowId,
-                    branchId: this.branchId,
-                });
-                /** @type {Record<string, string>} */
-                const wsQuery = { ...serverQuery };
-                if (localeRaw.trim() !== '') {
-                    try {
-                        wsQuery.language = normalizeFlowVoiceSttLanguage(localeRaw);
-                    } catch {
-                        /* noop */
-                    }
-                }
-                const mediaOpts = {
-                    baseUrl: wsBase,
-                    sessionId,
-                    companyId,
-                    autoRecord: false,
-                };
-                if (Object.keys(wsQuery).length > 0) {
-                    Object.assign(mediaOpts, { query: wsQuery });
-                }
-                media = new VoiceMediaSession(mediaOpts);
-                media.addEventListener('error', (ev) => {
-                    const d = ev.detail && typeof ev.detail === 'object' ? ev.detail : {};
-                    const msg =
-                        typeof d.detail === 'string' && d.detail.trim() !== ''
-                            ? d.detail
-                            : typeof d.code === 'string'
-                              ? d.code
-                              : this.t('platform_chat.toast_voice_ws_hint');
-                    this.toast('flows:platform_chat.toast_voice_error', {
-                        type: 'error',
-                        vars: { detail: msg },
-                    });
-                });
-                media.addEventListener('closed', () => {
-                    if (this._ttsOnlyMedia === media) {
-                        this._ttsOnlyMedia = null;
-                        clearStreamTtsTarget();
-                    }
-                });
-                this._ttsOnlyMedia = media;
-                media.primePlaybackFromUserGesture();
-                setStreamTtsTarget(media, readTtsOutputEnabled);
-                await media.connect();
-                if (this._ttsOnlyMedia !== media) {
-                    try {
-                        media.close();
-                    } catch {
-                        /* noop */
-                    }
-                    return;
-                }
-                if (this._voiceOn || !readTtsOutputEnabled()) {
-                    this._ttsOnlyMedia = null;
-                    clearStreamTtsTarget();
-                    try {
-                        media.close();
-                    } catch {
-                        /* noop */
-                    }
-                    return;
-                }
-                setStreamTtsTarget(media, readTtsOutputEnabled);
-            } catch (err) {
-                if (this._ttsOnlyMedia === media) {
-                    this._ttsOnlyMedia = null;
-                }
-                clearStreamTtsTarget();
-                if (media !== null) {
-                    try {
-                        media.close();
-                    } catch {
-                        /* noop */
-                    }
-                }
-                this.toast('flows:platform_chat.toast_voice_error', {
-                    type: 'error',
-                    vars: {
-                        detail: formatFlowVoiceConnectErrorDetail(err, (key) => this.t(key)),
-                    },
-                });
-            } finally {
-                this._ttsOnlyStreamStarting = false;
-            }
-        })();
-    }
-
-    async _awaitExecTtsOnlyReady() {
-        const t0 = Date.now();
-        const maxMs = 2500;
-        while (Date.now() - t0 < maxMs) {
-            if (this._voiceOn || !readTtsOutputEnabled()) {
-                return;
-            }
-            if (!this._ttsOnlyStreamStarting && this._ttsOnlyMedia !== null && this._ttsOnlyMedia.isConnected) {
-                return;
-            }
-            await new Promise((r) => setTimeout(r, 40));
-        }
-    }
-
-    _onStop() {
-        if (this._cancel.busy) return;
-        const chatState = this._chat.state;
-        const taskId = chatState && chatState.currentTaskId;
-        if (typeof taskId !== 'string' || taskId.length === 0) return;
-        void this._cancel.run({ flow_id: this.flowId, task_id: taskId });
-    }
-
     _onClose() {
         this._endPanelPointerInteraction();
         this._layoutExpanded = false;
@@ -1252,8 +833,8 @@ export class FlowsExecutionPanel extends PlatformElement {
     }
 
     _buildSessionId() {
-        const chatState = this._chat.state;
-        const ctx = chatState && chatState.currentContextId;
+        const chatState = this._chatRuntimeState();
+        const ctx = chatState.currentContextId;
         if (!this.flowId || typeof ctx !== 'string' || ctx.length === 0) return '';
         return `${this.flowId}:${ctx}`;
     }
@@ -1265,225 +846,55 @@ export class FlowsExecutionPanel extends PlatformElement {
     }
 
     _openTracing() {
+        this._openTracingModalFromDetail(null);
+    }
+
+    _openTracingModalFromDetail(detail) {
         const sessionId = this._buildSessionId();
         if (!sessionId) return;
-        this.openModal('flows.tracing', { sessionId });
+        const props = { sessionId };
+        const taskId =
+            detail && typeof detail === 'object' && typeof detail.taskId === 'string' && detail.taskId.length > 0
+                ? detail.taskId
+                : '';
+        if (taskId.length > 0) {
+            props.taskId = taskId;
+        }
+        const traceId =
+            detail && typeof detail === 'object' && typeof detail.traceId === 'string' && detail.traceId.length > 0
+                ? detail.traceId
+                : '';
+        if (traceId.length > 0) {
+            props.traceId = traceId;
+        }
+        this.openModal('flows.tracing', props);
     }
 
     _openLogs() {
         const sessionId = this._buildSessionId();
         if (!sessionId) return;
-        const chatState = asObject(this._chat.state);
-        const taskId = resolveFlowsChatTaskId(chatState);
+        const taskId = resolveFlowsChatTaskId(this._chatRuntimeState());
         const props = { sessionId };
         if (taskId.length > 0) {
             props.taskId = taskId;
         }
         this.openModal('flows.logs', props);
     }
+
     /**
      * Новая сессия чата: остановка текущей задачи при необходимости и сброс контекста.
      */
     async _onResetChat() {
-        if (!this.flowId) {
+        const chat = this._platformChat();
+        if (!chat) {
             return;
         }
-        this._disposeTtsOnlyStream();
-        const chatState = asObject(this._chat.state);
-        const taskId = typeof chatState.currentTaskId === 'string' ? chatState.currentTaskId : '';
-        if (Boolean(chatState.streaming) && taskId.length > 0) {
-            await this._cancel.run({ flow_id: this.flowId, task_id: taskId });
+        const chatState = asObject(chat.runtimeState);
+        if (Boolean(chatState.streaming)) {
+            await chat.cancelActiveTask();
         }
         this._editor.setAgentExecutionRunning({ running: false });
-        this._chat.resetSession({});
-        this._chatInputElement().clear();
-    }
-
-    async _startExecPanelVoice() {
-        if (this._voiceOn) return;
-        this._disposeTtsOnlyStream();
-        if (typeof this.flowId !== 'string' || this.flowId.length === 0) return;
-        const companyId = asString(this._activeCompanySel.value);
-        if (companyId === '') {
-            this._voiceStatus = 'no_company';
-            this.toast('flows:platform_chat.toast_voice_no_company', { type: 'warning' });
-            return;
-        }
-        this._ensureContextId();
-        const initialContextId =
-            this._chat.state && typeof this._chat.state.currentContextId === 'string'
-                ? this._chat.state.currentContextId
-                : null;
-        const localeRaw = asString(this._localeSel.value);
-        const sttLanguage = normalizeFlowVoiceSttLanguage(localeRaw);
-        /** @type {{ contextId: string|null, taskId: string|null, taskPrimed: boolean }} */
-        const voiceStreamRelayState = {
-            contextId: null,
-            taskId: null,
-            taskPrimed: false,
-        };
-        const { media, bridge } = await createFlowVoiceSession({
-            flowId: this.flowId,
-            branchId: this.branchId,
-            companyId,
-            sttLanguage,
-            initialContextId,
-            getVoiceWsQuery: async () =>
-                fetchFlowVoiceWsQuery({
-                    flowId: this.flowId,
-                    branchId: this.branchId,
-                }),
-            getHeaders: flowsVoiceAuxiliaryHttpHeadersStub,
-            getContextId: () => {
-                const st = this._chat.state;
-                const cid =
-                    st && typeof st.currentContextId === 'string' ? st.currentContextId : null;
-                return cid && cid.length > 0 ? cid : null;
-            },
-            getStreamMetadata: async () => {
-                const meta = {};
-                if (this.branchId && this.branchId !== 'base') {
-                    meta.branch = this.branchId;
-                }
-                const editorState = asObject(this._editor.state);
-                const preview = editorState.previewExecutionState;
-                const bps = preview && preview.breakpoints;
-                if (Array.isArray(bps) && bps.length > 0) {
-                    meta.breakpoints = bps;
-                }
-                const keysCount = Object.keys(meta).length;
-                if (keysCount === 0) return {};
-                return meta;
-            },
-            beforeA2aStream: async (text) => {
-                stopStreamTtsPlayback();
-                const ctx = this._ensureContextId();
-                voiceStreamRelayState.contextId = ctx;
-                voiceStreamRelayState.taskId = null;
-                voiceStreamRelayState.taskPrimed = false;
-                const trimmed = typeof text === 'string' ? text.trim() : '';
-                if (trimmed.length === 0) {
-                    throw new Error('flows execution voice: пустой транскрипт');
-                }
-                const userMessage = {
-                    id: `user_${Date.now()}`,
-                    role: 'user',
-                    content: trimmed,
-                    timestamp: new Date().toISOString(),
-                    files: [],
-                };
-                this._chat.addUserMessage({ contextId: ctx, message: userMessage });
-                this.dispatch('flows/run/flow_started', {}, { source: 'http' });
-            },
-            onA2aStreamEvent: (frame) => {
-                relayA2aVoiceStreamRpcFrame(
-                    {
-                        dispatch: (t, p, m) => {
-                            this.dispatch(t, p, m);
-                        },
-                    },
-                    voiceStreamRelayState,
-                    frame,
-                    null,
-                );
-            },
-            onVad: (e) => {
-                this._voiceStatus = e.detail.state === 'started' ? 'listening' : 'idle';
-            },
-            onTtsState: (e) => {
-                this._voiceStatus = e.detail.state === 'playing' ? 'speaking' : 'idle';
-            },
-            onMediaError: (e) => {
-                this._voiceStatus = 'error';
-                const d = isPlainObject(e.detail) ? e.detail : {};
-                const msg =
-                    typeof d.detail === 'string' && d.detail.trim() !== ''
-                        ? d.detail
-                        : typeof d.code === 'string'
-                          ? d.code
-                          : this.t('platform_chat.toast_voice_ws_hint');
-                this.toast('flows:platform_chat.toast_voice_error', {
-                    type: 'error',
-                    vars: { detail: msg },
-                });
-            },
-            onClosed: () => {
-                this._voiceMedia = null;
-                this._voiceBridge = null;
-                this._voiceOn = false;
-                this._voiceStatus = 'closed';
-            },
-        });
-        try {
-            await media.connect();
-        } catch (err) {
-            await disposeFlowVoiceSession(media, bridge);
-            this._voiceStatus = 'error';
-            this.toast('flows:platform_chat.toast_voice_error', {
-                type: 'error',
-                vars: {
-                    detail: formatFlowVoiceConnectErrorDetail(err, (key) => this.t(key)),
-                },
-            });
-            return;
-        }
-        const onVoiceA2aSettled = () => {
-            this.dispatch('flows/run/flow_done', {}, { source: 'http' });
-        };
-        const onVoiceA2aAborted = (ev) => {
-            const ce = /** @type {CustomEvent<Record<string, unknown>>} */ (ev);
-            const d =
-                ce.detail !== null && typeof ce.detail === 'object'
-                    ? /** @type {Record<string, unknown>} */ (ce.detail)
-                    : null;
-            const task_id =
-                d && typeof d.task_id === 'string' ? d.task_id : null;
-            const context_id =
-                d && typeof d.context_id === 'string' ? d.context_id : null;
-            this.dispatch('flows/chat/a2a_interrupted', { task_id, context_id }, { source: 'local' });
-        };
-        this._voiceA2aSettledHandler = onVoiceA2aSettled;
-        this._voiceA2aAbortedHandler = onVoiceA2aAborted;
-        bridge.addEventListener('a2aSettled', onVoiceA2aSettled);
-        bridge.addEventListener('a2aAborted', onVoiceA2aAborted);
-        bridge.start();
-        setStreamTtsTarget(media, readTtsOutputEnabled);
-        this._voiceMedia = media;
-        this._voiceBridge = bridge;
-        this._voiceOn = true;
-        this._voiceStatus = 'idle';
-    }
-
-    async _stopExecPanelVoice() {
-        if (this._voiceBridge && this._voiceA2aSettledHandler) {
-            this._voiceBridge.removeEventListener('a2aSettled', this._voiceA2aSettledHandler);
-            this._voiceA2aSettledHandler = null;
-        }
-        if (this._voiceBridge && this._voiceA2aAbortedHandler) {
-            this._voiceBridge.removeEventListener('a2aAborted', this._voiceA2aAbortedHandler);
-            this._voiceA2aAbortedHandler = null;
-        }
-        await disposeFlowVoiceSession(this._voiceMedia, this._voiceBridge);
-        this._voiceMedia = null;
-        this._voiceBridge = null;
-        this._voiceOn = false;
-        this._voiceStatus = 'idle';
-    }
-
-    _toggleExecPanelVoice() {
-        if (this._voiceOn) {
-            void this._stopExecPanelVoice();
-        } else {
-            void this._startExecPanelVoice();
-        }
-    }
-
-    _toggleExecTtsOutput() {
-        toggleTtsOutputEnabled();
-        if (!readTtsOutputEnabled()) {
-            this._disposeTtsOnlyStream();
-        }
-        this.requestUpdate();
+        chat.startNewChat();
     }
 
     _setPanelTab(tab) {
@@ -1495,14 +906,11 @@ export class FlowsExecutionPanel extends PlatformElement {
 
     render() {
         const editorState = asObject(this._editor.state);
-        if (!editorState.executionPanelOpen) return nothing;
-
         const ui = this._ui.value;
-        const chatState = asObject(this._chat.state);
+        const chatState = this._chatRuntimeState();
         const streaming = Boolean(chatState.streaming);
-        const sendBusy = this._send.busy;
         const agentRun = Boolean(editorState.agentExecutionRunning);
-        const runInFlight = streaming || sendBusy || agentRun;
+        const runInFlight = streaming || agentRun;
         const hasContext = typeof chatState.currentContextId === 'string'
             && chatState.currentContextId.length > 0;
         const lastAssistant = this._activeAssistantMessage();
@@ -1512,8 +920,6 @@ export class FlowsExecutionPanel extends PlatformElement {
             : 'execution_panel.placeholder_message';
 
         const runTrace = this._currentRunTrace();
-        const panelMessages = this._panelChatMessages();
-        const files = this._currentFiles();
         const taskId = typeof chatState.currentTaskId === 'string'
             ? chatState.currentTaskId
             : null;
@@ -1525,6 +931,12 @@ export class FlowsExecutionPanel extends PlatformElement {
         });
         const statusLabelKey = `execution_panel.status_${panelStatus}`;
         const tab = this._panelTab;
+        const companyId = asString(this._activeCompanySel.value);
+        const locale = asString(this._localeSel.value);
+        const voiceReady =
+            typeof this.flowId === 'string' && this.flowId.length > 0
+            && companyId !== ''
+            && this._voiceBaseUrl !== '';
 
         return html`
             <div
@@ -1543,12 +955,6 @@ export class FlowsExecutionPanel extends PlatformElement {
                         </div>
                     </div>
                     <div class="panel-header-aside">
-                        <chat-files-panel
-                            inline
-                            .files=${files}
-                            active-company-id=${asString(this._activeCompanySel.value)}
-                            @files-updated=${this._onFilesPanelUpdated}
-                        ></chat-files-panel>
                         <div class="persist-wrap">
                             <platform-switch
                                 size="sm"
@@ -1660,66 +1066,33 @@ export class FlowsExecutionPanel extends PlatformElement {
                     : nothing}
 
                 <div class="panel-body">
-                    <div class="tab-panel" data-tab=${tab}>
-                        ${tab === 'chat' ? html`
-                            ${panelMessages.length > 0 ? html`
-                                <div class="message-feed">
-                                    ${repeat(
-                                        panelMessages,
-                                        (m, i) => {
-                                            if (m && typeof m.id === 'string' && m.id.length > 0) {
-                                                return m.id;
-                                            }
-                                            const role = m && typeof m.role === 'string' ? m.role : 'msg';
-                                            const tid = m && typeof m.taskId === 'string' ? m.taskId : '';
-                                            return `${role}_${tid}_${i}`;
-                                        },
-                                        (message) => html`
-                                            <chat-message
-                                                .role=${asString(message.role)}
-                                                .content=${typeof message.content === 'string' ? message.content : ''}
-                                                .timestamp=${asString(message.timestamp)}
-                                                ?streaming=${Boolean(message.streaming)}
-                                                .reasoning=${asString(message.reasoning)}
-                                                .activity=${asString(message.activity)}
-                                                .toolCalls=${asArray(message.toolCalls)}
-                                                .toolResults=${asArray(message.toolResults)}
-                                                .browserPreviews=${asArray(message.browserPreviews)}
-                                                .inputRequired=${message.inputRequired != null ? message.inputRequired : null}
-                                                .operatorReply=${asString(message.operatorReply)}
-                                                .breakpoint=${message.breakpoint != null ? message.breakpoint : null}
-                                                .files=${asArray(message.files)}
-                                                .fileIds=${asArray(message.fileIds)}
-                                                .taskId=${asString(message.taskId)}
-                                                .error=${asString(message.error)}
-                                                .errorI18nKey=${message.errorI18nKey != null && typeof message.errorI18nKey === 'string'
-                                                    ? message.errorI18nKey
-                                                    : null}
-                                                .voicePlayGetHeaders=${flowsVoiceAuxiliaryHttpHeadersStub}
-                                            ></chat-message>
-                                        `,
-                                    )}
-                                </div>
-                            ` : nothing}
-                            <chat-input
-                                class="execution-chat-input"
-                                .placeholder=${this.t(placeholderKey)}
-                                .streaming=${runInFlight}
-                                .disabled=${sendBusy}
-                                .cancelBusy=${this._cancel.busy}
-                                .showVoice=${typeof this.flowId === 'string' && this.flowId.length > 0}
-                                .voiceActive=${this._voiceOn}
-                                .voiceStatus=${this._voiceStatus}
-                                .ttsOutputEnabled=${readTtsOutputEnabled()}
-                                .accept=${ACCEPT_FILE_TYPES}
-                                @send=${this._onRun}
-                                @stop=${this._onStop}
-                                @voice-toggle=${this._toggleExecPanelVoice}
-                                @tts-output-toggle=${this._toggleExecTtsOutput}
-                            ></chat-input>
-                        ` : nothing}
+                    <div class="tab-panel" data-tab="chat" ?hidden=${tab !== 'chat'}>
+                        <platform-chat
+                            display="panel"
+                            profile="editor_test"
+                            hide-header
+                            flow-id=${this.flowId}
+                            branch-id=${this.branchId}
+                            .flowsBaseUrl=${'/flows'}
+                            ?use-credentials=${true}
+                            company-id=${companyId}
+                            ?voice-enabled=${voiceReady}
+                            voice-base-url=${this._voiceBaseUrl}
+                            interface-locale=${locale || 'auto'}
+                            ?fresh-context-per-turn=${!ui.persistContext}
+                            .getSendMetadata=${() => this._sendMetadataForRun()}
+                            .labels=${{ placeholder: this.t(placeholderKey) }}
+                            @chat-state-changed=${() => this.requestUpdate()}
+                            @chat-run-event=${this._onChatRunEvent}
+                            @show-tracing=${this._onChatShowTracing}
+                            @show-logs=${this._onChatShowLogs}
+                            @show-durable-history=${this._onChatShowDurableHistory}
+                            @browser-preview-open=${this._onBrowserPreviewOpen}
+                        ></platform-chat>
+                    </div>
 
-                        ${tab === 'trace' ? html`
+                    ${tab === 'trace' ? html`
+                        <div class="tab-panel" data-tab="trace">
                             <div class="trace-panel-inner">
                                 <flows-chat-run-trace
                                     .entries=${runTrace}
@@ -1728,9 +1101,11 @@ export class FlowsExecutionPanel extends PlatformElement {
                                     .fillAvailable=${true}
                                 ></flows-chat-run-trace>
                             </div>
-                        ` : nothing}
+                        </div>
+                    ` : nothing}
 
-                        ${tab === 'state' ? html`
+                    ${tab === 'state' ? html`
+                        <div class="tab-panel" data-tab="state">
                             <div class="state-tab">
                                 <p class="state-tab-hint">${this.t('execution_panel.state_tab_hint')}</p>
                                 <glass-button
@@ -1741,8 +1116,8 @@ export class FlowsExecutionPanel extends PlatformElement {
                                     @click=${this._openState}
                                 >${this.t('execution_panel.open_state')}</glass-button>
                             </div>
-                        ` : nothing}
-                    </div>
+                        </div>
+                    ` : nothing}
                 </div>
                 `}
                 ${this._collapsed ? nothing : html`

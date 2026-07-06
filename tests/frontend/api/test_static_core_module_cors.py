@@ -8,7 +8,7 @@ import pytest
 async def test_static_core_embed_script_includes_acao_when_origin_sent(frontend_client):
     """GET к entrypoint embed-сборки с чужым Origin получает ACAO=* ."""
     response = await frontend_client.get(
-        "/static/core/lib/embed-chat/platform-lara-assistant.js",
+        "/static/core/lib/embed-chat/humanitec-embed-autoload.js",
         headers={"Origin": "https://example.invalid"},
     )
     assert response.status_code == 200
@@ -19,7 +19,7 @@ async def test_static_core_embed_script_includes_acao_when_origin_sent(frontend_
 async def test_static_core_options_preflight_returns_acao(frontend_client):
     response = await frontend_client.request(
         "OPTIONS",
-        "/static/core/lib/embed-chat/platform-lara-assistant.js",
+        "/static/core/lib/embed-chat/humanitec-embed-autoload.js",
         headers={
             "Origin": "https://example.invalid",
             "Access-Control-Request-Method": "GET",

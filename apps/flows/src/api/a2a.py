@@ -19,6 +19,7 @@ from a2a.types import (
 )
 from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import JSONResponse, StreamingResponse
+from pydantic import BaseModel
 
 from apps.flows.src.channels import PermissionDenied
 from apps.flows.src.channels.a2a import A2AChannel
@@ -26,7 +27,13 @@ from apps.flows.src.container import FlowContainer
 from apps.flows.src.container_contracts import as_flow_runtime_container
 from apps.flows.src.dependencies import ContainerDep
 from apps.flows.src.durable_execution.repository import WorkflowProjectionMismatchError
-from apps.flows.src.models import BranchCreateRequest, BranchUpdateRequest, FlowConfig
+from apps.flows.src.models import (
+    BranchCreateRequest,
+    BranchUpdateRequest,
+    FlowChatSettings,
+    FlowConfig,
+    resolve_effective_flow_chat,
+)
 from apps.flows.src.services.embed_target_resolver import EmbedTarget, resolve_embed_target
 from core.context import get_context
 from core.identity.embed_guest_turns import (
@@ -36,6 +43,7 @@ from core.identity.embed_guest_turns import (
 )
 from core.logging import get_logger
 from core.middleware.auth.company_resolver import build_service_base_url
+from core.models.embed_models import EmbedChatLook
 from core.models.identity_models import User
 from core.types import JsonObject, JsonValue, parse_json_object, require_json_object
 from core.ui_events.dispatcher import publish_ui_event_to_user
@@ -245,6 +253,48 @@ async def _embed_session_guest_turn_limit_error(
     return None
 
 
+def _validate_embed_session_claims(
+    *,
+    request: Request,
+    token_data: TokenData,
+    embed_id: str | None,
+    flow_id: str,
+    expected_branch_id: str | None = None,
+    expected_company_id: str | None = None,
+) -> str | None:
+    """Проверяет базовые claims embed-session токена (company/embed/flow/origin/branch)."""
+    metadata = token_data.metadata
+    if expected_company_id is not None and token_data.company_id != expected_company_id:
+        return "Embed session token is not allowed for this company"
+
+    embed_token_id = metadata.get("embed_id")
+    if embed_id is not None:
+        if not isinstance(embed_token_id, str) or not embed_token_id.strip():
+            return "Invalid embed session token: embed_id is required"
+        if embed_token_id.strip() != embed_id:
+            return "Embed session token is not allowed for this embed"
+
+    embed_flow_id = metadata.get("embed_flow_id")
+    if not isinstance(embed_flow_id, str) or not embed_flow_id.strip():
+        return "Invalid embed session token: embed_flow_id is required"
+    if flow_id != embed_flow_id.strip():
+        return "Embed session token is not allowed for this flow"
+
+    allowed_origin = metadata.get("allowed_origin")
+    origin = request.headers.get("origin", "")
+    if isinstance(allowed_origin, str) and allowed_origin.strip():
+        if origin != allowed_origin.strip():
+            return "Origin is not allowed for this embed session token"
+
+    allowed_branch_id = _embed_session_branch_from_token_metadata(metadata)
+    if expected_branch_id is not None:
+        if not isinstance(allowed_branch_id, str) or not allowed_branch_id.strip():
+            return "Invalid embed session token: embed_branch_id is required"
+        if allowed_branch_id.strip() != expected_branch_id:
+            return "Embed session token branch mismatch"
+    return None
+
+
 def _validate_embed_session_request(
     *,
     request: Request,
@@ -258,21 +308,16 @@ def _validate_embed_session_request(
 ) -> JsonObject | None:
     """Проверяет claims embed-session токена для A2A вызова."""
     metadata = token_data.metadata
-    if expected_company_id is not None and token_data.company_id != expected_company_id:
-        return {"code": -32000, "message": "Embed session token is not allowed for this company"}
-
-    embed_token_id = metadata.get("embed_id")
-    if embed_id is not None:
-        if not isinstance(embed_token_id, str) or not embed_token_id.strip():
-            return {"code": -32000, "message": "Invalid embed session token: embed_id is required"}
-        if embed_token_id.strip() != embed_id:
-            return {"code": -32000, "message": "Embed session token is not allowed for this embed"}
-
-    embed_flow_id = metadata.get("embed_flow_id")
-    if not isinstance(embed_flow_id, str) or not embed_flow_id.strip():
-        return {"code": -32000, "message": "Invalid embed session token: embed_flow_id is required"}
-    if flow_id != embed_flow_id.strip():
-        return {"code": -32000, "message": "Embed session token is not allowed for this flow"}
+    claims_error = _validate_embed_session_claims(
+        request=request,
+        token_data=token_data,
+        embed_id=embed_id,
+        flow_id=flow_id,
+        expected_branch_id=expected_branch_id,
+        expected_company_id=expected_company_id,
+    )
+    if claims_error is not None:
+        return {"code": -32000, "message": claims_error}
 
     if method not in _EMBED_SESSION_METHODS:
         return {
@@ -280,18 +325,7 @@ def _validate_embed_session_request(
             "message": "Embed session token supports only message/send, message/stream and tasks/cancel",
         }
 
-    allowed_origin = metadata.get("allowed_origin")
-    origin = request.headers.get("origin", "")
-    if isinstance(allowed_origin, str) and allowed_origin.strip():
-        if origin != allowed_origin.strip():
-            return {"code": -32000, "message": "Origin is not allowed for this embed session token"}
-
     allowed_branch_id = _embed_session_branch_from_token_metadata(metadata)
-    if expected_branch_id is not None:
-        if not isinstance(allowed_branch_id, str) or not allowed_branch_id.strip():
-            return {"code": -32000, "message": "Invalid embed session token: embed_branch_id is required"}
-        if allowed_branch_id.strip() != expected_branch_id:
-            return {"code": -32000, "message": "Embed session token branch mismatch"}
     if method in _EMBED_MESSAGE_METHODS and isinstance(allowed_branch_id, str) and allowed_branch_id.strip():
         effective_branch_id = allowed_branch_id.strip()
         metadata_dict = params_dict.get("metadata")
@@ -311,7 +345,7 @@ def _validate_embed_session_request(
         flow_id,
         _embed_session_branch_from_token_metadata(metadata) or "default",
         token_data.company_id,
-        origin,
+        request.headers.get("origin", ""),
         metadata.get("issued_by", "unknown"),
     )
     return None
@@ -801,6 +835,110 @@ async def json_rpc_embed_handler(
         request=request,
         container=container,
         v=v,
+        embed_target=embed_target,
+    )
+
+
+class ChatProfileViewer(BaseModel):
+    """Права текущего зрителя чата."""
+
+    can_edit_flow: bool
+
+
+class ChatProfileResponse(BaseModel):
+    """
+    Эффективный профиль чата для `<platform-chat>`.
+
+    `chat` — effective политика поведения: FlowConfig.chat для session-пути,
+    resolve_effective_flow_chat(FlowConfig.chat, EmbedConfig.chat_override) для embed;
+    `look` — look&feel embed-виджета, только для embed-маршрута.
+    """
+
+    flow_id: str
+    branch_id: str
+    chat: FlowChatSettings
+    viewer: ChatProfileViewer
+    look: EmbedChatLook | None = None
+
+
+async def _chat_profile_internal(
+    *,
+    flow_id: str,
+    branch_id: str,
+    request: Request,
+    container: FlowContainer,
+    embed_target: EmbedTarget | None = None,
+) -> ChatProfileResponse:
+    """Один handler chat-profile для обоих auth-путей (session/API key и embed_session)."""
+    config = await _get_flow_config(flow_id, container)
+    if config is None:
+        raise HTTPException(status_code=404, detail=f"Flow '{flow_id}' not found")
+    if embed_target is None and config.branches and branch_id != "default":
+        if branch_id not in config.branches:
+            raise HTTPException(status_code=404, detail=f"Branch '{branch_id}' not found")
+
+    token_data_raw = _request_state_mapping(request).get("token_data")
+    token_data = token_data_raw if isinstance(token_data_raw, TokenData) else None
+    is_embed_session = _is_embed_session_token(token_data)
+    if is_embed_session and isinstance(token_data, TokenData):
+        claims_error = _validate_embed_session_claims(
+            request=request,
+            token_data=token_data,
+            embed_id=embed_target.embed_id if embed_target is not None else None,
+            flow_id=flow_id,
+            expected_branch_id=embed_target.branch_id if embed_target is not None else None,
+            expected_company_id=embed_target.company_id if embed_target is not None else None,
+        )
+        if claims_error is not None:
+            raise HTTPException(status_code=403, detail=claims_error)
+
+    effective_chat = (
+        config.chat
+        if embed_target is None
+        else resolve_effective_flow_chat(config.chat, embed_target.chat_override)
+    )
+    return ChatProfileResponse(
+        flow_id=flow_id,
+        branch_id=branch_id,
+        chat=effective_chat,
+        viewer=ChatProfileViewer(can_edit_flow=not is_embed_session),
+        look=embed_target.look if embed_target is not None else None,
+    )
+
+
+@router.get("/{flow_id}/chat-profile", response_model=ChatProfileResponse)
+async def get_flow_chat_profile(
+    flow_id: str,
+    request: Request,
+    container: ContainerDep,
+    branch_id: str = "default",
+) -> ChatProfileResponse:
+    """Chat-profile для авторизованных пользователей платформы (session/API key)."""
+    return await _chat_profile_internal(
+        flow_id=flow_id,
+        branch_id=branch_id,
+        request=request,
+        container=container,
+    )
+
+
+@router.get("/embed/{embed_id}/chat-profile", response_model=ChatProfileResponse)
+async def get_embed_chat_profile(
+    embed_id: str,
+    request: Request,
+    container: ContainerDep,
+) -> ChatProfileResponse:
+    """Chat-profile для embed-сессий: политика из FlowConfig.chat + look из EmbedConfig."""
+    embed_target = await resolve_embed_target(container, embed_id)
+    if embed_target is None:
+        raise HTTPException(status_code=404, detail=f"Embed not found: {embed_id}")
+    if not embed_target.active:
+        raise HTTPException(status_code=403, detail=f"Embed disabled: {embed_id}")
+    return await _chat_profile_internal(
+        flow_id=embed_target.flow_id,
+        branch_id=embed_target.branch_id,
+        request=request,
+        container=container,
         embed_target=embed_target,
     )
 

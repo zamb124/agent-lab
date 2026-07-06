@@ -5,7 +5,7 @@
 import { html, css, nothing } from 'lit';
 import { unsafeHTML } from 'lit/directives/unsafe-html.js';
 import { PlatformElement } from '../platform-element/index.js';
-import { flowsChatMarkdownToHtml } from '../flows-chat/markdown.js';
+import { flowsChatMarkdownToHtml } from '../chat/markdown.js';
 import './platform-help-hint.js';
 
 export class PromptEditor extends PlatformElement {

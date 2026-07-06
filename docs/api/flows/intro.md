@@ -2335,7 +2335,6 @@ POST /frontend/api/embed/configs
   "position": "bottom-right",
   "show_launcher": true,
   "assistant_title": "AI-помощник",
-  "greeting_message": "Здравствуйте! Чем помочь?",
   "interface_locale": "ru",
   "placeholder": "Напишите вопрос...",
   "guest_max_user_messages": 30,
@@ -2356,10 +2355,7 @@ POST /frontend/api/embed/configs
 | `theme` | string | Тема widget. | Обычно `auto`, `light` или `dark`. |
 | `position` | string | Позиция на странице. | Например `bottom-right`, если используется стандартный launcher. |
 | `show_launcher` | boolean | Показывать стандартную кнопку открытия. | `false`, если открываете чат своей кнопкой через custom event. |
-| `show_reasoning` | boolean | Показывать reasoning, если UI это поддерживает. | Для внешнего production-чата обычно `false`. |
-| `show_tool_calls` | boolean | Показывать tool calls, если UI это поддерживает. | Для внешнего production-чата обычно `false`. |
 | `primary_color` | string | Основной цвет widget. | HEX, например `#6366f1`. |
-| `greeting_message` | string или null | Приветствие в начале чата. | Держите коротким. |
 | `assistant_title` | string или null | Имя ассистента в шапке. | Например `AI-помощник`. |
 | `interface_locale` | string | Язык UI: `auto`, `ru`, `en`. | Для русского сайта обычно `ru`. |
 | `placeholder` | string | Текст в пустом поле ввода. | Например `Напишите вопрос...`. |
@@ -2424,10 +2420,10 @@ Response config содержит и служебные поля:
 
 | Поле | Что означает |
 | --- | --- |
-| `show_reasoning` | Признак показа reasoning, если это поддерживается текущим UI виджета. |
-| `show_tool_calls` | Признак показа tool calls, если это поддерживается текущим UI виджета. |
 | `branding` | Признак показа брендинга платформы, если это поддерживается текущим UI виджета. |
 | `landing_visible`, `landing_card_image_url`, `landing_sort_order` | Поля для публичного каталога/демо-витрин. Для обычного встраивания на сайт не нужны. |
+
+Поведение чата (приветствие, reasoning, tool calls, отображение ошибок) не хранится в embed config: оно задаётся владельцем агента в `FlowConfig.chat` и доставляется виджету через `GET /flows/api/v1/embed/{embed_id}/chat-profile`.
 
 ### Ошибки embed-интеграции
 

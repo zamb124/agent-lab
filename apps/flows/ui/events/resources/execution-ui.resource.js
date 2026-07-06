@@ -2,10 +2,10 @@
  * Slice локального UI-состояния панели «Запуск агента».
  *
  * Хранит флаг «сохранять контекст между запусками» и mock-ответы.
- * Ввод текста и файлы принадлежат общему `chat-input`, как и в основном чате.
+ * Сам чат (ввод, файлы, стриминг A2A) живёт внутри `<platform-chat>`;
+ * `persistContext` панель транслирует в атрибут `fresh-context-per-turn`.
  *
- * Транспорта нет: createSlice без HTTP/WS. Сетевая часть запуска
- * живёт в `flows/chat_send` (см. `chat.resource.js`).
+ * Транспорта нет: createSlice без HTTP/WS.
  */
 
 import { createSlice } from '@platform/lib/events/index.js';

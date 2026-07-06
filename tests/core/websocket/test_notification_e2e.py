@@ -117,11 +117,18 @@ async def test_single_websocket_notification(crm_client, ws_cookie_system, syste
 
 
 @pytest.mark.asyncio
-async def test_multiple_tabs_same_user(crm_client, ws_cookie_system, system_user_id, crm_service):
+async def test_multiple_tabs_same_user(
+    crm_client,
+    ws_cookie_system,
+    system_user_id,
+    crm_service,
+    unique_id: str,
+) -> None:
     """Несколько вкладок (WebSocket) одного пользователя."""
 
     ws_url = "ws://localhost:9003/crm/api/ws/notifications"
     expected_type = _expected_event_type("crm", NotificationType.MENTION)
+    expected_title = f"Multi-tab mention {unique_id}"
 
     async with websockets.connect(ws_url, additional_headers=ws_cookie_system) as ws1:
         async with websockets.connect(ws_url, additional_headers=ws_cookie_system) as ws2:
@@ -130,16 +137,16 @@ async def test_multiple_tabs_same_user(crm_client, ws_cookie_system, system_user
                     user_id=system_user_id,
                     notification=Notification(
                         type=NotificationType.MENTION,
-                        title="Вас упомянули",
+                        title=expected_title,
                         message="Пользователь упомянул вас в заметке",
                         service="crm",
                         priority="high",
                     ),
                 )
 
-                ev1 = await _recv_event_by_type(ws1, expected_type, timeout=8)
-                ev2 = await _recv_event_by_type(ws2, expected_type, timeout=8)
-                ev3 = await _recv_event_by_type(ws3, expected_type, timeout=8)
+                ev1 = await _recv_event_by_payload_title(ws1, expected_title, timeout=15)
+                ev2 = await _recv_event_by_payload_title(ws2, expected_title, timeout=15)
+                ev3 = await _recv_event_by_payload_title(ws3, expected_title, timeout=15)
 
                 assert ev1["type"] == ev2["type"] == ev3["type"] == expected_type
                 p1 = _event_payload(ev1)

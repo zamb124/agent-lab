@@ -7,7 +7,7 @@ import {
     escapeHtmlAngleAndAmp,
     fallbackMarkdownToHtml,
     flowsChatMarkdownToHtml,
-} from '@platform/lib/flows-chat/markdown.js';
+} from '@platform/lib/chat/markdown.js';
 
 function fallbackFromRaw(md) {
     return fallbackMarkdownToHtml(escapeHtmlAngleAndAmp(md));

@@ -34,9 +34,6 @@ import './components/flows-sidebar.js';
 import './components/flows-catalog-list.js';
 import './components/flow-card.js';
 import './components/branch-item.js';
-import './components/chat/chat-input.js';
-import './components/chat/chat-message.js';
-import './components/chat/chat-messages.js';
 import './components/chat/flows-chat-run-trace.js';
 
 // Универсальные редакторы

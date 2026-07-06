@@ -1,6 +1,6 @@
 import { html, css } from 'lit';
 import { PlatformElement } from '@platform/lib/platform-element/index.js';
-import '@platform/lib/embed-chat/platform-embed-chat.js';
+import '@platform/lib/chat/platform-chat.js';
 import {
     buildLaraFlowsContext,
     flattenLaraFlowsContext,
@@ -37,7 +37,7 @@ export class FlowsNodeAiHelper extends PlatformElement {
                 flex-direction: column;
             }
 
-            platform-embed-chat {
+            platform-chat {
                 flex: 1;
                 min-height: 0;
                 --embed-radius: var(--radius-lg);
@@ -137,23 +137,23 @@ export class FlowsNodeAiHelper extends PlatformElement {
         const context = this._nodeContext();
         return html`
             <div class="chat-shell">
-                <platform-embed-chat
-                    .hideHeader=${true}
-                    .visible=${true}
-                    embed-theme="light"
+                <platform-chat
+                    display="panel"
+                    profile="spa"
+                    hide-header
+                    theme="light"
                     interface-locale="auto"
                     .flowsBaseUrl=${'/flows'}
                     flow-id="lara"
                     branch-id=${context.assistant_branch_id}
                     conversation-key=${laraNodeHelperConversationKey(context)}
-                    .assistantTitle=${'Lara'}
-                    .title=${'Lara'}
+                    assistant-title="Lara"
                     .labels=${this._labels()}
                     ?use-credentials=${true}
                     .enableVoice=${false}
                     .getExtraMetadataVariables=${this._chatVariables}
                     event-namespace="assistant"
-                ></platform-embed-chat>
+                ></platform-chat>
             </div>
         `;
     }

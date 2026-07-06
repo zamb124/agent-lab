@@ -61,6 +61,37 @@
     "action_cancel": "Отмена",
     "action_save": "Сохранить"
   },
+  "chat_settings": {
+    "section_title": "Поведение чата",
+    "section_hint": "Что видят пользователи этого агента в чате (SPA, embed, публичные страницы). В тестовом чате редактора всегда видно всё.",
+    "greeting_message": "Приветственное сообщение",
+    "greeting_message_hint": "Показывается при открытии пустого чата. Пусто — приветствия нет.",
+    "suggested_prompts": "Подсказки первых сообщений",
+    "suggested_prompts_hint": "Кликабельные примеры вопросов в пустом чате.",
+    "tool_calls_display": "Вызовы инструментов",
+    "tool_calls_display_hint": "Как показывать вызовы инструментов в ответе агента.",
+    "tool_calls_hidden": "Скрыты",
+    "tool_calls_compact": "Компактно",
+    "tool_calls_detailed": "Подробно",
+    "errors_display": "Ошибки выполнения",
+    "errors_display_hint": "generic — обезличенный текст, detailed — текст реальной ошибки.",
+    "errors_generic": "Обезличенно",
+    "errors_detailed": "Подробно",
+    "show_reasoning": "Показывать reasoning",
+    "show_reasoning_hint": "Блоки рассуждений ассистента.",
+    "show_activity": "Показывать активность",
+    "show_activity_hint": "Строка текущей ноды/инструмента во время выполнения.",
+    "show_run_trace": "Показывать run trace",
+    "show_run_trace_hint": "Таймлайн выполнения под ответом.",
+    "show_trace_actions": "Действия трейсов",
+    "show_trace_actions_hint": "Кнопки перехода к трейсам и логам.",
+    "show_browser_previews": "Превью браузера",
+    "show_browser_previews_hint": "Live-превью browser-сессий агента.",
+    "show_files_panel": "Панель файлов",
+    "show_files_panel_hint": "Панель файлов диалога над композером.",
+    "allow_cancel": "Разрешить отмену",
+    "allow_cancel_hint": "Пользователь может останавливать выполнение."
+  },
   "branch_create_modal": {
     "title": "Создать ветку",
     "field_branch_id": "Branch ID (snake_case)",
@@ -477,6 +508,9 @@
     "tool_call_label": "Инструмент: {{name}}",
     "tool_result_label": "Результат: {{name}}",
     "show_tracing_title": "Показать трейсинг",
+    "show_logs_title": "Открыть логи",
+    "show_durable_history_title": "Открыть durable history",
+    "show_run_trace_title": "Таймлайн выполнения",
     "interrupt_operator_banner": "Ожидается действие оператора. Диалог на паузе.",
     "interrupt_handoff_banner": "Управление передано другому агенту",
     "interrupt_oauth_banner": "Требуется авторизация во внешнем сервисе",
@@ -1278,7 +1312,11 @@
     "evaluation_lab": "Открыть Evaluation Lab",
     "code": "Код",
     "publish": "Опубликовать",
-    "share_preview": "Ссылка для гостевого просмотра (одноразовая)"
+    "share_preview": "Ссылка для гостевого просмотра (одноразовая)",
+    "flow_settings": "Настройки агента"
+  },
+  "chat_page": {
+    "flow_settings": "Настройки агента"
   },
   "node_ai_helper": {
     "placeholder": "Сообщение Lara…"

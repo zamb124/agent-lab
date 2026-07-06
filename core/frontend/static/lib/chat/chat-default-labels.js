@@ -42,6 +42,7 @@ export const EMBED_CHAT_DEFAULT_LABELS = {
         locale_ru: 'Русский',
         locale_en: 'English',
         ai_disclaimer: 'Содержимое, созданное ИИ, может быть неточным.',
+        error_generic: 'Не получилось обработать запрос. Попробуйте ещё раз.',
         interrupt_operator_banner: 'Ожидается действие оператора. Диалог на паузе.',
         interrupt_oauth_banner: 'Требуется авторизация во внешнем сервисе',
         interrupt_oauth_button: 'Авторизоваться',
@@ -64,6 +65,10 @@ export const EMBED_CHAT_DEFAULT_LABELS = {
         tool_hint_tool_name: 'Инструмент: {name}',
         tool_hint_args_label: 'Аргументы:',
         tool_hint_result_label: 'Результат:',
+        show_tracing_title: 'Открыть трассировку',
+        show_logs_title: 'Открыть логи',
+        show_durable_history_title: 'Открыть durable history',
+        show_run_trace_title: 'Таймлайн выполнения',
     },
     en: {
         title: 'Assistant',
@@ -102,6 +107,7 @@ export const EMBED_CHAT_DEFAULT_LABELS = {
         locale_ru: 'Russian',
         locale_en: 'English',
         ai_disclaimer: 'AI-generated content may be inaccurate.',
+        error_generic: 'Request failed. Please try again.',
         interrupt_operator_banner: 'Waiting for an operator. The chat is on hold.',
         interrupt_oauth_banner: 'External service authorization required',
         interrupt_oauth_button: 'Authorize',
@@ -124,6 +130,10 @@ export const EMBED_CHAT_DEFAULT_LABELS = {
         tool_hint_tool_name: 'Tool: {name}',
         tool_hint_args_label: 'Arguments:',
         tool_hint_result_label: 'Result:',
+        show_tracing_title: 'Open tracing',
+        show_logs_title: 'Open logs',
+        show_durable_history_title: 'Open durable history',
+        show_run_trace_title: 'Execution timeline',
     },
 };
 

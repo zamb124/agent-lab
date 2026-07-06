@@ -243,6 +243,7 @@ class FlowsLoader:
 
         depends_on_flow_ids = self._read_bundle_depends_on_flow_ids(bundle_dir)
 
+        raw_chat = raw_config.get("chat")
         return FlowConfig.model_validate(
             {
                 "flow_id": raw_flow_id,
@@ -259,6 +260,7 @@ class FlowsLoader:
                 "store_card_image_url": store_card_image_url,
                 "hidden": raw_hidden,
                 "depends_on_flow_ids": depends_on_flow_ids,
+                **({"chat": raw_chat} if raw_chat is not None else {}),
             }
         )
 

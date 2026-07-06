@@ -6,7 +6,9 @@ from datetime import datetime, timezone
 from enum import Enum
 from typing import ClassVar
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_serializer
+
+from core.models.flow_chat_settings import EmbedChatPolicyOverride
 
 
 class EmbedStatus(str, Enum):
@@ -76,25 +78,10 @@ class EmbedConfig(BaseModel):
         title="Показывать кнопку запуска",
         description="Показывать встроенную FAB кнопку запуска embed-чата",
     )
-    show_reasoning: bool = Field(
-        default=False,
-        title="Показывать reasoning",
-        description="Показывать процесс рассуждения агента",
-    )
-    show_tool_calls: bool = Field(
-        default=False,
-        title="Показывать tool calls",
-        description="Показывать вызовы инструментов",
-    )
     primary_color: str = Field(
         default="#6366f1",
         title="Основной цвет",
         description="Основной цвет интерфейса (HEX)",
-    )
-    greeting_message: str | None = Field(
-        default=None,
-        title="Приветствие",
-        description="Приветственное сообщение при загрузке чата",
     )
     assistant_title: str | None = Field(
         default=None,
@@ -160,6 +147,26 @@ class EmbedConfig(BaseModel):
         title="Служебный виджет для одноразовой гостевой ссылки из редактора flow",
         description="Не показывается в списке embed configs консоли; создаётся только через preview-share API.",
     )
+    chat_override: EmbedChatPolicyOverride | None = Field(
+        default=None,
+        title="Переопределение поведения чата",
+        description=(
+            "Частичный override FlowChatSettings для этого виджета; "
+            "None — полное наследование настроек flow"
+        ),
+    )
+
+    @field_serializer("chat_override")
+    def _serialize_chat_override(
+        self,
+        value: EmbedChatPolicyOverride | None,
+    ) -> dict[str, bool | str | list[str] | None] | None:
+        if value is None:
+            return None
+        payload = value.model_dump(exclude_unset=True)
+        if not payload:
+            return None
+        return payload
 
     # Статистика
     usage_count: int = Field(
@@ -193,6 +200,40 @@ class EmbedConfig(BaseModel):
         description="Время последнего обновления",
         json_schema_extra={"readonly": True},
     )
+
+
+class EmbedChatLook(BaseModel):
+    """
+    Look&feel-проекция EmbedConfig для доставки в chat-profile.
+
+    Только внешний вид виджета; политика поведения чата живёт в FlowConfig.chat.
+    """
+
+    theme: str
+    position: str
+    primary_color: str
+    assistant_title: str | None
+    placeholder: str
+    interface_locale: str
+    show_launcher: bool
+    branding: bool
+    voice_enabled: bool
+    voice_default_on: bool
+
+    @classmethod
+    def from_embed_config(cls, config: EmbedConfig) -> "EmbedChatLook":
+        return cls(
+            theme=config.theme,
+            position=config.position,
+            primary_color=config.primary_color,
+            assistant_title=config.assistant_title,
+            placeholder=config.placeholder,
+            interface_locale=config.interface_locale,
+            show_launcher=config.show_launcher,
+            branding=config.branding,
+            voice_enabled=config.voice_enabled,
+            voice_default_on=config.voice_default_on,
+        )
 
 
 class EmbedMapping(BaseModel):

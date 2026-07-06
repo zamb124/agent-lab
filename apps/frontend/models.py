@@ -242,10 +242,8 @@ class LandingDemoSpec(BaseModel):
     flow_id: str = Field(min_length=1)
     name: str = Field(min_length=1)
     assistant_title: str = Field(min_length=1)
-    greeting_message: str = Field(min_length=1)
     sort: int
     image: str = Field(min_length=1)
-    show_tool_calls: bool = False
     guest_max_user_messages: int = Field(default=5, ge=1)
 
 

@@ -4,7 +4,11 @@ from dataclasses import dataclass
 
 from apps.flows.src.container import FlowContainer
 from core.context import Context, clear_context, get_context, set_context
-from core.models.embed_models import EmbedStatus
+from core.models.embed_models import EmbedChatLook, EmbedStatus
+from core.models.flow_chat_settings import (
+    EmbedChatPolicyOverride,
+    compact_embed_chat_policy_override,
+)
 from core.models.i18n_models import Language
 from core.models.identity_models import Company, User
 
@@ -18,6 +22,8 @@ class EmbedTarget:
     allowed_origins: list[str]
     active: bool
     guest_max_user_messages: int | None
+    look: EmbedChatLook
+    chat_override: EmbedChatPolicyOverride | None
 
 
 async def resolve_embed_target(container: FlowContainer, embed_id: str) -> EmbedTarget | None:
@@ -46,6 +52,8 @@ async def resolve_embed_target(container: FlowContainer, embed_id: str) -> Embed
         allowed_origins=list(config.allowed_origins or []),
         active=config.status == EmbedStatus.ACTIVE,
         guest_max_user_messages=guest_cap,
+        look=EmbedChatLook.from_embed_config(config),
+        chat_override=compact_embed_chat_policy_override(config.chat_override),
     )
 
 

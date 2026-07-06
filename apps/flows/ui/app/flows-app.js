@@ -2,10 +2,9 @@
  * FlowsApp — корневой Lit-компонент сервиса flows.
  *
  * Все доменные операции описаны фабриками в `apps/flows/ui/events/resources/*`.
- * Чат использует `transport: 'ws'` с REST-зеркалом; сами стриминговые события
- * чата приходят push-ами `flows/chat/*` через единый WebSocket
- * `/flows/api/ws/notifications`. Задачи (включая HITL) ведутся в сервисе
- * worktracker, а не во flows UI.
+ * Чат целиком живёт в едином компоненте `<platform-chat>` (core/lib/chat):
+ * состояние, SSE A2A и voice — внутри компонента, не в фабриках. Задачи
+ * (включая HITL) ведутся в сервисе worktracker, а не во flows UI.
  *
  * Маршруты заданы декларативно через `createRouterEffect` (см. SYNC_ROUTES
  * для образца). `renderRoute` — switch по routeKey.
@@ -14,7 +13,7 @@
 import { html, css } from 'lit';
 import { PlatformApp, renderPlatformAppShell } from '@platform/lib/base/PlatformApp.js';
 import { createRouterEffect } from '@platform/lib/events/effects/router.effect.js';
-import '@platform/lib/embed-chat/platform-lara-assistant.js';
+import '@platform/lib/chat/platform-chat.js';
 
 import { flowsResource, flowUpdateOp, flowReloadFromBundleOp, flowVersionsListOp,
          flowStoreBundlesOp, flowValidateOp, branchCreateOp, branchUpdateOp,
@@ -63,7 +62,7 @@ import { promptRenderOp } from '../events/resources/prompts.resource.js';
 import { dataflowInspectOp } from '../events/resources/dataflow.resource.js';
 import { integrationsListOp, integrationsRemoveOp } from '../events/resources/integrations.resource.js';
 import { platformFileCreateOp } from '@platform/lib/events/factories/platform-file-create.js';
-import { chatResource, chatSendOp, chatCancelOp, apiConsoleRunOp } from '../events/resources/chat.resource.js';
+import { apiConsoleRunOp } from '../events/resources/api-console.resource.js';
 import { editorResource, editorBulkDeleteOp, stickyNoteUpsertOp } from '../events/resources/editor.resource.js';
 import { executionUiSlice } from '../events/resources/execution-ui.resource.js';
 import {
@@ -225,9 +224,6 @@ export class FlowsApp extends PlatformApp {
         integrationsListOp,
         integrationsRemoveOp,
         platformFileCreateOp,
-        chatResource,
-        chatSendOp,
-        chatCancelOp,
         apiConsoleRunOp,
         editorResource,
         editorBulkDeleteOp,
@@ -504,20 +500,22 @@ export class FlowsApp extends PlatformApp {
         const voiceBase = typeof this._laraVoiceBaseUrl === 'string' ? this._laraVoiceBaseUrl.trim() : '';
         const duplex = companyId !== '' && voiceBase !== '';
         return html`
-            <platform-lara-assistant
+            <platform-chat
+                display="drawer"
+                profile="spa"
                 toggle-event-name="flows-lara-open"
                 event-namespace="assistant"
                 flow-id="lara"
                 branch-id=${LARA_FLOWS_BRANCH_ID}
                 .flowsBaseUrl=${'/flows'}
                 ?use-credentials=${true}
-                .assistantTitle=${'Lara'}
+                assistant-title="Lara"
                 ?voice-enabled=${duplex}
                 voice-base-url=${voiceBase}
                 company-id=${companyId}
                 .getExtraMetadataVariables=${this._laraEmbedContextVariables}
                 .getContextVariables=${this._laraEmbedContextVariables}
-            ></platform-lara-assistant>
+            ></platform-chat>
         `;
     }
 

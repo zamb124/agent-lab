@@ -11,6 +11,9 @@
   "permission": [],
   "branches": {},
   "store_card_image": "tutor.jpg",
+  "chat": {
+    "greeting_message": "Объясню тему простыми словами. Демо, не ответ на ваше контрольное."
+  },
   "entry": "main",
   "nodes": {
     "main": {

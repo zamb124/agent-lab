@@ -31,7 +31,7 @@ import {
     isPlainObject,
     buildFlowPublishBody,
 } from '../../_helpers/flows-resolvers.js';
-import { dispatchEmbedChatWindowToggle } from '@platform/lib/embed-chat/embed-chat-window-toggle.js';
+import { dispatchEmbedChatWindowToggle } from '@platform/lib/chat/chat-window-toggle.js';
 
 export class FlowsEditorHeader extends PlatformElement {
     static properties = {
@@ -248,6 +248,13 @@ export class FlowsEditorHeader extends PlatformElement {
         this.openModal('flows.triggers', { flowId: this.flowId });
     }
 
+    _openFlowSettings() {
+        if (typeof this.flowId !== 'string' || this.flowId.length === 0) {
+            return;
+        }
+        this.openModal('flows.flow_edit', { flowId: this.flowId });
+    }
+
     _openPreviewShare() {
         if (typeof this.flowId !== 'string' || this.flowId.length === 0) {
             return;
@@ -332,6 +339,16 @@ export class FlowsEditorHeader extends PlatformElement {
             </div>
 
             <div class="header-right">
+                <button
+                    class="header-btn icon-only"
+                    type="button"
+                    title=${this.t('editor_header.flow_settings')}
+                    aria-label=${this.t('editor_header.flow_settings')}
+                    data-action="flow-settings"
+                    @click=${this._openFlowSettings}
+                >
+                    <platform-icon name="settings" size="16"></platform-icon>
+                </button>
                 <button
                     class="header-btn icon-only"
                     type="button"

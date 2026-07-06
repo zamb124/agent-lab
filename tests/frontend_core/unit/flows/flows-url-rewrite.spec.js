@@ -5,7 +5,7 @@ import {
     normalizeFlowChatBlockForPlatformUrls,
     resolvePlatformFileDownloadUrl,
     rewritePlatformFileUrlsInHtml,
-} from '@platform/lib/flows-chat/flows-url-rewrite.js';
+} from '@platform/lib/chat/flows-url-rewrite.js';
 
 const historicalDownloadPath = (serviceSegment, fileId) =>
     `/${serviceSegment}/api/v1/files/download/${fileId}`;

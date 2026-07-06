@@ -22,9 +22,9 @@ import {
 import { PlatformElement } from '@platform/lib/platform-element/index.js';
 import '@platform/lib/components/platform-modal-stack.js';
 import '@platform/lib/components/platform-file-viewer-modal.js';
-import '../../../../core/frontend/static/lib/flows-chat/flows-chat-message.js';
-import '../../../../core/frontend/static/lib/flows-chat/flows-chat-files-panel.js';
-import '../../../../core/frontend/static/lib/flows-chat/blocks/flows-chat-ui-file-card.js';
+import '../../../../core/frontend/static/lib/chat/chat-message.js';
+import '../../../../core/frontend/static/lib/chat/chat-files-panel.js';
+import '../../../../core/frontend/static/lib/chat/blocks/flows-chat-ui-file-card.js';
 import '../../../../apps/sync/ui/components/sync-message-bubble.js';
 import '../../../../apps/crm/ui/components/entity-card.js';
 import '../../../../apps/crm/ui/components/note-card-view.js';

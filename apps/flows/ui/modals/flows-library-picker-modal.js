@@ -16,7 +16,7 @@ import '@platform/lib/components/platform-modal-search-field.js';
 import '@platform/lib/components/glass-spinner.js';
 import '@platform/lib/components/platform-icon.js';
 import '../components/common/flows-code-language-icon.js';
-import { flowsChatMarkdownToHtml } from '@platform/lib/flows-chat/markdown.js';
+import { flowsChatMarkdownToHtml } from '@platform/lib/chat/markdown.js';
 import { registryItemIconName, registryItemTitle } from '../_helpers/flows-registry-item-icon.js';
 import { renderMcpServerIcon } from '../_helpers/mcp-server-icon.js';
 import { asArray, isPlainObject } from '../_helpers/flows-resolvers.js';

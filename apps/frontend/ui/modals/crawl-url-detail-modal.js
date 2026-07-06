@@ -2,7 +2,7 @@ import { html, css, nothing } from 'lit';
 import { unsafeHTML } from 'lit/directives/unsafe-html.js';
 import { PlatformModal } from '@platform/lib/components/glass-modal.js';
 import { registerModalKind } from '@platform/lib/utils/modal-registry.js';
-import { flowsChatMarkdownToHtml } from '@platform/lib/flows-chat/markdown.js';
+import { flowsChatMarkdownToHtml } from '@platform/lib/chat/markdown.js';
 import { formatPlatformDateTime } from '@platform/lib/utils/format-platform-date.js';
 import '@platform/lib/components/glass-spinner.js';
 import '../components/crawl-report/crawl-report-metadata-panels.js';

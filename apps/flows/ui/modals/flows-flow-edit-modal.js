@@ -1,7 +1,10 @@
 /**
- * flows-flow-edit-modal — редактирование метаданных flow (name, description, обложка).
+ * flows-flow-edit-modal — редактирование метаданных flow (name, description, обложка)
+ * и политики поведения чата (`FlowConfig.chat`, все поля FlowChatSettings).
  *
  * Обновление — `PUT /flows/api/v1/flows/{flow_id}`. Загрузка файла — `platform/file_create`.
+ * Политика чата доставляется пользователям через chat-profile endpoint; в режиме
+ * editor_test (`<platform-chat profile="editor_test">`) она игнорируется — редактор видит всё.
  */
 
 import { html, css } from 'lit';
@@ -10,6 +13,7 @@ import { registerModalKind } from '@platform/lib/utils/modal-registry.js';
 import { buildFlowAssetFileCreateSpecJson } from '@platform/lib/utils/file-create-spec.js';
 import '@platform/lib/components/platform-button.js';
 import '@platform/lib/components/fields/platform-field.js';
+import '@platform/lib/chat/chat-settings-fields.js';
 import { asArray } from '../_helpers/flows-resolvers.js';
 
 export class FlowsFlowEditModal extends PlatformFormModal {
@@ -22,6 +26,7 @@ export class FlowsFlowEditModal extends PlatformFormModal {
         _name: { state: true },
         _description: { state: true },
         _cardImageUrl: { state: true },
+        _chat: { state: true },
         _hydrated: { state: true },
     };
 
@@ -30,6 +35,18 @@ export class FlowsFlowEditModal extends PlatformFormModal {
         css`
             .field { display: flex; flex-direction: column; gap: var(--space-1); margin-bottom: var(--space-3); }
             .flow-id { font-family: var(--font-mono); color: var(--text-tertiary); }
+            .chat-section-title {
+                margin: var(--space-4) 0 var(--space-1);
+                font-size: var(--text-sm);
+                font-weight: var(--font-semibold);
+                color: var(--text-primary);
+            }
+            .chat-section-hint {
+                margin: 0 0 var(--space-3);
+                font-size: var(--text-xs);
+                color: var(--text-tertiary);
+                line-height: 1.5;
+            }
             .card-preview {
                 max-width: 100%;
                 max-height: 160px;
@@ -61,6 +78,7 @@ export class FlowsFlowEditModal extends PlatformFormModal {
         this._name = '';
         this._description = '';
         this._cardImageUrl = '';
+        this._chat = null;
         this._hydrated = false;
         this._flows = this.useResource('flows/flows');
         this._update = this.useOp('flows/flow_update');
@@ -74,6 +92,7 @@ export class FlowsFlowEditModal extends PlatformFormModal {
             this._name = '';
             this._description = '';
             this._cardImageUrl = '';
+            this._chat = null;
         }
         if (!this._hydrated && this.flowId) {
             const item = asArray(this._flows.items).find((f) => f && f.flow_id === this.flowId);
@@ -82,11 +101,34 @@ export class FlowsFlowEditModal extends PlatformFormModal {
                 this._description = typeof item.description === 'string' ? item.description : '';
                 const c = item.store_card_image_url;
                 this._cardImageUrl = typeof c === 'string' ? c : '';
+                if (!item.chat || typeof item.chat !== 'object') {
+                    throw new Error('flows-flow-edit-modal: flow item missing chat settings');
+                }
+                this._chat = { ...item.chat };
                 this._hydrated = true;
             } else {
                 this._flows.get(this.flowId);
             }
         }
+    }
+
+    _setChat(patch) {
+        this._chat = { ...this._chat, ...patch };
+        this.isDirty = true;
+    }
+
+    _renderChatSection() {
+        if (!this._chat) {
+            return null;
+        }
+        return html`
+            <h4 class="chat-section-title">${this.t('chat_settings.section_title')}</h4>
+            <p class="chat-section-hint">${this.t('chat_settings.section_hint')}</p>
+            <platform-chat-settings-fields
+                .chat=${this._chat}
+                @chat-changed=${(e) => this._setChat(e.detail.patch)}
+            ></platform-chat-settings-fields>
+        `;
     }
 
     renderHeader() {
@@ -154,6 +196,7 @@ export class FlowsFlowEditModal extends PlatformFormModal {
         : null}
                 </div>
             </div>
+            ${this._renderChatSection()}
         `;
     }
 
@@ -201,11 +244,15 @@ export class FlowsFlowEditModal extends PlatformFormModal {
         const item = asArray(this._flows.items).find((f) => f && f.flow_id === this.flowId);
         if (!item) return;
         const trimmedCard = this._cardImageUrl.trim();
+        if (!this._chat) {
+            throw new Error('flows-flow-edit-modal: chat settings not hydrated');
+        }
         const body = {
             ...item,
             name: this._name.trim(),
             description: this._description,
             store_card_image_url: trimmedCard.length > 0 ? trimmedCard : null,
+            chat: this._chat,
         };
         this._update.run({ flow_id: this.flowId, body });
         this.closeAfterSave();

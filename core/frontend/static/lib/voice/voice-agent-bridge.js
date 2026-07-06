@@ -16,10 +16,9 @@
  *    запустил `message/stream`, пустой `stop()` после снятия эфира **не**
  *    вызывает `AbortController.abort` на этом fetch (иначе UI успевает показать
  *    сообщение пользователя из `beforeA2aStream`, а ответ гаснет).
- *  - Авто-TTS из ответа обрабатывается отдельно: после `_dispatchA2aEvent` в
- *    `apps/flows/ui/events/resources/chat.resource.js` и в embed
- *    `_handleEvent` вызывается `feedStreamTtsFromA2aResult` (registry —
- *    `stream-tts-registry.js`, см. `voice.mdc`).
+ *  - Авто-TTS из ответа обрабатывается отдельно: потребитель SSE-кадров
+ *    (фабрика `flows/chat` или `<platform-chat>`) вызывает
+ *    `feedStreamTtsFromA2aResult` (registry — `stream-tts-registry.js`, см. `voice.mdc`).
  *  - Barge-in: `vad` с непрерывной речью ≥ ~0,3 s (как порог на шлюзе)
  *    во время TTS **или** пока живёт A2A fetch (фаза SSE до первого TTS) →
  *    `voice.stopPlayback()`, `AbortController.abort`, при наличии `taskId` —
@@ -38,7 +37,12 @@
  * в модулях friend'ах.
  */
 
-import { streamEmbedA2A } from '../embed-chat/embed-a2a-stream.js';
+import {
+    a2aEndpointUrl,
+    buildA2aCancelBody,
+    buildA2aMessageStreamBody,
+    consumeA2aStream,
+} from '../chat/runtime/a2a-stream.js';
 import { isVoiceClientDebugEnabled } from './voice-media-session.js';
 
 /** Минимальная длительность сегмента речи (VAD open) до client barge-in, мс — как `vad_speech_seconds < 0.3` в `BargeInController`. */
@@ -54,10 +58,10 @@ const CLIENT_BARGE_MIN_SPEECH_MS = 300;
  * @property {() => Promise<Record<string,string>>} [getHeaders]
  * @property {RequestCredentials} [credentials='omit']
  * @property {string|null} [initialContextId]
- * @property {() => string|null|undefined} [getContextId] — перед каждым message/stream подставляется актуальный contextId из UI (например embed-chat).
+ * @property {() => string|null|undefined} [getContextId] — перед каждым message/stream подставляется актуальный contextId из UI (например `<platform-chat>`).
  * @property {() => Promise<Record<string, unknown>|null|undefined>} [getStreamMetadata] — metadata для A2A (как у текстовой отправки: variables и т.д.).
  * @property {(text: string) => Promise<void>} [beforeA2aStream] — перед fetch (например добавить user/assistant пузыри в чат).
- * @property {(event: object) => void} [onA2aStreamEvent] — каждый SSE-кадр для UI; потребитель вызывает релей/reducer и там же `feedStreamTtsFromA2aResult` (flows: `relayA2aVoiceStreamRpcFrame`, embed: `platform-embed-chat._handleEvent`). Сам `VoiceAgentBridge` авто-TTS не вызывает.
+ * @property {(event: object) => void} [onA2aStreamEvent] — каждый SSE-кадр для UI; потребитель вызывает релей/reducer и там же `feedStreamTtsFromA2aResult` (flows: `relayA2aVoiceStreamRpcFrame`, standalone: `<platform-chat>.applyVoiceA2aStreamEvent`). Сам `VoiceAgentBridge` авто-TTS не вызывает.
  */
 
 export class VoiceAgentBridge extends EventTarget {
@@ -321,16 +325,21 @@ export class VoiceAgentBridge extends EventTarget {
                     throw Object.assign(e, { code: 'voice/bridge/metadata_failed' });
                 }
             }
-            await streamEmbedA2A(
+            const extraHeaders = await this._getHeaders();
+            await consumeA2aStream(
                 {
-                    baseUrl: this._a2aBaseUrl,
-                    flowId: this._flowId,
-                    embedId: this._embedId,
-                    message: text,
-                    contextId: this._contextId,
-                    branchId: this._branchId,
-                    metadata,
-                    getHeaders: this._getHeaders,
+                    url: a2aEndpointUrl({
+                        baseUrl: this._a2aBaseUrl,
+                        flowId: this._flowId,
+                        embedId: this._embedId,
+                    }),
+                    body: buildA2aMessageStreamBody({
+                        message: text,
+                        contextId: this._contextId,
+                        branchId: this._branchId,
+                        metadata,
+                    }),
+                    headers: extraHeaders,
                     credentials: this._credentials,
                     signal: ac.signal,
                 },
@@ -424,9 +433,11 @@ export class VoiceAgentBridge extends EventTarget {
         }
         if (typeof taskId !== 'string' || taskId === '') return;
 
-        const url = this._embedId
-            ? `${this._a2aBaseUrl}/api/v1/embed/${encodeURIComponent(this._embedId)}`
-            : `${this._a2aBaseUrl}/api/v1/${encodeURIComponent(this._flowId)}`;
+        const url = a2aEndpointUrl({
+            baseUrl: this._a2aBaseUrl,
+            flowId: this._flowId,
+            embedId: this._embedId,
+        });
 
         const extraHeaders = await this._getHeaders();
         try {
@@ -437,12 +448,7 @@ export class VoiceAgentBridge extends EventTarget {
                     'Content-Type': 'application/json',
                     ...extraHeaders,
                 },
-                body: JSON.stringify({
-                    jsonrpc: '2.0',
-                    id: String(Date.now()),
-                    method: 'tasks/cancel',
-                    params: { id: taskId },
-                }),
+                body: JSON.stringify(buildA2aCancelBody(taskId)),
             });
         } catch (err) {
             this._dispatch('error', {

@@ -1,8 +1,8 @@
 from pathlib import Path
 
 
-def test_embed_chat_uses_action_invoked_without_legacy_fallbacks() -> None:
-    chat_path = Path("core/frontend/static/lib/embed-chat/platform-embed-chat.js")
+def test_platform_chat_uses_action_invoked_without_legacy_fallbacks() -> None:
+    chat_path = Path("core/frontend/static/lib/chat/platform-chat.js")
     source = chat_path.read_text(encoding="utf-8")
 
     assert "_injectActionBlocksFromUiEvents" not in source

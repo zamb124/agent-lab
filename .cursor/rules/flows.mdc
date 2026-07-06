@@ -18,21 +18,21 @@ alwaysApply: false
 - Cancel: `POST /flows/api/v1/{flow_id}` body `{method:"tasks/cancel", params:{id: task_id}}`.
 - Ответ: `text/event-stream`, кадры `data: {jsonrpc, id, result: <a2a_event>}\n\n`. Терминальные `state`: `completed`/`failed`/`input-required`.
 
-UI-фабрика `chatSendOp`/`chatCancelOp` (`transport: 'http'`, `apps/flows/ui/events/resources/chat.resource.js`) внутри `request` читает SSE-стрим и маппит каждый A2A-фрейм в локальное событие `flows/chat/<verb>` для slice-reducer'а `messagesByContextId[ctx]`:
+Клиент — единый `<platform-chat>` (`core/lib/chat`, → **`flows_chat.mdc`**): `ChatController` читает SSE-стрим через `consumeA2aStream` и маппит каждый A2A-фрейм в verb pure reducer'а `applyChatRuntimeEvent` (`chat-state.js`, `messagesByContextId[ctx]`):
 
-| Локальное событие | Источник в A2A-стриме |
+| Verb reducer'а | Источник в A2A-стриме |
 |---|---|
-| `flows/chat/task_started` | первый `Task` |
-| `flows/chat/content_chunk` | `TaskArtifactUpdateEvent` text-part |
-| `flows/chat/reasoning_chunk` | `TaskArtifactUpdateEvent` artifact `name='reasoning'` |
-| `flows/chat/operator_reply` | artifact `name='operator_reply'` |
-| `flows/chat/operator_files` | artifact `name='operator_files'` |
-| `flows/chat/tool_calls` | `Message.metadata.tool_calls` |
-| `flows/chat/tool_result` | `Message.metadata.tool_result` |
-| `flows/chat/breakpoint` | `TaskStatusUpdateEvent state=input-required` + `metadata.breakpoint` |
-| `flows/chat/input_required` | `TaskStatusUpdateEvent state=input-required` без breakpoint |
-| `flows/chat/completed` | `TaskStatusUpdateEvent state=completed/finished, final=true` |
-| `flows/chat/failed` | `TaskStatusUpdateEvent state=failed/error` или ошибка стрима |
+| `task_started` | первый `Task` |
+| `content_chunk` | `TaskArtifactUpdateEvent` text-part |
+| `reasoning_chunk` | `TaskArtifactUpdateEvent` artifact `name='reasoning'` |
+| `operator_reply` | artifact `name='operator_reply'` |
+| `operator_files` | artifact `name='operator_files'` |
+| `tool_calls` | `Message.metadata.tool_calls` |
+| `tool_result` | `Message.metadata.tool_result` |
+| `breakpoint` | `TaskStatusUpdateEvent state=input-required` + `metadata.breakpoint` |
+| `input_required` | `TaskStatusUpdateEvent state=input-required` без breakpoint |
+| `completed` | `TaskStatusUpdateEvent state=completed/finished, final=true` |
+| `failed` | `TaskStatusUpdateEvent state=failed/error` или ошибка стрима |
 
 ## HITL и задачи оператора
 
@@ -269,7 +269,7 @@ Resolved LLM candidate может нести `context_length`; context layer и�
 
 **Library picker (`flows.tool_picker` + `flows.code_node_templates`)** — одна реализация `flows-library-picker-modal.js`. `flows.tool_picker` (`useOp('flows/tools_all')`, REST `GET /flows/api/v1/tools/all`): `pickMode: 'all' | 'flow_only'`; `onPick({kind:'tool'|'flow', tool_id, item})`. В LLM-ноде «Из библиотеки» для `kind === 'flow'` в `cfg.tools` добавляется `{type:'flow', tool_id}`; для tool — `{tool_id}`. `flows.code_node_templates`: вкладки каталог (`flows/code_templates`) + реестр (тот же `flows/tools_all`, без `item_type === 'flow'`).
 
-**Lara в редакторе flows:** `<flows-app>` подключает общий `platform-lara-assistant` с `flow-id="lara"` и фиксированной branch `flows`; глобальная кнопка Lara в `flows-editor-header.js` не переключается на специализации нод. AI для выбранной ноды открывается отдельной кнопкой в шапке `flows-floating-panel.js` и рендерит `flows-node-ai-helper.js` вместо property panel. `flows-node-ai-helper.js` не реализует собственный чат/transport: внутри используется общий `platform-embed-chat` (A2A/SSE, messages, input, action buttons).
+**Lara в редакторе flows:** `<flows-app>` монтирует `<platform-chat display="drawer" profile="spa">` с `flow-id="lara"` и фиксированной branch `flows`; глобальная кнопка Lara в `flows-editor-header.js` не переключается на специализации нод. AI для выбранной ноды открывается отдельной кнопкой в шапке `flows-floating-panel.js` и рендерит `flows-node-ai-helper.js` вместо property panel. `flows-node-ai-helper.js` не реализует собственный чат/transport: внутри тот же `<platform-chat display="panel" profile="spa">` (A2A/SSE, messages, input, action buttons).
 
 Node AI context строится в `apps/flows/ui/_helpers/lara-node-helper.js`: в `metadata.variables` передаются `flow_id`, `target_branch_id`, `api_branch_id`, `assistant_branch_id`, `node_id`, `node_type`, `node_payload_json`, `flow_payload_json`, `branch_node_payload_json`, `branch_code_payload_json`, `dataflow_node_json`, `lara_ui_context_json`. Для `code_helper` компонент дополнительно кладёт полную markdown-документацию inline-кода текущего языка через существующий `flows/code_documentation` op: `code_inline_documentation_language`, `code_inline_documentation_md`, `code_inline_documentation_error`. Для каждого типа ноды используется отдельная branch Lara: `code_helper`, `llm_node_helper`, `flow_node_helper`, `remote_flow_node_helper`, `external_api_node_helper`, `mcp_node_helper`, `channel_node_helper`, `hitl_node_helper`, `reflection_node_helper`, `resource_node_helper`; неизвестный тип падает на generic `node_helper`. Эти branch имеют ровно один tool — `flows_patch_node`; для изменений всегда `mode=propose`, затем `mode=apply` только после подтверждения пользователя.
 

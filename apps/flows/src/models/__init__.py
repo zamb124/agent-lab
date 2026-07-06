@@ -45,6 +45,13 @@ from .external_api import (
     ResponseStatus,
     ResponseType,
 )
+from .flow_chat_settings import (
+    ChatErrorsDisplay,
+    ChatToolCallsDisplay,
+    EmbedChatPolicyOverride,
+    FlowChatSettings,
+    resolve_effective_flow_chat,
+)
 from .flow_config import (
     BranchConfig,
     CodeEdgeCondition,
@@ -152,6 +159,12 @@ __all__ = [
     "ResponseStatus",
     "ResponseType",
     "SimpleEdgeCondition",
+    "ChatErrorsDisplay",
+    "ChatToolCallsDisplay",
+    "EmbedChatPolicyOverride",
+    "FlowChatSettings",
+    "compact_embed_chat_policy_override",
+    "resolve_effective_flow_chat",
     "FlowSpeechSettings",
     "FlowSpeechSttBlock",
     "FlowSpeechTtsBlock",

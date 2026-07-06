@@ -3,7 +3,7 @@
  */
 import { html, css } from 'lit';
 import { PlatformElement } from '@platform/lib/platform-element/index.js';
-import '@platform/lib/embed-chat/platform-embed-chat-drawer.js';
+import '@platform/lib/chat/platform-chat.js';
 import '@platform/lib/components/glass-card.js';
 import '@platform/lib/components/glass-button.js';
 import '@platform/lib/components/glass-spinner.js';
@@ -334,14 +334,16 @@ export class LandingHomeDemoAgents extends PlatformElement {
                       `
                     : ''}
             </div>
-            <platform-embed-chat-drawer
+            <platform-chat
+                display="drawer"
+                profile="embed_public"
                 flows-base-url=${this._flowsBaseUrl}
                 flow-id=${this._drawerSpec ? this._drawerSpec.flow_id : ''}
                 embed-id=${this._drawerSpec ? this._drawerSpec.embed_id : ''}
                 branch-id=${this._drawerSpec ? this._drawerSpec.branch_id : ''}
                 assistant-title=${this._drawerSpec ? this._drawerSpec.assistant_title : ''}
                 theme=${this._drawerSpec ? this._drawerSpec.theme : 'dark'}
-                locale=${this._drawerSpec ? this._drawerSpec.interface_locale : 'auto'}
+                interface-locale=${this._drawerSpec ? this._drawerSpec.interface_locale : 'auto'}
                 ?show-launcher=${false}
                 ?use-credentials=${false}
                 .open=${this._drawerOpen}
@@ -352,7 +354,7 @@ export class LandingHomeDemoAgents extends PlatformElement {
                 .getAuthToken=${this._getDemoAuthHeaders}
                 @humanitec-embed-drawer-open-changed=${this._onDrawerOpenChanged}
                 @embed-toast=${this._onEmbedDrawerToast}
-            ></platform-embed-chat-drawer>
+            ></platform-chat>
         `;
     }
 }

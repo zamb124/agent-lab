@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest';
 import {
     inputRequiredFieldsFromA2a,
     mapA2aResultToChatRuntimeEvents,
-} from '../../../../core/frontend/static/lib/flows-chat/a2a-chat-runtime.js';
+} from '../../../../core/frontend/static/lib/chat/a2a-chat-runtime.js';
 
 describe('flows-chat A2A runtime', () => {
     it('maps artifact chunks to task_started, content, reasoning and terminal events', () => {

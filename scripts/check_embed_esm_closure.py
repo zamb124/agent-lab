@@ -1,10 +1,12 @@
 #!/usr/bin/env python3
 """Статическая проверка автономного embed (внешний сайт без import map).
 
-Строится замыкание относительных импортов от entrypoints в
-``core/frontend/static/lib/embed-chat/``. Любой файл в замыкании не должен
-содержать bare ``from 'lit'`` / ``from 'lit/...`` или ``from '@platform/...``.
-Иначе в браузере на чужом origin — ``Failed to resolve module specifier``.
+Строится замыкание относительных импортов от entrypoints единого чата
+``core/frontend/static/lib/chat/`` (platform-chat + embed-autoload и
+CDN-реэкспорт по историческому пути embed-chat/). Любой файл в замыкании
+не должен содержать bare ``from 'lit'`` / ``from 'lit/...`` или
+``from '@platform/...``. Иначе в браузере на чужом origin —
+``Failed to resolve module specifier``.
 
 Запуск:
     uv run python scripts/check_embed_esm_closure.py
@@ -26,9 +28,8 @@ LIB = STATIC_ROOT / "lib"
 ENTRYPOINTS = tuple(
     LIB / rel
     for rel in (
-        Path("embed-chat/platform-embed-chat-drawer.js"),
-        Path("embed-chat/platform-embed-chat.js"),
-        Path("embed-chat/platform-lara-assistant.js"),
+        Path("chat/platform-chat.js"),
+        Path("chat/embed-autoload.js"),
         Path("embed-chat/humanitec-embed-autoload.js"),
     )
 )

@@ -104,12 +104,7 @@ async def ensure_docs_assistant_embed_config(container: "FrontendContainer") -> 
             theme="auto",
             position="bottom-right",
             show_launcher=False,
-            show_reasoning=False,
-            show_tool_calls=False,
             primary_color="#99A6F9",
-            greeting_message=(
-                "Спросите меня по документации. Я найду нужный раздел и дам прямую ссылку."
-            ),
             assistant_title="Ask AI",
             interface_locale="auto",
             placeholder="Спросите по документации...",

@@ -1,6 +1,7 @@
 import { html, css, nothing } from '../lit-shim.js';
 import { unsafeHTML } from '../unsafe-html-shim.js';
 import { PlatformElement } from '../platform-element/index.js';
+import './chat-run-trace.js';
 import '../components/platform-icon.js';
 import '../components/platform-work-item-badge.js';
 import '../components/platform-help-hint.js';
@@ -20,9 +21,9 @@ import {
     rewritePlatformFileUrlsInHtml,
     CANONICAL_FILES_DOWNLOAD_PREFIX,
 } from './flows-url-rewrite.js';
-import { registerBuiltinFlowChatBlocks } from './flows-chat-builtin-blocks.js';
+import { registerBuiltinFlowChatBlocks } from './chat-builtin-blocks.js';
 import { stopStreamTtsPlayback } from '../voice/stream-tts-registry.js';
-import './flows-chat-block-renderer.js';
+import './chat-block-renderer.js';
 
 registerBuiltinFlowChatBlocks();
 
@@ -40,6 +41,8 @@ const DEFAULT_LABELS = {
     tool_hint_args_label: 'Arguments:',
     tool_hint_result_label: 'Result:',
     show_tracing_title: 'Open tracing',
+    show_logs_title: 'Open logs',
+    show_durable_history_title: 'Open durable history',
     interrupt_operator_banner: 'Waiting for an operator. The chat is on hold.',
     interrupt_oauth_banner: 'External service authorization required',
     interrupt_oauth_button: 'Authorize',
@@ -102,10 +105,12 @@ export class FlowsChatMessage extends PlatformElement {
         filesMeta: { type: Array },
         fileIds: { type: Array },
         blocks: { type: Array },
-        taskId: { type: String },
-        traceTaskId: { type: String },
+        taskId: { type: String, attribute: 'task-id' },
+        traceTaskId: { type: String, attribute: 'trace-task-id' },
         isLastUserMessage: { type: Boolean, attribute: 'is-last-user-message' },
         runTraceAvailable: { type: Boolean, attribute: 'run-trace-available' },
+        runTraceEntries: { type: Array },
+        sessionId: { type: String, attribute: 'session-id' },
         labels: { type: Object },
         flowRoot: { type: String, attribute: 'flow-root' },
         useCredentials: { type: Boolean, attribute: 'use-credentials' },
@@ -113,7 +118,11 @@ export class FlowsChatMessage extends PlatformElement {
         getHeaders: { attribute: false },
         showAvatar: { type: Boolean, attribute: 'show-avatar' },
         showHeader: { type: Boolean, attribute: 'show-header' },
+        headerCompact: { type: Boolean, attribute: 'header-compact', reflect: true },
         showTraceControls: { type: Boolean, attribute: 'show-trace-controls' },
+        showRunTraceControls: { type: Boolean, attribute: 'show-run-trace-controls' },
+        showLogsAction: { type: Boolean, attribute: 'show-logs-action' },
+        showDurableHistoryAction: { type: Boolean, attribute: 'show-durable-history-action' },
         showUserActions: { type: Boolean, attribute: 'show-user-actions' },
         showAssistantActions: { type: Boolean, attribute: 'show-assistant-actions' },
         _runTracePanelOpen: { type: Boolean, state: true },
@@ -194,13 +203,15 @@ export class FlowsChatMessage extends PlatformElement {
         }
 
         .message.user .bubble {
-            flex: 0 1 auto;
-            width: fit-content;
+            flex: 0 0 auto;
+            width: max-content;
             max-width: 70%;
+            min-width: min-content;
             align-items: flex-end;
         }
 
         .content {
+            position: relative;
             box-sizing: border-box;
             width: 100%;
             min-width: 0;
@@ -236,6 +247,67 @@ export class FlowsChatMessage extends PlatformElement {
             gap: 8px;
             margin-bottom: 8px;
             min-width: 0;
+        }
+
+        .bubble-meta {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 8px;
+            margin-bottom: 8px;
+            min-width: 0;
+            width: 100%;
+            box-sizing: border-box;
+        }
+
+        .bubble-meta.user-meta {
+            justify-content: flex-end;
+        }
+
+        .bubble-meta.assistant-meta {
+            position: relative;
+            align-items: center;
+            flex-wrap: nowrap;
+            min-height: 24px;
+        }
+
+        .bubble-meta.assistant-meta:has(.bubble-observability-actions) {
+            padding-right: 84px;
+        }
+
+        .bubble-observability-actions,
+        .bubble-meta .header-actions {
+            display: inline-flex;
+            align-items: center;
+            gap: 4px;
+            flex-shrink: 0;
+            margin-left: auto;
+        }
+
+        :host([header-compact]) .bubble-meta.assistant-meta .bubble-observability-actions {
+            position: absolute;
+            top: 0;
+            right: 0;
+            margin-left: 0;
+        }
+
+        :host([header-compact]) .timestamp {
+            font-size: 11px;
+            line-height: 1.2;
+            white-space: nowrap;
+            flex-shrink: 0;
+        }
+
+        :host([header-compact]) .message.user .bubble-meta .timestamp {
+            color: rgba(255, 255, 255, 0.78);
+        }
+
+        :host([header-compact]) .bubble-meta {
+            margin-bottom: 6px;
+        }
+
+        :host([variant='embed']) .timestamp {
+            font-size: 11px;
         }
 
         .message.user .header {
@@ -327,6 +399,8 @@ export class FlowsChatMessage extends PlatformElement {
         .message.user .markdown {
             color: white;
             white-space: pre-wrap;
+            word-break: normal;
+            overflow-wrap: break-word;
         }
 
         .markdown p {
@@ -662,6 +736,7 @@ export class FlowsChatMessage extends PlatformElement {
 
         :host([variant='embed']) .message.user .bubble {
             max-width: 86%;
+            min-width: min-content;
             margin-left: auto;
         }
 
@@ -731,8 +806,9 @@ export class FlowsChatMessage extends PlatformElement {
             }
 
             :host([variant='embed']) .message.user .bubble {
-                width: fit-content;
+                width: max-content;
                 max-width: 92%;
+                min-width: min-content;
             }
 
             :host([variant='embed']) .message.user .content,
@@ -798,6 +874,8 @@ export class FlowsChatMessage extends PlatformElement {
         this.traceTaskId = '';
         this.isLastUserMessage = false;
         this.runTraceAvailable = false;
+        this.runTraceEntries = [];
+        this.sessionId = '';
         this.labels = {};
         this.flowRoot = '';
         this.useCredentials = true;
@@ -805,7 +883,11 @@ export class FlowsChatMessage extends PlatformElement {
         this.getHeaders = null;
         this.showAvatar = true;
         this.showHeader = true;
+        this.headerCompact = false;
         this.showTraceControls = true;
+        this.showRunTraceControls = false;
+        this.showLogsAction = false;
+        this.showDurableHistoryAction = false;
         this.showUserActions = true;
         this.showAssistantActions = true;
         this._runTracePanelOpen = false;
@@ -1388,6 +1470,35 @@ export class FlowsChatMessage extends PlatformElement {
         );
     }
 
+    _showLogs() {
+        const sessionId = asString(this.sessionId);
+        if (sessionId.length === 0) {
+            return;
+        }
+        const taskId = asString(this.taskId);
+        this.dispatchEvent(
+            new CustomEvent('show-logs', {
+                detail: { sessionId, taskId },
+                bubbles: true,
+                composed: true,
+            }),
+        );
+    }
+
+    _showDurableHistory() {
+        const sessionId = asString(this.sessionId);
+        if (sessionId.length === 0) {
+            return;
+        }
+        this.dispatchEvent(
+            new CustomEvent('show-durable-history', {
+                detail: { sessionId },
+                bubbles: true,
+                composed: true,
+            }),
+        );
+    }
+
     _showHandoffTrace() {
         const traceId = asString(this.handoff?.traceId || this.handback?.traceId);
         if (traceId.length === 0) {
@@ -1410,14 +1521,155 @@ export class FlowsChatMessage extends PlatformElement {
         if (this.role !== 'user' || !this.isLastUserMessage || !this._runTracePanelOpen) {
             return nothing;
         }
-        return html`<div class="user-run-trace-embed"><slot name="run-trace"></slot></div>`;
+        const entries = asArray(this.runTraceEntries);
+        return html`
+            <div class="user-run-trace-embed">
+                <chat-run-trace .entries=${entries} compact show-section-header></chat-run-trace>
+            </div>
+        `;
     }
 
-    _renderUserHeader() {
+    _assistantObservabilityVisible() {
+        if (this.role !== 'assistant' || this.streaming) {
+            return false;
+        }
+        const taskId = asString(this.taskId);
+        const sessionId = asString(this.sessionId);
+        if (this.showTraceControls && taskId.length > 0) {
+            return true;
+        }
+        if (this.showLogsAction && taskId.length > 0) {
+            return true;
+        }
+        if (this.showDurableHistoryAction && sessionId.length > 0) {
+            return true;
+        }
+        return false;
+    }
+
+    _renderAssistantObservabilityActions() {
+        if (!this._assistantObservabilityVisible()) {
+            return nothing;
+        }
+        const taskId = asString(this.taskId);
+        const showTrace = this.showTraceControls && taskId.length > 0;
+        const showLogs = this.showLogsAction && taskId.length > 0;
+        const showDurable = this.showDurableHistoryAction && asString(this.sessionId).length > 0;
+        return html`
+            <div class="bubble-observability-actions">
+                ${showTrace
+                    ? html`
+                          <button
+                              type="button"
+                              class="tracing-btn"
+                              @click=${this._showTracing}
+                              title=${this._label('show_tracing_title', 'Open tracing')}
+                              aria-label=${this._label('show_tracing_title', 'Open tracing')}
+                          >
+                              <platform-icon name="terminal" size="14"></platform-icon>
+                          </button>
+                      `
+                    : nothing}
+                ${showLogs
+                    ? html`
+                          <button
+                              type="button"
+                              class="tracing-btn"
+                              @click=${this._showLogs}
+                              title=${this._label('show_logs_title', 'Open logs')}
+                              aria-label=${this._label('show_logs_title', 'Open logs')}
+                          >
+                              <platform-icon name="file-text" size="14"></platform-icon>
+                          </button>
+                      `
+                    : nothing}
+                ${showDurable
+                    ? html`
+                          <button
+                              type="button"
+                              class="tracing-btn"
+                              @click=${this._showDurableHistory}
+                              title=${this._label('show_durable_history_title', 'Open durable history')}
+                              aria-label=${this._label('show_durable_history_title', 'Open durable history')}
+                          >
+                              <platform-icon name="trace-timeline" size="14"></platform-icon>
+                          </button>
+                      `
+                    : nothing}
+            </div>
+        `;
+    }
+
+    _renderUserRunTraceActions() {
+        if (!this.showRunTraceControls || !this.isLastUserMessage) {
+            return nothing;
+        }
+        return html`
+            <div class="header-actions">
+                ${this.runTraceAvailable
+                    ? html`
+                          <button
+                              type="button"
+                              class="tracing-btn"
+                              @click=${this._toggleUserRunTrace}
+                              title=${this._label('show_run_trace_title', this._label('show_tracing_title', 'Open tracing'))}
+                              aria-pressed=${this._runTracePanelOpen ? 'true' : 'false'}
+                              aria-label=${this._label('show_run_trace_title', this._label('show_tracing_title', 'Open tracing'))}
+                          >
+                              <platform-icon name="chart" size="14"></platform-icon>
+                          </button>
+                      `
+                    : nothing}
+                <button
+                    type="button"
+                    class="tracing-btn"
+                    @click=${this._showTracing}
+                    title=${this._label('show_tracing_title', 'Open tracing')}
+                    aria-label=${this._label('show_tracing_title', 'Open tracing')}
+                >
+                    <platform-icon name="terminal" size="14"></platform-icon>
+                </button>
+            </div>
+        `;
+    }
+
+    _renderBubbleMeta() {
         if (!this.showHeader) {
             return nothing;
         }
-        const hasTools = this.showTraceControls && this.isLastUserMessage;
+        const timestamp = this._formatTimestamp(this.timestamp);
+        if (this.headerCompact) {
+            if (this.role === 'user') {
+                if (!timestamp && !this.showRunTraceControls) {
+                    return nothing;
+                }
+                return html`
+                    <div class="bubble-meta user-meta">
+                        ${timestamp ? html`<span class="timestamp">${timestamp}</span>` : nothing}
+                        ${this._renderUserRunTraceActions()}
+                    </div>
+                `;
+            }
+            if (this.role === 'assistant' || this.role === 'operator') {
+                if (!timestamp && !this._assistantObservabilityVisible()) {
+                    return nothing;
+                }
+                return html`
+                    <div class="bubble-meta assistant-meta">
+                        ${timestamp ? html`<span class="timestamp">${timestamp}</span>` : nothing}
+                        ${this._renderAssistantObservabilityActions()}
+                    </div>
+                `;
+            }
+        }
+        if (this.role === 'user') {
+            return this._renderUserHeaderLegacy();
+        }
+        return this._renderDefaultHeaderLegacy();
+    }
+
+    _renderUserHeaderLegacy() {
+        const hasTools = this.showRunTraceControls && this.isLastUserMessage;
         const timestamp = this._formatTimestamp(this.timestamp);
         if (!hasTools) {
             return html`
@@ -1433,52 +1685,18 @@ export class FlowsChatMessage extends PlatformElement {
                     <span class="role">${this._roleName()}</span>
                     ${timestamp ? html`<span class="timestamp">${timestamp}</span>` : nothing}
                 </div>
-                <div class="header-actions">
-                    <button
-                        type="button"
-                        class="tracing-btn"
-                        @click=${this._toggleUserRunTrace}
-                        title=${this._label('show_run_trace_title', this._label('show_tracing_title', 'Open tracing'))}
-                        aria-pressed=${this._runTracePanelOpen ? 'true' : 'false'}
-                    >
-                        <platform-icon name="chart" size="14"></platform-icon>
-                    </button>
-                    <button
-                        type="button"
-                        class="tracing-btn"
-                        @click=${this._showTracing}
-                        title=${this._label('show_tracing_title', 'Open tracing')}
-                    >
-                        <platform-icon name="terminal" size="14"></platform-icon>
-                    </button>
-                </div>
+                ${this._renderUserRunTraceActions()}
             </div>
         `;
     }
 
-    _renderDefaultHeader() {
-        if (!this.showHeader) {
-            return nothing;
-        }
+    _renderDefaultHeaderLegacy() {
         const timestamp = this._formatTimestamp(this.timestamp);
         return html`
             <div class="header">
                 <span class="role">${this._roleName()}</span>
                 ${timestamp ? html`<span class="timestamp">${timestamp}</span>` : nothing}
-                ${this.showTraceControls && this.role === 'assistant' && asString(this.taskId) && !this.streaming
-                    ? html`
-                          <div class="header-actions">
-                              <button
-                                  type="button"
-                                  class="tracing-btn"
-                                  @click=${this._showTracing}
-                                  title=${this._label('show_tracing_title', 'Open tracing')}
-                              >
-                                  <platform-icon name="terminal" size="14"></platform-icon>
-                              </button>
-                          </div>
-                      `
-                    : nothing}
+                ${this._renderAssistantObservabilityActions()}
             </div>
         `;
     }
@@ -1594,7 +1812,7 @@ export class FlowsChatMessage extends PlatformElement {
                 </div>
                 <div class="bubble">
                     <div class="content">
-                        ${role === 'user' ? this._renderUserHeader() : this._renderDefaultHeader()}
+                        ${this._renderBubbleMeta()}
                         ${this._renderUserInlineRunTrace()}
                         ${this._renderFiles()}
                         ${this._renderOperatorFiles()}

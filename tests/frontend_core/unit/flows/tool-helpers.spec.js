@@ -5,7 +5,7 @@ import {
     flowChatToolRowId,
     formatFlowChatToolPairHintText,
     toolCallIconName,
-} from '../../../../core/frontend/static/lib/flows-chat/tool-helpers.js';
+} from '../../../../core/frontend/static/lib/chat/tool-helpers.js';
 
 describe('flows-chat tool helpers', () => {
     it('pairs tool calls and results by id, name, then index for every chat host', () => {

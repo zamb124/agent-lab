@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { blocksFromToolResult } from '../../../../core/frontend/static/lib/flows-chat/tool-result-blocks.js';
+import { blocksFromToolResult } from '../../../../core/frontend/static/lib/chat/tool-result-blocks.js';
 
 describe('flows-chat tool result blocks', () => {
     it('promotes document tool result files to shared file_card blocks', () => {

@@ -8,8 +8,12 @@
  */
 import { createAsyncOp } from '@platform/lib/events/index.js';
 import { httpRequest, HttpError } from '@platform/lib/events/http.js';
-import { streamEmbedA2A } from '@platform/lib/embed-chat/embed-a2a-stream.js';
-import { mapA2aResultToChatRuntimeEvents } from '@platform/lib/flows-chat/a2a-chat-runtime.js';
+import {
+    a2aEndpointUrl,
+    buildA2aMessageStreamBody,
+    consumeA2aStream,
+} from '@platform/lib/chat/runtime/a2a-stream.js';
+import { mapA2aResultToChatRuntimeEvents } from '@platform/lib/chat/a2a-chat-runtime.js';
 
 const SEARCH_RUN_MODES = Object.freeze(new Set(['quick', 'deep', 'research']));
 const PUBLIC_SEARCH_SESSION_MODES = Object.freeze(new Set(['quick', 'deep', 'research', 'source']));
@@ -722,15 +726,16 @@ async function _runPublicSearch({ payload, ctx, event }) {
     };
 
     try {
-        await streamEmbedA2A({
-            baseUrl: _flowsBaseUrl(),
-            embedId: session.embed_id,
-            branchId: session.branch_id,
-            message: request.query,
-            contextId: stream.context_id,
-            files: request.files,
-            metadata: { branch: session.branch_id },
-            getHeaders: async () => ({ Authorization: `${session.token_type} ${session.token}` }),
+        await consumeA2aStream({
+            url: a2aEndpointUrl({ baseUrl: _flowsBaseUrl(), embedId: session.embed_id }),
+            body: buildA2aMessageStreamBody({
+                message: request.query,
+                contextId: stream.context_id,
+                branchId: session.branch_id,
+                files: request.files,
+                metadata: { branch: session.branch_id },
+            }),
+            headers: { Authorization: `${session.token_type} ${session.token}` },
             credentials: 'omit',
             signal: controller.signal,
         }, onEvent);
@@ -820,15 +825,16 @@ async function _runPublicSearchSourceDescribe({ payload, ctx, event }) {
     };
 
     try {
-        await streamEmbedA2A({
-            baseUrl: _flowsBaseUrl(),
-            embedId: session.embed_id,
-            branchId: session.branch_id,
-            message: _sourceDescribeMessage(request),
-            contextId: sourceStream.context_id,
-            files: [],
-            metadata: { branch: session.branch_id, source_url: request.source.url },
-            getHeaders: async () => ({ Authorization: `${session.token_type} ${session.token}` }),
+        await consumeA2aStream({
+            url: a2aEndpointUrl({ baseUrl: _flowsBaseUrl(), embedId: session.embed_id }),
+            body: buildA2aMessageStreamBody({
+                message: _sourceDescribeMessage(request),
+                contextId: sourceStream.context_id,
+                branchId: session.branch_id,
+                files: [],
+                metadata: { branch: session.branch_id, source_url: request.source.url },
+            }),
+            headers: { Authorization: `${session.token_type} ${session.token}` },
             credentials: 'omit',
             signal: controller.signal,
         }, onEvent);

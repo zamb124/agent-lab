@@ -6,7 +6,7 @@ from pathlib import Path
 
 def test_external_embed_event_contract_v1_has_required_sections() -> None:
     contract_path = Path(
-        "core/frontend/static/lib/embed-chat/external-embed-event-contract-v1.json"
+        "core/frontend/static/lib/chat/external-embed-event-contract-v1.json"
     )
     payload = json.loads(contract_path.read_text(encoding="utf-8"))
 

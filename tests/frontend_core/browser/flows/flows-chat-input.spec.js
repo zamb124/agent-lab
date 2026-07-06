@@ -1,6 +1,6 @@
 import { expect, fixtureCleanup } from '../helpers/render.js';
 import { resetPlatformState, bootstrapTestBus } from '../helpers/reset.js';
-import '../../../../core/frontend/static/lib/flows-chat/flows-chat-input.js';
+import '../../../../core/frontend/static/lib/chat/chat-input.js';
 
 describe('flows-chat-input', () => {
     beforeEach(() => {

@@ -11,6 +11,10 @@
   "permission": [],
   "branches": {},
   "store_card_image": "support_demo.jpg",
+  "chat": {
+    "greeting_message": "Учебный сценарий первой линии: номер заказа, мок-данные в базе, уточнение проблемы и подсказки по следующим шагам. Реальных изменений в заказах нет.",
+    "tool_calls_display": "detailed"
+  },
   "entry": "main",
   "nodes": {
     "main": {

@@ -105,7 +105,24 @@ def _go_exported_name(raw: str) -> str:
     return name
 
 
-def _sdk_pairs(manifest: dict[str, object]) -> list[tuple[str, str]]:
+def _stable_capability_names() -> set[str]:
+    return {
+        "files.create",
+        "files.get_bytes",
+        "http.request",
+        "text.summarize",
+        "text.format_markdown",
+        "voice.transcribe_audio",
+        "voice.synthesize_speech",
+        "tools.calculator",
+    } | {f"tools.{tool_id}" for tool_id in _documented_builtin_tool_ids()}
+
+
+def _sdk_pairs(
+    manifest: dict[str, object],
+    *,
+    capability_names: set[str] | None = None,
+) -> list[tuple[str, str]]:
     capabilities = manifest.get("capabilities")
     assert isinstance(capabilities, list)
     pairs: set[tuple[str, str]] = set()
@@ -113,6 +130,8 @@ def _sdk_pairs(manifest: dict[str, object]) -> list[tuple[str, str]]:
         assert isinstance(item, dict)
         raw_name = item["name"]
         assert isinstance(raw_name, str)
+        if capability_names is not None and raw_name not in capability_names:
+            continue
         default_namespace, default_method = raw_name.split(".", 1)
         namespace = item.get("sdk_namespace")
         method = item.get("sdk_method")
@@ -333,20 +352,10 @@ async def test_capability_manifest_and_docs_are_served_by_gateway(sandbox_servic
         builtin_tool_capability_names = {
             f"tools.{tool_id}" for tool_id in _documented_builtin_tool_ids()
         }
-        base_capability_names = {
-            "files.create",
-            "files.get_bytes",
-            "http.request",
-            "text.summarize",
-            "text.format_markdown",
-            "voice.transcribe_audio",
-            "voice.synthesize_speech",
-            "tools.calculator",
-        }
         # Parallel-safe контракт: manifest и docs — два снапшота в разные моменты
         # времени; эфемерные тулы параллельных тестов (cross_language_tool_ids и др.)
         # появляются/исчезают между запросами. Сравниваем только стабильный набор.
-        stable_capability_names = base_capability_names | builtin_tool_capability_names
+        stable_capability_names = _stable_capability_names()
         assert capability_names >= stable_capability_names
         assert tool_capability_names >= builtin_tool_capability_names
         assert "tools.call" not in capability_names
@@ -430,7 +439,11 @@ async def test_all_manifest_capabilities_have_sdk_methods_in_every_language(
             headers={"X-Request-Id": "test-request-id", "X-Trace-Id": "test-trace-id"},
         )
         manifest_response.raise_for_status()
-        pairs = _sdk_pairs(manifest_response.json())
+        stable_capability_names = _stable_capability_names()
+        pairs = _sdk_pairs(
+            manifest_response.json(),
+            capability_names=stable_capability_names,
+        )
 
     assert pairs
 

@@ -54,7 +54,11 @@ async def test_flow_preview_share_one_shot_redis_and_short_link(
             assert loc.startswith("/flow-preview?h=")
             res_ok = await fe.get(loc)
             assert res_ok.status_code == 200
-            assert b"data-static-bearer=" in res_ok.content
+            body = res_ok.text
+            assert "data-static-bearer=" in body
+            assert 'data-platform-ui-origin="http://testserver"' in body
+            assert 'data-flows-base-url="http://testserver/flows"' in body
+            assert ":8001" not in body
             res_repeat = await fe.get(loc)
             assert res_repeat.status_code == 404
             res_l2 = await fe.get(f"/l/{code}")

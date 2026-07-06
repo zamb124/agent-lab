@@ -184,15 +184,16 @@ export class FlowsChatInput extends LitElement {
         }
         .input-container {
             display: flex;
-            align-items: flex-end;
-            gap: var(--flows-chat-input-gap, 12px);
+            flex-direction: column;
+            align-items: stretch;
+            gap: 0;
             min-height: var(--flows-chat-input-min-height, 52px);
             max-width: var(--flows-chat-input-max-width, 900px);
             margin: var(--flows-chat-input-margin, 0 auto);
-            padding: var(--flows-chat-input-padding, 12px);
+            padding: var(--flows-chat-input-padding, 0);
             box-sizing: border-box;
             border: 1px solid var(--flows-chat-input-border, var(--glass-border-medium, rgba(255, 255, 255, 0.14)));
-            border-radius: var(--flows-chat-input-radius, 20px);
+            border-radius: var(--flows-chat-input-radius, var(--radius-2xl, 24px));
             background: var(--flows-chat-input-bg, var(--glass-solid-medium, rgba(255, 255, 255, 0.07)));
             box-shadow: var(--flows-chat-input-shadow, var(--glass-shadow-subtle, none));
             backdrop-filter: var(--flows-chat-input-backdrop-filter, none);
@@ -205,16 +206,39 @@ export class FlowsChatInput extends LitElement {
         input[type='file'] {
             display: none;
         }
+        .composer-body {
+            padding: var(--flows-chat-input-body-padding, 12px 14px 4px);
+            min-width: 0;
+        }
+        .composer-toolbar {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: var(--flows-chat-input-toolbar-gap, 8px);
+            padding: var(--flows-chat-input-toolbar-padding, 4px 8px 8px);
+            min-width: 0;
+        }
+        .toolbar-start,
+        .toolbar-end {
+            display: inline-flex;
+            align-items: center;
+            gap: var(--flows-chat-input-gap, 6px);
+            min-width: 0;
+            flex-shrink: 0;
+        }
+        .toolbar-end {
+            margin-left: auto;
+        }
         .circle-btn {
             flex-shrink: 0;
-            width: var(--flows-chat-input-button-size, 40px);
-            height: var(--flows-chat-input-button-size, 40px);
+            width: var(--flows-chat-input-button-size, 36px);
+            height: var(--flows-chat-input-button-size, 36px);
             display: inline-flex;
             align-items: center;
             justify-content: center;
             padding: 0;
             border: none;
-            border-radius: var(--flows-chat-input-button-radius, 12px);
+            border-radius: var(--flows-chat-input-button-radius, var(--radius-md, 12px));
             cursor: pointer;
             background: var(--flows-chat-input-button-bg, transparent);
             color: var(--flows-chat-input-button-color, var(--flows-chat-input-muted, var(--text-tertiary, rgba(255, 255, 255, 0.55))));
@@ -232,25 +256,20 @@ export class FlowsChatInput extends LitElement {
             color: var(--flows-chat-input-active-color, var(--flows-chat-input-accent, var(--accent, #99a6f9)));
             background: var(--flows-chat-input-active-bg, rgba(153, 166, 249, 0.18));
         }
-        .grow {
-            flex: 1;
-            min-width: 0;
-            display: flex;
-            align-items: center;
-        }
         textarea {
+            display: block;
             width: 100%;
-            min-height: var(--flows-chat-input-textarea-min-height, 40px);
+            min-height: var(--flows-chat-input-textarea-min-height, 44px);
             max-height: var(--flows-chat-input-textarea-max-height, 180px);
             resize: none;
             border: none;
             outline: none;
             background: transparent;
             color: var(--flows-chat-input-text, var(--text-primary, rgba(255, 255, 255, 0.92)));
-            padding: var(--flows-chat-input-textarea-padding, 8px 4px);
+            padding: var(--flows-chat-input-textarea-padding, 0);
             font-family: inherit;
             font-size: var(--flows-chat-input-textarea-font-size, 15px);
-            line-height: 1.4;
+            line-height: 1.45;
             box-sizing: border-box;
         }
         textarea::placeholder {
@@ -260,28 +279,54 @@ export class FlowsChatInput extends LitElement {
             opacity: 0.55;
             cursor: not-allowed;
         }
-        .locale {
-            flex-shrink: 0;
-            max-width: 140px;
+        .locale-pill {
+            position: relative;
+            display: inline-flex;
+            align-items: center;
+            flex-shrink: 1;
+            min-width: 0;
+            max-width: var(--flows-chat-input-locale-max-width, 140px);
+            height: var(--flows-chat-input-button-size, 36px);
+            padding: 0 28px 0 12px;
+            border: 1px solid var(--flows-chat-input-border, var(--border-subtle, rgba(255, 255, 255, 0.14)));
+            border-radius: var(--radius-full, 9999px);
+            background: var(--flows-chat-input-chip-bg, var(--glass-solid-subtle, rgba(255, 255, 255, 0.1)));
+            box-sizing: border-box;
         }
-        .locale select {
-            max-width: 100%;
+        .locale-pill select {
+            appearance: none;
+            -webkit-appearance: none;
+            width: 100%;
+            min-width: 0;
             border: none;
             background: transparent;
-            color: var(--flows-chat-input-muted, var(--text-tertiary, rgba(255, 255, 255, 0.55)));
+            color: var(--flows-chat-input-text, var(--text-primary, rgba(255, 255, 255, 0.92)));
             font: inherit;
             font-size: 13px;
             cursor: pointer;
-            padding: 6px 4px;
+            padding: 0;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
         }
-        .locale select:focus {
+        .locale-pill select:focus {
             outline: none;
-            color: var(--flows-chat-input-text, var(--text-primary, rgba(255, 255, 255, 0.92)));
+        }
+        .locale-chevron {
+            position: absolute;
+            right: 10px;
+            top: 50%;
+            transform: translateY(-50%);
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            pointer-events: none;
+            color: var(--flows-chat-input-muted, var(--text-tertiary, rgba(255, 255, 255, 0.55)));
         }
         .send-btn {
-            width: var(--flows-chat-input-send-size, 44px);
-            height: var(--flows-chat-input-send-size, 44px);
-            border-radius: var(--flows-chat-input-send-radius, 14px);
+            width: var(--flows-chat-input-send-size, 40px);
+            height: var(--flows-chat-input-send-size, 40px);
+            border-radius: var(--flows-chat-input-send-radius, var(--radius-full, 9999px));
             background: var(--flows-chat-input-send-bg, var(--accent-gradient, #99a6f9));
             color: var(--flows-chat-input-send-color, white);
             box-shadow: var(--flows-chat-input-send-shadow, 0 4px 12px rgba(153, 166, 249, 0.3));
@@ -578,6 +623,62 @@ export class FlowsChatInput extends LitElement {
             : 'mic-off';
     }
 
+    _renderLocaleChevron() {
+        return html`<span class="locale-chevron" aria-hidden="true">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none">
+                <path d="M6 9l6 6 6-6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" />
+            </svg>
+        </span>`;
+    }
+
+    _renderToolbarEnd(showVoiceButton, ttsLabel, canSend) {
+        return html`
+            ${showVoiceButton
+                ? html`
+                      <button
+                          type="button"
+                          class="circle-btn ${this.ttsOutputEnabled ? 'active' : ''}"
+                          title=${ttsLabel}
+                          aria-label=${ttsLabel}
+                          aria-pressed=${this.ttsOutputEnabled ? 'true' : 'false'}
+                          ?disabled=${this.disabled}
+                          @click=${this._onTtsOutputClick}
+                      >${_icon(this.ttsOutputEnabled ? 'volume-up' : 'volume-off')}</button>
+                      <button
+                          type="button"
+                          class="circle-btn ${this.voiceActive || this._listening ? 'active' : ''}"
+                          title=${this._voiceLabel()}
+                          aria-label=${this._voiceLabel()}
+                          aria-pressed=${this.voiceDuplex && this.voiceActive ? 'true' : 'false'}
+                          ?disabled=${this.disabled || this.loading}
+                          @click=${this._onVoiceClick}
+                      >${_icon(this._voiceIconName())}</button>
+                  `
+                : nothing}
+            ${this.loading
+                ? html`
+                      <button
+                          type="button"
+                          class="circle-btn send-btn stop-btn"
+                          title=${this.cancelBusy ? this._l('title_stop_pending', 'Stopping response...') : this._l('title_stop', 'Stop response')}
+                          aria-label=${this.cancelBusy ? this._l('title_stop_pending', 'Stopping response...') : this._l('title_stop', 'Stop response')}
+                          ?disabled=${this.cancelBusy}
+                          @click=${this._stop}
+                      >${_icon('stop')}</button>
+                  `
+                : html`
+                      <button
+                          type="button"
+                          class="circle-btn send-btn ${canSend ? '' : 'muted'}"
+                          title=${this._l('send', 'Send')}
+                          aria-label=${this._l('send', 'Send')}
+                          ?disabled=${!canSend}
+                          @click=${this._send}
+                      >${_icon('send')}</button>
+                  `}
+        `;
+    }
+
     focus() {
         this.textareaEl?.focus();
     }
@@ -655,15 +756,7 @@ export class FlowsChatInput extends LitElement {
                     accept=${this.accept}
                     @change=${this._onFilesSelected}
                 />
-                <button
-                    type="button"
-                    class="circle-btn attach-btn"
-                    title=${this._l('title_attach', this._l('attach', 'Attachments'))}
-                    aria-label=${this._l('title_attach', this._l('attach', 'Attachments'))}
-                    ?disabled=${this.disabled || this.loading}
-                    @click=${this._openFilePicker}
-                >${_icon('attach')}</button>
-                <div class="grow">
+                <div class="composer-body">
                     <textarea
                         data-canon="composer"
                         rows="1"
@@ -675,60 +768,33 @@ export class FlowsChatInput extends LitElement {
                         @keydown=${this._onKeyDown}
                     ></textarea>
                 </div>
-                ${this.showLocaleControl
-                    ? html`
-                          <div class="locale">
-                              <select .value=${this.interfaceLocale || 'auto'} @change=${this._onLocaleSelect}>
-                                  <option value="auto">${this._l('locale_auto', 'Auto')}</option>
-                                  <option value="ru">${this._l('locale_ru', 'Russian')}</option>
-                                  <option value="en">${this._l('locale_en', 'English')}</option>
-                              </select>
-                          </div>
-                      `
-                    : nothing}
-                ${showVoiceButton
-                    ? html`
-                          <button
-                              type="button"
-                              class="circle-btn ${this.ttsOutputEnabled ? 'active' : ''}"
-                              title=${ttsLabel}
-                              aria-label=${ttsLabel}
-                              aria-pressed=${this.ttsOutputEnabled ? 'true' : 'false'}
-                              ?disabled=${this.disabled}
-                              @click=${this._onTtsOutputClick}
-                          >${_icon(this.ttsOutputEnabled ? 'volume-up' : 'volume-off')}</button>
-                          <button
-                              type="button"
-                              class="circle-btn ${this.voiceActive || this._listening ? 'active' : ''}"
-                              title=${this._voiceLabel()}
-                              aria-label=${this._voiceLabel()}
-                              aria-pressed=${this.voiceDuplex && this.voiceActive ? 'true' : 'false'}
-                              ?disabled=${this.disabled || this.loading}
-                              @click=${this._onVoiceClick}
-                          >${_icon(this._voiceIconName())}</button>
-                      `
-                    : nothing}
-                ${this.loading
-                    ? html`
-                          <button
-                              type="button"
-                              class="circle-btn send-btn stop-btn"
-                              title=${this.cancelBusy ? this._l('title_stop_pending', 'Stopping response...') : this._l('title_stop', 'Stop response')}
-                              aria-label=${this.cancelBusy ? this._l('title_stop_pending', 'Stopping response...') : this._l('title_stop', 'Stop response')}
-                              ?disabled=${this.cancelBusy}
-                              @click=${this._stop}
-                          >${_icon('stop')}</button>
-                      `
-                    : html`
-                          <button
-                              type="button"
-                              class="circle-btn send-btn ${canSend ? '' : 'muted'}"
-                              title=${this._l('send', 'Send')}
-                              aria-label=${this._l('send', 'Send')}
-                              ?disabled=${!canSend}
-                              @click=${this._send}
-                          >${_icon('send')}</button>
-                      `}
+                <div class="composer-toolbar">
+                    <div class="toolbar-start">
+                        <button
+                            type="button"
+                            class="circle-btn attach-btn"
+                            title=${this._l('title_attach', this._l('attach', 'Attachments'))}
+                            aria-label=${this._l('title_attach', this._l('attach', 'Attachments'))}
+                            ?disabled=${this.disabled || this.loading}
+                            @click=${this._openFilePicker}
+                        >${_icon('attach')}</button>
+                        ${this.showLocaleControl
+                            ? html`
+                                  <label class="locale-pill">
+                                      <select .value=${this.interfaceLocale || 'auto'} @change=${this._onLocaleSelect}>
+                                          <option value="auto">${this._l('locale_auto', 'Auto')}</option>
+                                          <option value="ru">${this._l('locale_ru', 'Russian')}</option>
+                                          <option value="en">${this._l('locale_en', 'English')}</option>
+                                      </select>
+                                      ${this._renderLocaleChevron()}
+                                  </label>
+                              `
+                            : nothing}
+                    </div>
+                    <div class="toolbar-end">
+                        ${this._renderToolbarEnd(showVoiceButton, ttsLabel, canSend)}
+                    </div>
+                </div>
             </div>
             ${this.showDisclaimer
                 ? html`<div class="disclaimer">${this._l('ai_disclaimer', 'AI-generated content may be inaccurate.')}</div>`

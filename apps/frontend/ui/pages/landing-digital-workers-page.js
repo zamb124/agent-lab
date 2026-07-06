@@ -1,10 +1,10 @@
 /**
- * Публичный каталог демо-агентов: карточки + пробный чат через platform-embed-chat-drawer.
+ * Публичный каталог демо-агентов: карточки + пробный чат через <platform-chat display="drawer">.
  */
 import { html, css } from 'lit';
 import { PlatformPage } from '@platform/lib/base/PlatformPage.js';
 import { marketingPublicContentPageStyles } from '@platform/lib/styles/shared/marketing-section.styles.js';
-import '@platform/lib/embed-chat/platform-embed-chat-drawer.js';
+import '@platform/lib/chat/platform-chat.js';
 import '@platform/lib/components/platform-breadcrumbs.js';
 import '@platform/lib/components/platform-button.js';
 import '@platform/lib/components/glass-spinner.js';
@@ -302,14 +302,16 @@ export class LandingDigitalWorkersPage extends PlatformPage {
                 </div>
                 <landing-footer></landing-footer>
             </div>
-            <platform-embed-chat-drawer
+            <platform-chat
+                display="drawer"
+                profile="embed_public"
                 flows-base-url=${this._flowsBaseUrl}
                 flow-id=${this._drawerSpec ? this._drawerSpec.flow_id : ''}
                 embed-id=${this._drawerSpec ? this._drawerSpec.embed_id : ''}
                 branch-id=${this._drawerSpec ? this._drawerSpec.branch_id : ''}
                 assistant-title=${this._drawerSpec ? this._drawerSpec.assistant_title : ''}
                 theme=${this._drawerSpec ? this._drawerSpec.theme : 'dark'}
-                locale=${this._drawerSpec ? this._drawerSpec.interface_locale : 'auto'}
+                interface-locale=${this._drawerSpec ? this._drawerSpec.interface_locale : 'auto'}
                 ?show-launcher=${false}
                 ?use-credentials=${false}
                 .open=${this._drawerOpen}
@@ -320,7 +322,7 @@ export class LandingDigitalWorkersPage extends PlatformPage {
                 .getAuthToken=${this._getDemoAuthHeaders}
                 @humanitec-embed-drawer-open-changed=${this._onDrawerOpenChanged}
                 @embed-toast=${this._onEmbedDrawerToast}
-            ></platform-embed-chat-drawer>
+            ></platform-chat>
         `;
     }
 }

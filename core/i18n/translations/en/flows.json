@@ -61,6 +61,37 @@
     "action_cancel": "Cancel",
     "action_save": "Save"
   },
+  "chat_settings": {
+    "section_title": "Chat behavior",
+    "section_hint": "What users of this agent see in chat (SPA, embed, public pages). The editor test chat always shows everything.",
+    "greeting_message": "Greeting message",
+    "greeting_message_hint": "Shown when an empty chat opens. Empty — no greeting.",
+    "suggested_prompts": "Suggested prompts",
+    "suggested_prompts_hint": "Clickable example questions in an empty chat.",
+    "tool_calls_display": "Tool calls",
+    "tool_calls_display_hint": "How tool calls are shown in the agent reply.",
+    "tool_calls_hidden": "Hidden",
+    "tool_calls_compact": "Compact",
+    "tool_calls_detailed": "Detailed",
+    "errors_display": "Execution errors",
+    "errors_display_hint": "generic — anonymized text, detailed — the actual error text.",
+    "errors_generic": "Generic",
+    "errors_detailed": "Detailed",
+    "show_reasoning": "Show reasoning",
+    "show_reasoning_hint": "Assistant reasoning blocks.",
+    "show_activity": "Show activity",
+    "show_activity_hint": "Current node/tool line while running.",
+    "show_run_trace": "Show run trace",
+    "show_run_trace_hint": "Execution timeline under the reply.",
+    "show_trace_actions": "Trace actions",
+    "show_trace_actions_hint": "Buttons that open traces and logs.",
+    "show_browser_previews": "Browser previews",
+    "show_browser_previews_hint": "Live previews of agent browser sessions.",
+    "show_files_panel": "Files panel",
+    "show_files_panel_hint": "Conversation files panel above the composer.",
+    "allow_cancel": "Allow cancel",
+    "allow_cancel_hint": "The user can stop execution."
+  },
   "branch_create_modal": {
     "title": "Create branch",
     "field_branch_id": "Branch ID (snake_case)",
@@ -477,6 +508,9 @@
     "tool_call_label": "Tool: {{name}}",
     "tool_result_label": "Result: {{name}}",
     "show_tracing_title": "Open tracing",
+    "show_logs_title": "Open logs",
+    "show_durable_history_title": "Open durable history",
+    "show_run_trace_title": "Execution timeline",
     "interrupt_operator_banner": "Waiting for an operator. The chat is on hold.",
     "interrupt_handoff_banner": "Control transferred to another agent",
     "interrupt_oauth_banner": "External service authorization required",
@@ -1278,7 +1312,11 @@
     "evaluation_lab": "Open Evaluation Lab",
     "code": "Code",
     "publish": "Publish",
-    "share_preview": "Guest preview link (one-time)"
+    "share_preview": "Guest preview link (one-time)",
+    "flow_settings": "Agent settings"
+  },
+  "chat_page": {
+    "flow_settings": "Agent settings"
   },
   "node_ai_helper": {
     "placeholder": "Message Lara…"

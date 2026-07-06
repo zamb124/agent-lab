@@ -118,7 +118,7 @@ import { platformFileCreateOp } from '@platform/lib/events/factories/platform-fi
 
 import '../components/crm-sidebar.js';
 import '../components/sheets/crm-workspace-picker-sheet.js';
-import '@platform/lib/embed-chat/platform-lara-assistant.js';
+import '@platform/lib/chat/platform-chat.js';
 import '../pages/settings-hub-page.js';
 import '../pages/daily-notes-page.js';
 import '../pages/entities-page.js';
@@ -458,7 +458,9 @@ export class CRMApp extends PlatformApp {
                     ?content-no-scroll=${islandContentNoScroll}
                 >${content}</platform-island>
             </div>
-            <platform-lara-assistant
+            <platform-chat
+                display="drawer"
+                profile="spa"
                 toggle-event-name="crm-lara-open"
                 event-namespace="assistant"
                 flow-id="lara"
@@ -466,11 +468,11 @@ export class CRMApp extends PlatformApp {
                 .flowsBaseUrl=${'/flows'}
                 ?use-credentials=${true}
                 .showLauncher=${laraShowLauncher}
-                .assistantTitle=${'Lara'}
+                assistant-title="Lara"
                 ?voice-enabled=${laraDuplex}
                 voice-base-url=${voiceBase}
                 company-id=${companyId}
-            ></platform-lara-assistant>
+            ></platform-chat>
         `;
     }
 }

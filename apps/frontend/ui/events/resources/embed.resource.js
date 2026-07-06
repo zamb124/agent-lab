@@ -55,10 +55,14 @@ export const embedConfigsResource = createResourceCollection({
                 throw new Error('frontend/embed_configs: guest_max_user_messages invalid');
             }
         }
+        if (raw.chat_override != null && (typeof raw.chat_override !== 'object' || Array.isArray(raw.chat_override))) {
+            throw new Error('frontend/embed_configs: chat_override must be object or null');
+        }
         return {
             ...raw,
             landing_card_image_url:
                 typeof raw.landing_card_image_url === 'string' ? raw.landing_card_image_url : null,
+            chat_override: raw.chat_override != null ? raw.chat_override : null,
         };
     },
 });

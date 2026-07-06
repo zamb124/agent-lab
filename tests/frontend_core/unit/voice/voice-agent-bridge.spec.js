@@ -3,7 +3,7 @@
  *
  * Проверяется:
  *  - на финальный `transcript{final:true}` от VoiceMediaSession bridge
- *    отправляет `message/stream` в A2A через streamEmbedA2A;
+ *    отправляет `message/stream` в A2A через consumeA2aStream (chat/runtime/a2a-stream.js);
  *  - speakable `TaskArtifactUpdateEvent` → `feedStreamTtsFromA2aResult` + registry → `mediaSession.speak`;
  *  - финальный `status-update`: текст в `status.message` при `input-required` / `metadata.platform_interrupt`
  *    → `speak` (interrupt ask_user и т.п.), затем `endUtterance`; иначе только `endUtterance`;
@@ -15,9 +15,13 @@ import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 
 const streamMock = vi.fn();
 
-vi.mock('@platform/lib/embed-chat/embed-a2a-stream.js', () => ({
-    streamEmbedA2A: (options, onEvent) => streamMock(options, onEvent),
-}));
+vi.mock('@platform/lib/chat/runtime/a2a-stream.js', async (importOriginal) => {
+    const actual = await importOriginal();
+    return {
+        ...actual,
+        consumeA2aStream: (options, onFrame) => streamMock(options, onFrame),
+    };
+});
 
 import { VoiceAgentBridge } from '@platform/lib/voice/voice-agent-bridge.js';
 import {
@@ -125,7 +129,7 @@ describe('VoiceAgentBridge: userStopActiveTurn', () => {
 });
 
 describe('VoiceAgentBridge: voice → flows', () => {
-    it('на transcript{final:true} вызывает streamEmbedA2A с текстом', async () => {
+    it('на transcript{final:true} вызывает consumeA2aStream с текстом', async () => {
         streamMock.mockResolvedValue(undefined);
         const media = new FakeMediaSession();
         const bridge = new VoiceAgentBridge({
@@ -144,9 +148,9 @@ describe('VoiceAgentBridge: voice → flows', () => {
         expect(userMsgs).toEqual([{ text: 'Привет агент.' }]);
         expect(streamMock).toHaveBeenCalledTimes(1);
         const [opts] = streamMock.mock.calls[0];
-        expect(opts.baseUrl).toBe('https://h/flows');
-        expect(opts.flowId).toBe('flow-1');
-        expect(opts.message).toBe('Привет агент.');
+        expect(opts.url).toBe('https://h/flows/api/v1/flow-1');
+        expect(opts.body.method).toBe('message/stream');
+        expect(opts.body.params.message.parts[0]).toEqual({ kind: 'text', text: 'Привет агент.' });
         expect(opts.signal).toBeInstanceOf(AbortSignal);
     });
 
@@ -187,7 +191,10 @@ describe('VoiceAgentBridge: voice → flows', () => {
         expect(userMsgs).toEqual([{ text: 'сказано до выключения микрофона' }]);
         expect(streamMock).toHaveBeenCalledTimes(1);
         const [opts] = streamMock.mock.calls[0];
-        expect(opts.message).toBe('сказано до выключения микрофона');
+        expect(opts.body.params.message.parts[0]).toEqual({
+            kind: 'text',
+            text: 'сказано до выключения микрофона',
+        });
     });
 });
 
@@ -613,6 +620,6 @@ describe('VoiceAgentBridge: barge-in', () => {
         expect(signals.length).toBe(2);
         expect(signals[0].aborted).toBe(true);
         expect(signals[1].aborted).toBe(false);
-        expect(streamMock.mock.calls[1][0].message).toBe('коммит при stop');
+        expect(streamMock.mock.calls[1][0].body.params.message.parts[0].text).toBe('коммит при stop');
     });
 });

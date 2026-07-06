@@ -469,8 +469,6 @@ async def flow_preview_guest_page(request: Request, container: ContainerDep, h: 
     branch_id = payload.get("branch_id")
     assistant_title = payload.get("assistant_title")
     interface_locale = payload.get("interface_locale")
-    flows_base_url = payload.get("flows_base_url")
-    platform_ui_origin = payload.get("platform_ui_origin")
     company_id = payload.get("company_id")
 
     if not isinstance(jwt, str) or not jwt.strip():
@@ -480,10 +478,6 @@ async def flow_preview_guest_page(request: Request, container: ContainerDep, h: 
     if not isinstance(flow_id, str) or not flow_id.strip():
         return _flow_preview_unavailable_response(request)
     if not isinstance(branch_id, str) or not branch_id.strip():
-        return _flow_preview_unavailable_response(request)
-    if not isinstance(flows_base_url, str) or not flows_base_url.strip():
-        return _flow_preview_unavailable_response(request)
-    if not isinstance(platform_ui_origin, str) or not platform_ui_origin.strip():
         return _flow_preview_unavailable_response(request)
     if not isinstance(company_id, str) or not company_id.strip():
         return _flow_preview_unavailable_response(request)
@@ -498,10 +492,12 @@ async def flow_preview_guest_page(request: Request, container: ContainerDep, h: 
     else:
         interface_locale = interface_locale.strip()
 
-    base = build_service_base_url(request)
+    page_origin = build_service_base_url(request).rstrip("/")
+    flows_base_url = f"{page_origin}/flows"
+    platform_ui_origin = page_origin
     # Только same-origin `/static/core/...`: страница на нашем домене; CDN-скрипт может быть иной сборки
     # и ломать нативный ESM (bare `@platform/*` без import map).
-    script_url = f"{base}/static/core/lib/embed-chat/humanitec-embed-autoload.js"
+    script_url = f"{page_origin}/static/core/lib/embed-chat/humanitec-embed-autoload.js"
 
     html_out = build_flow_preview_guest_html(
         script_url=script_url,
@@ -510,8 +506,8 @@ async def flow_preview_guest_page(request: Request, container: ContainerDep, h: 
         branch_id=branch_id.strip(),
         assistant_title=assistant_title,
         interface_locale=interface_locale,
-        flows_base_url=flows_base_url.strip(),
-        platform_ui_origin=platform_ui_origin.strip(),
+        flows_base_url=flows_base_url,
+        platform_ui_origin=platform_ui_origin,
         static_bearer=jwt.strip(),
         company_id=company_id.strip(),
     )

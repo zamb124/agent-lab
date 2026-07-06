@@ -235,15 +235,15 @@ async def test_embed_autoload_script_mounts_chat_and_streams_reply(
                     f"network:\n{chr(10).join(network_events) or '<empty>'}"
                 ) from exc
             _log.info("embed_browser_e2e: humanitecEmbed смонтирован")
-            await expect(page.locator("platform-lara-assistant")).to_be_visible(timeout=30_000)
-            fab = page.locator("platform-lara-assistant").locator("button.fab").first
+            await expect(page.locator("platform-chat")).to_be_attached(timeout=30_000)
+            fab = page.locator("platform-chat").locator("button.fab").first
             await expect(fab).to_be_visible(timeout=30_000)
             await fab.click()
-            root = page.locator("platform-lara-assistant")
-            textarea = root.locator("embed-chat-input textarea")
+            root = page.locator("platform-chat")
+            textarea = root.locator("flows-chat-input textarea")
             await expect(textarea).to_be_visible(timeout=30_000)
             await textarea.fill(user_line)
-            send_btn = root.locator("embed-chat-input button.send-btn:not(.muted)").first
+            send_btn = root.locator("flows-chat-input button.send-btn:not(.muted)").first
             await expect(send_btn).to_be_enabled(timeout=10_000)
             await send_btn.click()
             _log.info("embed_browser_e2e: сообщение отправлено, ждём ответ потока A2A")

@@ -9,6 +9,7 @@ from urllib.parse import urlparse
 from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel, Field
 
+from apps.flows.src.models import FlowConfig
 from apps.frontend.api.public_session_security import (
     enforce_public_session_issue_rate_limit,
     new_embed_session_id,
@@ -43,8 +44,6 @@ class PublicLandingAgentCard(BaseModel):
     primary_color: str
     interface_locale: str
     placeholder: str
-    show_reasoning: bool
-    show_tool_calls: bool
     branding: bool
     landing_sort_order: int
     voice_enabled: bool
@@ -85,9 +84,21 @@ def _origin_from_referer(referer: str) -> str:
     return ""
 
 
-async def _effective_landing_card_image_url(
+async def _landing_flow_config(
     container: ContainerDep,
+    flow_id: str,
+) -> FlowConfig | None:
+    flow_repo = container.flows_flow_repository
+    pair = await flow_repo.get_latest_by_flow_id_unscoped(flow_id)
+    if pair is None:
+        return None
+    cfg, _company_identifier = pair
+    return cfg
+
+
+def _effective_landing_card_image_url(
     embed: EmbedConfig,
+    flow_cfg: FlowConfig | None,
 ) -> str:
     demo_url = public_landing_demo_card_url(embed.embed_id)
     if demo_url is not None:
@@ -95,12 +106,9 @@ async def _effective_landing_card_image_url(
     direct = (embed.landing_card_image_url or "").strip()
     if direct:
         return direct
-    flow_repo = container.flows_flow_repository
-    pair = await flow_repo.get_latest_by_flow_id_unscoped(embed.flow_id)
-    if pair is None:
+    if flow_cfg is None:
         return ""
-    cfg, _company_identifier = pair
-    return (cfg.store_card_image_url or "").strip()
+    return (flow_cfg.store_card_image_url or "").strip()
 
 
 async def _collect_landing_cards(
@@ -111,9 +119,11 @@ async def _collect_landing_cards(
     for c in configs:
         if c.status != EmbedStatus.ACTIVE or not c.landing_visible:
             continue
-        img = await _effective_landing_card_image_url(container, c)
+        flow_cfg = await _landing_flow_config(container, c.flow_id)
+        img = _effective_landing_card_image_url(c, flow_cfg)
         if not img:
             continue
+        greeting_message = flow_cfg.chat.greeting_message if flow_cfg is not None else None
         cards.append(
             PublicLandingAgentCard(
                 embed_id=c.embed_id,
@@ -121,14 +131,12 @@ async def _collect_landing_cards(
                 flow_id=c.flow_id,
                 branch_id=c.branch_id,
                 assistant_title=c.assistant_title,
-                greeting_message=c.greeting_message,
+                greeting_message=greeting_message,
                 landing_card_image_url=img,
                 theme=c.theme,
                 primary_color=c.primary_color,
                 interface_locale=c.interface_locale,
                 placeholder=c.placeholder,
-                show_reasoning=c.show_reasoning,
-                show_tool_calls=c.show_tool_calls,
                 branding=c.branding,
                 landing_sort_order=c.landing_sort_order,
                 voice_enabled=c.voice_enabled,
@@ -182,7 +190,8 @@ async def issue_public_landing_session(
         raise HTTPException(status_code=403, detail="Виджет отключён")
     if not config.landing_visible:
         raise HTTPException(status_code=403, detail="Виджет недоступен для публичного чата")
-    img = await _effective_landing_card_image_url(container, config)
+    session_flow_cfg = await _landing_flow_config(container, config.flow_id)
+    img = _effective_landing_card_image_url(config, session_flow_cfg)
     if not img:
         raise HTTPException(status_code=403, detail="Виджет не опубликован в каталоге")
 

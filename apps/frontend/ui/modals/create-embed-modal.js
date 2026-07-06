@@ -5,15 +5,20 @@
  * Без него — режим создания (POST /configs).
  *
  * Поля соответствуют CreateEmbedConfigRequest/UpdateEmbedConfigRequest
- * (apps/frontend/api/embed_configs.py): в т.ч. greeting_message, placeholder.
+ * (apps/frontend/api/embed_configs.py): идентичность, безопасность и look&feel.
+ * Поведение чата: базовая политика живёт в FlowConfig.chat (редактор агента);
+ * секция «Поведение чата виджета» показывает наследуемые значения и позволяет
+ * частично переопределить их через chat_override (null = полное наследование).
  *
  * Branch (branch_id): список из flow.branches в ответе GET /flows/api/v1/flows/.
  * Заблокирован для external и для LOCAL без веток (бэк подставит default).
  */
-import { html, css } from 'lit';
+import { html, css, nothing } from 'lit';
 import { PlatformFormModal } from '@platform/lib/components/glass-form-modal.js';
 import { registerModalKind } from '@platform/lib/utils/modal-registry.js';
 import '@platform/lib/components/fields/platform-field.js';
+import '@platform/lib/components/platform-button.js';
+import '@platform/lib/chat/chat-settings-fields.js';
 
 const POSITIONS = Object.freeze([
     { value: 'bottom-right', key: 'pos_br' },
@@ -32,6 +37,20 @@ const LOCALES = Object.freeze([
     { value: 'auto', key: 'locale_auto' },
     { value: 'ru',   key: 'locale_ru' },
     { value: 'en',   key: 'locale_en' },
+]);
+
+const CHAT_POLICY_FIELD_KEYS = Object.freeze([
+    'show_reasoning',
+    'tool_calls_display',
+    'show_activity',
+    'errors_display',
+    'show_run_trace',
+    'show_trace_actions',
+    'show_browser_previews',
+    'show_files_panel',
+    'allow_cancel',
+    'greeting_message',
+    'suggested_prompts',
 ]);
 
 export class FrontendCreateEmbedModal extends PlatformFormModal {
@@ -55,6 +74,25 @@ export class FrontendCreateEmbedModal extends PlatformFormModal {
             .radio-row label.checked { background: var(--glass-solid-medium); border-color: var(--accent); }
             .switch-row { display: flex; align-items: center; gap: var(--space-2); }
             input[type=color] { width: 60px; height: 36px; padding: 0; border-radius: var(--radius-md); border: 1px solid var(--glass-border-subtle); }
+            .chat-policy-section {
+                grid-column: 1 / -1;
+                padding: var(--space-3);
+                border-radius: var(--radius-md);
+                border: 1px solid var(--border-subtle);
+                background: var(--glass-solid-subtle);
+            }
+            .chat-policy-title {
+                margin: 0 0 var(--space-1);
+                font-size: var(--text-sm);
+                font-weight: var(--font-semibold);
+                color: var(--text-primary);
+            }
+            .chat-policy-actions {
+                display: flex;
+                flex-wrap: wrap;
+                gap: var(--space-2);
+                margin-top: var(--space-3);
+            }
         `,
     ];
 
@@ -72,7 +110,6 @@ export class FrontendCreateEmbedModal extends PlatformFormModal {
         _branding: { state: true },
         _primaryColor: { state: true },
         _assistantTitle: { state: true },
-        _greetingMessage: { state: true },
         _placeholder: { state: true },
         _landingVisible: { state: true },
         _landingCardImageUrl: { state: true },
@@ -80,6 +117,8 @@ export class FrontendCreateEmbedModal extends PlatformFormModal {
         _guestMaxUserMessages: { state: true },
         _voiceEnabled: { state: true },
         _voiceDefaultOn: { state: true },
+        _chatOverrideEnabled: { state: true },
+        _chatOverride: { state: true },
     };
 
     constructor() {
@@ -96,7 +135,6 @@ export class FrontendCreateEmbedModal extends PlatformFormModal {
         this._branding = true;
         this._primaryColor = '#6366f1';
         this._assistantTitle = '';
-        this._greetingMessage = '';
         this._placeholder = '';
         this._landingVisible = false;
         this._landingCardImageUrl = '';
@@ -104,6 +142,8 @@ export class FrontendCreateEmbedModal extends PlatformFormModal {
         this._guestMaxUserMessages = '';
         this._voiceEnabled = true;
         this._voiceDefaultOn = false;
+        this._chatOverrideEnabled = false;
+        this._chatOverride = {};
         this.size = 'lg';
         this._configs = this.useResource('frontend/embed_configs');
         this._catalog = this.useOp('frontend/flows_catalog');
@@ -129,13 +169,14 @@ export class FrontendCreateEmbedModal extends PlatformFormModal {
         this._branding = true;
         this._primaryColor = '#6366f1';
         this._assistantTitle = '';
-        this._greetingMessage = '';
         this._landingVisible = false;
         this._landingCardImageUrl = '';
         this._landingSortOrder = 0;
         this._guestMaxUserMessages = '';
         this._voiceEnabled = true;
         this._voiceDefaultOn = false;
+        this._chatOverrideEnabled = false;
+        this._chatOverride = {};
         this._placeholder = this.t('embed_create_modal.default_message_placeholder');
     }
 
@@ -172,7 +213,6 @@ export class FrontendCreateEmbedModal extends PlatformFormModal {
             this._branding = c.branding !== false;
             if (typeof c.primary_color === 'string') this._primaryColor = c.primary_color;
             if (typeof c.assistant_title === 'string') this._assistantTitle = c.assistant_title;
-            if (typeof c.greeting_message === 'string') this._greetingMessage = c.greeting_message;
             if (typeof c.placeholder === 'string' && c.placeholder.trim() !== '') {
                 this._placeholder = c.placeholder;
             } else {
@@ -188,6 +228,13 @@ export class FrontendCreateEmbedModal extends PlatformFormModal {
             }
             this._voiceEnabled = c.voice_enabled === true;
             this._voiceDefaultOn = c.voice_default_on === true;
+            if (c.chat_override != null && typeof c.chat_override === 'object' && !Array.isArray(c.chat_override)) {
+                this._chatOverrideEnabled = true;
+                this._chatOverride = { ...c.chat_override };
+            } else {
+                this._chatOverrideEnabled = false;
+                this._chatOverride = {};
+            }
         }
     }
 
@@ -246,6 +293,118 @@ export class FrontendCreateEmbedModal extends PlatformFormModal {
         if (!flow) return false;
         if (flow.type === 'external') return false;
         return this._flowBranches().length > 0;
+    }
+
+    _flowBaseChat() {
+        const flow = this._selectedFlow();
+        if (!flow) {
+            return null;
+        }
+        if (!flow.chat || typeof flow.chat !== 'object' || Array.isArray(flow.chat)) {
+            throw new Error('create-embed-modal: selected flow missing chat settings');
+        }
+        return flow.chat;
+    }
+
+    _mergeFlowChatWithOverride(baseChat, override) {
+        const effective = { ...baseChat };
+        if (!override || typeof override !== 'object' || Array.isArray(override)) {
+            return effective;
+        }
+        for (const key of CHAT_POLICY_FIELD_KEYS) {
+            if (Object.prototype.hasOwnProperty.call(override, key) && override[key] !== null) {
+                effective[key] = override[key];
+            }
+        }
+        return effective;
+    }
+
+    _effectiveChatForForm() {
+        const baseChat = this._flowBaseChat();
+        if (!baseChat) {
+            return null;
+        }
+        if (!this._chatOverrideEnabled) {
+            return baseChat;
+        }
+        return this._mergeFlowChatWithOverride(baseChat, this._chatOverride);
+    }
+
+    _onChatOverrideFieldChanged(patch) {
+        if (!this._chatOverrideEnabled) {
+            return;
+        }
+        this._chatOverride = { ...this._chatOverride, ...patch };
+        this.isDirty = true;
+    }
+
+    _toggleChatOverrideEnabled(enabled) {
+        this._chatOverrideEnabled = enabled;
+        if (!enabled) {
+            this._chatOverride = {};
+        }
+        this.isDirty = true;
+    }
+
+    _resetChatOverrideToFlow() {
+        this._chatOverrideEnabled = false;
+        this._chatOverride = {};
+        this.isDirty = true;
+    }
+
+    _buildChatOverridePayload() {
+        if (!this._chatOverrideEnabled) {
+            return null;
+        }
+        return { ...this._chatOverride };
+    }
+
+    _renderChatPolicySection() {
+        if (!this._flowId) {
+            return html`
+                <div class="chat-policy-section">
+                    <h4 class="chat-policy-title">${this.t('embed_create_modal.chat_override_section_title')}</h4>
+                    <div class="hint">${this.t('embed_create_modal.chat_override_select_flow_hint')}</div>
+                </div>
+            `;
+        }
+        const effectiveChat = this._effectiveChatForForm();
+        if (!effectiveChat) {
+            return null;
+        }
+        return html`
+            <div class="chat-policy-section">
+                <h4 class="chat-policy-title">${this.t('embed_create_modal.chat_override_section_title')}</h4>
+                <div class="hint">${this.t('embed_create_modal.chat_override_section_hint')}</div>
+                <label class="switch-row">
+                    <input
+                        type="checkbox"
+                        .checked=${this._chatOverrideEnabled}
+                        @change=${(e) => this._toggleChatOverrideEnabled(e.target.checked)}
+                    />
+                    <span>${this.t('embed_create_modal.chat_override_toggle')}</span>
+                </label>
+                <div class="hint">
+                    ${this._chatOverrideEnabled
+                        ? this.t('embed_create_modal.chat_override_enabled_hint')
+                        : this.t('embed_create_modal.chat_override_inherit_hint')}
+                </div>
+                <platform-chat-settings-fields
+                    .chat=${effectiveChat}
+                    ?disabled=${!this._chatOverrideEnabled}
+                    @chat-changed=${(e) => this._onChatOverrideFieldChanged(e.detail.patch)}
+                ></platform-chat-settings-fields>
+                ${this._chatOverrideEnabled
+                    ? html`
+                        <div class="chat-policy-actions">
+                            <platform-button variant="secondary" @click=${this._resetChatOverrideToFlow}>
+                                ${this.t('embed_create_modal.chat_override_reset')}
+                            </platform-button>
+                        </div>
+                    `
+                    : nothing}
+            </div>
+        `;
     }
 
     validateForm() {
@@ -367,7 +526,6 @@ export class FrontendCreateEmbedModal extends PlatformFormModal {
             branding: this._branding,
             primary_color: this._primaryColor,
             assistant_title: this._assistantTitle.trim() || null,
-            greeting_message: this._greetingMessage.trim() || null,
             interface_locale: this._interfaceLocale,
             placeholder: this._placeholder.trim(),
             landing_visible: landingOn,
@@ -376,6 +534,7 @@ export class FrontendCreateEmbedModal extends PlatformFormModal {
             guest_max_user_messages,
             voice_enabled: this._voiceEnabled,
             voice_default_on: this._voiceEnabled && this._voiceDefaultOn,
+            chat_override: this._buildChatOverridePayload(),
         };
         const result = await this._awaitEmbedWrite(isEdit, payload);
         if (!result.ok) {
@@ -559,17 +718,7 @@ export class FrontendCreateEmbedModal extends PlatformFormModal {
                         @change=${(e) => { this._assistantTitle = e.detail.value; this.isDirty = true; }}
                     ></platform-field>
 
-                    <div class="full">
-                        <platform-field
-                            type="text"
-                            mode="edit"
-                            .label=${this.t('embed_create_modal.label_greeting_message')}
-                            .value=${this._greetingMessage}
-                            .placeholder=${this.t('embed_create_modal.placeholder_greeting_message')}
-                            .hint=${this.t('embed_create_modal.greeting_message_hint')}
-                            @change=${(e) => { this._greetingMessage = e.detail.value; this.isDirty = true; }}
-                        ></platform-field>
-                    </div>
+                    ${this._renderChatPolicySection()}
 
                     <div class="full">
                         <platform-field

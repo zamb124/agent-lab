@@ -105,10 +105,6 @@
         if (assistant.updateComplete && typeof assistant.updateComplete.then === "function") {
           await assistant.updateComplete;
         }
-        const drawer = assistant.querySelector("platform-embed-chat-drawer");
-        if (drawer && drawer.updateComplete && typeof drawer.updateComplete.then === "function") {
-          await drawer.updateComplete;
-        }
         return window.humanitecEmbed;
       }
       await nextFrame();

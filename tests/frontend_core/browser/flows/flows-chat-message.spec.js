@@ -1,10 +1,8 @@
 import { fixture, fixtureCleanup, html, expect, elementUpdated, aTimeout, waitUntil } from '../helpers/render.js';
 import { resetPlatformState, bootstrapTestBus } from '../helpers/reset.js';
-import { CoreEvents, FILES_EVENTS } from '@platform/lib/events/index.js';
-import '../../../../core/frontend/static/lib/flows-chat/flows-chat-message.js';
-import '../../../../core/frontend/static/lib/embed-chat/platform-embed-chat.js';
-import '../../../../apps/flows/ui/components/chat/chat-message.js';
-import '../../../../apps/flows/ui/components/chat/chat-files-panel.js';
+import { FILES_EVENTS } from '@platform/lib/events/index.js';
+import '../../../../core/frontend/static/lib/chat/chat-message.js';
+import '../../../../core/frontend/static/lib/chat/platform-chat.js';
 import '../../../../apps/flows/ui/modals/flows-browser-preview-modal.js';
 
 const LABELS = {
@@ -234,129 +232,63 @@ describe('flows-chat-message shared surface', () => {
         });
     });
 
-    it('app chat-message adapter dispatches compose_edit through the platform bus', async () => {
-        const events = [];
-        bus.subscribeType('flows/chat/compose_edit', (event) => events.push(event));
-
+    it('platform-chat host renders messages through flows-chat-message only', async () => {
         const el = await fixture(html`
-            <chat-message role="user" content="Draft from app"></chat-message>
-        `);
-        await elementUpdated(el);
-        const surface = el.shadowRoot.querySelector('flows-chat-message');
-        await elementUpdated(surface);
-        const actions = surface.shadowRoot.querySelector('platform-assistant-message-actions');
-        await elementUpdated(actions);
-        actions.shadowRoot.querySelectorAll('button')[1].click();
-
-        expect(events).to.have.length(1);
-        expect(events[0].payload).to.deep.equal({ text: 'Draft from app' });
-    });
-
-    it('app chat-message adapter opens browser preview through the platform modal stack', async () => {
-        const events = [];
-        bus.subscribeType(CoreEvents.UI_MODAL_OPEN, (event) => events.push(event));
-
-        const el = await fixture(html`
-            <chat-message
-                role="assistant"
-                content="Browser ready"
-                .toolCalls=${[{ id: 'tc-browser', name: 'browser.open', arguments: { url: 'https://example.test' } }]}
-                .toolResults=${[{ tool_call_id: 'tc-browser', name: 'browser.open', content: 'ok' }]}
-                .browserPreviews=${[{
-                    parentToolCallId: 'tc-browser',
-                    status: 'open',
-                    viewerUrl: 'https://browser.example.test/session/tc-browser',
-                    currentUrl: 'https://example.test',
-                    sessionId: 'tc-browser',
-                }]}
-            ></chat-message>
-        `);
-        await elementUpdated(el);
-        const surface = el.shadowRoot.querySelector('flows-chat-message');
-        await elementUpdated(surface);
-        surface.shadowRoot.querySelector('.tool-orb-button').click();
-
-        expect(events).to.have.length(1);
-        expect(events[0].payload.kind).to.equal('flows.browser_preview');
-        expect(events[0].payload.props.viewerUrl).to.equal('https://browser.example.test/session/tc-browser');
-        expect(events[0].payload.props.sessionId).to.equal('tc-browser');
-    });
-
-    it('embed chat host renders messages through flows-chat-message only', async () => {
-        const el = await fixture(html`
-            <platform-embed-chat
+            <platform-chat
                 flows-base-url="/flows"
                 flow-id="lara"
                 .labels=${{ greeting: 'Hi from embed', new_chat: 'New chat' }}
-            ></platform-embed-chat>
+            ></platform-chat>
         `);
+        el._controller.applyRuntimeVerb('user_message_added', {
+            contextId: el._controller.state.currentContextId,
+            message: {
+                id: 'user-compact-1',
+                role: 'user',
+                content: 'Hello',
+                timestamp: '2026-05-15T10:00:00.000Z',
+            },
+        });
         await elementUpdated(el);
         await aTimeout(80);
 
-        expect(el.shadowRoot.querySelector('flows-chat-message')).to.not.equal(null);
+        const bubble = el.shadowRoot.querySelector('flows-chat-message[data-role="user"]');
+        expect(bubble).to.not.equal(null);
+        expect(bubble.headerCompact).to.equal(true);
+        expect(bubble.shadowRoot.querySelector('.header .role')).to.equal(null);
         expect(el.shadowRoot.querySelector('.msg')).to.equal(null);
     });
 
-    it('app files panel opens existing document capability through the global file viewer event', async () => {
+    it('platform-chat host exposes document file blocks through the same files panel and global file viewer event', async () => {
         const events = [];
         bus.subscribeType(FILES_EVENTS.OPEN_REQUESTED, (event) => events.push(event));
         const el = await fixture(html`
-            <chat-files-panel
-                inline
-                .files=${[{
-                    file_id: 'file-docx-1',
-                    original_name: 'Contract.docx',
-                    content_type: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
-                    capabilities: {
-                        document: {
-                            binding_id: 'binding-docx-1',
-                            file_id: 'file-docx-1',
-                            editor_url: 'about:blank#binding-docx-1',
-                        },
-                    },
-                }]}
-            ></chat-files-panel>
-        `);
-        await elementUpdated(el);
-
-        el.shadowRoot.querySelector('.trigger').click();
-        await elementUpdated(el);
-        el.shadowRoot.querySelector('.file-row').click();
-        await elementUpdated(el);
-        await waitUntil(() => events.length === 1, 'file open requested');
-
-        expect(events[0].payload.file.file_id).to.equal('file-docx-1');
-        expect(events[0].payload.file.original_name).to.equal('Contract.docx');
-        expect(events[0].payload.source).to.equal('flows_chat_files_panel');
-    });
-
-    it('embed host exposes document file blocks through the same files panel and global file viewer event', async () => {
-        const events = [];
-        bus.subscribeType(FILES_EVENTS.OPEN_REQUESTED, (event) => events.push(event));
-        const el = await fixture(html`
-            <platform-embed-chat
+            <platform-chat
                 flows-base-url="https://flows.example/flows"
                 platform-ui-origin="https://platform.example"
                 flow-id="lara"
                 .labels=${{ greeting: 'Hi from embed', new_chat: 'New chat' }}
-            ></platform-embed-chat>
+            ></platform-chat>
         `);
-        el._messages = [{
-            id: 'assistant-doc',
-            role: 'assistant',
-            content: 'Document ready',
-            blocks: [{
-                type: 'file_card',
-                file_id: 'file-docx-2',
-                name: 'Offer.docx',
-                mime_type: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
-                document: {
-                    binding_id: 'binding-docx-2',
+        el._controller.applyRuntimeVerb('user_message_added', {
+            contextId: el._controller.state.currentContextId,
+            message: {
+                id: 'assistant-doc',
+                role: 'assistant',
+                content: 'Document ready',
+                blocks: [{
+                    type: 'file_card',
                     file_id: 'file-docx-2',
-                    editor_url: '/documents/embed/edit/binding-docx-2?namespace=system',
-                },
-            }],
-        }];
+                    name: 'Offer.docx',
+                    mime_type: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+                    document: {
+                        binding_id: 'binding-docx-2',
+                        file_id: 'file-docx-2',
+                        editor_url: '/documents/embed/edit/binding-docx-2?namespace=system',
+                    },
+                }],
+            },
+        });
         el.requestUpdate();
         await elementUpdated(el);
         await aTimeout(0);
@@ -375,39 +307,120 @@ describe('flows-chat-message shared surface', () => {
         expect(events[0].payload.source).to.equal('flows_chat_files_panel');
     });
 
-    it('embed host merges A2A files events into the shared files panel', async () => {
+    it('platform-chat host merges A2A files events into the shared files panel', async () => {
         const el = await fixture(html`
-            <platform-embed-chat
+            <platform-chat
                 flows-base-url="/flows"
                 flow-id="lara"
                 .labels=${{ greeting: 'Hi from embed', new_chat: 'New chat' }}
-            ></platform-embed-chat>
+            ></platform-chat>
         `);
-        el._messages = [{
-            id: 'assistant-files-event',
-            role: 'assistant',
-            content: '',
-            files: [],
-        }];
-        el._applyRuntimeEvent({
-            type: 'files_event',
-            payload: {
-                event: {
-                    payload: {
-                        files: [{
-                            file_id: 'file-event-1',
-                            original_name: 'Generated.txt',
-                            content_type: 'text/plain',
-                            url: '/frontend/api/v1/files/download/file-event-1',
-                        }],
-                    },
+        const contextId = el._controller.state.currentContextId;
+        el._controller.applyRuntimeVerb('task_started', {
+            task_id: 'task-files-event',
+            context_id: contextId,
+        });
+        el._controller.applyRuntimeVerb('files_event', {
+            task_id: 'task-files-event',
+            context_id: contextId,
+            event: {
+                payload: {
+                    files: [{
+                        file_id: 'file-event-1',
+                        original_name: 'Generated.txt',
+                        content_type: 'text/plain',
+                        file_size: 12,
+                        url: '/frontend/api/v1/files/download/file-event-1',
+                    }],
                 },
             },
-        }, 'assistant-files-event');
+        });
         await elementUpdated(el);
 
         const panel = el.shadowRoot.querySelector('flows-chat-files-panel');
         expect(panel).to.not.equal(null);
         expect(panel.files.map((file) => file.file_id)).to.deep.equal(['file-event-1']);
+    });
+
+    it('compact meta shows timestamp and observability actions scoped to taskId', async () => {
+        const el = await fixture(html`
+            <flows-chat-message
+                role="assistant"
+                .showHeader=${true}
+                .headerCompact=${true}
+                .showTraceControls=${true}
+                .showLogsAction=${true}
+                .showDurableHistoryAction=${true}
+                session-id="flow-1:ctx-1"
+                .taskId=${'task-42'}
+                .timestamp=${'2026-05-15T10:00:00.000Z'}
+                locale="en"
+                .content=${'Done'}
+                .labels=${LABELS}
+            ></flows-chat-message>
+        `);
+        await elementUpdated(el);
+
+        expect(el.shadowRoot.querySelector('.bubble-meta')).to.not.equal(null);
+        expect(el.shadowRoot.querySelector('.bubble-meta .timestamp')).to.not.equal(null);
+        expect(el.shadowRoot.querySelector('.bubble-observability-actions')).to.not.equal(null);
+
+        let tracingDetail = null;
+        let logsDetail = null;
+        let historyDetail = null;
+        el.addEventListener('show-tracing', (event) => { tracingDetail = event.detail; });
+        el.addEventListener('show-logs', (event) => { logsDetail = event.detail; });
+        el.addEventListener('show-durable-history', (event) => { historyDetail = event.detail; });
+
+        const buttons = el.shadowRoot.querySelectorAll('.bubble-observability-actions .tracing-btn');
+        expect(buttons.length).to.equal(3);
+        buttons[0].click();
+        buttons[1].click();
+        buttons[2].click();
+
+        expect(tracingDetail).to.deep.equal({ taskId: 'task-42' });
+        expect(logsDetail).to.deep.equal({ sessionId: 'flow-1:ctx-1', taskId: 'task-42' });
+        expect(historyDetail).to.deep.equal({ sessionId: 'flow-1:ctx-1' });
+    });
+
+    it('durable history action shows without taskId when sessionId is set', async () => {
+        const el = await fixture(html`
+            <flows-chat-message
+                role="assistant"
+                .showHeader=${true}
+                .headerCompact=${true}
+                .showTraceControls=${false}
+                .showLogsAction=${false}
+                .showDurableHistoryAction=${true}
+                session-id="flow-1:ctx-1"
+                .content=${'Done'}
+                .labels=${LABELS}
+            ></flows-chat-message>
+        `);
+        await elementUpdated(el);
+
+        expect(el.shadowRoot.querySelector('.bubble-observability-actions')).to.not.equal(null);
+        expect(el.shadowRoot.querySelectorAll('.bubble-observability-actions .tracing-btn').length).to.equal(1);
+    });
+
+    it('user short text stays on one line in compact bubble', async () => {
+        const el = await fixture(html`
+            <flows-chat-message
+                variant="embed"
+                role="user"
+                .showHeader=${true}
+                .headerCompact=${true}
+                .content=${'привет'}
+                .labels=${LABELS}
+            ></flows-chat-message>
+        `);
+        await elementUpdated(el);
+
+        const text = el.shadowRoot.querySelector('.text');
+        expect(text).to.not.equal(null);
+        expect(text.textContent).to.equal('привет');
+        const style = getComputedStyle(text);
+        expect(style.wordBreak).to.equal('normal');
+        expect(style.overflowWrap).to.equal('break-word');
     });
 });

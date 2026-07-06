@@ -4,16 +4,16 @@
 
 import { fixture, fixtureCleanup, html, expect, elementUpdated, aTimeout } from '../helpers/render.js';
 import { resetPlatformState, bootstrapTestBus } from '../helpers/reset.js';
-import '../../../../core/frontend/static/lib/embed-chat/platform-embed-chat.js';
+import '../../../../core/frontend/static/lib/chat/platform-chat.js';
 
-describe('crm lara confirm action (embed-chat default apply)', () => {
+describe('crm lara confirm action (platform-chat default apply)', () => {
     beforeEach(() => {
         resetPlatformState();
         bootstrapTestBus();
     });
 
     afterEach(() => {
-        document.querySelectorAll('platform-embed-chat').forEach((el) => el.remove());
+        document.querySelectorAll('platform-chat').forEach((el) => el.remove());
         fixtureCleanup();
     });
 
@@ -37,7 +37,7 @@ describe('crm lara confirm action (embed-chat default apply)', () => {
 
         try {
             const el = await fixture(html`
-                <platform-embed-chat flows-base-url="/flows"></platform-embed-chat>
+                <platform-chat flows-base-url="/flows"></platform-chat>
             `);
             await el.updateComplete;
             const ctxId =

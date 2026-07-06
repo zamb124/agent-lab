@@ -120,7 +120,6 @@ if rg -q "document\.body\.appendChild\(\s*[a-zA-Z_]+-?[a-zA-Z_]*[Mm]odal" "${MOD
 fi
 
 # 10. Запрет легаси window-событий sidebar/breadcrumbs/office-list — переехало на bus.
-#     Скоуп: и apps, и core (кроме самого embed-chat host-интерфейса).
 LEGACY_WINDOW_EVENTS=(
     'platform-sidebar-open'
     'platform-sidebar-mobile-change'
@@ -128,7 +127,7 @@ LEGACY_WINDOW_EVENTS=(
 )
 LEGACY_GLOBS=(
     apps -g '*.js' --glob '!apps/*/ui/assets/**' --glob '!**/*.min.js'
-    core/frontend/static -g '*.js' --glob '!core/frontend/static/lib/embed-chat/**' --glob '!**/*.min.js'
+    core/frontend/static -g '*.js' --glob '!**/*.min.js'
 )
 for ev in "${LEGACY_WINDOW_EVENTS[@]}"; do
     if rg -q "window\.(addEventListener|dispatchEvent)\(\s*['\"]?${ev}\b|new CustomEvent\(\s*['\"]${ev}['\"]" "${LEGACY_GLOBS[@]}"; then
@@ -142,11 +141,13 @@ if rg -q "new CustomEvent\(\s*['\"]navigate['\"]" "${LEGACY_GLOBS[@]}"; then
     rg -n "new CustomEvent\(\s*['\"]navigate['\"]" "${LEGACY_GLOBS[@]}" >&2 || true
 fi
 
-# 11. Запрет старых геттеров в core/frontend/static/lib (кроме embed-chat — у него свой бутстрап).
+# 11. Запрет старых геттеров в core/frontend/static/lib (кроме standalone chat-surface —
+#     у platform-chat свой бутстрап, а `theme` — его reactive property/attribute,
+#     контракт embed-виджета, не ThemeService).
 #     `icon` удалён из списка: reactive property Lit-компонентов
 #     (`<sidebar-nav-item icon="...">`, `<platform-panel icon="...">`), а не
 #     IconService (его нет).
-CORE_LIB_GLOBS=( core/frontend/static/lib -g '*.js' --glob '!core/frontend/static/lib/embed-chat/**' )
+CORE_LIB_GLOBS=( core/frontend/static/lib -g '*.js' --glob '!core/frontend/static/lib/chat/platform-chat.js' )
 if rg -q 'this\.(services|auth|notify|theme|companies|calendarApi|filesApi|fileTypes|team|a2a|syncWs|syncApi|crmApi|ragApi)\b' "${CORE_LIB_GLOBS[@]}"; then
     fail "this.services/this.calendarApi/... в core/lib — используйте dispatch(<SLICE_EVENTS>) и select"
     rg -n 'this\.(services|auth|notify|theme|companies|calendarApi|filesApi|fileTypes|team|a2a|syncWs|syncApi|crmApi|ragApi)\b' "${CORE_LIB_GLOBS[@]}" >&2 || true
@@ -216,7 +217,6 @@ RUNTIME_ANTI_GLOBS=(
     --glob '!apps/*/ui/assets/**'
     --glob '!**/*.min.js'
     core/frontend/static/lib -g '*.js'
-    --glob '!core/frontend/static/lib/embed-chat/**'
     --glob '!core/frontend/static/lib/platform-element/**'
     --glob '!core/frontend/static/lib/events/**'
 )

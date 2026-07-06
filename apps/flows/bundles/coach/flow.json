@@ -11,6 +11,9 @@
   "permission": [],
   "branches": {},
   "store_card_image": "coach.jpg",
+  "chat": {
+    "greeting_message": "План тренировки, техника, нагрузка без медицинских диагнозов. Демо."
+  },
   "entry": "main",
   "nodes": {
     "main": {

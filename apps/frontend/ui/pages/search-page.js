@@ -1,7 +1,7 @@
 import { html, css, nothing } from 'lit';
 import { unsafeHTML } from 'lit/directives/unsafe-html.js';
 import { PlatformPage } from '@platform/lib/base/PlatformPage.js';
-import { flowsChatMarkdownToHtml } from '@platform/lib/flows-chat/markdown.js';
+import { flowsChatMarkdownToHtml } from '@platform/lib/chat/markdown.js';
 import { formatFileSize } from '@platform/lib/utils/format-file-size.js';
 import { resolveFileIconKey } from '@platform/lib/utils/file-icons.js';
 import {

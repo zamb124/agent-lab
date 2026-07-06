@@ -7,7 +7,7 @@
  *
  * Подключается в:
  *   - `apps/flows/ui/` — assistant и user сообщения в `chat-message`;
- *   - `core/frontend/static/lib/flows-chat/flows-chat-message.js` — assistant/user.
+ *   - `core/frontend/static/lib/chat/chat-message.js` — assistant/user.
  *
  * Contract:
  *   - `text` (string, обязательный);

@@ -23,6 +23,7 @@ from apps.flows.src.models import (
     Edge,
     EdgeCondition,
     ExternalAgentStatus,
+    FlowChatSettings,
     FlowConfig,
     FlowType,
     FlowVariableConfig,
@@ -54,7 +55,6 @@ from core.identity.embed_guest_turns import EMBED_SESSION_ID_METADATA_KEY
 from core.identity.flow_preview_handoff import store_flow_preview_handoff
 from core.identity.runtime_users import ensure_persisted_runtime_user
 from core.logging import get_logger
-from core.middleware.auth.company_resolver import build_service_base_url
 from core.models.embed_models import EmbedConfig, EmbedMapping, EmbedStatus
 from core.pagination import ListResponse, OffsetPage
 from core.short_links.service import require_platform_public_base_url
@@ -80,12 +80,8 @@ _GRAPH_NODE_MAP_ADAPTER: TypeAdapter[dict[str, GraphNodeConfig]] = TypeAdapter(
 
 def _preview_share_base_urls(request: Request) -> tuple[str, str]:
     """Возвращает (flows_base_url, platform_ui_origin) для сценария встраивания."""
-    settings = get_settings()
-    if settings.server.env == "production":
-        base = require_platform_public_base_url().rstrip("/")
-        return f"{base}/flows", base
-
-    base = build_service_base_url(request).rstrip("/")
+    _ = request
+    base = require_platform_public_base_url().rstrip("/")
     return f"{base}/flows", base
 
 
@@ -539,6 +535,7 @@ class FlowCreateRequest(BaseModel):
     resources: dict[str, ResourceReference] = Field(default_factory=dict)
     store_card_image_url: str | None = None
     speech: FlowSpeechSettings | None = None
+    chat: FlowChatSettings | None = None
     agent_toolkit_ids: list[str] = Field(default_factory=list)
 
     @field_validator("store_card_image_url", mode="before")
@@ -603,6 +600,8 @@ class FlowResponse(BaseModel):
     source: str = "manual"
 
     speech: JsonObject | None = None
+
+    chat: FlowChatSettings = Field(default_factory=FlowChatSettings)
 
     agent_toolkit_ids: list[str] = Field(default_factory=list)
 
@@ -861,6 +860,7 @@ async def list_flows(
                     source=f.source,
                     has_bundle_update=bundle_update_flags.get(f.flow_id, False),
                     store_card_image_url=f.store_card_image_url,
+                    chat=f.chat,
                     agent_toolkit_ids=await _flow_agent_toolkit_ids(container, f.flow_id),
                     entry=f.entry,
                     nodes=f.nodes,
@@ -883,6 +883,7 @@ async def list_flows(
                     agent_toolkit_ids=await _flow_agent_toolkit_ids(container, f.flow_id),
                     has_bundle_update=bundle_update_flags.get(f.flow_id, False),
                     store_card_image_url=f.store_card_image_url,
+                    chat=f.chat,
                     url=f.url,
                     headers=f.headers,
                     status=f.status,
@@ -1076,6 +1077,7 @@ async def create_flow(request: FlowCreateRequest, container: ContainerDep) -> Fl
         source="api",
         store_card_image_url=request.store_card_image_url,
         speech=request.speech,
+        chat=request.chat if request.chat is not None else FlowChatSettings(),
     )
 
     _ = await container.flow_repository.set(flow_config)
@@ -1107,6 +1109,7 @@ async def create_flow(request: FlowCreateRequest, container: ContainerDep) -> Fl
         source=flow_config.source,
         store_card_image_url=flow_config.store_card_image_url,
         speech=_speech_to_json(flow_config.speech),
+        chat=flow_config.chat,
         agent_toolkit_ids=list(request.agent_toolkit_ids),
     )
 
@@ -1198,6 +1201,7 @@ async def get_flow(flow_id: str, container: ContainerDep) -> FlowResponse:
             has_bundle_update=bundle_update,
             store_card_image_url=flow_cfg.store_card_image_url,
             speech=_speech_to_json(flow_cfg.speech),
+            chat=flow_cfg.chat,
             agent_toolkit_ids=await _flow_agent_toolkit_ids(container, flow_cfg.flow_id),
         )
     except HTTPException:
@@ -1310,8 +1314,6 @@ async def create_flow_preview_share(
         theme="dark",
         position="bottom-right",
         show_launcher=True,
-        show_reasoning=False,
-        show_tool_calls=False,
         assistant_title=assistant_title,
         interface_locale="auto",
         voice_enabled=False,
@@ -1412,6 +1414,7 @@ async def update_flow(
     nodes = await _inline_tools_in_nodes(top_nodes, container)
 
     speech_merged = request.speech if request.speech is not None else existing.speech
+    chat_merged = request.chat if request.chat is not None else existing.chat
 
     flow_config = FlowConfig(
         flow_id=flow_id,
@@ -1429,6 +1432,7 @@ async def update_flow(
         metadata=existing.metadata or {},
         store_card_image_url=request.store_card_image_url,
         speech=speech_merged,
+        chat=chat_merged,
     )
 
     _ = await container.flow_repository.set(flow_config)
@@ -1471,6 +1475,7 @@ async def update_flow(
         source=flow_config.source,
         store_card_image_url=flow_config.store_card_image_url,
         speech=_speech_to_json(flow_config.speech),
+        chat=flow_config.chat,
         agent_toolkit_ids=list(request.agent_toolkit_ids),
     )
 
@@ -1539,6 +1544,7 @@ async def bulk_delete_nodes(
         metadata=existing.metadata or {},
         store_card_image_url=existing.store_card_image_url,
         speech=existing.speech,
+        chat=existing.chat,
     )
     _ = await container.flow_repository.set(flow_config)
 
@@ -1600,6 +1606,7 @@ async def update_flow_metadata(
         metadata=metadata,
         store_card_image_url=existing.store_card_image_url,
         speech=existing.speech,
+        chat=existing.chat,
     )
     _ = await container.flow_repository.set(flow_config)
 
@@ -1667,6 +1674,7 @@ async def get_version(
         source=version_cfg.source or "manual",
         store_card_image_url=version_cfg.store_card_image_url,
         speech=_speech_to_json(version_cfg.speech),
+        chat=version_cfg.chat,
         agent_toolkit_ids=await _flow_agent_toolkit_ids(container, version_cfg.flow_id),
     )
 

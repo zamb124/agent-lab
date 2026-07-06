@@ -231,10 +231,7 @@ async def test_create_embed_config(frontend_client: AsyncClient, test_auth_with_
             "allowed_origins": ["https://example.com", "https://test.com"],
             "theme": "dark",
             "position": "bottom-right",
-            "show_reasoning": True,
-            "show_tool_calls": False,
             "primary_color": "#6366f1",
-            "greeting_message": "Hello! How can I help?",
             "placeholder": "Type your message...",
             "branding": True,
         }
@@ -255,8 +252,7 @@ async def test_create_embed_config(frontend_client: AsyncClient, test_auth_with_
     assert data["allowed_origins"] == ["https://example.com", "https://test.com"]
     assert data["status"] == "active"
     assert data["theme"] == "dark"
-    assert data["show_reasoning"] is True
-    assert data["show_tool_calls"] is False
+    assert data["placeholder"] == "Type your message..."
     assert data["usage_count"] == 0
     assert data["last_used_at"] is None
     assert "created_at" in data
@@ -329,7 +325,7 @@ async def test_get_embed_config(frontend_client: AsyncClient, test_auth_with_age
         json={
             "name": "Get Test Widget",
             "flow_id": "test_agent",
-            "greeting_message": "Test greeting",
+            "assistant_title": "Test assistant",
         }
     )
 
@@ -348,7 +344,7 @@ async def test_get_embed_config(frontend_client: AsyncClient, test_auth_with_age
     assert data["embed_id"] == embed_id
     assert data["name"] == "Get Test Widget"
     assert data["flow_id"] == "test_agent"
-    assert data["greeting_message"] == "Test greeting"
+    assert data["assistant_title"] == "Test assistant"
 
     # Cleanup
     await frontend_client.delete(
@@ -401,6 +397,55 @@ async def test_update_embed_config(frontend_client: AsyncClient, test_auth_with_
     await frontend_client.delete(
         f"/frontend/api/embed/configs/{embed_id}",
         headers=auth_headers
+    )
+
+
+@pytest.mark.asyncio
+async def test_embed_config_chat_override_crud(frontend_client: AsyncClient, test_auth_with_agent):
+    """CRUD chat_override: create с override, PATCH null сброс, PATCH partial update."""
+
+    auth_headers, _, _ = test_auth_with_agent
+
+    create_response = await frontend_client.post(
+        "/frontend/api/embed/configs",
+        headers=auth_headers,
+        json={
+            "name": "Chat override widget",
+            "flow_id": "test_agent",
+            "chat_override": {
+                "show_reasoning": True,
+                "tool_calls_display": "detailed",
+            },
+        },
+    )
+    assert create_response.status_code == 200
+    created = create_response.json()
+    embed_id = created["embed_id"]
+    assert created["chat_override"] is not None
+    assert created["chat_override"]["show_reasoning"] is True
+    assert created["chat_override"]["tool_calls_display"] == "detailed"
+
+    patch_reset = await frontend_client.patch(
+        f"/frontend/api/embed/configs/{embed_id}",
+        headers=auth_headers,
+        json={"chat_override": None},
+    )
+    assert patch_reset.status_code == 200
+    assert patch_reset.json()["chat_override"] is None
+
+    patch_override = await frontend_client.patch(
+        f"/frontend/api/embed/configs/{embed_id}",
+        headers=auth_headers,
+        json={"chat_override": {"show_files_panel": False}},
+    )
+    assert patch_override.status_code == 200
+    override_payload = patch_override.json()["chat_override"]
+    assert override_payload is not None
+    assert override_payload["show_files_panel"] is False
+
+    await frontend_client.delete(
+        f"/frontend/api/embed/configs/{embed_id}",
+        headers=auth_headers,
     )
 
 

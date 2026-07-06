@@ -354,7 +354,7 @@ i18n namespace: `platform` (`work_item_badge.*`, `work_item_preview.*`). Semanti
 - `new CustomEvent('navigate', ...)` для роутинга.
 - `this.calendarApi`, `this.companies`, `this.team` и подобные геттеры в `core/frontend/static/lib/**` — только `dispatch(<SLICE_EVENTS>)` + `select`.
 
-Исключение — `core/frontend/static/lib/embed-chat/**`: у виджета свой standalone bus и host-интерфейс через `postMessage`.
+Исключение — `core/frontend/static/lib/chat/**` (`<platform-chat>`): единый чат-компонент работает и standalone (embed на внешних сайтах) со своим host-интерфейсом через свойства/события, без platform bus.
 
 ## Платформенные просмотрщики (`trace-viewer`, `log-viewer`)
 
