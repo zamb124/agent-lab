@@ -387,22 +387,7 @@ export class FlowsDurableHistoryModal extends PlatformModal {
                 padding: var(--space-2) var(--space-3);
                 border-bottom: 1px solid var(--border-subtle);
                 overflow-x: auto;
-            }
-            .detail-tab {
-                min-height: 30px;
-                padding: 0 var(--space-3);
-                border: 1px solid var(--border-subtle);
-                border-radius: var(--radius-md);
-                background: transparent;
-                color: var(--text-secondary);
-                cursor: pointer;
-                font-size: var(--text-xs);
-                white-space: nowrap;
-            }
-            .detail-tab--selected {
-                border-color: var(--accent);
-                color: var(--text-primary);
-                background: color-mix(in srgb, var(--accent) 10%, transparent);
+                flex-wrap: wrap;
             }
             .detail-content {
                 flex: 1 1 auto;
@@ -968,13 +953,13 @@ export class FlowsDurableHistoryModal extends PlatformModal {
 
     _renderTabButton(tab, labelKey) {
         return html`
-            <button
-                type="button"
-                class=${this._selectedTab === tab ? 'detail-tab detail-tab--selected' : 'detail-tab'}
+            <platform-button
+                variant=${this._selectedTab === tab ? 'secondary' : 'ghost'}
+                density="compact"
                 @click=${() => { this._selectedTab = tab; }}
             >
                 ${this.t(labelKey)}
-            </button>
+            </platform-button>
         `;
     }
 
@@ -1116,10 +1101,10 @@ export class FlowsDurableHistoryModal extends PlatformModal {
 
     renderHeaderActions() {
         return html`
-            <button
-                type="button"
-                class="header-btn"
-                title=${this.t('durable_history_modal.action_refresh')}
+            <platform-button
+                variant="ghost"
+                icon-only
+                density="dense"
                 aria-label=${this.t('durable_history_modal.action_refresh')}
                 ?disabled=${this._busy()}
                 @click=${() => this._loadAll()}
@@ -1127,7 +1112,7 @@ export class FlowsDurableHistoryModal extends PlatformModal {
                 ${this._busy()
                     ? html`<glass-spinner></glass-spinner>`
                     : html`<platform-icon name="refresh" size="16"></platform-icon>`}
-            </button>
+            </platform-button>
         `;
     }
 

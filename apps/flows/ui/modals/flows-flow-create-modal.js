@@ -24,6 +24,10 @@ import '@platform/lib/components/glass-spinner.js';
 import '@platform/lib/components/platform-modal-search-field.js';
 import '@platform/lib/components/fields/platform-field.js';
 import { getBlankCodeNodeConfig } from '../_helpers/code-node-defaults.js';
+import {
+    resolveFlowCoverGradient,
+    resolveFlowPresetGradient,
+} from '../constants/flow-cover-gradients.js';
 
 const FLOW_ID_PATTERN = /^[a-z][a-z0-9_]*$/;
 
@@ -31,7 +35,6 @@ const FLOW_PRESETS = Object.freeze([
     {
         id: 'react',
         icon: 'sparkle',
-        gradient: 'linear-gradient(135deg, #FFB7B2 0%, #B388EB 100%)',
         defaultIdPrefix: 'react_flow',
         buildConfig: ({ flow_id, name, description }) => ({
             flow_id, name, description,
@@ -50,7 +53,6 @@ const FLOW_PRESETS = Object.freeze([
     {
         id: 'graph',
         icon: 'workflow',
-        gradient: 'linear-gradient(135deg, #C39BD3 0%, #BB8FCE 100%)',
         defaultIdPrefix: 'graph_flow',
         buildConfig: ({ flow_id, name, description }) => ({
             flow_id, name, description,
@@ -74,7 +76,6 @@ const FLOW_PRESETS = Object.freeze([
     {
         id: 'multi',
         icon: 'agent',
-        gradient: 'linear-gradient(135deg, #5DADE2 0%, #48C9B0 100%)',
         defaultIdPrefix: 'multi_flow',
         buildConfig: ({ flow_id, name, description }) => ({
             flow_id, name, description,
@@ -93,7 +94,6 @@ const FLOW_PRESETS = Object.freeze([
     {
         id: 'code',
         icon: 'code',
-        gradient: 'linear-gradient(135deg, #82E0AA 0%, #76D7C4 100%)',
         defaultIdPrefix: 'code_flow',
         buildConfig: ({ flow_id, name, description }) => ({
             flow_id, name, description,
@@ -115,7 +115,6 @@ const FLOW_PRESETS = Object.freeze([
     {
         id: 'external',
         icon: 'cloud',
-        gradient: 'linear-gradient(135deg, #BB8FCE 0%, #8E44AD 100%)',
         defaultIdPrefix: 'external_flow',
         buildConfig: ({ flow_id, name, description }) => ({
             flow_id, name, description,
@@ -392,7 +391,7 @@ export class FlowsFlowCreateModal extends PlatformFormModal {
                                 }
                             }}
                         >
-                            <div class="card-icon" style=${`background:${p.gradient};`}>
+                            <div class="card-icon" style=${`background:${resolveFlowPresetGradient(p.id)};`}>
                                 <platform-icon name=${p.icon} size="28"></platform-icon>
                             </div>
                             <div class="card-title">${this.t(`flow_create_modal.preset_${p.id}_title`)}</div>
@@ -429,7 +428,7 @@ export class FlowsFlowCreateModal extends PlatformFormModal {
                             }
                         }}
                     >
-                        <div class="card-icon" style="background: linear-gradient(135deg, #94B49F 0%, #5D9CEC 100%);">
+                        <div class="card-icon" style=${`background:${resolveFlowCoverGradient(b.bundle_id)};`}>
                             <platform-icon name="box" size="28"></platform-icon>
                         </div>
                         <div class="card-title">${typeof b.name === 'string' && b.name !== '' ? b.name : b.bundle_id}</div>
@@ -459,9 +458,9 @@ export class FlowsFlowCreateModal extends PlatformFormModal {
                         <div class="picked-title">${pickedTitle}</div>
                         <div class="picked-sub">${pickedSub}</div>
                     </div>
-                    <button class="change-link" type="button" @click=${this._backToStep1}>
+                    <platform-button variant="ghost" density="compact" @click=${this._backToStep1}>
                         ${this.t('flow_create_modal.action_change')}
-                    </button>
+                    </platform-button>
                 </div>
                 <div class="field">
                     <label>${this.t('flow_create_modal.field_flow_id')}</label>

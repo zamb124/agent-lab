@@ -1,6 +1,7 @@
 import { html, css } from 'lit';
 import { PlatformElement } from '@platform/lib/platform-element/index.js';
 import '@platform/lib/components/platform-icon.js';
+import '@platform/lib/components/platform-button.js';
 import '@platform/lib/components/fields/platform-field.js';
 import '@platform/lib/components/platform-help-hint.js';
 import { evaluationCatalogNameKey } from '../../_helpers/evaluation-catalog-labels.js';
@@ -201,8 +202,7 @@ export class FlowsEvaluationCaseEditor extends PlatformElement {
                 letter-spacing: 0;
             }
 
-            .segmented button,
-            .action-btn {
+            .segmented button {
                 min-height: 34px;
                 display: inline-flex;
                 align-items: center;
@@ -219,8 +219,7 @@ export class FlowsEvaluationCaseEditor extends PlatformElement {
                 transition: var(--motion-transition-interactive);
             }
 
-            .segmented button:hover,
-            .action-btn:hover {
+            .segmented button:hover {
                 color: var(--text-primary);
                 background: var(--glass-solid-medium);
             }
@@ -262,25 +261,6 @@ export class FlowsEvaluationCaseEditor extends PlatformElement {
                 padding: 12px 14px;
                 border-top: 1px solid var(--border-subtle);
                 background: color-mix(in srgb, var(--bg-surface), transparent 18%);
-            }
-
-            .action-btn.primary {
-                background: var(--accent);
-                color: var(--text-inverse);
-                border-color: var(--accent);
-                font-weight: var(--font-semibold);
-            }
-
-            .action-btn.primary:hover {
-                background: var(--accent-hover);
-                border-color: var(--accent-hover);
-                box-shadow: var(--accent-glow);
-            }
-
-            .action-btn:disabled {
-                opacity: 0.45;
-                cursor: not-allowed;
-                box-shadow: none;
             }
 
             .empty {
@@ -681,10 +661,10 @@ export class FlowsEvaluationCaseEditor extends PlatformElement {
                     ${this._renderCheckEditor()}
                 </div>
                 <div class="footer">
-                    <button class="action-btn primary" type="button" ?disabled=${this.busy} @click=${this._submit}>
+                    <platform-button variant="primary" density="compact" ?disabled=${this.busy} @click=${this._submit}>
                         <platform-icon name="save" size="14"></platform-icon>
                         ${caseId.length > 0 ? this.t('evaluation.case_editor.save') : this.t('evaluation.case_editor.create')}
-                    </button>
+                    </platform-button>
                 </div>
             </section>
         `;

@@ -86,8 +86,8 @@ export class FlowsCodeWorkbench extends PlatformElement {
                 align-items: center;
                 justify-content: center;
                 color: var(--text-tertiary);
-                background: rgba(255, 255, 255, 0.06);
-                border: 1px solid var(--border-subtle, rgba(255, 255, 255, 0.1));
+                background: var(--glass-solid-subtle);
+                border: 1px solid var(--border-subtle);
                 border-radius: var(--radius-full, 999px);
                 cursor: pointer;
                 transition:
@@ -98,8 +98,8 @@ export class FlowsCodeWorkbench extends PlatformElement {
             .toolbar-icon-button:hover,
             .toolbar-icon-button:focus-visible {
                 color: var(--text-primary);
-                background: rgba(255, 255, 255, 0.1);
-                border-color: var(--border-default, rgba(255, 255, 255, 0.14));
+                background: var(--glass-solid-medium);
+                border-color: var(--border-default);
                 outline: none;
             }
             .language-segment {

@@ -3,13 +3,16 @@
  * Expandable с отображением веток (branches)
  */
 import { html, css } from 'lit';
-import { classMap } from 'lit/directives/class-map.js';
 import { PlatformElement } from '@platform/lib/platform-element/index.js';
 import '@platform/lib/components/platform-icon.js';
+import '@platform/lib/components/platform-button.js';
 import './branch-item.js';
 import { asString } from '../_helpers/flows-resolvers.js';
+import { resolveFlowCoverGradient } from '../constants/flow-cover-gradients.js';
 
 export class FlowCard extends PlatformElement {
+    static i18nNamespace = 'flows';
+
     static properties = {
         flow: { type: Object },
         active: { type: Boolean, reflect: true },
@@ -22,6 +25,7 @@ export class FlowCard extends PlatformElement {
         css`
             :host {
                 display: block;
+                --platform-button-icon-size: var(--flows-card-action-size);
             }
 
             .flow-card {
@@ -78,15 +82,14 @@ export class FlowCard extends PlatformElement {
                 border-radius: var(--radius-lg);
                 font-weight: var(--font-bold);
                 font-size: var(--text-sm);
-                color: white;
-                text-shadow: 0 1px 2px rgba(0, 0, 0, 0.2);
+                color: var(--flows-avatar-text);
                 flex-shrink: 0;
                 transition: var(--motion-transition-interactive);
             }
 
             .flow-card:hover .flow-avatar {
                 transform: scale(1.05);
-                box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+                box-shadow: var(--flows-avatar-hover-shadow);
             }
 
             .flow-info {
@@ -127,8 +130,8 @@ export class FlowCard extends PlatformElement {
                 width: 8px;
                 height: 8px;
                 border-radius: 50%;
-                background: var(--warning, #f59e0b);
-                box-shadow: 0 0 0 2px rgba(245, 158, 11, 0.24);
+                background: var(--warning);
+                box-shadow: var(--flows-bundle-update-shadow);
                 flex-shrink: 0;
             }
 
@@ -139,43 +142,12 @@ export class FlowCard extends PlatformElement {
                 top: var(--space-2);
                 right: 30px;
                 z-index: 1;
+                align-items: center;
             }
 
             .flow-card:hover .flow-actions,
             .flow-card.expanded .flow-actions {
                 display: flex;
-            }
-
-            .action-btn {
-                width: 26px;
-                height: 26px;
-                display: flex;
-                align-items: center;
-                justify-content: center;
-                border-radius: var(--radius-lg);
-                color: var(--text-tertiary);
-                background: var(--glass-solid-subtle);
-                border: none;
-                cursor: pointer;
-                transition: var(--motion-transition-interactive);
-            }
-
-            .action-btn platform-icon {
-                pointer-events: none;
-            }
-
-            .action-btn:hover {
-                background: var(--glass-solid-strong);
-                color: var(--text-primary);
-            }
-
-            .action-btn.chat:hover {
-                color: var(--accent);
-            }
-
-            .action-btn.danger:hover {
-                background: var(--error-bg);
-                color: var(--error);
             }
 
             .expand-icon {
@@ -233,29 +205,6 @@ export class FlowCard extends PlatformElement {
                 color: var(--text-tertiary);
             }
 
-            .branch-add-btn {
-                width: 22px;
-                height: 22px;
-                display: flex;
-                align-items: center;
-                justify-content: center;
-                border-radius: var(--radius-sm);
-                color: var(--text-tertiary);
-                background: var(--glass-solid-subtle);
-                border: none;
-                cursor: pointer;
-                transition: var(--motion-transition-interactive);
-            }
-
-            .branch-add-btn platform-icon {
-                pointer-events: none;
-            }
-
-            .branch-add-btn:hover {
-                background: var(--accent-subtle);
-                color: var(--accent);
-            }
-
             .branches-list {
                 display: flex;
                 flex-direction: column;
@@ -269,7 +218,6 @@ export class FlowCard extends PlatformElement {
                 text-align: center;
             }
 
-            /* Свёрнутый режим */
             :host([collapsed]) {
                 display: flex;
                 justify-content: center;
@@ -323,7 +271,7 @@ export class FlowCard extends PlatformElement {
                     display: flex;
                 }
             }
-        `
+        `,
     ];
 
     constructor() {
@@ -350,20 +298,9 @@ export class FlowCard extends PlatformElement {
         return name.substring(0, 2).toUpperCase();
     }
 
-    _getColor() {
-        const colors = [
-            'linear-gradient(135deg, #99A6F9 0%, #FF885C 100%)',
-            'linear-gradient(135deg, #8b5cf6 0%, #ec4899 100%)',
-            'linear-gradient(135deg, #f59e0b 0%, #ef4444 100%)',
-            'linear-gradient(135deg, #06b6d4 0%, #3b82f6 100%)',
-            'linear-gradient(135deg, #ec4899 0%, #8b5cf6 100%)',
-            'linear-gradient(135deg, #84cc16 0%, #99A6F9 100%)',
-            'linear-gradient(135deg, #f97316 0%, #f59e0b 100%)',
-            'linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%)',
-        ];
+    _getCoverGradient() {
         const flowId = asString(this.flow?.flow_id);
-        const hash = flowId.split('').reduce((a, b) => a + b.charCodeAt(0), 0);
-        return colors[hash % colors.length];
+        return resolveFlowCoverGradient(flowId);
     }
 
     _getBranches() {
@@ -392,25 +329,29 @@ export class FlowCard extends PlatformElement {
     render() {
         if (!this.flow) return '';
 
-        const cardClasses = {
-            'flow-card': true,
-            'expanded': this.expanded,
-            'active': this.active,
-        };
+        const cardClass = [
+            'flow-card',
+            this.expanded ? 'expanded' : '',
+            this.active ? 'active' : '',
+        ].filter((part) => part.length > 0).join(' ');
 
-        const expandClasses = {
-            'expand-icon': true,
-            'expanded': this.expanded,
-        };
+        const expandClass = [
+            'expand-icon',
+            this.expanded ? 'expanded' : '',
+        ].filter((part) => part.length > 0).join(' ');
 
         const branches = this._getBranches();
+        const chatTitle = this.t('flow_card.open_chat_title');
+        const editTitle = this.t('flow_card.edit_title');
+        const deleteTitle = this.t('flow_card.delete_title');
+        const addBranchTitle = this.t('flow_card.add_branch_title');
 
         return html`
-            <div class=${classMap(cardClasses)} data-flow-id=${this.flow.flow_id}>
+            <div class=${cardClass} data-flow-id=${this.flow.flow_id}>
                 <div class="flow-header" @click=${this._handleHeaderClick}>
-                    <div 
-                        class="flow-avatar" 
-                        style="background: ${this._getColor()}"
+                    <div
+                        class="flow-avatar"
+                        style="background: ${this._getCoverGradient()}"
                     >
                         ${this._getInitials()}
                     </div>
@@ -427,35 +368,38 @@ export class FlowCard extends PlatformElement {
                         </div>
                     </div>
                     <div class="flow-actions">
-                        <button 
-                            class="action-btn chat" 
-                            @click=${(e) => this._emitAction('chat', e)}
-                            title=${this.t('flow_card.open_chat_title')}
-                            aria-label=${this.t('flow_card.open_chat_title')}
+                        <platform-button
+                            variant="ghost"
+                            icon-only
+                            density="dense"
+                            aria-label=${chatTitle}
                             data-action="open-chat"
+                            @click=${(e) => this._emitAction('chat', e)}
                         >
                             <platform-icon name="chat" size="14"></platform-icon>
-                        </button>
-                        <button 
-                            class="action-btn" 
-                            @click=${(e) => this._emitAction('edit', e)}
-                            title=${this.t('flow_card.edit_title')}
-                            aria-label=${this.t('flow_card.edit_title')}
+                        </platform-button>
+                        <platform-button
+                            variant="ghost"
+                            icon-only
+                            density="dense"
+                            aria-label=${editTitle}
                             data-action="edit-flow"
+                            @click=${(e) => this._emitAction('edit', e)}
                         >
                             <platform-icon name="edit" size="14"></platform-icon>
-                        </button>
-                        <button 
-                            class="action-btn danger" 
-                            @click=${(e) => this._emitAction('delete', e)}
-                            title=${this.t('flow_card.delete_title')}
-                            aria-label=${this.t('flow_card.delete_title')}
+                        </platform-button>
+                        <platform-button
+                            variant="ghost"
+                            icon-only
+                            density="dense"
+                            aria-label=${deleteTitle}
                             data-action="delete-flow"
+                            @click=${(e) => this._emitAction('delete', e)}
                         >
                             <platform-icon name="trash" size="14"></platform-icon>
-                        </button>
+                        </platform-button>
                     </div>
-                    <div class=${classMap(expandClasses)}>
+                    <div class=${expandClass}>
                         <platform-icon name="chevron-right" size="14"></platform-icon>
                     </div>
                 </div>
@@ -465,13 +409,15 @@ export class FlowCard extends PlatformElement {
                         <div class="branches-section">
                             <div class="branches-header">
                                 <span class="branches-title">${this.t('flow_card.branches_title')}</span>
-                                <button 
-                                    class="branch-add-btn" 
+                                <platform-button
+                                    variant="ghost"
+                                    icon-only
+                                    density="dense"
+                                    aria-label=${addBranchTitle}
                                     @click=${(e) => this._emitAction('create-branch', e)}
-                                    title=${this.t('flow_card.add_branch_title')}
                                 >
                                     <platform-icon name="plus" size="12"></platform-icon>
-                                </button>
+                                </platform-button>
                             </div>
 
                             ${branches.length > 0 ? html`

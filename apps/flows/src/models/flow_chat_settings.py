@@ -10,6 +10,7 @@ from core.models.flow_chat_settings import (
     ChatToolCallsDisplay,
     EmbedChatPolicyOverride,
     FlowChatSettings,
+    compact_embed_chat_policy_override,
     resolve_effective_flow_chat,
 )
 
@@ -18,5 +19,6 @@ __all__ = [
     "ChatToolCallsDisplay",
     "EmbedChatPolicyOverride",
     "FlowChatSettings",
+    "compact_embed_chat_policy_override",
     "resolve_effective_flow_chat",
 ]

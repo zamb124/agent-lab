@@ -12,6 +12,7 @@
 import { html, css } from 'lit';
 import { PlatformElement } from '@platform/lib/platform-element/index.js';
 import '@platform/lib/components/fields/platform-field.js';
+import '@platform/lib/components/platform-button.js';
 import '@platform/lib/components/platform-help-hint.js';
 import '@platform/lib/components/platform-icon.js';
 
@@ -70,19 +71,6 @@ export class FlowsStateMappingEditor extends PlatformElement {
             .hint {
                 font-size: var(--text-xs);
                 color: var(--text-tertiary);
-            }
-            .add-btn {
-                padding: var(--space-2) var(--space-3);
-                border-radius: var(--radius-md);
-                border: 1px solid var(--accent-subtle);
-                background: var(--accent-subtle);
-                color: var(--accent);
-                font-size: var(--text-sm);
-                font-weight: var(--font-medium);
-                cursor: pointer;
-            }
-            .add-btn:hover {
-                filter: brightness(1.05);
             }
             .map-wrap {
                 display: flex;
@@ -432,9 +420,9 @@ export class FlowsStateMappingEditor extends PlatformElement {
                 <span class="hint">${isOut
                     ? this.t('state_mapping_editor.hint_legend_output')
                     : this.t('state_mapping_editor.hint_legend_input')}</span>
-                <button type="button" class="add-btn" @click=${this._addRow}>
+                <platform-button variant="ghost" density="compact" @click=${this._addRow}>
                     + ${this.t('state_mapping_editor.add')}
-                </button>
+                </platform-button>
             </div>
             ${empty
                 ? html`<div class="empty">${this.t('state_mapping_editor.empty')}</div>`
@@ -478,11 +466,16 @@ export class FlowsStateMappingEditor extends PlatformElement {
                                 (value) => this._updateOutputRow(i, { stateField: value }),
                                 this.t('state_mapping_editor.placeholder_state_field'),
                             )}
-                            <button
-                                type="button"
-                                class="remove-btn"
+                            <platform-button
+                                variant="ghost"
+                                icon-only
+                                density="dense"
+                                danger
+                                aria-label=${this.t('state_mapping_editor.remove_row')}
                                 @click=${() => this._removeRow(i)}
-                            >×</button>
+                            >
+                                <platform-icon name="close" size="14"></platform-icon>
+                            </platform-button>
                         </div>
                     `)
                     : this._rows.map((r, i) => html`
@@ -506,11 +499,16 @@ export class FlowsStateMappingEditor extends PlatformElement {
                                 .value=${r.param}
                                 @change=${(e) => this._updateInputRow(i, { param: typeof e.detail.value === 'string' ? e.detail.value : '' })}
                             ></platform-field>
-                            <button
-                                type="button"
-                                class="remove-btn"
+                            <platform-button
+                                variant="ghost"
+                                icon-only
+                                density="dense"
+                                danger
+                                aria-label=${this.t('state_mapping_editor.remove_row')}
                                 @click=${() => this._removeRow(i)}
-                            >×</button>
+                            >
+                                <platform-icon name="close" size="14"></platform-icon>
+                            </platform-button>
                         </div>
                     `)}
             </div>

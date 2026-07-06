@@ -2,7 +2,7 @@ import { fixture, fixtureCleanup, html, expect, nextFrame } from '../helpers/ren
 import { resetPlatformState, bootstrapTestBus } from '../helpers/reset.js';
 import '@platform/lib/components/fields/platform-field.js';
 import '@platform/lib/components/platform-date-picker.js';
-import '../../../../apps/flows/ui/components/editors/flows-searchable-combobox.js';
+import '@platform/lib/components/platform-searchable-combobox.js';
 
 describe('flows filters field height canon', () => {
     beforeEach(() => { resetPlatformState(); bootstrapTestBus(); });
@@ -38,11 +38,11 @@ describe('flows filters field height canon', () => {
                     width: 960px;
                 "
             >
-                <flows-searchable-combobox
+                <platform-searchable-combobox
                     compact
                     .label=${'user_id'}
                     .placeholder=${'user_id'}
-                ></flows-searchable-combobox>
+                ></platform-searchable-combobox>
                 <platform-field
                     type="string"
                     mode="edit"
@@ -60,7 +60,7 @@ describe('flows filters field height canon', () => {
         await nextFrame();
 
         const controls = [
-            el.querySelector('flows-searchable-combobox'),
+            el.querySelector('platform-searchable-combobox'),
             el.querySelector('platform-field'),
             el.querySelector('platform-date-picker'),
         ];

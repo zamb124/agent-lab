@@ -50,6 +50,7 @@ from .flow_chat_settings import (
     ChatToolCallsDisplay,
     EmbedChatPolicyOverride,
     FlowChatSettings,
+    compact_embed_chat_policy_override,
     resolve_effective_flow_chat,
 )
 from .flow_config import (

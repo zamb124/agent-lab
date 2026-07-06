@@ -26,6 +26,7 @@ import '@platform/lib/components/platform-icon.js';
 import '@platform/lib/components/platform-switch.js';
 import '@platform/lib/components/platform-help-hint.js';
 import '@platform/lib/components/glass-button.js';
+import '@platform/lib/components/platform-button.js';
 import '@platform/lib/chat/platform-chat.js';
 import { resolveVoiceHttpOrigin } from '@platform/lib/voice/voice-http-origin.js';
 import '../chat/flows-chat-run-trace.js';
@@ -170,15 +171,15 @@ export class FlowsExecutionPanel extends PlatformElement {
                 color: var(--text-secondary);
             }
             .status-badge[data-status='running'] {
-                border-color: var(--warning-border, rgba(234, 179, 8, 0.45));
-                background: var(--warning-bg, rgba(234, 179, 8, 0.12));
-                color: var(--warning, #ca8a04);
+                border-color: var(--warning-border);
+                background: var(--warning-bg);
+                color: var(--warning);
                 animation: execPanelPulse 1.4s ease-in-out infinite;
             }
             .status-badge[data-status='passed'] {
                 border-color: var(--success-border);
                 background: var(--success-bg);
-                color: var(--success, #16a34a);
+                color: var(--success);
             }
             .status-badge[data-status='failed'] {
                 border-color: var(--error-border);
@@ -230,24 +231,8 @@ export class FlowsExecutionPanel extends PlatformElement {
                 align-items: center;
                 justify-content: flex-end;
             }
-            .icon-btn-close {
-                box-sizing: border-box;
-                width: 36px;
-                height: 36px;
-                padding: 0;
-                display: inline-flex;
-                align-items: center;
-                justify-content: center;
-                color: var(--text-secondary);
-                background: transparent;
-                border: none;
-                border-radius: var(--radius-full);
-                cursor: pointer;
-                transition: background var(--duration-fast), color var(--duration-fast);
-            }
-            .icon-btn-close:hover {
-                background: var(--glass-solid-medium);
-                color: var(--text-primary);
+            .panel-header-actions platform-button {
+                --platform-button-icon-size: 36px;
             }
             .resize-handle {
                 position: absolute;
@@ -967,42 +952,45 @@ export class FlowsExecutionPanel extends PlatformElement {
                                 text=${this.t('execution_panel.persist_context_help')}
                             ></platform-help-hint>
                         </div>
-                        <button
-                            class="icon-btn-close"
-                            type="button"
-                            title=${this._collapsed
+                        <div class="panel-header-actions">
+                        <platform-button
+                            variant="ghost"
+                            icon-only
+                            density="dense"
+                            aria-label=${this._collapsed
                                 ? this.t('execution_panel.restore_panel')
                                 : this.t('execution_panel.minimize_panel')}
-                            aria-expanded=${this._collapsed ? 'false' : 'true'}
                             @click=${this._toggleCollapsed}
                         >
                             <platform-icon
                                 name=${this._collapsed ? 'fullscreen' : 'minus'}
                                 size="14"
                             ></platform-icon>
-                        </button>
-                        <button
-                            class="icon-btn-close"
-                            type="button"
-                            title=${this._layoutExpanded
+                        </platform-button>
+                        <platform-button
+                            variant="ghost"
+                            icon-only
+                            density="dense"
+                            aria-label=${this._layoutExpanded
                                 ? this.t('execution_panel.collapse_panel')
                                 : this.t('execution_panel.expand_panel')}
-                            aria-expanded=${this._layoutExpanded ? 'true' : 'false'}
                             @click=${this._toggleLayoutExpanded}
                         >
                             <platform-icon
                                 name=${this._layoutExpanded ? 'minimize' : 'fullscreen'}
                                 size="14"
                             ></platform-icon>
-                        </button>
-                        <button
-                            class="icon-btn-close"
-                            type="button"
-                            title=${this.t('execution_panel.close_panel')}
+                        </platform-button>
+                        <platform-button
+                            variant="ghost"
+                            icon-only
+                            density="dense"
+                            aria-label=${this.t('execution_panel.close_panel')}
                             @click=${this._onClose}
                         >
                             <platform-icon name="close" size="14"></platform-icon>
-                        </button>
+                        </platform-button>
+                        </div>
                     </div>
                 </div>
 

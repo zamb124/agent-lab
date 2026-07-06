@@ -3,10 +3,12 @@
 from __future__ import annotations
 
 import re
-from typing import Any
+from typing import Any, Literal
 
 import httpx
 from playwright.async_api import Locator, Page, expect
+
+from tests.ui.harness import AppUI
 
 
 def flows_company_origin(origin: str, company_slug: str = "company2") -> str:
@@ -242,6 +244,111 @@ async def flows_set_selected_llm_config(page: Page, config: dict[str, Any]) -> N
         """,
         config,
     )
+
+
+def flows_chat_echo_payload(
+    flow_id: str,
+    *,
+    name: str = "Chat E2E Echo",
+    response_prefix: str = "chat-ok",
+) -> dict[str, Any]:
+    return {
+        "flow_id": flow_id,
+        "name": name,
+        "description": "UI E2E echo agent for platform-chat SPA",
+        "entry": "main",
+        "nodes": {
+            "main": {
+                "type": "code",
+                "name": "Echo",
+                "code": (
+                    "async def run(args, state):\n"
+                    "    content = state.get('content', '')\n"
+                    f"    state['response'] = f'{response_prefix}:' + content\n"
+                    "    return state\n"
+                ),
+                "language": "python",
+            },
+        },
+        "edges": [{"from_node": "main", "to_node": None}],
+        "variables": {},
+        "tags": ["e2e", "chat"],
+        "branches": {},
+        "triggers": {},
+        "resources": {},
+    }
+
+
+def flows_chat_slow_payload(flow_id: str, *, sleep_seconds: float = 30.0) -> dict[str, Any]:
+    return {
+        "flow_id": flow_id,
+        "name": "Chat E2E Slow",
+        "description": "UI E2E slow agent for cancel test",
+        "entry": "slow",
+        "nodes": {
+            "slow": {
+                "type": "code",
+                "name": "Slow",
+                "code": (
+                    "import asyncio\n"
+                    "async def run(args, state):\n"
+                    f"    await asyncio.sleep({sleep_seconds})\n"
+                    "    state['response'] = 'slow-done'\n"
+                    "    return state\n"
+                ),
+                "language": "python",
+            },
+        },
+        "edges": [{"from_node": "slow", "to_node": None}],
+        "variables": {},
+        "tags": ["e2e", "chat"],
+        "branches": {},
+        "triggers": {},
+        "resources": {},
+    }
+
+
+async def flows_api_create_chat_test_flow(
+    origin: str,
+    auth_token: str,
+    flow_id: str,
+    *,
+    slow: bool = False,
+) -> dict[str, Any]:
+    payload = flows_chat_slow_payload(flow_id) if slow else flows_chat_echo_payload(flow_id)
+    return await flows_api_create_flow(origin, auth_token, payload)
+
+
+async def flows_open_chat_page(
+    page: Page,
+    flows_ui: AppUI,
+    flow_id: str,
+    *,
+    branch_id: str = "base",
+    wait_until: Literal["commit", "domcontentloaded", "load", "networkidle"] = "domcontentloaded",
+) -> None:
+    branch_segment = "" if branch_id in {"", "base", "default"} else f"/branch/{branch_id}"
+    url = f"{flows_ui.origin}/flows/{flow_id}{branch_segment}"
+    await page.goto(url, wait_until=wait_until)
+    await expect(page.locator("flows-app")).to_be_visible(timeout=30_000)
+    await expect(page.locator("chat-page")).to_be_visible(timeout=30_000)
+    await expect(page.locator("chat-page platform-chat")).to_be_visible(timeout=30_000)
+
+
+async def flows_chat_send_message(page: Page, text: str) -> None:
+    root = page.locator("chat-page platform-chat")
+    textarea = root.locator("flows-chat-input textarea")
+    await expect(textarea).to_be_visible(timeout=30_000)
+    await textarea.fill(text)
+    send_btn = root.locator("flows-chat-input button.send-btn:not(.muted)").first
+    await expect(send_btn).to_be_enabled(timeout=10_000)
+    await send_btn.click()
+
+
+async def flows_chat_click_clear(page: Page) -> None:
+    clear_btn = page.locator('chat-page platform-button[title="Clear chat"], chat-page platform-button[title="Очистить чат"]').first
+    await expect(clear_btn).to_be_visible(timeout=30_000)
+    await clear_btn.locator("button").first.click()
 
 
 async def flows_publish_editor(page: Page) -> None:

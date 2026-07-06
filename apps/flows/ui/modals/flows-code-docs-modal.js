@@ -6,6 +6,7 @@ import { html, css } from 'lit';
 import { unsafeHTML } from 'lit/directives/unsafe-html.js';
 import { PlatformModal } from '@platform/lib/components/glass-modal.js';
 import { registerModalKind } from '@platform/lib/utils/modal-registry.js';
+import '@platform/lib/components/platform-button.js';
 import '@platform/lib/components/platform-icon.js';
 import '@platform/lib/components/glass-spinner.js';
 import '@platform/lib/components/platform-modal-search-field.js';
@@ -144,35 +145,9 @@ export class FlowsCodeDocsModal extends PlatformModal {
                 border: 1px solid var(--glass-border-subtle);
                 box-sizing: border-box;
             }
-            .language-button {
-                width: 36px;
-                height: 28px;
-                padding: 0;
-                display: inline-flex;
-                align-items: center;
-                justify-content: center;
-                border: 0;
-                border-radius: calc(var(--radius-md) - 2px);
-                background: transparent;
-                color: var(--text-tertiary);
-                font-size: 11px;
-                font-weight: var(--font-semibold);
-                cursor: pointer;
-            }
-            .language-button:hover {
-                color: var(--text-primary);
-                background: var(--glass-tint-medium);
-            }
-            .language-button[active] {
-                color: var(--accent);
-                background: var(--accent-subtle);
-            }
-            .language-button:focus-visible {
-                outline: 2px solid var(--accent);
-                outline-offset: 1px;
-            }
-            .language-button flows-code-language-icon {
-                pointer-events: none;
+            .language-segment platform-button {
+                --platform-button-icon-size: 36px;
+                --platform-button-icon-radius: calc(var(--radius-md) - 2px);
             }
             .docs-toc {
                 flex: 1;
@@ -180,28 +155,12 @@ export class FlowsCodeDocsModal extends PlatformModal {
                 overflow: auto;
                 padding: var(--space-2) 0;
             }
-            .docs-toc-link {
-                display: block;
+            .docs-toc platform-button {
                 width: 100%;
-                text-align: left;
-                padding: 6px var(--space-3);
-                font-size: var(--text-sm);
-                font-weight: var(--font-medium);
-                color: var(--text-secondary);
-                background: none;
-                border: none;
-                cursor: pointer;
-                border-left: 2px solid transparent;
-                line-height: 1.3;
+                justify-content: flex-start;
             }
-            .docs-toc-link:hover {
-                color: var(--text-primary);
-                background: var(--glass-tint-medium);
-            }
-            .docs-toc-link--nested {
-                padding-left: calc(var(--space-3) + var(--space-4));
-                font-size: var(--text-xs);
-                font-weight: var(--font-regular);
+            .docs-toc platform-button.nested {
+                padding-inline-start: calc(var(--space-3) + var(--space-4));
             }
             .docs-toc-empty {
                 padding: var(--space-3);
@@ -391,16 +350,16 @@ export class FlowsCodeDocsModal extends PlatformModal {
         return html`
             <div class="language-segment" role="group" aria-label=${this.t('code_workbench.language_aria')}>
                 ${FLOW_CODE_LANGUAGES.map((lang) => html`
-                    <button
-                        type="button"
-                        class="language-button"
-                        ?active=${current === lang.value}
+                    <platform-button
+                        icon-only
+                        variant=${current === lang.value ? 'secondary' : 'ghost'}
+                        density="dense"
                         title=${lang.label}
                         aria-label=${lang.label}
                         @click=${() => this._setLanguage(lang.value)}
                     >
                         <flows-code-language-icon language=${lang.value} size="18"></flows-code-language-icon>
-                    </button>
+                    </platform-button>
                 `)}
             </div>
         `;
@@ -436,11 +395,12 @@ export class FlowsCodeDocsModal extends PlatformModal {
                             ? html`<div class="docs-toc-empty">${this.t('code_docs_modal.toc_empty')}</div>`
                             : shown.map(
                                 (it) => html`
-                                <button
-                                    type="button"
-                                    class="docs-toc-link ${it.level >= 3 ? 'docs-toc-link--nested' : ''}"
+                                <platform-button
+                                    variant="ghost"
+                                    density=${it.level >= 3 ? 'dense' : 'compact'}
+                                    class=${it.level >= 3 ? 'nested' : ''}
                                     @click=${() => this._scrollToTarget(it)}
-                                >${it.text}</button>
+                                >${it.text}</platform-button>
                             `,
                             )}
                     </nav>

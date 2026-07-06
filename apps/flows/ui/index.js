@@ -42,9 +42,6 @@ import './components/editors/flows-code-workbench.js';
 import './components/editors/flows-json-field-editor.js';
 import './components/editors/flows-llm-config-editor.js';
 import './components/editors/flows-state-mapping-editor.js';
-import './components/editors/flows-variable-input.js';
-import './components/editors/flows-searchable-combobox.js';
-
 // Редакторы нод
 import './components/nodes/flows-base-node-editor.js';
 import './components/nodes/flows-llm-node-editor.js';

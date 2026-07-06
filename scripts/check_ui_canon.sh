@@ -363,6 +363,72 @@ if rg -q 'zustand-bundle\.js' core/frontend/pwa/sw.js; then
     fail "zustand-bundle.js запрещён в SW precache"
 fi
 
+# 23. Flows UI: hardcoded hex/rgba в JS запрещены (Design System tokens only).
+FLOWS_HEX_HITS="$(rg -n '#[0-9a-fA-F]{3,8}|rgba?\(' apps/flows/ui -g '*.js' \
+    --glob '!apps/flows/ui/components/flow-canvas/**' \
+    --glob '!apps/flows/ui/constants/flow-cover-gradients.js' || true)"
+if [ -n "$FLOWS_HEX_HITS" ]; then
+    fail "apps/flows/ui/**/*.js: hardcoded hex/rgba запрещены — используйте tokens.css (--flows-*, --accent, --glass-*)"
+    echo "$FLOWS_HEX_HITS" >&2
+fi
+
+# 24. Flows UI: raw <button в apps/flows/ui/**/*.js запрещён — action chrome только <platform-button>.
+#     Исключения (временный allowlist до миграции; снимать по мере перевода на platform-button):
+#     - flow-canvas/flows-flow-canvas.js — canvas chrome
+#     - evaluation: results-matrix (cell-button), compare-panel (judge-btn), run-toolbar (segmented),
+#       case-editor (segmented), suite-sidebar (selectable rows)
+#     - library-picker-modal (lib-card, mcp-picker-tool-card)
+#     - incoming-policy-modal (policy cards)
+#     - durable-history-modal (branch-chip, event-row)
+#     - llm-node-editor, base-node-editor, flow-node-editor, remote-flow-editor (radio/segmented)
+#     - edge-condition-modal, trigger-editor-modal (mode-tab segmented)
+#     - code-workbench.js, code-editor.js (toolbar icons)
+#     - state-mapping-editor (source-type segmented toggle)
+#     - node-types-sidebar.js (node drag items)
+#     - editor-header (edit/run mode segmented), branches-tabs, execution-panel (tabs + resize)
+#     - api-console-modal (nav/mode/lang/response tabs)
+#     - tool-create-modal (language segmented)
+#     - parameters-schema-form.js
+FLOWS_BUTTON_ALLOW_GLOBS=(
+    --glob '!apps/flows/ui/components/flow-canvas/flows-flow-canvas.js'
+    --glob '!apps/flows/ui/components/evaluation/flows-evaluation-results-matrix.js'
+    --glob '!apps/flows/ui/components/evaluation/flows-evaluation-compare-panel.js'
+    --glob '!apps/flows/ui/components/evaluation/flows-evaluation-run-toolbar.js'
+    --glob '!apps/flows/ui/components/evaluation/flows-evaluation-case-editor.js'
+    --glob '!apps/flows/ui/components/evaluation/flows-evaluation-suite-sidebar.js'
+    --glob '!apps/flows/ui/modals/flows-library-picker-modal.js'
+    --glob '!apps/flows/ui/modals/flows-incoming-policy-modal.js'
+    --glob '!apps/flows/ui/modals/flows-durable-history-modal.js'
+    --glob '!apps/flows/ui/components/nodes/flows-llm-node-editor.js'
+    --glob '!apps/flows/ui/components/nodes/flows-base-node-editor.js'
+    --glob '!apps/flows/ui/components/nodes/flows-flow-node-editor.js'
+    --glob '!apps/flows/ui/components/nodes/flows-remote-flow-editor.js'
+    --glob '!apps/flows/ui/modals/flows-edge-condition-modal.js'
+    --glob '!apps/flows/ui/modals/flows-trigger-editor-modal.js'
+    --glob '!apps/flows/ui/components/editors/flows-code-workbench.js'
+    --glob '!apps/flows/ui/components/editors/flows-code-editor.js'
+    --glob '!apps/flows/ui/components/editors/flows-state-mapping-editor.js'
+    --glob '!apps/flows/ui/components/editor/flows-node-types-sidebar.js'
+    --glob '!apps/flows/ui/components/editor/flows-editor-header.js'
+    --glob '!apps/flows/ui/components/editor/flows-branches-tabs.js'
+    --glob '!apps/flows/ui/components/editor/flows-execution-panel.js'
+    --glob '!apps/flows/ui/modals/flows-api-console-modal.js'
+    --glob '!apps/flows/ui/modals/flows-tool-create-modal.js'
+    --glob '!apps/flows/ui/components/editors/flows-parameters-schema-form.js'
+)
+FLOWS_BUTTON_HITS="$(rg -n '<button' apps/flows/ui -g '*.js' "${FLOWS_BUTTON_ALLOW_GLOBS[@]}" || true)"
+if [ -n "$FLOWS_BUTTON_HITS" ]; then
+    fail "apps/flows/ui/**/*.js: raw <button запрещён — используйте <platform-button>; allowlist см. check #24 в scripts/check_ui_canon.sh"
+    echo "$FLOWS_BUTTON_HITS" >&2
+fi
+
+# 25. Flows UI: legacy action-button CSS class definitions запрещены — удалять в том же PR, что и миграция на platform-button.
+FLOWS_LEGACY_BTN_CSS_PATTERN='\.(action-btn|icon-btn|ghost-btn|mini-btn|add-btn|mcp-preset)\s*[\{,]'
+if rg -nP "${FLOWS_LEGACY_BTN_CSS_PATTERN}" apps/flows/ui -g '*.js' >/dev/null 2>&1; then
+    fail "apps/flows/ui/**/*.js: legacy .action-btn/.icon-btn/.ghost-btn/.mini-btn/.add-btn/.mcp-preset CSS запрещены — удаляйте вместе с миграцией на <platform-button>"
+    rg -nP "${FLOWS_LEGACY_BTN_CSS_PATTERN}" apps/flows/ui -g '*.js' >&2 || true
+fi
+
 if [ "$ERR" -ne 0 ]; then
     exit 1
 fi

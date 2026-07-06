@@ -22,6 +22,7 @@ import { html, css } from 'lit';
 import { PlatformFormModal } from '@platform/lib/components/glass-form-modal.js';
 import { registerModalKind } from '@platform/lib/utils/modal-registry.js';
 import '@platform/lib/components/platform-icon.js';
+import '@platform/lib/components/platform-button.js';
 import '@platform/lib/components/fields/platform-field.js';
 import '../components/common/flows-code-language-icon.js';
 import '../components/editors/flows-code-editor.js';
@@ -767,7 +768,14 @@ export class FlowsEdgeConditionModal extends PlatformFormModal {
     }
 
     renderFooter() {
-        return html``;
+        const errors = this.validateForm();
+        const disabled = Object.keys(errors).length > 0;
+        return html`
+            <platform-button @click=${() => this.close()}>${this.t('edge_condition_modal.action_cancel')}</platform-button>
+            <platform-button variant="primary" ?disabled=${disabled} @click=${() => this._performSave()}>
+                ${this.t('edge_condition_modal.action_save')}
+            </platform-button>
+        `;
     }
 }
 

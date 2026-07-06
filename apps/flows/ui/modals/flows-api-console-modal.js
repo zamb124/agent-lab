@@ -539,26 +539,6 @@ export class FlowsApiConsoleModal extends PlatformModal {
                 font-size: var(--text-sm);
                 line-height: 1.45;
             }
-            .copy-btn,
-            .ghost-btn {
-                min-height: 30px;
-                display: inline-flex;
-                align-items: center;
-                gap: var(--space-1);
-                padding: 0 var(--space-2);
-                border-radius: var(--radius-sm);
-                border: 1px solid var(--border-subtle);
-                background: var(--glass-solid-medium);
-                color: var(--text-secondary);
-                cursor: pointer;
-                transition: var(--motion-transition-interactive);
-                font-size: var(--text-xs);
-            }
-            .copy-btn:hover,
-            .ghost-btn:hover {
-                color: var(--text-primary);
-                background: var(--glass-solid-strong);
-            }
             pre {
                 margin: 0;
                 padding: var(--space-3);
@@ -1356,15 +1336,14 @@ ${jsRequest}${asyncJsSuffix}`,
                 <platform-icon name="book-open" size="16"></platform-icon>
                 <span>${this.t('api_console.instruction')}</span>
             </a>
-            <button
-                type="button"
-                class="header-btn"
-                title=${this.t('api_console.copy_body')}
+            <platform-button
+                variant="ghost"
+                density="compact"
                 aria-label=${this.t('api_console.copy_body')}
                 @click=${() => this._copy(_jsonPretty(this._sampleBody()))}
             >
                 <platform-icon name="copy" size="16"></platform-icon>
-            </button>
+            </platform-button>
         `;
     }
 
@@ -1531,10 +1510,10 @@ ${jsRequest}${asyncJsSuffix}`,
                             >${this.t(`api_console.lang_${lang}`)}</button>
                         `)}
                     </div>
-                    <button class="copy-btn" type="button" @click=${() => this._copy(example)}>
+                    <platform-button variant="ghost" density="compact" @click=${() => this._copy(example)}>
                         <platform-icon name="copy" size="13"></platform-icon>
                         ${this.t('api_console.copy')}
-                    </button>
+                    </platform-button>
                 </div>
                 <flows-code-editor
                     class="api-code-editor"
@@ -1701,9 +1680,9 @@ ${jsRequest}${asyncJsSuffix}`,
                         ></flows-code-editor>
                     </div>
                     <div class="run-actions">
-                        <button class="ghost-btn" type="button" @click=${() => this._resetContext()}>
+                        <platform-button variant="ghost" density="compact" @click=${() => this._resetContext()}>
                             ${this.t('api_console.reset_context')}
-                        </button>
+                        </platform-button>
                         <platform-button variant="primary" ?disabled=${this._run.busy} @click=${() => void this._runRequest()}>
                             ${this._run.busy
                                 ? html`<glass-spinner size="sm"></glass-spinner>${this.t('api_console.running')}`
@@ -1724,9 +1703,9 @@ ${jsRequest}${asyncJsSuffix}`,
                         <platform-icon name="file-json" size="15"></platform-icon>
                         <span>${this.t('api_console.request_preview_title')}</span>
                     </div>
-                    <button class="copy-btn" type="button" @click=${() => this._copy(_jsonPretty(this._sampleBody()))}>
+                    <platform-button variant="ghost" density="compact" @click=${() => this._copy(_jsonPretty(this._sampleBody()))}>
                         <platform-icon name="copy" size="13"></platform-icon>${this.t('api_console.copy')}
-                    </button>
+                    </platform-button>
                 </div>
                 <div class="api-panel-body">
                     <div class="request-header-grid">
@@ -1916,9 +1895,9 @@ ${jsRequest}${asyncJsSuffix}`,
                         <platform-icon name="code" size="15"></platform-icon>
                         <span>${this.t('api_console.response_inspector_title')}</span>
                     </div>
-                    <button class="copy-btn" type="button" @click=${() => this._copy(editorValue)}>
+                    <platform-button variant="ghost" density="compact" @click=${() => this._copy(editorValue)}>
                         <platform-icon name="copy" size="13"></platform-icon>${this.t('api_console.copy')}
-                    </button>
+                    </platform-button>
                 </div>
                 <div class="api-panel-body">
                     ${this._renderStatusStrip(result)}

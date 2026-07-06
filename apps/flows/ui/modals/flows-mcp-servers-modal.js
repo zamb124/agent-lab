@@ -12,6 +12,7 @@ import { registerModalKind } from '@platform/lib/utils/modal-registry.js';
 import { platformConfirm } from '@platform/lib/components/platform-confirm-modal.js';
 import { buildFileCreateSpecJson } from '@platform/lib/utils/file-create-spec.js';
 import '@platform/lib/components/platform-icon.js';
+import '@platform/lib/components/platform-button.js';
 import '@platform/lib/components/platform-switch.js';
 import '@platform/lib/components/glass-spinner.js';
 import '@platform/lib/components/platform-modal-search-field.js';
@@ -101,31 +102,7 @@ export class FlowsMcpServersModal extends PlatformModal {
         ...PlatformModal.styles,
         css`
             .flows-header-action-create {
-                width: 28px;
-                height: 28px;
-                display: inline-flex;
-                align-items: center;
-                justify-content: center;
-                padding: 0;
-                border: none;
-                border-radius: var(--radius-full, 50%);
-                flex-shrink: 0;
-                cursor: pointer;
-                color: var(--platform-btn-primary-text, #ffffff);
-                background: var(--platform-btn-primary-bg, #99a6f9);
-                box-shadow: var(--platform-btn-primary-shadow, none);
-                transition: var(--motion-transition-interactive);
-            }
-            .flows-header-action-create platform-icon {
-                display: flex;
-            }
-            .flows-header-action-create:hover:not(:disabled) {
-                background: var(--platform-btn-primary-bg-hover, #8794f0);
-                box-shadow: var(--platform-btn-primary-shadow-hover, 0 0 10px rgba(153, 166, 249, 0.6));
-            }
-            .flows-header-action-create:disabled {
-                opacity: 0.5;
-                cursor: not-allowed;
+                display: none;
             }
             .mcp-title-row platform-modal-search-field {
                 margin-left: auto;
@@ -234,23 +211,6 @@ export class FlowsMcpServersModal extends PlatformModal {
                 flex-wrap: wrap;
                 gap: var(--space-1);
             }
-            .mcp-card-actions .icon-btn {
-                display: inline-flex;
-                align-items: center;
-                justify-content: center;
-                min-width: 32px;
-                min-height: 32px;
-                padding: 0;
-                border: 1px solid var(--glass-border-subtle);
-                border-radius: var(--radius-lg);
-                background: var(--glass-solid-medium);
-                color: var(--text-secondary);
-                cursor: pointer;
-            }
-            .mcp-card-actions .icon-btn:hover {
-                background: var(--glass-solid-strong);
-                color: var(--text-primary);
-            }
             .mcp-card-url {
                 font-size: var(--text-sm);
                 color: var(--text-secondary);
@@ -268,43 +228,18 @@ export class FlowsMcpServersModal extends PlatformModal {
                 display: inline-block;
                 padding: 2px var(--space-2);
                 border-radius: var(--radius-full);
-                background: var(--info-subtle, rgba(59, 130, 246, 0.12));
-                color: var(--info, #3b82f6);
+                background: var(--info-subtle);
+                color: var(--info);
                 font-size: var(--text-xs);
                 font-weight: var(--font-medium);
             }
             .mcp-chip-warn {
-                background: var(--warning-subtle, rgba(245, 158, 11, 0.12));
-                color: var(--warning, #f59e0b);
+                background: var(--warning-subtle);
+                color: var(--warning);
             }
             .mcp-card-footer {
                 display: flex;
                 justify-content: flex-end;
-            }
-            .mcp-reset-btn {
-                display: inline-flex;
-                align-items: center;
-                justify-content: center;
-                gap: var(--space-2);
-                min-height: 32px;
-                padding: 0 var(--space-3);
-                border-radius: var(--radius-md);
-                border: 1px solid var(--border-subtle);
-                background: var(--glass-solid-subtle);
-                color: var(--text-secondary);
-                cursor: pointer;
-                font: inherit;
-                font-size: var(--text-sm);
-                transition: background var(--duration-fast), border-color var(--duration-fast), color var(--duration-fast);
-            }
-            .mcp-reset-btn:hover {
-                color: var(--text-primary);
-                background: var(--glass-solid-medium);
-                border-color: var(--glass-border-medium);
-            }
-            .mcp-reset-btn:focus-visible {
-                outline: none;
-                box-shadow: var(--focus-ring);
             }
             .mcp-headers-line {
                 font-size: var(--text-xs);
@@ -341,33 +276,19 @@ export class FlowsMcpServersModal extends PlatformModal {
             }
             .mcp-field textarea { min-height: 120px; font-family: var(--font-mono, ui-monospace, monospace); font-size: var(--text-sm); }
             .mcp-presets { display: flex; flex-wrap: wrap; gap: var(--space-2); }
-            .mcp-preset {
-                padding: var(--space-1) var(--space-2);
-                border-radius: var(--radius-full);
-                border: 1px solid var(--glass-border-subtle);
-                background: var(--glass-solid-medium);
-                font-size: var(--text-xs);
-                color: var(--text-secondary);
-                cursor: pointer;
-            }
-            .mcp-preset:hover { color: var(--text-primary); border-color: var(--accent); }
-            .mcp-form-err { font-size: var(--text-sm); color: var(--error, #ef4444); }
+            .mcp-form-err { font-size: var(--text-sm); color: var(--error); }
             .mcp-test-feedback {
                 font-size: var(--text-sm);
                 padding: var(--space-2) var(--space-3);
                 border-radius: var(--radius-md);
             }
             .mcp-test-feedback.ok {
-                background: var(--success-subtle, rgba(34, 197, 94, 0.12));
-                color: var(--success, #22c55e);
+                background: var(--success-subtle);
+                color: var(--success);
             }
             .mcp-test-feedback.err {
-                background: var(--error-subtle, rgba(239, 68, 68, 0.12));
-                color: var(--error, #ef4444);
-            }
-            .mcp-card-actions .icon-btn:disabled {
-                opacity: 0.5;
-                cursor: not-allowed;
+                background: var(--error-subtle);
+                color: var(--error);
             }
             .mcp-branding-toolbar {
                 display: flex;
@@ -1026,25 +947,50 @@ export class FlowsMcpServersModal extends PlatformModal {
                             ?checked=${s.is_active === true}
                             @change=${(e) => { e.stopPropagation(); this._onToggleActive(s, e); }}
                         ></platform-switch>
-                        <button type="button" class="icon-btn" @click=${() => this._sync(s)}
-                            title=${this.t('mcp_servers_modal.action_sync_aria')}>
+                        <platform-button
+                            variant="ghost"
+                            icon-only
+                            density="dense"
+                            @click=${() => this._sync(s)}
+                            title=${this.t('mcp_servers_modal.action_sync_aria')}
+                            aria-label=${this.t('mcp_servers_modal.action_sync_aria')}
+                        >
                             <platform-icon name="rotate-ccw" size="16"></platform-icon>
-                        </button>
-                        <button type="button" class="icon-btn" @click=${() => this._test(s)}
+                        </platform-button>
+                        <platform-button
+                            variant="ghost"
+                            icon-only
+                            density="dense"
+                            @click=${() => this._test(s)}
                             ?disabled=${this._testingServerId === s.server_id}
-                            title=${this.t('mcp_servers_modal.action_test_aria')}>
+                            title=${this.t('mcp_servers_modal.action_test_aria')}
+                            aria-label=${this.t('mcp_servers_modal.action_test_aria')}
+                        >
                             ${this._testingServerId === s.server_id
                                 ? html`<glass-spinner size="sm"></glass-spinner>`
                                 : html`<platform-icon name="check" size="16"></platform-icon>`}
-                        </button>
-                        <button type="button" class="icon-btn" @click=${() => this._editServer(s)}
-                            title=${this.t('mcp_servers_modal.action_edit_aria')}>
+                        </platform-button>
+                        <platform-button
+                            variant="ghost"
+                            icon-only
+                            density="dense"
+                            @click=${() => this._editServer(s)}
+                            title=${this.t('mcp_servers_modal.action_edit_aria')}
+                            aria-label=${this.t('mcp_servers_modal.action_edit_aria')}
+                        >
                             <platform-icon name="edit" size="16"></platform-icon>
-                        </button>
-                        <button type="button" class="icon-btn" @click=${() => this._delete(s)}
-                            title=${this.t('mcp_servers_modal.action_delete_aria')}>
+                        </platform-button>
+                        <platform-button
+                            variant="ghost"
+                            icon-only
+                            density="dense"
+                            danger
+                            @click=${() => this._delete(s)}
+                            title=${this.t('mcp_servers_modal.action_delete_aria')}
+                            aria-label=${this.t('mcp_servers_modal.action_delete_aria')}
+                        >
                             <platform-icon name="trash" size="16"></platform-icon>
-                        </button>
+                        </platform-button>
                     </div>
                 </div>
                 <div class="mcp-card-url">${s.url}</div>
@@ -1062,12 +1008,12 @@ export class FlowsMcpServersModal extends PlatformModal {
                 ${s.source === 'catalog'
                     ? html`
                         <div class="mcp-card-footer">
-                            <button
-                                type="button"
-                                class="mcp-reset-btn"
+                            <platform-button
+                                variant="ghost"
+                                density="compact"
                                 @click=${() => this._resetCatalogDefaults(s)}>
                                 ${this.t('mcp_servers_modal.action_reset_defaults')}
-                            </button>
+                            </platform-button>
                         </div>
                     `
                     : ''}
@@ -1079,9 +1025,9 @@ export class FlowsMcpServersModal extends PlatformModal {
         const brandingBtn = this._isSystemCompany()
             ? html`
                 <div class="mcp-list-toolbar">
-                    <button type="button" class="mcp-branding-link" @click=${() => { void this._goBranding(); }}>
+                    <platform-button variant="ghost" density="compact" @click=${() => { void this._goBranding(); }}>
                         ${this.t('mcp_servers_modal.branding_title')}
-                    </button>
+                    </platform-button>
                 </div>
             `
             : html``;
@@ -1122,11 +1068,11 @@ export class FlowsMcpServersModal extends PlatformModal {
                                 slugSuggestions,
                                 (slug) => slug,
                                 (slug) => html`
-                                    <button
-                                        type="button"
-                                        class="mcp-branding-slug"
+                                    <platform-button
+                                        variant="ghost"
+                                        density="compact"
                                         @click=${() => this._applyBrandingSlug(slug)}
-                                    ><code>${slug}</code></button>
+                                    ><code>${slug}</code></platform-button>
                                 `,
                             )}
                         </div>
@@ -1145,14 +1091,14 @@ export class FlowsMcpServersModal extends PlatformModal {
                     ? html`<div class="mcp-form-err" role="alert">${this._brandingError}</div>`
                     : ''}
                 <div>
-                    <button
-                        type="button"
-                        class="mcp-preset"
+                    <platform-button
+                        variant="ghost"
+                        density="compact"
                         ?disabled=${!this._brandingCanSave() || this._brandingSaving || this._brandingUpsertOp.busy}
                         @click=${() => { void this._saveBranding(); }}
                     >
                         ${this.t('mcp_servers_modal.branding_add')}
-                    </button>
+                    </platform-button>
                 </div>
             </div>
             <div class="mcp-cards">
@@ -1170,14 +1116,17 @@ export class FlowsMcpServersModal extends PlatformModal {
                                     <code>${row.server_id}</code>
                                 </div>
                                 <div class="mcp-branding-row-actions">
-                                    <button
-                                        type="button"
-                                        class="icon-btn"
+                                    <platform-button
+                                        variant="ghost"
+                                        icon-only
+                                        density="dense"
+                                        danger
                                         title=${this.t('mcp_servers_modal.action_delete_aria')}
+                                        aria-label=${this.t('mcp_servers_modal.action_delete_aria')}
                                         @click=${() => { void this._deleteBranding(row.server_id); }}
                                     >
                                         <platform-icon name="trash" size="16"></platform-icon>
-                                    </button>
+                                    </platform-button>
                                 </div>
                             </div>
                         `,
@@ -1291,15 +1240,15 @@ export class FlowsMcpServersModal extends PlatformModal {
                     <label>${this.t('mcp_servers_modal.label_headers')}</label>
                     <span class="hint">${this.t('mcp_servers_modal.hint_headers')}</span>
                     <div class="mcp-presets">
-                        <button type="button" class="mcp-preset" @click=${() => this._applyPreset('bearer')}>
+                        <platform-button variant="ghost" density="compact" @click=${() => this._applyPreset('bearer')}>
                             ${this.t('mcp_servers_modal.preset_bearer')}
-                        </button>
-                        <button type="button" class="mcp-preset" @click=${() => this._applyPreset('apikey')}>
+                        </platform-button>
+                        <platform-button variant="ghost" density="compact" @click=${() => this._applyPreset('apikey')}>
                             ${this.t('mcp_servers_modal.preset_api_key')}
-                        </button>
-                        <button type="button" class="mcp-preset" @click=${() => this._applyPreset('basic')}>
+                        </platform-button>
+                        <platform-button variant="ghost" density="compact" @click=${() => this._applyPreset('basic')}>
                             ${this.t('mcp_servers_modal.preset_basic')}
-                        </button>
+                        </platform-button>
                     </div>
                     <platform-field
                         type="text"
@@ -1347,46 +1296,49 @@ export class FlowsMcpServersModal extends PlatformModal {
         if (this._view === 'list') {
             const addLabel = this.t('mcp_servers_modal.action_add');
             return html`
-                <button
-                    type="button"
-                    class="flows-header-action-create"
-                    title=${addLabel}
+                <platform-button
+                    variant="primary"
+                    icon-only
+                    density="dense"
                     aria-label=${addLabel}
                     @click=${() => this._goAdd()}
                 >
                     <platform-icon name="plus" size="16"></platform-icon>
-                </button>
+                </platform-button>
             `;
         }
         if (this._view === 'branding') {
             return html`
-                <button
-                    type="button"
-                    class="header-btn"
+                <platform-button
+                    variant="ghost"
+                    icon-only
+                    density="dense"
                     @click=${() => this._goList()}
                     title=${this.t('mcp_servers_modal.action_back_aria')}
                     aria-label=${this.t('mcp_servers_modal.action_back_aria')}
                 >
                     <platform-icon name="chevron-left" size="16"></platform-icon>
-                </button>
+                </platform-button>
             `;
         }
         const isEdit = typeof this._editing === 'string' && this._editing.length > 0;
         return html`
-            <button
-                type="button"
-                class="header-btn"
+            <platform-button
+                variant="ghost"
+                icon-only
+                density="dense"
                 @click=${() => this._goList()}
                 title=${this.t('mcp_servers_modal.action_back_aria')}
                 aria-label=${this.t('mcp_servers_modal.action_back_aria')}
             >
                 <platform-icon name="chevron-left" size="16"></platform-icon>
-            </button>
+            </platform-button>
             ${isEdit
                 ? html`
-                    <button
-                        type="button"
-                        class="header-btn"
+                    <platform-button
+                        variant="ghost"
+                        icon-only
+                        density="dense"
                         @click=${() => this._testFromForm()}
                         ?disabled=${this._testOp.busy}
                         title=${this.t('mcp_servers_modal.action_test_aria')}
@@ -1395,9 +1347,26 @@ export class FlowsMcpServersModal extends PlatformModal {
                         ${this._testOp.busy
                             ? html`<glass-spinner size="sm"></glass-spinner>`
                             : html`<platform-icon name="check" size="16"></platform-icon>`}
-                    </button>
+                    </platform-button>
                 `
                 : ''}
+        `;
+    }
+
+    renderFooter() {
+        if (this._view !== 'form') {
+            return html``;
+        }
+        const isEdit = typeof this._editing === 'string' && this._editing.length > 0;
+        const saveLabel = isEdit
+            ? this.t('mcp_servers_modal.action_save')
+            : this.t('mcp_servers_modal.action_add');
+        const disabled = !this._formCanSave() || this._saving || this._update.busy;
+        return html`
+            <platform-button ?disabled=${this._saving} @click=${() => this._goList()}>${this.t('mcp_servers_modal.action_cancel')}</platform-button>
+            <platform-button variant="primary" ?disabled=${disabled} @click=${() => { this._save(); }}>
+                ${saveLabel}
+            </platform-button>
         `;
     }
 

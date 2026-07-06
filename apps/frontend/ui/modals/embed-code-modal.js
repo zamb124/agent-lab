@@ -190,6 +190,7 @@ export class FrontendEmbedCodeModal extends PlatformModal {
 
             <div class="section">
                 <div class="section-title">${this.t('embed_code_modal.client_backend_example_title')}</div>
+                <div class="section-desc">${this.t('embed_code_modal.client_backend_example_description')}</div>
                 <pre>${clientExample}</pre>
                 <button class="btn copy-btn"
                     @click=${() => this._copy(clientExample, 'embed_code_modal.toast_copied')}

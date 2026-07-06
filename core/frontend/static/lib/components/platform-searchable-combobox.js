@@ -1,10 +1,10 @@
 /**
- * flows-searchable-combobox — одна строка: поиск по options, выбор из списка
- * или произвольный id при blur. Событие: emit('change', { value }).
+ * platform-searchable-combobox — pill combobox: search options or commit free-form id on blur.
+ * Emits `change` with `{ value }`. `flush()` commits without waiting for blur.
  */
 
 import { html, css, nothing } from 'lit';
-import { PlatformElement } from '@platform/lib/platform-element/index.js';
+import { PlatformElement } from '../platform-element/index.js';
 
 /**
  * @param {unknown} o
@@ -25,16 +25,14 @@ function _asOption(o) {
     return { value, label };
 }
 
-export class FlowsSearchableCombobox extends PlatformElement {
-    static i18nNamespace = 'flows';
-
+export class PlatformSearchableCombobox extends PlatformElement {
     static properties = {
         value: { type: String },
         options: { type: Array },
         label: { type: String },
         placeholder: { type: String },
         emptyLabel: { type: String },
-        ariaLabel: { type: String },
+        ariaLabel: { type: String, attribute: 'aria-label' },
         compact: { type: Boolean, reflect: true },
         _open: { type: Boolean, state: true },
         _input: { type: String, state: true },
@@ -53,7 +51,7 @@ export class FlowsSearchableCombobox extends PlatformElement {
                 width: 100%;
                 min-width: 0;
             }
-            .combo-field {
+            .field-pill {
                 width: 100%;
                 box-sizing: border-box;
                 min-width: 0;
@@ -61,46 +59,46 @@ export class FlowsSearchableCombobox extends PlatformElement {
                 flex-direction: column;
                 gap: var(--field-pill-gap, 4px);
                 padding: var(--field-pill-padding-y, 8px) var(--field-pill-padding-x, 12px);
-                border-radius: var(--field-pill-radius, var(--radius-lg, 12px));
+                border-radius: var(--field-pill-radius, var(--radius-lg));
                 border: 1px solid var(--field-pill-border, var(--border-default));
                 background: var(--field-pill-bg, var(--glass-solid-subtle));
             }
-            .combo-field.plain {
+            .field-pill.plain {
                 display: block;
                 padding: 0;
                 border: none;
                 border-radius: 0;
                 background: transparent;
             }
-            :host([compact]) .combo-field:not(.plain) {
+            :host([compact]) .field-pill:not(.plain) {
                 --field-pill-gap: var(--field-pill-compact-gap, 4px);
                 --field-pill-padding-y: var(--field-pill-compact-padding-y, 6px);
                 --field-pill-padding-x: var(--field-pill-compact-padding-x, 12px);
-                --field-pill-radius: var(--field-pill-compact-radius, var(--radius-md, 8px));
-                --field-pill-input-size: var(--field-pill-compact-input-size, var(--text-sm, 14px));
-                --field-pill-input-weight: var(--field-pill-compact-input-weight, var(--font-medium, 500));
+                --field-pill-radius: var(--field-pill-compact-radius, var(--radius-md));
+                --field-pill-input-size: var(--field-pill-compact-input-size, var(--text-sm));
+                --field-pill-input-weight: var(--field-pill-compact-input-weight, var(--font-medium));
                 --field-pill-number-spin-height: 34px;
                 gap: var(--field-pill-gap);
                 padding: var(--field-pill-padding-y) var(--field-pill-padding-x);
                 border-radius: var(--field-pill-radius);
             }
-            .combo-field:focus-within {
+            .field-pill:focus-within {
                 border-color: var(--accent);
                 box-shadow: var(--focus-ring);
             }
-            .combo-field.plain:focus-within {
+            .field-pill.plain:focus-within {
                 border-color: transparent;
                 box-shadow: none;
             }
-            .combo-label {
+            .field-pill-label {
                 display: block;
                 min-width: 0;
                 overflow: hidden;
                 text-overflow: ellipsis;
                 white-space: nowrap;
-                font-size: var(--field-pill-label-size, var(--text-xs, 12px));
+                font-size: var(--field-pill-label-size, var(--text-xs));
                 line-height: var(--field-pill-label-line, 1.1);
-                font-weight: var(--field-pill-label-weight, var(--font-semibold, 600));
+                font-weight: var(--field-pill-label-weight, var(--font-semibold));
                 text-transform: uppercase;
                 letter-spacing: var(--field-pill-label-letter, 0.04em);
                 color: var(--field-pill-label-color, var(--text-tertiary));
@@ -116,15 +114,15 @@ export class FlowsSearchableCombobox extends PlatformElement {
                 background: transparent;
                 color: var(--field-pill-input-color, var(--text-primary));
                 font: inherit;
-                font-size: var(--field-pill-input-size, var(--text-sm, 14px));
-                font-weight: var(--field-pill-input-weight, var(--font-medium, 500));
+                font-size: var(--field-pill-input-size, var(--text-sm));
+                font-weight: var(--field-pill-input-weight, var(--font-medium));
                 line-height: var(--field-pill-input-line, 1.35);
                 outline: none;
             }
             :host([compact]) input {
                 min-height: var(--field-pill-number-spin-height);
             }
-            .combo-field.plain input {
+            .field-pill.plain input {
                 min-height: var(--input-height, 40px);
                 padding: var(--space-2) var(--space-3);
                 border-radius: var(--radius-md);
@@ -136,12 +134,9 @@ export class FlowsSearchableCombobox extends PlatformElement {
             }
             input::placeholder {
                 color: var(--text-disabled);
-                font-weight: var(--font-normal, 400);
+                font-weight: var(--font-normal);
             }
-            input:focus {
-                outline: none;
-            }
-            .combo-field.plain input:focus {
+            .field-pill.plain input:focus {
                 border-color: var(--accent);
                 box-shadow: var(--focus-ring);
             }
@@ -159,7 +154,7 @@ export class FlowsSearchableCombobox extends PlatformElement {
                 background: var(--glass-solid-medium);
                 border: 1px solid var(--border-subtle);
                 border-radius: var(--radius-md);
-                box-shadow: var(--shadow-md, 0 4px 16px rgba(0, 0, 0, 0.12));
+                box-shadow: var(--glass-shadow-medium);
             }
             .item {
                 padding: var(--space-2) var(--space-3);
@@ -295,9 +290,6 @@ export class FlowsSearchableCombobox extends PlatformElement {
         this._input = t;
     }
 
-    /**
-     * Сохраняет введённое значение без ожидания blur (нужно перед внешним «Применить»).
-     */
     flush() {
         this._clearBlurHandle();
         this._editing = false;
@@ -405,9 +397,10 @@ export class FlowsSearchableCombobox extends PlatformElement {
                 : (typeof this.placeholder === 'string' && this.placeholder.length > 0 ? this.placeholder : '');
         return html`
             <div class="root">
-                <div class="combo-field ${hasLabel ? '' : 'plain'}">
-                    ${hasLabel ? html`<span class="combo-label">${this.label}</span>` : nothing}
+                <div class="field-pill ${hasLabel ? '' : 'plain'}">
+                    ${hasLabel ? html`<span class="field-pill-label">${this.label}</span>` : nothing}
                     <input
+                        class="field-pill-input"
                         data-canon="combobox"
                         type="text"
                         .value=${this._input}
@@ -425,4 +418,4 @@ export class FlowsSearchableCombobox extends PlatformElement {
     }
 }
 
-customElements.define('flows-searchable-combobox', FlowsSearchableCombobox);
+customElements.define('platform-searchable-combobox', PlatformSearchableCombobox);

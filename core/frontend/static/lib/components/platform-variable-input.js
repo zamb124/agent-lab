@@ -1,16 +1,40 @@
 /**
- * flows-variable-input — input с автодополнением по @var:NAME.
- *
- * Company variables — secrets/variables; system keys — platform-system-variables-catalog.
+ * platform-variable-input — string input with @var:NAME autocomplete from company variables + system catalog.
  */
 
 import { html, css } from 'lit';
-import { PlatformElement } from '@platform/lib/platform-element/index.js';
-import { asArray, asString } from '../../_helpers/flows-resolvers.js';
-import {
-    listSystemVariableKeys,
-} from '@platform/lib/components/variables/platform-system-variables-catalog.js';
+import { PlatformElement } from '../platform-element/index.js';
+import { listSystemVariableKeys } from './variables/platform-system-variables-catalog.js';
 
+/**
+ * @param {unknown} value
+ * @returns {string}
+ */
+function _asString(value) {
+    if (typeof value === 'string') {
+        return value;
+    }
+    if (value === null || value === undefined) {
+        return '';
+    }
+    return String(value);
+}
+
+/**
+ * @param {unknown} value
+ * @returns {unknown[]}
+ */
+function _asArray(value) {
+    if (!Array.isArray(value)) {
+        throw new TypeError('platform-variable-input: expected array');
+    }
+    return value;
+}
+
+/**
+ * @param {{ source: string, secret?: boolean, expression?: boolean, scoped?: boolean }} item
+ * @returns {string}
+ */
 function _badgeLabel(item) {
     if (item.source === 'system') {
         return 'system';
@@ -27,7 +51,7 @@ function _badgeLabel(item) {
     return '';
 }
 
-export class FlowsVariableInput extends PlatformElement {
+export class PlatformVariableInput extends PlatformElement {
     static properties = {
         value: { type: String },
         placeholder: { type: String },
@@ -37,29 +61,50 @@ export class FlowsVariableInput extends PlatformElement {
     static styles = [
         PlatformElement.styles,
         css`
-            :host { display: block; position: relative; }
+            :host {
+                display: block;
+                position: relative;
+            }
             input {
-                width: 100%; box-sizing: border-box;
-                padding: var(--space-2);
+                width: 100%;
+                box-sizing: border-box;
+                padding: var(--space-2) var(--space-3);
                 border-radius: var(--radius-md);
-                border: 1px solid var(--glass-border-subtle);
-                background: var(--glass-solid-subtle);
-                color: var(--text-primary); font: inherit;
+                border: 1px solid var(--field-pill-border, var(--glass-border-subtle));
+                background: var(--field-pill-bg, var(--glass-solid-subtle));
+                color: var(--text-primary);
+                font: inherit;
+            }
+            input:focus {
+                border-color: var(--accent);
+                box-shadow: var(--focus-ring);
+                outline: none;
             }
             .suggestions {
-                position: absolute; top: 100%; left: 0; right: 0;
+                position: absolute;
+                top: 100%;
+                left: 0;
+                right: 0;
                 background: var(--glass-solid-strong);
                 border: 1px solid var(--border-subtle);
-                border-radius: var(--radius-md); z-index: 10;
-                max-height: 200px; overflow-y: auto;
+                border-radius: var(--radius-md);
+                z-index: 10;
+                max-height: 200px;
+                overflow-y: auto;
             }
             .suggestion {
-                display: flex; align-items: center; justify-content: space-between;
+                display: flex;
+                align-items: center;
+                justify-content: space-between;
                 padding: var(--space-1) var(--space-2);
-                cursor: pointer; font-size: var(--text-sm);
+                cursor: pointer;
+                font-size: var(--text-sm);
                 color: var(--text-secondary);
             }
-            .suggestion:hover { background: var(--glass-solid-medium); color: var(--text-primary); }
+            .suggestion:hover {
+                background: var(--glass-solid-medium);
+                color: var(--text-primary);
+            }
             .badge {
                 font-size: var(--text-xs);
                 padding: 1px 5px;
@@ -79,14 +124,16 @@ export class FlowsVariableInput extends PlatformElement {
     }
 
     _catalogItems() {
-        const companyItems = asArray(this._variables.items).map((item) => {
-            const base = item.payload?.base;
-            const expression = base?.value_kind === 'expression';
-            const scoped = Array.isArray(item.payload?.scopes) && item.payload.scopes.length > 0;
+        const companyItems = _asArray(this._variables.items).map((item) => {
+            const payload = item.payload;
+            const base = payload && typeof payload === 'object' ? payload.base : null;
+            const expression = base && typeof base === 'object' && base.value_kind === 'expression';
+            const scopes = payload && typeof payload === 'object' ? payload.scopes : null;
+            const scoped = Array.isArray(scopes) && scopes.length > 0;
             return {
                 key: item.variable_key,
                 secret: Boolean(item.secret),
-                expression,
+                expression: Boolean(expression),
                 scoped,
                 source: 'company',
             };
@@ -102,7 +149,8 @@ export class FlowsVariableInput extends PlatformElement {
     }
 
     _onInput(e) {
-        const v = asString(e.target.value);
+        const target = e.target;
+        const v = target && 'value' in target ? _asString(target.value) : '';
         this.value = v;
         this.emit('change', { value: v });
         const last = v.match(/@var:([A-Za-z0-9_]*)$/);
@@ -126,6 +174,7 @@ export class FlowsVariableInput extends PlatformElement {
     render() {
         return html`
             <input
+                class="field-pill-input"
                 data-canon="search-as-you-type"
                 type="text"
                 .value=${this.value}
@@ -151,4 +200,4 @@ export class FlowsVariableInput extends PlatformElement {
     }
 }
 
-customElements.define('flows-variable-input', FlowsVariableInput);
+customElements.define('platform-variable-input', PlatformVariableInput);

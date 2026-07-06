@@ -9,6 +9,7 @@ import { html, css, nothing } from 'lit';
 import { PlatformElement } from '@platform/lib/platform-element/index.js';
 import { nextModalLayerZIndex } from '@platform/lib/utils/modal-z-stack.js';
 import '@platform/lib/components/platform-icon.js';
+import '@platform/lib/components/platform-button.js';
 import {
     readPropertyPanelRectPref,
     schedulePropertyPanelRectPersist,
@@ -50,7 +51,7 @@ export class FlowsFloatingPanel extends PlatformElement {
                 background: var(--glass-solid-strong);
                 border: 1px solid var(--glass-border-medium);
                 border-radius: var(--radius-xl);
-                box-shadow: 0 32px 100px rgba(0, 0, 0, 0.45), 0 0 0 1px var(--glass-border-medium);
+                box-shadow: var(--glass-shadow-ultra), 0 0 0 1px var(--glass-border-medium);
                 overflow: hidden;
                 pointer-events: auto;
                 animation: slideInPanel 250ms cubic-bezier(0.22, 1, 0.36, 1);
@@ -62,7 +63,7 @@ export class FlowsFloatingPanel extends PlatformElement {
 
             :host([data-collapsed]) {
                 border-radius: var(--radius-lg);
-                box-shadow: 0 8px 24px rgba(0, 0, 0, 0.18), 0 0 0 1px var(--glass-border-medium);
+                box-shadow: var(--glass-shadow-strong), 0 0 0 1px var(--glass-border-medium);
             }
 
             :host([data-dragging]) .panel-title {
@@ -174,40 +175,7 @@ export class FlowsFloatingPanel extends PlatformElement {
                 display: none;
             }
 
-            .panel-btn {
-                width: 32px;
-                height: 32px;
-                display: flex;
-                align-items: center;
-                justify-content: center;
-                background: transparent;
-                border: none;
-                border-radius: var(--radius-lg);
-                color: var(--text-tertiary);
-                cursor: pointer;
-                transition: background var(--duration-fast), color var(--duration-fast);
-            }
-
-            :host([data-collapsed]) .panel-btn {
-                width: 28px;
-                height: 28px;
-            }
-
-            .panel-btn:hover {
-                background: var(--glass-solid-medium);
-                color: var(--text-primary);
-            }
-
-            .panel-btn.ai[aria-pressed="true"] {
-                color: var(--accent);
-                background: var(--accent-subtle);
-            }
-
-            .panel-btn.ai:hover {
-                color: var(--accent);
-            }
-
-            :host([data-collapsed]) .panel-btn.ai {
+            :host([data-collapsed]) .panel-ai-btn {
                 display: none;
             }
 
@@ -232,20 +200,11 @@ export class FlowsFloatingPanel extends PlatformElement {
                 position: absolute;
                 right: 2px;
                 bottom: 2px;
-                width: 28px;
-                height: 28px;
-                padding: 0;
-                border: none;
-                border-radius: var(--radius-sm);
-                background: transparent;
-                color: var(--text-tertiary);
-                cursor: nwse-resize;
-                opacity: 0.65;
-                display: inline-flex;
-                align-items: center;
-                justify-content: center;
                 z-index: 3;
+                opacity: 0.65;
+                cursor: nwse-resize;
                 touch-action: none;
+                --platform-button-icon-size: 28px;
             }
 
             .resize-handle::before,
@@ -260,6 +219,7 @@ export class FlowsFloatingPanel extends PlatformElement {
                 background: currentColor;
                 transform: rotate(-45deg);
                 transform-origin: right center;
+                pointer-events: none;
             }
 
             .resize-handle::after {
@@ -270,13 +230,10 @@ export class FlowsFloatingPanel extends PlatformElement {
 
             .resize-handle:hover {
                 opacity: 1;
-                color: var(--text-primary);
-                background: var(--glass-solid-medium);
             }
 
             :host([data-resizing]) .resize-handle {
                 opacity: 1;
-                color: var(--text-primary);
             }
 
             :host([data-collapsed]) .resize-handle {
@@ -603,6 +560,7 @@ export class FlowsFloatingPanel extends PlatformElement {
             'textarea',
             'select',
             'glass-button',
+            'platform-button',
             'platform-switch',
             'platform-help-hint',
             '.resize-handle',
@@ -804,44 +762,51 @@ export class FlowsFloatingPanel extends PlatformElement {
                     <div class="panel-actions">
                         <div class="header-actions-host"></div>
                         ${this.aiEnabled ? html`
-                            <button
-                                class="panel-btn ai"
-                                type="button"
-                                title=${this.t(this.aiActive ? 'floating_panel.close_node_ai' : 'floating_panel.open_node_ai')}
+                            <platform-button
+                                class="panel-ai-btn"
+                                variant=${this.aiActive ? 'secondary' : 'ghost'}
+                                icon-only
+                                density="dense"
                                 aria-label=${this.t(this.aiActive ? 'floating_panel.close_node_ai' : 'floating_panel.open_node_ai')}
-                                aria-pressed=${this.aiActive ? 'true' : 'false'}
                                 @click=${this._toggleNodeAiHelper}
                             >
                                 <platform-icon name="ai" size="14"></platform-icon>
-                            </button>
+                            </platform-button>
                         ` : ''}
-                        <button
-                            class="panel-btn"
-                            type="button"
-                            title=${this._collapsed
+                        <platform-button
+                            variant="ghost"
+                            icon-only
+                            density="dense"
+                            aria-label=${this._collapsed
                                 ? this.t('floating_panel.restore_panel')
                                 : this.t('floating_panel.minimize_panel')}
-                            aria-expanded=${this._collapsed ? 'false' : 'true'}
                             @click=${this._toggleCollapsed}
                         >
                             <platform-icon name=${this._collapsed ? 'fullscreen' : 'minus'} size="14"></platform-icon>
-                        </button>
-                        <button class="panel-btn" type="button" title=${this.t('floating_panel.close')} @click=${this._close}>
+                        </platform-button>
+                        <platform-button
+                            variant="ghost"
+                            icon-only
+                            density="dense"
+                            aria-label=${this.t('floating_panel.close')}
+                            @click=${this._close}
+                        >
                             <platform-icon name="close" size="14"></platform-icon>
-                        </button>
+                        </platform-button>
                     </div>
                 </div>
                 <div class="panel-body" ?data-lara-glow=${this._laraGlow}>
                     <slot></slot>
                 </div>
                 ${this._collapsed ? nothing : html`
-                    <button
+                    <platform-button
                         class="resize-handle"
-                        type="button"
-                        title=${this.t('floating_panel.resize_hint')}
+                        variant="ghost"
+                        icon-only
+                        density="dense"
                         aria-label=${this.t('floating_panel.resize_hint')}
                         @pointerdown=${this._onResizePointerDown}
-                    ></button>
+                    ></platform-button>
                 `}
             </div>
         `;

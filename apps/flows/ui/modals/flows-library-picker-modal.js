@@ -13,6 +13,7 @@ import { unsafeHTML } from 'lit/directives/unsafe-html.js';
 import { PlatformModal } from '@platform/lib/components/glass-modal.js';
 import { registerModalKind } from '@platform/lib/utils/modal-registry.js';
 import '@platform/lib/components/platform-modal-search-field.js';
+import '@platform/lib/components/platform-button.js';
 import '@platform/lib/components/glass-spinner.js';
 import '@platform/lib/components/platform-icon.js';
 import '../components/common/flows-code-language-icon.js';
@@ -199,20 +200,6 @@ export class FlowsLibraryPickerModal extends PlatformModal {
                 min-width: 0;
                 min-height: 0;
             }
-            .tag {
-                font-size: var(--text-xs);
-                padding: 4px 8px;
-                border-radius: var(--radius-full);
-                border: 1px solid var(--glass-border-subtle);
-                background: var(--glass-solid-subtle);
-                color: var(--text-secondary);
-                cursor: pointer;
-            }
-            .tag.is-on {
-                background: var(--accent-subtle);
-                border-color: var(--accent);
-                color: var(--accent);
-            }
             .search-wrap {
                 flex: 0 1 240px;
                 min-width: 160px;
@@ -255,50 +242,9 @@ export class FlowsLibraryPickerModal extends PlatformModal {
                 background: var(--glass-solid-subtle);
                 border: 1px solid var(--glass-border-subtle);
             }
-            .language-button {
-                width: 36px;
-                height: 24px;
-                padding: 0;
-                display: inline-flex;
-                align-items: center;
-                justify-content: center;
-                border: 0;
-                border-radius: calc(var(--radius-md) - 2px);
-                background: transparent;
-                color: var(--text-tertiary);
-                font-size: 11px;
-                font-weight: var(--font-semibold);
-                line-height: 1;
-                cursor: pointer;
-            }
-            .language-button:hover {
-                color: var(--text-primary);
-                background: var(--glass-tint-medium);
-            }
-            .language-button[active] {
-                color: var(--accent);
-                background: var(--accent-subtle);
-            }
-            .language-button:focus-visible {
-                outline: 2px solid var(--accent);
-                outline-offset: 1px;
-            }
-            .language-button flows-code-language-icon {
-                pointer-events: none;
-            }
-            .tab {
-                padding: 6px 12px;
-                border-radius: var(--radius-md);
-                border: 1px solid var(--glass-border-subtle);
-                background: var(--glass-solid-subtle);
-                color: var(--text-secondary);
-                font-size: var(--text-sm);
-                cursor: pointer;
-            }
-            .tab.is-on {
-                background: var(--accent-subtle);
-                color: var(--accent);
-                border-color: var(--accent-subtle);
+            .language-segment platform-button {
+                --platform-button-icon-size: 36px;
+                --platform-button-icon-radius: calc(var(--radius-md) - 2px);
             }
             .lib-grid {
                 display: grid;
@@ -341,20 +287,20 @@ export class FlowsLibraryPickerModal extends PlatformModal {
                 display: flex;
                 align-items: center;
                 justify-content: center;
-                color: #fff;
+                color: var(--flows-avatar-text);
                 flex-shrink: 0;
                 box-sizing: border-box;
             }
             .lib-card-icon[data-kind='flow'] {
-                background: linear-gradient(135deg, #bb8fce 0%, #8e44ad 100%);
+                background: var(--flows-lib-kind-flow-gradient);
             }
             .lib-card-icon[data-kind='mcp'] {
-                background: linear-gradient(135deg, #82e0aa 0%, #58d68d 100%);
+                background: var(--flows-lib-kind-mcp-gradient);
             }
             .lib-card-icon[data-kind='code'] {
                 background: var(--glass-solid);
                 border: 1px solid var(--glass-border-subtle);
-                box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.06);
+                box-shadow: inset 0 1px 0 color-mix(in srgb, var(--text-inverse) 6%, transparent);
             }
             .lib-card-icon[data-kind='tool'] {
                 background: var(--accent-subtle);
@@ -525,33 +471,12 @@ export class FlowsLibraryPickerModal extends PlatformModal {
                 gap: var(--space-1);
                 flex-shrink: 0;
             }
-            .mcp-picker-server-actions .icon-btn {
-                display: inline-flex;
-                align-items: center;
-                justify-content: center;
-                min-width: 32px;
-                min-height: 32px;
-                padding: 0;
-                border: 1px solid var(--glass-border-subtle);
-                border-radius: var(--radius-lg);
-                background: var(--glass-solid-medium);
-                color: var(--text-secondary);
-                cursor: pointer;
-            }
-            .mcp-picker-server-actions .icon-btn:hover:not(:disabled) {
-                background: var(--glass-solid-strong);
-                color: var(--text-primary);
-            }
-            .mcp-picker-server-actions .icon-btn:disabled {
-                opacity: 0.5;
-                cursor: not-allowed;
-            }
             .mcp-picker-chip {
                 display: inline-block;
                 padding: 2px var(--space-2);
                 border-radius: var(--radius-full);
-                background: var(--info-subtle, rgba(59, 130, 246, 0.12));
-                color: var(--info, #3b82f6);
+                background: var(--info-bg);
+                color: var(--info);
                 font-size: var(--text-xs);
                 font-weight: var(--font-medium);
             }
@@ -561,12 +486,12 @@ export class FlowsLibraryPickerModal extends PlatformModal {
                 border-radius: var(--radius-md);
             }
             .mcp-picker-test-feedback.ok {
-                background: var(--success-subtle, rgba(34, 197, 94, 0.12));
-                color: var(--success, #22c55e);
+                background: var(--success-bg);
+                color: var(--success);
             }
             .mcp-picker-test-feedback.err {
-                background: var(--error-subtle, rgba(239, 68, 68, 0.12));
-                color: var(--error, #ef4444);
+                background: var(--error-bg);
+                color: var(--error);
             }
             .mcp-picker-tools-grid {
                 display: grid;
@@ -611,8 +536,8 @@ export class FlowsLibraryPickerModal extends PlatformModal {
                 display: flex;
                 align-items: center;
                 justify-content: center;
-                background: linear-gradient(135deg, #82e0aa 0%, #58d68d 100%);
-                color: #fff;
+                background: var(--flows-lib-kind-mcp-gradient);
+                color: var(--flows-avatar-text);
             }
             .mcp-picker-tool-title {
                 font-weight: var(--font-semibold);
@@ -1096,9 +1021,10 @@ export class FlowsLibraryPickerModal extends PlatformModal {
                         </div>
                     </div>
                     <div class="mcp-picker-server-actions">
-                        <button
-                            type="button"
-                            class="icon-btn"
+                        <platform-button
+                            variant="ghost"
+                            icon-only
+                            density="dense"
                             ?disabled=${isSyncing}
                             title=${this.t('mcp_servers_modal.action_sync_aria')}
                             aria-label=${this.t('mcp_servers_modal.action_sync_aria')}
@@ -1110,10 +1036,11 @@ export class FlowsLibraryPickerModal extends PlatformModal {
                             ${isSyncing
                                 ? html`<glass-spinner size="sm"></glass-spinner>`
                                 : html`<platform-icon name="rotate-ccw" size="16"></platform-icon>`}
-                        </button>
-                        <button
-                            type="button"
-                            class="icon-btn"
+                        </platform-button>
+                        <platform-button
+                            variant="ghost"
+                            icon-only
+                            density="dense"
                             ?disabled=${isTesting}
                             title=${this.t('mcp_servers_modal.action_test_aria')}
                             aria-label=${this.t('mcp_servers_modal.action_test_aria')}
@@ -1125,7 +1052,7 @@ export class FlowsLibraryPickerModal extends PlatformModal {
                             ${isTesting
                                 ? html`<glass-spinner size="sm"></glass-spinner>`
                                 : html`<platform-icon name="check" size="16"></platform-icon>`}
-                        </button>
+                        </platform-button>
                     </div>
                 </div>
                 ${this._renderMcpTestFeedback(serverId)}
@@ -1241,32 +1168,22 @@ export class FlowsLibraryPickerModal extends PlatformModal {
             return nothing;
         }
         const t = this._toolCategoryTab;
+        const tabs = [
+            ['all', 'tool_picker_modal.tab_all'],
+            ['code', 'tool_picker_modal.tab_code'],
+            ['flow', 'tool_picker_modal.tab_flows'],
+            ['mcp', 'tool_picker_modal.tab_mcp'],
+        ];
         return html`
             <div class="tabs" role="tablist" aria-label=${this.t('tool_picker_modal.tabs_aria')}>
-                <button
-                    type="button"
-                    role="tab"
-                    class="tab ${t === 'all' ? 'is-on' : ''}"
-                    @click=${() => { this._toolCategoryTab = 'all'; }}
-                >${this.t('tool_picker_modal.tab_all')}</button>
-                <button
-                    type="button"
-                    role="tab"
-                    class="tab ${t === 'code' ? 'is-on' : ''}"
-                    @click=${() => { this._toolCategoryTab = 'code'; }}
-                >${this.t('tool_picker_modal.tab_code')}</button>
-                <button
-                    type="button"
-                    role="tab"
-                    class="tab ${t === 'flow' ? 'is-on' : ''}"
-                    @click=${() => { this._toolCategoryTab = 'flow'; }}
-                >${this.t('tool_picker_modal.tab_flows')}</button>
-                <button
-                    type="button"
-                    role="tab"
-                    class="tab ${t === 'mcp' ? 'is-on' : ''}"
-                    @click=${() => { this._toolCategoryTab = 'mcp'; }}
-                >${this.t('tool_picker_modal.tab_mcp')}</button>
+                ${tabs.map(([key, labelKey]) => html`
+                    <platform-button
+                        role="tab"
+                        variant=${t === key ? 'secondary' : 'ghost'}
+                        density="compact"
+                        @click=${() => { this._toolCategoryTab = key; }}
+                    >${this.t(labelKey)}</platform-button>
+                `)}
             </div>
         `;
     }
@@ -1290,16 +1207,16 @@ export class FlowsLibraryPickerModal extends PlatformModal {
             <div class="code-language-row">
                 <div class="language-segment" role="group" aria-label=${this.t('code_workbench.language_aria')}>
                     ${FLOW_CODE_LANGUAGES.map((lang) => html`
-                        <button
-                            type="button"
-                            class="language-button"
-                            ?active=${current === lang.value}
+                        <platform-button
+                            icon-only
+                            variant=${current === lang.value ? 'secondary' : 'ghost'}
+                            density="dense"
                             title=${lang.label}
                             aria-label=${lang.label}
                             @click=${() => this._setCodeLanguage(lang.value)}
                         >
                             <flows-code-language-icon language=${lang.value} size="18"></flows-code-language-icon>
-                        </button>
+                        </platform-button>
                     `)}
                 </div>
             </div>
@@ -1317,11 +1234,11 @@ export class FlowsLibraryPickerModal extends PlatformModal {
                 >
                     ${this._allTagSet().map(
                         (tag) => html`
-                            <button
-                                type="button"
-                                class="tag ${this._activeTag === tag ? 'is-on' : ''}"
+                            <platform-button
+                                variant=${this._activeTag === tag ? 'secondary' : 'ghost'}
+                                density="dense"
                                 @click=${() => this._setTag(tag)}
-                            >#${tag}</button>
+                            >#${tag}</platform-button>
                         `,
                     )}
                 </div>
@@ -1516,16 +1433,16 @@ export class FlowsLibraryPickerModal extends PlatformModal {
             ${this._renderFilterBar()}
             ${this._renderCodeLanguageSegment()}
             <div class="tabs">
-                <button
-                    type="button"
-                    class="tab ${this._sourceTab === 'catalog' ? 'is-on' : ''}"
+                <platform-button
+                    variant=${this._sourceTab === 'catalog' ? 'secondary' : 'ghost'}
+                    density="compact"
                     @click=${() => { this._sourceTab = 'catalog'; }}
-                >${this.t('code_node_templates_modal.tab_catalog')}</button>
-                <button
-                    type="button"
-                    class="tab ${this._sourceTab === 'registry' ? 'is-on' : ''}"
+                >${this.t('code_node_templates_modal.tab_catalog')}</platform-button>
+                <platform-button
+                    variant=${this._sourceTab === 'registry' ? 'secondary' : 'ghost'}
+                    density="compact"
                     @click=${() => { this._sourceTab = 'registry'; }}
-                >${this.t('code_node_templates_modal.tab_registry')}</button>
+                >${this.t('code_node_templates_modal.tab_registry')}</platform-button>
             </div>
             ${this._sourceTab === 'catalog' ? this._renderCatalogBlock(rowCatalog) : this._renderCodeRegistryBlock(rowTools)}
         `;

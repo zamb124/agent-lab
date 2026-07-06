@@ -3383,7 +3383,6 @@ export class PlatformChat extends LitElement {
                         .voiceStatus=${this._voiceStatus || 'idle'}
                         .showLocaleControl=${this.showLocaleControl}
                         .interfaceLocale=${this.interfaceLocale || 'auto'}
-                        .showDisclaimer=${true}
                         @send=${this._onComposerSend}
                         @stop=${this._onComposerStop}
                         @voice-toggle=${(e) => {

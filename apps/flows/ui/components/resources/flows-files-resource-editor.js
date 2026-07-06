@@ -14,7 +14,7 @@ import { html, css } from 'lit';
 import { PlatformElement } from '@platform/lib/platform-element/index.js';
 import '@platform/lib/components/fields/platform-field.js';
 import './flows-base-resource-editor.js';
-import '../editors/flows-variable-input.js';
+import '@platform/lib/components/platform-variable-input.js';
 
 export class FlowsFilesResourceEditor extends PlatformElement {
     static properties = {
@@ -154,10 +154,10 @@ export class FlowsFilesResourceEditor extends PlatformElement {
                     </div>
                     <div class="field">
                         <label>${this.t('files_resource_editor.secret_access_key')}</label>
-                        <flows-variable-input
+                        <platform-variable-input
                             .value=${secretKey}
                             @change=${(e) => { const v = e.detail?.value; this._emitConfig({ secret_access_key: typeof v === 'string' && v.length > 0 ? v : null }); }}
-                        ></flows-variable-input>
+                        ></platform-variable-input>
                     </div>
                 </div>
             </flows-base-resource-editor>

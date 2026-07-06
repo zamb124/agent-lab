@@ -13,6 +13,7 @@
 import { html, css } from 'lit';
 import { PlatformElement } from '@platform/lib/platform-element/index.js';
 import '@platform/lib/components/platform-icon.js';
+import '@platform/lib/components/platform-button.js';
 import '@platform/lib/components/platform-help-hint.js';
 import { asObject, isPlainObject, getBranchNodes } from '../../_helpers/flows-resolvers.js';
 import { computeFitViewBox, FLOWS_EDITOR_DEFAULT_VIEWBOX } from '../../_helpers/flows-viewbox.js';
@@ -29,30 +30,15 @@ export class FlowsBottomToolbar extends PlatformElement {
                 left: 50%;
                 transform: translateX(-50%);
                 z-index: 6;
-                display: flex; align-items: center; gap: var(--space-1);
+                display: flex;
+                align-items: center;
+                gap: var(--space-1);
                 padding: var(--space-1) var(--space-2);
                 border-radius: var(--radius-full);
                 background: var(--glass-solid-strong);
                 border: 1px solid var(--glass-border-medium);
                 box-shadow: var(--glass-shadow-strong);
             }
-            .btn {
-                box-sizing: border-box;
-                flex: 0 0 auto;
-                width: 36px; height: 36px;
-                padding: 0; gap: 0;
-                font-size: 0; line-height: 1;
-                display: inline-flex; align-items: center; justify-content: center;
-                background: transparent; border: none;
-                border-radius: var(--radius-full);
-                color: var(--text-secondary);
-                cursor: pointer;
-                transition: background var(--duration-fast), color var(--duration-fast);
-            }
-            .btn:hover:not(:disabled) { background: var(--glass-solid-medium); color: var(--text-primary); }
-            .btn[active] { background: var(--accent-subtle); color: var(--accent); }
-            .btn:disabled { opacity: 0.35; cursor: not-allowed; pointer-events: none; }
-            .btn platform-icon { display: inline-flex; pointer-events: none; }
             .divider {
                 width: 1px;
                 height: 22px;
@@ -85,8 +71,8 @@ export class FlowsBottomToolbar extends PlatformElement {
         this._setViewBox({ x: cx - w / 2, y: cy - h / 2, w, h });
     }
 
-    _zoomIn()    { this._zoom(1 / ZOOM_FACTOR); }
-    _zoomOut()   { this._zoom(ZOOM_FACTOR); }
+    _zoomIn() { this._zoom(1 / ZOOM_FACTOR); }
+    _zoomOut() { this._zoom(ZOOM_FACTOR); }
     _zoom100() {
         const vb = this._viewBox();
         const d = FLOWS_EDITOR_DEFAULT_VIEWBOX;
@@ -114,50 +100,71 @@ export class FlowsBottomToolbar extends PlatformElement {
     _toggleGuides() { this._editor.toggleSmartGuides({}); }
     _help() { this.openModal('flows.canvas_help', {}); }
 
+    _renderIconButton({ icon, title, onClick, active = false, disabled = false }) {
+        const variant = active ? 'secondary' : 'ghost';
+        return html`
+            <platform-button
+                variant=${variant}
+                icon-only
+                density="dense"
+                aria-label=${title}
+                ?disabled=${disabled}
+                @click=${onClick}
+            >
+                <platform-icon name=${icon} size="16"></platform-icon>
+            </platform-button>
+        `;
+    }
+
     render() {
         const state = asObject(this._editor.state);
         const activeTool = typeof state.activeTool === 'string' && state.activeTool.length > 0 ? state.activeTool : 'select';
         const guidesOn = state.smartGuidesEnabled !== false;
         return html`
-            <button class="btn" type="button" title=${this.t('canvas.toolbar.zoom_in')} @click=${this._zoomIn}>
-                <platform-icon name="plus" size="16"></platform-icon>
-            </button>
-            <button class="btn" type="button" title=${this.t('canvas.toolbar.zoom_out')} @click=${this._zoomOut}>
-                <platform-icon name="minus" size="16"></platform-icon>
-            </button>
-            <button class="btn" type="button" title=${this.t('canvas.toolbar.zoom_100')} @click=${this._zoom100}>
-                <platform-icon name="search" size="16"></platform-icon>
-            </button>
-            <button class="btn" type="button" title=${this.t('canvas.toolbar.zoom_fit')} @click=${this._fitView}>
-                <platform-icon name="fullscreen" size="16"></platform-icon>
-            </button>
+            ${this._renderIconButton({ icon: 'plus', title: this.t('canvas.toolbar.zoom_in'), onClick: () => this._zoomIn() })}
+            ${this._renderIconButton({ icon: 'minus', title: this.t('canvas.toolbar.zoom_out'), onClick: () => this._zoomOut() })}
+            ${this._renderIconButton({ icon: 'search', title: this.t('canvas.toolbar.zoom_100'), onClick: () => this._zoom100() })}
+            ${this._renderIconButton({ icon: 'fullscreen', title: this.t('canvas.toolbar.zoom_fit'), onClick: () => this._fitView() })}
 
             <span class="divider"></span>
 
-            <button class="btn" type="button" ?active=${activeTool === 'select'} title=${this.t('canvas.toolbar.tool_select')} @click=${() => this._setTool('select')}>
-                <platform-icon name="target" size="16"></platform-icon>
-            </button>
-            <button class="btn" type="button" ?active=${activeTool === 'pan'} title=${this.t('canvas.toolbar.tool_pan')} @click=${() => this._setTool('pan')}>
-                <platform-icon name="drag-handle" size="16"></platform-icon>
-            </button>
+            ${this._renderIconButton({
+                icon: 'target',
+                title: this.t('canvas.toolbar.tool_select'),
+                onClick: () => this._setTool('select'),
+                active: activeTool === 'select',
+            })}
+            ${this._renderIconButton({
+                icon: 'drag-handle',
+                title: this.t('canvas.toolbar.tool_pan'),
+                onClick: () => this._setTool('pan'),
+                active: activeTool === 'pan',
+            })}
 
             <span class="divider"></span>
 
-            <button class="btn" type="button" ?disabled=${!state.canUndo} title=${this.t('canvas.toolbar.undo')} @click=${this._undo}>
-                <platform-icon name="undo" size="16"></platform-icon>
-            </button>
-            <button class="btn" type="button" ?disabled=${!state.canRedo} title=${this.t('canvas.toolbar.redo')} @click=${this._redo}>
-                <platform-icon name="redo" size="16"></platform-icon>
-            </button>
+            ${this._renderIconButton({
+                icon: 'undo',
+                title: this.t('canvas.toolbar.undo'),
+                onClick: () => this._undo(),
+                disabled: !state.canUndo,
+            })}
+            ${this._renderIconButton({
+                icon: 'redo',
+                title: this.t('canvas.toolbar.redo'),
+                onClick: () => this._redo(),
+                disabled: !state.canRedo,
+            })}
 
             <span class="divider"></span>
 
-            <button class="btn" type="button" title=${this.t('canvas.toolbar.open_variables')} @click=${this._openVariables}>
-                <platform-icon name="code" size="16"></platform-icon>
-            </button>
-            <button class="btn" type="button" ?active=${guidesOn} title=${this.t('canvas.toolbar.toggle_guides')} @click=${this._toggleGuides}>
-                <platform-icon name="schema" size="16"></platform-icon>
-            </button>
+            ${this._renderIconButton({ icon: 'code', title: this.t('canvas.toolbar.open_variables'), onClick: () => this._openVariables() })}
+            ${this._renderIconButton({
+                icon: 'schema',
+                title: this.t('canvas.toolbar.toggle_guides'),
+                onClick: () => this._toggleGuides(),
+                active: guidesOn,
+            })}
             <platform-help-hint
                 .label=${this.t('canvas.toolbar.canvas_hint_label')}
                 .summary=${this.t('canvas.toolbar.canvas_hint_summary')}
@@ -165,9 +172,7 @@ export class FlowsBottomToolbar extends PlatformElement {
                 .docHref=${'/documentation/scenarios/flows/add-llm-node/'}
                 .docLabel=${this.t('help_hints.open_scenario')}
             ></platform-help-hint>
-            <button class="btn" type="button" title=${this.t('canvas.toolbar.help')} @click=${this._help}>
-                <platform-icon name="help" size="16"></platform-icon>
-            </button>
+            ${this._renderIconButton({ icon: 'help', title: this.t('canvas.toolbar.help'), onClick: () => this._help() })}
         `;
     }
 }

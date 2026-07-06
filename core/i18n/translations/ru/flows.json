@@ -1165,7 +1165,8 @@
     "type_const_label": "const",
     "type_state_hint": "Значение берётся из текущего state flow. В источнике укажи путь без @state:.",
     "type_var_hint": "Значение берётся из переменных flow или компании. В источнике укажи имя без @var:.",
-    "type_const_hint": "Текст источника передаётся как константа без чтения state или variables."
+    "type_const_hint": "Текст источника передаётся как константа без чтения state или variables.",
+    "remove_row": "Удалить строку"
   },
   "flows_sidebar": {
     "home": "Обзор",

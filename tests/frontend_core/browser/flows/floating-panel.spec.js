@@ -4,9 +4,29 @@
 
 import { fixture, fixtureCleanup, html, expect, elementUpdated } from '../helpers/render.js';
 import { resetPlatformState } from '../helpers/reset.js';
-import { bootstrapPlatformBus, getPlatformBus } from '@platform/lib/events/index.js';
+import { bootstrapPlatformBus } from '@platform/lib/events/index.js';
 import { FLOWS_EDITOR_PROPERTY_PANEL_PREFS_KEY } from '../../../../apps/flows/ui/_helpers/flows-editor-property-panel-prefs.js';
+import '@platform/lib/components/platform-button.js';
 import '../../../../apps/flows/ui/components/editor/flows-floating-panel.js';
+
+function panelButtonByIcon(el, iconName) {
+    const buttons = el.shadowRoot.querySelectorAll('.panel-actions platform-button');
+    for (const btn of buttons) {
+        if (btn.querySelector(`platform-icon[name="${iconName}"]`) !== null) {
+            return btn;
+        }
+    }
+    return null;
+}
+
+function clickPanelButton(btn) {
+    const inner = btn.shadowRoot?.querySelector('button');
+    if (inner instanceof HTMLButtonElement) {
+        inner.click();
+        return;
+    }
+    btn.click();
+}
 
 describe('flows-floating-panel', () => {
     beforeEach(() => {
@@ -34,9 +54,10 @@ describe('flows-floating-panel', () => {
                 <span>Body</span>
             </flows-floating-panel>
         `);
-        const collapseBtn = Array.from(el.shadowRoot.querySelectorAll('.panel-btn'))
-            .find((btn) => btn.querySelector('platform-icon[name="minus"]') !== null);
-        collapseBtn.click();
+        await elementUpdated(el);
+        const collapseBtn = panelButtonByIcon(el, 'minus');
+        expect(collapseBtn).to.not.equal(null);
+        clickPanelButton(collapseBtn);
         await elementUpdated(el);
         expect(el.hasAttribute('data-collapsed')).to.equal(true);
     });
@@ -70,10 +91,12 @@ describe('flows-floating-panel', () => {
         const el = await fixture(html`
             <flows-floating-panel header-icon="code" header-title="X"></flows-floating-panel>
         `);
+        await elementUpdated(el);
         let closed = false;
         el.addEventListener('close', () => { closed = true; });
-        const closeBtn = Array.from(el.shadowRoot.querySelectorAll('.panel-btn')).pop();
-        closeBtn.click();
+        const closeBtn = panelButtonByIcon(el, 'close');
+        expect(closeBtn).to.not.equal(null);
+        clickPanelButton(closeBtn);
         expect(closed).to.equal(true);
     });
 });

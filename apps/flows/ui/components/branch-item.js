@@ -4,6 +4,7 @@
 import { html, css } from 'lit';
 import { PlatformElement } from '@platform/lib/platform-element/index.js';
 import '@platform/lib/components/platform-icon.js';
+import '@platform/lib/components/platform-button.js';
 
 export class BranchItem extends PlatformElement {
     static properties = {
@@ -16,6 +17,7 @@ export class BranchItem extends PlatformElement {
         css`
             :host {
                 display: block;
+                --platform-button-icon-size: 22px;
             }
 
             .branch-item {
@@ -55,42 +57,11 @@ export class BranchItem extends PlatformElement {
                 gap: 2px;
                 opacity: 0;
                 transition: opacity var(--duration-fast);
+                align-items: center;
             }
 
             .branch-item:hover .branch-actions {
                 opacity: 1;
-            }
-
-            .action-btn {
-                width: 22px;
-                height: 22px;
-                display: flex;
-                align-items: center;
-                justify-content: center;
-                border-radius: var(--radius-md);
-                color: var(--text-tertiary);
-                background: var(--glass-solid-subtle);
-                border: none;
-                cursor: pointer;
-                transition: var(--motion-transition-interactive);
-            }
-
-            .action-btn platform-icon {
-                pointer-events: none;
-            }
-
-            .action-btn:hover {
-                background: var(--glass-solid-strong);
-                color: var(--text-primary);
-            }
-
-            .action-btn.chat:hover {
-                color: var(--accent);
-            }
-
-            .action-btn.danger:hover {
-                background: var(--error-bg);
-                color: var(--error);
             }
         `,
     ];
@@ -113,6 +84,10 @@ export class BranchItem extends PlatformElement {
     render() {
         if (!this.branch) return '';
 
+        const chatTitle = this.t('flow_card.open_chat_title');
+        const editTitle = this.t('flow_card.edit_title');
+        const deleteTitle = this.t('flow_card.delete_title');
+
         return html`
             <div class="branch-item">
                 <div class="branch-info">
@@ -122,27 +97,33 @@ export class BranchItem extends PlatformElement {
                     ` : ''}
                 </div>
                 <div class="branch-actions">
-                    <button
-                        class="action-btn chat"
+                    <platform-button
+                        variant="ghost"
+                        icon-only
+                        density="dense"
+                        aria-label=${chatTitle}
                         @click=${(e) => this._emitAction('chat', e)}
-                        title=${this.t('flow_card.open_chat_title')}
                     >
                         <platform-icon name="chat" size="12"></platform-icon>
-                    </button>
-                    <button
-                        class="action-btn"
+                    </platform-button>
+                    <platform-button
+                        variant="ghost"
+                        icon-only
+                        density="dense"
+                        aria-label=${editTitle}
                         @click=${(e) => this._emitAction('edit', e)}
-                        title=${this.t('flow_card.edit_title')}
                     >
                         <platform-icon name="edit" size="12"></platform-icon>
-                    </button>
-                    <button
-                        class="action-btn danger"
+                    </platform-button>
+                    <platform-button
+                        variant="ghost"
+                        icon-only
+                        density="dense"
+                        aria-label=${deleteTitle}
                         @click=${(e) => this._emitAction('delete-branch', e)}
-                        title=${this.t('flow_card.delete_title')}
                     >
                         <platform-icon name="trash" size="12"></platform-icon>
-                    </button>
+                    </platform-button>
                 </div>
             </div>
         `;

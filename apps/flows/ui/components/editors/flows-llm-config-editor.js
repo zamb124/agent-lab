@@ -27,6 +27,7 @@ import { html, css, nothing } from 'lit';
 import { PlatformElement } from '@platform/lib/platform-element/index.js';
 import '@platform/lib/components/fields/platform-field.js';
 import '@platform/lib/components/glass-button.js';
+import '@platform/lib/components/platform-button.js';
 import '@platform/lib/components/platform-icon.js';
 import '@platform/lib/components/platform-help-hint.js';
 import './flows-json-field-editor.js';
@@ -220,7 +221,7 @@ export class FlowsLlmConfigEditor extends PlatformElement {
                 overflow: clip;
             }
             .fallback-item.drag-over {
-                border-color: var(--accent, var(--focus-ring, #2563eb));
+                border-color: var(--accent, var(--focus-ring));
             }
             .fallback-summary {
                 display: grid;
@@ -893,8 +894,10 @@ export class FlowsLlmConfigEditor extends PlatformElement {
                                                                                 ? ''
                                                                                 : html`
                                                                                       <span class="fallback-actions">
-                                                                                          <button
-                                                                                              type="button"
+                                                                                          <platform-button
+                                                                                              variant="ghost"
+                                                                                              icon-only
+                                                                                              density="dense"
                                                                                               title=${this.t('llm_config_editor.fallback_move_up')}
                                                                                               ?disabled=${idx === 0}
                                                                                               @click=${(e) => {
@@ -904,9 +907,11 @@ export class FlowsLlmConfigEditor extends PlatformElement {
                                                                                               }}
                                                                                           >
                                                                                               <platform-icon name="arrow-up" .size=${15}></platform-icon>
-                                                                                          </button>
-                                                                                          <button
-                                                                                              type="button"
+                                                                                          </platform-button>
+                                                                                          <platform-button
+                                                                                              variant="ghost"
+                                                                                              icon-only
+                                                                                              density="dense"
                                                                                               title=${this.t('llm_config_editor.fallback_move_down')}
                                                                                               ?disabled=${idx === fallbackModels.length - 1}
                                                                                               @click=${(e) => {
@@ -916,10 +921,12 @@ export class FlowsLlmConfigEditor extends PlatformElement {
                                                                                               }}
                                                                                           >
                                                                                               <platform-icon name="arrow-down" .size=${15}></platform-icon>
-                                                                                          </button>
-                                                                                          <button
-                                                                                              type="button"
-                                                                                              class="danger"
+                                                                                          </platform-button>
+                                                                                          <platform-button
+                                                                                              variant="ghost"
+                                                                                              icon-only
+                                                                                              density="dense"
+                                                                                              danger
                                                                                               title=${this.t('llm_config_editor.fallback_remove')}
                                                                                               @click=${(e) => {
                                                                                                   e.preventDefault();
@@ -928,7 +935,7 @@ export class FlowsLlmConfigEditor extends PlatformElement {
                                                                                               }}
                                                                                           >
                                                                                               <platform-icon name="trash" .size=${15}></platform-icon>
-                                                                                          </button>
+                                                                                          </platform-button>
                                                                                       </span>
                                                                                   `}
                                                                         </summary>
@@ -1151,14 +1158,16 @@ export class FlowsLlmConfigEditor extends PlatformElement {
                                                       ${this.readOnly
                                                           ? ''
                                                           : html`
-                                                                <button
-                                                                    type="button"
-                                                                    class="del"
+                                                                <platform-button
+                                                                    variant="ghost"
+                                                                    icon-only
+                                                                    density="dense"
+                                                                    danger
                                                                     title=${this.t('llm_config_editor.extra_header_remove')}
                                                                     @click=${() => this._removeHeaderPairRow(idx)}
                                                                 >
                                                                     <platform-icon name="trash" .size=${16}></platform-icon>
-                                                                </button>
+                                                                </platform-button>
                                                             `}
                                                   </div>
                                               `,

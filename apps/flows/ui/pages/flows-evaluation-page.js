@@ -1,5 +1,7 @@
 import { html, css } from 'lit';
 import { PlatformPage } from '@platform/lib/base/PlatformPage.js';
+import '@platform/lib/components/platform-breadcrumbs.js';
+import '@platform/lib/components/platform-button.js';
 import '@platform/lib/components/platform-icon.js';
 import '@platform/lib/components/platform-help-hint.js';
 import '../components/evaluation/flows-evaluation-suite-sidebar.js';
@@ -136,9 +138,16 @@ export class FlowsEvaluationPage extends PlatformPage {
 
             .brand {
                 display: flex;
+                flex-direction: column;
+                align-items: flex-start;
+                gap: var(--space-1);
+                min-width: 220px;
+            }
+
+            .brand-row {
+                display: flex;
                 align-items: center;
                 gap: var(--space-2);
-                min-width: 220px;
             }
 
             .back {
@@ -1173,18 +1182,19 @@ export class FlowsEvaluationPage extends PlatformPage {
         const caseRun = this._selectedCaseRun();
         const activePanel = ui.activePanel;
         const fullscreenActive = ui.fullscreenPanel.length > 0;
+        const flowLabel = typeof this.flowId === 'string' && this.flowId.length > 0 ? this.flowId : '';
         return html`
             <div class="lab">
                 <header class="top">
                     <div class="brand">
-                        <button class="back" type="button" title=${this.t('evaluation.header.back')} @click=${this._backToEditor}>
-                            <platform-icon name="arrow-left" size="18"></platform-icon>
-                        </button>
-                        <span class="brand-mark"><platform-icon name="science" size="20"></platform-icon></span>
-                        <span class="brand-copy">
-                            <span class="brand-title">${this.t('evaluation.header.title')}</span>
-                            <span class="brand-sub">${this.flowId} · ${this._branchId()}</span>
-                        </span>
+                        <platform-breadcrumbs compact current-label=${this.t('evaluation.header.title')}></platform-breadcrumbs>
+                        <div class="brand-row">
+                            <span class="brand-mark"><platform-icon name="science" size="20"></platform-icon></span>
+                            <span class="brand-copy">
+                                <span class="brand-title">${this.t('evaluation.header.title')}</span>
+                                <span class="brand-sub">${flowLabel} · ${this._branchId()}</span>
+                            </span>
+                        </div>
                     </div>
                     <flows-evaluation-run-toolbar
                         .branchId=${this._branchId()}
@@ -1256,16 +1266,17 @@ export class FlowsEvaluationPage extends PlatformPage {
             <div class=${frameClass} data-panel=${panel}>
                 <div class="panel-fullscreen-bar">
                     <span class="panel-fullscreen-title">${title}</span>
-                    <button
-                        class="panel-fullscreen-toggle"
-                        type="button"
+                    <platform-button
+                        variant="ghost"
+                        icon-only
+                        density="dense"
                         title=${actionTitle}
                         aria-label=${actionTitle}
                         aria-pressed=${active ? 'true' : 'false'}
                         @click=${(event) => this._toggleFullscreenPanel(panel, event)}
                     >
                         <platform-icon name=${active ? 'minimize' : 'fullscreen'} size="15"></platform-icon>
-                    </button>
+                    </platform-button>
                 </div>
                 <div class="panel-content">${content}</div>
             </div>

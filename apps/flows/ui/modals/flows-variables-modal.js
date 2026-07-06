@@ -116,8 +116,8 @@ export class FlowsVariablesModal extends PlatformModal {
                 border: none;
                 border-radius: var(--radius-full, 50%);
                 cursor: pointer;
-                color: var(--platform-btn-primary-text, #ffffff);
-                background: var(--platform-btn-primary-bg, #99a6f9);
+                color: var(--platform-btn-primary-text);
+                background: var(--platform-btn-primary-bg);
             }
         `,
     ];
@@ -242,15 +242,16 @@ export class FlowsVariablesModal extends PlatformModal {
         }
         const createLabel = this.t('variables_modal.action_create');
         return html`
-            <button
-                type="button"
-                class="flows-header-action-create"
+            <platform-button
+                variant="ghost"
+                icon-only
+                density="dense"
                 title=${createLabel}
                 aria-label=${createLabel}
                 @click=${() => this._createFlow()}
             >
                 <platform-icon name="plus" size="16"></platform-icon>
-            </button>
+            </platform-button>
         `;
     }
 

@@ -103,7 +103,6 @@ export class FlowsChatInput extends LitElement {
         ttsOutputEnabled: { type: Boolean, attribute: 'tts-output-enabled' },
         showLocaleControl: { type: Boolean, attribute: 'show-locale-control' },
         interfaceLocale: { type: String, attribute: 'interface-locale' },
-        showDisclaimer: { type: Boolean, attribute: 'show-disclaimer' },
         labels: { type: Object },
         _value: { state: true },
         _selectedFiles: { state: true },
@@ -348,13 +347,6 @@ export class FlowsChatInput extends LitElement {
             color: var(--flows-chat-input-danger-color, #fff);
             box-shadow: var(--flows-chat-input-stop-shadow, 0 4px 12px rgba(239, 68, 68, 0.3));
         }
-        .disclaimer {
-            margin-top: 10px;
-            text-align: center;
-            font-size: 11px;
-            line-height: 1.35;
-            color: var(--flows-chat-input-muted, var(--text-tertiary, rgba(255, 255, 255, 0.42)));
-        }
         svg {
             display: block;
         }
@@ -378,7 +370,6 @@ export class FlowsChatInput extends LitElement {
         this.ttsOutputEnabled = true;
         this.showLocaleControl = false;
         this.interfaceLocale = 'auto';
-        this.showDisclaimer = false;
         this.labels = {};
         this._value = '';
         this._selectedFiles = [];
@@ -796,9 +787,6 @@ export class FlowsChatInput extends LitElement {
                     </div>
                 </div>
             </div>
-            ${this.showDisclaimer
-                ? html`<div class="disclaimer">${this._l('ai_disclaimer', 'AI-generated content may be inaccurate.')}</div>`
-                : nothing}
         `;
     }
 }

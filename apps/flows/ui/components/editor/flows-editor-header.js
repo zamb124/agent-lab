@@ -24,6 +24,7 @@
 import { html, css } from 'lit';
 import { PlatformElement } from '@platform/lib/platform-element/index.js';
 import '@platform/lib/components/platform-icon.js';
+import '@platform/lib/components/platform-button.js';
 import '@platform/lib/components/platform-help-hint.js';
 import {
     asArray,
@@ -53,22 +54,11 @@ export class FlowsEditorHeader extends PlatformElement {
                 background: var(--glass-solid-medium);
                 border-bottom: 1px solid var(--border-subtle);
                 box-shadow: var(--glass-shadow-subtle);
+                --platform-button-icon-size: 34px;
             }
 
             /* LEFT */
             .header-left { display: flex; align-items: center; gap: var(--space-2); min-width: 0; }
-            .icon-btn {
-                width: 34px; height: 34px;
-                display: flex; align-items: center; justify-content: center;
-                border-radius: var(--radius-lg);
-                border: 1px solid var(--border-subtle);
-                background: var(--glass-solid-subtle);
-                color: var(--text-secondary);
-                cursor: pointer;
-                transition: var(--motion-transition-interactive);
-            }
-            .icon-btn:hover { background: var(--glass-solid-strong); color: var(--text-primary); }
-            .icon-btn:disabled { opacity: 0.4; cursor: not-allowed; }
             .flow-name-input {
                 background: transparent;
                 border: 1px solid transparent;
@@ -143,36 +133,12 @@ export class FlowsEditorHeader extends PlatformElement {
             }
 
             /* RIGHT */
-            .header-right { display: flex; justify-content: flex-end; align-items: center; gap: var(--space-2); }
-            .header-btn {
-                display: inline-flex; align-items: center; gap: var(--space-1);
-                height: 34px;
-                padding: 6px var(--space-3);
-                border-radius: var(--radius-lg);
-                border: 1px solid var(--border-subtle);
-                background: var(--glass-solid-subtle);
-                color: var(--text-secondary);
-                font-size: var(--text-sm);
-                line-height: 1;
-                box-sizing: border-box;
-                cursor: pointer;
-                transition: var(--motion-transition-interactive);
+            .header-right {
+                display: flex;
+                justify-content: flex-end;
+                align-items: center;
+                gap: var(--space-2);
             }
-            .header-btn:hover { background: var(--glass-solid-strong); color: var(--text-primary); }
-            .header-btn.icon-only { padding: 6px; width: 34px; height: 34px; justify-content: center; }
-            .header-btn.primary {
-                border-radius: var(--radius-full);
-                background: var(--accent);
-                color: var(--text-inverse);
-                border-color: var(--accent);
-                font-weight: var(--font-medium);
-            }
-            .header-btn.primary:hover {
-                background: var(--accent-hover);
-                border-color: var(--accent-hover);
-                box-shadow: var(--accent-glow);
-            }
-            .header-btn:disabled { opacity: 0.5; cursor: not-allowed; }
         `,
     ];
 
@@ -302,9 +268,15 @@ export class FlowsEditorHeader extends PlatformElement {
         const hasBundleUpdate = Boolean(flow && flow.has_bundle_update);
         return html`
             <div class="header-left">
-                <button class="icon-btn" type="button" title=${this.t('editor_header.back')} @click=${this._back}>
+                <platform-button
+                    variant="ghost"
+                    icon-only
+                    density="dense"
+                    aria-label=${this.t('editor_header.back')}
+                    @click=${this._back}
+                >
                     <platform-icon name="arrow-left" size="16"></platform-icon>
-                </button>
+                </platform-button>
                 <input
                     class="flow-name-input"
                     type="text"
@@ -339,63 +311,69 @@ export class FlowsEditorHeader extends PlatformElement {
             </div>
 
             <div class="header-right">
-                <button
-                    class="header-btn icon-only"
-                    type="button"
-                    title=${this.t('editor_header.flow_settings')}
+                <platform-button
+                    variant="ghost"
+                    icon-only
+                    density="dense"
                     aria-label=${this.t('editor_header.flow_settings')}
                     data-action="flow-settings"
                     @click=${this._openFlowSettings}
                 >
                     <platform-icon name="settings" size="16"></platform-icon>
-                </button>
-                <button
-                    class="header-btn icon-only"
-                    type="button"
-                    title=${this.t('editor_header.share_preview')}
+                </platform-button>
+                <platform-button
+                    variant="ghost"
+                    icon-only
+                    density="dense"
                     aria-label=${this.t('editor_header.share_preview')}
                     @click=${this._openPreviewShare}
                 >
                     <platform-icon name="share" size="16"></platform-icon>
-                </button>
-                <button
-                    class="header-btn icon-only"
-                    type="button"
-                    title=${this.t('flows_sidebar.footer_triggers')}
+                </platform-button>
+                <platform-button
+                    variant="ghost"
+                    icon-only
+                    density="dense"
                     aria-label=${this.t('flows_sidebar.footer_triggers')}
                     @click=${this._openTriggers}
                 >
                     <platform-icon name="zap" size="16"></platform-icon>
-                </button>
-                <button class="header-btn icon-only" type="button" title=${this.t('editor_header.lara')} @click=${this._openLara}>
+                </platform-button>
+                <platform-button
+                    variant="ghost"
+                    icon-only
+                    density="dense"
+                    aria-label=${this.t('editor_header.lara')}
+                    @click=${this._openLara}
+                >
                     <platform-icon name="ai" size="16"></platform-icon>
-                </button>
-                <button
-                    class="header-btn"
-                    type="button"
-                    title=${this.t('editor_header.api_console')}
+                </platform-button>
+                <platform-button
+                    variant="ghost"
+                    density="compact"
+                    aria-label=${this.t('editor_header.api_console')}
                     @click=${this._openApiConsole}
                 >
                     <platform-icon name="api" size="14"></platform-icon>
                     ${this.t('editor_header.api')}
-                </button>
-                <button
-                    class="header-btn"
-                    type="button"
-                    title=${this.t('editor_header.evaluation_lab')}
+                </platform-button>
+                <platform-button
+                    variant="ghost"
+                    density="compact"
+                    aria-label=${this.t('editor_header.evaluation_lab')}
                     @click=${this._openEvaluationLab}
                 >
                     <platform-icon name="science" size="14"></platform-icon>
                     ${this.t('editor_header.evaluation')}
-                </button>
-                <button class="header-btn" type="button" @click=${this._openCodeView}>
+                </platform-button>
+                <platform-button variant="ghost" density="compact" @click=${this._openCodeView}>
                     <platform-icon name="code" size="14"></platform-icon>
                     ${this.t('editor_header.code')}
-                </button>
-                <button class="header-btn primary" type="button" ?disabled=${saving} @click=${this._save}>
+                </platform-button>
+                <platform-button variant="primary" density="compact" ?disabled=${saving} @click=${this._save}>
                     <platform-icon name="save" size="14"></platform-icon>
                     ${saving ? this.t('editor_header.saving') : this.t('editor_header.publish')}
-                </button>
+                </platform-button>
             </div>
         `;
     }

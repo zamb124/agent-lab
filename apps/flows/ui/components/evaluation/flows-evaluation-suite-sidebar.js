@@ -1,6 +1,7 @@
 import { html, css } from 'lit';
 import { PlatformElement } from '@platform/lib/platform-element/index.js';
 import '@platform/lib/components/platform-icon.js';
+import '@platform/lib/components/platform-button.js';
 import '@platform/lib/components/platform-help-hint.js';
 import { evaluationCatalogCategoryKey, evaluationCatalogNameKey } from '../../_helpers/evaluation-catalog-labels.js';
 
@@ -81,23 +82,8 @@ export class FlowsEvaluationSuiteSidebar extends PlatformElement {
                 text-transform: none;
             }
 
-            .icon-btn {
-                width: 30px;
-                height: 30px;
-                display: inline-flex;
-                align-items: center;
-                justify-content: center;
-                border-radius: var(--radius-md);
-                border: 1px solid var(--border-subtle);
-                background: var(--glass-solid-subtle);
-                color: var(--text-secondary);
-                cursor: pointer;
-                transition: var(--motion-transition-interactive);
-            }
-
-            .icon-btn:hover {
-                background: var(--glass-solid-strong);
-                color: var(--text-primary);
+            .section-head platform-button {
+                --platform-button-icon-size: 30px;
             }
 
             .search {
@@ -378,9 +364,15 @@ export class FlowsEvaluationSuiteSidebar extends PlatformElement {
                                     placement="bottom"
                                 ></platform-help-hint>
                             </div>
-                            <button class="icon-btn" type="button" title=${this.t('evaluation.sidebar.new_suite')} @click=${this._createSuite}>
+                            <platform-button
+                                variant="ghost"
+                                icon-only
+                                density="dense"
+                                aria-label=${this.t('evaluation.sidebar.new_suite')}
+                                @click=${this._createSuite}
+                            >
                                 <platform-icon name="plus" size="15"></platform-icon>
-                            </button>
+                            </platform-button>
                         </div>
                         <div class="suite-list">
                             ${suites.length > 0 ? suites.map((suite) => this._renderSuite(suite)) : this._renderEmptyAction(this.t('evaluation.sidebar.empty_suites'), this.t('evaluation.sidebar.new_suite'), this._createSuite)}
@@ -398,9 +390,15 @@ export class FlowsEvaluationSuiteSidebar extends PlatformElement {
                                     placement="bottom"
                                 ></platform-help-hint>
                             </div>
-                            <button class="icon-btn" type="button" title=${this.t('evaluation.sidebar.new_case')} @click=${this._createCase}>
+                            <platform-button
+                                variant="ghost"
+                                icon-only
+                                density="dense"
+                                aria-label=${this.t('evaluation.sidebar.new_case')}
+                                @click=${this._createCase}
+                            >
                                 <platform-icon name="plus" size="15"></platform-icon>
-                            </button>
+                            </platform-button>
                         </div>
                         <div class="case-list">
                             ${cases.length > 0 ? cases.map((testCase) => this._renderCase(testCase)) : this._renderEmptyAction(this.t('evaluation.sidebar.empty_cases'), this.t('evaluation.sidebar.new_case'), this._createCase)}

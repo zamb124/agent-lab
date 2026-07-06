@@ -1,4 +1,4 @@
-.PHONY: test test-until-fail test-all test-static test-up test-down test-reset test-cov test-cov-all test-cov-report test-unit test-network test-ui test-ui-doc test-ui-components test-frontend-core test-frontend-core-canon test-frontend-core-unit test-frontend-core-browser test-profile check-strict-agent-architecture check-wider-repo-strictness agent-ensure test-agent test-agent-e2e test-agent-desktop-e2e
+.PHONY: test test-until-fail test-all test-static test-up test-down test-reset test-cov test-cov-all test-cov-report test-unit test-network test-ui test-ui-chat test-ui-doc test-ui-components test-frontend-core test-frontend-core-canon test-frontend-core-unit test-frontend-core-browser test-profile check-strict-agent-architecture check-wider-repo-strictness agent-ensure test-agent test-agent-e2e test-agent-desktop-e2e
 
 WORKERS ?= 10
 DB_PROFILE ?= 1
@@ -85,6 +85,11 @@ test-network: test-up
 test-ui: test-up
 	@echo "Запуск E2E UI (pytest tests/ui/e2e)..."
 	UI_E2E_USE_LVH_ME=1 uv run pytest tests/ui/e2e -v --timeout=180
+
+# Быстрый прогон chat-related UI E2E (flows chat-page, embed autoload, landing drawer)
+test-ui-chat: test-up
+	@echo "Запуск chat UI E2E (pytest tests/ui/e2e/test_flows_chat_page.py tests/ui/e2e/test_embed_autoload_browser.py tests/ui/e2e/test_landing_demo_chat_drawer.py)..."
+	UI_E2E_USE_LVH_ME=1 uv run pytest tests/ui/e2e/test_flows_chat_page.py tests/ui/e2e/test_embed_autoload_browser.py tests/ui/e2e/test_landing_demo_chat_drawer.py -v --timeout=300
 
 # E2E UI + статическая документация (README в docs/scenarios из scenario_doc)
 test-ui-doc: test-ui

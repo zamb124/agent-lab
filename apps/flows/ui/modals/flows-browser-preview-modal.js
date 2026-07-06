@@ -57,11 +57,11 @@ export class FlowsBrowserPreviewModal extends PlatformModal {
                 width: 100%;
                 min-height: min(760px, calc(100vh - 148px));
                 border: 0;
-                background: #0b0d11;
+                background: var(--bg-primary);
             }
 
             :host-context([data-theme="light"]) .browser-preview-frame {
-                background: #f7f8fb;
+                background: var(--bg-elevated);
             }
 
             .browser-preview-empty {

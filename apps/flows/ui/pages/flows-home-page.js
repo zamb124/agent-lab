@@ -9,6 +9,7 @@ import { formatPlatformDateTime } from '@platform/lib/utils/format-platform-date
 import { buildFrontendPublicPath } from '@platform/lib/utils/build-service-entry-url.js';
 import '@platform/lib/components/layout/page-header.js';
 import '@platform/lib/components/platform-icon.js';
+import '@platform/lib/components/platform-button.js';
 import '@platform/lib/components/platform-help-hint.js';
 import '@platform/lib/components/glass-spinner.js';
 import '../components/flows-catalog-list.js';
@@ -218,55 +219,26 @@ export class FlowsHomePage extends PlatformPage {
                 align-items: center;
                 gap: var(--space-2);
             }
-            .icon-action,
-            .text-action {
+            .hero-download-link {
                 display: inline-flex;
                 align-items: center;
-                justify-content: center;
                 gap: var(--space-2);
-                min-height: 36px;
-                border-radius: var(--radius-md);
-                border: 1px solid var(--border-subtle);
-                background: var(--glass-solid-subtle);
+                min-height: 32px;
+                padding: 6px 14px;
+                border-radius: var(--btn-radius, 22px);
                 color: var(--text-secondary);
-                cursor: pointer;
-                font: inherit;
                 font-size: var(--text-sm);
-                transition: background var(--duration-fast), border-color var(--duration-fast), color var(--duration-fast);
-            }
-            .icon-action {
-                width: 36px;
-                padding: 0;
-            }
-            .text-action {
-                padding: 0 var(--space-3);
-            }
-            a.text-action {
+                line-height: var(--leading-tight);
                 text-decoration: none;
+                transition: var(--motion-transition-interactive);
             }
-            .icon-action:hover,
-            .text-action:hover {
+            .hero-download-link:hover {
                 color: var(--text-primary);
-                background: var(--glass-solid-medium);
-                border-color: var(--glass-border-medium);
+                background: var(--glass-tint-subtle);
             }
-            .icon-action:focus-visible,
-            .text-action:focus-visible,
-            .mini-btn:focus-visible,
-            button.action-card:focus-visible,
-            button.connect-card:focus-visible,
-            .session-row:focus-visible {
+            .hero-download-link:focus-visible {
                 outline: none;
                 box-shadow: var(--focus-ring);
-            }
-            .text-action.primary {
-                color: var(--text-inverse);
-                background: var(--accent);
-                border-color: var(--accent);
-            }
-            .text-action.primary:hover {
-                background: var(--accent-hover);
-                border-color: var(--accent-hover);
             }
             .hero-band {
                 display: grid;
@@ -389,6 +361,7 @@ export class FlowsHomePage extends PlatformPage {
             .capability-grid {
                 grid-template-columns: repeat(4, minmax(0, 1fr));
             }
+            .glass-card,
             .metric-card,
             .action-card,
             .connect-card,
@@ -524,22 +497,6 @@ export class FlowsHomePage extends PlatformPage {
                 align-items: center;
                 gap: var(--space-1);
             }
-            .mini-btn {
-                width: 30px;
-                height: 30px;
-                display: inline-flex;
-                align-items: center;
-                justify-content: center;
-                border-radius: var(--radius-md);
-                border: 1px solid var(--border-subtle);
-                background: var(--glass-solid-subtle);
-                color: var(--text-secondary);
-                cursor: pointer;
-            }
-            .mini-btn:hover {
-                color: var(--text-primary);
-                background: var(--glass-solid-medium);
-            }
             .action-card,
             .connect-card,
             .capability-card {
@@ -550,24 +507,17 @@ export class FlowsHomePage extends PlatformPage {
                 padding: var(--space-4);
                 text-align: left;
             }
-            button.action-card,
-            button.connect-card {
-                color: inherit;
-                cursor: pointer;
-                font: inherit;
-                transition: background var(--duration-fast), border-color var(--duration-fast), transform var(--duration-fast);
-            }
-            button.action-card:hover,
-            button.connect-card:hover {
-                background: var(--glass-solid-medium);
-                border-color: var(--glass-border-medium);
-                transform: translateY(-1px);
-            }
             .card-head {
                 display: flex;
                 align-items: center;
                 justify-content: space-between;
                 gap: var(--space-2);
+            }
+            .card-head-end {
+                display: inline-flex;
+                align-items: center;
+                gap: var(--space-1);
+                margin-left: auto;
             }
             .tone-icon {
                 width: 36px;
@@ -631,16 +581,6 @@ export class FlowsHomePage extends PlatformPage {
                 background: var(--glass-solid-subtle);
                 border: 1px solid var(--border-subtle);
             }
-            .session-row {
-                color: inherit;
-                cursor: pointer;
-                font: inherit;
-                text-align: left;
-            }
-            .session-row:hover {
-                background: var(--glass-solid-medium);
-                border-color: var(--glass-border-medium);
-            }
             .row-main {
                 min-width: 0;
                 display: flex;
@@ -699,13 +639,6 @@ export class FlowsHomePage extends PlatformPage {
                 .home-scroll {
                     padding: var(--space-3);
                     padding-bottom: max(var(--space-6), env(safe-area-inset-bottom, 0px));
-                }
-                .header-actions .text-action span {
-                    display: none;
-                }
-                .header-actions .text-action {
-                    width: 36px;
-                    padding: 0;
                 }
                 .hero-band {
                     padding: var(--space-4);
@@ -929,26 +862,26 @@ export class FlowsHomePage extends PlatformPage {
             <div class="header-actions" slot="actions">
                 ${this._isMobile
                     ? html`
-                        <button
-                            type="button"
-                            class="icon-action"
-                            title=${this.t('flows_home.mobile_open_catalog')}
+                        <platform-button
+                            variant="ghost"
+                            icon-only
+                            density="dense"
                             aria-label=${this.t('flows_home.mobile_open_catalog')}
                             @click=${() => this._openMobileCatalog()}
                         >
                             <platform-icon name="list" size="16"></platform-icon>
-                        </button>
+                        </platform-button>
                     `
                     : ''}
-                <button
-                    type="button"
-                    class="icon-action"
-                    title=${this.t('flows_home.header_sessions')}
+                <platform-button
+                    variant="ghost"
+                    icon-only
+                    density="dense"
                     aria-label=${this.t('flows_home.header_sessions')}
                     @click=${() => this.openModal('flows.sessions', {})}
                 >
                     <platform-icon name="chat" size="16"></platform-icon>
-                </button>
+                </platform-button>
                 <platform-help-hint
                     .label=${this.t('flows_home.header_help_label')}
                     .summary=${this.t('flows_home.header_help_summary')}
@@ -963,16 +896,17 @@ export class FlowsHomePage extends PlatformPage {
     _renderMobileCatalog() {
         return html`
             <page-header title=${this.t('flows_home.mobile_catalog_title')}>
-                <button
-                    type="button"
+                <platform-button
                     slot="leading"
-                    class="page-header-leading-btn"
+                    variant="ghost"
+                    icon-only
+                    density="dense"
                     title=${this.t('flows_home.mobile_back_home')}
                     aria-label=${this.t('flows_home.mobile_back_home')}
                     @click=${() => this._closeMobileCatalog()}
                 >
                     <platform-icon name="chevron-left" size="20"></platform-icon>
-                </button>
+                </platform-button>
             </page-header>
             <div class="mobile-catalog-shell">
                 <flows-catalog-list
@@ -1005,20 +939,20 @@ export class FlowsHomePage extends PlatformPage {
                     <h1>${this.t('flows_home.title')}</h1>
                     <p class="hero-subtitle">${this.t('flows_home.subtitle')}</p>
                     <div class="hero-actions">
-                        <button type="button" class="text-action primary" @click=${() => this.openModal('flows.flow_create', {})}>
+                        <platform-button variant="primary" density="compact" @click=${() => this.openModal('flows.flow_create', {})}>
                             <platform-icon name="plus" size="16"></platform-icon>
                             <span>${this.t('flows_home.hero_create')}</span>
-                        </button>
-                        <button type="button" class="text-action" @click=${() => this.openModal('flows.sessions', {})}>
+                        </platform-button>
+                        <platform-button variant="ghost" density="compact" @click=${() => this.openModal('flows.sessions', {})}>
                             <platform-icon name="chat" size="16"></platform-icon>
                             <span>${this.t('flows_home.hero_sessions')}</span>
-                        </button>
-                        <button type="button" class="text-action" @click=${() => this.openModal('flows.mcp_servers', {})}>
+                        </platform-button>
+                        <platform-button variant="ghost" density="compact" @click=${() => this.openModal('flows.mcp_servers', {})}>
                             <platform-icon name="mcp" size="16"></platform-icon>
                             <span>${this.t('flows_home.hero_mcp')}</span>
-                        </button>
+                        </platform-button>
                         <a
-                            class="text-action"
+                            class="hero-download-link"
                             href=${this._agentDownloadHref()}
                             title=${this.t('flows_home.hero_download_desc')}
                             aria-label=${this.t('flows_home.hero_download')}
@@ -1082,17 +1016,26 @@ export class FlowsHomePage extends PlatformPage {
     }
 
     _renderActionCard(action) {
+        const title = this.t(action.titleKey);
         return html`
-            <button type="button" class="action-card" @click=${() => this._openQuickAction(action.id)}>
+            <article class="action-card glass-card">
                 <div class="card-head">
                     <span class="tone-icon tone-${action.tone}">
                         <platform-icon name=${action.icon} size="18"></platform-icon>
                     </span>
-                    <platform-icon name="chevron-right" size="16"></platform-icon>
+                    <platform-button
+                        variant="ghost"
+                        density="compact"
+                        icon-only
+                        aria-label=${title}
+                        @click=${() => this._openQuickAction(action.id)}
+                    >
+                        <platform-icon name="chevron-right" size="16"></platform-icon>
+                    </platform-button>
                 </div>
-                <div class="card-title">${this.t(action.titleKey)}</div>
+                <div class="card-title">${title}</div>
                 <div class="card-desc">${this.t(action.descKey)}</div>
-            </button>
+            </article>
         `;
     }
 
@@ -1156,24 +1099,26 @@ export class FlowsHomePage extends PlatformPage {
                     <div class="flow-meta">
                         <span>${this.t('flows_home.flow_meta', { id: flowId, branches })}</span>
                         <span class="flow-actions">
-                            <button
-                                type="button"
-                                class="mini-btn"
+                            <platform-button
+                                variant="ghost"
+                                icon-only
+                                density="dense"
                                 title=${this.t('flows_home.flow_chat')}
                                 aria-label=${this.t('flows_home.flow_chat')}
                                 @click=${() => this._openFlowChat(flowId)}
                             >
                                 <platform-icon name="chat" size="14"></platform-icon>
-                            </button>
-                            <button
-                                type="button"
-                                class="mini-btn"
+                            </platform-button>
+                            <platform-button
+                                variant="ghost"
+                                icon-only
+                                density="dense"
                                 title=${this.t('flows_home.flow_edit')}
                                 aria-label=${this.t('flows_home.flow_edit')}
                                 @click=${() => this._openFlowEditor(flowId)}
                             >
                                 <platform-icon name="edit" size="14"></platform-icon>
-                            </button>
+                            </platform-button>
                         </span>
                     </div>
                 </div>
@@ -1204,31 +1149,43 @@ export class FlowsHomePage extends PlatformPage {
     }
 
     _renderConnectCard(action, value) {
+        const title = this.t(action.titleKey);
         if (action.id === 'resources') {
             return html`
-                <article class="connect-card">
+                <article class="connect-card glass-card">
                     <div class="card-head">
                         <span class="tone-icon tone-${action.tone}">
                             <platform-icon name=${action.icon} size="18"></platform-icon>
                         </span>
                         <span class="metric-value">${value}</span>
                     </div>
-                    <div class="card-title">${this.t(action.titleKey)}</div>
+                    <div class="card-title">${title}</div>
                     <div class="card-desc">${this.t(action.descKey)}</div>
                 </article>
             `;
         }
         return html`
-            <button type="button" class="connect-card" @click=${() => this._openConnectAction(action.id)}>
+            <article class="connect-card glass-card">
                 <div class="card-head">
                     <span class="tone-icon tone-${action.tone}">
                         <platform-icon name=${action.icon} size="18"></platform-icon>
                     </span>
-                    <span class="metric-value">${value}</span>
+                    <div class="card-head-end">
+                        <span class="metric-value">${value}</span>
+                        <platform-button
+                            variant="ghost"
+                            density="compact"
+                            icon-only
+                            aria-label=${title}
+                            @click=${() => this._openConnectAction(action.id)}
+                        >
+                            <platform-icon name="chevron-right" size="16"></platform-icon>
+                        </platform-button>
+                    </div>
                 </div>
-                <div class="card-title">${this.t(action.titleKey)}</div>
+                <div class="card-title">${title}</div>
                 <div class="card-desc">${this.t(action.descKey)}</div>
-            </button>
+            </article>
         `;
     }
 
@@ -1281,7 +1238,7 @@ export class FlowsHomePage extends PlatformPage {
         const flowId = asString(session?.flow_id);
         const status = asString(session?.status);
         return html`
-            <button type="button" class="session-row" @click=${() => this._openSession(session)}>
+            <article class="session-row">
                 <span class="row-main">
                     <span class="tone-icon tone-info">
                         <platform-icon name="chat" size="16"></platform-icon>
@@ -1292,7 +1249,16 @@ export class FlowsHomePage extends PlatformPage {
                     </span>
                 </span>
                 <span class="chip">${status}</span>
-            </button>
+                <platform-button
+                    variant="ghost"
+                    icon-only
+                    density="dense"
+                    aria-label=${this.t('flows_home.flow_chat')}
+                    @click=${() => this._openSession(session)}
+                >
+                    <platform-icon name="chevron-right" size="16"></platform-icon>
+                </platform-button>
+            </article>
         `;
     }
 

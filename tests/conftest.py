@@ -34,6 +34,7 @@ pytest_plugins = [
     "tests.fixtures.mcp_modes_stub",
     "tests.fixtures.mcp_registry_stub",
     "tests.fixtures.embed_e2e",
+    "tests.fixtures.flows_chat_e2e",
     "tests.agent.fixtures.local_releases",
     "tests.agent.fixtures.e2e",
     "tests.profiling.plugin",

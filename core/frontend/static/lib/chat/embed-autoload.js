@@ -253,6 +253,8 @@ function mountFromScript(scriptEl) {
     };
 }
 
+export { mountFromScript, resolveHostScript, readDatasetBool };
+
 function scheduleMount() {
     const scriptEl = resolveHostScript();
     if (!scriptEl) {
@@ -272,4 +274,12 @@ function scheduleMount() {
     run();
 }
 
-scheduleMount();
+const isVitestRuntime =
+    (typeof import.meta !== 'undefined' &&
+        import.meta.env &&
+        String(import.meta.env.VITEST) === 'true') ||
+    (typeof process !== 'undefined' && process.env.VITEST === 'true');
+
+if (!isVitestRuntime) {
+    scheduleMount();
+}

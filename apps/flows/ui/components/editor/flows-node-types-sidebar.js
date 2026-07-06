@@ -27,6 +27,7 @@ import { html, css } from 'lit';
 import { PlatformElement } from '@platform/lib/platform-element/index.js';
 import { platformConfirm } from '@platform/lib/components/platform-confirm-modal.js';
 import '@platform/lib/components/platform-icon.js';
+import '@platform/lib/components/platform-button.js';
 import '@platform/lib/components/platform-help-hint.js';
 import '@platform/lib/components/glass-spinner.js';
 import { getNodeTypeMeta, getCategoryToken } from '../../constants/node-icons.js';
@@ -88,17 +89,6 @@ export class FlowsNodeTypesSidebar extends PlatformElement {
                 gap: var(--space-1);
                 min-width: 0;
             }
-            .add-btn {
-                width: 24px; height: 24px;
-                display: flex; align-items: center; justify-content: center;
-                border-radius: var(--radius-full);
-                border: 1px solid var(--border-subtle);
-                background: var(--glass-solid-subtle);
-                color: var(--text-secondary);
-                cursor: pointer;
-                transition: var(--motion-transition-interactive);
-            }
-            .add-btn:hover { background: var(--accent-subtle); color: var(--accent); border-color: var(--accent); }
             .triggers-empty {
                 font-size: var(--text-xs);
                 color: var(--text-tertiary);
@@ -146,31 +136,6 @@ export class FlowsNodeTypesSidebar extends PlatformElement {
                 align-items: center;
                 flex-shrink: 0;
                 gap: var(--space-1);
-            }
-            .trigger-row-actions .icon-btn {
-                display: inline-flex;
-                align-items: center;
-                justify-content: center;
-                width: 22px;
-                height: 22px;
-                min-width: 22px;
-                min-height: 22px;
-                box-sizing: border-box;
-                padding: 0;
-                border: 1px solid var(--border-subtle);
-                border-radius: var(--radius-md);
-                background: var(--glass-solid-subtle);
-                color: var(--text-secondary);
-                cursor: pointer;
-                transition: var(--motion-transition-interactive);
-            }
-            .trigger-row-actions .icon-btn:hover {
-                background: var(--glass-solid-strong);
-                color: var(--text-primary);
-            }
-            .trigger-row-actions .icon-btn.danger:hover {
-                color: var(--error, #f43f5e);
-                border-color: var(--error, #f43f5e);
             }
 
             button.trigger-row {
@@ -279,9 +244,7 @@ export class FlowsNodeTypesSidebar extends PlatformElement {
             .node-item:hover {
                 background: color-mix(in oklab, var(--glass-solid-medium) 86%, var(--accent) 8%);
                 border-color: var(--glass-border-subtle);
-                box-shadow:
-                    0 7px 18px rgba(0, 0, 0, 0.12),
-                    inset 0 1px 0 rgba(255, 255, 255, 0.08);
+                box-shadow: var(--glass-shadow-medium);
                 transform: translateY(-1px);
             }
             .node-item:active { cursor: grabbing; }
@@ -293,9 +256,7 @@ export class FlowsNodeTypesSidebar extends PlatformElement {
                 display: flex;
                 align-items: center;
                 justify-content: center;
-                box-shadow:
-                    inset 0 1px 0 rgba(255, 255, 255, 0.12),
-                    0 3px 10px rgba(0, 0, 0, 0.1);
+                box-shadow: var(--glass-shadow-subtle);
             }
             .node-name {
                 font-size: var(--text-sm);
@@ -457,9 +418,15 @@ export class FlowsNodeTypesSidebar extends PlatformElement {
                             .docLabel=${this.t('help_hints.open_scenario')}
                         ></platform-help-hint>
                     </span>
-                    <button class="add-btn" type="button" title=${this.t('node_types_sidebar.add_trigger')} @click=${this._addTrigger}>
+                    <platform-button
+                        variant="primary"
+                        icon-only
+                        density="dense"
+                        aria-label=${this.t('node_types_sidebar.add_trigger')}
+                        @click=${this._addTrigger}
+                    >
                         <platform-icon name="plus" size="12"></platform-icon>
-                    </button>
+                    </platform-button>
                 </div>
                 ${triggerItems.length === 0
                     ? html`<div class="triggers-empty">${this.t('node_types_sidebar.no_triggers')}</div>`
@@ -478,24 +445,24 @@ export class FlowsNodeTypesSidebar extends PlatformElement {
                                 <span class="trigger-row-label">${tr.name || tr.trigger_id}</span>
                             </div>
                             <div class="trigger-row-actions" @click=${(e) => e.stopPropagation()}>
-                                <button
-                                    type="button"
-                                    class="icon-btn"
-                                    title=${this.t('triggers_modal.action_edit')}
+                                <platform-button
+                                    variant="ghost"
+                                    icon-only
+                                    density="dense"
                                     aria-label=${this.t('triggers_modal.action_edit')}
                                     @click=${() => this._editTrigger(tr)}
                                 >
                                     <platform-icon name="edit" size="12"></platform-icon>
-                                </button>
-                                <button
-                                    type="button"
-                                    class="icon-btn danger"
-                                    title=${this.t('triggers_modal.action_delete')}
+                                </platform-button>
+                                <platform-button
+                                    variant="ghost"
+                                    icon-only
+                                    density="dense"
                                     aria-label=${this.t('triggers_modal.action_delete')}
                                     @click=${() => this._deleteTrigger(tr)}
                                 >
                                     <platform-icon name="trash" size="12"></platform-icon>
-                                </button>
+                                </platform-button>
                             </div>
                         </div>
                     `;

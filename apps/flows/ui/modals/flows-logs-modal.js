@@ -9,6 +9,7 @@
 import { html, css, nothing } from 'lit';
 import { PlatformModal } from '@platform/lib/components/glass-modal.js';
 import { registerModalKind } from '@platform/lib/utils/modal-registry.js';
+import '@platform/lib/components/platform-button.js';
 import '@platform/lib/components/platform-icon.js';
 import '@platform/lib/components/glass-spinner.js';
 import '@platform/lib/components/platform-log-viewer.js';
@@ -177,38 +178,16 @@ export class FlowsLogsModal extends PlatformModal {
                 display: flex;
                 gap: var(--space-1);
                 background: var(--glass-solid-secondary);
-                border-radius: 8px;
+                border-radius: var(--radius-md);
                 padding: 2px;
-            }
-            .mode-tab {
-                display: inline-flex;
-                align-items: center;
-                gap: 6px;
-                padding: 4px 12px;
-                border-radius: 6px;
-                border: none;
-                background: transparent;
-                color: var(--text-secondary);
-                font-size: var(--text-sm);
-                cursor: pointer;
-                transition:
-                    background 0.15s,
-                    color 0.15s;
-            }
-            .mode-tab[data-active] {
-                background: var(--glass-solid-primary);
-                color: var(--text-primary);
-            }
-            .mode-tab:disabled {
-                opacity: 0.4;
-                cursor: default;
+                flex-wrap: wrap;
             }
             .count-badge {
                 font-size: var(--text-xs);
                 color: var(--text-tertiary);
                 background: var(--glass-solid-secondary);
                 padding: 2px 8px;
-                border-radius: 12px;
+                border-radius: var(--radius-full);
                 white-space: nowrap;
             }
             .tab-inline-spin {
@@ -632,10 +611,10 @@ export class FlowsLogsModal extends PlatformModal {
             || this._byTaskTraces.busy
             || this._bySessionTraces.busy;
         return html`
-            <button
-                type="button"
-                class="header-btn"
-                title=${this.t('logs_modal.reload')}
+            <platform-button
+                variant="ghost"
+                icon-only
+                density="dense"
                 aria-label=${this.t('logs_modal.reload')}
                 ?disabled=${busy}
                 @click=${() => this._manualReload()}
@@ -643,7 +622,7 @@ export class FlowsLogsModal extends PlatformModal {
                 ${busy
                     ? html`<glass-spinner size="14"></glass-spinner>`
                     : html`<platform-icon name="refresh" size="16"></platform-icon>`}
-            </button>
+            </platform-button>
         `;
     }
 
@@ -678,19 +657,17 @@ export class FlowsLogsModal extends PlatformModal {
             <div class="logs-modal-stack">
                 <div class="logs-toolbar">
                     <div class="mode-tabs">
-                        <button
-                            type="button"
-                            class="mode-tab"
-                            ?data-active=${this._mode === 'session'}
+                        <platform-button
+                            variant=${this._mode === 'session' ? 'secondary' : 'ghost'}
+                            density="compact"
                             ?disabled=${!hasSession}
                             @click=${() => this._setMode('session')}
                         >
-                            ${this.t('logs_modal.tab_session')}</button
-                        >
-                        <button
-                            type="button"
-                            class="mode-tab"
-                            ?data-active=${this._mode === 'trace'}
+                            ${this.t('logs_modal.tab_session')}
+                        </platform-button>
+                        <platform-button
+                            variant=${this._mode === 'trace' ? 'secondary' : 'ghost'}
+                            density="compact"
                             ?disabled=${!hasTraceResolver}
                             title=${traceTitle}
                             aria-label=${traceAria}
@@ -699,35 +676,32 @@ export class FlowsLogsModal extends PlatformModal {
                             ${resolving
                                 ? html`<span class="tab-inline-spin"><glass-spinner size="sm"></glass-spinner></span>`
                                 : nothing}
-                            ${this.t('logs_modal.tab_trace')}</button
-                        >
-                        <button
-                            type="button"
-                            class="mode-tab"
-                            ?data-active=${this._mode === 'request'}
+                            ${this.t('logs_modal.tab_trace')}
+                        </platform-button>
+                        <platform-button
+                            variant=${this._mode === 'request' ? 'secondary' : 'ghost'}
+                            density="compact"
                             ?disabled=${!hasRequest}
                             @click=${() => this._setMode('request')}
                         >
-                            ${this.t('logs_modal.tab_request')}</button
-                        >
-                        <button
-                            type="button"
-                            class="mode-tab"
-                            ?data-active=${this._mode === 'span'}
+                            ${this.t('logs_modal.tab_request')}
+                        </platform-button>
+                        <platform-button
+                            variant=${this._mode === 'span' ? 'secondary' : 'ghost'}
+                            density="compact"
                             ?disabled=${!hasSpan}
                             @click=${() => this._setMode('span')}
                         >
-                            ${this.t('logs_modal.tab_span')}</button
-                        >
-                        <button
-                            type="button"
-                            class="mode-tab"
-                            ?data-active=${this._mode === 'user'}
+                            ${this.t('logs_modal.tab_span')}
+                        </platform-button>
+                        <platform-button
+                            variant=${this._mode === 'user' ? 'secondary' : 'ghost'}
+                            density="compact"
                             ?disabled=${!hasUser}
                             @click=${() => this._setMode('user')}
                         >
-                            ${this.t('logs_modal.tab_user')}</button
-                        >
+                            ${this.t('logs_modal.tab_user')}
+                        </platform-button>
                     </div>
                     ${data
                         ? html`<span class="count-badge">${this.t('logs_modal.count', { count })}</span>`

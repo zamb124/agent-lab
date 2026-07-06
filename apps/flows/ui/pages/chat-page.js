@@ -13,6 +13,8 @@ import { PlatformPage } from '@platform/lib/base/PlatformPage.js';
 import '@platform/lib/components/platform-icon.js';
 import '@platform/lib/components/platform-help-hint.js';
 import '@platform/lib/components/layout/page-header.js';
+import '@platform/lib/components/platform-breadcrumbs.js';
+import '@platform/lib/components/platform-button.js';
 import '@platform/lib/chat/platform-chat.js';
 import { dispatchEmbedChatWindowToggle } from '@platform/lib/chat/chat-window-toggle.js';
 import { resolveVoiceHttpOrigin } from '@platform/lib/voice/voice-http-origin.js';
@@ -44,6 +46,10 @@ export class ChatPage extends PlatformPage {
                 background: transparent;
                 box-sizing: border-box;
             }
+            .chat-breadcrumbs {
+                flex-shrink: 0;
+                padding: var(--space-2) var(--space-4) 0;
+            }
             .chat-branch-hint {
                 flex-shrink: 0;
                 padding: 0 var(--space-4) var(--space-2);
@@ -63,39 +69,6 @@ export class ChatPage extends PlatformPage {
                 position: relative;
                 z-index: 50;
             }
-            .action-btn {
-                width: 36px;
-                height: 36px;
-                display: inline-flex;
-                align-items: center;
-                justify-content: center;
-                border-radius: var(--radius-lg);
-                background: var(--glass-solid-subtle);
-                border: 1px solid var(--border-subtle);
-                color: var(--text-secondary);
-                cursor: pointer;
-            }
-            .action-btn:hover {
-                background: var(--glass-solid-medium);
-                color: var(--text-primary);
-            }
-            .action-btn-menu {
-                width: 100%;
-                min-height: 40px;
-                display: flex;
-                align-items: center;
-                gap: var(--space-2);
-                background: transparent;
-                border: none;
-                text-align: left;
-                padding: var(--space-2) var(--space-3);
-                color: var(--text-primary);
-                cursor: pointer;
-                font-size: var(--text-sm);
-            }
-            .action-btn-menu:hover {
-                background: var(--glass-hover, color-mix(in srgb, var(--glass-hover) 35%, transparent));
-            }
             .menu-flyout {
                 position: absolute;
                 right: 0;
@@ -105,9 +78,15 @@ export class ChatPage extends PlatformPage {
                 background: var(--glass-solid-strong);
                 border: 1px solid var(--glass-border, var(--border-subtle));
                 border-radius: var(--radius-md);
-                box-shadow: 0 8px 24px rgba(0, 0, 0, 0.18);
-                padding: var(--space-1) 0;
+                box-shadow: var(--glass-shadow-strong);
                 z-index: 40;
+                display: flex;
+                flex-direction: column;
+                gap: var(--space-1);
+                padding: var(--space-1);
+            }
+            .menu-flyout platform-button {
+                justify-content: flex-start;
             }
             .chat-workspace {
                 flex: 1;
@@ -448,6 +427,32 @@ export class ChatPage extends PlatformPage {
         this._overflowOpen = !this._overflowOpen;
     }
 
+    _renderHeaderIconButton({ title, icon, iconSize = '16', onClick, dataAction, danger = false }) {
+        return html`
+            <platform-button
+                variant="ghost"
+                icon-only
+                density="dense"
+                ?danger=${danger}
+                aria-label=${title}
+                title=${title}
+                data-action=${dataAction || nothing}
+                @click=${onClick}
+            >
+                <platform-icon name=${icon} size=${iconSize}></platform-icon>
+            </platform-button>
+        `;
+    }
+
+    _renderMenuButton({ label, icon, onClick, danger = false }) {
+        return html`
+            <platform-button variant="ghost" density="compact" ?danger=${danger} @click=${onClick}>
+                <platform-icon name=${icon} size="16"></platform-icon>
+                ${label}
+            </platform-button>
+        `;
+    }
+
     _renderDesktopActions(hasFlow) {
         return html`
             <platform-help-hint
@@ -458,100 +463,59 @@ export class ChatPage extends PlatformPage {
                 .docHref=${'/documentation/scenarios/flows/run-flow-chat/'}
                 .docLabel=${this.t('help_hints.open_scenario')}
             ></platform-help-hint>
-            <button
-                type="button"
-                class="action-btn"
-                title=${this.t('editor_header.lara')}
-                aria-label=${this.t('editor_header.lara')}
-                @click=${this._openLara}
-            >
-                <platform-icon name="ai" size="16"></platform-icon>
-            </button>
+            ${this._renderHeaderIconButton({
+                title: this.t('editor_header.lara'),
+                icon: 'ai',
+                onClick: this._openLara,
+            })}
             ${hasFlow
-                ? html`
-                    <button
-                        type="button"
-                        class="action-btn"
-                        title=${this.t('chat_page.flow_settings')}
-                        aria-label=${this.t('chat_page.flow_settings')}
-                        data-action="flow-settings"
-                        @click=${this._openFlowSettings}
-                    >
-                        <platform-icon name="settings" size="16"></platform-icon>
-                    </button>
-                `
+                ? this._renderHeaderIconButton({
+                    title: this.t('chat_page.flow_settings'),
+                    icon: 'settings',
+                    dataAction: 'flow-settings',
+                    onClick: this._openFlowSettings,
+                })
                 : nothing}
             ${hasFlow
-                ? html`
-                    <button
-                        type="button"
-                        class="action-btn"
-                        title=${this.t('editor_header.share_preview')}
-                        aria-label=${this.t('editor_header.share_preview')}
-                        @click=${this._openPreviewShare}
-                    >
-                        <platform-icon name="share" size="16"></platform-icon>
-                    </button>
-                `
+                ? this._renderHeaderIconButton({
+                    title: this.t('editor_header.share_preview'),
+                    icon: 'share',
+                    onClick: this._openPreviewShare,
+                })
                 : nothing}
             ${hasFlow
-                ? html`
-                    <button
-                        type="button"
-                        class="action-btn"
-                        title=${this.t('flows_sidebar.footer_triggers')}
-                        aria-label=${this.t('flows_sidebar.footer_triggers')}
-                        @click=${this._openTriggers}
-                    >
-                        <platform-icon name="zap" size="16"></platform-icon>
-                    </button>
-                `
+                ? this._renderHeaderIconButton({
+                    title: this.t('flows_sidebar.footer_triggers'),
+                    icon: 'zap',
+                    onClick: this._openTriggers,
+                })
                 : nothing}
-            <button
-                type="button"
-                class="action-btn"
-                title=${this.t('platform_chat.btn_traces')}
-                aria-label=${this.t('platform_chat.btn_traces')}
-                @click=${this._openTracing}
-            >
-                <platform-icon name="chart" size="16"></platform-icon>
-            </button>
-            <button
-                type="button"
-                class="action-btn"
-                title=${this.t('platform_chat.btn_logs')}
-                aria-label=${this.t('platform_chat.btn_logs')}
-                @click=${this._openLogs}
-            >
-                <platform-icon name="file-text" size="16"></platform-icon>
-            </button>
-            <button
-                type="button"
-                class="action-btn"
-                title=${this.t('platform_chat.btn_history')}
-                aria-label=${this.t('platform_chat.btn_history')}
-                @click=${this._openDurableHistory}
-            >
-                <platform-icon name="trace-timeline" size="16"></platform-icon>
-            </button>
-            <button
-                type="button"
-                class="action-btn"
-                title=${this.t('platform_chat.btn_editor')}
-                aria-label=${this.t('platform_chat.btn_editor')}
-                @click=${this._openEditor}
-            >
-                <platform-icon name="edit" size="16"></platform-icon>
-            </button>
-            <button
-                type="button"
-                class="action-btn"
-                title=${this.t('platform_chat.btn_clear')}
-                aria-label=${this.t('platform_chat.btn_clear')}
-                @click=${this._onClear}
-            >
-                <platform-icon name="trash" size="16"></platform-icon>
-            </button>
+            ${this._renderHeaderIconButton({
+                title: this.t('platform_chat.btn_traces'),
+                icon: 'chart',
+                onClick: this._openTracing,
+            })}
+            ${this._renderHeaderIconButton({
+                title: this.t('platform_chat.btn_logs'),
+                icon: 'file-text',
+                onClick: this._openLogs,
+            })}
+            ${this._renderHeaderIconButton({
+                title: this.t('platform_chat.btn_history'),
+                icon: 'trace-timeline',
+                onClick: this._openDurableHistory,
+            })}
+            ${this._renderHeaderIconButton({
+                title: this.t('platform_chat.btn_editor'),
+                icon: 'edit',
+                onClick: this._openEditor,
+            })}
+            ${this._renderHeaderIconButton({
+                title: this.t('platform_chat.btn_clear'),
+                icon: 'trash',
+                danger: true,
+                onClick: this._onClear,
+            })}
         `;
     }
 
@@ -566,73 +530,68 @@ export class ChatPage extends PlatformPage {
                     .docHref=${'/documentation/scenarios/flows/run-flow-chat/'}
                     .docLabel=${this.t('help_hints.open_scenario')}
                 ></platform-help-hint>
-                <button
-                    type="button"
-                    class="action-btn"
-                    title=${this.t('editor_header.lara')}
-                    aria-label=${this.t('editor_header.lara')}
-                    @click=${this._openLara}
-                >
-                    <platform-icon name="ai" size="16"></platform-icon>
-                </button>
+                ${this._renderHeaderIconButton({
+                    title: this.t('editor_header.lara'),
+                    icon: 'ai',
+                    onClick: this._openLara,
+                })}
                 <div class="flow-chat-overflow-anchor">
-                    <button
-                        type="button"
-                        class="action-btn"
-                        title=${this.t('platform_chat.overflow_aria')}
-                        aria-label=${this.t('platform_chat.overflow_aria')}
-                        aria-expanded=${this._overflowOpen ? 'true' : 'false'}
-                        @click=${this._toggleOverflow}
-                    >
-                        <platform-icon name="more-vertical" size="20"></platform-icon>
-                    </button>
+                    ${this._renderHeaderIconButton({
+                        title: this.t('platform_chat.overflow_aria'),
+                        icon: 'more-vertical',
+                        iconSize: '20',
+                        onClick: this._toggleOverflow,
+                    })}
                     ${this._overflowOpen
                         ? html`
                             <div class="menu-flyout" @click=${(e) => e.stopPropagation()}>
                                 ${hasFlow
-                                    ? html`
-                                        <button type="button" class="action-btn-menu" @click=${this._openFlowSettings}>
-                                            <platform-icon name="settings" size="16"></platform-icon>
-                                            ${this.t('chat_page.flow_settings')}
-                                        </button>
-                                    `
+                                    ? this._renderMenuButton({
+                                        label: this.t('chat_page.flow_settings'),
+                                        icon: 'settings',
+                                        onClick: this._openFlowSettings,
+                                    })
                                     : nothing}
                                 ${hasFlow
-                                    ? html`
-                                        <button type="button" class="action-btn-menu" @click=${this._openPreviewShare}>
-                                            <platform-icon name="share" size="16"></platform-icon>
-                                            ${this.t('editor_header.share_preview')}
-                                        </button>
-                                    `
+                                    ? this._renderMenuButton({
+                                        label: this.t('editor_header.share_preview'),
+                                        icon: 'share',
+                                        onClick: this._openPreviewShare,
+                                    })
                                     : nothing}
                                 ${hasFlow
-                                    ? html`
-                                        <button type="button" class="action-btn-menu" @click=${this._openTriggers}>
-                                            <platform-icon name="zap" size="16"></platform-icon>
-                                            ${this.t('flows_sidebar.footer_triggers')}
-                                        </button>
-                                    `
+                                    ? this._renderMenuButton({
+                                        label: this.t('flows_sidebar.footer_triggers'),
+                                        icon: 'zap',
+                                        onClick: this._openTriggers,
+                                    })
                                     : nothing}
-                                <button type="button" class="action-btn-menu" @click=${this._openTracing}>
-                                    <platform-icon name="chart" size="16"></platform-icon>
-                                    ${this.t('platform_chat.btn_traces')}
-                                </button>
-                                <button type="button" class="action-btn-menu" @click=${this._openLogs}>
-                                    <platform-icon name="file-text" size="16"></platform-icon>
-                                    ${this.t('platform_chat.btn_logs')}
-                                </button>
-                                <button type="button" class="action-btn-menu" @click=${this._openDurableHistory}>
-                                    <platform-icon name="trace-timeline" size="16"></platform-icon>
-                                    ${this.t('platform_chat.btn_history')}
-                                </button>
-                                <button type="button" class="action-btn-menu" @click=${this._openEditor}>
-                                    <platform-icon name="edit" size="16"></platform-icon>
-                                    ${this.t('platform_chat.btn_editor')}
-                                </button>
-                                <button type="button" class="action-btn-menu" @click=${this._onClear}>
-                                    <platform-icon name="trash" size="16"></platform-icon>
-                                    ${this.t('platform_chat.btn_clear')}
-                                </button>
+                                ${this._renderMenuButton({
+                                    label: this.t('platform_chat.btn_traces'),
+                                    icon: 'chart',
+                                    onClick: this._openTracing,
+                                })}
+                                ${this._renderMenuButton({
+                                    label: this.t('platform_chat.btn_logs'),
+                                    icon: 'file-text',
+                                    onClick: this._openLogs,
+                                })}
+                                ${this._renderMenuButton({
+                                    label: this.t('platform_chat.btn_history'),
+                                    icon: 'trace-timeline',
+                                    onClick: this._openDurableHistory,
+                                })}
+                                ${this._renderMenuButton({
+                                    label: this.t('platform_chat.btn_editor'),
+                                    icon: 'edit',
+                                    onClick: this._openEditor,
+                                })}
+                                ${this._renderMenuButton({
+                                    label: this.t('platform_chat.btn_clear'),
+                                    icon: 'trash',
+                                    danger: true,
+                                    onClick: this._onClear,
+                                })}
                             </div>
                         `
                         : nothing}
@@ -658,6 +617,9 @@ export class ChatPage extends PlatformPage {
         const voiceReady = hasFlow && companyId !== '' && this._voiceBaseUrl !== '';
 
         return html`
+            <div class="chat-breadcrumbs">
+                <platform-breadcrumbs compact current-label=${flowName}></platform-breadcrumbs>
+            </div>
             <page-header
                 title=${flowName}
                 subtitle=${branchLabel}
@@ -665,16 +627,17 @@ export class ChatPage extends PlatformPage {
             >
                 ${this._isMobile
                     ? html`
-                          <button
-                              type="button"
+                          <platform-button
                               slot="leading"
-                              class="page-header-leading-btn"
-                              title=${this.t('platform_chat.title_back_to_flows_list')}
+                              variant="ghost"
+                              icon-only
+                              density="dense"
                               aria-label=${this.t('platform_chat.title_back_to_flows_list')}
+                              title=${this.t('platform_chat.title_back_to_flows_list')}
                               @click=${this._onFlowsChatBack}
                           >
                               <platform-icon name="arrow-left" size="20"></platform-icon>
-                          </button>
+                          </platform-button>
                       `
                     : nothing}
                 <div slot="actions">

@@ -1,6 +1,7 @@
 import { html, css } from 'lit';
 import { PlatformElement } from '@platform/lib/platform-element/index.js';
 import '@platform/lib/components/platform-icon.js';
+import '@platform/lib/components/platform-button.js';
 import '@platform/lib/components/platform-help-hint.js';
 
 function stringValue(record, field) {
@@ -121,8 +122,11 @@ export class FlowsEvaluationRunToolbar extends PlatformElement {
                 background: color-mix(in srgb, var(--bg-surface), transparent 18%);
             }
 
+            .actions platform-button {
+                --platform-button-icon-size: 34px;
+            }
+
             .segmented button,
-            .action-btn,
             .template-btn,
             .docs-link,
             .template-item,
@@ -147,7 +151,6 @@ export class FlowsEvaluationRunToolbar extends PlatformElement {
             }
 
             .segmented button:hover,
-            .action-btn:hover,
             .template-btn:hover,
             .template-item:hover,
             .step-btn:hover {
@@ -216,12 +219,6 @@ export class FlowsEvaluationRunToolbar extends PlatformElement {
                 border-radius: 7px;
                 border-color: transparent;
                 color: var(--text-tertiary);
-            }
-
-            .action-btn {
-                padding: 0 var(--space-3);
-                border-color: var(--border-subtle);
-                background: var(--glass-solid-subtle);
             }
 
             .template-btn {
@@ -330,31 +327,6 @@ export class FlowsEvaluationRunToolbar extends PlatformElement {
                 color: var(--text-tertiary);
                 font-size: var(--text-xs);
                 line-height: 1.35;
-            }
-
-            .action-btn.primary {
-                min-width: 104px;
-                background: linear-gradient(135deg, var(--accent), color-mix(in srgb, var(--accent), var(--success) 28%));
-                color: var(--text-inverse);
-                border-color: var(--accent);
-                font-weight: var(--font-semibold);
-            }
-
-            .action-btn.primary:hover {
-                background: var(--accent-hover);
-                border-color: var(--accent-hover);
-                box-shadow: var(--accent-glow);
-            }
-
-            .action-btn.danger {
-                color: var(--error);
-                border-color: color-mix(in srgb, var(--error), transparent 58%);
-            }
-
-            .action-btn:disabled {
-                opacity: 0.45;
-                cursor: not-allowed;
-                box-shadow: none;
             }
 
             .template-btn:disabled,
@@ -552,19 +524,25 @@ export class FlowsEvaluationRunToolbar extends PlatformElement {
                             ${runState} · ${passed}/${total} · ${failed}
                         </span>
                     ` : ''}
-                    <button class="action-btn" type="button" title=${this.t('evaluation.toolbar.reload')} @click=${this._reload}>
+                    <platform-button
+                        variant="ghost"
+                        icon-only
+                        density="compact"
+                        aria-label=${this.t('evaluation.toolbar.reload')}
+                        @click=${this._reload}
+                    >
                         <platform-icon name="refresh" size="14"></platform-icon>
-                    </button>
+                    </platform-button>
                     ${runActive ? html`
-                        <button class="action-btn danger" type="button" ?disabled=${this.busy} @click=${this._cancel}>
+                        <platform-button variant="danger" density="compact" ?disabled=${this.busy} @click=${this._cancel}>
                             <platform-icon name="square" size="14"></platform-icon>
                             ${this.t('evaluation.toolbar.cancel')}
-                        </button>
+                        </platform-button>
                     ` : html`
-                        <button class="action-btn primary" type="button" ?disabled=${suiteDisabled || this.busy} @click=${this._run}>
+                        <platform-button variant="primary" density="compact" ?disabled=${suiteDisabled || this.busy} @click=${this._run}>
                             <platform-icon name="play" size="14"></platform-icon>
                             ${this.t('evaluation.toolbar.run')}
-                        </button>
+                        </platform-button>
                     `}
                 </div>
             </div>

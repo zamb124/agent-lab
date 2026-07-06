@@ -976,6 +976,47 @@ async def test_embed_code_includes_assistant_title_and_locale(frontend_client: A
 
 
 @pytest.mark.asyncio
+async def test_get_embed_code_production_urls(
+    frontend_client: AsyncClient,
+    test_auth_with_agent,
+    monkeypatch,
+):
+    from core.config import get_settings
+
+    settings = get_settings()
+    monkeypatch.setattr(settings.server, "env", "production")
+
+    auth_headers, _, company_id = test_auth_with_agent
+    create_response = await frontend_client.post(
+        "/frontend/api/embed/configs",
+        headers=auth_headers,
+        json={
+            "name": "Production URL Widget",
+            "flow_id": "test_agent",
+        },
+    )
+    assert create_response.status_code == 200
+    embed_id = create_response.json()["embed_id"]
+
+    response = await frontend_client.get(
+        f"/frontend/api/embed/configs/{embed_id}/code",
+        headers=auth_headers,
+    )
+    assert response.status_code == 200
+    data = response.json()
+    html_code = data["html_code"]
+
+    assert data["script_url"] == "https://cdn.humanitec.ru/lib/embed-chat/humanitec-embed-autoload.js"
+    assert 'data-flows-base-url="https://api.humanitec.ru/flows"' in html_code
+    assert 'data-platform-ui-origin="https://api.humanitec.ru"' in html_code
+    assert 'data-voice-base-url="https://api.humanitec.ru/voice"' in html_code
+    assert data["token_endpoint"].startswith("https://api.humanitec.ru/frontend/api/embed/configs/")
+    assert company_id in html_code
+
+    await frontend_client.delete(f"/frontend/api/embed/configs/{embed_id}", headers=auth_headers)
+
+
+@pytest.mark.asyncio
 async def test_create_embed_config_allowed_origins_normalized(frontend_client: AsyncClient, test_auth_with_agent):
     auth_headers, flows_container, company_id = test_auth_with_agent
     import uuid

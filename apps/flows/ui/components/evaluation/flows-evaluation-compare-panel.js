@@ -1,6 +1,7 @@
 import { html, css } from 'lit';
 import { PlatformElement } from '@platform/lib/platform-element/index.js';
 import '@platform/lib/components/platform-icon.js';
+import '@platform/lib/components/platform-button.js';
 import '@platform/lib/components/platform-help-hint.js';
 
 function asArray(value) {
@@ -98,7 +99,6 @@ export class FlowsEvaluationComparePanel extends PlatformElement {
             }
 
             .run-chip,
-            .action-btn,
             .judge-btn {
                 min-height: 34px;
                 display: inline-flex;
@@ -118,7 +118,6 @@ export class FlowsEvaluationComparePanel extends PlatformElement {
             }
 
             .run-chip:hover,
-            .action-btn:hover,
             .judge-btn:hover {
                 color: var(--text-primary);
                 background: var(--glass-solid-medium);
@@ -138,14 +137,6 @@ export class FlowsEvaluationComparePanel extends PlatformElement {
                 flex-wrap: wrap;
             }
 
-            .action-btn.primary {
-                background: var(--accent);
-                color: var(--text-inverse);
-                border-color: var(--accent);
-                font-weight: var(--font-semibold);
-            }
-
-            .action-btn:disabled,
             .judge-btn:disabled {
                 opacity: 0.45;
                 cursor: not-allowed;
@@ -249,14 +240,14 @@ export class FlowsEvaluationComparePanel extends PlatformElement {
                         ${runs.length > 0 ? runs.map((run) => this._renderRunChip(run)) : html`<span class="empty">${this.t('evaluation.compare.no_runs')}</span>`}
                     </div>
                     <div class="action-row">
-                        <button class="action-btn primary" type="button" ?disabled=${!compareEnabled || this.busy} @click=${this._compare}>
+                        <platform-button variant="primary" density="compact" ?disabled=${!compareEnabled || this.busy} @click=${this._compare}>
                             <platform-icon name="git-compare" size="14"></platform-icon>
                             ${this.t('evaluation.compare.compare')}
-                        </button>
-                        <button class="action-btn" type="button" ?disabled=${this.selectedRunId.length === 0 || this.busy} @click=${this._setBaseline}>
+                        </platform-button>
+                        <platform-button variant="secondary" density="compact" ?disabled=${this.selectedRunId.length === 0 || this.busy} @click=${this._setBaseline}>
                             <platform-icon name="flag" size="14"></platform-icon>
                             ${this.t('evaluation.compare.set_baseline')}
-                        </button>
+                        </platform-button>
                     </div>
                     <div class="judge-row">
                         <button class="judge-btn" type="button" ?disabled=${!compareEnabled} @click=${() => this._pairwise('human', 'left')}>

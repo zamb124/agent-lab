@@ -1165,7 +1165,8 @@
     "type_const_label": "const",
     "type_state_hint": "Reads from the current flow state. Enter the source path without @state:.",
     "type_var_hint": "Reads from flow or company variables. Enter the variable name without @var:.",
-    "type_const_hint": "Passes the source text as a constant without reading state or variables."
+    "type_const_hint": "Passes the source text as a constant without reading state or variables.",
+    "remove_row": "Remove row"
   },
   "flows_sidebar": {
     "home": "Overview",

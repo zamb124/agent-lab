@@ -63,7 +63,7 @@ async def test_flows_home_agent_download_link(
     await expect(page.locator("flows-app")).to_be_visible(timeout=30_000)
     await expect(page.locator("flows-home-page")).to_be_visible(timeout=30_000)
     await scenario.step("Flows home открыта", page, label_en="Flows home opened")
-    download_link = page.locator('flows-home-page a.text-action[href*="/agent"]')
+    download_link = page.locator('flows-home-page a.hero-download-link[href*="/agent"]')
     await expect(download_link).to_be_visible(timeout=30_000)
     await expect(
         download_link.filter(

@@ -5,6 +5,7 @@
 import { html, css } from 'lit';
 import { PlatformModal } from '@platform/lib/components/glass-modal.js';
 import { registerModalKind } from '@platform/lib/utils/modal-registry.js';
+import '@platform/lib/components/platform-button.js';
 import '@platform/lib/components/platform-icon.js';
 import '../components/editors/flows-code-editor.js';
 
@@ -67,15 +68,16 @@ export class FlowsRawJsonModal extends PlatformModal {
 
     renderHeaderActions() {
         return html`
-            <button
-                type="button"
-                class="header-btn"
+            <platform-button
+                variant="ghost"
+                icon-only
+                density="dense"
                 title=${this.t('raw_json_modal.action_download')}
                 aria-label=${this.t('raw_json_modal.download_aria')}
                 @click=${() => this._downloadJson()}
             >
                 <platform-icon name="download" size="16"></platform-icon>
-            </button>
+            </platform-button>
         `;
     }
 

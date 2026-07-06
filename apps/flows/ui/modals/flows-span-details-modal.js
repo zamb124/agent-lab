@@ -5,6 +5,7 @@
 import { html, css } from 'lit';
 import { PlatformModal } from '@platform/lib/components/glass-modal.js';
 import { registerModalKind } from '@platform/lib/utils/modal-registry.js';
+import '@platform/lib/components/platform-button.js';
 import '@platform/lib/components/platform-icon.js';
 import '@platform/lib/components/platform-span-attributes-viewer.js';
 import { asObject } from '../_helpers/flows-resolvers.js';
@@ -95,35 +96,35 @@ export class FlowsSpanDetailsModal extends PlatformModal {
         const hasSpanId = typeof span.span_id === 'string' && span.span_id.length > 0;
         const hasWorkflowSession = this._workflowSessionId().length > 0;
         return html`
-            <button
-                type="button"
-                class="header-btn"
-                title=${this.t('span_details_modal.action_durable_history')}
+            <platform-button
+                variant="ghost"
+                icon-only
+                density="dense"
                 aria-label=${this.t('span_details_modal.action_durable_history')}
                 ?disabled=${!hasWorkflowSession}
                 @click=${() => this._openDurableHistory()}
             >
                 <platform-icon name="trace-timeline" size="18"></platform-icon>
-            </button>
-            <button
-                type="button"
-                class="header-btn"
-                title=${this.t('span_details_modal.action_logs')}
+            </platform-button>
+            <platform-button
+                variant="ghost"
+                icon-only
+                density="dense"
                 aria-label=${this.t('span_details_modal.action_logs')}
                 ?disabled=${!hasSpanId}
                 @click=${() => this._openLogs()}
             >
                 <platform-icon name="logs" size="18"></platform-icon>
-            </button>
-            <button
-                type="button"
-                class="header-btn"
-                title=${this.t('span_details_modal.action_raw')}
+            </platform-button>
+            <platform-button
+                variant="ghost"
+                icon-only
+                density="dense"
                 aria-label=${this.t('span_details_modal.action_raw')}
                 @click=${() => this._openRaw()}
             >
                 <platform-icon name="trace-json" size="18"></platform-icon>
-            </button>
+            </platform-button>
         `;
     }
 

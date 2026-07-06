@@ -15,6 +15,8 @@ import { platformConfirm } from '@platform/lib/components/platform-confirm-modal
 import '@platform/lib/components/glass-spinner.js';
 import '@platform/lib/components/platform-icon.js';
 import '@platform/lib/components/platform-help-hint.js';
+import '@platform/lib/components/platform-modal-search-field.js';
+import '@platform/lib/components/platform-button.js';
 import './flow-card.js';
 import { asArray, isPlainObject } from '../_helpers/flows-resolvers.js';
 
@@ -92,25 +94,6 @@ export class FlowsCatalogList extends PlatformElement {
                 display: none;
             }
 
-            .create-btn {
-                box-sizing: border-box;
-                width: var(--flows-toolbar-control-size);
-                height: var(--flows-toolbar-control-size);
-                display: flex; align-items: center; justify-content: center;
-                border-radius: var(--radius-lg);
-                color: white;
-                background: var(--accent);
-                border: none;
-                cursor: pointer;
-                box-shadow: 0 2px 6px rgba(153, 166, 249, 0.2);
-                transition: var(--motion-transition-interactive);
-                flex-shrink: 0;
-            }
-            .create-btn:hover {
-                background: var(--accent-hover);
-                transform: scale(1.06);
-                box-shadow: 0 3px 8px rgba(153, 166, 249, 0.3);
-            }
             .flows-toolbar {
                 display: flex;
                 align-items: center;
@@ -119,46 +102,12 @@ export class FlowsCatalogList extends PlatformElement {
                 min-width: 0;
                 box-sizing: border-box;
             }
-            .flows-toolbar .flows-search {
+            .flows-toolbar platform-modal-search-field {
                 flex: 1;
                 min-width: 0;
             }
             .catalog-help {
                 flex-shrink: 0;
-            }
-            .flows-search {
-                position: relative;
-                flex-shrink: 0;
-            }
-            .flows-search .search-icon {
-                position: absolute;
-                left: 10px;
-                top: 50%;
-                transform: translateY(-50%);
-                color: var(--text-tertiary);
-                pointer-events: none;
-            }
-            .flows-search-input {
-                width: 100%;
-                box-sizing: border-box;
-                height: var(--flows-toolbar-control-size);
-                padding: 0 var(--space-2) 0 calc(var(--space-2) + 22px);
-                border-radius: var(--radius-lg);
-                border: 1px solid var(--glass-border-subtle);
-                background: var(--glass-solid-subtle);
-                color: var(--text-primary);
-                font: inherit;
-                font-size: var(--text-sm);
-                line-height: calc(var(--flows-toolbar-control-size) - 2px);
-            }
-            .flows-search-input:focus {
-                outline: none;
-                border-color: var(--accent);
-                box-shadow: 0 0 0 2px var(--accent-subtle);
-            }
-            .flows-search-input:disabled {
-                opacity: 0.65;
-                cursor: not-allowed;
             }
             .flows-search-empty {
                 font-size: var(--text-sm);
@@ -170,12 +119,12 @@ export class FlowsCatalogList extends PlatformElement {
                 position: sticky;
                 top: 0;
                 z-index: 2;
-                background: var(--glass-tint-subtle, rgba(255, 255, 255, 0.03));
+                background: var(--glass-tint-subtle);
                 backdrop-filter: blur(var(--glass-blur-medium));
                 -webkit-backdrop-filter: blur(var(--glass-blur-medium));
                 padding-top: var(--space-3);
                 padding-bottom: var(--space-2);
-                border-bottom: 1px solid var(--border-subtle, rgba(255, 255, 255, 0.06));
+                border-bottom: 1px solid var(--border-subtle);
             }
             .catalog-inner-cards {
                 display: flex;
@@ -272,12 +221,12 @@ export class FlowsCatalogList extends PlatformElement {
         this.openModal('flows.flow_create', {});
     }
 
-    _onFlowSearchInput(e) {
-        const t = e.target;
-        if (!(t instanceof HTMLInputElement)) {
-            throw new Error('FlowsCatalogList._onFlowSearchInput: expected input');
+    _onFlowSearchChange(e) {
+        const detail = e.detail;
+        if (!isPlainObject(detail) || typeof detail.value !== 'string') {
+            throw new TypeError('FlowsCatalogList._onFlowSearchChange: expected string detail.value');
         }
-        this._flowSearchQuery = typeof t.value === 'string' ? t.value : '';
+        this._flowSearchQuery = detail.value;
     }
 
     render() {
@@ -296,30 +245,23 @@ export class FlowsCatalogList extends PlatformElement {
                         role="group"
                         aria-label=${this.t('flows_sidebar.section_all_flows')}
                     >
-                        <div class="flows-search">
-                            <span class="search-icon" aria-hidden="true">
-                                <platform-icon name="search" size="14"></platform-icon>
-                            </span>
-                            <input
-                                type="search"
-                                class="flows-search-input"
-                                .value=${this._flowSearchQuery}
-                                placeholder=${this.t('flows_sidebar.search_placeholder')}
-                                aria-label=${this.t('flows_sidebar.search_aria')}
-                                ?disabled=${this._flows.loading && items.length === 0}
-                                @input=${this._onFlowSearchInput}
-                            />
-                        </div>
-                        <button
-                            type="button"
-                            class="create-btn"
-                            title=${this.t('flows_sidebar.create_flow_tooltip')}
+                        <platform-modal-search-field
+                            layout="fill"
+                            .value=${this._flowSearchQuery}
+                            placeholder=${this.t('flows_sidebar.search_placeholder')}
+                            @change=${this._onFlowSearchChange}
+                        ></platform-modal-search-field>
+                        <platform-button
+                            variant="primary"
+                            icon-only
+                            density="dense"
                             aria-label=${this.t('flows_sidebar.create_flow_tooltip')}
+                            title=${this.t('flows_sidebar.create_flow_tooltip')}
                             data-action="create-flow"
                             @click=${this._createFlow}
                         >
                             <platform-icon name="plus" size="16"></platform-icon>
-                        </button>
+                        </platform-button>
                         <platform-help-hint
                             class="catalog-help"
                             .label=${this.t('flows_sidebar.catalog_help_label')}

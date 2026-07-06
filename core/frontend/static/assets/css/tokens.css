@@ -598,6 +598,45 @@
     --crm-note-icon-gradient: linear-gradient(80.46deg, #FAD17A 9.08%, #FF9A76 44.12%, #99A6F9 85.61%);
     --crm-note-related-icon-gradient: linear-gradient(312.35deg, #FAD17A 18.71%, #FF9A76 82.25%, #99A6F9 157.48%);
 
+    /* ========== FLOWS SEMANTIC TOKENS ========== */
+
+    --flows-cover-gradient-1: linear-gradient(135deg, var(--accent) 0%, var(--accent-secondary) 100%);
+    --flows-cover-gradient-2: linear-gradient(
+        135deg,
+        color-mix(in srgb, var(--accent) 72%, var(--info) 28%) 0%,
+        color-mix(in srgb, var(--accent-secondary) 55%, var(--accent) 45%) 100%
+    );
+    --flows-cover-gradient-3: linear-gradient(135deg, var(--warning) 0%, var(--accent-secondary) 100%);
+    --flows-cover-gradient-4: linear-gradient(135deg, var(--info) 0%, var(--accent) 100%);
+    --flows-cover-gradient-5: linear-gradient(
+        135deg,
+        color-mix(in srgb, var(--accent-secondary) 65%, var(--accent) 35%) 0%,
+        var(--accent) 100%
+    );
+    --flows-cover-gradient-6: linear-gradient(135deg, var(--success) 0%, var(--accent) 100%);
+    --flows-cover-gradient-7: linear-gradient(135deg, var(--accent-secondary) 0%, var(--warning) 100%);
+    --flows-cover-gradient-8: linear-gradient(
+        135deg,
+        color-mix(in srgb, var(--accent) 70%, var(--info) 30%) 0%,
+        color-mix(in srgb, var(--accent) 45%, var(--accent-secondary) 55%) 100%
+    );
+
+    --flows-preset-react-gradient: var(--flows-cover-gradient-1);
+    --flows-preset-graph-gradient: var(--flows-cover-gradient-2);
+    --flows-preset-multi-gradient: var(--flows-cover-gradient-4);
+    --flows-preset-code-gradient: var(--flows-cover-gradient-6);
+    --flows-preset-external-gradient: var(--flows-cover-gradient-5);
+    --flows-preset-store-gradient: var(--flows-cover-gradient-4);
+
+    --flows-lib-kind-flow-gradient: var(--flows-preset-external-gradient);
+    --flows-lib-kind-mcp-gradient: var(--flows-preset-code-gradient);
+
+    --flows-avatar-text: var(--text-inverse);
+    --flows-avatar-shadow: var(--glass-shadow-subtle);
+    --flows-avatar-hover-shadow: var(--glass-shadow-medium);
+    --flows-card-action-size: 28px;
+    --flows-bundle-update-shadow: 0 0 0 2px color-mix(in srgb, var(--warning) 24%, transparent);
+
     /* ========== SYNC SEMANTIC TOKENS ========== */
 
     --sync-bubble-own-bg: linear-gradient(135deg, rgba(153, 166, 249, 0.18) 0%, rgba(255, 136, 92, 0.10) 100%);

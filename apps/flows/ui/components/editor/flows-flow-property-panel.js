@@ -8,6 +8,7 @@
 import { html, css, nothing } from 'lit';
 import { PlatformElement } from '@platform/lib/platform-element/index.js';
 import '@platform/lib/components/fields/platform-field.js';
+import '@platform/lib/components/platform-button.js';
 import { asObject } from '../../_helpers/flows-resolvers.js';
 
 /** @param {string} provider */
@@ -79,19 +80,6 @@ export class FlowsFlowPropertyPanel extends PlatformElement {
                 display: flex;
                 gap: var(--space-2);
                 flex-wrap: wrap;
-            }
-            .speech-actions button {
-                padding: var(--space-1) var(--space-2);
-                border-radius: var(--radius-md);
-                border: 1px solid var(--glass-border-subtle);
-                background: var(--glass-solid-medium);
-                color: var(--text-secondary);
-                font-size: var(--text-xs);
-                cursor: pointer;
-            }
-            .speech-actions button:hover {
-                color: var(--text-primary);
-                border-color: var(--border-medium);
             }
             .flow-settings-heading {
                 font-weight: var(--font-semibold);
@@ -748,9 +736,9 @@ export class FlowsFlowPropertyPanel extends PlatformElement {
                 'property_panel.speech_vad_threshold_hint',
             )}
             <div class="speech-actions">
-                <button type="button" @click=${() => this._clearFlowSpeech()}>
+                <platform-button variant="ghost" density="compact" @click=${() => this._clearFlowSpeech()}>
                     ${this.t('property_panel.speech_clear_flow')}
-                </button>
+                </platform-button>
             </div>
         `;
     }
@@ -922,9 +910,9 @@ export class FlowsFlowPropertyPanel extends PlatformElement {
                 'property_panel.speech_vad_threshold_hint',
             )}
             <div class="speech-actions">
-                <button type="button" @click=${() => this._clearBranchSpeech(branchKey)}>
+                <platform-button variant="ghost" density="compact" @click=${() => this._clearBranchSpeech(branchKey)}>
                     ${this.t('property_panel.speech_clear_branch')}
-                </button>
+                </platform-button>
             </div>
         `;
     }

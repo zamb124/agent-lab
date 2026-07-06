@@ -70,8 +70,14 @@ export class FlowsCodeNodeDropModal extends PlatformModal {
                 display: flex;
                 align-items: center;
                 justify-content: center;
-                color: #fff;
+                color: var(--flows-avatar-text);
                 flex-shrink: 0;
+            }
+            .choice-card-icon[data-variant='code'] {
+                background: var(--flows-preset-code-gradient);
+            }
+            .choice-card-icon[data-variant='templates'] {
+                background: var(--flows-preset-multi-gradient);
             }
             .choice-card-label {
                 font-size: var(--text-sm);
@@ -131,10 +137,7 @@ export class FlowsCodeNodeDropModal extends PlatformModal {
                         @click=${this._onNew}
                         @keydown=${(e) => this._cardKeydown(e, this._onNew)}
                     >
-                        <div
-                            class="choice-card-icon"
-                            style="background: linear-gradient(135deg, #82E0AA 0%, #76D7C4 100%);"
-                        >
+                        <div class="choice-card-icon" data-variant="code">
                             <platform-icon name="code" size="28"></platform-icon>
                         </div>
                         <div class="choice-card-label">${this.t('code_node_drop_modal.action_blank')}</div>
@@ -147,10 +150,7 @@ export class FlowsCodeNodeDropModal extends PlatformModal {
                         @click=${this._onTemplates}
                         @keydown=${(e) => this._cardKeydown(e, this._onTemplates)}
                     >
-                        <div
-                            class="choice-card-icon"
-                            style="background: linear-gradient(135deg, #5DADE2 0%, #5499C7 100%);"
-                        >
+                        <div class="choice-card-icon" data-variant="templates">
                             <platform-icon name="layers" size="28"></platform-icon>
                         </div>
                         <div class="choice-card-label">${this.t('code_node_drop_modal.action_templates')}</div>

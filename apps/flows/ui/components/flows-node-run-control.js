@@ -4,6 +4,7 @@
 
 import { html, css } from 'lit';
 import { PlatformElement } from '@platform/lib/platform-element/index.js';
+import '@platform/lib/components/platform-button.js';
 import '@platform/lib/components/platform-icon.js';
 import '@platform/lib/components/glass-spinner.js';
 import { nextModalLayerZIndex } from '@platform/lib/utils/modal-z-stack.js';
@@ -35,9 +36,9 @@ function ensurePortalStyles() {
             overflow-wrap: anywhere;
             color: var(--text-primary);
             background: var(--bg-elevated);
-            border: 1px solid var(--glass-border-subtle, rgba(255, 255, 255, 0.12));
-            border-radius: var(--radius-md, 10px);
-            box-shadow: var(--glass-shadow-strong, 0 8px 28px rgba(0, 0, 0, 0.35));
+            border: 1px solid var(--glass-border-subtle);
+            border-radius: var(--radius-md);
+            box-shadow: var(--glass-shadow-strong);
             pointer-events: auto;
             box-sizing: border-box;
         }
@@ -51,7 +52,7 @@ function ensurePortalStyles() {
         }
         .flows-node-run-bubble .duration {
             font-size: 11px;
-            color: var(--text-tertiary, rgba(255, 255, 255, 0.5));
+            color: var(--text-tertiary);
             margin-bottom: 8px;
         }
         .flows-node-run-bubble ul {
@@ -70,13 +71,13 @@ function ensurePortalStyles() {
             background: none;
             border: none;
             padding: 0;
-            color: var(--accent, #7c8cff);
+            color: var(--accent);
             font: inherit;
             font-size: 12px;
             cursor: pointer;
             text-decoration: underline;
         }
-        .flows-node-run-bubble .full-btn:hover { color: var(--text-primary, #fff); }
+        .flows-node-run-bubble .full-btn:hover { color: var(--text-primary); }
     `;
     document.head.appendChild(style);
 }
@@ -100,14 +101,14 @@ export class FlowsNodeRunControl extends PlatformElement {
             .play-btn {
                 width: 32px; height: 32px; padding: 0;
                 display: inline-flex; align-items: center; justify-content: center;
-                background: var(--glass-solid-medium, rgba(255,255,255,0.08));
-                border: 1px solid var(--glass-border-subtle, rgba(255,255,255,0.12));
-                border-radius: var(--radius-md, 8px);
-                color: var(--accent, #7c8cff);
+                background: var(--glass-solid-medium);
+                border: 1px solid var(--glass-border-subtle);
+                border-radius: var(--radius-md);
+                color: var(--accent);
                 cursor: pointer;
             }
             .play-btn:hover:not(:disabled) {
-                background: var(--glass-solid-strong, rgba(255,255,255,0.12));
+                background: var(--glass-solid-strong);
             }
             .play-btn:disabled { opacity: 0.5; cursor: not-allowed; }
         `,
@@ -318,9 +319,10 @@ export class FlowsNodeRunControl extends PlatformElement {
         const title = this.t('test_panel.action_run');
         return html`
             <div class="root" part="root">
-                <button
-                    type="button"
-                    class="play-btn"
+                <platform-button
+                    variant="primary"
+                    icon-only
+                    density="dense"
                     title=${title}
                     aria-label=${title}
                     ?disabled=${this.busy}
@@ -329,7 +331,7 @@ export class FlowsNodeRunControl extends PlatformElement {
                     ${this.busy
                         ? html`<glass-spinner size="sm" aria-hidden="true"></glass-spinner>`
                         : html`<platform-icon name="play" size="18"></platform-icon>`}
-                </button>
+                </platform-button>
             </div>
         `;
     }

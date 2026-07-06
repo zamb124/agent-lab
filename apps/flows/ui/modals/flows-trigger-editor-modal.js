@@ -21,6 +21,7 @@ import { registerModalKind } from '@platform/lib/utils/modal-registry.js';
 import '@platform/lib/components/platform-icon.js';
 import '@platform/lib/components/platform-switch.js';
 import '@platform/lib/components/platform-help-hint.js';
+import '@platform/lib/components/platform-button.js';
 import '@platform/lib/components/platform-cron-field.js';
 import '@platform/lib/components/platform-timezone-picker.js';
 import '@platform/lib/components/fields/platform-field.js';
@@ -284,20 +285,6 @@ export class FlowsTriggerEditorModal extends PlatformFormModal {
             }
             .mapping-legend { font-size: var(--text-xs); color: var(--text-tertiary); }
 
-            .icon-btn {
-                background: transparent;
-                border: none;
-                cursor: pointer;
-                color: var(--text-tertiary);
-                padding: var(--space-1);
-                display: inline-flex;
-                align-items: center;
-                justify-content: center;
-                border-radius: var(--radius-sm);
-            }
-            .icon-btn:hover { color: var(--accent); background: var(--glass-tint-subtle); }
-            .icon-btn.danger:hover { color: var(--error); }
-
             .examples-list { font-size: var(--text-sm); font-family: var(--font-mono); }
             .examples-row { padding: var(--space-1) 0; display: flex; gap: var(--space-3); }
             .examples-row code { color: var(--accent); }
@@ -329,27 +316,12 @@ export class FlowsTriggerEditorModal extends PlatformFormModal {
                 font: inherit;
                 box-sizing: border-box;
             }
-            .add-btn {
-                display: flex;
-                align-items: center;
-                gap: var(--space-2);
-                padding: var(--space-2) var(--space-3);
-                background: var(--glass-tint-subtle);
-                border: 1px dashed var(--border-subtle);
-                border-radius: var(--radius-md);
-                color: var(--text-secondary);
-                cursor: pointer;
-                width: 100%;
-                justify-content: center;
-                font: inherit;
-            }
-            .add-btn:hover { background: var(--accent-subtle); color: var(--accent); border-color: var(--accent); }
 
             .form-error {
                 padding: var(--space-2) var(--space-3);
                 margin-bottom: var(--space-3);
                 color: var(--error);
-                background: rgba(239, 68, 68, 0.08);
+                background: var(--error-bg);
                 border-radius: var(--radius-md);
                 font-size: var(--text-sm);
             }
@@ -516,9 +488,10 @@ export class FlowsTriggerEditorModal extends PlatformFormModal {
                 .label=${this.t('trigger_editor_modal.verify_tooltip_label')}
             >
                 <div class="header-trigger-actions">
-                    <button
-                        type="button"
-                        class="header-btn verify-trigger-hint-btn"
+                    <platform-button
+                        variant="ghost"
+                        icon-only
+                        density="dense"
                         ?disabled=${this._verifyOp.busy || this._reregisterOp.busy}
                         title=${this.t('trigger_editor_modal.verify_btn_title')}
                         aria-label=${this.t('trigger_editor_modal.verify_btn_title')}
@@ -528,10 +501,11 @@ export class FlowsTriggerEditorModal extends PlatformFormModal {
         }}
                     >
                         <platform-icon name="check" size="16"></platform-icon>
-                    </button>
-                    <button
-                        type="button"
-                        class="header-btn"
+                    </platform-button>
+                    <platform-button
+                        variant="ghost"
+                        icon-only
+                        density="dense"
                         ?disabled=${reregisterDisabled}
                         title=${this.t('trigger_editor_modal.reregister_btn_title')}
                         aria-label=${this.t('trigger_editor_modal.reregister_btn_title')}
@@ -541,7 +515,7 @@ export class FlowsTriggerEditorModal extends PlatformFormModal {
         }}
                     >
                         <platform-icon name="rotate-ccw" size="16"></platform-icon>
-                    </button>
+                    </platform-button>
                 </div>
             </platform-help-hint>
         `;
@@ -1017,9 +991,9 @@ export class FlowsTriggerEditorModal extends PlatformFormModal {
                     <span style="font-weight: var(--font-medium); color: var(--text-secondary);">
                         ${this.t('trigger_editor_modal.mapping_label')}
                     </span>
-                    <button type="button" class="add-btn" style="width: auto;" @click=${this._addMapping}>
+                    <platform-button variant="ghost" density="compact" @click=${this._addMapping}>
                         + ${this.t('trigger_editor_modal.mapping_add')}
-                    </button>
+                    </platform-button>
                 </div>
 
                 ${this._outputMapping.length === 0
@@ -1053,14 +1027,16 @@ export class FlowsTriggerEditorModal extends PlatformFormModal {
                                     this._updateMapping(idx, 'payload', v);
                                 }}
                             ></platform-field>
-                            <button
-                                type="button"
-                                class="icon-btn danger"
+                            <platform-button
+                                variant="ghost"
+                                icon-only
+                                density="dense"
+                                danger
                                 title=${this.t('trigger_editor_modal.mapping_remove_title')}
                                 @click=${() => this._removeMapping(idx)}
                             >
                                 <platform-icon name="trash" size="16"></platform-icon>
-                            </button>
+                            </platform-button>
                         </div>
                     `)}
 
@@ -1147,13 +1123,9 @@ export class FlowsTriggerEditorModal extends PlatformFormModal {
                 </div>
                 <div class="config-section-title">${this.t('trigger_editor_modal.output_section_title')}</div>
                 <p class="config-intro">${this.t('trigger_editor_modal.output_telegram_auto')}</p>
-                <button
-                    type="button"
-                    class="add-btn"
-                    @click=${() => { this._outputTelegramExpanded = true; this.isDirty = true; }}
-                >
+                <platform-button variant="ghost" density="compact" @click=${() => { this._outputTelegramExpanded = true; this.isDirty = true; }}>
                     ${this.t('trigger_editor_modal.output_telegram_customize')}
-                </button>
+                </platform-button>
             `;
         }
         return html`
@@ -1178,10 +1150,10 @@ export class FlowsTriggerEditorModal extends PlatformFormModal {
                 : nothing}
             ${this._outputActions.map((action, idx) => this._renderOutputAction(action, idx))}
 
-            <button type="button" class="add-btn" @click=${this._addOutputAction}>
+            <platform-button variant="ghost" density="compact" @click=${this._addOutputAction}>
                 <platform-icon name="plus" size="16"></platform-icon>
                 ${this.t('trigger_editor_modal.output_add')}
-            </button>
+            </platform-button>
         `;
     }
 
@@ -1275,19 +1247,21 @@ export class FlowsTriggerEditorModal extends PlatformFormModal {
                                             this._setOutputMappingValue(idx, key, v);
                                         }}
                                     ></platform-field>
-                                    <button
-                                        type="button"
-                                        class="icon-btn danger"
+                                    <platform-button
+                                        variant="ghost"
+                                        icon-only
+                                        density="dense"
+                                        danger
                                         title=${this.t('trigger_editor_modal.mapping_remove_title')}
                                         @click=${() => this._removeOutputMappingKey(idx, key)}
                                     >
                                         <platform-icon name="trash" size="16"></platform-icon>
-                                    </button>
+                                    </platform-button>
                                 </div>
                             `)}
-                        <button type="button" class="add-btn" @click=${() => this._addOutputMappingKey(idx)}>
+                        <platform-button variant="ghost" density="compact" @click=${() => this._addOutputMappingKey(idx)}>
                             + ${this.t('trigger_editor_modal.output_mapping_add')}
-                        </button>
+                        </platform-button>
                     </div>
 
                     <div class="field">
@@ -1308,20 +1282,31 @@ export class FlowsTriggerEditorModal extends PlatformFormModal {
                         <span class="hint">${this.t('trigger_editor_modal.output_condition_hint')}</span>
                     </div>
                 </div>
-                <button
-                    type="button"
-                    class="icon-btn danger"
+                <platform-button
+                    variant="ghost"
+                    icon-only
+                    density="dense"
+                    danger
                     title=${this.t('trigger_editor_modal.output_action_remove_title')}
                     @click=${() => this._removeOutputAction(idx)}
                 >
                     <platform-icon name="trash" size="16"></platform-icon>
-                </button>
+                </platform-button>
             </div>
         `;
     }
 
     renderFooter() {
-        return html``;
+        const busy = this._createOp.busy || this._updateOp.busy;
+        const saveLabel = this.trigger
+            ? this.t('trigger_editor_modal.action_save')
+            : this.t('trigger_editor_modal.action_create');
+        return html`
+            <platform-button ?disabled=${busy} @click=${() => this.close()}>${this.t('trigger_editor_modal.action_cancel')}</platform-button>
+            <platform-button variant="primary" ?disabled=${busy} @click=${() => this._performSave()}>
+                ${busy ? this.t('editor_header.saving') : saveLabel}
+            </platform-button>
+        `;
     }
 
     renderSaveHeaderButton() {

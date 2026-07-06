@@ -18,6 +18,7 @@
 import { html, css } from 'lit';
 import { PlatformPage } from '@platform/lib/base/PlatformPage.js';
 import { CoreEvents } from '@platform/lib/events/index.js';
+import '@platform/lib/components/platform-breadcrumbs.js';
 import '../components/editor/flows-editor-header.js';
 import '../components/editor/flows-branches-tabs.js';
 import '../components/editor/flows-node-types-sidebar.js';
@@ -57,6 +58,10 @@ export class FlowEditorPage extends PlatformPage {
                 flex: 1; min-width: 0; min-height: 0;
                 display: flex; flex-direction: column;
                 background: var(--bg-elevated); overflow: hidden;
+            }
+            .editor-breadcrumbs {
+                flex-shrink: 0;
+                padding: var(--space-2) var(--space-4) 0;
             }
             .editor-shell {
                 flex: 1; min-height: 0;
@@ -400,6 +405,18 @@ export class FlowEditorPage extends PlatformPage {
         `;
     }
 
+    _flowDisplayLabel() {
+        const editorState = asObject(this._editor.state);
+        const flowConfig = asObject(editorState.flowConfig);
+        if (typeof flowConfig.name === 'string' && flowConfig.name.length > 0) {
+            return flowConfig.name;
+        }
+        if (typeof this.flowId === 'string' && this.flowId.length > 0) {
+            return this.flowId;
+        }
+        return '';
+    }
+
     render() {
         this._scheduleDataflowRefresh(asObject(this._editor.state));
         const dismissSafe = this._flowSettingsOpen ? 'flow-settings-dismiss-safe' : '';
@@ -407,6 +424,9 @@ export class FlowEditorPage extends PlatformPage {
             ${this._flowSettingsOpen
                 ? html`<div class="flow-settings-dismiss-layer" @click=${() => this._onDismissFlowSettingsBackdrop()}></div>`
                 : ''}
+            <div class="editor-breadcrumbs">
+                <platform-breadcrumbs compact current-label=${this._flowDisplayLabel()}></platform-breadcrumbs>
+            </div>
             <flows-editor-header
                 class=${dismissSafe}
                 .flowId=${this.flowId}

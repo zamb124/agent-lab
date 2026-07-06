@@ -14,7 +14,7 @@ import '@platform/lib/components/platform-icon.js';
 import '@platform/lib/components/glass-spinner.js';
 import '@platform/lib/components/fields/platform-field.js';
 import '@platform/lib/components/platform-date-picker.js';
-import '../components/editors/flows-searchable-combobox.js';
+import '@platform/lib/components/platform-searchable-combobox.js';
 import { asArray, asString } from '../_helpers/flows-resolvers.js';
 
 export class FlowsSessionsModal extends PlatformModal {
@@ -72,7 +72,7 @@ export class FlowsSessionsModal extends PlatformModal {
             }
             .flows-sessions-filter platform-field,
             .flows-sessions-filter platform-date-picker,
-            .flows-sessions-filter flows-searchable-combobox {
+            .flows-sessions-filter platform-searchable-combobox {
                 width: 100%;
                 min-width: 0;
                 max-width: 100%;
@@ -378,7 +378,7 @@ export class FlowsSessionsModal extends PlatformModal {
     _applyFromUi() {
         const root = this.renderRoot;
         if (root) {
-            for (const el of root.querySelectorAll('flows-searchable-combobox')) {
+            for (const el of root.querySelectorAll('platform-searchable-combobox')) {
                 if (typeof el.flush === 'function') {
                     el.flush();
                 }
@@ -559,7 +559,7 @@ export class FlowsSessionsModal extends PlatformModal {
             <div class="flows-sessions-body">
                 <div class="flows-sessions-filters" part="filters">
                     <div class="flows-sessions-filters-one-row">
-                        <flows-searchable-combobox
+                        <platform-searchable-combobox
                             class="flows-sessions-filter"
                             compact
                             .value=${this._filterUserId}
@@ -567,10 +567,10 @@ export class FlowsSessionsModal extends PlatformModal {
                             .label=${this.t('sessions_modal.filter_user')}
                             placeholder=${this.t('sessions_modal.filter_user')}
                             emptyLabel=${this.t('sessions_modal.filter_empty')}
-                            ariaLabel=${this.t('sessions_modal.filter_user_aria')}
+                            aria-label=${this.t('sessions_modal.filter_user_aria')}
                             @change=${this._onUserFilterCombobox}
-                        ></flows-searchable-combobox>
-                        <flows-searchable-combobox
+                        ></platform-searchable-combobox>
+                        <platform-searchable-combobox
                             class="flows-sessions-filter"
                             compact
                             .value=${this._filterFlowId}
@@ -578,9 +578,9 @@ export class FlowsSessionsModal extends PlatformModal {
                             .label=${this.t('sessions_modal.filter_flow')}
                             placeholder=${this.t('sessions_modal.filter_flow')}
                             emptyLabel=${this.t('sessions_modal.filter_empty')}
-                            ariaLabel=${this.t('sessions_modal.filter_flow_aria')}
+                            aria-label=${this.t('sessions_modal.filter_flow_aria')}
                             @change=${this._onFlowFilterCombobox}
-                        ></flows-searchable-combobox>
+                        ></platform-searchable-combobox>
                         <platform-field
                             class="flows-sessions-filter flows-sessions-filter--branch"
                             type="string"

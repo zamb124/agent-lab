@@ -20,6 +20,7 @@
 import { html, css } from 'lit';
 import { PlatformElement } from '@platform/lib/platform-element/index.js';
 import '@platform/lib/components/platform-icon.js';
+import '@platform/lib/components/platform-button.js';
 import '@platform/lib/components/fields/platform-field.js';
 
 const COLOR_ACCENT_VAR = Object.freeze({
@@ -102,20 +103,13 @@ export class FlowsStickyNote extends PlatformElement {
                 gap: 2px;
                 flex-shrink: 0;
             }
-            .icon-btn {
-                width: 22px; height: 22px;
-                display: inline-flex;
-                align-items: center; justify-content: center;
-                background: transparent;
-                border: none;
-                color: var(--text-tertiary);
-                cursor: pointer;
-                border-radius: var(--radius-md);
-                padding: 0;
+            .header-actions platform-button[data-active] {
+                color: var(--accent);
             }
-            .icon-btn:hover { color: var(--text-primary); background: rgba(0, 0, 0, 0.06); }
-            .icon-btn[data-active] { color: var(--accent); }
-            .icon-btn.danger:hover { color: var(--error); background: rgba(239, 68, 68, 0.12); }
+            .header-actions platform-button.sticky-delete:hover {
+                color: var(--error);
+                background: var(--error-bg);
+            }
 
             .body {
                 flex: 1;
@@ -247,31 +241,35 @@ export class FlowsStickyNote extends PlatformElement {
                 </div>
                 <div class="title">${this.text ? this.text.split('\n')[0] : this.t('canvas.sticky_note.placeholder')}</div>
                 <div class="header-actions" @pointerdown=${(e) => e.stopPropagation()}>
-                    <button
-                        class="icon-btn"
-                        type="button"
+                    <platform-button
+                        variant="ghost"
+                        icon-only
+                        density="dense"
                         ?data-active=${linkActive}
-                        title=${linkTitle}
+                        aria-label=${linkTitle}
                         @click=${this._onToggleLink}
                     >
                         <platform-icon name="link" size="14"></platform-icon>
-                    </button>
-                    <button
-                        class="icon-btn"
-                        type="button"
-                        title=${this.collapsed ? this.t('canvas.sticky_note.expand') : this.t('canvas.sticky_note.collapse')}
+                    </platform-button>
+                    <platform-button
+                        variant="ghost"
+                        icon-only
+                        density="dense"
+                        aria-label=${this.collapsed ? this.t('canvas.sticky_note.expand') : this.t('canvas.sticky_note.collapse')}
                         @click=${this._onToggleCollapse}
                     >
                         <platform-icon name=${this.collapsed ? 'chevron-down' : 'chevron-up'} size="14"></platform-icon>
-                    </button>
-                    <button
-                        class="icon-btn danger"
-                        type="button"
-                        title=${this.t('canvas.sticky_note.delete')}
+                    </platform-button>
+                    <platform-button
+                        class="sticky-delete"
+                        variant="ghost"
+                        icon-only
+                        density="dense"
+                        aria-label=${this.t('canvas.sticky_note.delete')}
                         @click=${this._onDelete}
                     >
                         <platform-icon name="close" size="14"></platform-icon>
-                    </button>
+                    </platform-button>
                 </div>
             </div>
         `;

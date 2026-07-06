@@ -18,7 +18,7 @@ import { html, css } from 'lit';
 import { PlatformElement } from '@platform/lib/platform-element/index.js';
 import '@platform/lib/components/fields/platform-field.js';
 import './flows-base-node-editor.js';
-import '../editors/flows-variable-input.js';
+import '@platform/lib/components/platform-variable-input.js';
 import '../editors/flows-json-field-editor.js';
 import { asString } from '../../_helpers/flows-resolvers.js';
 
@@ -214,11 +214,11 @@ export class FlowsChannelNodeEditor extends PlatformElement {
         return html`
             <div class="field">
                 <label>${this.t('channel_node_editor.telegram_bot_token')}</label>
-                <flows-variable-input
+                <platform-variable-input
                     .value=${typeof cfg.bot_token === 'string' ? cfg.bot_token : ''}
                     .flowVariables=${this.flowVariables}
                     @change=${(e) => this._onChannelConfig('bot_token', asString(e.detail?.value))}
-                ></flows-variable-input>
+                ></platform-variable-input>
             </div>
             <div class="field">
                 <label>${this.t('channel_node_editor.telegram_parse_mode')}</label>
@@ -265,11 +265,11 @@ export class FlowsChannelNodeEditor extends PlatformElement {
                 ></platform-field>
                 <div class="field">
                     <label>${this.t('channel_node_editor.email_password')}</label>
-                    <flows-variable-input
+                    <platform-variable-input
                         .value=${typeof cfg.password === 'string' ? cfg.password : ''}
                         .flowVariables=${this.flowVariables}
                         @change=${(e) => this._onChannelConfig('password', asString(e.detail?.value))}
-                    ></flows-variable-input>
+                    ></platform-variable-input>
                 </div>
             </div>
         `;
