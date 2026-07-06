@@ -14,6 +14,7 @@ from pydantic import Field
 from apps.flows.config import FLOWS_PUBLIC_API_PREFIX, get_settings
 from apps.flows.src.models.mcp import MCPCallResult, MCPServerConfig
 from apps.flows.src.runtime.tool_call_context import get_active_tool_call_context
+from core.clients.redis_client import RedisClient
 from core.logging import get_logger
 from core.models.base import StrictBaseModel
 from core.types import JsonObject, parse_json_object
@@ -23,12 +24,65 @@ logger = get_logger(__name__)
 BROWSER_PREVIEW_EVENT_PREFIX = "browser.preview."
 _BROWSER_SERVER_ID = "browser"
 _TOKEN_TTL_SECONDS = 6 * 60 * 60
+_ACTIVE_SESSION_KEY_PREFIX = "browser_preview:task:"
+
+_redis: RedisClient | None = None
+
+
+def _redis_client() -> RedisClient:
+    global _redis
+    if _redis is None:
+        _redis = RedisClient(get_settings().database.redis_url)
+    return _redis
+
+
+def browser_preview_active_session_key(task_id: str) -> str:
+    if not task_id.strip():
+        raise ValueError("task_id обязателен")
+    return f"{_ACTIVE_SESSION_KEY_PREFIX}{task_id.strip()}:active_session"
+
+
+async def get_active_browser_session_for_task(task_id: str) -> str | None:
+    """Активная browser-сессия задачи из Redis; None — сейчас нет открытой сессии."""
+    raw = await _redis_client().get(browser_preview_active_session_key(task_id))
+    if raw is None or raw.strip() == "":
+        return None
+    return raw.strip()
+
+
+async def _store_active_browser_session(task_id: str, session_id: str) -> None:
+    ok = await _redis_client().set(
+        browser_preview_active_session_key(task_id),
+        session_id,
+        ttl=_TOKEN_TTL_SECONDS,
+    )
+    if not ok:
+        logger.warning(
+            "browser_preview.active_session_store_failed",
+            task_id=task_id,
+            browser_session_id=session_id,
+        )
+
+
+async def _clear_active_browser_session(task_id: str, session_id: str) -> None:
+    key = browser_preview_active_session_key(task_id)
+    current = await _redis_client().get(key)
+    if current is None or current.strip() != session_id:
+        return
+    _ = await _redis_client().delete(key)
 
 
 class BrowserPreviewTokenClaims(StrictBaseModel):
     sid: str
     tid: str
     exp: int = Field(ge=1)
+
+
+class BrowserPreviewActiveSessionResponse(StrictBaseModel):
+    session_id: str | None
+    viewer_url: str | None = None
+    screenshot_url: str | None = None
+    status_url: str | None = None
 
 
 def _now_iso() -> str:
@@ -68,6 +122,20 @@ def create_browser_preview_token(
 
 
 def verify_browser_preview_token(*, token: str, session_id: str) -> BrowserPreviewTokenClaims:
+    claims = _verify_browser_preview_token_claims(token=token)
+    if claims.sid != session_id:
+        raise ValueError("preview token session mismatch")
+    return claims
+
+
+def verify_browser_preview_token_for_task(*, token: str, task_id: str) -> BrowserPreviewTokenClaims:
+    claims = _verify_browser_preview_token_claims(token=token)
+    if claims.tid != task_id:
+        raise ValueError("preview token task mismatch")
+    return claims
+
+
+def _verify_browser_preview_token_claims(*, token: str) -> BrowserPreviewTokenClaims:
     try:
         body, sig = token.split(".", 1)
     except ValueError as exc:
@@ -81,8 +149,6 @@ def verify_browser_preview_token(*, token: str, session_id: str) -> BrowserPrevi
         claims = BrowserPreviewTokenClaims.model_validate_json(_b64url_decode(body))
     except ValueError as exc:
         raise ValueError("invalid preview token payload") from exc
-    if claims.sid != session_id:
-        raise ValueError("preview token session mismatch")
     if claims.exp <= int(time.time()):
         raise ValueError("preview token expired")
     return claims
@@ -238,3 +304,12 @@ async def _emit_browser_preview_mcp_event(
         source="browser",
         correlation_id=ctx.tool_call_id,
     )
+
+    # Viewer следит за задачей, а не за одной сессией: поддерживаем в Redis
+    # маппинг task_id -> активная browser-сессия, чтобы после закрытия сессии
+    # iframe мог переключиться на следующую.
+    if phase == "finished" and session_id:
+        if tool_name == "browser_create_session":
+            await _store_active_browser_session(task_id, session_id)
+        elif tool_name == "browser_close_session":
+            await _clear_active_browser_session(task_id, session_id)

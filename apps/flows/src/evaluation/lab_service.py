@@ -1049,14 +1049,20 @@ class EvaluationLabService:
                 f"Evaluation run cannot be executed from state: {run.state}"
             )
         suite_version = await self._require_suite_version(run.suite_version_id)
-        run = run.model_copy(
-            update={
-                "state": EvaluationRunState.RUNNING,
-                "started_at": _utc_now(),
-                "updated_at": _utc_now(),
-            }
+        now = _utc_now()
+        started_run = await self._repository.start_run_if_queued(
+            run.run_id,
+            started_at=now,
+            updated_at=now,
         )
-        run = await self._repository.update_run(run)
+        if started_run is None:
+            latest_run = await self._require_run_model(run_id)
+            if latest_run.state == EvaluationRunState.CANCELED:
+                return await self.get_run(run_id)
+            raise EvaluationLabValidationError(
+                f"Evaluation run cannot be executed from state: {latest_run.state}"
+            )
+        run = started_run
         _ = await self._append_event(
             run.run_id,
             None,
@@ -1160,6 +1166,8 @@ class EvaluationLabService:
     async def cancel_run(self, run_id: str) -> EvaluationRunWithCases:
         run_with_cases = await self.get_run(run_id)
         run = run_with_cases.run
+        if run.state == EvaluationRunState.CANCELED:
+            return run_with_cases
         if run.state not in {EvaluationRunState.QUEUED, EvaluationRunState.RUNNING}:
             raise EvaluationLabValidationError(
                 f"Evaluation run cannot be canceled from state: {run.state}"

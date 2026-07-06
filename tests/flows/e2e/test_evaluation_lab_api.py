@@ -291,6 +291,27 @@ async def _wait_for_run(
     raise AssertionError(f"Evaluation run did not finish: {last_payload}")
 
 
+async def _create_evaluation_run_via_api(
+    client: AsyncClient,
+    payload: dict[str, object],
+    *,
+    attempts: int = 5,
+) -> EvaluationRunWithCases:
+    last_error = "evaluation run was not created"
+    for attempt in range(attempts):
+        run_response = await client.post("/flows/api/v1/evaluation/runs", json=payload)
+        if run_response.status_code != 200:
+            last_error = run_response.text
+            await asyncio.sleep(0.15 * (attempt + 1))
+            continue
+        created_run = EvaluationRunWithCases.model_validate(run_response.json())
+        if created_run.run.state == EvaluationRunState.QUEUED:
+            return created_run
+        last_error = f"unexpected evaluation run state: {created_run.run.state}"
+        await asyncio.sleep(0.15 * (attempt + 1))
+    raise AssertionError(last_error)
+
+
 async def _wait_for_run_gate_state(
     client: AsyncClient,
     run_id: str,
@@ -2989,16 +3010,14 @@ class TestEvaluationLabAPI:
             )
             assert case.status_code == 200, case.text
 
-            run_response = await client.post(
-                "/flows/api/v1/evaluation/runs",
-                json={
+            created_run = await _create_evaluation_run_via_api(
+                client,
+                {
                     "suite_id": suite.suite_id,
                     "branch_id": "default",
                     "scope": {"type": "suite"},
                 },
             )
-            assert run_response.status_code == 200, run_response.text
-            created_run = EvaluationRunWithCases.model_validate(run_response.json())
 
             cancel_response = await client.post(
                 f"/flows/api/v1/evaluation/runs/{created_run.run.run_id}/cancel"

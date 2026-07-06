@@ -41,6 +41,11 @@ ResponseHandler = Callable[[Response], None]
 PageEventListeners = tuple[ConsoleHandler, PageErrorHandler, RequestHandler, ResponseHandler]
 PageEventLogger = Callable[[str, JsonObject], None]
 
+# Сколько секунд помним закрытые сессии, чтобы status API мог отличить
+# «сессия существовала и закрыта» (closed=true) от неизвестного session_id (404).
+# Совпадает с TTL preview-токена flows (6 часов).
+CLOSED_SESSION_RETENTION_SEC = 6 * 60 * 60
+
 
 @dataclass
 class LeaseRecord:
@@ -179,6 +184,31 @@ class PageLeaseManager:
         self._page_event_logger: PageEventLogger | None = page_event_logger
         self._navigate_locks: dict[str, asyncio.Lock] = {}
         self._human_takeovers: dict[str, HumanTakeoverRecord] = {}
+        # session_id -> monotonic-время закрытия последней страницы сессии.
+        # Нужно, чтобы control status для уже закрытой сессии отвечал closed=true,
+        # а не 404 (preview-виджет различает «закрыто» и «не существует»).
+        self._closed_session_ids: dict[str, float] = {}
+
+    def _mark_session_closed_locked(self, session_id: str) -> None:
+        """Пометить сессию закрытой; вызывать только под `self._lock`."""
+        now = time.monotonic()
+        expired = [
+            sid
+            for sid, closed_at in self._closed_session_ids.items()
+            if now - closed_at > CLOSED_SESSION_RETENTION_SEC
+        ]
+        for sid in expired:
+            _ = self._closed_session_ids.pop(sid, None)
+        self._closed_session_ids[session_id] = now
+
+    async def is_session_recently_closed(self, session_id: str) -> bool:
+        if not session_id:
+            raise ValueError("session_id обязателен")
+        async with self._lock:
+            closed_at = self._closed_session_ids.get(session_id)
+            if closed_at is None:
+                return False
+            return time.monotonic() - closed_at <= CLOSED_SESSION_RETENTION_SEC
 
     @staticmethod
     def _console_location(msg: ConsoleMessage) -> JsonObject:
@@ -482,6 +512,7 @@ class PageLeaseManager:
                 if len(sess) == 0:
                     _ = self._session_pages.pop(rec.session_id, None)
                     _ = self._human_takeovers.pop(rec.session_id, None)
+                    self._mark_session_closed_locked(rec.session_id)
             session_mode = session_mode_override if session_mode_override is not None else rec.session_mode
             ctx_rec = self._session_contexts.get(rec.session_id)
             if ctx_rec is not None and (sess is None or len(sess) == 0):
@@ -533,6 +564,7 @@ class PageLeaseManager:
             async with self._lock:
                 ctx_rec = self._session_contexts.pop(session_id, None)
                 _ = self._human_takeovers.pop(session_id, None)
+                self._mark_session_closed_locked(session_id)
             if ctx_rec is not None:
                 await self._factory.close_context(ctx_rec.context)
         _ = self._navigate_locks.pop(session_id, None)

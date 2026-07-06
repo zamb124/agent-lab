@@ -109,6 +109,8 @@ async def test_kill_session_closes_all_pages() -> None:
     await lm.kill_session("sess-a", warm_idle_sec=0)
     assert factory.close_page_count == 2
     assert factory.close_context_count == 1
+    assert await lm.is_session_recently_closed("sess-a") is True
+    assert await lm.is_session_recently_closed("sess-never") is False
     _ = p1
     _ = p2
 

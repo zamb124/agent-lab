@@ -20,8 +20,12 @@ from apps.browser.contracts.control_types import (
 )
 from apps.flows.config import FLOWS_PUBLIC_API_PREFIX, get_settings
 from apps.flows.src.services.browser_preview import (
+    BrowserPreviewActiveSessionResponse,
     BrowserPreviewTokenClaims,
+    build_browser_preview_urls,
+    get_active_browser_session_for_task,
     verify_browser_preview_token,
+    verify_browser_preview_token_for_task,
 )
 from core.http import ProxyStrategy, get_httpx_client
 from core.types import JsonObject, parse_json_object, require_json_object
@@ -32,6 +36,13 @@ router = APIRouter(tags=["browser-preview"])
 def _verify_token_or_403(*, token: str, session_id: str) -> BrowserPreviewTokenClaims:
     try:
         return verify_browser_preview_token(token=token, session_id=session_id)
+    except ValueError as exc:
+        raise HTTPException(status_code=403, detail=str(exc)) from exc
+
+
+def _verify_task_token_or_403(*, token: str, task_id: str) -> BrowserPreviewTokenClaims:
+    try:
+        return verify_browser_preview_token_for_task(token=token, task_id=task_id)
     except ValueError as exc:
         raise HTTPException(status_code=403, detail=str(exc)) from exc
 
@@ -128,6 +139,29 @@ async def browser_preview_status(
         raise HTTPException(status_code=502, detail="browser status returned invalid json") from exc
     return JSONResponse(
         content=require_json_object(status.model_dump(mode="json"), "browser status response"),
+        headers={"Cache-Control": "no-store, max-age=0"},
+    )
+
+
+@router.get("/tasks/{task_id}/active-session")
+async def browser_preview_active_session(
+    task_id: str,
+    token: Annotated[str, Query()],
+) -> JSONResponse:
+    _ = _verify_task_token_or_403(token=token, task_id=task_id)
+    active_session_id = await get_active_browser_session_for_task(task_id)
+    if active_session_id is None:
+        payload = BrowserPreviewActiveSessionResponse(session_id=None)
+    else:
+        urls = build_browser_preview_urls(session_id=active_session_id, task_id=task_id)
+        payload = BrowserPreviewActiveSessionResponse(
+            session_id=active_session_id,
+            viewer_url=urls["viewer_url"],
+            screenshot_url=urls["screenshot_url"],
+            status_url=urls["status_url"],
+        )
+    return JSONResponse(
+        content=require_json_object(payload.model_dump(mode="json"), "browser active session response"),
         headers={"Cache-Control": "no-store, max-age=0"},
     )
 
@@ -289,10 +323,12 @@ async def browser_preview_viewer(
     token: Annotated[str, Query()],
     theme: Annotated[Literal["dark", "light"], Query()] = "dark",
 ) -> HTMLResponse:
-    _ = _verify_token_or_403(token=token, session_id=session_id)
+    claims = _verify_token_or_403(token=token, session_id=session_id)
     api_prefix_json = json.dumps(FLOWS_PUBLIC_API_PREFIX)
     token_json = json.dumps(token)
     sid_json = json.dumps(session_id)
+    task_id_json = json.dumps(claims.tid)
+    theme_json = json.dumps(theme)
     sid_label = html.escape(session_id)
     theme_attr = html.escape(theme)
     return HTMLResponse(
@@ -408,8 +444,11 @@ async def browser_preview_viewer(
   <script>
     const apiPrefix = {api_prefix_json};
     const sessionId = {sid_json};
+    const taskId = {task_id_json};
+    const theme = {theme_json};
     const token = {token_json};
     const base = `${{apiPrefix}}/browser-preview/sessions/${{encodeURIComponent(sessionId)}}`;
+    const taskBase = `${{apiPrefix}}/browser-preview/tasks/${{encodeURIComponent(taskId)}}`;
     const screen = document.getElementById('screen');
     const empty = document.getElementById('empty');
     const status = document.getElementById('status');
@@ -417,6 +456,12 @@ async def browser_preview_viewer(
     const viewport = document.getElementById('viewport');
     const takeoverBtn = document.getElementById('takeoverBtn');
     let stopped = false;
+    let followMode = false;
+    let followStartedAt = 0;
+    let followTimer = null;
+    let statusTimer = null;
+    const FOLLOW_POLL_MS = 1500;
+    const FOLLOW_TIMEOUT_MS = 90000;
     let pendingClick = false;
     let takeoverActive = false;
     let refreshTimer = null;
@@ -429,6 +474,76 @@ async def browser_preview_viewer(
       takeoverActive = Boolean(active);
       takeoverBtn.setAttribute('aria-pressed', takeoverActive ? 'true' : 'false');
       takeoverBtn.textContent = takeoverActive ? 'Release control' : 'Take control';
+    }}
+
+    function stopAllPolling() {{
+      stopped = true;
+      followMode = false;
+      if (refreshTimer !== null) {{
+        window.clearTimeout(refreshTimer);
+        refreshTimer = null;
+      }}
+      if (followTimer !== null) {{
+        window.clearTimeout(followTimer);
+        followTimer = null;
+      }}
+      if (statusTimer !== null) {{
+        window.clearInterval(statusTimer);
+        statusTimer = null;
+      }}
+    }}
+
+    function enterFollowMode() {{
+      if (stopped || followMode) return;
+      followMode = true;
+      followStartedAt = Date.now();
+      if (refreshTimer !== null) {{
+        window.clearTimeout(refreshTimer);
+        refreshTimer = null;
+      }}
+      setStatus('Agent continues in browser…');
+      scheduleFollowPoll(400);
+    }}
+
+    function scheduleFollowPoll(delayMs) {{
+      if (stopped || !followMode) return;
+      if (followTimer !== null) {{
+        window.clearTimeout(followTimer);
+      }}
+      followTimer = window.setTimeout(() => {{
+        followTimer = null;
+        pollActiveSession();
+      }}, delayMs);
+    }}
+
+    async function pollActiveSession() {{
+      if (stopped || !followMode) return;
+      if (Date.now() - followStartedAt >= FOLLOW_TIMEOUT_MS) {{
+        setStatus('Session finished');
+        stopAllPolling();
+        return;
+      }}
+      try {{
+        const res = await fetch(
+          `${{taskBase}}/active-session?token=${{encodeURIComponent(token)}}`,
+          {{ credentials: 'same-origin', cache: 'no-store' }},
+        );
+        if (!res.ok) throw new Error(String(res.status));
+        const data = await res.json();
+        const nextSessionId = data && typeof data.session_id === 'string' ? data.session_id : '';
+        if (nextSessionId.length > 0 && nextSessionId !== sessionId) {{
+          const viewerUrl = data && typeof data.viewer_url === 'string' ? data.viewer_url : '';
+          if (viewerUrl.length > 0) {{
+            const target = new URL(viewerUrl, window.location.href);
+            target.searchParams.set('theme', theme === 'light' ? 'light' : 'dark');
+            window.location.replace(`${{target.pathname}}${{target.search}}${{target.hash}}`);
+            return;
+          }}
+        }}
+        scheduleFollowPoll(FOLLOW_POLL_MS);
+      }} catch (_) {{
+        scheduleFollowPoll(FOLLOW_POLL_MS);
+      }}
     }}
 
     async function responseErrorText(res) {{
@@ -500,8 +615,13 @@ async def browser_preview_viewer(
     }}
 
     async function refreshStatus() {{
+      if (stopped || followMode) return;
       try {{
         const res = await fetch(`${{base}}/status?token=${{encodeURIComponent(token)}}`, {{ credentials: 'same-origin', cache: 'no-store' }});
+        if (res.status === 404) {{
+          enterFollowMode();
+          return;
+        }}
         if (!res.ok) throw new Error(String(res.status));
         const data = await res.json();
         if (data && typeof data.url === 'string' && data.url.length > 0) {{
@@ -509,16 +629,15 @@ async def browser_preview_viewer(
         }}
         setTakeover(data && data.human_takeover === true);
         if (data && data.closed === true) {{
-          setStatus('closed');
-          stopped = true;
+          enterFollowMode();
         }}
       }} catch (_) {{
-        if (!stopped) setStatus('status unavailable');
+        if (!stopped && !followMode) setStatus('status unavailable');
       }}
     }}
 
     function refreshFrame() {{
-      if (stopped) return;
+      if (stopped || followMode) return;
       const img = new Image();
       img.onload = () => {{
         screen.src = img.src;
@@ -530,12 +649,15 @@ async def browser_preview_viewer(
         scheduleFrame(900);
       }};
       img.onerror = () => {{
+        if (followMode || stopped) return;
+        if (screen.src) {{
+          enterFollowMode();
+          return;
+        }}
         screen.style.display = 'none';
         empty.style.display = 'block';
-        if (!stopped) {{
-          setStatus('waiting');
-          scheduleFrame(1400);
-        }}
+        setStatus('waiting');
+        scheduleFrame(1400);
       }};
       img.src = `${{base}}/screenshot?token=${{encodeURIComponent(token)}}&format=jpeg&quality=70&_=${{Date.now()}}`;
     }}
@@ -684,7 +806,7 @@ async def browser_preview_viewer(
     }});
     refreshStatus();
     refreshFrame();
-    setInterval(refreshStatus, 1600);
+    statusTimer = window.setInterval(refreshStatus, 1600);
   </script>
 </body>
 </html>""",

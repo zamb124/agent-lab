@@ -19,7 +19,13 @@ from core.config import get_settings
 from core.ui_events import UI_EVENTS_REDIS_CHANNEL
 
 
-async def _wait_presence_event(channel_pubsub, timeout: float = 10.0) -> dict:
+async def _wait_presence_event(
+    channel_pubsub,
+    *,
+    user_id: str | None = None,
+    company_id: str | None = None,
+    timeout: float = 10.0,
+) -> dict:
     async def _listen() -> dict:
         async for raw in channel_pubsub.listen():
             if raw["type"] != "message":
@@ -29,8 +35,18 @@ async def _wait_presence_event(channel_pubsub, timeout: float = 10.0) -> dict:
                 continue
             envelope = json.loads(data.decode("utf-8") if isinstance(data, bytes) else data)
             event = envelope.get("event")
-            if isinstance(event, dict) and event.get("type") == "sync/presence/changed":
-                return envelope
+            if not isinstance(event, dict) or event.get("type") != "sync/presence/changed":
+                continue
+            payload = event.get("payload")
+            if not isinstance(payload, dict):
+                continue
+            if user_id is not None and payload.get("user_id") != user_id:
+                continue
+            target = envelope.get("target")
+            if company_id is not None:
+                if not isinstance(target, dict) or target.get("company_id") != company_id:
+                    continue
+            return envelope
         raise RuntimeError("subscription closed")
 
     return await asyncio.wait_for(_listen(), timeout=timeout)
@@ -48,7 +64,9 @@ async def test_on_connect_first_publishes_presence_online(
     await pubsub.subscribe(UI_EVENTS_REDIS_CHANNEL)
     await asyncio.sleep(0.05)
 
-    listen_task = asyncio.create_task(_wait_presence_event(pubsub))
+    listen_task = asyncio.create_task(
+        _wait_presence_event(pubsub, user_id=user_id, company_id=company_id),
+    )
     try:
         await _on_connect(user_id, company_id, was_first=True)
 
@@ -110,7 +128,9 @@ async def test_on_disconnect_last_publishes_presence_offline(
     await pubsub.subscribe(UI_EVENTS_REDIS_CHANNEL)
     await asyncio.sleep(0.05)
 
-    listen_task = asyncio.create_task(_wait_presence_event(pubsub))
+    listen_task = asyncio.create_task(
+        _wait_presence_event(pubsub, user_id=user_id, company_id=company_id),
+    )
     try:
         await _on_disconnect(user_id, company_id, was_last=True)
 

@@ -952,6 +952,15 @@ async def control_session_status(
     try:
         page = await runtime.lease_manager.get_page_for_session(session_id)
     except KeyError as exc:
+        if await runtime.lease_manager.is_session_recently_closed(session_id):
+            return ControlSessionStatusResponse(
+                session_id=session_id,
+                url="",
+                title="",
+                closed=True,
+                human_takeover=False,
+                human_takeover_owner=None,
+            )
         raise HTTPException(status_code=404, detail=str(exc)) from exc
     except RuntimeError as exc:
         raise HTTPException(status_code=409, detail=str(exc)) from exc

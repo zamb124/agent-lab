@@ -34,6 +34,9 @@ export class PlatformTraceViewer extends PlatformElement {
         css`
             :host {
                 display: block;
+                --trace-viewer-control-size: calc(
+                    2px + 2 * var(--field-pill-dense-padding-y) + var(--field-pill-dense-spin-height)
+                );
             }
             .toolbar {
                 display: flex;
@@ -47,8 +50,8 @@ export class PlatformTraceViewer extends PlatformElement {
                 gap: var(--space-1);
             }
             .mode-btn {
-                width: 28px;
-                height: 28px;
+                width: var(--trace-viewer-control-size);
+                height: var(--trace-viewer-control-size);
                 display: inline-flex;
                 align-items: center;
                 justify-content: center;
@@ -398,6 +401,7 @@ export class PlatformTraceViewer extends PlatformElement {
                             type="string"
                             input-type="search"
                             mode="edit"
+                            pill-density="dense"
                             .placeholder=${this.t('trace_viewer.search_placeholder')}
                             .value=${this._search}
                             @change=${this._onSearchInput}
@@ -446,6 +450,7 @@ export class PlatformTraceViewer extends PlatformElement {
                         type="string"
                         input-type="search"
                         mode="edit"
+                        pill-density="dense"
                         .placeholder=${this.t('trace_viewer.search_placeholder')}
                         .value=${this._search}
                         @change=${this._onSearchInput}

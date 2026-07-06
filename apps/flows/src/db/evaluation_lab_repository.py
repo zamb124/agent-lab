@@ -35,6 +35,7 @@ from apps.flows.src.models.evaluation_lab import (
     EvaluationRunEvent,
     EvaluationRunJob,
     EvaluationRunJobState,
+    EvaluationRunState,
     EvaluationRunWithCases,
     EvaluationSuite,
     EvaluationSuiteVersion,
@@ -591,6 +592,40 @@ class EvaluationLabRepository:
             )
             await session.commit()
         return run
+
+    async def start_run_if_queued(
+        self,
+        run_id: str,
+        *,
+        started_at: datetime,
+        updated_at: datetime,
+    ) -> EvaluationRun | None:
+        company_id = _company_id()
+        async with self._storage.get_session() as session:
+            result = await session.execute(
+                text("""
+                    UPDATE evaluation_runs
+                    SET state = :running_state,
+                        started_at = :started_at,
+                        updated_at = :updated_at
+                    WHERE company_id = :company_id
+                      AND run_id = :run_id
+                      AND state = :queued_state
+                """),
+                {
+                    "company_id": company_id,
+                    "run_id": run_id,
+                    "running_state": EvaluationRunState.RUNNING,
+                    "queued_state": EvaluationRunState.QUEUED,
+                    "started_at": started_at,
+                    "updated_at": updated_at,
+                },
+            )
+            started = get_rowcount(result) == 1
+            await session.commit()
+        if not started:
+            return None
+        return await self.get_run(run_id)
 
     async def get_run(self, run_id: str) -> EvaluationRun | None:
         company_id = _company_id()

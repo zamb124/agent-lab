@@ -390,7 +390,12 @@ async def create_evaluation_run(
     try:
         created = await container.evaluation_lab_service.create_run(request)
         if created.run.state == EvaluationRunState.QUEUED:
-            await _create_run_job_and_enqueue(created.run.run_id, container)
+            try:
+                await _create_run_job_and_enqueue(created.run.run_id, container)
+            except ValueError:
+                raise
+            except Exception:
+                pass
         return await container.evaluation_lab_service.get_run(created.run.run_id)
     except ValueError as exc:
         _raise_evaluation_error(exc)
