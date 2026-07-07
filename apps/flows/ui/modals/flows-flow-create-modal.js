@@ -22,12 +22,14 @@ import '@platform/lib/components/platform-button.js';
 import '@platform/lib/components/platform-icon.js';
 import '@platform/lib/components/glass-spinner.js';
 import '@platform/lib/components/platform-modal-search-field.js';
+import '@platform/lib/components/platform-picker-card.js';
 import '@platform/lib/components/fields/platform-field.js';
 import { getBlankCodeNodeConfig } from '../_helpers/code-node-defaults.js';
 import {
     resolveFlowCoverGradient,
     resolveFlowPresetGradient,
 } from '../constants/flow-cover-gradients.js';
+import { glassStyles } from '@platform/lib/styles/shared/glass.styles.js';
 
 const FLOW_ID_PATTERN = /^[a-z][a-z0-9_]*$/;
 
@@ -151,6 +153,7 @@ export class FlowsFlowCreateModal extends PlatformFormModal {
 
     static styles = [
         ...(PlatformFormModal.styles ? [PlatformFormModal.styles] : []),
+        glassStyles,
         css`
             :host {
                 --modal-width: min(1280px, calc(100vw - 24px));
@@ -178,28 +181,10 @@ export class FlowsFlowCreateModal extends PlatformFormModal {
             @media (min-width: 1100px) {
                 .grid { grid-template-columns: repeat(4, 1fr); }
             }
-            .card {
-                position: relative;
-                box-sizing: border-box;
-                height: 168px;
-                padding: var(--space-3) var(--space-4) var(--space-4);
-                border-radius: var(--radius-xl);
-                background: var(--glass-solid-subtle);
-                border: 1px solid var(--glass-border-subtle);
-                cursor: pointer;
-                transition: var(--motion-transition-interactive);
-                display: flex;
-                flex-direction: column;
-                gap: var(--space-2);
-                overflow: hidden;
+            platform-picker-card {
+                min-width: 0;
             }
-            .card:hover { background: var(--glass-solid-medium); transform: translateY(-1px); }
-            .card[active] {
-                border-color: var(--accent);
-                box-shadow: 0 0 0 1px var(--accent);
-            }
-            .card-icon {
-                flex-shrink: 0;
+            .picker-card-icon {
                 width: 56px;
                 height: 56px;
                 border-radius: var(--radius-lg);
@@ -207,27 +192,6 @@ export class FlowsFlowCreateModal extends PlatformFormModal {
                 align-items: center;
                 justify-content: center;
                 color: white;
-            }
-            .card-title {
-                font-size: var(--text-base);
-                font-weight: var(--font-semibold);
-                color: var(--text-primary);
-                flex-shrink: 0;
-                display: -webkit-box;
-                -webkit-box-orient: vertical;
-                -webkit-line-clamp: 2;
-                overflow: hidden;
-            }
-            .card-desc {
-                font-size: var(--text-sm);
-                color: var(--text-secondary);
-                line-height: 1.4;
-                flex: 1;
-                min-height: 0;
-                display: -webkit-box;
-                -webkit-box-orient: vertical;
-                -webkit-line-clamp: 3;
-                overflow: hidden;
             }
             .empty-row {
                 grid-column: 1 / -1;
@@ -241,8 +205,6 @@ export class FlowsFlowCreateModal extends PlatformFormModal {
                 display: flex; align-items: center; gap: var(--space-2);
                 padding: var(--space-2) var(--space-3);
                 border-radius: var(--radius-lg);
-                background: var(--glass-solid-subtle);
-                border: 1px solid var(--glass-border-subtle);
             }
             .form .picked-text { display: flex; flex-direction: column; }
             .form .picked-title { font-weight: var(--font-semibold); color: var(--text-primary); }
@@ -369,25 +331,16 @@ export class FlowsFlowCreateModal extends PlatformFormModal {
                 ${presets.length === 0
                     ? html`<div class="empty-row">${this.t('flow_create_modal.empty_search')}</div>`
                     : presets.map((p) => html`
-                        <div
-                            class="card"
-                            data-preset-id=${p.id}
-                            role="button"
-                            tabindex="0"
-                            @click=${() => this._selectPreset(p)}
-                            @keydown=${(e) => {
-                                if (e.key === 'Enter' || e.key === ' ') {
-                                    e.preventDefault();
-                                    this._selectPreset(p);
-                                }
-                            }}
+                        <platform-picker-card
+                            value=${p.id}
+                            title=${this.t(`flow_create_modal.preset_${p.id}_title`)}
+                            subtitle=${this.t(`flow_create_modal.preset_${p.id}_desc`)}
+                            @select=${() => this._selectPreset(p)}
                         >
-                            <div class="card-icon" style=${`background:${resolveFlowPresetGradient(p.id)};`}>
+                            <div slot="icon" class="picker-card-icon" style=${`background:${resolveFlowPresetGradient(p.id)};`}>
                                 <platform-icon name=${p.icon} size="28"></platform-icon>
                             </div>
-                            <div class="card-title">${this.t(`flow_create_modal.preset_${p.id}_title`)}</div>
-                            <div class="card-desc">${this.t(`flow_create_modal.preset_${p.id}_desc`)}</div>
-                        </div>
+                        </platform-picker-card>
                     `)}
             </div>
 
@@ -406,25 +359,16 @@ export class FlowsFlowCreateModal extends PlatformFormModal {
         return html`
             <div class="grid">
                 ${bundles.map((b) => html`
-                    <div
-                        class="card"
-                        data-bundle-id=${b.bundle_id}
-                        role="button"
-                        tabindex="0"
-                        @click=${() => this._selectBundle(b)}
-                        @keydown=${(e) => {
-                            if (e.key === 'Enter' || e.key === ' ') {
-                                e.preventDefault();
-                                this._selectBundle(b);
-                            }
-                        }}
+                    <platform-picker-card
+                        value=${b.bundle_id}
+                        title=${typeof b.name === 'string' && b.name !== '' ? b.name : b.bundle_id}
+                        subtitle=${typeof b.description === 'string' ? b.description : b.bundle_id}
+                        @select=${() => this._selectBundle(b)}
                     >
-                        <div class="card-icon" style=${`background:${resolveFlowCoverGradient(b.bundle_id)};`}>
+                        <div slot="icon" class="picker-card-icon" style=${`background:${resolveFlowCoverGradient(b.bundle_id)};`}>
                             <platform-icon name="box" size="28"></platform-icon>
                         </div>
-                        <div class="card-title">${typeof b.name === 'string' && b.name !== '' ? b.name : b.bundle_id}</div>
-                        <div class="card-desc">${typeof b.description === 'string' ? b.description : b.bundle_id}</div>
-                    </div>
+                    </platform-picker-card>
                 `)}
             </div>
         `;
@@ -444,7 +388,7 @@ export class FlowsFlowCreateModal extends PlatformFormModal {
             : this.t('flow_create_modal.picked_preset');
         return html`
             <div class="form">
-                <div class="picked">
+                <div class="picked glass-subtle">
                     <div class="picked-text">
                         <div class="picked-title">${pickedTitle}</div>
                         <div class="picked-sub">${pickedSub}</div>

@@ -33,6 +33,7 @@ import {
     isKnownEdgeConditionStarterCode,
     normalizeFlowCodeLanguage,
 } from '../_helpers/flows-code-languages.js';
+import { glassStyles } from '@platform/lib/styles/shared/glass.styles.js';
 
 const OPERATORS = Object.freeze(['==', '!=', '>', '<', '>=', '<=', 'in']);
 
@@ -73,6 +74,7 @@ export class FlowsEdgeConditionModal extends PlatformFormModal {
 
     static styles = [
         ...(PlatformFormModal.styles ? [PlatformFormModal.styles] : []),
+        glassStyles,
         css`
             .modal-content { padding: var(--space-5) var(--space-6); }
 
@@ -134,8 +136,6 @@ export class FlowsEdgeConditionModal extends PlatformFormModal {
                 padding: 0 9px;
                 box-sizing: border-box;
                 border-radius: var(--radius-full, 999px);
-                border: 1px solid var(--glass-border-subtle);
-                background: var(--glass-solid-subtle);
                 color: var(--text-tertiary);
                 font-size: var(--text-xs);
                 line-height: 1;
@@ -183,9 +183,7 @@ export class FlowsEdgeConditionModal extends PlatformFormModal {
                 font-size: var(--text-sm);
                 color: var(--accent);
                 padding: var(--space-2) var(--space-3);
-                background: var(--glass-solid-subtle);
                 border-radius: var(--radius-sm);
-                border: 1px solid var(--glass-border-subtle);
             }
             .preview-code.empty { color: var(--text-tertiary); font-style: italic; }
 
@@ -533,7 +531,7 @@ export class FlowsEdgeConditionModal extends PlatformFormModal {
             }
         }
         return html`
-            <span class="code-validation-status" data-state=${status} title=${label}>
+            <span class="code-validation-status glass-subtle" data-state=${status} title=${label}>
                 <platform-icon name=${iconName} size="14"></platform-icon>
                 <span class="code-validation-text">${label}</span>
             </span>
@@ -600,7 +598,7 @@ export class FlowsEdgeConditionModal extends PlatformFormModal {
 
                 <div class="condition-preview">
                     <div class="preview-label">${this.t('edge_condition_modal.preview_label')}</div>
-                    <div class="preview-code ${preview.length === 0 ? 'empty' : ''}">${preview.length === 0 ? this.t('edge_condition_modal.preview_empty') : preview}</div>
+                    <div class="preview-code glass-subtle ${preview.length === 0 ? 'empty' : ''}">${preview.length === 0 ? this.t('edge_condition_modal.preview_empty') : preview}</div>
                 </div>
 
                 <div class="skip-condition">
@@ -690,7 +688,7 @@ export class FlowsEdgeConditionModal extends PlatformFormModal {
         const errors = this.validateForm();
         const disabled = Object.keys(errors).length > 0;
         return html`
-            <platform-button @click=${() => this.close()}>${this.t('edge_condition_modal.action_cancel')}</platform-button>
+            <platform-button @click=${() => this.close()}>${this.t('common.action_cancel')}</platform-button>
             <platform-button variant="primary" ?disabled=${disabled} @click=${() => this._performSave()}>
                 ${this.t('edge_condition_modal.action_save')}
             </platform-button>

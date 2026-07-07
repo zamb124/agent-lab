@@ -1,4 +1,4 @@
-.PHONY: help runtime-bootstrap dev dev-up dev-down dev-logs dev-clean dev-minio-restart dev-bootstrap-postgres stress lint lint-ts lint-file mcp-branding-seed agent agent-ensure agent-release
+.PHONY: help runtime-bootstrap dev dev-up dev-down dev-logs dev-clean dev-minio-restart dev-bootstrap-postgres stress lint lint-ts lint-file mcp-branding-seed agent agent-ensure agent-release ui ui-doc
 .PHONY: test-frontend test-rag test-crawl-llm-live
 .PHONY: check-ui-canon check-i18n check-i18n-keys check-inline-docs check-ui-factories check-command-rest-mirror check-core-frontend-canon check-embed-esm check-events-canon check-logging check-voice-resolver check-speakable-parity check-voice-canon check-field-canon check-rag-post-retrieval-rerank check-company-ai check-files-canon build-i18n
 .PHONY: clean-i18n-unused base
@@ -396,6 +396,12 @@ help:
 	@echo "  make check-logging      - Канон structlog, get_logger, контракт"
 	@echo ""
 	@echo "============================================================================"
+	@echo "UI (канон + core frontend + UI Kit L1):"
+	@echo "============================================================================"
+	@echo "  make ui                 - lint-ts + test-frontend-core (canon, unit, WTR browser + UI Kit)"
+	@echo "  make ui-doc             - make ui + Playwright L2 doc scenarios + docs/scenarios/platform/ui-kit"
+	@echo ""
+	@echo "============================================================================"
 	@echo "Миграции БД:"
 	@echo "============================================================================"
 	@echo "  make migrate                      - Применить миграции для всех сервисов"
@@ -441,6 +447,7 @@ doc:
 	@echo "Локальная сборка документации (Zensical RU + EN)..."
 	rm -rf documentation-dist build/documentation-ru build/documentation-en build/zensical-en-out
 	uv run python scripts/extract_openapi.py
+	uv run python scripts/generate_ui_kit_docs.py
 	uv run python scripts/check_scenario_docs_quality.py --warnings-ok
 	uv run python scripts/docs_prepare.py
 	uv run python scripts/check_docs_locale_parity.py
@@ -454,8 +461,12 @@ doc:
 
 doc-serve:
 	@echo "Предпросмотр RU-сайта: docs_prepare + zensical serve (zensical.ru.toml)"
+	uv run python scripts/generate_ui_kit_docs.py
 	uv run python scripts/docs_prepare.py
 	uv run --group docs zensical serve --config-file zensical.ru.toml
+
+doc-ui-kit:
+	uv run python scripts/generate_ui_kit_docs.py
 
 doc-docker:
 	docker build --target docs-builder -t agent-lab-docs .

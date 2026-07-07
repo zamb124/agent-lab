@@ -453,7 +453,7 @@ export class FlowsSessionsModal extends PlatformModal {
                 variant: 'danger',
                 confirmVariant: 'danger',
                 confirmText: this.t('sessions_modal.delete_btn'),
-                cancelText: this.t('sessions_modal.action_cancel'),
+                cancelText: this.t('common.action_cancel'),
             },
         );
         if (!ok) {

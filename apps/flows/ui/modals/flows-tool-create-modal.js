@@ -17,6 +17,7 @@ import {
     normalizeFlowCodeLanguage,
     starterCodeForLanguage,
 } from '../_helpers/flows-code-languages.js';
+import { glassStyles } from '@platform/lib/styles/shared/glass.styles.js';
 
 const TOOL_ID_PATTERN = /^[a-z][a-z0-9_]*$/;
 const EMPTY_PARAMETERS_SCHEMA = Object.freeze({ type: 'object', properties: {} });
@@ -39,6 +40,7 @@ export class FlowsToolCreateModal extends PlatformFormModal {
 
     static styles = [
         ...(PlatformFormModal.styles ? [PlatformFormModal.styles] : []),
+        glassStyles,
         css`
             .field {
                 display: flex;
@@ -67,8 +69,6 @@ export class FlowsToolCreateModal extends PlatformFormModal {
                 padding: 0 9px;
                 box-sizing: border-box;
                 border-radius: var(--radius-full, 999px);
-                border: 1px solid var(--glass-border-subtle);
-                background: var(--glass-solid-subtle);
                 color: var(--text-tertiary);
                 font-size: var(--text-xs);
                 line-height: 1;
@@ -213,7 +213,7 @@ export class FlowsToolCreateModal extends PlatformFormModal {
             }
         }
         return html`
-            <span class="code-validation-status" data-state=${status} title=${label}>
+            <span class="code-validation-status glass-subtle" data-state=${status} title=${label}>
                 <platform-icon name=${iconName} size="14"></platform-icon>
                 <span class="code-validation-text">${label}</span>
             </span>
@@ -300,7 +300,7 @@ export class FlowsToolCreateModal extends PlatformFormModal {
             && this._codeValidationStatus !== 'pending'
             && this._codeValidationStatus !== 'invalid';
         return html`
-            <platform-button @click=${() => this.close()}>${this.t('tool_create_modal.action_cancel')}</platform-button>
+            <platform-button @click=${() => this.close()}>${this.t('common.action_cancel')}</platform-button>
             <platform-button variant="primary" ?disabled=${!valid} @click=${this._save}>
                 ${this.t('tool_create_modal.action_create')}
             </platform-button>

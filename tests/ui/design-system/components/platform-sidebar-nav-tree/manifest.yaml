@@ -1,0 +1,13 @@
+component: platform-sidebar-nav-tree
+doc_slug: platform-sidebar-nav-tree
+tier: T0
+title_ru: Sidebar Nav Tree
+title_en: Sidebar Nav Tree
+import: "@platform/lib/components/layout/platform-sidebar-nav-tree.js"
+variants:
+  - id: default
+    props: {}
+    scenarios: [render]
+playwright:
+  min_steps: 2
+  min_screenshots: 1

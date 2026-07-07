@@ -707,6 +707,8 @@ Three-layer canon ([`mk/test.mk`](mk/test.mk)):
 | Layer 2 — pure-node unit | `make test-frontend-core-unit` | Vitest + MSW + MockWebSocket в `tests/frontend_core/unit/`. |
 | Layer 3 — браузерные | `make test-frontend-core-browser` | Web Test Runner + Playwright Chromium. |
 | **Полный**: | `make test-frontend-core` | Все 3 слоя fail-fast. |
+| **UI (локально)** | `make ui` | `lint-ts` + `test-frontend-core` (canon, Vitest, WTR incl. UI Kit L1). |
+| UI Kit L2 + docs | `make ui-doc` | `make ui` + Playwright `@pytest.mark.ui_component` + `docs/scenarios/platform/ui-kit/**`. |
 | Lit-компоненты сервисов | `make test-ui-components` | Web Test Runner. |
 | E2E UI | `make test-ui` | Playwright (`tests/ui/e2e`). |
 
@@ -747,14 +749,8 @@ uv run python scripts/report_ui_i18n_gaps.py --app <svc>   # 0 совпаден�
 # Объединённая цель — должна быть зелёной перед коммитом
 make check-events-canon
 
-# Layer 2 — pure-node unit (Vitest)
-make test-frontend-core-unit
-
-# Lit-компоненты (если правил core UI Kit или модалки)
-make test-ui-components
-
-# Layer 3 — browser (если правил event-flow / SelectController / use*-helpers)
-make test-frontend-core-browser
+# Layer 2+3 — unit + browser (Vitest + WTR incl. UI Kit L1)
+make ui
 ```
 
 Объявляю фичу готовой **только** когда:

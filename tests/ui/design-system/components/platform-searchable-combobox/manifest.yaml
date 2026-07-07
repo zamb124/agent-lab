@@ -1,0 +1,13 @@
+component: platform-searchable-combobox
+doc_slug: platform-searchable-combobox
+tier: T0
+title_ru: Searchable Combobox
+title_en: Searchable Combobox
+import: "@platform/lib/components/platform-searchable-combobox.js"
+variants:
+  - id: default
+    props: {}
+    scenarios: [render]
+playwright:
+  min_steps: 2
+  min_screenshots: 1

@@ -66,7 +66,6 @@ SERVICES = {
             ("/flows/static", "apps/flows/ui"),
             ("/static", "apps/flows/static"),
             ("/flows/demo_cards", "apps/flows/static/demo_cards"),
-            ("/documentation", "apps/flows/site"),
         ],
     },
     "frontend": {

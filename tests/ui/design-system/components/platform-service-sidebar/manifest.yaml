@@ -1,0 +1,13 @@
+component: platform-service-sidebar
+doc_slug: platform-service-sidebar
+tier: T0
+title_ru: Service Sidebar
+title_en: Service Sidebar
+import: "@platform/lib/components/layout/platform-service-sidebar.js"
+variants:
+  - id: default
+    props: {}
+    scenarios: [render]
+playwright:
+  min_steps: 2
+  min_screenshots: 1

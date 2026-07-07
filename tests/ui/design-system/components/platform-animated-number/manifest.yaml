@@ -1,0 +1,13 @@
+component: platform-animated-number
+doc_slug: platform-animated-number
+tier: T0
+title_ru: Animated Number
+title_en: Animated Number
+import: "@platform/lib/components/platform-animated-number.js"
+variants:
+  - id: default
+    props: {}
+    scenarios: [render]
+playwright:
+  min_steps: 2
+  min_screenshots: 1

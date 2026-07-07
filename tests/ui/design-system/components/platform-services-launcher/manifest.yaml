@@ -1,0 +1,13 @@
+component: platform-services-launcher
+doc_slug: platform-services-launcher
+tier: T0
+title_ru: Services Launcher
+title_en: Services Launcher
+import: "@platform/lib/components/platform-services-launcher.js"
+variants:
+  - id: default
+    props: {}
+    scenarios: [render]
+playwright:
+  min_steps: 2
+  min_screenshots: 1

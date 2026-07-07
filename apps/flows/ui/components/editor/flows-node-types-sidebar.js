@@ -34,6 +34,7 @@ import '@platform/lib/components/glass-spinner.js';
 import { getNodeTypeMeta, getCategoryToken } from '../../constants/node-icons.js';
 import { getTriggerTypeRowVisual } from '../../constants/trigger-types.js';
 import { asArray, asString } from '../../_helpers/flows-resolvers.js';
+import { glassStyles } from '@platform/lib/styles/shared/glass.styles.js';
 
 const NODE_CATEGORY_ORDER = Object.freeze(['core', 'tools', 'integrations', 'channels']);
 
@@ -56,6 +57,7 @@ export class FlowsNodeTypesSidebar extends PlatformElement {
 
     static styles = [
         PlatformElement.styles,
+        glassStyles,
         css`
             :host {
                 display: flex;
@@ -96,15 +98,12 @@ export class FlowsNodeTypesSidebar extends PlatformElement {
                 padding: var(--space-2);
                 text-align: center;
                 border-radius: var(--radius-lg);
-                background: var(--glass-solid-subtle);
             }
             .trigger-row {
                 display: flex; align-items: center; justify-content: space-between;
                 gap: var(--space-2);
                 padding: var(--space-2) var(--space-2);
                 border-radius: var(--radius-lg);
-                background: var(--glass-solid-subtle);
-                border: 1px solid var(--glass-border-subtle);
                 font-size: var(--text-sm);
                 line-height: 1.25;
                 color: var(--text-primary);
@@ -217,7 +216,7 @@ export class FlowsNodeTypesSidebar extends PlatformElement {
             }
             .node-item:hover {
                 background: color-mix(in oklab, var(--glass-solid-medium) 86%, var(--accent) 8%);
-                border-color: var(--glass-border-subtle);
+                border-color: var(--border-subtle);
                 box-shadow: var(--glass-shadow-medium);
                 transform: translateY(-1px);
             }
@@ -353,7 +352,7 @@ export class FlowsNodeTypesSidebar extends PlatformElement {
                 <article
                     tabindex="0"
                     role="button"
-                    class="trigger-row ${this.flowSettingsActive ? 'is-active' : ''}"
+                    class="trigger-row glass-subtle ${this.flowSettingsActive ? 'is-active' : ''}"
                     aria-pressed=${this.flowSettingsActive ? 'true' : 'false'}
                     title=${this.t('node_types_sidebar.flow_settings_toggle_hint')}
                     @click=${this._toggleFlowSettingsPanel}
@@ -413,11 +412,11 @@ export class FlowsNodeTypesSidebar extends PlatformElement {
                     </platform-button>
                 </div>
                 ${triggerItems.length === 0
-                    ? html`<div class="triggers-empty">${this.t('node_types_sidebar.no_triggers')}</div>`
+                    ? html`<div class="triggers-empty glass-subtle">${this.t('node_types_sidebar.no_triggers')}</div>`
                     : triggerItems.map((tr) => {
                         const tv = getTriggerTypeRowVisual(tr.type);
                         return html`
-                        <div class="trigger-row">
+                        <div class="trigger-row glass-subtle">
                             <div class="trigger-row-main">
                                 <div
                                     class="trigger-type-icon-wrap"

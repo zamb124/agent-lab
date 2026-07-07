@@ -1,0 +1,13 @@
+component: platform-work-item-preview
+doc_slug: platform-work-item-preview
+tier: T0
+title_ru: Work Item Preview
+title_en: Work Item Preview
+import: "@platform/lib/components/platform-work-item-preview.js"
+variants:
+  - id: default
+    props: {}
+    scenarios: [render]
+playwright:
+  min_steps: 2
+  min_screenshots: 1

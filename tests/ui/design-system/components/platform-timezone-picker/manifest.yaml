@@ -1,0 +1,13 @@
+component: platform-timezone-picker
+doc_slug: platform-timezone-picker
+tier: T0
+title_ru: Timezone Picker
+title_en: Timezone Picker
+import: "@platform/lib/components/platform-timezone-picker.js"
+variants:
+  - id: default
+    props: {}
+    scenarios: [render]
+playwright:
+  min_steps: 2
+  min_screenshots: 1

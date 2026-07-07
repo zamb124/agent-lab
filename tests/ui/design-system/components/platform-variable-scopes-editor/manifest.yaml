@@ -1,0 +1,13 @@
+component: platform-variable-scopes-editor
+doc_slug: platform-variable-scopes-editor
+tier: T0
+title_ru: Variable Scopes Editor
+title_en: Variable Scopes Editor
+import: "@platform/lib/components/variables/platform-variable-scopes-editor.js"
+variants:
+  - id: default
+    props: {}
+    scenarios: [render]
+playwright:
+  min_steps: 2
+  min_screenshots: 1

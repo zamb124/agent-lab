@@ -376,7 +376,6 @@ fi
 #     Исключения (Phase 3 allowlist — selectable cards / canvas chrome / resize handle):
 #     - flow-canvas/flows-flow-canvas.js — canvas chrome
 #     - evaluation: results-matrix (run-head, cell-button), compare-panel (run-chip)
-#     - library-picker-modal (lib-card, mcp-picker-tool-card)
 #     - durable-history-modal (branch-chip, event-row)
 #     - base-node-editor (dataflow-chip, file-ref)
 #     - execution-panel (resize-handle)
@@ -385,7 +384,6 @@ FLOWS_BUTTON_ALLOW_GLOBS=(
     --glob '!apps/flows/ui/components/flow-canvas/flows-flow-canvas.js'
     --glob '!apps/flows/ui/components/evaluation/flows-evaluation-results-matrix.js'
     --glob '!apps/flows/ui/components/evaluation/flows-evaluation-compare-panel.js'
-    --glob '!apps/flows/ui/modals/flows-library-picker-modal.js'
     --glob '!apps/flows/ui/modals/flows-durable-history-modal.js'
     --glob '!apps/flows/ui/components/editor/flows-execution-panel.js'
     --glob '!apps/flows/ui/components/nodes/flows-base-node-editor.js'
@@ -419,7 +417,7 @@ if [ -n "$FLOWS_ICON_SIZE_HITS" ]; then
 fi
 
 # 28. Flows UI: inline glass panel triplet (--glass-solid-subtle + --glass-border-subtle) — glassStyles/panelShellStyles.
-FLOWS_GLASS_TRIPLET_MAX=18
+FLOWS_GLASS_TRIPLET_MAX=12
 FLOWS_GLASS_TRIPLET_COUNT=0
 while IFS= read -r glass_file; do
     [ -z "$glass_file" ] && continue
@@ -432,6 +430,35 @@ if [ "$FLOWS_GLASS_TRIPLET_COUNT" -gt "$FLOWS_GLASS_TRIPLET_MAX" ]; then
     rg -l 'glass-solid-subtle' apps/flows/ui -g '*.js' --glob '!apps/flows/ui/components/flow-canvas/**' | while IFS= read -r glass_file; do
         rg -q 'glass-border-subtle' "$glass_file" && echo "  $glass_file" >&2
     done
+fi
+
+# 29. Flows i18n: action_cancel только в flows.common.*
+FLOWS_I18N_DUP_ACTION_CANCEL="$(uv run python - <<'PY'
+import json
+import sys
+from pathlib import Path
+
+root = Path("core/i18n/translations")
+errors = []
+for lang in ("en", "ru"):
+    path = root / lang / "flows.json"
+    data = json.loads(path.read_text(encoding="utf-8"))
+
+    def walk(obj, prefix=""):
+        if not isinstance(obj, dict):
+            return
+        if prefix != "common" and "action_cancel" in obj:
+            errors.append(f"{lang}:{prefix or '<root>'}.action_cancel")
+        for key, value in obj.items():
+            walk(value, f"{prefix}.{key}" if prefix else key)
+
+    walk(data)
+print("\n".join(errors))
+PY
+)"
+if [ -n "$FLOWS_I18N_DUP_ACTION_CANCEL" ]; then
+    fail "flows.json: action_cancel дублируется вне common — используйте flows.common.action_cancel"
+    echo "$FLOWS_I18N_DUP_ACTION_CANCEL" >&2
 fi
 
 if [ "$ERR" -ne 0 ]; then

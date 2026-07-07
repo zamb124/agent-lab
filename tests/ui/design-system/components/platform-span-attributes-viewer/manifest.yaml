@@ -1,0 +1,13 @@
+component: platform-span-attributes-viewer
+doc_slug: platform-span-attributes-viewer
+tier: T0
+title_ru: Span Attributes Viewer
+title_en: Span Attributes Viewer
+import: "@platform/lib/components/platform-span-attributes-viewer.js"
+variants:
+  - id: default
+    props: {}
+    scenarios: [render]
+playwright:
+  min_steps: 2
+  min_screenshots: 1

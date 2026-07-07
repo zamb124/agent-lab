@@ -75,7 +75,7 @@ describe('flows chrome height canon', () => {
         `);
         await nextFrame();
 
-        const toolbar = el.querySelector('flows-evaluation-run-toolbar').shadowRoot.querySelector('.toolbar');
+        const toolbar = el.querySelector('flows-evaluation-run-toolbar').shadowRoot.querySelector('.toolbar-shell');
         expect(toolbar).to.not.equal(null);
 
         const styles = getComputedStyle(toolbar);

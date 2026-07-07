@@ -1,0 +1,13 @@
+component: platform-help-hint
+doc_slug: platform-help-hint
+tier: T0
+title_ru: Help Hint
+title_en: Help Hint
+import: "@platform/lib/components/platform-help-hint.js"
+variants:
+  - id: default
+    props: {}
+    scenarios: [render]
+playwright:
+  min_steps: 2
+  min_screenshots: 1

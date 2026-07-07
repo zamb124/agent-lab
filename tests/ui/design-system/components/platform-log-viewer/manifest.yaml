@@ -1,0 +1,13 @@
+component: platform-log-viewer
+doc_slug: platform-log-viewer
+tier: T0
+title_ru: Log Viewer
+title_en: Log Viewer
+import: "@platform/lib/components/platform-log-viewer.js"
+variants:
+  - id: default
+    props: {}
+    scenarios: [render]
+playwright:
+  min_steps: 2
+  min_screenshots: 1

@@ -1277,7 +1277,7 @@ export class FlowsTriggerEditorModal extends PlatformFormModal {
             ? this.t('trigger_editor_modal.action_save')
             : this.t('trigger_editor_modal.action_create');
         return html`
-            <platform-button ?disabled=${busy} @click=${() => this.close()}>${this.t('trigger_editor_modal.action_cancel')}</platform-button>
+            <platform-button ?disabled=${busy} @click=${() => this.close()}>${this.t('common.action_cancel')}</platform-button>
             <platform-button variant="primary" ?disabled=${busy} @click=${() => this._performSave()}>
                 ${busy ? this.t('editor_header.saving') : saveLabel}
             </platform-button>

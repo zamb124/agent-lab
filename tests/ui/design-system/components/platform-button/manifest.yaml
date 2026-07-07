@@ -1,0 +1,13 @@
+component: platform-button
+doc_slug: platform-button
+tier: T1
+title_ru: Button
+title_en: Button
+import: "@platform/lib/components/platform-button.js"
+variants:
+  - id: default
+    props: {}
+    scenarios: [render]
+playwright:
+  min_steps: 2
+  min_screenshots: 1

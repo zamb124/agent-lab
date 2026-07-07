@@ -1,0 +1,13 @@
+component: platform-shell-page
+doc_slug: platform-shell-page
+tier: T0
+title_ru: Shell Page
+title_en: Shell Page
+import: "@platform/lib/components/platform-shell-page.js"
+variants:
+  - id: default
+    props: {}
+    scenarios: [render]
+playwright:
+  min_steps: 2
+  min_screenshots: 1

@@ -1,0 +1,13 @@
+component: platform-breadcrumbs
+doc_slug: platform-breadcrumbs
+tier: T0
+title_ru: Breadcrumbs
+title_en: Breadcrumbs
+import: "@platform/lib/components/platform-breadcrumbs.js"
+variants:
+  - id: default
+    props: {}
+    scenarios: [render]
+playwright:
+  min_steps: 2
+  min_screenshots: 1

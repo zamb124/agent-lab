@@ -1,0 +1,13 @@
+component: platform-user-info-modal
+doc_slug: platform-user-info-modal
+tier: T0
+title_ru: User Info Modal
+title_en: User Info Modal
+import: "@platform/lib/components/platform-user-info-modal.js"
+variants:
+  - id: default
+    props: {}
+    scenarios: [render]
+playwright:
+  min_steps: 2
+  min_screenshots: 1

@@ -1086,6 +1086,10 @@
             "type": "string",
             "title": "Platform Mcp Url"
           },
+          "toolkits_url": {
+            "type": "string",
+            "title": "Toolkits Url"
+          },
           "tunnel_ws_url": {
             "type": "string",
             "title": "Tunnel Ws Url"
@@ -1103,6 +1107,7 @@
         "required": [
           "frontend_base_url",
           "platform_mcp_url",
+          "toolkits_url",
           "tunnel_ws_url",
           "llm_api_url",
           "releases"
@@ -1200,6 +1205,11 @@
             },
             "type": "array",
             "title": "Asset Checksums"
+          },
+          "macos_notarization_pending": {
+            "type": "boolean",
+            "title": "Macos Notarization Pending",
+            "default": false
           }
         },
         "additionalProperties": false,
@@ -4034,6 +4044,17 @@
             ],
             "title": "Title"
           },
+          "description": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Description"
+          },
           "date_published": {
             "anyOf": [
               {
@@ -4801,35 +4822,11 @@
             "description": "Показывать встроенную кнопку запуска",
             "default": true
           },
-          "show_reasoning": {
-            "type": "boolean",
-            "title": "Show Reasoning",
-            "description": "Показывать reasoning",
-            "default": false
-          },
-          "show_tool_calls": {
-            "type": "boolean",
-            "title": "Show Tool Calls",
-            "description": "Показывать tool calls",
-            "default": false
-          },
           "primary_color": {
             "type": "string",
             "title": "Primary Color",
             "description": "Основной цвет",
             "default": "#6366f1"
-          },
-          "greeting_message": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Greeting Message",
-            "description": "Приветственное сообщение"
           },
           "assistant_title": {
             "anyOf": [
@@ -4908,6 +4905,17 @@
             "title": "Voice Default On",
             "description": "Автоматически включать голосовой режим при открытии виджета",
             "default": false
+          },
+          "chat_override": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/EmbedChatPolicyOverride"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Частичное переопределение FlowChatSettings для виджета; null — наследовать flow"
           }
         },
         "type": "object",
@@ -5447,6 +5455,11 @@
             "title": "Platform Mcp Url",
             "description": "URL Platform MCP endpoint для Goose"
           },
+          "toolkits_url": {
+            "type": "string",
+            "title": "Toolkits Url",
+            "description": "URL каталога групп инструментов HumanitecAgent"
+          },
           "frontend_base_url": {
             "type": "string",
             "title": "Frontend Base Url",
@@ -5485,6 +5498,7 @@
           "device_id",
           "token",
           "platform_mcp_url",
+          "toolkits_url",
           "frontend_base_url",
           "tunnel_ws_url",
           "company_id",
@@ -5803,6 +5817,158 @@
         ],
         "title": "DocsPlacementAnchor"
       },
+      "EmbedChatPolicyOverride": {
+        "properties": {
+          "show_reasoning": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Show Reasoning",
+            "description": "Переопределить показ reasoning; None — наследовать из flow"
+          },
+          "tool_calls_display": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "hidden",
+                  "compact",
+                  "detailed"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Tool Calls Display",
+            "description": "Переопределить отображение вызовов инструментов; None — наследовать"
+          },
+          "show_activity": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Show Activity",
+            "description": "Переопределить строку активности; None — наследовать"
+          },
+          "errors_display": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "generic",
+                  "detailed"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Errors Display",
+            "description": "Переопределить режим ошибок; None — наследовать"
+          },
+          "show_run_trace": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Show Run Trace",
+            "description": "Переопределить показ run trace; None — наследовать"
+          },
+          "show_trace_actions": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Show Trace Actions",
+            "description": "Переопределить действия трейсов/логов; None — наследовать"
+          },
+          "show_browser_previews": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Show Browser Previews",
+            "description": "Переопределить live-превью браузера; None — наследовать"
+          },
+          "show_files_panel": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Show Files Panel",
+            "description": "Переопределить панель файлов; None — наследовать"
+          },
+          "allow_cancel": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Allow Cancel",
+            "description": "Переопределить возможность отмены; None — наследовать"
+          },
+          "greeting_message": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Greeting Message",
+            "description": "Переопределить приветствие; None — наследовать из flow"
+          },
+          "suggested_prompts": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Suggested Prompts",
+            "description": "Переопределить подсказки первых сообщений; None — наследовать"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "title": "EmbedChatPolicyOverride",
+        "description": "Частичное переопределение FlowChatSettings для одного embed-виджета.\n\nВсе поля опциональны: None = поле наследуется из FlowConfig.chat.\nExplicit false — валидное переопределение (например скрыть tool calls\nтолько на внешнем сайте). Merge — `resolve_effective_flow_chat`."
+      },
       "EmbedCodeResponse": {
         "properties": {
           "html_code": {
@@ -5890,28 +6056,9 @@
             "type": "boolean",
             "title": "Show Launcher"
           },
-          "show_reasoning": {
-            "type": "boolean",
-            "title": "Show Reasoning"
-          },
-          "show_tool_calls": {
-            "type": "boolean",
-            "title": "Show Tool Calls"
-          },
           "primary_color": {
             "type": "string",
             "title": "Primary Color"
-          },
-          "greeting_message": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Greeting Message"
           },
           "assistant_title": {
             "anyOf": [
@@ -5974,6 +6121,16 @@
             "type": "boolean",
             "title": "Voice Default On"
           },
+          "chat_override": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/EmbedChatPolicyOverride"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "preview_share_link": {
             "type": "boolean",
             "title": "Preview Share Link"
@@ -6020,10 +6177,7 @@
           "theme",
           "position",
           "show_launcher",
-          "show_reasoning",
-          "show_tool_calls",
           "primary_color",
-          "greeting_message",
           "assistant_title",
           "interface_locale",
           "placeholder",
@@ -6034,6 +6188,7 @@
           "guest_max_user_messages",
           "voice_enabled",
           "voice_default_on",
+          "chat_override",
           "preview_share_link",
           "usage_count",
           "last_used_at",
@@ -10408,14 +10563,6 @@
             "type": "string",
             "title": "Placeholder"
           },
-          "show_reasoning": {
-            "type": "boolean",
-            "title": "Show Reasoning"
-          },
-          "show_tool_calls": {
-            "type": "boolean",
-            "title": "Show Tool Calls"
-          },
           "branding": {
             "type": "boolean",
             "title": "Branding"
@@ -10446,8 +10593,6 @@
           "primary_color",
           "interface_locale",
           "placeholder",
-          "show_reasoning",
-          "show_tool_calls",
           "branding",
           "landing_sort_order",
           "voice_enabled",
@@ -11821,28 +11966,6 @@
             ],
             "title": "Show Launcher"
           },
-          "show_reasoning": {
-            "anyOf": [
-              {
-                "type": "boolean"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Show Reasoning"
-          },
-          "show_tool_calls": {
-            "anyOf": [
-              {
-                "type": "boolean"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Show Tool Calls"
-          },
           "primary_color": {
             "anyOf": [
               {
@@ -11853,17 +11976,6 @@
               }
             ],
             "title": "Primary Color"
-          },
-          "greeting_message": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Greeting Message"
           },
           "assistant_title": {
             "anyOf": [
@@ -11974,6 +12086,16 @@
               }
             ],
             "title": "Voice Default On"
+          },
+          "chat_override": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/EmbedChatPolicyOverride"
+              },
+              {
+                "type": "null"
+              }
+            ]
           }
         },
         "type": "object",

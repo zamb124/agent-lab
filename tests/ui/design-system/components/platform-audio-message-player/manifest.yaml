@@ -1,0 +1,13 @@
+component: platform-audio-message-player
+doc_slug: platform-audio-message-player
+tier: T0
+title_ru: Audio Message Player
+title_en: Audio Message Player
+import: "@platform/lib/components/platform-audio-message-player.js"
+variants:
+  - id: default
+    props: {}
+    scenarios: [render]
+playwright:
+  min_steps: 2
+  min_screenshots: 1

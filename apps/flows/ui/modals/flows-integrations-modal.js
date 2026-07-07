@@ -46,7 +46,7 @@ export class FlowsIntegrationsModal extends PlatformModal {
                 variant: 'danger',
                 confirmVariant: 'danger',
                 confirmText: this.t('integrations_modal.action_delete'),
-                cancelText: this.t('integrations_modal.action_cancel'),
+                cancelText: this.t('common.action_cancel'),
             },
         );
         if (!ok) return;

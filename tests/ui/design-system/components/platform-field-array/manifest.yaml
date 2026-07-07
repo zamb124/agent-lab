@@ -1,0 +1,13 @@
+component: platform-field-array
+doc_slug: platform-field-array
+tier: T0
+title_ru: Field Array
+title_en: Field Array
+import: "@platform/lib/components/fields/platform-field-array.js"
+variants:
+  - id: default
+    props: {}
+    scenarios: [render]
+playwright:
+  min_steps: 2
+  min_screenshots: 1

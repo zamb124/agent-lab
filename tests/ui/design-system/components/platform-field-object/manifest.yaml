@@ -1,0 +1,13 @@
+component: platform-field-object
+doc_slug: platform-field-object
+tier: T0
+title_ru: Field Object
+title_en: Field Object
+import: "@platform/lib/components/fields/platform-field-object.js"
+variants:
+  - id: default
+    props: {}
+    scenarios: [render]
+playwright:
+  min_steps: 2
+  min_screenshots: 1

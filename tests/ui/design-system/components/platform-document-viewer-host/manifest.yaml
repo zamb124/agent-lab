@@ -1,0 +1,13 @@
+component: platform-document-viewer-host
+doc_slug: platform-document-viewer-host
+tier: T0
+title_ru: Document Viewer Host
+title_en: Document Viewer Host
+import: "@platform/lib/components/platform-document-viewer-host.js"
+variants:
+  - id: default
+    props: {}
+    scenarios: [render]
+playwright:
+  min_steps: 2
+  min_screenshots: 1

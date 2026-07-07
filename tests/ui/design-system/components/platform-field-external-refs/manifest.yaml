@@ -1,0 +1,13 @@
+component: platform-field-external-refs
+doc_slug: platform-field-external-refs
+tier: T0
+title_ru: Field External Refs
+title_en: Field External Refs
+import: "@platform/lib/components/fields/platform-field-external-refs.js"
+variants:
+  - id: default
+    props: {}
+    scenarios: [render]
+playwright:
+  min_steps: 2
+  min_screenshots: 1

@@ -38,6 +38,7 @@ function createMockChatElement() {
 
 let mockChat;
 let appended;
+let headChildren;
 let originalDocument;
 let originalWindow;
 let originalCustomElements;
@@ -46,6 +47,7 @@ let fetchMock;
 beforeEach(() => {
     mockChat = createMockChatElement();
     appended = [];
+    headChildren = [];
     fetchMock = vi.fn();
 
     originalDocument = globalThis.document;
@@ -59,11 +61,38 @@ beforeEach(() => {
                 appended.push(el);
             },
         },
+        head: {
+            appendChild(el) {
+                headChildren.push(el);
+            },
+        },
         readyState: 'complete',
         title: 'Embed host page',
+        querySelector(selector) {
+            if (selector === 'link[data-humanitec-chat-tokens="1"]') {
+                const found = headChildren.find(
+                    (el) => el.getAttribute && el.getAttribute('data-humanitec-chat-tokens') === '1',
+                );
+                return found ?? null;
+            }
+            return null;
+        },
         createElement(tag) {
             if (tag === 'platform-chat') {
                 return mockChat;
+            }
+            if (tag === 'link') {
+                const attrs = new Map();
+                return {
+                    rel: '',
+                    href: '',
+                    setAttribute(name, value) {
+                        attrs.set(name, String(value));
+                    },
+                    getAttribute(name) {
+                        return attrs.has(name) ? attrs.get(name) : null;
+                    },
+                };
             }
             throw new Error(`unexpected tag ${tag}`);
         },
@@ -145,6 +174,10 @@ describe('mountFromScript', () => {
         expect(mockChat.showLauncher).toBe(true);
         expect(mockChat.getAttribute('voice-enabled')).toBe('');
         expect(mockChat.flowsBaseUrl).toBe('https://api.humanitec.ru/flows');
+        expect(headChildren).toHaveLength(1);
+        expect(headChildren[0].rel).toBe('stylesheet');
+        expect(headChildren[0].href).toBe('https://api.humanitec.ru/static/core/lib/chat/chat-tokens.css');
+        expect(headChildren[0].getAttribute('data-humanitec-chat-tokens')).toBe('1');
     });
 
     it('data-static-bearer не вызывает fetch', async () => {

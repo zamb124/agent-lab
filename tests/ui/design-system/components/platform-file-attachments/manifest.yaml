@@ -1,0 +1,13 @@
+component: platform-file-attachments
+doc_slug: platform-file-attachments
+tier: T0
+title_ru: File Attachments
+title_en: File Attachments
+import: "@platform/lib/components/platform-file-attachments.js"
+variants:
+  - id: default
+    props: {}
+    scenarios: [render]
+playwright:
+  min_steps: 2
+  min_screenshots: 1

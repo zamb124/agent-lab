@@ -1,0 +1,13 @@
+component: platform-deployment-version
+doc_slug: platform-deployment-version
+tier: T0
+title_ru: Deployment Version
+title_en: Deployment Version
+import: "@platform/lib/components/platform-deployment-version.js"
+variants:
+  - id: default
+    props: {}
+    scenarios: [render]
+playwright:
+  min_steps: 2
+  min_screenshots: 1

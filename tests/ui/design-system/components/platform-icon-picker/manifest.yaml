@@ -1,0 +1,13 @@
+component: platform-icon-picker
+doc_slug: platform-icon-picker
+tier: T0
+title_ru: Icon Picker
+title_en: Icon Picker
+import: "@platform/lib/components/platform-icon-picker.js"
+variants:
+  - id: default
+    props: {}
+    scenarios: [render]
+playwright:
+  min_steps: 2
+  min_screenshots: 1

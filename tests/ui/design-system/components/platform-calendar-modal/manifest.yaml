@@ -1,0 +1,13 @@
+component: platform-calendar-modal
+doc_slug: platform-calendar-modal
+tier: T0
+title_ru: Calendar Modal
+title_en: Calendar Modal
+import: "@platform/lib/components/platform-calendar-modal.js"
+variants:
+  - id: default
+    props: {}
+    scenarios: [render]
+playwright:
+  min_steps: 2
+  min_screenshots: 1

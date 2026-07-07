@@ -1,0 +1,13 @@
+component: platform-onlyoffice-host
+doc_slug: platform-onlyoffice-host
+tier: T0
+title_ru: Onlyoffice Host
+title_en: Onlyoffice Host
+import: "@platform/lib/components/platform-onlyoffice-host.js"
+variants:
+  - id: default
+    props: {}
+    scenarios: [render]
+playwright:
+  min_steps: 2
+  min_screenshots: 1

@@ -9,6 +9,7 @@ import '@platform/lib/components/platform-button.js';
 import './branch-item.js';
 import { asString } from '../_helpers/flows-resolvers.js';
 import { resolveFlowCoverGradient } from '../constants/flow-cover-gradients.js';
+import { glassStyles } from '@platform/lib/styles/shared/glass.styles.js';
 
 export class FlowCard extends PlatformElement {
     static i18nNamespace = 'flows';
@@ -22,6 +23,7 @@ export class FlowCard extends PlatformElement {
 
     static styles = [
         PlatformElement.styles,
+        glassStyles,
         css`
             :host {
                 display: block;
@@ -38,7 +40,7 @@ export class FlowCard extends PlatformElement {
 
             .flow-card:hover {
                 background: var(--glass-solid-medium);
-                border-color: var(--glass-border-subtle);
+                border-color: var(--border-subtle);
             }
 
             .flow-card.expanded {
@@ -185,7 +187,6 @@ export class FlowCard extends PlatformElement {
             }
 
             .branches-section {
-                background: var(--glass-solid-subtle);
                 border-radius: var(--radius-lg);
                 padding: var(--space-3);
             }
@@ -406,7 +407,7 @@ export class FlowCard extends PlatformElement {
 
                 ${this.expanded ? html`
                     <div class="flow-details">
-                        <div class="branches-section">
+                        <div class="branches-section glass-subtle">
                             <div class="branches-header">
                                 <span class="branches-title">${this.t('flow_card.branches_title')}</span>
                                 <platform-button

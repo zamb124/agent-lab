@@ -697,7 +697,7 @@ export class FlowsDurableHistoryModal extends PlatformModal {
             {
                 title: this.t('durable_history_modal.confirm_fork_title'),
                 confirmText: this.t('durable_history_modal.action_fork'),
-                cancelText: this.t('durable_history_modal.action_cancel'),
+                cancelText: this.t('common.action_cancel'),
             },
         );
         if (!ok) {
@@ -733,7 +733,7 @@ export class FlowsDurableHistoryModal extends PlatformModal {
                 variant: 'warning',
                 confirmVariant: 'danger',
                 confirmText: this.t('durable_history_modal.action_rewind'),
-                cancelText: this.t('durable_history_modal.action_cancel'),
+                cancelText: this.t('common.action_cancel'),
             },
         );
         if (!ok) {
@@ -766,7 +766,7 @@ export class FlowsDurableHistoryModal extends PlatformModal {
             {
                 title: this.t('durable_history_modal.confirm_retry_title'),
                 confirmText: this.t('durable_history_modal.action_retry'),
-                cancelText: this.t('durable_history_modal.action_cancel'),
+                cancelText: this.t('common.action_cancel'),
             },
         );
         if (!ok) {
@@ -817,7 +817,7 @@ export class FlowsDurableHistoryModal extends PlatformModal {
                 title: this.t('durable_history_modal.confirm_patch_title'),
                 variant: 'warning',
                 confirmText: this.t('durable_history_modal.action_patch'),
-                cancelText: this.t('durable_history_modal.action_cancel'),
+                cancelText: this.t('common.action_cancel'),
             },
         );
         if (!ok) {

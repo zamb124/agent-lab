@@ -1,0 +1,13 @@
+component: platform-variable-secret-policy
+doc_slug: platform-variable-secret-policy
+tier: T0
+title_ru: Variable Secret Policy
+title_en: Variable Secret Policy
+import: "@platform/lib/components/variables/platform-variable-secret-policy.js"
+variants:
+  - id: default
+    props: {}
+    scenarios: [render]
+playwright:
+  min_steps: 2
+  min_screenshots: 1

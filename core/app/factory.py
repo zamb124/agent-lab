@@ -159,7 +159,7 @@ def create_service_app(
         include_tracing_lifecycle: Включать ли tracing startup hooks. None — вместе с include_platform_lifecycle.
         include_platform_lifecycle: Включать ли Redis/billing/push startup hooks
         include_platform_routers: Включать ли общие платформенные роутеры (files/auth/calendar/ws/i18n)
-        mount_repo_documentation: Смонтировать статическую документацию (Zensical) из корня репозитория ``documentation-dist/`` на ``/documentation/`` (False для flows со своим ``apps/flows/site``).
+        mount_repo_documentation: Смонтировать статическую документацию (Zensical) из корня репозитория ``documentation-dist/`` на ``/documentation/``.
         documentation_gateway_prefix: Если задан (например ``documents`` для office), первый сегмент публичных путей HTTP API и платформенных роутеров (team, ws, auth, …); плюс дублирование документации на ``/{prefix}/documentation/`` за ingress.
         include_platform_pwa: Маршруты ``/manifest.json``, ``/sw.js``, ``/offline.html``. None: выключено при ``TESTING=true``, иначе включено.
         services_spa_index: Путь к ``index.html`` SPA; если файл существует, регистрируются

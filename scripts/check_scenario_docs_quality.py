@@ -107,9 +107,20 @@ def _ast_str(node: ast.expr | None) -> str | None:
     return None
 
 
+def _is_ui_kit_scenario_stub(slug_dir: Path, scenarios_root: Path) -> bool:
+    """UI Kit pages sync from tests/ui/design-system; full scenario quality — только после make ui-doc."""
+    try:
+        parts = slug_dir.relative_to(scenarios_root).parts
+    except ValueError:
+        return False
+    return len(parts) >= 2 and parts[0] == "platform" and parts[1] == "ui-kit"
+
+
 def _check_readme_quality(scenarios_root: Path) -> list[str]:
     errors: list[str] = []
     for slug_dir in _slug_readme_dirs(scenarios_root):
+        if _is_ui_kit_scenario_stub(slug_dir, scenarios_root):
+            continue
         readme = slug_dir / "README.md"
         rel = slug_dir.relative_to(scenarios_root.parent)
         title = _title_from_readme(readme)
@@ -153,6 +164,9 @@ def _find_slug_readme(repo_root: Path, service: str, slug: str) -> bool:
     service_root = repo_root / "docs" / "scenarios" / service
     if not service_root.is_dir():
         return False
+    tag_hub = service_root / slug / "README.md"
+    if tag_hub.is_file():
+        return True
     for tag_dir in service_root.iterdir():
         if not tag_dir.is_dir() or tag_dir.name.startswith("."):
             continue

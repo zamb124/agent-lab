@@ -1,0 +1,13 @@
+component: platform-service-switcher-sheet
+doc_slug: platform-service-switcher-sheet
+tier: T0
+title_ru: Service Switcher Sheet
+title_en: Service Switcher Sheet
+import: "@platform/lib/components/sheets/platform-service-switcher-sheet.js"
+variants:
+  - id: default
+    props: {}
+    scenarios: [render]
+playwright:
+  min_steps: 2
+  min_screenshots: 1

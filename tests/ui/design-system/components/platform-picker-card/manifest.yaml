@@ -1,0 +1,13 @@
+component: platform-picker-card
+doc_slug: platform-picker-card
+tier: T1
+title_ru: Picker Card
+title_en: Picker Card
+import: "@platform/lib/components/platform-picker-card.js"
+variants:
+  - id: default
+    props: {}
+    scenarios: [render]
+playwright:
+  min_steps: 2
+  min_screenshots: 1

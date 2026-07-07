@@ -1,0 +1,13 @@
+component: platform-variables-panel
+doc_slug: platform-variables-panel
+tier: T0
+title_ru: Variables Panel
+title_en: Variables Panel
+import: "@platform/lib/components/platform-variables-panel.js"
+variants:
+  - id: default
+    props: {}
+    scenarios: [render]
+playwright:
+  min_steps: 2
+  min_screenshots: 1

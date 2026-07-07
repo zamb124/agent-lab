@@ -1,0 +1,12 @@
+# Variable Value Editor
+
+Platform component `platform-variable-value-editor`.
+
+Documentation status: **backlog**.
+
+## Run tests
+
+```bash
+npm run test:ui-kit -- tests/ui/design-system/components/platform-variable-value-editor/contract.spec.js
+uv run pytest tests/ui/design-system/components/platform-variable-value-editor/playwright.spec.py -v
+```

@@ -1,0 +1,13 @@
+component: platform-company-variable-editor-modal
+doc_slug: platform-company-variable-editor-modal
+tier: T0
+title_ru: Company Variable Editor Modal
+title_en: Company Variable Editor Modal
+import: "@platform/lib/components/variables/platform-company-variable-editor-modal.js"
+variants:
+  - id: default
+    props: {}
+    scenarios: [render]
+playwright:
+  min_steps: 2
+  min_screenshots: 1

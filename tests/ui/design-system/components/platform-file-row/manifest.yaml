@@ -1,0 +1,13 @@
+component: platform-file-row
+doc_slug: platform-file-row
+tier: T0
+title_ru: File Row
+title_en: File Row
+import: "@platform/lib/components/platform-file-row.js"
+variants:
+  - id: default
+    props: {}
+    scenarios: [render]
+playwright:
+  min_steps: 2
+  min_screenshots: 1

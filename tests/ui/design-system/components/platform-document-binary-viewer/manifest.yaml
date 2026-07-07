@@ -1,0 +1,13 @@
+component: platform-document-binary-viewer
+doc_slug: platform-document-binary-viewer
+tier: T0
+title_ru: Document Binary Viewer
+title_en: Document Binary Viewer
+import: "@platform/lib/components/platform-document-binary-viewer.js"
+variants:
+  - id: default
+    props: {}
+    scenarios: [render]
+playwright:
+  min_steps: 2
+  min_screenshots: 1

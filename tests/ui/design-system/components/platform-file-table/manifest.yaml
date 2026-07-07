@@ -1,0 +1,13 @@
+component: platform-file-table
+doc_slug: platform-file-table
+tier: T0
+title_ru: File Table
+title_en: File Table
+import: "@platform/lib/components/platform-file-table.js"
+variants:
+  - id: default
+    props: {}
+    scenarios: [render]
+playwright:
+  min_steps: 2
+  min_screenshots: 1

@@ -7,6 +7,34 @@
     "x-service": "flows"
   },
   "paths": {
+    "/flows/api/v1/agent/toolkits": {
+      "get": {
+        "tags": [
+          "flows",
+          "agent-toolkits",
+          "agent-toolkits",
+          "public"
+        ],
+        "summary": "List Agent Toolkits Catalog",
+        "operationId": "list_agent_toolkits_catalog_flows_api_v1_agent_toolkits_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/AgentToolkitCatalogItem"
+                  },
+                  "type": "array",
+                  "title": "Response List Agent Toolkits Catalog Flows Api V1 Agent Toolkits Get"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/flows/api/v1/{flow_id}/.well-known/agent-card.json": {
       "get": {
         "tags": [
@@ -239,6 +267,108 @@
             "content": {
               "application/json": {
                 "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/flows/api/v1/{flow_id}/chat-profile": {
+      "get": {
+        "tags": [
+          "public",
+          "a2a",
+          "public",
+          "a2a"
+        ],
+        "summary": "Get Flow Chat Profile",
+        "description": "Chat-profile для авторизованных пользователей платформы (session/API key).",
+        "operationId": "get_flow_chat_profile_flows_api_v1__flow_id__chat_profile_get",
+        "parameters": [
+          {
+            "name": "flow_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Flow Id"
+            }
+          },
+          {
+            "name": "branch_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "default": "default",
+              "title": "Branch Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ChatProfileResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/flows/api/v1/embed/{embed_id}/chat-profile": {
+      "get": {
+        "tags": [
+          "public",
+          "a2a",
+          "public",
+          "a2a"
+        ],
+        "summary": "Get Embed Chat Profile",
+        "description": "Chat-profile для embed-сессий: политика из FlowConfig.chat + look из EmbedConfig.",
+        "operationId": "get_embed_chat_profile_flows_api_v1_embed__embed_id__chat_profile_get",
+        "parameters": [
+          {
+            "name": "embed_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Embed Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ChatProfileResponse"
+                }
               }
             }
           },
@@ -668,13 +798,7 @@
             "description": "Successful Response",
             "content": {
               "application/json": {
-                "schema": {
-                  "additionalProperties": {
-                    "$ref": "#/components/schemas/JsonValue"
-                  },
-                  "type": "object",
-                  "title": "Response Platform Mcp Discover Flows Api V1 Agent Platform Mcp Get"
-                }
+                "schema": {}
               }
             }
           }
@@ -694,12 +818,90 @@
             "description": "Successful Response",
             "content": {
               "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        }
+      }
+    },
+    "/flows/api/v1/agent/platform-mcp/{toolkit_id}": {
+      "get": {
+        "tags": [
+          "agent-platform-mcp",
+          "agent-platform-mcp",
+          "agent-platform-mcp",
+          "public"
+        ],
+        "summary": "Platform Mcp Discover Toolkit",
+        "operationId": "platform_mcp_discover_toolkit_flows_api_v1_agent_platform_mcp__toolkit_id__get",
+        "parameters": [
+          {
+            "name": "toolkit_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Toolkit Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
                 "schema": {
-                  "additionalProperties": {
-                    "$ref": "#/components/schemas/JsonValue"
-                  },
-                  "type": "object",
-                  "title": "Response Platform Mcp Message Flows Api V1 Agent Platform Mcp Post"
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "agent-platform-mcp",
+          "agent-platform-mcp",
+          "agent-platform-mcp",
+          "public"
+        ],
+        "summary": "Platform Mcp Message Toolkit",
+        "operationId": "platform_mcp_message_toolkit_flows_api_v1_agent_platform_mcp__toolkit_id__post",
+        "parameters": [
+          {
+            "name": "toolkit_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Toolkit Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
                 }
               }
             }
@@ -1068,6 +1270,206 @@
           "data"
         ],
         "title": "AgentOpenAIModelsResponse"
+      },
+      "AgentToolkitCatalogItem": {
+        "properties": {
+          "toolkit_id": {
+            "type": "string",
+            "title": "Toolkit Id"
+          },
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "description": {
+            "type": "string",
+            "title": "Description"
+          },
+          "default_enabled": {
+            "type": "boolean",
+            "title": "Default Enabled"
+          },
+          "position": {
+            "type": "integer",
+            "title": "Position"
+          },
+          "mcp_url": {
+            "type": "string",
+            "title": "Mcp Url"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "toolkit_id",
+          "name",
+          "description",
+          "default_enabled",
+          "position",
+          "mcp_url"
+        ],
+        "title": "AgentToolkitCatalogItem"
+      },
+      "AgentToolkitCreateRequest": {
+        "properties": {
+          "toolkit_id": {
+            "type": "string",
+            "title": "Toolkit Id"
+          },
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "description": {
+            "type": "string",
+            "title": "Description"
+          },
+          "default_enabled": {
+            "type": "boolean",
+            "title": "Default Enabled",
+            "default": false
+          },
+          "position": {
+            "type": "integer",
+            "title": "Position",
+            "default": 100
+          },
+          "flow_ids": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Flow Ids",
+            "default": []
+          },
+          "tool_ids": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Tool Ids",
+            "default": []
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "toolkit_id",
+          "name",
+          "description"
+        ],
+        "title": "AgentToolkitCreateRequest"
+      },
+      "AgentToolkitResponse": {
+        "properties": {
+          "toolkit_id": {
+            "type": "string",
+            "title": "Toolkit Id"
+          },
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "description": {
+            "type": "string",
+            "title": "Description"
+          },
+          "default_enabled": {
+            "type": "boolean",
+            "title": "Default Enabled"
+          },
+          "position": {
+            "type": "integer",
+            "title": "Position"
+          },
+          "flow_ids": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Flow Ids"
+          },
+          "tool_ids": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Tool Ids"
+          },
+          "source": {
+            "type": "string",
+            "title": "Source"
+          },
+          "mcp_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Mcp Url"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "toolkit_id",
+          "name",
+          "description",
+          "default_enabled",
+          "position",
+          "flow_ids",
+          "tool_ids",
+          "source"
+        ],
+        "title": "AgentToolkitResponse"
+      },
+      "AgentToolkitUpdateRequest": {
+        "properties": {
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "description": {
+            "type": "string",
+            "title": "Description"
+          },
+          "default_enabled": {
+            "type": "boolean",
+            "title": "Default Enabled"
+          },
+          "position": {
+            "type": "integer",
+            "title": "Position"
+          },
+          "flow_ids": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Flow Ids"
+          },
+          "tool_ids": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Tool Ids"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "name",
+          "description",
+          "default_enabled",
+          "position",
+          "flow_ids",
+          "tool_ids"
+        ],
+        "title": "AgentToolkitUpdateRequest"
       },
       "Artifact": {
         "properties": {
@@ -3074,6 +3476,57 @@
         "title": "ChannelType",
         "description": "Типы каналов для отправки сообщений.\n\nИспользуется в ChannelNode и output_actions триггеров."
       },
+      "ChatProfileResponse": {
+        "properties": {
+          "flow_id": {
+            "type": "string",
+            "title": "Flow Id"
+          },
+          "branch_id": {
+            "type": "string",
+            "title": "Branch Id"
+          },
+          "chat": {
+            "$ref": "#/components/schemas/FlowChatSettings"
+          },
+          "viewer": {
+            "$ref": "#/components/schemas/ChatProfileViewer"
+          },
+          "look": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/EmbedChatLook"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "type": "object",
+        "required": [
+          "flow_id",
+          "branch_id",
+          "chat",
+          "viewer"
+        ],
+        "title": "ChatProfileResponse",
+        "description": "Эффективный профиль чата для `<platform-chat>`.\n\n`chat` — effective политика поведения: FlowConfig.chat для session-пути,\nresolve_effective_flow_chat(FlowConfig.chat, EmbedConfig.chat_override) для embed;\n`look` — look&feel embed-виджета, только для embed-маршрута."
+      },
+      "ChatProfileViewer": {
+        "properties": {
+          "can_edit_flow": {
+            "type": "boolean",
+            "title": "Can Edit Flow"
+          }
+        },
+        "type": "object",
+        "required": [
+          "can_edit_flow"
+        ],
+        "title": "ChatProfileViewer",
+        "description": "Права текущего зрителя чата."
+      },
       "ChildWorkflowLifecyclePayload": {
         "properties": {
           "node_id": {
@@ -4255,6 +4708,72 @@
           "to_node"
         ],
         "title": "EdgeActivatedPayload"
+      },
+      "EmbedChatLook": {
+        "properties": {
+          "theme": {
+            "type": "string",
+            "title": "Theme"
+          },
+          "position": {
+            "type": "string",
+            "title": "Position"
+          },
+          "primary_color": {
+            "type": "string",
+            "title": "Primary Color"
+          },
+          "assistant_title": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Assistant Title"
+          },
+          "placeholder": {
+            "type": "string",
+            "title": "Placeholder"
+          },
+          "interface_locale": {
+            "type": "string",
+            "title": "Interface Locale"
+          },
+          "show_launcher": {
+            "type": "boolean",
+            "title": "Show Launcher"
+          },
+          "branding": {
+            "type": "boolean",
+            "title": "Branding"
+          },
+          "voice_enabled": {
+            "type": "boolean",
+            "title": "Voice Enabled"
+          },
+          "voice_default_on": {
+            "type": "boolean",
+            "title": "Voice Default On"
+          }
+        },
+        "type": "object",
+        "required": [
+          "theme",
+          "position",
+          "primary_color",
+          "assistant_title",
+          "placeholder",
+          "interface_locale",
+          "show_launcher",
+          "branding",
+          "voice_enabled",
+          "voice_default_on"
+        ],
+        "title": "EmbedChatLook",
+        "description": "Look&feel-проекция EmbedConfig для доставки в chat-profile.\n\nТолько внешний вид виджета; политика поведения чата живёт в FlowConfig.chat."
       },
       "EmptyWorkflowEventPayload": {
         "properties": {},
@@ -10658,6 +11177,97 @@
         "title": "FileWithUri",
         "description": "Represents a file with its content located at a specific URI."
       },
+      "FlowChatSettings": {
+        "properties": {
+          "show_reasoning": {
+            "type": "boolean",
+            "title": "Show Reasoning",
+            "description": "Показывать блоки reasoning ассистента",
+            "default": false
+          },
+          "tool_calls_display": {
+            "type": "string",
+            "enum": [
+              "hidden",
+              "compact",
+              "detailed"
+            ],
+            "title": "Tool Calls Display",
+            "description": "Отображение вызовов инструментов: hidden, compact или detailed",
+            "default": "compact"
+          },
+          "show_activity": {
+            "type": "boolean",
+            "title": "Show Activity",
+            "description": "Показывать строку активности агента (текущая нода/инструмент)",
+            "default": true
+          },
+          "errors_display": {
+            "type": "string",
+            "enum": [
+              "generic",
+              "detailed"
+            ],
+            "title": "Errors Display",
+            "description": "Ошибки выполнения: generic (обезличенный текст) или detailed (текст ошибки)",
+            "default": "generic"
+          },
+          "show_run_trace": {
+            "type": "boolean",
+            "title": "Show Run Trace",
+            "description": "Показывать таймлайн выполнения (run trace) под ответом",
+            "default": false
+          },
+          "show_trace_actions": {
+            "type": "boolean",
+            "title": "Show Trace Actions",
+            "description": "Показывать действия перехода к трейсам/логам",
+            "default": false
+          },
+          "show_browser_previews": {
+            "type": "boolean",
+            "title": "Show Browser Previews",
+            "description": "Показывать live-превью browser-сессий агента",
+            "default": true
+          },
+          "show_files_panel": {
+            "type": "boolean",
+            "title": "Show Files Panel",
+            "description": "Показывать панель файлов диалога",
+            "default": true
+          },
+          "allow_cancel": {
+            "type": "boolean",
+            "title": "Allow Cancel",
+            "description": "Разрешить пользователю отменять выполнение (tasks/cancel)",
+            "default": true
+          },
+          "greeting_message": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Greeting Message",
+            "description": "Приветственное сообщение при открытии чата"
+          },
+          "suggested_prompts": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Suggested Prompts",
+            "description": "Подсказки-примеры первых сообщений"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "title": "FlowChatSettings",
+        "description": "Per-flow настройки видимости и поведения единого чат-компонента."
+      },
       "FlowCreateRequest": {
         "properties": {
           "flow_id": {
@@ -10752,6 +11362,23 @@
                 "type": "null"
               }
             ]
+          },
+          "chat": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/FlowChatSettings"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "agent_toolkit_ids": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Agent Toolkit Ids"
           }
         },
         "type": "object",
@@ -11359,6 +11986,16 @@
               }
             ],
             "title": "Speech"
+          },
+          "chat": {
+            "$ref": "#/components/schemas/FlowChatSettings"
+          },
+          "agent_toolkit_ids": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Agent Toolkit Ids"
           }
         },
         "type": "object",
@@ -18247,6 +18884,13 @@
               }
             ],
             "title": "React Role"
+          },
+          "agent_toolkit_ids": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Agent Toolkit Ids"
           }
         },
         "additionalProperties": false,
@@ -18681,6 +19325,13 @@
               }
             ],
             "title": "Mcp Output Schema"
+          },
+          "agent_toolkit_ids": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Agent Toolkit Ids"
           }
         },
         "additionalProperties": false,
@@ -20445,6 +21096,14 @@
     {
       "name": "agent-platform-mcp",
       "description": "Public API endpoints for agent-platform-mcp"
+    },
+    {
+      "name": "agent-toolkits",
+      "description": "Public API endpoints for agent-toolkits"
+    },
+    {
+      "name": "flows",
+      "description": "Public API endpoints for flows"
     }
   ]
 }

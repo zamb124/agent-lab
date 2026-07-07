@@ -1,0 +1,13 @@
+component: platform-document-image-viewer
+doc_slug: platform-document-image-viewer
+tier: T0
+title_ru: Document Image Viewer
+title_en: Document Image Viewer
+import: "@platform/lib/components/platform-document-image-viewer.js"
+variants:
+  - id: default
+    props: {}
+    scenarios: [render]
+playwright:
+  min_steps: 2
+  min_screenshots: 1

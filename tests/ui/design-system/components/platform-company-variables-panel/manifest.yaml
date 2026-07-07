@@ -1,0 +1,13 @@
+component: platform-company-variables-panel
+doc_slug: platform-company-variables-panel
+tier: T0
+title_ru: Company Variables Panel
+title_en: Company Variables Panel
+import: "@platform/lib/components/variables/platform-company-variables-panel.js"
+variants:
+  - id: default
+    props: {}
+    scenarios: [render]
+playwright:
+  min_steps: 2
+  min_screenshots: 1

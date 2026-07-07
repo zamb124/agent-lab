@@ -1,0 +1,13 @@
+component: platform-variable-value-editor
+doc_slug: platform-variable-value-editor
+tier: T0
+title_ru: Variable Value Editor
+title_en: Variable Value Editor
+import: "@platform/lib/components/variables/platform-variable-value-editor.js"
+variants:
+  - id: default
+    props: {}
+    scenarios: [render]
+playwright:
+  min_steps: 2
+  min_screenshots: 1

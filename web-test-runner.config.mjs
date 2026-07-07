@@ -11,7 +11,11 @@ const litDevModeMessage =
 
 export default {
     rootDir,
-    files: ['tests/frontend_core/browser/**/*.spec.js'],
+    files: [
+        'tests/frontend_core/browser/**/*.spec.js',
+        'tests/ui/design-system/components/**/contract.spec.js',
+        'tests/ui/design-system/flows/**/*.spec.js',
+    ],
     hostname: '127.0.0.1',
     concurrentBrowsers: 1,
     concurrency: 1,

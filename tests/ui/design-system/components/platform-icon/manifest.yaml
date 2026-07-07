@@ -1,0 +1,13 @@
+component: platform-icon
+doc_slug: platform-icon
+tier: T0
+title_ru: Icon
+title_en: Icon
+import: "@platform/lib/components/platform-icon.js"
+variants:
+  - id: default
+    props: {}
+    scenarios: [render]
+playwright:
+  min_steps: 2
+  min_screenshots: 1

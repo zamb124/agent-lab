@@ -1,0 +1,13 @@
+component: platform-metric-card
+doc_slug: platform-metric-card
+tier: T0
+title_ru: Metric Card
+title_en: Metric Card
+import: "@platform/lib/components/platform-metric-card.js"
+variants:
+  - id: default
+    props: {}
+    scenarios: [render]
+playwright:
+  min_steps: 2
+  min_screenshots: 1

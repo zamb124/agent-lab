@@ -1,4 +1,4 @@
-.PHONY: test test-until-fail test-all test-static test-up test-down test-reset test-cov test-cov-all test-cov-report test-unit test-network test-ui test-ui-chat test-ui-doc test-ui-components test-frontend-core test-frontend-core-canon test-frontend-core-unit test-frontend-core-browser test-profile check-strict-agent-architecture check-wider-repo-strictness agent-ensure test-agent test-agent-e2e test-agent-desktop-e2e
+.PHONY: test test-until-fail test-all test-static test-up test-down test-reset test-cov test-cov-all test-cov-report test-unit test-network test-ui test-ui-chat test-ui-doc test-ui-components test-ui-kit test-ui-kit-playwright test-ui-kit-doc ui ui-doc test-frontend-core test-frontend-core-canon test-frontend-core-unit test-frontend-core-browser test-profile check-strict-agent-architecture check-wider-repo-strictness agent-ensure test-agent test-agent-e2e test-agent-desktop-e2e
 
 WORKERS ?= 10
 DB_PROFILE ?= 1
@@ -139,6 +139,27 @@ test-frontend-core-browser: runtime-bootstrap
 	@echo "Layer 3/3: браузерные тесты (Web Test Runner + Playwright)..."
 	@npm ci --silent
 	@npm run test:core-browser
+
+# Единая локальная проверка UI: канон TS + core frontend (canon/unit/browser incl. UI Kit L1).
+ui: lint-ts test-frontend-core
+	@echo "ui: OK"
+
+# UI + Playwright L2 doc scenarios (нужен test-up) + regenerate docs/scenarios/platform/ui-kit/**
+ui-doc: ui test-ui-kit-doc
+	@echo "ui-doc: OK"
+
+test-ui-kit: runtime-bootstrap
+	@echo "UI Kit L1: design-system contract specs (Web Test Runner)..."
+	@npm ci --silent
+	@npm run test:ui-kit
+
+test-ui-kit-playwright: test-up
+	@echo "UI Kit L2: Playwright component doc scenarios..."
+	@uv run pytest tests/ui/design-system/components/**/playwright.spec.py -v -m ui_component
+
+test-ui-kit-doc: test-ui-kit-playwright
+	@echo "UI Kit: regenerate docs/scenarios/platform/ui-kit/**"
+	@uv run python scripts/generate_ui_kit_docs.py
 
 test-frontend-core: test-frontend-core-canon test-frontend-core-unit test-frontend-core-browser
 	@echo "core/frontend: 3/3 OK"

@@ -1,0 +1,13 @@
+component: platform-file-viewer-modal
+doc_slug: platform-file-viewer-modal
+tier: T0
+title_ru: File Viewer Modal
+title_en: File Viewer Modal
+import: "@platform/lib/components/platform-file-viewer-modal.js"
+variants:
+  - id: default
+    props: {}
+    scenarios: [render]
+playwright:
+  min_steps: 2
+  min_screenshots: 1

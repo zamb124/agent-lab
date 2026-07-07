@@ -1,0 +1,13 @@
+component: platform-island
+doc_slug: platform-island
+tier: T0
+title_ru: Island
+title_en: Island
+import: "@platform/lib/components/layout/platform-island.js"
+variants:
+  - id: default
+    props: {}
+    scenarios: [render]
+playwright:
+  min_steps: 2
+  min_screenshots: 1

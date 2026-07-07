@@ -1,0 +1,13 @@
+component: platform-field-text
+doc_slug: platform-field-text
+tier: T0
+title_ru: Field Text
+title_en: Field Text
+import: "@platform/lib/components/fields/platform-field-text.js"
+variants:
+  - id: default
+    props: {}
+    scenarios: [render]
+playwright:
+  min_steps: 2
+  min_screenshots: 1

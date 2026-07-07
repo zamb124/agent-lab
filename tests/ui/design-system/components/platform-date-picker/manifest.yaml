@@ -1,0 +1,13 @@
+component: platform-date-picker
+doc_slug: platform-date-picker
+tier: T0
+title_ru: Date Picker
+title_en: Date Picker
+import: "@platform/lib/components/platform-date-picker.js"
+variants:
+  - id: default
+    props: {}
+    scenarios: [render]
+playwright:
+  min_steps: 2
+  min_screenshots: 1

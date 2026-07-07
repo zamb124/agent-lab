@@ -1,0 +1,13 @@
+component: platform-segmented-control
+doc_slug: platform-segmented-control
+tier: T1
+title_ru: Segmented Control
+title_en: Segmented Control
+import: "@platform/lib/components/platform-segmented-control.js"
+variants:
+  - id: default
+    props: {}
+    scenarios: [render]
+playwright:
+  min_steps: 2
+  min_screenshots: 1

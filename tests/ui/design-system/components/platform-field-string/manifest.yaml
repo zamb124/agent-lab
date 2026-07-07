@@ -1,0 +1,13 @@
+component: platform-field-string
+doc_slug: platform-field-string
+tier: T0
+title_ru: Field String
+title_en: Field String
+import: "@platform/lib/components/fields/platform-field-string.js"
+variants:
+  - id: default
+    props: {}
+    scenarios: [render]
+playwright:
+  min_steps: 2
+  min_screenshots: 1

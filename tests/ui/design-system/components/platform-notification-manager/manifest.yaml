@@ -1,0 +1,13 @@
+component: platform-notification-manager
+doc_slug: platform-notification-manager
+tier: T0
+title_ru: Notification Manager
+title_en: Notification Manager
+import: "@platform/lib/components/platform-notification-manager.js"
+variants:
+  - id: default
+    props: {}
+    scenarios: [render]
+playwright:
+  min_steps: 2
+  min_screenshots: 1

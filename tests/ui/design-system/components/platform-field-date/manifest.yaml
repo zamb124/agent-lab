@@ -1,0 +1,13 @@
+component: platform-field-date
+doc_slug: platform-field-date
+tier: T0
+title_ru: Field Date
+title_en: Field Date
+import: "@platform/lib/components/fields/platform-field-date.js"
+variants:
+  - id: default
+    props: {}
+    scenarios: [render]
+playwright:
+  min_steps: 2
+  min_screenshots: 1

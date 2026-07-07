@@ -1,0 +1,13 @@
+component: platform-confirm-modal
+doc_slug: platform-confirm-modal
+tier: T0
+title_ru: Confirm Modal
+title_en: Confirm Modal
+import: "@platform/lib/components/platform-confirm-modal.js"
+variants:
+  - id: default
+    props: {}
+    scenarios: [render]
+playwright:
+  min_steps: 2
+  min_screenshots: 1

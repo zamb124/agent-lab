@@ -1,0 +1,13 @@
+component: platform-llm-context-editor
+doc_slug: platform-llm-context-editor
+tier: T0
+title_ru: Llm Context Editor
+title_en: Llm Context Editor
+import: "@platform/lib/components/llm/llm-context-editor.js"
+variants:
+  - id: default
+    props: {}
+    scenarios: [render]
+playwright:
+  min_steps: 2
+  min_screenshots: 1

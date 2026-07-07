@@ -15,6 +15,7 @@ import { registerModalKind } from '@platform/lib/utils/modal-registry.js';
 import '@platform/lib/components/platform-modal-search-field.js';
 import '@platform/lib/components/platform-button.js';
 import '@platform/lib/components/platform-segmented-control.js';
+import '@platform/lib/components/platform-picker-card.js';
 import '@platform/lib/components/glass-spinner.js';
 import '@platform/lib/components/platform-icon.js';
 import '../components/common/flows-code-language-icon.js';
@@ -242,33 +243,8 @@ export class FlowsLibraryPickerModal extends PlatformModal {
                 gap: var(--space-3);
                 min-height: 200px;
             }
-            .lib-card {
-                display: flex;
-                flex-direction: column;
-                align-items: stretch;
-                text-align: left;
-                padding: var(--space-3);
-                border-radius: var(--radius-xl);
-                border: 1px solid var(--glass-border-subtle);
-                background: var(--glass-solid-subtle);
-                cursor: pointer;
-                transition: background var(--duration-fast), border-color var(--duration-fast),
-                    transform var(--duration-fast);
-                box-sizing: border-box;
-            }
-            .lib-card:hover {
-                background: var(--glass-solid-medium);
-                border-color: var(--glass-border-medium);
-                transform: translateY(-1px);
-            }
-            .lib-card:focus-visible {
-                outline: 2px solid var(--accent);
-                outline-offset: 2px;
-            }
-            .lib-card-icon-row {
-                display: flex;
-                justify-content: center;
-                margin-bottom: var(--space-2);
+            platform-picker-card {
+                min-width: 0;
             }
             .lib-card-icon {
                 width: 48px;
@@ -302,16 +278,6 @@ export class FlowsLibraryPickerModal extends PlatformModal {
             }
             .lib-card-icon platform-icon {
                 flex-shrink: 0;
-            }
-            .lib-card-title {
-                font-weight: var(--font-semibold);
-                font-size: var(--text-sm);
-                margin-bottom: var(--space-1);
-                color: var(--text-primary);
-            }
-            .lib-card-desc {
-                flex: 1 1 auto;
-                min-height: 0;
             }
             .lib-md {
                 font-size: var(--text-xs);
@@ -487,32 +453,6 @@ export class FlowsLibraryPickerModal extends PlatformModal {
                 display: grid;
                 grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
                 gap: var(--space-2);
-            }
-            .mcp-picker-tool-card {
-                display: flex;
-                flex-direction: column;
-                align-items: stretch;
-                text-align: left;
-                padding: var(--space-2) var(--space-3);
-                border-radius: var(--radius-lg);
-                border: 1px solid var(--glass-border-subtle);
-                background: var(--glass-solid-medium);
-                cursor: pointer;
-                transition: background var(--duration-fast), border-color var(--duration-fast);
-                box-sizing: border-box;
-            }
-            .mcp-picker-tool-card:hover {
-                background: var(--glass-solid-strong);
-                border-color: var(--glass-border-medium);
-            }
-            .mcp-picker-tool-card:focus-visible {
-                outline: 2px solid var(--accent);
-                outline-offset: 2px;
-            }
-            .mcp-picker-tool-icon-row {
-                display: flex;
-                justify-content: center;
-                margin-bottom: var(--space-1);
             }
             .mcp-picker-tool-icon .mcp-server-icon-img {
                 width: 18px;
@@ -972,15 +912,18 @@ export class FlowsLibraryPickerModal extends PlatformModal {
             ? renderMcpServerIcon(server, 18)
             : html`<platform-icon name=${icon} size="18"></platform-icon>`;
         return html`
-            <button type="button" class="mcp-picker-tool-card" @click=${() => this._pickToolLike(t)}>
-                <div class="mcp-picker-tool-icon-row">
+            <platform-picker-card
+                value=${typeof t.tool_id === 'string' ? t.tool_id : title}
+                title=${title}
+                subtitle=${desc}
+                @select=${() => this._pickToolLike(t)}
+            >
+                <div slot="icon">
                     <div class="mcp-picker-tool-icon">
                         ${iconNode}
                     </div>
                 </div>
-                <div class="mcp-picker-tool-title">${title}</div>
-                <div class="mcp-picker-tool-desc">${desc}</div>
-            </button>
+            </platform-picker-card>
         `;
     }
 
@@ -1290,14 +1233,17 @@ export class FlowsLibraryPickerModal extends PlatformModal {
         const desc = typeof t.description === 'string' ? t.description : '';
         const id = typeof t.tool_id === 'string' ? t.tool_id : '';
         return html`
-            <button type="button" class="lib-card" @click=${onSelect}>
-                <div class="lib-card-icon-row">
+            <platform-picker-card
+                value=${id.length > 0 ? id : title}
+                title=${title}
+                @select=${onSelect}
+            >
+                <div slot="icon">
                     <div class="lib-card-icon" data-kind=${kindAttr}>
                         ${cardIcon}
                     </div>
                 </div>
-                <div class="lib-card-title">${title}</div>
-                <div class="lib-card-desc">${this._mdDescription(desc)}</div>
+                <div class="lib-md">${this._mdDescription(desc)}</div>
                 <div class="lib-card-meta">
                     ${id.length > 0 ? html`<span class="lib-chip">${id}</span>` : null}
                     ${kindAttr === 'code'
@@ -1305,7 +1251,7 @@ export class FlowsLibraryPickerModal extends PlatformModal {
                         : nothing}
                     ${_tagsFromItem(t).map((g) => html`<span class="lib-chip">${g}</span>`)}
                 </div>
-            </button>
+            </platform-picker-card>
         `;
     }
 
@@ -1445,14 +1391,17 @@ export class FlowsLibraryPickerModal extends PlatformModal {
         return html`
             <div class="lib-grid">
                 ${rows.map((t) => html`
-                    <button type="button" class="lib-card" @click=${() => this._commitTemplate(t)}>
-                        <div class="lib-card-icon-row">
+                    <platform-picker-card
+                        value=${typeof t.id === 'string' ? t.id : (typeof t.name === 'string' ? t.name : 'template')}
+                        title=${typeof t.name === 'string' ? t.name : t.id}
+                        @select=${() => this._commitTemplate(t)}
+                    >
+                        <div slot="icon">
                             <div class="lib-card-icon" data-kind="code">
                                 <flows-code-language-icon language=${t.language} size="38"></flows-code-language-icon>
                             </div>
                         </div>
-                        <div class="lib-card-title">${typeof t.name === 'string' ? t.name : t.id}</div>
-                        <div class="lib-card-desc">${this._mdDescription(
+                        <div class="lib-md">${this._mdDescription(
                             typeof t.description === 'string' ? t.description : '',
                         )}</div>
                         <div class="lib-card-meta">
@@ -1466,7 +1415,7 @@ export class FlowsLibraryPickerModal extends PlatformModal {
                                 .filter((g) => typeof g === 'string' && g.length > 0)
                                 .map((g) => html`<span class="lib-chip">${g}</span>`)}
                         </div>
-                    </button>
+                    </platform-picker-card>
                 `)}
             </div>
         `;

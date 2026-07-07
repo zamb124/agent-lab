@@ -1,0 +1,13 @@
+component: platform-top-bar
+doc_slug: platform-top-bar
+tier: T0
+title_ru: Top Bar
+title_en: Top Bar
+import: "@platform/lib/components/layout/platform-top-bar.js"
+variants:
+  - id: default
+    props: {}
+    scenarios: [render]
+playwright:
+  min_steps: 2
+  min_screenshots: 1

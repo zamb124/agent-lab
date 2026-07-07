@@ -1,0 +1,13 @@
+component: platform-field-number
+doc_slug: platform-field-number
+tier: T0
+title_ru: Field Number
+title_en: Field Number
+import: "@platform/lib/components/fields/platform-field-number.js"
+variants:
+  - id: default
+    props: {}
+    scenarios: [render]
+playwright:
+  min_steps: 2
+  min_screenshots: 1

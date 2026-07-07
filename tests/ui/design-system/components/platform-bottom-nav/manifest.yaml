@@ -1,0 +1,13 @@
+component: platform-bottom-nav
+doc_slug: platform-bottom-nav
+tier: T0
+title_ru: Bottom Nav
+title_en: Bottom Nav
+import: "@platform/lib/components/layout/platform-bottom-nav.js"
+variants:
+  - id: default
+    props: {}
+    scenarios: [render]
+playwright:
+  min_steps: 2
+  min_screenshots: 1

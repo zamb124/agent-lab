@@ -1,0 +1,13 @@
+component: platform-user-chip
+doc_slug: platform-user-chip
+tier: T0
+title_ru: User Chip
+title_en: User Chip
+import: "@platform/lib/components/platform-user-chip.js"
+variants:
+  - id: default
+    props: {}
+    scenarios: [render]
+playwright:
+  min_steps: 2
+  min_screenshots: 1

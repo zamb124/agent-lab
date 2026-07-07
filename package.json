@@ -6,6 +6,7 @@
     "test:core-unit": "vitest run --config vitest.config.mjs --coverage",
     "test:core-unit:fast": "vitest run --config vitest.config.mjs",
     "test:core-unit:watch": "vitest --config vitest.config.mjs",
+    "test:ui-kit": "web-test-runner --config web-test-runner.config.mjs --files tests/ui/design-system/components/**/contract.spec.js",
     "test:core-browser": "web-test-runner --config web-test-runner.config.mjs",
     "test:core-browser:watch": "web-test-runner --config web-test-runner.config.mjs --watch",
     "test:core": "npm run test:core-unit && npm run test:core-browser",

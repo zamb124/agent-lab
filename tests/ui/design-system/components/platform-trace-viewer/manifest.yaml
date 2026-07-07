@@ -1,0 +1,13 @@
+component: platform-trace-viewer
+doc_slug: platform-trace-viewer
+tier: T0
+title_ru: Trace Viewer
+title_en: Trace Viewer
+import: "@platform/lib/components/platform-trace-viewer.js"
+variants:
+  - id: default
+    props: {}
+    scenarios: [render]
+playwright:
+  min_steps: 2
+  min_screenshots: 1

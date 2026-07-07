@@ -1,0 +1,13 @@
+component: platform-bottom-sheet
+doc_slug: platform-bottom-sheet
+tier: T0
+title_ru: Bottom Sheet
+title_en: Bottom Sheet
+import: "@platform/lib/components/layout/platform-bottom-sheet.js"
+variants:
+  - id: default
+    props: {}
+    scenarios: [render]
+playwright:
+  min_steps: 2
+  min_screenshots: 1

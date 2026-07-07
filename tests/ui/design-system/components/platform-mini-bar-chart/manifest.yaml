@@ -1,0 +1,13 @@
+component: platform-mini-bar-chart
+doc_slug: platform-mini-bar-chart
+tier: T0
+title_ru: Mini Bar Chart
+title_en: Mini Bar Chart
+import: "@platform/lib/components/platform-mini-bar-chart.js"
+variants:
+  - id: default
+    props: {}
+    scenarios: [render]
+playwright:
+  min_steps: 2
+  min_screenshots: 1

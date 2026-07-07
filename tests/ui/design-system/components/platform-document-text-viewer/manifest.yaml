@@ -1,0 +1,13 @@
+component: platform-document-text-viewer
+doc_slug: platform-document-text-viewer
+tier: T0
+title_ru: Document Text Viewer
+title_en: Document Text Viewer
+import: "@platform/lib/components/platform-document-text-viewer.js"
+variants:
+  - id: default
+    props: {}
+    scenarios: [render]
+playwright:
+  min_steps: 2
+  min_screenshots: 1

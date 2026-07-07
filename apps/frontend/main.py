@@ -32,6 +32,7 @@ from apps.frontend.api.company_voice_providers import (
     router as company_voice_providers_router,
 )
 from apps.frontend.api.crawl_report import router as crawl_report_router
+from apps.frontend.api.design_system import router as design_system_router
 from apps.frontend.api.embed_configs import router as embed_configs_router
 from apps.frontend.api.invites import router as invites_router
 from apps.frontend.api.leads import lead_requests_router, leads_router
@@ -341,6 +342,7 @@ app = create_service_app(
         public_docs_assistant_router,
         public_search_router,
         public_site_router,
+        design_system_router,
         invites_router,
         team_router,
         api_keys_router,
@@ -603,6 +605,7 @@ async def serve_spa(container: ContainerDep, full_path: str = ""):
         "manifest.json", "sw.js", "offline.html",
         "robots.txt", "sitemap.xml", "llms.txt",
         "frontend/robots.txt", "frontend/sitemap.xml", "frontend/llms.txt",
+        "design-system/", "frontend/design-system/",
     )
     if full_path.startswith(excluded) or full_path in ("manifest.json", "sw.js", "offline.html"):
         raise HTTPException(status_code=404)

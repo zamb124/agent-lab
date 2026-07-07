@@ -151,7 +151,7 @@ export class FlowsCatalogList extends PlatformElement {
                 variant: 'danger',
                 confirmVariant: 'danger',
                 confirmText: this.t('context_menu.delete'),
-                cancelText: this.t('flows_sidebar.action_cancel'),
+                cancelText: this.t('common.action_cancel'),
             },
         );
         if (!ok) return;
@@ -166,7 +166,7 @@ export class FlowsCatalogList extends PlatformElement {
                 variant: 'danger',
                 confirmVariant: 'danger',
                 confirmText: this.t('context_menu.delete'),
-                cancelText: this.t('flows_sidebar.action_cancel'),
+                cancelText: this.t('common.action_cancel'),
             },
         );
         if (!ok) return;

@@ -64,7 +64,6 @@
     "action_clear_image": "Убрать",
     "action_open_evaluation": "Evaluation Lab",
     "toast_image_type": "Выберите файл изображения",
-    "action_cancel": "Отмена",
     "action_save": "Сохранить"
   },
   "chat_settings": {
@@ -119,7 +118,6 @@
     "delete_title": "Удалить переменную?",
     "delete_message": "Удалить переменную \"{{key}}\"?",
     "action_delete": "Удалить",
-    "action_cancel": "Отмена",
     "col_key": "Ключ",
     "col_value": "Значение",
     "col_scope": "Источник",
@@ -352,7 +350,6 @@
     "error_name_required": "Укажите название",
     "error_type_required": "Выберите тип триггера",
     "error_branch_required": "Укажите ветку",
-    "action_cancel": "Отмена",
     "action_save": "Сохранить",
     "action_create": "Создать"
   },
@@ -360,7 +357,6 @@
     "title": "Подключённые интеграции",
     "action_disconnect": "Отключить",
     "action_delete": "Отключить",
-    "action_cancel": "Отмена",
     "delete_title": "Отключить интеграцию?",
     "delete_message": "Отключить интеграцию {{provider}} / {{service}}?",
     "col_provider": "Провайдер",
@@ -469,7 +465,6 @@
     "apply": "Применить",
     "preview_python": "Код: check(args, state) -> bool",
     "field_condition": "Код условия",
-    "action_cancel": "Отмена",
     "action_save": "Сохранить"
   },
   "variables_panel": {
@@ -911,7 +906,6 @@
     "title": "Политика входящих рёбер",
     "subtitle": "Нода: {name}",
     "field_policy": "Политика",
-    "action_cancel": "Отмена",
     "action_save": "Сохранить",
     "option_any_title": "Any",
     "option_any_desc": "Запуск при завершении любого входящего ребра. Обычный вариант без AND-join.",
@@ -939,7 +933,6 @@
     "field_description": "Описание",
     "field_code": "Код",
     "field_schema": "Parameters schema (JSON)",
-    "action_cancel": "Отмена",
     "action_create": "Создать",
     "toast_schema_invalid": "Схема параметров должна быть валидным JSON-объектом"
   },
@@ -1023,7 +1016,6 @@
     "action_rewind": "Rewind",
     "action_retry": "Retry",
     "action_patch": "Patch state",
-    "action_cancel": "Отмена",
     "confirm_fork_title": "Создать branch",
     "confirm_fork_message": "Создать новую execution branch из sequence {sequence}?",
     "confirm_rewind_title": "Rewind активной branch",
@@ -1183,7 +1175,6 @@
     "delete_branch_title": "Удалить ветку?",
     "delete_branch_message": "Вы уверены, что хотите удалить ветку «{{id}}»?",
     "footer_triggers": "Триггеры",
-    "action_cancel": "Отмена",
     "search_placeholder": "Поиск по flows…",
     "search_aria": "Поиск в каталоге flows",
     "search_empty": "Ничего не найдено",
@@ -1274,7 +1265,6 @@
     "empty": "Нет сохраненных сессий",
     "continue_title": "Продолжить диалог",
     "delete_btn": "Удалить",
-    "action_cancel": "Отмена",
     "col_session": "Сессия",
     "col_flow": "Flow",
     "col_last": "Последнее обращение",

@@ -1,0 +1,13 @@
+component: platform-sidebar
+doc_slug: platform-sidebar
+tier: T0
+title_ru: Sidebar
+title_en: Sidebar
+import: "@platform/lib/components/layout/platform-sidebar.js"
+variants:
+  - id: default
+    props: {}
+    scenarios: [render]
+playwright:
+  min_steps: 2
+  min_screenshots: 1

@@ -6,6 +6,7 @@ import { html, css } from 'lit';
 import { PlatformModal } from '@platform/lib/components/glass-modal.js';
 import { registerModalKind } from '@platform/lib/utils/modal-registry.js';
 import '@platform/lib/components/platform-icon.js';
+import '@platform/lib/components/platform-picker-card.js';
 
 export class FlowsCodeNodeDropModal extends PlatformModal {
     static modalKind = 'flows.code_node_drop';
@@ -34,36 +35,10 @@ export class FlowsCodeNodeDropModal extends PlatformModal {
                 grid-template-columns: repeat(2, minmax(0, 1fr));
                 gap: var(--space-3);
             }
-            .choice-card {
-                aspect-ratio: 1;
-                max-width: 100%;
-                margin: 0 auto;
-                width: 100%;
-                box-sizing: border-box;
-                display: flex;
-                flex-direction: column;
-                align-items: center;
-                justify-content: center;
-                gap: var(--space-3);
-                padding: var(--space-4);
-                border-radius: var(--radius-xl);
-                background: var(--glass-solid-subtle);
-                border: 1px solid var(--glass-border-subtle);
-                cursor: pointer;
-                transition: background var(--duration-fast), border-color var(--duration-fast),
-                    transform var(--duration-fast);
-                text-align: center;
+            platform-picker-card {
+                min-width: 0;
             }
-            .choice-card:hover {
-                background: var(--glass-solid-medium);
-                border-color: var(--glass-border-medium);
-                transform: translateY(-1px);
-            }
-            .choice-card:focus-visible {
-                outline: 2px solid var(--accent);
-                outline-offset: 2px;
-            }
-            .choice-card-icon {
+            .picker-card-icon {
                 width: 56px;
                 height: 56px;
                 border-radius: var(--radius-lg);
@@ -71,19 +46,12 @@ export class FlowsCodeNodeDropModal extends PlatformModal {
                 align-items: center;
                 justify-content: center;
                 color: var(--flows-avatar-text);
-                flex-shrink: 0;
             }
-            .choice-card-icon[data-variant='code'] {
+            .picker-card-icon[data-variant='code'] {
                 background: var(--flows-preset-code-gradient);
             }
-            .choice-card-icon[data-variant='templates'] {
+            .picker-card-icon[data-variant='templates'] {
                 background: var(--flows-preset-multi-gradient);
-            }
-            .choice-card-label {
-                font-size: var(--text-sm);
-                font-weight: var(--font-semibold);
-                color: var(--text-primary);
-                line-height: 1.3;
             }
         `,
     ];
@@ -112,14 +80,6 @@ export class FlowsCodeNodeDropModal extends PlatformModal {
         this._emitAfterClose(this.onChooseTemplates);
     }
 
-    _cardKeydown(e, handler) {
-        if (e.key !== 'Enter' && e.key !== ' ') {
-            return;
-        }
-        e.preventDefault();
-        handler.call(this);
-    }
-
     renderHeader() {
         return this.t('code_node_drop_modal.title');
     }
@@ -129,32 +89,24 @@ export class FlowsCodeNodeDropModal extends PlatformModal {
             <div class="body">
                 <p class="hint">${this.t('code_node_drop_modal.hint')}</p>
                 <div class="choice-grid">
-                    <div
-                        class="choice-card"
-                        role="button"
-                        tabindex="0"
-                        aria-label=${this.t('code_node_drop_modal.action_blank')}
-                        @click=${this._onNew}
-                        @keydown=${(e) => this._cardKeydown(e, this._onNew)}
+                    <platform-picker-card
+                        value="blank"
+                        title=${this.t('code_node_drop_modal.action_blank')}
+                        @select=${this._onNew}
                     >
-                        <div class="choice-card-icon" data-variant="code">
+                        <div slot="icon" class="picker-card-icon" data-variant="code">
                             <platform-icon name="code" size="28"></platform-icon>
                         </div>
-                        <div class="choice-card-label">${this.t('code_node_drop_modal.action_blank')}</div>
-                    </div>
-                    <div
-                        class="choice-card"
-                        role="button"
-                        tabindex="0"
-                        aria-label=${this.t('code_node_drop_modal.action_templates')}
-                        @click=${this._onTemplates}
-                        @keydown=${(e) => this._cardKeydown(e, this._onTemplates)}
+                    </platform-picker-card>
+                    <platform-picker-card
+                        value="templates"
+                        title=${this.t('code_node_drop_modal.action_templates')}
+                        @select=${this._onTemplates}
                     >
-                        <div class="choice-card-icon" data-variant="templates">
+                        <div slot="icon" class="picker-card-icon" data-variant="templates">
                             <platform-icon name="layers" size="28"></platform-icon>
                         </div>
-                        <div class="choice-card-label">${this.t('code_node_drop_modal.action_templates')}</div>
-                    </div>
+                    </platform-picker-card>
                 </div>
             </div>
         `;

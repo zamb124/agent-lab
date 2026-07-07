@@ -1,0 +1,35 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "UI Kit component manifest",
+  "type": "object",
+  "required": ["component", "doc_slug", "tier", "title_ru", "title_en", "import", "variants", "playwright"],
+  "properties": {
+    "component": { "type": "string", "pattern": "^platform-" },
+    "doc_slug": { "type": "string" },
+    "tier": { "enum": ["T0", "T1", "T2"] },
+    "title_ru": { "type": "string", "minLength": 1 },
+    "title_en": { "type": "string", "minLength": 1 },
+    "import": { "type": "string", "minLength": 1 },
+    "variants": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "required": ["id", "props", "scenarios"],
+        "properties": {
+          "id": { "type": "string" },
+          "props": { "type": "object" },
+          "scenarios": { "type": "array", "items": { "type": "string" } }
+        }
+      }
+    },
+    "playwright": {
+      "type": "object",
+      "required": ["min_steps", "min_screenshots"],
+      "properties": {
+        "min_steps": { "type": "integer", "minimum": 1 },
+        "min_screenshots": { "type": "integer", "minimum": 0 }
+      }
+    }
+  }
+}

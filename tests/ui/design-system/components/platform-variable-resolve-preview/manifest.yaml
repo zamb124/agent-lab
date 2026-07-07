@@ -1,0 +1,13 @@
+component: platform-variable-resolve-preview
+doc_slug: platform-variable-resolve-preview
+tier: T0
+title_ru: Variable Resolve Preview
+title_en: Variable Resolve Preview
+import: "@platform/lib/components/variables/platform-variable-resolve-preview.js"
+variants:
+  - id: default
+    props: {}
+    scenarios: [render]
+playwright:
+  min_steps: 2
+  min_screenshots: 1

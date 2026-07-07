@@ -1,7 +1,8 @@
 """
 Перед сборкой Zensical: деревья build/documentation-ru и build/documentation-en.
 Исходники сценариев: docs/scenarios/<service>/<tag>/<slug>/README.md.
-В сборке тег — только группировка на hub-страницах; URL: …/scenarios/<service>/<slug>/.
+В сборке тег — группировка на hub-страницах; URL сценария: …/scenarios/<service>/<slug>/.
+Hub тега (например platform/ui-kit): …/scenarios/<service>/<tag>/.
 Навигация и learning paths — docs/scenarios/taxonomy.yaml.
 """
 
@@ -87,6 +88,63 @@ def _write_index_md_from_readme(readme: Path, out: Path) -> None:
     title_json = json.dumps(title, ensure_ascii=False)
     out.parent.mkdir(parents=True, exist_ok=True)
     out.write_text(f"---\ntitle: {title_json}\n---\n\n{body}", encoding="utf-8")
+
+
+def _tag_hub_readme(scenarios_src: Path, service: str, tag: str, *, language: str) -> Path | None:
+    tag_dir = scenarios_src / service / tag
+    if not tag_dir.is_dir():
+        return None
+    if language == "en":
+        en_readme = tag_dir / "README.en.md"
+        if en_readme.is_file():
+            return en_readme
+    readme = tag_dir / "README.md"
+    if readme.is_file():
+        return readme
+    return None
+
+
+def _publish_tag_hub_pages(
+    scenarios_src: Path,
+    scenarios_dst: Path,
+    *,
+    language: str,
+) -> None:
+    """Публикует hub-страницы тегов (docs/scenarios/<service>/<tag>/README.md → …/<tag>/index.md)."""
+    for service_dir in sorted(p for p in scenarios_src.iterdir() if p.is_dir() and not p.name.startswith(".")):
+        service = service_dir.name
+        for tag_dir in sorted(p for p in service_dir.iterdir() if p.is_dir() and not p.name.startswith(".")):
+            tag = tag_dir.name
+            if service != "platform" or tag != "ui-kit":
+                continue
+            readme = _tag_hub_readme(scenarios_src, service, tag, language=language)
+            if readme is None:
+                continue
+            _write_index_md_from_readme(readme, scenarios_dst / service / tag / "index.md")
+
+
+def _write_service_pages_nav(
+    taxonomy: ScenarioTaxonomy,
+    scenarios_dst: Path,
+) -> None:
+    """Sidebar platform: hub + onboarding + ui-kit; страницы компонентов доступны по ссылкам из каталога."""
+    service = "platform"
+    svc_dir = scenarios_dst / service
+    if not svc_dir.is_dir() or not (svc_dir / "index.md").is_file():
+        return
+    nav_entries: list[str] = ["index.md"]
+    spec = taxonomy.services.get(service)
+    if spec is not None and spec.featured_slug is not None:
+        featured = svc_dir / spec.featured_slug / "index.md"
+        if featured.is_file():
+            nav_entries.append(f"{spec.featured_slug}/index.md")
+    ui_kit_hub = svc_dir / "ui-kit" / "index.md"
+    if ui_kit_hub.is_file():
+        nav_entries.append("ui-kit/index.md")
+    if len(nav_entries) <= 1:
+        return
+    lines = ["nav:", *[f"  - {entry}" for entry in nav_entries]]
+    (svc_dir / ".pages").write_text("\n".join(lines) + "\n", encoding="utf-8")
 
 
 def _dest_parts_for_scenario(service: str, slug_name: str) -> tuple[str, ...]:
@@ -235,6 +293,11 @@ def _grouped_sections_for_service(
 
     for tag_key in ordered_tags:
         tag_entries = by_tag.get(tag_key, [])
+        section_title = tag_label(taxonomy, service, tag_key, language=language)
+        tag_hub_index = scenarios_dst / service / tag_key / "index.md"
+        if tag_hub_index.is_file():
+            sections.append((section_title, [(_title_from_index_md(tag_hub_index), f"{tag_key}/")]))
+            continue
         if not tag_entries:
             continue
         links: list[tuple[str, str]] = []
@@ -247,7 +310,6 @@ def _grouped_sections_for_service(
             links.append((_title_from_index_md(idx), f"{entry.slug}/"))
         if not links:
             continue
-        section_title = tag_label(taxonomy, service, tag_key, language=language)
         sections.append((section_title, links))
 
     return sections
@@ -353,7 +415,9 @@ def _populate_scenario_index_tree(
                 readme = en_readme
         _write_index_md_from_readme(readme, dst_dir / "index.md")
         _copy_screenshots(entry.src_dir, dst_dir)
+    _publish_tag_hub_pages(scenarios_src, scenarios_dst, language=language)
     _write_scenario_hub_indices(taxonomy, scenarios_src, scenarios_dst, entries, language=language)
+    _write_service_pages_nav(taxonomy, scenarios_dst)
     _write_scenarios_pages_file(taxonomy, scenarios_dst)
 
 

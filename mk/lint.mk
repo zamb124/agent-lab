@@ -19,6 +19,8 @@ lint:
 lint-ts:
 	@echo "=== lint-ts: events/ui canon ==="
 	@$(MAKE) --no-print-directory check-events-canon
+	@echo "=== lint-ts: ui kit docs canon ==="
+	@uv run python scripts/check_ui_kit_docs.py
 	@echo "=== lint-ts: field canon ==="
 	@$(MAKE) --no-print-directory check-field-canon
 	@echo "=== lint-ts: logging canon ==="

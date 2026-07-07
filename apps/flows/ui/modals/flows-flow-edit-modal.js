@@ -207,7 +207,7 @@ export class FlowsFlowEditModal extends PlatformFormModal {
             <platform-button variant="secondary" ?disabled=${!this.flowId} @click=${this._openEvaluationLab}>
                 ${this.t('flow_edit_modal.action_open_evaluation')}
             </platform-button>
-            <platform-button @click=${() => this.close()}>${this.t('flow_edit_modal.action_cancel')}</platform-button>
+            <platform-button @click=${() => this.close()}>${this.t('common.action_cancel')}</platform-button>
             <platform-button variant="primary" ?disabled=${!valid || busy} @click=${this._onSubmit}>
                 ${this.t('flow_edit_modal.action_save')}
             </platform-button>

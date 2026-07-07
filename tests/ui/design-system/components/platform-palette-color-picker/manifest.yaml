@@ -1,0 +1,13 @@
+component: platform-palette-color-picker
+doc_slug: platform-palette-color-picker
+tier: T0
+title_ru: Palette Color Picker
+title_en: Palette Color Picker
+import: "@platform/lib/components/platform-palette-color-picker.js"
+variants:
+  - id: default
+    props: {}
+    scenarios: [render]
+playwright:
+  min_steps: 2
+  min_screenshots: 1

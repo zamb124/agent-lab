@@ -43,6 +43,9 @@ learning_paths:
       - label_ru: Flows — API Console и A2A
         label_en: Flows — API Console and A2A
         href: scenarios/flows/api-console/
+      - label_ru: UI Kit — каталог core-компонентов
+        label_en: UI Kit — core component catalog
+        href: scenarios/platform/ui-kit/
       - label_ru: Справочник API
         label_en: API reference
         href: api/
@@ -111,6 +114,10 @@ services:
         label_ru: Первые шаги
         label_en: First steps
         order: 1
+      ui-kit:
+        label_ru: UI Kit
+        label_en: UI Kit
+        order: 2
 
   sync:
     label_ru: Sync

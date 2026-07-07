@@ -1,0 +1,13 @@
+component: platform-sidebar-namespace-select
+doc_slug: platform-sidebar-namespace-select
+tier: T0
+title_ru: Sidebar Namespace Select
+title_en: Sidebar Namespace Select
+import: "@platform/lib/components/layout/platform-sidebar-namespace-select.js"
+variants:
+  - id: default
+    props: {}
+    scenarios: [render]
+playwright:
+  min_steps: 2
+  min_screenshots: 1

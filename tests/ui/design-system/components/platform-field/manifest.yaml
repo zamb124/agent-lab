@@ -1,0 +1,13 @@
+component: platform-field
+doc_slug: platform-field
+tier: T1
+title_ru: Field
+title_en: Field
+import: "@platform/lib/components/fields/platform-field.js"
+variants:
+  - id: default
+    props: {}
+    scenarios: [render]
+playwright:
+  min_steps: 2
+  min_screenshots: 1

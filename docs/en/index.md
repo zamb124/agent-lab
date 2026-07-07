@@ -35,6 +35,11 @@ description: "Modern Humanitec documentation hub: quickstart, API reference, gui
     <h2>Platform Basics</h2>
     <p>Site entry, Dashboard, service list, and user menu for new users.</p>
   </a>
+  <a class="docs-card" href="scenarios/platform/ui-kit/">
+    <span class="docs-card-kicker">UI</span>
+    <h2>UI Kit</h2>
+    <p>Catalog of core platform-* components: buttons, fields, modals, layout, and playground preview.</p>
+  </a>
   <a class="docs-card" href="api/">
     <span class="docs-card-kicker">Reference</span>
     <h2>API Reference</h2>

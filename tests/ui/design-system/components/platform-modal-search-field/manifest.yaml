@@ -1,0 +1,13 @@
+component: platform-modal-search-field
+doc_slug: platform-modal-search-field
+tier: T0
+title_ru: Modal Search Field
+title_en: Modal Search Field
+import: "@platform/lib/components/platform-modal-search-field.js"
+variants:
+  - id: default
+    props: {}
+    scenarios: [render]
+playwright:
+  min_steps: 2
+  min_screenshots: 1

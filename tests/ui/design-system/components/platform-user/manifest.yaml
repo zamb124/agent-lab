@@ -1,0 +1,13 @@
+component: platform-user
+doc_slug: platform-user
+tier: T0
+title_ru: User
+title_en: User
+import: "@platform/lib/components/platform-user.js"
+variants:
+  - id: default
+    props: {}
+    scenarios: [render]
+playwright:
+  min_steps: 2
+  min_screenshots: 1

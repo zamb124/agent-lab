@@ -35,6 +35,11 @@ description: "Современная документация Humanitec: быс�
     <h2>Основные инструкции</h2>
     <p>Вход на сайт, Dashboard, список сервисов и меню пользователя простым языком.</p>
   </a>
+  <a class="docs-card" href="scenarios/platform/ui-kit/">
+    <span class="docs-card-kicker">UI</span>
+    <h2>UI Kit</h2>
+    <p>Каталог core-компонентов platform-*: кнопки, поля, модалки, layout и playground preview.</p>
+  </a>
   <a class="docs-card" href="api/">
     <span class="docs-card-kicker">API</span>
     <h2>API</h2>

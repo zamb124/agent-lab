@@ -1,0 +1,13 @@
+component: platform-variable-input
+doc_slug: platform-variable-input
+tier: T0
+title_ru: Variable Input
+title_en: Variable Input
+import: "@platform/lib/components/platform-variable-input.js"
+variants:
+  - id: default
+    props: {}
+    scenarios: [render]
+playwright:
+  min_steps: 2
+  min_screenshots: 1

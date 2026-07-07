@@ -1,0 +1,13 @@
+component: platform-document-media-viewer
+doc_slug: platform-document-media-viewer
+tier: T0
+title_ru: Document Media Viewer
+title_en: Document Media Viewer
+import: "@platform/lib/components/platform-document-media-viewer.js"
+variants:
+  - id: default
+    props: {}
+    scenarios: [render]
+playwright:
+  min_steps: 2
+  min_screenshots: 1

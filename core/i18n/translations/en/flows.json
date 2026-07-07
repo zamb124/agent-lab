@@ -64,7 +64,6 @@
     "action_clear_image": "Remove",
     "action_open_evaluation": "Evaluation Lab",
     "toast_image_type": "Please choose an image file",
-    "action_cancel": "Cancel",
     "action_save": "Save"
   },
   "chat_settings": {
@@ -119,7 +118,6 @@
     "delete_title": "Delete variable?",
     "delete_message": "Delete variable \"{{key}}\"?",
     "action_delete": "Delete",
-    "action_cancel": "Cancel",
     "col_key": "Key",
     "col_value": "Value",
     "col_scope": "Source",
@@ -352,7 +350,6 @@
     "error_name_required": "Name is required",
     "error_type_required": "Select a trigger type",
     "error_branch_required": "Select a branch",
-    "action_cancel": "Cancel",
     "action_save": "Save",
     "action_create": "Create"
   },
@@ -360,7 +357,6 @@
     "title": "Connected integrations",
     "action_disconnect": "Disconnect",
     "action_delete": "Disconnect",
-    "action_cancel": "Cancel",
     "delete_title": "Disconnect integration?",
     "delete_message": "Disconnect integration {{provider}} / {{service}}?",
     "col_provider": "Provider",
@@ -469,7 +465,6 @@
     "apply": "Apply",
     "preview_python": "Code: check(args, state) -> bool",
     "field_condition": "Condition code",
-    "action_cancel": "Cancel",
     "action_save": "Save"
   },
   "variables_panel": {
@@ -913,7 +908,6 @@
     "title": "Incoming policy",
     "subtitle": "Node: {name}",
     "field_policy": "Policy",
-    "action_cancel": "Cancel",
     "action_save": "Save",
     "option_any_title": "Any",
     "option_any_desc": "Start the node when any one incoming edge completes. Default for fan-in without an AND join.",
@@ -941,7 +935,6 @@
     "field_description": "Description",
     "field_code": "Code",
     "field_schema": "Parameters schema (JSON)",
-    "action_cancel": "Cancel",
     "action_create": "Create",
     "toast_schema_invalid": "Parameters schema must be a valid JSON object"
   },
@@ -1025,7 +1018,6 @@
     "action_rewind": "Rewind",
     "action_retry": "Retry",
     "action_patch": "Patch state",
-    "action_cancel": "Cancel",
     "confirm_fork_title": "Create branch",
     "confirm_fork_message": "Create a new execution branch from sequence {sequence}?",
     "confirm_rewind_title": "Rewind active branch",
@@ -1185,7 +1177,6 @@
     "delete_branch_title": "Delete branch?",
     "delete_branch_message": "Delete branch \"{{id}}\"?",
     "footer_triggers": "Triggers",
-    "action_cancel": "Cancel",
     "search_placeholder": "Search flows…",
     "search_aria": "Search flows catalog",
     "search_empty": "No matches",
@@ -1276,7 +1267,6 @@
     "empty": "No saved sessions",
     "continue_title": "Continue chat",
     "delete_btn": "Delete",
-    "action_cancel": "Cancel",
     "col_session": "Session",
     "col_flow": "Flow",
     "col_last": "Last activity",

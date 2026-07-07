@@ -1,0 +1,13 @@
+component: platform-sparkline
+doc_slug: platform-sparkline
+tier: T0
+title_ru: Sparkline
+title_en: Sparkline
+import: "@platform/lib/components/platform-sparkline.js"
+variants:
+  - id: default
+    props: {}
+    scenarios: [render]
+playwright:
+  min_steps: 2
+  min_screenshots: 1

@@ -1,0 +1,13 @@
+component: platform-assistant-message-actions
+doc_slug: platform-assistant-message-actions
+tier: T0
+title_ru: Assistant Message Actions
+title_en: Assistant Message Actions
+import: "@platform/lib/components/platform-assistant-message-actions.js"
+variants:
+  - id: default
+    props: {}
+    scenarios: [render]
+playwright:
+  min_steps: 2
+  min_screenshots: 1

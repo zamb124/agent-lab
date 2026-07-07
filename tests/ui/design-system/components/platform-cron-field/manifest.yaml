@@ -1,0 +1,13 @@
+component: platform-cron-field
+doc_slug: platform-cron-field
+tier: T0
+title_ru: Cron Field
+title_en: Cron Field
+import: "@platform/lib/components/platform-cron-field.js"
+variants:
+  - id: default
+    props: {}
+    scenarios: [render]
+playwright:
+  min_steps: 2
+  min_screenshots: 1

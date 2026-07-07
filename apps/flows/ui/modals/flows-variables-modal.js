@@ -165,7 +165,7 @@ export class FlowsVariablesModal extends PlatformModal {
                 variant: 'danger',
                 confirmVariant: 'danger',
                 confirmText: this.t('variables_modal.action_delete'),
-                cancelText: this.t('variables_modal.action_cancel'),
+                cancelText: this.t('common.action_cancel'),
             },
         );
         if (!ok) return;

@@ -1,0 +1,13 @@
+component: platform-json-editor
+doc_slug: platform-json-editor
+tier: T1
+title_ru: Json Editor
+title_en: Json Editor
+import: "@platform/lib/components/platform-json-editor.js"
+variants:
+  - id: default
+    props: {}
+    scenarios: [render]
+playwright:
+  min_steps: 2
+  min_screenshots: 1

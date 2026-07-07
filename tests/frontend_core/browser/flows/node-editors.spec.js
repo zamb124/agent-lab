@@ -6,7 +6,7 @@
  * патчей по верному backend-контракту.
  */
 
-import { fixture, fixtureCleanup, html, expect, elementUpdated, aTimeout, waitUntil } from '../helpers/render.js';
+import { fixture, fixtureCleanup, html, expect, elementUpdated, aTimeout, waitUntil, oneEvent } from '../helpers/render.js';
 import { resetPlatformState, bootstrapTestBus } from '../helpers/reset.js';
 import { installFetchMock } from '../helpers/fake-fetch.js';
 import { registerFactory, collectFactories } from '@platform/lib/events/index.js';
@@ -64,6 +64,30 @@ function bootstrap() {
         || effect.__factoryName === 'flows/code_editor_state'
     ));
     return bootstrapTestBus({ slices: collected.slices, effects });
+}
+
+function segmentedSegments(control) {
+    return [...control.shadowRoot.querySelectorAll('.segment')];
+}
+
+function settingsSegmentedControl(baseEditor, selector = 'platform-segmented-control') {
+    const settingsSlot = baseEditor.shadowRoot.querySelector('slot[name="settings"]');
+    const assigned = settingsSlot.assignedElements({ flatten: true });
+    for (const root of assigned) {
+        if (root.matches && root.matches(selector)) {
+            return root;
+        }
+        const nested = root.querySelector ? root.querySelector(selector) : null;
+        if (nested) {
+            return nested;
+        }
+    }
+    return null;
+}
+
+function codeEditorToolbarControls(workbench) {
+    const codeEditor = workbench.shadowRoot.querySelector('flows-code-editor');
+    return codeEditor ? [...codeEditor.querySelectorAll('platform-segmented-control')] : [];
 }
 
 describe('node editors — top-level NodeConfig contract', () => {
@@ -147,7 +171,9 @@ describe('node editors — top-level NodeConfig contract', () => {
         const workbench = el.shadowRoot.querySelector('flows-code-workbench');
         expect(workbench).to.not.be.null;
         await elementUpdated(workbench);
-        const tabs = workbench.shadowRoot.querySelectorAll('.main-tab');
+        const [mainTabs] = codeEditorToolbarControls(workbench);
+        expect(mainTabs).to.not.be.undefined;
+        const tabs = segmentedSegments(mainTabs);
         expect(tabs.length).to.be.greaterThanOrEqual(2);
         tabs[1].click();
         await elementUpdated(workbench);
@@ -164,20 +190,21 @@ describe('node editors — top-level NodeConfig contract', () => {
             </flows-code-node-editor>
         `);
         await elementUpdated(el);
-        let last = null;
-        el.addEventListener('change', (e) => { last = e.detail; });
         const workbench = el.shadowRoot.querySelector('flows-code-workbench');
         await elementUpdated(workbench);
-        const buttons = Array.from(workbench.shadowRoot.querySelectorAll('.language-button'));
+        const langControl = codeEditorToolbarControls(workbench)
+            .find((control) => control.hasAttribute('icon-only'));
+        expect(langControl).to.not.be.undefined;
+        const buttons = segmentedSegments(langControl);
         expect(buttons.length).to.equal(5);
         const tsButton = buttons.find((button) => button.getAttribute('aria-label') === 'TypeScript');
         expect(tsButton).to.not.be.undefined;
-        expect(tsButton.querySelector('flows-code-language-icon[language="typescript"]')).to.not.be.null;
-        tsButton.click();
-        await elementUpdated(workbench);
-        expect(last.patch).to.have.property('language', 'typescript');
-        expect(last.patch.code).to.include('async function run');
-        expect(last.patch).to.have.property('tool_id', null);
+        expect(tsButton.querySelector('platform-icon')).to.not.be.null;
+        setTimeout(() => tsButton.click());
+        const changeEv = await oneEvent(el, 'change');
+        expect(changeEv.detail.patch).to.have.property('language', 'typescript');
+        expect(changeEv.detail.patch.code).to.include('async function run');
+        expect(changeEv.detail.patch).to.have.property('tool_id', null);
     });
 
     it('flows-llm-node-editor — выбранный code tool сохраняет language для иконки на ноде', async () => {
@@ -421,8 +448,9 @@ describe('node editors — top-level NodeConfig contract', () => {
         `);
         await elementUpdated(el);
         const root = el.shadowRoot.querySelector('flows-base-node-editor');
-        const buttons = root.querySelectorAll('.toggle button');
-        expect(buttons.length).to.equal(2);
+        const modeControl = settingsSegmentedControl(root, 'platform-segmented-control.source-mode');
+        expect(modeControl).to.not.be.null;
+        expect(segmentedSegments(modeControl).length).to.equal(2);
     });
 
     it('flows-remote-flow-editor — toggle url ↔ flow_id', async () => {
@@ -433,12 +461,14 @@ describe('node editors — top-level NodeConfig contract', () => {
             </flows-remote-flow-editor>
         `);
         await elementUpdated(el);
-        let last = null;
-        el.addEventListener('change', (e) => { last = e.detail; });
-        const buttons = el.shadowRoot.querySelector('flows-base-node-editor').querySelectorAll('.toggle button');
-        buttons[1].click();
-        expect(last.patch).to.have.property('flow_id', '');
-        expect(last.patch).to.have.property('url', null);
+        const base = el.shadowRoot.querySelector('flows-base-node-editor');
+        await elementUpdated(base);
+        const modeControl = settingsSegmentedControl(base, 'platform-segmented-control.endpoint-mode');
+        expect(modeControl).to.not.be.null;
+        setTimeout(() => segmentedSegments(modeControl)[1].click());
+        const changeEv = await oneEvent(el, 'change');
+        expect(changeEv.detail.patch).to.have.property('flow_id', '');
+        expect(changeEv.detail.patch).to.have.property('url', null);
     });
 
     it('flows-base-node-editor — id ноды только для чтения (rename отключён)', async () => {

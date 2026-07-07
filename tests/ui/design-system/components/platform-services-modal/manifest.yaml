@@ -1,0 +1,13 @@
+component: platform-services-modal
+doc_slug: platform-services-modal
+tier: T0
+title_ru: Services Modal
+title_en: Services Modal
+import: "@platform/lib/components/platform-services-modal.js"
+variants:
+  - id: default
+    props: {}
+    scenarios: [render]
+playwright:
+  min_steps: 2
+  min_screenshots: 1

@@ -42,7 +42,7 @@ describe('flows-llm-config-editor', () => {
         const apiInner = apiPf.shadowRoot.querySelector('platform-field-string');
         expect(apiInner).to.not.be.null;
         expect(apiInner.shadowRoot.querySelector('input[type="password"]')).to.not.be.null;
-        expect(el.shadowRoot.querySelector('flows-json-field-editor')).to.not.be.null;
+        expect(el.shadowRoot.querySelector('platform-json-editor')).to.not.be.null;
         const enumFields = el.shadowRoot.querySelectorAll('platform-field[type="enum"]');
         expect(enumFields.length).to.be.greaterThanOrEqual(2);
     });

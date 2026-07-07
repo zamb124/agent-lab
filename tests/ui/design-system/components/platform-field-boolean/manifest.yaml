@@ -1,0 +1,13 @@
+component: platform-field-boolean
+doc_slug: platform-field-boolean
+tier: T0
+title_ru: Field Boolean
+title_en: Field Boolean
+import: "@platform/lib/components/fields/platform-field-boolean.js"
+variants:
+  - id: default
+    props: {}
+    scenarios: [render]
+playwright:
+  min_steps: 2
+  min_screenshots: 1

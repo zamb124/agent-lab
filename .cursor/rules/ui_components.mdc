@@ -364,6 +364,28 @@ i18n namespace: `platform` (`work_item_badge.*`, `work_item_preview.*`). Semanti
 
 **Обязательное применение:** любой UI, показывающий **дерево/timeline spans одного trace** или **список записей логов** — **только** через эти core-компоненты. В `apps/<svc>/ui/**` запрещены отдельные «trace tree», «span waterfall», «таблица логов», «.log-entry список». Расширения — только в core, не дублировать в сервисах.
 
+## UI Kit Documentation System (UIKDS)
+
+Каждый `platform-*` с `customElements.define` обязан иметь папку `tests/ui/design-system/components/<component>/` с файлами:
+
+- `README.md`, `README.en.md`, `manifest.yaml`, `contract.spec.js` (WTR L1), `playwright.spec.py` (L2 doc scenario).
+
+Реестр: `tests/ui/design-system/catalog.yaml`. CI: `scripts/check_ui_kit_docs.py` (gates #30–33, часть `make lint-ts`).
+
+Playground (read-only): `GET /frontend/design-system/preview?component=<tag>&variant=<id>` — whitelist из catalog.
+
+Команды:
+
+```bash
+make ui                            # lint-ts + test-frontend-core (incl. UI Kit L1 WTR)
+make ui-doc                        # + Playwright L2 + regenerate docs/scenarios/platform/ui-kit/**
+make doc-ui-kit                    # hub + sync README stubs only
+```
+
+Granular (отладка): `make test-ui-kit`, `make test-ui-kit-playwright`, `make test-ui-kit-doc`.
+
+Doc output: `docs/scenarios/platform/ui-kit/<doc_slug>/`. Taxonomy tag: `platform` / `ui-kit`.
+
 ## Прочие core-компоненты ввода
 
 - `<platform-timezone-picker>` — combobox IANA time zone (фильтр по подстроке без учёта регистра, выбор кликом). Список: `utils/iana-timezones.js` (`getSortedIanaTimeZones()` через `Intl.supportedValuesOf('timeZone')` или fallback). События `input`/`change` с `detail.value`. i18n `timezone_picker.*` в `platform.json`.

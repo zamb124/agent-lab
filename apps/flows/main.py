@@ -337,16 +337,10 @@ app = create_service_app(
     title="Humanitec Flows",
     description="Сервис flows: конфигурации, runtime и A2A",
     version="2.0.0",
-    mount_repo_documentation=False,
 )
 
 if _flow_settings.dynamic_embed_cors_enabled:
     app.add_middleware(EmbedDynamicCorsMiddleware, container=get_container())
-
-# Документация (локальная статика apps/flows/site)
-docs_path = Path(__file__).parent / "site"
-if docs_path.exists():
-    app.mount("/documentation", StaticFiles(directory=docs_path, html=True), name="documentation")
 
 # Core frontend — раньше общего /static: иначе Mount("/static") забирает /static/core/... и ищет
 # core/... внутри apps/flows/static (404 на tokens.css, import map и т.д.).
