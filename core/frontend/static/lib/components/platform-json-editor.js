@@ -25,6 +25,9 @@ export class PlatformJsonEditor extends PlatformElement {
         fillParent: { type: Boolean, reflect: true, attribute: 'fill-parent' },
         fullscreen: { type: Boolean, reflect: true },
         minHeight: { type: Number, attribute: 'min-height' },
+        validateJson: { type: Boolean, attribute: 'validate-json' },
+        _invalid: { state: true },
+        _error: { state: true },
     };
 
     static styles = [
@@ -137,6 +140,14 @@ export class PlatformJsonEditor extends PlatformElement {
             .cm-line {
                 overflow-wrap: anywhere;
             }
+            :host([data-invalid]) {
+                border-color: var(--error);
+            }
+            .json-error {
+                color: var(--error);
+                font-size: var(--text-xs);
+                padding: var(--space-1) var(--space-3) var(--space-2);
+            }
         `,
     ];
 
@@ -148,6 +159,9 @@ export class PlatformJsonEditor extends PlatformElement {
         this.fillParent = false;
         this.fullscreen = false;
         this.minHeight = 220;
+        this.validateJson = false;
+        this._invalid = false;
+        this._error = '';
         this._cm = null;
         this._editorView = null;
         this._readonlyCompartment = null;
@@ -219,6 +233,29 @@ export class PlatformJsonEditor extends PlatformElement {
         this._syncEditorTheme();
     }
 
+    _emitEditorChange(next) {
+        this.value = next;
+        if (!this.validateJson) {
+            this._invalid = false;
+            this._error = '';
+            this.removeAttribute('data-invalid');
+            this.emit('change', { value: next });
+            return;
+        }
+        try {
+            const parsed = next.trim().length === 0 ? null : JSON.parse(next);
+            this._invalid = false;
+            this._error = '';
+            this.removeAttribute('data-invalid');
+            this.emit('change', { value: next, parsed });
+        } catch (err) {
+            const message = err instanceof Error ? err.message : String(err);
+            this._invalid = true;
+            this._error = message;
+            this.setAttribute('data-invalid', '');
+        }
+    }
+
     async _ensureEditorMounted() {
         if (this._editorView) return;
         if (this._initInFlight) return this._initInFlight;
@@ -273,9 +310,8 @@ export class PlatformJsonEditor extends PlatformElement {
                     cm.EditorView.updateListener.of((update) => {
                         if (!update.docChanged) return;
                         const next = update.state.doc.toString();
-                        if (next !== this.value) {
-                            this.value = next;
-                            this.emit('change', { value: next });
+                        if (next !== this.value || this.validateJson) {
+                            this._emitEditorChange(next);
                         }
                     }),
                 ],
@@ -395,6 +431,7 @@ export class PlatformJsonEditor extends PlatformElement {
                     </div>
                 ` : null}
                 <div id="cm-wrap"><div id="cm-host"></div></div>
+                ${this._invalid ? html`<div class="json-error">${this._error}</div>` : null}
             </div>
         `;
     }

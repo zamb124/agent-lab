@@ -40,10 +40,10 @@ export class FlowsNodeAiHelper extends PlatformElement {
             platform-chat {
                 flex: 1;
                 min-height: 0;
-                --embed-radius: var(--radius-lg);
-                --embed-chat-accent: var(--accent);
-                --embed-chat-accent-muted: var(--accent-subtle);
-                --embed-chat-on-accent: var(--text-inverse);
+                --platform-chat-radius: var(--radius-lg);
+                --platform-chat-accent: var(--accent);
+                --platform-chat-accent-muted: var(--accent-subtle);
+                --platform-chat-on-accent: var(--text-inverse);
             }
         `,
     ];

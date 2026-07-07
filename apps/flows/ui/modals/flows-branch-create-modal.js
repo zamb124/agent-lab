@@ -101,9 +101,9 @@ export class FlowsBranchCreateModal extends PlatformFormModal {
         const validId = BRANCH_ID_PATTERN.test(this._branchId);
         const validName = this._name.trim().length > 0;
         return html`
-            <platform-button @click=${() => this.close()}>${this.t('branch_create_modal.action_cancel')}</platform-button>
+            <platform-button @click=${() => this.close()}>${this.t('common.action_cancel')}</platform-button>
             <platform-button variant="primary" ?disabled=${!(validId && validName)} @click=${this._onSubmit}>
-                ${this.t('branch_create_modal.action_create')}
+                ${this.t('common.action_create')}
             </platform-button>
         `;
     }

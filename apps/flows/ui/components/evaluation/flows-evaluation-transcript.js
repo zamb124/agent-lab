@@ -1,5 +1,7 @@
 import { html, css } from 'lit';
 import { PlatformElement } from '@platform/lib/platform-element/index.js';
+import { panelShellStyles } from '@platform/lib/styles/shared/panel-shell.styles.js';
+import { formatJsonPretty } from '@platform/lib/utils/json-format.js';
 import '@platform/lib/components/platform-icon.js';
 import '@platform/lib/components/platform-help-hint.js';
 
@@ -74,7 +76,7 @@ function scalarText(value) {
 }
 
 function prettyJson(value) {
-    return JSON.stringify(value, null, 2);
+    return formatJsonPretty(value);
 }
 
 function eventTone(eventType, payload) {
@@ -128,34 +130,13 @@ export class FlowsEvaluationTranscript extends PlatformElement {
 
     static styles = [
         PlatformElement.styles,
+        panelShellStyles,
         css`
             :host {
                 display: flex;
                 min-width: 0;
                 min-height: 0;
                 color: var(--text-primary);
-            }
-
-            .panel {
-                flex: 1;
-                min-width: 0;
-                min-height: 0;
-                display: flex;
-                flex-direction: column;
-                border: 1px solid var(--border-subtle);
-                border-radius: var(--radius-xl);
-                background: var(--glass-solid-subtle);
-                overflow: hidden;
-            }
-
-            .head {
-                display: flex;
-                align-items: center;
-                justify-content: space-between;
-                gap: var(--space-3);
-                padding: var(--space-3) var(--space-4);
-                border-bottom: 1px solid var(--border-subtle);
-                background: linear-gradient(180deg, color-mix(in srgb, var(--glass-solid-medium), transparent 8%), transparent);
             }
 
             .title {
@@ -462,8 +443,8 @@ export class FlowsEvaluationTranscript extends PlatformElement {
             return caseRunId.length === 0 || eventCaseRunId.length === 0 || eventCaseRunId === caseRunId;
         });
         return html`
-            <section class="panel">
-                <div class="head">
+            <section class="content-panel">
+                <div class="content-panel-head">
                     <div class="title">
                         <platform-icon name="messages-square" size="16"></platform-icon>
                         ${this.t('evaluation.transcript.title')}
@@ -481,7 +462,7 @@ export class FlowsEvaluationTranscript extends PlatformElement {
                         <div class="events">
                             ${events.length > 0 ? events.map((event) => this._renderEvent(event)) : html`<div class="event-empty">${this.t('evaluation.transcript.no_events')}</div>`}
                         </div>
-                    ` : html`<div class="empty">${this.t('evaluation.transcript.empty')}</div>`}
+                    ` : html`<div class="content-panel-empty">${this.t('evaluation.transcript.empty')}</div>`}
                 </div>
             </section>
         `;
@@ -496,7 +477,7 @@ export class FlowsEvaluationTranscript extends PlatformElement {
         if (feedback.length > 0) {
             return this._renderMessage({ role: 'judge', content: feedback });
         }
-        return html`<div class="empty">${this.t('evaluation.transcript.no_dialog')}</div>`;
+        return html`<div class="content-panel-empty">${this.t('evaluation.transcript.no_dialog')}</div>`;
     }
 
     _renderMessage(message) {

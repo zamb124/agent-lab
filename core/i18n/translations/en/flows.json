@@ -14,6 +14,14 @@
     "flows": "Overview",
     "profile": "Profile"
   },
+  "common": {
+    "action_cancel": "Cancel",
+    "action_save": "Save",
+    "action_create": "Create",
+    "action_delete": "Delete",
+    "action_close": "Close",
+    "search_placeholder": "Search…"
+  },
   "flow_create_modal": {
     "title": "Create flow",
     "mode_empty_title": "Empty flow",
@@ -25,8 +33,6 @@
     "field_description": "Description (optional)",
     "err_flow_id_pattern": "Allowed: lowercase letters, digits, underscores; starts with a letter.",
     "bundles_empty": "Bundle store is empty",
-    "action_cancel": "Cancel",
-    "action_create": "Create",
     "action_install": "Install",
     "subtitle": "Choose the type of agent that fits your task",
     "search_placeholder": "Search templates and Store...",
@@ -97,18 +103,14 @@
     "field_branch_id": "Branch ID (snake_case)",
     "field_name": "Name",
     "field_description": "Description (optional)",
-    "err_branch_id_pattern": "Branch ID: latin letters, digits, underscores.",
-    "action_cancel": "Cancel",
-    "action_create": "Create"
+    "err_branch_id_pattern": "Branch ID: latin letters, digits, underscores."
   },
   "variable_editor_modal": {
     "title_create": "New flow variable",
     "title_edit": "Edit flow variable",
     "field_key": "Key",
     "field_value": "Value",
-    "field_secret": "Store as secret",
-    "action_cancel": "Cancel",
-    "action_save": "Save"
+    "field_secret": "Store as secret"
   },
   "variables_modal": {
     "title_company": "Company variables",
@@ -170,8 +172,6 @@
     "preset_api_key": "API Key",
     "preset_basic": "Basic",
     "action_add": "Add",
-    "action_save": "Save",
-    "action_cancel": "Cancel",
     "action_sync": "Sync",
     "action_test": "Test",
     "action_test_connection": "Test connection",
@@ -213,11 +213,9 @@
   },
   "triggers_modal": {
     "title": "Flow triggers",
-    "action_create": "Create trigger",
     "action_test": "Test",
     "action_edit": "Edit",
     "action_delete": "Delete",
-    "action_cancel": "Cancel",
     "delete_title": "Delete trigger?",
     "delete_message": "Delete trigger \"{{id}}\"?",
     "col_id": "ID",
@@ -715,6 +713,8 @@
     "section_output_mode": "Output mode",
     "output_mode_tools": "Tools",
     "output_mode_structured": "Structured",
+    "output_mode_aria": "LLM output mode",
+    "tools_remove": "Remove tool",
     "output_mode_hint": "Tools: the assistant may call tools and respond in natural language. Structured: the reply is a JSON object validated against the output schema below.",
     "output_mode_help": "Tools mode is for actions and ReAct. Structured output is for cases where the next node expects strict JSON and no tool calls.",
     "section_output_schema": "Output JSON schema",
@@ -794,6 +794,7 @@
   },
   "code_workbench": {
     "tab_params": "Parameters",
+    "main_tab_aria": "Code editor view",
     "language_aria": "Code language",
     "validation_checking": "Checking",
     "validation_valid": "Code is valid",
@@ -811,6 +812,7 @@
     "search_placeholder": "Search",
     "tab_catalog": "Catalog",
     "tab_registry": "Tool registry",
+    "source_tabs_aria": "Template source",
     "empty": "No templates",
     "empty_registry": "No matching tools",
     "toast_no_code": "This tool has no code"
@@ -839,7 +841,8 @@
     "branch_id": "Branch",
     "from_list": "From list",
     "custom_id": "Custom ID",
-    "custom_id_hint": "Enter flow_id manually"
+    "custom_id_hint": "Enter flow_id manually",
+    "flow_id_mode_aria": "Flow ID source"
   },
   "mcp_node_editor": {
     "field_server": "MCP server",
@@ -876,6 +879,7 @@
     "field_headers": "Headers (JSON)",
     "mode_url": "Direct URL",
     "mode_id": "Registry flow_id",
+    "mode_aria": "Remote flow endpoint mode",
     "url": "URL",
     "flow_id": "Flow ID",
     "branch_id": "Branch",
@@ -970,6 +974,7 @@
     "tab_request": "By request",
     "tab_span": "By span",
     "tab_user": "By user",
+    "mode_aria": "Log filter mode",
     "tab_trace_resolving_hint": "Resolving trace from Tempo…",
     "tab_trace_disabled_hint": "Run the assistant once (current task) or open logs with an explicit trace ID",
     "count": "{{count}} entries",
@@ -1011,6 +1016,7 @@
     "tab_delta": "State delta",
     "tab_state": "Projection",
     "tab_command": "Command result",
+    "detail_tabs_aria": "Event detail view",
     "action_refresh": "Refresh",
     "action_state": "Load projection",
     "action_load_state": "Load projection at sequence",
@@ -1303,6 +1309,7 @@
     "status_published": "Published",
     "mode_edit": "Visual editor",
     "mode_run": "Run",
+    "mode_group_aria": "Editor mode",
     "editor_help_label": "Flow editor",
     "editor_help_summary": "Flow editor",
     "editor_help_details": "Edit changes the graph and settings. Run opens the execution panel for checks. Publish saves the current configuration as the active flow version; API, Eval, Triggers, and Preview apply to the selected branch.",
@@ -1314,7 +1321,16 @@
     "code": "Code",
     "publish": "Publish",
     "share_preview": "Guest preview link (one-time)",
-    "flow_settings": "Agent settings"
+    "flow_settings": "Agent settings",
+    "overflow_aria": "More editor actions",
+    "menu_settings": "Agent settings",
+    "menu_lara": "Open Lara for current flow",
+    "menu_share": "Guest preview link",
+    "menu_triggers": "Triggers",
+    "menu_api": "API and A2A specification",
+    "menu_eval": "Evaluation Lab",
+    "menu_code": "Flow JSON",
+    "menu_reload": "Reload from bundle"
   },
   "chat_page": {
     "flow_settings": "Agent settings"
@@ -1561,6 +1577,7 @@
     "tab_chat": "Chat",
     "tab_trace": "Trace",
     "tab_state": "State",
+    "tabs_aria": "Execution panel tabs",
     "status_idle": "Idle",
     "status_running": "Running",
     "status_passed": "Passed",
@@ -1604,7 +1621,8 @@
   "branches_tabs": {
     "base": "Base Flow",
     "add": "Branch",
-    "delete": "Delete branch"
+    "delete": "Delete branch",
+    "group_aria": "Flow branches"
   },
   "canvas": {
     "context_menu": {
@@ -1940,6 +1958,7 @@
       "branch": "branch",
       "scope_suite": "Suite",
       "scope_case": "Case",
+      "scope_aria": "Run scope",
       "trials": "Trials",
       "concurrency": "Parallel",
       "docs": "Documentation",
@@ -1988,6 +2007,7 @@
       "input": "Input",
       "input_placeholder": "User message for the first turn",
       "check_type": "Check type",
+      "check_type_aria": "Check type",
       "check_contains": "Contains",
       "check_not_contains": "Not contains",
       "check_regex": "Regex",
@@ -2010,13 +2030,16 @@
       "state_operator": "Operator",
       "json_schema": "JSON schema",
       "trace_tool_called": "Tool called",
+      "trace_assertion_aria": "Trace assertion type",
       "trace_node_completed": "Node completed",
       "trace_node_failed": "Node failed",
       "trace_value": "Trace value",
       "trace_value_placeholder": "node_id or tool_call_id",
       "rubric_version_id": "Rubric version ID",
       "metric_id": "Metric ID",
+      "builtin_metric_aria": "Built-in metric",
       "reference": "Reference",
+      "code_language_aria": "Code language",
       "code_source": "Code source",
       "save": "Save",
       "create": "Create"
@@ -2030,6 +2053,7 @@
       "tie": "Tie",
       "right_wins": "Right wins",
       "llm_pairwise": "LLM pairwise",
+      "judge_aria": "Pairwise judgment",
       "empty": "Select two runs"
     },
     "trace": {

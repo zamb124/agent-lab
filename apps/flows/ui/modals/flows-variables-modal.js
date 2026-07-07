@@ -106,19 +106,6 @@ export class FlowsVariablesModal extends PlatformModal {
                 color: var(--text-tertiary);
             }
             .flows-vars-badge.flow { color: var(--accent); border-color: var(--accent); }
-            .flows-header-action-create {
-                width: 28px;
-                height: 28px;
-                display: inline-flex;
-                align-items: center;
-                justify-content: center;
-                padding: 0;
-                border: none;
-                border-radius: var(--radius-full, 50%);
-                cursor: pointer;
-                color: var(--platform-btn-primary-text);
-                background: var(--platform-btn-primary-bg);
-            }
         `,
     ];
 

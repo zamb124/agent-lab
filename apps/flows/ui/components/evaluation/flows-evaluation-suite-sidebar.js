@@ -3,6 +3,7 @@ import { PlatformElement } from '@platform/lib/platform-element/index.js';
 import '@platform/lib/components/platform-icon.js';
 import '@platform/lib/components/platform-button.js';
 import '@platform/lib/components/platform-help-hint.js';
+import '@platform/lib/components/platform-modal-search-field.js';
 import { evaluationCatalogCategoryKey, evaluationCatalogNameKey } from '../../_helpers/evaluation-catalog-labels.js';
 
 function asArray(value) {
@@ -82,42 +83,6 @@ export class FlowsEvaluationSuiteSidebar extends PlatformElement {
                 text-transform: none;
             }
 
-            .section-head platform-button {
-                --platform-button-icon-size: 30px;
-            }
-
-            .search {
-                display: flex;
-                align-items: center;
-                gap: var(--space-2);
-                min-height: 38px;
-                padding: 0 var(--space-3);
-                border-radius: 18px;
-                border: 1px solid var(--border-subtle);
-                background: color-mix(in srgb, var(--glass-solid-strong), transparent 16%);
-                box-shadow: inset 0 1px 0 color-mix(in srgb, var(--text-inverse), transparent 94%);
-            }
-
-            .search platform-icon {
-                color: var(--text-tertiary);
-                flex: 0 0 auto;
-            }
-
-            .search input {
-                flex: 1;
-                min-width: 0;
-                border: 0;
-                outline: 0;
-                background: transparent;
-                color: var(--text-primary);
-                font: inherit;
-                font-size: var(--text-sm);
-            }
-
-            .search input::placeholder {
-                color: var(--text-tertiary);
-            }
-
             .scroll {
                 flex: 1;
                 min-height: 0;
@@ -137,13 +102,21 @@ export class FlowsEvaluationSuiteSidebar extends PlatformElement {
                 gap: var(--space-1);
             }
 
+            article.row,
+            article.empty-action {
+                appearance: none;
+                margin: 0;
+                font: inherit;
+                box-sizing: border-box;
+            }
+
             .row {
                 width: 100%;
                 display: grid;
                 grid-template-columns: auto 1fr auto;
                 align-items: center;
                 gap: var(--space-2);
-                min-height: 36px;
+                min-height: var(--flows-sidebar-row-min-height);
                 padding: var(--space-2);
                 border-radius: 12px;
                 border: 1px solid transparent;
@@ -330,9 +303,20 @@ export class FlowsEvaluationSuiteSidebar extends PlatformElement {
         this.emit('case-create', null);
     }
 
-    _onSearch(event) {
-        const target = event.target;
-        this._query = target && typeof target.value === 'string' ? target.value : '';
+    _onSearchChange(event) {
+        const rawValue = event.detail?.value;
+        if (typeof rawValue !== 'string') {
+            throw new TypeError('FlowsEvaluationSuiteSidebar._onSearchChange: string detail.value required');
+        }
+        this._query = rawValue;
+    }
+
+    _onSelectableKeydown(event, handler) {
+        if (event.key !== 'Enter' && event.key !== ' ') {
+            return;
+        }
+        event.preventDefault();
+        handler.call(this);
     }
 
     render() {
@@ -341,16 +325,12 @@ export class FlowsEvaluationSuiteSidebar extends PlatformElement {
         const catalog = asArray(this.catalog).slice(0, 6);
         return html`
             <aside class="rail">
-                <div class="search">
-                    <platform-icon name="search" size="16"></platform-icon>
-                    <input
-                        type="search"
-                        data-canon="search"
-                        .value=${this._query}
-                        placeholder=${this.t('evaluation.sidebar.search')}
-                        @input=${this._onSearch}
-                    />
-                </div>
+                <platform-modal-search-field
+                    layout="fill"
+                    .value=${this._query}
+                    placeholder=${this.t('evaluation.sidebar.search')}
+                    @change=${this._onSearchChange}
+                ></platform-modal-search-field>
 
                 <div class="scroll">
                     <section>
@@ -453,14 +433,21 @@ export class FlowsEvaluationSuiteSidebar extends PlatformElement {
         const description = stringValue(suite, 'description');
         const active = suiteId === this.selectedSuiteId;
         return html`
-            <button class="row" type="button" data-active=${active ? 'true' : 'false'} @click=${() => this._selectSuite(suiteId)}>
+            <article
+                class="row"
+                tabindex="0"
+                role="button"
+                data-active=${active ? 'true' : 'false'}
+                @click=${() => this._selectSuite(suiteId)}
+                @keydown=${(event) => this._onSelectableKeydown(event, () => this._selectSuite(suiteId))}
+            >
                 <platform-icon name="folder" size="15"></platform-icon>
                 <span class="row-main">
                     <span class="row-title">${name}</span>
                     <span class="row-sub">${description}</span>
                 </span>
                 <span class="badge">${enabledCount(this.cases)}</span>
-            </button>
+            </article>
         `;
     }
 
@@ -471,27 +458,41 @@ export class FlowsEvaluationSuiteSidebar extends PlatformElement {
         const subtitle = tags.length > 0 ? tags.join(', ') : this.t('evaluation.sidebar.case_no_tags');
         const active = caseId === this.selectedCaseId;
         return html`
-            <button class="row" type="button" data-active=${active ? 'true' : 'false'} @click=${() => this._selectCase(caseId)}>
+            <article
+                class="row"
+                tabindex="0"
+                role="button"
+                data-active=${active ? 'true' : 'false'}
+                @click=${() => this._selectCase(caseId)}
+                @keydown=${(event) => this._onSelectableKeydown(event, () => this._selectCase(caseId))}
+            >
                 <platform-icon name=${testCase.enabled === true ? 'check-circle' : 'circle'} size="15"></platform-icon>
                 <span class="row-main">
                     <span class="row-title">${name}</span>
                     <span class="row-sub">${subtitle}</span>
                 </span>
                 <span class="badge">${asArray(testCase.turns).length}</span>
-            </button>
+            </article>
         `;
     }
 
     _renderPanel(panel, icon, label) {
         const active = panel === this.activePanel;
         return html`
-            <button class="row" type="button" data-active=${active ? 'true' : 'false'} @click=${() => this._selectPanel(panel)}>
+            <article
+                class="row"
+                tabindex="0"
+                role="button"
+                data-active=${active ? 'true' : 'false'}
+                @click=${() => this._selectPanel(panel)}
+                @keydown=${(event) => this._onSelectableKeydown(event, () => this._selectPanel(panel))}
+            >
                 <platform-icon name=${icon} size="15"></platform-icon>
                 <span class="row-main">
                     <span class="row-title">${label}</span>
                 </span>
                 <platform-icon name="chevron-right" size="14"></platform-icon>
-            </button>
+            </article>
         `;
     }
 
@@ -513,10 +514,16 @@ export class FlowsEvaluationSuiteSidebar extends PlatformElement {
 
     _renderEmptyAction(message, label, handler) {
         return html`
-            <button class="empty empty-action" type="button" @click=${() => handler.call(this)}>
+            <article
+                class="empty empty-action"
+                tabindex="0"
+                role="button"
+                @click=${() => handler.call(this)}
+                @keydown=${(event) => this._onSelectableKeydown(event, handler)}
+            >
                 <span>${message}</span>
                 <span><platform-icon name="plus" size="13"></platform-icon>${label}</span>
-            </button>
+            </article>
         `;
     }
 }

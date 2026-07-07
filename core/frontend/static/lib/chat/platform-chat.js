@@ -355,36 +355,11 @@ export class PlatformChat extends LitElement {
             height: 100%;
             min-height: 200px;
             font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
-            --embed-radius: 25px;
-            --embed-drawer-radius: 25px;
-            --embed-chat-text: rgba(255, 255, 255, 0.92);
-            --embed-chat-muted: rgba(255, 255, 255, 0.52);
-            --embed-chat-border: rgba(255, 255, 255, 0.11);
-            --embed-chat-surface: rgba(255, 255, 255, 0.07);
-            --embed-chat-accent: #99a6f9;
-            --embed-chat-on-accent: #0f0f12;
-            --embed-chat-accent-muted: rgba(153, 166, 249, 0.28);
-            --embed-chat-input-bg: rgba(0, 0, 0, 0.22);
-            --embed-chat-composer-bg: rgba(255, 255, 255, 0.06);
-            --embed-chat-panel-bg: transparent;
-            --embed-chat-interrupt-bg: rgba(153, 166, 249, 0.1);
-            color: var(--embed-chat-text);
-            background: var(--embed-chat-panel-bg);
+            color: var(--platform-chat-text);
+            background: var(--platform-chat-page-bg);
             border-radius: 0;
             border: none;
             overflow: hidden;
-        }
-        :host([data-embed-theme='light']) {
-            --embed-chat-text: #1c1f2e;
-            --embed-chat-muted: rgba(28, 31, 46, 0.52);
-            --embed-chat-border: rgba(28, 31, 46, 0.1);
-            --embed-chat-surface: rgba(28, 31, 46, 0.05);
-            --embed-chat-accent: #6d62e8;
-            --embed-chat-on-accent: #ffffff;
-            --embed-chat-accent-muted: rgba(109, 98, 232, 0.2);
-            --embed-chat-input-bg: rgba(255, 255, 255, 0.92);
-            --embed-chat-composer-bg: #f2f3f8;
-            --embed-chat-interrupt-bg: rgba(109, 98, 232, 0.1);
         }
         :host([display='drawer']) {
             display: contents;
@@ -394,7 +369,7 @@ export class PlatformChat extends LitElement {
             align-items: center;
             justify-content: space-between;
             padding: 4px 4px 12px 8px;
-            border-bottom: 1px solid var(--embed-chat-border);
+            border-bottom: 1px solid var(--platform-chat-border);
             font-weight: 600;
             font-size: 15px;
             border-radius: 0;
@@ -419,17 +394,17 @@ export class PlatformChat extends LitElement {
             max-width: 92%;
             min-width: 0;
             align-self: flex-start;
-            --flows-chat-radius: var(--embed-radius);
-            --flows-chat-text: var(--embed-chat-text);
-            --flows-chat-muted: var(--embed-chat-muted);
-            --flows-chat-secondary: var(--embed-chat-muted);
-            --flows-chat-border: var(--embed-chat-border);
-            --flows-chat-surface: var(--embed-chat-surface);
-            --flows-chat-surface-subtle: var(--embed-chat-composer-bg);
-            --flows-chat-accent: var(--embed-chat-accent);
-            --flows-chat-accent-muted: var(--embed-chat-accent-muted);
-            --flows-chat-info-bg: var(--embed-chat-interrupt-bg);
-            --flows-chat-info-border: var(--embed-chat-accent);
+            --flows-chat-radius: var(--platform-chat-radius);
+            --flows-chat-text: var(--platform-chat-text);
+            --flows-chat-muted: var(--platform-chat-muted);
+            --flows-chat-secondary: var(--platform-chat-muted);
+            --flows-chat-border: var(--platform-chat-border);
+            --flows-chat-surface: var(--platform-chat-surface);
+            --flows-chat-surface-subtle: var(--platform-chat-surface-subtle);
+            --flows-chat-accent: var(--platform-chat-accent);
+            --flows-chat-accent-muted: var(--platform-chat-accent-muted);
+            --flows-chat-info-bg: var(--platform-chat-interrupt-bg);
+            --flows-chat-info-border: var(--platform-chat-accent);
         }
         flows-chat-message[data-role='user'] {
             align-self: flex-end;
@@ -437,11 +412,11 @@ export class PlatformChat extends LitElement {
         button.link {
             background: transparent;
             border: none;
-            color: var(--embed-chat-accent);
+            color: var(--platform-chat-accent);
             cursor: pointer;
             font-size: 13px;
             padding: 0;
-            border-radius: var(--embed-radius);
+            border-radius: var(--platform-chat-radius);
         }
         .suggested-prompts {
             display: flex;
@@ -450,9 +425,9 @@ export class PlatformChat extends LitElement {
             padding: 0 4px 10px;
         }
         .suggested-prompt {
-            border: 1px solid var(--embed-chat-border);
-            background: var(--embed-chat-surface);
-            color: var(--embed-chat-text);
+            border: 1px solid var(--platform-chat-border);
+            background: var(--platform-chat-surface);
+            color: var(--platform-chat-text);
             border-radius: 999px;
             padding: 7px 14px;
             font-size: 13px;
@@ -460,10 +435,10 @@ export class PlatformChat extends LitElement {
             transition: background 0.15s ease;
         }
         .suggested-prompt:hover {
-            background: var(--embed-chat-accent-muted);
+            background: var(--platform-chat-accent-muted);
         }
         .chat-composer {
-            border-top: 1px solid var(--embed-chat-border);
+            border-top: 1px solid var(--platform-chat-border);
             padding: 12px 0 0;
             background: transparent;
         }
@@ -477,30 +452,30 @@ export class PlatformChat extends LitElement {
             --flows-chat-input-toolbar-gap: 6px;
             --flows-chat-input-gap: 6px;
             --flows-chat-input-radius: var(--radius-2xl, 24px);
-            --flows-chat-input-bg: var(--embed-chat-composer-bg);
-            --flows-chat-input-border: var(--embed-chat-border);
-            --flows-chat-input-text: var(--embed-chat-text);
-            --flows-chat-input-muted: var(--embed-chat-muted);
-            --flows-chat-input-accent: var(--embed-chat-accent);
+            --flows-chat-input-bg: var(--platform-chat-composer-bg);
+            --flows-chat-input-border: var(--platform-chat-border);
+            --flows-chat-input-text: var(--platform-chat-text);
+            --flows-chat-input-muted: var(--platform-chat-muted);
+            --flows-chat-input-accent: var(--platform-chat-accent);
             --flows-chat-input-button-size: 36px;
             --flows-chat-input-button-radius: 50%;
-            --flows-chat-input-button-bg: var(--embed-chat-surface);
-            --flows-chat-input-button-hover-bg: var(--embed-chat-surface-hover, rgba(255, 255, 255, 0.14));
-            --flows-chat-input-button-color: var(--embed-chat-text);
-            --flows-chat-input-button-hover-color: var(--embed-chat-text);
-            --flows-chat-input-active-bg: var(--embed-chat-accent-muted);
-            --flows-chat-input-active-color: var(--embed-chat-text);
+            --flows-chat-input-button-bg: var(--platform-chat-surface);
+            --flows-chat-input-button-hover-bg: var(--platform-chat-surface-hover);
+            --flows-chat-input-button-color: var(--platform-chat-text);
+            --flows-chat-input-button-hover-color: var(--platform-chat-text);
+            --flows-chat-input-active-bg: var(--platform-chat-accent-muted);
+            --flows-chat-input-active-color: var(--platform-chat-text);
             --flows-chat-input-send-size: 36px;
             --flows-chat-input-send-radius: 50%;
-            --flows-chat-input-send-bg: var(--embed-chat-accent);
-            --flows-chat-input-send-color: var(--embed-chat-on-accent);
+            --flows-chat-input-send-bg: var(--platform-chat-accent);
+            --flows-chat-input-send-color: var(--platform-chat-on-accent);
             --flows-chat-input-send-shadow: none;
             --flows-chat-input-send-hover-shadow: none;
-            --flows-chat-input-chip-bg: var(--embed-chat-surface);
+            --flows-chat-input-chip-bg: var(--platform-chat-surface);
             --flows-chat-input-file-radius: 999px;
             --flows-chat-input-file-padding: 4px 8px;
             --flows-chat-input-danger: rgba(229, 57, 53, 0.9);
-            --flows-chat-input-danger-bg: var(--embed-chat-input-bg);
+            --flows-chat-input-danger-bg: var(--platform-chat-input-bg);
             --flows-chat-input-textarea-max-height: 140px;
             --flows-chat-input-textarea-font-size: 15px;
             --flows-chat-input-textarea-padding: 0;
@@ -543,8 +518,8 @@ export class PlatformChat extends LitElement {
             top: calc(100% + 6px);
             right: 0;
             min-width: 160px;
-            background: var(--embed-chat-surface, rgba(30, 30, 40, 0.95));
-            border: 1px solid var(--embed-chat-border);
+            background: var(--platform-chat-surface);
+            border: 1px solid var(--platform-chat-border);
             border-radius: 8px;
             box-shadow: 0 4px 16px rgba(0, 0, 0, 0.3);
             padding: 10px;
@@ -556,7 +531,7 @@ export class PlatformChat extends LitElement {
         .cred-popover-title {
             font-size: 13px;
             font-weight: 500;
-            color: var(--embed-chat-text);
+            color: var(--platform-chat-text);
         }
         .cred-disconnect {
             background: none;
@@ -582,10 +557,10 @@ export class PlatformChat extends LitElement {
             width: 56px;
             height: 56px;
             border-radius: 50%;
-            border: 1px solid var(--embed-drawer-fab-border, rgba(255, 255, 255, 0.14));
-            background: var(--embed-drawer-fab-bg, #99a6f9);
-            color: var(--embed-drawer-fab-fg, #0f0f12);
-            box-shadow: 0 10px 32px rgba(0, 0, 0, 0.35);
+            border: 1px solid var(--platform-chat-drawer-fab-border);
+            background: var(--platform-chat-drawer-fab-bg);
+            color: var(--platform-chat-drawer-fab-fg);
+            box-shadow: var(--platform-chat-drawer-fab-shadow);
             cursor: pointer;
             display: flex;
             align-items: center;
@@ -616,7 +591,7 @@ export class PlatformChat extends LitElement {
             box-shadow: 0 1px 4px rgba(0, 0, 0, 0.28);
         }
         .fab:hover {
-            background: var(--embed-drawer-fab-bg-hover, #8794f0);
+            background: var(--platform-chat-drawer-fab-bg-hover);
         }
         .fab svg {
             width: 26px;
@@ -630,13 +605,6 @@ export class PlatformChat extends LitElement {
                 right: max(12px, env(safe-area-inset-right, 0px));
                 bottom: max(12px, env(safe-area-inset-bottom, 0px));
             }
-        }
-        :host([data-embed-theme='light']) .fab {
-            --embed-drawer-fab-border: rgba(109, 98, 232, 0.35);
-            --embed-drawer-fab-bg: linear-gradient(145deg, #f0edff 0%, #e2e8ff 100%);
-            --embed-drawer-fab-bg-hover: linear-gradient(145deg, #e6e2fc 0%, #d8e0fc 100%);
-            --embed-drawer-fab-fg: #1c1f2e;
-            box-shadow: 0 10px 32px rgba(60, 50, 140, 0.18);
         }
         .panel {
             position: fixed;
@@ -656,10 +624,12 @@ export class PlatformChat extends LitElement {
             display: flex;
             flex-direction: column;
             gap: 10px;
-            border-radius: var(--embed-drawer-radius);
-            background: var(--embed-drawer-panel-bg, rgba(24, 26, 34, 0.97));
-            border: 1px solid var(--embed-drawer-panel-border, rgba(255, 255, 255, 0.1));
-            box-shadow: 0 24px 64px rgba(0, 0, 0, 0.45);
+            border-radius: var(--platform-chat-drawer-radius);
+            background: var(--platform-chat-panel-bg);
+            border: 1px solid var(--platform-chat-panel-border);
+            box-shadow: var(--platform-chat-panel-shadow);
+            backdrop-filter: blur(var(--glass-blur-strong, 60px));
+            -webkit-backdrop-filter: blur(var(--glass-blur-strong, 60px));
             opacity: 1;
             transform: translate3d(0, 0, 0);
             transition:
@@ -678,11 +648,6 @@ export class PlatformChat extends LitElement {
         :host([data-embed-position='bottom-left']) .panel {
             right: auto;
             left: max(12px, env(safe-area-inset-left, 0px));
-        }
-        :host([data-embed-theme='light']) .panel {
-            --embed-drawer-panel-bg: rgba(255, 255, 255, 0.98);
-            --embed-drawer-panel-border: rgba(28, 31, 46, 0.08);
-            box-shadow: 0 24px 64px rgba(22, 26, 38, 0.12);
         }
         .panel.panel--collapsed {
             opacity: 0;
@@ -719,7 +684,7 @@ export class PlatformChat extends LitElement {
             gap: 10px;
             flex-shrink: 0;
             padding: 4px 4px 12px 8px;
-            border-bottom: 1px solid var(--embed-drawer-panel-border, rgba(255, 255, 255, 0.1));
+            border-bottom: 1px solid var(--platform-chat-panel-border);
         }
         .panel-head.panel-head--draggable {
             cursor: grab;
@@ -733,10 +698,7 @@ export class PlatformChat extends LitElement {
             min-width: 0;
             font-weight: 600;
             font-size: 15px;
-            color: rgba(255, 255, 255, 0.92);
-        }
-        :host([data-embed-theme='light']) .panel-head-title {
-            color: #1c1f2e;
+            color: var(--platform-chat-text);
         }
         .panel-head-actions {
             display: flex;
@@ -750,22 +712,15 @@ export class PlatformChat extends LitElement {
             display: flex;
             align-items: center;
             justify-content: center;
-            border-radius: var(--embed-drawer-radius);
-            border: 1px solid var(--embed-drawer-panel-border, rgba(255, 255, 255, 0.12));
-            background: var(--embed-drawer-close-bg, transparent);
-            color: var(--embed-drawer-close-fg, rgba(255, 255, 255, 0.85));
+            border-radius: var(--platform-chat-drawer-radius);
+            border: 1px solid var(--platform-chat-panel-border);
+            background: var(--platform-chat-drawer-close-bg);
+            color: var(--platform-chat-drawer-close-fg);
             cursor: pointer;
             padding: 0;
         }
-        :host([data-embed-theme='light']) .close-btn {
-            --embed-drawer-close-bg: rgba(28, 31, 46, 0.04);
-            --embed-drawer-close-fg: rgba(28, 31, 46, 0.75);
-        }
         .close-btn:hover {
-            background: var(--embed-drawer-close-hover, rgba(255, 255, 255, 0.08));
-        }
-        :host([data-embed-theme='light']) .close-btn:hover {
-            --embed-drawer-close-hover: rgba(28, 31, 46, 0.08);
+            background: var(--platform-chat-drawer-close-hover);
         }
         .close-btn svg {
             width: 18px;
@@ -777,7 +732,7 @@ export class PlatformChat extends LitElement {
             min-height: 0;
             display: flex;
             flex-direction: column;
-            color: var(--embed-chat-text);
+            color: var(--platform-chat-text);
         }
         @media (min-width: 768px) {
             .panel.panel--maximized {
@@ -788,7 +743,7 @@ export class PlatformChat extends LitElement {
                 width: auto;
                 height: auto;
                 max-height: none;
-                border-radius: min(var(--embed-drawer-radius), 20px);
+                border-radius: min(var(--platform-chat-drawer-radius), 20px);
             }
         }
         @media (max-width: 767px) {
@@ -800,7 +755,7 @@ export class PlatformChat extends LitElement {
                 width: auto;
                 height: auto;
                 max-height: none;
-                border-radius: min(var(--embed-drawer-radius), 20px);
+                border-radius: min(var(--platform-chat-drawer-radius), 20px);
             }
         }
         .panel:fullscreen {
@@ -1095,7 +1050,7 @@ export class PlatformChat extends LitElement {
             this.voiceDefaultOn = look.voice_default_on;
         }
         if (typeof look.primary_color === 'string' && look.primary_color.trim() !== '') {
-            this.style.setProperty('--embed-chat-accent', look.primary_color.trim());
+            this.style.setProperty('--platform-chat-accent', look.primary_color.trim());
         }
         if (typeof look.position === 'string' && look.position.trim() === 'bottom-left') {
             this.setAttribute('data-embed-position', 'bottom-left');

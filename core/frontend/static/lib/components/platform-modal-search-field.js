@@ -58,6 +58,11 @@ export class PlatformModalSearchField extends PlatformElement {
             platform-icon[slot='prefix'] {
                 color: var(--text-tertiary);
             }
+
+            platform-help-hint[slot='suffix'] {
+                flex-shrink: 0;
+                margin-inline-start: var(--space-1);
+            }
         `,
     ];
 
@@ -91,6 +96,7 @@ export class PlatformModalSearchField extends PlatformElement {
                 @change=${this._onChange}
             >
                 <platform-icon slot="prefix" name="search" size="12"></platform-icon>
+                <slot name="suffix" slot="suffix"></slot>
             </platform-field>
         `;
     }

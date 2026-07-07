@@ -8,7 +8,7 @@ import { registerModalKind } from '@platform/lib/utils/modal-registry.js';
 import '@platform/lib/components/platform-button.js';
 import '@platform/lib/components/platform-icon.js';
 import '@platform/lib/components/fields/platform-field.js';
-import '../components/common/flows-code-language-icon.js';
+import '@platform/lib/components/platform-segmented-control.js';
 import '../components/editors/flows-code-editor.js';
 import { asString } from '../_helpers/flows-resolvers.js';
 import {
@@ -57,46 +57,6 @@ export class FlowsToolCreateModal extends PlatformFormModal {
                 align-items: center;
                 gap: var(--space-2);
                 min-width: 0;
-            }
-            .language-segment {
-                display: inline-flex;
-                align-items: center;
-                gap: 2px;
-                padding: 2px;
-                border-radius: var(--radius-md);
-                background: var(--glass-solid-subtle);
-                border: 1px solid var(--glass-border-subtle);
-            }
-            .language-button {
-                width: 36px;
-                height: 24px;
-                padding: 0;
-                display: inline-flex;
-                align-items: center;
-                justify-content: center;
-                border: 0;
-                border-radius: calc(var(--radius-md) - 2px);
-                background: transparent;
-                color: var(--text-tertiary);
-                font-size: 11px;
-                font-weight: var(--font-semibold);
-                line-height: 1;
-                cursor: pointer;
-            }
-            .language-button:hover {
-                color: var(--text-primary);
-                background: var(--glass-tint-medium);
-            }
-            .language-button[active] {
-                color: var(--accent);
-                background: var(--accent-subtle);
-            }
-            .language-button:focus-visible {
-                outline: 2px solid var(--accent);
-                outline-offset: 1px;
-            }
-            .language-button flows-code-language-icon {
-                pointer-events: none;
             }
             .code-validation-status {
                 display: inline-flex;
@@ -262,20 +222,17 @@ export class FlowsToolCreateModal extends PlatformFormModal {
 
     _renderLanguageSegment() {
         return html`
-            <div class="language-segment" role="group" aria-label=${this.t('code_workbench.language_aria')}>
-                ${FLOW_CODE_LANGUAGES.map((lang) => html`
-                    <button
-                        type="button"
-                        class="language-button"
-                        ?active=${this._language === lang.value}
-                        title=${lang.label}
-                        aria-label=${lang.label}
-                        @click=${() => this._setLanguage(lang.value)}
-                    >
-                        <flows-code-language-icon language=${lang.value} size="18"></flows-code-language-icon>
-                    </button>
-                `)}
-            </div>
+            <platform-segmented-control
+                density="compact"
+                .value=${this._language}
+                .items=${FLOW_CODE_LANGUAGES.map((lang) => ({
+                    value: lang.value,
+                    label: lang.label,
+                    title: lang.label,
+                }))}
+                aria-label=${this.t('code_workbench.language_aria')}
+                @change=${(e) => this._setLanguage(e.detail.value)}
+            ></platform-segmented-control>
         `;
     }
 

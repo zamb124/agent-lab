@@ -14,6 +14,14 @@
     "flows": "Обзор",
     "profile": "Профиль"
   },
+  "common": {
+    "action_cancel": "Отмена",
+    "action_save": "Сохранить",
+    "action_create": "Создать",
+    "action_delete": "Удалить",
+    "action_close": "Закрыть",
+    "search_placeholder": "Поиск…"
+  },
   "flow_create_modal": {
     "title": "Создать flow",
     "mode_empty_title": "Пустой flow",
@@ -25,8 +33,6 @@
     "field_description": "Описание (опционально)",
     "err_flow_id_pattern": "Допустимы только латиница, цифры и нижнее подчёркивание; начинается с буквы.",
     "bundles_empty": "Bundle-репозиторий пуст",
-    "action_cancel": "Отмена",
-    "action_create": "Создать",
     "action_install": "Установить",
     "subtitle": "Выберите подходящий тип агента для вашей задачи",
     "search_placeholder": "Поиск по шаблонам и Store...",
@@ -97,18 +103,14 @@
     "field_branch_id": "Branch ID (snake_case)",
     "field_name": "Название",
     "field_description": "Описание (опционально)",
-    "err_branch_id_pattern": "Branch ID: латиница, цифры, нижнее подчёркивание.",
-    "action_cancel": "Отмена",
-    "action_create": "Создать"
+    "err_branch_id_pattern": "Branch ID: латиница, цифры, нижнее подчёркивание."
   },
   "variable_editor_modal": {
     "title_create": "Новая переменная flow",
     "title_edit": "Редактирование переменной flow",
     "field_key": "Ключ",
     "field_value": "Значение",
-    "field_secret": "Хранить как секрет",
-    "action_cancel": "Отмена",
-    "action_save": "Сохранить"
+    "field_secret": "Хранить как секрет"
   },
   "variables_modal": {
     "title_company": "Переменные компании",
@@ -170,8 +172,6 @@
     "preset_api_key": "API Key",
     "preset_basic": "Basic",
     "action_add": "Добавить",
-    "action_save": "Сохранить",
-    "action_cancel": "Отмена",
     "action_sync": "Sync",
     "action_test": "Test",
     "action_test_connection": "Проверить подключение",
@@ -213,11 +213,9 @@
   },
   "triggers_modal": {
     "title": "Триггеры flow",
-    "action_create": "Создать триггер",
     "action_test": "Тест",
     "action_edit": "Редактировать",
     "action_delete": "Удалить",
-    "action_cancel": "Отмена",
     "delete_title": "Удалить триггер?",
     "delete_message": "Удалить триггер \"{{id}}\"?",
     "col_id": "ID",
@@ -715,6 +713,8 @@
     "section_output_mode": "Режим вывода",
     "output_mode_tools": "Инструменты",
     "output_mode_structured": "Структурированный",
+    "output_mode_aria": "Режим вывода LLM",
+    "tools_remove": "Удалить tool",
     "output_mode_hint": "Инструменты: ассистент вызывает tools и отвечает обычным текстом. Структурированный: ответ — JSON по схеме ниже.",
     "output_mode_help": "Tools подходит для действий и ReAct. Structured output подходит, когда следующая нода ждёт строгий JSON без вызова инструментов.",
     "section_output_schema": "JSON-схема вывода",
@@ -794,6 +794,7 @@
   },
   "code_workbench": {
     "tab_params": "Параметры",
+    "main_tab_aria": "Режим редактора кода",
     "language_aria": "Язык кода",
     "validation_checking": "Проверка",
     "validation_valid": "Код валиден",
@@ -811,6 +812,7 @@
     "search_placeholder": "Поиск",
     "tab_catalog": "Каталог",
     "tab_registry": "Реестр tools",
+    "source_tabs_aria": "Источник шаблонов",
     "empty": "Нет шаблонов",
     "empty_registry": "Нет подходящих tools",
     "toast_no_code": "У tool нет исходного кода"
@@ -970,6 +972,7 @@
     "tab_request": "По request",
     "tab_span": "По span",
     "tab_user": "По user",
+    "mode_aria": "Режим фильтра логов",
     "tab_trace_resolving_hint": "Определяем trace в Tempo…",
     "tab_trace_disabled_hint": "Нужен текущий task_id запуска (отправьте сообщение) или явный trace_id",
     "count": "{{count}} записей",
@@ -1011,6 +1014,7 @@
     "tab_delta": "State delta",
     "tab_state": "Projection",
     "tab_command": "Command result",
+    "detail_tabs_aria": "Вид деталей события",
     "action_refresh": "Обновить",
     "action_state": "Загрузить projection",
     "action_load_state": "Загрузить projection на sequence",
@@ -1303,6 +1307,7 @@
     "status_published": "Опубликован",
     "mode_edit": "Визуальный редактор",
     "mode_run": "Run",
+    "mode_group_aria": "Режим редактора",
     "editor_help_label": "Редактор flow",
     "editor_help_summary": "Редактор flow",
     "editor_help_details": "Edit меняет граф и настройки. Run открывает панель выполнения для проверки. Publish сохраняет текущую конфигурацию как рабочую версию flow; API, Eval, Triggers и Preview относятся к выбранной ветке.",
@@ -1314,7 +1319,16 @@
     "code": "Код",
     "publish": "Опубликовать",
     "share_preview": "Ссылка для гостевого просмотра (одноразовая)",
-    "flow_settings": "Настройки агента"
+    "flow_settings": "Настройки агента",
+    "overflow_aria": "Дополнительные действия редактора",
+    "menu_settings": "Настройки агента",
+    "menu_lara": "Открыть Lara для текущего flow",
+    "menu_share": "Гостевой просмотр",
+    "menu_triggers": "Триггеры",
+    "menu_api": "API и A2A спецификация",
+    "menu_eval": "Evaluation Lab",
+    "menu_code": "JSON flow",
+    "menu_reload": "Перезагрузить из bundle"
   },
   "chat_page": {
     "flow_settings": "Настройки агента"
@@ -1561,6 +1575,7 @@
     "tab_chat": "Чат",
     "tab_trace": "Трассировка",
     "tab_state": "Состояние",
+    "tabs_aria": "Вкладки панели выполнения",
     "status_idle": "Ожидание",
     "status_running": "Выполняется",
     "status_passed": "Успех",
@@ -1604,7 +1619,8 @@
   "branches_tabs": {
     "base": "Базовый flow",
     "add": "Ветка",
-    "delete": "Удалить ветку"
+    "delete": "Удалить ветку",
+    "group_aria": "Ветки flow"
   },
   "canvas": {
     "context_menu": {
@@ -1940,6 +1956,7 @@
       "branch": "branch",
       "scope_suite": "Suite",
       "scope_case": "Case",
+      "scope_aria": "Область запуска",
       "trials": "Trials",
       "concurrency": "Parallel",
       "docs": "Документация",
@@ -1988,6 +2005,7 @@
       "input": "Входное сообщение",
       "input_placeholder": "Сообщение пользователя для первого turn",
       "check_type": "Тип проверки",
+      "check_type_aria": "Тип проверки",
       "check_contains": "Содержит",
       "check_not_contains": "Не содержит",
       "check_regex": "Regex",
@@ -2010,13 +2028,16 @@
       "state_operator": "Operator",
       "json_schema": "JSON schema",
       "trace_tool_called": "Инструмент вызван",
+      "trace_assertion_aria": "Тип trace assertion",
       "trace_node_completed": "Нода завершена",
       "trace_node_failed": "Нода завершилась ошибкой",
       "trace_value": "Значение trace",
       "trace_value_placeholder": "node_id или tool_call_id",
       "rubric_version_id": "Rubric version ID",
       "metric_id": "Metric ID",
+      "builtin_metric_aria": "Встроенная метрика",
       "reference": "Эталон",
+      "code_language_aria": "Язык кода",
       "code_source": "Код проверки",
       "save": "Сохранить",
       "create": "Создать"
@@ -2030,6 +2051,7 @@
       "tie": "Ничья",
       "right_wins": "Победил правый",
       "llm_pairwise": "LLM pairwise",
+      "judge_aria": "Pairwise оценка",
       "empty": "Выберите два запуска"
     },
     "trace": {

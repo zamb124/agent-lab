@@ -110,6 +110,7 @@ import { applyCompanyHostRedirectIfNeeded } from '@platform/lib/utils/company-ho
 import { COMPANIES_EVENTS } from '@platform/lib/events/reducers/companies.js';
 import '@platform/lib/components/layout/platform-island.js';
 import '../components/flows-catalog-list.js';
+import '../components/flows-sidebar.js';
 
 const FLOWS_ROUTES = [
     { key: 'list',                 path: '',                              titleKey: 'routes.list' },
@@ -422,7 +423,7 @@ export class FlowsApp extends PlatformApp {
 
     _flowsDesktopSidebarColumn() {
         if (this._flowsMobile) return html``;
-        return html`<div class="sidebar"><flows-list-page></flows-list-page></div>`;
+        return html`<div class="sidebar"><flows-sidebar></flows-sidebar></div>`;
     }
 
     renderRoute(routeKey, params) {

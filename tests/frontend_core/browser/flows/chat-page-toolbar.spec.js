@@ -82,6 +82,26 @@ describe('chat-page toolbar', () => {
         expect(settingsBtn.localName).to.equal('platform-button');
     });
 
+    it('mobile overflow menu uses block ghost-danger for clear action', async () => {
+        const el = await fixture(html`
+            <chat-page flow-id="demo_flow" branch-id="base"></chat-page>
+        `);
+        el._isMobile = true;
+        el._overflowOpen = true;
+        await elementUpdated(el);
+
+        const flyout = el.shadowRoot.querySelector('.menu-flyout');
+        expect(flyout).to.not.equal(null);
+
+        const menuButtons = flyout.querySelectorAll('platform-button[block]');
+        expect(menuButtons.length).to.be.greaterThan(0);
+
+        const clearBtn = menuButtons[menuButtons.length - 1];
+        expect(clearBtn.hasAttribute('danger')).to.equal(true);
+        expect(clearBtn.shadowRoot.querySelector('button.ghost-danger')).to.not.equal(null);
+        expect(clearBtn.shadowRoot.querySelector('button.danger')).to.equal(null);
+    });
+
     it('mounts platform-chat display=page profile=spa without chat-profile 404', async () => {
         const stack = await fixture(html`<platform-modal-stack></platform-modal-stack>`);
         const el = await fixture(html`

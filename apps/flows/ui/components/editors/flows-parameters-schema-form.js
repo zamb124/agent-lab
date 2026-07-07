@@ -16,7 +16,7 @@
 import { html, css } from 'lit';
 import { PlatformElement } from '@platform/lib/platform-element/index.js';
 import '@platform/lib/components/fields/platform-field.js';
-import './flows-json-field-editor.js';
+import '@platform/lib/components/platform-json-editor.js';
 
 export class FlowsParametersSchemaForm extends PlatformElement {
     static i18nNamespace = 'flows';
@@ -121,13 +121,13 @@ export class FlowsParametersSchemaForm extends PlatformElement {
             const json = value === undefined || value === null
                 ? (it.type === 'array' ? '[]' : '{}')
                 : JSON.stringify(value, null, 2);
-            return html`<flows-json-field-editor
+            return html`<platform-json-editor validate-json show-toolbar="false"
                 ?readonly=${this.readonly}
                 .value=${json}
                 @change=${(e) => {
                     if (e.detail && 'parsed' in e.detail) this._emit(it.key, e.detail.parsed);
                 }}
-            ></flows-json-field-editor>`;
+            ></platform-json-editor>`;
         }
         return html`<platform-field
             type="string"

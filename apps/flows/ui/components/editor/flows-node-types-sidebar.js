@@ -29,6 +29,7 @@ import { platformConfirm } from '@platform/lib/components/platform-confirm-modal
 import '@platform/lib/components/platform-icon.js';
 import '@platform/lib/components/platform-button.js';
 import '@platform/lib/components/platform-help-hint.js';
+import '@platform/lib/components/platform-modal-search-field.js';
 import '@platform/lib/components/glass-spinner.js';
 import { getNodeTypeMeta, getCategoryToken } from '../../constants/node-icons.js';
 import { getTriggerTypeRowVisual } from '../../constants/trigger-types.js';
@@ -138,7 +139,7 @@ export class FlowsNodeTypesSidebar extends PlatformElement {
                 gap: var(--space-1);
             }
 
-            button.trigger-row {
+            article.trigger-row {
                 appearance: none;
                 margin: 0;
                 font: inherit;
@@ -147,40 +148,13 @@ export class FlowsNodeTypesSidebar extends PlatformElement {
                 text-align: left;
                 cursor: pointer;
             }
-            button.trigger-row.is-active {
+            article.trigger-row.is-active {
                 border-color: var(--accent);
                 box-shadow: 0 0 0 1px color-mix(in oklab, var(--accent) 40%, transparent);
             }
 
-            /* Поиск */
-            .search-box {
-                position: relative;
+            .search-wrap {
                 padding: 0 var(--space-2);
-            }
-            .search-box .search-icon {
-                position: absolute;
-                left: calc(var(--space-2) + 8px);
-                top: 50%;
-                transform: translateY(-50%);
-                color: var(--text-tertiary);
-                pointer-events: none;
-            }
-            .search-input {
-                width: 100%;
-                box-sizing: border-box;
-                padding: var(--space-2) var(--space-2) var(--space-2) calc(var(--space-2) + 22px);
-                border-radius: var(--radius-lg);
-                border: 1px solid var(--glass-border-subtle);
-                background: var(--glass-solid-subtle);
-                color: var(--text-primary);
-                font: inherit;
-                font-size: var(--text-sm);
-                line-height: 1.25;
-            }
-            .search-input:focus {
-                outline: none;
-                border-color: var(--accent);
-                box-shadow: 0 0 0 2px var(--accent-subtle);
             }
             .palette-help {
                 display: flex;
@@ -232,7 +206,7 @@ export class FlowsNodeTypesSidebar extends PlatformElement {
                 display: flex;
                 align-items: center;
                 gap: var(--space-2);
-                min-height: 42px;
+                min-height: var(--flows-sidebar-row-min-height);
                 padding: 6px 8px;
                 border-radius: var(--radius-sm);
                 border: 1px solid transparent;
@@ -349,7 +323,7 @@ export class FlowsNodeTypesSidebar extends PlatformElement {
                 variant: 'danger',
                 confirmVariant: 'danger',
                 confirmText: this.t('triggers_modal.action_delete'),
-                cancelText: this.t('triggers_modal.action_cancel'),
+                cancelText: this.t('common.action_cancel'),
             },
         );
         if (!ok) return;
@@ -362,18 +336,28 @@ export class FlowsNodeTypesSidebar extends PlatformElement {
         this.emit('toggle-flow-settings', {});
     }
 
+    _onFlowSettingsKeydown(event) {
+        if (event.key !== 'Enter' && event.key !== ' ') {
+            return;
+        }
+        event.preventDefault();
+        this._toggleFlowSettingsPanel();
+    }
+
     _renderFlowSettingsPanelToggle() {
         if (!this.flowId) return '';
         const flowTok = getCategoryToken('flow');
         const wrapBg = `color-mix(in oklab, ${flowTok} 14%, transparent)`;
         return html`
             <div class="triggers-section">
-                <button
-                    type="button"
+                <article
+                    tabindex="0"
+                    role="button"
                     class="trigger-row ${this.flowSettingsActive ? 'is-active' : ''}"
                     aria-pressed=${this.flowSettingsActive ? 'true' : 'false'}
                     title=${this.t('node_types_sidebar.flow_settings_toggle_hint')}
                     @click=${this._toggleFlowSettingsPanel}
+                    @keydown=${this._onFlowSettingsKeydown}
                 >
                     <div class="trigger-row-main">
                         <div
@@ -385,7 +369,7 @@ export class FlowsNodeTypesSidebar extends PlatformElement {
                         </div>
                         <span class="trigger-row-label">${this.t('flow_property_panel.card_title')}</span>
                     </div>
-                </button>
+                </article>
                 <div class="palette-help">
                     <platform-help-hint
                         .label=${this.t('node_types_sidebar.flow_settings_help_label')}
@@ -471,18 +455,23 @@ export class FlowsNodeTypesSidebar extends PlatformElement {
         `;
     }
 
+    _onSearchChange(e) {
+        const rawValue = e.detail?.value;
+        if (typeof rawValue !== 'string') {
+            throw new TypeError('FlowsNodeTypesSidebar._onSearchChange: string detail.value required');
+        }
+        this._query = rawValue;
+    }
+
     _renderSearch() {
         return html`
-            <div class="search-box">
-                <platform-icon class="search-icon" name="search" size="14"></platform-icon>
-                <input
-                    type="text"
-                    class="search-input"
-                    data-canon="search-as-you-type"
+            <div class="search-wrap">
+                <platform-modal-search-field
+                    layout="fill"
                     .value=${this._query}
                     placeholder=${this.t('node_types_sidebar.search_placeholder')}
-                    @input=${(e) => { this._query = e.target.value; }}
-                />
+                    @change=${this._onSearchChange}
+                ></platform-modal-search-field>
             </div>
             <div class="palette-help">
                 <platform-help-hint

@@ -88,7 +88,6 @@ export class FlowsSessionsModal extends PlatformModal {
             }
             .flows-sessions-filter-actions platform-button,
             .flows-sessions-row-actions platform-button {
-                --platform-button-icon-size: 36px;
                 --platform-button-icon-radius: var(--radius-full);
             }
             .flows-sessions-table-scroll {

@@ -1,5 +1,6 @@
 import { html, css } from 'lit';
 import { PlatformElement } from '@platform/lib/platform-element/index.js';
+import { panelShellStyles } from '@platform/lib/styles/shared/panel-shell.styles.js';
 import '@platform/lib/components/platform-icon.js';
 import '@platform/lib/components/platform-help-hint.js';
 
@@ -85,6 +86,7 @@ export class FlowsEvaluationResultsMatrix extends PlatformElement {
 
     static styles = [
         PlatformElement.styles,
+        panelShellStyles,
         css`
             :host {
                 display: flex;
@@ -93,27 +95,10 @@ export class FlowsEvaluationResultsMatrix extends PlatformElement {
                 color: var(--text-primary);
             }
 
-            .panel {
-                flex: 1;
-                min-width: 0;
-                min-height: 0;
-                display: flex;
-                flex-direction: column;
-                border: 1px solid var(--border-subtle);
-                border-radius: var(--radius-xl);
+            .content-panel {
                 background:
                     linear-gradient(180deg, color-mix(in srgb, var(--glass-solid-medium), transparent 12%), transparent 62%),
                     var(--glass-solid-subtle);
-                overflow: hidden;
-            }
-
-            .head {
-                display: flex;
-                align-items: center;
-                justify-content: space-between;
-                gap: var(--space-3);
-                padding: var(--space-3) var(--space-4);
-                border-bottom: 1px solid var(--border-subtle);
             }
 
             .title {
@@ -583,7 +568,7 @@ export class FlowsEvaluationResultsMatrix extends PlatformElement {
         const matrix = this.matrix && typeof this.matrix === 'object' ? this.matrix : null;
         if (matrix === null) {
             return html`
-                <section class="panel">
+                <section class="content-panel">
                     <div class="cockpit">
                         <div class="cockpit-copy">
                             <span class="eyebrow">
@@ -607,8 +592,8 @@ export class FlowsEvaluationResultsMatrix extends PlatformElement {
         const runs = asArray(matrix.runs);
         const grouped = groupCells(matrix.cells);
         return html`
-            <section class="panel">
-                <div class="head">
+            <section class="content-panel">
+                <div class="content-panel-head">
                     <div class="title">
                         <platform-icon name="table" size="16"></platform-icon>
                         ${this.t('evaluation.matrix.title')}

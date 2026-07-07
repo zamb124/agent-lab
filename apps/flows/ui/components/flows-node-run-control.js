@@ -98,19 +98,6 @@ export class FlowsNodeRunControl extends PlatformElement {
         css`
             :host { display: inline-flex; align-items: center; vertical-align: middle; }
             .root { position: relative; display: inline-flex; align-items: center; }
-            .play-btn {
-                width: 32px; height: 32px; padding: 0;
-                display: inline-flex; align-items: center; justify-content: center;
-                background: var(--glass-solid-medium);
-                border: 1px solid var(--glass-border-subtle);
-                border-radius: var(--radius-md);
-                color: var(--accent);
-                cursor: pointer;
-            }
-            .play-btn:hover:not(:disabled) {
-                background: var(--glass-solid-strong);
-            }
-            .play-btn:disabled { opacity: 0.5; cursor: not-allowed; }
         `,
     ];
 
@@ -211,7 +198,7 @@ export class FlowsNodeRunControl extends PlatformElement {
         if (!this._portalEl) {
             return;
         }
-        const btn = this.renderRoot?.querySelector('.play-btn');
+        const btn = this.renderRoot?.querySelector('platform-button');
         if (!btn) {
             return;
         }

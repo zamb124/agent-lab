@@ -14,6 +14,7 @@ import { PlatformModal } from '@platform/lib/components/glass-modal.js';
 import { registerModalKind } from '@platform/lib/utils/modal-registry.js';
 import '@platform/lib/components/platform-modal-search-field.js';
 import '@platform/lib/components/platform-button.js';
+import '@platform/lib/components/platform-segmented-control.js';
 import '@platform/lib/components/glass-spinner.js';
 import '@platform/lib/components/platform-icon.js';
 import '../components/common/flows-code-language-icon.js';
@@ -212,7 +213,7 @@ export class FlowsLibraryPickerModal extends PlatformModal {
                 margin-bottom: var(--space-3);
                 min-width: 0;
             }
-            .tool-picker-toolbar .tabs {
+            .tool-picker-toolbar .source-segment {
                 margin-bottom: 0;
                 min-width: 0;
             }
@@ -221,11 +222,6 @@ export class FlowsLibraryPickerModal extends PlatformModal {
                 min-width: 0;
                 margin-left: auto;
             }
-            .tabs {
-                display: flex;
-                gap: var(--space-1);
-                margin-bottom: var(--space-3);
-            }
             .code-language-row {
                 display: flex;
                 align-items: center;
@@ -233,18 +229,12 @@ export class FlowsLibraryPickerModal extends PlatformModal {
                 gap: var(--space-2);
                 margin: calc(var(--space-2) * -1) 0 var(--space-3);
             }
-            .language-segment {
-                display: inline-flex;
-                align-items: center;
-                gap: 2px;
-                padding: 2px;
-                border-radius: var(--radius-md);
-                background: var(--glass-solid-subtle);
-                border: 1px solid var(--glass-border-subtle);
+            .code-language-row platform-segmented-control {
+                flex: 1 1 auto;
+                min-width: 0;
             }
-            .language-segment platform-button {
-                --platform-button-icon-size: 36px;
-                --platform-button-icon-radius: calc(var(--radius-md) - 2px);
+            .source-segment {
+                margin-bottom: var(--space-3);
             }
             .lib-grid {
                 display: grid;
@@ -1163,28 +1153,28 @@ export class FlowsLibraryPickerModal extends PlatformModal {
         return m !== 'flow_only' && m !== 'mcp_only';
     }
 
+    _toolCategoryTabItems() {
+        return [
+            { value: 'all', label: this.t('tool_picker_modal.tab_all') },
+            { value: 'code', label: this.t('tool_picker_modal.tab_code') },
+            { value: 'flow', label: this.t('tool_picker_modal.tab_flows') },
+            { value: 'mcp', label: this.t('tool_picker_modal.tab_mcp') },
+        ];
+    }
+
     _renderToolCategoryTabs() {
         if (!this._showToolCategoryTabs()) {
             return nothing;
         }
-        const t = this._toolCategoryTab;
-        const tabs = [
-            ['all', 'tool_picker_modal.tab_all'],
-            ['code', 'tool_picker_modal.tab_code'],
-            ['flow', 'tool_picker_modal.tab_flows'],
-            ['mcp', 'tool_picker_modal.tab_mcp'],
-        ];
         return html`
-            <div class="tabs" role="tablist" aria-label=${this.t('tool_picker_modal.tabs_aria')}>
-                ${tabs.map(([key, labelKey]) => html`
-                    <platform-button
-                        role="tab"
-                        variant=${t === key ? 'secondary' : 'ghost'}
-                        density="compact"
-                        @click=${() => { this._toolCategoryTab = key; }}
-                    >${this.t(labelKey)}</platform-button>
-                `)}
-            </div>
+            <platform-segmented-control
+                class="source-segment"
+                density="compact"
+                .value=${this._toolCategoryTab}
+                .items=${this._toolCategoryTabItems()}
+                aria-label=${this.t('tool_picker_modal.tabs_aria')}
+                @change=${(e) => { this._toolCategoryTab = e.detail.value; }}
+            ></platform-segmented-control>
         `;
     }
 
@@ -1205,20 +1195,18 @@ export class FlowsLibraryPickerModal extends PlatformModal {
         const current = normalizeFlowCodeLanguage(this._codeLanguage);
         return html`
             <div class="code-language-row">
-                <div class="language-segment" role="group" aria-label=${this.t('code_workbench.language_aria')}>
-                    ${FLOW_CODE_LANGUAGES.map((lang) => html`
-                        <platform-button
-                            icon-only
-                            variant=${current === lang.value ? 'secondary' : 'ghost'}
-                            density="dense"
-                            title=${lang.label}
-                            aria-label=${lang.label}
-                            @click=${() => this._setCodeLanguage(lang.value)}
-                        >
-                            <flows-code-language-icon language=${lang.value} size="18"></flows-code-language-icon>
-                        </platform-button>
-                    `)}
-                </div>
+                <platform-segmented-control
+                    icon-only
+                    density="compact"
+                    .value=${current}
+                    .items=${FLOW_CODE_LANGUAGES.map((lang) => ({
+                        value: lang.value,
+                        icon: lang.icon,
+                        title: lang.label,
+                    }))}
+                    aria-label=${this.t('code_workbench.language_aria')}
+                    @change=${(e) => this._setCodeLanguage(e.detail.value)}
+                ></platform-segmented-control>
             </div>
         `;
     }
@@ -1432,18 +1420,17 @@ export class FlowsLibraryPickerModal extends PlatformModal {
         return html`
             ${this._renderFilterBar()}
             ${this._renderCodeLanguageSegment()}
-            <div class="tabs">
-                <platform-button
-                    variant=${this._sourceTab === 'catalog' ? 'secondary' : 'ghost'}
-                    density="compact"
-                    @click=${() => { this._sourceTab = 'catalog'; }}
-                >${this.t('code_node_templates_modal.tab_catalog')}</platform-button>
-                <platform-button
-                    variant=${this._sourceTab === 'registry' ? 'secondary' : 'ghost'}
-                    density="compact"
-                    @click=${() => { this._sourceTab = 'registry'; }}
-                >${this.t('code_node_templates_modal.tab_registry')}</platform-button>
-            </div>
+            <platform-segmented-control
+                class="source-segment"
+                density="compact"
+                .value=${this._sourceTab}
+                .items=${[
+                    { value: 'catalog', label: this.t('code_node_templates_modal.tab_catalog') },
+                    { value: 'registry', label: this.t('code_node_templates_modal.tab_registry') },
+                ]}
+                aria-label=${this.t('code_node_templates_modal.source_tabs_aria')}
+                @change=${(e) => { this._sourceTab = e.detail.value; }}
+            ></platform-segmented-control>
             ${this._sourceTab === 'catalog' ? this._renderCatalogBlock(rowCatalog) : this._renderCodeRegistryBlock(rowTools)}
         `;
     }

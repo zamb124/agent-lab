@@ -49,7 +49,7 @@ UI_REFLECTION_CONTRACTS: tuple[tuple[str, tuple[str, ...]], ...] = (
         "apps/flows/ui/components/editor/flows-node-editor-surface.js",
         ("flows-reflection-node-editor.js", "case 'reflection':"),
     ),
-    ("apps/flows/ui/index.js", ("flows-reflection-node-editor.js",)),
+    ("apps/flows/ui/pages/flow-editor-page.js", ("flows-property-panel.js",)),
     ("apps/flows/ui/_helpers/lara-node-helper.js", ("reflection: 'reflection_node_helper'",)),
     ("core/i18n/translations/en/flows.json", ('"reflection_node_editor"',)),
     ("core/i18n/translations/ru/flows.json", ('"reflection_node_editor"',)),

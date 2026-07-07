@@ -14,6 +14,23 @@ export class PlatformButton extends PlatformElement {
         :host([icon-only]) {
             flex: 0 0 auto;
         }
+
+        :host([block]) {
+            display: flex;
+            width: 100%;
+            max-width: 100%;
+            min-width: 0;
+            box-sizing: border-box;
+        }
+
+        :host([block]) button {
+            width: 100%;
+            max-width: 100%;
+            justify-content: flex-start;
+            white-space: normal;
+            text-align: left;
+            border-radius: var(--radius-md);
+        }
         
         button {
             display: inline-flex;
@@ -117,6 +134,16 @@ export class PlatformButton extends PlatformElement {
             background: #e11d48;
             box-shadow: 0 0 10px rgba(244, 63, 94, 0.4);
         }
+
+        button.ghost-danger {
+            color: var(--error, #f43f5e);
+            background: transparent;
+        }
+
+        button.ghost-danger:hover:not(:disabled) {
+            color: var(--error, #f43f5e);
+            background: var(--error-bg, rgba(244, 63, 94, 0.12));
+        }
         
         /* Ghost */
         button.ghost {
@@ -147,6 +174,15 @@ export class PlatformButton extends PlatformElement {
             color: var(--text-primary, #1e293b);
             background: var(--glass-tint-subtle, rgba(0, 0, 0, 0.02));
         }
+
+        :host-context([data-theme="light"]) button.ghost-danger {
+            color: var(--error, #e11d48);
+        }
+
+        :host-context([data-theme="light"]) button.ghost-danger:hover:not(:disabled) {
+            color: var(--error, #e11d48);
+            background: var(--error-bg, rgba(244, 63, 94, 0.1));
+        }
     `;
 
     static properties = {
@@ -156,6 +192,7 @@ export class PlatformButton extends PlatformElement {
         type: { type: String },
         density: { type: String, reflect: true },
         iconOnly: { type: Boolean, attribute: 'icon-only', reflect: true },
+        block: { type: Boolean, reflect: true },
         ariaLabel: { type: String, attribute: 'aria-label' },
         primary: { type: Boolean, reflect: true },
         accent: { type: Boolean, reflect: true },
@@ -172,6 +209,7 @@ export class PlatformButton extends PlatformElement {
         this.type = 'button';
         this.density = 'default';
         this.iconOnly = false;
+        this.block = false;
         this.ariaLabel = '';
         this.primary = false;
         this.accent = false;
@@ -180,11 +218,24 @@ export class PlatformButton extends PlatformElement {
         this.ghost = false;
     }
 
+    _isGhostVariant() {
+        return this.ghost || this.variant === 'ghost';
+    }
+
     _effectiveVariant() {
-        if (this.danger) return 'danger';
+        if (this.danger && this._isGhostVariant()) {
+            return 'ghost-danger';
+        }
+        if (this.danger) {
+            return 'danger';
+        }
         if (this.accent) return 'accent';
-        if (this.secondary) return 'secondary';
-        if (this.ghost) return 'ghost';
+        if (this.secondary) {
+            return 'secondary';
+        }
+        if (this._isGhostVariant()) {
+            return 'ghost';
+        }
         if (this.primary) return 'primary';
         return this.variant;
     }

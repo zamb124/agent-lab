@@ -8,10 +8,13 @@ import { registerModalKind } from '@platform/lib/utils/modal-registry.js';
 import { buildScenarioDocumentationUrl } from '@platform/lib/utils/documentation-url.js';
 import '@platform/lib/components/platform-button.js';
 import '@platform/lib/components/platform-icon.js';
+import '@platform/lib/components/platform-segmented-control.js';
 import '@platform/lib/components/glass-spinner.js';
 import '@platform/lib/components/fields/platform-field.js';
 import '../components/editors/flows-code-editor.js';
 import { asObject, isPlainObject } from '../_helpers/flows-resolvers.js';
+import { formatJsonPretty } from '@platform/lib/utils/json-format.js';
+import { panelShellStyles } from '@platform/lib/styles/shared/panel-shell.styles.js';
 
 import { listSystemVariableKeys } from '@platform/lib/components/variables/platform-system-variables-catalog.js';
 
@@ -115,15 +118,11 @@ function _publicVariableEntries(variables) {
         });
 }
 
-function _jsonPretty(value) {
-    return JSON.stringify(value, null, 2);
-}
-
 function _displayJson(value) {
     if (typeof value === 'string') {
         return value;
     }
-    return _jsonPretty(value);
+    return formatJsonPretty(value);
 }
 
 function _shellSingleQuote(value) {
@@ -258,6 +257,7 @@ export class FlowsApiConsoleModal extends PlatformModal {
 
     static styles = [
         ...PlatformModal.styles,
+        panelShellStyles,
         css`
             :host {
                 --modal-width: min(1360px, calc(100vw - 24px));
@@ -310,37 +310,12 @@ export class FlowsApiConsoleModal extends PlatformModal {
                 padding: var(--space-4);
             }
             .api-nav {
-                display: grid;
-                gap: var(--space-1);
+                display: block;
             }
-            .api-nav button,
-            .lang-tabs button {
-                border: 1px solid transparent;
-                background: transparent;
-                color: var(--text-secondary);
-                border-radius: var(--radius-sm);
-                cursor: pointer;
-                transition: var(--motion-transition-interactive);
-            }
-            .api-nav button {
-                min-height: 40px;
-                display: flex;
-                align-items: center;
-                gap: var(--space-2);
-                padding: 0 var(--space-2);
-                text-align: left;
-                font-size: var(--text-sm);
-            }
-            .api-nav button:hover,
-            .lang-tabs button:hover {
-                background: var(--glass-solid-medium);
-                color: var(--text-primary);
-            }
-            .api-nav button[active],
-            .lang-tabs button[active] {
-                background: var(--glass-solid-strong);
-                color: var(--accent);
-                border-color: var(--border-medium);
+            .mode-tabs,
+            .lang-tabs,
+            .response-tabs {
+                min-width: 0;
             }
             .endpoint-card {
                 display: grid;
@@ -459,82 +434,23 @@ export class FlowsApiConsoleModal extends PlatformModal {
                 margin-bottom: var(--space-2);
             }
             .lang-tabs {
-                display: inline-flex;
-                gap: 2px;
-                padding: 3px;
-                border-radius: var(--radius-md);
-                border: 1px solid var(--border-subtle);
-                background: var(--glass-solid-medium);
+                flex-shrink: 0;
             }
-            .lang-tabs button {
-                min-height: 30px;
-                padding: 0 var(--space-2);
-                font-size: var(--text-xs);
-            }
-            .mode-tabs {
-                display: grid;
-                grid-template-columns: repeat(3, minmax(0, 1fr));
-                gap: 2px;
-                padding: 3px;
-                border-radius: var(--radius-md);
-                border: 1px solid var(--border-subtle);
-                background: var(--glass-solid-medium);
-            }
-            .mode-tabs button {
-                min-height: 34px;
-                padding: 0 var(--space-2);
-                border: 1px solid transparent;
-                border-radius: var(--radius-sm);
-                background: transparent;
-                color: var(--text-secondary);
-                cursor: pointer;
-                display: inline-flex;
-                align-items: center;
-                justify-content: center;
-                gap: var(--space-1);
-                font-size: var(--text-xs);
-                transition: var(--motion-transition-interactive);
-            }
-            .mode-tabs button:hover {
-                background: var(--glass-solid-medium);
-                color: var(--text-primary);
-            }
-            .mode-tabs button[active] {
-                background: var(--glass-solid-strong);
-                color: var(--accent);
-                border-color: var(--border-medium);
-            }
-            .mode-grid {
-                display: grid;
-                grid-template-columns: repeat(3, minmax(0, 1fr));
-                gap: var(--space-2);
-            }
-            .mode-card {
-                border: 1px solid var(--border-subtle);
-                border-radius: var(--radius-md);
-                background: var(--glass-solid-medium);
-                padding: var(--space-3);
+            .mode-docs {
                 display: grid;
                 gap: var(--space-2);
+                margin-top: var(--space-3);
             }
-            .mode-card[active] {
-                border-color: var(--accent);
-                background: var(--glass-solid-strong);
+            .mode-doc[hidden] {
+                display: none;
             }
-            .mode-card b {
-                display: flex;
-                align-items: center;
-                gap: var(--space-2);
-                color: var(--text-primary);
-                font-size: var(--text-sm);
-            }
-            .mode-card code {
+            .mode-doc code {
                 font-family: var(--font-mono);
                 font-size: var(--text-xs);
                 color: var(--accent);
             }
-            .mode-card p {
-                margin: 0;
+            .mode-doc p {
+                margin: var(--space-2) 0 0;
                 color: var(--text-secondary);
                 font-size: var(--text-sm);
                 line-height: 1.45;
@@ -615,33 +531,13 @@ export class FlowsApiConsoleModal extends PlatformModal {
                 display: grid;
                 gap: var(--space-3);
             }
-            .run-textarea-label {
+            .run-field-label {
                 display: block;
                 margin-bottom: var(--space-1);
                 color: var(--text-tertiary);
                 font-size: var(--text-xs);
                 text-transform: uppercase;
                 letter-spacing: 0;
-            }
-            .run-textarea {
-                width: 100%;
-                min-height: 128px;
-                resize: vertical;
-                border-radius: var(--radius-md);
-                border: 1px solid var(--border-subtle);
-                background: var(--bg-elevated);
-                color: var(--text-primary);
-                padding: var(--space-2);
-                box-sizing: border-box;
-                font: inherit;
-                font-family: var(--font-mono);
-                font-size: var(--text-xs);
-                line-height: 1.5;
-            }
-            .run-textarea:focus {
-                outline: none;
-                border-color: var(--accent);
-                box-shadow: var(--focus-ring);
             }
             .run-actions {
                 display: flex;
@@ -660,24 +556,15 @@ export class FlowsApiConsoleModal extends PlatformModal {
                 display: grid;
                 gap: var(--space-3);
             }
-            .api-panel {
-                min-width: 0;
-                border: 1px solid var(--border-subtle);
+            .content-panel {
                 border-radius: var(--radius-md);
-                background: var(--glass-solid-subtle);
-                overflow: hidden;
             }
-            .api-panel-head {
+            .content-panel-head {
                 min-height: 46px;
-                display: flex;
-                align-items: center;
-                justify-content: space-between;
-                gap: var(--space-2);
                 padding: var(--space-2) var(--space-3);
-                border-bottom: 1px solid var(--border-subtle);
                 background: var(--glass-solid-medium);
             }
-            .api-panel-title {
+            .content-panel-title {
                 min-width: 0;
                 display: flex;
                 align-items: center;
@@ -686,12 +573,13 @@ export class FlowsApiConsoleModal extends PlatformModal {
                 font-weight: var(--font-semibold);
                 font-size: var(--text-sm);
             }
-            .api-panel-title span {
+            .content-panel-title span {
                 overflow: hidden;
                 text-overflow: ellipsis;
                 white-space: nowrap;
             }
-            .api-panel-body {
+            .content-panel-body.run-form,
+            .content-panel-body {
                 min-width: 0;
                 display: grid;
                 gap: var(--space-3);
@@ -796,36 +684,7 @@ export class FlowsApiConsoleModal extends PlatformModal {
                 overflow-wrap: anywhere;
             }
             .response-tabs {
-                display: flex;
-                flex-wrap: wrap;
-                gap: var(--space-1);
-                padding: 3px;
-                border-radius: var(--radius-md);
-                border: 1px solid var(--border-subtle);
-                background: var(--glass-solid-medium);
-            }
-            .response-tabs button {
-                min-height: 30px;
-                padding: 0 var(--space-2);
-                border: 1px solid transparent;
-                border-radius: var(--radius-sm);
-                background: transparent;
-                color: var(--text-secondary);
-                cursor: pointer;
-                display: inline-flex;
-                align-items: center;
-                gap: var(--space-1);
-                font-size: var(--text-xs);
-                transition: var(--motion-transition-interactive);
-            }
-            .response-tabs button:hover {
-                background: var(--glass-solid-medium);
-                color: var(--text-primary);
-            }
-            .response-tabs button[active] {
-                background: var(--glass-solid-strong);
-                color: var(--accent);
-                border-color: var(--border-medium);
+                margin-bottom: var(--space-2);
             }
             .run-result {
                 display: grid;
@@ -882,8 +741,7 @@ export class FlowsApiConsoleModal extends PlatformModal {
                     grid-template-columns: minmax(0, 1fr);
                 }
                 .metric-grid,
-                .steps,
-                .mode-grid {
+                .steps {
                     grid-template-columns: minmax(0, 1fr);
                 }
                 .api-side {
@@ -1088,12 +946,12 @@ export class FlowsApiConsoleModal extends PlatformModal {
     _examples() {
         const mode = this._mode;
         const body = this._sampleBody(mode);
-        const bodyText = _jsonPretty(body);
+        const bodyText = formatJsonPretty(body);
         const endpoint = this._endpointUrl();
         const flowId = typeof this.flowId === 'string' && this.flowId.length > 0 ? this.flowId : 'your_flow_id';
         const baseUrl = endpoint.replace(this._endpointPath(), '');
         const accept = _acceptForMode(mode);
-        const tasksGetBodyText = _jsonPretty(this._tasksGetBody());
+        const tasksGetBodyText = formatJsonPretty(this._tasksGetBody());
         const asyncCurlSuffix = mode === 'async'
             ? `
 
@@ -1340,27 +1198,37 @@ ${jsRequest}${asyncJsSuffix}`,
                 variant="ghost"
                 density="compact"
                 aria-label=${this.t('api_console.copy_body')}
-                @click=${() => this._copy(_jsonPretty(this._sampleBody()))}
+                @click=${() => this._copy(formatJsonPretty(this._sampleBody()))}
             >
                 <platform-icon name="copy" size="16"></platform-icon>
             </platform-button>
         `;
     }
 
+    _navIcon(key) {
+        if (key === 'run') return 'play';
+        if (key === 'fields') return 'table';
+        if (key === 'examples') return 'code';
+        return 'book-open';
+    }
+
     _renderNav() {
         return html`
-            <div class="api-nav">
-                ${TAB_KEYS.map((key) => html`
-                    <button
-                        type="button"
-                        ?active=${this._activeTab === key}
-                        @click=${() => this._setTab(key)}
-                    >
-                        <platform-icon name=${key === 'run' ? 'play' : key === 'fields' ? 'table' : key === 'examples' ? 'code' : 'book-open'} size="15"></platform-icon>
-                        ${this.t(`api_console.tab_${key}`)}
-                    </button>
-                `)}
-            </div>
+            <platform-segmented-control
+                class="api-nav"
+                orientation="vertical"
+                full-width
+                density="compact"
+                .value=${this._activeTab}
+                .items=${TAB_KEYS.map((key) => ({
+                    value: key,
+                    icon: this._navIcon(key),
+                    label: this.t(`api_console.tab_${key}`),
+                    title: this.t(`api_console.tab_${key}`),
+                }))}
+                aria-label=${this.t('api_console.nav_aria')}
+                @change=${(e) => this._setTab(e.detail.value)}
+            ></platform-segmented-control>
         `;
     }
 
@@ -1389,31 +1257,41 @@ ${jsRequest}${asyncJsSuffix}`,
 
     _renderModeSelector() {
         return html`
-            <div class="mode-tabs" role="tablist" aria-label=${this.t('api_console.mode_tabs_aria')}>
-                ${MODE_KEYS.map((mode) => html`
-                    <button
-                        type="button"
-                        role="tab"
-                        ?active=${this._mode === mode}
-                        @click=${() => this._setMode(mode)}
-                    >
-                        <platform-icon name=${mode === 'stream' ? 'radio' : mode === 'sync' ? 'send' : 'clock'} size="13"></platform-icon>
-                        ${this.t(`api_console.mode_${mode}`)}
-                    </button>
-                `)}
-            </div>
+            <platform-segmented-control
+                class="mode-tabs"
+                full-width
+                density="compact"
+                .value=${this._mode}
+                .items=${MODE_KEYS.map((mode) => ({
+                    value: mode,
+                    icon: mode === 'stream' ? 'radio' : mode === 'sync' ? 'send' : 'clock',
+                    label: this.t(`api_console.mode_${mode}`),
+                    title: this.t(`api_console.mode_${mode}`),
+                }))}
+                aria-label=${this.t('api_console.mode_tabs_aria')}
+                @change=${(e) => this._setMode(e.detail.value)}
+            ></platform-segmented-control>
         `;
     }
 
     _renderModeCards() {
         return html`
-            <div class="mode-grid">
+            <platform-segmented-control
+                full-width
+                density="compact"
+                .value=${this._mode}
+                .items=${MODE_KEYS.map((mode) => ({
+                    value: mode,
+                    icon: mode === 'stream' ? 'radio' : mode === 'sync' ? 'send' : 'clock',
+                    label: this.t(`api_console.mode_${mode}_title`),
+                    title: this.t(`api_console.mode_${mode}_title`),
+                }))}
+                aria-label=${this.t('api_console.mode_tabs_aria')}
+                @change=${(e) => this._setMode(e.detail.value)}
+            ></platform-segmented-control>
+            <div class="mode-docs">
                 ${MODE_KEYS.map((mode) => html`
-                    <div class="mode-card" ?active=${this._mode === mode}>
-                        <b>
-                            <platform-icon name=${mode === 'stream' ? 'radio' : mode === 'sync' ? 'send' : 'clock'} size="15"></platform-icon>
-                            ${this.t(`api_console.mode_${mode}_title`)}
-                        </b>
+                    <div class="mode-doc" ?hidden=${this._mode !== mode}>
                         <code>${_methodForMode(mode)}${mode === 'async' ? ' + execution_mode=async' : ''}</code>
                         <p>${this.t(`api_console.mode_${mode}_text`)}</p>
                     </div>
@@ -1500,16 +1378,18 @@ ${jsRequest}${asyncJsSuffix}`,
             ${this._renderHero()}
             <div class="section">
                 <div class="code-head">
-                    <div class="lang-tabs" role="tablist" aria-label=${this.t('api_console.examples_tabs_aria')}>
-                        ${LANG_KEYS.map((lang) => html`
-                            <button
-                                type="button"
-                                role="tab"
-                                ?active=${this._language === lang}
-                                @click=${() => this._setLanguage(lang)}
-                            >${this.t(`api_console.lang_${lang}`)}</button>
-                        `)}
-                    </div>
+                    <platform-segmented-control
+                        class="lang-tabs"
+                        density="compact"
+                        .value=${this._language}
+                        .items=${LANG_KEYS.map((lang) => ({
+                            value: lang,
+                            label: this.t(`api_console.lang_${lang}`),
+                            title: this.t(`api_console.lang_${lang}`),
+                        }))}
+                        aria-label=${this.t('api_console.examples_tabs_aria')}
+                        @change=${(e) => this._setLanguage(e.detail.value)}
+                    ></platform-segmented-control>
                     <platform-button variant="ghost" density="compact" @click=${() => this._copy(example)}>
                         <platform-icon name="copy" size="13"></platform-icon>
                         ${this.t('api_console.copy')}
@@ -1529,7 +1409,7 @@ ${jsRequest}${asyncJsSuffix}`,
                 <flows-code-editor
                     class="api-json-editor"
                     language="json"
-                    .value=${_jsonPretty(body)}
+                    .value=${formatJsonPretty(body)}
                     .readonly=${true}
                     .showToolbar=${false}
                     .fillParent=${true}
@@ -1541,7 +1421,7 @@ ${jsRequest}${asyncJsSuffix}`,
                 <flows-code-editor
                     class="api-code-editor short"
                     language="json"
-                    .value=${_jsonPretty({
+                    .value=${formatJsonPretty({
                     kind: 'file',
                     file: {
                         name: 'invoice.pdf',
@@ -1635,16 +1515,16 @@ ${jsRequest}${asyncJsSuffix}`,
 
     _renderRunControls() {
         return html`
-            <div class="api-panel">
-                <div class="api-panel-head">
-                    <div class="api-panel-title">
+            <div class="content-panel">
+                <div class="content-panel-head">
+                    <div class="content-panel-title">
                         <platform-icon name="play" size="15"></platform-icon>
                         <span>${this.t('api_console.run_title')}</span>
                     </div>
                 </div>
-                <div class="api-panel-body run-form">
+                <div class="content-panel-body run-form">
                     <div>
-                        <div class="run-textarea-label">${this.t('api_console.mode_label')}</div>
+                        <div class="run-field-label">${this.t('api_console.mode_label')}</div>
                         ${this._renderModeSelector()}
                     </div>
                     <platform-field
@@ -1666,7 +1546,7 @@ ${jsRequest}${asyncJsSuffix}`,
                         }}
                     ></platform-field>
                     <div>
-                        <div class="run-textarea-label">${this.t('api_console.run_variables_label')}</div>
+                        <div class="run-field-label">${this.t('api_console.run_variables_label')}</div>
                         <flows-code-editor
                             class="api-json-editor compact"
                             language="json"
@@ -1697,17 +1577,17 @@ ${jsRequest}${asyncJsSuffix}`,
     _renderRequestPreview() {
         const headers = _requestHeadersForMode(this._mode);
         return html`
-            <div class="api-panel">
-                <div class="api-panel-head">
-                    <div class="api-panel-title">
+            <div class="content-panel">
+                <div class="content-panel-head">
+                    <div class="content-panel-title">
                         <platform-icon name="file-json" size="15"></platform-icon>
                         <span>${this.t('api_console.request_preview_title')}</span>
                     </div>
-                    <platform-button variant="ghost" density="compact" @click=${() => this._copy(_jsonPretty(this._sampleBody()))}>
+                    <platform-button variant="ghost" density="compact" @click=${() => this._copy(formatJsonPretty(this._sampleBody()))}>
                         <platform-icon name="copy" size="13"></platform-icon>${this.t('api_console.copy')}
                     </platform-button>
                 </div>
-                <div class="api-panel-body">
+                <div class="content-panel-body">
                     <div class="request-header-grid">
                         <div class="request-header">
                             <span>${this.t('api_console.request_method')}</span>
@@ -1729,7 +1609,7 @@ ${jsRequest}${asyncJsSuffix}`,
                     <flows-code-editor
                         class="api-json-editor"
                         language="json"
-                        .value=${_jsonPretty(this._sampleBody())}
+                        .value=${formatJsonPretty(this._sampleBody())}
                         .readonly=${true}
                         .showToolbar=${false}
                         .fillParent=${true}
@@ -1833,7 +1713,7 @@ ${jsRequest}${asyncJsSuffix}`,
         const reasoningText = typeof result.reasoning_text === 'string' ? result.reasoning_text.trim() : '';
         return html`
             <div>
-                <div class="run-textarea-label">${this.t('api_console.assistant_text_title')}</div>
+                <div class="run-field-label">${this.t('api_console.assistant_text_title')}</div>
                 ${responseText.length > 0
                     ? html`<div class="assistant-response">${responseText}</div>`
                     : html`<div class="empty-note">${this.t('api_console.result_no_text')}</div>`}
@@ -1841,7 +1721,7 @@ ${jsRequest}${asyncJsSuffix}`,
             ${reasoningText.length > 0
                 ? html`
                     <div>
-                        <div class="run-textarea-label">${this.t('api_console.reasoning_text_title')}</div>
+                        <div class="run-field-label">${this.t('api_console.reasoning_text_title')}</div>
                         <div class="assistant-response">${reasoningText}</div>
                     </div>
                 `
@@ -1854,14 +1734,14 @@ ${jsRequest}${asyncJsSuffix}`,
         const errorText = typeof this._lastError === 'string' ? this._lastError : '';
         if (errorText.length > 0) {
             return html`
-                <div class="api-panel">
-                    <div class="api-panel-head">
-                        <div class="api-panel-title">
+                <div class="content-panel">
+                    <div class="content-panel-head">
+                        <div class="content-panel-title">
                             <platform-icon name="alert-triangle" size="15"></platform-icon>
                             <span>${this.t('api_console.result_title')}</span>
                         </div>
                     </div>
-                    <div class="api-panel-body">
+                    <div class="content-panel-body">
                         <div class="result-box error-box">${errorText}</div>
                     </div>
                 </div>
@@ -1869,14 +1749,14 @@ ${jsRequest}${asyncJsSuffix}`,
         }
         if (!result) {
             return html`
-                <div class="api-panel">
-                    <div class="api-panel-head">
-                        <div class="api-panel-title">
+                <div class="content-panel">
+                    <div class="content-panel-head">
+                        <div class="content-panel-title">
                             <platform-icon name="code" size="15"></platform-icon>
                             <span>${this.t('api_console.response_inspector_title')}</span>
                         </div>
                     </div>
-                    <div class="api-panel-body">
+                    <div class="content-panel-body">
                         <div class="empty-note">${this.t('api_console.result_empty')}</div>
                     </div>
                 </div>
@@ -1889,9 +1769,9 @@ ${jsRequest}${asyncJsSuffix}`,
         const language = view === 'raw' && typeof payload === 'string' ? 'text' : 'json';
         const editorClass = compact ? 'api-json-editor compact' : 'api-json-editor tall';
         return html`
-            <div class="api-panel response-inspector">
-                <div class="api-panel-head">
-                    <div class="api-panel-title">
+            <div class="content-panel response-inspector">
+                <div class="content-panel-head">
+                    <div class="content-panel-title">
                         <platform-icon name="code" size="15"></platform-icon>
                         <span>${this.t('api_console.response_inspector_title')}</span>
                     </div>
@@ -1899,22 +1779,23 @@ ${jsRequest}${asyncJsSuffix}`,
                         <platform-icon name="copy" size="13"></platform-icon>${this.t('api_console.copy')}
                     </platform-button>
                 </div>
-                <div class="api-panel-body">
+                <div class="content-panel-body">
                     ${this._renderStatusStrip(result)}
                     ${this._renderAssistantSummary(result)}
-                    <div class="response-tabs" role="tablist" aria-label=${this.t('api_console.response_tabs_aria')}>
-                        ${tabs.map((tab) => html`
-                            <button
-                                type="button"
-                                role="tab"
-                                ?active=${view === tab}
-                                @click=${() => this._setResultView(tab)}
-                            >
-                                <platform-icon name=${this._resultTabIcon(tab)} size="13"></platform-icon>
-                                ${this.t(`api_console.result_tab_${tab}`)}
-                            </button>
-                        `)}
-                    </div>
+                    <platform-segmented-control
+                        class="response-tabs"
+                        full-width
+                        density="compact"
+                        .value=${view}
+                        .items=${tabs.map((tab) => ({
+                            value: tab,
+                            icon: this._resultTabIcon(tab),
+                            label: this.t(`api_console.result_tab_${tab}`),
+                            title: this.t(`api_console.result_tab_${tab}`),
+                        }))}
+                        aria-label=${this.t('api_console.response_tabs_aria')}
+                        @change=${(e) => this._setResultView(e.detail.value)}
+                    ></platform-segmented-control>
                     <flows-code-editor
                         class=${editorClass}
                         language=${language}

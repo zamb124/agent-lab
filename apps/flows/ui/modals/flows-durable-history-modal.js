@@ -7,10 +7,12 @@ import { PlatformModal } from '@platform/lib/components/glass-modal.js';
 import { registerModalKind } from '@platform/lib/utils/modal-registry.js';
 import { platformConfirm } from '@platform/lib/components/platform-confirm-modal.js';
 import '@platform/lib/components/platform-button.js';
+import '@platform/lib/components/platform-segmented-control.js';
 import '@platform/lib/components/platform-icon.js';
 import '@platform/lib/components/platform-work-item-badge.js';
 import '@platform/lib/components/glass-spinner.js';
 import '../components/editors/flows-code-editor.js';
+import { formatJsonPretty } from '@platform/lib/utils/json-format.js';
 
 const NODE_FAILED_EVENT_TYPE = 'NodeFailed';
 
@@ -377,17 +379,9 @@ export class FlowsDurableHistoryModal extends PlatformModal {
                 justify-content: flex-end;
                 gap: var(--space-2);
             }
-            .detail-actions platform-button {
-                --platform-button-icon-size: 34px;
-                --platform-button-icon-radius: var(--radius-full);
-            }
             .detail-tabs {
-                display: flex;
-                gap: var(--space-1);
                 padding: var(--space-2) var(--space-3);
                 border-bottom: 1px solid var(--border-subtle);
-                overflow-x: auto;
-                flex-wrap: wrap;
             }
             .detail-content {
                 flex: 1 1 auto;
@@ -653,7 +647,7 @@ export class FlowsDurableHistoryModal extends PlatformModal {
         });
         const state = requireRecord(result, 'state projection');
         this._stateJson = state;
-        this._stateEditText = JSON.stringify(state, null, 2);
+        this._stateEditText = formatJsonPretty(state);
         this._selectedTab = 'state';
     }
 
@@ -681,7 +675,7 @@ export class FlowsDurableHistoryModal extends PlatformModal {
             return;
         }
         try {
-            await navigator.clipboard.writeText(JSON.stringify(this._anchorFor(event), null, 2));
+            await navigator.clipboard.writeText(formatJsonPretty(this._anchorFor(event)));
             this.toast('flows:durable_history_modal.toast_anchor_copied', { type: 'success' });
         } catch (err) {
             this.toast('flows:durable_history_modal.toast_copy_failed', {
@@ -951,16 +945,13 @@ export class FlowsDurableHistoryModal extends PlatformModal {
         };
     }
 
-    _renderTabButton(tab, labelKey) {
-        return html`
-            <platform-button
-                variant=${this._selectedTab === tab ? 'secondary' : 'ghost'}
-                density="compact"
-                @click=${() => { this._selectedTab = tab; }}
-            >
-                ${this.t(labelKey)}
-            </platform-button>
-        `;
+    _detailTabItems() {
+        return [
+            { value: 'payload', label: this.t('durable_history_modal.tab_payload') },
+            { value: 'delta', label: this.t('durable_history_modal.tab_delta') },
+            { value: 'state', label: this.t('durable_history_modal.tab_state') },
+            { value: 'command', label: this.t('durable_history_modal.tab_command') },
+        ];
     }
 
     _renderDetailContent() {
@@ -992,7 +983,7 @@ export class FlowsDurableHistoryModal extends PlatformModal {
             `;
         }
         const value = this._detailJsonValue();
-        const json = value === null ? '' : JSON.stringify(value, null, 2);
+        const json = value === null ? '' : formatJsonPretty(value);
         return html`
             <flows-code-editor
                 language="json"
@@ -1081,12 +1072,14 @@ export class FlowsDurableHistoryModal extends PlatformModal {
                         </platform-button>
                     </div>
                 </div>
-                <div class="detail-tabs">
-                    ${this._renderTabButton('payload', 'durable_history_modal.tab_payload')}
-                    ${this._renderTabButton('delta', 'durable_history_modal.tab_delta')}
-                    ${this._renderTabButton('state', 'durable_history_modal.tab_state')}
-                    ${this._renderTabButton('command', 'durable_history_modal.tab_command')}
-                </div>
+                <platform-segmented-control
+                    class="detail-tabs"
+                    density="compact"
+                    .value=${this._selectedTab}
+                    .items=${this._detailTabItems()}
+                    aria-label=${this.t('durable_history_modal.detail_tabs_aria')}
+                    @change=${(e) => { this._selectedTab = e.detail.value; }}
+                ></platform-segmented-control>
                 <div class="detail-content">${this._renderDetailContent()}</div>
             </section>
         `;

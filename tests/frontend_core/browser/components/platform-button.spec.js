@@ -35,6 +35,19 @@ describe('platform-button', () => {
         expect(el.shadowRoot.querySelector('button.danger')).to.exist;
     });
 
+    it('ghost + danger выбирает ghost-danger (menu/toolbar destructive)', async () => {
+        const el = await fixture(html`<platform-button variant="ghost" danger>x</platform-button>`);
+        expect(el.shadowRoot.querySelector('button.ghost-danger')).to.exist;
+        expect(el.shadowRoot.querySelector('button.danger')).to.equal(null);
+    });
+
+    it('block растягивает кнопку на ширину контейнера', async () => {
+        const el = await fixture(html`<platform-button block variant="ghost">Menu item</platform-button>`);
+        expect(el.hasAttribute('block')).to.equal(true);
+        const button = el.shadowRoot.querySelector('button');
+        expect(button.classList.contains('ghost')).to.equal(true);
+    });
+
     it('icon-only прокидывает accessible label во внутреннюю кнопку', async () => {
         const el = await fixture(html`
             <platform-button icon-only aria-label="Apply">
@@ -44,6 +57,16 @@ describe('platform-button', () => {
         const button = el.shadowRoot.querySelector('button');
         expect(button.getAttribute('aria-label')).to.equal('Apply');
         expect(button.getAttribute('title')).to.equal('Apply');
+    });
+
+    it('icon-only compact uses 32px chrome control size', async () => {
+        const el = await fixture(html`
+            <platform-button icon-only density="compact" aria-label="Action">
+                <span>x</span>
+            </platform-button>
+        `);
+        const height = el.shadowRoot.querySelector('button').getBoundingClientRect().height;
+        expect(height).to.be.closeTo(32, 1);
     });
 });
 

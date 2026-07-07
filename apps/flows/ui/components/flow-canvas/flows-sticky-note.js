@@ -53,13 +53,11 @@ export class FlowsStickyNote extends PlatformElement {
                 height: 100%;
                 box-sizing: border-box;
                 border-radius: var(--radius-md);
-                box-shadow:
-                    inset 0 1px 0 rgba(255, 255, 255, 0.16),
-                    inset 0 -1px 0 rgba(0, 0, 0, 0.04);
+                box-shadow: var(--flows-canvas-sticky-inset);
                 border: 1px solid color-mix(in oklab, var(--sticky-accent) 20%, var(--border-subtle));
                 background:
                     linear-gradient(180deg, color-mix(in oklab, var(--sticky-accent) 7%, transparent), transparent 58%),
-                    color-mix(in oklab, var(--bg-elevated) 90%, var(--sticky-accent) 10%);
+                    var(--flows-canvas-sticky-surface);
                 position: relative;
                 overflow: hidden;
             }

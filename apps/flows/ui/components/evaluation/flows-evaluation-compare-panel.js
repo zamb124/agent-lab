@@ -1,8 +1,10 @@
 import { html, css } from 'lit';
 import { PlatformElement } from '@platform/lib/platform-element/index.js';
+import { panelShellStyles } from '@platform/lib/styles/shared/panel-shell.styles.js';
 import '@platform/lib/components/platform-icon.js';
 import '@platform/lib/components/platform-button.js';
 import '@platform/lib/components/platform-help-hint.js';
+import '@platform/lib/components/platform-segmented-control.js';
 
 function asArray(value) {
     return Array.isArray(value) ? value : [];
@@ -39,34 +41,13 @@ export class FlowsEvaluationComparePanel extends PlatformElement {
 
     static styles = [
         PlatformElement.styles,
+        panelShellStyles,
         css`
             :host {
                 display: flex;
                 min-width: 0;
                 min-height: 0;
                 color: var(--text-primary);
-            }
-
-            .panel {
-                flex: 1;
-                min-width: 0;
-                min-height: 0;
-                display: flex;
-                flex-direction: column;
-                border: 1px solid var(--border-subtle);
-                border-radius: var(--radius-xl);
-                background: var(--glass-solid-subtle);
-                overflow: hidden;
-            }
-
-            .head {
-                display: flex;
-                align-items: center;
-                justify-content: space-between;
-                gap: var(--space-3);
-                padding: var(--space-3) var(--space-4);
-                border-bottom: 1px solid var(--border-subtle);
-                background: linear-gradient(180deg, color-mix(in srgb, var(--glass-solid-medium), transparent 8%), transparent);
             }
 
             .title {
@@ -98,8 +79,7 @@ export class FlowsEvaluationComparePanel extends PlatformElement {
                 padding-bottom: var(--space-1);
             }
 
-            .run-chip,
-            .judge-btn {
+            .run-chip {
                 min-height: 34px;
                 display: inline-flex;
                 align-items: center;
@@ -117,8 +97,7 @@ export class FlowsEvaluationComparePanel extends PlatformElement {
                 white-space: nowrap;
             }
 
-            .run-chip:hover,
-            .judge-btn:hover {
+            .run-chip:hover {
                 color: var(--text-primary);
                 background: var(--glass-solid-medium);
             }
@@ -137,9 +116,9 @@ export class FlowsEvaluationComparePanel extends PlatformElement {
                 flex-wrap: wrap;
             }
 
-            .judge-btn:disabled {
-                opacity: 0.45;
-                cursor: not-allowed;
+            .judge-row platform-segmented-control {
+                flex: 1 1 100%;
+                min-width: 0;
             }
 
             .diff-list {
@@ -218,13 +197,40 @@ export class FlowsEvaluationComparePanel extends PlatformElement {
         this.emit('pairwise-judge-request', { mode, preference });
     }
 
+    _judgeItems(compareEnabled) {
+        return [
+            { value: 'left_wins', label: this.t('evaluation.compare.left_wins'), disabled: !compareEnabled },
+            { value: 'tie', label: this.t('evaluation.compare.tie'), disabled: !compareEnabled },
+            { value: 'right_wins', label: this.t('evaluation.compare.right_wins'), disabled: !compareEnabled },
+            { value: 'llm_pairwise', label: this.t('evaluation.compare.llm_pairwise'), icon: 'sparkles', disabled: !compareEnabled },
+        ];
+    }
+
+    _onJudgeChange(value) {
+        if (value === 'left_wins') {
+            this._pairwise('human', 'left');
+            return;
+        }
+        if (value === 'right_wins') {
+            this._pairwise('human', 'right');
+            return;
+        }
+        if (value === 'llm_pairwise') {
+            this._pairwise('llm', 'tie');
+            return;
+        }
+        if (value === 'tie') {
+            this._pairwise('human', 'tie');
+        }
+    }
+
     render() {
         const runs = asArray(this.runs);
         const compareEnabled = this.selectedRunId.length > 0 && this.selectedCompareRunId.length > 0 && this.selectedRunId !== this.selectedCompareRunId;
         const cases = this._compareCases();
         return html`
-            <section class="panel">
-                <div class="head">
+            <section class="content-panel">
+                <div class="content-panel-head">
                     <div class="title">
                         <platform-icon name="git-compare" size="16"></platform-icon>
                         ${this.t('evaluation.compare.title')}
@@ -250,22 +256,16 @@ export class FlowsEvaluationComparePanel extends PlatformElement {
                         </platform-button>
                     </div>
                     <div class="judge-row">
-                        <button class="judge-btn" type="button" ?disabled=${!compareEnabled} @click=${() => this._pairwise('human', 'left')}>
-                            ${this.t('evaluation.compare.left_wins')}
-                        </button>
-                        <button class="judge-btn" type="button" ?disabled=${!compareEnabled} @click=${() => this._pairwise('human', 'tie')}>
-                            ${this.t('evaluation.compare.tie')}
-                        </button>
-                        <button class="judge-btn" type="button" ?disabled=${!compareEnabled} @click=${() => this._pairwise('human', 'right')}>
-                            ${this.t('evaluation.compare.right_wins')}
-                        </button>
-                        <button class="judge-btn" type="button" ?disabled=${!compareEnabled} @click=${() => this._pairwise('llm', 'tie')}>
-                            <platform-icon name="sparkles" size="14"></platform-icon>
-                            ${this.t('evaluation.compare.llm_pairwise')}
-                        </button>
+                        <platform-segmented-control
+                            full-width
+                            density="compact"
+                            .items=${this._judgeItems(compareEnabled)}
+                            aria-label=${this.t('evaluation.compare.judge_aria')}
+                            @change=${(event) => this._onJudgeChange(event.detail.value)}
+                        ></platform-segmented-control>
                     </div>
                     <div class="diff-list">
-                        ${cases.length > 0 ? cases.map((item) => this._renderDiff(item)) : html`<div class="empty">${this.t('evaluation.compare.empty')}</div>`}
+                        ${cases.length > 0 ? cases.map((item) => this._renderDiff(item)) : html`<div class="content-panel-empty">${this.t('evaluation.compare.empty')}</div>`}
                     </div>
                 </div>
             </section>

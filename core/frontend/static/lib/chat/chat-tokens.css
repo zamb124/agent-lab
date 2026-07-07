@@ -1,0 +1,76 @@
+/**
+ * Platform chat theme tokens — единый источник палитры для <platform-chat>.
+ * SPA: @import из tokens.css. Внешний embed: inject через embed-autoload.js.
+ */
+
+:root {
+    --platform-chat-radius: 25px;
+    --platform-chat-drawer-radius: 25px;
+
+    --platform-chat-text: var(--text-primary, rgba(255, 255, 255, 0.92));
+    --platform-chat-muted: var(--text-tertiary, rgba(255, 255, 255, 0.52));
+    --platform-chat-border: var(--border-default, rgba(255, 255, 255, 0.11));
+    --platform-chat-surface: var(--glass-solid-medium, rgba(35, 35, 55, 0.85));
+    --platform-chat-surface-subtle: var(--glass-solid-subtle, rgba(28, 28, 46, 0.75));
+    --platform-chat-surface-hover: var(--glass-tint-strong, rgba(255, 255, 255, 0.14));
+
+    --platform-chat-accent: var(--accent, #99a6f9);
+    --platform-chat-accent-hover: var(--accent-hover, #8794f0);
+    --platform-chat-on-accent: var(--text-inverse, #0f0f12);
+    --platform-chat-accent-muted: var(--accent-subtle, rgba(153, 166, 249, 0.28));
+
+    --platform-chat-input-bg: rgba(0, 0, 0, 0.22);
+    --platform-chat-composer-bg: var(--glass-solid-subtle, rgba(255, 255, 255, 0.06));
+    --platform-chat-page-bg: transparent;
+    --platform-chat-interrupt-bg: var(--accent-subtle, rgba(153, 166, 249, 0.1));
+
+    --platform-chat-panel-bg: var(--glass-solid-strong, rgba(40, 40, 64, 0.92));
+    --platform-chat-panel-border: var(--glass-border-subtle, rgba(255, 255, 255, 0.08));
+    --platform-chat-panel-shadow: var(
+        --glass-shadow-strong,
+        0 16px 48px rgba(0, 0, 0, 0.4),
+        0 4px 16px rgba(0, 0, 0, 0.25)
+    );
+
+    --platform-chat-drawer-fab-bg: var(--accent, #99a6f9);
+    --platform-chat-drawer-fab-fg: var(--text-inverse, #0f0f12);
+    --platform-chat-drawer-fab-border: var(--glass-border-medium, rgba(255, 255, 255, 0.14));
+    --platform-chat-drawer-fab-bg-hover: var(--accent-hover, #8794f0);
+    --platform-chat-drawer-fab-shadow: 0 1px 4px rgba(0, 0, 0, 0.28);
+
+    --platform-chat-drawer-close-bg: transparent;
+    --platform-chat-drawer-close-fg: var(--text-secondary, rgba(255, 255, 255, 0.85));
+    --platform-chat-drawer-close-hover: var(--glass-tint-strong, rgba(255, 255, 255, 0.08));
+}
+
+platform-chat[data-embed-theme='light'] {
+    --platform-chat-text: #1c1f2e;
+    --platform-chat-muted: rgba(28, 31, 46, 0.52);
+    --platform-chat-border: rgba(28, 31, 46, 0.1);
+    --platform-chat-surface: rgba(28, 31, 46, 0.05);
+    --platform-chat-surface-subtle: #f2f3f8;
+    --platform-chat-surface-hover: rgba(28, 31, 46, 0.08);
+
+    --platform-chat-accent: #6d62e8;
+    --platform-chat-accent-hover: #5a50d4;
+    --platform-chat-on-accent: #ffffff;
+    --platform-chat-accent-muted: rgba(109, 98, 232, 0.2);
+
+    --platform-chat-input-bg: rgba(255, 255, 255, 0.92);
+    --platform-chat-composer-bg: #f2f3f8;
+    --platform-chat-interrupt-bg: rgba(109, 98, 232, 0.1);
+
+    --platform-chat-panel-bg: rgba(255, 255, 255, 0.98);
+    --platform-chat-panel-border: rgba(28, 31, 46, 0.08);
+    --platform-chat-panel-shadow: 0 24px 64px rgba(22, 26, 38, 0.12);
+
+    --platform-chat-drawer-fab-border: rgba(109, 98, 232, 0.35);
+    --platform-chat-drawer-fab-bg: linear-gradient(145deg, #f0edff 0%, #e2e8ff 100%);
+    --platform-chat-drawer-fab-bg-hover: linear-gradient(145deg, #e6e2fc 0%, #d8e0fc 100%);
+    --platform-chat-drawer-fab-fg: #1c1f2e;
+    --platform-chat-drawer-fab-shadow: 0 10px 32px rgba(60, 50, 140, 0.18);
+
+    --platform-chat-drawer-close-bg: rgba(28, 31, 46, 0.04);
+    --platform-chat-drawer-close-fg: rgba(28, 31, 46, 0.75);
+    --platform-chat-drawer-close-hover: rgba(28, 31, 46, 0.08);
+}

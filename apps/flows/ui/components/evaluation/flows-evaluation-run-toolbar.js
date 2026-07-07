@@ -1,8 +1,10 @@
 import { html, css } from 'lit';
 import { PlatformElement } from '@platform/lib/platform-element/index.js';
+import { toolbarShellStyles } from '@platform/lib/styles/shared/toolbar-shell.styles.js';
 import '@platform/lib/components/platform-icon.js';
 import '@platform/lib/components/platform-button.js';
 import '@platform/lib/components/platform-help-hint.js';
+import '@platform/lib/components/platform-segmented-control.js';
 
 function stringValue(record, field) {
     if (!record || typeof record !== 'object') {
@@ -43,23 +45,11 @@ export class FlowsEvaluationRunToolbar extends PlatformElement {
 
     static styles = [
         PlatformElement.styles,
+        toolbarShellStyles,
         css`
             :host {
                 display: block;
                 color: var(--text-primary);
-            }
-
-            .toolbar {
-                display: grid;
-                grid-template-columns: minmax(220px, 1fr) auto auto auto;
-                align-items: center;
-                gap: var(--space-2);
-                min-height: 54px;
-                padding: 7px;
-                border: 1px solid color-mix(in srgb, var(--border-subtle), transparent 8%);
-                border-radius: 22px;
-                background: color-mix(in srgb, var(--bg-surface), transparent 4%);
-                box-shadow: 0 10px 30px color-mix(in srgb, var(--shadow-color), transparent 88%);
             }
 
             .context {
@@ -113,25 +103,15 @@ export class FlowsEvaluationRunToolbar extends PlatformElement {
                 position: relative;
             }
 
-            .segmented {
-                display: inline-flex;
-                gap: 2px;
-                padding: 3px;
-                border-radius: 18px;
-                border: 1px solid var(--border-subtle);
-                background: color-mix(in srgb, var(--bg-surface), transparent 18%);
+            .scope-segment {
+                flex: 1 1 180px;
+                min-width: 0;
             }
 
-            .actions platform-button {
-                --platform-button-icon-size: 34px;
-            }
-
-            .segmented button,
-            .template-btn,
             .docs-link,
             .template-item,
             .step-btn {
-                min-height: 34px;
+                min-height: var(--flows-chrome-control-size);
                 display: inline-flex;
                 align-items: center;
                 justify-content: center;
@@ -146,22 +126,10 @@ export class FlowsEvaluationRunToolbar extends PlatformElement {
                 transition: var(--motion-transition-interactive);
             }
 
-            .segmented button {
-                padding: 0 var(--space-3);
-            }
-
-            .segmented button:hover,
-            .template-btn:hover,
             .template-item:hover,
             .step-btn:hover {
                 color: var(--text-primary);
                 background: var(--glass-solid-medium);
-            }
-
-            .segmented button[data-active="true"] {
-                color: var(--text-primary);
-                background: var(--glass-solid-strong);
-                box-shadow: var(--glass-shadow-subtle);
             }
 
             .numbers {
@@ -169,7 +137,7 @@ export class FlowsEvaluationRunToolbar extends PlatformElement {
             }
 
             .stepper {
-                height: 38px;
+                height: var(--flows-chrome-control-size);
                 min-width: 92px;
                 display: grid;
                 grid-template-columns: 1fr auto;
@@ -219,12 +187,6 @@ export class FlowsEvaluationRunToolbar extends PlatformElement {
                 border-radius: 7px;
                 border-color: transparent;
                 color: var(--text-tertiary);
-            }
-
-            .template-btn {
-                padding: 0 var(--space-3);
-                border-color: var(--border-subtle);
-                background: var(--glass-solid-subtle);
             }
 
             .docs-link {
@@ -329,7 +291,6 @@ export class FlowsEvaluationRunToolbar extends PlatformElement {
                 line-height: 1.35;
             }
 
-            .template-btn:disabled,
             .template-item:disabled {
                 opacity: 0.45;
                 cursor: not-allowed;
@@ -400,6 +361,22 @@ export class FlowsEvaluationRunToolbar extends PlatformElement {
         this.emit('scope-change', { scope });
     }
 
+    _scopeItems(caseScopeDisabled) {
+        return [
+            {
+                value: 'suite',
+                label: this.t('evaluation.toolbar.scope_suite'),
+                icon: 'database',
+            },
+            {
+                value: 'selected_case',
+                label: this.t('evaluation.toolbar.scope_case'),
+                icon: 'target',
+                disabled: caseScopeDisabled,
+            },
+        ];
+    }
+
     _stepTrials(delta) {
         const next = Math.max(1, Math.trunc(this.trials) + delta);
         this.emit('options-change', { trials: next, max_concurrency: this.maxConcurrency });
@@ -450,7 +427,7 @@ export class FlowsEvaluationRunToolbar extends PlatformElement {
         const passed = numberValue(this.selectedRun, 'passed_cases');
         const failed = numberValue(this.selectedRun, 'failed_cases');
         return html`
-            <div class="toolbar">
+            <div class="toolbar-shell">
                 <div class="context">
                     <platform-icon name="science" size="18"></platform-icon>
                     <div class="context-main">
@@ -473,10 +450,10 @@ export class FlowsEvaluationRunToolbar extends PlatformElement {
                         <platform-icon name="book-open" size="14"></platform-icon>
                         ${this.t('evaluation.toolbar.docs')}
                     </a>
-                    <button class="template-btn" type="button" ?disabled=${suiteDisabled || this.busy} @click=${this._toggleTemplates}>
+                    <platform-button variant="secondary" density="compact" ?disabled=${suiteDisabled || this.busy} @click=${this._toggleTemplates}>
                         <platform-icon name="plus" size="14"></platform-icon>
                         ${this.t('evaluation.templates.button')}
-                    </button>
+                    </platform-button>
                     <platform-help-hint
                         .text=${this.t('evaluation.hints.templates')}
                         .label=${this.t('evaluation.hints.templates_label')}
@@ -486,20 +463,15 @@ export class FlowsEvaluationRunToolbar extends PlatformElement {
                 </div>
 
                 <div class="scope">
-                    <div class="segmented">
-                        <button type="button" data-active=${this.runScope === 'suite' ? 'true' : 'false'} @click=${() => this._setScope('suite')}>
-                            <platform-icon name="database" size="14"></platform-icon>
-                            ${this.t('evaluation.toolbar.scope_suite')}
-                        </button>
-                        <button
-                            type="button"
-                            data-active=${this.runScope === 'selected_case' ? 'true' : 'false'}
-                            ?disabled=${caseScopeDisabled}
-                            @click=${() => this._setScope('selected_case')}
-                        >
-                            <platform-icon name="target" size="14"></platform-icon>
-                            ${this.t('evaluation.toolbar.scope_case')}
-                        </button>
+                    <div class="scope-segment">
+                        <platform-segmented-control
+                            full-width
+                            density="compact"
+                            .value=${this.runScope}
+                            .items=${this._scopeItems(caseScopeDisabled)}
+                            aria-label=${this.t('evaluation.toolbar.scope_aria')}
+                            @change=${(event) => this._setScope(event.detail.value)}
+                        ></platform-segmented-control>
                     </div>
                     <platform-help-hint
                         .text=${this.t('evaluation.hints.run_scope')}
@@ -565,9 +537,16 @@ export class FlowsEvaluationRunToolbar extends PlatformElement {
                         <strong>${this.t('evaluation.templates.menu_title')}</strong>
                         <span>${this.t('evaluation.templates.menu_subtitle')}</span>
                     </span>
-                    <button class="step-btn" type="button" title=${this.t('evaluation.templates.close')} @click=${this._closeTemplates}>
+                    <platform-button
+                        variant="ghost"
+                        icon-only
+                        density="compact"
+                        title=${this.t('evaluation.templates.close')}
+                        aria-label=${this.t('evaluation.templates.close')}
+                        @click=${this._closeTemplates}
+                    >
                         <platform-icon name="close" size="12"></platform-icon>
-                    </button>
+                    </platform-button>
                 </div>
                 ${groups.map(([groupId, label]) => this._renderTemplateGroup(groupId, label, templates))}
             </div>
@@ -590,15 +569,28 @@ export class FlowsEvaluationRunToolbar extends PlatformElement {
         `;
     }
 
+    _onSelectableKeydown(e, handler) {
+        if (e.key === 'Enter' || e.key === ' ') {
+            e.preventDefault();
+            handler.call(this);
+        }
+    }
+
     _renderTemplateItem(template) {
         return html`
-            <button class="template-item" type="button" @click=${() => this._createFromTemplate(template.id)}>
+            <article
+                class="template-item"
+                tabindex="0"
+                role="button"
+                @click=${() => this._createFromTemplate(template.id)}
+                @keydown=${(e) => this._onSelectableKeydown(e, () => this._createFromTemplate(template.id))}
+            >
                 <platform-icon name=${template.icon} size="15"></platform-icon>
                 <span class="template-copy">
                     <span class="template-name">${template.name}</span>
                     <span class="template-description">${template.description}</span>
                 </span>
-            </button>
+            </article>
         `;
     }
 
@@ -610,12 +602,12 @@ export class FlowsEvaluationRunToolbar extends PlatformElement {
                     <span class="step-value">${value}</span>
                 </span>
                 <span class="step-actions">
-                    <button class="step-btn" type="button" title=${label} @click=${increment}>
+                    <platform-button variant="ghost" icon-only density="compact" title=${label} aria-label=${label} @click=${increment}>
                         <platform-icon name="chevron-up" size="10"></platform-icon>
-                    </button>
-                    <button class="step-btn" type="button" title=${label} @click=${decrement}>
+                    </platform-button>
+                    <platform-button variant="ghost" icon-only density="compact" title=${label} aria-label=${label} @click=${decrement}>
                         <platform-icon name="chevron-down" size="10"></platform-icon>
-                    </button>
+                    </platform-button>
                 </span>
             </div>
         `;

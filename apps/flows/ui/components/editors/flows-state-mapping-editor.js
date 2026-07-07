@@ -15,6 +15,7 @@ import '@platform/lib/components/fields/platform-field.js';
 import '@platform/lib/components/platform-button.js';
 import '@platform/lib/components/platform-help-hint.js';
 import '@platform/lib/components/platform-icon.js';
+import '@platform/lib/components/platform-segmented-control.js';
 
 function _parseInputSource(raw) {
     const s = String(raw);
@@ -104,88 +105,9 @@ export class FlowsStateMappingEditor extends PlatformElement {
             }
             .map-row platform-field {
                 min-width: 0;
-                --field-pill-padding-y: var(--space-1);
-                --field-pill-padding-x: var(--space-2);
             }
-            .source-switch {
-                display: grid;
-                grid-template-columns: repeat(3, 32px);
-                align-items: center;
-                justify-content: center;
-                gap: 3px;
+            .source-type-segment {
                 width: 114px;
-                height: 34px;
-                padding: 3px;
-                box-sizing: border-box;
-                border: 1px solid var(--field-pill-border);
-                border-radius: var(--field-pill-radius);
-                background: var(--field-pill-bg);
-            }
-            .source-switch platform-help-hint {
-                display: inline-flex;
-                width: 32px;
-                height: 28px;
-                min-width: 0;
-            }
-            .source-toggle-btn {
-                display: inline-flex;
-                align-items: center;
-                justify-content: center;
-                width: 32px;
-                height: 28px;
-                padding: 0;
-                box-sizing: border-box;
-                border: none;
-                border-radius: var(--radius-sm);
-                background: transparent;
-                color: var(--text-tertiary);
-                cursor: pointer;
-                transition:
-                    background var(--duration-fast) var(--easing-default),
-                    color var(--duration-fast) var(--easing-default),
-                    box-shadow var(--duration-fast) var(--easing-default);
-            }
-            .source-toggle-btn:hover,
-            .source-toggle-btn:focus-visible {
-                color: var(--text-primary);
-                background: var(--glass-tint-medium);
-                outline: none;
-            }
-            .source-toggle-btn[data-source='state'] {
-                --source-color: var(--accent);
-                --source-bg: var(--accent-subtle);
-                --source-border: color-mix(in oklab, var(--accent) 34%, transparent);
-            }
-            .source-toggle-btn[data-source='var'] {
-                --source-color: var(--success);
-                --source-bg: var(--success-bg);
-                --source-border: var(--success-border);
-            }
-            .source-toggle-btn[data-source='const'] {
-                --source-color: var(--warning);
-                --source-bg: var(--warning-bg);
-                --source-border: var(--warning-border);
-            }
-            .source-toggle-btn[aria-pressed='true'] {
-                color: var(--source-color);
-                background: var(--source-bg);
-                box-shadow: inset 0 0 0 1px var(--source-border);
-            }
-            .remove-btn {
-                width: 32px;
-                height: 32px;
-                padding: 0;
-                border: none;
-                border-radius: var(--radius-sm);
-                background: transparent;
-                color: var(--text-tertiary);
-                font-size: var(--text-xl);
-                line-height: 1;
-                cursor: pointer;
-            }
-            .remove-btn:hover {
-                color: var(--text-primary);
-                background: var(--glass-tint-medium);
             }
             .head-row {
                 display: grid;
@@ -380,32 +302,21 @@ export class FlowsStateMappingEditor extends PlatformElement {
 
     _renderSourceTypeSwitch(value, onChange) {
         const current = ['state', 'var', 'const'].includes(value) ? value : 'state';
+        const items = this._sourceTypeOptions().map((option) => ({
+            value: option.value,
+            icon: option.icon,
+            title: `${option.label}: ${option.hint}`,
+        }));
         return html`
-            <div class="source-switch" role="group" aria-label=${this.t('state_mapping_editor.col_type')}>
-                ${this._sourceTypeOptions().map((option) => {
-                    const active = option.value === current;
-                    return html`
-                        <platform-help-hint
-                            .text=${option.hint}
-                            .label=${option.label}
-                            placement="top"
-                        >
-                            <button
-                                type="button"
-                                class="source-toggle-btn"
-                                data-source=${option.value}
-                                aria-label=${option.label}
-                                aria-pressed=${active ? 'true' : 'false'}
-                                @click=${() => {
-                                    if (!active) onChange(option.value);
-                                }}
-                            >
-                                <platform-icon name=${option.icon} size="15"></platform-icon>
-                            </button>
-                        </platform-help-hint>
-                    `;
-                })}
-            </div>
+            <platform-segmented-control
+                class="source-type-segment"
+                icon-only
+                density="compact"
+                .value=${current}
+                .items=${items}
+                aria-label=${this.t('state_mapping_editor.col_type')}
+                @change=${(e) => onChange(e.detail.value)}
+            ></platform-segmented-control>
         `;
     }
 

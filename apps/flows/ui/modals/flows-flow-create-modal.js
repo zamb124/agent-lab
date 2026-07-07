@@ -255,15 +255,6 @@ export class FlowsFlowCreateModal extends PlatformFormModal {
                 padding: 0;
             }
             .field { display: flex; flex-direction: column; gap: var(--space-1); }
-            .field input, .field textarea {
-                padding: var(--space-2);
-                border-radius: var(--radius-md);
-                border: 1px solid var(--glass-border-subtle);
-                background: var(--glass-solid-subtle);
-                color: var(--text-primary);
-                font: inherit;
-            }
-            .field textarea { min-height: 80px; resize: vertical; }
             label { font-size: var(--text-sm); color: var(--text-secondary); }
             .form-error { color: var(--error); font-size: var(--text-xs); margin-top: 4px; }
         `,
@@ -521,7 +512,7 @@ export class FlowsFlowCreateModal extends PlatformFormModal {
     renderFooter() {
         if (this._step === 1) {
             return html`
-                <platform-button @click=${() => this.close()}>${this.t('flow_create_modal.action_cancel')}</platform-button>
+                <platform-button @click=${() => this.close()}>${this.t('common.action_cancel')}</platform-button>
             `;
         }
         const validId = FLOW_ID_PATTERN.test(this._flowId);
@@ -532,7 +523,7 @@ export class FlowsFlowCreateModal extends PlatformFormModal {
             <platform-button variant="primary" ?disabled=${!valid || this.loading} @click=${this._onSubmit}>
                 ${isBundle
                     ? this.t('flow_create_modal.action_install')
-                    : this.t('flow_create_modal.action_create')}
+                    : this.t('common.action_create')}
             </platform-button>
         `;
     }

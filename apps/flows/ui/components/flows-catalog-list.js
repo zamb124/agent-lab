@@ -11,6 +11,7 @@ import { html, css } from 'lit';
 import { repeat } from 'lit/directives/repeat.js';
 import { PlatformElement } from '@platform/lib/platform-element/index.js';
 import { sidebarStyles, sidebarNavItemStyles, sidebarSectionStyles } from '@platform/lib/styles/shared/sidebar.styles.js';
+import { toolbarShellStyles } from '@platform/lib/styles/shared/toolbar-shell.styles.js';
 import { platformConfirm } from '@platform/lib/components/platform-confirm-modal.js';
 import '@platform/lib/components/glass-spinner.js';
 import '@platform/lib/components/platform-icon.js';
@@ -60,6 +61,7 @@ export class FlowsCatalogList extends PlatformElement {
         sidebarStyles,
         sidebarNavItemStyles,
         sidebarSectionStyles,
+        toolbarShellStyles,
         css`
             :host {
                 display: flex;
@@ -94,20 +96,9 @@ export class FlowsCatalogList extends PlatformElement {
                 display: none;
             }
 
-            .flows-toolbar {
-                display: flex;
-                align-items: center;
-                gap: var(--space-2);
-                width: 100%;
-                min-width: 0;
-                box-sizing: border-box;
-            }
             .flows-toolbar platform-modal-search-field {
                 flex: 1;
                 min-width: 0;
-            }
-            .catalog-help {
-                flex-shrink: 0;
             }
             .flows-search-empty {
                 font-size: var(--text-sm);
@@ -241,7 +232,7 @@ export class FlowsCatalogList extends PlatformElement {
             <div class="section flows-catalog-root">
                 <div class="section-header section-header--custom catalog-toolbar-host">
                     <div
-                        class="flows-toolbar"
+                        class="flows-toolbar toolbar-shell--flex"
                         role="group"
                         aria-label=${this.t('flows_sidebar.section_all_flows')}
                     >
@@ -250,7 +241,16 @@ export class FlowsCatalogList extends PlatformElement {
                             .value=${this._flowSearchQuery}
                             placeholder=${this.t('flows_sidebar.search_placeholder')}
                             @change=${this._onFlowSearchChange}
-                        ></platform-modal-search-field>
+                        >
+                            <platform-help-hint
+                                slot="suffix"
+                                .label=${this.t('flows_sidebar.catalog_help_label')}
+                                .summary=${this.t('flows_sidebar.catalog_help_summary')}
+                                .details=${this.t('flows_sidebar.catalog_help_details')}
+                                .docHref=${'/documentation/scenarios/flows/flows-home-overview/'}
+                                .docLabel=${this.t('help_hints.open_scenario')}
+                            ></platform-help-hint>
+                        </platform-modal-search-field>
                         <platform-button
                             variant="primary"
                             icon-only
@@ -262,14 +262,6 @@ export class FlowsCatalogList extends PlatformElement {
                         >
                             <platform-icon name="plus" size="16"></platform-icon>
                         </platform-button>
-                        <platform-help-hint
-                            class="catalog-help"
-                            .label=${this.t('flows_sidebar.catalog_help_label')}
-                            .summary=${this.t('flows_sidebar.catalog_help_summary')}
-                            .details=${this.t('flows_sidebar.catalog_help_details')}
-                            .docHref=${'/documentation/scenarios/flows/flows-home-overview/'}
-                            .docLabel=${this.t('help_hints.open_scenario')}
-                        ></platform-help-hint>
                     </div>
                 </div>
                 <div class="section-content catalog-scroll catalog-inner-cards">

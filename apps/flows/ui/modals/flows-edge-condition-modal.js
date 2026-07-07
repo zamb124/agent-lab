@@ -24,7 +24,7 @@ import { registerModalKind } from '@platform/lib/utils/modal-registry.js';
 import '@platform/lib/components/platform-icon.js';
 import '@platform/lib/components/platform-button.js';
 import '@platform/lib/components/fields/platform-field.js';
-import '../components/common/flows-code-language-icon.js';
+import '@platform/lib/components/platform-segmented-control.js';
 import '../components/editors/flows-code-editor.js';
 import { getEdgeEndpoints } from '../_helpers/flows-resolvers.js';
 import {
@@ -93,29 +93,8 @@ export class FlowsEdgeConditionModal extends PlatformFormModal {
                 font-family: var(--font-mono, monospace);
             }
 
-            .mode-tabs {
-                display: flex;
-                gap: var(--space-2);
+            .condition-mode {
                 margin-bottom: var(--space-4);
-            }
-            .mode-tab {
-                flex: 1;
-                padding: var(--space-2) var(--space-3);
-                font-size: var(--text-sm);
-                font-weight: var(--font-medium);
-                color: var(--text-secondary);
-                background: var(--glass-tint-subtle);
-                border: 1px solid var(--border-subtle);
-                border-radius: var(--radius-md);
-                cursor: pointer;
-                transition: var(--motion-transition-interactive);
-                text-align: center;
-            }
-            .mode-tab:hover { color: var(--text-primary); border-color: var(--border-medium); }
-            .mode-tab.active {
-                color: var(--accent);
-                background: var(--accent-subtle);
-                border-color: var(--accent);
             }
 
             .builder-row {
@@ -136,23 +115,6 @@ export class FlowsEdgeConditionModal extends PlatformFormModal {
                 color: var(--text-secondary);
                 overflow-wrap: anywhere;
             }
-            select, input {
-                width: 100%;
-                box-sizing: border-box;
-                height: 36px;
-                padding: 0 var(--space-3);
-                font-size: var(--text-sm);
-                color: var(--text-primary);
-                background: var(--glass-solid-subtle);
-                border: 1px solid var(--glass-border-subtle);
-                border-radius: var(--radius-md);
-                font: inherit;
-            }
-            select:focus, input:focus {
-                outline: none;
-                border-color: var(--accent);
-                box-shadow: 0 0 0 3px var(--accent-light);
-            }
 
             .python-mode { margin-top: var(--space-2); }
             .code-mode-head {
@@ -161,46 +123,6 @@ export class FlowsEdgeConditionModal extends PlatformFormModal {
                 justify-content: space-between;
                 gap: var(--space-2);
                 margin-bottom: var(--space-2);
-            }
-            .language-segment {
-                display: inline-flex;
-                align-items: center;
-                gap: 2px;
-                padding: 2px;
-                border-radius: var(--radius-md);
-                background: var(--glass-solid-subtle);
-                border: 1px solid var(--glass-border-subtle);
-            }
-            .language-button {
-                width: 36px;
-                height: 24px;
-                padding: 0;
-                display: inline-flex;
-                align-items: center;
-                justify-content: center;
-                border: 0;
-                border-radius: calc(var(--radius-md) - 2px);
-                background: transparent;
-                color: var(--text-tertiary);
-                font-size: 11px;
-                font-weight: var(--font-semibold);
-                line-height: 1;
-                cursor: pointer;
-            }
-            .language-button:hover {
-                color: var(--text-primary);
-                background: var(--glass-tint-medium);
-            }
-            .language-button[active] {
-                color: var(--accent);
-                background: var(--accent-subtle);
-            }
-            .language-button:focus-visible {
-                outline: 2px solid var(--accent);
-                outline-offset: 1px;
-            }
-            .language-button flows-code-language-icon {
-                pointer-events: none;
             }
             .code-validation-status {
                 display: inline-flex;
@@ -621,20 +543,17 @@ export class FlowsEdgeConditionModal extends PlatformFormModal {
     _renderCodeLanguageSegment() {
         const current = normalizeFlowCodeLanguage(this._codeLanguage);
         return html`
-            <div class="language-segment" role="group" aria-label=${this.t('code_workbench.language_aria')}>
-                ${FLOW_CODE_LANGUAGES.map((lang) => html`
-                    <button
-                        type="button"
-                        class="language-button"
-                        ?active=${current === lang.value}
-                        title=${lang.label}
-                        aria-label=${lang.label}
-                        @click=${() => this._setCodeLanguage(lang.value)}
-                    >
-                        <flows-code-language-icon language=${lang.value} size="18"></flows-code-language-icon>
-                    </button>
-                `)}
-            </div>
+            <platform-segmented-control
+                density="compact"
+                .value=${current}
+                .items=${FLOW_CODE_LANGUAGES.map((lang) => ({
+                    value: lang.value,
+                    label: lang.label,
+                    title: lang.label,
+                }))}
+                aria-label=${this.t('code_workbench.language_aria')}
+                @change=${(e) => this._setCodeLanguage(e.detail.value)}
+            ></platform-segmented-control>
         `;
     }
 
@@ -663,18 +582,18 @@ export class FlowsEdgeConditionModal extends PlatformFormModal {
                 <div class="condition-subtitle">${fromId} ${sep} ${toId}</div>
             </div>
 
-            <div class="mode-tabs">
-                <button
-                    type="button"
-                    class="mode-tab ${this._mode === 'simple' ? 'active' : ''}"
-                    @click=${() => this._onModeChange('simple')}
-                >${this.t('edge_condition_modal.mode_simple')}</button>
-                <button
-                    type="button"
-                    class="mode-tab ${this._mode === 'python' ? 'active' : ''}"
-                    @click=${() => this._onModeChange('python')}
-                >${this.t('edge_condition_modal.mode_python')}</button>
-            </div>
+            <platform-segmented-control
+                class="condition-mode"
+                full-width
+                density="compact"
+                .value=${this._mode}
+                .items=${[
+                    { value: 'simple', label: this.t('edge_condition_modal.mode_simple') },
+                    { value: 'python', label: this.t('edge_condition_modal.mode_python') },
+                ]}
+                aria-label=${this.t('edge_condition_modal.mode_aria')}
+                @change=${(e) => this._onModeChange(e.detail.value)}
+            ></platform-segmented-control>
 
             <form @submit=${(e) => { e.preventDefault(); this._performSave(); }}>
                 ${this._mode === 'simple' ? this._renderSimple() : this._renderPython()}

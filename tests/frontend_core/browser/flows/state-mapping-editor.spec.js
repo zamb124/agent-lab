@@ -9,7 +9,7 @@ describe('flows-state-mapping-editor', () => {
     });
     afterEach(() => fixtureCleanup());
 
-    it('input mapping uses icon source switch and emits selected source type', async () => {
+    it('input mapping uses segmented source switch and emits selected source type', async () => {
         const el = await fixture(html`
             <flows-state-mapping-editor
                 kind="input"
@@ -17,17 +17,22 @@ describe('flows-state-mapping-editor', () => {
             ></flows-state-mapping-editor>
         `);
 
-        const buttons = el.shadowRoot.querySelectorAll('.source-toggle-btn');
-        expect(buttons.length).to.equal(3);
-        expect(el.shadowRoot.querySelector('.source-toggle-btn[data-source="state"]').getAttribute('aria-pressed')).to.equal('true');
+        const control = el.shadowRoot.querySelector('platform-segmented-control.source-type-segment');
+        expect(control).to.not.equal(null);
 
-        const varButton = el.shadowRoot.querySelector('.source-toggle-btn[data-source="var"]');
+        const segments = control.shadowRoot.querySelectorAll('.segment');
+        expect(segments.length).to.equal(3);
+        expect(segments[0].getAttribute('data-active')).to.equal('true');
+        expect(segments[0].getAttribute('aria-pressed')).to.equal('true');
+
         const changed = oneEvent(el, 'change');
-        varButton.click();
+        segments[1].click();
         const event = await changed;
         expect(event.detail.mapping).to.deep.equal({ target: '@var:user.name' });
 
         await elementUpdated(el);
-        expect(el.shadowRoot.querySelector('.source-toggle-btn[data-source="var"]').getAttribute('aria-pressed')).to.equal('true');
+        const updatedSegments = control.shadowRoot.querySelectorAll('.segment');
+        expect(updatedSegments[1].getAttribute('data-active')).to.equal('true');
+        expect(updatedSegments[1].getAttribute('aria-pressed')).to.equal('true');
     });
 });

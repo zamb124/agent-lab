@@ -8,11 +8,13 @@
 import { html, css } from 'lit';
 import { PlatformElement } from '@platform/lib/platform-element/index.js';
 import './flows-code-editor.js';
-import '../common/flows-code-language-icon.js';
+import '@platform/lib/components/platform-button.js';
 import '@platform/lib/components/platform-icon.js';
+import '@platform/lib/components/platform-segmented-control.js';
 import '@platform/lib/components/platform-help-hint.js';
 import '@platform/lib/components/fields/platform-field.js';
 import { asString, isPlainObject } from '../../_helpers/flows-resolvers.js';
+import { formatJsonPretty } from '@platform/lib/utils/json-format.js';
 import {
     FLOW_CODE_LANGUAGES,
     flowCodeLanguageOptions,
@@ -77,76 +79,6 @@ export class FlowsCodeWorkbench extends PlatformElement {
                 gap: var(--space-1);
                 flex-shrink: 0;
             }
-            .toolbar-icon-button {
-                width: 28px;
-                height: 28px;
-                padding: 0;
-                margin: 0;
-                display: inline-flex;
-                align-items: center;
-                justify-content: center;
-                color: var(--text-tertiary);
-                background: var(--glass-solid-subtle);
-                border: 1px solid var(--border-subtle);
-                border-radius: var(--radius-full, 999px);
-                cursor: pointer;
-                transition:
-                    color var(--duration-fast, 0.2s) ease,
-                    background var(--duration-fast, 0.2s) ease,
-                    border-color var(--duration-fast, 0.2s) ease;
-            }
-            .toolbar-icon-button:hover,
-            .toolbar-icon-button:focus-visible {
-                color: var(--text-primary);
-                background: var(--glass-solid-medium);
-                border-color: var(--border-default);
-                outline: none;
-            }
-            .language-segment {
-                display: inline-flex;
-                align-items: center;
-                gap: 2px;
-                padding: 2px;
-                border-radius: var(--radius-md);
-                background: var(--glass-solid-subtle);
-                border: 1px solid var(--glass-border-subtle);
-                flex: 0 0 auto;
-            }
-            .language-button {
-                width: 36px;
-                height: 24px;
-                padding: 0;
-                display: inline-flex;
-                align-items: center;
-                justify-content: center;
-                border: 0;
-                border-radius: calc(var(--radius-md) - 2px);
-                background: transparent;
-                color: var(--text-tertiary);
-                font-size: 11px;
-                font-weight: var(--font-semibold);
-                line-height: 1;
-                cursor: pointer;
-                white-space: nowrap;
-            }
-            .language-button:hover {
-                color: var(--text-primary);
-                background: var(--glass-tint-medium);
-            }
-            .language-button[active] {
-                color: var(--accent);
-                background: var(--accent-subtle);
-            }
-            .language-button:focus-visible {
-                outline: 2px solid var(--accent);
-                outline-offset: 1px;
-            }
-            .language-button flows-code-language-icon {
-                pointer-events: none;
-            }
-            .execute-tool-hint-trigger {
-                cursor: help;
-            }
             .code-validation-status {
                 display: inline-flex;
                 align-items: center;
@@ -180,27 +112,6 @@ export class FlowsCodeWorkbench extends PlatformElement {
             .code-validation-text {
                 overflow: hidden;
                 text-overflow: ellipsis;
-            }
-            .main-tabs {
-                display: flex;
-                gap: var(--space-1);
-                flex-wrap: nowrap;
-                flex-shrink: 0;
-            }
-            .main-tab {
-                padding: 6px 14px;
-                background: var(--glass-solid-subtle);
-                border: 1px solid var(--glass-border-subtle);
-                border-radius: var(--radius-md);
-                color: var(--text-secondary);
-                font-size: var(--text-sm);
-                font-weight: var(--font-medium);
-                cursor: pointer;
-            }
-            .main-tab[active] {
-                background: var(--accent-subtle);
-                color: var(--accent);
-                border-color: var(--accent-subtle);
             }
             .schema-editor-wrap[data-invalid] flows-code-editor {
                 border-color: var(--error);
@@ -517,20 +428,18 @@ export class FlowsCodeWorkbench extends PlatformElement {
     _renderLanguageSegment() {
         const current = this._normalizedLanguage();
         return html`
-            <div class="language-segment" role="group" aria-label=${this.t('code_workbench.language_aria')}>
-                ${FLOW_CODE_LANGUAGES.map((lang) => html`
-                    <button
-                        type="button"
-                        class="language-button"
-                        ?active=${current === lang.value}
-                        title=${lang.label}
-                        aria-label=${lang.label}
-                        @click=${() => this._emitLanguageChange(lang.value)}
-                    >
-                        <flows-code-language-icon language=${lang.value} size="18"></flows-code-language-icon>
-                    </button>
-                `)}
-            </div>
+            <platform-segmented-control
+                icon-only
+                density="compact"
+                .value=${current}
+                .items=${FLOW_CODE_LANGUAGES.map((lang) => ({
+                    value: lang.value,
+                    icon: lang.icon,
+                    title: lang.label,
+                }))}
+                aria-label=${this.t('code_workbench.language_aria')}
+                @change=${(e) => this._emitLanguageChange(e.detail.value)}
+            ></platform-segmented-control>
         `;
     }
 
@@ -564,53 +473,46 @@ export class FlowsCodeWorkbench extends PlatformElement {
     _renderToolbarStart() {
         const hintLabel = this.t('code_node_editor.execute_tool_hint_aria');
         const secondaryLabel = this._secondTabLabel();
+        const mainTabItems = [
+            { value: 'code', label: this.t('code_node_editor.tab_code') },
+            { value: 'secondary', label: secondaryLabel },
+        ];
         return html`
             <div class="toolbar-start-wrap">
-                <div class="main-tabs" role="tablist">
-                    <button
-                        type="button"
-                        class="main-tab"
-                        role="tab"
-                        ?active=${this._mainTab === 'code'}
-                        @click=${() => { this._mainTab = 'code'; }}
-                    >
-                        ${this.t('code_node_editor.tab_code')}
-                    </button>
-                    <button
-                        type="button"
-                        class="main-tab"
-                        role="tab"
-                        ?active=${this._mainTab === 'secondary'}
-                        @click=${() => { this._mainTab = 'secondary'; }}
-                    >
-                        ${secondaryLabel}
-                    </button>
-                </div>
+                <platform-segmented-control
+                    density="compact"
+                    .value=${this._mainTab}
+                    .items=${mainTabItems}
+                    aria-label=${this.t('code_workbench.main_tab_aria')}
+                    @change=${(e) => { this._mainTab = e.detail.value; }}
+                ></platform-segmented-control>
                 ${this._renderLanguageSegment()}
                 ${this._renderValidationStatus()}
                 <div class="toolbar-start-actions">
-                    <button
-                        type="button"
-                        class="toolbar-icon-button"
+                    <platform-button
+                        variant="ghost"
+                        icon-only
+                        density="compact"
                         title=${this.t('code_node_editor.docs')}
                         aria-label=${this.t('code_node_editor.docs')}
                         @click=${this._openDocs}
                     >
                         <platform-icon name="book-open" size="16"></platform-icon>
-                    </button>
+                    </platform-button>
                     <platform-help-hint
                         .text=${this.t('code_node_editor.execute_tool_hint')}
                         .label=${hintLabel}
                         placement="bottom"
                     >
-                        <button
-                            type="button"
-                            class="toolbar-icon-button execute-tool-hint-trigger"
+                        <platform-button
+                            variant="ghost"
+                            icon-only
+                            density="compact"
                             aria-label=${hintLabel}
                             title=${hintLabel}
                         >
                             <platform-icon name="info" size="16"></platform-icon>
-                        </button>
+                        </platform-button>
                     </platform-help-hint>
                 </div>
             </div>
@@ -628,7 +530,7 @@ export class FlowsCodeWorkbench extends PlatformElement {
     render() {
         const code = typeof this.code === 'string' ? this.code : '';
         const parametersSchema = this._parametersSchemaObject();
-        const schemaText = JSON.stringify(parametersSchema, null, 2);
+        const schemaText = formatJsonPretty(parametersSchema);
         const cmLang = this._cmLanguageForCodeTab();
         const completionCtx = this._completionContextPayload();
         const varKeysEff = this._effectiveCompletionVariableKeys();

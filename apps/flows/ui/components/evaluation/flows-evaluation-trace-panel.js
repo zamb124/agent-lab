@@ -1,5 +1,7 @@
 import { html, css } from 'lit';
 import { PlatformElement } from '@platform/lib/platform-element/index.js';
+import { panelShellStyles } from '@platform/lib/styles/shared/panel-shell.styles.js';
+import { formatJsonPretty } from '@platform/lib/utils/json-format.js';
 import '@platform/lib/components/platform-icon.js';
 import '@platform/lib/components/platform-help-hint.js';
 
@@ -27,7 +29,7 @@ function objectText(value) {
     if (value === null || value === undefined) {
         return '';
     }
-    return JSON.stringify(value, null, 2);
+    return formatJsonPretty(value);
 }
 
 export class FlowsEvaluationTracePanel extends PlatformElement {
@@ -40,34 +42,13 @@ export class FlowsEvaluationTracePanel extends PlatformElement {
 
     static styles = [
         PlatformElement.styles,
+        panelShellStyles,
         css`
             :host {
                 display: flex;
                 min-width: 0;
                 min-height: 0;
                 color: var(--text-primary);
-            }
-
-            .panel {
-                flex: 1;
-                min-width: 0;
-                min-height: 0;
-                display: flex;
-                flex-direction: column;
-                border: 1px solid var(--border-subtle);
-                border-radius: var(--radius-xl);
-                background: var(--glass-solid-subtle);
-                overflow: hidden;
-            }
-
-            .head {
-                display: flex;
-                align-items: center;
-                justify-content: space-between;
-                gap: var(--space-3);
-                padding: var(--space-3) var(--space-4);
-                border-bottom: 1px solid var(--border-subtle);
-                background: linear-gradient(180deg, color-mix(in srgb, var(--glass-solid-medium), transparent 8%), transparent);
             }
 
             .title {
@@ -227,8 +208,8 @@ export class FlowsEvaluationTracePanel extends PlatformElement {
         const stateHistory = this.trace && typeof this.trace === 'object' ? asArray(this.trace.state_history) : [];
         const caseRunId = stringValue(this.caseRun, 'case_run_id');
         return html`
-            <section class="panel">
-                <div class="head">
+            <section class="content-panel">
+                <div class="content-panel-head">
                     <div class="title">
                         <platform-icon name="activity" size="16"></platform-icon>
                         ${this.t('evaluation.trace.title')}
@@ -262,7 +243,7 @@ export class FlowsEvaluationTracePanel extends PlatformElement {
                             <div class="section-title"><platform-icon name="braces" size="14"></platform-icon>${this.t('evaluation.trace.state_history')}</div>
                             <div class="kv"><pre>${objectText(stateHistory)}</pre></div>
                         </section>
-                    ` : html`<div class="empty">${this.t('evaluation.trace.empty')}</div>`}
+                    ` : html`<div class="content-panel-empty">${this.t('evaluation.trace.empty')}</div>`}
                 </div>
             </section>
         `;

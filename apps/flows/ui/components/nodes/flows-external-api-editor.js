@@ -12,7 +12,7 @@ import { html, css } from 'lit';
 import { PlatformElement } from '@platform/lib/platform-element/index.js';
 import '@platform/lib/components/fields/platform-field.js';
 import './flows-base-node-editor.js';
-import '../editors/flows-json-field-editor.js';
+import '@platform/lib/components/platform-json-editor.js';
 import { asObject } from '../../_helpers/flows-resolvers.js';
 
 const HTTP_METHODS = Object.freeze(['GET', 'POST', 'PUT', 'PATCH', 'DELETE']);
@@ -209,22 +209,22 @@ export class FlowsExternalApiEditor extends PlatformElement {
                     <details>
                         <summary>${this.t('external_api_editor.body_template')}</summary>
                         <p class="field-hint">${this.t('external_api_editor.body_template_hint')}</p>
-                        <flows-json-field-editor
+                        <platform-json-editor validate-json show-toolbar="false"
                             .value=${bodyTemplateStr}
                             @change=${(e) => {
                                 if (e.detail && 'parsed' in e.detail) {
                                     this._onBodyTemplate(e.detail.parsed);
                                 }
                             }}
-                        ></flows-json-field-editor>
+                        ></platform-json-editor>
                     </details>
                     <details>
                         <summary>${this.t('external_api_editor.headers')}</summary>
                         <p class="field-hint">${this.t('external_api_editor.headers_hint')}</p>
-                        <flows-json-field-editor
+                        <platform-json-editor validate-json show-toolbar="false"
                             .value=${headersJson}
                             @change=${(e) => { if (e.detail && 'parsed' in e.detail) this._onHeaders(e.detail.parsed); }}
-                        ></flows-json-field-editor>
+                        ></platform-json-editor>
                     </details>
                 </div>
             </flows-base-node-editor>

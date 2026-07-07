@@ -267,6 +267,7 @@
         "active_tasks_all": "All tasks",
         "active_tasks_empty": "No open tasks"
     },
+    "segmented_close": "Remove segment",
     "trace_viewer": {
         "empty": "No spans in this trace",
         "mode_group_label": "Trace view mode",

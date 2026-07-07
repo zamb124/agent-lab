@@ -74,7 +74,9 @@ export class ChatPage extends PlatformPage {
                 right: 0;
                 top: 100%;
                 margin-top: 4px;
-                min-width: 220px;
+                width: min(320px, calc(100vw - 2 * var(--space-4)));
+                max-width: calc(100vw - 2 * var(--space-4));
+                box-sizing: border-box;
                 background: var(--glass-solid-strong);
                 border: 1px solid var(--glass-border, var(--border-subtle));
                 border-radius: var(--radius-md);
@@ -84,9 +86,7 @@ export class ChatPage extends PlatformPage {
                 flex-direction: column;
                 gap: var(--space-1);
                 padding: var(--space-1);
-            }
-            .menu-flyout platform-button {
-                justify-content: flex-start;
+                overflow: hidden;
             }
             .chat-workspace {
                 flex: 1;
@@ -446,7 +446,7 @@ export class ChatPage extends PlatformPage {
 
     _renderMenuButton({ label, icon, onClick, danger = false }) {
         return html`
-            <platform-button variant="ghost" density="compact" ?danger=${danger} @click=${onClick}>
+            <platform-button variant="ghost" density="compact" block ?danger=${danger} @click=${onClick}>
                 <platform-icon name=${icon} size="16"></platform-icon>
                 ${label}
             </platform-button>

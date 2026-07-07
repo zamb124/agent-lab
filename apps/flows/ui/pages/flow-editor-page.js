@@ -2,8 +2,7 @@
  * FlowEditorPage — визуальный редактор flow.
  *
  * Макет:
- *   <flows-editor-header />          — назад / сохранить / тема
- *   <flows-branches-tabs />            — табы веток
+ *   <flows-editor-header />          — chrome: actions + branch tabs
  *   .editor-shell:
  *     <flows-node-types-sidebar />    — drag-source типов нод
  *     .canvas-host:
@@ -20,7 +19,6 @@ import { PlatformPage } from '@platform/lib/base/PlatformPage.js';
 import { CoreEvents } from '@platform/lib/events/index.js';
 import '@platform/lib/components/platform-breadcrumbs.js';
 import '../components/editor/flows-editor-header.js';
-import '../components/editor/flows-branches-tabs.js';
 import '../components/editor/flows-node-types-sidebar.js';
 import '../components/editor/flows-flow-property-panel.js';
 import '../components/editor/flows-property-panel.js';
@@ -30,11 +28,20 @@ import '../components/editor/flows-execution-panel.js';
 import '../components/editor/flows-floating-panel.js';
 import '../components/editor/flows-node-ai-helper.js';
 import '../components/flow-canvas/flows-flow-canvas.js';
+import '../modals/flows-edge-condition-modal.js';
+import '../modals/flows-incoming-policy-modal.js';
+import '../modals/flows-library-picker-modal.js';
+import '../modals/flows-tool-create-modal.js';
+import '../modals/flows-embedded-tool-config-modal.js';
+import '../modals/flows-code-node-drop-modal.js';
+import '../modals/flows-code-modal.js';
+import '../modals/flows-code-docs-modal.js';
 import '../modals/flows-canvas-help-modal.js';
-import '../modals/flows-preview-share-modal.js';
 import '../modals/flows-api-console-modal.js';
+import '../modals/flows-raw-json-modal.js';
+import '../modals/flows-state-modal.js';
 import { getNodeTypeMeta, getCategoryToken } from '../constants/node-icons.js';
-import { asObject, isPlainObject } from '../_helpers/flows-resolvers.js';
+import { asArray, asObject, isPlainObject } from '../_helpers/flows-resolvers.js';
 
 function stableStringify(value) {
     if (value === null || typeof value !== 'object') return JSON.stringify(value);
@@ -59,8 +66,13 @@ export class FlowEditorPage extends PlatformPage {
                 display: flex; flex-direction: column;
                 background: var(--bg-elevated); overflow: hidden;
             }
-            .editor-breadcrumbs {
+            .editor-chrome {
                 flex-shrink: 0;
+                background: var(--glass-solid-medium);
+                border-bottom: 1px solid var(--border-subtle);
+                box-shadow: var(--glass-shadow-subtle);
+            }
+            .editor-breadcrumbs {
                 padding: var(--space-2) var(--space-4) 0;
             }
             .editor-shell {
@@ -405,14 +417,19 @@ export class FlowEditorPage extends PlatformPage {
         `;
     }
 
-    _flowDisplayLabel() {
-        const editorState = asObject(this._editor.state);
-        const flowConfig = asObject(editorState.flowConfig);
-        if (typeof flowConfig.name === 'string' && flowConfig.name.length > 0) {
-            return flowConfig.name;
+    _branchDisplayLabel() {
+        if (this.branchId === 'base') {
+            return this.t('branches_tabs.base');
         }
-        if (typeof this.flowId === 'string' && this.flowId.length > 0) {
-            return this.flowId;
+        const flow = this._flows.byId && this._flows.byId[this.flowId]
+            ? this._flows.byId[this.flowId]
+            : asArray(this._flows.items).find((f) => f && f.flow_id === this.flowId);
+        const branch = flow && flow.branches && flow.branches[this.branchId] ? flow.branches[this.branchId] : null;
+        if (branch && typeof branch.name === 'string' && branch.name.length > 0) {
+            return branch.name;
+        }
+        if (typeof this.branchId === 'string' && this.branchId.length > 0) {
+            return this.branchId;
         }
         return '';
     }
@@ -424,15 +441,16 @@ export class FlowEditorPage extends PlatformPage {
             ${this._flowSettingsOpen
                 ? html`<div class="flow-settings-dismiss-layer" @click=${() => this._onDismissFlowSettingsBackdrop()}></div>`
                 : ''}
-            <div class="editor-breadcrumbs">
-                <platform-breadcrumbs compact current-label=${this._flowDisplayLabel()}></platform-breadcrumbs>
+            <div class="editor-chrome">
+                <div class="editor-breadcrumbs">
+                    <platform-breadcrumbs compact current-label=${this._branchDisplayLabel()}></platform-breadcrumbs>
+                </div>
+                <flows-editor-header
+                    class="editor-chrome-panel ${dismissSafe}"
+                    .flowId=${this.flowId}
+                    .branchId=${this.branchId}
+                ></flows-editor-header>
             </div>
-            <flows-editor-header
-                class=${dismissSafe}
-                .flowId=${this.flowId}
-                .branchId=${this.branchId}
-            ></flows-editor-header>
-            <flows-branches-tabs class=${dismissSafe} .flowId=${this.flowId} active-branch-id=${this.branchId}></flows-branches-tabs>
             <div class="editor-shell">
                 <flows-node-types-sidebar
                     class=${dismissSafe}

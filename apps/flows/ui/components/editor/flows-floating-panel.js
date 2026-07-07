@@ -204,7 +204,7 @@ export class FlowsFloatingPanel extends PlatformElement {
                 opacity: 0.65;
                 cursor: nwse-resize;
                 touch-action: none;
-                --platform-button-icon-size: 28px;
+                --platform-button-icon-size: var(--flows-micro-control-size);
             }
 
             .resize-handle::before,
@@ -559,7 +559,6 @@ export class FlowsFloatingPanel extends PlatformElement {
             'input',
             'textarea',
             'select',
-            'glass-button',
             'platform-button',
             'platform-switch',
             'platform-help-hint',

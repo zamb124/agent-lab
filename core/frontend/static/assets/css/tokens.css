@@ -4,6 +4,8 @@
  * Поддержка темной и светлой темы
  */
 
+@import url('../../lib/chat/chat-tokens.css');
+
 :root {
     /* ========== RESPONSIVE BREAKPOINTS ========== */
     
@@ -634,8 +636,18 @@
     --flows-avatar-text: var(--text-inverse);
     --flows-avatar-shadow: var(--glass-shadow-subtle);
     --flows-avatar-hover-shadow: var(--glass-shadow-medium);
-    --flows-card-action-size: 28px;
+    --flows-micro-control-size: 28px;
+    --flows-card-action-size: var(--flows-micro-control-size);
+    --flows-chrome-control-size: 32px;
+    --flows-chrome-row-min-height: 40px;
+    --flows-editor-chrome-row-min-height: var(--flows-chrome-row-min-height);
+    --flows-editor-chrome-gap: var(--space-2);
+    --flows-sidebar-row-min-height: 42px;
+    --flows-toolbar-shell-min-height: 48px;
     --flows-bundle-update-shadow: 0 0 0 2px color-mix(in srgb, var(--warning) 24%, transparent);
+
+    --flows-canvas-sticky-inset: var(--glass-inner-glow-subtle);
+    --flows-canvas-sticky-surface: color-mix(in oklab, var(--bg-elevated) 90%, var(--sticky-accent) 10%);
 
     /* ========== SYNC SEMANTIC TOKENS ========== */
 

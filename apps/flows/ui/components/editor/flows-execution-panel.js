@@ -25,11 +25,11 @@ import { nextModalLayerZIndex } from '@platform/lib/utils/modal-z-stack.js';
 import '@platform/lib/components/platform-icon.js';
 import '@platform/lib/components/platform-switch.js';
 import '@platform/lib/components/platform-help-hint.js';
-import '@platform/lib/components/glass-button.js';
+import '@platform/lib/components/platform-segmented-control.js';
 import '@platform/lib/components/platform-button.js';
 import '@platform/lib/chat/platform-chat.js';
 import { resolveVoiceHttpOrigin } from '@platform/lib/voice/voice-http-origin.js';
-import '../chat/flows-chat-run-trace.js';
+import '@platform/lib/chat/chat-run-trace.js';
 import {
     asObject,
     asString,
@@ -190,38 +190,11 @@ export class FlowsExecutionPanel extends PlatformElement {
                 0%, 100% { opacity: 1; }
                 50% { opacity: 0.72; }
             }
-            .tabs {
+            .panel-tabs {
                 flex-shrink: 0;
-                display: flex;
-                gap: 2px;
-                padding: 4px;
-                border-radius: var(--radius-full);
-                background: var(--glass-solid-medium);
-                border: 1px solid var(--glass-border-subtle);
-                box-shadow: var(--glass-inner-glow-subtle);
             }
-            .tab {
-                flex: 1;
-                min-height: 36px;
-                padding: 8px 12px;
-                font-size: var(--text-xs);
-                font-weight: var(--font-medium);
-                color: var(--text-tertiary);
-                background: transparent;
-                border: none;
-                border-radius: var(--radius-full);
-                cursor: pointer;
-                transition: background var(--duration-fast), color var(--duration-fast), box-shadow var(--duration-fast);
-            }
-            .tab:hover {
-                color: var(--text-secondary);
-                background: var(--glass-tint-subtle);
-            }
-            .tab[data-active] {
-                color: var(--text-primary);
-                font-weight: var(--font-semibold);
-                background: var(--glass-solid-strong);
-                box-shadow: var(--glass-inner-glow-medium), var(--glass-shadow-subtle);
+            .panel-tabs platform-segmented-control {
+                width: 100%;
             }
             .tab-toolbar {
                 flex-shrink: 0;
@@ -231,8 +204,13 @@ export class FlowsExecutionPanel extends PlatformElement {
                 align-items: center;
                 justify-content: flex-end;
             }
-            .panel-header-actions platform-button {
-                --platform-button-icon-size: 36px;
+            .panel-header-actions {
+                flex-shrink: 0;
+                display: flex;
+                flex-wrap: wrap;
+                gap: var(--space-2);
+                align-items: center;
+                justify-content: flex-end;
             }
             .resize-handle {
                 position: absolute;
@@ -312,7 +290,7 @@ export class FlowsExecutionPanel extends PlatformElement {
                 flex-direction: column;
                 overflow: hidden;
             }
-            .trace-panel-inner flows-chat-run-trace {
+            .trace-panel-inner chat-run-trace {
                 flex: 1;
                 min-height: 0;
             }
@@ -678,7 +656,7 @@ export class FlowsExecutionPanel extends PlatformElement {
             'input',
             'textarea',
             'select',
-            'glass-button',
+            'platform-button',
             'platform-switch',
             'platform-help-hint',
             '.resize-handle',
@@ -995,59 +973,47 @@ export class FlowsExecutionPanel extends PlatformElement {
                 </div>
 
                 ${this._collapsed ? nothing : html`
-                <div class="tabs" role="tablist">
-                    <button
-                        type="button"
-                        class="tab"
-                        role="tab"
-                        ?data-active=${tab === 'chat'}
-                        aria-selected=${tab === 'chat' ? 'true' : 'false'}
-                        @click=${() => { this._setPanelTab('chat'); }}
-                    >${this.t('execution_panel.tab_chat')}</button>
-                    <button
-                        type="button"
-                        class="tab"
-                        role="tab"
-                        ?data-active=${tab === 'trace'}
-                        aria-selected=${tab === 'trace' ? 'true' : 'false'}
-                        @click=${() => { this._setPanelTab('trace'); }}
-                    >${this.t('execution_panel.tab_trace')}</button>
-                    <button
-                        type="button"
-                        class="tab"
-                        role="tab"
-                        ?data-active=${tab === 'state'}
-                        aria-selected=${tab === 'state' ? 'true' : 'false'}
-                        @click=${() => { this._setPanelTab('state'); }}
-                    >${this.t('execution_panel.tab_state')}</button>
+                <div class="panel-tabs">
+                    <platform-segmented-control
+                        full-width
+                        density="compact"
+                        .value=${tab}
+                        .items=${[
+                            { value: 'chat', label: this.t('execution_panel.tab_chat') },
+                            { value: 'trace', label: this.t('execution_panel.tab_trace') },
+                            { value: 'state', label: this.t('execution_panel.tab_state') },
+                        ]}
+                        aria-label=${this.t('execution_panel.tabs_aria')}
+                        @change=${(e) => { this._setPanelTab(e.detail.value); }}
+                    ></platform-segmented-control>
                 </div>
 
                 ${tab === 'chat' || tab === 'trace'
                     ? html`
                         <div class="tab-toolbar">
                             ${tab === 'trace' ? html`
-                                <glass-button
+                                <platform-button
                                     variant="primary"
-                                    size="sm"
+                                    density="compact"
                                     ?disabled=${!hasContext}
                                     title=${this.t('execution_panel.full_trace_title')}
                                     @click=${this._openTracing}
-                                >${this.t('execution_panel.full_trace')}</glass-button>
-                                <glass-button
+                                >${this.t('execution_panel.full_trace')}</platform-button>
+                                <platform-button
                                     variant="secondary"
-                                    size="sm"
+                                    density="compact"
                                     ?disabled=${!hasContext}
                                     title=${this.t('execution_panel.open_logs_title')}
                                     @click=${this._openLogs}
-                                >${this.t('execution_panel.open_logs')}</glass-button>
+                                >${this.t('execution_panel.open_logs')}</platform-button>
                             ` : nothing}
                             ${tab === 'chat' ? html`
-                                <glass-button
+                                <platform-button
                                     variant="secondary"
-                                    size="sm"
+                                    density="compact"
                                     title=${this.t('execution_panel.reset_chat_title')}
                                     @click=${() => { void this._onResetChat(); }}
-                                >${this.t('execution_panel.reset_chat')}</glass-button>
+                                >${this.t('execution_panel.reset_chat')}</platform-button>
                             ` : nothing}
                         </div>
                     `
@@ -1082,12 +1048,12 @@ export class FlowsExecutionPanel extends PlatformElement {
                     ${tab === 'trace' ? html`
                         <div class="tab-panel" data-tab="trace">
                             <div class="trace-panel-inner">
-                                <flows-chat-run-trace
+                                <chat-run-trace
                                     .entries=${runTrace}
                                     compact
                                     .showSectionHeader=${false}
                                     .fillAvailable=${true}
-                                ></flows-chat-run-trace>
+                                ></chat-run-trace>
                             </div>
                         </div>
                     ` : nothing}
@@ -1096,13 +1062,13 @@ export class FlowsExecutionPanel extends PlatformElement {
                         <div class="tab-panel" data-tab="state">
                             <div class="state-tab">
                                 <p class="state-tab-hint">${this.t('execution_panel.state_tab_hint')}</p>
-                                <glass-button
+                                <platform-button
                                     variant="secondary"
-                                    size="sm"
+                                    density="compact"
                                     ?disabled=${!hasContext}
                                     title=${this.t('execution_panel.state_title')}
                                     @click=${this._openState}
-                                >${this.t('execution_panel.open_state')}</glass-button>
+                                >${this.t('execution_panel.open_state')}</platform-button>
                             </div>
                         </div>
                     ` : nothing}

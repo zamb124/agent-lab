@@ -267,6 +267,7 @@
         "active_tasks_all": "Все задачи",
         "active_tasks_empty": "Нет открытых задач"
     },
+    "segmented_close": "Удалить",
     "trace_viewer": {
         "empty": "В этом trace нет spans",
         "mode_group_label": "Режим просмотра trace",

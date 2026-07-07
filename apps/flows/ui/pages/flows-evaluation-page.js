@@ -124,7 +124,7 @@ export class FlowsEvaluationPage extends PlatformPage {
             }
 
             .top {
-                min-height: 76px;
+                min-height: var(--flows-chrome-row-min-height);
                 display: grid;
                 grid-template-columns: auto minmax(0, 1fr);
                 align-items: center;
@@ -150,28 +150,9 @@ export class FlowsEvaluationPage extends PlatformPage {
                 gap: var(--space-2);
             }
 
-            .back {
-                width: 38px;
-                height: 38px;
-                display: inline-flex;
-                align-items: center;
-                justify-content: center;
-                border-radius: var(--radius-full);
-                border: 1px solid var(--border-subtle);
-                background: var(--glass-solid-subtle);
-                color: var(--text-secondary);
-                cursor: pointer;
-                transition: var(--motion-transition-interactive);
-            }
-
-            .back:hover {
-                background: var(--glass-solid-strong);
-                color: var(--text-primary);
-            }
-
             .brand-mark {
-                width: 38px;
-                height: 38px;
+                width: var(--flows-chrome-control-size);
+                height: var(--flows-chrome-control-size);
                 display: inline-flex;
                 align-items: center;
                 justify-content: center;
@@ -287,27 +268,6 @@ export class FlowsEvaluationPage extends PlatformPage {
                 color: var(--text-secondary);
                 font-size: var(--text-sm);
                 font-weight: var(--font-semibold);
-            }
-
-            .panel-fullscreen-toggle {
-                width: 32px;
-                height: 32px;
-                display: inline-flex;
-                align-items: center;
-                justify-content: center;
-                border-radius: var(--radius-full);
-                border: 1px solid var(--border-subtle);
-                background: color-mix(in srgb, var(--glass-solid-strong), transparent 10%);
-                color: var(--text-secondary);
-                cursor: pointer;
-                transition: var(--motion-transition-interactive);
-                backdrop-filter: blur(16px);
-            }
-
-            .panel-fullscreen-toggle:hover {
-                color: var(--text-primary);
-                border-color: color-mix(in srgb, var(--accent), transparent 50%);
-                background: color-mix(in srgb, var(--accent), transparent 88%);
             }
 
             .main {

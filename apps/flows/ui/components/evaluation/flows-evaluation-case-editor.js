@@ -4,7 +4,12 @@ import '@platform/lib/components/platform-icon.js';
 import '@platform/lib/components/platform-button.js';
 import '@platform/lib/components/fields/platform-field.js';
 import '@platform/lib/components/platform-help-hint.js';
+import '@platform/lib/components/platform-segmented-control.js';
+import '@platform/lib/components/platform-json-editor.js';
+import '../editors/flows-code-editor.js';
 import { evaluationCatalogNameKey } from '../../_helpers/evaluation-catalog-labels.js';
+import { formatJsonPretty } from '@platform/lib/utils/json-format.js';
+import { panelShellStyles } from '@platform/lib/styles/shared/panel-shell.styles.js';
 
 function asArray(value) {
     return Array.isArray(value) ? value : [];
@@ -61,7 +66,7 @@ function jsonText(value) {
     if (!value || typeof value !== 'object' || Array.isArray(value)) {
         return '{\n  \"type\": \"object\"\n}';
     }
-    return JSON.stringify(value, null, 2);
+    return formatJsonPretty(value);
 }
 
 export class FlowsEvaluationCaseEditor extends PlatformElement {
@@ -95,47 +100,13 @@ export class FlowsEvaluationCaseEditor extends PlatformElement {
 
     static styles = [
         PlatformElement.styles,
+        panelShellStyles,
         css`
             :host {
                 display: flex;
                 min-width: 0;
                 min-height: 0;
                 color: var(--text-primary);
-                --field-pill-bg: color-mix(in srgb, var(--bg-surface), transparent 14%);
-                --field-pill-border: var(--border-subtle);
-                --field-pill-radius: 14px;
-                --field-pill-padding-y: 7px;
-                --field-pill-padding-x: 12px;
-                --field-pill-gap: 4px;
-                --field-pill-gap-textarea: 5px;
-                --field-pill-number-spin-height: 32px;
-                --field-pill-textarea-min-height: 74px;
-                --field-pill-label-size: 10px;
-                --field-pill-label-letter: 0;
-                --field-pill-input-size: var(--text-sm);
-                --field-pill-input-weight: var(--font-medium);
-            }
-
-            .panel {
-                flex: 1;
-                min-width: 0;
-                min-height: 0;
-                display: flex;
-                flex-direction: column;
-                border: 1px solid var(--border-subtle);
-                border-radius: var(--radius-xl);
-                background: var(--glass-solid-subtle);
-                overflow: hidden;
-            }
-
-            .head {
-                display: flex;
-                align-items: center;
-                justify-content: space-between;
-                gap: var(--space-3);
-                padding: var(--space-3) var(--space-4);
-                border-bottom: 1px solid var(--border-subtle);
-                background: linear-gradient(180deg, color-mix(in srgb, var(--glass-solid-medium), transparent 8%), transparent);
             }
 
             .title {
@@ -185,10 +156,8 @@ export class FlowsEvaluationCaseEditor extends PlatformElement {
                 --field-pill-textarea-min-height: 104px;
             }
 
-            .segmented {
-                display: flex;
-                flex-wrap: wrap;
-                gap: 6px;
+            .check-type-scroll {
+                overflow-x: auto;
             }
 
             .section-label {
@@ -202,55 +171,17 @@ export class FlowsEvaluationCaseEditor extends PlatformElement {
                 letter-spacing: 0;
             }
 
-            .segmented button {
-                min-height: 34px;
-                display: inline-flex;
-                align-items: center;
-                justify-content: center;
-                gap: var(--space-1);
-                padding: 0 10px;
-                border-radius: var(--radius-full);
-                border: 1px solid var(--border-subtle);
-                background: var(--glass-solid-subtle);
-                color: var(--text-secondary);
-                font: inherit;
-                font-size: var(--text-sm);
-                cursor: pointer;
-                transition: var(--motion-transition-interactive);
-            }
-
-            .segmented button:hover {
-                color: var(--text-primary);
-                background: var(--glass-solid-medium);
-            }
-
-            .segmented button[data-active="true"] {
-                color: var(--text-primary);
-                border-color: color-mix(in srgb, var(--accent), transparent 54%);
-                background: color-mix(in srgb, var(--accent), transparent 86%);
-            }
-
             .code {
                 min-height: 128px;
-                resize: vertical;
-                width: 100%;
-                box-sizing: border-box;
-                padding: var(--space-3);
-                border-radius: var(--radius-lg);
-                border: 1px solid var(--border-subtle);
-                background: color-mix(in srgb, var(--bg-surface), transparent 12%);
-                color: var(--text-primary);
-                font: 13px/1.45 var(--font-mono);
-                outline: none;
             }
 
-            .json {
+            flows-code-editor,
+            platform-json-editor {
+                min-height: 128px;
+            }
+
+            platform-json-editor.json-schema-editor {
                 min-height: 150px;
-            }
-
-            .code:focus {
-                border-color: var(--accent);
-                box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent), transparent 78%);
             }
 
             .footer {
@@ -394,6 +325,47 @@ export class FlowsEvaluationCaseEditor extends PlatformElement {
 
     _setCheckType(checkType) {
         this._checkType = checkType;
+    }
+
+    _checkTypeItems() {
+        return [
+            { value: 'contains', label: this.t('evaluation.case_editor.check_contains'), icon: 'search-check' },
+            { value: 'not_contains', label: this.t('evaluation.case_editor.check_not_contains'), icon: 'shield' },
+            { value: 'regex', label: this.t('evaluation.case_editor.check_regex'), icon: 'code' },
+            { value: 'length', label: this.t('evaluation.case_editor.check_length'), icon: 'list' },
+            { value: 'state_path', label: this.t('evaluation.case_editor.check_state'), icon: 'braces' },
+            { value: 'json_schema', label: this.t('evaluation.case_editor.check_json_schema'), icon: 'table' },
+            { value: 'trace_assertion', label: this.t('evaluation.case_editor.check_trace'), icon: 'activity' },
+            { value: 'builtin_metric', label: this.t('evaluation.case_editor.check_builtin'), icon: 'badge-check' },
+            { value: 'llm_judge', label: this.t('evaluation.case_editor.check_judge'), icon: 'sparkles' },
+            { value: 'code', label: this.t('evaluation.case_editor.check_code'), icon: 'code' },
+        ];
+    }
+
+    _traceAssertionItems() {
+        return [
+            { value: 'tool_called', label: this.t('evaluation.case_editor.trace_tool_called') },
+            { value: 'node_completed', label: this.t('evaluation.case_editor.trace_node_completed') },
+            { value: 'node_failed', label: this.t('evaluation.case_editor.trace_node_failed') },
+        ];
+    }
+
+    _builtinMetricItems(metrics) {
+        return metrics.map((item) => {
+            const metricId = stringValue(item, 'evaluator_id');
+            return {
+                value: metricId,
+                label: this.t(evaluationCatalogNameKey(metricId)),
+            };
+        });
+    }
+
+    _codeLanguageItems() {
+        return ['python', 'javascript', 'typescript', 'go', 'csharp'].map((language) => ({
+            value: language,
+            label: language,
+            icon: language,
+        }));
     }
 
     _onCodeInput(event) {
@@ -569,7 +541,7 @@ export class FlowsEvaluationCaseEditor extends PlatformElement {
         const suiteId = stringValue(this.suite, 'suite_id');
         if (suiteId.length === 0) {
             return html`
-                <section class="panel">
+                <section class="content-panel">
                     <div class="empty">
                         <span class="empty-mark"><platform-icon name="checklist" size="20"></platform-icon></span>
                         <span>${this.t('evaluation.case_editor.no_suite')}</span>
@@ -579,8 +551,8 @@ export class FlowsEvaluationCaseEditor extends PlatformElement {
         }
         const caseId = stringValue(this.testCase, 'case_id');
         return html`
-            <section class="panel">
-                <div class="head">
+            <section class="content-panel">
+                <div class="content-panel-head">
                     <div class="title">
                         <platform-icon name="file-pen" size="16"></platform-icon>
                         ${caseId.length > 0 ? this.t('evaluation.case_editor.edit_title') : this.t('evaluation.case_editor.create_title')}
@@ -645,17 +617,13 @@ export class FlowsEvaluationCaseEditor extends PlatformElement {
                             placement="bottom"
                         ></platform-help-hint>
                     </div>
-                    <div class="segmented">
-                        ${this._renderCheckButton('contains', 'search-check', this.t('evaluation.case_editor.check_contains'))}
-                        ${this._renderCheckButton('not_contains', 'shield', this.t('evaluation.case_editor.check_not_contains'))}
-                        ${this._renderCheckButton('regex', 'code', this.t('evaluation.case_editor.check_regex'))}
-                        ${this._renderCheckButton('length', 'list', this.t('evaluation.case_editor.check_length'))}
-                        ${this._renderCheckButton('state_path', 'braces', this.t('evaluation.case_editor.check_state'))}
-                        ${this._renderCheckButton('json_schema', 'table', this.t('evaluation.case_editor.check_json_schema'))}
-                        ${this._renderCheckButton('trace_assertion', 'activity', this.t('evaluation.case_editor.check_trace'))}
-                        ${this._renderCheckButton('builtin_metric', 'badge-check', this.t('evaluation.case_editor.check_builtin'))}
-                        ${this._renderCheckButton('llm_judge', 'sparkles', this.t('evaluation.case_editor.check_judge'))}
-                        ${this._renderCheckButton('code', 'code', this.t('evaluation.case_editor.check_code'))}
+                    <div class="check-type-scroll">
+                        <platform-segmented-control
+                            .value=${this._checkType}
+                            .items=${this._checkTypeItems()}
+                            aria-label=${this.t('evaluation.case_editor.check_type_aria')}
+                            @change=${(event) => this._setCheckType(event.detail.value)}
+                        ></platform-segmented-control>
                     </div>
 
                     ${this._renderCheckEditor()}
@@ -667,15 +635,6 @@ export class FlowsEvaluationCaseEditor extends PlatformElement {
                     </platform-button>
                 </div>
             </section>
-        `;
-    }
-
-    _renderCheckButton(checkType, icon, label) {
-        return html`
-            <button type="button" data-active=${this._checkType === checkType ? 'true' : 'false'} @click=${() => this._setCheckType(checkType)}>
-                <platform-icon name=${icon} size="14"></platform-icon>
-                ${label}
-            </button>
         `;
     }
 
@@ -772,23 +731,32 @@ export class FlowsEvaluationCaseEditor extends PlatformElement {
         }
         if (this._checkType === 'json_schema') {
             return html`
-                <textarea
-                    class="code json"
-                    data-canon="code-editor"
-                    spellcheck="false"
-                    aria-label=${this.t('evaluation.case_editor.json_schema')}
+                <platform-json-editor
+                    class="json-schema-editor"
+                    validate-json
+                    show-toolbar="false"
+                    min-height="150"
                     .value=${this._jsonSchema}
-                    @input=${this._onJsonSchemaInput}
-                ></textarea>
+                    @change=${(event) => {
+                        if (event.detail && typeof event.detail.value === 'string') {
+                            this._jsonSchema = event.detail.value;
+                        }
+                    }}
+                ></platform-json-editor>
             `;
         }
         if (this._checkType === 'trace_assertion') {
             return html`
                 <div class="grid">
-                    <div class="full segmented">
-                        ${this._renderTraceButton('tool_called', this.t('evaluation.case_editor.trace_tool_called'))}
-                        ${this._renderTraceButton('node_completed', this.t('evaluation.case_editor.trace_node_completed'))}
-                        ${this._renderTraceButton('node_failed', this.t('evaluation.case_editor.trace_node_failed'))}
+                    <div class="full">
+                        <platform-segmented-control
+                            full-width
+                            density="compact"
+                            .value=${this._traceAssertion}
+                            .items=${this._traceAssertionItems()}
+                            aria-label=${this.t('evaluation.case_editor.trace_assertion_aria')}
+                            @change=${(event) => { this._traceAssertion = event.detail.value; }}
+                        ></platform-segmented-control>
                     </div>
                     <platform-field
                         class="full"
@@ -839,58 +807,43 @@ export class FlowsEvaluationCaseEditor extends PlatformElement {
                         .value=${this._reference}
                         @change=${(event) => { this._reference = this._fieldValue(event); }}
                     ></platform-field>
-                    <div class="full segmented">
-                        ${metrics.map((item) => this._renderMetricChip(item))}
+                    <div class="full">
+                        <platform-segmented-control
+                            full-width
+                            density="compact"
+                            .value=${this._builtinMetricId}
+                            .items=${this._builtinMetricItems(metrics)}
+                            aria-label=${this.t('evaluation.case_editor.builtin_metric_aria')}
+                            @change=${(event) => { this._builtinMetricId = event.detail.value; }}
+                        ></platform-segmented-control>
                     </div>
                 </div>
             `;
         }
         if (this._checkType === 'code') {
             return html`
-                <div class="segmented">
-                    ${this._renderLanguageButton('python')}
-                    ${this._renderLanguageButton('javascript')}
-                    ${this._renderLanguageButton('typescript')}
-                    ${this._renderLanguageButton('go')}
-                    ${this._renderLanguageButton('csharp')}
-                </div>
-                <textarea
-                    class="code"
-                    data-canon="code-editor"
-                    spellcheck="false"
-                    aria-label=${this.t('evaluation.case_editor.code_source')}
+                <platform-segmented-control
+                    full-width
+                    density="compact"
+                    .value=${this._codeLanguage}
+                    .items=${this._codeLanguageItems()}
+                    aria-label=${this.t('evaluation.case_editor.code_language_aria')}
+                    @change=${(event) => { this._codeLanguage = event.detail.value; }}
+                ></platform-segmented-control>
+                <flows-code-editor
+                    language=${this._codeLanguage}
                     .value=${this._codeSource}
-                    @input=${this._onCodeInput}
-                ></textarea>
+                    .showToolbar=${false}
+                    .fillParent=${true}
+                    @change=${(event) => {
+                        if (event.detail && typeof event.detail.value === 'string') {
+                            this._codeSource = event.detail.value;
+                        }
+                    }}
+                ></flows-code-editor>
             `;
         }
         throw new Error(`FlowsEvaluationCaseEditor: unsupported render check type ${this._checkType}`);
-    }
-
-    _renderMetricChip(item) {
-        const metricId = stringValue(item, 'evaluator_id');
-        return html`
-            <button type="button" data-active=${this._builtinMetricId === metricId ? 'true' : 'false'} @click=${() => { this._builtinMetricId = metricId; }}>
-                ${this.t(evaluationCatalogNameKey(metricId))}
-            </button>
-        `;
-    }
-
-    _renderTraceButton(assertion, label) {
-        return html`
-            <button type="button" data-active=${this._traceAssertion === assertion ? 'true' : 'false'} @click=${() => { this._traceAssertion = assertion; }}>
-                ${label}
-            </button>
-        `;
-    }
-
-    _renderLanguageButton(language) {
-        return html`
-            <button type="button" data-active=${this._codeLanguage === language ? 'true' : 'false'} @click=${() => { this._codeLanguage = language; }}>
-                <platform-icon name=${language} size="14"></platform-icon>
-                ${language}
-            </button>
-        `;
     }
 }
 

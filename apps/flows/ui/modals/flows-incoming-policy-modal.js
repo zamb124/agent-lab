@@ -10,6 +10,7 @@
 import { html, css } from 'lit';
 import { PlatformModal } from '@platform/lib/components/glass-modal.js';
 import { registerModalKind } from '@platform/lib/utils/modal-registry.js';
+import '@platform/lib/components/platform-picker-card.js';
 import { asObject } from '../_helpers/flows-resolvers.js';
 
 const ICON_ANY = html`
@@ -69,57 +70,8 @@ export class FlowsIncomingPolicyModal extends PlatformModal {
                     grid-template-columns: 1fr;
                 }
             }
-            .card {
-                display: flex;
-                flex-direction: column;
-                align-items: center;
-                gap: var(--space-2);
-                padding: var(--space-4);
-                margin: 0;
+            platform-picker-card {
                 min-width: 0;
-                max-width: 100%;
-                box-sizing: border-box;
-                border: 2px solid var(--border-subtle);
-                border-radius: var(--radius-lg);
-                background: var(--glass-tint-subtle);
-                color: var(--text-primary);
-                font: inherit;
-                text-align: center;
-                cursor: pointer;
-                transition: border-color 120ms, background 120ms, box-shadow 120ms;
-            }
-            .card:hover {
-                border-color: var(--border-medium);
-                background: var(--glass-tint-medium);
-            }
-            .card[data-selected] {
-                border-color: var(--accent);
-                background: var(--accent-subtle);
-                box-shadow: 0 0 0 1px var(--accent-subtle);
-            }
-            .card-icon {
-                width: 72px;
-                height: 72px;
-                display: flex;
-                align-items: center;
-                justify-content: center;
-                color: var(--text-secondary);
-            }
-            .card[data-selected] .card-icon { color: var(--accent); }
-            .card-title {
-                font-size: var(--text-md);
-                font-weight: var(--font-semibold);
-                min-width: 0;
-                width: 100%;
-                word-break: break-word;
-            }
-            .card-desc {
-                font-size: var(--text-xs);
-                color: var(--text-tertiary);
-                line-height: 1.45;
-                min-width: 0;
-                width: 100%;
-                word-break: break-word;
             }
         `,
     ];
@@ -175,26 +127,24 @@ export class FlowsIncomingPolicyModal extends PlatformModal {
                 </p>
             </div>
             <div class="cards">
-                <button
-                    type="button"
-                    class="card"
-                    ?data-selected=${this._policy === 'any'}
-                    @click=${() => this._pick('any')}
+                <platform-picker-card
+                    value="any"
+                    .selected=${this._policy === 'any'}
+                    .title=${this.t('incoming_policy_modal.option_any_title')}
+                    .subtitle=${this.t('incoming_policy_modal.option_any_desc')}
+                    @select=${() => this._pick('any')}
                 >
-                    <span class="card-icon">${ICON_ANY}</span>
-                    <span class="card-title">${this.t('incoming_policy_modal.option_any_title')}</span>
-                    <span class="card-desc">${this.t('incoming_policy_modal.option_any_desc')}</span>
-                </button>
-                <button
-                    type="button"
-                    class="card"
-                    ?data-selected=${this._policy === 'all'}
-                    @click=${() => this._pick('all')}
+                    <span slot="icon">${ICON_ANY}</span>
+                </platform-picker-card>
+                <platform-picker-card
+                    value="all"
+                    .selected=${this._policy === 'all'}
+                    .title=${this.t('incoming_policy_modal.option_all_title')}
+                    .subtitle=${this.t('incoming_policy_modal.option_all_desc')}
+                    @select=${() => this._pick('all')}
                 >
-                    <span class="card-icon">${ICON_ALL}</span>
-                    <span class="card-title">${this.t('incoming_policy_modal.option_all_title')}</span>
-                    <span class="card-desc">${this.t('incoming_policy_modal.option_all_desc')}</span>
-                </button>
+                    <span slot="icon">${ICON_ALL}</span>
+                </platform-picker-card>
             </div>
         `;
     }

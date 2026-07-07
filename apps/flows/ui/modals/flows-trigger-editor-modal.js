@@ -25,7 +25,9 @@ import '@platform/lib/components/platform-button.js';
 import '@platform/lib/components/platform-cron-field.js';
 import '@platform/lib/components/platform-timezone-picker.js';
 import '@platform/lib/components/fields/platform-field.js';
+import '@platform/lib/components/platform-segmented-control.js';
 import { asString, isPlainObject } from '../_helpers/flows-resolvers.js';
+import { formatJsonPretty } from '@platform/lib/utils/json-format.js';
 import { TRIGGER_TYPES } from '../constants/trigger-types.js';
 
 const TRIGGER_ID_PATTERN = /^[a-zA-Z][a-zA-Z0-9_-]*$/;
@@ -173,44 +175,12 @@ export class FlowsTriggerEditorModal extends PlatformFormModal {
         css`
             :host { --modal-max-width: 920px; }
 
-            .tabs {
-                display: flex;
-                gap: var(--space-1);
+            .modal-tabs {
                 margin-bottom: var(--space-4);
-                border-bottom: 1px solid var(--border-subtle);
             }
-            .tab {
-                padding: var(--space-2) var(--space-4);
-                font-size: var(--text-sm);
-                font-weight: var(--font-medium);
-                color: var(--text-secondary);
-                border: none;
-                background: none;
-                cursor: pointer;
-                border-bottom: 2px solid transparent;
-                margin-bottom: -1px;
-                transition: color var(--duration-fast) var(--easing-default),
-                            border-color var(--duration-fast) var(--easing-default);
-            }
-            .tab:hover { color: var(--text-primary); }
-            .tab.active { color: var(--accent); border-bottom-color: var(--accent); }
-
             .field { display: flex; flex-direction: column; gap: var(--space-1); margin-bottom: var(--space-3); }
             .field > label { font-size: var(--text-sm); color: var(--text-secondary); font-weight: var(--font-medium); }
             .field > .hint { font-size: var(--text-xs); color: var(--text-tertiary); }
-            .field input,
-            .field select,
-            .field textarea {
-                padding: var(--space-2) var(--space-3);
-                border-radius: var(--radius-md);
-                border: 1px solid var(--glass-border-subtle);
-                background: var(--glass-tint-subtle);
-                color: var(--text-primary);
-                font: inherit;
-                width: 100%;
-                box-sizing: border-box;
-            }
-            .field textarea { min-height: 96px; resize: vertical; font-family: var(--font-mono); font-size: var(--text-xs); }
 
             .checkbox-row { display: flex; align-items: center; gap: var(--space-2); margin-bottom: var(--space-3); }
             .switch-row { display: flex; align-items: center; margin-bottom: var(--space-3); }
@@ -527,7 +497,7 @@ export class FlowsTriggerEditorModal extends PlatformFormModal {
      */
     _stringifyVerifyPayload(v) {
         if (v !== null && typeof v === 'object') {
-            return JSON.stringify(v, null, 2);
+            return formatJsonPretty(v);
         }
         if (typeof v === 'string') {
             return v;
@@ -608,23 +578,28 @@ export class FlowsTriggerEditorModal extends PlatformFormModal {
         await this._reregisterOp.run({ flow_id: this.flowId, trigger_id: tid });
     }
 
+    _triggerTabItems() {
+        const items = [
+            { value: 'config', label: this.t('trigger_editor_modal.tab_config') },
+            { value: 'mapping', label: this.t('trigger_editor_modal.tab_mapping') },
+        ];
+        if (showTriggerOutputTab(this._type)) {
+            items.push({ value: 'output', label: this.t('trigger_editor_modal.tab_output') });
+        }
+        return items;
+    }
+
     renderBody() {
         return html`
-            <div class="tabs">
-                <button type="button" class="tab ${this._activeTab === 'config' ? 'active' : ''}" @click=${() => this._setTab('config')}>
-                    ${this.t('trigger_editor_modal.tab_config')}
-                </button>
-                <button type="button" class="tab ${this._activeTab === 'mapping' ? 'active' : ''}" @click=${() => this._setTab('mapping')}>
-                    ${this.t('trigger_editor_modal.tab_mapping')}
-                </button>
-                ${showTriggerOutputTab(this._type)
-        ? html`
-                <button type="button" class="tab ${this._activeTab === 'output' ? 'active' : ''}" @click=${() => this._setTab('output')}>
-                    ${this.t('trigger_editor_modal.tab_output')}
-                </button>
-                `
-        : nothing}
-            </div>
+            <platform-segmented-control
+                class="modal-tabs"
+                full-width
+                density="compact"
+                .value=${this._activeTab}
+                .items=${this._triggerTabItems()}
+                aria-label=${this.t('trigger_editor_modal.tabs_aria')}
+                @change=${(e) => this._setTab(e.detail.value)}
+            ></platform-segmented-control>
 
             ${this._validationError ? html`<div class="form-error">${this._validationError}</div>` : ''}
 

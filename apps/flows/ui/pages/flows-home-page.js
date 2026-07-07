@@ -12,6 +12,8 @@ import '@platform/lib/components/platform-icon.js';
 import '@platform/lib/components/platform-button.js';
 import '@platform/lib/components/platform-help-hint.js';
 import '@platform/lib/components/glass-spinner.js';
+import '@platform/lib/components/platform-metric-card.js';
+import { marketingHeroStyles } from '@platform/lib/styles/shared/marketing-section.styles.js';
 import '../components/flows-catalog-list.js';
 import { asArray, asString, isPlainObject } from '../_helpers/flows-resolvers.js';
 
@@ -179,6 +181,7 @@ export class FlowsHomePage extends PlatformPage {
 
     static styles = [
         PlatformPage.styles,
+        marketingHeroStyles,
         css`
             :host {
                 display: block;
@@ -361,8 +364,19 @@ export class FlowsHomePage extends PlatformPage {
             .capability-grid {
                 grid-template-columns: repeat(4, minmax(0, 1fr));
             }
+            .metric-shell {
+                min-height: 112px;
+                display: flex;
+                flex-direction: column;
+                gap: var(--space-2);
+            }
+            .metric-shell .metric-caption {
+                color: var(--text-tertiary);
+                font-size: var(--text-xs);
+                line-height: var(--leading-normal);
+                padding: 0 var(--space-1);
+            }
             .glass-card,
-            .metric-card,
             .action-card,
             .connect-card,
             .capability-card,
@@ -372,36 +386,7 @@ export class FlowsHomePage extends PlatformPage {
                 border: 1px solid var(--border-subtle);
                 box-sizing: border-box;
             }
-            .metric-card {
-                min-height: 112px;
-                padding: var(--space-4);
-                display: flex;
-                flex-direction: column;
-                gap: var(--space-3);
-            }
-            .metric-head {
-                display: flex;
-                align-items: center;
-                justify-content: space-between;
-                gap: var(--space-2);
-                color: var(--text-tertiary);
-                font-size: var(--text-xs);
-                text-transform: uppercase;
-                letter-spacing: 0.06em;
-                font-weight: var(--font-semibold);
-            }
-            .metric-value {
-                font-size: var(--text-3xl);
-                line-height: var(--leading-tight);
-                font-weight: var(--font-bold);
-                color: var(--text-primary);
-            }
-            .metric-caption {
-                color: var(--text-tertiary);
-                font-size: var(--text-xs);
-                line-height: var(--leading-normal);
-            }
-            .section-head {
+            .action-card,
                 display: flex;
                 align-items: flex-end;
                 justify-content: space-between;
@@ -987,13 +972,13 @@ export class FlowsHomePage extends PlatformPage {
     }
 
     _renderMetric(icon, labelKey, value, captionKey) {
+        const numericValue = Number(value);
         return html`
-            <div class="metric-card">
-                <div class="metric-head">
-                    <span>${this.t(labelKey)}</span>
-                    <platform-icon name=${icon} size="16"></platform-icon>
-                </div>
-                <div class="metric-value">${value}</div>
+            <div class="metric-shell">
+                <platform-metric-card
+                    .label=${this.t(labelKey)}
+                    .value=${Number.isFinite(numericValue) ? numericValue : 0}
+                ></platform-metric-card>
                 <div class="metric-caption">${this.t(captionKey)}</div>
             </div>
         `;
@@ -1018,7 +1003,7 @@ export class FlowsHomePage extends PlatformPage {
     _renderActionCard(action) {
         const title = this.t(action.titleKey);
         return html`
-            <article class="action-card glass-card">
+            <glass-card compact>
                 <div class="card-head">
                     <span class="tone-icon tone-${action.tone}">
                         <platform-icon name=${action.icon} size="18"></platform-icon>
@@ -1035,7 +1020,7 @@ export class FlowsHomePage extends PlatformPage {
                 </div>
                 <div class="card-title">${title}</div>
                 <div class="card-desc">${this.t(action.descKey)}</div>
-            </article>
+            </glass-card>
         `;
     }
 

@@ -9,6 +9,7 @@
 import { html, css } from 'lit';
 import { PlatformElement } from '@platform/lib/platform-element/index.js';
 import '@platform/lib/components/fields/platform-field.js';
+import '@platform/lib/components/platform-segmented-control.js';
 import './flows-base-node-editor.js';
 import { asObject } from '../../_helpers/flows-resolvers.js';
 
@@ -33,25 +34,9 @@ export class FlowsFlowNodeEditor extends PlatformElement {
             :host { display: block; height: 100%; min-height: 0; }
             .field { display: flex; flex-direction: column; gap: var(--space-1); margin-bottom: var(--space-3); }
             label { font-size: var(--text-sm); color: var(--text-secondary); }
-            input, select {
-                padding: var(--space-2);
-                border-radius: var(--radius-md);
-                border: 1px solid var(--glass-border-subtle);
-                background: var(--glass-solid-subtle);
-                color: var(--text-primary); font: inherit;
-                width: 100%; box-sizing: border-box;
+            .source-mode {
+                margin-bottom: var(--space-2);
             }
-            .toggle button {
-                padding: 4px 12px;
-                background: var(--glass-solid-subtle);
-                color: var(--text-secondary);
-                border: 1px solid var(--glass-border-subtle);
-                border-radius: var(--radius-full);
-                font-size: var(--text-xs);
-                cursor: pointer;
-            }
-            .toggle button[active] { background: var(--accent-subtle); color: var(--accent); border-color: var(--accent-subtle); }
-            .row { display: flex; gap: var(--space-2); margin-bottom: var(--space-2); }
         `,
     ];
 
@@ -203,14 +188,18 @@ export class FlowsFlowNodeEditor extends PlatformElement {
                 <div slot="settings">
                     <div class="field">
                         <label>${this.t('flow_node_editor.flow_id')}</label>
-                        <div class="row toggle">
-                            <button ?active=${!useCustom} @click=${() => { this._showCustom = false; }}>
-                                ${this.t('flow_node_editor.from_list')}
-                            </button>
-                            <button ?active=${useCustom} @click=${() => { this._showCustom = true; }}>
-                                ${this.t('flow_node_editor.custom_id')}
-                            </button>
-                        </div>
+                        <platform-segmented-control
+                            class="source-mode"
+                            full-width
+                            density="compact"
+                            .value=${useCustom ? 'custom' : 'list'}
+                            .items=${[
+                                { value: 'list', label: this.t('flow_node_editor.from_list') },
+                                { value: 'custom', label: this.t('flow_node_editor.custom_id') },
+                            ]}
+                            aria-label=${this.t('flow_node_editor.flow_id_mode_aria')}
+                            @change=${(e) => { this._showCustom = e.detail.value === 'custom'; }}
+                        ></platform-segmented-control>
                         ${useCustom ? html`
                             <platform-field
                                 mode="edit"

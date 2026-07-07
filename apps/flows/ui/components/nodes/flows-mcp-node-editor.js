@@ -12,9 +12,9 @@ import { html, css } from 'lit';
 import { PlatformElement } from '@platform/lib/platform-element/index.js';
 import '@platform/lib/components/fields/platform-field.js';
 import './flows-base-node-editor.js';
-import '../editors/flows-json-field-editor.js';
+import '@platform/lib/components/platform-json-editor.js';
 import '../editors/flows-parameters-schema-form.js';
-import '@platform/lib/components/glass-button.js';
+import '@platform/lib/components/platform-button.js';
 import '@platform/lib/components/platform-icon.js';
 import { asObject, isPlainObject } from '../../_helpers/flows-resolvers.js';
 import {
@@ -64,7 +64,6 @@ export class FlowsMcpNodeEditor extends PlatformElement {
                 width: 100%; box-sizing: border-box;
             }
             .row { display: flex; align-items: center; gap: var(--space-2); }
-            .row > select, .row > input { flex: 1; }
             .mcp-control-row {
                 display: grid;
                 grid-template-columns: minmax(180px, 0.55fr) minmax(260px, 1fr) auto;
@@ -454,16 +453,16 @@ export class FlowsMcpNodeEditor extends PlatformElement {
                             .config=${{ values: toolValues }}
                             @change=${this._onTool}
                         ></platform-field>
-                        <glass-button
+                        <platform-button
                             class="mcp-sync-button"
-                            size="sm"
                             variant="ghost"
+                            density="compact"
                             ?disabled=${!serverId || this._sync.busy}
                             @click=${() => this._onSync(serverId)}
                         >
                             <platform-icon name="refresh"></platform-icon>
                             ${this.t('mcp_node_editor.sync_server')}
-                        </glass-button>
+                        </platform-button>
                     </div>
                     ${schema ? html`
                         <details>
@@ -477,10 +476,10 @@ export class FlowsMcpNodeEditor extends PlatformElement {
                     ` : ''}
                     <details>
                         <summary>${this.t('mcp_node_editor.headers')}</summary>
-                        <flows-json-field-editor
+                        <platform-json-editor validate-json show-toolbar="false"
                             .value=${headersJson}
                             @change=${(e) => { if (e.detail && 'parsed' in e.detail) this._onHeaders(e.detail.parsed); }}
-                        ></flows-json-field-editor>
+                        ></platform-json-editor>
                     </details>
                 </div>
             </flows-base-node-editor>

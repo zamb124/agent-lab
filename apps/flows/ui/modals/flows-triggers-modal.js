@@ -98,7 +98,7 @@ export class FlowsTriggersModal extends PlatformModal {
                 variant: 'danger',
                 confirmVariant: 'danger',
                 confirmText: this.t('triggers_modal.action_delete'),
-                cancelText: this.t('triggers_modal.action_cancel'),
+                cancelText: this.t('common.action_cancel'),
             },
         );
         if (!ok) return;
@@ -199,7 +199,7 @@ export class FlowsTriggersModal extends PlatformModal {
     }
 
     renderHeaderActions() {
-        const createLabel = this.t('triggers_modal.action_create');
+        const createLabel = this.t('common.action_create');
         return html`
             <platform-button
                 variant="primary"

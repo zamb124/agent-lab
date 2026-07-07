@@ -1,31 +1,27 @@
 /**
- * flows-editor-header — шапка редактора flow.
+ * flows-editor-header — шапка редактора flow (2 строки).
  *
- * Раскладка (3 секции):
- *   left:  back / flow-name input / status-badge (Черновик|Опубликован)
- *   center: mode-toggle pill (edit | run | reload-bundle с update-индикатором)
- *   right: AI / Code / Publish (primary)
+ * Row 1: назад / название+статус / режим / help / tiered actions / Publish.
+ * Row 2: segmented control веток + кнопка создания ветки.
  *
  * Источники state:
  *   - useOp('flows/editor').state.flowConfig — текущая модель flow.
  *   - useOp('flows/editor').state.{isDirty, isSaving, mode, publishedAt}.
- *   - useOp('flows/editor').state.agentExecutionRunning — индикатор Run.
- *   - useResource('flows/flows') — для обновления флага has_bundle_update.
+ *   - useResource('flows/flows') — флаг has_bundle_update и список branches.
  *
- * Изменения через ops:
- *   - flows/flow_update — публикация (PATCH с актуальным flowConfig + skillsData);
- *   - flows/flow_reload_from_bundle — переинициализация из bundle.
- *
- * Локальные UI-actions slice'а editor:
- *   - setMode({ mode: 'edit'|'run' })
- *   - setName({ name }) — переименование (isDirty=true).
+ * Ops:
+ *   - flows/flow_update — публикация;
+ *   - flows/flow_reload_from_bundle — переинициализация из bundle;
+ *   - flows/branch_remove — удаление ветки.
  */
 
-import { html, css } from 'lit';
+import { html, css, nothing } from 'lit';
 import { PlatformElement } from '@platform/lib/platform-element/index.js';
 import '@platform/lib/components/platform-icon.js';
 import '@platform/lib/components/platform-button.js';
+import '@platform/lib/components/platform-segmented-control.js';
 import '@platform/lib/components/platform-help-hint.js';
+import '@platform/lib/components/fields/platform-field.js';
 import {
     asArray,
     asObject,
@@ -38,43 +34,83 @@ export class FlowsEditorHeader extends PlatformElement {
     static properties = {
         flowId: { type: String, attribute: 'flow-id' },
         branchId: { type: String, attribute: 'branch-id' },
+        _isMobile: { state: true },
+        _overflowOpen: { state: true },
     };
 
     static styles = [
         PlatformElement.styles,
         css`
             :host {
-                display: grid;
-                grid-template-columns: 1fr auto 1fr;
-                align-items: center;
-                gap: var(--space-3);
+                display: flex;
+                flex-direction: column;
+                gap: var(--flows-editor-chrome-gap);
                 padding: var(--space-2) var(--space-4);
-                height: var(--header-height);
                 box-sizing: border-box;
                 background: var(--glass-solid-medium);
                 border-bottom: 1px solid var(--border-subtle);
                 box-shadow: var(--glass-shadow-subtle);
-                --platform-button-icon-size: 34px;
             }
 
-            /* LEFT */
-            .header-left { display: flex; align-items: center; gap: var(--space-2); min-width: 0; }
-            .flow-name-input {
+            :host(.editor-chrome-panel) {
                 background: transparent;
-                border: 1px solid transparent;
-                color: var(--text-primary);
-                font-size: var(--text-base);
-                font-weight: var(--font-semibold);
-                padding: 4px var(--space-2);
-                border-radius: var(--radius-sm);
-                min-width: 220px;
-                font: inherit;
-                font-weight: var(--font-semibold);
+                border-bottom: none;
+                box-shadow: none;
+                padding-top: 0;
             }
-            .flow-name-input:hover { border-color: var(--border-subtle); }
-            .flow-name-input:focus { outline: none; border-color: var(--accent); background: var(--glass-solid-subtle); }
+
+            .chrome-row {
+                display: flex;
+                align-items: center;
+                gap: var(--flows-editor-chrome-gap);
+                min-height: var(--flows-editor-chrome-row-min-height);
+                min-width: 0;
+            }
+
+            .chrome-row-primary {
+                justify-content: space-between;
+            }
+
+            .row-left,
+            .row-center,
+            .row-right {
+                display: flex;
+                align-items: center;
+                gap: var(--space-2);
+                min-width: 0;
+            }
+
+            .row-left {
+                flex: 1 1 auto;
+            }
+
+            .row-center {
+                flex: 0 0 auto;
+            }
+
+            .row-right {
+                flex: 0 0 auto;
+                position: relative;
+            }
+
+            .title-group {
+                display: flex;
+                align-items: center;
+                gap: var(--space-2);
+                min-width: 0;
+                flex: 1 1 auto;
+            }
+
+            .flow-name-field {
+                flex: 1 1 auto;
+                min-width: 0;
+                max-width: min(320px, 40vw);
+            }
+
             .status-badge {
-                display: inline-flex; align-items: center;
+                display: inline-flex;
+                align-items: center;
+                flex-shrink: 0;
                 padding: 2px var(--space-2);
                 border-radius: var(--radius-full);
                 font-size: var(--text-xs);
@@ -85,59 +121,105 @@ export class FlowsEditorHeader extends PlatformElement {
                 text-transform: uppercase;
                 letter-spacing: 0.04em;
             }
+
             .status-badge[data-status="dirty"] {
                 color: var(--warning);
                 background: var(--warning-bg);
                 border-color: var(--warning-border);
             }
+
             .status-badge[data-status="published"] {
                 color: var(--success);
                 background: var(--success-bg);
                 border-color: var(--success-border);
             }
 
-            /* CENTER pill */
-            .header-center { display: flex; justify-content: center; align-items: center; gap: var(--space-2); }
-            .mode-pill {
-                display: inline-flex;
-                gap: 2px;
-                padding: 3px;
-                border-radius: var(--radius-full);
-                border: 1px solid var(--border-subtle);
-                background: var(--glass-solid-subtle);
+            .chrome-row-branches {
+                overflow-x: auto;
+                overflow-y: hidden;
+                scrollbar-width: thin;
             }
-            .mode-btn {
-                width: 36px; height: 32px;
-                display: flex; align-items: center; justify-content: center;
-                border-radius: var(--radius-full);
-                border: none;
-                background: transparent;
-                color: var(--text-secondary);
-                cursor: pointer;
-                transition: var(--motion-transition-interactive);
+
+            .branches-row {
+                display: flex;
+                align-items: center;
+                gap: var(--space-2);
+                width: max-content;
+                min-width: 100%;
             }
-            .mode-btn:hover { background: var(--glass-solid-medium); color: var(--text-primary); }
-            .mode-btn[active] {
+
+            .branches-row platform-segmented-control {
+                flex-shrink: 0;
+                max-width: 100%;
+            }
+
+            .header-actions {
+                position: relative;
+                display: flex;
+                align-items: center;
+                gap: var(--space-2);
+            }
+
+            .overflow-anchor {
+                position: relative;
+                z-index: 50;
+            }
+
+            .menu-flyout {
+                position: absolute;
+                right: 0;
+                top: 100%;
+                margin-top: 4px;
+                width: min(320px, calc(100vw - 2 * var(--space-4)));
+                max-width: calc(100vw - 2 * var(--space-4));
+                box-sizing: border-box;
                 background: var(--glass-solid-strong);
-                color: var(--accent);
-                box-shadow: var(--glass-shadow-subtle);
+                border: 1px solid var(--glass-border, var(--border-subtle));
+                border-radius: var(--radius-md);
+                box-shadow: var(--glass-shadow-strong);
+                z-index: 40;
+                display: flex;
+                flex-direction: column;
+                gap: var(--space-1);
+                padding: var(--space-1);
+                overflow: hidden;
             }
-            .mode-btn.reload { position: relative; }
+
+            .overflow-btn-wrap {
+                position: relative;
+                display: inline-flex;
+            }
+
             .reload-dot {
                 position: absolute;
-                top: 2px; right: 2px;
-                width: 8px; height: 8px;
+                top: 2px;
+                right: 2px;
+                width: 8px;
+                height: 8px;
                 border-radius: 50%;
                 background: var(--warning);
                 box-shadow: 0 0 6px var(--warning);
+                pointer-events: none;
             }
 
-            /* RIGHT */
-            .header-right {
-                display: flex;
-                justify-content: flex-end;
-                align-items: center;
-                gap: var(--space-2);
+            @media (max-width: 767px) {
+                .desktop-only-actions {
+                    display: none;
+                }
+
+                .flow-name-field {
+                    max-width: min(180px, 42vw);
+                }
+
+                .chrome-row-primary {
+                    flex-wrap: wrap;
+                }
+
+                .row-center {
+                    order: 3;
+                    width: 100%;
+                    justify-content: flex-start;
+                }
             }
         `,
     ];
@@ -146,10 +228,64 @@ export class FlowsEditorHeader extends PlatformElement {
         super();
         this.flowId = '';
         this.branchId = 'base';
+        this._isMobile =
+            typeof window !== 'undefined' &&
+            typeof window.matchMedia === 'function' &&
+            window.matchMedia('(max-width: 767px)').matches;
+        this._overflowOpen = false;
+        this._editorMql = null;
+        this._onEditorMobileMql = null;
+        this._onDocPointer = (e) => {
+            if (!this._overflowOpen) {
+                return;
+            }
+            const path = e.composedPath();
+            for (const n of path) {
+                if (n === this) {
+                    break;
+                }
+                if (n == null || typeof n !== 'object' || !('classList' in n) || !n.classList) {
+                    continue;
+                }
+                if (n.classList.contains('header-actions')) {
+                    return;
+                }
+            }
+            this._overflowOpen = false;
+        };
         this._editor = this.useOp('flows/editor');
         this._update = this.useOp('flows/flow_update');
         this._reload = this.useOp('flows/flow_reload_from_bundle');
         this._flows = this.useResource('flows/flows');
+        this._branchRemove = this.useOp('flows/branch_remove');
+    }
+
+    connectedCallback() {
+        super.connectedCallback();
+        if (typeof window === 'undefined' || typeof window.matchMedia !== 'function') {
+            return;
+        }
+        this._editorMql = window.matchMedia('(max-width: 767px)');
+        this._onEditorMobileMql = () => {
+            const next = this._editorMql.matches;
+            if (next !== this._isMobile) {
+                this._isMobile = next;
+            }
+        };
+        this._editorMql.addEventListener('change', this._onEditorMobileMql);
+        const next = this._editorMql.matches;
+        if (next !== this._isMobile) {
+            this._isMobile = next;
+        }
+        document.addEventListener('pointerdown', this._onDocPointer);
+    }
+
+    disconnectedCallback() {
+        if (this._editorMql && this._onEditorMobileMql) {
+            this._editorMql.removeEventListener('change', this._onEditorMobileMql);
+        }
+        document.removeEventListener('pointerdown', this._onDocPointer);
+        super.disconnectedCallback();
     }
 
     _resolveStatusBadge(state) {
@@ -158,8 +294,12 @@ export class FlowsEditorHeader extends PlatformElement {
         return { key: 'idle', textKey: 'editor_header.status_draft' };
     }
 
-    _onNameInput(e) {
-        this._editor.setName({ name: e.target.value });
+    _onNameChange(e) {
+        const detail = e.detail;
+        if (!detail || typeof detail.value !== 'string') {
+            return;
+        }
+        this._editor.setName({ name: detail.value });
     }
 
     _setMode(mode) {
@@ -184,11 +324,22 @@ export class FlowsEditorHeader extends PlatformElement {
     }
 
     async _reloadBundle() {
+        this._overflowOpen = false;
         if (!this.flowId) return;
         await this._reload.run({ flow_id: this.flowId });
     }
 
+    _closeOverflow() {
+        this._overflowOpen = false;
+    }
+
+    _toggleOverflow(e) {
+        e.stopPropagation();
+        this._overflowOpen = !this._overflowOpen;
+    }
+
     _openCodeView() {
+        this._closeOverflow();
         if (typeof this.flowId !== 'string' || this.flowId.length === 0) {
             return;
         }
@@ -204,10 +355,12 @@ export class FlowsEditorHeader extends PlatformElement {
     }
 
     _openLara() {
+        this._closeOverflow();
         dispatchEmbedChatWindowToggle('flows-lara-open', { open: true });
     }
 
     _openTriggers() {
+        this._closeOverflow();
         if (typeof this.flowId !== 'string' || this.flowId.length === 0) {
             return;
         }
@@ -215,6 +368,7 @@ export class FlowsEditorHeader extends PlatformElement {
     }
 
     _openFlowSettings() {
+        this._closeOverflow();
         if (typeof this.flowId !== 'string' || this.flowId.length === 0) {
             return;
         }
@@ -222,6 +376,7 @@ export class FlowsEditorHeader extends PlatformElement {
     }
 
     _openPreviewShare() {
+        this._closeOverflow();
         if (typeof this.flowId !== 'string' || this.flowId.length === 0) {
             return;
         }
@@ -232,6 +387,7 @@ export class FlowsEditorHeader extends PlatformElement {
     }
 
     _openApiConsole() {
+        this._closeOverflow();
         if (typeof this.flowId !== 'string' || this.flowId.length === 0) {
             return;
         }
@@ -242,6 +398,7 @@ export class FlowsEditorHeader extends PlatformElement {
     }
 
     _openEvaluationLab() {
+        this._closeOverflow();
         if (typeof this.flowId !== 'string' || this.flowId.length === 0) {
             return;
         }
@@ -249,6 +406,240 @@ export class FlowsEditorHeader extends PlatformElement {
             typeof this.branchId === 'string' && this.branchId.trim() !== '' ? this.branchId.trim() : 'base';
         const bid = raw === 'base' ? 'default' : raw;
         this.navigate('flow_evaluation_branch', { flowId: this.flowId, branchId: bid });
+    }
+
+    _selectBranch(branchId) {
+        if (branchId === 'base') {
+            this.navigate('flow_editor', { flowId: this.flowId });
+        } else {
+            this.navigate('flow_editor_branch', { flowId: this.flowId, branchId });
+        }
+    }
+
+    _createBranch() {
+        this.openModal('flows.branch_create', { flowId: this.flowId });
+    }
+
+    async _deleteBranch(branchId) {
+        if (!this.flowId || branchId === 'base') return;
+        await this._branchRemove.run({ flow_id: this.flowId, branch_id: branchId });
+        if (this.branchId === branchId) {
+            this.navigate('flow_editor', { flowId: this.flowId });
+        }
+    }
+
+    _branchItems(flow, branchIds) {
+        const items = [
+            {
+                value: 'base',
+                label: this.t('branches_tabs.base'),
+                title: this.t('branches_tabs.base'),
+            },
+        ];
+        for (const bid of branchIds) {
+            const branch = flow && flow.branches && flow.branches[bid] ? flow.branches[bid] : null;
+            const label = branch && typeof branch.name === 'string' && branch.name.length > 0
+                ? branch.name
+                : bid;
+            items.push({
+                value: bid,
+                label,
+                title: label,
+                closable: true,
+            });
+        }
+        return items;
+    }
+
+    _renderHeaderIconButton({ title, icon, iconSize = '16', onClick, dataAction }) {
+        return html`
+            <platform-button
+                variant="ghost"
+                icon-only
+                density="dense"
+                aria-label=${title}
+                title=${title}
+                data-action=${dataAction || nothing}
+                @click=${onClick}
+            >
+                <platform-icon name=${icon} size=${iconSize}></platform-icon>
+            </platform-button>
+        `;
+    }
+
+    _renderMenuButton({ label, icon, onClick }) {
+        return html`
+            <platform-button variant="ghost" density="compact" block @click=${onClick}>
+                <platform-icon name=${icon} size="16"></platform-icon>
+                ${label}
+            </platform-button>
+        `;
+    }
+
+    _renderOverflowMenu(hasBundleUpdate) {
+        return html`
+            <div class="overflow-anchor">
+                <span class="overflow-btn-wrap">
+                    ${this._renderHeaderIconButton({
+                        title: this.t('editor_header.overflow_aria'),
+                        icon: 'more-vertical',
+                        iconSize: '20',
+                        onClick: this._toggleOverflow,
+                    })}
+                    ${hasBundleUpdate ? html`<span class="reload-dot"></span>` : nothing}
+                </span>
+                ${this._overflowOpen
+                    ? html`
+                        <div class="menu-flyout" @click=${(e) => e.stopPropagation()}>
+                            ${this._isMobile
+                                ? this._renderMenuButton({
+                                    label: this.t('editor_header.menu_settings'),
+                                    icon: 'settings',
+                                    onClick: this._openFlowSettings,
+                                })
+                                : nothing}
+                            ${this._isMobile
+                                ? this._renderMenuButton({
+                                    label: this.t('editor_header.menu_lara'),
+                                    icon: 'ai',
+                                    onClick: this._openLara,
+                                })
+                                : nothing}
+                            ${this._renderMenuButton({
+                                label: this.t('editor_header.menu_share'),
+                                icon: 'share',
+                                onClick: this._openPreviewShare,
+                            })}
+                            ${this._renderMenuButton({
+                                label: this.t('editor_header.menu_triggers'),
+                                icon: 'zap',
+                                onClick: this._openTriggers,
+                            })}
+                            ${this._renderMenuButton({
+                                label: this.t('editor_header.menu_api'),
+                                icon: 'api',
+                                onClick: this._openApiConsole,
+                            })}
+                            ${this._renderMenuButton({
+                                label: this.t('editor_header.menu_eval'),
+                                icon: 'science',
+                                onClick: this._openEvaluationLab,
+                            })}
+                            ${this._renderMenuButton({
+                                label: this.t('editor_header.menu_code'),
+                                icon: 'code',
+                                onClick: this._openCodeView,
+                            })}
+                            ${this._renderMenuButton({
+                                label: this.t('editor_header.menu_reload'),
+                                icon: 'refresh',
+                                onClick: this._reloadBundle,
+                            })}
+                        </div>
+                    `
+                    : nothing}
+            </div>
+        `;
+    }
+
+    _renderPrimaryRow(state, flowName, mode, saving, status, hasBundleUpdate) {
+        return html`
+            <div class="chrome-row chrome-row-primary">
+                <div class="row-left">
+                    <platform-button
+                        variant="ghost"
+                        icon-only
+                        density="dense"
+                        aria-label=${this.t('editor_header.back')}
+                        @click=${this._back}
+                    >
+                        <platform-icon name="arrow-left" size="16"></platform-icon>
+                    </platform-button>
+                    <div class="title-group">
+                        <platform-field
+                            class="flow-name-field"
+                            type="string"
+                            mode="edit"
+                            label=""
+                            pill-density="dense"
+                            pill-embed
+                            .value=${flowName}
+                            placeholder=${this.t('editor_header.flow_name_placeholder')}
+                            @change=${this._onNameChange}
+                        ></platform-field>
+                        <span class="status-badge" data-status=${status.key}>${this.t(status.textKey)}</span>
+                    </div>
+                </div>
+
+                <div class="row-center">
+                    <platform-segmented-control
+                        icon-only
+                        density="dense"
+                        .value=${mode}
+                        .items=${[
+                            { value: 'edit', icon: 'edit', title: this.t('editor_header.mode_edit') },
+                            { value: 'run', icon: 'play', title: this.t('editor_header.mode_run') },
+                        ]}
+                        aria-label=${this.t('editor_header.mode_group_aria')}
+                        @change=${(e) => this._setMode(e.detail.value)}
+                    ></platform-segmented-control>
+                </div>
+
+                <div class="row-right">
+                    <div class="header-actions" @click=${(e) => e.stopPropagation()}>
+                        <platform-help-hint
+                            .label=${this.t('editor_header.editor_help_label')}
+                            .summary=${this.t('editor_header.editor_help_summary')}
+                            .details=${this.t('editor_header.editor_help_details')}
+                            .docHref=${'/documentation/scenarios/flows/edit-llm-flow/'}
+                            .docLabel=${this.t('help_hints.open_scenario')}
+                        ></platform-help-hint>
+                        <div class="desktop-only-actions">
+                            ${this._renderHeaderIconButton({
+                                title: this.t('editor_header.flow_settings'),
+                                icon: 'settings',
+                                dataAction: 'flow-settings',
+                                onClick: this._openFlowSettings,
+                            })}
+                            ${this._renderHeaderIconButton({
+                                title: this.t('editor_header.lara'),
+                                icon: 'ai',
+                                onClick: this._openLara,
+                            })}
+                        </div>
+                        ${this._renderOverflowMenu(hasBundleUpdate)}
+                        <platform-button variant="primary" density="compact" ?disabled=${saving} @click=${this._save}>
+                            <platform-icon name="save" size="14"></platform-icon>
+                            ${saving ? this.t('editor_header.saving') : this.t('editor_header.publish')}
+                        </platform-button>
+                    </div>
+                </div>
+            </div>
+        `;
+    }
+
+    _renderBranchesRow(branchItems) {
+        if (typeof this.flowId !== 'string' || this.flowId.length === 0) {
+            return nothing;
+        }
+        return html`
+            <div class="chrome-row chrome-row-branches">
+                <div class="branches-row">
+                    <platform-segmented-control
+                        density="compact"
+                        .value=${this.branchId}
+                        .items=${branchItems}
+                        aria-label=${this.t('branches_tabs.group_aria')}
+                        @change=${(e) => this._selectBranch(e.detail.value)}
+                        @segment-close=${(e) => { void this._deleteBranch(e.detail.value); }}
+                    ></platform-segmented-control>
+                    <platform-button variant="ghost" density="compact" @click=${this._createBranch}>
+                        <platform-icon name="plus" size="14"></platform-icon>
+                        ${this.t('branches_tabs.add')}
+                    </platform-button>
+                </div>
+            </div>
+        `;
     }
 
     render() {
@@ -266,115 +657,12 @@ export class FlowsEditorHeader extends PlatformElement {
         const status = this._resolveStatusBadge(state);
         const flow = asArray(this._flows.items).find((f) => f && f.flow_id === this.flowId);
         const hasBundleUpdate = Boolean(flow && flow.has_bundle_update);
+        const branchIds = flow && flow.branches ? Object.keys(flow.branches) : [];
+        const branchItems = this._branchItems(flow, branchIds);
+
         return html`
-            <div class="header-left">
-                <platform-button
-                    variant="ghost"
-                    icon-only
-                    density="dense"
-                    aria-label=${this.t('editor_header.back')}
-                    @click=${this._back}
-                >
-                    <platform-icon name="arrow-left" size="16"></platform-icon>
-                </platform-button>
-                <input
-                    class="flow-name-input"
-                    type="text"
-                    data-canon="inline-edit"
-                    .value=${flowName}
-                    placeholder=${this.t('editor_header.flow_name_placeholder')}
-                    @input=${this._onNameInput}
-                />
-                <span class="status-badge" data-status=${status.key}>${this.t(status.textKey)}</span>
-            </div>
-
-            <div class="header-center">
-                <div class="mode-pill">
-                    <button class="mode-btn" type="button" ?active=${mode === 'edit'} title=${this.t('editor_header.mode_edit')} @click=${() => this._setMode('edit')}>
-                        <platform-icon name="edit" size="14"></platform-icon>
-                    </button>
-                    <button class="mode-btn" type="button" ?active=${mode === 'run'} title=${this.t('editor_header.mode_run')} @click=${() => this._setMode('run')}>
-                        <platform-icon name="play" size="14"></platform-icon>
-                    </button>
-                    <button class="mode-btn reload" type="button" title=${this.t('editor_header.reload_bundle')} @click=${this._reloadBundle}>
-                        <platform-icon name="refresh" size="14"></platform-icon>
-                        ${hasBundleUpdate ? html`<span class="reload-dot"></span>` : ''}
-                    </button>
-                </div>
-                <platform-help-hint
-                    .label=${this.t('editor_header.editor_help_label')}
-                    .summary=${this.t('editor_header.editor_help_summary')}
-                    .details=${this.t('editor_header.editor_help_details')}
-                    .docHref=${'/documentation/scenarios/flows/edit-llm-flow/'}
-                    .docLabel=${this.t('help_hints.open_scenario')}
-                ></platform-help-hint>
-            </div>
-
-            <div class="header-right">
-                <platform-button
-                    variant="ghost"
-                    icon-only
-                    density="dense"
-                    aria-label=${this.t('editor_header.flow_settings')}
-                    data-action="flow-settings"
-                    @click=${this._openFlowSettings}
-                >
-                    <platform-icon name="settings" size="16"></platform-icon>
-                </platform-button>
-                <platform-button
-                    variant="ghost"
-                    icon-only
-                    density="dense"
-                    aria-label=${this.t('editor_header.share_preview')}
-                    @click=${this._openPreviewShare}
-                >
-                    <platform-icon name="share" size="16"></platform-icon>
-                </platform-button>
-                <platform-button
-                    variant="ghost"
-                    icon-only
-                    density="dense"
-                    aria-label=${this.t('flows_sidebar.footer_triggers')}
-                    @click=${this._openTriggers}
-                >
-                    <platform-icon name="zap" size="16"></platform-icon>
-                </platform-button>
-                <platform-button
-                    variant="ghost"
-                    icon-only
-                    density="dense"
-                    aria-label=${this.t('editor_header.lara')}
-                    @click=${this._openLara}
-                >
-                    <platform-icon name="ai" size="16"></platform-icon>
-                </platform-button>
-                <platform-button
-                    variant="ghost"
-                    density="compact"
-                    aria-label=${this.t('editor_header.api_console')}
-                    @click=${this._openApiConsole}
-                >
-                    <platform-icon name="api" size="14"></platform-icon>
-                    ${this.t('editor_header.api')}
-                </platform-button>
-                <platform-button
-                    variant="ghost"
-                    density="compact"
-                    aria-label=${this.t('editor_header.evaluation_lab')}
-                    @click=${this._openEvaluationLab}
-                >
-                    <platform-icon name="science" size="14"></platform-icon>
-                    ${this.t('editor_header.evaluation')}
-                </platform-button>
-                <platform-button variant="ghost" density="compact" @click=${this._openCodeView}>
-                    <platform-icon name="code" size="14"></platform-icon>
-                    ${this.t('editor_header.code')}
-                </platform-button>
-                <platform-button variant="primary" density="compact" ?disabled=${saving} @click=${this._save}>
-                    <platform-icon name="save" size="14"></platform-icon>
-                    ${saving ? this.t('editor_header.saving') : this.t('editor_header.publish')}
-                </platform-button>
-            </div>
+            ${this._renderPrimaryRow(state, flowName, mode, saving, status, hasBundleUpdate)}
+            ${this._renderBranchesRow(branchItems)}
         `;
     }
 }

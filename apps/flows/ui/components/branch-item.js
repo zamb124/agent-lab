@@ -17,7 +17,6 @@ export class BranchItem extends PlatformElement {
         css`
             :host {
                 display: block;
-                --platform-button-icon-size: 22px;
             }
 
             .branch-item {

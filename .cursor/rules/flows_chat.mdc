@@ -59,6 +59,15 @@ CDN-контракт autoload не меняется: `<script src=".../lib/embed
 
 Layout — **stacked capsule**: textarea на всю ширину в `.composer-body`, toolbar в `.composer-toolbar` (`toolbar-start`: attach + locale-pill; `toolbar-end`: TTS/voice/send). Радиусы и glass — platform tokens (`--radius-2xl`, `--glass-solid-*`, `--border-subtle`); embed/drawer theming через `--flows-chat-input-*` overrides в `.chat-composer flows-chat-input` (`platform-chat.js`). Новые vars: `--flows-chat-input-body-padding`, `--flows-chat-input-toolbar-padding`, `--flows-chat-input-toolbar-gap`.
 
+## Theming (`chat-tokens.css`)
+
+Единственный источник палитры чата — **`core/frontend/static/lib/chat/chat-tokens.css`** (`--platform-chat-*`). Подключается в SPA через `@import` в `tokens.css`; внешний embed получает тот же файл через inject в `embed-autoload.js`.
+
+- **`platform-chat.js`** не задаёт hardcoded rgba/`#hex` палитру на `:host` — только `var(--platform-chat-*)` и проброс в детей (`--flows-chat-*`, `--flows-chat-input-*`).
+- **`--embed-chat-*` deprecated** → `--platform-chat-*`.
+- Light/dark: SPA — каскад `tokens.css` + `[data-theme="light"]`; embed с явным `theme=light` — `platform-chat[data-embed-theme="light"]` в `chat-tokens.css`.
+- Runtime patch accent — только `look.primary_color` из embed chat-profile → `--platform-chat-accent` на host element.
+
 ## Bubble meta и observability
 
 `<flows-chat-message>` в unified surfaces рендерится с `showHeader` + `headerCompact` (property binding): timestamp в `.bubble-meta`, без label роли. На assistant bubble — `.bubble-observability-actions` справа вверху: trace/logs при `taskId`, durable history при `sessionId` (`flow_id:context_id`). Events: `show-tracing`, `show-logs`, `show-durable-history`. Policy: `show_trace_actions` / `show_run_trace`; для profile `spa` без явной policy observability включён по умолчанию; `embed_public` скрывает trace actions через capabilities. Host (`chat-page`, `flows-execution-panel`) слушает bubble events и открывает modals.

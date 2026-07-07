@@ -33,9 +33,10 @@ import './flows-base-node-editor.js';
 import '@platform/lib/components/prompt-editor.js';
 import '../common/flows-code-language-icon.js';
 import '../editors/flows-llm-config-editor.js';
-import '../editors/flows-json-field-editor.js';
+import '@platform/lib/components/platform-json-editor.js';
 import '@platform/lib/components/llm/llm-context-editor.js';
-import '@platform/lib/components/glass-button.js';
+import '@platform/lib/components/platform-segmented-control.js';
+import '@platform/lib/components/platform-button.js';
 import '@platform/lib/components/platform-icon.js';
 import '@platform/lib/components/platform-help-hint.js';
 import '@platform/lib/components/platform-switch.js';
@@ -51,6 +52,7 @@ import {
 import { normalizeToolRef } from '../../_helpers/flows-tool-ref.js';
 import { isMcpToolRegistryItem, parseMcpToolIdToNodeConfig } from '../../_helpers/flows-mcp-tool-registry.js';
 import { sanitizeToolName } from '@platform/lib/utils/sanitize-tool-name.js';
+import { formatJsonPretty } from '@platform/lib/utils/json-format.js';
 
 const REACT_LOOP_MODES = Object.freeze(['auto', 'explicit']);
 
@@ -867,10 +869,10 @@ export class FlowsLlmNodeEditor extends PlatformElement {
                     ${legacyRid !== null ? html`
                         <div class="row" style="align-items:center;gap:var(--space-2);flex-wrap:wrap;">
                             <span class="block-hint">${this.t('llm_node_editor.llm_resource_legacy_hint')}</span>
-                            <glass-button size="sm" variant="secondary" type="button"
+                            <platform-button variant="secondary" density="compact" type="button"
                                 @click=${() => this._applyLlmResourceKeyToNode(legacyRid)}>
                                 ${this.t('llm_node_editor.llm_resource_legacy_bind')}
-                            </glass-button>
+                            </platform-button>
                         </div>
                     ` : ''}
                     <flows-llm-config-editor
@@ -979,16 +981,17 @@ export class FlowsLlmNodeEditor extends PlatformElement {
                     'llm_node_editor.output_mode_help',
                 )}
                 <div class="block-card">
-                    <div class="toggle">
-                        <button type="button" ?active=${!structured}
-                            @click=${() => this._onOutputModeToggle('tools')}>
-                            ${this.t('llm_node_editor.output_mode_tools')}
-                        </button>
-                        <button type="button" ?active=${structured}
-                            @click=${() => this._onOutputModeToggle('structured')}>
-                            ${this.t('llm_node_editor.output_mode_structured')}
-                        </button>
-                    </div>
+                    <platform-segmented-control
+                        full-width
+                        density="compact"
+                        .value=${structured ? 'structured' : 'tools'}
+                        .items=${[
+                            { value: 'tools', label: this.t('llm_node_editor.output_mode_tools') },
+                            { value: 'structured', label: this.t('llm_node_editor.output_mode_structured') },
+                        ]}
+                        aria-label=${this.t('llm_node_editor.output_mode_aria')}
+                        @change=${(e) => this._onOutputModeToggle(e.detail.value)}
+                    ></platform-segmented-control>
                     <div class="block-hint">${this.t('llm_node_editor.output_mode_hint')}</div>
                 </div>
             </section>
@@ -1000,7 +1003,7 @@ export class FlowsLlmNodeEditor extends PlatformElement {
         const raw = this.nodeConfig?.output_schema;
         const schemaObj =
             !_isUnsetOutputSchema(raw) && typeof raw === 'object' ? raw : DEFAULT_STRUCTURED_OUTPUT_SCHEMA;
-        const schema = JSON.stringify(schemaObj, null, 2);
+        const schema = formatJsonPretty(schemaObj);
         return html`
             <section class="block">
                 ${this._sectionHeading(
@@ -1009,10 +1012,10 @@ export class FlowsLlmNodeEditor extends PlatformElement {
                 )}
                 <div class="block-card">
                     <div class="block-hint">${this.t('llm_node_editor.output_schema_strict_hint')}</div>
-                    <flows-json-field-editor
+                    <platform-json-editor validate-json show-toolbar="false"
                         .value=${schema}
                         @change=${this._onOutputSchemaChange}
-                    ></flows-json-field-editor>
+                    ></platform-json-editor>
                 </div>
             </section>
         `;
@@ -1181,16 +1184,24 @@ export class FlowsLlmNodeEditor extends PlatformElement {
                             <span class="chip" @click=${() => this._onEditTool(t)}>
                                 ${chipIcon}
                                 <span class="chip-label">${getToolLabel(t)}</span>
-                                <button type="button" @click=${(e) => { e.stopPropagation(); this._onRemoveTool(tid); }}>×</button>
+                                <platform-button
+                                    variant="ghost"
+                                    icon-only
+                                    density="compact"
+                                    aria-label=${this.t('llm_node_editor.tools_remove')}
+                                    @click=${(e) => { e.stopPropagation(); this._onRemoveTool(tid); }}
+                                >
+                                    <platform-icon name="x" size="12"></platform-icon>
+                                </platform-button>
                             </span>
                         `;
                         })}
                     </div>
                     <div class="add-tools">
-                        <glass-button size="sm" variant="secondary" @click=${this._onPickTool}>
+                        <platform-button variant="secondary" density="compact" @click=${this._onPickTool}>
                             <platform-icon name="plus"></platform-icon>
                             ${this.t('llm_node_editor.tools_add_library')}
-                        </glass-button>
+                        </platform-button>
                     </div>
                 </div>
             </section>

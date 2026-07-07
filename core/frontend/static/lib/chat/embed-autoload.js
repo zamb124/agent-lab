@@ -14,6 +14,24 @@
 
 import './platform-chat.js';
 
+/**
+ * @param {string} platformUiOrigin
+ */
+function ensureChatTokensStylesheet(platformUiOrigin) {
+    const origin = typeof platformUiOrigin === 'string' ? platformUiOrigin.trim().replace(/\/+$/, '') : '';
+    if (origin === '') {
+        return;
+    }
+    if (document.querySelector('link[data-humanitec-chat-tokens="1"]')) {
+        return;
+    }
+    const link = document.createElement('link');
+    link.rel = 'stylesheet';
+    link.href = `${origin}/static/core/lib/chat/chat-tokens.css`;
+    link.setAttribute('data-humanitec-chat-tokens', '1');
+    document.head.appendChild(link);
+}
+
 /** @returns {HTMLScriptElement | null} */
 function resolveHostScript() {
     const meta = typeof import.meta !== 'undefined' ? import.meta : null;
@@ -178,6 +196,7 @@ function mountFromScript(scriptEl) {
     chat.flowsBaseUrl = flowsBaseUrl;
 
     const platformUiOrigin = resolveEmbedPlatformUiOrigin(scriptEl, ds);
+    ensureChatTokensStylesheet(platformUiOrigin);
     if (platformUiOrigin !== '') {
         chat.setAttribute('platform-ui-origin', platformUiOrigin);
     }
@@ -253,7 +272,7 @@ function mountFromScript(scriptEl) {
     };
 }
 
-export { mountFromScript, resolveHostScript, readDatasetBool };
+export { mountFromScript, resolveHostScript, readDatasetBool, ensureChatTokensStylesheet };
 
 function scheduleMount() {
     const scriptEl = resolveHostScript();

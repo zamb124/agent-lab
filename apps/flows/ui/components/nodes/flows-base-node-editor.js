@@ -19,13 +19,15 @@ import { html, css, nothing } from 'lit';
 import { PlatformElement } from '@platform/lib/platform-element/index.js';
 import { resolveFileIconKey } from '@platform/lib/utils/file-icons.js';
 import { formatFileSize } from '@platform/lib/utils/format-file-size.js';
-import '@platform/lib/components/glass-button.js';
+import { formatJsonPretty } from '@platform/lib/utils/json-format.js';
 import '@platform/lib/components/glass-spinner.js';
+import '@platform/lib/components/platform-button.js';
 import '@platform/lib/components/platform-icon.js';
+import '@platform/lib/components/platform-segmented-control.js';
 import '@platform/lib/components/platform-switch.js';
 import '@platform/lib/components/platform-help-hint.js';
 import '../editors/flows-state-mapping-editor.js';
-import '../editors/flows-json-field-editor.js';
+import '@platform/lib/components/platform-json-editor.js';
 import '../flows-node-run-control.js';
 import '@platform/lib/components/fields/platform-field.js';
 import { fieldPillStyles } from '@platform/lib/styles/shared/field-pill.styles.js';
@@ -157,10 +159,6 @@ export class FlowsBaseNodeEditor extends PlatformElement {
                 cursor: pointer;
             }
 
-            glass-button {
-                flex-shrink: 0;
-            }
-
             /* Списки файлов и ресурсов */
             .item-list {
                 display: flex; flex-direction: column; gap: var(--space-1);
@@ -180,13 +178,6 @@ export class FlowsBaseNodeEditor extends PlatformElement {
             .item-row .meta {
                 color: var(--text-tertiary); font-size: var(--text-xs);
             }
-            .item-row .remove {
-                background: none; border: none; padding: 0; cursor: pointer;
-                color: var(--text-tertiary);
-                display: inline-flex; align-items: center;
-            }
-            .item-row .remove:hover { color: var(--error); }
-
             input[type="file"] { display: none; }
 
             .mapping-tabs {
@@ -225,21 +216,6 @@ export class FlowsBaseNodeEditor extends PlatformElement {
                 padding-top: var(--space-1);
                 border-top: 1px solid var(--glass-border-subtle);
             }
-            .mapping-tab {
-                padding: 4px 12px;
-                background: var(--glass-solid-subtle);
-                border: 1px solid var(--glass-border-subtle);
-                border-radius: var(--radius-full);
-                color: var(--text-secondary);
-                font-size: var(--text-xs);
-                cursor: pointer;
-            }
-            .mapping-tab[active] {
-                background: var(--accent-subtle);
-                color: var(--accent);
-                border-color: var(--accent-subtle);
-            }
-
             .dataflow-lanes {
                 display: grid;
                 grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
@@ -375,15 +351,6 @@ export class FlowsBaseNodeEditor extends PlatformElement {
                 }
             }
 
-            .reset-link {
-                background: none; border: none; padding: 0;
-                color: var(--text-tertiary);
-                font-size: var(--text-xs);
-                cursor: pointer;
-                text-decoration: underline;
-                align-self: flex-start;
-            }
-            .reset-link:hover { color: var(--accent); }
         `,
     ];
 
@@ -850,10 +817,6 @@ export class FlowsBaseNodeEditor extends PlatformElement {
         input.value = '';
     }
 
-    _formatFileSize(bytes) {
-        return formatFileSize(bytes);
-    }
-
     _onRemoveFile(idx) {
         const files = Array.isArray(this.nodeConfig?.files) ? this.nodeConfig.files : [];
         this._emitPatch({ files: files.filter((_, i) => i !== idx) });
@@ -1092,7 +1055,7 @@ export class FlowsBaseNodeEditor extends PlatformElement {
         if (typeof this._stateDraft === 'string') return this._stateDraft;
         const preview = this.previewExecutionState;
         if (!preview) return '{}';
-        return JSON.stringify(preview, null, 2);
+        return formatJsonPretty(preview);
     }
 
     _onStateChange(e) {
@@ -1162,7 +1125,7 @@ export class FlowsBaseNodeEditor extends PlatformElement {
                                 : files.map((f, i) => {
                                     const fname = typeof f.original_name === 'string' && f.original_name !== '' ? f.original_name : f.file_id;
                                     const fmime = typeof f.content_type === 'string' ? f.content_type : '';
-                                    const fsize = this._formatFileSize(f.file_size);
+                                    const fsize = formatFileSize(f.file_size);
                                     return html`
                                         <div class="field-pill-file-ref-row">
                                             <button
@@ -1330,9 +1293,16 @@ export class FlowsBaseNodeEditor extends PlatformElement {
                             <div class="item-row">
                                 <span class="grow">${branchRowTitle}</span>
                                 <span class="meta">${presetKey}</span>
-                                <button class="remove" type="button" title=${rem} @click=${() => this._onRemoveResource(presetKey)}>
+                                <platform-button
+                                    variant="ghost"
+                                    icon-only
+                                    density="compact"
+                                    title=${rem}
+                                    aria-label=${rem}
+                                    @click=${() => this._onRemoveResource(presetKey)}
+                                >
                                     <platform-icon name="trash" size="14"></platform-icon>
-                                </button>
+                                </platform-button>
                             </div>
                         ` : nothing}
                         ${Object.entries(resources).map(([key, ref]) => {
@@ -1341,9 +1311,16 @@ export class FlowsBaseNodeEditor extends PlatformElement {
                                 <div class="item-row">
                                     <span class="grow">${def ? def.name : key}</span>
                                     <span class="meta">${def ? def.type : ''}</span>
-                                    <button class="remove" type="button" title=${rem} @click=${() => this._onRemoveResource(key)}>
+                                    <platform-button
+                                        variant="ghost"
+                                        icon-only
+                                        density="compact"
+                                        title=${rem}
+                                        aria-label=${rem}
+                                        @click=${() => this._onRemoveResource(key)}
+                                    >
                                         <platform-icon name="trash" size="14"></platform-icon>
-                                    </button>
+                                    </platform-button>
                                 </div>
                             `;
                         })}
@@ -1656,13 +1633,13 @@ export class FlowsBaseNodeEditor extends PlatformElement {
         return html`
             <div class="section">
                 <div class="section-title">${this.t('base_node_editor.section_input_state')}</div>
-                <flows-json-field-editor
+                <platform-json-editor validate-json show-toolbar="false"
                     .value=${value}
                     @change=${this._onStateChange}
-                ></flows-json-field-editor>
-                <button class="reset-link" type="button" @click=${this._onStateReset}>
+                ></platform-json-editor>
+                <platform-button variant="ghost" density="compact" @click=${this._onStateReset}>
                     ${this.t('base_node_editor.input_state_reset')}
-                </button>
+                </platform-button>
             </div>
         `;
     }
@@ -1692,14 +1669,17 @@ export class FlowsBaseNodeEditor extends PlatformElement {
             <div class="dataflow-mapping-head">
                 <div class="section-title">${this.t('base_node_editor.section_mapping')}</div>
                 <div class="mapping-tabs">
-                    <button class="mapping-tab" type="button" ?active=${tab === 'input'}
-                        @click=${() => { this._mappingTab = 'input'; }}>
-                        ${this.t('base_node_editor.tab_input')}
-                    </button>
-                    <button class="mapping-tab" type="button" ?active=${tab === 'output'}
-                        @click=${() => { this._mappingTab = 'output'; }}>
-                        ${this.t('base_node_editor.tab_output')}
-                    </button>
+                    <platform-segmented-control
+                        full-width
+                        density="compact"
+                        .value=${tab}
+                        .items=${[
+                            { value: 'input', label: this.t('base_node_editor.tab_input') },
+                            { value: 'output', label: this.t('base_node_editor.tab_output') },
+                        ]}
+                        aria-label=${this.t('base_node_editor.section_mapping')}
+                        @change=${(e) => { this._mappingTab = e.detail.value; }}
+                    ></platform-segmented-control>
                 </div>
             </div>
             <flows-state-mapping-editor

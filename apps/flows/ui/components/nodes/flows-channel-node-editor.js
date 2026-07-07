@@ -19,7 +19,7 @@ import { PlatformElement } from '@platform/lib/platform-element/index.js';
 import '@platform/lib/components/fields/platform-field.js';
 import './flows-base-node-editor.js';
 import '@platform/lib/components/platform-variable-input.js';
-import '../editors/flows-json-field-editor.js';
+import '@platform/lib/components/platform-json-editor.js';
 import { asString } from '../../_helpers/flows-resolvers.js';
 
 const CHANNELS = Object.freeze(['telegram', 'email', 'whatsapp', 'sms', 'webhook']);
@@ -301,10 +301,10 @@ export class FlowsChannelNodeEditor extends PlatformElement {
             </div>
             <div class="field">
                 <label>${this.t('channel_node_editor.webhook_headers')}</label>
-                <flows-json-field-editor
+                <platform-json-editor validate-json show-toolbar="false"
                     .value=${headers}
                     @change=${(e) => { if (e.detail && 'parsed' in e.detail) this._onChannelConfig('headers', e.detail.parsed); }}
-                ></flows-json-field-editor>
+                ></platform-json-editor>
             </div>
         `;
     }
@@ -313,10 +313,10 @@ export class FlowsChannelNodeEditor extends PlatformElement {
         return html`
             <div class="field">
                 <label>${this.t('channel_node_editor.provider_json')}</label>
-                <flows-json-field-editor
+                <platform-json-editor validate-json show-toolbar="false"
                     .value=${JSON.stringify(cfg, null, 2)}
                     @change=${(e) => { if (e.detail && 'parsed' in e.detail) this._onChannelConfigJson(e.detail.parsed); }}
-                ></flows-json-field-editor>
+                ></platform-json-editor>
             </div>
         `;
     }

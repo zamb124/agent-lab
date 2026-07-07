@@ -19,6 +19,7 @@ import '@platform/lib/components/platform-modal-search-field.js';
 import '@platform/lib/components/fields/platform-field.js';
 import '@platform/lib/components/platform-file-attachments.js';
 import { asArray, asString, isPlainObject } from '../_helpers/flows-resolvers.js';
+import { formatJsonPretty } from '@platform/lib/utils/json-format.js';
 import { renderMcpServerIcon } from '../_helpers/mcp-server-icon.js';
 
 const SERVER_ID_PATTERN = /^[a-zA-Z][a-zA-Z0-9_-]{1,63}$/;
@@ -52,7 +53,7 @@ function headersObjectToJsonString(h) {
     if (!isPlainObject(h) || Object.keys(h).length === 0) {
         return '{}';
     }
-    return JSON.stringify(h, null, 2);
+    return formatJsonPretty(h);
 }
 
 /**
@@ -618,7 +619,7 @@ export class FlowsMcpServersModal extends PlatformModal {
                 variant: 'danger',
                 confirmVariant: 'danger',
                 confirmText: this.t('mcp_servers_modal.action_delete'),
-                cancelText: this.t('mcp_servers_modal.action_cancel'),
+                cancelText: this.t('common.action_cancel'),
             },
         );
         if (!ok) {
@@ -882,7 +883,7 @@ export class FlowsMcpServersModal extends PlatformModal {
                 variant: 'danger',
                 confirmVariant: 'primary',
                 confirmText: this.t('mcp_servers_modal.action_reset_defaults'),
-                cancelText: this.t('mcp_servers_modal.action_cancel'),
+                cancelText: this.t('common.action_cancel'),
             },
         );
         if (!ok) {
@@ -900,7 +901,7 @@ export class FlowsMcpServersModal extends PlatformModal {
                 variant: 'danger',
                 confirmVariant: 'danger',
                 confirmText: this.t('mcp_servers_modal.action_delete'),
-                cancelText: this.t('mcp_servers_modal.action_cancel'),
+                cancelText: this.t('common.action_cancel'),
             },
         );
         if (!ok) {
@@ -1359,11 +1360,11 @@ export class FlowsMcpServersModal extends PlatformModal {
         }
         const isEdit = typeof this._editing === 'string' && this._editing.length > 0;
         const saveLabel = isEdit
-            ? this.t('mcp_servers_modal.action_save')
+            ? this.t('common.action_save')
             : this.t('mcp_servers_modal.action_add');
         const disabled = !this._formCanSave() || this._saving || this._update.busy;
         return html`
-            <platform-button ?disabled=${this._saving} @click=${() => this._goList()}>${this.t('mcp_servers_modal.action_cancel')}</platform-button>
+            <platform-button ?disabled=${this._saving} @click=${() => this._goList()}>${this.t('common.action_cancel')}</platform-button>
             <platform-button variant="primary" ?disabled=${disabled} @click=${() => { this._save(); }}>
                 ${saveLabel}
             </platform-button>
@@ -1376,7 +1377,7 @@ export class FlowsMcpServersModal extends PlatformModal {
         }
         const isEdit = typeof this._editing === 'string' && this._editing.length > 0;
         const saveLabel = isEdit
-            ? this.t('mcp_servers_modal.action_save')
+            ? this.t('common.action_save')
             : this.t('mcp_servers_modal.action_add');
         const disabled = !this._formCanSave() || this._saving || this._update.busy;
         return this._renderHeaderSaveIcon({

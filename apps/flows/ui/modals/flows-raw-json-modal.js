@@ -8,6 +8,7 @@ import { registerModalKind } from '@platform/lib/utils/modal-registry.js';
 import '@platform/lib/components/platform-button.js';
 import '@platform/lib/components/platform-icon.js';
 import '../components/editors/flows-code-editor.js';
+import { formatJsonPretty } from '@platform/lib/utils/json-format.js';
 
 export class FlowsRawJsonModal extends PlatformModal {
     static modalKind = 'flows.raw_json';
@@ -49,7 +50,7 @@ export class FlowsRawJsonModal extends PlatformModal {
         if (this.value === null || this.value === undefined) {
             throw new Error('flows-raw-json-modal: value is required for download');
         }
-        const text = JSON.stringify(this.value, null, 2);
+        const text = formatJsonPretty(this.value);
         const blob = new Blob([text], { type: 'application/json;charset=utf-8' });
         const url = URL.createObjectURL(blob);
         const a = document.createElement('a');
@@ -82,7 +83,7 @@ export class FlowsRawJsonModal extends PlatformModal {
     }
 
     renderBody() {
-        const json = this.value === null ? '' : JSON.stringify(this.value, null, 2);
+        const json = this.value === null ? '' : formatJsonPretty(this.value);
         return html`
             <div class="raw-json-body">
                 <flows-code-editor

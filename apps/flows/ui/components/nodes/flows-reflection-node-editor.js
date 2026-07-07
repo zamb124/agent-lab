@@ -3,7 +3,7 @@ import { PlatformElement } from '@platform/lib/platform-element/index.js';
 import '@platform/lib/components/fields/platform-field.js';
 import './flows-base-node-editor.js';
 import '../editors/flows-llm-config-editor.js';
-import '../editors/flows-json-field-editor.js';
+import '@platform/lib/components/platform-json-editor.js';
 import { asObject, isPlainObject } from '../../_helpers/flows-resolvers.js';
 
 const REFLECTION_GATES = Object.freeze(['final_answer', 'transaction', 'quality']);
@@ -308,12 +308,12 @@ export class FlowsReflectionNodeEditor extends PlatformElement {
                             @change=${this._onInstruction}
                         ></platform-field>
                     </div>
-                    <flows-json-field-editor
+                    <platform-json-editor validate-json show-toolbar="false"
                         .value=${JSON.stringify(criteria, null, 2)}
                         @change=${this._onCriteriaJson}
                     >
                         <span slot="toolbar-start">${this.t('reflection_node_editor.criteria')}</span>
-                    </flows-json-field-editor>
+                    </platform-json-editor>
                 </div>
             </section>
         `;

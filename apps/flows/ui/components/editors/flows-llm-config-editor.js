@@ -26,12 +26,12 @@
 import { html, css, nothing } from 'lit';
 import { PlatformElement } from '@platform/lib/platform-element/index.js';
 import '@platform/lib/components/fields/platform-field.js';
-import '@platform/lib/components/glass-button.js';
 import '@platform/lib/components/platform-button.js';
 import '@platform/lib/components/platform-icon.js';
 import '@platform/lib/components/platform-help-hint.js';
-import './flows-json-field-editor.js';
+import '@platform/lib/components/platform-json-editor.js';
 import { asString } from '../../_helpers/flows-resolvers.js';
+import { formatJsonPretty } from '@platform/lib/utils/json-format.js';
 
 const REASONING_LEVELS = Object.freeze(['', 'none', 'minimal', 'low', 'medium', 'high', 'xhigh']);
 const HUMANITEC_LLM_PROVIDER = 'humanitec_llm';
@@ -155,27 +155,6 @@ export class FlowsLlmConfigEditor extends PlatformElement {
                 padding: var(--space-1) 0;
                 border-bottom: 1px solid var(--glass-border-subtle);
             }
-            .header-pair-row button.del {
-                background: none;
-                border: none;
-                padding: var(--space-1);
-                cursor: pointer;
-                color: var(--text-tertiary);
-                line-height: 0;
-                display: inline-flex;
-                align-items: center;
-                justify-content: center;
-                flex-shrink: 0;
-                width: 32px;
-                height: 32px;
-                box-sizing: border-box;
-            }
-            .header-pair-row button.del platform-icon {
-                --icon-size: 16px;
-            }
-            .header-pair-row button.del:hover {
-                color: var(--error);
-            }
             .header-pairs-add {
                 margin-top: var(--space-2);
             }
@@ -288,30 +267,6 @@ export class FlowsLlmConfigEditor extends PlatformElement {
                 display: inline-flex;
                 align-items: center;
                 gap: 2px;
-            }
-            .fallback-actions button {
-                background: none;
-                border: none;
-                padding: var(--space-1);
-                cursor: pointer;
-                color: var(--text-tertiary);
-                line-height: 0;
-                display: inline-flex;
-                align-items: center;
-                justify-content: center;
-                width: 28px;
-                height: 28px;
-                box-sizing: border-box;
-            }
-            .fallback-actions button:hover {
-                color: var(--text-primary);
-            }
-            .fallback-actions button.danger:hover {
-                color: var(--error);
-            }
-            .fallback-actions button:disabled {
-                cursor: default;
-                opacity: 0.35;
             }
             .fallback-body {
                 padding: 0 var(--space-2) var(--space-2);
@@ -714,7 +669,7 @@ export class FlowsLlmConfigEditor extends PlatformElement {
         const humanitecLlm = this._isHumanitecLlmProvider(provider);
         const model = humanitecLlm && rawModel.length === 0 ? HUMANITEC_LLM_AUTO_MODEL : rawModel;
         const extraJson = cfg.extra_request_body && typeof cfg.extra_request_body === 'object'
-            ? JSON.stringify(cfg.extra_request_body, null, 2)
+            ? formatJsonPretty(cfg.extra_request_body)
             : '{}';
         const models = this._modelsList();
         const providers = this._providersList();
@@ -845,14 +800,14 @@ export class FlowsLlmConfigEditor extends PlatformElement {
                                                   ${this.readOnly
                                                       ? ''
                                                       : html`
-                                                            <glass-button
-                                                                size="sm"
+                                                            <platform-button
                                                                 variant="ghost"
+                                                                density="compact"
                                                                 @click=${() => this._addFallbackModel()}
                                                             >
                                                                 <platform-icon name="plus"></platform-icon>
                                                                 ${this.t('llm_config_editor.fallback_add')}
-                                                            </glass-button>
+                                                            </platform-button>
                                                         `}
                                               </div>
                                               ${fallbackModels.length === 0
@@ -1111,7 +1066,7 @@ export class FlowsLlmConfigEditor extends PlatformElement {
                                                   .text=${this.t('llm_config_editor.extra_request_body_hint')}
                                               ></platform-help-hint>
                                           </span>
-                                          <flows-json-field-editor
+                                          <platform-json-editor validate-json show-toolbar="false"
                                               .value=${extraJson}
                                               .readonly=${this.readOnly}
                                               @change=${this.readOnly
@@ -1121,7 +1076,7 @@ export class FlowsLlmConfigEditor extends PlatformElement {
                                                           this._onJson('extra_request_body', e.detail.parsed);
                                                       }
                                                   }}
-                                          ></flows-json-field-editor>
+                                          ></platform-json-editor>
                                       </div>
                                       <div class="field full extra">
                                           <span class="extra-label-wrap">
@@ -1175,15 +1130,15 @@ export class FlowsLlmConfigEditor extends PlatformElement {
                                           ${this.readOnly
                                               ? ''
                                               : html`
-                                                    <glass-button
+                                                    <platform-button
                                                         class="header-pairs-add"
-                                                        size="sm"
                                                         variant="ghost"
+                                                        density="compact"
                                                         @click=${() => this._addHeaderPairRow()}
                                                     >
                                                         <platform-icon name="plus"></platform-icon>
                                                         ${this.t('llm_config_editor.extra_header_add')}
-                                                    </glass-button>
+                                                    </platform-button>
                                                 `}
                                       </div>
                                   `}

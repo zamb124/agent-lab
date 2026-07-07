@@ -7,11 +7,12 @@ import { unsafeHTML } from 'lit/directives/unsafe-html.js';
 import { PlatformModal } from '@platform/lib/components/glass-modal.js';
 import { registerModalKind } from '@platform/lib/utils/modal-registry.js';
 import '@platform/lib/components/platform-button.js';
+import '@platform/lib/components/platform-segmented-control.js';
 import '@platform/lib/components/platform-icon.js';
 import '@platform/lib/components/glass-spinner.js';
 import '@platform/lib/components/platform-modal-search-field.js';
-import '../components/common/flows-code-language-icon.js';
 import { asObject } from '../_helpers/flows-resolvers.js';
+import { formatJsonPretty } from '@platform/lib/utils/json-format.js';
 import {
     FLOW_CODE_LANGUAGES,
     flowCodeLanguageLabel,
@@ -74,7 +75,7 @@ function getDocsMarkdown(result) {
     if (result && typeof result === 'object' && typeof result.markdown === 'string') {
         return result.markdown;
     }
-    return JSON.stringify(asObject(result), null, 2);
+    return formatJsonPretty(asObject(result));
 }
 
 /**
@@ -134,20 +135,8 @@ export class FlowsCodeDocsModal extends PlatformModal {
                 border-bottom: 1px solid var(--glass-border-subtle);
                 flex-shrink: 0;
             }
-            .language-segment {
-                display: grid;
-                grid-template-columns: repeat(5, minmax(0, 1fr));
+            .docs-sidebar-top platform-segmented-control {
                 width: 100%;
-                gap: 2px;
-                padding: 2px;
-                border-radius: var(--radius-md);
-                background: var(--glass-solid-subtle);
-                border: 1px solid var(--glass-border-subtle);
-                box-sizing: border-box;
-            }
-            .language-segment platform-button {
-                --platform-button-icon-size: 36px;
-                --platform-button-icon-radius: calc(var(--radius-md) - 2px);
             }
             .docs-toc {
                 flex: 1;
@@ -348,20 +337,19 @@ export class FlowsCodeDocsModal extends PlatformModal {
     _renderLanguageSegment() {
         const current = this._documentationLanguage();
         return html`
-            <div class="language-segment" role="group" aria-label=${this.t('code_workbench.language_aria')}>
-                ${FLOW_CODE_LANGUAGES.map((lang) => html`
-                    <platform-button
-                        icon-only
-                        variant=${current === lang.value ? 'secondary' : 'ghost'}
-                        density="dense"
-                        title=${lang.label}
-                        aria-label=${lang.label}
-                        @click=${() => this._setLanguage(lang.value)}
-                    >
-                        <flows-code-language-icon language=${lang.value} size="18"></flows-code-language-icon>
-                    </platform-button>
-                `)}
-            </div>
+            <platform-segmented-control
+                icon-only
+                density="compact"
+                full-width
+                .value=${current}
+                .items=${FLOW_CODE_LANGUAGES.map((lang) => ({
+                    value: lang.value,
+                    icon: lang.icon,
+                    title: lang.label,
+                }))}
+                aria-label=${this.t('code_workbench.language_aria')}
+                @change=${(e) => this._setLanguage(e.detail.value)}
+            ></platform-segmented-control>
         `;
     }
 

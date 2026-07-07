@@ -183,9 +183,9 @@ export class FlowsVariableEditorModal extends PlatformFormModal {
     renderFooter() {
         const valid = this._key.trim().length > 0;
         return html`
-            <platform-button @click=${() => this.close()}>${this.t('variable_editor_modal.action_cancel')}</platform-button>
+            <platform-button @click=${() => this.close()}>${this.t('common.action_cancel')}</platform-button>
             <platform-button variant="primary" ?disabled=${!valid} @click=${this._onSubmit}>
-                ${this.t('variable_editor_modal.action_save')}
+                ${this.t('common.action_save')}
             </platform-button>
         `;
     }

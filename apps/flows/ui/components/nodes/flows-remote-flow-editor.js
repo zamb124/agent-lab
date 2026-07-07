@@ -12,9 +12,10 @@
 import { html, css } from 'lit';
 import { PlatformElement } from '@platform/lib/platform-element/index.js';
 import '@platform/lib/components/fields/platform-field.js';
+import '@platform/lib/components/platform-segmented-control.js';
 import { asObject } from '../../_helpers/flows-resolvers.js';
 import './flows-base-node-editor.js';
-import '../editors/flows-json-field-editor.js';
+import '@platform/lib/components/platform-json-editor.js';
 
 export class FlowsRemoteFlowEditor extends PlatformElement {
     static properties = {
@@ -34,17 +35,9 @@ export class FlowsRemoteFlowEditor extends PlatformElement {
         PlatformElement.styles,
         css`
             :host { display: block; height: 100%; min-height: 0; }
-            .toggle button {
-                padding: 4px 12px;
-                background: var(--glass-solid-subtle);
-                color: var(--text-secondary);
-                border: 1px solid var(--glass-border-subtle);
-                border-radius: var(--radius-full);
-                font-size: var(--text-xs);
-                cursor: pointer;
+            .endpoint-mode {
+                margin-bottom: var(--space-3);
             }
-            .toggle button[active] { background: var(--accent-subtle); color: var(--accent); border-color: var(--accent-subtle); }
-            .row { display: flex; gap: var(--space-2); margin-bottom: var(--space-2); }
             .remote-flow-endpoint-stack {
                 display: flex;
                 flex-direction: column;
@@ -161,14 +154,18 @@ export class FlowsRemoteFlowEditor extends PlatformElement {
                 ?embedded=${this.embedded}
             >
                 <div slot="settings">
-                    <div class="row toggle">
-                        <button ?active=${mode === 'url'} @click=${() => this._setMode('url')}>
-                            ${this.t('remote_flow_editor.mode_url')}
-                        </button>
-                        <button ?active=${mode === 'flow_id'} @click=${() => this._setMode('flow_id')}>
-                            ${this.t('remote_flow_editor.mode_id')}
-                        </button>
-                    </div>
+                    <platform-segmented-control
+                        class="endpoint-mode"
+                        full-width
+                        density="compact"
+                        .value=${mode}
+                        .items=${[
+                            { value: 'url', label: this.t('remote_flow_editor.mode_url') },
+                            { value: 'flow_id', label: this.t('remote_flow_editor.mode_id') },
+                        ]}
+                        aria-label=${this.t('remote_flow_editor.mode_aria')}
+                        @change=${(e) => this._setMode(e.detail.value)}
+                    ></platform-segmented-control>
                     <div class="remote-flow-endpoint-stack">
                         ${mode === 'url'
                             ? html`
@@ -201,12 +198,12 @@ export class FlowsRemoteFlowEditor extends PlatformElement {
                         ></platform-field>
                     </div>
                     <div class="field-auth-headers">
-                        <flows-json-field-editor
+                        <platform-json-editor validate-json show-toolbar="false"
                             .value=${headersJson}
                             @change=${(e) => { if (e.detail && 'parsed' in e.detail) this._onHeaders(e.detail.parsed); }}
                         >
                             <span slot="toolbar-start">${this.t('remote_flow_editor.headers')}</span>
-                        </flows-json-field-editor>
+                        </platform-json-editor>
                     </div>
                 </div>
             </flows-base-node-editor>

@@ -10,6 +10,7 @@ import { html, css, nothing } from 'lit';
 import { PlatformModal } from '@platform/lib/components/glass-modal.js';
 import { registerModalKind } from '@platform/lib/utils/modal-registry.js';
 import '@platform/lib/components/platform-button.js';
+import '@platform/lib/components/platform-segmented-control.js';
 import '@platform/lib/components/platform-icon.js';
 import '@platform/lib/components/glass-spinner.js';
 import '@platform/lib/components/platform-log-viewer.js';
@@ -174,13 +175,9 @@ export class FlowsLogsModal extends PlatformModal {
                 border-bottom: 1px solid var(--glass-border-primary);
                 flex-wrap: wrap;
             }
-            .mode-tabs {
-                display: flex;
-                gap: var(--space-1);
-                background: var(--glass-solid-secondary);
-                border-radius: var(--radius-md);
-                padding: 2px;
-                flex-wrap: wrap;
+            .mode-segment {
+                flex: 1 1 auto;
+                min-width: 0;
             }
             .count-badge {
                 font-size: var(--text-xs);
@@ -189,11 +186,6 @@ export class FlowsLogsModal extends PlatformModal {
                 padding: 2px 8px;
                 border-radius: var(--radius-full);
                 white-space: nowrap;
-            }
-            .tab-inline-spin {
-                display: inline-flex;
-                vertical-align: middle;
-                --spinner-size: 12px;
             }
         `,
     ];
@@ -424,6 +416,46 @@ export class FlowsLogsModal extends PlatformModal {
         this._mode = mode;
     }
 
+    _modeSegmentItems({
+        hasSession,
+        hasTraceResolver,
+        hasRequest,
+        hasSpan,
+        hasUser,
+        resolving,
+        traceTitle,
+    }) {
+        return [
+            {
+                value: 'session',
+                label: this.t('logs_modal.tab_session'),
+                disabled: !hasSession,
+            },
+            {
+                value: 'trace',
+                label: this.t('logs_modal.tab_trace'),
+                disabled: !hasTraceResolver,
+                title: traceTitle,
+                indicator: resolving,
+            },
+            {
+                value: 'request',
+                label: this.t('logs_modal.tab_request'),
+                disabled: !hasRequest,
+            },
+            {
+                value: 'span',
+                label: this.t('logs_modal.tab_span'),
+                disabled: !hasSpan,
+            },
+            {
+                value: 'user',
+                label: this.t('logs_modal.tab_user'),
+                disabled: !hasUser,
+            },
+        ];
+    }
+
     _activeData() {
         if (this._mode === 'trace') {
             return this._byTrace.lastResult;
@@ -651,58 +683,27 @@ export class FlowsLogsModal extends PlatformModal {
             : resolving
               ? this.t('logs_modal.tab_trace_resolving_hint')
               : this.t('logs_modal.tab_trace_disabled_hint');
-        const traceAria = hasTrace ? this.t('logs_modal.tab_trace') : traceTitle;
+        const modeItems = this._modeSegmentItems({
+            hasSession,
+            hasTraceResolver,
+            hasRequest,
+            hasSpan,
+            hasUser,
+            resolving,
+            traceTitle,
+        });
 
         return html`
             <div class="logs-modal-stack">
                 <div class="logs-toolbar">
-                    <div class="mode-tabs">
-                        <platform-button
-                            variant=${this._mode === 'session' ? 'secondary' : 'ghost'}
-                            density="compact"
-                            ?disabled=${!hasSession}
-                            @click=${() => this._setMode('session')}
-                        >
-                            ${this.t('logs_modal.tab_session')}
-                        </platform-button>
-                        <platform-button
-                            variant=${this._mode === 'trace' ? 'secondary' : 'ghost'}
-                            density="compact"
-                            ?disabled=${!hasTraceResolver}
-                            title=${traceTitle}
-                            aria-label=${traceAria}
-                            @click=${() => this._setMode('trace')}
-                        >
-                            ${resolving
-                                ? html`<span class="tab-inline-spin"><glass-spinner size="sm"></glass-spinner></span>`
-                                : nothing}
-                            ${this.t('logs_modal.tab_trace')}
-                        </platform-button>
-                        <platform-button
-                            variant=${this._mode === 'request' ? 'secondary' : 'ghost'}
-                            density="compact"
-                            ?disabled=${!hasRequest}
-                            @click=${() => this._setMode('request')}
-                        >
-                            ${this.t('logs_modal.tab_request')}
-                        </platform-button>
-                        <platform-button
-                            variant=${this._mode === 'span' ? 'secondary' : 'ghost'}
-                            density="compact"
-                            ?disabled=${!hasSpan}
-                            @click=${() => this._setMode('span')}
-                        >
-                            ${this.t('logs_modal.tab_span')}
-                        </platform-button>
-                        <platform-button
-                            variant=${this._mode === 'user' ? 'secondary' : 'ghost'}
-                            density="compact"
-                            ?disabled=${!hasUser}
-                            @click=${() => this._setMode('user')}
-                        >
-                            ${this.t('logs_modal.tab_user')}
-                        </platform-button>
-                    </div>
+                    <platform-segmented-control
+                        class="mode-segment"
+                        density="compact"
+                        .value=${this._mode}
+                        .items=${modeItems}
+                        aria-label=${this.t('logs_modal.mode_aria')}
+                        @change=${(e) => this._setMode(e.detail.value)}
+                    ></platform-segmented-control>
                     ${data
                         ? html`<span class="count-badge">${this.t('logs_modal.count', { count })}</span>`
                         : nothing}
