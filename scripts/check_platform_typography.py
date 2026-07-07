@@ -15,6 +15,9 @@ TOKENS_PATH = ROOT / "core/frontend/static/assets/css/tokens.css"
 FONTS_CSS_PATH = ROOT / "core/frontend/static/assets/fonts/platform-fonts.css"
 FONTS_DIR = ROOT / "core/frontend/static/assets/fonts"
 RESET_PATH = ROOT / "core/frontend/static/assets/css/reset.css"
+PLATFORM_ELEMENT_STYLES_PATH = (
+    ROOT / "core/frontend/static/lib/platform-element/styles.js"
+)
 
 SPA_SHELLS = (
     ROOT / "apps/frontend/ui/index.html",
@@ -195,6 +198,20 @@ def _check_tokens_import(manifest: PlatformTypographyManifest, errors: list[str]
         _fail(errors, "reset.css body must use font-feature-settings: var(--font-feature-sans)")
 
 
+def _check_platform_element_shadow_reset(errors: list[str]) -> None:
+    styles_text = PLATFORM_ELEMENT_STYLES_PATH.read_text(encoding="utf-8")
+    if "font-family: var(--font-sans);" not in styles_text:
+        _fail(
+            errors,
+            "platform-element/styles.js :host must use font-family: var(--font-sans)",
+        )
+    if ":host button" not in styles_text or "font: inherit;" not in styles_text:
+        _fail(
+            errors,
+            "platform-element/styles.js must reset :host button/input/textarea/select with font: inherit",
+        )
+
+
 def _check_platform_fonts_css(manifest: PlatformTypographyManifest, errors: list[str]) -> None:
     css_text = FONTS_CSS_PATH.read_text(encoding="utf-8")
     sans_family = manifest["sans"]["family"]
@@ -207,7 +224,13 @@ def _check_platform_fonts_css(manifest: PlatformTypographyManifest, errors: list
         _fail(errors, "platform-fonts.css must set font-display: swap")
 
 
-def _check_html_shell(path: Path, errors: list[str], *, require_tokens: bool) -> None:
+def _check_html_shell(
+    path: Path,
+    errors: list[str],
+    *,
+    require_tokens: bool,
+    require_reset: bool = False,
+) -> None:
     if not path.is_file():
         _fail(errors, f"missing HTML shell {_rel(path)}")
         return
@@ -220,11 +243,13 @@ def _check_html_shell(path: Path, errors: list[str], *, require_tokens: bool) ->
         _fail(errors, f"{_rel(path)}: external Google Fonts forbidden")
     if require_tokens and "/static/core/assets/css/tokens.css" not in text:
         _fail(errors, f"{_rel(path)}: must link /static/core/assets/css/tokens.css")
+    if require_reset and "/static/core/assets/css/reset.css" not in text:
+        _fail(errors, f"{_rel(path)}: must link /static/core/assets/css/reset.css")
 
 
 def _check_spa_shells(errors: list[str]) -> None:
     for shell_path in SPA_SHELLS:
-        _check_html_shell(shell_path, errors, require_tokens=True)
+        _check_html_shell(shell_path, errors, require_tokens=True, require_reset=True)
 
 
 def _check_platform_html(manifest: PlatformTypographyManifest, errors: list[str]) -> None:
@@ -378,6 +403,7 @@ def main() -> int:
     manifest = _load_manifest()
     _check_manifest_files(manifest, errors)
     _check_tokens_import(manifest, errors)
+    _check_platform_element_shadow_reset(errors)
     _check_platform_fonts_css(manifest, errors)
     _check_spa_shells(errors)
     _check_platform_html(manifest, errors)

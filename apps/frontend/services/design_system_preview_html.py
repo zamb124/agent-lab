@@ -46,6 +46,7 @@ def build_design_system_preview_html(
   <meta name="color-scheme" content="light" />
   <title>{safe_title} — UI Kit preview</title>
   <link rel="stylesheet" href="/static/core/assets/css/tokens.css" />
+  <link rel="stylesheet" href="/static/core/assets/css/reset.css" />
   <style>
     html, body {{
       margin: 0;

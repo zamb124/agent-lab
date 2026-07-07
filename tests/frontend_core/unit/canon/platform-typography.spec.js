@@ -14,6 +14,10 @@ const MANIFEST_PATH = path.join(
 );
 const TOKENS_PATH = path.join(ROOT, 'core/frontend/static/assets/css/tokens.css');
 const RESET_PATH = path.join(ROOT, 'core/frontend/static/assets/css/reset.css');
+const PLATFORM_ELEMENT_STYLES_PATH = path.join(
+    ROOT,
+    'core/frontend/static/lib/platform-element/styles.js',
+);
 const FONTS_CSS_PATH = path.join(
     ROOT,
     'core/frontend/static/assets/fonts/platform-fonts.css',
@@ -98,6 +102,10 @@ describe('platform typography canon', () => {
         expect(tokens).toContain('--font-feature-sans:');
         expect(reset).toContain('font-family: var(--font-sans);');
         expect(reset).toContain('font-feature-settings: var(--font-feature-sans);');
+        const platformElementStyles = readFileSync(PLATFORM_ELEMENT_STYLES_PATH, 'utf8');
+        expect(platformElementStyles).toContain('font-family: var(--font-sans);');
+        expect(platformElementStyles).toContain(':host button');
+        expect(platformElementStyles).toContain('font: inherit;');
     });
 
     it('platform-fonts.css declares manifest families with font-display swap', () => {
@@ -108,7 +116,15 @@ describe('platform typography canon', () => {
     });
 
     it('SPA and platform HTML shells do not load local fonts or legacy bundles', () => {
-        for (const rel of [...SPA_SHELLS, ...PLATFORM_HTML]) {
+        for (const rel of SPA_SHELLS) {
+            const html = readFileSync(path.join(ROOT, rel), 'utf8');
+            expect(html, rel).not.toMatch(/@font-face/i);
+            expect(html, rel).not.toMatch(/fira-sans/i);
+            expect(html, rel).not.toMatch(/fonts\.google/i);
+            expect(html, rel).toContain('/static/core/assets/css/tokens.css');
+            expect(html, rel).toContain('/static/core/assets/css/reset.css');
+        }
+        for (const rel of PLATFORM_HTML) {
             const html = readFileSync(path.join(ROOT, rel), 'utf8');
             expect(html, rel).not.toMatch(/@font-face/i);
             expect(html, rel).not.toMatch(/fira-sans/i);

@@ -6,6 +6,20 @@ import { css } from '../../assets/js/lit/lit.min.js';
 export const baseStyles = css`
     :host {
         box-sizing: border-box;
+        font-family: var(--font-sans);
+        font-feature-settings: var(--font-feature-sans);
+    }
+
+    /*
+     * reset.css (button/input font: inherit) не действует внутри Shadow DOM.
+     * Без этого UA stylesheet задаёт button font-family (Arial) поверх platform tokens.
+     */
+    :host button,
+    :host input,
+    :host textarea,
+    :host select {
+        font: inherit;
+        color: inherit;
     }
     
     :host *, :host *::before, :host *::after {

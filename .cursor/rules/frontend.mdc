@@ -218,6 +218,7 @@ export class FooApp extends PlatformApp {
 - Hardcoded `font-family: 'Fira Sans'`, `'Onest'`, `'SF Pro Display'`, `'Geist'` в `apps/**` и `core/frontend/static/lib/**` — только `var(--font-sans)` / `var(--font-mono)`.
 - Fallback-стеки `var(--font-sans, …)` / `var(--font-mono, …)` — только голый `var(--font-sans)` / `var(--font-mono)`.
 - Legacy tokens `--font-main`, `--font-condensed`, bundle `fira-sans*` — удалены, CI fail.
+- `PlatformElement` baseStyles: `:host { font-family: var(--font-sans) }` + `button/input/textarea/select { font: inherit }` — shadow reset (document `reset.css` в closed shadow не действует).
 - Отдельные condensed/display font-family — `--text-display-*`, `--tracking-tight`, `--font-semibold`.
 - CI: `scripts/check_platform_typography.py` (п.33 `check_ui_canon.sh`), unit: `platform-typography.spec.js`.
 
