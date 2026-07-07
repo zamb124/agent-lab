@@ -22,6 +22,7 @@ import {
     mcpInputMappingDraftFromToolRecord,
     shortMcpNameFromCacheEntry,
 } from '../../_helpers/flows-mcp-tool-registry.js';
+import { glassStyles } from '@platform/lib/styles/shared/glass.styles.js';
 
 export class FlowsMcpNodeEditor extends PlatformElement {
     static properties = {
@@ -39,6 +40,7 @@ export class FlowsMcpNodeEditor extends PlatformElement {
 
     static styles = [
         PlatformElement.styles,
+        glassStyles,
         css`
             :host {
                 display: block;
@@ -48,9 +50,7 @@ export class FlowsMcpNodeEditor extends PlatformElement {
             details {
                 margin-bottom: var(--space-3);
                 padding: var(--space-2) var(--space-3);
-                border: 1px solid var(--glass-border-subtle);
                 border-radius: var(--radius-md);
-                background: var(--glass-solid-subtle);
             }
             summary { cursor: pointer; font-size: var(--text-sm); font-weight: var(--font-semibold); }
             .field { display: flex; flex-direction: column; gap: var(--space-1); margin-bottom: var(--space-2); }
@@ -58,8 +58,8 @@ export class FlowsMcpNodeEditor extends PlatformElement {
             input, select {
                 padding: var(--space-2);
                 border-radius: var(--radius-md);
-                border: 1px solid var(--glass-border-subtle);
-                background: var(--glass-solid-subtle);
+                border: 1px solid var(--border-subtle);
+                background: var(--bg-elevated);
                 color: var(--text-primary); font: inherit;
                 width: 100%; box-sizing: border-box;
             }
@@ -465,7 +465,7 @@ export class FlowsMcpNodeEditor extends PlatformElement {
                         </platform-button>
                     </div>
                     ${schema ? html`
-                        <details>
+                        <details class="glass-subtle">
                             <summary>${this.t('mcp_node_editor.args_preview')}</summary>
                             <flows-parameters-schema-form
                                 .schema=${schema}
@@ -474,7 +474,7 @@ export class FlowsMcpNodeEditor extends PlatformElement {
                             ></flows-parameters-schema-form>
                         </details>
                     ` : ''}
-                    <details>
+                    <details class="glass-subtle">
                         <summary>${this.t('mcp_node_editor.headers')}</summary>
                         <platform-json-editor validate-json show-toolbar="false"
                             .value=${headersJson}

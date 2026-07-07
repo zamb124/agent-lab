@@ -18,9 +18,12 @@ import '@platform/lib/components/glass-spinner.js';
 import '@platform/lib/components/platform-modal-search-field.js';
 import '@platform/lib/components/fields/platform-field.js';
 import '@platform/lib/components/platform-file-attachments.js';
+import '@platform/lib/components/platform-picker-card.js';
 import { asArray, asString, isPlainObject } from '../_helpers/flows-resolvers.js';
 import { formatJsonPretty } from '@platform/lib/utils/json-format.js';
 import { renderMcpServerIcon } from '../_helpers/mcp-server-icon.js';
+import { panelShellStyles } from '@platform/lib/styles/shared/panel-shell.styles.js';
+import { glassStyles } from '@platform/lib/styles/shared/glass.styles.js';
 
 const SERVER_ID_PATTERN = /^[a-zA-Z][a-zA-Z0-9_-]{1,63}$/;
 const TRANSPORT_TYPES = Object.freeze(['http', 'sse']);
@@ -43,6 +46,11 @@ function normalizeMcpTransportType(raw) {
 const HEADER_PRESET_BEARER = '{\n  "Authorization": "Bearer @var:token"\n}';
 const HEADER_PRESET_API_KEY = '{\n  "X-API-Key": "@var:api_key"\n}';
 const HEADER_PRESET_BASIC = '{\n  "Authorization": "Basic @var:basic_credentials"\n}';
+const HEADER_PRESET_OPTIONS = Object.freeze([
+    Object.freeze({ id: 'bearer', titleKey: 'mcp_servers_modal.preset_bearer', icon: 'key' }),
+    Object.freeze({ id: 'apikey', titleKey: 'mcp_servers_modal.preset_api_key', icon: 'key' }),
+    Object.freeze({ id: 'basic', titleKey: 'mcp_servers_modal.preset_basic', icon: 'lock' }),
+]);
 const PLATFORM_MCP_SLUGS = Object.freeze(['browser', 'search']);
 
 /**
@@ -101,6 +109,8 @@ export class FlowsMcpServersModal extends PlatformModal {
 
     static styles = [
         ...PlatformModal.styles,
+        panelShellStyles,
+        glassStyles,
         css`
             .flows-header-action-create {
                 display: none;
@@ -156,13 +166,8 @@ export class FlowsMcpServersModal extends PlatformModal {
                 }
             }
             .mcp-card {
-                display: flex;
-                flex-direction: column;
                 gap: var(--space-2);
                 padding: var(--space-4);
-                border: 1px solid var(--glass-border-subtle);
-                border-radius: var(--radius-lg);
-                background: var(--glass-solid-subtle);
             }
             .mcp-card-top {
                 display: flex;
@@ -186,8 +191,6 @@ export class FlowsMcpServersModal extends PlatformModal {
                 align-items: center;
                 justify-content: center;
                 border-radius: var(--radius-md);
-                background: var(--glass-solid-medium);
-                border: 1px solid var(--glass-border-subtle);
                 overflow: hidden;
             }
             .mcp-card-icon .mcp-server-icon-img {
@@ -270,13 +273,20 @@ export class FlowsMcpServersModal extends PlatformModal {
                 box-sizing: border-box;
                 padding: var(--space-2) var(--space-3);
                 border-radius: var(--radius-md);
-                border: 1px solid var(--glass-border-subtle);
-                background: var(--glass-solid-subtle);
+                border: 1px solid var(--border-subtle);
+                background: var(--bg-elevated);
                 color: var(--text-primary);
                 font: inherit;
             }
             .mcp-field textarea { min-height: 120px; font-family: var(--font-mono, ui-monospace, monospace); font-size: var(--text-sm); }
-            .mcp-presets { display: flex; flex-wrap: wrap; gap: var(--space-2); }
+            .mcp-header-presets {
+                display: grid;
+                grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+                gap: var(--space-2);
+            }
+            .mcp-header-presets platform-picker-card {
+                min-width: 0;
+            }
             .mcp-form-err { font-size: var(--text-sm); color: var(--error); }
             .mcp-test-feedback {
                 font-size: var(--text-sm);
@@ -300,14 +310,9 @@ export class FlowsMcpServersModal extends PlatformModal {
                 margin-bottom: var(--space-3);
             }
             .mcp-branding-form {
-                display: flex;
-                flex-direction: column;
                 gap: var(--space-3);
                 padding: var(--space-4);
                 margin-bottom: var(--space-4);
-                border: 1px solid var(--glass-border-subtle);
-                border-radius: var(--radius-lg);
-                background: var(--glass-solid-subtle);
             }
             .mcp-branding-slugs {
                 display: flex;
@@ -317,7 +322,7 @@ export class FlowsMcpServersModal extends PlatformModal {
             .mcp-branding-slug {
                 padding: 2px var(--space-2);
                 border-radius: var(--radius-full);
-                border: 1px solid var(--glass-border-subtle);
+                border: 1px solid var(--border-subtle);
                 background: var(--glass-solid-medium);
                 font-size: var(--text-xs);
                 color: var(--text-secondary);
@@ -333,9 +338,6 @@ export class FlowsMcpServersModal extends PlatformModal {
                 align-items: center;
                 gap: var(--space-3);
                 padding: var(--space-3);
-                border: 1px solid var(--glass-border-subtle);
-                border-radius: var(--radius-lg);
-                background: var(--glass-solid-subtle);
             }
             .mcp-branding-row-icon {
                 width: 44px;
@@ -933,10 +935,10 @@ export class FlowsMcpServersModal extends PlatformModal {
             return html`<div class="mcp-empty">${this.t('mcp_servers_modal.empty_search')}</div>`;
         }
         return items.map((s) => html`
-            <div class="mcp-card">
+            <div class="mcp-card content-panel">
                 <div class="mcp-card-top">
                     <div class="mcp-card-head-row">
-                        <div class="mcp-card-icon">${renderMcpServerIcon(s, 28)}</div>
+                        <div class="mcp-card-icon glass-subtle">${renderMcpServerIcon(s, 28)}</div>
                         <div class="mcp-card-titles">
                             <h3>${s.name}</h3>
                             <div class="sub"><code>${s.server_id}</code></div>
@@ -1044,7 +1046,7 @@ export class FlowsMcpServersModal extends PlatformModal {
         }
         const slugSuggestions = this._brandingSlugSuggestions();
         return html`
-            <div class="mcp-branding-form">
+            <div class="mcp-branding-form content-panel">
                 <div class="mcp-field">
                     <label>${this.t('mcp_servers_modal.branding_slug')}</label>
                     <platform-field
@@ -1109,7 +1111,7 @@ export class FlowsMcpServersModal extends PlatformModal {
                         this._brandingItems,
                         (row) => (typeof row.server_id === 'string' ? row.server_id : ''),
                         (row) => html`
-                            <div class="mcp-branding-row">
+                            <div class="mcp-branding-row content-panel">
                                 <div class="mcp-branding-row-icon">
                                     ${renderMcpServerIcon(row, 32)}
                                 </div>
@@ -1240,16 +1242,28 @@ export class FlowsMcpServersModal extends PlatformModal {
                 <div class="mcp-field">
                     <label>${this.t('mcp_servers_modal.label_headers')}</label>
                     <span class="hint">${this.t('mcp_servers_modal.hint_headers')}</span>
-                    <div class="mcp-presets">
-                        <platform-button variant="ghost" density="compact" @click=${() => this._applyPreset('bearer')}>
-                            ${this.t('mcp_servers_modal.preset_bearer')}
-                        </platform-button>
-                        <platform-button variant="ghost" density="compact" @click=${() => this._applyPreset('apikey')}>
-                            ${this.t('mcp_servers_modal.preset_api_key')}
-                        </platform-button>
-                        <platform-button variant="ghost" density="compact" @click=${() => this._applyPreset('basic')}>
-                            ${this.t('mcp_servers_modal.preset_basic')}
-                        </platform-button>
+                    <div class="mcp-header-presets">
+                        ${repeat(
+                            HEADER_PRESET_OPTIONS,
+                            (preset) => preset.id,
+                            (preset) => html`
+                                <platform-picker-card
+                                    title=${this.t(preset.titleKey)}
+                                    value=${preset.id}
+                                    @select=${(e) => {
+                                        const presetId = e.detail.value;
+                                        if (typeof presetId !== 'string') {
+                                            throw new TypeError('flows-mcp-servers-modal: header preset value must be string');
+                                        }
+                                        this._applyPreset(presetId);
+                                    }}
+                                >
+                                    <div slot="icon">
+                                        <platform-icon name=${preset.icon} size="22"></platform-icon>
+                                    </div>
+                                </platform-picker-card>
+                            `,
+                        )}
                     </div>
                     <platform-field
                         type="text"

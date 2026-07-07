@@ -258,11 +258,11 @@ Resolved LLM candidate может нести `context_length`; context layer и�
 
 ### Design System (flows UI)
 
-- Визуальный канон — `tokens.css` + core UI Kit (`platform-button`, `platform-field`, `platform-segmented-control`, `glass-modal`, `page-header`, `platform-breadcrumbs`, `platform-picker-card`, `platform-json-editor`). Figma Networkle — только reference; hex/rgba в `apps/flows/ui/**` запрещены (исключение: SVG canvas в `flow-canvas/`). CI: `scripts/check_ui_canon.sh` #23 (hex/rgba), #24 (raw `<button`), #25 (legacy button CSS), #26 (`glass-button`), #27 (literal `--platform-button-icon-size`), #28 (inline glass triplet).
+- Визуальный канон — `tokens.css` + core UI Kit (`platform-button`, `platform-field`, `platform-segmented-control`, `glass-modal`, `page-header`, `platform-breadcrumbs`, `platform-picker-card`, `platform-json-editor`). Figma Networkle — только reference; hex/rgba в `apps/flows/ui/**` запрещены (исключение: SVG canvas в `flow-canvas/`). CI: `scripts/check_ui_canon.sh` #23 (hex/rgba), #24 (raw `<button`), #25 (legacy button CSS), #26 (`glass-button`), #27 (literal `--platform-button-icon-size`), #28 (inline glass triplet, max 4 файла), #30 (`color: white`), #31 (local `.form-field` CSS), #32 (raw checkbox/radio).
 - Cover/preset gradients — только `--flows-cover-gradient-*` / `--flows-preset-*-gradient` из `tokens.css`; резолвер — `apps/flows/ui/constants/flow-cover-gradients.js` (`resolveFlowCoverGradient`, `resolveFlowPresetGradient`). Эталон компонента — `flow-card.js`.
 - Поиск в модалках/тулбарах — `<platform-modal-search-field>`.
 - **Editor chrome** — header/toolbar action chrome только `<platform-button>` (icon-only + `density="dense"` для compact toolbar). Mode/branch/language segmented toggles — `<platform-segmented-control>`, не raw `<button`. Пример: `flows-editor-header.js` (edit/run mode, branches), `flows-evaluation-case-editor.js`, `flows-state-mapping-editor.js`, `flows-trigger-editor-modal.js`, `flows-api-console-modal.js`.
-- **Action chrome** — только `<platform-button>`. Raw `<button` в `apps/flows/ui/**` запрещён; единственные исключения — явный allowlist в `check_ui_canon.sh` #24: canvas chrome (`flows-flow-canvas.js`), selectable cards в модалках (`lib-card`, `mcp-picker-tool-card`, `branch-chip`, `event-row`, `run-head`, `cell-button`, `run-chip`), node editor chips/tabs (`dataflow-chip`, `file-ref`, `mapping-tab`), execution panel `resize-handle`. `flows-incoming-policy-modal.js` — `<platform-picker-card>`. Новые исключения — только с правкой allowlist и снятием после миграции.
+- **Action chrome** — только `<platform-button>`. Raw `<button` в `apps/flows/ui/**` запрещён (CI #24, allowlist снят Wave F). Selectable cards — `<article role="button" tabindex="0">`; resize handles — `role="separator"`.
 - **Selectable cards / list rows** — не `<button class="row">`: `<article class="row" tabindex="0" role="button">` + `@click` + `@keydown` (Enter/Space). Эталон: `flows-evaluation-suite-sidebar.js`, `flows-flow-create-modal.js` (preset cards), `flows-node-types-sidebar.js` (`trigger-row` для flow settings).
 - **`<glass-button>`** — запрещён в `apps/flows/ui/**` (CI #26); замена — `<platform-button>`.
 - **Field widgets** — flows-local combobox/variable-input запрещены; используйте core `<platform-searchable-combobox>`, `<platform-variable-input>`.
@@ -272,6 +272,8 @@ Resolved LLM candidate может нести `context_length`; context layer и�
   - **Chrome (32px)** — editor header, modal header, sidebar toolbar: `platform-button icon-only density="compact"`, `platform-segmented-control density="compact"`, `platform-modal-search-field`. Токены: `--flows-chrome-control-size`, `--flows-chrome-row-min-height`, `--flows-toolbar-shell-min-height`.
   - **Micro (28px)** — canvas badges, collapsed panel icons: `platform-button icon-only density="dense"`. Токен: `--flows-micro-control-size` / `--flows-card-action-size`.
   - List rows — layout semantics: `--flows-sidebar-row-min-height`, не button height.
+  - Side panels (evaluation rail, matrix sticky column) — `--flows-side-panel-width` (324px, CRM parity), `--flows-side-panel-min-width`, `--flows-side-panel-max-width`; запрещены magic `260px`/`286px` в evaluation sidebar.
+  - Editor header (desktop) — single chrome row, total stack `--flows-editor-chrome-stack-height` (~60px); branches inline в primary row; вторая строка branches — только mobile (`≤767px`).
   - Запрещено: локальный `--platform-button-icon-size: Npx` в `apps/flows/ui/**` (CI #27); допустимо только `var(--flows-*)` или density props core-компонентов.
   - Tab/mode/language pickers — только `<platform-segmented-control>`, не ряды `platform-button`.
 - **Style consolidation contract** — presentational CSS живёт в core shared styles, не копипастится в flows:
@@ -282,7 +284,9 @@ Resolved LLM candidate может нести `context_length`; context layer и�
   - Selectable cards — `<platform-picker-card>` (`platform-picker-card.js`), не raw `<button class="card">`.
   - JSON fields — `<platform-json-editor validate-json>`, не `flows-json-field-editor` (удалён).
   - Modal footer actions — `flows.common.action_*`, не дубли per-modal (`action_cancel` × N).
-  - Запрещено: inline triplet `--glass-solid-subtle` + `--glass-border-subtle` в одном `css` блоке (CI #28); canvas/domain editors — временный allowlist до миграции.
+  - Form layout/errors — `formStyles` из `@platform/lib/styles/shared/form.styles.js` (`.form-group`, `.form-error`); local `.form-field` запрещён (CI #31).
+  - Header presets (MCP servers) — `<platform-picker-card>`, не ghost button row.
+  - Запрещено: inline triplet `--glass-solid-subtle` + `--glass-border-subtle` в одном flows-файле (CI #28, max 4); миграция — `glassStyles` / `panelShellStyles`.
 - Подстраницы (editor, chat, evaluation) — `<platform-breadcrumbs>` + i18n `routes.*`.
 
 ### Панель свойств ноды (`flows-floating-panel`)

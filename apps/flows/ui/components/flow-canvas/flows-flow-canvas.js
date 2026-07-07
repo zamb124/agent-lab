@@ -2008,9 +2008,10 @@ export class FlowsFlowCanvas extends PlatformElement {
                                 ? this._renderCodeLanguageIcon(inferredLanguage, 24)
                                 : this._renderCanvasIcon(tm.icon, 14);
                             return html`
-                                <button
-                                    type="button"
+                                <article
                                     class="node-tool-chip"
+                                    tabindex="0"
+                                    role="button"
                                     data-cat=${tm.category}
                                     ?data-language-icon=${isLanguageTool}
                                     style=${chipStyle}
@@ -2021,7 +2022,7 @@ export class FlowsFlowCanvas extends PlatformElement {
                                     }}
                                 >
                                     ${chipIcon}
-                                </button>
+                                </article>
                             `;
                         })}
                         ${moreTools > 0 ? html`<span class="node-tools-more">+${moreTools}</span>` : ''}

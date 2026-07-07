@@ -9,10 +9,12 @@ import { html, css } from 'lit';
 import { PlatformModal } from '@platform/lib/components/glass-modal.js';
 import { registerModalKind } from '@platform/lib/utils/modal-registry.js';
 import { platformConfirm } from '@platform/lib/components/platform-confirm-modal.js';
+import { glassStyles } from '@platform/lib/styles/shared/glass.styles.js';
 import './flows-trigger-editor-modal.js';
 import '@platform/lib/components/platform-icon.js';
 import '@platform/lib/components/platform-button.js';
 import '@platform/lib/components/glass-spinner.js';
+import '@platform/lib/components/platform-modal-search-field.js';
 import '@platform/lib/components/fields/platform-field.js';
 
 export class FlowsTriggersModal extends PlatformModal {
@@ -21,7 +23,11 @@ export class FlowsTriggersModal extends PlatformModal {
 
     static styles = [
         ...PlatformModal.styles,
+        glassStyles,
         css`
+            .trg-search {
+                margin-bottom: var(--space-3);
+            }
             .trg-table { width: 100%; border-collapse: collapse; color: var(--text-secondary); }
             .trg-table th, .trg-table td { padding: var(--space-2); text-align: left; border-bottom: 1px solid var(--border-subtle); }
             .trg-empty { text-align: center; color: var(--text-tertiary); padding: var(--space-4); }
@@ -36,8 +42,6 @@ export class FlowsTriggersModal extends PlatformModal {
                 margin-top: var(--space-3);
                 padding: var(--space-2);
                 border-radius: var(--radius-md);
-                border: 1px solid var(--glass-border-subtle);
-                background: var(--glass-tint-subtle);
                 color: var(--text-primary);
                 font-family: var(--font-mono, ui-monospace, monospace);
                 font-size: var(--text-xs);
@@ -58,6 +62,7 @@ export class FlowsTriggersModal extends PlatformModal {
     static properties = {
         ...PlatformModal.properties,
         flowId: { type: String },
+        _query: { state: true },
         _testSampleJson: { state: true },
         _testResultText: { state: true },
         _lastTestTriggerId: { state: true },
@@ -67,6 +72,7 @@ export class FlowsTriggersModal extends PlatformModal {
         super();
         this.size = 'xl';
         this.flowId = '';
+        this._query = '';
         this._testSampleJson = '{}';
         this._testResultText = '';
         this._lastTestTriggerId = '';
@@ -145,9 +151,35 @@ export class FlowsTriggersModal extends PlatformModal {
         this._testSampleJson = v;
     }
 
-    _renderRows() {
+    _onSearchChange(e) {
+        const rawValue = e.detail.value;
+        if (typeof rawValue !== 'string') {
+            throw new TypeError('flows-triggers-modal: search expects string detail.value');
+        }
+        this._query = rawValue;
+    }
+
+    _filteredItems() {
         const items = Array.isArray(this._listOp.lastResult) ? this._listOp.lastResult : [];
-        if (this._listOp.busy && items.length === 0) {
+        const query = this._query.trim().toLocaleLowerCase();
+        if (query.length === 0) {
+            return items;
+        }
+        return items.filter((item) => {
+            if (!item || typeof item !== 'object') {
+                return false;
+            }
+            const triggerId = typeof item.trigger_id === 'string' ? item.trigger_id : '';
+            const name = typeof item.name === 'string' ? item.name : '';
+            const type = typeof item.type === 'string' ? item.type : '';
+            const haystack = `${triggerId} ${name} ${type}`.toLocaleLowerCase();
+            return haystack.includes(query);
+        });
+    }
+
+    _renderRows() {
+        const items = this._filteredItems();
+        if (this._listOp.busy && items.length === 0 && this._query.trim().length === 0) {
             return html`<tr><td colspan="5"><glass-spinner></glass-spinner></td></tr>`;
         }
         if (items.length === 0) {
@@ -223,7 +255,7 @@ export class FlowsTriggersModal extends PlatformModal {
                               ? html` <code>${this._lastTestTriggerId}</code>`
                               : ''}
                       </p>
-                      <div class="trg-test-out">${this._testResultText}</div>
+                      <div class="trg-test-out glass-subtle">${this._testResultText}</div>
                   `
                 : null;
         return html`
@@ -236,6 +268,13 @@ export class FlowsTriggersModal extends PlatformModal {
                     @change=${this._onTestSampleInput}
                 ></platform-field>
             </div>
+            <platform-modal-search-field
+                class="trg-search"
+                layout="fill"
+                .value=${this._query}
+                placeholder=${this.t('triggers_modal.search')}
+                @change=${this._onSearchChange}
+            ></platform-modal-search-field>
             <table class="trg-table">
                 <thead>
                     <tr>

@@ -224,6 +224,7 @@
     "status_enabled": "включён",
     "status_disabled": "выключен",
     "empty": "Триггеров нет",
+    "search": "Поиск по ID, названию или типу",
     "test_sample_label": "Тело для теста (JSON) — маппинг input как у реального вебхука",
     "test_result_title": "Результат теста (POST …/test)",
     "test_json_error": "Некорректный JSON в теле теста"
@@ -363,7 +364,8 @@
     "col_service": "Сервис",
     "col_status": "Статус",
     "col_actions": "Действия",
-    "empty": "Интеграций нет"
+    "empty": "Интеграций нет",
+    "search": "Поиск по провайдеру, сервису или статусу"
   },
   "context_menu": {
     "delete": "Удалить"
@@ -924,7 +926,9 @@
     "tab_flows": "Flows",
     "tab_mcp": "MCP",
     "mcp_server_empty": "Инструментов нет. Нажмите обновить.",
-    "mcp_server_tools_count": "{{n}} инструментов"
+    "mcp_server_tools_count": "{{n}} инструментов",
+    "load_error": "Не удалось загрузить инструменты",
+    "action_retry": "Повторить"
   },
   "tool_create_modal": {
     "title": "Новый tool",

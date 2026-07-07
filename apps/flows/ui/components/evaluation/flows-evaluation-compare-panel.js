@@ -79,6 +79,10 @@ export class FlowsEvaluationComparePanel extends PlatformElement {
                 padding-bottom: var(--space-1);
             }
 
+            article.run-chip {
+                margin: 0;
+            }
+
             .run-chip {
                 min-height: 34px;
                 display: inline-flex;
@@ -181,6 +185,14 @@ export class FlowsEvaluationComparePanel extends PlatformElement {
         this.busy = false;
     }
 
+    _onSelectableKeydown(event, handler) {
+        if (event.key !== 'Enter' && event.key !== ' ') {
+            return;
+        }
+        event.preventDefault();
+        handler.call(this);
+    }
+
     _selectCompareRun(runId) {
         this.emit('compare-run-select', { run_id: runId });
     }
@@ -277,10 +289,17 @@ export class FlowsEvaluationComparePanel extends PlatformElement {
         const state = stringValue(run, 'state');
         const active = runId === this.selectedCompareRunId;
         return html`
-            <button class="run-chip" type="button" data-active=${active ? 'true' : 'false'} @click=${() => this._selectCompareRun(runId)}>
+            <article
+                class="run-chip"
+                tabindex="0"
+                role="button"
+                data-active=${active ? 'true' : 'false'}
+                @click=${() => this._selectCompareRun(runId)}
+                @keydown=${(event) => this._onSelectableKeydown(event, () => this._selectCompareRun(runId))}
+            >
                 <platform-icon name="history" size="14"></platform-icon>
                 ${runId.slice(0, 8)} · ${state}
-            </button>
+            </article>
         `;
     }
 

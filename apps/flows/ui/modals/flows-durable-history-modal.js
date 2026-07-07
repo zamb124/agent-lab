@@ -214,6 +214,13 @@ export class FlowsDurableHistoryModal extends PlatformModal {
                 gap: var(--space-2);
                 min-width: 0;
             }
+            article.branch-chip,
+            article.event-row {
+                margin: 0;
+                font: inherit;
+                box-sizing: border-box;
+            }
+
             .branch-chip {
                 display: inline-flex;
                 align-items: center;
@@ -572,6 +579,14 @@ export class FlowsDurableHistoryModal extends PlatformModal {
         return events[events.length - 1];
     }
 
+    _onSelectableKeydown(event, handler) {
+        if (event.key !== 'Enter' && event.key !== ' ') {
+            return;
+        }
+        event.preventDefault();
+        handler.call(this);
+    }
+
     _selectEvent(event) {
         const row = durableEvent(event);
         this._selectedEventId = row.event_id;
@@ -861,16 +876,18 @@ export class FlowsDurableHistoryModal extends PlatformModal {
                 ${branches.map((branch) => {
                     const selected = branch.execution_branch_id === selectedBranchId;
                     return html`
-                        <button
-                            type="button"
+                        <article
+                            tabindex="0"
+                            role="button"
                             class=${selected ? 'branch-chip branch-chip--selected' : 'branch-chip'}
                             title=${branch.execution_branch_id}
                             @click=${() => this._setBranch(branch)}
+                            @keydown=${(event) => this._onSelectableKeydown(event, () => this._setBranch(branch))}
                         >
                             ${branch.is_active === true ? html`<span class="branch-chip__active"></span>` : nothing}
                             <span class="branch-chip__label">${formatBranchLabel(branch.execution_branch_id)}</span>
                             <span class="branch-chip__meta">${branch.reason} @${branch.base_sequence}</span>
-                        </button>
+                        </article>
                     `;
                 })}
             </div>
@@ -890,10 +907,12 @@ export class FlowsDurableHistoryModal extends PlatformModal {
                     const subtitle = this._eventSubtitle(event);
                     const workItemId = this._eventWorkItemId(event);
                     return html`
-                        <button
-                            type="button"
+                        <article
+                            tabindex="0"
+                            role="button"
                             class=${this._eventClass(event, selectedEventId)}
                             @click=${() => this._selectEvent(event)}
+                            @keydown=${(eventKey) => this._onSelectableKeydown(eventKey, () => this._selectEvent(event))}
                         >
                             <div class="event-seq">#${event.sequence}</div>
                             <div class="event-main">
@@ -911,7 +930,7 @@ export class FlowsDurableHistoryModal extends PlatformModal {
                                         : nothing)}
                                 <div class="event-created">${this._formatCreatedAt(event)}</div>
                             </div>
-                        </button>
+                        </article>
                     `;
                 })}
             </div>

@@ -34,6 +34,7 @@ import {
     normalizeFlowCodeLanguage,
 } from '../_helpers/flows-code-languages.js';
 import { glassStyles } from '@platform/lib/styles/shared/glass.styles.js';
+import { formStyles } from '@platform/lib/styles/shared/form.styles.js';
 
 const OPERATORS = Object.freeze(['==', '!=', '>', '<', '>=', '<=', 'in']);
 
@@ -75,6 +76,7 @@ export class FlowsEdgeConditionModal extends PlatformFormModal {
     static styles = [
         ...(PlatformFormModal.styles ? [PlatformFormModal.styles] : []),
         glassStyles,
+        ...formStyles,
         css`
             .modal-content { padding: var(--space-5) var(--space-6); }
 
@@ -104,18 +106,6 @@ export class FlowsEdgeConditionModal extends PlatformFormModal {
                 grid-template-columns: minmax(0, 1fr) minmax(88px, 120px) minmax(0, 1fr);
                 gap: var(--space-3);
                 align-items: end;
-            }
-            .form-field {
-                display: flex;
-                flex-direction: column;
-                gap: var(--space-1);
-                min-width: 0;
-            }
-            .form-field label {
-                font-size: var(--text-xs);
-                font-weight: var(--font-medium);
-                color: var(--text-secondary);
-                overflow-wrap: anywhere;
             }
 
             .python-mode { margin-top: var(--space-2); }
@@ -205,12 +195,6 @@ export class FlowsEdgeConditionModal extends PlatformFormModal {
                 color: var(--text-secondary);
             }
             .variables-hint strong { color: var(--text-primary); }
-
-            .form-error {
-                margin-top: var(--space-1);
-                font-size: var(--text-xs);
-                color: var(--error);
-            }
         `,
     ];
 
@@ -621,7 +605,7 @@ export class FlowsEdgeConditionModal extends PlatformFormModal {
         };
         return html`
             <div class="builder-row">
-                <div class="form-field">
+                <div class="form-group">
                     <label>${this.t('edge_condition_modal.label_variable')}</label>
                     <platform-field
                         type="enum"
@@ -632,7 +616,7 @@ export class FlowsEdgeConditionModal extends PlatformFormModal {
                     ></platform-field>
                     ${this.renderFieldError('variable')}
                 </div>
-                <div class="form-field">
+                <div class="form-group">
                     <label>${this.t('edge_condition_modal.label_operator')}</label>
                     <platform-field
                         type="enum"
@@ -642,7 +626,7 @@ export class FlowsEdgeConditionModal extends PlatformFormModal {
                         @change=${this._onOperatorChange}
                     ></platform-field>
                 </div>
-                <div class="form-field">
+                <div class="form-group">
                     <label>${this.t('edge_condition_modal.label_value')}</label>
                     <platform-field
                         type="string"

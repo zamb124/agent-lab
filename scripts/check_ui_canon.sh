@@ -373,24 +373,11 @@ if [ -n "$FLOWS_HEX_HITS" ]; then
 fi
 
 # 24. Flows UI: raw <button в apps/flows/ui/**/*.js запрещён — action chrome только <platform-button>.
-#     Исключения (Phase 3 allowlist — selectable cards / canvas chrome / resize handle):
-#     - flow-canvas/flows-flow-canvas.js — canvas chrome
-#     - evaluation: results-matrix (run-head, cell-button), compare-panel (run-chip)
-#     - durable-history-modal (branch-chip, event-row)
-#     - base-node-editor (dataflow-chip, file-ref)
-#     - execution-panel (resize-handle)
-#     Segmented/mode toggles — <platform-segmented-control>. Selectable lists — <article role="button">.
-FLOWS_BUTTON_ALLOW_GLOBS=(
-    --glob '!apps/flows/ui/components/flow-canvas/flows-flow-canvas.js'
-    --glob '!apps/flows/ui/components/evaluation/flows-evaluation-results-matrix.js'
-    --glob '!apps/flows/ui/components/evaluation/flows-evaluation-compare-panel.js'
-    --glob '!apps/flows/ui/modals/flows-durable-history-modal.js'
-    --glob '!apps/flows/ui/components/editor/flows-execution-panel.js'
-    --glob '!apps/flows/ui/components/nodes/flows-base-node-editor.js'
-)
-FLOWS_BUTTON_HITS="$(rg -n '<button' apps/flows/ui -g '*.js' "${FLOWS_BUTTON_ALLOW_GLOBS[@]}" || true)"
+#     Selectable cards / list rows — <article role="button" tabindex="0"> + keyboard (Enter/Space).
+#     Resize handles — role="separator" + pointer handlers, не <button>.
+FLOWS_BUTTON_HITS="$(rg -n '<button' apps/flows/ui -g '*.js' || true)"
 if [ -n "$FLOWS_BUTTON_HITS" ]; then
-    fail "apps/flows/ui/**/*.js: raw <button запрещён — используйте <platform-button>; allowlist см. check #24 в scripts/check_ui_canon.sh"
+    fail "apps/flows/ui/**/*.js: raw <button запрещён — используйте <platform-button> или <article role=\"button\">"
     echo "$FLOWS_BUTTON_HITS" >&2
 fi
 
@@ -417,7 +404,7 @@ if [ -n "$FLOWS_ICON_SIZE_HITS" ]; then
 fi
 
 # 28. Flows UI: inline glass panel triplet (--glass-solid-subtle + --glass-border-subtle) — glassStyles/panelShellStyles.
-FLOWS_GLASS_TRIPLET_MAX=12
+FLOWS_GLASS_TRIPLET_MAX=4
 FLOWS_GLASS_TRIPLET_COUNT=0
 while IFS= read -r glass_file; do
     [ -z "$glass_file" ] && continue
@@ -459,6 +446,27 @@ PY
 if [ -n "$FLOWS_I18N_DUP_ACTION_CANCEL" ]; then
     fail "flows.json: action_cancel дублируется вне common — используйте flows.common.action_cancel"
     echo "$FLOWS_I18N_DUP_ACTION_CANCEL" >&2
+fi
+
+# 30. Flows UI: literal color: white запрещён — используйте semantic tokens (--text-inverse, --flows-avatar-text).
+FLOWS_COLOR_WHITE_HITS="$(rg -n 'color:\s*white\b' apps/flows/ui -g '*.js' || true)"
+if [ -n "$FLOWS_COLOR_WHITE_HITS" ]; then
+    fail "apps/flows/ui/**/*.js: color: white запрещён — используйте var(--text-inverse) или var(--flows-avatar-text)"
+    echo "$FLOWS_COLOR_WHITE_HITS" >&2
+fi
+
+# 31. Flows UI: local .form-field CSS запрещён — используйте formStyles (.form-group) из core.
+FLOWS_FORM_FIELD_CSS_HITS="$(rg -n '\.form-field\s*\{' apps/flows/ui/{pages,modals,components} -g '*.js' || true)"
+if [ -n "$FLOWS_FORM_FIELD_CSS_HITS" ]; then
+    fail "apps/flows/ui: local .form-field CSS запрещён — импортируйте formStyles и используйте .form-group"
+    echo "$FLOWS_FORM_FIELD_CSS_HITS" >&2
+fi
+
+# 32. Flows UI: raw checkbox/radio запрещены — platform-field boolean / platform-segmented-control.
+FLOWS_CHECKBOX_RADIO_HITS="$(rg -n 'type="checkbox"|type="radio"' apps/flows/ui/{pages,modals,components} -g '*.js' || true)"
+if [ -n "$FLOWS_CHECKBOX_RADIO_HITS" ]; then
+    fail "apps/flows/ui: raw checkbox/radio запрещены — используйте platform-field type=\"boolean\" или platform-segmented-control"
+    echo "$FLOWS_CHECKBOX_RADIO_HITS" >&2
 fi
 
 if [ "$ERR" -ne 0 ]; then

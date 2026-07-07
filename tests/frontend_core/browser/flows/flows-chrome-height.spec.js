@@ -57,6 +57,28 @@ describe('flows chrome height canon', () => {
         expect(delta).to.be.at.most(4);
     });
 
+    it('editor header stack height stays within desktop chrome rhythm (≤64px)', async () => {
+        for (const factory of FACTORIES) {
+            registerFactory(factory);
+        }
+        const collected = collectFactories(FACTORIES);
+        bootstrapTestBus({ slices: collected.slices, effects: [] });
+
+        const wrap = await fixture(html`
+            <div style="width: 1440px;">
+                <flows-editor-header flow-id="flow-demo" branch-id="base"></flows-editor-header>
+            </div>
+        `);
+        await elementUpdated(wrap);
+
+        const el = wrap.querySelector('flows-editor-header');
+        const height = el.getBoundingClientRect().height;
+        expect(height).to.be.at.most(64);
+
+        const branches = el.shadowRoot.querySelector('.branches-slot platform-segmented-control');
+        expect(branches).to.not.equal(null);
+    });
+
     it('evaluation run toolbar shell uses flows toolbar min-height token', async () => {
         bootstrapTestBus();
 

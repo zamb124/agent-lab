@@ -53,6 +53,7 @@ import { normalizeToolRef } from '../../_helpers/flows-tool-ref.js';
 import { isMcpToolRegistryItem, parseMcpToolIdToNodeConfig } from '../../_helpers/flows-mcp-tool-registry.js';
 import { sanitizeToolName } from '@platform/lib/utils/sanitize-tool-name.js';
 import { formatJsonPretty } from '@platform/lib/utils/json-format.js';
+import { panelShellStyles } from '@platform/lib/styles/shared/panel-shell.styles.js';
 
 const REACT_LOOP_MODES = Object.freeze(['auto', 'explicit']);
 
@@ -154,6 +155,7 @@ export class FlowsLlmNodeEditor extends PlatformElement {
 
     static styles = [
         PlatformElement.styles,
+        panelShellStyles,
         css`
             :host {
                 display: block; height: 100%; min-height: 0;
@@ -176,12 +178,8 @@ export class FlowsLlmNodeEditor extends PlatformElement {
                 min-width: 0;
             }
             .block-card {
-                display: flex; flex-direction: column;
                 gap: var(--space-3);
                 padding: var(--space-3);
-                border: 1px solid var(--glass-border-subtle);
-                border-radius: var(--radius-md);
-                background: var(--glass-solid-subtle);
             }
             .block-hint {
                 font-size: var(--text-xs);
@@ -192,11 +190,10 @@ export class FlowsLlmNodeEditor extends PlatformElement {
             select, input {
                 padding: var(--space-2);
                 border-radius: var(--radius-md);
-                border: 1px solid var(--glass-border-subtle);
-                background: var(--glass-solid-subtle);
+                border: 1px solid var(--border-subtle);
+                background: var(--bg-elevated);
                 color: var(--text-primary); font: inherit;
             }
-            input[type="checkbox"] { width: auto; }
             .chip {
                 display: inline-flex; align-items: center; gap: 4px;
                 padding: 2px var(--space-2);
@@ -218,7 +215,7 @@ export class FlowsLlmNodeEditor extends PlatformElement {
                 display: flex; flex-direction: column; gap: var(--space-1);
                 max-height: 180px; overflow-y: auto;
                 padding: var(--space-2);
-                border: 1px solid var(--glass-border-subtle);
+                border: 1px solid var(--border-subtle);
                 border-radius: var(--radius-md);
                 background: var(--glass-solid-medium);
             }
@@ -226,9 +223,9 @@ export class FlowsLlmNodeEditor extends PlatformElement {
             .toggle { display: inline-flex; gap: var(--space-1); }
             .toggle button {
                 padding: var(--space-2) var(--space-3);
-                background: var(--glass-solid-subtle);
+                background: var(--bg-elevated);
                 color: var(--text-secondary);
-                border: 1px solid var(--glass-border-subtle);
+                border: 1px solid var(--border-subtle);
                 border-radius: var(--radius-md);
                 font-size: var(--text-sm);
                 cursor: pointer;
@@ -613,11 +610,14 @@ export class FlowsLlmNodeEditor extends PlatformElement {
         this._emitPatch({ messages_filter: current.length > 0 ? current : [this.nodeId] });
     }
 
-    _onFilterToggle(nodeId) {
+    _onFilterToggleChecked(nodeId, checked) {
         const current = Array.isArray(this.nodeConfig?.messages_filter) ? this.nodeConfig.messages_filter : [];
-        const next = current.includes(nodeId)
-            ? current.filter((id) => id !== nodeId)
-            : [...current, nodeId];
+        let next;
+        if (checked === true) {
+            next = current.includes(nodeId) ? current : [...current, nodeId];
+        } else {
+            next = current.filter((id) => id !== nodeId);
+        }
         if (next.length === 0) {
             this._emitPatch({ messages_filter: 'all' });
             return;
@@ -865,7 +865,7 @@ export class FlowsLlmNodeEditor extends PlatformElement {
                         : this.t('llm_node_editor.section_llm'),
                     'llm_node_editor.llm_section_help',
                 )}
-                <div class="block-card">
+                <div class="block-card content-panel">
                     ${legacyRid !== null ? html`
                         <div class="row" style="align-items:center;gap:var(--space-2);flex-wrap:wrap;">
                             <span class="block-hint">${this.t('llm_node_editor.llm_resource_legacy_hint')}</span>
@@ -896,34 +896,28 @@ export class FlowsLlmNodeEditor extends PlatformElement {
                     this.t('llm_node_editor.section_messages_filter'),
                     'llm_node_editor.messages_filter_help',
                 )}
-                <div class="block-card">
-                    <div class="row">
-                        <label class="filter-row">
-                            <input type="radio" name="filter-${this.nodeId}" ?checked=${mode === 'all'}
-                                @change=${() => this._onFilterMode('all')} />
-                            ${this.t('llm_node_editor.messages_filter_all')}
-                        </label>
-                        <label class="filter-row">
-                            <input type="radio" name="filter-${this.nodeId}" ?checked=${mode === 'own'}
-                                @change=${() => this._onFilterMode('own')} />
-                            ${this.t('llm_node_editor.messages_filter_own')}
-                        </label>
-                        <label class="filter-row">
-                            <input type="radio" name="filter-${this.nodeId}" ?checked=${mode === 'custom'}
-                                @change=${() => this._onFilterMode('custom')} />
-                            ${this.t('llm_node_editor.messages_filter_custom')}
-                        </label>
-                    </div>
+                <div class="block-card content-panel">
+                    <platform-segmented-control
+                        density="compact"
+                        .value=${mode}
+                        .items=${[
+                            { value: 'all', label: this.t('llm_node_editor.messages_filter_all') },
+                            { value: 'own', label: this.t('llm_node_editor.messages_filter_own') },
+                            { value: 'custom', label: this.t('llm_node_editor.messages_filter_custom') },
+                        ]}
+                        aria-label=${this.t('llm_node_editor.section_messages_filter')}
+                        @change=${(e) => this._onFilterMode(e.detail.value)}
+                    ></platform-segmented-control>
                     ${mode === 'custom' ? html`
                         <div class="filter-list">
                             ${nodes.map((n) => html`
-                                <label class="filter-row">
-                                    <input type="checkbox"
-                                        ?checked=${customList.includes(n.id)}
-                                        @change=${() => this._onFilterToggle(n.id)} />
-                                    <span>${n.name}</span>
-                                    <span style="color:var(--text-tertiary);font-size:var(--text-xs)">${n.id}</span>
-                                </label>
+                                <platform-field
+                                    type="boolean"
+                                    mode="edit"
+                                    .label=${`${n.name} (${n.id})`}
+                                    .value=${customList.includes(n.id)}
+                                    @change=${(e) => this._onFilterToggleChecked(n.id, e.detail.value === true)}
+                                ></platform-field>
                             `)}
                         </div>
                     ` : ''}
@@ -946,7 +940,7 @@ export class FlowsLlmNodeEditor extends PlatformElement {
                     this.t('llm_node_editor.section_context'),
                     'llm_node_editor.context_section_help',
                 )}
-                <div class="block-card">
+                <div class="block-card content-panel">
                     ${contextResourceOptions.values.length > 1 || contextResourceKey.length > 0
                         ? html`
                             <platform-field
@@ -980,7 +974,7 @@ export class FlowsLlmNodeEditor extends PlatformElement {
                     this.t('llm_node_editor.section_output_mode'),
                     'llm_node_editor.output_mode_help',
                 )}
-                <div class="block-card">
+                <div class="block-card content-panel">
                     <platform-segmented-control
                         full-width
                         density="compact"
@@ -1010,7 +1004,7 @@ export class FlowsLlmNodeEditor extends PlatformElement {
                     this.t('llm_node_editor.section_output_schema'),
                     'llm_node_editor.output_schema_help',
                 )}
-                <div class="block-card">
+                <div class="block-card content-panel">
                     <div class="block-hint">${this.t('llm_node_editor.output_schema_strict_hint')}</div>
                     <platform-json-editor validate-json show-toolbar="false"
                         .value=${schema}
@@ -1076,7 +1070,7 @@ export class FlowsLlmNodeEditor extends PlatformElement {
                     this.t('llm_node_editor.section_react'),
                     'llm_node_editor.react_section_help',
                 )}
-                <div class="block-card">
+                <div class="block-card content-panel">
                     <div class="react-composite-row">
                         <platform-field
                             class="react-field-grow"
@@ -1139,7 +1133,7 @@ export class FlowsLlmNodeEditor extends PlatformElement {
                     this.t('llm_node_editor.section_call_type'),
                     'llm_node_editor.call_type_help',
                 )}
-                <div class="block-card">
+                <div class="block-card content-panel">
                     <platform-field
                         type="select"
                         .label=${this.t('llm_node_editor.field_call_type')}
@@ -1170,7 +1164,7 @@ export class FlowsLlmNodeEditor extends PlatformElement {
                     'llm_node_editor.tools_section_help',
                     '/documentation/scenarios/flows/add-llm-node/',
                 )}
-                <div class="block-card">
+                <div class="block-card content-panel">
                     <div class="row">
                         ${tools.map((t) => {
                             const vm = this._toolChipVisualMeta(t);

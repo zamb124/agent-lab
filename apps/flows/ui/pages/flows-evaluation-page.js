@@ -189,7 +189,7 @@ export class FlowsEvaluationPage extends PlatformPage {
                 min-width: 0;
                 min-height: 0;
                 display: grid;
-                grid-template-columns: auto minmax(520px, 1fr) minmax(380px, 460px);
+                grid-template-columns: auto minmax(520px, 1fr) minmax(320px, 400px);
                 overflow: hidden;
             }
 

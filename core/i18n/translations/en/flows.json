@@ -224,6 +224,7 @@
     "status_enabled": "enabled",
     "status_disabled": "disabled",
     "empty": "No triggers",
+    "search": "Search by ID, name, or type",
     "test_sample_label": "Test body (JSON) — same mapping as a real inbound payload",
     "test_result_title": "Test result (POST …/test)",
     "test_json_error": "Invalid JSON in test body"
@@ -363,7 +364,8 @@
     "col_service": "Service",
     "col_status": "Status",
     "col_actions": "Actions",
-    "empty": "No integrations"
+    "empty": "No integrations",
+    "search": "Search by provider, service, or status"
   },
   "context_menu": {
     "delete": "Delete"
@@ -926,7 +928,9 @@
     "tab_flows": "Flows",
     "tab_mcp": "MCP",
     "mcp_server_empty": "No tools yet. Click sync to refresh.",
-    "mcp_server_tools_count": "{{n}} tools"
+    "mcp_server_tools_count": "{{n}} tools",
+    "load_error": "Could not load tools",
+    "action_retry": "Retry"
   },
   "tool_create_modal": {
     "title": "New tool",

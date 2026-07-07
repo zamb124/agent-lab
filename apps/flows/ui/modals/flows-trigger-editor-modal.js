@@ -29,6 +29,7 @@ import '@platform/lib/components/platform-segmented-control.js';
 import { asString, isPlainObject } from '../_helpers/flows-resolvers.js';
 import { formatJsonPretty } from '@platform/lib/utils/json-format.js';
 import { TRIGGER_TYPES } from '../constants/trigger-types.js';
+import { formStyles } from '@platform/lib/styles/shared/form.styles.js';
 
 const TRIGGER_ID_PATTERN = /^[a-zA-Z][a-zA-Z0-9_-]*$/;
 
@@ -172,6 +173,7 @@ export class FlowsTriggerEditorModal extends PlatformFormModal {
 
     static styles = [
         ...(PlatformFormModal.styles ? [PlatformFormModal.styles] : []),
+        ...formStyles,
         css`
             :host { --modal-max-width: 920px; }
 
@@ -285,15 +287,6 @@ export class FlowsTriggerEditorModal extends PlatformFormModal {
                 color: var(--text-primary);
                 font: inherit;
                 box-sizing: border-box;
-            }
-
-            .form-error {
-                padding: var(--space-2) var(--space-3);
-                margin-bottom: var(--space-3);
-                color: var(--error);
-                background: var(--error-bg);
-                border-radius: var(--radius-md);
-                font-size: var(--text-sm);
             }
             .header-trigger-actions {
                 display: flex;
@@ -942,15 +935,13 @@ export class FlowsTriggerEditorModal extends PlatformFormModal {
                         }}
                     ></platform-field>
                 </div>
-                <div class="checkbox-row">
-                    <input
-                        type="checkbox"
-                        id="flows-trigger-redis-pattern"
-                        .checked=${Boolean(c.pattern)}
-                        @change=${(e) => this._setConfig('pattern', e.target.checked)}
-                    />
-                    <label for="flows-trigger-redis-pattern">${this.t('trigger_editor_modal.field_pattern')}</label>
-                </div>
+                <platform-field
+                    type="boolean"
+                    mode="edit"
+                    .label=${this.t('trigger_editor_modal.field_pattern')}
+                    .value=${Boolean(c.pattern)}
+                    @change=${(e) => this._setConfig('pattern', e.detail.value === true)}
+                ></platform-field>
                 <span class="hint">${this.t('trigger_editor_modal.hint_pattern')}</span>
             </div>
         `;

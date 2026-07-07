@@ -21,6 +21,7 @@ import './flows-base-node-editor.js';
 import '@platform/lib/components/platform-variable-input.js';
 import '@platform/lib/components/platform-json-editor.js';
 import { asString } from '../../_helpers/flows-resolvers.js';
+import { glassStyles } from '@platform/lib/styles/shared/glass.styles.js';
 
 const CHANNELS = Object.freeze(['telegram', 'email', 'whatsapp', 'sms', 'webhook']);
 const PARSE_MODES = Object.freeze(['', 'HTML', 'MarkdownV2']);
@@ -42,6 +43,7 @@ export class FlowsChannelNodeEditor extends PlatformElement {
 
     static styles = [
         PlatformElement.styles,
+        glassStyles,
         css`
             :host { display: block; height: 100%; min-height: 0; }
             .field { display: flex; flex-direction: column; gap: var(--space-1); margin-bottom: var(--space-2); }
@@ -49,17 +51,15 @@ export class FlowsChannelNodeEditor extends PlatformElement {
             input, select {
                 padding: var(--space-2);
                 border-radius: var(--radius-md);
-                border: 1px solid var(--glass-border-subtle);
-                background: var(--glass-solid-subtle);
+                border: 1px solid var(--border-subtle);
+                background: var(--bg-elevated);
                 color: var(--text-primary); font: inherit;
                 width: 100%; box-sizing: border-box;
             }
             details {
                 margin-top: var(--space-3);
                 padding: var(--space-2) var(--space-3);
-                border: 1px solid var(--glass-border-subtle);
                 border-radius: var(--radius-md);
-                background: var(--glass-solid-subtle);
             }
             summary { cursor: pointer; font-size: var(--text-sm); font-weight: var(--font-semibold); }
             .grid {
@@ -364,7 +364,7 @@ export class FlowsChannelNodeEditor extends PlatformElement {
                             @change=${this._onAction}
                         ></platform-field>
                     </div>
-                    <details open>
+                    <details class="glass-subtle" open>
                         <summary>${this.t('channel_node_editor.channel_config')}</summary>
                         ${this._renderChannelBody(channel, cfg)}
                     </details>

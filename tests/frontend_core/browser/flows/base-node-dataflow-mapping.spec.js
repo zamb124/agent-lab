@@ -75,14 +75,14 @@ describe('flows-base-node-editor dataflow mapping shortcuts', () => {
         let lastPatch = null;
         el.addEventListener('change', (e) => { lastPatch = e.detail.patch; });
 
-        const readButton = el.shadowRoot.querySelector('.dataflow-lane:first-child button.dataflow-chip');
+        const readButton = el.shadowRoot.querySelector('.dataflow-lane:first-child article.dataflow-chip');
         readButton.click();
         expect(lastPatch).to.deep.equal({ input_mapping: { content: '@state:content' } });
 
         el.nodeConfig = { ...node, ...lastPatch };
         await elementUpdated(el);
 
-        const writeButton = el.shadowRoot.querySelector('.dataflow-lane:nth-child(2) button.dataflow-chip');
+        const writeButton = el.shadowRoot.querySelector('.dataflow-lane:nth-child(2) article.dataflow-chip');
         writeButton.click();
         expect(lastPatch).to.deep.equal({ output_mapping: { response: 'response' } });
     });

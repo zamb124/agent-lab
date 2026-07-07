@@ -5,6 +5,7 @@ import './flows-base-node-editor.js';
 import '../editors/flows-llm-config-editor.js';
 import '@platform/lib/components/platform-json-editor.js';
 import { asObject, isPlainObject } from '../../_helpers/flows-resolvers.js';
+import { panelShellStyles } from '@platform/lib/styles/shared/panel-shell.styles.js';
 
 const REFLECTION_GATES = Object.freeze(['final_answer', 'transaction', 'quality']);
 const REFLECTION_TARGET_KINDS = Object.freeze(['response', 'result', 'validation', 'state_path']);
@@ -26,6 +27,7 @@ export class FlowsReflectionNodeEditor extends PlatformElement {
 
     static styles = [
         PlatformElement.styles,
+        panelShellStyles,
         css`
             :host { display: block; height: 100%; min-height: 0; container-type: inline-size; }
             .stack { display: flex; flex-direction: column; gap: var(--space-5); }
@@ -37,13 +39,8 @@ export class FlowsReflectionNodeEditor extends PlatformElement {
                 margin: 0;
             }
             .block-card {
-                display: flex;
-                flex-direction: column;
                 gap: var(--space-3);
                 padding: var(--space-3);
-                border: 1px solid var(--glass-border-subtle);
-                border-radius: var(--radius-md);
-                background: var(--glass-solid-subtle);
             }
             .grid {
                 display: grid;
@@ -221,7 +218,7 @@ export class FlowsReflectionNodeEditor extends PlatformElement {
         return html`
             <section class="block">
                 <h4 class="block-title">${this.t('reflection_node_editor.section_llm')}</h4>
-                <div class="block-card">
+                <div class="block-card content-panel">
                     <flows-llm-config-editor
                         .config=${this._llmForEditor()}
                         .allowFallbacks=${false}
@@ -244,7 +241,7 @@ export class FlowsReflectionNodeEditor extends PlatformElement {
         return html`
             <section class="block">
                 <h4 class="block-title">${this.t('reflection_node_editor.section_policy')}</h4>
-                <div class="block-card">
+                <div class="block-card content-panel">
                     <div class="grid">
                         <platform-field
                             class="field"

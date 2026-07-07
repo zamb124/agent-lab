@@ -35,10 +35,11 @@ describe('flows-parameters-schema-form', () => {
         expect(last).to.deep.equal({ values: { name: 'Vova' } });
     });
 
-    it('boolean поле — checkbox', async () => {
+    it('boolean поле — platform-field', async () => {
         const schema = { active: { type: 'boolean' } };
         const el = await fixture(html`<flows-parameters-schema-form .schema=${schema} .values=${{ active: true }}></flows-parameters-schema-form>`);
-        const cb = el.shadowRoot.querySelector('input[type="checkbox"]');
-        expect(cb.checked).to.equal(true);
+        const pf = el.shadowRoot.querySelector('platform-field[type="boolean"]');
+        expect(pf).to.not.equal(null);
+        expect(pf.value).to.equal(true);
     });
 });

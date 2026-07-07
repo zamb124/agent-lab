@@ -52,7 +52,7 @@ describe('flows-editor-header flow settings entry', () => {
         expect(opened).to.deep.equal({ kind: 'flows.flow_edit', props: { flowId: 'flow-demo' } });
     });
 
-    it('desktop header renders overflow anchor and branch row', async () => {
+    it('desktop header renders overflow anchor and inline branches slot', async () => {
         for (const factory of FACTORIES) {
             registerFactory(factory);
         }
@@ -70,8 +70,8 @@ describe('flows-editor-header flow settings entry', () => {
         const overflowAnchor = el.shadowRoot.querySelector('.overflow-anchor');
         expect(overflowAnchor).to.not.equal(null);
 
-        const branchesRow = el.shadowRoot.querySelector('.chrome-row-branches');
-        expect(branchesRow).to.not.equal(null);
+        const branchesSlot = el.shadowRoot.querySelector('.branches-slot platform-segmented-control');
+        expect(branchesSlot).to.not.equal(null);
     });
 
     it('mobile overflow menu uses block ghost buttons at 390px', async () => {

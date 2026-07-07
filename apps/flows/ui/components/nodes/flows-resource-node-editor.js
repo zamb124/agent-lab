@@ -14,6 +14,7 @@ import {
     resolveResourceForPanel,
 } from '../../_helpers/flows-branch-resource.js';
 import { renderResourceDefinitionEditor } from '../editor/flows-resource-definition-editor-surface.js';
+import { panelShellStyles } from '@platform/lib/styles/shared/panel-shell.styles.js';
 
 const SAVE_DEBOUNCE_MS = 400;
 
@@ -35,6 +36,7 @@ export class FlowsResourceNodeEditor extends PlatformElement {
 
     static styles = [
         PlatformElement.styles,
+        panelShellStyles,
         css`
             :host {
                 display: block;
@@ -67,9 +69,6 @@ export class FlowsResourceNodeEditor extends PlatformElement {
                 min-width: 0;
             }
             .resource-def-card {
-                border: 1px solid var(--glass-border-subtle);
-                border-radius: var(--radius-md);
-                background: var(--glass-solid-subtle);
                 overflow: visible;
                 min-width: 0;
                 padding: var(--space-5);
@@ -252,7 +251,7 @@ export class FlowsResourceNodeEditor extends PlatformElement {
                         `;
                     }
                     return html`
-                        <div class="resource-def-card">
+                        <div class="resource-def-card content-panel">
                             ${renderResourceDefinitionEditor(
                                 resolved.resource,
                                 (ev) => this._onResourceDefinitionChange(ev),

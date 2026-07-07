@@ -33,6 +33,7 @@ import {
     fetchCompletionCatalog,
 } from '../../_helpers/flows-python-completion-catalog.js';
 import { editorBodyPortalZIndex } from '@platform/lib/utils/modal-z-stack.js';
+import { glassStyles } from '@platform/lib/styles/shared/glass.styles.js';
 
 const CODEMIRROR_URL = '/static/core/assets/codemirror/codemirror-bundle.js';
 
@@ -84,6 +85,7 @@ export class FlowsCodeEditor extends PlatformElement {
 
     static styles = [
         PlatformElement.styles,
+        glassStyles,
         css`
             :host {
                 display: block;
@@ -92,10 +94,6 @@ export class FlowsCodeEditor extends PlatformElement {
                 min-width: 0;
                 min-height: 120px;
                 box-sizing: border-box;
-                border-radius: var(--radius-md);
-                overflow: hidden;
-                border: 1px solid var(--glass-border-subtle);
-                background: var(--glass-solid-subtle);
                 font-family: var(--font-mono, monospace);
             }
             :host([header-only]) {
@@ -219,6 +217,8 @@ export class FlowsCodeEditor extends PlatformElement {
                 min-width: 0;
                 max-width: 100%;
                 box-sizing: border-box;
+                border-radius: var(--radius-md);
+                overflow: hidden;
             }
             #cm-wrap {
                 flex: 1 1 auto;
@@ -580,7 +580,7 @@ export class FlowsCodeEditor extends PlatformElement {
             ? this.t('code_editor.exit_fullscreen')
             : this.t('code_editor.fullscreen');
         return html`
-            <div class="editor-root">
+            <div class="editor-root glass-subtle">
                 ${this.showToolbar
                     ? html`
                         <div class="editor-header">

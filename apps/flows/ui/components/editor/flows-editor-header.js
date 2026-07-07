@@ -1,8 +1,8 @@
 /**
- * flows-editor-header — шапка редактора flow (2 строки).
+ * flows-editor-header — шапка редактора flow.
  *
- * Row 1: назад / название+статус / режим / help / tiered actions / Publish.
- * Row 2: segmented control веток + кнопка создания ветки.
+ * Desktop: одна chrome-row (~60px) — back / title / branches / mode / actions.
+ * Mobile: branches — вторая строка; overflow-menu для tiered actions.
  *
  * Источники state:
  *   - useOp('flows/editor').state.flowConfig — текущая модель flow.
@@ -45,11 +45,18 @@ export class FlowsEditorHeader extends PlatformElement {
                 display: flex;
                 flex-direction: column;
                 gap: var(--flows-editor-chrome-gap);
+                min-height: var(--flows-editor-chrome-stack-height);
                 padding: var(--space-2) var(--space-4);
                 box-sizing: border-box;
                 background: var(--glass-solid-medium);
                 border-bottom: 1px solid var(--border-subtle);
                 box-shadow: var(--glass-shadow-subtle);
+            }
+
+            @media (min-width: 768px) {
+                :host {
+                    gap: 0;
+                }
             }
 
             :host(.editor-chrome-panel) {
@@ -138,6 +145,36 @@ export class FlowsEditorHeader extends PlatformElement {
                 overflow-x: auto;
                 overflow-y: hidden;
                 scrollbar-width: thin;
+            }
+
+            .branches-slot {
+                display: none;
+                flex: 1 1 auto;
+                min-width: 0;
+                align-items: center;
+                gap: var(--space-2);
+                overflow-x: auto;
+                overflow-y: hidden;
+                scrollbar-width: thin;
+            }
+
+            .branches-slot platform-segmented-control {
+                flex-shrink: 0;
+                max-width: 100%;
+            }
+
+            @media (min-width: 768px) {
+                .chrome-row-primary {
+                    min-height: var(--flows-editor-chrome-stack-height);
+                }
+
+                .branches-slot {
+                    display: flex;
+                }
+
+                .chrome-row-branches {
+                    display: none;
+                }
             }
 
             .branches-row {
@@ -542,7 +579,25 @@ export class FlowsEditorHeader extends PlatformElement {
         `;
     }
 
-    _renderPrimaryRow(state, flowName, mode, saving, status, hasBundleUpdate) {
+    _renderBranchesControls(branchItems) {
+        return html`
+            <platform-segmented-control
+                density="compact"
+                .value=${this.branchId}
+                .items=${branchItems}
+                aria-label=${this.t('branches_tabs.group_aria')}
+                @change=${(e) => this._selectBranch(e.detail.value)}
+                @segment-close=${(e) => { void this._deleteBranch(e.detail.value); }}
+            ></platform-segmented-control>
+            <platform-button variant="ghost" density="compact" @click=${this._createBranch}>
+                <platform-icon name="plus" size="14"></platform-icon>
+                ${this.t('branches_tabs.add')}
+            </platform-button>
+        `;
+    }
+
+    _renderPrimaryRow(state, flowName, mode, saving, status, hasBundleUpdate, branchItems) {
+        const showBranches = typeof this.flowId === 'string' && this.flowId.length > 0;
         return html`
             <div class="chrome-row chrome-row-primary">
                 <div class="row-left">
@@ -570,6 +625,10 @@ export class FlowsEditorHeader extends PlatformElement {
                         <span class="status-badge" data-status=${status.key}>${this.t(status.textKey)}</span>
                     </div>
                 </div>
+
+                ${showBranches && !this._isMobile
+                    ? html`<div class="branches-slot">${this._renderBranchesControls(branchItems)}</div>`
+                    : nothing}
 
                 <div class="row-center">
                     <platform-segmented-control
@@ -622,21 +681,13 @@ export class FlowsEditorHeader extends PlatformElement {
         if (typeof this.flowId !== 'string' || this.flowId.length === 0) {
             return nothing;
         }
+        if (!this._isMobile) {
+            return nothing;
+        }
         return html`
             <div class="chrome-row chrome-row-branches">
                 <div class="branches-row">
-                    <platform-segmented-control
-                        density="compact"
-                        .value=${this.branchId}
-                        .items=${branchItems}
-                        aria-label=${this.t('branches_tabs.group_aria')}
-                        @change=${(e) => this._selectBranch(e.detail.value)}
-                        @segment-close=${(e) => { void this._deleteBranch(e.detail.value); }}
-                    ></platform-segmented-control>
-                    <platform-button variant="ghost" density="compact" @click=${this._createBranch}>
-                        <platform-icon name="plus" size="14"></platform-icon>
-                        ${this.t('branches_tabs.add')}
-                    </platform-button>
+                    ${this._renderBranchesControls(branchItems)}
                 </div>
             </div>
         `;
@@ -661,7 +712,7 @@ export class FlowsEditorHeader extends PlatformElement {
         const branchItems = this._branchItems(flow, branchIds);
 
         return html`
-            ${this._renderPrimaryRow(state, flowName, mode, saving, status, hasBundleUpdate)}
+            ${this._renderPrimaryRow(state, flowName, mode, saving, status, hasBundleUpdate, branchItems)}
             ${this._renderBranchesRow(branchItems)}
         `;
     }

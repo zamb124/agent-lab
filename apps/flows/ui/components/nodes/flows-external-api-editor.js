@@ -14,6 +14,7 @@ import '@platform/lib/components/fields/platform-field.js';
 import './flows-base-node-editor.js';
 import '@platform/lib/components/platform-json-editor.js';
 import { asObject } from '../../_helpers/flows-resolvers.js';
+import { glassStyles } from '@platform/lib/styles/shared/glass.styles.js';
 
 const HTTP_METHODS = Object.freeze(['GET', 'POST', 'PUT', 'PATCH', 'DELETE']);
 
@@ -33,6 +34,7 @@ export class FlowsExternalApiEditor extends PlatformElement {
 
     static styles = [
         PlatformElement.styles,
+        glassStyles,
         css`
             :host { display: block; height: 100%; min-height: 0; }
             .settings-wrap {
@@ -42,9 +44,7 @@ export class FlowsExternalApiEditor extends PlatformElement {
             }
             details {
                 padding: var(--space-2) var(--space-3);
-                border: 1px solid var(--glass-border-subtle);
                 border-radius: var(--radius-md);
-                background: var(--glass-solid-subtle);
             }
             summary { cursor: pointer; font-size: var(--text-sm); font-weight: var(--font-semibold); }
             .field { display: flex; flex-direction: column; gap: var(--space-1); margin-bottom: var(--space-2); }
@@ -206,7 +206,7 @@ export class FlowsExternalApiEditor extends PlatformElement {
                         .value=${timeout}
                         @change=${this._onTimeout}
                     ></platform-field>
-                    <details>
+                    <details class="glass-subtle">
                         <summary>${this.t('external_api_editor.body_template')}</summary>
                         <p class="field-hint">${this.t('external_api_editor.body_template_hint')}</p>
                         <platform-json-editor validate-json show-toolbar="false"
@@ -218,7 +218,7 @@ export class FlowsExternalApiEditor extends PlatformElement {
                             }}
                         ></platform-json-editor>
                     </details>
-                    <details>
+                    <details class="glass-subtle">
                         <summary>${this.t('external_api_editor.headers')}</summary>
                         <p class="field-hint">${this.t('external_api_editor.headers_hint')}</p>
                         <platform-json-editor validate-json show-toolbar="false"

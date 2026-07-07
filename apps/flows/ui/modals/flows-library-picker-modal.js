@@ -24,6 +24,8 @@ import { registryItemIconName, registryItemTitle } from '../_helpers/flows-regis
 import { renderMcpServerIcon } from '../_helpers/mcp-server-icon.js';
 import { asArray, isPlainObject } from '../_helpers/flows-resolvers.js';
 import { isMcpToolRegistryItem, parseMcpToolIdToNodeConfig } from '../_helpers/flows-mcp-tool-registry.js';
+import { panelShellStyles } from '@platform/lib/styles/shared/panel-shell.styles.js';
+import { glassStyles } from '@platform/lib/styles/shared/glass.styles.js';
 import {
     FLOW_CODE_LANGUAGES,
     flowCodeLanguageLabel,
@@ -53,6 +55,16 @@ function _tagsFromItem(t) {
 
 function _hasInlineCode(t) {
     return t && typeof t.code === 'string' && t.code.trim().length > 0;
+}
+
+function _truncateText(text, maxLen = 180) {
+    if (typeof text !== 'string' || text.length === 0) {
+        return '';
+    }
+    if (text.length <= maxLen) {
+        return text;
+    }
+    return `${text.slice(0, maxLen - 1)}…`;
 }
 
 const PYTHON_KEYWORDS = new Set([
@@ -181,6 +193,8 @@ export class FlowsLibraryPickerModal extends PlatformModal {
 
     static styles = [
         ...PlatformModal.styles,
+        panelShellStyles,
+        glassStyles,
         css`
             .bar {
                 display: flex;
@@ -265,7 +279,7 @@ export class FlowsLibraryPickerModal extends PlatformModal {
             }
             .lib-card-icon[data-kind='code'] {
                 background: var(--glass-solid);
-                border: 1px solid var(--glass-border-subtle);
+                border: 1px solid var(--border-subtle);
                 box-shadow: inset 0 1px 0 color-mix(in srgb, var(--text-inverse) 6%, transparent);
             }
             .lib-card-icon[data-kind='tool'] {
@@ -329,6 +343,30 @@ export class FlowsLibraryPickerModal extends PlatformModal {
                 padding: var(--space-4);
                 text-align: center;
             }
+            .lib-plain-desc {
+                font-size: var(--text-xs);
+                color: var(--text-secondary);
+                line-height: 1.35;
+                text-align: left;
+                display: -webkit-box;
+                -webkit-box-orient: vertical;
+                -webkit-line-clamp: 4;
+                overflow: hidden;
+            }
+            .lib-load-error {
+                display: flex;
+                flex-direction: column;
+                align-items: flex-start;
+                gap: var(--space-3);
+                padding: var(--space-4);
+                margin-top: var(--space-3);
+            }
+            .lib-load-error-detail {
+                margin: 0;
+                font-size: var(--text-sm);
+                color: var(--text-secondary);
+                word-break: break-word;
+            }
             @media (max-width: 640px) {
                 .tool-picker-toolbar {
                     flex-wrap: wrap;
@@ -344,7 +382,7 @@ export class FlowsLibraryPickerModal extends PlatformModal {
                 grid-template-columns: 1fr;
                 gap: var(--space-4);
                 min-height: 200px;
-                align-items: start;
+                align-items: stretch;
             }
             @media (min-width: 960px) {
                 .mcp-picker-servers {
@@ -357,14 +395,10 @@ export class FlowsLibraryPickerModal extends PlatformModal {
                 }
             }
             .mcp-picker-server {
-                display: flex;
-                flex-direction: column;
-                gap: var(--space-3);
-                padding: var(--space-4);
-                border: 1px solid var(--glass-border-subtle);
-                border-radius: var(--radius-lg);
-                background: var(--glass-solid-subtle);
+                gap: 0;
+                padding: 0;
                 min-width: 0;
+                height: var(--flows-tool-picker-mcp-panel-height);
             }
             .mcp-picker-server-head {
                 display: flex;
@@ -388,8 +422,6 @@ export class FlowsLibraryPickerModal extends PlatformModal {
                 align-items: center;
                 justify-content: center;
                 border-radius: var(--radius-md);
-                background: var(--glass-solid-medium);
-                border: 1px solid var(--glass-border-subtle);
             }
             .mcp-picker-server-icon .mcp-server-icon-img {
                 width: 30px;
@@ -453,6 +485,12 @@ export class FlowsLibraryPickerModal extends PlatformModal {
                 display: grid;
                 grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
                 gap: var(--space-2);
+                align-items: stretch;
+            }
+            .mcp-picker-tools-grid platform-picker-card {
+                display: block;
+                min-height: 132px;
+                height: 100%;
             }
             .mcp-picker-tool-icon .mcp-server-icon-img {
                 width: 18px;
@@ -480,7 +518,9 @@ export class FlowsLibraryPickerModal extends PlatformModal {
                 font-size: 10px;
                 color: var(--text-secondary);
                 line-height: 1.3;
-                max-height: calc(1.3em * 3);
+                display: -webkit-box;
+                -webkit-box-orient: vertical;
+                -webkit-line-clamp: 3;
                 overflow: hidden;
             }
             .mcp-picker-server-empty {
@@ -504,6 +544,9 @@ export class FlowsLibraryPickerModal extends PlatformModal {
         this._testFeedback = null;
         this._testingServerId = null;
         this._syncingServerId = null;
+        this._pickerItemsByCategory = new Map();
+        this._pickerErrorByCategory = new Map();
+        this._pickerLoadingCategory = null;
         this._toolsAll = this.useOp('flows/tools_all');
         this._codeTemplates = this.useOp('flows/code_templates');
         this._codeParseSignature = this.useOp('flows/code_parse_signature');
@@ -514,6 +557,80 @@ export class FlowsLibraryPickerModal extends PlatformModal {
 
     _isCodeNodeTemplates() {
         return this._modalKind === 'flows.code_node_templates';
+    }
+
+    _resetPickerCache() {
+        this._pickerItemsByCategory = new Map();
+        this._pickerErrorByCategory = new Map();
+        this._pickerLoadingCategory = null;
+    }
+
+    _currentPickerCategory() {
+        if (this._isCodeNodeTemplates()) {
+            return 'code';
+        }
+        if (this.pickMode === 'flow_only') {
+            return 'flow';
+        }
+        if (this.pickMode === 'mcp_only') {
+            return 'mcp';
+        }
+        return this._toolCategoryTab;
+    }
+
+    _isPickerCategoryLoading(category) {
+        return this._pickerLoadingCategory === category
+            || (this._toolsAll.busy && !this._pickerItemsByCategory.has(category));
+    }
+
+    _pickerLoadErrorMessage(category) {
+        const message = this._pickerErrorByCategory.get(category);
+        if (typeof message === 'string' && message.length > 0) {
+            return message;
+        }
+        return null;
+    }
+
+    async _ensurePickerCategoryLoaded(category) {
+        if (typeof category !== 'string' || category.length === 0) {
+            throw new Error('flows-library-picker-modal: picker category required');
+        }
+        if (this._pickerItemsByCategory.has(category)) {
+            return;
+        }
+        if (this._pickerLoadingCategory === category) {
+            return;
+        }
+        this._pickerLoadingCategory = category;
+        this._pickerErrorByCategory.delete(category);
+        this.requestUpdate();
+        const result = await this._toolsAll.run({
+            limit: 2000,
+            offset: 0,
+            picker_category: category,
+        });
+        this._pickerLoadingCategory = null;
+        if (result !== null && isPlainObject(result) && Array.isArray(result.items)) {
+            this._pickerItemsByCategory.set(
+                category,
+                result.items.filter((x) => isPlainObject(x)),
+            );
+            this.requestUpdate();
+            return;
+        }
+        const errorMessage = typeof this._toolsAll.error === 'string' && this._toolsAll.error.length > 0
+            ? this._toolsAll.error
+            : 'flows-library-picker-modal: tools_all failed';
+        this._pickerErrorByCategory.set(category, errorMessage);
+        this.requestUpdate();
+    }
+
+    _onToolCategoryTabChange(nextTab) {
+        this._toolCategoryTab = nextTab;
+        void this._ensurePickerCategoryLoaded(this._currentPickerCategory());
+        if (this._usesMcpGroupedLayout()) {
+            void this._mcpServers.load();
+        }
     }
 
     willUpdate(changed) {
@@ -527,17 +644,17 @@ export class FlowsLibraryPickerModal extends PlatformModal {
             this._testFeedback = null;
             this._testingServerId = null;
             this._syncingServerId = null;
+            this._resetPickerCache();
             this.size = 'full';
             if (this._isCodeNodeTemplates()) {
                 void this._loadCodeTemplates();
+                void this._ensurePickerCategoryLoaded('code');
+                return;
             }
-            void this._toolsAll.run({ limit: 2000, offset: 0 });
-            if (this.pickMode === 'mcp_only' || (this.pickMode === 'all' && this._toolCategoryTab === 'mcp')) {
+            void this._ensurePickerCategoryLoaded(this._currentPickerCategory());
+            if (this._usesMcpGroupedLayout()) {
                 void this._mcpServers.load();
             }
-        }
-        if (changed.has('_toolCategoryTab') && this._usesMcpGroupedLayout()) {
-            void this._mcpServers.load();
         }
     }
 
@@ -554,6 +671,11 @@ export class FlowsLibraryPickerModal extends PlatformModal {
     }
 
     _toolsAllItems() {
+        const category = this._currentPickerCategory();
+        const cached = this._pickerItemsByCategory.get(category);
+        if (Array.isArray(cached)) {
+            return cached;
+        }
         const r = this._toolsAll.lastResult;
         if (!isPlainObject(r) || !Array.isArray(r.items)) {
             return [];
@@ -648,29 +770,11 @@ export class FlowsLibraryPickerModal extends PlatformModal {
 
     _pickModeRows() {
         const list = this._toolsAllItems();
-        const mode = this.pickMode;
-        let rows = list;
-        if (mode === 'flow_only') {
-            rows = rows.filter((t) => t.item_type === 'flow');
-        } else if (mode === 'mcp_only') {
-            rows = rows.filter((t) => isMcpToolRegistryItem(t));
-        } else {
-            const tab = this._toolCategoryTab;
-            if (tab === 'code') {
-                rows = rows.filter(
-                    (t) => t.item_type === 'tool' && !isMcpToolRegistryItem(t),
-                );
-            } else if (tab === 'flow') {
-                rows = rows.filter((t) => t.item_type === 'flow');
-            } else if (tab === 'mcp') {
-                rows = rows.filter((t) => isMcpToolRegistryItem(t));
-            }
-        }
         const q = _lower(this._search);
         if (q.length === 0) {
-            return rows;
+            return list;
         }
-        return rows.filter((t) => {
+        return list.filter((t) => {
             const id = typeof t.tool_id === 'string' ? t.tool_id : '';
             const title = typeof t.title === 'string' ? t.title : '';
             const desc = typeof t.description === 'string' ? t.description : '';
@@ -833,9 +937,11 @@ export class FlowsLibraryPickerModal extends PlatformModal {
     }
 
     _mcpGroupedInitialBusy() {
-        const toolsEmpty = this._toolsAllItems().length === 0;
+        const category = this._currentPickerCategory();
+        const toolsEmpty = !this._pickerItemsByCategory.has(category);
         const serversEmpty = asArray(this._mcpServers.items).length === 0;
-        return (this._toolsAll.busy && toolsEmpty) || (this._mcpServers.loading && serversEmpty);
+        return (this._isPickerCategoryLoading(category) && toolsEmpty)
+            || (this._mcpServers.loading && serversEmpty);
     }
 
     async _syncMcpServer(serverId) {
@@ -845,7 +951,8 @@ export class FlowsLibraryPickerModal extends PlatformModal {
         this._syncingServerId = serverId;
         try {
             await this._syncOp.run({ server_id: serverId });
-            await this._toolsAll.run({ limit: 2000, offset: 0 });
+            this._pickerItemsByCategory.delete('mcp');
+            await this._ensurePickerCategoryLoaded('mcp');
         } finally {
             this._syncingServerId = null;
         }
@@ -883,6 +990,29 @@ export class FlowsLibraryPickerModal extends PlatformModal {
         }
     }
 
+    _renderPickerLoadError(category) {
+        const errorMessage = this._pickerLoadErrorMessage(category);
+        if (errorMessage === null) {
+            return nothing;
+        }
+        return html`
+            <div class="lib-load-error content-panel" role="alert">
+                <p>${this.t('tool_picker_modal.load_error')}</p>
+                <p class="lib-load-error-detail">${errorMessage}</p>
+                <platform-button
+                    variant="secondary"
+                    @click=${() => {
+                        this._pickerItemsByCategory.delete(category);
+                        this._pickerErrorByCategory.delete(category);
+                        void this._ensurePickerCategoryLoaded(category);
+                    }}
+                >
+                    ${this.t('tool_picker_modal.action_retry')}
+                </platform-button>
+            </div>
+        `;
+    }
+
     _renderMcpTestFeedback(serverId) {
         const fb = this._testFeedback;
         if (!fb || fb.serverId !== serverId) {
@@ -904,7 +1034,7 @@ export class FlowsLibraryPickerModal extends PlatformModal {
 
     _renderMcpToolCard(t) {
         const title = registryItemTitle(t);
-        const desc = typeof t.description === 'string' ? t.description : '';
+        const desc = typeof t.description === 'string' ? _truncateText(t.description, 120) : '';
         const icon = registryItemIconName(t);
         const mcpServerId = typeof t.mcp_server_id === 'string' ? t.mcp_server_id : '';
         const server = this._mcpServerById(mcpServerId);
@@ -915,7 +1045,6 @@ export class FlowsLibraryPickerModal extends PlatformModal {
             <platform-picker-card
                 value=${typeof t.tool_id === 'string' ? t.tool_id : title}
                 title=${title}
-                subtitle=${desc}
                 @select=${() => this._pickToolLike(t)}
             >
                 <div slot="icon">
@@ -923,6 +1052,7 @@ export class FlowsLibraryPickerModal extends PlatformModal {
                         ${iconNode}
                     </div>
                 </div>
+                ${desc.length > 0 ? html`<div class="mcp-picker-tool-desc">${desc}</div>` : nothing}
             </platform-picker-card>
         `;
     }
@@ -936,10 +1066,10 @@ export class FlowsLibraryPickerModal extends PlatformModal {
         const isSyncing = this._syncingServerId === serverId;
         const isTesting = this._testingServerId === serverId;
         return html`
-            <section class="mcp-picker-server" aria-labelledby="mcp-server-${serverId}" data-server-id=${serverId}>
-                <div class="mcp-picker-server-head">
+            <section class="mcp-picker-server content-panel" aria-labelledby="mcp-server-${serverId}" data-server-id=${serverId}>
+                <div class="content-panel-head mcp-picker-server-head">
                     <div class="mcp-picker-server-head-main">
-                        <div class="mcp-picker-server-icon">${renderMcpServerIcon(server, 30)}</div>
+                        <div class="mcp-picker-server-icon glass-subtle">${renderMcpServerIcon(server, 30)}</div>
                         <div class="mcp-picker-server-titles">
                             <h3 id="mcp-server-${serverId}">${server.name}</h3>
                             <div class="sub"><code>${serverId}</code></div>
@@ -988,24 +1118,34 @@ export class FlowsLibraryPickerModal extends PlatformModal {
                         </platform-button>
                     </div>
                 </div>
-                ${this._renderMcpTestFeedback(serverId)}
-                ${tools.length === 0
-                    ? html`<div class="mcp-picker-server-empty">${this.t('tool_picker_modal.mcp_server_empty')}</div>`
-                    : html`
-                        <div class="mcp-picker-tools-grid" role="list">
-                            ${repeat(
-                                tools,
-                                (t) => (typeof t.tool_id === 'string' ? t.tool_id : registryItemTitle(t)),
-                                (t) => this._renderMcpToolCard(t),
-                            )}
-                        </div>
-                    `}
+                <div class="content-panel-body">
+                    ${this._renderMcpTestFeedback(serverId)}
+                    ${tools.length === 0
+                        ? html`<div class="mcp-picker-server-empty">${this.t('tool_picker_modal.mcp_server_empty')}</div>`
+                        : html`
+                            <div class="mcp-picker-tools-grid" role="list">
+                                ${repeat(
+                                    tools,
+                                    (t) => (typeof t.tool_id === 'string' ? t.tool_id : registryItemTitle(t)),
+                                    (t) => this._renderMcpToolCard(t),
+                                )}
+                            </div>
+                        `}
+                </div>
             </section>
         `;
     }
 
     _renderMcpGroupedBody() {
         const showTabs = this._showToolCategoryTabs();
+        const category = this._currentPickerCategory();
+        const loadError = this._renderPickerLoadError(category);
+        if (loadError !== nothing) {
+            return html`
+                ${showTabs ? this._renderToolCategoryTabs() : nothing}
+                ${loadError}
+            `;
+        }
         if (this._mcpGroupedInitialBusy()) {
             return html`
                 ${showTabs ? this._renderToolCategoryTabs() : nothing}
@@ -1116,7 +1256,7 @@ export class FlowsLibraryPickerModal extends PlatformModal {
                 .value=${this._toolCategoryTab}
                 .items=${this._toolCategoryTabItems()}
                 aria-label=${this.t('tool_picker_modal.tabs_aria')}
-                @change=${(e) => { this._toolCategoryTab = e.detail.value; }}
+                @change=${(e) => { this._onToolCategoryTabChange(e.detail.value); }}
             ></platform-segmented-control>
         `;
     }
@@ -1222,7 +1362,7 @@ export class FlowsLibraryPickerModal extends PlatformModal {
         `;
     }
 
-    _renderRegistryCard(t, { onSelect }) {
+    _renderRegistryCard(t, { onSelect, plainDescription = false }) {
         const icon = registryItemIconName(t);
         const kindAttr = this._iconKindAttr(t);
         const cardLanguage = _hasInlineCode(t) ? t.language : this._codeLanguage;
@@ -1232,6 +1372,9 @@ export class FlowsLibraryPickerModal extends PlatformModal {
         const title = registryItemTitle(t);
         const desc = typeof t.description === 'string' ? t.description : '';
         const id = typeof t.tool_id === 'string' ? t.tool_id : '';
+        const descriptionNode = plainDescription
+            ? (desc.length > 0 ? html`<div class="lib-plain-desc">${_truncateText(desc)}</div>` : nothing)
+            : html`<div class="lib-md">${this._mdDescription(desc)}</div>`;
         return html`
             <platform-picker-card
                 value=${id.length > 0 ? id : title}
@@ -1243,7 +1386,7 @@ export class FlowsLibraryPickerModal extends PlatformModal {
                         ${cardIcon}
                     </div>
                 </div>
-                <div class="lib-md">${this._mdDescription(desc)}</div>
+                ${descriptionNode}
                 <div class="lib-card-meta">
                     ${id.length > 0 ? html`<span class="lib-chip">${id}</span>` : null}
                     ${kindAttr === 'code'
@@ -1338,9 +1481,17 @@ export class FlowsLibraryPickerModal extends PlatformModal {
         if (this._usesMcpGroupedLayout()) {
             return this._renderMcpGroupedBody();
         }
-        const busy = this._toolsAll.busy;
+        const category = this._currentPickerCategory();
+        const loadError = this._renderPickerLoadError(category);
+        if (loadError !== nothing) {
+            return html`
+                ${this._renderToolPickerToolbar()}
+                ${loadError}
+            `;
+        }
+        const loading = this._isPickerCategoryLoading(category) && !this._pickerItemsByCategory.has(category);
         const rows = this._pickModeRows();
-        if (busy && this._toolsAllItems().length === 0) {
+        if (loading) {
             return html`
                 ${this._renderToolPickerToolbar()}
                 <glass-spinner></glass-spinner>
@@ -1355,7 +1506,10 @@ export class FlowsLibraryPickerModal extends PlatformModal {
         return html`
             ${this._renderToolPickerToolbar()}
             <div class="lib-grid" role="list">
-                ${rows.map((t) => this._renderRegistryCard(t, { onSelect: () => this._pickToolLike(t) }))}
+                ${rows.map((t) => this._renderRegistryCard(t, {
+                    onSelect: () => this._pickToolLike(t),
+                    plainDescription: true,
+                }))}
             </div>
         `;
     }
@@ -1422,7 +1576,12 @@ export class FlowsLibraryPickerModal extends PlatformModal {
     }
 
     _renderCodeRegistryBlock(rows) {
-        if (this._toolsAll.busy && this._toolsAllItems().filter((x) => x.item_type !== 'flow').length === 0) {
+        const category = this._currentPickerCategory();
+        const loadError = this._renderPickerLoadError(category);
+        if (loadError !== nothing) {
+            return loadError;
+        }
+        if (this._isPickerCategoryLoading(category) && !this._pickerItemsByCategory.has(category)) {
             return html`<glass-spinner></glass-spinner>`;
         }
         if (rows.length === 0) {

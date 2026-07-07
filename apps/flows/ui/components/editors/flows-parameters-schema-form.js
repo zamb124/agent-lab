@@ -36,7 +36,6 @@ export class FlowsParametersSchemaForm extends PlatformElement {
             label { font-size: var(--text-sm); color: var(--text-secondary); }
             label .req { color: var(--error); margin-left: 2px; }
             .desc { font-size: var(--text-xs); color: var(--text-tertiary); }
-            input[type="checkbox"] { width: auto; }
             .empty {
                 font-size: var(--text-sm);
                 color: var(--text-tertiary);
@@ -97,12 +96,14 @@ export class FlowsParametersSchemaForm extends PlatformElement {
             ></platform-field>`;
         }
         if (it.type === 'boolean') {
-            return html`<input
-                type="checkbox"
+            return html`<platform-field
+                type="boolean"
+                mode="edit"
+                label=""
                 ?disabled=${this.readonly}
-                .checked=${Boolean(value)}
-                @change=${(e) => this._emit(it.key, e.target.checked)}
-            />`;
+                .value=${Boolean(value)}
+                @change=${(e) => this._emit(it.key, e.detail.value === true)}
+            ></platform-field>`;
         }
         if (it.type === 'number' || it.type === 'integer') {
             const numVal = value === undefined || value === null

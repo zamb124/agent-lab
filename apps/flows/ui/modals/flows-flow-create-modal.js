@@ -30,6 +30,7 @@ import {
     resolveFlowPresetGradient,
 } from '../constants/flow-cover-gradients.js';
 import { glassStyles } from '@platform/lib/styles/shared/glass.styles.js';
+import { formStyles } from '@platform/lib/styles/shared/form.styles.js';
 
 const FLOW_ID_PATTERN = /^[a-z][a-z0-9_]*$/;
 
@@ -154,6 +155,7 @@ export class FlowsFlowCreateModal extends PlatformFormModal {
     static styles = [
         ...(PlatformFormModal.styles ? [PlatformFormModal.styles] : []),
         glassStyles,
+        ...formStyles,
         css`
             :host {
                 --modal-width: min(1280px, calc(100vw - 24px));
@@ -191,7 +193,7 @@ export class FlowsFlowCreateModal extends PlatformFormModal {
                 display: flex;
                 align-items: center;
                 justify-content: center;
-                color: white;
+                color: var(--flows-avatar-text);
             }
             .empty-row {
                 grid-column: 1 / -1;
@@ -200,7 +202,11 @@ export class FlowsFlowCreateModal extends PlatformFormModal {
                 color: var(--text-tertiary);
                 font-size: var(--text-sm);
             }
-            .form { display: flex; flex-direction: column; gap: var(--space-3); }
+            .form {
+                display: flex;
+                flex-direction: column;
+                gap: var(--space-3);
+            }
             .form .picked {
                 display: flex; align-items: center; gap: var(--space-2);
                 padding: var(--space-2) var(--space-3);
@@ -216,9 +222,6 @@ export class FlowsFlowCreateModal extends PlatformFormModal {
                 font: inherit; cursor: pointer;
                 padding: 0;
             }
-            .field { display: flex; flex-direction: column; gap: var(--space-1); }
-            label { font-size: var(--text-sm); color: var(--text-secondary); }
-            .form-error { color: var(--error); font-size: var(--text-xs); margin-top: 4px; }
         `,
     ];
 
@@ -397,7 +400,7 @@ export class FlowsFlowCreateModal extends PlatformFormModal {
                         ${this.t('flow_create_modal.action_change')}
                     </platform-button>
                 </div>
-                <div class="field">
+                <div class="form-group">
                     <label>${this.t('flow_create_modal.field_flow_id')}</label>
                     <platform-field
                         type="string"
@@ -417,7 +420,7 @@ export class FlowsFlowCreateModal extends PlatformFormModal {
                         ? html`<div class="form-error">${this.t('flow_create_modal.err_flow_id_pattern')}</div>`
                         : ''}
                 </div>
-                <div class="field">
+                <div class="form-group">
                     <label>${this.t('flow_create_modal.field_name')}</label>
                     <platform-field
                         type="string"
@@ -433,7 +436,7 @@ export class FlowsFlowCreateModal extends PlatformFormModal {
                         }}
                     ></platform-field>
                 </div>
-                <div class="field">
+                <div class="form-group">
                     <label>${this.t('flow_create_modal.field_description')}</label>
                     <platform-field
                         type="text"

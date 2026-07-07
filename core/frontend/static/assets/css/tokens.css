@@ -632,6 +632,7 @@
 
     --flows-lib-kind-flow-gradient: var(--flows-preset-external-gradient);
     --flows-lib-kind-mcp-gradient: var(--flows-preset-code-gradient);
+    --flows-tool-picker-mcp-panel-height: 420px;
 
     --flows-avatar-text: var(--text-inverse);
     --flows-avatar-shadow: var(--glass-shadow-subtle);
@@ -643,6 +644,10 @@
     --flows-editor-chrome-row-min-height: var(--flows-chrome-row-min-height);
     --flows-editor-chrome-gap: var(--space-2);
     --flows-sidebar-row-min-height: 42px;
+    --flows-side-panel-width: 324px;
+    --flows-side-panel-min-width: 320px;
+    --flows-side-panel-max-width: 400px;
+    --flows-editor-chrome-stack-height: 60px;
     --flows-toolbar-shell-min-height: 48px;
     --flows-bundle-update-shadow: 0 0 0 2px color-mix(in srgb, var(--warning) 24%, transparent);
 

@@ -49,9 +49,10 @@ export class FlowsEvaluationSuiteSidebar extends PlatformElement {
             }
 
             .rail {
-                width: 286px;
-                min-width: 260px;
-                max-width: 320px;
+                width: var(--flows-side-panel-width);
+                min-width: var(--flows-side-panel-min-width);
+                max-width: var(--flows-side-panel-max-width);
+                flex: 0 0 var(--flows-side-panel-width);
                 display: flex;
                 flex-direction: column;
                 gap: 12px;
@@ -243,7 +244,7 @@ export class FlowsEvaluationSuiteSidebar extends PlatformElement {
 
             @media (max-width: 1024px) {
                 .rail {
-                    width: 260px;
+                    width: var(--flows-side-panel-min-width);
                     padding: var(--space-3);
                 }
             }

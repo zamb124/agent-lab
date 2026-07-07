@@ -651,7 +651,6 @@ export class FlowsExecutionPanel extends PlatformElement {
             return false;
         }
         return Boolean(target.closest([
-            'button',
             'a',
             'input',
             'textarea',
@@ -1075,13 +1074,15 @@ export class FlowsExecutionPanel extends PlatformElement {
                 </div>
                 `}
                 ${this._collapsed ? nothing : html`
-                    <button
+                    <div
                         class="resize-handle"
-                        type="button"
+                        role="separator"
+                        aria-orientation="vertical"
+                        tabindex="0"
                         title=${this.t('execution_panel.resize_panel')}
                         aria-label=${this.t('execution_panel.resize_panel')}
                         @pointerdown=${this._onResizePointerDown}
-                    ></button>
+                    ></div>
                 `}
             </div>
         `;

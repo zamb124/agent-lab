@@ -31,6 +31,7 @@ import '@platform/lib/components/platform-json-editor.js';
 import '../flows-node-run-control.js';
 import '@platform/lib/components/fields/platform-field.js';
 import { fieldPillStyles } from '@platform/lib/styles/shared/field-pill.styles.js';
+import { panelShellStyles } from '@platform/lib/styles/shared/panel-shell.styles.js';
 import {
     nextCodeExecuteClientId,
     setCodeExecuteRequestClientId,
@@ -63,6 +64,7 @@ export class FlowsBaseNodeEditor extends PlatformElement {
     static styles = [
         PlatformElement.styles,
         fieldPillStyles,
+        panelShellStyles,
         css`
             :host {
                 display: block;
@@ -82,8 +84,6 @@ export class FlowsBaseNodeEditor extends PlatformElement {
             .panel-sidebar {
                 overflow: auto;
                 padding: var(--space-4);
-                border-right: 1px solid var(--border-subtle);
-                background: var(--glass-solid-subtle);
                 display: flex;
                 flex-direction: column;
                 gap: var(--space-5);
@@ -167,7 +167,7 @@ export class FlowsBaseNodeEditor extends PlatformElement {
                 display: flex; align-items: center; gap: var(--space-2);
                 padding: var(--space-1) var(--space-2);
                 background: var(--glass-solid-medium);
-                border: 1px solid var(--glass-border-subtle);
+                border: 1px solid var(--border-subtle);
                 border-radius: var(--radius-sm);
                 font-size: var(--text-sm);
             }
@@ -184,9 +184,6 @@ export class FlowsBaseNodeEditor extends PlatformElement {
                 display: flex; gap: var(--space-1); margin-bottom: var(--space-2);
             }
             .dataflow-mapping-shell {
-                border: 1px solid var(--glass-border-subtle);
-                border-radius: var(--radius-md);
-                background: var(--glass-solid-subtle);
                 padding: var(--space-3);
             }
             .dataflow-mapping-shell .section-title {
@@ -214,7 +211,7 @@ export class FlowsBaseNodeEditor extends PlatformElement {
                 flex-direction: column;
                 gap: var(--space-2);
                 padding-top: var(--space-1);
-                border-top: 1px solid var(--glass-border-subtle);
+                border-top: 1px solid var(--border-subtle);
             }
             .dataflow-lanes {
                 display: grid;
@@ -223,9 +220,9 @@ export class FlowsBaseNodeEditor extends PlatformElement {
             }
             .dataflow-lane {
                 min-width: 0;
-                border: 1px solid var(--glass-border-subtle);
+                border: 1px solid var(--border-subtle);
                 border-radius: var(--radius-sm);
-                background: var(--glass-solid-subtle);
+                background: var(--bg-elevated);
                 padding: var(--space-2);
                 display: flex;
                 flex-direction: column;
@@ -265,22 +262,23 @@ export class FlowsBaseNodeEditor extends PlatformElement {
                 max-width: 100%;
                 padding: 3px 7px;
                 border-radius: var(--radius-sm);
-                border: 1px solid var(--glass-border-subtle);
+                border: 1px solid var(--border-subtle);
                 background: var(--glass-solid-medium);
                 color: var(--text-secondary);
                 line-height: 1.2;
                 animation: dataflow-chip-in 160ms var(--easing-smooth, ease-out) both;
             }
-            button.dataflow-chip {
+            article.dataflow-chip {
                 appearance: none;
                 font: inherit;
                 text-align: left;
                 cursor: pointer;
+                margin: 0;
             }
-            button.dataflow-chip:hover,
-            button.dataflow-chip:focus-visible {
+            article.dataflow-chip:hover,
+            article.dataflow-chip:focus-visible {
                 color: var(--accent);
-                border-color: color-mix(in oklab, var(--accent) 34%, var(--glass-border-subtle));
+                border-color: color-mix(in oklab, var(--accent) 34%, var(--border-subtle));
                 background: var(--accent-subtle);
                 outline: none;
             }
@@ -297,12 +295,12 @@ export class FlowsBaseNodeEditor extends PlatformElement {
             .dataflow-chip[data-status="missing"],
             .dataflow-chip[data-severity="error"] {
                 color: var(--error);
-                border-color: color-mix(in oklab, var(--error) 36%, var(--glass-border-subtle));
+                border-color: color-mix(in oklab, var(--error) 36%, var(--border-subtle));
                 background: color-mix(in oklab, var(--error) 10%, var(--glass-solid-subtle));
             }
             .dataflow-chip[data-severity="warning"] {
                 color: var(--warning);
-                border-color: color-mix(in oklab, var(--warning) 36%, var(--glass-border-subtle));
+                border-color: color-mix(in oklab, var(--warning) 36%, var(--border-subtle));
                 background: color-mix(in oklab, var(--warning) 10%, var(--glass-solid-subtle));
             }
             .dataflow-empty {
@@ -1128,9 +1126,10 @@ export class FlowsBaseNodeEditor extends PlatformElement {
                                     const fsize = formatFileSize(f.file_size);
                                     return html`
                                         <div class="field-pill-file-ref-row">
-                                            <button
-                                                type="button"
+                                            <article
                                                 class="field-pill-file-ref-open"
+                                                tabindex="0"
+                                                role="button"
                                                 @click=${() => this.openFile({
                                                     file_id: f.file_id,
                                                     original_name: fname,
@@ -1138,6 +1137,13 @@ export class FlowsBaseNodeEditor extends PlatformElement {
                                                     file_size: f.file_size,
                                                     url: typeof f.url === 'string' ? f.url : '',
                                                 }, { source: 'flows_node_file_ref' })}
+                                                @keydown=${(event) => this._onSelectableKeydown(event, () => this.openFile({
+                                                    file_id: f.file_id,
+                                                    original_name: fname,
+                                                    content_type: fmime,
+                                                    file_size: f.file_size,
+                                                    url: typeof f.url === 'string' ? f.url : '',
+                                                }, { source: 'flows_node_file_ref' }))}
                                             >
                                                 <platform-icon
                                                     class="field-pill-file-ref-icon"
@@ -1156,16 +1162,18 @@ export class FlowsBaseNodeEditor extends PlatformElement {
                                                             : ''}
                                                     </span>
                                                 </div>
-                                            </button>
-                                            <button
+                                            </article>
+                                            <platform-button
                                                 class="field-pill-file-ref-remove"
-                                                type="button"
+                                                variant="ghost"
+                                                icon-only
+                                                density="dense"
                                                 aria-label=${this.t('base_node_editor.files_remove')}
                                                 title=${this.t('base_node_editor.files_remove')}
                                                 @click=${() => this._onRemoveFile(i)}
                                             >
                                                 <platform-icon name="x" size="16"></platform-icon>
-                                            </button>
+                                            </platform-button>
                                         </div>
                                     `;
                                 })}
@@ -1414,6 +1422,14 @@ export class FlowsBaseNodeEditor extends PlatformElement {
         });
     }
 
+    _onSelectableKeydown(event, handler) {
+        if (event.key !== 'Enter' && event.key !== ' ') {
+            return;
+        }
+        event.preventDefault();
+        handler.call(this);
+    }
+
     _addInputMappingFromPath(path) {
         const rawPath = typeof path === 'string' ? path.trim() : '';
         if (rawPath.length === 0) return;
@@ -1462,28 +1478,32 @@ export class FlowsBaseNodeEditor extends PlatformElement {
             return html`
                 <div class="dataflow-list">
                     ${visible.map((item) => html`
-                        <button
-                            type="button"
+                        <article
                             class="dataflow-chip"
+                            tabindex="0"
+                            role="button"
                             title=${this._dataflowActionTitle(item.path, 'base_node_editor.dataflow_add_input')}
                             @click=${() => this._addInputMappingFromPath(item.path)}
+                            @keydown=${(event) => this._onSelectableKeydown(event, () => this._addInputMappingFromPath(item.path))}
                         >
                             <span class="label">${this._dataflowLabel(item.path)}</span>
                             <span class="type">${this._dataflowType(item.type)}</span>
-                        </button>
+                        </article>
                     `)}
                     ${mappedRows.map((row) => html`
                         <div class="dataflow-row">
-                            <button
-                                type="button"
+                            <article
                                 class="dataflow-chip"
+                                tabindex="0"
+                                role="button"
                                 data-status=${row.status === 'missing' ? 'missing' : 'ok'}
                                 title=${this._dataflowActionTitle(row.source_path || row.source, 'base_node_editor.dataflow_add_input')}
                                 @click=${() => this._addInputMappingFromPath(row.source_path || row.source)}
+                                @keydown=${(event) => this._onSelectableKeydown(event, () => this._addInputMappingFromPath(row.source_path || row.source))}
                             >
                                 <span class="label">${this._dataflowLabel(row.source_path || row.source)}</span>
                                 <span class="type">${this._dataflowType(row.type)}</span>
-                            </button>
+                            </article>
                             <span class="arrow">→</span>
                             <span class="dataflow-chip" title=${this._dataflowLabel(row.target)}>
                                 <span class="label">${this._dataflowLabel(row.target)}</span>
@@ -1498,16 +1518,18 @@ export class FlowsBaseNodeEditor extends PlatformElement {
                 <div class="dataflow-list">
                     ${rows.slice(0, 8).map((row) => html`
                         <div class="dataflow-row">
-                            <button
-                                type="button"
+                            <article
                                 class="dataflow-chip"
+                                tabindex="0"
+                                role="button"
                                 data-status=${row.status === 'missing' ? 'missing' : 'ok'}
                                 title=${this._dataflowActionTitle(row.source_path || row.source, 'base_node_editor.dataflow_add_input')}
                                 @click=${() => this._addInputMappingFromPath(row.source_path || row.source)}
+                                @keydown=${(event) => this._onSelectableKeydown(event, () => this._addInputMappingFromPath(row.source_path || row.source))}
                             >
                                 <span class="label">${this._dataflowLabel(row.source_path || row.source)}</span>
                                 <span class="type">${this._dataflowType(row.type)}</span>
-                            </button>
+                            </article>
                             <span class="arrow">→</span>
                             <span class="dataflow-chip" title=${this._dataflowLabel(row.target)}>
                                 <span class="label">${this._dataflowLabel(row.target)}</span>
@@ -1528,16 +1550,18 @@ export class FlowsBaseNodeEditor extends PlatformElement {
         return html`
             <div class="dataflow-list">
                 ${visible.map((item) => html`
-                    <button
-                        type="button"
+                    <article
                         class="dataflow-chip"
+                        tabindex="0"
+                        role="button"
                         data-status=${item.protected ? 'missing' : 'ok'}
                         title=${this._dataflowActionTitle(item.path, 'base_node_editor.dataflow_add_output')}
                         @click=${() => this._addOutputMappingFromPath(item.path)}
+                        @keydown=${(event) => this._onSelectableKeydown(event, () => this._addOutputMappingFromPath(item.path))}
                     >
                         <span class="label">${this._dataflowLabel(item.path)}</span>
                         <span class="type">${this._dataflowType(item.type)}</span>
-                    </button>
+                    </article>
                 `)}
             </div>
         `;
@@ -1704,7 +1728,7 @@ export class FlowsBaseNodeEditor extends PlatformElement {
 
     _renderDataflowMapping() {
         return html`
-            <div class="section dataflow-mapping-shell">
+            <div class="section dataflow-mapping-shell content-panel">
                 <div class="section-title">${this.t('base_node_editor.section_dataflow')}</div>
                 <div class="dataflow-mapping-grid">
                     ${this._renderDataflowLanes()}
@@ -1728,7 +1752,7 @@ export class FlowsBaseNodeEditor extends PlatformElement {
         if (!this.nodeConfig) return html`<div>${this.t('property_panel.select_node')}</div>`;
         return html`
             <div class="panel-layout">
-                <div class="panel-sidebar">
+                <div class="panel-sidebar content-panel">
                     ${this._renderBasic()}
                     ${this._shouldShowPinnedResourcesSection() ? this._renderResources() : nothing}
                     ${this._renderInputState()}

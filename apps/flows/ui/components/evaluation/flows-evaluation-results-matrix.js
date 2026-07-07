@@ -208,8 +208,8 @@ export class FlowsEvaluationResultsMatrix extends PlatformElement {
             }
 
             .case-cell {
-                width: 260px;
-                min-width: 260px;
+                width: var(--flows-side-panel-width);
+                min-width: var(--flows-side-panel-min-width);
                 display: flex;
                 flex-direction: column;
                 justify-content: center;
@@ -248,6 +248,12 @@ export class FlowsEvaluationResultsMatrix extends PlatformElement {
                 white-space: nowrap;
             }
 
+            article.run-head,
+            article.cell-button {
+                margin: 0;
+                font: inherit;
+            }
+
             .run-head {
                 width: 128px;
                 min-width: 128px;
@@ -256,7 +262,7 @@ export class FlowsEvaluationResultsMatrix extends PlatformElement {
                 justify-content: center;
                 gap: 2px;
                 padding: 8px var(--space-2);
-                border: 0;
+                border: none;
                 background: transparent;
                 color: inherit;
                 text-align: left;
@@ -275,7 +281,7 @@ export class FlowsEvaluationResultsMatrix extends PlatformElement {
                 justify-content: center;
                 gap: 4px;
                 padding: 7px var(--space-2);
-                border: 0;
+                border: none;
                 background: transparent;
                 color: var(--text-secondary);
                 cursor: pointer;
@@ -552,6 +558,14 @@ export class FlowsEvaluationResultsMatrix extends PlatformElement {
         this.selectedCaseRunId = '';
     }
 
+    _onSelectableKeydown(event, handler) {
+        if (event.key !== 'Enter' && event.key !== ' ') {
+            return;
+        }
+        event.preventDefault();
+        handler.call(this);
+    }
+
     _selectRun(runId) {
         this.emit('run-select', { run_id: runId });
     }
@@ -678,13 +692,20 @@ export class FlowsEvaluationResultsMatrix extends PlatformElement {
         const active = runId === this.selectedRunId;
         return html`
             <th>
-                <button class="run-head" type="button" data-active=${active ? 'true' : 'false'} @click=${() => this._selectRun(runId)}>
+                <article
+                    class="run-head"
+                    tabindex="0"
+                    role="button"
+                    data-active=${active ? 'true' : 'false'}
+                    @click=${() => this._selectRun(runId)}
+                    @keydown=${(event) => this._onSelectableKeydown(event, () => this._selectRun(runId))}
+                >
                     <span class="case-name">${runId.slice(0, 8)}</span>
                     <span class="run-meta">
                         <i class="dot" data-tone=${tone}></i>
                         <span class="run-meta-text">${state} · ${formatScore(averageScore)}</span>
                     </span>
-                </button>
+                </article>
             </th>
         `;
     }
@@ -723,13 +744,21 @@ export class FlowsEvaluationResultsMatrix extends PlatformElement {
         const tone = aggregateCellsTone(cells);
         return html`
             <td>
-                <button class="cell-button" type="button" data-active=${active ? 'true' : 'false'} data-tone=${tone} @click=${() => this._selectCaseRun(primary)}>
+                <article
+                    class="cell-button"
+                    tabindex="0"
+                    role="button"
+                    data-active=${active ? 'true' : 'false'}
+                    data-tone=${tone}
+                    @click=${() => this._selectCaseRun(primary)}
+                    @keydown=${(event) => this._onSelectableKeydown(event, () => this._selectCaseRun(primary))}
+                >
                     <span class="score-row">
                         <span class="score" data-tone=${tone}>${formatScore(score)}</span>
                         <span class="trials">${cells.map((cell) => html`<i class="dot" data-tone=${stateTone(stringValue(cell, 'state'))}></i>`)}</span>
                     </span>
                     <span class="duration">${duration === null ? this.t('evaluation.matrix.no_duration') : `${duration}ms`}</span>
-                </button>
+                </article>
             </td>
         `;
     }

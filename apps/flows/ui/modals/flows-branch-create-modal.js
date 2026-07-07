@@ -10,6 +10,7 @@ import { PlatformFormModal } from '@platform/lib/components/glass-form-modal.js'
 import { registerModalKind } from '@platform/lib/utils/modal-registry.js';
 import '@platform/lib/components/platform-button.js';
 import '@platform/lib/components/fields/platform-field.js';
+import { formStyles } from '@platform/lib/styles/shared/form.styles.js';
 
 const BRANCH_ID_PATTERN = /^[a-z][a-z0-9_]*$/;
 
@@ -27,9 +28,8 @@ export class FlowsBranchCreateModal extends PlatformFormModal {
 
     static styles = [
         ...(PlatformFormModal.styles ? [PlatformFormModal.styles] : []),
+        ...formStyles,
         css`
-            .field { display: flex; flex-direction: column; gap: var(--space-1); margin-bottom: var(--space-3); }
-            .form-error { color: var(--error); font-size: var(--text-xs); }
         `,
     ];
 
@@ -54,7 +54,7 @@ export class FlowsBranchCreateModal extends PlatformFormModal {
     renderBody() {
         const validId = BRANCH_ID_PATTERN.test(this._branchId);
         return html`
-            <div class="field">
+            <div class="form-group">
                 <platform-field
                     type="string"
                     mode="edit"
@@ -70,7 +70,7 @@ export class FlowsBranchCreateModal extends PlatformFormModal {
                     ? html`<div class="form-error">${this.t('branch_create_modal.err_branch_id_pattern')}</div>`
                     : nothing}
             </div>
-            <div class="field">
+            <div class="form-group">
                 <platform-field
                     type="string"
                     mode="edit"
@@ -82,7 +82,7 @@ export class FlowsBranchCreateModal extends PlatformFormModal {
                     }}
                 ></platform-field>
             </div>
-            <div class="field">
+            <div class="form-group">
                 <platform-field
                     type="text"
                     mode="edit"

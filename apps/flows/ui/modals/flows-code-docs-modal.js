@@ -18,6 +18,7 @@ import {
     flowCodeLanguageLabel,
     normalizeFlowCodeLanguage,
 } from '../_helpers/flows-code-languages.js';
+import { panelShellStyles } from '@platform/lib/styles/shared/panel-shell.styles.js';
 
 function _lower(s) {
     if (typeof s === 'string' && s.length > 0) {
@@ -106,6 +107,7 @@ export class FlowsCodeDocsModal extends PlatformModal {
 
     static styles = [
         ...PlatformModal.styles,
+        panelShellStyles,
         css`
             .docs-layout {
                 display: flex;
@@ -118,12 +120,8 @@ export class FlowsCodeDocsModal extends PlatformModal {
             .docs-sidebar {
                 width: 280px;
                 flex-shrink: 0;
-                display: flex;
-                flex-direction: column;
-                border-right: 1px solid var(--glass-border-subtle);
-                background: var(--glass-solid-subtle);
-                border-radius: var(--radius-md) 0 0 var(--radius-md);
                 min-height: 0;
+                border-radius: var(--radius-md) 0 0 var(--radius-md);
             }
             .docs-sidebar-top {
                 display: flex;
@@ -132,7 +130,7 @@ export class FlowsCodeDocsModal extends PlatformModal {
                 align-items: center;
                 gap: var(--space-2);
                 padding: var(--space-3);
-                border-bottom: 1px solid var(--glass-border-subtle);
+                border-bottom: 1px solid var(--border-subtle);
                 flex-shrink: 0;
             }
             .docs-sidebar-top platform-segmented-control {
@@ -205,7 +203,7 @@ export class FlowsCodeDocsModal extends PlatformModal {
             }
             .docs-md pre {
                 background: var(--glass-solid-medium);
-                border: 1px solid var(--glass-border-subtle);
+                border: 1px solid var(--border-subtle);
                 border-radius: var(--radius-md);
                 padding: var(--space-3);
                 overflow: auto;
@@ -223,12 +221,12 @@ export class FlowsCodeDocsModal extends PlatformModal {
             }
             .docs-md th,
             .docs-md td {
-                border: 1px solid var(--glass-border-subtle);
+                border: 1px solid var(--border-subtle);
                 padding: var(--space-2);
                 text-align: left;
             }
             .docs-md th {
-                background: var(--glass-solid-subtle);
+                background: var(--bg-elevated);
             }
             .docs-md ul,
             .docs-md ol {
@@ -368,7 +366,7 @@ export class FlowsCodeDocsModal extends PlatformModal {
         const shown = this._filteredToc(toc);
         return html`
             <div class="docs-layout">
-                <aside class="docs-sidebar" aria-label=${this.t('code_docs_modal.toc_aria')}>
+                <aside class="docs-sidebar content-panel" aria-label=${this.t('code_docs_modal.toc_aria')}>
                     <div class="docs-sidebar-top">
                         ${this._renderLanguageSegment()}
                         <platform-modal-search-field

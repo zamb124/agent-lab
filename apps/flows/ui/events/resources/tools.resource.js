@@ -39,6 +39,9 @@ export const toolsAllOp = createAsyncOp({
         const q = new URLSearchParams();
         q.set('limit', String(limit));
         q.set('offset', String(offset));
+        if (typeof src.picker_category === 'string' && src.picker_category.length > 0) {
+            q.set('picker_category', src.picker_category);
+        }
         return httpRequest({
             method: 'GET',
             url: `/flows/api/v1/tools/all?${q.toString()}`,

@@ -11,6 +11,7 @@ import { platformConfirm } from '@platform/lib/components/platform-confirm-modal
 import '@platform/lib/components/platform-button.js';
 import '@platform/lib/components/platform-icon.js';
 import '@platform/lib/components/glass-spinner.js';
+import '@platform/lib/components/platform-modal-search-field.js';
 import { asString } from '../_helpers/flows-resolvers.js';
 
 export class FlowsIntegrationsModal extends PlatformModal {
@@ -20,15 +21,24 @@ export class FlowsIntegrationsModal extends PlatformModal {
     static styles = [
         ...PlatformModal.styles,
         css`
+            .int-search {
+                margin-bottom: var(--space-3);
+            }
             .int-table { width: 100%; border-collapse: collapse; color: var(--text-secondary); }
             .int-table th, .int-table td { padding: var(--space-2); text-align: left; border-bottom: 1px solid var(--border-subtle); }
             .int-empty { text-align: center; color: var(--text-tertiary); padding: var(--space-4); }
         `,
     ];
 
+    static properties = {
+        ...PlatformModal.properties,
+        _query: { state: true },
+    };
+
     constructor() {
         super();
         this.size = 'lg';
+        this._query = '';
         this._listOp = this.useOp('flows/integrations_list');
         this._removeOp = this.useOp('flows/integrations_remove');
     }
@@ -54,14 +64,46 @@ export class FlowsIntegrationsModal extends PlatformModal {
         await this._listOp.run({});
     }
 
-    _renderRows() {
+    _onSearchChange(e) {
+        const rawValue = e.detail.value;
+        if (typeof rawValue !== 'string') {
+            throw new TypeError('flows-integrations-modal: search expects string detail.value');
+        }
+        this._query = rawValue;
+    }
+
+    _listItems() {
         const result = this._listOp.lastResult;
-        const items = Array.isArray(result?.items)
-            ? result.items
-            : Array.isArray(result)
-                ? result
-                : [];
-        if (this._listOp.busy && items.length === 0) {
+        if (Array.isArray(result?.items)) {
+            return result.items;
+        }
+        if (Array.isArray(result)) {
+            return result;
+        }
+        return [];
+    }
+
+    _filteredItems() {
+        const items = this._listItems();
+        const query = this._query.trim().toLocaleLowerCase();
+        if (query.length === 0) {
+            return items;
+        }
+        return items.filter((item) => {
+            if (!item || typeof item !== 'object') {
+                return false;
+            }
+            const provider = typeof item.provider === 'string' ? item.provider : '';
+            const service = typeof item.service === 'string' ? item.service : '';
+            const status = asString(item.status);
+            const haystack = `${provider} ${service} ${status}`.toLocaleLowerCase();
+            return haystack.includes(query);
+        });
+    }
+
+    _renderRows() {
+        const items = this._filteredItems();
+        if (this._listOp.busy && items.length === 0 && this._query.trim().length === 0) {
             return html`<tr><td colspan="4"><glass-spinner></glass-spinner></td></tr>`;
         }
         if (items.length === 0) {
@@ -87,6 +129,13 @@ export class FlowsIntegrationsModal extends PlatformModal {
 
     renderBody() {
         return html`
+            <platform-modal-search-field
+                class="int-search"
+                layout="fill"
+                .value=${this._query}
+                placeholder=${this.t('integrations_modal.search')}
+                @change=${this._onSearchChange}
+            ></platform-modal-search-field>
             <table class="int-table">
                 <thead>
                     <tr>

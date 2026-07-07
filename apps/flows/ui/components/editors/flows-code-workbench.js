@@ -23,6 +23,7 @@ import {
     normalizeFlowCodeLanguage,
     starterCodeForLanguage,
 } from '../../_helpers/flows-code-languages.js';
+import { panelShellStyles } from '@platform/lib/styles/shared/panel-shell.styles.js';
 
 export class FlowsCodeWorkbench extends PlatformElement {
     static i18nNamespace = 'flows';
@@ -53,6 +54,7 @@ export class FlowsCodeWorkbench extends PlatformElement {
 
     static styles = [
         PlatformElement.styles,
+        panelShellStyles,
         css`
             :host {
                 display: block;
@@ -89,8 +91,8 @@ export class FlowsCodeWorkbench extends PlatformElement {
                 padding: 0 9px;
                 box-sizing: border-box;
                 border-radius: var(--radius-full, 999px);
-                border: 1px solid var(--glass-border-subtle);
-                background: var(--glass-solid-subtle);
+                border: 1px solid var(--border-subtle);
+                background: var(--bg-elevated);
                 color: var(--text-tertiary);
                 font-size: var(--text-xs);
                 line-height: 1;
@@ -122,10 +124,7 @@ export class FlowsCodeWorkbench extends PlatformElement {
                 margin-top: var(--space-1);
             }
             .resource-secondary-wrap {
-                border: 1px solid var(--glass-border-subtle);
-                border-radius: var(--radius-md);
                 overflow: hidden;
-                background: var(--glass-solid-subtle);
             }
             .resource-secondary-wrap flows-code-editor {
                 border: none;
@@ -553,7 +552,7 @@ export class FlowsCodeWorkbench extends PlatformElement {
                             </flows-code-editor>
                         `
                         : html`
-                            <div class="resource-secondary-wrap">
+                            <div class="resource-secondary-wrap content-panel">
                                 <flows-code-editor
                                     .headerOnly=${true}
                                     language="text"
