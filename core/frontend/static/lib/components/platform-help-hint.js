@@ -52,7 +52,7 @@ function ensurePortalBubbleStyles() {
             max-width: min(560px, 92vw);
             max-height: 50vh;
             overflow: auto;
-            font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+            font-family: var(--font-mono);
             font-size: 11px;
             line-height: 1.4;
             white-space: pre-wrap;

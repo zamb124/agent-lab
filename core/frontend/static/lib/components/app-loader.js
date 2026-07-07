@@ -123,7 +123,7 @@ export class AppLoader extends PlatformElement {
             }
             
             .loader-text {
-                font-family: 'SF Pro Display', -apple-system, BlinkMacSystemFont, sans-serif;
+                font-family: var(--font-sans);
                 font-size: 14px;
                 font-weight: 500;
                 color: rgba(255, 255, 255, 0.5);

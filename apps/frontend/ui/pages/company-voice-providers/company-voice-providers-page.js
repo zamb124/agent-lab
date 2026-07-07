@@ -241,7 +241,7 @@ class FrontendCompanyVoiceProvidersPage extends PlatformPage {
             .kind-stress { background: #d1fae5; color: #065f46; }
 
             .rule-mono {
-                font-family: monospace;
+                font-family: var(--font-mono);
                 font-size: var(--text-sm);
                 padding: 2px 6px;
                 border-radius: var(--radius-sm);
@@ -303,7 +303,7 @@ class FrontendCompanyVoiceProvidersPage extends PlatformPage {
             }
 
             .result-code {
-                font-family: monospace;
+                font-family: var(--font-mono);
                 font-size: var(--text-sm);
                 color: var(--text-primary);
                 padding: var(--space-2) var(--space-3);

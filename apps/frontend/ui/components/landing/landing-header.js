@@ -82,7 +82,7 @@ export class LandingHeader extends PlatformElement {
             }
             
             .logo-text {
-                font-family: 'Fira Sans Condensed', sans-serif;
+                font-family: var(--font-sans); letter-spacing: var(--tracking-tight);
                 font-size: 18px;
                 font-weight: 500;
                 color: var(--landing-secondary, #E8E8E8);
@@ -97,7 +97,7 @@ export class LandingHeader extends PlatformElement {
             }
             
             .nav-link {
-                font-family: 'Fira Sans', sans-serif;
+                font-family: var(--font-sans);
                 font-size: 16px;
                 color: var(--landing-secondary, #E8E8E8);
                 text-decoration: none;
@@ -117,7 +117,7 @@ export class LandingHeader extends PlatformElement {
                 display: flex;
                 align-items: center;
                 gap: 6px;
-                font-family: 'Fira Sans', sans-serif;
+                font-family: var(--font-sans);
                 font-size: 16px;
                 color: var(--landing-secondary, #E8E8E8);
                 text-decoration: none;
@@ -200,13 +200,13 @@ export class LandingHeader extends PlatformElement {
             }
             
             .nav-dropdown-item-title {
-                font-family: 'Fira Sans', sans-serif;
+                font-family: var(--font-sans);
                 font-size: 15px;
                 font-weight: 500;
             }
             
             .nav-dropdown-item-desc {
-                font-family: 'Fira Sans', sans-serif;
+                font-family: var(--font-sans);
                 font-size: 12px;
                 color: var(--landing-text-subtle, rgba(232, 232, 232, 0.6));
             }
@@ -226,7 +226,7 @@ export class LandingHeader extends PlatformElement {
                 background: transparent;
                 border: none;
                 color: var(--landing-secondary);
-                font-family: 'Fira Sans', sans-serif;
+                font-family: var(--font-sans);
                 font-size: 14px;
             }
             
@@ -278,7 +278,7 @@ export class LandingHeader extends PlatformElement {
                 border: none;
                 border-radius: 24px;
                 color: var(--landing-on-primary, #FFFFFF);
-                font-family: 'Fira Sans', sans-serif;
+                font-family: var(--font-sans);
                 font-size: 14px;
                 font-weight: 500;
                 cursor: pointer;
@@ -297,7 +297,7 @@ export class LandingHeader extends PlatformElement {
                 border: 1px solid var(--accent);
                 border-radius: 24px;
                 color: var(--landing-secondary);
-                font-family: 'Fira Sans', sans-serif;
+                font-family: var(--font-sans);
                 font-size: 14px;
                 font-weight: 500;
                 cursor: pointer;
@@ -511,7 +511,7 @@ export class LandingHeader extends PlatformElement {
             }
             
             .mobile-products-title {
-                font-family: 'Fira Sans', sans-serif;
+                font-family: var(--font-sans);
                 font-size: 12px;
                 color: var(--landing-text-faint, rgba(232, 232, 232, 0.5));
                 text-transform: uppercase;
@@ -528,7 +528,7 @@ export class LandingHeader extends PlatformElement {
                 padding: 12px 12px;
                 color: var(--landing-secondary, #E8E8E8);
                 text-decoration: none;
-                font-family: 'Fira Sans', sans-serif;
+                font-family: var(--font-sans);
                 font-size: clamp(16px, 4.2vw, 18px);
                 border-radius: 8px;
                 transition: background 0.2s;

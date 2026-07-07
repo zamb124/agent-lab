@@ -22,7 +22,7 @@ export class LandingReviews extends PlatformElement {
             }
             
             .reviews-title {
-                font-family: 'Fira Sans Condensed', sans-serif;
+                font-family: var(--font-sans); letter-spacing: var(--tracking-tight);
                 font-size: 32px;
                 font-weight: 500;
                 line-height: 1.3;
@@ -80,7 +80,7 @@ export class LandingReviews extends PlatformElement {
             }
             
             .review-name {
-                font-family: 'Fira Sans', sans-serif;
+                font-family: var(--font-sans);
                 font-size: 18px;
                 font-weight: 600;
                 color: var(--landing-secondary);
@@ -88,14 +88,14 @@ export class LandingReviews extends PlatformElement {
             }
             
             .review-position {
-                font-family: 'Fira Sans', sans-serif;
+                font-family: var(--font-sans);
                 font-size: 14px;
                 color: var(--landing-text-subtle, rgba(232, 232, 232, 0.6));
                 margin: 0;
             }
             
             .review-text {
-                font-family: 'Fira Sans', sans-serif;
+                font-family: var(--font-sans);
                 font-size: 16px;
                 line-height: 1.7;
                 color: var(--landing-text-soft, rgba(232, 232, 232, 0.9));

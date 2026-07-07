@@ -281,7 +281,7 @@ export class SyncMessageBubble extends PlatformElement {
             color: #f8fafc;
             padding: var(--space-2);
             border-radius: var(--radius-sm);
-            font-family: ui-monospace, monospace;
+            font-family: var(--font-mono);
             font-size: var(--text-xs);
             overflow-x: auto;
             margin: 0;

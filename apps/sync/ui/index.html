@@ -35,22 +35,6 @@
 
     <link rel="stylesheet" href="/static/core/assets/css/tokens.css">
     <link rel="stylesheet" href="/static/core/assets/css/reset.css">
-    <style>
-        @font-face {
-            font-family: 'Inter';
-            src: url('/sync/ui/static/assets/InterVariable-DEKF4JyX.ttf') format('truetype');
-            font-weight: 100 900;
-            font-display: swap;
-            font-style: normal;
-        }
-        @font-face {
-            font-family: 'Inter';
-            src: url('/sync/ui/static/assets/InterVariable-Italic-uRLhbqHc.ttf') format('truetype');
-            font-weight: 100 900;
-            font-display: swap;
-            font-style: italic;
-        }
-    </style>
 <style>
 sync-app:not(:defined) {
             position: fixed;
@@ -61,7 +45,7 @@ sync-app:not(:defined) {
             background: var(--bg-gradient);
             z-index: 9999;
             color: rgba(255, 255, 255, 0.5);
-            font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+            font-family: var(--font-sans);
         }
 
         sync-app:not(:defined)::after {

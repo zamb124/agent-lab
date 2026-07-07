@@ -117,7 +117,7 @@ export class PublicSearchPage extends PlatformPage {
             }
 
             .brand-name {
-                font-family: 'Fira Sans Condensed', sans-serif;
+                font-family: var(--font-sans); letter-spacing: var(--tracking-tight);
                 font-size: 24px;
                 line-height: 1;
                 letter-spacing: 0;
@@ -207,7 +207,7 @@ export class PublicSearchPage extends PlatformPage {
 
             .search-title {
                 margin: 0;
-                font-family: 'Fira Sans Condensed', sans-serif;
+                font-family: var(--font-sans); letter-spacing: var(--tracking-tight);
                 font-weight: 500;
                 font-size: 92px;
                 line-height: 0.96;
@@ -306,7 +306,7 @@ export class PublicSearchPage extends PlatformPage {
                 outline: none;
                 background: transparent;
                 color: var(--landing-text, var(--text-primary));
-                font: 500 20px/1.25 'Fira Sans', system-ui, sans-serif;
+                font: 500 20px/1.25 var(--font-sans);
                 letter-spacing: 0;
             }
 
@@ -381,7 +381,7 @@ export class PublicSearchPage extends PlatformPage {
                 padding: 0 13px;
                 color: var(--landing-text-subtle, var(--text-tertiary));
                 background: var(--landing-panel-bg-strong, var(--glass-bg-medium));
-                font: 500 14px/1 'Fira Sans', system-ui, sans-serif;
+                font: 500 14px/1 var(--font-sans);
                 cursor: pointer;
                 transition: background 180ms ease, color 180ms ease, transform 180ms ease;
                 white-space: nowrap;
@@ -481,7 +481,7 @@ export class PublicSearchPage extends PlatformPage {
                 overflow: hidden;
                 text-overflow: ellipsis;
                 white-space: nowrap;
-                font: 500 13px/1 'Fira Sans', system-ui, sans-serif;
+                font: 500 13px/1 var(--font-sans);
             }
 
             .file-size {
@@ -608,7 +608,7 @@ export class PublicSearchPage extends PlatformPage {
             .source-ai-markdown h4 {
                 margin: 18px 0 10px;
                 color: #fff;
-                font-family: 'Fira Sans Condensed', sans-serif;
+                font-family: var(--font-sans); letter-spacing: var(--tracking-tight);
                 font-weight: 600;
                 line-height: 1.18;
                 letter-spacing: 0;
@@ -684,7 +684,7 @@ export class PublicSearchPage extends PlatformPage {
                 border-radius: var(--radius-sm, 8px);
                 padding: 2px 6px;
                 background: rgba(255, 255, 255, 0.08);
-                font-family: var(--font-mono, ui-monospace, SFMono-Regular, Menlo, monospace);
+                font-family: var(--font-mono);
                 font-size: 0.88em;
             }
 
@@ -725,7 +725,7 @@ export class PublicSearchPage extends PlatformPage {
             .answer-error-title {
                 margin: 0;
                 color: rgba(255, 255, 255, 0.94);
-                font-family: 'Fira Sans Condensed', sans-serif;
+                font-family: var(--font-sans); letter-spacing: var(--tracking-tight);
                 font-size: 22px;
                 font-weight: 600;
                 line-height: 1.18;
@@ -748,7 +748,7 @@ export class PublicSearchPage extends PlatformPage {
                 color: #fff;
                 background: rgba(137, 149, 255, 0.28);
                 box-shadow: inset 0 0 0 1px rgba(137, 149, 255, 0.28);
-                font: 600 13px/1 'Fira Sans', system-ui, sans-serif;
+                font: 600 13px/1 var(--font-sans);
                 cursor: pointer;
                 transition: transform 180ms ease, background 180ms ease;
             }
@@ -775,7 +775,7 @@ export class PublicSearchPage extends PlatformPage {
                 white-space: pre-wrap;
                 overflow-wrap: anywhere;
                 color: rgba(245, 245, 243, 0.62);
-                font: 12px/1.45 var(--font-mono, ui-monospace, SFMono-Regular, Menlo, monospace);
+                font: 12px/1.45 var(--font-mono);
             }
 
             .answer-placeholder {
@@ -921,7 +921,7 @@ export class PublicSearchPage extends PlatformPage {
                 color: #fff;
                 background: rgba(137, 149, 255, 0.20);
                 box-shadow: inset 0 0 0 1px rgba(137, 149, 255, 0.22);
-                font: 600 13px/1 'Fira Sans', system-ui, sans-serif;
+                font: 600 13px/1 var(--font-sans);
                 cursor: pointer;
                 transition: transform 180ms ease, background 180ms ease, opacity 180ms ease;
             }
@@ -1075,7 +1075,7 @@ export class PublicSearchPage extends PlatformPage {
                 padding: 0 11px;
                 color: rgba(245, 245, 243, 0.78);
                 background: rgba(255, 255, 255, 0.06);
-                font: 500 13px/1 'Fira Sans', system-ui, sans-serif;
+                font: 500 13px/1 var(--font-sans);
             }
 
             .provider-count {

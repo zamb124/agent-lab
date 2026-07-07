@@ -49,7 +49,7 @@ export class LandingAdvantages extends PlatformElement {
             }
             
             .advantages-title {
-                font-family: 'Fira Sans Condensed', sans-serif;
+                font-family: var(--font-sans); letter-spacing: var(--tracking-tight);
                 font-size: 32px;
                 font-weight: 500;
                 line-height: 1.3;
@@ -73,7 +73,7 @@ export class LandingAdvantages extends PlatformElement {
                 background: var(--landing-panel-bg, rgba(255, 255, 255, 0.05));
                 border: 1px solid var(--landing-panel-border-strong, rgba(255, 255, 255, 0.2));
                 border-radius: 30px;
-                font-family: 'Fira Sans', sans-serif;
+                font-family: var(--font-sans);
                 font-size: 16px;
                 color: var(--landing-secondary);
                 backdrop-filter: blur(20px);

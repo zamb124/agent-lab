@@ -469,6 +469,11 @@ if [ -n "$FLOWS_CHECKBOX_RADIO_HITS" ]; then
     echo "$FLOWS_CHECKBOX_RADIO_HITS" >&2
 fi
 
+# 33. Platform typography: единый Inter + JetBrains Mono через tokens.css / platform-fonts.css.
+if ! uv run python scripts/check_platform_typography.py; then
+    fail "platform typography canon — см. scripts/check_platform_typography.py и frontend.mdc Typography canon"
+fi
+
 if [ "$ERR" -ne 0 ]; then
     exit 1
 fi

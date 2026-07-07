@@ -354,7 +354,7 @@ export class PlatformChat extends LitElement {
             flex-direction: column;
             height: 100%;
             min-height: 200px;
-            font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
+            font-family: var(--font-sans);
             color: var(--platform-chat-text);
             background: var(--platform-chat-page-bg);
             border-radius: 0;

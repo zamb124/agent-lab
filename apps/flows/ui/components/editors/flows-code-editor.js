@@ -94,7 +94,7 @@ export class FlowsCodeEditor extends PlatformElement {
                 min-width: 0;
                 min-height: 120px;
                 box-sizing: border-box;
-                font-family: var(--font-mono, monospace);
+                font-family: var(--font-mono);
             }
             :host([header-only]) {
                 min-height: 0;

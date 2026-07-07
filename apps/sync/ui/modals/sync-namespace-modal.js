@@ -50,7 +50,7 @@ export class SyncNamespaceModal extends PlatformFormModal {
                 border-radius: var(--radius-md);
                 background: var(--glass-tint-subtle, var(--glass-hover));
                 color: var(--text-primary);
-                font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+                font-family: var(--font-mono);
                 font-size: var(--text-sm);
                 margin-bottom: var(--space-3);
             }

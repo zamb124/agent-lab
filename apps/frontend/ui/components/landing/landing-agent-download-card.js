@@ -114,7 +114,7 @@ export class LandingAgentDownloadCard extends PlatformElement {
 
             .title {
                 margin: 0;
-                font-family: 'Fira Sans', sans-serif;
+                font-family: var(--font-sans);
                 font-size: 15px;
                 font-weight: 600;
                 line-height: 1.25;
@@ -123,7 +123,7 @@ export class LandingAgentDownloadCard extends PlatformElement {
 
             .subtitle {
                 margin: 0;
-                font-family: 'Fira Sans', sans-serif;
+                font-family: var(--font-sans);
                 font-size: 12px;
                 line-height: 1.35;
                 color: var(--landing-text-subtle, rgba(232, 232, 232, 0.68));

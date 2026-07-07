@@ -200,6 +200,27 @@ export class FooApp extends PlatformApp {
 
 Нижний контент-padding автоматически: `<platform-island safe-bottom>` либо страница ставит `padding-bottom: var(--app-content-bottom-padding-mobile)`.
 
+### Typography canon
+
+Единственный источник шрифтов платформы:
+
+| Слой | Файл | Назначение |
+|---|---|---|
+| Manifest | `core/frontend/static/assets/fonts/platform-typography.json` | family, пути woff2, stacks |
+| @font-face | `core/frontend/static/assets/fonts/platform-fonts.css` | self-hosted Inter + JetBrains Mono |
+| Tokens | `core/frontend/static/assets/css/tokens.css` | `@import` fonts + `--font-sans` / `--font-mono` / `--font-feature-sans` |
+
+**Смена шрифта:** обновить manifest + woff2 в `core/frontend/static/assets/fonts/<family>/` + `@font-face` в `platform-fonts.css`; stacks синхронизируются через manifest (CI: `scripts/check_platform_typography.py`).
+
+**Запреты:**
+
+- Локальные `@font-face` / `<link>` на шрифты в `apps/*/ui/index.html` — только `tokens.css` + `reset.css`.
+- Hardcoded `font-family: 'Fira Sans'`, `'Onest'`, `'SF Pro Display'`, `'Geist'` в `apps/**` и `core/frontend/static/lib/**` — только `var(--font-sans)` / `var(--font-mono)`.
+- Fallback-стеки `var(--font-sans, …)` / `var(--font-mono, …)` — только голый `var(--font-sans)` / `var(--font-mono)`.
+- Legacy tokens `--font-main`, `--font-condensed`, bundle `fira-sans*` — удалены, CI fail.
+- Отдельные condensed/display font-family — `--text-display-*`, `--tracking-tight`, `--font-semibold`.
+- CI: `scripts/check_platform_typography.py` (п.33 `check_ui_canon.sh`), unit: `platform-typography.spec.js`.
+
 ### i18n
 
 Каждый сервис обязан содержать в своём bundle (`core/i18n/translations/{ru,en}/<ns>.json`) парные ключи:

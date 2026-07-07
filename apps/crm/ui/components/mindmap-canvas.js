@@ -400,7 +400,7 @@ export class CRMMindmapCanvas extends PlatformElement {
                 opacity: 0.92;
             }
             .mm-edge-label {
-                font-family: var(--font-sans, system-ui);
+                font-family: var(--font-sans);
                 font-size: 11px;
                 font-weight: 600;
                 fill: var(--text-primary);
@@ -427,7 +427,7 @@ export class CRMMindmapCanvas extends PlatformElement {
                 padding: 0 12px 0 8px;
                 box-sizing: border-box;
                 border-radius: ${unsafeCSS(`${MM_NODE_CORNER_RX}px`)};
-                font-family: var(--font-sans, system-ui);
+                font-family: var(--font-sans);
                 font-size: 13px;
                 font-weight: 600;
                 color: var(--text-primary);

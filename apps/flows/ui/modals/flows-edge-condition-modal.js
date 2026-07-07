@@ -94,7 +94,7 @@ export class FlowsEdgeConditionModal extends PlatformFormModal {
             .condition-subtitle {
                 font-size: var(--text-sm);
                 color: var(--text-tertiary);
-                font-family: var(--font-mono, monospace);
+                font-family: var(--font-mono);
             }
 
             .condition-mode {
@@ -169,7 +169,7 @@ export class FlowsEdgeConditionModal extends PlatformFormModal {
                 letter-spacing: 0.05em;
             }
             .preview-code {
-                font-family: var(--font-mono, monospace);
+                font-family: var(--font-mono);
                 font-size: var(--text-sm);
                 color: var(--accent);
                 padding: var(--space-2) var(--space-3);

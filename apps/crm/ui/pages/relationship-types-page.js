@@ -199,7 +199,7 @@ export class CRMRelationshipTypesPage extends PlatformPage {
             .type-id {
                 font-size: var(--text-xs);
                 color: var(--text-tertiary);
-                font-family: var(--font-mono, ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace);
+                font-family: var(--font-mono);
             }
 
             .type-desc {

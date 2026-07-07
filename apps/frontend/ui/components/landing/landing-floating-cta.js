@@ -48,7 +48,7 @@ export class LandingFloatingCta extends PlatformElement {
                 gap: 12px;
             }
             .text {
-                font-family: 'Fira Sans', sans-serif;
+                font-family: var(--font-sans);
                 font-size: 15px;
                 line-height: 1.45;
                 color: var(--landing-secondary, #e8e8e8);
@@ -68,7 +68,7 @@ export class LandingFloatingCta extends PlatformElement {
                 border-radius: 999px;
                 background: var(--landing-primary, #5768fe);
                 color: #fff;
-                font-family: 'Fira Sans', sans-serif;
+                font-family: var(--font-sans);
                 font-size: 14px;
                 font-weight: 600;
                 text-decoration: none;
@@ -77,7 +77,7 @@ export class LandingFloatingCta extends PlatformElement {
                 border: none;
                 background: transparent;
                 color: var(--landing-text-subtle, rgba(232, 232, 232, 0.65));
-                font-family: 'Fira Sans', sans-serif;
+                font-family: var(--font-sans);
                 font-size: 13px;
                 cursor: pointer;
                 text-decoration: underline;

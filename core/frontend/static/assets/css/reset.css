@@ -42,6 +42,7 @@ body {
     background-attachment: fixed;
     color: var(--text-primary);
     font-family: var(--font-sans);
+    font-feature-settings: var(--font-feature-sans);
     font-size: var(--text-base);
     line-height: var(--leading-normal);
     letter-spacing: var(--tracking-normal);

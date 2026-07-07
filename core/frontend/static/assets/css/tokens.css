@@ -5,6 +5,7 @@
  */
 
 @import url('../../lib/chat/chat-tokens.css');
+@import url('../fonts/platform-fonts.css');
 
 :root {
     /* ========== RESPONSIVE BREAKPOINTS ========== */
@@ -243,8 +244,9 @@
     
     /* ========== ТИПОГРАФИКА ========== */
     
-    --font-sans: 'Onest', 'Inter', 'SF Pro Display', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-    --font-mono: 'SF Mono', 'JetBrains Mono', 'Fira Code', monospace;
+    --font-sans: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    --font-mono: 'JetBrains Mono', ui-monospace, 'SF Mono', monospace;
+    --font-feature-sans: 'cv02' 1, 'cv03' 1, 'cv04' 1, 'cv11' 1;
     
     --text-xs: 0.75rem;
     --text-sm: 0.8125rem;

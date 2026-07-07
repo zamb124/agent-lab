@@ -62,7 +62,7 @@ export class FlowsBaseResourceEditor extends PlatformElement {
                 border: 1px solid var(--glass-border-subtle);
                 border-radius: var(--radius-sm);
                 color: var(--text-secondary);
-                font-family: var(--font-mono, monospace);
+                font-family: var(--font-mono);
             }
             .field { display: flex; flex-direction: column; gap: var(--space-1); }
             .field label { font-size: var(--text-sm); color: var(--text-secondary); }

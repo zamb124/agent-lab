@@ -65,7 +65,7 @@ export class LandingHero extends PlatformElement {
                 top: 50%;
                 left: 50%;
                 transform: translate(-50%, -50%);
-                font-family: 'Fira Sans Condensed', sans-serif;
+                font-family: var(--font-sans); letter-spacing: var(--tracking-tight);
                 font-weight: 500;
                 font-size: 280px;
                 line-height: 320px;
@@ -132,7 +132,7 @@ export class LandingHero extends PlatformElement {
                 outline: none;
                 background: transparent;
                 color: var(--landing-text, #fff);
-                font-family: 'Fira Sans', sans-serif;
+                font-family: var(--font-sans);
                 font-weight: 500;
                 font-size: 20px;
                 line-height: 1.2;
@@ -196,7 +196,7 @@ export class LandingHero extends PlatformElement {
                 padding: 0 13px;
                 color: var(--landing-text-subtle, rgba(232, 232, 232, 0.74));
                 background: var(--landing-panel-bg-strong, rgba(255, 255, 255, 0.07));
-                font-family: 'Fira Sans', sans-serif;
+                font-family: var(--font-sans);
                 font-weight: 500;
                 font-size: 14px;
                 line-height: 1;
@@ -273,7 +273,7 @@ export class LandingHero extends PlatformElement {
                 overflow: hidden;
                 text-overflow: ellipsis;
                 white-space: nowrap;
-                font: 500 13px/1 'Fira Sans', sans-serif;
+                font: 500 13px/1 var(--font-sans);
             }
 
             .hero-file-size {
@@ -305,7 +305,7 @@ export class LandingHero extends PlatformElement {
                 position: absolute;
                 bottom: 235px;
                 left: 50px;
-                font-family: 'Fira Sans', sans-serif;
+                font-family: var(--font-sans);
                 font-size: 22px;
                 line-height: 1.4;
                 color: var(--landing-secondary, #E8E8E8);
@@ -317,7 +317,7 @@ export class LandingHero extends PlatformElement {
                 position: absolute;
                 bottom: 235px;
                 right: 50px;
-                font-family: 'Fira Sans', sans-serif;
+                font-family: var(--font-sans);
                 font-size: 22px;
                 line-height: 1.4;
                 color: var(--landing-secondary, #E8E8E8);
@@ -343,7 +343,7 @@ export class LandingHero extends PlatformElement {
             .hero-cta {
                 padding: 12px 24px;
                 border-radius: 40px;
-                font-family: 'Fira Sans', sans-serif;
+                font-family: var(--font-sans);
                 font-weight: 500;
                 font-size: 20px;
                 line-height: 24px;

@@ -19,7 +19,7 @@ export class LandingCases extends PlatformElement {
                 margin: 0 auto;
             }
             h2 {
-                font-family: 'Fira Sans Condensed', sans-serif;
+                font-family: var(--font-sans); letter-spacing: var(--tracking-tight);
                 font-size: clamp(26px, 3.5vw, 40px);
                 margin: 0 0 12px;
                 color: var(--landing-secondary, #e8e8e8);
@@ -48,14 +48,14 @@ export class LandingCases extends PlatformElement {
                 background: var(--landing-panel-bg, rgba(255, 255, 255, 0.04));
             }
             .metric {
-                font-family: 'Fira Sans Condensed', sans-serif;
+                font-family: var(--font-sans); letter-spacing: var(--tracking-tight);
                 font-size: 14px;
                 font-weight: 600;
                 color: var(--landing-primary, #5768fe);
                 margin-bottom: 10px;
             }
             h3 {
-                font-family: 'Fira Sans Condensed', sans-serif;
+                font-family: var(--font-sans); letter-spacing: var(--tracking-tight);
                 font-size: 20px;
                 margin: 0 0 10px;
                 color: var(--landing-secondary, #e8e8e8);

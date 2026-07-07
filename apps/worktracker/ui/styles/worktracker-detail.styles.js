@@ -29,7 +29,7 @@ export const worktrackerDetailContentStyles = css`
     }
     .wt-id-chip {
         font-size: var(--text-xs);
-        font-family: var(--font-mono, monospace);
+        font-family: var(--font-mono);
         color: var(--text-tertiary);
         padding: var(--space-1) var(--space-2);
         border-radius: var(--radius-md);

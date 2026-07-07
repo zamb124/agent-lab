@@ -47,8 +47,10 @@ def _require_mapping(raw: object, label: str) -> JsonObject:
 def load_catalog() -> tuple[UiKitCatalogEntry, ...]:
     if not _CATALOG_PATH.is_file():
         raise FileNotFoundError(f"UI Kit catalog not found: {_CATALOG_PATH}")
-    raw = yaml.safe_load(_CATALOG_PATH.read_text(encoding="utf-8"))
-    catalog = _require_mapping(raw, "catalog.yaml")
+    catalog = _require_mapping(
+        yaml.safe_load(_CATALOG_PATH.read_text(encoding="utf-8")) or {},
+        "catalog.yaml",
+    )
     entries_raw = catalog.get("components")
     if not isinstance(entries_raw, list):
         raise ValueError("catalog.yaml components must be a list")
@@ -85,8 +87,10 @@ def load_manifest(component: str) -> UiKitManifest:
     manifest_path = _DS_ROOT / "components" / component / "manifest.yaml"
     if not manifest_path.is_file():
         raise FileNotFoundError(f"manifest not found for {component}: {manifest_path}")
-    raw = yaml.safe_load(manifest_path.read_text(encoding="utf-8"))
-    manifest = _require_mapping(raw, f"{component} manifest.yaml")
+    manifest = _require_mapping(
+        yaml.safe_load(manifest_path.read_text(encoding="utf-8")) or {},
+        f"{component} manifest.yaml",
+    )
     import_path = manifest.get("import")
     if not isinstance(import_path, str) or not import_path:
         raise ValueError(f"{component}: manifest import is required")

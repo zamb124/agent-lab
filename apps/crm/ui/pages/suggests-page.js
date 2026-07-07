@@ -176,7 +176,7 @@ export class CRMSuggestsPage extends CRMNamespacePage {
                 gap: var(--space-2);
                 color: var(--text-tertiary);
                 font-size: var(--text-xs);
-                font-family: var(--font-mono, ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace);
+                font-family: var(--font-mono);
             }
 
             .list {
@@ -239,7 +239,7 @@ export class CRMSuggestsPage extends CRMNamespacePage {
             .suggest-id {
                 color: var(--text-tertiary);
                 font-size: var(--text-xs);
-                font-family: var(--font-mono, ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace);
+                font-family: var(--font-mono);
                 overflow: hidden;
                 text-overflow: ellipsis;
                 white-space: nowrap;

@@ -44,7 +44,8 @@ export class PlatformShellPage extends PlatformElement {
             }
 
             .code {
-                font-family: 'Fira Sans Condensed', sans-serif;
+                font-family: var(--font-sans);
+                letter-spacing: var(--tracking-tight);
                 font-size: 4rem;
                 font-weight: 700;
                 line-height: 1;

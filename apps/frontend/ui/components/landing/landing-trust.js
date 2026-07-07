@@ -20,7 +20,7 @@ export class LandingTrust extends PlatformElement {
                 margin: 0 auto;
             }
             h2 {
-                font-family: 'Fira Sans Condensed', sans-serif;
+                font-family: var(--font-sans); letter-spacing: var(--tracking-tight);
                 font-size: clamp(28px, 4vw, 44px);
                 font-weight: 500;
                 color: var(--landing-secondary, #e8e8e8);
@@ -45,14 +45,14 @@ export class LandingTrust extends PlatformElement {
                 backdrop-filter: blur(12px);
             }
             h3 {
-                font-family: 'Fira Sans Condensed', sans-serif;
+                font-family: var(--font-sans); letter-spacing: var(--tracking-tight);
                 font-size: 20px;
                 margin: 0 0 12px;
                 color: var(--landing-primary, #5768fe);
             }
             p {
                 margin: 0;
-                font-family: 'Fira Sans', sans-serif;
+                font-family: var(--font-sans);
                 font-size: 15px;
                 line-height: 1.55;
                 color: var(--landing-text-soft, rgba(232, 232, 232, 0.85));

@@ -76,9 +76,6 @@
     }
     </script>
     
-    <link rel="stylesheet" href="/static/core/assets/fonts/fira-sans.css">
-    <link rel="stylesheet" href="/static/core/assets/fonts/fira-sans-condensed.css">
-    
     <!-- Import Map для Lit и библиотеки -->
     <script type="importmap">
     {
@@ -126,7 +123,7 @@
             background: var(--bg-gradient, linear-gradient(135deg, #1a1a2e 0%, #16213e 25%, #0f3460 50%, #1a1a2e 75%, #16213e 100%));
             z-index: 9999;
             color: var(--text-secondary, rgba(255, 255, 255, 0.5));
-            font-family: 'Fira Sans', sans-serif;
+            font-family: var(--font-sans);
         }
 
         frontend-app:not(:defined)::after {

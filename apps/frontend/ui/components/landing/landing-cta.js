@@ -56,7 +56,7 @@ export class LandingCta extends PlatformElement {
             }
 
             .cta-title {
-                font-family: 'Fira Sans Condensed', sans-serif;
+                font-family: var(--font-sans); letter-spacing: var(--tracking-tight);
                 font-size: 40px;
                 font-weight: 500;
                 line-height: 1.2;
@@ -74,7 +74,7 @@ export class LandingCta extends PlatformElement {
                 color: var(--landing-secondary);
                 border: none;
                 border-radius: 40px;
-                font-family: 'Fira Sans', sans-serif;
+                font-family: var(--font-sans);
                 font-weight: 500;
                 font-size: 20px;
                 cursor: pointer;

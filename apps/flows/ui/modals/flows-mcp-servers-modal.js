@@ -278,7 +278,7 @@ export class FlowsMcpServersModal extends PlatformModal {
                 color: var(--text-primary);
                 font: inherit;
             }
-            .mcp-field textarea { min-height: 120px; font-family: var(--font-mono, ui-monospace, monospace); font-size: var(--text-sm); }
+            .mcp-field textarea { min-height: 120px; font-family: var(--font-mono); font-size: var(--text-sm); }
             .mcp-header-presets {
                 display: grid;
                 grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));

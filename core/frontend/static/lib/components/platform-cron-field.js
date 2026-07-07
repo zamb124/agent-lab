@@ -26,7 +26,7 @@ export class PlatformCronField extends PlatformElement {
                 gap: var(--space-2, 8px);
             }
             .custom {
-                font-family: var(--font-mono, ui-monospace, monospace);
+                font-family: var(--font-mono);
                 font-size: var(--text-sm, 14px);
             }
         `,

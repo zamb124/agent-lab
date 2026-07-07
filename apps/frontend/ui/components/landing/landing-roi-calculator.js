@@ -33,7 +33,7 @@ export class LandingRoiCalculator extends PlatformElement {
                 background: radial-gradient(circle at top right, rgba(87, 104, 254, 0.18), var(--landing-panel-bg-strong, rgba(15, 15, 15, 0.95)));
             }
             h2 {
-                font-family: 'Fira Sans Condensed', sans-serif;
+                font-family: var(--font-sans); letter-spacing: var(--tracking-tight);
                 font-size: clamp(26px, 3.5vw, 36px);
                 margin: 0 0 12px;
                 color: var(--landing-secondary, #e8e8e8);
@@ -51,7 +51,7 @@ export class LandingRoiCalculator extends PlatformElement {
                 display: flex;
                 justify-content: space-between;
                 align-items: baseline;
-                font-family: 'Fira Sans', sans-serif;
+                font-family: var(--font-sans);
                 font-size: 14px;
                 color: var(--landing-secondary, #e8e8e8);
                 margin-bottom: 10px;
@@ -90,7 +90,7 @@ export class LandingRoiCalculator extends PlatformElement {
                 margin-bottom: 6px;
             }
             .tile strong {
-                font-family: 'Fira Sans Condensed', sans-serif;
+                font-family: var(--font-sans); letter-spacing: var(--tracking-tight);
                 font-size: 22px;
                 color: var(--landing-secondary, #e8e8e8);
             }

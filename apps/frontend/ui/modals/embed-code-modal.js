@@ -37,7 +37,7 @@ export class FrontendEmbedCodeModal extends PlatformModal {
                 margin-bottom: var(--space-2);
             }
             pre {
-                font-family: var(--font-mono, ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace);
+                font-family: var(--font-mono);
                 font-size: var(--text-xs);
                 background: var(--glass-solid-subtle);
                 padding: var(--space-3) var(--space-4);

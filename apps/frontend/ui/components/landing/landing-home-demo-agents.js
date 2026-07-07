@@ -37,14 +37,14 @@ export class LandingHomeDemoAgents extends PlatformElement {
                 margin-bottom: var(--space-8);
             }
             h2 {
-                font-family: 'Fira Sans Condensed', sans-serif;
+                font-family: var(--font-sans); letter-spacing: var(--tracking-tight);
                 font-size: clamp(1.5rem, 4vw, 2.25rem);
                 font-weight: 600;
                 margin: 0 0 var(--space-3);
                 line-height: 1.2;
             }
             .lede {
-                font-family: 'Fira Sans', sans-serif;
+                font-family: var(--font-sans);
                 font-size: var(--text-md);
                 line-height: 1.6;
                 color: var(--landing-text-subtle, rgba(255, 255, 255, 0.72));
@@ -101,7 +101,7 @@ export class LandingHomeDemoAgents extends PlatformElement {
                 justify-content: center;
                 gap: var(--space-4);
                 min-height: 160px;
-                font-family: 'Fira Sans', sans-serif;
+                font-family: var(--font-sans);
                 color: var(--landing-text-subtle, rgba(255, 255, 255, 0.7));
             }
             .err {

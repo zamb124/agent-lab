@@ -195,7 +195,7 @@ export class FlowsCodeDocsModal extends PlatformModal {
                 text-decoration: underline;
             }
             .docs-md code {
-                font-family: var(--font-mono, ui-monospace, monospace);
+                font-family: var(--font-mono);
                 font-size: 0.9em;
                 background: var(--glass-tint-medium);
                 padding: 0.1em 0.35em;

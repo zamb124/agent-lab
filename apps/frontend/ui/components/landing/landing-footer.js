@@ -35,7 +35,7 @@ export class LandingFooter extends PlatformElement {
             }
             
             .footer-email {
-                font-family: 'Fira Sans Condensed', sans-serif;
+                font-family: var(--font-sans); letter-spacing: var(--tracking-tight);
                 font-size: 28px;
                 font-weight: 700;
                 color: var(--landing-secondary);
@@ -50,7 +50,7 @@ export class LandingFooter extends PlatformElement {
             }
             
             .footer-logo {
-                font-family: 'Fira Sans Condensed', sans-serif;
+                font-family: var(--font-sans); letter-spacing: var(--tracking-tight);
                 font-size: clamp(2rem, 12vw, 6.25rem);
                 font-weight: 500;
                 line-height: 1;
@@ -66,14 +66,14 @@ export class LandingFooter extends PlatformElement {
             }
 
             .footer-requisites h3 {
-                font-family: 'Fira Sans Condensed', sans-serif;
+                font-family: var(--font-sans); letter-spacing: var(--tracking-tight);
                 font-size: 18px;
                 margin: 0 0 12px;
                 color: var(--landing-secondary, #e8e8e8);
             }
 
             .footer-requisites p {
-                font-family: 'Fira Sans', sans-serif;
+                font-family: var(--font-sans);
                 font-size: 14px;
                 line-height: 1.55;
                 color: var(--landing-text-subtle, rgba(232, 232, 232, 0.72));
@@ -87,7 +87,7 @@ export class LandingFooter extends PlatformElement {
             }
             
             .footer-link {
-                font-family: 'Fira Sans Condensed', sans-serif;
+                font-family: var(--font-sans); letter-spacing: var(--tracking-tight);
                 font-size: 18px;
                 color: var(--landing-secondary);
                 text-decoration: underline;
@@ -107,7 +107,7 @@ export class LandingFooter extends PlatformElement {
             }
             
             .footer-copy {
-                font-family: 'Fira Sans Condensed', sans-serif;
+                font-family: var(--font-sans); letter-spacing: var(--tracking-tight);
                 font-size: 16px;
                 color: var(--landing-text-subtle, rgba(232, 232, 232, 0.6));
                 margin: 0;
@@ -120,7 +120,7 @@ export class LandingFooter extends PlatformElement {
             }
             
             .footer-legal-link {
-                font-family: 'Fira Sans Condensed', sans-serif;
+                font-family: var(--font-sans); letter-spacing: var(--tracking-tight);
                 font-size: 14px;
                 color: var(--landing-secondary);
                 text-decoration: underline;

@@ -23,7 +23,7 @@ export class LandingFaq extends PlatformElement {
             }
             
             .faq-title {
-                font-family: 'Fira Sans Condensed', sans-serif;
+                font-family: var(--font-sans); letter-spacing: var(--tracking-tight);
                 font-size: 32px;
                 font-weight: 500;
                 color: var(--landing-secondary);
@@ -53,7 +53,7 @@ export class LandingFaq extends PlatformElement {
                 justify-content: space-between;
                 align-items: center;
                 gap: 20px;
-                font-family: 'Fira Sans', sans-serif;
+                font-family: var(--font-sans);
                 font-size: 18px;
                 font-weight: 500;
                 color: var(--landing-secondary);
@@ -91,7 +91,7 @@ export class LandingFaq extends PlatformElement {
             }
             
             .faq-answer-text {
-                font-family: 'Fira Sans', sans-serif;
+                font-family: var(--font-sans);
                 font-size: 16px;
                 line-height: 1.7;
                 color: var(--landing-text-soft, rgba(232, 232, 232, 0.8));

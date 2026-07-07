@@ -160,7 +160,7 @@ export class CRMNamespaceIntegrationsPage extends PlatformPage {
             .callback-url {
                 flex: 1;
                 min-width: 0;
-                font-family: var(--font-mono, ui-monospace, monospace);
+                font-family: var(--font-mono);
                 font-size: var(--text-xs);
                 word-break: break-all;
                 padding: var(--space-2) var(--space-3);

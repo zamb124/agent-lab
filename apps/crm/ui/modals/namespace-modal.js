@@ -151,8 +151,7 @@ export class CRMNamespaceModal extends PlatformFormModal {
                 padding: 2px var(--space-2);
                 color: var(--text-tertiary);
                 font-size: var(--text-xs);
-                font-family: ui-monospace, SFMono-Regular, Menlo, Monaco,
-                             Consolas, "Liberation Mono", "Courier New", monospace;
+                font-family: var(--font-mono);
             }
 
             .hint {
@@ -203,8 +202,7 @@ export class CRMNamespaceModal extends PlatformFormModal {
                 border-radius: var(--radius-md);
                 background: var(--crm-surface-muted);
                 color: var(--text-primary);
-                font-family: ui-monospace, SFMono-Regular, Menlo, Monaco,
-                             Consolas, "Liberation Mono", "Courier New", monospace;
+                font-family: var(--font-mono);
                 font-size: var(--text-sm);
             }
 

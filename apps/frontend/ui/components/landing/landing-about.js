@@ -26,7 +26,7 @@ export class LandingAbout extends PlatformElement {
             }
             
             .about-title {
-                font-family: 'Fira Sans Condensed', sans-serif;
+                font-family: var(--font-sans); letter-spacing: var(--tracking-tight);
                 font-size: 32px;
                 font-weight: 500;
                 line-height: 1.3;
@@ -35,7 +35,7 @@ export class LandingAbout extends PlatformElement {
             }
             
             .about-description {
-                font-family: 'Fira Sans', sans-serif;
+                font-family: var(--font-sans);
                 font-size: 16px;
                 line-height: 1.6;
                 color: var(--landing-text-soft, rgba(232, 232, 232, 0.8));
@@ -66,7 +66,7 @@ export class LandingAbout extends PlatformElement {
             }
             
             .stat-value {
-                font-family: 'Fira Sans Condensed', sans-serif;
+                font-family: var(--font-sans); letter-spacing: var(--tracking-tight);
                 font-size: 48px;
                 font-weight: 700;
                 color: var(--landing-primary);
@@ -74,7 +74,7 @@ export class LandingAbout extends PlatformElement {
             }
             
             .stat-label {
-                font-family: 'Fira Sans', sans-serif;
+                font-family: var(--font-sans);
                 font-size: 18px;
                 color: var(--landing-secondary);
                 margin: 0;
@@ -87,7 +87,7 @@ export class LandingAbout extends PlatformElement {
             }
             
             .integrations-title {
-                font-family: 'Fira Sans', sans-serif;
+                font-family: var(--font-sans);
                 font-size: 20px;
                 color: var(--landing-secondary);
                 text-align: center;

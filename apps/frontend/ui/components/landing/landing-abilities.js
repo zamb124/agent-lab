@@ -30,7 +30,7 @@ export class LandingAbilities extends PlatformElement {
             }
             
             .abilities-title {
-                font-family: 'Fira Sans Condensed', sans-serif;
+                font-family: var(--font-sans); letter-spacing: var(--tracking-tight);
                 font-size: 32px;
                 font-weight: 500;
                 color: var(--landing-secondary);
@@ -86,7 +86,7 @@ export class LandingAbilities extends PlatformElement {
             }
             
             .ability-name {
-                font-family: 'Fira Sans Condensed', sans-serif;
+                font-family: var(--font-sans); letter-spacing: var(--tracking-tight);
                 font-size: 28px;
                 font-weight: 500;
                 color: var(--landing-primary);
@@ -94,7 +94,7 @@ export class LandingAbilities extends PlatformElement {
             }
             
             .ability-description {
-                font-family: 'Fira Sans', sans-serif;
+                font-family: var(--font-sans);
                 font-size: 16px;
                 line-height: 1.6;
                 color: var(--landing-text-soft, rgba(232, 232, 232, 0.8));
@@ -108,7 +108,7 @@ export class LandingAbilities extends PlatformElement {
             }
             
             .ability-features li {
-                font-family: 'Fira Sans', sans-serif;
+                font-family: var(--font-sans);
                 font-size: 14px;
                 color: var(--landing-secondary);
                 padding-left: 24px;

@@ -23,7 +23,7 @@ export class LandingPlans extends PlatformElement {
             }
             
             .plans-title {
-                font-family: 'Fira Sans Condensed', sans-serif;
+                font-family: var(--font-sans); letter-spacing: var(--tracking-tight);
                 font-size: 32px;
                 font-weight: 500;
                 color: var(--landing-secondary);
@@ -83,7 +83,7 @@ export class LandingPlans extends PlatformElement {
             }
             
             .plan-name {
-                font-family: 'Fira Sans Condensed', sans-serif;
+                font-family: var(--font-sans); letter-spacing: var(--tracking-tight);
                 font-size: 36px;
                 font-weight: 500;
                 color: var(--landing-secondary);
@@ -91,7 +91,7 @@ export class LandingPlans extends PlatformElement {
             }
 
             .plan-price {
-                font-family: 'Fira Sans Condensed', sans-serif;
+                font-family: var(--font-sans); letter-spacing: var(--tracking-tight);
                 font-size: 22px;
                 font-weight: 600;
                 color: var(--landing-primary);
@@ -103,7 +103,7 @@ export class LandingPlans extends PlatformElement {
             }
             
             .plan-description {
-                font-family: 'Fira Sans', sans-serif;
+                font-family: var(--font-sans);
                 font-size: 16px;
                 line-height: 1.6;
                 color: var(--landing-text-soft, rgba(232, 232, 232, 0.8));
@@ -117,7 +117,7 @@ export class LandingPlans extends PlatformElement {
             }
             
             .plan-features li {
-                font-family: 'Fira Sans', sans-serif;
+                font-family: var(--font-sans);
                 font-size: 14px;
                 color: var(--landing-secondary);
                 padding-left: 28px;
@@ -136,7 +136,7 @@ export class LandingPlans extends PlatformElement {
             }
             
             .plan-target {
-                font-family: 'Fira Sans', sans-serif;
+                font-family: var(--font-sans);
                 font-size: 14px;
                 color: var(--landing-text-subtle, rgba(232, 232, 232, 0.6));
                 margin: 0 0 24px 0;
@@ -148,7 +148,7 @@ export class LandingPlans extends PlatformElement {
                 width: 100%;
                 padding: 16px 32px;
                 border-radius: 40px;
-                font-family: 'Fira Sans', sans-serif;
+                font-family: var(--font-sans);
                 font-weight: 500;
                 font-size: 18px;
                 cursor: pointer;

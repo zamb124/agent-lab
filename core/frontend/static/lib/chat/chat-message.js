@@ -412,7 +412,7 @@ export class FlowsChatMessage extends PlatformElement {
         }
 
         .markdown code {
-            font-family: var(--font-mono, ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace);
+            font-family: var(--font-mono);
             font-size: 0.875em;
             padding: 2px 6px;
             border-radius: 4px;

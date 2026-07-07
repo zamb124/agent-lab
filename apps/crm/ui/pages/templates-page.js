@@ -242,7 +242,7 @@ export class CRMTemplatesPage extends PlatformPage {
             }
 
             .mono {
-                font-family: var(--font-mono, ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace);
+                font-family: var(--font-mono);
             }
 
             .empty {

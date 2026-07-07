@@ -60,7 +60,7 @@ export class PlatformLogViewer extends PlatformElement {
                 display: flex;
                 flex-direction: column;
                 gap: 0;
-                font-family: var(--font-mono, monospace);
+                font-family: var(--font-mono);
                 font-size: 12px;
                 overflow-y: auto;
                 max-height: calc(100vh - 260px);
@@ -145,7 +145,7 @@ export class PlatformLogViewer extends PlatformElement {
                 margin: 0;
                 white-space: pre-wrap;
                 word-break: break-word;
-                font-family: var(--font-mono, monospace);
+                font-family: var(--font-mono);
                 font-size: 11px;
                 color: var(--text-secondary);
             }

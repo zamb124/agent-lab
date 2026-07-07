@@ -29,9 +29,6 @@
     --landing-section-gradient: var(--marketing-hero-bg);
     --landing-reviews-gradient: var(--marketing-footer-bg);
 
-    --font-condensed: var(--font-sans);
-    --font-main: var(--font-sans);
-
     --breakpoint-mobile: 428px;
     --breakpoint-tablet: 768px;
     --breakpoint-desktop: 1440px;
@@ -113,7 +110,7 @@ html {
 }
 
 body {
-    font-family: var(--font-main);
+    font-family: var(--font-sans);
     color: var(--landing-text);
     background: var(--landing-bg);
     line-height: 1.6;
@@ -121,7 +118,7 @@ body {
 }
 
 h1, h2, h3, h4, h5, h6 {
-    font-family: var(--font-condensed);
+    font-family: var(--font-sans);
     font-weight: 500;
     line-height: 1.2;
 }
@@ -181,7 +178,7 @@ a:hover {
     color: var(--platform-btn-primary-text);
     padding: 12px 24px;
     border-radius: var(--btn-radius);
-    font-family: var(--font-main);
+    font-family: var(--font-sans);
     font-weight: 500;
     font-size: 20px;
     border: none;
@@ -203,7 +200,7 @@ a:hover {
     border: 1px solid var(--glass-border-medium);
     padding: 12px 24px;
     border-radius: var(--btn-radius);
-    font-family: var(--font-main);
+    font-family: var(--font-sans);
     font-weight: 500;
     font-size: 20px;
     cursor: pointer;

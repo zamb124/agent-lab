@@ -312,7 +312,7 @@ export class FlowsLibraryPickerModal extends PlatformModal {
                 color: var(--text-primary);
             }
             .lib-md code {
-                font-family: var(--font-mono, ui-monospace, monospace);
+                font-family: var(--font-mono);
                 font-size: 0.92em;
                 background: var(--glass-tint-medium);
                 padding: 0.1em 0.25em;

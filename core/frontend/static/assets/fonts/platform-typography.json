@@ -1,0 +1,41 @@
+{
+  "sans": {
+    "family": "Inter",
+    "license": "OFL-1.1",
+    "faces": [
+      {
+        "path": "inter/InterVariable.woff2",
+        "weight": "100 900",
+        "style": "normal"
+      },
+      {
+        "path": "inter/InterVariable-Italic.woff2",
+        "weight": "100 900",
+        "style": "italic"
+      }
+    ]
+  },
+  "mono": {
+    "family": "JetBrains Mono",
+    "license": "OFL-1.1",
+    "faces": [
+      {
+        "path": "jetbrains-mono/JetBrainsMono-Variable.woff2",
+        "weight": "100 800",
+        "style": "normal"
+      },
+      {
+        "path": "jetbrains-mono/JetBrainsMono-Italic-Variable.woff2",
+        "weight": "100 800",
+        "style": "italic"
+      }
+    ]
+  },
+  "stacks": {
+    "sans": "'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif",
+    "mono": "'JetBrains Mono', ui-monospace, 'SF Mono', monospace"
+  },
+  "features": {
+    "sans": "'cv02' 1, 'cv03' 1, 'cv04' 1, 'cv11' 1"
+  }
+}

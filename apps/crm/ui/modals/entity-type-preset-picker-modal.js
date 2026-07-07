@@ -268,7 +268,7 @@ export class CRMEntityTypePresetPickerModal extends PlatformModal {
                 white-space: nowrap;
             }
             .mono {
-                font-family: ui-monospace, monospace;
+                font-family: var(--font-mono);
                 font-size: var(--text-xs);
                 color: var(--text-tertiary);
             }

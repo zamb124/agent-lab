@@ -109,7 +109,7 @@ export class WorktrackerQueuesPage extends PlatformPage {
                 margin-top: 2px;
                 font-size: var(--text-xs);
                 color: var(--text-tertiary);
-                font-family: var(--font-mono, ui-monospace, monospace);
+                font-family: var(--font-mono);
             }
             .empty {
                 padding: var(--space-8) var(--space-4);

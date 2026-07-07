@@ -477,7 +477,7 @@ export class PlatformDatePicker extends PlatformElement {
             flex-direction: column;
             gap: 12px;
             pointer-events: auto;
-            font-family: var(--font-family, system-ui, sans-serif);
+            font-family: var(--font-sans);
             color: var(--text-primary, #1a1a1a);
             box-sizing: border-box;
         }

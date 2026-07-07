@@ -1,0 +1,37 @@
+/*
+ * Platform typography — self-hosted @font-face bundle.
+ * Canonical families and paths: platform-typography.json
+ * Stacks and features: tokens.css (--font-sans, --font-mono, --font-feature-sans)
+ */
+
+@font-face {
+    font-family: 'Inter';
+    src: url('./inter/InterVariable.woff2') format('woff2');
+    font-weight: 100 900;
+    font-style: normal;
+    font-display: swap;
+}
+
+@font-face {
+    font-family: 'Inter';
+    src: url('./inter/InterVariable-Italic.woff2') format('woff2');
+    font-weight: 100 900;
+    font-style: italic;
+    font-display: swap;
+}
+
+@font-face {
+    font-family: 'JetBrains Mono';
+    src: url('./jetbrains-mono/JetBrainsMono-Variable.woff2') format('woff2');
+    font-weight: 100 800;
+    font-style: normal;
+    font-display: swap;
+}
+
+@font-face {
+    font-family: 'JetBrains Mono';
+    src: url('./jetbrains-mono/JetBrainsMono-Italic-Variable.woff2') format('woff2');
+    font-weight: 100 800;
+    font-style: italic;
+    font-display: swap;
+}

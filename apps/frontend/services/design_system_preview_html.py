@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import html
 import json
+
+from core.frontend.viewport import PLATFORM_MOBILE_VIEWPORT_CONTENT
 from core.types import JsonObject
 
 _IMPORT_MAP_SCRIPT = (

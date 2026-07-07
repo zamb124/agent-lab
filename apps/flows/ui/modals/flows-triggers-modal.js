@@ -43,7 +43,7 @@ export class FlowsTriggersModal extends PlatformModal {
                 padding: var(--space-2);
                 border-radius: var(--radius-md);
                 color: var(--text-primary);
-                font-family: var(--font-mono, ui-monospace, monospace);
+                font-family: var(--font-mono);
                 font-size: var(--text-xs);
                 white-space: pre-wrap;
                 word-break: break-word;

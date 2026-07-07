@@ -1277,7 +1277,11 @@ export class SyncCallOverlayModal extends PlatformModal {
         doc.body.style.background = '#0c0c12';
         doc.body.style.color = '#fff';
         doc.body.style.padding = '8px';
-        doc.body.style.fontFamily = 'system-ui, sans-serif';
+        const sansStack = getComputedStyle(document.documentElement).getPropertyValue('--font-sans').trim();
+        if (!sansStack) {
+            throw new Error('--font-sans is required for call share PiP document');
+        }
+        doc.body.style.fontFamily = sansStack;
         doc.body.style.boxSizing = 'border-box';
         const wrap = doc.createElement('div');
         wrap.style.display = 'flex';
