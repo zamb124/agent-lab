@@ -30,10 +30,8 @@ _MINIMAL_SVG = b"""<?xml version="1.0" encoding="UTF-8"?>
 
 
 def _make_avif_bytes() -> bytes:
-    try:
-        import pillow_heif
-    except ImportError as exc:
-        pytest.skip(f"pillow_heif недоступен: {exc}")
+    import pillow_heif
+
     image = Image.new("RGB", (16, 16), color=(200, 40, 40))
     buffer = BytesIO()
     pillow_heif.register_heif_opener()
