@@ -39,6 +39,25 @@ if [ -z "$REGRU_USERNAME" ] || [ -z "$REGRU_PASSWORD" ]; then
   exit 1
 fi
 
+REGRU_API="https://api.reg.ru/api/regru2"
+# shellcheck source=_regru_api.sh
+source "$SCRIPT_DIR/_regru_api.sh"
+
+require_command curl || exit 1
+require_command python3 || exit 1
+
+log_section "Обновление DNS $DOMAIN → $NEW_IP (через Reg.ru API)"
+
+regru_update_a() {
+  local subdomain="$1"
+  local ip="$2"
+  log_do "Reg.ru: ${subdomain}.${DOMAIN} → $ip"
+  local response
+  response=$(regru_add_alias "$DOMAIN" "$subdomain" "$ip")
+  regru_assert_success "${DOMAIN}/${subdomain}" "$response"
+  log_ok "${subdomain}.${DOMAIN} → $ip"
+}
+
 PLATFORM_NS="${PLATFORM_NS:-platform}"
 HELM_CHART="${HELM_CHART:-./deploy/helm/agent-lab}"
 HELM_RELEASE="${HELM_RELEASE:-agent-lab}"
@@ -47,35 +66,6 @@ DNS_TTL=300
 
 K="$KUBECTL"
 H="$HELM"
-
-REGRU_API="https://api.reg.ru/api/regru2"
-
-log_section "Обновление DNS $DOMAIN → $NEW_IP (через Reg.ru API)"
-
-# Reg.ru API: обновить A-запись
-regru_update_a() {
-  local subdomain="$1"
-  local ip="$2"
-  log_do "Reg.ru: ${subdomain}.${DOMAIN} → $ip"
-  local response
-  response=$(curl -fsS --max-time 30 \
-    -X POST "${REGRU_API}/zone/update_record" \
-    -H "Content-Type: application/json" \
-    -d "{
-      \"username\": \"${REGRU_USERNAME}\",
-      \"password\": \"${REGRU_PASSWORD}\",
-      \"domains\": [{\"dname\": \"${DOMAIN}\"}],
-      \"subdomain\": \"${subdomain}\",
-      \"record_type\": \"A\",
-      \"content\": \"${ip}\"
-    }")
-  if echo "$response" | grep -q '"result":"success"'; then
-    log_ok "${subdomain}.${DOMAIN} → $ip"
-  else
-    log_error "Reg.ru API error для ${subdomain}: $response"
-    return 1
-  fi
-}
 
 # Обновляем A-записи: apex + wildcard + livekit
 regru_update_a "@" "$NEW_IP"

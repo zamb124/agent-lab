@@ -49,6 +49,17 @@ bash deploy/scripts/kubeconfig-for-github-actions.sh
 
 Без успешного GHCR login **`make test-up` падает** — локальная сборка без auth не используется как обход.
 
+## 1d. Обязательно для brand DNS и wildcard TLS (Reg.ru API)
+
+Reg.ru API принимает запросы **только с whitelist IP**. Шаг **Setup brand DNS** в CI запускает `setup-brand-dns.sh` **с master-ноды** (Kubernetes Job с `nodeName=master`), egress IP = `84.38.184.105`. В whitelist Reg.ru должен быть **master** `84.38.184.105` (не GitHub Actions runner, не домашний Mac).
+
+| Имя в GitHub | Как получить |
+|---|---|
+| **`REGRU_USERNAME`** | Логин Reg.ru (личный кабинет). |
+| **`REGRU_PASSWORD`** | **API-пароль** из Reg.ru → Настройки → API (не обязательно пароль от аккаунта). |
+
+Без этих секретов deploy **падает** на шагах DNS/TLS. Локальная проверка: `bash deploy/scripts/test-regru-api.sh` (с Mac — IP в whitelist Reg.ru) или `bash deploy/scripts/setup-brand-dns-via-master-job.sh` при настроенном `kubectl`.
+
 ## 2. Обязательные для шага «Sync platform-secrets»
 
 Имена должны совпадать с колонкой «Имя в GitHub».
