@@ -170,8 +170,14 @@ CORPUS: tuple[CorpusFile, ...] = (
     CorpusFile("pdf/list-item-example.pdf", FileReadKind.PDF, None),
     CorpusFile("pdf/DA-1p.pdf", FileReadKind.PDF, None),
     CorpusFile("pdf/all-number-table.pdf", FileReadKind.PDF, None),
-    # PDF без текстового слоя (только картинки/таблицы как изображения) — текст пуст без OCR
-    CorpusFile("pdf/single_table.pdf", FileReadKind.PDF, None, allows_empty_text=True),
+    # PDF без текстового слоя (только картинки/таблицы как изображения) — OCR через read_file hybrid
+    CorpusFile(
+        "pdf/single_table.pdf",
+        FileReadKind.PDF,
+        None,
+        allows_empty_text=True,
+        uses_vision_llm=True,
+    ),
     CorpusFile("pdf/embedded-cmap-cidfont.pdf", FileReadKind.PDF, None),
     CorpusFile("pdf/fake-memo-with-duplicate-page.pdf", FileReadKind.PDF, None),
     CorpusFile("pdf/header-test-doc.pdf", FileReadKind.PDF, None, expected_min_pages=1),

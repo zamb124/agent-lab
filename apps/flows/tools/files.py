@@ -130,7 +130,9 @@ def _resolve_file_refs_for_read(
     description=(
         "Читает вложения из state.files по списку имён names. "
         "Передаёшь список original_name — tool находит объекты файлов в state "
-        "и вызывает движок чтения. Если names не указан, берутся все файлы в state.files."
+        "и вызывает движок чтения. Если names не указан, берутся все файлы в state.files. "
+        "Для PDF автоматически извлекается текстовый слой и OCR встроенных изображений "
+        "(vision); для сканов без текста — OCR всей страницы."
     ),
     tags=["files", "ocr", "document"],
     parameters_model=ReadFileArgs,

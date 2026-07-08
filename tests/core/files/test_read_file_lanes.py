@@ -15,6 +15,7 @@ from tests.fixtures.s3 import require_s3_configured
 _AUTO_DETECT = (
     ("fake-text.txt", ReadLane.TEXT),
     ("pdf/DA-1p.pdf", ReadLane.TEXT),
+    ("pdf/single_table.pdf", ReadLane.HYBRID),
     ("stanley-cups.xlsx", ReadLane.TEXT),
     ("simple.docx", ReadLane.TEXT),
     ("img/example.jpg", ReadLane.VISION),

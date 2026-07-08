@@ -83,3 +83,54 @@ async def store_vision_page(
     if key is None:
         return
     _ = await _client().set(key, text, ttl=_EXTRACT_CACHE_TTL_SECONDS)
+
+
+def _vision_image_key(
+    *,
+    file_id: str | None,
+    checksum: str | None,
+    page: int,
+    image_checksum: str,
+) -> str | None:
+    base = extract_cache_key(file_id=file_id, checksum=checksum)
+    if base is None:
+        return None
+    return f"{base}:vis:{page}:img:{image_checksum}"
+
+
+async def load_vision_image(
+    *,
+    file_id: str | None,
+    checksum: str | None,
+    page: int,
+    image_checksum: str,
+) -> str | None:
+    """Кэш OCR одного встроенного изображения PDF."""
+    key = _vision_image_key(
+        file_id=file_id,
+        checksum=checksum,
+        page=page,
+        image_checksum=image_checksum,
+    )
+    if key is None:
+        return None
+    return await _client().get(key)
+
+
+async def store_vision_image(
+    *,
+    file_id: str | None,
+    checksum: str | None,
+    page: int,
+    image_checksum: str,
+    text: str,
+) -> None:
+    key = _vision_image_key(
+        file_id=file_id,
+        checksum=checksum,
+        page=page,
+        image_checksum=image_checksum,
+    )
+    if key is None:
+        return
+    _ = await _client().set(key, text, ttl=_EXTRACT_CACHE_TTL_SECONDS)

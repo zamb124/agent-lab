@@ -16,7 +16,7 @@ from email import policy
 from email.parser import BytesParser
 from io import BytesIO
 from pathlib import Path
-from typing import Protocol, TypeIs, cast
+from typing import Protocol, TypedDict, TypeIs, cast
 
 import ebooklib
 import extract_msg
@@ -93,8 +93,16 @@ class _PdfPixmap(Protocol):
     def tobytes(self, output: str) -> bytes: ...
 
 
+class _PdfExtractedImage(TypedDict):
+    image: bytes
+    ext: str
+    width: int
+    height: int
+
+
 class _PdfPage(Protocol):
     def get_text(self) -> object: ...
+    def get_images(self, *, full: bool) -> list[tuple[int, ...]]: ...
     def get_pixmap(self, *, matrix: object) -> _PdfPixmap: ...
 
 
@@ -102,6 +110,7 @@ class _PdfDocument(Protocol):
     page_count: int
 
     def __getitem__(self, index: int) -> _PdfPage: ...
+    def extract_image(self, xref: int) -> _PdfExtractedImage: ...
     def close(self) -> None: ...
 
 
@@ -884,6 +893,67 @@ def _read_doc_ole_sync(
     )
 
 
+_PDF_MIN_EMBEDDED_IMAGE_PIXELS: int = 32 * 32
+_PDF_MIN_EMBEDDED_IMAGE_BYTES: int = 512
+
+
+def _pdf_page_text(page: _PdfPage) -> str:
+    raw_text = page.get_text() or ""
+    return raw_text if isinstance(raw_text, str) else str(raw_text)
+
+
+def _pdf_mime_from_extracted(ext: str) -> str:
+    ext_lower = ext.lower().lstrip(".")
+    if ext_lower in ("jpg", "jpeg"):
+        return "image/jpeg"
+    if ext_lower == "png":
+        return "image/png"
+    if ext_lower == "webp":
+        return "image/webp"
+    if ext_lower == "gif":
+        return "image/gif"
+    if ext_lower == "bmp":
+        return "image/bmp"
+    if ext_lower == "tiff":
+        return "image/tiff"
+    return f"image/{ext_lower}"
+
+
+def _pdf_page_embedded_image_assets(
+    page: _PdfPage,
+    doc: _PdfDocument,
+    *,
+    include_bytes: bool,
+) -> list[ReadAsset]:
+    assets: list[ReadAsset] = []
+    for image_info in page.get_images(full=True):
+        xref = image_info[0]
+        extracted = doc.extract_image(xref)
+        image_bytes = extracted["image"]
+        width = extracted["width"]
+        height = extracted["height"]
+        if width * height < _PDF_MIN_EMBEDDED_IMAGE_PIXELS:
+            continue
+        if len(image_bytes) < _PDF_MIN_EMBEDDED_IMAGE_BYTES:
+            continue
+        mime = _pdf_mime_from_extracted(extracted["ext"])
+        checksum = compute_content_checksum_sha256(image_bytes)
+        bytes_b64: str | None = None
+        if include_bytes:
+            bytes_b64 = base64.b64encode(image_bytes).decode("utf-8")
+        assets.append(
+            ReadAsset(
+                kind=ReadAssetKind.EMBEDDED_IMAGE,
+                content_type=mime,
+                checksum=checksum,
+                width=width,
+                height=height,
+                bytes_b64=bytes_b64,
+            )
+        )
+    return assets
+
+
 def _read_pdf_sync(
     raw: bytes,
     file_name: str,
@@ -900,11 +970,10 @@ def _read_pdf_sync(
         n = doc.page_count
         for i in range(n):
             skip_raster = False
-            page = None
+            page: _PdfPage | None = None
             try:
                 page = doc[i]
-                raw_text = page.get_text() or ""
-                text = raw_text if isinstance(raw_text, str) else str(raw_text)
+                text = _pdf_page_text(page)
             except (ValueError, RuntimeError) as exc:
                 msg = str(exc).lower()
                 if "encrypt" in msg or "password" in msg:
@@ -919,23 +988,29 @@ def _read_pdf_sync(
             if opts.include_asset_bytes and not skip_raster:
                 if page is None:
                     raise FileReadError(f"Не удалось получить страницу PDF: {file_name}#{i + 1}")
-                mat = fitz.Matrix(2, 2)
-                pix = page.get_pixmap(matrix=mat)
-                img_bytes = pix.tobytes("png")
-                ch = compute_content_checksum_sha256(img_bytes)
-                b64_val: str | None = None
-                if opts.include_asset_bytes:
-                    b64_val = base64.b64encode(img_bytes).decode("utf-8")
-                assets.append(
-                    ReadAsset(
-                        kind=ReadAssetKind.PAGE_RASTER,
-                        content_type="image/png",
-                        checksum=ch,
-                        width=pix.width,
-                        height=pix.height,
-                        bytes_b64=b64_val,
+                assets.extend(
+                    _pdf_page_embedded_image_assets(
+                        page,
+                        doc,
+                        include_bytes=True,
                     )
                 )
+                text_stripped = text.strip()
+                if not text_stripped and not assets:
+                    mat = fitz.Matrix(2, 2)
+                    pix = page.get_pixmap(matrix=mat)
+                    img_bytes = pix.tobytes("png")
+                    checksum = compute_content_checksum_sha256(img_bytes)
+                    assets.append(
+                        ReadAsset(
+                            kind=ReadAssetKind.PAGE_RASTER,
+                            content_type="image/png",
+                            checksum=checksum,
+                            width=pix.width,
+                            height=pix.height,
+                            bytes_b64=base64.b64encode(img_bytes).decode("utf-8"),
+                        )
+                    )
             pages.append(ReadPage(index=i, text=text, assets=assets, label=f"page_{i + 1}"))
     finally:
         doc.close()
