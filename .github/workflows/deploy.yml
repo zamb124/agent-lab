@@ -271,13 +271,7 @@ jobs:
         env:
           REGRU_USERNAME: ${{ secrets.REGRU_USERNAME }}
           REGRU_PASSWORD: ${{ secrets.REGRU_PASSWORD }}
-        run: |
-          set -euo pipefail
-          if [ -z "${REGRU_USERNAME:-}" ] || [ -z "${REGRU_PASSWORD:-}" ]; then
-            echo "::warning::REGRU_USERNAME/REGRU_PASSWORD не заданы — пропускаю brand DNS."
-            exit 0
-          fi
-          bash deploy/scripts/setup-brand-dns.sh 84.38.184.105
+        run: bash deploy/scripts/setup-brand-dns.sh 84.38.184.105
 
       - name: Setup wildcard TLS (cert-manager-webhook-regru + Certificate platform-tls)
         # Идемпотентный выпуск wildcard-сертификата для всех platform brand apex (humanitec.ru, linnex.io)
@@ -288,13 +282,7 @@ jobs:
           REGRU_USERNAME: ${{ secrets.REGRU_USERNAME }}
           REGRU_PASSWORD: ${{ secrets.REGRU_PASSWORD }}
           PLATFORM_NS: ${{ env.K8S_NAMESPACE }}
-        run: |
-          set -euo pipefail
-          if [ -z "${REGRU_USERNAME:-}" ] || [ -z "${REGRU_PASSWORD:-}" ]; then
-            echo "::warning::REGRU_USERNAME/REGRU_PASSWORD не заданы — пропускаю wildcard TLS (helm install продолжит без TLS, ingress'ы будут отдавать HTTP)."
-            exit 0
-          fi
-          bash deploy/scripts/setup-wildcard-tls.sh
+        run: bash deploy/scripts/setup-wildcard-tls.sh
 
       - name: Helm upgrade --install
         env:
@@ -420,6 +408,7 @@ jobs:
       - name: Verify rollout (cluster-health.sh)
         env:
           PLATFORM_NS: ${{ env.K8S_NAMESPACE }}
-          # CHECK_PUBLIC=1 — проверяем https://humanitec.ru/* через ingress
           CHECK_PUBLIC: "1"
+          PLATFORM_APEX_HOSTS: "humanitec.ru linnex.io"
+          PLATFORM_PUBLIC_IP: "84.38.184.105"
         run: bash deploy/scripts/cluster-health.sh

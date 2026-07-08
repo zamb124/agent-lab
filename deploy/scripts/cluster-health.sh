@@ -16,6 +16,7 @@
 #   ONLYOFFICE_HOST=onlyoffice.humanitec.ru
 #   LIVEKIT_HOST=livekit.humanitec.ru
 #   CHECK_PUBLIC=1                      — проверить https://… через curl (требует DNS); 0 = только in-cluster
+#   PLATFORM_PUBLIC_IP=84.38.184.105     — ожидаемый A-record для apex/subdomain brand DNS (CHECK_PUBLIC=1)
 
 set -uo pipefail
 
@@ -35,6 +36,18 @@ GRAFANA_HOST="${GRAFANA_HOST:-grafana.humanitec.ru}"
 ONLYOFFICE_HOST="${ONLYOFFICE_HOST:-onlyoffice.humanitec.ru}"
 LIVEKIT_HOST="${LIVEKIT_HOST:-livekit.humanitec.ru}"
 CHECK_PUBLIC="${CHECK_PUBLIC:-1}"
+PLATFORM_PUBLIC_IP="${PLATFORM_PUBLIC_IP:-84.38.184.105}"
+
+if [ "$CHECK_PUBLIC" = "1" ]; then
+  if ! command -v curl >/dev/null 2>&1; then
+    log_error "CHECK_PUBLIC=1 требует curl в PATH"
+    exit 1
+  fi
+  if ! command -v dig >/dev/null 2>&1; then
+    log_error "CHECK_PUBLIC=1 требует dig в PATH (проверка brand DNS)"
+    exit 1
+  fi
+fi
 
 # Список ожидаемых деплойментов (дефолтный состав под Helm values.yaml + values-prod.yaml).
 # При отключении компонента через Helm (*.enabled: false) уберите имя отсюда (см. deploy/README.md
@@ -186,8 +199,31 @@ check_step \
   "Tempo ready" \
   "[ \"$($K get pod tempo-0 -n $PLATFORM_NS -o jsonpath='{.status.containerStatuses[0].ready}' 2>/dev/null)\" = 'true' ]"
 
+# 12b. TLS Certificate SAN покрывает все brand apex (in-cluster, без curl)
+log_section "12b) platform-tls Certificate dnsNames"
+CURRENT_CERT_DNS=$($K get certificate platform-tls -n "$PLATFORM_NS" \
+  -o jsonpath='{range .spec.dnsNames[*]}{.}{" "}{end}' 2>/dev/null || true)
+for apex in $PLATFORM_APEX_HOSTS; do
+  check_step \
+    "Certificate platform-tls dnsNames содержит ${apex}" \
+    "case ' ${CURRENT_CERT_DNS} ' in *' ${apex} '*) exit 0;; *) exit 1;; esac"
+  check_step \
+    "Certificate platform-tls dnsNames содержит *.${apex}" \
+    "case ' ${CURRENT_CERT_DNS} ' in *' *.${apex} '*) exit 0;; *) exit 1;; esac"
+done
+
+# 12c. Brand apex DNS указывает на кластер (CHECK_PUBLIC=1)
+if [ "$CHECK_PUBLIC" = "1" ]; then
+  log_section "12c) Brand apex DNS → ${PLATFORM_PUBLIC_IP}"
+  for apex in $PLATFORM_APEX_HOSTS; do
+    check_step \
+      "dig ${apex} A → ${PLATFORM_PUBLIC_IP}" \
+      "[ \"\$(dig +short ${apex} A | head -1)\" = '${PLATFORM_PUBLIC_IP}' ]"
+  done
+fi
+
 # 13. Health-endpoints через ingress (если есть DNS)
-if [ "$CHECK_PUBLIC" = "1" ] && command -v curl >/dev/null 2>&1; then
+if [ "$CHECK_PUBLIC" = "1" ]; then
   log_section "13) Public health endpoints (через Ingress)"
   for apex in $PLATFORM_APEX_HOSTS; do
     for path in "/flows/health" "/crm/health" "/sync/health" "/worktracker/health" "/secrets/health"; do
@@ -199,12 +235,10 @@ if [ "$CHECK_PUBLIC" = "1" ] && command -v curl >/dev/null 2>&1; then
       "https://grafana.${apex}/api/health" \
       "curl -fsS --max-time 10 https://grafana.${apex}/api/health >/dev/null"
   done
-else
-  log_info "Пропуск public-проверок (CHECK_PUBLIC=0 или нет curl)"
 fi
 
 # 14. WebSocket upgrade через Ingress (Traefik -> Granian HTTP/1.1 hop)
-if [ "$CHECK_PUBLIC" = "1" ] && command -v curl >/dev/null 2>&1; then
+if [ "$CHECK_PUBLIC" = "1" ]; then
   log_section "14) WebSocket upgrade (через Ingress)"
   for apex in $PLATFORM_APEX_HOSTS; do
     for svc in flows crm sync rag worktracker voice; do
@@ -213,8 +247,6 @@ if [ "$CHECK_PUBLIC" = "1" ] && command -v curl >/dev/null 2>&1; then
         "code=\$(curl -sS --http1.1 -o /dev/null -w '%{http_code}' --max-time 10 -H 'Connection: Upgrade' -H 'Upgrade: websocket' -H 'Sec-WebSocket-Version: 13' -H 'Sec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==' 'https://${apex}/${svc}/api/ws/notifications'); [ \"\$code\" = '401' ] || [ \"\$code\" = '101' ]"
     done
   done
-else
-  log_info "Пропуск WS upgrade (CHECK_PUBLIC=0 или нет curl)"
 fi
 
 # 15. Запрет serversscheme h2c на app Service (ломает WS upgrade)
@@ -245,15 +277,13 @@ else
 fi
 
 # 17. Platform brand API (multi-apex)
-if [ "$CHECK_PUBLIC" = "1" ] && command -v curl >/dev/null 2>&1; then
+if [ "$CHECK_PUBLIC" = "1" ]; then
   log_section "17) Platform brand API (multi-apex)"
   for apex in $PLATFORM_APEX_HOSTS; do
     check_step \
       "https://${apex}/frontend/api/platform/brand base_domain=${apex}" \
       "curl -fsS --max-time 10 https://${apex}/frontend/api/platform/brand | python3 -c \"import json,sys; b=json.load(sys.stdin); assert b.get('base_domain')=='${apex}', b\""
   done
-else
-  log_info "Пропуск brand API (CHECK_PUBLIC=0 или нет curl)"
 fi
 
 # 18. Browser runtime (in-cluster: CDP sidecar + app readiness + рестарты)

@@ -23,7 +23,7 @@ if [ -z "$REGRU_USERNAME" ] || [ -z "$REGRU_PASSWORD" ]; then
 fi
 
 DOMAINS="${PLATFORM_BRAND_DOMAINS:-humanitec.ru linnex.io}"
-SUBDOMAINS="${PLATFORM_BRAND_DNS_SUBDOMAINS:-@ * livekit onlyoffice grafana}"
+SUBDOMAINS="${PLATFORM_BRAND_DNS_SUBDOMAINS:-@ * api cdn livekit onlyoffice grafana}"
 DNS_TTL="${DNS_TTL:-300}"
 REGRU_API="https://api.reg.ru/api/regru2"
 
