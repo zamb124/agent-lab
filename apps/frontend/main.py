@@ -2,7 +2,6 @@
 Сервис frontend — FastAPI-приложение для управления платформой
 """
 
-import json
 from datetime import UTC, datetime
 from pathlib import Path
 from urllib.parse import quote, urlparse
@@ -89,7 +88,7 @@ from core.middleware.static_core_module_cors import StaticCoreModuleCorsMiddlewa
 from core.platform_brand.resolver import resolve_brand, resolve_public_base_url
 from core.short_links.kinds import SHORT_LINK_KIND_FLOW_PREVIEW_EMBED
 from core.short_links.payloads import FlowPreviewEmbedPayload
-from core.types import JsonObject, require_json_object
+from core.types import JsonObject, parse_json_object
 
 logger = get_logger(__name__)
 _FRONTEND_DEV_CORS_ORIGIN_REGEX = (
@@ -616,8 +615,8 @@ async def get_pwa_manifest(request: Request, container: ContainerDep) -> JSONRes
     if host is None or not str(host).strip():
         raise HTTPException(status_code=400, detail="Host header is required")
     brand = resolve_brand(str(host).strip())
-    manifest_payload: JsonObject = require_json_object(
-        json.loads(_PWA_MANIFEST_TEMPLATE_PATH.read_text(encoding="utf-8")),
+    manifest_payload: JsonObject = parse_json_object(
+        _PWA_MANIFEST_TEMPLATE_PATH.read_text(encoding="utf-8"),
         "PWA manifest template",
     )
     manifest_payload["name"] = f"{brand.platform_name} - AI agents for business"

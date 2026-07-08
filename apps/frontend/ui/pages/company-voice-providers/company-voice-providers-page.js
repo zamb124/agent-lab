@@ -11,6 +11,7 @@ import '@platform/lib/components/glass-button.js';
 import '@platform/lib/components/layout/page-header.js';
 import '@platform/lib/components/platform-icon.js';
 import { getPlatformBrandBootstrap } from '@platform/lib/utils/platform-brand.js';
+import { frontendIslandPageBodyStyles } from '../../styles/frontend-island-page-body.styles.js';
 
 // ─── Voice providers constants ────────────────────────────────────────────────
 const KINDS = ['stt', 'tts'];

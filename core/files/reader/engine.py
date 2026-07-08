@@ -46,8 +46,8 @@ from core.files.reader.render import render_file_result
 from core.files.reader.service import (
     FileReader,
     SourceInput,
-    _guess_mime,
-    _is_file_ref_source,
+    guess_mime,
+    is_file_ref_source,
     pdf_page_text_for_merge,
     pdf_page_text_usable,
     run_vision_on_image_bytes,
@@ -127,7 +127,7 @@ async def file_ref_from_source(
     display_name = resolved_name
     resolved_id = normalized_file_id or opts.source_file_id
     file_type = reader.recognize_file_type(file_name=display_name, head=raw[:8192])
-    content_type = file_type.content_type or _guess_mime(display_name)
+    content_type = file_type.content_type or guess_mime(display_name)
     if content_type is None or not content_type.strip():
         content_type = ext_to_mime(Path(display_name).suffix.lower())
     ref_file_id, ref_url = _file_ref_identity_for_source(
@@ -334,7 +334,7 @@ async def _extract_pdf_auto_hybrid(
         source_file_id=file_id,
         include_asset_bytes=True,
     )
-    result = await reader._read_raw(resolved_raw, resolved_name, opts)
+    result = await reader.read_raw_bytes(resolved_raw, resolved_name, opts)
     file_name = _display_name(file_ref)
     pages_total = len(result.pages)
     checksum = result.source_checksum
@@ -404,7 +404,7 @@ async def _extract_text_lane(
 ) -> FileExtract:
     reader = FileReader()
     opts = read_options_from_args(args, source_file_id=file_id)
-    result = await reader._read_raw(resolved_raw, resolved_name, opts)
+    result = await reader.read_raw_bytes(resolved_raw, resolved_name, opts)
     extract = build_file_extract(
         result, file_name=_display_name(file_ref), file_id=file_id
     )
@@ -427,7 +427,7 @@ async def _extract_pdf_visual(
         source_file_id=file_id,
         include_asset_bytes=True,
     )
-    result = await reader._read_raw(resolved_raw, resolved_name, opts)
+    result = await reader.read_raw_bytes(resolved_raw, resolved_name, opts)
     file_name = _display_name(file_ref)
     pages_total = len(result.pages)
     checksum = result.source_checksum
@@ -660,7 +660,7 @@ async def read_file_extract(
 ) -> FileExtract:
     if isinstance(source, FileRef):
         source_input: SourceInput | FileRef = source
-    elif _is_file_ref_source(source):
+    elif is_file_ref_source(source):
         source_input = FileRef.model_validate(source)
     else:
         source_input = source

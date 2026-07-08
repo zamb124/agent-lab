@@ -14,7 +14,6 @@ from pydantic import BaseModel, Field
 from apps.flows.src.models.flow_config import FlowType
 from apps.frontend.dependencies import ContainerDep
 from core.config import get_settings
-from core.platform_brand.resolver import resolve_embed_origins
 from core.context import require_context
 from core.identity.embed_guest_turns import EMBED_SESSION_ID_METADATA_KEY
 from core.identity.system_bootstrap import SYSTEM_COMPANY_ID
@@ -31,6 +30,7 @@ from core.models.flow_chat_settings import (
 )
 from core.models.identity_models import Company, User
 from core.pagination import OffsetPage
+from core.platform_brand.resolver import resolve_embed_origins
 from core.types import JsonObject
 from core.utils.tokens import get_token_service
 

@@ -8,7 +8,6 @@ from typing import Annotated
 
 from fastapi import APIRouter, HTTPException, Query, Request
 
-from apps.frontend.config import get_frontend_public_base_url
 from apps.frontend.dependencies import ContainerDep
 from apps.frontend.models import (
     PublicBlogListResponse,

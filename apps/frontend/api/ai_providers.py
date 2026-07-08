@@ -55,9 +55,9 @@ from core.ai.providers import (
     platform_provider_specs_for_capability,
     validate_platform_provider_for_capability,
 )
-from core.config.models import PlatformBrandConfig
 from core.ai.resolver import resolve_ai_model
 from core.config import get_settings
+from core.config.models import PlatformBrandConfig
 from core.context import clear_context, require_context, set_context
 from core.llm_context import LLMContextPatch
 from core.llm_context.resolver import resolve_llm_context_policy
@@ -65,7 +65,11 @@ from core.logging import get_logger
 from core.models.context_models import Context
 from core.models.identity_models import Company, User
 from core.models.voice_providers_catalog import build_voice_providers_catalog_dto
-from core.platform_brand.resolver import UnknownPlatformDomainError, resolve_brand, resolve_context_host
+from core.platform_brand.resolver import (
+    UnknownPlatformDomainError,
+    resolve_brand,
+    resolve_context_host,
+)
 from core.types import JsonObject, require_json_object
 
 if TYPE_CHECKING:

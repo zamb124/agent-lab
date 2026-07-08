@@ -45,6 +45,7 @@ from apps.frontend.container import FrontendContainer
 from core.clients.redis_client import RedisClient
 from core.db.storage import Storage
 from core.logging import get_logger
+from core.platform_brand.resolver import resolve_oauth_brand_origin
 from core.types import JsonObject, parse_json_object
 from core.utils.domain import is_allowed_integration_return_origin
 from core.utils.tokens import TokenService
@@ -415,7 +416,7 @@ async def fetch_latest_release_asset_url(
 ) -> str:
     if use_local_release_artifact():
         artifact = resolve_local_release_artifact_path(platform)
-        base = get_frontend_public_base_url(brand_host).rstrip("/")
+        base = resolve_oauth_brand_origin(brand_host=brand_host).rstrip("/")
         route = local_release_artifact_route(platform)
         logger.info(
             "agent.download.resolved_local",

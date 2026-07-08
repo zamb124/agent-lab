@@ -231,7 +231,7 @@ class _ExtractMsgModule(Protocol):
     def openMsg(self, path: str) -> _MsgFile: ...
 
 
-def _is_file_ref_source(source: SourceInput | FileRefSource) -> TypeIs[FileRefSource]:
+def is_file_ref_source(source: SourceInput | FileRefSource) -> TypeIs[FileRefSource]:
     if isinstance(source, (FileRef, FileRecord, FileResponse)):
         return True
     if isinstance(source, Mapping):
@@ -331,7 +331,7 @@ def _normalize_extension(file_name: str) -> str:
     return Path(file_name).suffix.lower()
 
 
-def _guess_mime(file_name: str) -> str | None:
+def guess_mime(file_name: str) -> str | None:
     mime, _ = mimetypes.guess_type(file_name)
     return mime
 
@@ -451,7 +451,7 @@ class FileReader:
 
     def recognize_file_type(self, *, file_name: str, head: bytes | None = None) -> FileTypeInfo:
         ext = _normalize_extension(file_name)
-        mime = _guess_mime(file_name)
+        mime = guess_mime(file_name)
         kind = _kind_from_extension(ext)
         if head is not None and _sniff_pdf(head):
             kind = FileReadKind.PDF
@@ -509,7 +509,7 @@ class FileReader:
 
         raise FileReadError(f"Файл не найден: {s}")
 
-    async def _read_raw(
+    async def read_raw_bytes(
         self,
         raw: bytes,
         name: str,
@@ -517,7 +517,7 @@ class FileReader:
     ) -> FileReadResult:
         source_checksum = opts.source_checksum or compute_content_checksum_sha256(raw)
         info = self.recognize_file_type(file_name=name, head=raw[:8192])
-        mime = info.content_type or _guess_mime(name)
+        mime = info.content_type or guess_mime(name)
 
         if info.detected_kind == FileReadKind.IMAGE:
             result = await _read_image_impl(raw, name, mime or "application/octet-stream", opts)
@@ -585,7 +585,7 @@ class FileReader:
             vision_prompt=vision_prompt,
             transcription_company_id=transcription_company_id,
         )
-        if _is_file_ref_source(source):
+        if is_file_ref_source(source):
             file_ref = FileRef.model_validate(source)
             opts = merge_file_ref_read_options(file_ref, opts)
             raw, resolved_name = await self.raw_from_file_ref(file_ref, opts)
@@ -594,7 +594,7 @@ class FileReader:
             ) or resolved_name
         else:
             raw, name = await self.resolve_source(source, file_name, opts)
-        return await self._read_raw(raw, name, opts)
+        return await self.read_raw_bytes(raw, name, opts)
 
     async def read(
         self,

@@ -364,14 +364,6 @@ def _optional_array(value: JsonValue, name: str) -> list[JsonValue] | None:
     return list(value)
 
 
-def _optional_bool(value: JsonValue, name: str) -> bool | None:
-    if value is None:
-        return None
-    if not isinstance(value, bool):
-        raise TypeError(f"{name} must be boolean")
-    return value
-
-
 def _http_headers(headers: JsonObject) -> dict[str, str]:
     encoded: dict[str, str] = {}
     for key, value in headers.items():

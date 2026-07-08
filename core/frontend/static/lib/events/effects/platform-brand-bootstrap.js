@@ -31,7 +31,8 @@ export async function loadPlatformBrandBootstrap() {
      *   llms_display_label: string,
      *   flows_product_label: string,
      * }} */
-    const payload = await httpRequest('/frontend/api/platform/brand', {
+    const payload = await httpRequest({
+        url: '/frontend/api/platform/brand',
         method: 'GET',
         headers: { Accept: 'application/json' },
     });

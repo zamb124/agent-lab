@@ -1,4 +1,4 @@
-import core.files.reader.engine as _reader_engine  # noqa: F401 — binds FileReader.read
+import core.files.reader.engine  # noqa: F401  # pyright: ignore[reportUnusedImport] — binds FileReader.read
 from core.files.reader.engine import read_files_to_envelope
 from core.files.reader.exceptions import FileReadError
 from core.files.reader.models import (

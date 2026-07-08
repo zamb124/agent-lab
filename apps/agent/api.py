@@ -29,9 +29,9 @@ from apps.agent.service import (
 )
 from apps.frontend.dependencies import ContainerDep
 from core.app_state import get_request_token_data
+from core.config import get_settings
 from core.context import require_context
 from core.logging import get_logger
-from core.config import get_settings
 from core.platform_brand.resolver import UnknownPlatformDomainError, resolve_brand
 from core.utils.tokens import TokenService
 
