@@ -182,6 +182,43 @@ describe('node editors — top-level NodeConfig contract', () => {
         expect(jsonEditor).to.not.be.null;
     });
 
+    it('flows-code-node-editor — round-trip Код → Схема → Код сохраняет code', async () => {
+        const node = { node_id: 'a', type: 'code', name: 'A', code: 'print(1)' };
+        const el = await fixture(html`
+            <flows-code-node-editor .nodeId=${'a'} .flowId=${'demo'} .branchId=${'base'}
+                .nodeConfig=${node} .nodeType=${'code'}>
+            </flows-code-node-editor>
+        `);
+        await elementUpdated(el);
+        const workbench = el.shadowRoot.querySelector('flows-code-workbench');
+        await elementUpdated(workbench);
+
+        const patches = [];
+        el.addEventListener('change', (e) => { patches.push(e.detail); });
+
+        const [mainTabs] = codeEditorToolbarControls(workbench);
+        const tabs = segmentedSegments(mainTabs);
+        tabs[1].click();
+        await elementUpdated(workbench);
+        await elementUpdated(el);
+
+        tabs[0].click();
+        await elementUpdated(workbench);
+        await elementUpdated(el);
+
+        const codePatches = patches
+            .map((detail) => detail.patch)
+            .filter((patch) => patch && typeof patch.code === 'string');
+        for (const patch of codePatches) {
+            expect(patch.code).to.not.equal('secondary');
+        }
+
+        const pyEditor = workbench.shadowRoot.querySelector('flows-code-editor[language="python"]');
+        expect(pyEditor).to.not.be.null;
+        await elementUpdated(pyEditor);
+        expect(pyEditor.value).to.equal('print(1)');
+    });
+
     it('flows-code-node-editor — переключение языка кода эмитит language patch', async () => {
         const node = { node_id: 'a', type: 'code', name: 'A', code: '' };
         const el = await fixture(html`

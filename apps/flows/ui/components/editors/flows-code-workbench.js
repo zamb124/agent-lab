@@ -379,6 +379,9 @@ export class FlowsCodeWorkbench extends PlatformElement {
     }
 
     _onCodeEditorChange(e) {
+        if (e.target !== e.currentTarget) {
+            return;
+        }
         const value = asString(e.detail?.value);
         this._emitWorkbench({ type: 'code', value });
     }
@@ -437,7 +440,10 @@ export class FlowsCodeWorkbench extends PlatformElement {
                     title: lang.label,
                 }))}
                 aria-label=${this.t('code_workbench.language_aria')}
-                @change=${(e) => this._emitLanguageChange(e.detail.value)}
+                @change=${(e) => {
+                    e.stopPropagation();
+                    this._emitLanguageChange(e.detail.value);
+                }}
             ></platform-segmented-control>
         `;
     }
@@ -483,7 +489,10 @@ export class FlowsCodeWorkbench extends PlatformElement {
                     .value=${this._mainTab}
                     .items=${mainTabItems}
                     aria-label=${this.t('code_workbench.main_tab_aria')}
-                    @change=${(e) => { this._mainTab = e.detail.value; }}
+                    @change=${(e) => {
+                        e.stopPropagation();
+                        this._mainTab = e.detail.value;
+                    }}
                 ></platform-segmented-control>
                 ${this._renderLanguageSegment()}
                 ${this._renderValidationStatus()}
