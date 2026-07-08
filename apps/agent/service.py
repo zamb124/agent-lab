@@ -316,13 +316,13 @@ def build_agent_llm_bundle(frontend_base_url: str) -> AgentLlmBundle:
 
 def resolve_frontend_base_url(origin_override: str | None = None) -> str:
     if origin_override is not None:
-        platform_base = get_frontend_public_base_url()
-        if not is_allowed_integration_return_origin(origin_override, platform_base):
+        ro = origin_override.rstrip("/")
+        if not is_allowed_integration_return_origin(ro, None):
             raise HTTPException(
                 status_code=400,
                 detail="origin не разрешён для register/discover",
             )
-        return origin_override.rstrip("/")
+        return ro
     return get_frontend_public_base_url()
 
 
@@ -408,10 +408,14 @@ def _resolve_asset_url_from_release(release_payload: JsonObject, platform: str) 
     raise HTTPException(status_code=404, detail=f"Релизный asset для платформы {platform!r} не найден")
 
 
-async def fetch_latest_release_asset_url(platform: str) -> str:
+async def fetch_latest_release_asset_url(
+    platform: str,
+    *,
+    brand_host: str | None = None,
+) -> str:
     if use_local_release_artifact():
         artifact = resolve_local_release_artifact_path(platform)
-        base = get_frontend_public_base_url().rstrip("/")
+        base = get_frontend_public_base_url(brand_host).rstrip("/")
         route = local_release_artifact_route(platform)
         logger.info(
             "agent.download.resolved_local",

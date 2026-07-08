@@ -2065,6 +2065,40 @@ class LegalConfig(BaseModel):
     billing_provider: str | None = None
 
 
+class PlatformBrandConfig(BaseModel):
+    """Бренд платформы на одном registrable apex-домене (humanitec.ru, linnex.io, …)."""
+
+    platform_name: str
+    support_email: str
+    logo_path: str = "/static/core/assets/service_logos/frontend_logo.svg"
+    legal: LegalConfig = Field(default_factory=LegalConfig)
+    public_site: PublicSiteConfig = Field(default_factory=PublicSiteConfig)
+    embed_api_subdomain: str = "api"
+    embed_cdn_subdomain: str = "cdn"
+    embed_script_path: str = "/lib/embed-chat/humanitec-embed-autoload.js"
+    auth_apple_client_id: str | None = None
+    vapid_email: str | None = None
+
+
+def default_platform_brands() -> dict[str, PlatformBrandConfig]:
+    return {
+        "humanitec.ru": PlatformBrandConfig(
+            platform_name="Humanitec",
+            support_email="helpme@humanitec.ru",
+        ),
+        "agents-lab.ru": PlatformBrandConfig(
+            platform_name="Humanitec",
+            support_email="helpme@humanitec.ru",
+        ),
+        "linnex.io": PlatformBrandConfig(
+            platform_name="Linnex",
+            support_email="support@linnex.io",
+            auth_apple_client_id="app.linnex.io",
+            vapid_email="admin@linnex.io",
+        ),
+    }
+
+
 def default_billing_resource_base_prices() -> dict[str, dict[str, float]]:
     """
     Базовый каталог цен до merge с shared storage и пер-компанией.

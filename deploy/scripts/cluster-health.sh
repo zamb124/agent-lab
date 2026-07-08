@@ -10,7 +10,8 @@
 #
 # ENV:
 #   PLATFORM_NS=platform                — namespace с подами платформы
-#   APEX_HOST=humanitec.ru              — публичный апекс
+#   APEX_HOST=humanitec.ru              — legacy single apex (если PLATFORM_APEX_HOSTS пуст)
+#   PLATFORM_APEX_HOSTS="humanitec.ru linnex.io" — все brand apex для public checks
 #   GRAFANA_HOST=grafana.humanitec.ru   — Grafana (PUBLIC)
 #   ONLYOFFICE_HOST=onlyoffice.humanitec.ru
 #   LIVEKIT_HOST=livekit.humanitec.ru
@@ -29,6 +30,7 @@ fi
 
 K="$KUBECTL"
 APEX_HOST="${APEX_HOST:-humanitec.ru}"
+PLATFORM_APEX_HOSTS="${PLATFORM_APEX_HOSTS:-humanitec.ru linnex.io}"
 GRAFANA_HOST="${GRAFANA_HOST:-grafana.humanitec.ru}"
 ONLYOFFICE_HOST="${ONLYOFFICE_HOST:-onlyoffice.humanitec.ru}"
 LIVEKIT_HOST="${LIVEKIT_HOST:-livekit.humanitec.ru}"
@@ -187,14 +189,16 @@ check_step \
 # 13. Health-endpoints через ingress (если есть DNS)
 if [ "$CHECK_PUBLIC" = "1" ] && command -v curl >/dev/null 2>&1; then
   log_section "13) Public health endpoints (через Ingress)"
-  for path in "/flows/health" "/crm/health" "/sync/health" "/worktracker/health" "/secrets/health"; do
+  for apex in $PLATFORM_APEX_HOSTS; do
+    for path in "/flows/health" "/crm/health" "/sync/health" "/worktracker/health" "/secrets/health"; do
+      check_step \
+        "https://${apex}${path}" \
+        "curl -fsS --max-time 10 https://${apex}${path} >/dev/null"
+    done
     check_step \
-      "https://${APEX_HOST}${path}" \
-      "curl -fsS --max-time 10 https://${APEX_HOST}${path} >/dev/null"
+      "https://grafana.${apex}/api/health" \
+      "curl -fsS --max-time 10 https://grafana.${apex}/api/health >/dev/null"
   done
-  check_step \
-    "https://${GRAFANA_HOST}/api/health" \
-    "curl -fsS --max-time 10 https://${GRAFANA_HOST}/api/health >/dev/null"
 else
   log_info "Пропуск public-проверок (CHECK_PUBLIC=0 или нет curl)"
 fi
@@ -202,10 +206,12 @@ fi
 # 14. WebSocket upgrade через Ingress (Traefik -> Granian HTTP/1.1 hop)
 if [ "$CHECK_PUBLIC" = "1" ] && command -v curl >/dev/null 2>&1; then
   log_section "14) WebSocket upgrade (через Ingress)"
-  for svc in flows crm sync rag worktracker voice; do
-    check_step \
-      "WS upgrade https://${APEX_HOST}/${svc}/api/ws/notifications (401 или 101, не 500)" \
-      "code=\$(curl -sS --http1.1 -o /dev/null -w '%{http_code}' --max-time 10 -H 'Connection: Upgrade' -H 'Upgrade: websocket' -H 'Sec-WebSocket-Version: 13' -H 'Sec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==' 'https://${APEX_HOST}/${svc}/api/ws/notifications'); [ \"\$code\" = '401' ] || [ \"\$code\" = '101' ]"
+  for apex in $PLATFORM_APEX_HOSTS; do
+    for svc in flows crm sync rag worktracker voice; do
+      check_step \
+        "WS upgrade https://${apex}/${svc}/api/ws/notifications (401 или 101, не 500)" \
+        "code=\$(curl -sS --http1.1 -o /dev/null -w '%{http_code}' --max-time 10 -H 'Connection: Upgrade' -H 'Upgrade: websocket' -H 'Sec-WebSocket-Version: 13' -H 'Sec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==' 'https://${apex}/${svc}/api/ws/notifications'); [ \"\$code\" = '401' ] || [ \"\$code\" = '101' ]"
+    done
   done
 else
   log_info "Пропуск WS upgrade (CHECK_PUBLIC=0 или нет curl)"
@@ -238,8 +244,20 @@ else
     "$K exec -n $PLATFORM_NS $LITSERVE_POD -- sh -lc 'PY=/opt/venv/bin/python; MODEL=\$(\"\$PY\" -c \"from apps.provider_litserve.config import get_provider_litserve_settings as g; print(g().provider_litserve.infra.embedding_openai_model_id)\"); curl -fsS --max-time 300 -H \"Content-Type: application/json\" -d \"{\\\"model\\\":\\\"\${MODEL}\\\",\\\"input\\\":\\\"litserve healthcheck\\\"}\" http://127.0.0.1:8014/v1/embeddings | \"\$PY\" -c \"import json, sys; body=json.load(sys.stdin); vec=body[\\\"data\\\"][0][\\\"embedding\\\"]; assert isinstance(vec, list) and len(vec) > 0\"'"
 fi
 
-# 17. Browser runtime (in-cluster: CDP sidecar + app readiness + рестарты)
-log_section "17) Browser runtime (CDP + рестарты)"
+# 17. Platform brand API (multi-apex)
+if [ "$CHECK_PUBLIC" = "1" ] && command -v curl >/dev/null 2>&1; then
+  log_section "17) Platform brand API (multi-apex)"
+  for apex in $PLATFORM_APEX_HOSTS; do
+    check_step \
+      "https://${apex}/frontend/api/platform/brand base_domain=${apex}" \
+      "curl -fsS --max-time 10 https://${apex}/frontend/api/platform/brand | python3 -c \"import json,sys; b=json.load(sys.stdin); assert b.get('base_domain')=='${apex}', b\""
+  done
+else
+  log_info "Пропуск brand API (CHECK_PUBLIC=0 или нет curl)"
+fi
+
+# 18. Browser runtime (in-cluster: CDP sidecar + app readiness + рестарты)
+log_section "18) Browser runtime (CDP + рестарты)"
 BROWSER_POD=$($K get pod -n "$PLATFORM_NS" -l app=browser \
   -o jsonpath='{.items[0].metadata.name}' 2>/dev/null || true)
 if [ -z "$BROWSER_POD" ]; then

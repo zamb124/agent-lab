@@ -25,6 +25,7 @@ from core.config.models import (
     MediaTranscriberConfig,
     NanoBananaConfig,
     PaymentProvidersConfig,
+    PlatformBrandConfig,
     ProviderLitserveConfig,
     ProxyConfig,
     PublicSiteConfig,
@@ -41,6 +42,7 @@ from core.config.models import (
     TracingConfig,
     WhatsAppConfig,
     WorkerConfig,
+    default_platform_brands,
 )
 from core.llm_context.models import LLMContextConfig
 from core.logging import get_logger
@@ -103,6 +105,14 @@ class BaseSettings(PydanticBaseSettings):
     sgr: SGRConfig = Field(default_factory=SGRConfig)
     legal: LegalConfig = Field(default_factory=LegalConfig)
     public_site: PublicSiteConfig = Field(default_factory=PublicSiteConfig)
+    primary_platform_domain: str = Field(
+        default="linnex.io",
+        description="Deployment default apex when Host is unavailable (TURN, VAPID). Host-aware code uses resolve_brand().",
+    )
+    platform_brands: dict[str, PlatformBrandConfig] = Field(
+        default_factory=default_platform_brands,
+        description="Бренды платформы по registrable apex-домену.",
+    )
     tracing: TracingConfig = Field(default_factory=TracingConfig)
     billing: BillingConfig = Field(default_factory=BillingConfig)
     tasks: TasksConfig = Field(default_factory=TasksConfig)

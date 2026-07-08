@@ -16,6 +16,7 @@ from urllib.parse import urlparse
 import httpx
 from bs4 import BeautifulSoup
 
+from core.config import get_settings
 from core.http import get_httpx_client
 from core.http.client import ProxyStrategy
 from core.types import (
@@ -38,14 +39,18 @@ _IPS_SEARCH_BASIC_AUTHORIZATION = "Basic aXBzOm5ld3Bhc3N3b3JkMjAyMA=="
 _LEGISLATION_HASH_RE = re.compile(r"(?i)hash=([a-f0-9]{64})")
 _STANDALONE_HASH_RE = re.compile(r"^[a-fA-F0-9]{64}$")
 _DEFAULT_TIMEOUT_SECONDS = 60.0
-_DEFAULT_HEADERS: dict[str, str] = {
-    "User-Agent": (
-        "Mozilla/5.0 (compatible; HumanitecPravoClient/1.0; +https://humanitec.ru); "
-        "lang=ru"
-    ),
-    "Accept": "application/json, text/html, text/plain;q=0.9, */*;q=0.8",
-    "Accept-Language": "ru-RU,ru;q=0.9",
-}
+
+
+def _default_pravo_headers() -> dict[str, str]:
+    apex = get_settings().primary_platform_domain
+    return {
+        "User-Agent": (
+            f"Mozilla/5.0 (compatible; HumanitecPravoClient/1.0; +https://{apex}); "
+            "lang=ru"
+        ),
+        "Accept": "application/json, text/html, text/plain;q=0.9, */*;q=0.8",
+        "Accept-Language": "ru-RU,ru;q=0.9",
+    }
 
 
 class PravoClientError(Exception):
@@ -110,7 +115,7 @@ class PravoClient:
     def __init__(self, timeout: float = _DEFAULT_TIMEOUT_SECONDS, headers: dict[str, str] | None = None) -> None:
         extra_headers = headers if headers is not None else {}
         self._timeout: float = timeout
-        self._headers: dict[str, str] = {**_DEFAULT_HEADERS, **extra_headers}
+        self._headers: dict[str, str] = {**_default_pravo_headers(), **extra_headers}
 
     @staticmethod
     def extract_legislation_document_hash(ref: str) -> str:

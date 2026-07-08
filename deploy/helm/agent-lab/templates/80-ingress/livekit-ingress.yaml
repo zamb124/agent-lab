@@ -1,4 +1,5 @@
 {{- if and .Values.ingress.enabled .Values.livekit.enabled }}
+{{- $platformDomains := .Values.ingress.platformDomains | default (list (dict "apexHost" .Values.ingress.apexHost "wildcardHost" .Values.ingress.wildcardHost)) }}
 ---
 apiVersion: networking.k8s.io/v1
 kind: Ingress
@@ -12,10 +13,13 @@ spec:
   ingressClassName: {{ .Values.ingress.className }}
   tls:
     - hosts:
-        - {{ .Values.ingress.livekitHost }}
+        {{- range $platformDomains }}
+        - {{ printf "livekit.%s" .apexHost | quote }}
+        {{- end }}
       secretName: platform-tls
   rules:
-    - host: {{ .Values.ingress.livekitHost | quote }}
+    {{- range $platformDomains }}
+    - host: {{ printf "livekit.%s" .apexHost | quote }}
       http:
         paths:
           - path: /
@@ -25,4 +29,5 @@ spec:
                 name: livekit
                 port:
                   number: 7880
+    {{- end }}
 {{- end }}

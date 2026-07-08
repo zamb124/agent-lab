@@ -61,6 +61,16 @@ def test_get_cookie_domain_localhost_shared_across_subdomains() -> None:
     assert get_cookie_domain("company.localhost:8002") == "localhost"
 
 
+@pytest.mark.parametrize("host,expected_domain", [
+    ("humanitec.ru", ".humanitec.ru"),
+    ("acme.humanitec.ru", ".humanitec.ru"),
+    ("linnex.io", ".linnex.io"),
+    ("acme.linnex.io", ".linnex.io"),
+])
+def test_get_cookie_domain_brand_apex(host: str, expected_domain: str) -> None:
+    assert get_cookie_domain(host) == expected_domain
+
+
 def test_extract_subdomain_on_ip() -> None:
     assert extract_subdomain("127.0.0.1:8002") is None
 
@@ -75,8 +85,9 @@ def test_extract_company_subdomain_company_unchanged() -> None:
     assert extract_company_subdomain("acme.humanitec.ru") == "acme"
 
 
-def test_unknown_hostname_still_primary_domain() -> None:
-    assert extract_base_domain("custom.internal:8002") == "humanitec.ru"
+def test_unknown_hostname_raises() -> None:
+    with pytest.raises(ValueError, match="unsupported host domain"):
+        extract_base_domain("custom.internal:8002")
 
 
 def test_is_allowed_integration_return_origin_lvh_subdomain() -> None:
@@ -95,6 +106,10 @@ def test_is_allowed_integration_return_origin_lvh_port_mismatch_local_dev() -> N
 def test_is_allowed_integration_return_origin_prod_ports_must_match() -> None:
     pub = "https://humanitec.ru"
     assert is_allowed_integration_return_origin("https://acme.humanitec.ru:8443", pub) is False
+
+
+def test_is_allowed_integration_return_origin_linnex() -> None:
+    assert is_allowed_integration_return_origin("https://acme.linnex.io", "https://humanitec.ru") is True
 
 
 def test_is_allowed_integration_return_origin_humanitec() -> None:

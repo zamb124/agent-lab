@@ -1114,7 +1114,8 @@ async def flows_client(flows_app):
             assert response.status_code == 200
     """
     async with AsyncClient(
-        transport=ASGITransport(app=flows_app), base_url="http://testserver"
+        transport=ASGITransport(app=flows_app), base_url="http://testserver",
+        headers={"Host": "humanitec.ru"},
     ) as client:
         yield client
 
@@ -1133,6 +1134,7 @@ async def frontend_client(frontend_app):
         transport=ASGITransport(app=frontend_app),
         base_url="http://testserver",
         follow_redirects=True,
+        headers={"Host": "humanitec.ru"},
     ) as client:
         yield client
 
@@ -1152,6 +1154,7 @@ async def frontend_client_with_auth(frontend_app, auth_token):
         base_url="http://testserver",
         cookies={"auth_token": auth_token},
         follow_redirects=True,
+        headers={"Host": "humanitec.ru"},
     ) as client:
         yield client
 

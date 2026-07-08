@@ -133,11 +133,18 @@ class AppleProvider(BaseAuthProvider):
         return True
 
     @override
-    def get_authorization_url(self, state: str, redirect_uri: str) -> str:
-        if not self.client_id:
+    def get_authorization_url(
+        self,
+        state: str,
+        redirect_uri: str,
+        *,
+        client_id: str | None = None,
+    ) -> str:
+        effective_client_id = client_id if client_id is not None else self.client_id
+        if not effective_client_id:
             raise ValueError("client_id (Services ID) не настроен для apple")
         params = {
-            "client_id": self.client_id,
+            "client_id": effective_client_id,
             "redirect_uri": redirect_uri,
             "response_type": "code",
             "scope": self.scope,
@@ -147,8 +154,15 @@ class AppleProvider(BaseAuthProvider):
         return f"{self.auth_url}?{urlencode(params)}"
 
     @override
-    async def exchange_code_for_token(self, code: str, redirect_uri: str) -> tuple[str, str | None]:
-        if not self.client_id:
+    async def exchange_code_for_token(
+        self,
+        code: str,
+        redirect_uri: str,
+        *,
+        client_id: str | None = None,
+    ) -> tuple[str, str | None]:
+        effective_client_id = client_id if client_id is not None else self.client_id
+        if not effective_client_id:
             raise ValueError("client_id (Services ID) не настроен для apple")
         if not self._team_id:
             raise ValueError("apple_team_id не настроен для apple")
@@ -158,7 +172,7 @@ class AppleProvider(BaseAuthProvider):
             raise ValueError("apple_private_key не настроен для apple")
         client_secret = build_apple_client_secret(
             self._team_id,
-            self.client_id,
+            effective_client_id,
             self._key_id,
             self._private_key_pem,
         )
@@ -166,7 +180,7 @@ class AppleProvider(BaseAuthProvider):
             "grant_type": "authorization_code",
             "code": code,
             "redirect_uri": redirect_uri,
-            "client_id": self.client_id,
+            "client_id": effective_client_id,
             "client_secret": client_secret,
         }
         response = await request_public_oauth(
@@ -193,10 +207,13 @@ class AppleProvider(BaseAuthProvider):
         self,
         access_token: str,
         first_login_user_json: str | None = None,
+        *,
+        client_id: str | None = None,
     ) -> ProviderUserInfo:
-        if not self.client_id:
+        effective_client_id = client_id if client_id is not None else self.client_id
+        if not effective_client_id:
             raise ValueError("client_id (Services ID) не настроен для apple")
-        claims = decode_apple_id_token(access_token, self.client_id)
+        claims = decode_apple_id_token(access_token, effective_client_id)
         sub = claims.get("sub")
         if not isinstance(sub, str) or not sub:
             raise ValueError("Apple id_token без sub")

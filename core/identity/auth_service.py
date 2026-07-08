@@ -33,6 +33,7 @@ from core.models.identity_models import (
     User,
     UserProviderRecord,
 )
+from core.platform_brand.resolver import resolve_auth_apple_client_id
 from core.utils.tokens import get_token_service
 
 if TYPE_CHECKING:
@@ -143,7 +144,18 @@ class AuthService:
 
         await self._save_auth_state(state, provider_name, redirect_uri, original_host, return_path)
 
-        auth_url = provider.get_authorization_url(state, redirect_uri)
+        apple_client_id: str | None = None
+        if provider_name == AuthProvider.APPLE and original_host is not None and str(original_host).strip():
+            apple_client_id = resolve_auth_apple_client_id(str(original_host).strip())
+
+        if isinstance(provider, AppleProvider):
+            auth_url = provider.get_authorization_url(
+                state,
+                redirect_uri,
+                client_id=apple_client_id,
+            )
+        else:
+            auth_url = provider.get_authorization_url(state, redirect_uri)
 
         logger.info(f"Начата авторизация через {provider_name.value}")
         logger.info(f"   redirect_uri: {redirect_uri}, original_host: {original_host}")
@@ -190,20 +202,42 @@ class AuthService:
         if redirect_uri is None:
             redirect_uri = auth_state.redirect_uri
 
+        apple_client_id: str | None = None
+        if (
+            auth_request.provider == AuthProvider.APPLE
+            and auth_state.original_host is not None
+            and str(auth_state.original_host).strip()
+        ):
+            apple_client_id = resolve_auth_apple_client_id(str(auth_state.original_host).strip())
+
         try:
-            access_token, refresh_token = await provider.exchange_code_for_token(
-                auth_request.code,
-                redirect_uri,
-            )
+            if isinstance(provider, AppleProvider):
+                access_token, refresh_token = await provider.exchange_code_for_token(
+                    auth_request.code,
+                    redirect_uri,
+                    client_id=apple_client_id,
+                )
+            else:
+                access_token, refresh_token = await provider.exchange_code_for_token(
+                    auth_request.code,
+                    redirect_uri,
+                )
         except ValueError as e:
             error_msg = str(e)
             if "ошибку: 400" in error_msg or "ошибку: 401" in error_msg:
                 return AuthResult(success=False, error_message=error_msg)
             raise
 
-        user_info = await provider.get_user_info(
-            access_token, auth_request.oauth_first_login_user_json
-        )
+        if isinstance(provider, AppleProvider):
+            user_info = await provider.get_user_info(
+                access_token,
+                auth_request.oauth_first_login_user_json,
+                client_id=apple_client_id,
+            )
+        else:
+            user_info = await provider.get_user_info(
+                access_token, auth_request.oauth_first_login_user_json
+            )
 
         user = await self._get_or_create_user(auth_request.provider, user_info)
 

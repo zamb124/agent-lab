@@ -8,6 +8,7 @@ from pywebpush import WebPushException, webpush
 
 from core.db.models import PushSubscription
 from core.logging import get_logger
+from core.platform_brand.resolver import resolve_context_host, resolve_vapid_email
 from core.types import JsonObject, PushSubscriptionKeys
 
 logger = get_logger(__name__)
@@ -74,11 +75,14 @@ class WebPushService:
                 "endpoint": subscription.endpoint,
                 "keys": keys,
             }
+            context_host = resolve_context_host()
+            vapid_email = resolve_vapid_email(context_host)
+            vapid_claims: dict[str, str | int] = {"sub": f"mailto:{vapid_email}"}
             _ = webpush(
                 subscription_info=subscription_info,
                 data=json.dumps(payload),
                 vapid_private_key=self.vapid_private_key,
-                vapid_claims=self.vapid_claims,
+                vapid_claims=vapid_claims,
             )
             logger.debug(f"Push отправлен: {title} -> {subscription.platform}")
             return True

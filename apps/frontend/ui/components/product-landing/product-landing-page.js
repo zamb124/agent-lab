@@ -9,6 +9,7 @@ import '@platform/lib/components/platform-button.js';
 import '../landing/landing-header.js';
 import '../landing/landing-footer.js';
 import { applyPublicDocumentMeta } from '../../utils/public-document-meta.js';
+import { getPlatformBrandBootstrap } from '@platform/lib/utils/platform-brand.js';
 
 /** @typedef {'hero' | 'gallery' | 'features' | 'steps' | 'benefits' | 'use-cases' | 'faq' | 'cta'} ProductLandingSection */
 
@@ -94,8 +95,10 @@ export class ProductLandingPage extends PlatformPage {
             throw new Error(`${this.tagName.toLowerCase()}: productKey is required`);
         }
         const origin = window.location.origin;
+        const brand = getPlatformBrandBootstrap();
+        const platformSuffix = brand ? ` | ${brand.platformName}` : '';
         applyPublicDocumentMeta({
-            title: this._t('meta_title'),
+            title: `${this._t('meta_title')}${platformSuffix}`,
             description: this._t('meta_description'),
             canonicalUrl: `${origin}/products/${productKey}`,
             ogImageUrl: `${origin}/static/frontend/assets/images/main_img.png`,

@@ -872,6 +872,43 @@ class TestTelegramTriggerHandler:
         url = handler.generate_webhook_url("my_agent", "my_trigger")
         assert url == "https://example.com/flows/api/v1/triggers/telegram/my_agent/my_trigger"
 
+    @pytest.mark.parametrize("host,expected_origin", [
+        ("humanitec.ru", "https://humanitec.ru"),
+        ("linnex.io", "https://linnex.io"),
+    ])
+    def test_handler_generates_webhook_url_brand_host(
+        self,
+        container,
+        host: str,
+        expected_origin: str,
+    ) -> None:
+        """Webhook URL host-aware по Context.host (multi-brand apex)."""
+        from apps.flows.src.triggers.handlers.telegram import TelegramTriggerHandler
+        from core.context import clear_context, set_context
+        from core.models.context_models import Context
+        from core.models.identity_models import User
+
+        handler = TelegramTriggerHandler(
+            base_url="https://fallback.example.com",
+            container=container,
+        )
+        set_context(
+            Context(
+                user=User(user_id="trigger_host_user", name="Trigger Host User"),
+                host=host,
+                session_id="test_session",
+                channel="test",
+                metadata={},
+            )
+        )
+        try:
+            url = handler.generate_webhook_url("my_agent", "my_trigger")
+        finally:
+            clear_context()
+        assert url == (
+            f"{expected_origin}/flows/api/v1/triggers/telegram/my_agent/my_trigger"
+        )
+
     def test_handler_verify_secret_token(self, container):
         """TelegramTriggerHandler верифицирует secret_token."""
         from apps.flows.src.triggers.handlers.telegram import TelegramTriggerHandler

@@ -18,7 +18,7 @@
     "code_runner_node_service_url": "http://localhost:8018",
     "code_runner_go_service_url": "http://localhost:8019",
     "code_runner_csharp_service_url": "http://localhost:8020",
-    "platform_public_base_url": "https://humanitec.ru",
+    "platform_public_base_url": "https://linnex.io",
     "document_server_dev_upstream_url": "http://localhost:8088"
   },
   "database": {
@@ -169,6 +169,93 @@
     "yandex_metrika_id": null,
     "google_analytics_measurement_id": null
   },
+  "primary_platform_domain": "linnex.io",
+  "platform_brands": {
+    "humanitec.ru": {
+      "platform_name": "Humanitec",
+      "support_email": "helpme@humanitec.ru",
+      "logo_path": "/static/core/assets/service_logos/frontend_logo.svg",
+      "legal": {
+        "company_name_ru": "ООО «Humanitec»",
+        "company_name_en": "Humanitec LLC",
+        "legal_form_ru": "Общество с ограниченной ответственностью Энжилабс",
+        "legal_form_en": "Limited Liability Company Angilabs",
+        "inn": "3123213213",
+        "ogrn": "3213213",
+        "legal_address_ru": "Россия, ",
+        "legal_address_en": "Russia, ",
+        "contact_email": "legal@humanitec.ru",
+        "support_email": "helpme@humanitec.ru",
+        "dpo_email": "dpo@humanitec.ru",
+        "phone": "+7 (953) 477-10-94",
+        "min_age": 18,
+        "retention_logs": "12 months",
+        "retention_messages": "24 months",
+        "retention_accounts": "5 years after account closure",
+        "cloud_provider": "Yandex Cloud",
+        "cloud_region": "Russian Federation",
+        "analytics_tools": "Internal monitoring and product analytics",
+        "billing_provider": "YooMoney"
+      },
+      "public_site": {
+        "telegram_community_url": "https://t.me/humanitecru",
+        "yandex_metrika_id": null,
+        "google_analytics_measurement_id": null
+      },
+      "embed_api_subdomain": "api",
+      "embed_cdn_subdomain": "cdn",
+      "embed_script_path": "/lib/embed-chat/humanitec-embed-autoload.js"
+    },
+    "agents-lab.ru": {
+      "platform_name": "Humanitec",
+      "support_email": "helpme@humanitec.ru",
+      "logo_path": "/static/core/assets/service_logos/frontend_logo.svg",
+      "legal": {
+        "company_name_ru": "ООО «Humanitec»",
+        "company_name_en": "Humanitec LLC",
+        "contact_email": "legal@humanitec.ru",
+        "support_email": "helpme@humanitec.ru",
+        "dpo_email": "dpo@humanitec.ru"
+      },
+      "public_site": {
+        "telegram_community_url": "https://t.me/humanitecru"
+      },
+      "embed_api_subdomain": "api",
+      "embed_cdn_subdomain": "cdn",
+      "embed_script_path": "/lib/embed-chat/humanitec-embed-autoload.js"
+    },
+    "linnex.io": {
+      "platform_name": "Linnex",
+      "support_email": "support@linnex.io",
+      "logo_path": "/static/core/assets/service_logos/frontend_logo.svg",
+      "legal": {
+        "company_name_ru": "Linnex",
+        "company_name_en": "Linnex",
+        "contact_email": "legal@linnex.io",
+        "support_email": "support@linnex.io",
+        "dpo_email": "privacy@linnex.io",
+        "phone": "+7 (953) 477-10-94",
+        "min_age": 18,
+        "retention_logs": "12 months",
+        "retention_messages": "24 months",
+        "retention_accounts": "5 years after account closure",
+        "cloud_provider": "Yandex Cloud",
+        "cloud_region": "Russian Federation",
+        "analytics_tools": "Internal monitoring and product analytics",
+        "billing_provider": "YooMoney"
+      },
+      "public_site": {
+        "telegram_community_url": null,
+        "yandex_metrika_id": null,
+        "google_analytics_measurement_id": null
+      },
+      "embed_api_subdomain": "api",
+      "embed_cdn_subdomain": "cdn",
+      "embed_script_path": "/lib/embed-chat/humanitec-embed-autoload.js",
+      "auth_apple_client_id": "app.linnex.io",
+      "vapid_email": "admin@linnex.io"
+    }
+  },
   "secrets": {
     "encryption_key": "dev-secrets-encryption-key-change-in-production"
   },
@@ -234,8 +321,8 @@
       "api_key": "YOUR_OPENROUTER_API_KEY",
       "base_url": "https://openrouter.ai/api/v1",
       "models_url": "https://openrouter.ai/api/v1/models",
-      "site_url": "https://humanitec.ru",
-      "site_name": "Humanitec"
+      "site_url": "https://linnex.io",
+      "site_name": "Linnex"
     },
     "bothub": {
       "api_key": "YOUR_BOTHUB_API_KEY",

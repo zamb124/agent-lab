@@ -147,6 +147,8 @@ alwaysApply: false
 
 Webhook URL: `/flows/api/v1/triggers/{telegram|webhook}/{flow_id}/{trigger_id}`.
 
+**Multi-brand webhooks:** `BaseTriggerHandler.generate_webhook_url` строит URL через `resolve_flows_webhook_public_base_url_from_context()` (Host запроса → `{apex}/flows`). Без request context — fallback на `TriggerRegistry.base_url` (TaskIQ/startup). Один Telegram bot = один webhook URL; при смене apex или tenant Host — `POST /flows/api/v1/flows/{flow_id}/triggers/{trigger_id}/reregister`.
+
 ## Resources
 
 Переиспользуемые shared-ресурсы графа (только типы каталога):

@@ -1,4 +1,5 @@
 {{- if and .Values.ingress.enabled .Values.onlyoffice.enabled }}
+{{- $platformDomains := .Values.ingress.platformDomains | default (list (dict "apexHost" .Values.ingress.apexHost "wildcardHost" .Values.ingress.wildcardHost)) }}
 ---
 apiVersion: networking.k8s.io/v1
 kind: Ingress
@@ -13,10 +14,13 @@ spec:
   ingressClassName: {{ .Values.ingress.className }}
   tls:
     - hosts:
-        - {{ .Values.ingress.onlyofficeHost }}
+        {{- range $platformDomains }}
+        - {{ printf "onlyoffice.%s" .apexHost | quote }}
+        {{- end }}
       secretName: platform-tls
   rules:
-    - host: {{ .Values.ingress.onlyofficeHost | quote }}
+    {{- range $platformDomains }}
+    - host: {{ printf "onlyoffice.%s" .apexHost | quote }}
       http:
         paths:
           - path: /
@@ -26,4 +30,5 @@ spec:
                 name: onlyoffice
                 port:
                   number: 80
+    {{- end }}
 {{- end }}

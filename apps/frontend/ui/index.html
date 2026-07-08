@@ -10,21 +10,85 @@
     </script>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, minimum-scale=1.0, user-scalable=no, viewport-fit=cover">
-    <title>Humanitec — платформа автоматизации бизнеса</title>
-    <meta name="description" content="Humanitec — пять продуктов в одном контуре: AI Studio, Knowledge Base, NetWorkle, Sync и Документы. Серверы в РФ, 152-ФЗ, облако и on-premise, оплата в рублях для юрлиц.">
+    <title>Platform — business automation</title>
+    <meta name="description" content="Five products in one platform: AI Studio, Knowledge Base, NetWorkle, Sync and Documents.">
     <meta name="robots" content="index,follow,max-image-preview:large,max-snippet:-1,max-video-preview:-1">
-    <link rel="canonical" href="https://humanitec.ru/">
+    <link rel="canonical" href="/">
     <meta property="og:type" content="website">
     <meta property="og:locale" content="ru_RU">
-    <meta property="og:site_name" content="Humanitec">
-    <meta property="og:title" content="Humanitec — платформа автоматизации бизнеса">
-    <meta property="og:description" content="Пять продуктов в одном контуре: AI Studio, Knowledge Base, NetWorkle, Sync и Документы. Серверы в РФ, 152-ФЗ, облако и on-premise.">
-    <meta property="og:url" content="https://humanitec.ru/">
-    <meta property="og:image" content="https://humanitec.ru/static/frontend/assets/images/main_img.png">
+    <meta property="og:site_name" content="Platform">
+    <meta property="og:title" content="Platform — business automation">
+    <meta property="og:description" content="Five products in one platform: AI Studio, Knowledge Base, NetWorkle, Sync and Documents.">
+    <meta property="og:url" content="/">
+    <meta property="og:image" content="/static/frontend/assets/images/main_img.png">
     <meta name="twitter:card" content="summary_large_image">
-    <meta name="twitter:title" content="Humanitec — платформа автоматизации бизнеса">
-    <meta name="twitter:description" content="Пять продуктов в одном контуре: AI Studio, Knowledge Base, NetWorkle, Sync и Документы. Серверы в РФ, 152-ФЗ, облако и on-premise.">
-    <meta name="twitter:image" content="https://humanitec.ru/static/frontend/assets/images/main_img.png">
+    <meta name="twitter:title" content="Platform — business automation">
+    <meta name="twitter:description" content="Five products in one platform: AI Studio, Knowledge Base, NetWorkle, Sync and Documents.">
+    <meta name="twitter:image" content="/static/frontend/assets/images/main_img.png">
+    <script>
+        (function () {
+            try {
+                var xhr = new XMLHttpRequest();
+                xhr.open('GET', '/frontend/api/platform/brand', false);
+                xhr.setRequestHeader('Accept', 'application/json');
+                xhr.send(null);
+                if (xhr.status !== 200) {
+                    return;
+                }
+                var brand = JSON.parse(xhr.responseText);
+                var origin = String(brand.apex_origin || '').replace(/\/$/, '');
+                var platformName = String(brand.platform_name || 'Platform');
+                var title = platformName + ' — платформа автоматизации бизнеса';
+                document.title = title;
+                var setMeta = function (selector, attr, value) {
+                    var node = document.querySelector(selector);
+                    if (node) {
+                        node.setAttribute(attr, value);
+                    }
+                };
+                setMeta('meta[name="description"]', 'content', platformName + ' — пять продуктов в одном контуре: AI Studio, Knowledge Base, NetWorkle, Sync и Документы.');
+                setMeta('link[rel="canonical"]', 'href', origin + '/');
+                setMeta('meta[property="og:site_name"]', 'content', platformName);
+                setMeta('meta[property="og:title"]', 'content', title);
+                setMeta('meta[property="og:url"]', 'content', origin + '/');
+                setMeta('meta[property="og:image"]', 'content', origin + '/static/frontend/assets/images/main_img.png');
+                setMeta('meta[name="twitter:title"]', 'content', title);
+                setMeta('meta[name="twitter:image"]', 'content', origin + '/static/frontend/assets/images/main_img.png');
+                setMeta('meta[name="apple-mobile-web-app-title"]', 'content', platformName);
+                var ldNode = document.getElementById('platform-ld-json');
+                if (ldNode) {
+                    ldNode.textContent = JSON.stringify({
+                        '@context': 'https://schema.org',
+                        '@graph': [
+                            {
+                                '@type': 'WebSite',
+                                name: platformName,
+                                url: origin + '/',
+                                inLanguage: 'ru',
+                                description: platformName + ' — пять продуктов в одном контуре: AI Studio, Knowledge Base, NetWorkle, Sync и Документы.',
+                            },
+                            {
+                                '@type': 'Organization',
+                                name: platformName,
+                                url: origin + '/',
+                                logo: origin + '/static/core/assets/service_logos/frontend_logo.svg',
+                            },
+                            {
+                                '@type': 'SoftwareApplication',
+                                name: platformName,
+                                applicationCategory: 'BusinessApplication',
+                                operatingSystem: 'Web',
+                                url: origin + '/',
+                                description: platformName + ' — пять продуктов в одном контуре для автоматизации бизнеса.',
+                            },
+                        ],
+                    });
+                }
+            } catch (e) {
+                return;
+            }
+        })();
+    </script>
     <link rel="icon" type="image/svg+xml" href="/static/core/assets/service_logos/frontend_logo.svg">
     
     <!-- PWA Manifest -->
@@ -38,7 +102,7 @@
     <!-- Поддержка iOS PWA -->
     <meta name="mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-    <meta name="apple-mobile-web-app-title" content="Humanitec">
+    <meta name="apple-mobile-web-app-title" content="Platform">
     <link rel="apple-touch-icon" href="/static/core/pwa/icons/icon-180x180.png">
     <link rel="apple-touch-icon" sizes="152x152" href="/static/core/pwa/icons/icon-152x152.png">
     <link rel="apple-touch-icon" sizes="180x180" href="/static/core/pwa/icons/icon-180x180.png">
@@ -47,30 +111,16 @@
     <!-- Microsoft Tiles -->
     <meta name="msapplication-TileColor" content="#1a1a2e">
     <meta name="msapplication-TileImage" content="/static/core/pwa/icons/icon-144x144.png">
-    <script type="application/ld+json">
+    <script type="application/ld+json" id="platform-ld-json">
     {
       "@context": "https://schema.org",
       "@graph": [
         {
           "@type": "WebSite",
-          "name": "Humanitec",
-          "url": "https://humanitec.ru/",
+          "name": "Platform",
+          "url": "/",
           "inLanguage": "ru",
-          "description": "Платформа автоматизации бизнеса: AI Studio, Knowledge Base, NetWorkle, Sync и Документы."
-        },
-        {
-          "@type": "Organization",
-          "name": "Humanitec",
-          "url": "https://humanitec.ru/",
-          "logo": "https://humanitec.ru/static/core/assets/service_logos/frontend_logo.svg"
-        },
-        {
-          "@type": "SoftwareApplication",
-          "name": "Humanitec",
-          "applicationCategory": "BusinessApplication",
-          "operatingSystem": "Web",
-          "url": "https://humanitec.ru/",
-          "description": "Пять продуктов в одном контуре для автоматизации бизнеса: AI Studio, Knowledge Base, NetWorkle, Sync и Документы."
+          "description": "Business automation platform."
         }
       ]
     }

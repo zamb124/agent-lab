@@ -698,3 +698,13 @@ Alembic держит DDL-блокировку на alembic_version → пара�
   volumeMounts:
     {{- include "agentlab.confVolumeMount" . | nindent 4 }}
 {{- end -}}
+
+{{- define "agentlab.ingressPlatformDomains" -}}
+{{- if .Values.ingress.platformDomains -}}
+{{- toYaml .Values.ingress.platformDomains -}}
+{{- else -}}
+- apexHost: {{ .Values.ingress.apexHost | quote }}
+  wildcardHost: {{ .Values.ingress.wildcardHost | quote }}
+{{- end -}}
+{{- end -}}
+

@@ -30,6 +30,7 @@ fi
 LE_EMAIL="${LE_EMAIL:-ops@humanitec.ru}"
 APEX_HOST="${APEX_HOST:-humanitec.ru}"
 WILDCARD_HOST="${WILDCARD_HOST:-*.humanitec.ru}"
+PLATFORM_BRAND_DOMAINS="${PLATFORM_BRAND_DOMAINS:-humanitec.ru linnex.io}"
 PLATFORM_TLS_SECRET="${PLATFORM_TLS_SECRET:-platform-tls}"
 WEBHOOK_REPO_URL="${WEBHOOK_REPO_URL:-https://github.com/flant/cert-manager-webhook-regru.git}"
 WEBHOOK_CHART_DIR="${WEBHOOK_CHART_DIR:-${TMPDIR:-/tmp}/cert-manager-webhook-regru}"
@@ -152,6 +153,12 @@ $K delete order -n "$PLATFORM_NS" --all --wait=false >/dev/null 2>&1 || true
 
 # 6. Certificate
 log_do "Certificate $PLATFORM_TLS_SECRET в $PLATFORM_NS"
+DNS_NAMES_YAML=""
+for domain in $PLATFORM_BRAND_DOMAINS; do
+  DNS_NAMES_YAML="${DNS_NAMES_YAML}    - ${domain}
+    - \"*.${domain}\"
+"
+done
 cat <<EOF | $K apply -f -
 apiVersion: cert-manager.io/v1
 kind: Certificate
@@ -164,9 +171,7 @@ spec:
     name: letsencrypt-prod-dns01
     kind: ClusterIssuer
   dnsNames:
-    - ${APEX_HOST}
-    - "${WILDCARD_HOST}"
-EOF
+${DNS_NAMES_YAML}EOF
 
 # 7. Ждём Ready
 wait_for \

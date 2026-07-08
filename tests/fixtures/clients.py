@@ -303,7 +303,12 @@ async def crm_client(
     crm_app = create_app()
 
     transport = ASGITransport(app=crm_app)
-    async with AsyncClient(transport=transport, base_url="http://testserver", follow_redirects=True) as client:
+    async with AsyncClient(
+        transport=transport,
+        base_url="http://testserver",
+        follow_redirects=True,
+        headers={"Host": "humanitec.ru"},
+    ) as client:
         await ensure_crm_per_test_namespace_and_types(
             client,
             unique_id,
@@ -323,7 +328,11 @@ async def frontend_client():
     from apps.frontend.main import app
 
     transport = ASGITransport(app=app)
-    async with AsyncClient(transport=transport, base_url="http://testserver") as client:
+    async with AsyncClient(
+        transport=transport,
+        base_url="http://testserver",
+        headers={"Host": "humanitec.ru"},
+    ) as client:
         yield client
 
 

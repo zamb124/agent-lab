@@ -12,7 +12,7 @@ import secrets
 from collections.abc import Awaitable, Callable
 from datetime import datetime, timedelta, timezone
 from typing import TYPE_CHECKING
-from urllib.parse import urlencode, urlparse, urlunparse
+from urllib.parse import urlencode
 from uuid import uuid4
 
 from core.config import get_settings
@@ -29,6 +29,7 @@ from core.integrations.providers.amocrm import (
     parse_amocrm_subdomain_from_referer,
 )
 from core.logging import get_logger
+from core.platform_brand.resolver import resolve_oauth_brand_origin
 from core.types import JsonObject, parse_json_object, require_json_object
 from core.utils.domain import is_allowed_integration_return_origin
 
@@ -54,14 +55,6 @@ def set_oauth_credential_saved_hook(hook: CredentialSavedHook) -> None:
     """
     global _oauth_credential_saved_hook
     _oauth_credential_saved_hook = hook
-
-
-def _public_service_origin(service_base_url: str) -> str:
-    """Схема + host + port без path/query: в конфиге URL сервиса иногда с суффиксом пути."""
-    parts = urlparse(service_base_url)
-    if parts.scheme and parts.netloc:
-        return urlunparse((parts.scheme, parts.netloc, "", "", "", "")).rstrip("/")
-    return service_base_url.rstrip("/")
 
 
 class OAuthTokenRefreshError(Exception):
@@ -141,6 +134,7 @@ class OAuthService:
         amocrm_subdomain: str | None = None,
         return_origin: str | None = None,
         oauth_ui_locale: OAuthErrorLocale | None = None,
+        brand_host: str | None = None,
     ) -> str:
         """
         Генерирует OAuth authorization URL.
@@ -151,7 +145,9 @@ class OAuthService:
         amocrm_subdomain: поддомен amo (без .amocrm.ru) — обязателен для provider amocrm.
 
         return_origin: фактический origin вкладки (например http://system.lvh.me:8002) для редиректа
-        после успешного OAuth; должен быть в том же тенант-кластере, что и platform_public_base_url.
+        после успешного OAuth; должен принадлежать одному из platform brand apex или dev-кластеру.
+
+        brand_host: Host header вкладки (или apex) для redirect_uri, если redirect_uri не задан явно.
 
         oauth_ui_locale: локаль SPA при старте OAuth (ru/en), сохраняется в state для страницы ошибки
         callback после редиректа с провайдера (куки браузера на callback могут не совпасть с вкладкой приложения).
@@ -169,12 +165,11 @@ class OAuthService:
         )
 
         if redirect_uri is None:
+            origin = resolve_oauth_brand_origin(
+                brand_host=brand_host,
+                return_origin=return_origin,
+            )
             settings = get_settings()
-            public_base = settings.server.platform_public_base_url
-            if public_base and public_base.strip():
-                origin = public_base.strip().rstrip("/")
-            else:
-                origin = _public_service_origin(settings.server.get_service_url())
             public_segment = settings.server.name
             redirect_uri = f"{origin}/{public_segment}/api/v1/integrations/oauth/callback"
 
@@ -193,11 +188,10 @@ class OAuthService:
         if amocrm_subdomain is not None and str(amocrm_subdomain).strip() != "":
             state_payload["amocrm_subdomain"] = str(amocrm_subdomain).strip()
         if return_origin is not None and str(return_origin).strip():
-            settings = get_settings()
             ro = str(return_origin).strip().rstrip("/")
-            if not is_allowed_integration_return_origin(ro, settings.server.platform_public_base_url):
+            if not is_allowed_integration_return_origin(ro, None):
                 raise ValueError(
-                    "return_origin не из того же origin-кластера, что server.platform_public_base_url"
+                    "return_origin не из разрешённого platform brand apex или dev-кластера"
                 )
             state_payload["post_auth_redirect_origin"] = ro
         if oauth_ui_locale == "ru" or oauth_ui_locale == "en":
@@ -422,7 +416,7 @@ class OAuthService:
         post_raw = state_payload.get("post_auth_redirect_origin")
         if isinstance(post_raw, str) and post_raw.strip():
             ro = post_raw.strip().rstrip("/")
-            if is_allowed_integration_return_origin(ro, get_settings().server.platform_public_base_url):
+            if is_allowed_integration_return_origin(ro, None):
                 post_auth_redirect_origin = ro
 
         return credential, return_path, flow_context, post_auth_redirect_origin

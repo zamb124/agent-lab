@@ -45,13 +45,53 @@ async def test_catalog_shape_and_mcp_url(
                 None,
             )
             assert matched is not None
-            frontend_base = get_frontend_public_base_url().rstrip("/")
+            frontend_base = get_frontend_public_base_url("humanitec.ru").rstrip("/")
             assert matched["mcp_url"] == (
                 f"{frontend_base}/flows/api/v1/agent/platform-mcp/{toolkit_id}"
             )
             assert matched["name"] == "Catalog toolkit"
             positions = [item["position"] for item in items if isinstance(item, dict)]
             assert positions == sorted(positions)
+        finally:
+            await container.agent_toolkit_repository.delete(toolkit_id)
+
+
+@pytest.mark.asyncio
+async def test_catalog_mcp_url_linnex_host(
+    flows_client: AsyncClient,
+    auth_headers: dict[str, str],
+    container,
+    frontend_container,
+    unique_id: str,
+) -> None:
+    from tests.agent.test_platform_mcp_exposure import _repository_context_for_auth
+
+    toolkit_id = f"tk_linnex_{unique_id}"
+    async with _repository_context_for_auth(auth_headers, frontend_container):
+        await container.agent_toolkit_repository.set(
+            AgentToolkit(
+                toolkit_id=toolkit_id,
+                name="Linnex host toolkit",
+                description="MCP URL must use linnex.io apex",
+                default_enabled=False,
+                position=6,
+                source="custom",
+            )
+        )
+        try:
+            response = await flows_client.get(
+                "/flows/api/v1/agent/toolkits",
+                headers={**auth_headers, "Host": "linnex.io"},
+            )
+            assert response.status_code == 200, response.text
+            matched = next(
+                (item for item in response.json() if item.get("toolkit_id") == toolkit_id),
+                None,
+            )
+            assert matched is not None
+            assert matched["mcp_url"] == (
+                f"https://linnex.io/flows/api/v1/agent/platform-mcp/{toolkit_id}"
+            )
         finally:
             await container.agent_toolkit_repository.delete(toolkit_id)
 
@@ -127,9 +167,8 @@ async def test_catalog_lazy_backfill_empty_company(
     unique_id: str,
 ) -> None:
     from core.context import Context, clear_context, get_context, set_context
-    from core.models.identity_models import Company, User
+    from core.models.identity_models import Company
     from tests.agent._helpers import user_id_from_auth_token
-    from tests.agent.test_platform_mcp_exposure import _repository_context_for_auth
     auth_token = auth_headers["Authorization"].removeprefix("Bearer ").strip()
     user_id = user_id_from_auth_token(auth_token)
     user = await frontend_container.user_repository.get(user_id)
@@ -141,7 +180,6 @@ async def test_catalog_lazy_backfill_empty_company(
         subdomain=f"empty-tk-{unique_id}",
     )
     previous = None
-    from core.context import get_context
 
     previous = get_context()
     set_context(

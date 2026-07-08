@@ -21,23 +21,29 @@ class TestAuthLogin:
 
         print(f"✅ /frontend/api/auth/login/yandex возвращает JSON с auth_url: {data['auth_url'][:80]}...")
 
-    async def test_login_with_custom_host(self, frontend_client):
-        """Проверяем что при кастомном хосте возвращается валидный auth_url"""
+    async def test_login_linnex_redirect_uri(self, frontend_client):
+        """OAuth redirect_uri на linnex.io для Host linnex.io."""
         response = await frontend_client.get(
             "/frontend/api/auth/login/yandex",
-            headers={"host": "custom.domain.com"}
+            headers={"host": "linnex.io"},
         )
 
         assert response.status_code == 200
         data = response.json()
         assert "auth_url" in data
-        assert "provider" in data
-        # Для неизвестных доменов redirect_uri строится через PRIMARY_DOMAIN (humanitec.ru)
-        # что позволяет использовать единый callback URL у OAuth провайдеров
-        assert "oauth.yandex.ru" in data["auth_url"]
-        assert "redirect_uri" in data["auth_url"]
+        assert "redirect_uri=https%3A%2F%2Flinnex.io" in data["auth_url"]
 
-        print("✅ Кастомный хост обрабатывается, возвращается валидный auth_url")
+    async def test_login_unknown_host_rejected(self, frontend_client):
+        """Неизвестный Host не должен получать OAuth redirect_uri."""
+        response = await frontend_client.get(
+            "/frontend/api/auth/login/yandex",
+            headers={"host": "custom.domain.com"},
+        )
+
+        assert response.status_code == 400
+        data = response.json()
+        assert "detail" in data
+        assert "unsupported host domain" in data["detail"]
 
     async def test_login_invalid_provider(self, frontend_client):
         """Проверяем обработку невалидного провайдера"""
@@ -83,5 +89,16 @@ class TestAuthLogin:
         assert data.get("provider") == "apple"
         assert "appleid.apple.com" in data["auth_url"]
         assert "response_mode=form_post" in data["auth_url"] or "response_mode%3Dform_post" in data["auth_url"]
+
+    async def test_login_apple_linnex_client_id(self, frontend_client):
+        """Apple OAuth client_id per-brand для Host linnex.io."""
+        response = await frontend_client.get(
+            "/frontend/api/auth/login/apple",
+            headers={"host": "linnex.io"},
+        )
+        assert response.status_code == 200, response.text
+        data = response.json()
+        assert data.get("provider") == "apple"
+        assert "client_id=app.linnex.io" in data["auth_url"] or "client_id%3Dapp.linnex.io" in data["auth_url"]
 
 

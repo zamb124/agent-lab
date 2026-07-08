@@ -2,6 +2,7 @@
 Сервис frontend — FastAPI-приложение для управления платформой
 """
 
+import json
 from datetime import UTC, datetime
 from pathlib import Path
 from urllib.parse import quote, urlparse
@@ -38,6 +39,7 @@ from apps.frontend.api.invites import router as invites_router
 from apps.frontend.api.leads import lead_requests_router, leads_router
 from apps.frontend.api.payments_webhook import router as payments_webhook_router
 from apps.frontend.api.platform_billing import router as platform_billing_router
+from apps.frontend.api.platform_brand import router as platform_brand_router
 from apps.frontend.api.platform_llm_model_scores import (
     router as platform_llm_model_scores_router,
 )
@@ -84,6 +86,7 @@ from core.identity.system_bootstrap import ensure_system_admin_membership
 from core.logging import get_logger
 from core.middleware.auth.company_resolver import build_service_base_url
 from core.middleware.static_core_module_cors import StaticCoreModuleCorsMiddleware
+from core.platform_brand.resolver import resolve_brand
 from core.short_links.kinds import SHORT_LINK_KIND_FLOW_PREVIEW_EMBED
 from core.short_links.payloads import FlowPreviewEmbedPayload
 
@@ -357,6 +360,7 @@ app = create_service_app(
         platform_tracing_router,
         crawl_report_router,
         platform_billing_router,
+        platform_brand_router,
         platform_llm_model_scores_router,
         payments_webhook_router,
         yoomoney_oauth_router,
@@ -518,17 +522,23 @@ async def flow_preview_guest_page(request: Request, container: ContainerDep, h: 
 
 @app.get("/api/public/legal")
 @app.get("/frontend/api/public/legal")
-async def get_public_legal(container: ContainerDep) -> JSONResponse:
+async def get_public_legal(request: Request, container: ContainerDep) -> JSONResponse:
     """Публичные юридические реквизиты для страниц policy/terms."""
     _ = container
-    legal = get_frontend_settings().legal.model_dump()
-    return JSONResponse(content=legal)
+    host = request.headers.get("host")
+    if host is None or not str(host).strip():
+        raise HTTPException(status_code=400, detail="Host header is required")
+    brand = resolve_brand(str(host).strip())
+    return JSONResponse(content=brand.legal.model_dump())
 
 @app.get("/robots.txt")
 @app.get("/frontend/robots.txt")
-async def get_robots_txt(container: ContainerDep) -> PlainTextResponse:
+async def get_robots_txt(request: Request, container: ContainerDep) -> PlainTextResponse:
     _ = container
-    base_url = get_frontend_public_base_url()
+    host = request.headers.get("host")
+    if host is None or not str(host).strip():
+        raise HTTPException(status_code=400, detail="Host header is required")
+    base_url = get_frontend_public_base_url(str(host).strip())
     robots_txt = (
         "User-agent: *\n"
         "Allow: /\n"
@@ -549,18 +559,46 @@ async def get_robots_txt(container: ContainerDep) -> PlainTextResponse:
 
 @app.get("/sitemap.xml")
 @app.get("/frontend/sitemap.xml")
-async def get_sitemap_xml(container: ContainerDep) -> Response:
+async def get_sitemap_xml(request: Request, container: ContainerDep) -> Response:
     _ = container
-    base_url = get_frontend_public_base_url()
+    host = request.headers.get("host")
+    if host is None or not str(host).strip():
+        raise HTTPException(status_code=400, detail="Host header is required")
+    base_url = get_frontend_public_base_url(str(host).strip())
     sitemap_xml = _build_sitemap_xml(base_url=base_url)
     return Response(content=sitemap_xml, media_type="application/xml")
 
 @app.get("/llms.txt")
 @app.get("/frontend/llms.txt")
-async def serve_llms_txt(container: ContainerDep) -> PlainTextResponse:
+async def serve_llms_txt(request: Request, container: ContainerDep) -> PlainTextResponse:
     _ = container
-    base_url = get_frontend_public_base_url()
+    host = request.headers.get("host")
+    if host is None or not str(host).strip():
+        raise HTTPException(status_code=400, detail="Host header is required")
+    base_url = get_frontend_public_base_url(str(host).strip())
     return PlainTextResponse(content=_build_llms_txt(base_url=base_url))
+
+
+_PWA_MANIFEST_TEMPLATE_PATH = (
+    Path(__file__).resolve().parents[2] / "core" / "frontend" / "pwa" / "manifest.json"
+)
+
+
+@app.get("/manifest.json")
+@app.get("/frontend/manifest.json")
+async def get_pwa_manifest(request: Request, container: ContainerDep) -> JSONResponse:
+    _ = container
+    host = request.headers.get("host")
+    if host is None or not str(host).strip():
+        raise HTTPException(status_code=400, detail="Host header is required")
+    brand = resolve_brand(str(host).strip())
+    manifest_payload = json.loads(_PWA_MANIFEST_TEMPLATE_PATH.read_text(encoding="utf-8"))
+    manifest_payload["name"] = f"{brand.platform_name} - AI agents for business"
+    manifest_payload["short_name"] = brand.platform_name
+    manifest_payload["description"] = (
+        f"Business automation platform: AI agents, knowledge base and CRM — {brand.platform_name}"
+    )
+    return JSONResponse(content=manifest_payload)
 
 
 # HumanitecAgent: статика (assets), страница /agent — SPA (agent-download-page)

@@ -40,13 +40,16 @@ DEVICE_TOKEN_EXPIRES = 30 * 86400
 
 
 @router.get("/download/{platform}", tags=["agent", "public"])
-async def download_agent(platform: str) -> RedirectResponse:
+async def download_agent(platform: str, request: Request) -> RedirectResponse:
     if platform not in VALID_PLATFORMS:
         raise HTTPException(
             status_code=400,
             detail=f"Неподдерживаемая платформа: {platform!r}. Допустимые: {sorted(VALID_PLATFORMS)}",
         )
     settings = get_agent_settings()
+    brand_host = request.headers.get("host")
+    if brand_host is not None:
+        brand_host = str(brand_host).strip() or None
     logger.info(
         "agent.download.requested",
         platform=platform,
@@ -54,7 +57,7 @@ async def download_agent(platform: str) -> RedirectResponse:
         github_repo=settings.releases.github_repo,
     )
     try:
-        url = await fetch_latest_release_asset_url(platform)
+        url = await fetch_latest_release_asset_url(platform, brand_host=brand_host)
     except httpx.HTTPStatusError as exc:
         logger.warning(
             "agent.download.failed",

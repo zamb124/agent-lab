@@ -1,4 +1,5 @@
 {{- if and .Values.ingress.enabled .Values.observability.grafana.enabled }}
+{{- $platformDomains := .Values.ingress.platformDomains | default (list (dict "apexHost" .Values.ingress.apexHost "wildcardHost" .Values.ingress.wildcardHost)) }}
 ---
 apiVersion: networking.k8s.io/v1
 kind: Ingress
@@ -21,10 +22,13 @@ spec:
   ingressClassName: {{ .Values.ingress.className }}
   tls:
     - hosts:
-        - {{ .Values.ingress.grafanaHost }}
+        {{- range $platformDomains }}
+        - {{ printf "grafana.%s" .apexHost | quote }}
+        {{- end }}
       secretName: platform-tls
   rules:
-    - host: {{ .Values.ingress.grafanaHost | quote }}
+    {{- range $platformDomains }}
+    - host: {{ printf "grafana.%s" .apexHost | quote }}
       http:
         paths:
           - path: /
@@ -34,6 +38,7 @@ spec:
                 name: grafana
                 port:
                   number: 3000
+    {{- end }}
 ---
 # Без forwardAuth: иначе curl https://grafana.../api/health (cluster-health §13) получает 401 от grafana-check.
 # Приоритет выше основного Ingress Grafana (1000), иначе совпадение PathPrefix / перехватывает запрос.
@@ -48,10 +53,13 @@ spec:
   ingressClassName: {{ .Values.ingress.className }}
   tls:
     - hosts:
-        - {{ .Values.ingress.grafanaHost }}
+        {{- range $platformDomains }}
+        - {{ printf "grafana.%s" .apexHost | quote }}
+        {{- end }}
       secretName: platform-tls
   rules:
-    - host: {{ .Values.ingress.grafanaHost | quote }}
+    {{- range $platformDomains }}
+    - host: {{ printf "grafana.%s" .apexHost | quote }}
       http:
         paths:
           - path: /api/health
@@ -61,4 +69,5 @@ spec:
                 name: grafana
                 port:
                   number: 3000
+    {{- end }}
 {{- end }}

@@ -6,6 +6,7 @@ import { unsafeHTML } from 'lit/directives/unsafe-html.js';
 import { PlatformPage } from '@platform/lib/base/PlatformPage.js';
 import { marketingPublicContentPageStyles } from '@platform/lib/styles/shared/marketing-section.styles.js';
 import { applyPublicDocumentMeta } from '../utils/public-document-meta.js';
+import { getPlatformBrandBootstrap } from '@platform/lib/utils/platform-brand.js';
 import '@platform/lib/components/glass-spinner.js';
 import '@platform/lib/components/platform-button.js';
 import '../components/landing/landing-header.js';
@@ -69,8 +70,10 @@ export class BlogPostPage extends PlatformPage {
         if (typeof bodyHtml !== 'string') {
             throw new Error('blog-post-page: body missing');
         }
+        const brand = getPlatformBrandBootstrap();
+        const platformName = brand ? brand.platformName : 'Platform';
         applyPublicDocumentMeta({
-            title: `${title} | Humanitec`,
+            title: `${title} | ${platformName}`,
             description,
             canonicalUrl: `${origin}/blog/${encodeURIComponent(slug)}`,
             ogImageUrl: `${origin}/static/frontend/assets/images/main_img.png`,

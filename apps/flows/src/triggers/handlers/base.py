@@ -11,6 +11,7 @@ from apps.flows.config import get_settings
 from apps.flows.src.container_contracts import FlowRuntimeContainer
 from apps.flows.src.models import TriggerConfig, TriggerType
 from core.logging import get_logger
+from core.platform_brand.resolver import resolve_flows_webhook_public_base_url_from_context
 from core.types import JsonObject
 
 logger = get_logger(__name__)
@@ -122,7 +123,14 @@ class BaseTriggerHandler(ABC):
         """
         trigger_type = self.trigger_type.value
         svc = get_settings().server.name
-        return f"{self.base_url}/{svc}/api/v1/triggers/{trigger_type}/{flow_id}/{trigger_id}"
+        context_base = resolve_flows_webhook_public_base_url_from_context()
+        if context_base is not None:
+            webhook_base = context_base.rstrip("/")
+        else:
+            webhook_base = self.base_url.rstrip("/")
+        if webhook_base.endswith(f"/{svc}"):
+            return f"{webhook_base}/api/v1/triggers/{trigger_type}/{flow_id}/{trigger_id}"
+        return f"{webhook_base}/{svc}/api/v1/triggers/{trigger_type}/{flow_id}/{trigger_id}"
 
     def _log_register(self, flow_id: str, trigger_id: str) -> None:
         """Логирует регистрацию триггера."""

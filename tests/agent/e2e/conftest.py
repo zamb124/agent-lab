@@ -38,11 +38,6 @@ def agent_e2e_sandbox_contour(sandbox_services: dict[str, str]) -> None:
     _ = sandbox_services
 
 
-@pytest.fixture(autouse=True)
-def agent_e2e_subdomains(test_company_subdomains_initialized: None) -> None:
-    _ = test_company_subdomains_initialized
-
-
 @pytest.fixture
 def flows_worker(taskiq_worker):
     return taskiq_worker
