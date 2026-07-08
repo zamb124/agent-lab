@@ -32,23 +32,23 @@ export const baseStyles = css`
 
     /*
      * Ссылки внутри Shadow DOM не наследуют reset.css у document.
-     * Исключаем .btn и marketing-download-link — иначе accent-текст сливается с primary-фоном кнопки-ссылки.
+     * Исключаем .btn и marketing-download-* — иначе accent-текст сливается с primary-фоном CTA.
      */
-    :host a:any-link:not(.btn):not([class*='marketing-download-link']) {
+    :host a:any-link:not(.btn):not([class*='marketing-download-']) {
         color: var(--accent);
         text-decoration: none;
         transition: color var(--duration-fast) var(--easing-default);
     }
 
-    :host a:any-link:not(.btn):not([class*='marketing-download-link']):hover {
+    :host a:any-link:not(.btn):not([class*='marketing-download-']):hover {
         color: var(--accent-hover);
     }
 
-    :host a:any-link:not(.btn):not([class*='marketing-download-link']):visited {
+    :host a:any-link:not(.btn):not([class*='marketing-download-']):visited {
         color: var(--accent);
     }
 
-    :host a:any-link:not(.btn):not([class*='marketing-download-link']):active {
+    :host a:any-link:not(.btn):not([class*='marketing-download-']):active {
         color: var(--accent-active);
     }
 `;
