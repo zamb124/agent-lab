@@ -267,12 +267,23 @@ jobs:
           HELM_RELEASE: ${{ env.K8S_RELEASE }}
         run: bash deploy/scripts/helm_clear_pending_release.sh
 
+      - name: Setup brand DNS (Reg.ru A records for all platform apex)
+        env:
+          REGRU_USERNAME: ${{ secrets.REGRU_USERNAME }}
+          REGRU_PASSWORD: ${{ secrets.REGRU_PASSWORD }}
+        run: |
+          set -euo pipefail
+          if [ -z "${REGRU_USERNAME:-}" ] || [ -z "${REGRU_PASSWORD:-}" ]; then
+            echo "::warning::REGRU_USERNAME/REGRU_PASSWORD не заданы — пропускаю brand DNS."
+            exit 0
+          fi
+          bash deploy/scripts/setup-brand-dns.sh 84.38.184.105
+
       - name: Setup wildcard TLS (cert-manager-webhook-regru + Certificate platform-tls)
-        # Идемпотентный выпуск wildcard-сертификата humanitec.ru + *.humanitec.ru через
-        # DNS-01 ACME challenge (cert-manager-webhook-regru, API reg.ru). Выполняется ДО
+        # Идемпотентный выпуск wildcard-сертификата для всех platform brand apex (humanitec.ru, linnex.io)
+        # через DNS-01 ACME challenge (cert-manager-webhook-regru, API reg.ru). Выполняется ДО
         # helm install — Secret platform-tls создаётся cert-manager'ом, ingress'ы платформы
         # его подхватывают на старте (без HTTP-01, чтобы поддерживать wildcard).
-        # Если webhook + ClusterIssuer + Certificate уже на месте и Ready — пропускаем все шаги.
         env:
           REGRU_USERNAME: ${{ secrets.REGRU_USERNAME }}
           REGRU_PASSWORD: ${{ secrets.REGRU_PASSWORD }}

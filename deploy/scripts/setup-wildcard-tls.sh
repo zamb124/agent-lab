@@ -53,16 +53,34 @@ if ! $K get namespace cert-manager >/dev/null 2>&1; then
 fi
 log_ok "cert-manager установлен"
 
-# 1b. Fast-path: Certificate + ClusterIssuer Ready → выходим. Renewal cert-manager делает сам.
-if $K get certificate "$PLATFORM_TLS_SECRET" -n "$PLATFORM_NS" \
+# 1b. Fast-path: Certificate + ClusterIssuer Ready и dnsNames покрывают все brand apex → выходим.
+EXPECTED_DNS_NAMES=""
+for domain in $PLATFORM_BRAND_DOMAINS; do
+  EXPECTED_DNS_NAMES="${EXPECTED_DNS_NAMES} ${domain} *.${domain}"
+done
+CURRENT_DNS_NAMES=$($K get certificate "$PLATFORM_TLS_SECRET" -n "$PLATFORM_NS" \
+  -o jsonpath='{range .spec.dnsNames[*]}{.}{" "}{end}' 2>/dev/null || true)
+DNS_NAMES_COMPLETE=1
+for domain in $PLATFORM_BRAND_DOMAINS; do
+  case " ${CURRENT_DNS_NAMES} " in
+    *" ${domain} "*) ;;
+    *) DNS_NAMES_COMPLETE=0; break ;;
+  esac
+  case " ${CURRENT_DNS_NAMES} " in
+    *" *.${domain} "*) ;;
+    *) DNS_NAMES_COMPLETE=0; break ;;
+  esac
+done
+if [ "$DNS_NAMES_COMPLETE" = "1" ] \
+  && $K get certificate "$PLATFORM_TLS_SECRET" -n "$PLATFORM_NS" \
     -o jsonpath='{.status.conditions[?(@.type=="Ready")].status}' 2>/dev/null \
     | grep -q '^True$' \
-   && $K get clusterissuer letsencrypt-prod-dns01 \
+  && $K get clusterissuer letsencrypt-prod-dns01 \
     -o jsonpath='{.status.conditions[?(@.type=="Ready")].status}' 2>/dev/null \
     | grep -q '^True$'; then
   EXPIRES=$($K get certificate "$PLATFORM_TLS_SECRET" -n "$PLATFORM_NS" \
     -o jsonpath='{.status.notAfter}' 2>/dev/null)
-  log_skip "Certificate $PLATFORM_TLS_SECRET уже Ready (notAfter=$EXPIRES) — все шаги пропущены"
+  log_skip "Certificate $PLATFORM_TLS_SECRET уже Ready для всех brand apex (notAfter=$EXPIRES)"
   print_summary
   exit 0
 fi
