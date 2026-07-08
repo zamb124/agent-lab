@@ -16823,6 +16823,16 @@
         "title": "PendingUIEvent",
         "description": "UI-событие в очереди ExecutionState до отправки runtime в A2A stream."
       },
+      "PickerCategory": {
+        "type": "string",
+        "enum": [
+          "all",
+          "code",
+          "flow",
+          "mcp"
+        ],
+        "title": "PickerCategory"
+      },
       "PlatformToolDoc": {
         "properties": {
           "tool_id": {
@@ -20691,81 +20701,6 @@
         ],
         "title": "WorkItemCompletedBody"
       },
-      "WorkflowBranchOperationResponse": {
-        "properties": {
-          "execution_branch_id": {
-            "type": "string",
-            "title": "Execution Branch Id"
-          },
-          "parent_execution_branch_id": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Parent Execution Branch Id"
-          },
-          "base_sequence": {
-            "type": "integer",
-            "title": "Base Sequence"
-          },
-          "base_state_hash": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Base State Hash"
-          },
-          "reason": {
-            "type": "string",
-            "title": "Reason"
-          },
-          "event_id": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Event Id"
-          },
-          "sequence": {
-            "type": "integer",
-            "title": "Sequence"
-          },
-          "state_hash": {
-            "type": "string",
-            "title": "State Hash"
-          },
-          "snapshot_id": {
-            "type": "string",
-            "title": "Snapshot Id"
-          }
-        },
-        "additionalProperties": false,
-        "type": "object",
-        "required": [
-          "execution_branch_id",
-          "parent_execution_branch_id",
-          "base_sequence",
-          "base_state_hash",
-          "reason",
-          "event_id",
-          "sequence",
-          "state_hash",
-          "snapshot_id"
-        ],
-        "title": "WorkflowBranchOperationResponse"
-      },
       "WorkflowBranchRecord": {
         "properties": {
           "execution_branch_id": {
@@ -20822,6 +20757,80 @@
           "is_active"
         ],
         "title": "WorkflowBranchRecord"
+      },
+      "WorkflowBranchResult": {
+        "properties": {
+          "execution_branch_id": {
+            "type": "string",
+            "title": "Execution Branch Id"
+          },
+          "parent_execution_branch_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Parent Execution Branch Id"
+          },
+          "base_sequence": {
+            "type": "integer",
+            "title": "Base Sequence"
+          },
+          "base_state_hash": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Base State Hash"
+          },
+          "reason": {
+            "$ref": "#/components/schemas/ExecutionBranchReason"
+          },
+          "event_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Event Id"
+          },
+          "sequence": {
+            "type": "integer",
+            "title": "Sequence"
+          },
+          "state_hash": {
+            "type": "string",
+            "title": "State Hash"
+          },
+          "snapshot_id": {
+            "type": "string",
+            "title": "Snapshot Id"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "execution_branch_id",
+          "parent_execution_branch_id",
+          "base_sequence",
+          "base_state_hash",
+          "reason",
+          "event_id",
+          "sequence",
+          "state_hash",
+          "snapshot_id"
+        ],
+        "title": "WorkflowBranchResult"
       },
       "WorkflowBranchesResponse": {
         "properties": {

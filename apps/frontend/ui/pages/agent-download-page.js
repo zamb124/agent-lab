@@ -17,6 +17,8 @@ import {
 import '../components/landing/landing-header.js';
 import '../components/landing/landing-footer.js';
 
+const AGENT_LOGO_SRC = '/static/core/assets/service_logos/humanitec_agent_logo.svg';
+
 export class AgentDownloadPage extends PlatformPage {
     static i18nNamespace = 'landing';
 
@@ -71,6 +73,74 @@ export class AgentDownloadPage extends PlatformPage {
     }
 
     /**
+     * @returns {import('../utils/agent-download-platforms.js').AgentPlatformSpec | null}
+     */
+    _getPrimaryPlatformSpec() {
+        if (this._hostOs === 'windows') {
+            return getAgentPlatformSpec('windows');
+        }
+        if (this._hostOs === 'linux') {
+            return getAgentPlatformSpec('linux-deb');
+        }
+        if (this._hostOs === 'macos') {
+            if (this._macArchitecture === 'x64') {
+                return getAgentPlatformSpec('macos-x64');
+            }
+            return getAgentPlatformSpec('macos-arm64');
+        }
+        return null;
+    }
+
+    /**
+     * @param {import('../utils/agent-download-platforms.js').AgentPlatformId | null} primaryPlatformId
+     * @returns {readonly import('../utils/agent-download-platforms.js').AgentPlatformSpec[]}
+     */
+    _getAlsoAvailablePlatforms(primaryPlatformId) {
+        if (!primaryPlatformId) {
+            return AGENT_PLATFORM_CATALOG;
+        }
+        return AGENT_PLATFORM_CATALOG.filter(
+            (platformSpec) => platformSpec.platformId !== primaryPlatformId,
+        );
+    }
+
+    /**
+     * @returns {{ versionValue: string, releaseValue: string, releaseReady: boolean }}
+     */
+    _resolveReleaseStats() {
+        const releasePayload = this._releases.lastResult;
+        if (!releasePayload || typeof releasePayload !== 'object') {
+            if (this._releases.busy) {
+                return {
+                    versionValue: this._pt('stat_version_pending'),
+                    releaseValue: this._pt('stat_release_unavailable'),
+                    releaseReady: false,
+                };
+            }
+            return {
+                versionValue: this._pt('stat_version_pending'),
+                releaseValue: this._pt('release_check_failed'),
+                releaseReady: false,
+            };
+        }
+        const ready = releasePayload.ready === true;
+        const latestTag = typeof releasePayload.latest_tag === 'string' ? releasePayload.latest_tag : '';
+        const detail = typeof releasePayload.detail === 'string' ? releasePayload.detail : '';
+        if (ready) {
+            return {
+                versionValue: latestTag || this._pt('stat_version_pending'),
+                releaseValue: this._pt('stat_release_ready'),
+                releaseReady: true,
+            };
+        }
+        return {
+            versionValue: this._pt('stat_version_pending'),
+            releaseValue: detail || this._pt('stat_release_unavailable'),
+            releaseReady: false,
+        };
+    }
+
+    /**
      * @param {import('../utils/agent-download-platforms.js').AgentPlatformSpec} platformSpec
      */
     _renderPlatformIcon(platformSpec) {
@@ -85,6 +155,27 @@ export class AgentDownloadPage extends PlatformPage {
                     aria-hidden="true"
                 ></span>
             </span>
+        `;
+    }
+
+    /**
+     * @param {import('../utils/agent-download-platforms.js').AgentPlatformSpec} platformSpec
+     */
+    _renderPlatformRowIcon(platformSpec) {
+        const iconMaskStyle = `--marketing-download-platform-icon-mask: url('${platformSpec.iconSrc}')`;
+        const downloadLabel = this._pt('platform_card_download');
+        return html`
+            <a
+                class="marketing-agent-download-platform-row-link marketing-agent-download-platform-row-link--${platformSpec.iconTone}"
+                href=${this._platformDownloadHref(platformSpec.platformId)}
+                aria-label=${`${downloadLabel}: ${this._pt(platformSpec.titleKey)}`}
+            >
+                <span
+                    class="marketing-agent-download-platform-row-icon"
+                    style=${iconMaskStyle}
+                    aria-hidden="true"
+                ></span>
+            </a>
         `;
     }
 
@@ -139,40 +230,147 @@ export class AgentDownloadPage extends PlatformPage {
         `;
     }
 
+    /**
+     * @param {import('../utils/agent-download-platforms.js').AgentPlatformSpec} platformSpec
+     */
+    _renderInstallButton(platformSpec) {
+        const iconMaskStyle = `--marketing-download-platform-icon-mask: url('${platformSpec.iconSrc}')`;
+        return html`
+            <a
+                class="marketing-download-hero-button"
+                href=${this._platformDownloadHref(platformSpec.platformId)}
+            >
+                ${this._pt('install_agent')}
+                <span
+                    class="marketing-download-hero-button-icon"
+                    style=${iconMaskStyle}
+                    aria-hidden="true"
+                ></span>
+            </a>
+        `;
+    }
+
     _renderHeroPrimary() {
-        if (this._hostOs === 'macos') {
-            const arm64Spec = getAgentPlatformSpec('macos-arm64');
-            const x64Spec = getAgentPlatformSpec('macos-x64');
-            const recommendArm64 = this._macArchitecture === 'arm64';
+        const primaryPlatformSpec = this._getPrimaryPlatformSpec();
+        if (!primaryPlatformSpec) {
             return html`
-                <div class="marketing-download-hero-cards">
-                    ${this._renderPlatformCard(arm64Spec, { hero: true, recommended: recommendArm64 })}
-                    ${this._renderPlatformCard(x64Spec, { hero: true })}
+                <p class="marketing-download-hero-hint">${this._pt('choose_platform_hint')}</p>
+            `;
+        }
+        return this._renderInstallButton(primaryPlatformSpec);
+    }
+
+    _renderHeroStats() {
+        const releaseStats = this._resolveReleaseStats();
+        return html`
+            <dl class="marketing-agent-download-hero-stats">
+                <div class="marketing-agent-download-hero-stat">
+                    <dt class="marketing-agent-download-hero-stat-label">${this._pt('stat_version_label')}</dt>
+                    <dd class="marketing-agent-download-hero-stat-value">${releaseStats.versionValue}</dd>
+                </div>
+                <div class="marketing-agent-download-hero-stat">
+                    <dt class="marketing-agent-download-hero-stat-label">${this._pt('stat_release_label')}</dt>
+                    <dd
+                        class="marketing-agent-download-hero-stat-value"
+                        data-ready=${releaseStats.releaseReady ? 'true' : 'false'}
+                    >
+                        ${releaseStats.releaseValue}
+                    </dd>
+                </div>
+                <div class="marketing-agent-download-hero-stat">
+                    <dt class="marketing-agent-download-hero-stat-label">${this._pt('stat_platforms_label')}</dt>
+                    <dd class="marketing-agent-download-hero-stat-value">${AGENT_PLATFORM_CATALOG.length}</dd>
+                </div>
+            </dl>
+        `;
+    }
+
+    _renderAlsoAvailablePlatforms() {
+        const primaryPlatformSpec = this._getPrimaryPlatformSpec();
+        const primaryPlatformId = primaryPlatformSpec ? primaryPlatformSpec.platformId : null;
+        const alsoAvailablePlatforms = this._getAlsoAvailablePlatforms(primaryPlatformId);
+        if (alsoAvailablePlatforms.length === 0) {
+            return html``;
+        }
+        return html`
+            <div class="marketing-agent-download-platform-row">
+                <span class="marketing-agent-download-platform-row-label">${this._pt('also_available_on')}</span>
+                <div class="marketing-agent-download-platform-row-icons">
+                    ${alsoAvailablePlatforms.map((platformSpec) => this._renderPlatformRowIcon(platformSpec))}
+                </div>
+            </div>
+        `;
+    }
+
+    _renderReleaseBanner() {
+        const releasePayload = this._releases.lastResult;
+        if (!releasePayload || typeof releasePayload !== 'object') {
+            if (this._releases.busy) {
+                return html``;
+            }
+            return html`
+                <div class="marketing-release-banner marketing-release-banner--hero" data-ready="false">
+                    ${this._pt('release_check_failed')}
                 </div>
             `;
         }
-        if (this._hostOs === 'windows') {
-            const windowsSpec = getAgentPlatformSpec('windows');
-            return html`
-                <a
-                    class="marketing-download-hero-button"
-                    href=${this._platformDownloadHref(windowsSpec.platformId)}
-                >
-                    <span
-                        class="marketing-download-hero-button-icon"
-                        style="--marketing-download-platform-icon-mask: url('${windowsSpec.iconSrc}')"
-                        aria-hidden="true"
-                    ></span>
-                    ${this._pt('download_windows')}
-                </a>
-            `;
-        }
-        if (this._hostOs === 'linux') {
-            const debSpec = getAgentPlatformSpec('linux-deb');
-            return this._renderPlatformCard(debSpec, { hero: true });
-        }
+        const ready = releasePayload.ready === true;
+        const latestTag = typeof releasePayload.latest_tag === 'string' ? releasePayload.latest_tag : '';
+        const detail = typeof releasePayload.detail === 'string' ? releasePayload.detail : '';
+        const bannerText = ready
+            ? `${this._pt('release_ready')}${latestTag ? ` ${latestTag}` : ''}`
+            : detail || this._pt('release_not_ready');
         return html`
-            <p class="marketing-download-hero-hint">${this._pt('choose_platform_hint')}</p>
+            <div class="marketing-release-banner marketing-release-banner--hero" data-ready=${ready ? 'true' : 'false'}>
+                ${bannerText}
+            </div>
+        `;
+    }
+
+    _renderHero() {
+        return html`
+            <section class="marketing-agent-download-hero">
+                <div class="marketing-agent-download-hero-grid">
+                    <div class="marketing-agent-download-hero-copy">
+                        <div class="marketing-agent-download-hero-brand">
+                            <img
+                                class="marketing-agent-download-hero-logo"
+                                src=${AGENT_LOGO_SRC}
+                                alt=""
+                                width="48"
+                                height="48"
+                                decoding="async"
+                            />
+                            <h1 class="marketing-agent-download-hero-title">${this._pt('hero_title')}</h1>
+                        </div>
+                        <p class="marketing-agent-download-hero-description">${this._pt('hero_description')}</p>
+                        ${this._renderHeroStats()}
+                        ${this._renderReleaseBanner()}
+                        <div class="marketing-download-hero-primary">${this._renderHeroPrimary()}</div>
+                        ${this._renderAlsoAvailablePlatforms()}
+                    </div>
+                    <div class="marketing-agent-download-hero-visual">
+                        <div class="marketing-agent-download-hero-shot">
+                            <img
+                                src=${landHumanitecAgentHeroUrl}
+                                alt=${this._pt('hero_visual_alt')}
+                                width="1200"
+                                height="967"
+                                loading="eager"
+                                decoding="async"
+                            />
+                        </div>
+                    </div>
+                </div>
+                <button
+                    type="button"
+                    class="marketing-agent-download-learn-more"
+                    @click=${this._scrollToAllPlatforms}
+                >
+                    ${this._pt('learn_more')}
+                    <platform-icon name="chevron-down" size="16"></platform-icon>
+                </button>
+            </section>
         `;
     }
 
@@ -187,55 +385,11 @@ export class AgentDownloadPage extends PlatformPage {
         `;
     }
 
-    _renderReleaseBanner() {
-        const releasePayload = this._releases.lastResult;
-        if (!releasePayload || typeof releasePayload !== 'object') {
-            if (this._releases.busy) {
-                return html``;
-            }
-            return html`
-                <div class="marketing-release-banner" data-ready="false">
-                    ${this._pt('release_check_failed')}
-                </div>
-            `;
-        }
-        const ready = releasePayload.ready === true;
-        const latestTag = typeof releasePayload.latest_tag === 'string' ? releasePayload.latest_tag : '';
-        const detail = typeof releasePayload.detail === 'string' ? releasePayload.detail : '';
-        const bannerText = ready
-            ? `${this._pt('release_ready')}${latestTag ? ` ${latestTag}` : ''}`
-            : detail || this._pt('release_not_ready');
-        return html`
-            <div class="marketing-release-banner" data-ready=${ready ? 'true' : 'false'}>
-                ${bannerText}
-            </div>
-        `;
-    }
-
     render() {
         return html`
             <landing-header></landing-header>
             <div class="marketing-page-container">
-                <section class="marketing-hero">
-                    <h1 class="marketing-hero-title">${this._pt('hero_title')}</h1>
-                    <div class="marketing-hero-shot">
-                        <img
-                            src=${landHumanitecAgentHeroUrl}
-                            alt=${this._pt('hero_visual_alt')}
-                            width="1200"
-                            height="967"
-                            loading="eager"
-                            decoding="async"
-                        />
-                    </div>
-                    <p class="marketing-hero-description">${this._pt('hero_description')}</p>
-                    ${this._renderReleaseBanner()}
-                    <div class="marketing-download-hero-primary">${this._renderHeroPrimary()}</div>
-                    <button type="button" class="marketing-download-scroll-trigger" @click=${this._scrollToAllPlatforms}>
-                        ${this._pt('other_platforms')}
-                        <platform-icon name="chevron-down" size="16"></platform-icon>
-                    </button>
-                </section>
+                ${this._renderHero()}
 
                 ${this._renderAllPlatformCards()}
 

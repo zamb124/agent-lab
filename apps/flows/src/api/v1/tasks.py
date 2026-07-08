@@ -22,6 +22,7 @@ from apps.flows.src.channels.types import FlowTaskResult
 from apps.flows.src.dependencies import ContainerDep
 from apps.flows.src.durable_execution.models import (
     WorkflowBranchRecord,
+    WorkflowBranchResult,
     WorkflowEventRecord,
 )
 from apps.flows.src.runtime.message_metadata import MESSAGE_SOURCE_TASK
@@ -175,18 +176,6 @@ class RetryFromFailureRequest(StrictBaseModel):
     execution_branch_id: str | None = Field(default=None, min_length=1)
 
 
-class WorkflowBranchOperationResponse(StrictBaseModel):
-    execution_branch_id: str
-    parent_execution_branch_id: str | None
-    base_sequence: int
-    base_state_hash: str | None
-    reason: str
-    event_id: str | None
-    sequence: int
-    state_hash: str
-    snapshot_id: str
-
-
 class WorkflowBranchesResponse(StrictBaseModel):
     branches: list[WorkflowBranchRecord]
 
@@ -326,63 +315,59 @@ async def list_execution_branches(
     return WorkflowBranchesResponse(branches=branches)
 
 
-@router.post("/{session_id}/fork", response_model=WorkflowBranchOperationResponse)
+@router.post("/{session_id}/fork", response_model=WorkflowBranchResult)
 async def fork_state(
     session_id: str,
     request: ForkStateRequest,
     container: ContainerDep,
-) -> WorkflowBranchOperationResponse:
-    result = await container.workflow_runtime.fork_state_at_sequence(
+) -> WorkflowBranchResult:
+    return await container.workflow_runtime.fork_state_at_sequence(
         session_id,
         request.sequence,
         execution_branch_id=request.execution_branch_id,
         activate=request.activate,
     )
-    return WorkflowBranchOperationResponse.model_validate(result)
 
 
-@router.post("/{session_id}/rewind", response_model=WorkflowBranchOperationResponse)
+@router.post("/{session_id}/rewind", response_model=WorkflowBranchResult)
 async def rewind_state(
     session_id: str,
     request: TimeTravelRequest,
     container: ContainerDep,
-) -> WorkflowBranchOperationResponse:
-    result = await container.workflow_runtime.rewind_to_sequence(
+) -> WorkflowBranchResult:
+    return await container.workflow_runtime.rewind_to_sequence(
         session_id,
         request.sequence,
         execution_branch_id=request.execution_branch_id,
     )
-    return WorkflowBranchOperationResponse.model_validate(result)
 
 
-@router.post("/{session_id}/manual-patch", response_model=WorkflowBranchOperationResponse)
+@router.post("/{session_id}/manual-patch", response_model=WorkflowBranchResult)
 async def manual_state_patch(
     session_id: str,
     request: ManualStatePatchRequest,
     container: ContainerDep,
-) -> WorkflowBranchOperationResponse:
-    result = await container.workflow_runtime.patch_state_at_sequence(
+) -> WorkflowBranchResult:
+    return await container.workflow_runtime.patch_state_at_sequence(
         session_id,
         request.sequence,
         request.state,
         execution_branch_id=request.execution_branch_id,
         activate=request.activate,
     )
-    return WorkflowBranchOperationResponse.model_validate(result)
 
 
-@router.post("/{session_id}/retry-from-failure", response_model=WorkflowBranchOperationResponse)
+@router.post("/{session_id}/retry-from-failure", response_model=WorkflowBranchResult)
 async def retry_from_failure(
     session_id: str,
     request: RetryFromFailureRequest,
     container: ContainerDep,
-) -> WorkflowBranchOperationResponse:
-    result = await container.workflow_runtime.retry_from_failure(
+) -> WorkflowBranchResult:
+    return await container.workflow_runtime.retry_from_failure(
         session_id,
         failed_sequence=request.failed_sequence,
         execution_branch_id=request.execution_branch_id,
     )
-    return WorkflowBranchOperationResponse.model_validate(result)
 
 
 @router.get("/{session_id}/state-at/{sequence}", response_model=ExecutionState)

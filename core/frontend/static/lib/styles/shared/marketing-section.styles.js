@@ -856,6 +856,300 @@ export const marketingAgentDownloadStyles = css`
     }
 `;
 
+export const marketingAgentDownloadHeroStyles = css`
+    .marketing-agent-download-hero {
+        position: relative;
+        min-height: calc(var(--app-vh, 100vh) - var(--header-height, 64px));
+        padding: var(--space-10) var(--marketing-section-padding-x) var(--space-16);
+        background: var(--marketing-hero-bg);
+        overflow: hidden;
+        box-sizing: border-box;
+    }
+
+    .marketing-agent-download-hero::before {
+        content: '';
+        position: absolute;
+        inset: 0;
+        background-image:
+            linear-gradient(var(--glass-border-subtle) 1px, transparent 1px),
+            linear-gradient(90deg, var(--glass-border-subtle) 1px, transparent 1px);
+        background-size: 3rem 3rem;
+        mask-image: radial-gradient(ellipse 80% 70% at 70% 40%, black 20%, transparent 75%);
+        opacity: 0.35;
+        pointer-events: none;
+    }
+
+    .marketing-agent-download-hero::after {
+        content: '';
+        position: absolute;
+        inset: 0;
+        background: radial-gradient(ellipse 55% 45% at 75% 35%, var(--accent-subtle), transparent 70%);
+        pointer-events: none;
+    }
+
+    .marketing-agent-download-hero-grid {
+        position: relative;
+        z-index: 1;
+        max-width: var(--marketing-content-max-width);
+        margin: 0 auto;
+        display: grid;
+        grid-template-columns: 1fr;
+        gap: var(--space-10);
+        align-items: center;
+    }
+
+    .marketing-agent-download-hero-copy {
+        display: flex;
+        flex-direction: column;
+        align-items: flex-start;
+        gap: var(--space-6);
+        text-align: left;
+    }
+
+    .marketing-agent-download-hero-brand {
+        display: flex;
+        align-items: center;
+        gap: var(--space-4);
+    }
+
+    .marketing-agent-download-hero-logo {
+        width: 3rem;
+        height: 3rem;
+        object-fit: contain;
+        flex-shrink: 0;
+    }
+
+    .marketing-agent-download-hero-title {
+        margin: 0;
+        font-size: var(--text-display-sm);
+        font-weight: var(--font-semibold);
+        line-height: var(--leading-tight);
+        letter-spacing: var(--tracking-tight);
+        color: var(--text-primary);
+    }
+
+    .marketing-agent-download-hero-description {
+        margin: 0;
+        max-width: 34rem;
+        font-size: var(--text-lg);
+        line-height: var(--leading-relaxed);
+        color: var(--text-secondary);
+    }
+
+    .marketing-agent-download-hero-stats {
+        display: grid;
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        gap: var(--space-4);
+        width: 100%;
+        max-width: 28rem;
+        margin: 0;
+    }
+
+    .marketing-agent-download-hero-stat {
+        display: flex;
+        flex-direction: column;
+        gap: var(--space-1);
+        min-width: 0;
+    }
+
+    .marketing-agent-download-hero-stat-label {
+        margin: 0;
+        font-size: var(--text-xs);
+        font-weight: var(--font-semibold);
+        letter-spacing: var(--tracking-wide);
+        text-transform: uppercase;
+        color: var(--text-tertiary);
+    }
+
+    .marketing-agent-download-hero-stat-value {
+        margin: 0;
+        font-size: var(--text-xl);
+        font-weight: var(--font-semibold);
+        line-height: var(--leading-snug);
+        color: var(--text-primary);
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+    }
+
+    .marketing-agent-download-hero-stat-value[data-ready='true'] {
+        color: var(--success);
+    }
+
+    .marketing-agent-download-hero-stat-value[data-ready='false'] {
+        color: var(--text-secondary);
+        font-size: var(--text-sm);
+        white-space: normal;
+    }
+
+    .marketing-agent-download-hero .marketing-release-banner--hero {
+        margin: 0;
+        max-width: 34rem;
+        text-align: left;
+    }
+
+    .marketing-agent-download-hero .marketing-download-hero-primary {
+        max-width: none;
+        width: 100%;
+        margin: 0;
+        align-items: flex-start;
+    }
+
+    .marketing-agent-download-hero .marketing-download-hero-button {
+        min-width: min(100%, 22rem);
+        justify-content: space-between;
+        padding: var(--space-5) var(--space-6);
+        font-size: var(--text-lg);
+        text-transform: uppercase;
+        letter-spacing: var(--tracking-wide);
+    }
+
+    .marketing-agent-download-platform-row {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: var(--space-3);
+    }
+
+    .marketing-agent-download-platform-row-label {
+        font-size: var(--text-sm);
+        color: var(--text-tertiary);
+    }
+
+    .marketing-agent-download-platform-row-icons {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: var(--space-2);
+    }
+
+    a.marketing-agent-download-platform-row-link,
+    a.marketing-agent-download-platform-row-link:any-link {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        width: 2.25rem;
+        height: 2.25rem;
+        border-radius: var(--radius-md);
+        border: 1px solid var(--glass-border-subtle);
+        background: var(--glass-bg-subtle);
+        text-decoration: none;
+        transition: var(--motion-transition-interactive);
+    }
+
+    a.marketing-agent-download-platform-row-link:hover {
+        border-color: var(--accent);
+        background: var(--accent-subtle);
+        transform: translateY(-1px);
+    }
+
+    .marketing-agent-download-platform-row-icon {
+        display: block;
+        width: 1.125rem;
+        height: 1.125rem;
+        background-color: var(--marketing-download-platform-icon-color, var(--text-secondary));
+        -webkit-mask-image: var(--marketing-download-platform-icon-mask);
+        -webkit-mask-repeat: no-repeat;
+        -webkit-mask-position: center;
+        -webkit-mask-size: contain;
+        mask-image: var(--marketing-download-platform-icon-mask);
+        mask-repeat: no-repeat;
+        mask-position: center;
+        mask-size: contain;
+    }
+
+    a.marketing-agent-download-platform-row-link--windows {
+        --marketing-download-platform-icon-color: var(--marketing-download-icon-windows);
+    }
+
+    a.marketing-agent-download-platform-row-link--apple {
+        --marketing-download-platform-icon-color: var(--marketing-download-icon-apple);
+    }
+
+    a.marketing-agent-download-platform-row-link--ubuntu {
+        --marketing-download-platform-icon-color: var(--marketing-download-icon-ubuntu);
+    }
+
+    a.marketing-agent-download-platform-row-link--fedora {
+        --marketing-download-platform-icon-color: var(--marketing-download-icon-fedora);
+    }
+
+    a.marketing-agent-download-platform-row-link--linux {
+        --marketing-download-platform-icon-color: var(--marketing-download-icon-linux);
+    }
+
+    .marketing-agent-download-hero-visual {
+        position: relative;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+    }
+
+    .marketing-agent-download-hero-shot {
+        width: 100%;
+        max-width: 40rem;
+        border-radius: var(--marketing-shot-radius);
+        overflow: hidden;
+        border: 1px solid var(--marketing-shot-border);
+        box-shadow: var(--marketing-shot-shadow);
+        filter: var(--marketing-hero-image-filter);
+    }
+
+    .marketing-agent-download-hero-shot img {
+        width: 100%;
+        height: auto;
+        display: block;
+    }
+
+    .marketing-agent-download-learn-more {
+        position: relative;
+        z-index: 1;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        gap: var(--space-1);
+        margin: var(--space-10) auto 0;
+        padding: var(--space-2) var(--space-4);
+        border: none;
+        background: transparent;
+        color: var(--text-tertiary);
+        font: inherit;
+        font-size: var(--text-xs);
+        font-weight: var(--font-semibold);
+        letter-spacing: var(--tracking-wide);
+        text-transform: uppercase;
+        cursor: pointer;
+        transition: var(--motion-transition-interactive);
+    }
+
+    .marketing-agent-download-learn-more:hover {
+        color: var(--text-primary);
+    }
+
+    @media (min-width: 768px) {
+        .marketing-agent-download-hero {
+            padding-top: var(--space-12);
+            padding-bottom: var(--space-12);
+        }
+
+        .marketing-agent-download-hero-title {
+            font-size: var(--text-display-md);
+        }
+    }
+
+    @media (min-width: 1024px) {
+        .marketing-agent-download-hero-grid {
+            grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+            gap: var(--space-12);
+        }
+
+        .marketing-agent-download-hero-visual {
+            justify-content: flex-end;
+        }
+    }
+`;
+
 export const marketingContentStyles = css`
     .marketing-content {
         max-width: var(--marketing-narrow-max-width);
@@ -1099,10 +1393,10 @@ export const marketingPublicContentPageStyles = [
 export const marketingAgentDownloadPageStyles = [
     glassStyles,
     marketingPageHostStyles,
-    marketingHeroStyles,
     marketingFeatureGridStyles,
     marketingDownloadStyles,
     marketingAgentDownloadStyles,
+    marketingAgentDownloadHeroStyles,
 ];
 
 export const marketingProductPageStyles = [
