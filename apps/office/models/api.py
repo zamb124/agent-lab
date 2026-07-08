@@ -20,6 +20,7 @@ class OfficeDocumentItem(BaseModel):
     file_id: str
     file_category: str
     onlyoffice_document_type: str | None = None
+    file_availability: Literal["available", "missing"] = "available"
     file_size: int
     created_at: datetime
     updated_at: datetime

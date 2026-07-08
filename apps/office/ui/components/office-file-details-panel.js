@@ -119,6 +119,21 @@ export class OfficeFileDetailsPanel extends PlatformElement {
                 background: var(--documents-empty-bg, var(--glass-tint-subtle));
                 border: 1px solid var(--documents-explorer-divider, var(--glass-border-subtle));
             }
+            .missing-banner {
+                display: flex;
+                gap: var(--space-2);
+                align-items: flex-start;
+                padding: var(--space-3);
+                border-radius: var(--radius-lg);
+                border: 1px solid color-mix(in srgb, var(--warning) 35%, transparent);
+                background: color-mix(in srgb, var(--warning) 12%, transparent);
+                color: var(--text-primary);
+                font-size: var(--text-sm);
+            }
+            .missing-banner strong {
+                display: block;
+                margin-bottom: var(--space-1);
+            }
             @media (max-width: 767px) {
                 :host {
                     width: 100%;
@@ -147,6 +162,10 @@ export class OfficeFileDetailsPanel extends PlatformElement {
     _docTypeLabel(typeKey) {
         if (typeof typeKey !== 'string' || typeKey.length === 0) return '—';
         return this.t(`list.docType.${typeKey}`);
+    }
+
+    _isFileMissing(doc) {
+        return doc && doc.file_availability === 'missing';
     }
 
     _formatDate(iso) {
@@ -239,6 +258,7 @@ export class OfficeFileDetailsPanel extends PlatformElement {
 
     _renderDocumentBody(doc) {
         const iconKey = resolveFileIconKey(doc.title, '');
+        const fileMissing = this._isFileMissing(doc);
         const sizeLabel = typeof doc.file_size === 'number' && doc.file_size > 0
             ? formatFileSize(doc.file_size)
             : '—';
@@ -248,6 +268,15 @@ export class OfficeFileDetailsPanel extends PlatformElement {
                 <platform-icon file-icon name=${iconKey} size="48"></platform-icon>
             </div>
             <div class="doc-title">${doc.title}</div>
+            ${fileMissing ? html`
+                <div class="missing-banner" role="status">
+                    <platform-icon name="alert-triangle" size="18"></platform-icon>
+                    <div>
+                        <strong>${this.t('list.fileMissing')}</strong>
+                        ${this.t('list.fileMissingHint')}
+                    </div>
+                </div>
+            ` : ''}
             <div class="meta-grid">
                 <div class="meta-row">
                     <span class="meta-label">${this.t('details.catalog')}</span>
@@ -255,7 +284,7 @@ export class OfficeFileDetailsPanel extends PlatformElement {
                 </div>
                 <div class="meta-row">
                     <span class="meta-label">${this.t('details.type')}</span>
-                    <span class="meta-value">${this._docTypeLabel(doc.file_category)}</span>
+                    <span class="meta-value">${fileMissing ? this.t('list.fileMissing') : this._docTypeLabel(doc.file_category)}</span>
                 </div>
                 <div class="meta-row">
                     <span class="meta-label">${this.t('details.size')}</span>
@@ -286,18 +315,20 @@ export class OfficeFileDetailsPanel extends PlatformElement {
                         ${this.t('trash.deletePermanent')}
                     </button>
                 ` : html`
-                    <button class="btn btn-primary" type="button" @click=${() => this._action('open')}>
-                        ${this.t('list.open')}
-                    </button>
-                    <button class="btn" type="button" @click=${() => this._action('toggle-starred')}>
-                        ${this.starred ? this.t('nav.unstar') : this.t('nav.star')}
-                    </button>
-                    <button class="btn" type="button" @click=${() => this._action('share')}>
-                        ${this.t('access.menuShare')}
-                    </button>
-                    <button class="btn" type="button" @click=${() => this._action('rename')}>
-                        ${this.t('list.rename')}
-                    </button>
+                    ${fileMissing ? '' : html`
+                        <button class="btn btn-primary" type="button" @click=${() => this._action('open')}>
+                            ${this.t('list.open')}
+                        </button>
+                        <button class="btn" type="button" @click=${() => this._action('toggle-starred')}>
+                            ${this.starred ? this.t('nav.unstar') : this.t('nav.star')}
+                        </button>
+                        <button class="btn" type="button" @click=${() => this._action('share')}>
+                            ${this.t('access.menuShare')}
+                        </button>
+                        <button class="btn" type="button" @click=${() => this._action('rename')}>
+                            ${this.t('list.rename')}
+                        </button>
+                    `}
                     <button class="btn btn-danger" type="button" @click=${() => this._action('delete')}>
                         ${this.t('list.delete')}
                     </button>

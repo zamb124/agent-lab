@@ -11,6 +11,7 @@ export class OfficeFileActionsMenu extends PlatformElement {
 
     static properties = {
         menuOpen: { type: Boolean, attribute: 'menu-open', reflect: true },
+        fileMissing: { type: Boolean, attribute: 'file-missing', reflect: true },
     };
 
     static styles = [
@@ -76,6 +77,7 @@ export class OfficeFileActionsMenu extends PlatformElement {
     constructor() {
         super();
         this.menuOpen = false;
+        this.fileMissing = false;
         this._onDocClick = this._onDocClick.bind(this);
     }
 
@@ -113,18 +115,20 @@ export class OfficeFileActionsMenu extends PlatformElement {
             </button>
             ${this.menuOpen ? html`
                 <div class="menu" role="menu" @click=${(e) => e.stopPropagation()}>
-                    <button class="item" type="button" role="menuitem" @click=${() => this._emit('open')}>
-                        <platform-icon name="external-link" size="14"></platform-icon>
-                        ${this.t('list.open')}
-                    </button>
-                    <button class="item" type="button" role="menuitem" @click=${() => this._emit('rename')}>
-                        <platform-icon name="edit" size="14"></platform-icon>
-                        ${this.t('list.rename')}
-                    </button>
-                    <button class="item" type="button" role="menuitem" @click=${() => this._emit('share')}>
-                        <platform-icon name="link" size="14"></platform-icon>
-                        ${this.t('access.menuShare')}
-                    </button>
+                    ${this.fileMissing ? '' : html`
+                        <button class="item" type="button" role="menuitem" @click=${() => this._emit('open')}>
+                            <platform-icon name="external-link" size="14"></platform-icon>
+                            ${this.t('list.open')}
+                        </button>
+                        <button class="item" type="button" role="menuitem" @click=${() => this._emit('rename')}>
+                            <platform-icon name="edit" size="14"></platform-icon>
+                            ${this.t('list.rename')}
+                        </button>
+                        <button class="item" type="button" role="menuitem" @click=${() => this._emit('share')}>
+                            <platform-icon name="link" size="14"></platform-icon>
+                            ${this.t('access.menuShare')}
+                        </button>
+                    `}
                     <button class="item danger" type="button" role="menuitem" @click=${() => this._emit('delete')}>
                         <platform-icon name="trash" size="14"></platform-icon>
                         ${this.t('list.delete')}

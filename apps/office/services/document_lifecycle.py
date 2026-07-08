@@ -7,8 +7,11 @@ from datetime import datetime, timedelta, timezone
 from apps.office.container import OfficeContainer
 from apps.office.db.models import OfficeDocumentBinding
 from apps.office.models.api import OfficeDocumentItem
+from core.logging import get_logger
 from core.models.identity_models import User
 from core.types import JsonObject
+
+logger = get_logger(__name__)
 
 
 async def binding_to_item(
@@ -29,8 +32,28 @@ async def binding_to_item(
         avatar_url = None
     file_record = await container.file_repository.get(row.file_id)
     if file_record is None:
-        raise ValueError(f"FileRecord не найден для binding {row.binding_id}")
-    updated_at = file_record.updated_at
+        logger.warning(
+            "office.binding_file_missing",
+            binding_id=row.binding_id,
+            file_id=row.file_id,
+            catalog_id=row.catalog_id,
+            company_id=row.company_id,
+        )
+        return OfficeDocumentItem(
+            binding_id=row.binding_id,
+            catalog_id=row.catalog_id,
+            title=row.title,
+            file_id=row.file_id,
+            file_category=row.file_category,
+            onlyoffice_document_type=row.onlyoffice_document_type,
+            file_availability="missing",
+            file_size=0,
+            created_at=row.created_at,
+            updated_at=row.updated_at,
+            created_by_user_id=row.created_by_user_id,
+            created_by_display_name=display_name,
+            created_by_avatar_url=avatar_url,
+        )
     return OfficeDocumentItem(
         binding_id=row.binding_id,
         catalog_id=row.catalog_id,
@@ -38,9 +61,10 @@ async def binding_to_item(
         file_id=row.file_id,
         file_category=row.file_category,
         onlyoffice_document_type=row.onlyoffice_document_type,
+        file_availability="available",
         file_size=file_record.file_size,
         created_at=row.created_at,
-        updated_at=updated_at,
+        updated_at=file_record.updated_at,
         created_by_user_id=row.created_by_user_id,
         created_by_display_name=display_name,
         created_by_avatar_url=avatar_url,

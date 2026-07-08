@@ -508,8 +508,24 @@ export class OfficeDocumentsExplorerPage extends PlatformPage {
 
     _onOpenDocument(bindingId) {
         if (typeof bindingId !== 'string' || bindingId.length === 0) return;
+        const doc = this._docByBindingId(bindingId);
+        if (doc && doc.file_availability === 'missing') {
+            this.toast(this.t('list.fileMissingOpenBlocked'), { variant: 'warning' });
+            return;
+        }
         this._documents.recordRecentOpen({ bindingId });
         this.navigate('document_editor', { bindingId });
+    }
+
+    _isFileMissing(doc) {
+        return Boolean(doc && doc.file_availability === 'missing');
+    }
+
+    _docTypeLabel(doc) {
+        if (this._isFileMissing(doc)) {
+            return this.t('list.fileMissing');
+        }
+        return this.t(`list.docType.${doc.file_category}`);
     }
 
     _onSelectDocument(bindingId) {
@@ -637,10 +653,10 @@ export class OfficeDocumentsExplorerPage extends PlatformPage {
         const doc = this._selectedDocument();
         if (doc) {
             if (action === 'open') this._onOpenDocument(doc.binding_id);
-            if (action === 'rename') this._onRenameDocument(doc);
+            if (action === 'rename' && !this._isFileMissing(doc)) this._onRenameDocument(doc);
             if (action === 'delete') this._onDeleteDocument(doc);
             if (action === 'restore') this._onRestoreDocument(doc);
-            if (action === 'share') this._onShareDocument(doc);
+            if (action === 'share' && !this._isFileMissing(doc)) this._onShareDocument(doc);
             if (action === 'toggle-starred') {
                 this._documents.toggleStarred({ bindingId: doc.binding_id });
             }
@@ -726,17 +742,18 @@ export class OfficeDocumentsExplorerPage extends PlatformPage {
                         file-name=${doc.title}
                         file-size=${doc.file_size}
                         date-label=${this._formatDate(doc.updated_at)}
-                        type-label=${this.t(`list.docType.${doc.file_category}`)}
+                        type-label=${this._docTypeLabel(doc)}
                         author-user-id=${doc.created_by_user_id}
                         ?selected=${state.selectedBindingId === doc.binding_id || selectedIds.has(doc.binding_id)}
                         selectable
-                        draggable
+                        ?draggable=${!this._isFileMissing(doc)}
                         @row-dragstart=${(e) => this._onFileDragStart(e.detail.nativeEvent, doc)}
                         @open=${() => this._onSelectDocument(doc.binding_id)}
                         @select-toggle=${this._onRowSelectToggle}
                     >
                         <office-file-actions-menu
                             slot="actions"
+                            ?file-missing=${this._isFileMissing(doc)}
                             @action=${(e) => this._onFileAction(e, doc)}
                         ></office-file-actions-menu>
                     </platform-file-row>
@@ -755,12 +772,13 @@ export class OfficeDocumentsExplorerPage extends PlatformPage {
                         file-name=${doc.title}
                         file-size=${doc.file_size}
                         date-label=${this._formatDate(doc.updated_at)}
-                        type-label=${this.t(`list.docType.${doc.file_category}`)}
+                        type-label=${this._docTypeLabel(doc)}
                         ?selected=${state.selectedBindingId === doc.binding_id}
                         @open=${() => this._onSelectDocument(doc.binding_id)}
                     >
                         <office-file-actions-menu
                             slot="actions"
+                            ?file-missing=${this._isFileMissing(doc)}
                             @action=${(e) => this._onFileAction(e, doc)}
                         ></office-file-actions-menu>
                     </platform-file-card>

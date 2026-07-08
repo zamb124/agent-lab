@@ -5,7 +5,6 @@ BFF documents/office: реальные PostgreSQL (platform_office), MinIO, http
 from __future__ import annotations
 
 import hashlib
-import io
 from urllib.parse import parse_qs, quote, urlparse
 
 import jwt
@@ -149,6 +148,7 @@ async def test_office_empty_document_list_rename_delete(office_client, auth_head
     assert "updated_at" in match
     assert isinstance(match["file_size"], int)
     assert match["file_size"] >= 0
+    assert match["file_availability"] == "available"
     assert match["created_by_user_id"]
     assert "created_by_display_name" in match
     assert "created_by_avatar_url" in match
@@ -562,3 +562,45 @@ async def test_office_catalog_list_includes_rag_index_enabled(
     catalog_item = next((item for item in items if item["catalog_id"] == catalog_id), None)
     assert catalog_item is not None
     assert catalog_item["rag_index_enabled"] is False
+
+
+@pytest.mark.asyncio
+async def test_office_list_documents_marks_missing_file_without_500(
+    office_client,
+    auth_headers_system,
+    unique_id,
+):
+    catalog_id = await _dedicated_catalog_id(office_client, auth_headers_system, unique_id)
+    title = f"Missing file doc {unique_id}"
+    create_response = await office_client.post(
+        "/documents/api/v1/documents/empty",
+        headers=auth_headers_system,
+        json={"title": title, "catalog_id": catalog_id},
+    )
+    assert create_response.status_code == 200
+    created = create_response.json()
+    binding_id = created["binding_id"]
+    file_id = created["file_id"]
+
+    container = get_office_container()
+    deleted = await container.file_repository.delete(file_id)
+    assert deleted is True
+
+    list_response = await office_client.get(
+        "/documents/api/v1/documents",
+        params={"catalog_id": catalog_id},
+        headers=auth_headers_system,
+    )
+    assert list_response.status_code == 200
+    items = list_response.json()["items"]
+    match = next((item for item in items if item["binding_id"] == binding_id), None)
+    assert match is not None
+    assert match["file_availability"] == "missing"
+    assert match["file_size"] == 0
+    assert match["title"] == title
+
+    delete_response = await office_client.delete(
+        f"/documents/api/v1/documents/{binding_id}",
+        headers=auth_headers_system,
+    )
+    assert delete_response.status_code == 204
