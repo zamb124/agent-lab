@@ -23,7 +23,12 @@ require_command python3 || exit 1
 regru_require_credentials
 
 DOMAINS="${PLATFORM_BRAND_DOMAINS:-humanitec.ru linnex.io}"
-SUBDOMAINS="${PLATFORM_BRAND_DNS_SUBDOMAINS:-@ * api cdn livekit onlyoffice grafana}"
+# Нельзя `for x in $SUBDOMAINS` с literal `*` — bash glob развернёт файлы в cwd (ConfigMap mount).
+if [ -n "${PLATFORM_BRAND_DNS_SUBDOMAINS:-}" ]; then
+  IFS=',' read -r -a SUBDOMAINS_LIST <<< "${PLATFORM_BRAND_DNS_SUBDOMAINS}"
+else
+  SUBDOMAINS_LIST=( '@' '*' api cdn livekit onlyoffice grafana )
+fi
 
 log_section "Reg.ru API auth (nop)"
 regru_nop
@@ -42,7 +47,7 @@ regru_add_a() {
 
 log_section "DNS platform brands → $PUBLIC_IP"
 for domain in $DOMAINS; do
-  for subdomain in $SUBDOMAINS; do
+  for subdomain in "${SUBDOMAINS_LIST[@]}"; do
     regru_add_a "$domain" "$subdomain" "$PUBLIC_IP"
   done
 done

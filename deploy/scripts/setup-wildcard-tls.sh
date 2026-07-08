@@ -189,7 +189,8 @@ spec:
     name: letsencrypt-prod-dns01
     kind: ClusterIssuer
   dnsNames:
-${DNS_NAMES_YAML}EOF
+${DNS_NAMES_YAML}
+EOF
 
 # 7. Ждём Ready
 wait_for \
