@@ -16,7 +16,7 @@ from core.logging import get_logger
 logger = get_logger(__name__)
 
 _EXTRACT_CACHE_TTL_SECONDS: int = 24 * 60 * 60
-_KEY_PREFIX: str = "file_extract"
+_KEY_PREFIX: str = "file_extract:v2"
 
 _redis_client: RedisClient | None = None
 

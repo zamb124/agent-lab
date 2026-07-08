@@ -39,7 +39,12 @@ from core.files.reader.models import (
     UniversalPage,
 )
 from core.files.reader.render import render_file_result
-from core.files.reader.service import FileReader, run_vision_on_image_bytes
+from core.files.reader.service import (
+    FileReader,
+    pdf_page_text_for_merge,
+    pdf_page_text_usable,
+    run_vision_on_image_bytes,
+)
 from core.files.reader.universal import build_file_extract
 from core.logging import get_logger
 
@@ -58,6 +63,18 @@ def _file_id_of(file_ref: FileRef) -> str | None:
 
 def _display_name(file_ref: FileRef) -> str:
     return file_ref.original_name
+
+
+def cached_pdf_extract_is_stale(extract: FileExtract) -> bool:
+    """Старый TEXT-кэш до hybrid-OCR: пустые страницы PDF без vision."""
+    if extract.kind != FileReadKind.PDF:
+        return False
+    if extract.read_lane != ReadLane.TEXT:
+        return False
+    if not extract.pages:
+        return True
+    total_text = sum(len(page.text.strip()) for page in extract.pages)
+    return total_text == 0
 
 
 def _pdf_lazy_target_indices(pages_total: int, args: ReadFileArgs) -> tuple[set[int], bool]:
@@ -146,7 +163,7 @@ async def _build_pdf_hybrid_page_text(
     file_id: str | None,
     checksum: str | None,
 ) -> tuple[str, bool, ContentMode]:
-    base_text = page.text.strip()
+    merge_text = pdf_page_text_for_merge(page.text)
     image_ocr_blocks: list[str] = []
     raster_ocr_text = ""
     vision_used = False
@@ -176,27 +193,28 @@ async def _build_pdf_hybrid_page_text(
         vision_used = True
         image_ocr_blocks.append(f"[image {image_index}]\n{ocr_text}")
 
-    if not base_text and not embedded_assets:
+    if not embedded_assets:
         raster_asset = next(
             (asset for asset in page.assets if asset.kind == ReadAssetKind.PAGE_RASTER),
             None,
         )
         if raster_asset is not None and raster_asset.bytes_b64 is not None:
-            raster_ocr_text = await _vision_ocr_pdf_asset(
-                raster_asset.bytes_b64,
-                file_name=f"{file_name}#p{page.index + 1}",
-                mime=raster_asset.content_type or "image/png",
-                prompt=prompt,
-                compression=compression,
-                file_id=file_id,
-                checksum=checksum,
-                page_index=page.index,
-                image_checksum=None,
-            )
-            vision_used = True
+            if not pdf_page_text_usable(page.text):
+                raster_ocr_text = await _vision_ocr_pdf_asset(
+                    raster_asset.bytes_b64,
+                    file_name=f"{file_name}#p{page.index + 1}",
+                    mime=raster_asset.content_type or "image/png",
+                    prompt=prompt,
+                    compression=compression,
+                    file_id=file_id,
+                    checksum=checksum,
+                    page_index=page.index,
+                    image_checksum=None,
+                )
+                vision_used = True
 
     merged = _merge_pdf_page_hybrid_text(
-        base_text=base_text,
+        base_text=merge_text,
         image_ocr_blocks=image_ocr_blocks,
         raster_ocr_text=raster_ocr_text,
     )
@@ -433,7 +451,7 @@ async def _get_or_extract(
             )
 
     cached = await load_file_extract(file_id=file_id, checksum=None)
-    if cached is not None:
+    if cached is not None and not cached_pdf_extract_is_stale(cached):
         return cached
 
     reader = FileReader()

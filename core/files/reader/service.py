@@ -895,6 +895,35 @@ def _read_doc_ole_sync(
 
 _PDF_MIN_EMBEDDED_IMAGE_PIXELS: int = 32 * 32
 _PDF_MIN_EMBEDDED_IMAGE_BYTES: int = 512
+_PDF_MIN_USABLE_TEXT_CHARS: int = 40
+_PDF_MIN_MERGE_TEXT_CHARS: int = 10
+
+
+def _pdf_text_printable_ratio(stripped: str) -> float:
+    printable_count = sum(1 for ch in stripped if ch.isprintable() or ch in "\n\r\t")
+    return printable_count / len(stripped)
+
+
+def pdf_page_text_usable(text: str) -> bool:
+    """True если текстовый слой PDF достаточен; иначе нужен OCR (скан / мусорный слой)."""
+    stripped = text.strip()
+    if not stripped:
+        return False
+    if len(stripped) < _PDF_MIN_USABLE_TEXT_CHARS:
+        return False
+    return _pdf_text_printable_ratio(stripped) >= 0.85
+
+
+def pdf_page_text_for_merge(text: str) -> str:
+    """Текстовый слой для merge в hybrid: короткий, но чистый текст сохраняем."""
+    stripped = text.strip()
+    if not stripped:
+        return ""
+    if len(stripped) < _PDF_MIN_MERGE_TEXT_CHARS:
+        return ""
+    if _pdf_text_printable_ratio(stripped) < 0.85:
+        return ""
+    return stripped
 
 
 def _pdf_page_text(page: _PdfPage) -> str:
@@ -995,8 +1024,7 @@ def _read_pdf_sync(
                         include_bytes=True,
                     )
                 )
-                text_stripped = text.strip()
-                if not text_stripped and not assets:
+                if not pdf_page_text_usable(text) and not assets:
                     mat = fitz.Matrix(2, 2)
                     pix = page.get_pixmap(matrix=mat)
                     img_bytes = pix.tobytes("png")
