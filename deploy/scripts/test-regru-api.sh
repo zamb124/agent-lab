@@ -105,11 +105,15 @@ PY
 log_ok "DNS records match ${EXPECTED_IP}"
 
 if [ "$APPLY" = "1" ]; then
-  log_section "3) zone/add_alias (write test)"
+  log_section "3) zone set A (write test)"
   log_do "${APPLY_SUBDOMAIN}.${APPLY_DOMAIN} → ${APPLY_IP}"
+  if [ "$APPLY_SUBDOMAIN" = "www" ]; then
+    REMOVE_RESPONSE=$(regru_remove_a_record "$APPLY_DOMAIN" "$APPLY_SUBDOMAIN")
+    regru_assert_success "${APPLY_DOMAIN}/${APPLY_SUBDOMAIN} remove A" "$REMOVE_RESPONSE"
+  fi
   APPLY_RESPONSE=$(regru_add_alias "$APPLY_DOMAIN" "$APPLY_SUBDOMAIN" "$APPLY_IP")
   regru_assert_success "${APPLY_DOMAIN}/${APPLY_SUBDOMAIN}" "$APPLY_RESPONSE"
-  log_ok "add_alias OK"
+  log_ok "A record OK"
 fi
 
 print_summary

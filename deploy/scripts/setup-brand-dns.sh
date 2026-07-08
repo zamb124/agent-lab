@@ -40,7 +40,12 @@ regru_add_a() {
   local ip="$3"
   log_do "Reg.ru: ${subdomain}.${domain} → $ip"
   local response
-  response=$(regru_add_alias "$domain" "$subdomain" "$ip")
+  if [ "$subdomain" = "www" ]; then
+    # Reg.ru parking: add_alias не перезаписывает существующую A www → remove + add.
+    response=$(regru_set_a_record "$domain" "$subdomain" "$ip")
+  else
+    response=$(regru_add_alias "$domain" "$subdomain" "$ip")
+  fi
   regru_assert_success "${domain}/${subdomain}" "$response"
   log_ok "${subdomain}.${domain} → $ip"
 }

@@ -75,3 +75,34 @@ print(json.dumps({
 ")
   regru_post "zone/add_alias" "$input_data"
 }
+
+regru_remove_a_record() {
+  local domain="$1"
+  local subdomain="$2"
+  local content="${3:-}"
+  local input_data
+  input_data=$(python3 -c "
+import json
+payload = {
+    'domains': [{'dname': '${domain}'}],
+    'subdomain': '${subdomain}',
+    'record_type': 'A',
+    'output_content_type': 'plain',
+}
+content = '''${content}'''
+if content:
+    payload['content'] = content
+print(json.dumps(payload))
+")
+  regru_post "zone/remove_record" "$input_data"
+}
+
+regru_set_a_record() {
+  local domain="$1"
+  local subdomain="$2"
+  local ipaddr="$3"
+  local response
+  response=$(regru_remove_a_record "$domain" "$subdomain")
+  regru_assert_success "${domain}/${subdomain} remove A" "$response"
+  regru_add_alias "$domain" "$subdomain" "$ipaddr"
+}
