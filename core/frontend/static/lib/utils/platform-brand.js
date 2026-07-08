@@ -3,20 +3,30 @@
  * Согласовано с core.utils.domain и /frontend/api/platform/brand.
  */
 
-/** @type {import('./company-url.js').CompanyHostContext & { platformName: string, supportEmail: string, logoPath: string, supportedDomains: string[] } | null} */
+/** @type {import('./company-url.js').CompanyHostContext & PlatformBrandProductLabels | null} */
 let cachedPlatformBrand = null;
 
 /**
- * @typedef {object} PlatformBrandBootstrap
- * @property {string} baseDomain
+ * @typedef {object} PlatformBrandProductLabels
  * @property {string} platformName
  * @property {string} supportEmail
  * @property {string} logoPath
  * @property {string} apexOrigin
  * @property {string[]} supportedDomains
- * @property {boolean} isProduction
- * @property {string} portSuffix
- * @property {string} protocol
+ * @property {string} agentProductName
+ * @property {string} modelsProductName
+ * @property {string} voiceProductName
+ * @property {string} llmsDisplayLabel
+ * @property {string} flowsProductLabel
+ */
+
+/**
+ * @typedef {PlatformBrandProductLabels & {
+ *   baseDomain: string,
+ *   isProduction: boolean,
+ *   portSuffix: string,
+ *   protocol: string,
+ * }} PlatformBrandBootstrap
  */
 
 /**
@@ -36,6 +46,11 @@ export function setPlatformBrandBootstrap(brand) {
         logoPath: brand.logoPath,
         supportedDomains: brand.supportedDomains,
         apexOrigin: brand.apexOrigin,
+        agentProductName: brand.agentProductName,
+        modelsProductName: brand.modelsProductName,
+        voiceProductName: brand.voiceProductName,
+        llmsDisplayLabel: brand.llmsDisplayLabel,
+        flowsProductLabel: brand.flowsProductLabel,
     };
     if (typeof window !== 'undefined') {
         window.__PLATFORM_BRAND__ = cachedPlatformBrand;

@@ -18,6 +18,7 @@ import { PlatformElement } from '../platform-element/index.js';
 import { NOTIFICATIONS_EVENTS } from '../events/reducers/notifications.js';
 import { PWA_EVENTS } from '../events/effects/pwa.effect.js';
 import { translate } from '../events/effects/i18n.effect.js';
+import { mergePlatformI18nVars } from '../utils/platform-i18n-vars.js';
 import './platform-icon.js';
 import './platform-work-item-badge.js';
 
@@ -291,7 +292,7 @@ export class PlatformNotificationManager extends PlatformElement {
         const parsed = this._splitQualifiedKey(raw);
         if (!parsed) return '';
         const state = this._i18nSelect.value;
-        return translate(state, parsed.key, vars || undefined, parsed.namespace);
+        return translate(state, parsed.key, mergePlatformI18nVars(vars || undefined), parsed.namespace);
     }
 
     _looksLikeI18nKey(value) {

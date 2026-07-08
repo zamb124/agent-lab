@@ -297,6 +297,7 @@ async def on_shutdown(_app: FastAPI, container: FlowContainer) -> None:
 
 
 _flow_settings = FlowSettings.model_validate(_FLOWS_BOOTSTRAP_MERGED)
+_flows_brand = _flow_settings.platform_brands[_flow_settings.primary_platform_domain]
 _cors_regex = _flow_settings.cors_allow_origin_regex
 if "*" in _flow_settings.cors_allow_origins:
     raise ValueError("flows.cors_allow_origins не может содержать '*' для embed/A2A")
@@ -334,7 +335,7 @@ app = create_service_app(
     cors_origins=list(_flow_settings.cors_allow_origins),
     cors_allow_origin_regex=_cors_regex,
     api_version="v1",
-    title="Humanitec Flows",
+    title=f"{_flows_brand.flows_product_label} API",
     description="Сервис flows: конфигурации, runtime и A2A",
     version="2.0.0",
 )

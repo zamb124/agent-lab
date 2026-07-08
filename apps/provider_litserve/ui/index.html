@@ -4,8 +4,45 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, minimum-scale=1.0, user-scalable=no, viewport-fit=cover">
     <meta name="robots" content="noindex,nofollow,noarchive">
-    <title>Humanitec Models</title>
+    <title>Platform Models</title>
     <link rel="icon" type="image/svg+xml" href="/static/core/assets/service_logos/frontend_logo.svg">
+    <script>
+        (function () {
+            try {
+                var xhr = new XMLHttpRequest();
+                xhr.open('GET', '/frontend/api/platform/brand', false);
+                xhr.setRequestHeader('Accept', 'application/json');
+                xhr.send(null);
+                if (xhr.status !== 200) {
+                    return;
+                }
+                var brand = JSON.parse(xhr.responseText);
+                var modelsName = String(brand.models_product_name || 'Platform Models');
+                document.title = modelsName;
+                window.__PLATFORM_BRAND__ = {
+                    platformName: String(brand.platform_name || 'Platform'),
+                    agentProductName: String(brand.agent_product_name || 'Platform Agent'),
+                    modelsProductName: modelsName,
+                    voiceProductName: String(brand.voice_product_name || 'Platform Voice'),
+                    llmsDisplayLabel: String(brand.llms_display_label || 'Platform LLMs'),
+                    flowsProductLabel: String(brand.flows_product_label || 'Platform Flows'),
+                    supportEmail: String(brand.support_email || ''),
+                    logoPath: String(brand.logo_path || ''),
+                    apexOrigin: String(brand.apex_origin || ''),
+                    supportedDomains: Array.isArray(brand.supported_domains) ? brand.supported_domains : [],
+                    baseDomain: String(brand.base_domain || ''),
+                    isProduction: window.location.protocol === 'https:',
+                    portSuffix: window.location.port ? (':' + window.location.port) : '',
+                    protocol: window.location.protocol.replace(':', ''),
+                };
+                var style = document.createElement('style');
+                style.textContent = 'litserve-app:not(:defined)::after { content: ' + JSON.stringify(modelsName) + '; }';
+                document.head.appendChild(style);
+            } catch (_err) {
+                /* brand bootstrap optional before module load */
+            }
+        })();
+    </script>
 
     <script type="importmap">
     {
@@ -38,7 +75,7 @@ litserve-app:not(:defined) {
         }
 
         litserve-app:not(:defined)::after {
-            content: 'Humanitec Models';
+            content: 'Platform Models';
         }
 </style>
 </head>

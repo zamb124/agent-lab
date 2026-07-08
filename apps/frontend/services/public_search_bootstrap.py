@@ -6,6 +6,7 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 from typing import TYPE_CHECKING
 
+from core.config import get_settings
 from core.context import Context, clear_context, set_context
 from core.identity.system_bootstrap import SYSTEM_COMPANY_ID, ensure_system_company_exists
 from core.logging import get_logger
@@ -41,32 +42,39 @@ class PublicSearchEmbedSpec:
         return public_search_branch_id(self.mode)
 
 
-PUBLIC_SEARCH_EMBED_SPECS: tuple[PublicSearchEmbedSpec, ...] = (
-    PublicSearchEmbedSpec(
-        mode="quick",
-        name="Humanitec Search",
-        placeholder="Спросите Humanitec Search...",
-        guest_max_user_messages=20,
-    ),
-    PublicSearchEmbedSpec(
-        mode="deep",
-        name="Humanitec Deep Search",
-        placeholder="Запустить глубокий поиск...",
-        guest_max_user_messages=20,
-    ),
-    PublicSearchEmbedSpec(
-        mode="research",
-        name="Humanitec Research",
-        placeholder="Сформулируйте исследовательский запрос...",
-        guest_max_user_messages=20,
-    ),
-    PublicSearchEmbedSpec(
-        mode="source",
-        name="Humanitec Source AI",
-        placeholder="Заглянуть внутрь источника...",
-        guest_max_user_messages=20,
-    ),
-)
+def _public_search_embed_specs() -> tuple[PublicSearchEmbedSpec, ...]:
+    settings = get_settings()
+    brand = settings.platform_brands[settings.primary_platform_domain]
+    platform_name = brand.platform_name
+    return (
+        PublicSearchEmbedSpec(
+            mode="quick",
+            name=f"{platform_name} Search",
+            placeholder=f"Спросите {platform_name} Search...",
+            guest_max_user_messages=20,
+        ),
+        PublicSearchEmbedSpec(
+            mode="deep",
+            name=f"{platform_name} Deep Search",
+            placeholder="Запустить глубокий поиск...",
+            guest_max_user_messages=20,
+        ),
+        PublicSearchEmbedSpec(
+            mode="research",
+            name=f"{platform_name} Research",
+            placeholder="Сформулируйте исследовательский запрос...",
+            guest_max_user_messages=20,
+        ),
+        PublicSearchEmbedSpec(
+            mode="source",
+            name=f"{platform_name} Source AI",
+            placeholder="Заглянуть внутрь источника...",
+            guest_max_user_messages=20,
+        ),
+    )
+
+
+PUBLIC_SEARCH_EMBED_SPECS: tuple[PublicSearchEmbedSpec, ...] = _public_search_embed_specs()
 
 PUBLIC_SEARCH_SPEC_BY_MODE: dict[PublicSearchMode, PublicSearchEmbedSpec] = {
     spec.mode: spec for spec in PUBLIC_SEARCH_EMBED_SPECS

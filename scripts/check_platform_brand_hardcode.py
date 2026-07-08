@@ -45,7 +45,48 @@ ALLOWLIST_PATHS: tuple[Path, ...] = (
     REPO_ROOT / "core" / "utils" / "domain.py",
     REPO_ROOT / "core" / "utils" / "subdomain.py",
     REPO_ROOT / "core" / "models" / "identity_models.py",
-    REPO_ROOT / "core" / "clients" / "pravo.py",
+    REPO_ROOT / "core" / "ai" / "providers" / "__init__.py",
+    REPO_ROOT / "core" / "ai" / "providers" / "specs.py",
+    REPO_ROOT / "core" / "frontend" / "pwa" / "manifest.json",
+    REPO_ROOT / "core" / "frontend" / "pwa" / "sw.js",
+)
+
+BRAND_LITERAL_PATTERNS: tuple[re.Pattern[str], ...] = (
+    re.compile(r'''["']Humanitec["']'''),
+    re.compile(r'''["']HumanitecAgent["']'''),
+    re.compile(r'''["']Humanitec Models["']'''),
+    re.compile(r'''["']Humanitec Voice["']'''),
+    re.compile(r'''["']Humanitec LLMs["']'''),
+    re.compile(r'''["']Humanitec Flows["']'''),
+    re.compile(r'''["']Humanitec Search["']'''),
+    re.compile(r'''["']Humanitec Docs["']'''),
+    re.compile(r'''["']Humanitec Platform["']'''),
+)
+
+BRAND_LITERAL_LINE_ALLOWLIST_SUBSTRINGS: tuple[str, ...] = (
+    "humanitec_llm",
+    "humanitec://",
+    "humanitec-static",
+    "humanitec-dynamic",
+    "humanitec-metadata",
+    "humanitec-web-push",
+    "HumanitecDistroConfig",
+    "HumanitecModels",
+    "deleteObsoleteHumanitecCaches",
+    "deleteHumanitecContentCaches",
+    "__PLATFORM_NAME__",
+    "{platformName}",
+    "{agentProductName}",
+    "product_humanitec_agent",
+    "humanitec_llms_",
+    "dashboardHumanitecModels",
+    "HumanitecModelsApp",
+    "HumanitecModelsSidebar",
+    "humanitec-embed-autoload",
+    "хуманитэк",
+    "humanitec.ru",
+    "agents-lab.ru",
+    "linnex.io",
 )
 
 
@@ -113,10 +154,46 @@ def _scan_i18n_product_meta() -> list[str]:
     return errors
 
 
+def _line_allowed_for_brand_literal(line: str) -> bool:
+    return any(marker in line for marker in BRAND_LITERAL_LINE_ALLOWLIST_SUBSTRINGS)
+
+
+def _scan_brand_literals() -> list[str]:
+    errors: list[str] = []
+    for root in SCAN_ROOTS:
+        if not root.is_dir():
+            continue
+        for path in root.rglob("*"):
+            if not path.is_file():
+                continue
+            if any(part in SKIP_DIR_NAMES for part in path.parts):
+                continue
+            if path.suffix not in ALLOWLIST_SUFFIXES:
+                continue
+            if _is_allowlisted(path):
+                continue
+            try:
+                lines = path.read_text(encoding="utf-8").splitlines()
+            except UnicodeDecodeError:
+                continue
+            rel = path.relative_to(REPO_ROOT)
+            for line_no, line in enumerate(lines, start=1):
+                if _line_allowed_for_brand_literal(line):
+                    continue
+                for pattern in BRAND_LITERAL_PATTERNS:
+                    if pattern.search(line):
+                        errors.append(
+                            f"{rel}:{line_no}: hardcoded brand literal {pattern.pattern!r}"
+                        )
+                        break
+    return errors
+
+
 def main() -> int:
     errors = _scan()
     errors.extend(_scan_html_apex())
     errors.extend(_scan_i18n_product_meta())
+    errors.extend(_scan_brand_literals())
     if errors:
         print("check_platform_brand_hardcode: FAIL", file=sys.stderr)
         for line in errors:

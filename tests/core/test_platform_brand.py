@@ -101,7 +101,7 @@ def test_resolve_oauth_brand_origin_from_return_origin() -> None:
 
 
 def test_is_allowed_integration_return_origin_linnex() -> None:
-    assert is_allowed_integration_return_origin("https://acme.linnex.io", "https://humanitec.ru") is True
+    assert is_allowed_integration_return_origin("https://acme.linnex.io", "https://linnex.io") is True
 
 
 def test_is_allowed_integration_return_origin_foreign_host() -> None:
@@ -109,4 +109,4 @@ def test_is_allowed_integration_return_origin_foreign_host() -> None:
 
 
 def test_is_allowed_integration_return_origin_local_without_reference() -> None:
-    assert is_allowed_integration_return_origin("http://system.lvh.me:8002", None) is True
+    assert is_allowed_integration_return_origin("http://system.lvh.me:8002", None) is False

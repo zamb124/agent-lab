@@ -44,7 +44,7 @@ CERT_MANAGER_NS="${CERT_MANAGER_NS:-cert-manager}"
 K="$KUBECTL"
 H="$HELM"
 
-log_section "Wildcard TLS для $APEX_HOST + $WILDCARD_HOST"
+log_section "Wildcard TLS для brand apex: $PLATFORM_BRAND_DOMAINS"
 
 # 1. Проверка cert-manager
 if ! $K get namespace cert-manager >/dev/null 2>&1; then
@@ -59,7 +59,7 @@ for domain in $PLATFORM_BRAND_DOMAINS; do
   EXPECTED_DNS_NAMES="${EXPECTED_DNS_NAMES} ${domain} *.${domain}"
 done
 CURRENT_DNS_NAMES=$($K get certificate "$PLATFORM_TLS_SECRET" -n "$PLATFORM_NS" \
-  -o jsonpath='{range .spec.dnsNames[*]}{.}{" "}{end}' 2>/dev/null || true)
+  -o jsonpath='{.spec.dnsNames[*]}' 2>/dev/null || true)
 DNS_NAMES_COMPLETE=1
 for domain in $PLATFORM_BRAND_DOMAINS; do
   case " ${CURRENT_DNS_NAMES} " in
@@ -204,6 +204,27 @@ wait_for \
     log_warn "  $K logs -n cert-manager deployment/cert-manager-webhook-regru"
     exit 1
   }
+
+CURRENT_DNS_NAMES=$($K get certificate "$PLATFORM_TLS_SECRET" -n "$PLATFORM_NS" \
+  -o jsonpath='{.spec.dnsNames[*]}' 2>/dev/null || true)
+for domain in $PLATFORM_BRAND_DOMAINS; do
+  case " ${CURRENT_DNS_NAMES} " in
+    *" ${domain} "*) ;;
+    *)
+      log_error "Certificate $PLATFORM_TLS_SECRET: spec.dnsNames не содержит ${domain} (actual: ${CURRENT_DNS_NAMES:-<empty>})"
+      exit 1
+      ;;
+  esac
+  case " ${CURRENT_DNS_NAMES} " in
+    *" *.${domain} "*) ;;
+    *)
+      log_error "Certificate $PLATFORM_TLS_SECRET: spec.dnsNames не содержит *.${domain} (actual: ${CURRENT_DNS_NAMES:-<empty>})"
+      exit 1
+      ;;
+  esac
+done
+
+log_ok "Certificate $PLATFORM_TLS_SECRET dnsNames: ${CURRENT_DNS_NAMES}"
 
 log_ok "Wildcard TLS готов: Secret $PLATFORM_TLS_SECRET в $PLATFORM_NS"
 print_summary

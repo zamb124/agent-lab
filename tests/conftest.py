@@ -1132,9 +1132,8 @@ async def frontend_client(frontend_app):
     """
     async with AsyncClient(
         transport=ASGITransport(app=frontend_app),
-        base_url="http://testserver",
+        base_url="http://humanitec.ru",
         follow_redirects=True,
-        headers={"Host": "humanitec.ru"},
     ) as client:
         yield client
 

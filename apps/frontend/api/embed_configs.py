@@ -14,6 +14,7 @@ from pydantic import BaseModel, Field
 from apps.flows.src.models.flow_config import FlowType
 from apps.frontend.dependencies import ContainerDep
 from core.config import get_settings
+from core.platform_brand.resolver import resolve_embed_origins
 from core.context import require_context
 from core.identity.embed_guest_turns import EMBED_SESSION_ID_METADATA_KEY
 from core.identity.system_bootstrap import SYSTEM_COMPANY_ID
@@ -80,7 +81,7 @@ def _build_embed_integration_snippets(
         f"    expires_in_seconds: {ttl},\n"
         "  }),\n"
         "});\n"
-        "if (!response.ok) throw new Error('Humanitec session-token request failed');\n"
+        "if (!response.ok) throw new Error('Platform session-token request failed');\n"
         "const data = await response.json();\n"
         "// data.token — Bearer для виджета; data.expires_at — при необходимости клиенту.\n"
     )
@@ -618,19 +619,21 @@ async def get_embed_code(
 
     settings = get_settings()
 
-    # Канонический Web Component путь
+    host = request.headers.get("host")
+    if host is None or not str(host).strip():
+        raise HTTPException(status_code=400, detail="Host header is required")
+    host_value = str(host).strip()
+
     if settings.server.env == "production":
-        script_url = "https://cdn.humanitec.ru/lib/embed-chat/humanitec-embed-autoload.js"
-        base_url = "https://api.humanitec.ru"
+        script_url, base_url = resolve_embed_origins(host_value)
     else:
-        host = request.headers.get("host", "localhost:8000")
         protocol = request.url.scheme
         if protocol not in ("http", "https"):
             raise ValueError(
                 f"get_embed_code: ожидалась схема http или https, получено {protocol!r}"
             )
-        script_url = f"{protocol}://{host}/static/core/lib/embed-chat/humanitec-embed-autoload.js"
-        base_url = f"{protocol}://{host}"
+        script_url = f"{protocol}://{host_value}/static/core/lib/embed-chat/humanitec-embed-autoload.js"
+        base_url = f"{protocol}://{host_value}"
 
     token_endpoint = f"{base_url}/frontend/api/embed/configs/{embed_id}/session-token"
     ttl = _EMBED_CODE_SESSION_TOKEN_TTL_SECONDS

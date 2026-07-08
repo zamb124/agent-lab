@@ -42,6 +42,7 @@ import '@platform/lib/components/fields/platform-field.js';
 import '@platform/lib/components/glass-spinner.js';
 import { initialsFromName, syncAvatarHueVar } from '../_helpers/sync-hue.js';
 import { formatDurationSeconds } from '@platform/lib/utils/format-duration.js';
+import { getPlatformBrandBootstrap } from '@platform/lib/utils/platform-brand.js';
 
 const SCROLL_TOP_THRESHOLD = 60;
 const COPY_LINK_FEEDBACK_MS = 2000;
@@ -1329,9 +1330,13 @@ export class SyncCallOverlayModal extends PlatformModal {
         }
         if (typeof window.MediaMetadata === 'function') {
             try {
+                const brand = getPlatformBrandBootstrap();
+                if (!brand) {
+                    throw new Error('sync-call-overlay: platform brand bootstrap required');
+                }
                 navigator.mediaSession.metadata = new window.MediaMetadata({
                     title: 'Sync',
-                    artist: 'Humanitec',
+                    artist: brand.platformName,
                 });
             } catch (_e) {
                 /* noop */

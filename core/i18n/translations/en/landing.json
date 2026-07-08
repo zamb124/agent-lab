@@ -20,7 +20,7 @@
         "product_sync_desc": "Chat and video calls",
         "product_documents_title": "Documents",
         "product_documents_desc": "Word, Excel, PDF — collaborative editing",
-        "product_humanitec_agent_title": "HumanitecAgent",
+        "product_humanitec_agent_title": "{agentProductName}",
         "product_humanitec_agent_desc": "Desktop client for pairing and local tools",
         "mobile_nav_aria": "Menu",
         "blog": "Blog",
@@ -28,36 +28,36 @@
         "roadmap": "Roadmap"
     },
     "meta": {
-        "home_title": "Humanitec — business automation platform",
+        "home_title": "{platformName} — business automation platform",
         "home_description": "Five products in one stack: AI Studio, Knowledge Base, NetWorkle, Sync, and Documents. Hosted in Russia with 152-FZ alignment, cloud or on-premise, invoicing in rubles for legal entities.",
-        "search_title": "Humanitec Search — AI web and source search",
-        "search_description": "Public Humanitec search through a flow, Search MCP, and A2A/SSE: web results, suggestions, sources, and a live AI answer.",
-        "blog_title": "Humanitec blog",
-        "blog_description": "Articles on AI agents, RAG, and adopting the Humanitec platform.",
-        "about_title": "About Humanitec",
-        "about_description": "Team and mission of the Humanitec automation platform.",
-        "roadmap_title": "Humanitec roadmap",
-        "roadmap_description": "Humanitec platform roadmap.",
-        "digital_workers_title": "Humanitec digital workers",
-        "digital_workers_description": "Try Humanitec demo assistants without signing up.",
-        "policy_description": "Humanitec privacy policy: personal data processing and data subject rights.",
-        "terms_description": "Humanitec terms of service: platform usage rules.",
-        "support_title": "Humanitec support",
-        "support_description": "Contact Humanitec support for platform and onboarding questions.",
-        "agent_download_title": "Download HumanitecAgent — Humanitec desktop client",
-        "agent_download_description": "HumanitecAgent — AI agent on your computer. Files, shell, browser, and platform flows via MCP."
+        "search_title": "{platformName} Search — AI web and source search",
+        "search_description": "Public {platformName} search through a flow, Search MCP, and A2A/SSE: web results, suggestions, sources, and a live AI answer.",
+        "blog_title": "{platformName} blog",
+        "blog_description": "Articles on AI agents, RAG, and adopting the {platformName} platform.",
+        "about_title": "About {platformName}",
+        "about_description": "Team and mission of the {platformName} automation platform.",
+        "roadmap_title": "{platformName} roadmap",
+        "roadmap_description": "{platformName} platform roadmap.",
+        "digital_workers_title": "{platformName} digital workers",
+        "digital_workers_description": "Try {platformName} demo assistants without signing up.",
+        "policy_description": "{platformName} privacy policy: personal data processing and data subject rights.",
+        "terms_description": "{platformName} terms of service: platform usage rules.",
+        "support_title": "{platformName} support",
+        "support_description": "Contact {platformName} support for platform and onboarding questions.",
+        "agent_download_title": "Download {agentProductName} — {platformName} desktop client",
+        "agent_download_description": "{agentProductName} — AI agent on your computer. Files, shell, browser, and platform flows via MCP."
     },
     "hero": {
         "subtitle": "Five products for automation: AI Studio, Knowledge Base, NetWorkle, Sync, and Documents",
         "trust_process": "Entrust workflows to<br>AI agents, knowledge base, and NetWorkle",
         "start_button": "Launch digital employees",
-        "download_agent_button": "Download HumanitecAgent",
-        "download_agent_aria": "Download HumanitecAgent for desktop",
+        "download_agent_button": "Download {agentProductName}",
+        "download_agent_aria": "Download {agentProductName} for desktop",
         "download_agent_subtitle": "Desktop client for pairing and local tools",
-        "download_agent_close_aria": "Hide HumanitecAgent download card",
+        "download_agent_close_aria": "Hide {agentProductName} download card",
         "evolution": "The evolution of your<br>business is here",
-        "image_alt": "Humanitec platform",
-        "search_placeholder": "Ask Humanitec",
+        "image_alt": "{platformName} platform",
+        "search_placeholder": "Ask {platformName}",
         "search_aria": "Search query",
         "search_submit": "Search",
         "search_modes": "Search mode",
@@ -72,7 +72,7 @@
         "file_query_required": "Enter a question for the attached file"
     },
     "search_page": {
-        "title": "Humanitec Search",
+        "title": "{platformName} Search",
         "placeholder": "Ask anything",
         "input_aria": "Search query",
         "submit": "Search",
@@ -117,7 +117,7 @@
         "empty_hint": "Enter a query to launch the public search flow"
     },
     "about": {
-        "title": "Humanitec — five products in one platform",
+        "title": "{platformName} — five products in one platform",
         "subtitle_landing": "One perimeter for your company: AI Studio builds agents and flows, Knowledge Base powers semantic document search, NetWorkle connects entities in a graph, Sync brings chat and calls with Git context, Documents delivers collaborative Office editing on your servers. Russian invoicing for legal entities and cloud or on-premise deployment.",
         "metric_tools_value": "25+",
         "metric_tools_label": "built-in<br>tools",
@@ -149,12 +149,12 @@
         "integ_models_500": "500+ AI models"
     },
     "features": {
-        "ability_alt_flows": "AI Studio in Humanitec",
-        "ability_alt_kb": "Knowledge Base in Humanitec",
-        "ability_alt_networkle": "NetWorkle in Humanitec",
-        "ability_alt_sync": "Sync in Humanitec",
-        "ability_alt_documents": "Documents and collaborative editing in Humanitec",
-        "ability_alt_documents_2": "Collaborative document editing in Humanitec",
+        "ability_alt_flows": "AI Studio in {platformName}",
+        "ability_alt_kb": "Knowledge Base in {platformName}",
+        "ability_alt_networkle": "NetWorkle in {platformName}",
+        "ability_alt_sync": "Sync in {platformName}",
+        "ability_alt_documents": "Documents and collaborative editing in {platformName}",
+        "ability_alt_documents_2": "Collaborative document editing in {platformName}",
         "tag": "/ Platform Features",
         "feature1_title": "Launch in hours, not months",
         "feature1_description": "Do not waste time and money building from scratch. Use ready-made services: create AI agents, collaborate in Sync, manage contacts in NetWorkle, store documents in Knowledge Base. Everything is configured and running.",
@@ -249,7 +249,7 @@
         "self_cta": "Start for free",
         "business_name": "Business",
         "business_price": "from 15,000 RUB per month",
-        "business_description": "Everything in self-service plus Humanitec onboarding and scaling support.",
+        "business_description": "Everything in self-service plus {platformName} onboarding and scaling support.",
         "business_li1": "Dedicated manager",
         "business_li2": "Priority support",
         "business_li3": "Help with agents, RAG, and integrations",
@@ -271,7 +271,7 @@
         "slide1_name": "Alexey Ivanov",
         "slide1_role": "CEO, TechStart",
         "slide1_avatar": "AI",
-        "slide1_text": "Humanitec helped us automate client request handling. Our team can focus on the product while AI agents handle routine work. It paid off in the first month!",
+        "slide1_text": "{platformName} helped us automate client request handling. Our team can focus on the product while AI agents handle routine work. It paid off in the first month!",
         "slide2_name": "Maria Petrova",
         "slide2_role": "Founder, E-commerce Store",
         "slide2_avatar": "MP",
@@ -279,7 +279,7 @@
         "slide3_name": "Dmitry Sokolov",
         "slide3_role": "CTO, FinTech Company",
         "slide3_avatar": "DS",
-        "slide3_text": "Complex processes that once needed a dev team now run on Humanitec. The platform is flexible, reliable, and well supported. Highly recommended!"
+        "slide3_text": "Complex processes that once needed a dev team now run on {platformName}. The platform is flexible, reliable, and well supported. Highly recommended!"
     },
     "faq": {
         "tag": "/ Questions & answers",
@@ -296,7 +296,7 @@
         "slot6_q": "Can I use Knowledge Base and NetWorkle together with AI agents?",
         "slot6_a": "Yes — that is the recommended setup. Agents pull answers from Knowledge Base and context from NetWorkle (client data, conversation history). For example, support finds an answer in the knowledge base and sees the client’s ticket history in one flow.",
         "slot7_q": "What is Sync and why does a team need it?",
-        "slot7_a": "Sync is Humanitec’s team chat: channels, DMs, threads, and video calls with screen sharing. Engineering context can sit next to Git. Data is isolated per company; notifications help you not miss important updates.",
+        "slot7_a": "Sync is {platformName}’s team chat: channels, DMs, threads, and video calls with screen sharing. Engineering context can sit next to Git. Data is isolated per company; notifications help you not miss important updates.",
         "slot8_q": "How is Sync different from a regular messenger?",
         "slot8_a": "Sync is part of the platform: one login from the dashboard, same users and company as AI Studio, Knowledge Base, and NetWorkle. Repo integration for engineering teams, guest links for calls, and org-level access — not mixed personal and work chat.",
         "slot9_q": "How safe is it to store data on the platform?",
@@ -305,7 +305,7 @@
         "slot10_a": "No. Every service has a simple visual UI. Creating agents, uploading documents, working in NetWorkle, chat and calls in Sync — all without coding. For complex needs, our supported plan includes help tailoring everything to your processes."
     },
     "cta": {
-        "title_plain": "Automate your business with Humanitec",
+        "title_plain": "Automate your business with {platformName}",
         "button": "Submit a request",
         "modal_title": "Submit a request",
         "modal_close_aria": "Close dialog",
@@ -366,7 +366,7 @@
         "legal_heading": "Legal information",
         "inn_label": "INN",
         "ogrn_label": "OGRN",
-        "copyright": "© {{year}} Humanitec"
+        "copyright": "© {{year}} {platformName}"
     },
     "blog_page": {
         "title": "Blog",
@@ -379,7 +379,7 @@
         "cta_demo": "Try demo"
     },
     "about_page": {
-        "title": "About Humanitec",
+        "title": "About {platformName}",
         "lead": "We build a stack where AI Studio, Knowledge Base, NetWorkle, Sync, and Documents operate as one automation perimeter.",
         "mission_title": "Mission",
         "mission_text": "Reduce operational drag and speed up digital workflows without ballooning engineering headcount.",
@@ -402,10 +402,10 @@
         "note": "Timelines evolve with prioritization; customers receive specifics via support."
     },
     "agent_download_page": {
-        "hero_title": "HumanitecAgent",
-        "hero_visual_alt": "HumanitecAgent screenshot: desktop chat and workspace",
-        "hero_description": "An AI agent on your computer. Works with files, runs programs, and connects to Humanitec Platform.",
-        "install_agent": "Install HumanitecAgent",
+        "hero_title": "{agentProductName}",
+        "hero_visual_alt": "{agentProductName} screenshot: desktop chat and workspace",
+        "hero_description": "An AI agent on your computer. Works with files, runs programs, and connects to {platformName} Platform.",
+        "install_agent": "Install {agentProductName}",
         "also_available_on": "Also available on:",
         "learn_more": "Learn more",
         "stat_version_label": "Version",
@@ -419,7 +419,7 @@
         "f2_title": "Shell and apps",
         "f2_desc": "Run bash, Python, git, and other tools with whitelist and confirm dialogs.",
         "f3_title": "Platform flows",
-        "f3_desc": "All Humanitec scenarios are available as MCP tools in the agent chat.",
+        "f3_desc": "All {platformName} scenarios are available as MCP tools in the agent chat.",
         "f4_title": "Privacy",
         "f4_desc": "Data stays on your computer. The agent runs locally; audit logs live on the platform.",
         "download_macos": "Download for macOS",
@@ -457,6 +457,6 @@
         "release_check_failed": "Could not check release status",
         "login_prompt": "Already have an account?",
         "login_link": "Sign in",
-        "footer_note": "HumanitecAgent — Built on Goose (Apache 2.0)"
+        "footer_note": "{agentProductName} — Built on Goose (Apache 2.0)"
     }
 }

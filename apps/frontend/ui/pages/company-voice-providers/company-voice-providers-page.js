@@ -10,7 +10,7 @@ import '@platform/lib/components/fields/platform-field.js';
 import '@platform/lib/components/glass-button.js';
 import '@platform/lib/components/layout/page-header.js';
 import '@platform/lib/components/platform-icon.js';
-import { frontendIslandPageBodyStyles } from '../../styles/frontend-island-page-body.styles.js';
+import { getPlatformBrandBootstrap } from '@platform/lib/utils/platform-brand.js';
 
 // ─── Voice providers constants ────────────────────────────────────────────────
 const KINDS = ['stt', 'tts'];
@@ -71,13 +71,19 @@ const KIND_OPTIONS = [
     { value: 'stress', label: 'Ударение (+)' },
 ];
 
-const PROVIDER_OPTIONS = [
-    { value: 'litserve', label: 'Humanitec Voice' },
-    { value: 'cloud_ru', label: 'Cloud.ru' },
-    { value: 'yandex',   label: 'Yandex SpeechKit' },
-    { value: 'sber',     label: 'Sber SmartSpeech' },
-    { value: 'mock',     label: 'Mock (тесты)' },
-];
+function _providerOptions() {
+    const brand = getPlatformBrandBootstrap();
+    if (!brand) {
+        throw new Error('company-voice-providers: platform brand bootstrap required');
+    }
+    return [
+        { value: 'litserve', label: brand.voiceProductName },
+        { value: 'cloud_ru', label: 'Cloud.ru' },
+        { value: 'yandex',   label: 'Yandex SpeechKit' },
+        { value: 'sber',     label: 'Sber SmartSpeech' },
+        { value: 'mock',     label: 'Mock (тесты)' },
+    ];
+}
 
 const KIND_ICON  = { alias: 'edit', regex: 'settings', stress: 'microphone' };
 const KIND_CLASS = { alias: 'kind-alias', regex: 'kind-regex', stress: 'kind-stress' };
@@ -959,7 +965,7 @@ class FrontendCompanyVoiceProvidersPage extends PlatformPage {
                     <platform-field type="enum" mode="edit"
                         label="${this.t('pronunciation_rules_page.test_provider')}"
                         .value=${this._testProvider}
-                        .config=${{ values: PROVIDER_OPTIONS }}
+                        .config=${{ values: _providerOptions() }}
                         @change=${e => { this._testProvider = e.detail.value; this._testResult = null; }}
                     ></platform-field>
                 </div>

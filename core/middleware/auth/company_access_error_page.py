@@ -14,9 +14,11 @@ from core.types import JsonValue
 def build_company_access_error_html(
     status_code: int,
     message: str,
+    platform_name: str,
 ) -> str:
     """message — отображаемый текст, уже безопасно не считаем (экранируем)."""
     safe_message = html.escape(message, quote=True)
+    safe_platform_name = html.escape(platform_name, quote=True)
     year = datetime.now(timezone.utc).year
     return f"""<!DOCTYPE html>
 <html lang="ru">
@@ -81,7 +83,7 @@ def build_company_access_error_html(
     <div class="code">HTTP {status_code}</div>
     <p>{safe_message}</p>
     <p class="en">If you need access, ask your organization administrator. / Если нужен доступ, обратитесь к администратору организации.</p>
-    <p class="footer">Humanitec &middot; {year}</p>
+    <p class="footer">{safe_platform_name} &middot; {year}</p>
   </div>
 </body>
 </html>
@@ -91,9 +93,10 @@ def build_company_access_error_html(
 def build_company_access_error_response(
     status_code: int,
     message: str,
+    platform_name: str,
 ) -> HTMLResponse:
     return HTMLResponse(
-        content=build_company_access_error_html(status_code, message),
+        content=build_company_access_error_html(status_code, message, platform_name),
         status_code=status_code,
     )
 

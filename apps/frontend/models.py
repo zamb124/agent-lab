@@ -224,7 +224,7 @@ class PublicStartupCard(BaseModel):
 
     model_config: ClassVar[ConfigDict] = ConfigDict(extra="forbid", str_strip_whitespace=True)
 
-    name: Literal["Humanitec"]
+    name: str = Field(min_length=1)
     tagline_ru: str = Field(min_length=1)
     tagline_en: str = Field(min_length=1)
     website_url: str = Field(min_length=1)

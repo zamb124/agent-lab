@@ -6,9 +6,9 @@ from __future__ import annotations
 
 from typing import Annotated
 
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, HTTPException, Query, Request
 
-from apps.frontend.config import get_frontend_public_base_url, get_frontend_settings
+from apps.frontend.config import get_frontend_public_base_url
 from apps.frontend.dependencies import ContainerDep
 from apps.frontend.models import (
     PublicBlogListResponse,
@@ -16,6 +16,7 @@ from apps.frontend.models import (
     PublicSiteBundle,
     PublicStartupCard,
 )
+from core.platform_brand.resolver import resolve_brand, resolve_public_base_url
 
 router = APIRouter(prefix="/api/public", tags=["public-site"])
 
@@ -62,10 +63,13 @@ _BLOG_POSTS: tuple[PublicBlogPost, ...] = (
 
 
 @router.get("/site-bundle", response_model=PublicSiteBundle)
-async def get_site_bundle(container: ContainerDep) -> PublicSiteBundle:
+async def get_site_bundle(request: Request, container: ContainerDep) -> PublicSiteBundle:
     _ = container
-    settings = get_frontend_settings()
-    return PublicSiteBundle(legal=settings.legal, marketing=settings.public_site)
+    host = request.headers.get("host")
+    if host is None or not str(host).strip():
+        raise HTTPException(status_code=400, detail="Host header is required")
+    brand = resolve_brand(str(host).strip())
+    return PublicSiteBundle(legal=brand.legal, marketing=brand.public_site)
 
 
 @router.get("/blog", response_model=PublicBlogListResponse)
@@ -87,12 +91,16 @@ async def get_public_blog_post(
 
 
 @router.get("/startup-card", response_model=PublicStartupCard)
-async def get_startup_card(container: ContainerDep) -> PublicStartupCard:
+async def get_startup_card(request: Request, container: ContainerDep) -> PublicStartupCard:
     """Карточка продукта для внешних каталогов и форм submit startup."""
     _ = container
-    base_url = get_frontend_public_base_url()
+    host = request.headers.get("host")
+    if host is None or not str(host).strip():
+        raise HTTPException(status_code=400, detail="Host header is required")
+    brand = resolve_brand(str(host).strip())
+    base_url = resolve_public_base_url(str(host).strip())
     return PublicStartupCard(
-        name="Humanitec",
+        name=brand.platform_name,
         tagline_ru="Платформа автоматизации бизнеса: AI-агенты, база знаний, CRM-граф, чат и документы.",
         tagline_en="Business automation platform: AI agents, knowledge base, CRM graph, chat, and documents.",
         website_url=base_url,

@@ -202,7 +202,7 @@ check_step \
 # 12b. TLS Certificate SAN покрывает все brand apex (in-cluster, без curl)
 log_section "12b) platform-tls Certificate dnsNames"
 CURRENT_CERT_DNS=$($K get certificate platform-tls -n "$PLATFORM_NS" \
-  -o jsonpath='{range .spec.dnsNames[*]}{.}{" "}{end}' 2>/dev/null || true)
+  -o jsonpath='{.spec.dnsNames[*]}' 2>/dev/null || true)
 for apex in $PLATFORM_APEX_HOSTS; do
   check_step \
     "Certificate platform-tls dnsNames содержит ${apex}" \

@@ -417,7 +417,7 @@ self.addEventListener('push', (event) => {
     data = event.data.json();
   } catch (e) {
     data = {
-      title: 'Humanitec',
+      title: '__PLATFORM_NAME__',
       message: event.data.text()
     };
   }
@@ -448,7 +448,7 @@ self.addEventListener('push', (event) => {
           client.postMessage({
             type: 'humanitec-web-push',
             payload: {
-              title: data.title || 'Humanitec',
+              title: data.title || '__PLATFORM_NAME__',
               message: data.message || data.body || '',
               tag: data.tag || data.type,
               priority: data.priority,
@@ -458,7 +458,7 @@ self.addEventListener('push', (event) => {
           });
         }
       }
-      await self.registration.showNotification(data.title || 'Humanitec', options);
+      await self.registration.showNotification(data.title || '__PLATFORM_NAME__', options);
     })()
   );
 });

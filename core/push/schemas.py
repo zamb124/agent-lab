@@ -136,7 +136,7 @@ class PushSuccessResponse(StrictBaseModel):
 
 class TestPushRequest(StrictBaseModel):
     title: str = "Тестовое уведомление"
-    message: str = "Это тестовое push-уведомление от Humanitec"
+    message: str = "Это тестовое push-уведомление"
 
 
 class TestPushResponse(StrictBaseModel):

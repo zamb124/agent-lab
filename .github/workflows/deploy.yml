@@ -289,6 +289,7 @@ jobs:
           REGRU_USERNAME: ${{ secrets.REGRU_USERNAME }}
           REGRU_PASSWORD: ${{ secrets.REGRU_PASSWORD }}
           PLATFORM_NS: ${{ env.K8S_NAMESPACE }}
+          PLATFORM_BRAND_DOMAINS: "humanitec.ru linnex.io"
         run: |
           set -euo pipefail
           if [ -z "${REGRU_USERNAME:-}" ] || [ -z "${REGRU_PASSWORD:-}" ]; then

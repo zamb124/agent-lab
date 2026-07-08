@@ -18,14 +18,41 @@ from pydantic import BaseModel, ConfigDict, Field, ValidationError
 import core.tracing.attributes as trace_attributes
 from core.billing import get_billing_service
 from core.billing.service import BALANCE_BLOCK_OPERATION_EMBEDDING
+from core.config import get_settings
 from core.context import get_context
 from core.http import ProxyStrategy, get_httpx_client
 from core.logging import get_logger
 from core.models.billing_models import UsageType
+from core.platform_brand.resolver import (
+    UnknownPlatformDomainError,
+    resolve_brand,
+    resolve_context_host,
+    resolve_public_base_url,
+)
 from core.tracing.operation_span import traced_operation
 from core.types import JsonObject, OtelAttributeValue
 
 logger = get_logger(__name__)
+
+
+def _embedding_openrouter_attribution_headers() -> dict[str, str]:
+    host = resolve_context_host()
+    if host is not None:
+        try:
+            brand = resolve_brand(host)
+            return {
+                "HTTP-Referer": resolve_public_base_url(host),
+                "X-Title": f"{brand.platform_name} RAG",
+            }
+        except UnknownPlatformDomainError:
+            pass
+    settings = get_settings()
+    primary_domain = settings.primary_platform_domain
+    brand = settings.platform_brands[primary_domain]
+    return {
+        "HTTP-Referer": f"https://{primary_domain}",
+        "X-Title": f"{brand.platform_name} RAG",
+    }
 
 
 class EmbeddingResponseItem(BaseModel):
@@ -132,8 +159,7 @@ class AIEmbeddingClient:
         headers = {
             "Authorization": f"Bearer {self.api_key}",
             "Content-Type": "application/json",
-            "HTTP-Referer": "https://humanitec.ru",
-            "X-Title": "Humanitec RAG",
+            **_embedding_openrouter_attribution_headers(),
         }
         if self._extra_headers:
             headers = {**headers, **self._extra_headers}

@@ -50,6 +50,7 @@ import { CoreEvents, assertEventType } from '../events/contract.js';
 import { CoreAuthEvents } from '../events/effects/auth.effect.js';
 import { FILES_EVENTS } from '../events/reducers/files.js';
 import { translate } from '../events/effects/i18n.effect.js';
+import { mergePlatformI18nVars } from '../utils/platform-i18n-vars.js';
 import { getFactory } from '../events/factory-registry.js';
 import { getDefaultI18nNamespace } from '../utils/i18n-namespace.js';
 import {
@@ -132,7 +133,7 @@ export class PlatformElement extends LitElement {
         if (!ns) {
             throw new Error(`PlatformElement.t: cannot resolve i18n namespace for key "${key}". Provide explicit namespace, declare static i18nNamespace, or set PlatformApp.defaultI18nNamespace.`);
         }
-        return translate(this.bus.getState().i18n, key, vars, ns);
+        return translate(this.bus.getState().i18n, key, mergePlatformI18nVars(vars), ns);
     }
 
     useResource(name, opts) {

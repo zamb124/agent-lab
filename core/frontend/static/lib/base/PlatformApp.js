@@ -35,6 +35,7 @@ import { PlatformElement } from '../platform-element/index.js';
 import { bootstrapPlatformBus, completeBootstrap, getPlatformBus, hasPlatformBus } from '../events/index.js';
 import { CoreEvents } from '../events/contract.js';
 import { translate } from '../events/effects/i18n.effect.js';
+import { mergePlatformI18nVars } from '../utils/platform-i18n-vars.js';
 import { CoreAuthEvents } from '../events/effects/auth.effect.js';
 import { redirectToLogin } from '../utils/auth-redirect.js';
 import { nextModalLayerZIndex } from '../utils/modal-z-stack.js';
@@ -277,7 +278,7 @@ export class PlatformApp extends PlatformElement {
         const [nsOrKey, ...rest] = t.i18n_key.split(':');
         const key = rest.length > 0 ? rest.join(':') : nsOrKey;
         const namespace = rest.length > 0 ? nsOrKey : undefined;
-        return translate(i18nState, key, t.i18n_vars || undefined, namespace);
+        return translate(i18nState, key, mergePlatformI18nVars(t.i18n_vars || undefined), namespace);
     }
 
     _handleAuthSideEffects() {

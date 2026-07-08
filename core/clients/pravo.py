@@ -42,10 +42,13 @@ _DEFAULT_TIMEOUT_SECONDS = 60.0
 
 
 def _default_pravo_headers() -> dict[str, str]:
-    apex = get_settings().primary_platform_domain
+    settings = get_settings()
+    primary_domain = settings.primary_platform_domain
+    brand = settings.platform_brands[primary_domain]
+    apex = primary_domain
     return {
         "User-Agent": (
-            f"Mozilla/5.0 (compatible; HumanitecPravoClient/1.0; +https://{apex}); "
+            f"Mozilla/5.0 (compatible; {brand.platform_name}PravoClient/1.0; +https://{apex}); "
             "lang=ru"
         ),
         "Accept": "application/json, text/html, text/plain;q=0.9, */*;q=0.8",

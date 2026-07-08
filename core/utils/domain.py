@@ -8,8 +8,14 @@ from __future__ import annotations
 import ipaddress
 from urllib.parse import urlparse
 
+from core.config import get_settings
+
 PRIMARY_DOMAIN = "humanitec.ru"
-SUPPORTED_DOMAINS = ["humanitec.ru", "agents-lab.ru"]
+
+
+def _supported_platform_domains() -> tuple[str, ...]:
+    domains = tuple(get_settings().platform_brands.keys())
+    return tuple(sorted(domains, key=len, reverse=True))
 
 
 def split_host_port(host: str) -> tuple[str, str | None]:
@@ -67,7 +73,7 @@ def extract_base_domain(host: str) -> str:
     """
     hostname, _ = split_host_port(host)
     if not hostname:
-        return PRIMARY_DOMAIN
+        raise ValueError("unsupported host domain: empty host")
 
     ip_base = _ip_dev_base(hostname)
     if ip_base is not None:
@@ -79,11 +85,11 @@ def extract_base_domain(host: str) -> str:
     if hostname == "lvh.me" or hostname.endswith(".lvh.me"):
         return "lvh.me"
 
-    for domain in SUPPORTED_DOMAINS:
+    for domain in _supported_platform_domains():
         if hostname == domain or hostname.endswith(f".{domain}"):
             return domain
 
-    return PRIMARY_DOMAIN
+    raise ValueError(f"unsupported host domain: {hostname}")
 
 
 def extract_subdomain(host: str) -> str | None:
@@ -98,7 +104,10 @@ def extract_subdomain(host: str) -> str | None:
         localhost → None
         company.localhost:8002 → company
     """
-    base = extract_base_domain(host)
+    try:
+        base = extract_base_domain(host)
+    except ValueError:
+        return None
     hostname, _ = split_host_port(host)
 
     if hostname == base or hostname == f"www.{base}":
@@ -128,7 +137,10 @@ def extract_company_subdomain(host: str) -> str | None:
 
 def is_local(host: str) -> bool:
     """Локальная разработка: localhost, lvh.me, loopback/private/link-local IP."""
-    base = extract_base_domain(host)
+    try:
+        base = extract_base_domain(host)
+    except ValueError:
+        return False
     if base == "localhost" or base == "lvh.me":
         return True
     if _ip_dev_base(base) is not None:
@@ -138,8 +150,11 @@ def is_local(host: str) -> bool:
 
 def is_supported_domain(host: str) -> bool:
     """Поддерживаемый прод-домен, localhost, lvh.me или dev IP."""
-    base = extract_base_domain(host)
-    if base == "localhost" or base == "lvh.me" or base in SUPPORTED_DOMAINS:
+    try:
+        base = extract_base_domain(host)
+    except ValueError:
+        return False
+    if base == "localhost" or base == "lvh.me" or base in _supported_platform_domains():
         return True
     if _ip_dev_base(base) is not None:
         return True

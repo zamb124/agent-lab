@@ -2070,6 +2070,11 @@ class PlatformBrandConfig(BaseModel):
 
     platform_name: str
     support_email: str
+    agent_product_name: str
+    models_product_name: str
+    voice_product_name: str
+    llms_display_label: str
+    flows_product_label: str
     logo_path: str = "/static/core/assets/service_logos/frontend_logo.svg"
     legal: LegalConfig = Field(default_factory=LegalConfig)
     public_site: PublicSiteConfig = Field(default_factory=PublicSiteConfig)
@@ -2085,14 +2090,29 @@ def default_platform_brands() -> dict[str, PlatformBrandConfig]:
         "humanitec.ru": PlatformBrandConfig(
             platform_name="Humanitec",
             support_email="helpme@humanitec.ru",
+            agent_product_name="HumanitecAgent",
+            models_product_name="Humanitec Models",
+            voice_product_name="Humanitec Voice",
+            llms_display_label="Humanitec LLMs",
+            flows_product_label="Humanitec Flows",
         ),
         "agents-lab.ru": PlatformBrandConfig(
             platform_name="Humanitec",
             support_email="helpme@humanitec.ru",
+            agent_product_name="HumanitecAgent",
+            models_product_name="Humanitec Models",
+            voice_product_name="Humanitec Voice",
+            llms_display_label="Humanitec LLMs",
+            flows_product_label="Humanitec Flows",
         ),
         "linnex.io": PlatformBrandConfig(
             platform_name="Linnex",
             support_email="support@linnex.io",
+            agent_product_name="LinnexAgent",
+            models_product_name="Linnex Models",
+            voice_product_name="Linnex Voice",
+            llms_display_label="Linnex LLMs",
+            flows_product_label="Linnex Flows",
             auth_apple_client_id="app.linnex.io",
             vapid_email="admin@linnex.io",
         ),

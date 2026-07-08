@@ -60,7 +60,6 @@ from apps.frontend.api.voice_providers_catalog import router as voice_providers_
 from apps.frontend.api.yoomoney_oauth import router as yoomoney_oauth_router
 from apps.frontend.config import (
     FrontendSettings,
-    get_frontend_public_base_url,
     get_frontend_settings,
 )
 from apps.frontend.container import FrontendContainer, get_frontend_container
@@ -76,6 +75,7 @@ from core.app.health_payload import build_health_payload
 from core.app_state import get_request_correlation_ids
 from core.clients.payment import PaymentProviderFactory
 from core.config import get_settings
+from core.config.models import PlatformBrandConfig
 from core.config.testing import is_testing
 from core.identity.demo_bootstrap import ensure_demo_company_and_user
 from core.identity.flow_preview_handoff import (
@@ -86,9 +86,10 @@ from core.identity.system_bootstrap import ensure_system_admin_membership
 from core.logging import get_logger
 from core.middleware.auth.company_resolver import build_service_base_url
 from core.middleware.static_core_module_cors import StaticCoreModuleCorsMiddleware
-from core.platform_brand.resolver import resolve_brand
+from core.platform_brand.resolver import resolve_brand, resolve_public_base_url
 from core.short_links.kinds import SHORT_LINK_KIND_FLOW_PREVIEW_EMBED
 from core.short_links.payloads import FlowPreviewEmbedPayload
+from core.types import JsonObject, require_json_object
 
 logger = get_logger(__name__)
 _FRONTEND_DEV_CORS_ORIGIN_REGEX = (
@@ -204,10 +205,13 @@ def _build_sitemap_xml(base_url: str) -> str:
         "</urlset>\n"
     )
 
-def _build_llms_txt(base_url: str) -> str:
+def _build_llms_txt(base_url: str, brand: PlatformBrandConfig) -> str:
+    platform_name = brand.platform_name
+    agent_product_name = brand.agent_product_name
     return (
-        "# Humanitec\n\n"
-        "> Humanitec is a business automation platform with AI flows and LLM agents, RAG knowledge search, NetWorkle graph, "
+        f"# {platform_name}\n\n"
+        f"> {platform_name} is a business automation platform with AI flows and LLM agents, "
+        "RAG knowledge search, NetWorkle graph, "
         "team collaboration tools, and scheduler automation.\n\n"
         "Use canonical HTTPS URLs only.\n"
         "Prioritize public product and documentation pages.\n"
@@ -219,7 +223,7 @@ def _build_llms_txt(base_url: str) -> str:
         f"- Product NetWorkle: {base_url}/products/crm\n"
         f"- Product Sync: {base_url}/products/sync\n"
         f"- Product Documents: {base_url}/products/documents\n"
-        f"- HumanitecAgent Download: {base_url}/agent\n"
+        f"- {agent_product_name} Download: {base_url}/agent\n"
         f"- Product Documentation: {base_url}/documentation/\n"
         f"- Support: {base_url}/support\n"
         f"- Blog: {base_url}/blog\n"
@@ -406,6 +410,11 @@ for route in list(app.routes):
     if isinstance(route, Route) and route.path == "/":
         app.routes.remove(route)
 
+_PLATFORM_PWA_ROUTE_PATHS = frozenset({"/manifest.json", "/sw.js", "/offline.html"})
+for route in list(app.routes):
+    if isinstance(route, Route) and route.path in _PLATFORM_PWA_ROUTE_PATHS:
+        app.routes.remove(route)
+
 @app.get("/api/health")
 @app.get("/health")
 async def health(container: ContainerDep):
@@ -538,7 +547,7 @@ async def get_robots_txt(request: Request, container: ContainerDep) -> PlainText
     host = request.headers.get("host")
     if host is None or not str(host).strip():
         raise HTTPException(status_code=400, detail="Host header is required")
-    base_url = get_frontend_public_base_url(str(host).strip())
+    base_url = resolve_public_base_url(str(host).strip())
     robots_txt = (
         "User-agent: *\n"
         "Allow: /\n"
@@ -564,7 +573,7 @@ async def get_sitemap_xml(request: Request, container: ContainerDep) -> Response
     host = request.headers.get("host")
     if host is None or not str(host).strip():
         raise HTTPException(status_code=400, detail="Host header is required")
-    base_url = get_frontend_public_base_url(str(host).strip())
+    base_url = resolve_public_base_url(str(host).strip())
     sitemap_xml = _build_sitemap_xml(base_url=base_url)
     return Response(content=sitemap_xml, media_type="application/xml")
 
@@ -575,13 +584,28 @@ async def serve_llms_txt(request: Request, container: ContainerDep) -> PlainText
     host = request.headers.get("host")
     if host is None or not str(host).strip():
         raise HTTPException(status_code=400, detail="Host header is required")
-    base_url = get_frontend_public_base_url(str(host).strip())
-    return PlainTextResponse(content=_build_llms_txt(base_url=base_url))
+    brand = resolve_brand(str(host).strip())
+    base_url = resolve_public_base_url(str(host).strip())
+    return PlainTextResponse(content=_build_llms_txt(base_url=base_url, brand=brand))
 
 
 _PWA_MANIFEST_TEMPLATE_PATH = (
     Path(__file__).resolve().parents[2] / "core" / "frontend" / "pwa" / "manifest.json"
 )
+_PWA_SW_TEMPLATE_PATH = (
+    Path(__file__).resolve().parents[2] / "core" / "frontend" / "pwa" / "sw.js"
+)
+_PWA_OFFLINE_TEMPLATE_PATH = (
+    Path(__file__).resolve().parents[2] / "core" / "frontend" / "pwa" / "offline.html"
+)
+_PWA_BRAND_PLACEHOLDER = "__PLATFORM_NAME__"
+
+
+def _render_pwa_brand_template(template_path: Path, platform_name: str) -> str:
+    return template_path.read_text(encoding="utf-8").replace(
+        _PWA_BRAND_PLACEHOLDER,
+        platform_name,
+    )
 
 
 @app.get("/manifest.json")
@@ -592,13 +616,47 @@ async def get_pwa_manifest(request: Request, container: ContainerDep) -> JSONRes
     if host is None or not str(host).strip():
         raise HTTPException(status_code=400, detail="Host header is required")
     brand = resolve_brand(str(host).strip())
-    manifest_payload = json.loads(_PWA_MANIFEST_TEMPLATE_PATH.read_text(encoding="utf-8"))
+    manifest_payload: JsonObject = require_json_object(
+        json.loads(_PWA_MANIFEST_TEMPLATE_PATH.read_text(encoding="utf-8")),
+        "PWA manifest template",
+    )
     manifest_payload["name"] = f"{brand.platform_name} - AI agents for business"
     manifest_payload["short_name"] = brand.platform_name
     manifest_payload["description"] = (
         f"Business automation platform: AI agents, knowledge base and CRM — {brand.platform_name}"
     )
     return JSONResponse(content=manifest_payload)
+
+
+@app.get("/sw.js")
+@app.get("/frontend/sw.js")
+async def get_pwa_service_worker(request: Request, container: ContainerDep) -> Response:
+    _ = container
+    host = request.headers.get("host")
+    if host is None or not str(host).strip():
+        raise HTTPException(status_code=400, detail="Host header is required")
+    brand = resolve_brand(str(host).strip())
+    body = _render_pwa_brand_template(_PWA_SW_TEMPLATE_PATH, brand.platform_name)
+    return Response(
+        content=body,
+        media_type="application/javascript",
+        headers={
+            "Service-Worker-Allowed": "/",
+            "Cache-Control": "no-cache, no-store, must-revalidate",
+        },
+    )
+
+
+@app.get("/offline.html")
+@app.get("/frontend/offline.html")
+async def get_pwa_offline_page(request: Request, container: ContainerDep) -> Response:
+    _ = container
+    host = request.headers.get("host")
+    if host is None or not str(host).strip():
+        raise HTTPException(status_code=400, detail="Host header is required")
+    brand = resolve_brand(str(host).strip())
+    body = _render_pwa_brand_template(_PWA_OFFLINE_TEMPLATE_PATH, brand.platform_name)
+    return Response(content=body, media_type="text/html; charset=utf-8")
 
 
 # HumanitecAgent: статика (assets), страница /agent — SPA (agent-download-page)

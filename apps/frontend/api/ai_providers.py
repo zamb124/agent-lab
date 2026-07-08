@@ -19,7 +19,7 @@ Endpoints:
 
 from typing import TYPE_CHECKING
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Request
 from pydantic import ValidationError
 
 from apps.frontend.dependencies import ContainerDep
@@ -47,12 +47,15 @@ from core.ai.free_pool import read_humanitec_llms_model_options
 from core.ai.providers import (
     HUMANITEC_LLM_PROVIDER,
     LLM_CAPABILITIES,
+    PROVIDER_LITSERVE,
     VOICE_CAPABILITIES,
+    VOICE_PROVIDER_LITSERVE,
     AICapability,
     platform_provider_spec,
     platform_provider_specs_for_capability,
     validate_platform_provider_for_capability,
 )
+from core.config.models import PlatformBrandConfig
 from core.ai.resolver import resolve_ai_model
 from core.config import get_settings
 from core.context import clear_context, require_context, set_context
@@ -62,6 +65,7 @@ from core.logging import get_logger
 from core.models.context_models import Context
 from core.models.identity_models import Company, User
 from core.models.voice_providers_catalog import build_voice_providers_catalog_dto
+from core.platform_brand.resolver import UnknownPlatformDomainError, resolve_brand, resolve_context_host
 from core.types import JsonObject, require_json_object
 
 if TYPE_CHECKING:
@@ -249,9 +253,38 @@ def _voice_override_for_capability(
     raise TypeError(f"{capability.value} ожидает CompanyVoiceOverride")
 
 
+def _resolve_brand_for_ai_providers(host: str | None) -> PlatformBrandConfig:
+    if host is not None and str(host).strip():
+        try:
+            return resolve_brand(str(host).strip())
+        except UnknownPlatformDomainError:
+            pass
+    settings = get_settings()
+    return settings.platform_brands[settings.primary_platform_domain]
+
+
+def _provider_display_label(
+    provider: str,
+    default_label: str,
+    brand: PlatformBrandConfig,
+) -> str:
+    if provider == HUMANITEC_LLM_PROVIDER:
+        return brand.llms_display_label
+    if provider == PROVIDER_LITSERVE:
+        return brand.models_product_name
+    if provider == VOICE_PROVIDER_LITSERVE:
+        return brand.voice_product_name
+    return default_label
+
+
+def _llms_display_label_for_context() -> str:
+    return _resolve_brand_for_ai_providers(resolve_context_host()).llms_display_label
+
+
 def _provider_catalog(
     aip: CompanyAIProviders,
     *,
+    brand: PlatformBrandConfig,
     humanitec_llms_models: list[JsonObject],
     provider_models: dict[str, dict[str, list[JsonObject]]],
     embedding_models: dict[str, list[JsonObject]],
@@ -277,7 +310,7 @@ def _provider_catalog(
             items.append(
                 {
                     "value": p,
-                    "label": spec.label,
+                    "label": _provider_display_label(p, spec.label, brand),
                     "kind": spec.kind,
                     "byok_allowed": spec.byok_allowed,
                     **(
@@ -447,7 +480,7 @@ def _build_llm_override(capability: AICapability, payload: AIProvidersCapability
                 status_code=400,
                 detail=(
                     f"capability {capability.value}: model обязателен для provider={provider!r}; "
-                    + "auto доступен только через Humanitec LLMs"
+                    + f"auto доступен только через {_llms_display_label_for_context()}"
                 ),
             )
     encrypted = encrypt_secret(payload.api_key) if payload.api_key else None
@@ -674,9 +707,10 @@ def _validated_ai_providers(aip: CompanyAIProviders) -> CompanyAIProviders:
 
 
 @router.get("")
-async def get_ai_providers(container: ContainerDep) -> JsonObject:
+async def get_ai_providers(request: Request, container: ContainerDep) -> JsonObject:
     _, company = _require_admin()
     aip = _load_aip(company)
+    brand = _resolve_brand_for_ai_providers(request.headers.get("host"))
     humanitec_llms_models = await read_humanitec_llms_model_options(container.redis_client)
     provider_models = await _provider_model_options(container)
     embedding_models = await _embedding_model_options(container)
@@ -686,6 +720,7 @@ async def get_ai_providers(container: ContainerDep) -> JsonObject:
         "custom_providers": [_custom_provider_to_public(p) for p in aip.custom_providers],
         "catalog": _provider_catalog(
             aip,
+            brand=brand,
             humanitec_llms_models=humanitec_llms_models,
             provider_models=provider_models,
             embedding_models=embedding_models,

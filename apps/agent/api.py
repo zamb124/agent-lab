@@ -31,6 +31,8 @@ from apps.frontend.dependencies import ContainerDep
 from core.app_state import get_request_token_data
 from core.context import require_context
 from core.logging import get_logger
+from core.config import get_settings
+from core.platform_brand.resolver import UnknownPlatformDomainError, resolve_brand
 from core.utils.tokens import TokenService
 
 logger = get_logger(__name__)
@@ -108,13 +110,29 @@ async def agent_discover(
     return await fetch_agent_discover(container, origin_override=origin)
 
 
+def _resolve_agent_page_brand(request: Request) -> tuple[str, str]:
+    host = request.headers.get("host")
+    if host is not None and str(host).strip():
+        try:
+            brand = resolve_brand(str(host).strip())
+            return brand.agent_product_name, brand.platform_name
+        except UnknownPlatformDomainError:
+            pass
+    settings = get_settings()
+    brand = settings.platform_brands[settings.primary_platform_domain]
+    return brand.agent_product_name, brand.platform_name
+
+
 def _render_login_page(
     redirect_uri: str = "humanitec://auth/callback",
     already_logged_in: bool = False,
     user_email: str | None = None,
     session_token: str | None = None,
+    *,
+    agent_product_name: str,
+    platform_name: str,
 ) -> HTMLResponse:
-    title = "HumanitecAgent — Вход"
+    title = f"{agent_product_name} — Вход"
     redirect_escaped = url_quote(redirect_uri, safe="")
 
     if already_logged_in:
@@ -126,10 +144,10 @@ def _render_login_page(
             <div class="logo">H</div>
             <h1>Добро пожаловать</h1>
             <p>Вы вошли как <strong>{user_email or 'пользователь'}</strong></p>
-            <p>Регистрируем HumanitecAgent на платформе...</p>
+            <p>Регистрируем {agent_product_name} на платформе...</p>
             <div class="spinner"></div>
             <p class="hint">Если приложение не открылось автоматически, нажмите кнопку ниже.</p>
-            <button id="open-agent" class="btn btn-primary">Открыть HumanitecAgent</button>
+            <button id="open-agent" class="btn btn-primary">Открыть {agent_product_name}</button>
         </div>
         <script>
             window.location.href = '{redirect_uri}?token=' + encodeURIComponent('{redirect_escaped_token}');
@@ -142,9 +160,9 @@ def _render_login_page(
         body = f"""
         <div class="card">
             <div class="logo">H</div>
-            <h1>Вход в HumanitecAgent</h1>
-            <p>Войдите в аккаунт Humanitec для подключения агента</p>
-            <a href="/login?redirect={redirect_escaped}" class="btn btn-primary">Войти через Humanitec</a>
+            <h1>Вход в {agent_product_name}</h1>
+            <p>Войдите в аккаунт {platform_name} для подключения агента</p>
+            <a href="/login?redirect={redirect_escaped}" class="btn btn-primary">Войти через {platform_name}</a>
             <p class="hint">Нет аккаунта? <a href="/register?redirect={redirect_escaped}">Создать</a></p>
         </div>
         """
@@ -184,6 +202,7 @@ async def agent_login_page(
     redirect: Annotated[str, Query()] = "humanitec://auth/callback",
 ) -> HTMLResponse:
     _ = container
+    agent_product_name, platform_name = _resolve_agent_page_brand(request)
     token_data = get_request_token_data(request)
     if token_data is not None:
         token_service = TokenService()
@@ -199,9 +218,16 @@ async def agent_login_page(
             already_logged_in=True,
             user_email=token_data.email,
             session_token=session_token,
+            agent_product_name=agent_product_name,
+            platform_name=platform_name,
         )
 
-    return _render_login_page(redirect_uri=redirect, already_logged_in=False)
+    return _render_login_page(
+        redirect_uri=redirect,
+        already_logged_in=False,
+        agent_product_name=agent_product_name,
+        platform_name=platform_name,
+    )
 
 
 @router.post("/auth/device-token")

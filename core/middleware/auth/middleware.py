@@ -24,6 +24,7 @@ from core.app_state import (
     read_session_token_override,
     require_request_trace_id,
 )
+from core.config import get_settings
 from core.container import BaseContainer
 from core.context import clear_context, set_context
 from core.identity.runtime_users import ensure_persisted_runtime_user
@@ -38,6 +39,7 @@ from core.logging.attributes import (
 )
 from core.models.context_models import Context
 from core.models.identity_models import Company, User, UserStatus
+from core.platform_brand.resolver import UnknownPlatformDomainError, resolve_brand
 from core.utils.auth_session_rebind import attach_session_auth_cookie, rebind_session_to_company
 from core.utils.domain import extract_subdomain
 from core.utils.tokens import TokenData, TokenType, get_token_service
@@ -80,6 +82,16 @@ class AuthMiddleware(BaseHTTPMiddleware):
         if not hasattr(app.state, "container") or not hasattr(app.state, "settings"):
             raise RuntimeError("Platform app state is not configured")
         return cast(PlatformAppState, cast(object, app.state))
+
+    def _resolve_error_page_platform_name(self, request: Request) -> str:
+        host = request.headers.get("host")
+        if host is not None and str(host).strip():
+            try:
+                return resolve_brand(str(host).strip()).platform_name
+            except UnknownPlatformDomainError:
+                pass
+        settings = get_settings()
+        return settings.platform_brands[settings.primary_platform_domain].platform_name
 
     def _get_container(self, request: Request) -> BaseContainer:
         return self._app_state(request).container
@@ -186,7 +198,9 @@ class AuthMiddleware(BaseHTTPMiddleware):
                 request
             ):
                 return build_company_access_error_response(
-                    e.status_code, http_exception_detail_to_str(e.detail)
+                    e.status_code,
+                    http_exception_detail_to_str(e.detail),
+                    self._resolve_error_page_platform_name(request),
                 )
             return JSONResponse(status_code=e.status_code, content={"detail": e.detail})
         finally:

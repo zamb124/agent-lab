@@ -6,6 +6,7 @@ import { classMap } from 'lit/directives/class-map.js';
 import { PlatformElement } from '@platform/lib/platform-element/index.js';
 
 import { isAllowedLandingScrollSectionId, storePendingLandingSectionTarget } from './landing-section-scroll.js';
+import { getPlatformBrandBootstrap } from '@platform/lib/utils/platform-brand.js';
 
 const INTERNAL_HREF_TO_ROUTE = Object.freeze({
     '/': 'landing',
@@ -747,13 +748,17 @@ export class LandingHeader extends PlatformElement {
             throw new Error(`LandingHeader.render: invalid theme "${themeMode}"`);
         }
         const h = (sub) => this._lt(`header.${sub}`);
+        const brand = getPlatformBrandBootstrap();
+        if (!brand) {
+            throw new Error('landing-header: platform brand bootstrap required');
+        }
         return html`
             <header class="header-container" @click=${this._onHeaderBarClick}>
                 <a href="/" class="logo" @click=${this._closeMobileMenu}>
                     <div class="logo-icon">
-                        <img src="/static/core/assets/service_logos/frontend_logo.svg" alt="Humanitec" />
+                        <img src="/static/core/assets/service_logos/frontend_logo.svg" alt="${brand.platformName}" />
                     </div>
-                    <span class="logo-text">Humanitec</span>
+                    <span class="logo-text">${brand.platformName}</span>
                 </a>
                 
                 <nav class="nav">

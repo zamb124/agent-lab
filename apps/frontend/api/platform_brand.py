@@ -21,6 +21,11 @@ class PlatformBrandResponse(BaseModel):
     base_domain: str
     platform_name: str
     support_email: str
+    agent_product_name: str
+    models_product_name: str
+    voice_product_name: str
+    llms_display_label: str
+    flows_product_label: str
     logo_path: str
     apex_origin: str
     legal: LegalConfig
@@ -45,6 +50,11 @@ async def get_platform_brand(request: Request) -> PlatformBrandResponse:
         base_domain=base_domain,
         platform_name=brand.platform_name,
         support_email=brand.support_email,
+        agent_product_name=brand.agent_product_name,
+        models_product_name=brand.models_product_name,
+        voice_product_name=brand.voice_product_name,
+        llms_display_label=brand.llms_display_label,
+        flows_product_label=brand.flows_product_label,
         logo_path=brand.logo_path,
         apex_origin=resolve_public_base_url(host).rstrip("/") + "/",
         legal=brand.legal,
