@@ -17,3 +17,7 @@ Open docx in OnlyOffice, return to explorer, and reopen.
 ## Step 4. Same document reopened
 
 ![Same document reopened](screenshots/004.png)
+
+## Step 5. Document Server integration active
+
+![Document Server integration active](screenshots/005.png)

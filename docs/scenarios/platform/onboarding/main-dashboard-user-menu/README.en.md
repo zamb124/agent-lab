@@ -2,9 +2,9 @@
 
 A basic path for a new user: open the website, go to Dashboard, understand the service list, and inspect the user menu.
 
-## Step 1. Open the main website. If the user is signed in, the header has a Dashboard button.
+## Step 1. Open the company dashboard with the main services.
 
-![Open the main website. If the user is signed in, the header has a Dashboard button.](screenshots/001.png)
+![Open the company dashboard with the main services.](screenshots/001.png)
 
 ## Step 2. Dashboard shows the company's main services. System-only services are hidden from a regular company.
 

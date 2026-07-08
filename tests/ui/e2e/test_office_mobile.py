@@ -11,7 +11,7 @@ from tests.ui.e2e.office_e2e_helpers import (
     office_e2e_expect_editor_loaded,
     office_e2e_explorer,
     office_e2e_open_with_namespace,
-    office_e2e_select_catalog,
+    office_e2e_select_catalog_mobile,
 )
 from tests.ui.harness import AppUI
 from tests.ui.scenario_doc import ScenarioRecorder
@@ -80,8 +80,9 @@ async def test_office_mobile_documents_workflow(
         label_en="Mobile catalog picker",
     )
 
-    await office_e2e_select_catalog(ui_page_system, f"mobile-{unique_id}")
+    await office_e2e_select_catalog_mobile(ui_page_system, f"mobile-{unique_id}")
     row = ui_page_system.locator("platform-file-row, platform-file-card").filter(has_text=doc_title).first
+    await expect(row).to_be_visible(timeout=45_000)
     await row.dblclick()
     await office_e2e_expect_editor_loaded(ui_page_system)
     await expect(bottom_nav).to_be_hidden(timeout=15_000)

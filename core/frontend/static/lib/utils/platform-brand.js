@@ -30,6 +30,48 @@ let cachedPlatformBrand = null;
  */
 
 /**
+ * @param {import('./company-url.js').CompanyHostContext} hostContext
+ * @param {{
+ *   base_domain: string,
+ *   platform_name: string,
+ *   support_email: string,
+ *   logo_path: string,
+ *   apex_origin: string,
+ *   supported_domains: string[],
+ *   agent_product_name: string,
+ *   models_product_name: string,
+ *   voice_product_name: string,
+ *   llms_display_label: string,
+ *   flows_product_label: string,
+ * }} payload
+ * @returns {PlatformBrandBootstrap}
+ */
+export function buildPlatformBrandBootstrapFromApiPayload(payload, hostContext) {
+    if (!payload || typeof payload.base_domain !== 'string' || payload.base_domain.length === 0) {
+        throw new Error('buildPlatformBrandBootstrapFromApiPayload: base_domain required');
+    }
+    if (!hostContext || typeof hostContext.baseDomain !== 'string' || hostContext.baseDomain.length === 0) {
+        throw new Error('buildPlatformBrandBootstrapFromApiPayload: hostContext.baseDomain required');
+    }
+    return {
+        isProduction: hostContext.isProduction,
+        baseDomain: hostContext.baseDomain,
+        portSuffix: hostContext.portSuffix,
+        protocol: hostContext.protocol,
+        platformName: payload.platform_name,
+        supportEmail: payload.support_email,
+        logoPath: payload.logo_path,
+        apexOrigin: payload.apex_origin,
+        supportedDomains: payload.supported_domains,
+        agentProductName: payload.agent_product_name,
+        modelsProductName: payload.models_product_name,
+        voiceProductName: payload.voice_product_name,
+        llmsDisplayLabel: payload.llms_display_label,
+        flowsProductLabel: payload.flows_product_label,
+    };
+}
+
+/**
  * @param {PlatformBrandBootstrap} brand
  */
 export function setPlatformBrandBootstrap(brand) {

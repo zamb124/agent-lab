@@ -818,7 +818,7 @@ export class SyncMessageBubble extends PlatformElement {
         if (typeof text !== 'string' || text === '') return '';
         const segments = parseMentionsToSegments(text, this.members);
         return html`<div class="body">${segments.map((s) => s.kind === 'mention'
-            ? html`<span class="mention" @click=${() => this._onMentionClick(s.userId)}>${s.value}</span>`
+            ? html`<span class="mention" @click=${(e) => { e.stopPropagation(); this._onMentionClick(s.userId); }}>${s.value}</span>`
             : s.value)}</div>`;
     }
 

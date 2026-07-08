@@ -661,7 +661,7 @@ export class PlatformUserInfoModal extends PlatformFormModal {
                 </div>
             </div>
             ${this._renderSharedChannels()}
-            ${this._renderActiveTasks(user, isOwn)}
+            ${this._renderActiveTasks(user, false)}
             ${showRolesEditor ? this._renderRolesEditor(user) : null}
         `;
     }

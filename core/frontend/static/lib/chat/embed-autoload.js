@@ -13,6 +13,7 @@
  */
 
 import './platform-chat.js';
+import { loadPlatformBrandBootstrap } from '../events/effects/platform-brand-bootstrap.js';
 
 /**
  * @param {string} platformUiOrigin
@@ -91,7 +92,7 @@ function resolveEmbedPlatformUiOrigin(scriptEl, ds) {
 /**
  * @param {HTMLScriptElement} scriptEl
  */
-function mountFromScript(scriptEl) {
+async function mountFromScript(scriptEl) {
     const ds = scriptEl.dataset;
     const embedId = (ds.embedId || '').trim();
     if (!embedId) {
@@ -101,6 +102,11 @@ function mountFromScript(scriptEl) {
     if (!flowsBaseUrl) {
         throw new Error('humanitec-embed-autoload: data-flows-base-url required');
     }
+
+    const platformUiOrigin = resolveEmbedPlatformUiOrigin(scriptEl, ds);
+    await loadPlatformBrandBootstrap({
+        platformUiOrigin: platformUiOrigin !== '' ? platformUiOrigin : undefined,
+    });
 
     const staticBearerRaw = typeof ds.staticBearer === 'string' ? ds.staticBearer.trim() : '';
     const staticBearer = staticBearerRaw;
@@ -195,7 +201,6 @@ function mountFromScript(scriptEl) {
 
     chat.flowsBaseUrl = flowsBaseUrl;
 
-    const platformUiOrigin = resolveEmbedPlatformUiOrigin(scriptEl, ds);
     ensureChatTokensStylesheet(platformUiOrigin);
     if (platformUiOrigin !== '') {
         chat.setAttribute('platform-ui-origin', platformUiOrigin);
@@ -283,7 +288,7 @@ function scheduleMount() {
     }
 
     function run() {
-        mountFromScript(scriptEl);
+        void mountFromScript(scriptEl);
     }
 
     if (typeof document !== 'undefined' && document.readyState === 'loading') {

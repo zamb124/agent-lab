@@ -8,11 +8,12 @@ from playwright.async_api import Page, expect
 from tests.ui.e2e.office_e2e_helpers import (
     office_api_setup_private_catalog,
     office_e2e_catalog_context_action,
+    office_e2e_click_modal_button,
+    office_e2e_expect_explorer,
     office_e2e_open_catalog_context_menu,
     office_e2e_open_with_namespace,
     office_e2e_select_catalog,
 )
-from tests.ui.e2e.sync_e2e_helpers import sync_e2e_click_platform_button
 from tests.ui.harness import AppUI
 from tests.ui.personas import UiTestUser
 from tests.ui.scenario_doc import ScenarioRecorder
@@ -55,6 +56,8 @@ async def test_office_catalog_access_and_members(
         title_prefix="private-ui",
     )
     catalog_title = f"private-ui-{unique_id}"
+    await ui_page_system.reload(wait_until="domcontentloaded")
+    await office_e2e_expect_explorer(ui_page_system)
 
     await office_e2e_select_catalog(ui_page_system, catalog_title)
     await office_e2e_open_catalog_context_menu(ui_page_system, catalog_title)
@@ -70,12 +73,13 @@ async def test_office_catalog_access_and_members(
         label_en="Private catalog members modal",
     )
 
-    search = members_modal.locator("input.field-pill-input").first
-    await search.fill(ui_user_system_member.name)
+    search = members_modal.locator("platform-field").first
+    await expect(search).to_be_visible(timeout=30_000)
+    await search.locator("input").first.fill("System User 2")
     candidate = members_modal.locator(".candidate-row").first
     await expect(candidate).to_be_visible(timeout=30_000)
     await candidate.click()
-    await sync_e2e_click_platform_button(members_modal, "Закрыть", "Close")
+    await office_e2e_click_modal_button(members_modal, "Закрыть", "Close")
     await expect(members_modal).to_be_hidden(timeout=30_000)
     await scenario.step(
         "Участник добавлен в каталог",

@@ -388,13 +388,15 @@ export class OfficeAccessModal extends PlatformFormModal {
                             @change=${(e) => this._setLinkPermission(e.detail.value)}
                         ></platform-field>
                     </div>
-                    ${this._publicUrl ? html`
+                    ${this._linkEnabled ? html`
                         <div class="link-row">
-                            <span class="link-url">${this._publicUrl}</span>
+                            ${this._publicUrl ? html`<span class="link-url">${this._publicUrl}</span>` : nothing}
                             <div class="link-actions">
-                                <button class="btn btn-secondary" type="button" @click=${this._copyPublicUrl}>
-                                    ${this.t('access.copyLink')}
-                                </button>
+                                ${this._publicUrl ? html`
+                                    <button class="btn btn-secondary" type="button" @click=${this._copyPublicUrl}>
+                                        ${this.t('access.copyLink')}
+                                    </button>
+                                ` : nothing}
                                 <button class="btn btn-secondary" type="button" @click=${this._rotateLink}>
                                     ${this.t('access.rotateLink')}
                                 </button>

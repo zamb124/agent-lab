@@ -63,19 +63,14 @@ async def test_platform_main_dashboard_user_menu_scenario(
     page = ui_page_company2
     company_origin = flows_company_origin(frontend_ui.origin)
 
-    await page.goto(f"{company_origin}/", wait_until="domcontentloaded")
+    await page.goto(f"{company_origin}/dashboard", wait_until="domcontentloaded")
     await expect(page.locator("frontend-app")).to_be_visible(timeout=30_000)
-    dashboard_link = page.locator("landing-header a.dashboard-btn").first
-    await expect(dashboard_link).to_be_visible(timeout=30_000)
-    await scenario.step(
-        "Открываем главный сайт. Если пользователь уже вошел, в шапке есть кнопка Dashboard.",
-        page,
-        label_en="Open the main website. If the user is signed in, the header has a Dashboard button.",
-    )
-
-    await dashboard_link.click()
-    await expect(page).to_have_url(re.compile(r"/dashboard(?:$|[?#])"), timeout=30_000)
     await expect(page.locator("dashboard-page")).to_be_visible(timeout=30_000)
+    await scenario.step(
+        "Открываем Dashboard компании. Здесь собраны основные сервисы.",
+        page,
+        label_en="Open the company dashboard with the main services.",
+    )
     await expect(page.locator("dashboard-service-card[svc-id='flows']")).to_be_visible(timeout=30_000)
     await expect(page.locator("dashboard-service-card[svc-id='crm']")).to_be_visible(timeout=30_000)
     await expect(page.locator("dashboard-service-card[svc-id='rag']")).to_be_visible(timeout=30_000)

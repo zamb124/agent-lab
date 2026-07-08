@@ -12,7 +12,7 @@ export class OfficePublicPreviewPage extends PlatformPage {
 
     static properties = {
         token: { type: String },
-        _error: { state: true },
+        _errorKey: { state: true },
         _loading: { state: true },
         _resolve: { state: true },
         _openConfig: { state: true },
@@ -87,7 +87,7 @@ export class OfficePublicPreviewPage extends PlatformPage {
     constructor() {
         super();
         this.token = '';
-        this._error = '';
+        this._errorKey = '';
         this._loading = true;
         this._resolve = null;
         this._openConfig = null;
@@ -107,18 +107,18 @@ export class OfficePublicPreviewPage extends PlatformPage {
 
     async _load() {
         const token = (this.token || '').trim();
-        this._error = '';
+        this._errorKey = '';
         this._loading = true;
         this._openConfig = null;
         this._catalogItems = [];
         if (token.length === 0) {
-            this._error = this.t('public_preview.invalidToken');
+            this._errorKey = 'public_preview.invalidToken';
             this._loading = false;
             return;
         }
         const resolve = await this._publicResolve.run({ token });
         if (!resolve) {
-            this._error = this.t('public_preview.notFound');
+            this._errorKey = 'public_preview.notFound';
             this._loading = false;
             return;
         }
@@ -133,7 +133,7 @@ export class OfficePublicPreviewPage extends PlatformPage {
         }
         const openConfig = await this._publicOpen.run({ token });
         if (!openConfig) {
-            this._error = this.t('public_preview.openFailed');
+            this._errorKey = 'public_preview.openFailed';
             this._loading = false;
             return;
         }
@@ -152,7 +152,7 @@ export class OfficePublicPreviewPage extends PlatformPage {
         });
         this._loading = false;
         if (!openConfig) {
-            this._error = this.t('public_preview.openFailed');
+            this._errorKey = 'public_preview.openFailed';
             return;
         }
         this._openConfig = openConfig;
@@ -169,8 +169,8 @@ export class OfficePublicPreviewPage extends PlatformPage {
             </div>
             <div class="body">
                 ${this._loading ? html`<div class="status">${this.t('public_preview.loading')}</div>` : ''}
-                ${this._error ? html`<div class="error">${this._error}</div>` : ''}
-                ${!this._loading && !this._error && this._resolve && this._resolve.resource_kind === 'catalog'
+                ${this._errorKey ? html`<div class="error">${this.t(this._errorKey)}</div>` : ''}
+                ${!this._loading && !this._errorKey && this._resolve && this._resolve.resource_kind === 'catalog'
                     ? html`
                         <div class="catalog-grid">
                             ${this._catalogItems.map((item) => html`

@@ -7,7 +7,7 @@ from urllib.parse import urlparse
 from core.config import get_settings
 from core.config.models import PlatformBrandConfig
 from core.context import get_context
-from core.utils.domain import extract_base_domain, get_protocol
+from core.utils.domain import extract_base_domain, get_protocol, is_local, split_host_port
 
 
 class UnknownPlatformDomainError(ValueError):
@@ -38,6 +38,17 @@ def resolve_public_base_url(host: str) -> str:
     base_domain = extract_base_domain(host)
     protocol = get_protocol(host)
     return f"{protocol}://{base_domain}"
+
+
+def resolve_brand_apex_origin(host: str, *, url_scheme: str) -> str:
+    """Публичный origin бренда для bootstrap: dev host сохраняет subdomain и порт."""
+    if is_local(host):
+        hostname, port = split_host_port(host)
+        origin = f"{url_scheme}://{hostname}"
+        if port is not None:
+            origin = f"{origin}:{port}"
+        return origin.rstrip("/") + "/"
+    return resolve_public_base_url(host).rstrip("/") + "/"
 
 
 def resolve_infrastructure_service_url(host: str, service_subdomain: str) -> str:

@@ -299,3 +299,18 @@ async def sync_api_find_message_id_with_text(
             if isinstance(data, dict) and substring in str(data.get("body", "")):
                 return mid
     raise AssertionError(f"Сообщение с текстом, содержащим {substring!r}, не найдено.")
+
+
+async def sync_e2e_expect_team_member_loaded(page: Page, user_id: str, *, timeout: float = 30_000) -> None:
+    """Ждёт появления участника компании в state.team.members (для profile modal / mentions)."""
+    user_id_json = json.dumps(user_id)
+    await page.wait_for_function(
+        f"""() => {{
+            const bus = window.__PLATFORM_BUS__;
+            if (!bus || typeof bus.getState !== 'function') return false;
+            const team = bus.getState().team;
+            if (!team || !Array.isArray(team.members)) return false;
+            return team.members.some((m) => m && m.user_id === {user_id_json});
+        }}""",
+        timeout=timeout,
+    )

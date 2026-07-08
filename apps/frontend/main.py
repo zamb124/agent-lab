@@ -38,7 +38,6 @@ from apps.frontend.api.invites import router as invites_router
 from apps.frontend.api.leads import lead_requests_router, leads_router
 from apps.frontend.api.payments_webhook import router as payments_webhook_router
 from apps.frontend.api.platform_billing import router as platform_billing_router
-from apps.frontend.api.platform_brand import router as platform_brand_router
 from apps.frontend.api.platform_llm_model_scores import (
     router as platform_llm_model_scores_router,
 )
@@ -363,7 +362,6 @@ app = create_service_app(
         platform_tracing_router,
         crawl_report_router,
         platform_billing_router,
-        platform_brand_router,
         platform_llm_model_scores_router,
         payments_webhook_router,
         yoomoney_oauth_router,

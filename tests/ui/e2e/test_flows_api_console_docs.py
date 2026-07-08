@@ -441,9 +441,14 @@ async def _open_api_console(page: Page, flow_id: str, flows_ui: AppUI) -> Any:
     await page.set_viewport_size({"width": 1600, "height": 920})
     await page.goto(f"{flows_ui.origin}/flows/{flow_id}/editor", wait_until="domcontentloaded")
     await expect(page.locator("flow-editor-page")).to_be_visible(timeout=30_000)
-    api_button = page.locator("flows-editor-header button.header-btn").filter(has_text=re.compile(r"API")).first
-    await expect(api_button).to_be_visible(timeout=30_000)
-    await api_button.click()
+    overflow_btn = page.locator("flows-editor-header .overflow-btn-wrap platform-button").first
+    await expect(overflow_btn).to_be_visible(timeout=30_000)
+    await overflow_btn.locator("button").first.click()
+    api_menu_item = page.locator("flows-editor-header .menu-flyout platform-button").filter(
+        has_text=re.compile(r"API and A2A specification|API и A2A")
+    ).first
+    await expect(api_menu_item).to_be_visible(timeout=30_000)
+    await api_menu_item.locator("button").first.click()
     modal = page.locator("flows-api-console-modal[open]").first
     await expect(modal).to_be_visible(timeout=30_000)
     await expect(modal.locator("a.docs-link")).to_have_attribute(
@@ -455,15 +460,19 @@ async def _open_api_console(page: Page, flow_id: str, flows_ui: AppUI) -> Any:
 
 
 async def _click_nav(modal: Any, label_pattern: str) -> None:
-    button = modal.locator(".api-nav button").filter(has_text=re.compile(label_pattern)).first
+    button = modal.locator("platform-segmented-control.api-nav button.segment").filter(
+        has_text=re.compile(label_pattern)
+    ).first
     await expect(button).to_be_visible(timeout=30_000)
-    await button.click()
+    await button.evaluate("(el) => el.click()")
 
 
 async def _click_mode(modal: Any, label_pattern: str) -> None:
-    button = modal.locator(".mode-tabs button").filter(has_text=re.compile(label_pattern)).first
+    button = modal.locator(".mode-tabs button.segment, platform-segmented-control.mode-tabs button.segment").filter(
+        has_text=re.compile(label_pattern)
+    ).first
     await expect(button).to_be_visible(timeout=30_000)
-    await button.click()
+    await button.evaluate("(el) => el.click()")
 
 
 async def _set_run_variables(modal: Any, variables: dict[str, Any]) -> None:

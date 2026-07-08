@@ -59,7 +59,7 @@ export class SyncChannelMembersAddModal extends PlatformFormModal {
         return this._members.items.filter((m) => resolveDisplayName(m).toLowerCase().includes(q));
     }
 
-    renderHeader() { return html`<h3>${this.t('channel_members_add.title')}</h3>`; }
+    renderHeader() { return this.t('channel_members_add.title'); }
 
     renderBody() {
         const filtered = this._filteredMembers();

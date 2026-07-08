@@ -35,6 +35,7 @@ from core.api.auth import router as core_auth_router
 from core.api.calendar import router as core_calendar_router
 from core.api.companies import router as core_companies_router
 from core.api.integrations import router as core_integrations_router
+from core.api.platform_brand import router as platform_brand_router
 from core.api.team import router as core_team_router
 from core.app.file_types_route import register_platform_file_types_route
 from core.app.health_payload import build_health_payload
@@ -447,6 +448,10 @@ def create_service_app(
         push_prefix = f"/{public_segment}"
         logger.info("service.router_attached", router="push", prefix=f"{push_prefix}/api/push")
         app.include_router(push_router, prefix=push_prefix, tags=["push"])
+
+        brand_prefix = "/frontend"
+        logger.info("service.router_attached", router="platform_brand", prefix=f"{brand_prefix}/api/platform")
+        app.include_router(platform_brand_router, prefix=brand_prefix, tags=["platform-brand"])
 
         # WebSocket роутер для уведомлений (`/<svc>/api/ws/notifications`).
         ws_prefix = f"/{public_segment}/api" if service_name != "core" else ""

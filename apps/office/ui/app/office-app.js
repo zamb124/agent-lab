@@ -239,6 +239,14 @@ export class OfficeApp extends PlatformApp {
         );
     }
 
+    rendersUnauthenticated() {
+        if (typeof window === 'undefined') {
+            return false;
+        }
+        const path = window.location.pathname;
+        return /^\/documents\/p\/[^/]+/.test(path);
+    }
+
     renderRoute(routeKey, params) {
         let content;
         let editorMode = false;

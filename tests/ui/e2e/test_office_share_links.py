@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import re
+
 import pytest
 from playwright.async_api import Page, expect
 
@@ -72,8 +74,9 @@ async def test_office_share_catalog_and_document(
         label_en="Catalog access modal",
     )
 
-    link_switch = access_modal.locator("platform-switch").first
-    await link_switch.click()
+    link_switch = access_modal.locator("platform-switch").last
+    if not await link_switch.get_attribute("checked"):
+        await link_switch.click()
     await access_modal.get_by_role("button", name="Сохранить").click()
     await expect(access_modal).to_be_hidden(timeout=45_000)
     await scenario.step(
@@ -85,6 +88,11 @@ async def test_office_share_catalog_and_document(
     await office_e2e_catalog_context_action(ui_page_system, catalog_title, "Доступ", "Access")
     access_modal = ui_page_system.locator("office-access-modal")
     await expect(access_modal).to_be_visible(timeout=30_000)
+    rotate_btn = access_modal.locator("button.btn-secondary").filter(
+        has_text=re.compile(r"Обновить|Refresh|Rotate")
+    ).first
+    await expect(rotate_btn).to_be_visible(timeout=30_000)
+    await rotate_btn.click()
     await expect(access_modal.locator(".link-url")).to_be_visible(timeout=60_000)
 
     await access_modal.locator("button.btn-secondary").filter(has_text="Скопировать").click()
@@ -102,7 +110,7 @@ async def test_office_share_catalog_and_document(
         label_en="Link rotated",
     )
 
-    await access_modal.locator("platform-switch").first.click()
+    await access_modal.locator("platform-switch").last.click()
     await access_modal.get_by_role("button", name="Сохранить").click()
     await expect(access_modal).to_be_hidden(timeout=45_000)
     await scenario.step(

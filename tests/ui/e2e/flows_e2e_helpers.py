@@ -13,7 +13,11 @@ from tests.ui.harness import AppUI
 
 def flows_company_origin(origin: str, company_slug: str = "company2") -> str:
     """Возвращает тот же origin тестового сервиса на subdomain компании."""
-    return origin.replace("://localhost", f"://{company_slug}.localhost")
+    if "://localhost" in origin:
+        return origin.replace("://localhost", f"://{company_slug}.localhost")
+    if "://system.lvh.me" in origin:
+        return origin.replace("://system.lvh.me", f"://{company_slug}.lvh.me")
+    raise ValueError(f"Unsupported origin for flows company subdomain: {origin!r}")
 
 
 def flows_doc_flow_id(prefix: str, unique_id: str) -> str:
@@ -206,7 +210,9 @@ async def flows_drop_llm_node(page: Page, *, x: int = 700, y: int = 330) -> None
 
 
 async def flows_set_selected_llm_prompt(page: Page, prompt: str) -> None:
-    editor = page.locator("flows-property-panel flows-llm-node-editor").first
+    editor = page.locator(
+        "flows-floating-panel flows-llm-node-editor, flows-property-panel flows-llm-node-editor"
+    ).first
     await expect(editor).to_be_visible(timeout=30_000)
     prompt_editor = editor.locator("prompt-editor").first
     await expect(prompt_editor).to_be_visible(timeout=30_000)
@@ -227,7 +233,9 @@ async def flows_set_selected_llm_prompt(page: Page, prompt: str) -> None:
 
 
 async def flows_set_selected_llm_config(page: Page, config: dict[str, Any]) -> None:
-    editor = page.locator("flows-property-panel flows-llm-node-editor").first
+    editor = page.locator(
+        "flows-floating-panel flows-llm-node-editor, flows-property-panel flows-llm-node-editor"
+    ).first
     llm_config = editor.locator("flows-llm-config-editor").first
     await expect(llm_config).to_be_visible(timeout=30_000)
     await llm_config.evaluate(
@@ -354,13 +362,20 @@ async def flows_chat_click_clear(page: Page) -> None:
 async def flows_publish_editor(page: Page) -> None:
     panel = page.locator("flows-floating-panel[show-backdrop]").first
     if await panel.count() > 0:
-        close_button = panel.locator('button.panel-btn').filter(
-            has=page.locator('platform-icon[name="close"]')
+        close_button = panel.locator(
+            (
+                'platform-button[aria-label*="close"], platform-button[aria-label*="Close"], '
+                'platform-button[aria-label*="закрыть"], platform-button[aria-label*="Закрыть"]'
+            )
         ).first
-        await close_button.click(timeout=5_000)
+        await close_button.locator("button").first.click(timeout=5_000)
         await expect(panel).to_be_hidden(timeout=5_000)
-    button = page.locator("flows-editor-header button.header-btn.primary").first
+    publish_pattern = re.compile(r"^\s*(?:Publish|Опубликовать)\s*$")
+    button = page.locator("flows-editor-header platform-button").filter(
+        has_text=publish_pattern
+    ).first
     await expect(button).to_be_visible(timeout=30_000)
-    await expect(button).to_be_enabled(timeout=30_000)
-    await button.click()
-    await expect(button).to_be_enabled(timeout=30_000)
+    inner = button.locator("button").first
+    await expect(inner).to_be_enabled(timeout=30_000)
+    await inner.click()
+    await expect(inner).to_be_enabled(timeout=30_000)

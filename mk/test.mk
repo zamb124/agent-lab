@@ -83,6 +83,8 @@ test-network: test-up
 
 # E2E UI: pytest + Playwright + фикстуры из tests/fixtures (нужны test-up)
 test-ui: test-up
+	@echo "Обеспечение HumanitecAgent release artifacts..."
+	@AGENT_ARTIFACT_MODE=release $(MAKE) --no-print-directory agent-ensure
 	@echo "Запуск E2E UI (pytest tests/ui/e2e)..."
 	UI_E2E_USE_LVH_ME=1 uv run pytest tests/ui/e2e -v --timeout=180
 

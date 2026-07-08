@@ -55,6 +55,7 @@ import { createSyncPersistEffect } from '../events/sync-persist.effect.js';
 import { createSyncCallPrefsEffect } from '../events/sync-call-prefs.effect.js';
 import { applyCompanyHostRedirectIfNeeded } from '@platform/lib/utils/company-host-guard.js';
 import { COMPANIES_EVENTS } from '@platform/lib/events/reducers/companies.js';
+import { TEAM_EVENTS } from '@platform/lib/events/reducers/team.js';
 
 const SYNC_ROUTES = [
     { key: 'shell',             path: '',                titleKey: 'routes.shell' },
@@ -94,6 +95,7 @@ export class SyncApp extends PlatformApp {
         this._callUiSel = this.select((s) => s.syncCallUi);
         this._companiesListSel = this.select((s) => s.companies.list);
         this._companiesLoadingSel = this.select((s) => s.companies.loading);
+        this._teamSel = this.select((s) => s.team);
         this.useEvent('sync/call/incoming', (event) => this._onIncomingCall(event));
         this.useEvent('sync/call/ended', (event) => this._onCallEnded(event));
         this.useEvent(CoreEvents.WS_CONNECTED, () => this._onWsConnected());
@@ -145,7 +147,22 @@ export class SyncApp extends PlatformApp {
             this._companiesLoadingSel.value,
             { loadCompanies: () => this.dispatch(COMPANIES_EVENTS.LOAD_REQUESTED, null) },
         );
+        this._preloadTeamMembersIfNeeded();
     }
+
+    _preloadTeamMembersIfNeeded() {
+        const auth = this._authSelect.value;
+        if (!auth || auth.status !== 'authenticated') {
+            return;
+        }
+        const team = this._teamSel.value;
+        if (!team || team.loading) {
+            return;
+        }
+        if (Array.isArray(team.members) && team.members.length > 0) {
+            return;
+        }
+        this.dispatch(TEAM_EVENTS.MEMBERS_LOAD_REQUESTED, null);
 
     connectedCallback() {
         super.connectedCallback();

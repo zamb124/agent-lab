@@ -36,6 +36,33 @@ async def test_platform_brand_linnex(frontend_client) -> None:
 
 
 @pytest.mark.asyncio
+async def test_platform_brand_lvh_me_dev_host(frontend_client) -> None:
+    response = await frontend_client.get(
+        "/frontend/api/platform/brand",
+        headers={"Host": "system.lvh.me:9004"},
+    )
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["base_domain"] == "lvh.me"
+    assert payload["platform_name"] == "Humanitec"
+    assert payload["agent_product_name"] == "HumanitecAgent"
+    assert payload["apex_origin"] == "http://system.lvh.me:9004/"
+
+
+@pytest.mark.asyncio
+async def test_platform_brand_localhost_dev_host(frontend_client) -> None:
+    response = await frontend_client.get(
+        "/frontend/api/platform/brand",
+        headers={"Host": "localhost:9004"},
+    )
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["base_domain"] == "localhost"
+    assert payload["agent_product_name"] == "HumanitecAgent"
+    assert payload["apex_origin"] == "http://localhost:9004/"
+
+
+@pytest.mark.asyncio
 async def test_platform_brand_unknown_host_rejected(frontend_client) -> None:
     response = await frontend_client.get(
         "/frontend/api/platform/brand",

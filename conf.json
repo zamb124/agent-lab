@@ -269,6 +269,32 @@
       "embed_script_path": "/lib/embed-chat/humanitec-embed-autoload.js",
       "auth_apple_client_id": "app.linnex.io",
       "vapid_email": "admin@linnex.io"
+    },
+    "localhost": {
+      "platform_name": "Humanitec",
+      "support_email": "helpme@humanitec.ru",
+      "agent_product_name": "HumanitecAgent",
+      "models_product_name": "Humanitec Models",
+      "voice_product_name": "Humanitec Voice",
+      "llms_display_label": "Humanitec LLMs",
+      "flows_product_label": "Humanitec Flows",
+      "logo_path": "/static/core/assets/service_logos/frontend_logo.svg",
+      "embed_api_subdomain": "api",
+      "embed_cdn_subdomain": "cdn",
+      "embed_script_path": "/lib/embed-chat/humanitec-embed-autoload.js"
+    },
+    "lvh.me": {
+      "platform_name": "Humanitec",
+      "support_email": "helpme@humanitec.ru",
+      "agent_product_name": "HumanitecAgent",
+      "models_product_name": "Humanitec Models",
+      "voice_product_name": "Humanitec Voice",
+      "llms_display_label": "Humanitec LLMs",
+      "flows_product_label": "Humanitec Flows",
+      "logo_path": "/static/core/assets/service_logos/frontend_logo.svg",
+      "embed_api_subdomain": "api",
+      "embed_cdn_subdomain": "cdn",
+      "embed_script_path": "/lib/embed-chat/humanitec-embed-autoload.js"
     }
   },
   "secrets": {

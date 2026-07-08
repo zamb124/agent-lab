@@ -2085,26 +2085,25 @@ class PlatformBrandConfig(BaseModel):
     vapid_email: str | None = None
 
 
+def _default_humanitec_platform_brand() -> PlatformBrandConfig:
+    return PlatformBrandConfig(
+        platform_name="Humanitec",
+        support_email="helpme@humanitec.ru",
+        agent_product_name="HumanitecAgent",
+        models_product_name="Humanitec Models",
+        voice_product_name="Humanitec Voice",
+        llms_display_label="Humanitec LLMs",
+        flows_product_label="Humanitec Flows",
+    )
+
+
 def default_platform_brands() -> dict[str, PlatformBrandConfig]:
+    humanitec_brand = _default_humanitec_platform_brand()
     return {
-        "humanitec.ru": PlatformBrandConfig(
-            platform_name="Humanitec",
-            support_email="helpme@humanitec.ru",
-            agent_product_name="HumanitecAgent",
-            models_product_name="Humanitec Models",
-            voice_product_name="Humanitec Voice",
-            llms_display_label="Humanitec LLMs",
-            flows_product_label="Humanitec Flows",
-        ),
-        "agents-lab.ru": PlatformBrandConfig(
-            platform_name="Humanitec",
-            support_email="helpme@humanitec.ru",
-            agent_product_name="HumanitecAgent",
-            models_product_name="Humanitec Models",
-            voice_product_name="Humanitec Voice",
-            llms_display_label="Humanitec LLMs",
-            flows_product_label="Humanitec Flows",
-        ),
+        "humanitec.ru": humanitec_brand.model_copy(deep=True),
+        "agents-lab.ru": humanitec_brand.model_copy(deep=True),
+        "localhost": humanitec_brand.model_copy(deep=True),
+        "lvh.me": humanitec_brand.model_copy(deep=True),
         "linnex.io": PlatformBrandConfig(
             platform_name="Linnex",
             support_email="support@linnex.io",

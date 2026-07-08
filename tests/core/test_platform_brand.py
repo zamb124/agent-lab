@@ -25,6 +25,8 @@ def test_supported_domains_include_linnex() -> None:
     domains = supported_domains()
     assert "humanitec.ru" in domains
     assert "linnex.io" in domains
+    assert "localhost" in domains
+    assert "lvh.me" in domains
 
 
 def test_resolve_brand_humanitec() -> None:

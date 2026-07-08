@@ -63,7 +63,7 @@ async def test_flows_create_graph_flow_scenario(
         page,
     )
 
-    await modal.locator("[data-preset-id='graph']").click()
+    await modal.locator('platform-picker-card[value="graph"]').click()
     await expect(modal.locator("platform-field").nth(0)).to_be_visible(timeout=30_000)
     await flows_set_platform_field(modal.locator("platform-field").nth(0), flow_id)
     await flows_set_platform_field(modal.locator("platform-field").nth(1), "Учебный flow")
@@ -130,7 +130,7 @@ async def test_flows_add_llm_node_scenario(
     )
 
     await flows_drop_llm_node(page)
-    await expect(page.locator("flows-property-panel flows-llm-node-editor")).to_be_visible(timeout=30_000)
+    await expect(page.locator("flows-floating-panel flows-llm-node-editor")).to_be_visible(timeout=30_000)
     await scenario.step(
         "Перетаскиваем LLM Node из палитры на канву. Справа открываются настройки выбранной ноды.",
         page,
@@ -207,8 +207,8 @@ async def test_flows_edit_llm_flow_scenario(
     await expect(page.locator("flow-editor-page")).to_be_visible(timeout=30_000)
     llm_node = page.locator("flows-flow-canvas g.node[data-node-type='llm_node']").first
     await expect(llm_node).to_be_visible(timeout=30_000)
-    await llm_node.click()
-    await expect(page.locator("flows-property-panel flows-llm-node-editor")).to_be_visible(timeout=30_000)
+    await llm_node.dblclick()
+    await expect(page.locator("flows-floating-panel flows-llm-node-editor")).to_be_visible(timeout=30_000)
     await scenario.step(
         "Открываем уже готовый flow и кликаем по LLM-ноду. Справа снова видны ее настройки.",
         page,
@@ -219,9 +219,9 @@ async def test_flows_edit_llm_flow_scenario(
         "Ты объясняешь работу flow очень простыми словами. "
         "Сначала скажи, что сейчас произойдет, потом попроси пользователя подтвердить действие."
     )
-    name_input = page.locator("flows-editor-header input.flow-name-input").first
-    await expect(name_input).to_be_visible(timeout=30_000)
-    await name_input.fill(new_name)
+    name_field = page.locator("flows-editor-header platform-field.flow-name-field").first
+    await expect(name_field).to_be_visible(timeout=30_000)
+    await name_field.locator("input").fill(new_name)
     await flows_set_selected_llm_prompt(page, new_prompt)
     await page.locator("flows-property-panel prompt-editor").scroll_into_view_if_needed(timeout=30_000)
     await scenario.step(

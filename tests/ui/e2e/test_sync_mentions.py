@@ -11,6 +11,7 @@ from tests.ui.e2e.sync_e2e_helpers import (
     sync_api_add_channel_member,
     sync_api_channel_id_by_name,
     sync_e2e_create_topic_channel_and_open,
+    sync_e2e_expect_team_member_loaded,
     sync_e2e_open_with_namespace,
     sync_sidebar_channel_nav,
     sync_sidebar_channel_row,
@@ -18,21 +19,6 @@ from tests.ui.e2e.sync_e2e_helpers import (
 from tests.ui.harness import AppUI
 from tests.ui.personas import UiTestUser
 from tests.ui.scenario_doc import ScenarioRecorder
-
-
-async def _expect_company_member_loaded(page: Page, user_id: str) -> None:
-    await page.wait_for_function(
-        """(userId) => {
-            const bus = window.__PLATFORM_BUS__;
-            if (!bus || typeof bus.getState !== 'function') return false;
-            const state = bus.getState();
-            const slice = state && state.syncCompanyMembers;
-            return !!(slice && Array.isArray(slice.items)
-                && slice.items.some((m) => m && m.user_id === userId));
-        }""",
-        arg=user_id,
-        timeout=30_000,
-    )
 
 
 @pytest.mark.scenario(
@@ -76,7 +62,7 @@ async def test_user_mentions_channel_member_from_popup(
     await sync_api_add_channel_member(
         sync_ui.origin, auth_token_system, channel_id, peer_uid
     )
-    await _expect_company_member_loaded(ui_page_system, peer_uid)
+    await sync_e2e_expect_team_member_loaded(ui_page_system, peer_uid)
 
     await sync_sidebar_channel_nav(ui_page_system, channel_name).click()
     await expect(ui_page_system.locator("sync-channel-page")).to_be_visible()
@@ -157,7 +143,7 @@ async def test_click_mention_opens_profile_modal_with_shared_channel(
     await sync_api_add_channel_member(
         sync_ui.origin, auth_token_system, channel_id, peer_uid
     )
-    await _expect_company_member_loaded(ui_page_system, peer_uid)
+    await sync_e2e_expect_team_member_loaded(ui_page_system, peer_uid)
 
     await sync_sidebar_channel_nav(ui_page_system, channel_name).click()
     await expect(ui_page_system.locator("sync-channel-page")).to_be_visible()
@@ -186,7 +172,7 @@ async def test_click_mention_opens_profile_modal_with_shared_channel(
     await scenario.step("Упоминание в ленте", ui_page_system)
 
     await mention.click()
-    user_modal = ui_page_system.locator("platform-user-info-modal")
+    user_modal = ui_page_system.locator("platform-user-info-modal[open]")
     await expect(user_modal).to_be_visible(timeout=30_000)
     await expect(user_modal.locator(".modal-title")).to_contain_text(
         re.compile(r"Профиль|Profile")

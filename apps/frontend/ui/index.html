@@ -10,34 +10,16 @@
     </script>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, minimum-scale=1.0, user-scalable=no, viewport-fit=cover">
-    <title>Platform — business automation</title>
-    <meta name="description" content="Five products in one platform: AI Studio, Knowledge Base, NetWorkle, Sync and Documents.">
-    <meta name="robots" content="index,follow,max-image-preview:large,max-snippet:-1,max-video-preview:-1">
-    <link rel="canonical" href="/">
-    <meta property="og:type" content="website">
-    <meta property="og:locale" content="ru_RU">
-    <meta property="og:site_name" content="Platform">
-    <meta property="og:title" content="Platform — business automation">
-    <meta property="og:description" content="Five products in one platform: AI Studio, Knowledge Base, NetWorkle, Sync and Documents.">
-    <meta property="og:url" content="/">
-    <meta property="og:image" content="/static/frontend/assets/images/main_img.png">
-    <meta name="twitter:card" content="summary_large_image">
-    <meta name="twitter:title" content="Platform — business automation">
-    <meta name="twitter:description" content="Five products in one platform: AI Studio, Knowledge Base, NetWorkle, Sync and Documents.">
-    <meta name="twitter:image" content="/static/frontend/assets/images/main_img.png">
+    <script src="/static/core/assets/js/platform-brand-sync-bootstrap.js"></script>
     <script>
         (function () {
             try {
-                var xhr = new XMLHttpRequest();
-                xhr.open('GET', '/frontend/api/platform/brand', false);
-                xhr.setRequestHeader('Accept', 'application/json');
-                xhr.send(null);
-                if (xhr.status !== 200) {
+                var brand = window.__PLATFORM_BRAND__;
+                if (!brand) {
                     return;
                 }
-                var brand = JSON.parse(xhr.responseText);
-                var origin = String(brand.apex_origin || '').replace(/\/$/, '');
-                var platformName = String(brand.platform_name || 'Platform');
+                var origin = String(brand.apexOrigin || '').replace(/\/$/, '');
+                var platformName = String(brand.platformName || 'Platform');
                 var title = platformName + ' — платформа автоматизации бизнеса';
                 document.title = title;
                 var setMeta = function (selector, attr, value) {
@@ -89,6 +71,21 @@
             }
         })();
     </script>
+    <title>Platform — business automation</title>
+    <meta name="description" content="Five products in one platform: AI Studio, Knowledge Base, NetWorkle, Sync and Documents.">
+    <meta name="robots" content="index,follow,max-image-preview:large,max-snippet:-1,max-video-preview:-1">
+    <link rel="canonical" href="/">
+    <meta property="og:type" content="website">
+    <meta property="og:locale" content="ru_RU">
+    <meta property="og:site_name" content="Platform">
+    <meta property="og:title" content="Platform — business automation">
+    <meta property="og:description" content="Five products in one platform: AI Studio, Knowledge Base, NetWorkle, Sync and Documents.">
+    <meta property="og:url" content="/">
+    <meta property="og:image" content="/static/frontend/assets/images/main_img.png">
+    <meta name="twitter:card" content="summary_large_image">
+    <meta name="twitter:title" content="Platform — business automation">
+    <meta name="twitter:description" content="Five products in one platform: AI Studio, Knowledge Base, NetWorkle, Sync and Documents.">
+    <meta name="twitter:image" content="/static/frontend/assets/images/main_img.png">
     <link rel="icon" type="image/svg+xml" href="/static/core/assets/service_logos/frontend_logo.svg">
     
     <!-- PWA Manifest -->

@@ -4,20 +4,27 @@
 
 import { httpRequest } from '../http.js';
 import {
+    buildPlatformBrandBootstrapFromApiPayload,
     getPlatformBrandBootstrap,
     getCompanyHostContextFromLocation,
     setPlatformBrandBootstrap,
 } from '../../utils/platform-brand.js';
 
 /**
+ * @param {{ platformUiOrigin?: string }} [options]
  * @returns {Promise<import('../../utils/platform-brand.js').PlatformBrandBootstrap>}
  */
-export async function loadPlatformBrandBootstrap() {
+export async function loadPlatformBrandBootstrap(options = {}) {
     const existing = getPlatformBrandBootstrap();
     if (existing) {
         return existing;
     }
     const ctx = getCompanyHostContextFromLocation();
+    const originRaw =
+        typeof options.platformUiOrigin === 'string' ? options.platformUiOrigin.trim().replace(/\/+$/, '') : '';
+    const brandUrl = originRaw
+        ? `${originRaw}/frontend/api/platform/brand`
+        : '/frontend/api/platform/brand';
     /** @type {{
      *   base_domain: string,
      *   platform_name: string,
@@ -32,26 +39,11 @@ export async function loadPlatformBrandBootstrap() {
      *   flows_product_label: string,
      * }} */
     const payload = await httpRequest({
-        url: '/frontend/api/platform/brand',
+        url: brandUrl,
         method: 'GET',
         headers: { Accept: 'application/json' },
     });
-    const brand = {
-        isProduction: ctx.isProduction,
-        baseDomain: payload.base_domain,
-        portSuffix: ctx.portSuffix,
-        protocol: ctx.protocol,
-        platformName: payload.platform_name,
-        supportEmail: payload.support_email,
-        logoPath: payload.logo_path,
-        apexOrigin: payload.apex_origin,
-        supportedDomains: payload.supported_domains,
-        agentProductName: payload.agent_product_name,
-        modelsProductName: payload.models_product_name,
-        voiceProductName: payload.voice_product_name,
-        llmsDisplayLabel: payload.llms_display_label,
-        flowsProductLabel: payload.flows_product_label,
-    };
+    const brand = buildPlatformBrandBootstrapFromApiPayload(payload, ctx);
     setPlatformBrandBootstrap(brand);
     return brand;
 }

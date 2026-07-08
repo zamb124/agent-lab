@@ -58,6 +58,19 @@ async def _click_settings_agent_tab(page: Page) -> None:
     await agent_tab.click()
 
 
+async def _wait_agent_releases_status(page: Page) -> None:
+    await page.wait_for_function(
+        """() => {
+            const bus = window.__PLATFORM_BUS__;
+            if (!bus || typeof bus.getState !== 'function') return false;
+            const slice = bus.getState().frontendAgentReleasesStatus;
+            if (!slice || slice.busy) return false;
+            return slice.lastResult != null;
+        }""",
+        timeout=60_000,
+    )
+
+
 @pytest.mark.scenario(
     service="frontend",
     tag="settings-agent",
@@ -317,6 +330,7 @@ async def test_f7_settings_agent_release_banner(
         ui_page_system,
         frontend_ui=frontend_ui,
     )
+    await _wait_agent_releases_status(ui_page_system)
     await scenario.step(
         "Открыта вкладка HumanitecAgent",
         ui_page_system,
@@ -521,6 +535,7 @@ async def test_f14_settings_agent_release_banner_lvh_origin(
 ) -> None:
     assert "system.lvh.me" in frontend_ui.origin
     await _open_settings_agent_tab_raw(ui_page_system, origin=frontend_ui.origin)
+    await _wait_agent_releases_status(ui_page_system)
     await expect(
         ui_page_system.locator("frontend-settings-page .section-help").filter(
             has_text=re.compile(

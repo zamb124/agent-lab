@@ -161,6 +161,33 @@ async def office_e2e_select_catalog(page: Page, title: str) -> None:
     await row.click()
 
 
+async def office_e2e_select_catalog_mobile(page: Page, title: str) -> None:
+    """Mobile: каталог через bottom sheet picker вместо дерева."""
+    mobile_btn = page.locator("button.mobile-catalog-btn").first
+    if await mobile_btn.count() > 0 and await mobile_btn.is_visible():
+        if await mobile_btn.filter(has_text=title).count() > 0:
+            return
+        await mobile_btn.click()
+        sheet = page.locator("office-catalog-picker-sheet, platform-bottom-sheet-stack platform-bottom-sheet").last
+        await expect(sheet).to_be_visible(timeout=15_000)
+        option = sheet.locator("button.item").filter(has_text=title).first
+        await expect(option).to_be_visible(timeout=15_000)
+        await option.click()
+        return
+    await office_e2e_select_catalog(page, title)
+
+
+async def office_e2e_confirm_delete(page: Page) -> None:
+    confirm = page.locator("platform-confirm-modal")
+    await expect(confirm).to_be_visible(timeout=15_000)
+    delete_btn = confirm.locator("button.btn").filter(
+        has_text=re.compile(r"^\s*(?:Удалить|Delete)\s*$")
+    ).first
+    await expect(delete_btn).to_be_visible(timeout=10_000)
+    await delete_btn.click()
+    await expect(confirm).to_be_hidden(timeout=30_000)
+
+
 async def office_e2e_open_create_empty_modal(page: Page) -> Locator:
     toolbar = office_e2e_toolbar(page)
     await toolbar.get_by_role("button", name="Новый документ").click()

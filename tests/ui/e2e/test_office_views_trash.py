@@ -9,13 +9,13 @@ from tests.ui.e2e.office_e2e_helpers import (
     office_api_create_catalog,
     office_api_delete_document,
     office_api_upload_txt,
+    office_e2e_confirm_delete,
     office_e2e_explorer,
     office_e2e_open_document_by_title,
     office_e2e_open_with_namespace,
     office_e2e_select_catalog,
     office_e2e_select_nav_view,
 )
-from tests.ui.e2e.sync_e2e_helpers import sync_e2e_click_platform_button
 from tests.ui.harness import AppUI
 from tests.ui.scenario_doc import ScenarioRecorder
 
@@ -139,9 +139,7 @@ async def test_office_views_and_trash(
     await deleted_row.click()
     details = office_e2e_explorer(ui_page_system).locator("office-file-details-panel")
     await details.get_by_role("button", name="Удалить навсегда").click()
-    confirm = ui_page_system.locator("platform-confirm-modal")
-    await expect(confirm).to_be_visible(timeout=15_000)
-    await sync_e2e_click_platform_button(confirm, "Удалить", "Delete")
+    await office_e2e_confirm_delete(ui_page_system)
     await scenario.step(
         "Документ удалён навсегда",
         ui_page_system,
