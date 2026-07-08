@@ -17,7 +17,7 @@ from core.files.reader.models import FileReadKind
 async def test_read_bytes_text(tmp_path) -> None:
     raw = "строка utf-8".encode("utf-8")
     reader = FileReader()
-    res = await reader.read(raw, file_name="x.txt")
+    res = await reader.read_raw(raw, file_name="x.txt")
     assert res.detected_kind == FileReadKind.TEXT
     assert res.page_count == 1
     assert len(res.pages) == 1
@@ -31,7 +31,7 @@ async def test_read_path_text_stable_checksum(tmp_path) -> None:
     path.write_text("alpha\nbeta", encoding="utf-8")
     data = path.read_bytes()
     reader = FileReader()
-    res = await reader.read(path)
+    res = await reader.read_raw(path)
     assert res.source_checksum == compute_content_checksum_sha256(data)
     assert res.page_count == len(res.pages)
 
@@ -46,7 +46,7 @@ async def test_read_pdf_with_fitz(tmp_path) -> None:
     doc.close()
 
     reader = FileReader()
-    res = await reader.read(out)
+    res = await reader.read_raw(out)
     assert res.detected_kind == FileReadKind.PDF
     assert res.page_count >= 1
     joined = "\n".join(p.text for p in res.pages)
@@ -57,14 +57,14 @@ async def test_read_pdf_with_fitz(tmp_path) -> None:
 async def test_read_bytes_requires_name() -> None:
     reader = FileReader()
     with pytest.raises(ValueError, match="file_name"):
-        await reader.read(b"x")
+        await reader.read_raw(b"x")
 
 
 @pytest.mark.asyncio
 async def test_unknown_empty_raises() -> None:
     reader = FileReader()
     with pytest.raises(FileReadError):
-        await reader.read(
+        await reader.read_raw(
             b"\x00\x01\x02\xff",
             file_name="blob.xyzunknownext123",
         )
@@ -75,7 +75,7 @@ async def test_read_csv_as_text(tmp_path) -> None:
     path = tmp_path / "data.csv"
     path.write_text("a,b\n1,2", encoding="utf-8")
     reader = FileReader()
-    res = await reader.read(path)
+    res = await reader.read_raw(path)
     assert res.detected_kind == FileReadKind.TEXT
     assert "a,b" in res.pages[0].text
 
@@ -94,7 +94,7 @@ async def test_read_html_as_markdown_with_trafilatura() -> None:
     </html>
     """.strip().encode("utf-8")
     reader = FileReader()
-    res = await reader.read(html, file_name="page.html")
+    res = await reader.read_raw(html, file_name="page.html")
     assert res.detected_kind == FileReadKind.HTML
     body = res.pages[0].text
     assert "Главный заголовок" in body
@@ -110,7 +110,7 @@ async def test_read_eml_via_unstructured_office_path() -> None:
         b"LineOneUnstructured\r\nLineTwo\r\n"
     )
     reader = FileReader()
-    res = await reader.read(raw, file_name="mail.eml")
+    res = await reader.read_raw(raw, file_name="mail.eml")
     assert res.detected_kind == FileReadKind.OFFICE
     joined = "\n".join(p.text for p in res.pages)
     assert "LineOneUnstructured" in joined
@@ -127,11 +127,12 @@ def test_recognize_file_type_html_by_extension_and_mime() -> None:
     reader = FileReader()
     assert reader.recognize_file_type(file_name="a.htm").detected_kind == FileReadKind.HTML
     assert reader.recognize_file_type(file_name="dir/page.html").detected_kind == FileReadKind.HTML
-    from unittest.mock import patch
+    from tests.core.files.corpus.manifest import CORPUS_DIR
 
-    with patch("core.files.reader.service._guess_mime", return_value="text/html"):
-        by_mime = reader.recognize_file_type(file_name="extensionless", head=b"<html></html>")
-    assert by_mime.detected_kind == FileReadKind.HTML
+    html_path = CORPUS_DIR / "fake-html.html"
+    head = html_path.read_bytes()[:8192]
+    by_extension = reader.recognize_file_type(file_name=html_path.name, head=head)
+    assert by_extension.detected_kind == FileReadKind.HTML
 
 
 @pytest.mark.asyncio
@@ -143,7 +144,7 @@ async def test_read_image_empty_vision_prompt_raises(tmp_path) -> None:
     path.write_bytes(png)
     reader = FileReader()
     with pytest.raises(ValueError, match="vision_prompt"):
-        await reader.read(path, vision_prompt="")
+        await reader.read_raw(path, vision_prompt="")
 
 
 @pytest.mark.asyncio
@@ -151,7 +152,7 @@ async def test_read_accepts_file_entry_dict(tmp_path) -> None:
     path = tmp_path / "a.txt"
     path.write_text("hello", encoding="utf-8")
     reader = FileReader()
-    res = await reader.read(
+    res = await reader.read_raw(
         {
             "original_name": "a.txt",
             "url": str(path),
@@ -167,7 +168,7 @@ async def test_mislabeled_docx_with_plain_text_fallback() -> None:
     text = "Привет! Это произвольный текст для демонстрации."
     raw = text.encode("utf-8")
     reader = FileReader()
-    result = await reader.read(raw, file_name="demo.docx")
+    result = await reader.read_raw(raw, file_name="demo.docx")
     assert result.detected_kind == FileReadKind.TEXT
     assert result.pages[0].text == text
     assert result.warnings

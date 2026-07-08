@@ -146,7 +146,10 @@ async def read_file(
     summarization_prompt: str = "",
     summarization_model: str = "",
     vision_prompt: str = "",
+    vision_model: str | None = None,
     compression: CompressionMode | None = None,
+    transcription_company_id: str | None = None,
+    forced_lane: ReadLane | None = None,
     budget: int = MAX_READ_BUDGET,
     *,
     state: ExecutionState,
@@ -165,7 +168,10 @@ async def read_file(
             summarization_prompt=summarization_prompt,
             summarization_model=summarization_model,
             vision_prompt=vision_prompt,
+            vision_model=vision_model,
             compression=compression if compression is not None else CompressionMode.NEVER,
+            transcription_company_id=transcription_company_id,
+            forced_lane=forced_lane,
             budget=budget,
         )
     else:
@@ -180,7 +186,10 @@ async def read_file(
             summarization_prompt=summarization_prompt,
             summarization_model=summarization_model,
             vision_prompt=vision_prompt,
+            vision_model=vision_model,
             compression=compression if compression is not None else CompressionMode.NEVER,
+            transcription_company_id=transcription_company_id,
+            forced_lane=forced_lane,
             budget=budget,
         )
 

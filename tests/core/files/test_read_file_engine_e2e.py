@@ -6,27 +6,24 @@ import pytest
 
 from apps.capability_gateway.container import get_capability_gateway_container
 from apps.flows.tools.files import read_file
-from core.capabilities import (
-    CapabilityCallRequest,
-    CapabilityExecutionContext,
-    CapabilityExecutionTokenClaims,
-    execution_token_exp,
-    issue_execution_token,
-)
 from core.files.file_ref import FileRef
 from core.files.reader.engine import read_files_to_envelope
-from core.files.reader.models import ReadFileArgs
 from core.files.reader.extract_cache import (
     extract_cache_key,
     load_file_extract,
     store_file_extract,
 )
-from core.files.reader.models import StopReason
-from core.state import ExecutionState
+from core.files.reader.models import ReadFileArgs, StopReason
 from core.types import require_json_object
+from tests.core.files.corpus.e2e_helpers import (
+    assert_file_extract_body,
+    capability_files_read_request,
+    execution_state_for_files,
+)
 from tests.core.files.corpus.manifest import POSITIVE
 from tests.core.files.corpus.read_helpers import (
     build_corpus_extract,
+    require_corpus_bytes,
     store_corpus_in_files_service,
 )
 from tests.fixtures.s3 import require_s3_configured
@@ -36,48 +33,6 @@ _CSV = "stanley-cups.csv"
 _PDF = "pdf/DA-1p.pdf"
 _XLSX = "stanley-cups.xlsx"
 _IMAGE = "img/example.jpg"
-
-
-def _capability_request(*, user_id: str, file_id: str, **kwargs: object) -> CapabilityCallRequest:
-    claims = CapabilityExecutionTokenClaims(
-        company_id="system",
-        user_id=user_id,
-        flow_id="read_file_e2e_flow",
-        branch_id="main",
-        session_id="read_file_e2e_flow:ctx",
-        task_id="read_file_e2e_task",
-        context_id="ctx",
-        channel="a2a",
-        request_id="read-file-e2e",
-        exp=execution_token_exp(300),
-    )
-    return CapabilityCallRequest(
-        context=CapabilityExecutionContext(
-            execution_token=issue_execution_token(claims),
-            company_id=claims.company_id,
-            user_id=claims.user_id,
-            flow_id=claims.flow_id,
-            branch_id=claims.branch_id,
-            session_id=claims.session_id,
-            task_id=claims.task_id,
-            context_id=claims.context_id,
-            channel=claims.channel,
-            request_id=claims.request_id,
-            trace_id="read-file-e2e-trace",
-        ),
-        name="files.read",
-        kwargs={"file_id": file_id, **kwargs},
-    )
-
-
-def _execution_state(*, files: list[FileRef]) -> ExecutionState:
-    return ExecutionState.create(
-        task_id="read_file_e2e_task",
-        context_id="ctx",
-        user_id="test_user",
-        session_id="read_file_e2e_flow:ctx",
-        files=files,
-    )
 
 
 @pytest.mark.asyncio
@@ -198,7 +153,7 @@ async def test_read_file_tool_missing_name_returns_error_result(
     require_s3_configured()
     entry = next(e for e in POSITIVE if e.relative_path == _TEXT)
     file_ref = await store_corpus_in_files_service(frontend_container, entry, unique_id=unique_id)
-    state = _execution_state(files=[file_ref])
+    state = execution_state_for_files(files=[file_ref], user_id="test_user")
     payload = require_json_object(
         await read_file.run({"names": ["definitely-missing.txt", file_ref.original_name]}, state),
         "read_file.missing",
@@ -220,21 +175,17 @@ async def test_capability_files_read_returns_single_file_result(
 ) -> None:
     require_s3_configured()
     entry = next(e for e in POSITIVE if e.relative_path == _XLSX)
+    raw = require_corpus_bytes(entry)
     file_ref = await store_corpus_in_files_service(frontend_container, entry, unique_id=unique_id)
     assert file_ref.file_id is not None
 
     registry = get_capability_gateway_container().capability_registry
     response = await registry.call(
-        _capability_request(user_id=system_user_id, file_id=file_ref.file_id)
+        capability_files_read_request(user_id=system_user_id, file_id=file_ref.file_id, page_end=-1)
     )
     assert response.status == "ok"
     body = require_json_object(response.result, "files.read.result")
-
-    assert body["source_file_id"] == file_ref.file_id
-    assert body["page_count"] >= 1
-    assert isinstance(body["pages"], list)
-    assert body["pages"]
-    assert body["detected_kind"] in ("spreadsheet", "tabular", "document", "text", "image", "pdf")
+    assert_file_extract_body(body, entry=entry, file_ref=file_ref, raw=raw)
 
 
 @pytest.mark.asyncio

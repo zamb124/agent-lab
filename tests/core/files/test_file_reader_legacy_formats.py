@@ -47,7 +47,7 @@ async def test_read_xls_single_sheet(tmp_path: Path) -> None:
     raw = _make_xls_bytes("Склад", rows)
 
     reader = FileReader()
-    result = await reader.read(raw, file_name="report.xls")
+    result = await reader.read_raw(raw, file_name="report.xls")
 
     assert result.detected_kind == FileReadKind.SPREADSHEET
     assert result.page_count == 1
@@ -75,7 +75,7 @@ async def test_read_xls_multiple_sheets(tmp_path: Path) -> None:
     raw = buf.getvalue()
 
     reader = FileReader()
-    result = await reader.read(raw, file_name="months.xls")
+    result = await reader.read_raw(raw, file_name="months.xls")
 
     assert result.detected_kind == FileReadKind.SPREADSHEET
     assert result.page_count == 2
@@ -100,7 +100,7 @@ async def test_read_xls_numeric_values(tmp_path: Path) -> None:
     wb.save(buf)
 
     reader = FileReader()
-    result = await reader.read(buf.getvalue(), file_name="nums.xls")
+    result = await reader.read_raw(buf.getvalue(), file_name="nums.xls")
 
     assert result.detected_kind == FileReadKind.SPREADSHEET
     text = result.pages[0].text
@@ -118,7 +118,7 @@ async def test_read_xls_empty_raises() -> None:
 
     reader = FileReader()
     with pytest.raises(FileReadError):
-        await reader.read(buf.getvalue(), file_name="empty.xls")
+        await reader.read_raw(buf.getvalue(), file_name="empty.xls")
 
 
 # ─────────────────────────────────────────── DOC ────────────────────────────
@@ -134,7 +134,7 @@ async def test_read_doc_via_antiword() -> None:
     assert shutil.which("antiword"), "Для чтения .doc нужен исполняемый antiword в PATH"
     assert _SAMPLE_DOC.is_file(), f"Фикстура .doc не найдена: {_SAMPLE_DOC}"
     reader = FileReader()
-    result = await reader.read(_SAMPLE_DOC)
+    result = await reader.read_raw(_SAMPLE_DOC)
 
     assert result.detected_kind == FileReadKind.OFFICE
     assert result.page_count >= 1
@@ -148,7 +148,7 @@ async def test_read_docx_bytes_with_doc_extension_uses_unstructured() -> None:
     """Байты DOCX (ZIP OOXML) с расширением .doc распознаются по сигнатуре и читаются через Unstructured."""
     raw = _make_docx_bytes("Маркер OOXML под именем doc")
     reader = FileReader()
-    result = await reader.read(raw, file_name="report.doc")
+    result = await reader.read_raw(raw, file_name="report.doc")
 
     assert result.detected_kind == FileReadKind.OFFICE
     all_text = "\n".join(p.text for p in result.pages)
@@ -166,4 +166,4 @@ async def test_read_doc_without_antiword_raises_clear_error(
 
     reader = FileReader()
     with pytest.raises(FileReadError, match=r"antiword|извлекаемого текста"):
-        await reader.read(doc_path)
+        await reader.read_raw(doc_path)

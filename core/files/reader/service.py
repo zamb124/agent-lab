@@ -1,4 +1,4 @@
-"""Оркестратор чтения файлов: единая точка входа FileReader.read -> FileReadResult."""
+"""Оркестратор чтения файлов: FileReader.read -> FileExtract; read_raw -> FileReadResult (internal)."""
 
 from __future__ import annotations
 
@@ -33,6 +33,7 @@ from odf import opendocument as odf_opendocument
 from odf import teletype as odf_teletype
 from odf import text as odf_text
 from pptx import Presentation as raw_presentation
+from pymupdf import mupdf as pymupdf_lowlevel
 from striprtf.striprtf import rtf_to_text
 from unstructured.partition.auto import partition as raw_partition
 
@@ -49,11 +50,13 @@ from core.files.models import FileRecord, FileResponse
 from core.files.reader.exceptions import FileReadError
 from core.files.reader.models import (
     CompressionMode,
+    FileExtract,
     FileReadKind,
     FileReadResult,
     FileTypeInfo,
     ReadAsset,
     ReadAssetKind,
+    ReadFileArgs,
     ReadOptions,
     ReadPage,
     merge_file_ref_read_options,
@@ -444,7 +447,7 @@ def _kind_from_extension(ext: str) -> FileReadKind:
 
 
 class FileReader:
-    """Чтение файлов в каноническую структуру FileReadResult."""
+    """Чтение файлов: read() — полный extract (FileExtract); read_raw() — low-level parse."""
 
     def recognize_file_type(self, *, file_name: str, head: bytes | None = None) -> FileTypeInfo:
         ext = _normalize_extension(file_name)
@@ -506,7 +509,7 @@ class FileReader:
 
         raise FileReadError(f"Файл не найден: {s}")
 
-    async def _read_resolved(
+    async def _read_raw(
         self,
         raw: bytes,
         name: str,
@@ -562,7 +565,7 @@ class FileReader:
 
         return await self.resolve_source(source, file_ref.original_name, opts)
 
-    async def read(
+    async def read_raw(
         self,
         source: SourceInput | FileRefSource,
         *,
@@ -591,7 +594,18 @@ class FileReader:
             ) or resolved_name
         else:
             raw, name = await self.resolve_source(source, file_name, opts)
-        return await self._read_resolved(raw, name, opts)
+        return await self._read_raw(raw, name, opts)
+
+    async def read(
+        self,
+        source: SourceInput | FileRefSource,
+        args: ReadFileArgs,
+        *,
+        file_name: str | None = None,
+        file_id: str | None = None,
+    ) -> FileExtract:
+        _ = (source, args, file_name, file_id)
+        raise RuntimeError("FileReader.read доступен после import core.files.reader")
 
 
 async def run_vision_on_image_bytes(
@@ -957,7 +971,16 @@ def _pdf_page_embedded_image_assets(
     assets: list[ReadAsset] = []
     for image_info in page.get_images(full=True):
         xref = image_info[0]
-        extracted = doc.extract_image(xref)
+        try:
+            extracted = doc.extract_image(xref)
+        except pymupdf_lowlevel.FzErrorBase as exc:
+            raise FileReadError(
+                f"Не удалось извлечь embedded image из PDF xref={xref}: {exc}"
+            ) from exc
+        except (ValueError, RuntimeError, OSError) as exc:
+            raise FileReadError(
+                f"Не удалось извлечь embedded image из PDF xref={xref}: {exc}"
+            ) from exc
         image_bytes = extracted["image"]
         width = extracted["width"]
         height = extracted["height"]

@@ -1,11 +1,11 @@
 """
-Текстовое превью файла из хранилища (тот же пайплайн, что FileReader, без vision для изображений).
+Текстовое превью файла из хранилища (канонический FileReader.read).
 """
 
 from __future__ import annotations
 
 from core.files.models import FileReadPreviewResponse
-from core.files.reader.models import FileReadKind
+from core.files.reader.models import FileReadKind, ReadFileArgs
 from core.files.reader.service import FileReader, read_stored_file_by_id
 
 _PREVIEW_MAX_CHARS = 12_000
@@ -34,10 +34,15 @@ async def build_stored_file_text_preview(*, file_id: str, original_name: str) ->
             preview_note=_IMAGE_PREVIEW_NOTE,
         )
 
-    result = await reader.read(raw, file_name=name)
+    extract = await reader.read(
+        raw,
+        ReadFileArgs(page_end=-1),
+        file_name=name,
+        file_id=file_id,
+    )
 
     parts: list[str] = []
-    for page in result.pages:
+    for page in extract.pages:
         chunk = (page.text or "").strip()
         if chunk:
             parts.append(chunk)
@@ -55,9 +60,9 @@ async def build_stored_file_text_preview(*, file_id: str, original_name: str) ->
     return FileReadPreviewResponse(
         text=text,
         truncated=truncated,
-        page_count=result.page_count,
-        detected_kind=result.detected_kind.value,
-        content_type=result.content_type,
-        warnings=list(result.warnings),
+        page_count=extract.page_layout.pages_total,
+        detected_kind=extract.kind.value,
+        content_type=extract.mime_type,
+        warnings=list(extract.warnings),
         preview_note=None,
     )

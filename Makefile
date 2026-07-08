@@ -1,4 +1,4 @@
-.PHONY: help runtime-bootstrap dev dev-up dev-down dev-logs dev-clean dev-minio-restart dev-bootstrap-postgres stress lint lint-ts lint-file mcp-branding-seed agent agent-ensure agent-release ui ui-doc
+.PHONY: help runtime-bootstrap dev dev-up dev-down dev-logs dev-clean dev-minio-restart dev-bootstrap-postgres stress lint lint-ts lint-file mcp-branding-seed agent agent-ensure agent-release ui ui-doc sync-example-docs
 .PHONY: test-frontend test-rag test-crawl-llm-live
 .PHONY: check-ui-canon check-i18n check-i18n-keys check-inline-docs check-ui-factories check-command-rest-mirror check-core-frontend-canon check-embed-esm check-events-canon check-logging check-voice-resolver check-speakable-parity check-voice-canon check-field-canon check-rag-post-retrieval-rerank check-company-ai check-files-canon build-i18n
 .PHONY: clean-i18n-unused base
@@ -158,6 +158,15 @@ check-company-ai:
 check-rag-post-retrieval-rerank:
 	@uv run python scripts/check_rag_post_retrieval_rerank_single.py
 
+check-file-reader-canon:
+	@uv run python scripts/check_file_reader_canon.py
+
+check-corpus-manifest:
+	@uv run python scripts/check_corpus_manifest_complete.py
+
+sync-example-docs:
+	@uv run python scripts/download_example_docs.py
+
 check-voice-canon: check-voice-resolver check-speakable-parity check-tts-pipeline
 
 check-files-canon:
@@ -170,7 +179,7 @@ check-mcp-branding-bundle:
 mcp-branding-seed:
 	@uv run python scripts/mcp_branding_seed.py
 
-check-events-canon: check-core-frontend-canon check-ui-canon check-ui-factories check-command-rest-mirror check-voice-resolver check-speakable-parity check-tts-pipeline check-rag-post-retrieval-rerank check-company-ai check-files-canon check-mcp-branding-bundle check-i18n check-i18n-keys check-no-uvicorn
+check-events-canon: check-core-frontend-canon check-ui-canon check-ui-factories check-command-rest-mirror check-voice-resolver check-speakable-parity check-tts-pipeline check-rag-post-retrieval-rerank check-file-reader-canon check-corpus-manifest check-company-ai check-files-canon check-mcp-branding-bundle check-i18n check-i18n-keys check-no-uvicorn
 	@echo "check-events-canon: OK"
 
 check-i18n:

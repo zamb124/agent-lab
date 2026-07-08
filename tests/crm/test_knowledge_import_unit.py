@@ -64,7 +64,7 @@ def test_split_oversize_part_slices() -> None:
 async def test_file_reader_markdown_bytes() -> None:
     raw = "# Заголовок\n\nТело KN_UNIT_MD_442".encode("utf-8")
     reader = FileReader()
-    res = await reader.read(raw, file_name="doc.md")
+    res = await reader.read_raw(raw, file_name="doc.md")
     assert res.detected_kind == FileReadKind.TEXT
     joined = "\n".join(p.text for p in res.pages)
     assert "KN_UNIT_MD_442" in joined
@@ -82,7 +82,7 @@ async def test_file_reader_xlsx_bytes() -> None:
     raw = buf.getvalue()
 
     reader = FileReader()
-    res = await reader.read(raw, file_name="t.xlsx")
+    res = await reader.read_raw(raw, file_name="t.xlsx")
     assert res.detected_kind == FileReadKind.SPREADSHEET
     joined = "\n".join(p.text for p in res.pages)
     assert "KN_UNIT_XLSX_MARKER" in joined
@@ -97,7 +97,7 @@ async def test_file_reader_docx_bytes() -> None:
     raw = buf.getvalue()
 
     reader = FileReader()
-    res = await reader.read(raw, file_name="t.docx")
+    res = await reader.read_raw(raw, file_name="t.docx")
     assert res.detected_kind == FileReadKind.OFFICE
     joined = "\n".join(p.text for p in res.pages)
     assert "KN_UNIT_DOCX_MARKER" in joined
@@ -114,7 +114,7 @@ async def test_file_reader_pdf_bytes(tmp_path: Path) -> None:
     raw = out.read_bytes()
 
     reader = FileReader()
-    res = await reader.read(raw, file_name="u.pdf")
+    res = await reader.read_raw(raw, file_name="u.pdf")
     assert res.detected_kind == FileReadKind.PDF
     joined = "\n".join(p.text for p in res.pages)
     assert "KN_UNIT_PDF_MARKER" in joined

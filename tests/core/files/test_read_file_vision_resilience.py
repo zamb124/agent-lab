@@ -18,7 +18,8 @@ from core.files.reader.vision import (
 )
 from core.state import ExecutionState
 from core.types import require_json_object
-from tests.core.files.corpus.manifest import POSITIVE
+from tests.core.files.corpus.helpers import require_heic_entry_supported
+from tests.core.files.corpus.manifest import CORPUS, POSITIVE
 from tests.core.files.corpus.read_helpers import store_corpus_in_files_service
 from tests.fixtures.s3 import require_s3_configured
 
@@ -100,9 +101,8 @@ async def test_read_image_vision_heic_from_corpus(
     require_s3_configured()
     from tests.core.files.corpus.manifest import CORPUS
 
-    entry = next(e for e in CORPUS if e.relative_path == "img/DA-1p.heic")
-    if entry.skip_reason:
-        pytest.skip(entry.skip_reason)
+    entry = next(entry for entry in CORPUS if entry.relative_path == "img/DA-1p.heic")
+    require_heic_entry_supported(entry.relative_path)
     mock_llm_with_queue(["MOCK_VISION"])
     file_ref = await store_corpus_in_files_service(frontend_container, entry, unique_id=unique_id)
     from apps.flows.tools.files import read_file

@@ -11,6 +11,7 @@ from urllib.parse import urlparse
 
 from apps.flows.src.services.platform_facades import call_mcp_tool
 from core.files.reader import FileReader
+from core.files.reader.models import ReadFileArgs
 from core.state import ExecutionState
 from core.types import JsonObject, parse_json_object, require_json_object
 
@@ -350,14 +351,15 @@ class BrowserSnapshotDescribe(Describe):
                 {"session_id": session_id},
             )
 
-        read_result = await reader.read(
+        extract = await reader.read(
             "",
+            ReadFileArgs(page_end=-1),
             file_name="snapshot.html",
-            source_file_id=file_id,
+            file_id=file_id,
         )
-        if len(read_result.pages) == 0:
+        if len(extract.pages) == 0:
             raise ValueError("FileReader: нет страниц в результате")
-        text = str(read_result.pages[0].text).strip()
+        text = str(extract.pages[0].text).strip()
         if text == "":
             raise ValueError("FileReader: пустой markdown")
         return file_id, s3_path, source_url, text

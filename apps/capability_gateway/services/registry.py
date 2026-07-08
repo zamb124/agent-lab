@@ -42,6 +42,7 @@ from core.files.audio_probe import probe_audio_duration_seconds_from_upload
 from core.files.create_spec import FileCreateSpec, FilePostCreate, FileSourceKind, FileSourceRef
 from core.files.models import FileResponse
 from core.files.reader import FileReader, FileReadError
+from core.files.reader.models import ReadFileArgs, ReadLane
 from core.files.registry import default_retention_for_source
 from core.files.s3_client import S3ClientFactory
 from core.files.writer import ContentMode, FileWriteError, FileWriter
@@ -1088,24 +1089,27 @@ class CapabilityRegistry:
                 name="files.read",
                 title="Read persisted file as structured document",
                 description=(
-                    "Читает persisted-файл через core.files.reader.FileReader и возвращает FileReadResult: "
-                    "pages, page_count, detected_kind, content_type, warnings, source checksum/file_id."
+                    "Читает persisted-файл через канонический FileReader.read и возвращает FileExtract: "
+                    "pages, read_lane, kind, mime_type, warnings, source_checksum, file_id."
                 ),
                 input_schema=_schema_object(
                     properties={
                         "file_id": _string_schema("ID файла в FileRepository"),
                         "file_name": _string_schema("Опциональное имя с расширением"),
-                        "include_asset_bytes": _boolean_schema(
-                            "Включать base64 ассетов PDF/Office"
-                        ),
+                        "page_start": _integer_schema("Начальная страница (0-based)"),
+                        "page_end": _integer_schema("Конечная страница (-1 = до конца)"),
                         "vision_prompt": _string_schema(
                             "Опциональная инструкция для image/vision чтения"
                         ),
                         "vision_model": _string_schema("Опциональная vision-модель"),
+                        "transcription_company_id": _string_schema(
+                            "company_id для резолва STT-tier при audio/video"
+                        ),
+                        "forced_lane": _string_schema("text|vision|hybrid|stt"),
                     },
                     required=["file_id"],
                 ),
-                output_schema=_object_schema("FileReadResult JSON"),
+                output_schema=_object_schema("FileExtract JSON"),
                 languages=_supported_languages(),
                 tags=["files", "reader", "documents"],
                 sdk_namespace="files",
@@ -1646,25 +1650,36 @@ class CapabilityRegistry:
         self._reject_positional_args(request)
         file_id = _required_string(request.kwargs.get("file_id"), "file_id")
         file_name = _optional_string(request.kwargs.get("file_name"), "file_name")
-        include_asset_bytes = (
-            _optional_bool(
-                request.kwargs.get("include_asset_bytes"),
-                "include_asset_bytes",
-            )
-            or False
-        )
         vision_prompt = _optional_string(request.kwargs.get("vision_prompt"), "vision_prompt")
         vision_model = _optional_string(request.kwargs.get("vision_model"), "vision_model")
+        page_start_raw = request.kwargs.get("page_start")
+        page_end_raw = request.kwargs.get("page_end")
+        page_start = int(page_start_raw) if isinstance(page_start_raw, int) and not isinstance(page_start_raw, bool) else 0
+        page_end = int(page_end_raw) if isinstance(page_end_raw, int) and not isinstance(page_end_raw, bool) else -1
+        forced_lane_raw = _optional_string(request.kwargs.get("forced_lane"), "forced_lane")
+        forced_lane: ReadLane | None = None
+        if forced_lane_raw is not None:
+            forced_lane = ReadLane(forced_lane_raw)
+        transcription_company_id = _optional_string(
+            request.kwargs.get("transcription_company_id"),
+            "transcription_company_id",
+        )
+        read_args = ReadFileArgs(
+            page_start=page_start,
+            page_end=page_end,
+            vision_prompt=vision_prompt or "",
+            vision_model=vision_model,
+            transcription_company_id=transcription_company_id,
+            forced_lane=forced_lane,
+        )
         context = await self._context_service.build_context(request.context)
         with self._context_service.activate(context):
             try:
                 result = await FileReader().read(
                     file_id,
+                    read_args,
                     file_name=file_name,
-                    include_asset_bytes=include_asset_bytes,
-                    source_file_id=file_id,
-                    vision_prompt=vision_prompt,
-                    vision_model=vision_model,
+                    file_id=file_id,
                 )
             except FileReadError as exc:
                 raise ValueError(str(exc)) from exc

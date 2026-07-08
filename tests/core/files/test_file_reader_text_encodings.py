@@ -47,7 +47,7 @@ async def test_text_decoded_correctly_for_encoding(
     """
     raw = extra_bom + _MARKER.encode(codec)
     reader = FileReader()
-    result = await reader.read(raw, file_name="test_encoding.txt")
+    result = await reader.read_raw(raw, file_name="test_encoding.txt")
     assert result.detected_kind == FileReadKind.TEXT
     assert result.page_count == 1
     assert _MARKER in result.pages[0].text, (
@@ -68,7 +68,7 @@ async def test_real_corpus_utf16_txt_readable() -> None:
     if not path.exists():
         pytest.skip("Файл отсутствует в корпусе")
     reader = FileReader()
-    result = await reader.read(path)
+    result = await reader.read_raw(path)
     assert result.detected_kind == FileReadKind.TEXT
     assert "test document" in result.pages[0].text
 
@@ -78,14 +78,14 @@ async def test_real_corpus_utf16_be_txt_no_bom_does_not_crash() -> None:
     """fake-text-utf-16-be.txt хранится БЕЗ BOM в unstructured/example-docs.
 
     charset_normalizer не детектирует bare UTF-16 BE надёжно — возвращает latin-1.
-    Важно: reader.read() НЕ должен падать; detected_kind=TEXT.
+    Важно: reader.read_raw() НЕ должен падать; detected_kind=TEXT.
     Содержимое может быть garbled (это documented limitation).
     """
     path = CORPUS_DIR / "fake-text-utf-16-be.txt"
     if not path.exists():
         pytest.skip("Файл отсутствует в корпусе")
     reader = FileReader()
-    result = await reader.read(path)
+    result = await reader.read_raw(path)
     assert result.detected_kind == FileReadKind.TEXT
     assert result.page_count == 1
 
@@ -95,14 +95,14 @@ async def test_real_corpus_utf16_le_txt_no_bom_does_not_crash() -> None:
     """fake-text-utf-16-le.txt хранится БЕЗ BOM в unstructured/example-docs.
 
     charset_normalizer не детектирует bare UTF-16 LE надёжно — возвращает latin-1.
-    Важно: reader.read() НЕ должен падать; detected_kind=TEXT.
+    Важно: reader.read_raw() НЕ должен падать; detected_kind=TEXT.
     Содержимое может быть garbled (это documented limitation).
     """
     path = CORPUS_DIR / "fake-text-utf-16-le.txt"
     if not path.exists():
         pytest.skip("Файл отсутствует в корпусе")
     reader = FileReader()
-    result = await reader.read(path)
+    result = await reader.read_raw(path)
     assert result.detected_kind == FileReadKind.TEXT
     assert result.page_count == 1
 
@@ -114,7 +114,7 @@ async def test_real_corpus_utf32_txt_readable() -> None:
     if not path.exists():
         pytest.skip("Файл отсутствует в корпусе")
     reader = FileReader()
-    result = await reader.read(path)
+    result = await reader.read_raw(path)
     assert result.detected_kind == FileReadKind.TEXT
     assert "test document" in result.pages[0].text
 
@@ -126,6 +126,6 @@ async def test_real_corpus_utf16_csv_readable() -> None:
     if not path.exists():
         pytest.skip("Файл отсутствует в корпусе")
     reader = FileReader()
-    result = await reader.read(path)
+    result = await reader.read_raw(path)
     assert result.detected_kind == FileReadKind.TEXT
     assert "Stanley" in result.pages[0].text

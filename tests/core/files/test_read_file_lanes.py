@@ -8,6 +8,7 @@ from apps.flows.tools.files import read_file
 from core.files.reader import ContentMode, ReadLane
 from core.state import ExecutionState
 from core.types import require_json_object
+from tests.core.files.corpus.helpers import corpus_stt_company_id
 from tests.core.files.corpus.manifest import POSITIVE
 from tests.core.files.corpus.read_helpers import store_corpus_in_files_service
 from tests.fixtures.s3 import require_s3_configured
@@ -137,7 +138,13 @@ async def test_read_file_audio_uses_stt_lane(
     state = _state_with(file_ref)
 
     payload = require_json_object(
-        await read_file.run({"names": [file_ref.original_name]}, state),
+        await read_file.run(
+            {
+                "names": [file_ref.original_name],
+                "transcription_company_id": corpus_stt_company_id(unique_id),
+            },
+            state,
+        ),
         "read_file.audio",
     )
     file_result = payload["files"][0]

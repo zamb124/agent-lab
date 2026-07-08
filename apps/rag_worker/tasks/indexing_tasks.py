@@ -223,7 +223,13 @@ async def index_office_catalog_task(
         binding_id = binding_id_value.strip()
         file_record = await container.file_repository.get(file_id)
         if file_record is None:
-            raise ValueError(f"FileRecord не найден: {file_id}")
+            logger.warning(
+                "Office catalog index skip: FileRecord не найден file_id=%s binding_id=%s catalog_id=%s",
+                file_id,
+                binding_id,
+                catalog_id,
+            )
+            continue
         if file_record.company_id != company_id:
             raise ValueError(f"FileRecord {file_id} не принадлежит company_id={company_id}")
 

@@ -67,23 +67,6 @@ async def _vector_document_rows_ordered(
         return list(result.scalars().all())
 
 
-@pytest.fixture
-def rag_company_id() -> str:
-    """Изоляция строк vector_documents по company_id в рамках теста."""
-    return f"test_co_{uuid.uuid4().hex[:8]}"
-
-
-@pytest.fixture
-def ns_name():
-    """Уникальное имя namespace для каждого теста."""
-    return f"test_ns_{uuid.uuid4().hex[:8]}"
-
-
-@pytest.fixture
-def ns_name_2():
-    return f"test_ns_{uuid.uuid4().hex[:8]}"
-
-
 # -- Namespace CRUD --
 
 

@@ -1,7 +1,7 @@
 """Контракт read_file на реальном корпусе unstructured/example-docs без моков.
 
 Проверяется детерминированный конвейер:
-  FileReader.read(raw) -> build_file_extract (Universal Pages) -> render_file_result.
+  FileReader.read(ReadFileArgs) -> FileExtract -> render_file_result.
 
 Vision/STT: только санкционированные MockLLM и mock STT-tier (см. testing.mdc).
 """
@@ -21,11 +21,10 @@ from core.files.reader.render import render_file_result
 from tests.core.files.corpus.manifest import POSITIVE, CorpusFile
 from tests.core.files.corpus.read_helpers import (
     assert_checksum_stable,
+    assert_extract_read_lane,
     build_corpus_extract,
     expected_layout_kind,
-    expected_read_lane,
     read_args_for,
-    read_corpus_result,
     require_corpus_bytes,
 )
 
@@ -34,9 +33,7 @@ _SMALL_TEXT = "book-war-and-peace-1p.txt"
 _CSV = "csv-with-escaped-commas.csv"
 _XLSX = "2023-half-year-analyses-by-segment.xlsx"
 
-_PIPELINE_POSITIVE = tuple(
-    e for e in POSITIVE if not e.uses_vision_llm and not e.uses_mock_stt_tier
-)
+_PIPELINE_POSITIVE = POSITIVE
 
 
 @pytest.mark.asyncio
@@ -50,16 +47,13 @@ async def test_corpus_extract_pipeline_invariants(
 ) -> None:
     """Universal Pages + read_lane + checksum для каждого текстового файла корпуса."""
     raw = require_corpus_bytes(entry)
-    result = await read_corpus_result(
-        entry, unique_id=unique_id, mock_llm_with_queue=mock_llm_with_queue
-    )
     extract = await build_corpus_extract(
         entry, unique_id=unique_id, mock_llm_with_queue=mock_llm_with_queue
     )
 
     assert extract.kind == entry.expected_kind
-    assert extract.read_lane == expected_read_lane(entry)
-    assert extract.page_layout.kind == expected_layout_kind(result, entry.path.name)
+    assert_extract_read_lane(entry, extract)
+    assert extract.page_layout.kind == expected_layout_kind(extract, entry.path.name)
     assert extract.page_layout.pages_total == len(extract.pages)
     assert extract.page_layout.pages_total >= entry.expected_min_pages
     assert_checksum_stable(raw, extract)

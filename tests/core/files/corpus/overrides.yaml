@@ -1,0 +1,413 @@
+entries:
+  2023-half-year-analyses-by-segment.xlsx:
+    expected_kind: spreadsheet
+  CantinaBand3.wav:
+    expected_kind: audio
+    uses_mock_stt_tier: true
+  README-w-include.org:
+    expected_kind: text
+  README-w-include.rst:
+    expected_kind: text
+  README.md:
+    expected_kind: text
+    expected_text_substring: Example Docs
+  README.org:
+    expected_kind: text
+    expected_text_substring: Example Docs
+  README.rst:
+    expected_kind: text
+    expected_text_substring: Example Docs
+  book-war-and-peace-1225p.txt:
+    expected_kind: text
+    expected_text_substring: CHAPTER
+  book-war-and-peace-1p.txt:
+    expected_kind: text
+    expected_text_substring: Prince
+  category-level.docx:
+    expected_kind: office
+  codeblock.md:
+    expected_kind: text
+  contains-pictures.docx:
+    expected_kind: office
+  csv-with-escaped-commas.csv:
+    expected_kind: text
+  csv-with-line-delimiter.csv:
+    expected_kind: text
+  docx-hdrftr.docx:
+    expected_kind: office
+  docx-shapes.docx:
+    expected_kind: office
+  docx-tables.docx:
+    expected_kind: office
+  duplicate-paragraphs.doc:
+    expected_kind: office
+  duplicate-paragraphs.docx:
+    expected_kind: office
+  eml/email-no-html-content-1.eml:
+    expected_kind: office
+  eml/empty.eml:
+    expected_kind: office
+    is_unsupported: true
+  eml/fake-email-attachment.eml:
+    expected_kind: office
+  eml/fake-email-header.eml:
+    expected_kind: office
+  eml/fake-email.eml:
+    expected_kind: office
+  eml/fake-encrypted.eml:
+    allows_empty_text: true
+    expected_kind: OFFICE
+  eml/family-day.eml:
+    expected_kind: office
+  eml/mime-html-only.eml:
+    expected_kind: office
+  eml/mime-multi-to-cc-bcc.eml:
+    expected_kind: office
+  eml/mime-simple.eml:
+    expected_kind: office
+  eml/signed-doc.p7s:
+    expected_kind: office
+  eml/simple-rfc-822.eml:
+    expected_kind: office
+  emoji.xlsx:
+    expected_kind: spreadsheet
+  empty.txt:
+    allows_empty_text: true
+    expected_kind: text
+  empty.xlsx:
+    expected_kind: spreadsheet
+    is_unsupported: true
+  example-10k-1p.html:
+    expected_kind: html
+  example-10k-230p.html:
+    expected_kind: HTML
+  example-10k-utf-16.html:
+    expected_kind: html
+  example-10k.html:
+    expected_kind: html
+  example-list-items-multiple.docx:
+    expected_kind: office
+  example-steelJIS-datasheet-utf-16.html:
+    expected_kind: html
+  example-steelJIS-datasheet.html:
+    expected_kind: html
+  example-with-scripts.html:
+    expected_kind: html
+  factbook-utf-16.xml:
+    expected_kind: text
+  factbook.xml:
+    expected_kind: text
+  fake-doc-emphasized-text.doc:
+    expected_kind: office
+  fake-doc-emphasized-text.docx:
+    expected_kind: office
+  fake-doc.rtf:
+    expected_kind: office
+  fake-email-attachment.msg:
+    expected_kind: office
+  fake-email-multiple-attachments.msg:
+    expected_kind: office
+  fake-email-with-cc-and-bcc.msg:
+    expected_kind: office
+  fake-email.eml:
+    expected_kind: office
+  fake-email.msg:
+    expected_kind: office
+  fake-email.txt:
+    expected_kind: text
+  fake-encrypted.msg:
+    allows_empty_text: true
+    expected_kind: office
+  fake-html-cp1252.html:
+    expected_kind: html
+  fake-html-lang-de.html:
+    expected_kind: html
+  fake-html-pre.htm:
+    expected_kind: html
+  fake-html-with-base64-image.html:
+    expected_kind: html
+  fake-html-with-duplicate-elements.html:
+    expected_kind: html
+  fake-html-with-footer-and-header.html:
+    expected_kind: html
+  fake-html-with-image-from-url.html:
+    expected_kind: html
+  fake-html.html:
+    expected_kind: html
+  fake-incomplete-json.txt:
+    expected_kind: text
+  fake-power-point-malformed.pptx:
+    expected_kind: office
+  fake-power-point-many-pages.pptx:
+    expected_kind: office
+  fake-power-point-table.pptx:
+    expected_kind: office
+  fake-power-point.ppt:
+    expected_kind: office
+    is_unsupported: true
+  fake-power-point.pptx:
+    expected_kind: office
+  fake-text-all-whitespace.txt:
+    allows_empty_text: true
+    expected_kind: text
+  fake-text-utf-16-be.txt:
+    expected_kind: text
+  fake-text-utf-16-le.txt:
+    expected_kind: text
+  fake-text-utf-16.txt:
+    expected_kind: text
+    expected_text_substring: test document
+  fake-text-utf-32.txt:
+    expected_kind: text
+    expected_text_substring: test document
+  fake-text.txt:
+    expected_kind: text
+    expected_text_substring: Hamburgers are delicious
+  fake.doc:
+    expected_kind: office
+  fake.docx:
+    expected_kind: office
+  fake.go:
+    expected_kind: text
+    expected_text_substring: Hello Go!
+  fake.odt:
+    expected_kind: office
+  fake_table.docx:
+    expected_kind: office
+  file_we_dont_want_imported:
+    expected_kind: unknown
+    is_unsupported: true
+  grid_offset_error.docx:
+    expected_kind: office
+  group-shapes-nested.pptx:
+    expected_kind: office
+  handbook-1p-no-rendered-page-breaks.docx:
+    expected_kind: office
+  handbook-1p.docx:
+    expected_kind: office
+  handbook-872p.docx:
+    expected_kind: office
+  hebrew-text-base64-iso88598i.txt:
+    expected_kind: text
+  hlink-meta.docx:
+    expected_kind: office
+  ideas-page.html:
+    expected_kind: html
+  img/DA-1p.heic:
+    expected_kind: image
+    expected_text_substring: MOCK_VISION
+    uses_vision_llm: true
+  img/DA-1p.jpg:
+    expected_kind: image
+    expected_text_substring: MOCK_VISION
+    uses_vision_llm: true
+  img/DA-1p.png:
+    expected_kind: image
+    expected_text_substring: MOCK_VISION
+    uses_vision_llm: true
+  img/bmp_24.bmp:
+    expected_kind: image
+    expected_text_substring: MOCK_VISION
+    uses_vision_llm: true
+  img/chi_sim_image.jpeg:
+    expected_kind: image
+    expected_text_substring: MOCK_VISION
+    uses_vision_llm: true
+  img/english-and-korean.png:
+    expected_kind: image
+    expected_text_substring: MOCK_VISION
+    uses_vision_llm: true
+  img/example.jpg:
+    expected_kind: image
+    expected_text_substring: MOCK_VISION
+    uses_vision_llm: true
+  img/layout-parser-paper-combined.tiff:
+    expected_kind: image
+    expected_text_substring: MOCK_VISION
+    uses_vision_llm: true
+  img/layout-parser-paper-fast.jpg:
+    expected_kind: image
+    expected_text_substring: MOCK_VISION
+    uses_vision_llm: true
+  language-docs/UDHR_first_article_all.txt:
+    expected_kind: text
+    expected_text_substring: human beings
+  language-docs/eng_spa.txt:
+    expected_kind: text
+    expected_text_substring: human beings
+  language-docs/eng_spa.xlsx:
+    expected_kind: spreadsheet
+  language-docs/eng_spa_mult.doc:
+    expected_kind: office
+  language-docs/eng_spa_mult.docx:
+    expected_kind: office
+    expected_text_substring: human beings
+  language-docs/eng_spa_mult.eml:
+    expected_kind: office
+  language-docs/eng_spa_mult.epub:
+    expected_kind: office
+    expected_text_substring: human beings
+  language-docs/eng_spa_mult.html:
+    expected_kind: html
+    expected_text_substring: human beings
+  language-docs/eng_spa_mult.md:
+    expected_kind: text
+    expected_text_substring: human beings
+  language-docs/eng_spa_mult.odt:
+    expected_kind: office
+    expected_text_substring: human beings
+  language-docs/eng_spa_mult.org:
+    expected_kind: text
+    expected_text_substring: human beings
+  language-docs/eng_spa_mult.ppt:
+    expected_kind: office
+    expected_text_substring: human beings
+  language-docs/eng_spa_mult.pptx:
+    expected_kind: office
+    expected_text_substring: human beings
+  language-docs/eng_spa_mult.rst:
+    expected_kind: text
+    expected_text_substring: human beings
+  language-docs/eng_spa_mult.rtf:
+    expected_kind: office
+    expected_text_substring: human beings
+  language-docs/eng_spa_mult.xml:
+    expected_kind: text
+  language-docs/fr_olap.pdf:
+    expected_kind: pdf
+  logger.py:
+    expected_kind: text
+    expected_text_substring: logging
+  more-than-1k-cells.xlsx:
+    expected_kind: spreadsheet
+  norwich-city.txt:
+    expected_kind: text
+    expected_text_substring: Norwich City
+  not-unstructured-payload.json:
+    expected_kind: text
+  page-breaks.docx:
+    expected_kind: office
+  password_protected.xlsx:
+    expected_kind: spreadsheet
+    is_unsupported: true
+  pdf/DA-1p.pdf:
+    expected_kind: pdf
+  pdf/all-number-table.pdf:
+    expected_kind: pdf
+  pdf/copy-protected.pdf:
+    allows_empty_text: true
+    expected_kind: PDF
+  pdf/embedded-cmap-cidfont.pdf:
+    expected_kind: pdf
+  pdf/embedded-link.pdf:
+    expected_kind: pdf
+  pdf/fake-bold-sample.pdf:
+    expected_kind: pdf
+  pdf/fake-memo-with-duplicate-page.pdf:
+    expected_kind: pdf
+  pdf/fake-memo.pdf:
+    expected_kind: pdf
+  pdf/figure-overlay-text.pdf:
+    expected_kind: pdf
+  pdf/header-test-doc.pdf:
+    expected_kind: pdf
+  pdf/layout-parser-paper-fast.pdf:
+    expected_kind: pdf
+  pdf/list-item-example.pdf:
+    expected_kind: pdf
+  pdf/multi-column-2p.pdf:
+    expected_kind: pdf
+    expected_min_pages: 2
+  pdf/password.pdf:
+    allows_empty_text: true
+    expected_kind: pdf
+  pdf/pdf-bad-color-space.pdf:
+    expected_kind: pdf
+    is_unsupported: true
+  pdf/single_table.pdf:
+    allows_empty_text: true
+    expected_kind: pdf
+    uses_vision_llm: true
+  picture.pptx:
+    allows_empty_text: true
+    expected_kind: office
+  rotated-page-90.pdf:
+    expected_kind: pdf
+  sample-presentation.pptx:
+    expected_kind: office
+  science-exploration-1p.pptx:
+    expected_kind: office
+  science-exploration-369p.pptx:
+    expected_kind: OFFICE
+  semicolon-delimited.csv:
+    expected_kind: text
+  simple-table.md:
+    expected_kind: text
+  simple.doc:
+    expected_kind: office
+  simple.docx:
+    expected_kind: office
+  simple.epub:
+    expected_kind: OFFICE
+  simple.json:
+    expected_kind: text
+    expected_text_substring: element_id
+  simple.ndjson:
+    expected_kind: text
+  simple.odt:
+    expected_kind: office
+  simple.pptx:
+    expected_kind: office
+  simple.yaml:
+    expected_kind: text
+    expected_text_substring: deer
+  simple.zip:
+    expected_kind: unknown
+    is_unsupported: true
+  single-column.csv:
+    expected_kind: text
+  spring-weather.html.json:
+    expected_kind: text
+  spring-weather.html.ndjson:
+    expected_kind: text
+  stanley-cups-utf-16.csv:
+    expected_kind: text
+    expected_text_substring: Stanley
+  stanley-cups-with-emoji.csv:
+    expected_kind: text
+  stanley-cups-with-emoji.tsv:
+    expected_kind: text
+  stanley-cups.csv:
+    expected_kind: text
+    expected_text_substring: Stanley
+  stanley-cups.tsv:
+    expected_kind: text
+    expected_text_substring: Stanley
+  stanley-cups.xlsx:
+    expected_kind: spreadsheet
+    expected_text_substring: Stanley
+  table-multi-row-column-cells-actual.csv:
+    expected_kind: text
+  table-semicolon-delimiter.csv:
+    expected_kind: text
+  tables-with-incomplete-rows.docx:
+    expected_kind: office
+  teams_chat.docx:
+    expected_kind: office
+  test-image-jpg-mime.pptx:
+    allows_empty_text: true
+    expected_kind: office
+  tests-example.xls:
+    expected_kind: spreadsheet
+  umlauts-non-utf8.md:
+    expected_kind: text
+  umlauts-utf8.md:
+    expected_kind: text
+  unsupported/factbook.xsl:
+    expected_kind: text
+  vodafone.xlsx:
+    expected_kind: spreadsheet
+  winter-sports.epub:
+    expected_kind: office
+  xlsx-subtable-cases.xlsx:
+    expected_kind: spreadsheet

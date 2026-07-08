@@ -52,6 +52,7 @@ FILE_TYPE_REGISTRY: tuple[FileTypeEntry, ...] = (
     FileTypeEntry(".tsv", ("text/tab-separated-values",), FileCategory.TEXT),
     FileTypeEntry(".json", ("application/json",), FileCategory.TEXT),
     FileTypeEntry(".xml", ("application/xml", "text/xml"), FileCategory.TEXT),
+    FileTypeEntry(".xsl", ("application/xml", "text/xml"), FileCategory.TEXT),
     FileTypeEntry(".html", ("text/html",), FileCategory.TEXT),
     FileTypeEntry(".htm", ("text/html",), FileCategory.TEXT),
     FileTypeEntry(".css", ("text/css",), FileCategory.TEXT),

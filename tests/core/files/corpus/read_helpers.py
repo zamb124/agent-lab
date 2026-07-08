@@ -18,8 +18,8 @@ from core.files.reader.models import (
     ReadLane,
 )
 from core.files.reader.service import FileReader
-from core.files.reader.universal import build_file_extract, read_lane_for_kind
-from tests.core.files.corpus.helpers import corpus_stt_company_id
+from core.files.reader.universal import read_lane_for_kind
+from tests.core.files.corpus.helpers import corpus_stt_company_id, require_heic_entry_supported
 from tests.core.files.corpus.manifest import CORPUS_DIR, CorpusFile
 
 _MOCK_VISION_TEXT = "MOCK_VISION"
@@ -44,35 +44,74 @@ def expected_read_lane(entry: CorpusFile) -> ReadLane:
     return read_lane_for_kind(entry.expected_kind)
 
 
-def expected_layout_kind(result: FileReadResult, file_name: str) -> PageLayoutKind:
-    if result.detected_kind == FileReadKind.PDF:
+def assert_extract_read_lane(entry: CorpusFile, extract: FileExtract) -> None:
+    if entry.expected_kind == FileReadKind.PDF:
+        if entry.uses_vision_llm:
+            assert extract.read_lane in (ReadLane.HYBRID, ReadLane.VISION)
+        else:
+            assert extract.read_lane in (ReadLane.TEXT, ReadLane.HYBRID)
+        return
+    expected = expected_read_lane(entry)
+    assert extract.read_lane == expected
+
+
+def expected_layout_kind(extract: FileExtract, file_name: str) -> PageLayoutKind:
+    if extract.kind in (FileReadKind.PDF, FileReadKind.SPREADSHEET, FileReadKind.IMAGE):
         return PageLayoutKind.NATIVE
-    if result.detected_kind == FileReadKind.SPREADSHEET:
-        return PageLayoutKind.NATIVE
-    if result.detected_kind == FileReadKind.IMAGE:
-        return PageLayoutKind.NATIVE
-    if result.detected_kind == FileReadKind.OFFICE and len(result.pages) > 1:
-        return PageLayoutKind.NATIVE
+    if extract.kind == FileReadKind.OFFICE:
+        if any(page.label.strip() for page in extract.pages):
+            return PageLayoutKind.NATIVE
+        return PageLayoutKind.VIRTUAL
     _ = file_name
     return PageLayoutKind.VIRTUAL
 
 
-async def read_corpus_result(
+async def read_corpus_extract(
     entry: CorpusFile,
     *,
     unique_id: str,
     mock_llm_with_queue,
     vision_prompt: str | None = None,
-) -> FileReadResult:
+) -> FileExtract:
     if entry.skip_reason:
         pytest.skip(entry.skip_reason)
+    require_heic_entry_supported(entry.relative_path)
     raw = require_corpus_bytes(entry)
     if entry.uses_vision_llm:
         mock_llm_with_queue([_MOCK_VISION_TEXT])
     transcription_company_id: str | None = None
     if entry.uses_mock_stt_tier:
         transcription_company_id = corpus_stt_company_id(unique_id)
+    read_args = ReadFileArgs(
+        page_end=-1,
+        vision_prompt=vision_prompt or "",
+        transcription_company_id=transcription_company_id,
+    )
     return await FileReader().read(
+        raw,
+        read_args,
+        file_name=entry.path.name,
+    )
+
+
+async def read_corpus_raw(
+    entry: CorpusFile,
+    *,
+    unique_id: str,
+    mock_llm_with_queue,
+    vision_prompt: str | None = None,
+) -> FileReadResult:
+    """Low-level parse без extract engine (unit-тесты парсера)."""
+    if entry.skip_reason:
+        pytest.skip(entry.skip_reason)
+    require_heic_entry_supported(entry.relative_path)
+    raw = require_corpus_bytes(entry)
+    if entry.uses_vision_llm:
+        mock_llm_with_queue([_MOCK_VISION_TEXT])
+    transcription_company_id: str | None = None
+    if entry.uses_mock_stt_tier:
+        transcription_company_id = corpus_stt_company_id(unique_id)
+    return await FileReader().read_raw(
         raw,
         file_name=entry.path.name,
         transcription_company_id=transcription_company_id,
@@ -87,10 +126,12 @@ async def build_corpus_extract(
     mock_llm_with_queue,
     file_id: str = "test-file-id",
 ) -> FileExtract:
-    result = await read_corpus_result(
+    extract = await read_corpus_extract(
         entry, unique_id=unique_id, mock_llm_with_queue=mock_llm_with_queue
     )
-    return build_file_extract(result, file_name=entry.path.name, file_id=file_id)
+    if file_id != "test-file-id" and extract.file_id != file_id:
+        return extract.model_copy(update={"file_id": file_id})
+    return extract
 
 
 def read_args_for(entry: CorpusFile, **overrides: object) -> ReadFileArgs:

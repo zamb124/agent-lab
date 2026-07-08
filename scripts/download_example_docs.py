@@ -1,23 +1,22 @@
 """Скачивает example-docs из Unstructured-IO/unstructured в tests/core/files/example-docs/.
 
-Использует GitHub Contents API (без токена, публичный репозиторий).
+Использует GitHub Git Trees API (без токена, публичный репозиторий).
 Идемпотентен: пропускает уже скачанные файлы с совпадающим размером.
 
-Тяжёлые файлы (>SIZE_LIMIT_BYTES) сохраняются в tests/.cache/example-docs-large/
-и не входят в git-коммит (покрыты .gitignore).
+Все blobs (включая >5 MB для Git LFS) сохраняются в tests/core/files/example-docs/.
 
 Запуск:
     uv run python scripts/download_example_docs.py
-    uv run python scripts/download_example_docs.py --force    # пере-скачать всё
-    uv run python scripts/download_example_docs.py --large    # скачать и тяжёлые
+    uv run python scripts/download_example_docs.py --force
+    make sync-example-docs
 """
 
 from __future__ import annotations
 
-import argparse
 import sys
 import time
 from pathlib import Path
+from typing import TypedDict, cast
 
 import httpx
 
@@ -27,22 +26,29 @@ EXAMPLE_DOCS_PREFIX = "example-docs/"
 BASE_API = "https://api.github.com"
 RAW_BASE = "https://raw.githubusercontent.com"
 
-SIZE_LIMIT_BYTES = 5 * 1024 * 1024  # 5 MB — граница «тяжёлых» файлов
-
 REPO_ROOT = Path(__file__).parent.parent
 CORPUS_DIR = REPO_ROOT / "tests" / "core" / "files" / "example-docs"
-LARGE_CACHE_DIR = REPO_ROOT / "tests" / ".cache" / "example-docs-large"
 
 
-def _get_tree(client: httpx.Client) -> list[dict]:
+class GitHubTreeBlob(TypedDict):
+    path: str
+    type: str
+    size: int
+
+
+class GitHubTreeResponse(TypedDict):
+    tree: list[GitHubTreeBlob]
+
+
+def _get_tree(client: httpx.Client) -> list[GitHubTreeBlob]:
     """Возвращает плоский список всех blob-записей example-docs из git tree."""
     url = f"{BASE_API}/repos/{REPO}/git/trees/{BRANCH}?recursive=1"
     resp = client.get(url)
-    resp.raise_for_status()
-    data = resp.json()
+    _ = resp.raise_for_status()
+    data = cast(GitHubTreeResponse, resp.json())
     return [
         item
-        for item in data.get("tree", [])
+        for item in data["tree"]
         if item["type"] == "blob" and item["path"].startswith(EXAMPLE_DOCS_PREFIX)
     ]
 
@@ -51,65 +57,79 @@ def _download_blob(client: httpx.Client, path_in_repo: str) -> bytes:
     url = f"{RAW_BASE}/{REPO}/{BRANCH}/{path_in_repo}"
     for attempt in range(3):
         try:
-            resp = client.get(url, timeout=120.0)
-            resp.raise_for_status()
+            resp = client.get(url, timeout=300.0)
+            _ = resp.raise_for_status()
             return resp.content
         except httpx.HTTPStatusError:
             if attempt == 2:
                 raise
-            time.sleep(2 ** attempt)
+            backoff_seconds = 1.0 if attempt == 0 else 2.0
+            time.sleep(backoff_seconds)
     raise RuntimeError("unreachable")
 
 
-def main(argv: list[str] | None = None) -> None:
-    parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--force", action="store_true", help="Пере-скачать существующие файлы")
-    parser.add_argument("--large", action="store_true", help="Скачать тяжёлые файлы (>5MB) в .cache/")
-    args = parser.parse_args(argv)
+def _parse_force(argv: list[str] | None) -> bool:
+    return bool(argv and "--force" in argv)
+
+
+def main(argv: list[str] | None = None) -> int:
+    force = _parse_force(argv)
 
     CORPUS_DIR.mkdir(parents=True, exist_ok=True)
-    LARGE_CACHE_DIR.mkdir(parents=True, exist_ok=True)
 
     headers = {"Accept": "application/vnd.github+json", "X-GitHub-Api-Version": "2022-11-28"}
+    missing: list[str] = []
     with httpx.Client(headers=headers, follow_redirects=True) as client:
         print("Получаю список файлов из GitHub API...")
         tree = _get_tree(client)
         print(f"Найдено {len(tree)} файлов в example-docs/")
 
-        downloaded = skipped = large_skipped = 0
+        downloaded = skipped = 0
         for item in tree:
-            rel = item["path"][len(EXAMPLE_DOCS_PREFIX):]  # путь внутри example-docs/
-            size = item.get("size", 0)
-            is_large = size > SIZE_LIMIT_BYTES
-
-            if is_large:
-                if not args.large:
-                    print(f"  [large, skip] {rel}  ({size / 1024 / 1024:.1f} MB)")
-                    large_skipped += 1
-                    continue
-                dest = LARGE_CACHE_DIR / rel
-            else:
-                dest = CORPUS_DIR / rel
-
+            path_in_repo = item["path"]
+            rel = path_in_repo[len(EXAMPLE_DOCS_PREFIX) :]
+            size = item["size"]
+            dest = CORPUS_DIR / rel
             dest.parent.mkdir(parents=True, exist_ok=True)
 
-            if dest.exists() and not args.force and dest.stat().st_size == size:
+            if dest.exists() and not force and dest.stat().st_size == size:
                 skipped += 1
                 continue
 
-            print(f"  [{size:>9} B] {rel}")
-            data = _download_blob(client, item["path"])
-            dest.write_bytes(data)
+            size_mb = size / 1024 / 1024
+            label = f"{size_mb:.1f} MB" if size_mb >= 1 else f"{size} B"
+            print(f"  [{label:>10}] {rel}")
+            data = _download_blob(client, path_in_repo)
+            if len(data) != size:
+                raise RuntimeError(
+                    f"Размер {rel} не совпал: GitHub={size}, downloaded={len(data)}"
+                )
+            _ = dest.write_bytes(data)
             downloaded += 1
-
-            # небольшая пауза чтобы не дергать API слишком быстро
             time.sleep(0.05)
 
-    print(f"\nГотово: скачано {downloaded}, пропущено {skipped}, тяжёлых пропущено {large_skipped}.")
+        for item in tree:
+            rel = item["path"][len(EXAMPLE_DOCS_PREFIX) :]
+            dest = CORPUS_DIR / rel
+            expected = item["size"]
+            if not dest.exists():
+                missing.append(rel)
+                continue
+            actual = dest.stat().st_size
+            if actual != expected:
+                missing.append(f"{rel} (size {actual} != {expected})")
+
+    print(f"\nГотово: скачано {downloaded}, пропущено {skipped}.")
     print(f"Корпус: {CORPUS_DIR}")
-    if large_skipped:
-        print(f"Тяжёлые файлы доступны через --large: {LARGE_CACHE_DIR}")
+    if missing:
+        print("Отсутствуют или размер не совпал:", file=sys.stderr)
+        for path in missing[:20]:
+            print(f"  - {path}", file=sys.stderr)
+        if len(missing) > 20:
+            print(f"  ... ещё {len(missing) - 20}", file=sys.stderr)
+        return 1
+    return 0
 
 
 if __name__ == "__main__":
-    main(sys.argv[1:])
+    raise SystemExit(main(sys.argv[1:]))

@@ -1,14 +1,14 @@
 """
-Извлечение полного текста из файла в shared storage (тот же пайплайн, что превью).
+Извлечение полного текста из файла в shared storage (канонический FileReader.read).
 """
 
 from __future__ import annotations
 
-from core.files.reader.models import ReadPage
+from core.files.reader.models import ReadFileArgs, UniversalPage
 from core.files.reader.service import FileReader, read_stored_file_by_id
 
 
-def _join_pages(pages: list[ReadPage]) -> str:
+def _join_pages(pages: list[UniversalPage]) -> str:
     parts: list[str] = []
     for page in pages:
         chunk = (page.text or "").strip()
@@ -28,8 +28,8 @@ async def load_text_from_stored_file_id(file_id: str) -> str:
         raise ValueError("file_id пуст")
     raw, name = await read_stored_file_by_id(fid)
     reader = FileReader()
-    result = await reader.read(raw, file_name=name)
-    return _join_pages(result.pages)
+    extract = await reader.read(raw, ReadFileArgs(page_end=-1), file_name=name, file_id=fid)
+    return _join_pages(extract.pages)
 
 
 async def load_text_and_name_from_stored_file_id(file_id: str) -> tuple[str, str]:
@@ -39,8 +39,8 @@ async def load_text_and_name_from_stored_file_id(file_id: str) -> tuple[str, str
         raise ValueError("file_id пуст")
     raw, name = await read_stored_file_by_id(fid)
     reader = FileReader()
-    result = await reader.read(raw, file_name=name)
-    return _join_pages(result.pages), name
+    extract = await reader.read(raw, ReadFileArgs(page_end=-1), file_name=name, file_id=fid)
+    return _join_pages(extract.pages), name
 
 
 async def load_text_from_bytes(raw: bytes, file_name: str) -> str:
@@ -50,5 +50,5 @@ async def load_text_from_bytes(raw: bytes, file_name: str) -> str:
         raise ValueError("raw file bytes empty")
     nm = str(file_name).strip() if file_name else "file"
     reader = FileReader()
-    result = await reader.read(data, file_name=nm)
-    return _join_pages(result.pages)
+    extract = await reader.read(data, ReadFileArgs(page_end=-1), file_name=nm)
+    return _join_pages(extract.pages)

@@ -45,8 +45,16 @@ from core.config.testing import is_testing
 from core.db.models import VectorDocument
 from core.db.sqlalchemy_pool import sqlalchemy_async_engine_pool_kwargs
 from core.db.utils import get_rowcount
-from core.files.reader import FileReader
-from core.files.reader.models import FileReadKind, FileReadResult, ReadPage
+from core.files.reader import FileReader, ReadFileArgs
+from core.files.reader.models import (
+    ContentMode,
+    FileExtract,
+    FileReadKind,
+    PageLayout,
+    PageLayoutKind,
+    ReadLane,
+    UniversalPage,
+)
 from core.logging import get_logger
 from core.rag.base_provider import BaseRAGProvider, validate_metadata_filters
 from core.rag.embedding_runtime import RagEmbeddingRuntime
@@ -206,14 +214,15 @@ class PgVectorProvider(BaseRAGProvider):
             start = end - self._chunk_overlap
         return chunks
 
-    def _chunks_from_file_read_result(
+    def _chunks_from_file_extract(
         self,
-        read_result: FileReadResult,
+        extract: FileExtract,
     ) -> list[tuple[str, RAGMetadata]]:
-        """Чанки для embeddings строго из FileReadResult.pages."""
+        """Чанки для embeddings из канонического FileExtract."""
         out: list[tuple[str, RAGMetadata]] = []
-        doc_checksum = read_result.source_checksum or ""
-        for page in read_result.pages:
+        doc_checksum = extract.source_checksum or ""
+        pages_total = extract.page_layout.pages_total
+        for page in extract.pages:
             body = (page.text or "").strip()
             if not body:
                 continue
@@ -221,18 +230,17 @@ class PgVectorProvider(BaseRAGProvider):
                 "file_read_page_index": page.index,
                 "file_read_page_label": page.label,
                 "file_read_source_checksum": doc_checksum,
-                "file_read_detected_kind": read_result.detected_kind.value,
-                "file_read_page_count": read_result.page_count,
+                "file_read_detected_kind": extract.kind.value,
+                "file_read_page_count": pages_total,
+                "file_read_lane": extract.read_lane.value,
             }
-            if page.assets:
-                base_meta["file_read_page_asset_checksums"] = [a.checksum for a in page.assets]
             subchunks = self._chunk_text(body)
             for sci, chunk_text in enumerate(subchunks):
                 meta = {**base_meta, "file_read_subchunk_index": sci}
                 out.append((chunk_text, meta))
         if not out:
             raise ValueError(
-                f"После FileReader нет текста для индексации (пустые страницы). file={read_result.file_name}"
+                f"После FileReader нет текста для индексации (пустые страницы). file={extract.file_name}"
             )
         return out
 
@@ -326,20 +334,25 @@ class PgVectorProvider(BaseRAGProvider):
         doc_name = document_name or original_filename
 
         doc_metadata = dict(metadata) if metadata is not None else {}
-        read_result = await self._file_reader.read(
+        document_id_raw = doc_metadata.get("document_id")
+        document_id = str(document_id_raw).strip() if document_id_raw else ""
+        read_args = ReadFileArgs(page_end=-1)
+        extract = await self._file_reader.read(
             file_path,
+            read_args,
             file_name=doc_name,
+            file_id=document_id if document_id else None,
         )
-        doc_metadata["file_type"] = read_result.detected_kind.value
+        doc_metadata["file_type"] = extract.kind.value
         doc_metadata["s3_key"] = s3_key
         doc_metadata["s3_bucket"] = bucket_name
         doc_metadata["original_filename"] = original_filename
-        if read_result.source_checksum:
-            doc_metadata["source_checksum"] = read_result.source_checksum
+        if extract.source_checksum:
+            doc_metadata["source_checksum"] = extract.source_checksum
 
-        return await self._upload_file_read_internal(
+        return await self._upload_file_extract_internal(
             namespace_id=namespace_id,
-            read_result=read_result,
+            extract=extract,
             document_name=doc_name,
             metadata=doc_metadata,
         )
@@ -364,21 +377,27 @@ class PgVectorProvider(BaseRAGProvider):
 
         filename = document_name or original_filename
 
-        read_result = await self._file_reader.read(
+        doc_metadata = dict(metadata) if metadata is not None else {}
+        document_id_raw = doc_metadata.get("document_id")
+        document_id = str(document_id_raw).strip() if document_id_raw else ""
+        read_args = ReadFileArgs(page_end=-1)
+        extract = await self._file_reader.read(
             file_data,
+            read_args,
             file_name=filename,
+            file_id=document_id if document_id else None,
         )
-        doc_metadata["file_type"] = read_result.detected_kind.value
+        doc_metadata["file_type"] = extract.kind.value
         doc_metadata["s3_key"] = s3_key
         doc_metadata["s3_bucket"] = bucket_name
         doc_metadata["original_filename"] = original_filename
-        if read_result.source_checksum:
-            doc_metadata["source_checksum"] = read_result.source_checksum
+        if extract.source_checksum:
+            doc_metadata["source_checksum"] = extract.source_checksum
 
         logger.info(f"Документ из S3 индексируется через FileReader: {s3_key}")
-        return await self._upload_file_read_internal(
+        return await self._upload_file_extract_internal(
             namespace_id=namespace_id,
-            read_result=read_result,
+            extract=extract,
             document_name=filename,
             metadata=doc_metadata,
             upload_profile=upload_profile,
@@ -404,15 +423,15 @@ class PgVectorProvider(BaseRAGProvider):
             metadata=doc_metadata,
         )
 
-    async def _upload_file_read_internal(
+    async def _upload_file_extract_internal(
         self,
         namespace_id: str,
-        read_result: FileReadResult,
+        extract: FileExtract,
         document_name: str,
         metadata: RAGMetadata,
         upload_profile: UploadProfileBinding | None = None,
     ) -> RAGDocument:
-        """Chunk + embed из FileReadResult (единая схема с flows FileReader)."""
+        """Chunk + embed из канонического FileExtract."""
         md = dict(metadata)
         document_id_raw = md.get("document_id")
         document_id = str(document_id_raw).strip() if document_id_raw else ""
@@ -432,7 +451,7 @@ class PgVectorProvider(BaseRAGProvider):
             )
             metadata["index_profile_config"] = index_profile_config
 
-        chunk_pairs = self._chunks_from_file_read_result(read_result)
+        chunk_pairs = self._chunks_from_file_extract(extract)
         chunks = [pair[0] for pair in chunk_pairs]
         chunk_metas = [pair[1] for pair in chunk_pairs]
 
@@ -528,19 +547,27 @@ class PgVectorProvider(BaseRAGProvider):
         document_name: str,
         metadata: RAGMetadata,
     ) -> RAGDocument:
-        """Прямой текст (без файла): одна логическая страница в FileReadResult."""
-        page = ReadPage(index=0, text=text_content, assets=[], label=None)
-        read_result = FileReadResult(
+        """Прямой текст (без файла): одна логическая страница в FileExtract."""
+        extract = FileExtract(
             file_name=document_name,
-            content_type="text/plain",
-            detected_kind=FileReadKind.TEXT,
-            page_count=1,
-            pages=[page],
+            kind=FileReadKind.TEXT,
+            mime_type="text/plain",
+            read_lane=ReadLane.TEXT,
+            page_layout=PageLayout(kind=PageLayoutKind.VIRTUAL, pages_total=1, page_size=0),
+            pages=[
+                UniversalPage(
+                    index=0,
+                    label="",
+                    text=text_content,
+                    content_mode=ContentMode.FULL,
+                )
+            ],
+            content_chars_total=len(text_content),
             warnings=[],
         )
-        return await self._upload_file_read_internal(
+        return await self._upload_file_extract_internal(
             namespace_id=namespace_id,
-            read_result=read_result,
+            extract=extract,
             document_name=document_name,
             metadata=metadata,
         )

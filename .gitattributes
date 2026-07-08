@@ -1,0 +1,5 @@
+# Git LFS: тяжёлые файлы корпуса example-docs (>5 MB)
+tests/core/files/example-docs/simple.epub filter=lfs diff=lfs merge=lfs -text
+tests/core/files/example-docs/example-10k-230p.html filter=lfs diff=lfs merge=lfs -text
+tests/core/files/example-docs/science-exploration-369p.pptx filter=lfs diff=lfs merge=lfs -text
+tests/core/files/example-docs/pdf/invalid-pdf-structure-pdfminer-entire-doc.pdf filter=lfs diff=lfs merge=lfs -text

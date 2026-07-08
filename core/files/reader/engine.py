@@ -9,8 +9,10 @@ from __future__ import annotations
 
 import base64
 from collections.abc import Sequence
+from pathlib import Path
 
-from core.files.file_ref import FileRef, file_id_from_download_url
+from core.files.checksum import compute_content_checksum_sha256
+from core.files.file_ref import FileRef, FileRefSource, file_id_from_download_url
 from core.files.reader.exceptions import FileReadError
 from core.files.reader.extract_cache import (
     load_file_extract,
@@ -34,21 +36,113 @@ from core.files.reader.models import (
     ReadFileArgs,
     ReadFileEnvelope,
     ReadLane,
+    ReadOptions,
     ReadPage,
     StopReason,
     UniversalPage,
+    merge_file_ref_read_options,
 )
 from core.files.reader.render import render_file_result
 from core.files.reader.service import (
     FileReader,
+    SourceInput,
+    _guess_mime,
+    _is_file_ref_source,
     pdf_page_text_for_merge,
     pdf_page_text_usable,
     run_vision_on_image_bytes,
 )
 from core.files.reader.universal import build_file_extract
+from core.files.types import ext_to_mime
 from core.logging import get_logger
 
 logger = get_logger(__name__)
+
+
+def _file_ref_identity_for_source(
+    source: SourceInput,
+    *,
+    raw: bytes,
+    resolved_file_id: str | None,
+) -> tuple[str | None, str | None]:
+    if isinstance(resolved_file_id, str) and resolved_file_id.strip():
+        return resolved_file_id.strip(), None
+
+    if isinstance(source, Path):
+        return None, source.resolve().as_uri()
+
+    if isinstance(source, str):
+        stripped = source.strip()
+        if stripped.startswith(("http://", "https://")):
+            return None, stripped
+        parsed_file_id = file_id_from_download_url(stripped)
+        if parsed_file_id is not None:
+            return parsed_file_id, None
+        path = Path(stripped)
+        if path.is_file():
+            return None, path.resolve().as_uri()
+
+    checksum = compute_content_checksum_sha256(raw)
+    return None, f"inline://sha256/{checksum}"
+
+
+def read_options_from_args(
+    args: ReadFileArgs,
+    *,
+    source_file_id: str | None = None,
+    include_asset_bytes: bool = False,
+) -> ReadOptions:
+    vision_prompt = args.vision_prompt.strip() if args.vision_prompt.strip() else None
+    return ReadOptions(
+        include_asset_bytes=include_asset_bytes,
+        source_file_id=source_file_id,
+        vision_model=args.vision_model,
+        vision_prompt=vision_prompt,
+        transcription_company_id=args.transcription_company_id,
+    )
+
+
+async def file_ref_from_source(
+    reader: FileReader,
+    source: SourceInput | FileRef,
+    *,
+    file_name: str | None = None,
+    file_id: str | None = None,
+) -> tuple[FileRef, bytes, str]:
+    normalized_file_id = file_id.strip() if isinstance(file_id, str) and file_id.strip() else None
+    if isinstance(source, FileRef):
+        file_ref = source
+        if normalized_file_id is not None and file_ref.file_id is None:
+            file_ref = file_ref.model_copy(update={"file_id": normalized_file_id})
+        opts = ReadOptions(source_file_id=normalized_file_id or file_ref.file_id)
+        opts = merge_file_ref_read_options(file_ref, opts)
+        raw, resolved_name = await reader.raw_from_file_ref(file_ref, opts)
+        display_name = (
+            file_name.strip() if isinstance(file_name, str) and file_name.strip() else None
+        ) or resolved_name
+        return file_ref.model_copy(update={"original_name": display_name}), raw, display_name
+
+    opts = ReadOptions(source_file_id=normalized_file_id)
+    raw, resolved_name = await reader.resolve_source(source, file_name, opts)
+    display_name = resolved_name
+    resolved_id = normalized_file_id or opts.source_file_id
+    file_type = reader.recognize_file_type(file_name=display_name, head=raw[:8192])
+    content_type = file_type.content_type or _guess_mime(display_name)
+    if content_type is None or not content_type.strip():
+        content_type = ext_to_mime(Path(display_name).suffix.lower())
+    ref_file_id, ref_url = _file_ref_identity_for_source(
+        source,
+        raw=raw,
+        resolved_file_id=resolved_id,
+    )
+    file_ref = FileRef(
+        original_name=display_name,
+        file_id=ref_file_id,
+        url=ref_url,
+        file_size=len(raw),
+        content_type=content_type,
+    )
+    return file_ref, raw, display_name
 
 
 def _file_id_of(file_ref: FileRef) -> str | None:
@@ -107,6 +201,7 @@ async def _vision_ocr_pdf_asset(
     file_name: str,
     mime: str,
     prompt: str,
+    vision_model: str | None,
     compression: CompressionMode,
     file_id: str | None,
     checksum: str | None,
@@ -132,7 +227,7 @@ async def _vision_ocr_pdf_asset(
         file_name=file_name,
         mime=mime,
         prompt=prompt,
-        vision_model=None,
+        vision_model=vision_model,
         compression=compression,
         trace_name="core.files.reader.pdf_vision",
     )
@@ -159,6 +254,7 @@ async def _build_pdf_hybrid_page_text(
     *,
     file_name: str,
     prompt: str,
+    vision_model: str | None,
     compression: CompressionMode,
     file_id: str | None,
     checksum: str | None,
@@ -184,6 +280,7 @@ async def _build_pdf_hybrid_page_text(
             file_name=f"{file_name}#p{page.index + 1}:img{image_index}",
             mime=asset.content_type or "image/png",
             prompt=prompt,
+            vision_model=vision_model,
             compression=compression,
             file_id=file_id,
             checksum=checksum,
@@ -205,6 +302,7 @@ async def _build_pdf_hybrid_page_text(
                     file_name=f"{file_name}#p{page.index + 1}",
                     mime=raster_asset.content_type or "image/png",
                     prompt=prompt,
+                    vision_model=vision_model,
                     compression=compression,
                     file_id=file_id,
                     checksum=checksum,
@@ -227,17 +325,20 @@ async def _extract_pdf_auto_hybrid(
     args: ReadFileArgs,
     *,
     file_id: str | None,
+    resolved_raw: bytes,
+    resolved_name: str,
 ) -> FileExtract:
     reader = FileReader()
-    result = await reader.read(
-        file_ref,
+    opts = read_options_from_args(
+        args,
+        source_file_id=file_id,
         include_asset_bytes=True,
-        vision_prompt=args.vision_prompt or None,
     )
+    result = await reader._read_raw(resolved_raw, resolved_name, opts)
     file_name = _display_name(file_ref)
     pages_total = len(result.pages)
     checksum = result.source_checksum
-    vision_prompt = args.vision_prompt or None
+    vision_prompt = args.vision_prompt.strip() if args.vision_prompt.strip() else None
     prompt = vision_prompt or "Опиши содержимое страницы и извлеки весь видимый текст."
 
     target_indices, lazy = _pdf_lazy_target_indices(pages_total, args)
@@ -252,6 +353,7 @@ async def _extract_pdf_auto_hybrid(
             page,
             file_name=file_name,
             prompt=prompt,
+            vision_model=args.vision_model,
             compression=args.compression,
             file_id=file_id,
             checksum=checksum,
@@ -272,9 +374,7 @@ async def _extract_pdf_auto_hybrid(
             f"vision применён только к запрошенным страницам (pages_total={pages_total} "
             + f"> порога {VISION_FULL_READ_MAX_PAGES})"
         )
-        content_chars_total = -1
-    else:
-        content_chars_total = sum(len(page.text) for page in universal)
+    content_chars_total = sum(len(page.text) for page in universal)
 
     read_lane = ReadLane.HYBRID if any_vision_used else ReadLane.TEXT
     extract = FileExtract(
@@ -299,14 +399,12 @@ async def _extract_text_lane(
     args: ReadFileArgs,
     *,
     file_id: str | None,
-    transcription_company_id: str | None,
+    resolved_raw: bytes,
+    resolved_name: str,
 ) -> FileExtract:
     reader = FileReader()
-    result = await reader.read(
-        file_ref,
-        vision_prompt=args.vision_prompt or None,
-        transcription_company_id=transcription_company_id,
-    )
+    opts = read_options_from_args(args, source_file_id=file_id)
+    result = await reader._read_raw(resolved_raw, resolved_name, opts)
     extract = build_file_extract(
         result, file_name=_display_name(file_ref), file_id=file_id
     )
@@ -320,17 +418,21 @@ async def _extract_pdf_visual(
     *,
     file_id: str | None,
     lane: ReadLane,
+    resolved_raw: bytes,
+    resolved_name: str,
 ) -> FileExtract:
     reader = FileReader()
-    result = await reader.read(
-        file_ref,
+    opts = read_options_from_args(
+        args,
+        source_file_id=file_id,
         include_asset_bytes=True,
     )
+    result = await reader._read_raw(resolved_raw, resolved_name, opts)
     file_name = _display_name(file_ref)
     pages_total = len(result.pages)
     checksum = result.source_checksum
     content_mode = ContentMode.HYBRID if lane == ReadLane.HYBRID else ContentMode.VISION
-    vision_prompt = args.vision_prompt or None
+    vision_prompt = args.vision_prompt.strip() if args.vision_prompt.strip() else None
     prompt = vision_prompt or "Опиши содержимое страницы и извлеки весь видимый текст."
 
     lazy = pages_total > VISION_FULL_READ_MAX_PAGES
@@ -359,7 +461,7 @@ async def _extract_pdf_visual(
                     file_name=f"{file_name}#p{page.index + 1}",
                     mime="image/png",
                     prompt=prompt,
-                    vision_model=None,
+                    vision_model=args.vision_model,
                     compression=args.compression,
                     trace_name="core.files.reader.pdf_vision",
                 )
@@ -408,7 +510,8 @@ async def _get_or_extract(
     args: ReadFileArgs,
     *,
     forced_lane: ReadLane | None,
-    transcription_company_id: str | None,
+    resolved_raw: bytes,
+    resolved_name: str,
 ) -> FileExtract:
     file_id = _file_id_of(file_ref)
 
@@ -426,7 +529,12 @@ async def _get_or_extract(
         info = reader.recognize_file_type(file_name=_display_name(file_ref))
         if info.detected_kind == FileReadKind.PDF:
             return await _extract_pdf_visual(
-                file_ref, args, file_id=file_id, lane=forced_lane
+                file_ref,
+                args,
+                file_id=file_id,
+                lane=forced_lane,
+                resolved_raw=resolved_raw,
+                resolved_name=resolved_name,
             )
         if info.detected_kind == FileReadKind.IMAGE:
             pass  # обычный vision-путь ниже
@@ -435,7 +543,8 @@ async def _get_or_extract(
                 file_ref,
                 args,
                 file_id=file_id,
-                transcription_company_id=transcription_company_id,
+                resolved_raw=resolved_raw,
+                resolved_name=resolved_name,
             )
             hybrid_warning = (
                 f"hybrid недоступен для типа {info.detected_kind.value}: "
@@ -455,16 +564,22 @@ async def _get_or_extract(
         return cached
 
     reader = FileReader()
-    info = reader.recognize_file_type(file_name=_display_name(file_ref))
+    info = reader.recognize_file_type(file_name=_display_name(file_ref), head=resolved_raw[:8192])
     if info.detected_kind == FileReadKind.PDF:
         return await _extract_pdf_auto_hybrid(
             file_ref,
             args,
             file_id=file_id,
+            resolved_raw=resolved_raw,
+            resolved_name=resolved_name,
         )
 
     return await _extract_text_lane(
-        file_ref, args, file_id=file_id, transcription_company_id=transcription_company_id
+        file_ref,
+        args,
+        file_id=file_id,
+        resolved_raw=resolved_raw,
+        resolved_name=resolved_name,
     )
 
 
@@ -498,23 +613,17 @@ async def read_files_to_envelope(
     args: ReadFileArgs,
     *,
     tool_name: str,
-    forced_lane: ReadLane | None = None,
-    transcription_company_id: str | None = None,
 ) -> ReadFileEnvelope:
     total_files = len(file_refs)
     per_file_budget = max(args.budget // total_files, 1)
     carryover = 0
 
+    reader = FileReader()
     files: list[FileResult] = []
     for file_ref in file_refs:
         file_budget = per_file_budget + carryover
         try:
-            extract = await _get_or_extract(
-                file_ref,
-                args,
-                forced_lane=forced_lane,
-                transcription_company_id=transcription_company_id,
-            )
+            extract = await reader.read(file_ref, args)
             file_result = await render_file_result(
                 extract, args, tool_name=tool_name, budget=file_budget
             )
@@ -539,3 +648,35 @@ async def read_files_to_envelope(
         files=files,
         warnings=[],
     )
+
+
+async def read_file_extract(
+    reader: FileReader,
+    source: SourceInput | FileRefSource,
+    args: ReadFileArgs,
+    *,
+    file_name: str | None = None,
+    file_id: str | None = None,
+) -> FileExtract:
+    if isinstance(source, FileRef):
+        source_input: SourceInput | FileRef = source
+    elif _is_file_ref_source(source):
+        source_input = FileRef.model_validate(source)
+    else:
+        source_input = source
+    file_ref, resolved_raw, resolved_name = await file_ref_from_source(
+        reader,
+        source_input,
+        file_name=file_name,
+        file_id=file_id,
+    )
+    return await _get_or_extract(
+        file_ref,
+        args,
+        forced_lane=args.forced_lane,
+        resolved_raw=resolved_raw,
+        resolved_name=resolved_name,
+    )
+
+
+setattr(FileReader, "read", read_file_extract)

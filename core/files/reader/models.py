@@ -116,7 +116,7 @@ class Continuation(BaseModel):
 
 
 class ReadFileArgs(BaseModel):
-    """Аргументы чтения файла (не путать с ReadOptions — это параметры пагинации и суммаризации)."""
+    """Единые аргументы канонического FileReader.read (extract + render)."""
 
     page_start: int = Field(default=0, ge=0)
     page_end: int = Field(default=-1, description="-1 = до конца.")
@@ -124,7 +124,10 @@ class ReadFileArgs(BaseModel):
     summarization_prompt: str = ""
     summarization_model: str = ""
     vision_prompt: str = ""
+    vision_model: str | None = None
     compression: CompressionMode = CompressionMode.NEVER
+    transcription_company_id: str | None = None
+    forced_lane: ReadLane | None = None
     names: list[str] = Field(default_factory=list)
     budget: int = Field(default=MAX_READ_BUDGET, ge=0)
 

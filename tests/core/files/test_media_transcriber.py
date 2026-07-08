@@ -27,7 +27,7 @@ from core.files.media.chunked_stt import (
 from core.files.media.transcriber import MediaTranscriber, TranscriptionResult
 from core.files.media.youtube import is_youtube_url
 from core.files.reader import FileReader
-from core.files.reader.models import FileReadKind
+from core.files.reader.models import FileReadKind, ReadFileArgs
 from tests.fixtures.audio_bytes import minimal_wav_silence
 
 
@@ -290,11 +290,14 @@ class TestFileReaderAudioVideo:
         reader = FileReader()
         result = await reader.read(
             wav,
+            ReadFileArgs(
+                page_end=-1,
+                transcription_company_id=_mock_stt_tier_company_id(unique_id),
+            ),
             file_name="voice.wav",
-            transcription_company_id=_mock_stt_tier_company_id(unique_id),
         )
-        assert result.detected_kind == FileReadKind.AUDIO
-        assert result.page_count == 1
+        assert result.kind == FileReadKind.AUDIO
+        assert result.page_layout.pages_total == 1
         assert len(result.pages) == 1
         assert len(result.pages[0].text) > 0
 
@@ -303,10 +306,13 @@ class TestFileReaderAudioVideo:
         reader = FileReader()
         result = await reader.read(
             video_bytes,
+            ReadFileArgs(
+                page_end=-1,
+                transcription_company_id=_mock_stt_tier_company_id(unique_id),
+            ),
             file_name="meeting.mp4",
-            transcription_company_id=_mock_stt_tier_company_id(unique_id),
         )
-        assert result.detected_kind == FileReadKind.VIDEO
-        assert result.page_count == 1
+        assert result.kind == FileReadKind.VIDEO
+        assert result.page_layout.pages_total == 1
         assert len(result.pages) == 1
         assert len(result.pages[0].text) > 0
