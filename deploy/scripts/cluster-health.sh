@@ -219,6 +219,9 @@ if [ "$CHECK_PUBLIC" = "1" ]; then
     check_step \
       "dig ${apex} A → ${PLATFORM_PUBLIC_IP}" \
       "[ \"\$(dig +short ${apex} A | head -1)\" = '${PLATFORM_PUBLIC_IP}' ]"
+    check_step \
+      "dig www.${apex} A → ${PLATFORM_PUBLIC_IP}" \
+      "[ \"\$(dig +short www.${apex} A | head -1)\" = '${PLATFORM_PUBLIC_IP}' ]"
   done
 fi
 

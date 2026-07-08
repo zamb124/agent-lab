@@ -17,7 +17,7 @@ source "$SCRIPT_DIR/_regru_api.sh"
 
 REGRU_API="https://api.reg.ru/api/regru2"
 DOMAINS="${PLATFORM_BRAND_DOMAINS:-humanitec.ru linnex.io}"
-SUBDOMAINS="${PLATFORM_BRAND_DNS_SUBDOMAINS:-@ * api cdn livekit onlyoffice grafana}"
+SUBDOMAINS="${PLATFORM_BRAND_DNS_SUBDOMAINS:-@ www * api cdn livekit onlyoffice grafana}"
 EXPECTED_IP="${PLATFORM_PUBLIC_IP:-84.38.184.105}"
 
 require_command curl || exit 1

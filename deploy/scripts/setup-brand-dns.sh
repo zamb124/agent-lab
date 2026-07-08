@@ -5,7 +5,7 @@
 #   REGRU_USERNAME=... REGRU_PASSWORD=... \
 #   bash deploy/scripts/setup-brand-dns.sh [public_ip]
 #
-# По умолчанию: humanitec.ru и linnex.io (@, *, api, cdn, livekit, onlyoffice, grafana).
+# По умолчанию: humanitec.ru и linnex.io (@, www, *, api, cdn, livekit, onlyoffice, grafana).
 
 set -euo pipefail
 
@@ -27,7 +27,7 @@ DOMAINS="${PLATFORM_BRAND_DOMAINS:-humanitec.ru linnex.io}"
 if [ -n "${PLATFORM_BRAND_DNS_SUBDOMAINS:-}" ]; then
   IFS=',' read -r -a SUBDOMAINS_LIST <<< "${PLATFORM_BRAND_DNS_SUBDOMAINS}"
 else
-  SUBDOMAINS_LIST=( '@' '*' api cdn livekit onlyoffice grafana )
+  SUBDOMAINS_LIST=( '@' 'www' '*' api cdn livekit onlyoffice grafana )
 fi
 
 log_section "Reg.ru API auth (nop)"
