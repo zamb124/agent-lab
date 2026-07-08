@@ -189,7 +189,14 @@ class OAuthService:
             state_payload["amocrm_subdomain"] = str(amocrm_subdomain).strip()
         if return_origin is not None and str(return_origin).strip():
             ro = str(return_origin).strip().rstrip("/")
-            if not is_allowed_integration_return_origin(ro, None):
+            settings = get_settings()
+            pub_ref = settings.server.platform_public_base_url
+            if pub_ref is None or not str(pub_ref).strip():
+                pub_ref = resolve_oauth_brand_origin(
+                    brand_host=brand_host,
+                    return_origin=return_origin,
+                )
+            if not is_allowed_integration_return_origin(ro, pub_ref):
                 raise ValueError(
                     "return_origin не из разрешённого platform brand apex или dev-кластера"
                 )
@@ -416,7 +423,9 @@ class OAuthService:
         post_raw = state_payload.get("post_auth_redirect_origin")
         if isinstance(post_raw, str) and post_raw.strip():
             ro = post_raw.strip().rstrip("/")
-            if is_allowed_integration_return_origin(ro, None):
+            settings = get_settings()
+            pub_ref = settings.server.platform_public_base_url
+            if is_allowed_integration_return_origin(ro, pub_ref):
                 post_auth_redirect_origin = ro
 
         return credential, return_path, flow_context, post_auth_redirect_origin

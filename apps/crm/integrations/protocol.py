@@ -44,6 +44,7 @@ class NamespaceIntegrationConnector(Protocol):
         user_id: str,
         return_origin: str | None = None,
         oauth_ui_locale: OAuthErrorLocale | None = None,
+        brand_host: str | None = None,
     ) -> str:
         """URL OAuth для подключения (открыть в браузере)."""
         ...

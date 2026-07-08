@@ -5,6 +5,7 @@ from datetime import UTC, datetime
 from urllib.parse import quote
 
 from core.config import get_settings
+from core.platform_brand.resolver import resolve_public_base_url
 from core.short_links.kinds import (
     SHORT_LINK_KIND_COMPANY_INVITE,
     SHORT_LINK_KIND_FLOW_PREVIEW_EMBED,
@@ -25,7 +26,9 @@ def _random_code() -> str:
     return raw[:16]
 
 
-def require_platform_public_base_url() -> str:
+def require_platform_public_base_url(*, host: str | None = None) -> str:
+    if host is not None and str(host).strip():
+        return resolve_public_base_url(str(host).strip()).rstrip("/")
     settings = get_settings()
     base = settings.server.platform_public_base_url
     if base is None or str(base).strip() == "":
@@ -41,19 +44,24 @@ class ShortLinkService:
         """``repository`` собирается контейнером (`BaseContainer.short_link_service`)."""
         self._repo: ShortLinkRepository = repository
 
-    def public_short_url(self, code: str) -> str:
-        base = require_platform_public_base_url()
+    def public_short_url(self, code: str, *, host: str | None = None) -> str:
+        base = require_platform_public_base_url(host=host)
         return f"{base}/l/{code}"
 
     async def mint_sync_call_join(
-        self, link_token: str, expires_at: datetime, company_id: str
+        self,
+        link_token: str,
+        expires_at: datetime,
+        company_id: str,
+        *,
+        host: str | None = None,
     ) -> str:
         payload = SyncCallJoinPayload(link_token=link_token, company_id=company_id)
 
         existing_any = await self._repo.find_sync_by_link_token(link_token)
         if existing_any is not None:
             await self._repo.update_expires_at(existing_any.code, expires_at)
-            return self.public_short_url(existing_any.code)
+            return self.public_short_url(existing_any.code, host=host)
 
         for _ in range(12):
             code = _random_code()
@@ -64,11 +72,17 @@ class ShortLinkService:
                 expires_at,
             )
             if ok:
-                return self.public_short_url(code)
+                return self.public_short_url(code, host=host)
 
         raise RuntimeError("Не удалось выделить уникальный код короткой ссылки")
 
-    async def mint_company_invite(self, jwt: str, expires_at: datetime) -> str:
+    async def mint_company_invite(
+        self,
+        jwt: str,
+        expires_at: datetime,
+        *,
+        host: str | None = None,
+    ) -> str:
         payload = CompanyInvitePayload(jwt=jwt)
 
         for _ in range(12):
@@ -80,7 +94,7 @@ class ShortLinkService:
                 expires_at,
             )
             if ok:
-                return self.public_short_url(code)
+                return self.public_short_url(code, host=host)
 
         raise RuntimeError("Не удалось выделить уникальный код короткой ссылки")
 
@@ -100,7 +114,12 @@ class ShortLinkService:
 
         raise RuntimeError("Не удалось выделить уникальный код короткой ссылки")
 
-    async def resolve_absolute_redirect_url(self, code: str) -> str | None:
+    async def resolve_absolute_redirect_url(
+        self,
+        code: str,
+        *,
+        host: str | None = None,
+    ) -> str | None:
         row = await self._repo.get_by_code(code)
         if row is None:
             return None
@@ -110,11 +129,11 @@ class ShortLinkService:
 
         if row.kind == SHORT_LINK_KIND_SYNC_CALL_JOIN:
             payload = SyncCallJoinPayload.model_validate(row.payload)
-            base = require_platform_public_base_url()
+            base = require_platform_public_base_url(host=host)
             company_id = quote(payload.company_id, safe="")
             return f"{base}/sync/join/{payload.link_token}?company_id={company_id}"
 
-        base = require_platform_public_base_url()
+        base = require_platform_public_base_url(host=host)
 
         if row.kind == SHORT_LINK_KIND_COMPANY_INVITE:
             return f"{base}/join?c={quote(code, safe='')}"

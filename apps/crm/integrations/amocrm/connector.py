@@ -85,6 +85,7 @@ class AmoCRMConnector:
         user_id: str,
         return_origin: str | None = None,
         oauth_ui_locale: OAuthErrorLocale | None = None,
+        brand_host: str | None = None,
     ) -> str:
         service = f"amocrm:{namespace_name.strip()}"
         return await self._oauth_service.build_auth_url(
@@ -97,6 +98,7 @@ class AmoCRMConnector:
             amocrm_subdomain=subdomain.strip(),
             return_origin=return_origin,
             oauth_ui_locale=oauth_ui_locale,
+            brand_host=brand_host,
         )
 
     @staticmethod

@@ -179,6 +179,17 @@ def _hosts_same_company_host_cluster(o_host: str, p_host: str) -> bool:
     return False
 
 
+def _hosts_on_supported_platform_brand_apexes(o_host: str, p_host: str) -> bool:
+    """Оба хоста на настроенных platform brand apex (cross-brand OAuth return origin)."""
+    try:
+        o_base = extract_base_domain(o_host)
+        p_base = extract_base_domain(p_host)
+    except ValueError:
+        return False
+    supported = set(_supported_platform_domains())
+    return o_base in supported and p_base in supported
+
+
 def is_allowed_integration_return_origin(origin: str, platform_public_base_url: str | None) -> bool:
     """
     Разрешённый origin вкладки после OAuth: тот же scheme, хост в том же company-host кластере,
@@ -210,7 +221,9 @@ def is_allowed_integration_return_origin(origin: str, platform_public_base_url: 
             and _hosts_same_company_host_cluster(o_host, p_host)
         ):
             return False
-    return _hosts_same_company_host_cluster(o_host, p_host)
+    if _hosts_same_company_host_cluster(o_host, p_host):
+        return True
+    return _hosts_on_supported_platform_brand_apexes(o_host, p_host)
 
 
 def get_protocol(host: str) -> str:

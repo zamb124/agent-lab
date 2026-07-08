@@ -250,7 +250,10 @@ async def start_auth(
 
         # Используем базовый домен (без субдомена) для OAuth redirect_uri
         # Это позволяет зарегистрировать один callback URL в провайдере
-        base_host = get_host_with_port(original_host)
+        try:
+            base_host = get_host_with_port(original_host)
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
 
         # Единый OAuth callback на frontend gateway.
         callback_path = f"/auth/callback/{provider_name}"

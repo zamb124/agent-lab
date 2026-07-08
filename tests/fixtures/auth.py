@@ -48,6 +48,7 @@ async def auth_token_system(frontend_container):
             members={user_id: company_roles},
         )
         await frontend_container.company_repository.set(company)
+        await frontend_container.subdomain_repository.set_mapping("system", company_id)
     else:
         existing_company = company_with_test_ai_provider_defaults(existing_company)
         if user_id not in existing_company.members:
@@ -200,6 +201,7 @@ async def auth_token_company2(frontend_container):
             members={user_id: ["owner", "admin"]},
         )
         await frontend_container.company_repository.set(company)
+        await frontend_container.subdomain_repository.set_mapping("company2", company_id)
     else:
         existing_company = company_with_test_ai_provider_defaults(existing_company)
         if user_id not in existing_company.members:

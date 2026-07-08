@@ -26,6 +26,11 @@ import pytest
 import pytest_asyncio
 from httpx import ASGITransport, AsyncClient
 
+# ASGI-клиенты с Host: humanitec.ru получают 307 на apex домен; base_url должен
+# совпадать с Host, иначе httpx сбрасывает Authorization при cross-host redirect.
+_PLATFORM_ASGI_BASE_URL = "http://humanitec.ru"
+_PLATFORM_ASGI_HOST_HEADERS = {"Host": "humanitec.ru"}
+
 # rag_worker импортируется из tests.conftest через pytest
 # Он объявлен там как session-scoped фикстура
 
@@ -139,7 +144,12 @@ def patch_service_clients_asgi(
         if not path.startswith(f"/{service_prefix}/"):
             request_path = f"/{service_prefix}{path}"
 
-        async with AsyncClient(transport=transport, base_url="http://testserver", timeout=timeout) as client:
+        async with AsyncClient(
+            transport=transport,
+            base_url=_PLATFORM_ASGI_BASE_URL,
+            timeout=timeout,
+            headers=_PLATFORM_ASGI_HOST_HEADERS,
+        ) as client:
             response = await client.request(method, request_path, headers=headers, **req_kwargs)
             # Мы не используем response.raise_for_status() здесь, так как оригинальный request
             # обрабатывает ошибки самостоятельно (ServiceClientError)
@@ -171,7 +181,11 @@ async def flows_client():
     from apps.flows.main import app
 
     transport = ASGITransport(app=app)
-    async with AsyncClient(transport=transport, base_url="http://testserver") as client:
+    async with AsyncClient(
+        transport=transport,
+        base_url=_PLATFORM_ASGI_BASE_URL,
+        headers=_PLATFORM_ASGI_HOST_HEADERS,
+    ) as client:
         yield client
 
 
@@ -200,7 +214,11 @@ async def rag_client(rag_app, rag_worker):
     - rag_worker: для обработки документов
     """
     transport = ASGITransport(app=rag_app)
-    async with AsyncClient(transport=transport, base_url="http://testserver") as client:
+    async with AsyncClient(
+        transport=transport,
+        base_url=_PLATFORM_ASGI_BASE_URL,
+        headers=_PLATFORM_ASGI_HOST_HEADERS,
+    ) as client:
         yield client
 
 
@@ -223,8 +241,8 @@ async def search_client(search_app, setup_database_before_tests, auth_headers_sy
     async with search_app.router.lifespan_context(search_app):
         async with AsyncClient(
             transport=transport,
-            base_url="http://testserver",
-            headers=auth_headers_system,
+            base_url=_PLATFORM_ASGI_BASE_URL,
+            headers={**_PLATFORM_ASGI_HOST_HEADERS, **auth_headers_system},
         ) as client:
             yield client
 
@@ -305,9 +323,9 @@ async def crm_client(
     transport = ASGITransport(app=crm_app)
     async with AsyncClient(
         transport=transport,
-        base_url="http://testserver",
+        base_url=_PLATFORM_ASGI_BASE_URL,
         follow_redirects=True,
-        headers={"Host": "humanitec.ru"},
+        headers=_PLATFORM_ASGI_HOST_HEADERS,
     ) as client:
         await ensure_crm_per_test_namespace_and_types(
             client,
@@ -330,8 +348,8 @@ async def frontend_client():
     transport = ASGITransport(app=app)
     async with AsyncClient(
         transport=transport,
-        base_url="http://testserver",
-        headers={"Host": "humanitec.ru"},
+        base_url=_PLATFORM_ASGI_BASE_URL,
+        headers=_PLATFORM_ASGI_HOST_HEADERS,
     ) as client:
         yield client
 
@@ -356,7 +374,11 @@ async def office_app():
 async def office_client(office_app):
     """HTTP-клиент для BFF office (ASGI). Миграции platform_office — в setup_database_before_tests."""
     transport = ASGITransport(app=office_app)
-    async with AsyncClient(transport=transport, base_url="http://testserver") as client:
+    async with AsyncClient(
+        transport=transport,
+        base_url=_PLATFORM_ASGI_BASE_URL,
+        headers=_PLATFORM_ASGI_HOST_HEADERS,
+    ) as client:
         yield client
 
 
@@ -406,7 +428,11 @@ def voice_app(monkeypatch: pytest.MonkeyPatch):
 async def voice_client(voice_app):
     """HTTP-клиент для voice API (ASGI)."""
     transport = ASGITransport(app=voice_app)
-    async with AsyncClient(transport=transport, base_url="http://testserver") as client:
+    async with AsyncClient(
+        transport=transport,
+        base_url=_PLATFORM_ASGI_BASE_URL,
+        headers=_PLATFORM_ASGI_HOST_HEADERS,
+    ) as client:
         yield client
 
 
@@ -416,8 +442,8 @@ async def worktracker_client(worktracker_app, auth_headers_system):
     transport = ASGITransport(app=worktracker_app)
     async with AsyncClient(
         transport=transport,
-        base_url="http://testserver",
-        headers=auth_headers_system,
+        base_url=_PLATFORM_ASGI_BASE_URL,
+        headers={**_PLATFORM_ASGI_HOST_HEADERS, **auth_headers_system},
     ) as client:
         yield client
 
@@ -446,8 +472,8 @@ async def secrets_client(secrets_app, setup_database_before_tests, auth_headers_
     async with secrets_app.router.lifespan_context(secrets_app):
         async with AsyncClient(
             transport=transport,
-            base_url="http://testserver",
-            headers=auth_headers_system,
+            base_url=_PLATFORM_ASGI_BASE_URL,
+            headers={**_PLATFORM_ASGI_HOST_HEADERS, **auth_headers_system},
         ) as client:
             yield client
 
@@ -460,7 +486,11 @@ async def sync_client(sync_app, sync_worker):
     Зависит от sync_worker: эндпоинты с handle_command.kiq() ждут очередь sync.
     """
     transport = ASGITransport(app=sync_app)
-    async with AsyncClient(transport=transport, base_url="http://testserver") as client:
+    async with AsyncClient(
+        transport=transport,
+        base_url=_PLATFORM_ASGI_BASE_URL,
+        headers=_PLATFORM_ASGI_HOST_HEADERS,
+    ) as client:
         yield client
 
 

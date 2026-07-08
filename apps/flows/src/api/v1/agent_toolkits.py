@@ -100,7 +100,7 @@ async def list_agent_toolkits_catalog(
         container.agent_toolkit_repository,
         company_id=active_company.company_id,
     )
-    frontend_base = get_frontend_public_base_url()
+    frontend_base = get_frontend_public_base_url(request.headers.get("host"))
     items: list[AgentToolkitCatalogItem] = []
     for toolkit in await list_agent_toolkits(container.agent_toolkit_repository):
         items.append(

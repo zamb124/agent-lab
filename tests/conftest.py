@@ -38,6 +38,7 @@ pytest_plugins = [
     "tests.agent.fixtures.local_releases",
     "tests.agent.fixtures.e2e",
     "tests.profiling.plugin",
+    "tests.core.files.conftest",
 ]
 
 os.environ["TESTING"] = "true"

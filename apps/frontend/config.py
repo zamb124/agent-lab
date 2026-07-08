@@ -9,6 +9,7 @@ from pydantic import Field
 
 from core.config import BaseSettings
 from core.config.loader import load_merged_config
+from core.platform_brand.resolver import resolve_public_base_url
 
 
 class FrontendSettings(BaseSettings):
@@ -41,8 +42,10 @@ def get_frontend_settings() -> FrontendSettings:
     return _frontend_settings
 
 
-def get_frontend_public_base_url() -> str:
-    """Публичный origin frontend для SEO и каталогов."""
+def get_frontend_public_base_url(host: str | None = None) -> str:
+    """Публичный origin frontend для SEO, каталогов и MCP URL."""
+    if host is not None and str(host).strip():
+        return resolve_public_base_url(str(host).strip()).rstrip("/")
     base_url = get_frontend_settings().server.platform_public_base_url
     if base_url is None or base_url.strip() == "":
         raise ValueError("server.platform_public_base_url must be configured for public frontend URLs")

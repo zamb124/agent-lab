@@ -1900,7 +1900,18 @@ def _livekit_client(settings: BaseSettings) -> LiveKitClient:
 
 
 def _livekit_public_url(settings: BaseSettings) -> str:
-    return settings.calls.livekit_public_url or settings.calls.livekit_url
+    from core.platform_brand.resolver import resolve_context_host, resolve_livekit_public_url
+
+    host = resolve_context_host()
+    if host is not None:
+        try:
+            return resolve_livekit_public_url(host)
+        except ValueError:
+            pass
+    configured = settings.calls.livekit_public_url or settings.calls.livekit_url
+    if str(configured).strip() == "":
+        raise ValueError("calls.livekit_public_url or calls.livekit_url must be configured")
+    return str(configured).strip()
 
 
 def _ttl_hours_from_schedule(scheduled_end: datetime, now: datetime) -> int:

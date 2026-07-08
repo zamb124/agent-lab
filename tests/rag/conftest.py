@@ -6,9 +6,6 @@ import uuid
 
 import pytest
 
-pytest_plugins = ["tests.core.files.conftest"]
-
-
 @pytest.fixture
 def rag_company_id() -> str:
     """Изоляция строк vector_documents по company_id в рамках теста."""

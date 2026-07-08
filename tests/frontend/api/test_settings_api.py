@@ -161,7 +161,11 @@ class TestSettingsAPI:
         embedding_litserve = next(
             item for item in embedding_providers if item["value"] == "provider_litserve"
         )
-        assert embedding_litserve["label"] == "Humanitec"
+        from core.config import get_settings
+
+        settings = get_settings()
+        brand = settings.platform_brands[settings.primary_platform_domain]
+        assert embedding_litserve["label"] == brand.models_product_name
         assert {
             "value": embedding_model_id,
             "label": embedding_model_id,
@@ -172,15 +176,12 @@ class TestSettingsAPI:
             "metadata_status": "verified",
             "source": "provider_catalog",
         } in embedding_litserve["models"]
-        from core.config import get_settings
-
-        settings = get_settings()
         voice_tts = body["catalog"]["voice_tts"]
         voice_tts_values = {item["value"] for item in voice_tts}
         assert "litserve" in voice_tts_values
         assert "cloud_ru" in voice_tts_values
         humanitec_voice_tts = next(item for item in voice_tts if item["value"] == "litserve")
-        assert humanitec_voice_tts["label"] == "Humanitec Voice"
+        assert humanitec_voice_tts["label"] == brand.voice_product_name
         assert humanitec_voice_tts["byok_allowed"] is False
         assert {
             "value": settings.provider_litserve.infra.tts_default_api_model_id,
@@ -197,7 +198,7 @@ class TestSettingsAPI:
         voice_vad = body["catalog"]["voice_vad"]
         assert [item["value"] for item in voice_vad] == ["litserve"]
         humanitec_voice_vad = voice_vad[0]
-        assert humanitec_voice_vad["label"] == "Humanitec Voice"
+        assert humanitec_voice_vad["label"] == brand.voice_product_name
         assert humanitec_voice_vad["byok_allowed"] is False
         assert {
             "value": settings.provider_litserve.infra.vad_default_api_model_id,

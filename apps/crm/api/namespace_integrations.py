@@ -183,6 +183,7 @@ async def integration_authorize_url(
             user_id=ctx.user_id,
             return_origin=ro,
             oauth_ui_locale=oauth_ui_locale,
+            brand_host=request.headers.get("host"),
         )
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc

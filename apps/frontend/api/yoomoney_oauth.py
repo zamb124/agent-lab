@@ -25,8 +25,8 @@ from core.clients.payment.yoomoney_provider import (
 from core.config import get_settings
 from core.http import request_public_oauth
 from core.logging import get_logger
+from core.platform_brand.resolver import resolve_public_base_url
 from core.types import parse_json_object
-from core.utils.domain import PRIMARY_DOMAIN
 
 logger = get_logger(__name__)
 router = APIRouter(prefix="/api/billing/yoomoney", tags=["yoomoney-oauth"])
@@ -46,7 +46,11 @@ def _build_callback_url(request: Request) -> str:
         host = request.headers.get("host", f"localhost:{settings.server.port}")
         return f"http://{host}/frontend/api/billing/yoomoney/callback"
 
-    return f"https://{PRIMARY_DOMAIN}/frontend/api/billing/yoomoney/callback"
+    host = request.headers.get("host")
+    if host is None or not str(host).strip():
+        raise ValueError("Host header required for YooMoney callback URL")
+    base = resolve_public_base_url(str(host).strip())
+    return f"{base}/frontend/api/billing/yoomoney/callback"
 
 @router.get("/authorize")
 async def yoomoney_authorize(request: Request) -> JSONResponse:
