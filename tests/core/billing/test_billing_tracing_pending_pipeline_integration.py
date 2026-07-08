@@ -107,6 +107,7 @@ async def test_save_pending_span_list_then_rule_settle_creates_usage(
         from_time=from_time,
         to_time=to_time,
         limit=50,
+        company_id=cid,
     )
     ours = [p for p in pending if p.span_id == sid]
     assert len(ours) == 1
@@ -217,6 +218,7 @@ async def test_pending_span_rules_engine_quantity_from_attr(
         from_time=from_time,
         to_time=to_time,
         limit=50,
+        company_id=cid,
     )
     span = next(p for p in pending if p.span_id == sid)
 

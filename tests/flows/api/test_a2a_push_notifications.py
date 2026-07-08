@@ -561,6 +561,7 @@ class TestPushNotificationRetries:
         return "example_react"
 
     @pytest.mark.asyncio
+    @pytest.mark.timeout(30)
     async def test_task_completes_even_if_webhook_unavailable(
         self, client, flow_id, mock_llm_with_queue, sync_tools
     ):

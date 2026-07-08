@@ -288,6 +288,7 @@ async def test_notification_with_action_url(crm_client, ws_cookie_system, system
 
 
 @pytest.mark.asyncio
+@pytest.mark.timeout(90)
 async def test_notification_types_coverage(crm_client, ws_cookie_system, system_user_id, crm_service):
     """Проверка всех типов уведомлений."""
 

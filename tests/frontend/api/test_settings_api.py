@@ -162,9 +162,10 @@ class TestSettingsAPI:
             item for item in embedding_providers if item["value"] == "provider_litserve"
         )
         from core.config import get_settings
+        from core.platform_brand.resolver import resolve_brand
 
         settings = get_settings()
-        brand = settings.platform_brands[settings.primary_platform_domain]
+        brand = resolve_brand("humanitec.ru")
         assert embedding_litserve["label"] == brand.models_product_name
         assert {
             "value": embedding_model_id,

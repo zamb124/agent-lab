@@ -549,6 +549,7 @@ class SpanRepository:
         from_time: datetime,
         to_time: datetime,
         limit: int,
+        company_id: str | None = None,
     ) -> list[BillingSettlementSpan]:
         """
         Spans с platform.billing.resource_name и platform.billing.pending_settlement=true
@@ -575,9 +576,10 @@ class SpanRepository:
                         cast(pend_txt, Boolean).is_(True),
                     ),
                 )
-                .order_by(Spans.start_time.asc(), Spans.span_id.asc())
-                .limit(limit)
             )
+            if company_id is not None:
+                stmt = stmt.where(Spans.company_id == company_id)
+            stmt = stmt.order_by(Spans.start_time.asc(), Spans.span_id.asc()).limit(limit)
             result = await session.execute(stmt)
             rows = result.scalars().all()
             return [self._billing_settlement_span(row) for row in rows]
