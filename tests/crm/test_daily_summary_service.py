@@ -53,8 +53,8 @@ def _build_service() -> EntityService:
             optional_fields={},
         )
     )
-    namespace_repo = AsyncMock()
-    namespace_repo.get = AsyncMock(return_value=SimpleNamespace(name="default"))
+    namespace_service = AsyncMock()
+    namespace_service.get = AsyncMock(return_value=SimpleNamespace(name="default"))
     artifact_service = AsyncMock()
     artifact_service.put_daily_payload = AsyncMock()
     artifact_service.get_daily_payload = AsyncMock(return_value=None)
@@ -67,7 +67,7 @@ def _build_service() -> EntityService:
         entity_type_repo=entity_type_repo,
         relationship_type_repo=AsyncMock(),
         relationship_repo=relationship_repo,
-        namespace_repo=namespace_repo,
+        namespace_service=namespace_service,
         attachment_service=AsyncMock(),
         a2a_client=AsyncMock(),
         daily_summary_cache_service=AsyncMock(),

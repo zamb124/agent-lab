@@ -62,6 +62,7 @@ def _observability_info_logging() -> Generator[None, None, None]:
 
 @pytest.fixture
 def observability_caplog(caplog: pytest.LogCaptureFixture) -> pytest.LogCaptureFixture:
+    _rebind_observability_module_loggers()
     for logger_name in OBSERVABILITY_LOGGERS:
         caplog.set_level("INFO", logger=logger_name)
     return caplog

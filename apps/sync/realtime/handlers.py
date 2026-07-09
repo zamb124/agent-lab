@@ -66,7 +66,6 @@ from apps.sync.sender_display import sender_brief_for_message
 from core.calls.livekit_client import LiveKitClient
 from core.calls.livekit_usage_spans import trace_livekit_egress_composite_usage
 from core.config import get_settings
-from core.db.repositories.namespace_repository import NamespaceRepository
 from core.db.repositories.user_repository import UserRepository
 from core.files.models import (
     AudioAttachmentContent,
@@ -74,7 +73,7 @@ from core.files.models import (
     VideoAttachmentContent,
 )
 from core.logging import get_logger
-from core.models.identity_models import Namespace
+from core.namespace import NamespaceService
 from core.tasks.kicker import kiq_task_name_with_context
 from core.websocket import WsCommandError
 
@@ -659,7 +658,7 @@ async def create_channel(
     actor_user_id: str,
     company_id: str,
     channels: ChannelRepository,
-    namespaces: NamespaceRepository,
+    namespaces: NamespaceService,
     user_repository: UserRepository,
 ) -> tuple[ChannelRead, bool]:
     """Создаёт канал, привязанный к платформенному `namespace`.
@@ -689,17 +688,7 @@ async def create_channel(
             raise ValueError("Для calendar_meeting обязателен name (заголовок встречи).")
 
     namespace = body.namespace if body.namespace else "default"
-    ns_entity = await namespaces.get(namespace)
-    if ns_entity is None and namespace == "default":
-        ns_entity = Namespace(
-            name="default",
-            company_id=company_id,
-            description="Основное пространство",
-            is_default=True,
-        )
-        _ = await namespaces.set(ns_entity)
-    if ns_entity is None:
-        raise ValueError(f"Namespace '{namespace}' не найден в платформенном реестре.")
+    ns_entity = await namespaces.ensure_exists(namespace)
     if ns_entity.company_id != company_id:
         raise PermissionError(f"Namespace '{namespace}' принадлежит другой компании.")
     sync_defaults = ns_entity.sync_settings

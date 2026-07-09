@@ -639,7 +639,7 @@ async def _require_explicit_namespace(container: OfficeContainer) -> str:
     проверенного namespace, чтобы вызывающий мог использовать его явно.
 
     Системный `default` всегда валиден и при необходимости создаётся через
-    `namespace_repository.list()` (тот же механизм, что и в публичном
+    `NamespaceService.ensure_default()` (тот же механизм, что и в публичном
     `GET /documents/api/v1/namespaces`).
     """
     ctx = _require_office_context()
@@ -654,8 +654,8 @@ async def _require_explicit_namespace(container: OfficeContainer) -> str:
             detail="Не выбрано пространство (X-Platform-Namespace) для документов",
         )
     if raw == "default":
-        _ = await container.namespace_repository.list(limit=1)
-    found = await container.namespace_repository.get(raw)
+        _ = await container.namespace_service.ensure_default()
+    found = await container.namespace_service.get(raw)
     if found is None:
         raise HTTPException(
             status_code=400,
@@ -786,7 +786,7 @@ async def list_namespaces(container: ContainerDep) -> OffsetPage[OfficeNamespace
         raise HTTPException(status_code=403, detail="Компания не выбрана")
     if not ctx.user:
         raise HTTPException(status_code=403, detail="Пользователь не авторизован")
-    rows = await container.namespace_repository.list(limit=1000)
+    rows = await container.namespace_service.list(limit=1000)
     items: list[OfficeNamespaceItem] = [
         OfficeNamespaceItem(name=ns.name.strip(), is_default=bool(ns.is_default))
         for ns in rows

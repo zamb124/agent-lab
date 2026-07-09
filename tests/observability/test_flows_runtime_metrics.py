@@ -148,14 +148,14 @@ async def test_flow_react_completed_emitted_after_llm_node(
     setup_mock_responses(
         response_queue=[
             {"type": "tool_call", "tool": "calculator", "args": {"expression": "1+1"}},
-            "done",
+            "4",
         ]
     )
     state = workflow_state(flow_id=flow_id, unique_id=unique_id, content="calc")
     flow = await container.flow_factory.get_flow(flow_id)
     _ = await run_flow(container=container, flow=flow, state=state)
 
-    rec = find_caplog_record(
+    rec = await wait_for_caplog_event(
         observability_caplog,
         message=FLOW_REACT_COMPLETED.message,
         logger_name="apps.flows.src.runtime.runners.llm_runner",

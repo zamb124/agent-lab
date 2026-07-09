@@ -37,19 +37,24 @@ class FakeRAGRepository:
         return self.response
 
 
-class FakeNamespaceRepository:
+class FakeNamespaceService:
     def __init__(self, exists: bool) -> None:
         self.exists = exists
-        self.set_calls: list[Namespace] = []
+        self.created: list[Namespace] = []
 
     async def get(self, namespace_id: str) -> Namespace | None:
         if not self.exists:
             return None
         return Namespace(name=namespace_id, company_id="system")
 
-    async def set(self, namespace: Namespace) -> None:
+    async def get_or_create(
+        self, namespace_id: str, *, description: str | None = None
+    ) -> Namespace:
+        _ = description
+        namespace = Namespace(name=namespace_id, company_id="system")
         self.exists = True
-        self.set_calls.append(namespace)
+        self.created.append(namespace)
+        return namespace
 
 
 @pytest.fixture
@@ -69,7 +74,7 @@ async def test_rag_memory_store_writes_and_recalls_scoped_episode(
     marker = f"MEMORY_STORE_MARKER_{uuid.uuid4().hex[:10]}"
     store = RAGLLMContextMemoryStore(
         repository=flow_container_for_memory.rag_repository,
-        namespace_repository=flow_container_for_memory.namespace_repository,
+        namespace_service=flow_container_for_memory.namespace_service,
         namespace_id=namespace_id,
     )
 
@@ -120,16 +125,16 @@ async def test_rag_memory_store_writes_and_recalls_scoped_episode(
     finally:
         with service_client_asgi_auth_context(auth_headers_system):
             await flow_container_for_memory.rag_repository.delete_namespace(namespace_id)
-            await flow_container_for_memory.namespace_repository.delete(namespace_id)
+            await flow_container_for_memory.namespace_service.delete(namespace_id)
 
 
 @pytest.mark.asyncio
 async def test_rag_memory_store_handles_empty_namespace_and_scope_filters() -> None:
     repo = FakeRAGRepository()
-    missing_ns = FakeNamespaceRepository(exists=False)
+    missing_ns = FakeNamespaceService(exists=False)
     store = RAGLLMContextMemoryStore(
         repository=repo,
-        namespace_repository=missing_ns,
+        namespace_service=missing_ns,
         namespace_id="memory-test",
     )
 
@@ -147,7 +152,7 @@ async def test_rag_memory_store_handles_empty_namespace_and_scope_filters() -> N
             metadata={"custom": "yes"},
         )
     )
-    assert missing_ns.set_calls[0].name == "memory-test"
+    assert missing_ns.created[0].name == "memory-test"
     assert repo.uploads[0]["metadata"]["custom"] == "yes"
 
     await store.recall(LLMContextMemoryRecallRequest(query="q", scope="session"))
@@ -194,7 +199,7 @@ async def test_rag_memory_store_without_namespace_repository_and_result_coercion
     )
     store = RAGLLMContextMemoryStore(
         repository=repo,
-        namespace_repository=None,
+        namespace_service=None,
         namespace_id=None,
     )
 
@@ -223,7 +228,7 @@ async def test_rag_memory_store_without_namespace_repository_and_result_coercion
 async def test_rag_memory_store_strict_error_paths() -> None:
     store = RAGLLMContextMemoryStore(
         repository=FakeRAGRepository({"results": "bad"}),
-        namespace_repository=None,
+        namespace_service=None,
         namespace_id="memory-test",
     )
     with pytest.raises(ValueError, match="response.results"):
@@ -246,7 +251,7 @@ async def test_rag_memory_store_strict_error_paths() -> None:
                 ]
             }
         ),
-        namespace_repository=None,
+        namespace_service=None,
         namespace_id="memory-test",
     )
     with pytest.raises(ValueError, match="metadata.memory_id"):
@@ -273,7 +278,7 @@ async def test_rag_memory_store_strict_error_paths() -> None:
                 ]
             }
         ),
-        namespace_repository=None,
+        namespace_service=None,
         namespace_id="memory-test",
     )
     with pytest.raises(ValueError, match="metadata.created_at"):

@@ -68,7 +68,7 @@ async def test_amocrm_import_tasks_upsert_and_relationships(
             entity_type_repository=crm_container.entity_type_repository,
             relationship_repository=crm_container.relationship_repository,
             entity_service=crm_container.entity_service,
-            namespace_repository=crm_container.namespace_repository,
+            namespace_service=crm_container.namespace_service,
             task_service=crm_container.task_service,
             integration_external_author=crm_container.integration_external_author_service,
         )
@@ -193,7 +193,7 @@ async def test_amocrm_import_tasks_skips_unmapped_parent(
             entity_type_repository=crm_container.entity_type_repository,
             relationship_repository=crm_container.relationship_repository,
             entity_service=crm_container.entity_service,
-            namespace_repository=crm_container.namespace_repository,
+            namespace_service=crm_container.namespace_service,
             task_service=crm_container.task_service,
             integration_external_author=crm_container.integration_external_author_service,
         )

@@ -6,7 +6,6 @@ import hashlib
 from datetime import datetime
 
 from core.context import get_context
-from core.db.repositories.namespace_repository import NamespaceRepository
 from core.llm_context import (
     LLM_CONTEXT_MEMORY_RECALL_CONTENT_METADATA_KEY,
     LLMContextMemoryEpisode,
@@ -14,7 +13,7 @@ from core.llm_context import (
     LLMContextMemoryRecord,
     LLMContextMemoryScope,
 )
-from core.models.identity_models import Namespace
+from core.namespace import NamespaceService
 from core.rag.models import RAGMetadata, RAGMetadataFilter, RAGSearchResult
 from core.rag.rag_resource_bind import RagResourceBindParams
 from core.rag.repository import RAGRepository
@@ -30,19 +29,19 @@ class RAGLLMContextMemoryStore:
         self,
         *,
         repository: RAGRepository,
-        namespace_repository: NamespaceRepository | None = None,
+        namespace_service: NamespaceService | None = None,
         namespace_id: str | None = None,
         provider: str = "pgvector",
     ) -> None:
         self.repository: RAGRepository = repository
-        self.namespace_repository: NamespaceRepository | None = namespace_repository
+        self.namespace_service: NamespaceService | None = namespace_service
         self.namespace_id: str | None = namespace_id
         self.provider: str = provider
 
     async def write_episode(self, episode: LLMContextMemoryEpisode) -> str:
         company_id = _active_company_id()
         namespace_id = self._namespace_id(company_id)
-        await self._ensure_namespace(namespace_id, company_id)
+        await self._ensure_namespace(namespace_id)
         metadata = _episode_metadata(episode, company_id)
         _ = await self.repository.upload_text(
             namespace_id=namespace_id,
@@ -75,23 +74,18 @@ class RAGLLMContextMemoryStore:
     def _namespace_id(self, company_id: str) -> str:
         return self.namespace_id or llm_context_memory_namespace_id(company_id)
 
-    async def _ensure_namespace(self, namespace_id: str, company_id: str) -> None:
-        if self.namespace_repository is None:
+    async def _ensure_namespace(self, namespace_id: str) -> None:
+        if self.namespace_service is None:
             return
-        existing = await self.namespace_repository.get(namespace_id)
-        if existing is None:
-            _ = await self.namespace_repository.set(
-                Namespace(
-                    name=namespace_id,
-                    company_id=company_id,
-                    description="LLM context episodic memory",
-                )
-            )
+        _ = await self.namespace_service.get_or_create(
+            namespace_id,
+            description="LLM context episodic memory",
+        )
 
     async def _namespace_exists(self, namespace_id: str) -> bool:
-        if self.namespace_repository is None:
+        if self.namespace_service is None:
             return True
-        return await self.namespace_repository.get(namespace_id) is not None
+        return await self.namespace_service.get(namespace_id) is not None
 
 
 def llm_context_memory_namespace_id(company_id: str) -> str:

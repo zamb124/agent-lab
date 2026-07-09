@@ -46,10 +46,10 @@ async def list_namespaces(
     try:
         company_id = require_active_company().company_id
 
-        namespace_repo = container.namespace_repository
+        namespace_service = container.namespace_service
         namespaces, total = await asyncio.gather(
-            namespace_repo.list_by_company(company_id, limit=limit, offset=offset),
-            namespace_repo.count_all(),
+            namespace_service.list_by_company(company_id, limit=limit, offset=offset),
+            namespace_service.count(),
         )
 
         logger.info(f"Получено {len(namespaces)} namespaces для компании {company_id}")
@@ -92,13 +92,10 @@ async def create_namespace(
             description=request.description
         )
 
-        namespace_repo = container.namespace_repository
-        namespace = Namespace(
-            name=request.name,
-            company_id=company_id,
-            description=request.description
+        namespace = await container.namespace_service.get_or_create(
+            request.name,
+            description=request.description,
         )
-        _ = await namespace_repo.set(namespace)
 
         logger.info(f"Создан namespace: {request.name} для компании {company_id}")
 
@@ -133,18 +130,18 @@ async def delete_namespace(
 
         settings = get_rag_settings()
         rag_provider = get_rag_provider(provider, settings=settings) if provider else get_rag_provider(settings=settings)
-        namespace_repo = container.namespace_repository
+        namespace_service = container.namespace_service
 
         # Удаляем документы из провайдера (может не быть, если namespace пустой)
         provider_deleted = await rag_provider.delete_namespace(namespace_id)
 
-        # Проверяем, существует ли namespace в репозитории
-        ns_from_repo = await namespace_repo.get(namespace_id)
+        # Проверяем, существует ли namespace в реестре
+        ns_from_repo = await namespace_service.get(namespace_id)
 
         if not provider_deleted and not ns_from_repo:
             raise HTTPException(status_code=404, detail="Namespace not found")
 
-        _ = await namespace_repo.delete(namespace_id)
+        _ = await namespace_service.delete(namespace_id)
 
         logger.info(f"Удален namespace: {namespace_id} для компании {company_id}")
 

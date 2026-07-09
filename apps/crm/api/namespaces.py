@@ -149,10 +149,10 @@ async def list_namespaces(
     offset: Annotated[int, Query(ge=0)] = 0,
 ) -> OffsetPage[NamespaceResponse]:
     """Список всех namespaces текущей компании."""
-    namespace_repo = container.namespace_repository
+    namespace_service = container.namespace_service
     namespaces, total = await asyncio.gather(
-        namespace_repo.list(limit=limit, offset=offset),
-        namespace_repo.count_all(),
+        namespace_service.list(limit=limit, offset=offset),
+        namespace_service.count(),
     )
     responses = await asyncio.gather(
         *[_namespace_response(container, ns) for ns in namespaces],
@@ -436,7 +436,7 @@ async def get_namespace_editability(
     if not normalized_namespace_name:
         raise HTTPException(status_code=422, detail="Namespace name is required")
 
-    existing_namespace = await container.namespace_repository.get(normalized_namespace_name)
+    existing_namespace = await container.namespace_service.get(normalized_namespace_name)
     if existing_namespace is None:
         raise HTTPException(
             status_code=404, detail=f"Namespace {normalized_namespace_name} not found"
@@ -457,7 +457,7 @@ async def update_namespace(
     if not normalized_namespace_name:
         raise HTTPException(status_code=422, detail="Namespace name is required")
 
-    existing_namespace = await container.namespace_repository.get(normalized_namespace_name)
+    existing_namespace = await container.namespace_service.get(normalized_namespace_name)
     if existing_namespace is None:
         raise HTTPException(
             status_code=404, detail=f"Namespace {normalized_namespace_name} not found"
@@ -498,7 +498,7 @@ async def update_namespace(
     )
 
     if request.crm_settings is not None:
-        ns = await container.namespace_repository.get(normalized_namespace_name)
+        ns = await container.namespace_service.get(normalized_namespace_name)
         if ns is None:
             raise HTTPException(
                 status_code=404, detail=f"Namespace {normalized_namespace_name} not found"
@@ -528,7 +528,7 @@ async def update_namespace(
                 new_settings.suggests.schedule_task_id = created.schedule_task_id
 
         ns.crm_settings = new_settings
-        _ = await container.namespace_repository.set(ns)
+        _ = await container.namespace_service.save(ns)
         updated_namespace = ns
 
     return await _namespace_response(container, updated_namespace)

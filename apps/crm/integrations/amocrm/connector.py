@@ -29,9 +29,9 @@ if TYPE_CHECKING:
     from apps.crm.services.entity_service import EntityService
     from apps.crm.services.namespace_template_service import NamespaceTemplateService
     from apps.crm.services.task_service import TaskService
-    from core.db.repositories.namespace_repository import NamespaceRepository
     from core.identity.integration_external_author import IntegrationExternalAuthorService
     from core.integrations.oauth_service import OAuthService
+    from core.namespace import NamespaceService
 
 
 class AmoCRMConnector:
@@ -55,14 +55,14 @@ class AmoCRMConnector:
         entity_type_repository: EntityTypeRepository,
         relationship_repository: RelationshipRepository,
         entity_service: EntityService,
-        namespace_repository: NamespaceRepository,
+        namespace_service: NamespaceService,
         task_service: TaskService,
         integration_external_author: IntegrationExternalAuthorService,
         namespace_template_service: NamespaceTemplateService,
     ) -> None:
         self._oauth_service: OAuthService = oauth_service
         self._entity_type_repository: EntityTypeRepository = entity_type_repository
-        self._namespace_repository: NamespaceRepository = namespace_repository
+        self._namespace_service: NamespaceService = namespace_service
         self._namespace_template_service: NamespaceTemplateService = namespace_template_service
         self._service: AmoCRMIntegrationService = AmoCRMIntegrationService(
             oauth_service=oauth_service,
@@ -70,7 +70,7 @@ class AmoCRMConnector:
             entity_type_repository=entity_type_repository,
             relationship_repository=relationship_repository,
             entity_service=entity_service,
-            namespace_repository=namespace_repository,
+            namespace_service=namespace_service,
             task_service=task_service,
             integration_external_author=integration_external_author,
         )
@@ -220,7 +220,7 @@ class AmoCRMConnector:
         if not isinstance(sub, str) or not sub.strip():
             return
         sub = sub.strip()
-        existing = await self._namespace_repository.get(namespace_name)
+        existing = await self._namespace_service.get(namespace_name)
         if existing is None or existing.company_id != credential.company_id:
             return
         await self.ensure_namespace_ready(
@@ -242,7 +242,7 @@ class AmoCRMConnector:
         amo["subdomain"] = sub
         integ["amocrm"] = amo
         existing.crm_settings = base.model_copy(update={"integrations": integ})
-        _ = await self._namespace_repository.set(existing)
+        _ = await self._namespace_service.save(existing)
 
     async def manifest_item(
         self,

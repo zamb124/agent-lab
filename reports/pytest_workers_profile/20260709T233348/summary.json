@@ -1,0 +1,90 @@
+{
+  "run_id": "20260709T233348",
+  "pytest_workers": "10",
+  "pytest_workers_numeric": 10,
+  "phase1_passed": false,
+  "phase1_exit_code": 1,
+  "failed_count": 25,
+  "parallelism_suspect_count": 0,
+  "phase1_wall_time_seconds": null,
+  "max_worker_restart": 2,
+  "stack_scale_factor": 1.0,
+  "stack_capacity": {
+    "secrets": 1,
+    "flows": 2,
+    "rag": 1,
+    "crm": 1,
+    "frontend": 1,
+    "sync": 1,
+    "office": 1,
+    "search": 2,
+    "provider_litserve": 1,
+    "voice": 1,
+    "capability_gateway": 6,
+    "code_runner_python": 12,
+    "code_runner_node": 1,
+    "code_runner_go": 1,
+    "code_runner_csharp": 1,
+    "worktracker": 1,
+    "flows_worker": 1,
+    "rag_worker": 1,
+    "search_worker": 2,
+    "sync_worker": 2,
+    "crm_worker": 1
+  },
+  "xdist_counts": {
+    "total_phase1_estimate": 1683,
+    "code_sandbox_estimate": 106,
+    "real_taskiq_estimate": 12,
+    "parallelizable_estimate": 1565
+  },
+  "failed_nodeids": [
+    "tests/agent/test_agent_release_smoke.py::test_r_d1_download_local_release_redirect",
+    "tests/agent/test_humanitec_agent_build.py::test_artifact_ready_distinguishes_placeholder_from_release",
+    "tests/core/redis_inventory/test_service.py::test_inventory_db_domain",
+    "tests/frontend/api/test_humanitec_agent_api.py::test_agent_discover",
+    "tests/frontend/api/test_humanitec_agent_api.py::test_download_redirect_resolves_asset",
+    "tests/frontend/api/test_humanitec_agent_api.py::test_download_redirect_serves_local_artifact",
+    "tests/frontend/api/test_humanitec_agent_api.py::test_releases_status_ready",
+    "tests/observability/test_billing_settlement_lag.py::test_billing_settlement_lag_emitted_for_pending_span",
+    "tests/observability/test_flows_runtime_metrics.py::test_flow_first_content_chunk_emitted_after_enqueue",
+    "tests/observability/test_flows_runtime_metrics.py::test_flow_react_completed_emitted_after_llm_node",
+    "tests/observability/test_flows_runtime_metrics.py::test_flow_terminal_emitted_after_enqueue",
+    "tests/observability/test_flows_runtime_metrics.py::test_mcp_tool_call_operation_finished_error",
+    "tests/observability/test_flows_runtime_metrics.py::test_mcp_tool_call_operation_finished_ok",
+    "tests/observability/test_flows_runtime_metrics.py::test_tool_call_finished_emitted_for_builtin_tool",
+    "tests/observability/test_handoff_hitl_metrics.py::test_handoff_wall_time_emitted_after_initiated",
+    "tests/observability/test_handoff_hitl_metrics.py::test_hitl_operator_responded_emitted_on_resume",
+    "tests/observability/test_llm_observability_runtime.py::test_llm_context_compiled_emitted",
+    "tests/observability/test_llm_observability_runtime.py::test_llm_stream_response_includes_ttft",
+    "tests/observability/test_operation_finished_runtime.py::test_operation_finished_emitted_for_traced_operation_with_mirror_always",
+    "tests/observability/test_rag_search_metrics.py::test_rag_rerank_after_retrieve_operation_finished",
+    "tests/observability/test_rag_search_metrics.py::test_rag_search_namespace_operation_finished",
+    "tests/observability/test_taskiq_flow_metrics.py::test_flow_terminal_via_process_flow_task_in_worker_context",
+    "tests/observability/test_taskiq_flow_metrics.py::test_task_queue_wait_ms_emitted_by_logging_middleware",
+    "tests/observability/test_voice_tts_metrics.py::test_voice_tts_response_includes_ttfa",
+    "tests/observability/test_ws_command_metrics.py::test_ws_command_finished_emitted_for_successful_command"
+  ],
+  "issues": [
+    {
+      "severity": "error",
+      "code": "phase1_failed",
+      "message": "pytest phase 1 завершился с exit_code=1",
+      "nodeid": null,
+      "pattern": null
+    }
+  ],
+  "recommendations": [
+    "Дождитесь phase 2 retry или запустите: make test с меньшим WORKERS"
+  ],
+  "issue_count_error": 1,
+  "issue_count_warn": 0,
+  "delta_vs_previous": {
+    "has_previous": true,
+    "previous_run_id": "20260709T183548",
+    "failed_count_delta": 25,
+    "parallelism_suspect_count_delta": 0,
+    "phase1_wall_time_seconds_delta": null,
+    "issue_count_error_delta": 1
+  }
+}

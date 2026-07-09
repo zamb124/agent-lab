@@ -12,8 +12,7 @@ from typing import Protocol, override
 
 from core.clients.service_client import ServiceClientError
 from core.context import get_context
-from core.db.repositories.namespace_repository import NamespaceRepository
-from core.models.identity_models import Namespace
+from core.namespace import NamespaceService
 from core.rag.constants import RAG_IN_PROCESS_PROVIDER_ID
 from core.rag.index_profile_merge import merge_index_profile_dict_overlays
 from core.rag.models import RAGMetadata, RAGMetadataFilter, RAGSearchOptions
@@ -24,7 +23,7 @@ from core.types import JsonObject, require_json_object
 
 class _RAGResourceContainer(Protocol):
     rag_repository: RAGRepository
-    namespace_repository: NamespaceRepository
+    namespace_service: NamespaceService
 
 
 class RAGResource:
@@ -131,12 +130,7 @@ class RAGResource:
         context = get_context()
         if context is None or context.active_company is None:
             raise ValueError("RAGResource.add_document: контекст с active_company обязателен")
-        namespace_repo = self._container.namespace_repository
-        existing_namespace = await namespace_repo.get(self._bind.namespace)
-        if existing_namespace is None:
-            _ = await namespace_repo.set(
-                Namespace(name=self._bind.namespace, company_id=context.active_company.company_id)
-            )
+        _ = await self._container.namespace_service.get_or_create(self._bind.namespace)
         doc_metadata: RAGMetadata = dict(metadata) if metadata is not None else {}
         doc_metadata["document_id"] = document_id
 

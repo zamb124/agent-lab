@@ -121,6 +121,13 @@ def _replace_in_file_text(
 def patch_base_chat_watermark(goose_desktop: Path, distro: HumanitecDistroConfig) -> None:
     base_chat_path = goose_desktop / "src" / "components" / "BaseChat.tsx"
     text = base_chat_path.read_text(encoding="utf-8")
+    if text.strip() == "":
+        raise ValueError(
+            (
+                f"{base_chat_path}: file is empty; restore goose submodule file "
+                "(git checkout -- ui/desktop/src/components/BaseChat.tsx in vendor/goose)"
+            )
+        )
     goose_import = "import { Goose } from './icons';"
     watermark_import = "import humanitecWatermarkIcon from '../images/icon.png';"
     if goose_import in text and watermark_import not in text:

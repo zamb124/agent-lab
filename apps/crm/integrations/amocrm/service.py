@@ -26,11 +26,11 @@ from apps.crm.services.crm_work_item_service import CrmTaskWorkSeed
 from apps.crm.services.entity_service import EntityService
 from apps.crm.services.task_service import ActiveTaskExistsError, TaskService
 from core.context import get_context
-from core.db.repositories.namespace_repository import NamespaceRepository
 from core.http.client import get_httpx_client
 from core.identity.integration_external_author import IntegrationExternalAuthorService
 from core.integrations.models import IntegrationProvider
 from core.integrations.oauth_service import OAuthService, OAuthTokenRefreshError
+from core.namespace import NamespaceService
 from core.types import JsonObject
 
 AMO_RPS_DELAY_SEC = 0.15
@@ -64,7 +64,7 @@ class AmoCRMIntegrationService:
         entity_type_repository: EntityTypeRepository,
         relationship_repository: RelationshipRepository,
         entity_service: EntityService,
-        namespace_repository: NamespaceRepository,
+        namespace_service: NamespaceService,
         task_service: TaskService,
         integration_external_author: IntegrationExternalAuthorService,
     ) -> None:
@@ -73,7 +73,7 @@ class AmoCRMIntegrationService:
         self._entity_type_repo: EntityTypeRepository = entity_type_repository
         self._relationship_repo: RelationshipRepository = relationship_repository
         self._entity_service: EntityService = entity_service
-        self._namespace_repo: NamespaceRepository = namespace_repository
+        self._namespace_service: NamespaceService = namespace_service
         self._task_service: TaskService = task_service
         self._integration_author: IntegrationExternalAuthorService = integration_external_author
 
@@ -86,7 +86,7 @@ class AmoCRMIntegrationService:
         namespace: str,
         company_id: str,
     ) -> bool:
-        existing = await self._namespace_repo.get(namespace)
+        existing = await self._namespace_service.get(namespace)
         if existing is None or existing.company_id != company_id:
             return False
         crm = existing.crm_settings

@@ -34,6 +34,36 @@ async def create_pairing_code(
     return pairing_code
 
 
+async def wait_for_humanitec_agent_api(
+    browser: Browser,
+    *,
+    timeout_seconds: float = 120.0,
+) -> Page:
+    deadline = asyncio.get_event_loop().time() + timeout_seconds
+    while asyncio.get_event_loop().time() < deadline:
+        for context in browser.contexts:
+            for page in context.pages:
+                has_api = await page.evaluate("typeof window.humanitecAgent !== 'undefined'")
+                if has_api:
+                    return page
+        await asyncio.sleep(0.5)
+    raise TimeoutError("humanitecAgent preload API not available in desktop window")
+
+
+async def pair_via_humanitec_agent_api(
+    browser: Browser,
+    pairing_code: str,
+    *,
+    timeout_seconds: float = 120.0,
+) -> Page:
+    page = await wait_for_humanitec_agent_api(browser, timeout_seconds=timeout_seconds)
+    await page.evaluate(
+        "(code) => window.humanitecAgent.pair(code)",
+        pairing_code,
+    )
+    return page
+
+
 async def pair_desktop_via_deep_link(
     desktop_process: HumanitecDesktopProcess,
     agent_frontend_http_client: AsyncClient,
@@ -50,12 +80,13 @@ async def pair_desktop_via_deep_link(
             raise RuntimeError("HumanitecAgent pairing UI not found on provided page")
         await submit_pairing_code_in_ui(page, pairing_code)
     else:
+        desktop_process.open_pairing_ui_deep_link()
         from playwright.async_api import async_playwright
 
         playwright = await async_playwright().start()
         try:
             browser = await connect_desktop_browser(playwright, desktop_process)
-            pairing_page = await find_main_app_page(browser)
+            pairing_page = await find_pairing_page(browser)
             await submit_pairing_code_in_ui(pairing_page, pairing_code)
         finally:
             await playwright.stop()
@@ -176,9 +207,11 @@ async def find_main_app_page(browser: Browser) -> Page:
                     return page
                 if await page.locator("[data-humanitec-chat-composer]").count() > 0:
                     return page
+                body_text = await page.locator("body").inner_text()
+                if "Configuring Platform Brain" in body_text:
+                    continue
                 if await page.locator("textarea").count() > 0:
                     return page
-                body_text = await page.locator("body").inner_text()
                 if "HumanitecAgent" in body_text or "Pair device" in body_text:
                     return page
         await asyncio.sleep(0.5)

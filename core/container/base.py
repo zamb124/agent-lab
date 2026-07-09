@@ -67,6 +67,7 @@ from core.integrations.oauth_service import OAuthService
 from core.integrations.repository import IntegrationCredentialRepository
 from core.logging import get_logger
 from core.models.billing_models import TariffPlan
+from core.namespace import NamespaceService
 from core.push.repository import PushSubscriptionRepository
 from core.rag.constants import RAG_IN_PROCESS_PROVIDER_ID
 from core.rag.factory import get_rag_provider
@@ -325,11 +326,16 @@ class BaseContainer:
         return NamespaceRepository(storage=self.shared_storage)
 
     @lazy
+    def namespace_service(self) -> NamespaceService:
+        """Единый вход жизненного цикла записи namespace для всех сервисов."""
+        return NamespaceService(repository=self.namespace_repository)
+
+    @lazy
     def llm_context_memory_store(self) -> RAGLLMContextMemoryStore:
         """Хранилище эпизодической памяти в scope компании для generic LLM context layer."""
         return RAGLLMContextMemoryStore(
             repository=self.rag_repository,
-            namespace_repository=self.namespace_repository,
+            namespace_service=self.namespace_service,
         )
 
     # === Сервисы ===

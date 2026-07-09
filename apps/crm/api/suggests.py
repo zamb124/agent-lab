@@ -31,7 +31,7 @@ async def list_suggests(
     if not ctx or not ctx.user:
         raise HTTPException(status_code=401, detail="Unauthorized")
 
-    ns_obj = await container.namespace_repository.get(namespace)
+    ns_obj = await container.namespace_service.get(namespace)
     if not ns_obj:
         raise HTTPException(status_code=404, detail="Namespace not found")
 
@@ -59,7 +59,7 @@ async def resolve_suggest(
     if not ctx or not ctx.user:
         raise HTTPException(status_code=401, detail="Unauthorized")
 
-    ns_obj = await container.namespace_repository.get(namespace)
+    ns_obj = await container.namespace_service.get(namespace)
     if not ns_obj:
         raise HTTPException(status_code=404, detail="Namespace not found")
 
@@ -86,7 +86,7 @@ async def dismiss_suggest(
     if not ctx or not ctx.user:
         raise HTTPException(status_code=401, detail="Unauthorized")
 
-    ns_obj = await container.namespace_repository.get(namespace)
+    ns_obj = await container.namespace_service.get(namespace)
     if not ns_obj:
         raise HTTPException(status_code=404, detail="Namespace not found")
 

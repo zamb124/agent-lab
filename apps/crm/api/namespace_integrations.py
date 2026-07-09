@@ -109,7 +109,7 @@ async def list_namespace_integrations(
     if not namespace_name.strip():
         raise HTTPException(status_code=422, detail="namespace_name required")
     ns_name = namespace_name.strip()
-    existing = await container.namespace_repository.get(ns_name)
+    existing = await container.namespace_service.get(ns_name)
     if existing is None or existing.company_id != ctx.company_id:
         raise HTTPException(status_code=404, detail="namespace not found")
     crm = existing.crm_settings
@@ -208,7 +208,7 @@ async def integration_auto_sync_patch(
     except KeyError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
     ns_name = namespace_name.strip()
-    existing_ns = await container.namespace_repository.get(ns_name)
+    existing_ns = await container.namespace_service.get(ns_name)
     if existing_ns is None or existing_ns.company_id != ctx.company_id:
         raise HTTPException(status_code=404, detail="namespace not found")
     try:
@@ -223,7 +223,7 @@ async def integration_auto_sync_patch(
         )
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
-    refreshed = await container.namespace_repository.get(ns_name)
+    refreshed = await container.namespace_service.get(ns_name)
     crm = refreshed.crm_settings if refreshed is not None else None
     row = await connector.manifest_item(
         namespace_name=ns_name,
@@ -252,7 +252,7 @@ async def integration_auto_note_ai_analyze_patch(
     except KeyError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
     ns_name = namespace_name.strip()
-    existing_ns = await container.namespace_repository.get(ns_name)
+    existing_ns = await container.namespace_service.get(ns_name)
     if existing_ns is None or existing_ns.company_id != ctx.company_id:
         raise HTTPException(status_code=404, detail="namespace not found")
     try:
@@ -264,7 +264,7 @@ async def integration_auto_note_ai_analyze_patch(
         )
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
-    refreshed = await container.namespace_repository.get(ns_name)
+    refreshed = await container.namespace_service.get(ns_name)
     crm = refreshed.crm_settings if refreshed is not None else None
     row = await connector.manifest_item(
         namespace_name=ns_name,

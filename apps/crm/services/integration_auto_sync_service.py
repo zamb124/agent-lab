@@ -15,10 +15,10 @@ from apps.crm.scheduled_integration_constants import (
     SCHEDULED_NAMESPACE_INTEGRATION_UNIFIED_SYNC_TASK_NAME,
 )
 from core.clients.scheduler_client import SchedulerClient
-from core.db.repositories.namespace_repository import NamespaceRepository
 from core.integrations.models import IntegrationProvider
 from core.integrations.oauth_service import OAuthService
 from core.models.identity_models import Namespace, NamespaceCRMSettings
+from core.namespace import NamespaceService
 from core.scheduler.models import PlatformScheduleCreateRequest, PlatformScheduleType
 
 
@@ -45,12 +45,12 @@ class IntegrationAutoSyncService:
     def __init__(
         self,
         *,
-        namespace_repository: NamespaceRepository,
+        namespace_service: NamespaceService,
         integration_registry: IntegrationRegistry,
         oauth_service: OAuthService,
         scheduler_client: SchedulerClient,
     ) -> None:
-        self._namespace_repository: NamespaceRepository = namespace_repository
+        self._namespace_service: NamespaceService = namespace_service
         self._integration_registry: IntegrationRegistry = integration_registry
         self._oauth_service: OAuthService = oauth_service
         self._scheduler_client: SchedulerClient = scheduler_client
@@ -99,7 +99,7 @@ class IntegrationAutoSyncService:
 
         _ = self._integration_registry.get(pid)
 
-        existing = await self._namespace_repository.get(ns_raw)
+        existing = await self._namespace_service.get(ns_raw)
         if existing is None or existing.company_id != company_id:
             raise ValueError("namespace not found")
 
@@ -119,7 +119,7 @@ class IntegrationAutoSyncService:
             block["auto_sync_schedule_task_id"] = None
             integ[pid] = block
             existing.crm_settings = crm.model_copy(update={"integrations": integ})
-            _ = await self._namespace_repository.set(existing)
+            _ = await self._namespace_service.save(existing)
             return existing
 
         cron_raw = auto_sync_cron if isinstance(auto_sync_cron, str) else ""
@@ -195,7 +195,7 @@ class IntegrationAutoSyncService:
         block["auto_sync_schedule_task_id"] = active_schedule_task_id
         integ[pid] = block
         existing.crm_settings = crm.model_copy(update={"integrations": integ})
-        _ = await self._namespace_repository.set(existing)
+        _ = await self._namespace_service.save(existing)
         return existing
 
     async def apply_auto_note_ai_analyze(
@@ -215,7 +215,7 @@ class IntegrationAutoSyncService:
 
         _ = self._integration_registry.get(pid)
 
-        existing = await self._namespace_repository.get(ns_raw)
+        existing = await self._namespace_service.get(ns_raw)
         if existing is None or existing.company_id != company_id:
             raise ValueError("namespace not found")
 
@@ -228,5 +228,5 @@ class IntegrationAutoSyncService:
         block["auto_note_ai_analyze"] = bool(auto_note_ai_analyze)
         integ[pid] = block
         existing.crm_settings = crm.model_copy(update={"integrations": integ})
-        _ = await self._namespace_repository.set(existing)
+        _ = await self._namespace_service.save(existing)
         return existing

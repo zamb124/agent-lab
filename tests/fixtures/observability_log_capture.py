@@ -21,7 +21,7 @@ def caplog_message_to_dict(raw: str) -> JsonObject:
     if stripped.startswith("{"):
         try:
             return parse_json_object(stripped, "caplog.message")
-        except json.JSONDecodeError:
+        except (json.JSONDecodeError, ValueError):
             pass
     try:
         return require_json_object(

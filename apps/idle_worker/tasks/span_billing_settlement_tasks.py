@@ -46,10 +46,12 @@ async def span_billing_settlement_tick(
     billing = container.billing_service
     settlement = SpanBillingSettlement(container.shared_storage)
 
+    scoped_company_id = company_id
     spans = await span_repo.list_spans_pending_billing_settlement(
         from_time=from_time,
         to_time=now,
         limit=cfg.batch_limit,
+        company_id=scoped_company_id,
     )
 
     rules_by_company: dict[str, SettlementRulesDocument] = {}
@@ -58,8 +60,8 @@ async def span_billing_settlement_tick(
     errors = 0
     prev_company_id: str | None = None
     for span in spans:
-        company_id = span.company_id
-        if not company_id:
+        span_company_id = span.company_id
+        if not span_company_id:
             errors += 1
             logger.error(
                 "span_billing_settlement_tick: span без company_id span_id=%s",
@@ -67,19 +69,19 @@ async def span_billing_settlement_tick(
             )
             continue
 
-        if company_id != prev_company_id:
+        if span_company_id != prev_company_id:
             set_context(Context(
                 user=User(user_id="billing-worker", name="Billing Worker"),
-                active_company=Company(company_id=company_id, name=company_id),
-                session_id=f"billing-settlement:{company_id}",
+                active_company=Company(company_id=span_company_id, name=span_company_id),
+                session_id=f"billing-settlement:{span_company_id}",
                 channel="taskiq",
             ))
-            prev_company_id = company_id
+            prev_company_id = span_company_id
 
-        rules_doc = rules_by_company.get(company_id)
+        rules_doc = rules_by_company.get(span_company_id)
         if rules_doc is None:
-            rules_doc = await billing.load_settlement_rules_document_for_company(company_id)
-            rules_by_company[company_id] = rules_doc
+            rules_doc = await billing.load_settlement_rules_document_for_company(span_company_id)
+            rules_by_company[span_company_id] = rules_doc
         if span.end_time is not None:
             settlement_lag_ms = int((now - span.end_time).total_seconds() * 1000)
             logger.info(
@@ -88,7 +90,7 @@ async def span_billing_settlement_tick(
                     LOG_BILLING_SETTLEMENT_LAG_MS: settlement_lag_ms,
                     LOG_OPERATION_NAME: span.operation_name,
                     "span_id": span.span_id,
-                    "company_id": company_id,
+                    "company_id": span_company_id,
                 },
             )
         try:
@@ -113,6 +115,6 @@ async def span_billing_settlement_tick(
         settled,
         errors,
         schedule_task_id,
-        company_id,
+        scoped_company_id,
     )
     return {"spans_fetched": len(spans), "settled": settled, "errors": errors}

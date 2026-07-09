@@ -76,7 +76,6 @@ from apps.crm_worker.task_names import (
 )
 from core.clients.a2a_client import A2AClient, A2ATaskResponse
 from core.context import get_context, resolve_namespace_or_raise
-from core.db.repositories.namespace_repository import NamespaceRepository
 from core.llm_context import (
     LLMContextBudgetError,
     LLMContextCompiler,
@@ -86,7 +85,8 @@ from core.llm_context import (
 from core.llm_context.resolver import resolve_llm_context_policy
 from core.logging import get_logger
 from core.models.i18n_models import Language
-from core.models.identity_models import Namespace, NamespaceCRMSettings
+from core.models.identity_models import NamespaceCRMSettings
+from core.namespace import NamespaceService
 from core.tasks.kicker import kiq_task_name_with_context
 from core.types import JsonObject, JsonValue, require_json_object, require_json_value
 
@@ -353,7 +353,7 @@ class EntityService:
         entity_type_repo: EntityTypeRepository,
         relationship_type_repo: RelationshipTypeRepository,
         relationship_repo: RelationshipRepository,
-        namespace_repo: NamespaceRepository,
+        namespace_service: NamespaceService,
         attachment_service: AttachmentService,
         a2a_client: A2AClient,
         daily_summary_cache_service: DailySummaryCacheService,
@@ -372,7 +372,7 @@ class EntityService:
         self._entity_type_repo: EntityTypeRepository = entity_type_repo
         self._relationship_type_repo: RelationshipTypeRepository = relationship_type_repo
         self._relationship_repo: RelationshipRepository = relationship_repo
-        self._namespace_repo: NamespaceRepository = namespace_repo
+        self._namespace_service: NamespaceService = namespace_service
         self._attachment_service: AttachmentService = attachment_service
         self._a2a_client: A2AClient = a2a_client
         self._daily_summary_cache_service: DailySummaryCacheService = daily_summary_cache_service
@@ -440,21 +440,7 @@ class EntityService:
         return resolve_namespace_or_raise()
 
     async def _ensure_namespace_exists(self, namespace: str) -> None:
-        existing_namespace = await self._namespace_repo.get(namespace)
-        if existing_namespace is None and namespace == "default":
-            context = get_context()
-            if context is None or context.active_company is None:
-                raise ValueError("Нет активной компании в контексте")
-            default_namespace = Namespace(
-                name="default",
-                company_id=context.active_company.company_id,
-                description="Основное пространство",
-                is_default=True,
-            )
-            _ = await self._namespace_repo.set(default_namespace)
-            existing_namespace = await self._namespace_repo.get(namespace)
-        if existing_namespace is None:
-            raise ValueError(f"Namespace not found: {namespace}")
+        _ = await self._namespace_service.ensure_exists(namespace)
 
     async def ensure_namespace_exists(self, namespace: str) -> None:
         await self._ensure_namespace_exists(namespace)
@@ -823,7 +809,7 @@ class EntityService:
         return used_field_types
 
     async def _load_namespace_crm_settings(self, namespace: str) -> NamespaceCRMSettings:
-        ns = await self._namespace_repo.get(namespace)
+        ns = await self._namespace_service.get(namespace)
         if ns is None or ns.crm_settings is None:
             return NamespaceCRMSettings()
         return ns.crm_settings

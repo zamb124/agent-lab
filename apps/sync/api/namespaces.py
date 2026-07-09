@@ -56,10 +56,10 @@ async def list_namespaces(
     offset: Annotated[int, Query(ge=0)] = 0,
 ) -> OffsetPage[SyncNamespaceResponse]:
     """Список namespace текущей компании (источник — shared `NamespaceRepository`)."""
-    namespace_repo = container.namespace_repository
+    namespace_service = container.namespace_service
     namespaces, total = await asyncio.gather(
-        namespace_repo.list(limit=limit, offset=offset),
-        namespace_repo.count_all(),
+        namespace_service.list(limit=limit, offset=offset),
+        namespace_service.count(),
     )
     return OffsetPage[SyncNamespaceResponse](
         items=[
@@ -90,12 +90,12 @@ async def update_namespace_sync_settings(
     в shared `NamespaceRepository` для текущей компании.
     """
     _ = require_current_user()
-    namespace_repo = container.namespace_repository
-    existing = await namespace_repo.get(namespace_name)
+    namespace_service = container.namespace_service
+    existing = await namespace_service.get(namespace_name)
     if existing is None:
         raise HTTPException(status_code=404, detail=f"Namespace '{namespace_name}' не найден")
     existing.sync_settings = body.sync_settings
-    _ = await namespace_repo.set(existing)
+    _ = await namespace_service.save(existing)
     return SyncNamespaceResponse(
         name=existing.name,
         company_id=existing.company_id,

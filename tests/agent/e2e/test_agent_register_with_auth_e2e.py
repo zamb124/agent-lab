@@ -5,7 +5,6 @@ from __future__ import annotations
 import pytest
 from httpx import AsyncClient
 
-from apps.frontend.config import get_frontend_public_base_url
 from core.utils.tokens import get_token_service
 from tests.agent._helpers import AGENT_API_PREFIX
 
@@ -14,20 +13,22 @@ pytestmark = pytest.mark.asyncio
 
 async def test_e2e_discover_includes_llm_api_url(
     agent_frontend_http_client: AsyncClient,
+    agent_base_url: str,
 ) -> None:
     response = await agent_frontend_http_client.get(f"{AGENT_API_PREFIX}/discover")
     assert response.status_code == 200
     body = response.json()
-    frontend_base = get_frontend_public_base_url().rstrip("/")
-    assert body["llm_api_url"] == f"{frontend_base}/flows/api/v1/agent/llm/v1"
+    expected_base = agent_base_url.rstrip("/")
+    assert body["llm_api_url"] == f"{expected_base}/flows/api/v1/agent/llm/v1"
 
 
 async def test_e2e_register_with_auth_returns_llm_bundle(
     agent_frontend_http_client: AsyncClient,
+    agent_base_url: str,
     auth_token: str,
     unique_id: str,
 ) -> None:
-    frontend_base = get_frontend_public_base_url().rstrip("/")
+    expected_base = agent_base_url.rstrip("/")
     response = await agent_frontend_http_client.post(
         f"{AGENT_API_PREFIX}/register-with-auth",
         json={
@@ -44,7 +45,7 @@ async def test_e2e_register_with_auth_returns_llm_bundle(
     assert isinstance(llm, dict)
     assert llm["provider_id"] == "humanitec"
     assert llm["model_id"] == "auto"
-    assert llm["api_base_url"] == f"{frontend_base}/flows/api/v1/agent/llm/v1"
+    assert llm["api_base_url"] == f"{expected_base}/flows/api/v1/agent/llm/v1"
 
     token_data = get_token_service().validate_token(body["token"])
     assert token_data is not None

@@ -163,7 +163,7 @@ class CRMContainer(BaseContainer):
             company_repo=self.company_repository,
             relationship_repo=self.relationship_repository,
             company_mapping_repo=self.company_mapping_repository,
-            namespace_repo=self.namespace_repository,
+            namespace_service=self.namespace_service,
         )
 
     @lazy
@@ -171,7 +171,7 @@ class CRMContainer(BaseContainer):
         return NamespaceTemplateService(
             template_repo=self.namespace_template_repository,
             entity_type_repo=self.entity_type_repository,
-            namespace_repo=self.namespace_repository,
+            namespace_service=self.namespace_service,
             entity_repo=self.entity_repository,
             company_init_service=self.company_init_service,
         )
@@ -220,7 +220,7 @@ class CRMContainer(BaseContainer):
             entity_type_repo=self.entity_type_repository,
             relationship_type_repo=self.relationship_type_repository,
             relationship_repo=self.relationship_repository,
-            namespace_repo=self.namespace_repository,
+            namespace_service=self.namespace_service,
             attachment_service=self.attachment_service,
             a2a_client=A2AClient(timeout=300.0),
             daily_summary_cache_service=self.daily_summary_cache_service,
@@ -319,7 +319,7 @@ class CRMContainer(BaseContainer):
                     entity_type_repository=self.entity_type_repository,
                     relationship_repository=self.relationship_repository,
                     entity_service=self.entity_service,
-                    namespace_repository=self.namespace_repository,
+                    namespace_service=self.namespace_service,
                     task_service=self.task_service,
                     integration_external_author=self.integration_external_author_service,
                     namespace_template_service=self.namespace_template_service,
@@ -330,7 +330,7 @@ class CRMContainer(BaseContainer):
     @lazy
     def integration_auto_sync_service(self) -> IntegrationAutoSyncService:
         return IntegrationAutoSyncService(
-            namespace_repository=self.namespace_repository,
+            namespace_service=self.namespace_service,
             integration_registry=self.integration_registry,
             oauth_service=self.oauth_service,
             scheduler_client=self.scheduler_client,

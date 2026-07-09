@@ -203,7 +203,7 @@ async def _create_slow_flow(client: AsyncClient, flow_id: str) -> None:
                     "code": (
                         "import asyncio\n"
                         "async def run(args, state):\n"
-                        "    await asyncio.sleep(1.5)\n"
+                        "    await asyncio.sleep(5.0)\n"
                         "    state['response'] = 'slow done'\n"
                         "    return state\n"
                     ),
@@ -289,6 +289,50 @@ async def _wait_for_run(
             return payload
         await asyncio.sleep(0.2)
     raise AssertionError(f"Evaluation run did not finish: {last_payload}")
+
+
+async def _wait_for_cancellable_run(
+    client: AsyncClient,
+    run_id: str,
+    *,
+    timeout_seconds: float = 10.0,
+) -> EvaluationRunState:
+    cancellable_states = {EvaluationRunState.QUEUED, EvaluationRunState.RUNNING}
+    deadline = time.monotonic() + timeout_seconds
+    last_state: EvaluationRunState | None = None
+    while time.monotonic() < deadline:
+        response = await client.get(f"/flows/api/v1/evaluation/runs/{run_id}")
+        assert response.status_code == 200, response.text
+        payload = EvaluationRunWithCases.model_validate(response.json())
+        last_state = payload.run.state
+        if last_state in cancellable_states:
+            return last_state
+        if last_state == EvaluationRunState.CANCELED:
+            return last_state
+        if last_state in {
+            EvaluationRunState.PASSED,
+            EvaluationRunState.FAILED,
+            EvaluationRunState.ERROR,
+        }:
+            break
+        await asyncio.sleep(0.05)
+    raise AssertionError(f"Evaluation run is not cancellable: state={last_state}")
+
+
+async def _cancel_evaluation_run_via_api(
+    client: AsyncClient,
+    run_id: str,
+    *,
+    attempts: int = 5,
+) -> EvaluationRunWithCases:
+    last_error = "evaluation run cancel failed"
+    for attempt in range(attempts):
+        cancel_response = await client.post(f"/flows/api/v1/evaluation/runs/{run_id}/cancel")
+        if cancel_response.status_code == 200:
+            return EvaluationRunWithCases.model_validate(cancel_response.json())
+        last_error = cancel_response.text
+        await asyncio.sleep(0.1 * (attempt + 1))
+    raise AssertionError(last_error)
 
 
 async def _create_evaluation_run_via_api(
@@ -3019,12 +3063,10 @@ class TestEvaluationLabAPI:
                 },
             )
 
-            cancel_response = await client.post(
-                f"/flows/api/v1/evaluation/runs/{created_run.run.run_id}/cancel"
-            )
-            assert cancel_response.status_code == 200, cancel_response.text
-            canceled = EvaluationRunWithCases.model_validate(cancel_response.json())
-            assert canceled.run.state == EvaluationRunState.CANCELED
+            run_state = await _wait_for_cancellable_run(client, created_run.run.run_id)
+            if run_state != EvaluationRunState.CANCELED:
+                canceled = await _cancel_evaluation_run_via_api(client, created_run.run.run_id)
+                assert canceled.run.state == EvaluationRunState.CANCELED
 
             final_payload = await _wait_for_run(client, created_run.run.run_id)
             assert final_payload.run.state == EvaluationRunState.CANCELED

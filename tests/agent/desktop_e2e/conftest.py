@@ -16,10 +16,13 @@ from tests.agent.desktop_e2e.desktop_app import (
     install_humanitec_desktop_release,
 )
 from tests.agent.desktop_e2e.electron_launcher import (
+    DEFAULT_DEBUG_PORT,
     HumanitecDesktopLaunchConfig,
     HumanitecDesktopProcess,
 )
 from tests.fixtures.e2e_scope import bind_static_e2e_scope
+
+_next_desktop_debug_port = DEFAULT_DEBUG_PORT
 
 
 @pytest.fixture(autouse=True)
@@ -82,10 +85,14 @@ async def humanitec_desktop_process_factory(
     """Desktop на Host той же test-компании, что auth_token и agent_frontend_http_client."""
 
     def _factory() -> HumanitecDesktopProcess:
+        global _next_desktop_debug_port
+        debug_port = _next_desktop_debug_port
+        _next_desktop_debug_port += 1
         return HumanitecDesktopProcess(
             HumanitecDesktopLaunchConfig(
                 frontend_base_url=agent_base_url,
                 install=humanitec_desktop_install,
+                remote_debugging_port=debug_port,
             )
         )
 
@@ -101,10 +108,14 @@ def humanitec_desktop_system_process_factory(
     system_base_url = AGENT_TEST_PUBLIC_ORIGIN.rstrip("/")
 
     def _factory() -> HumanitecDesktopProcess:
+        global _next_desktop_debug_port
+        debug_port = _next_desktop_debug_port
+        _next_desktop_debug_port += 1
         return HumanitecDesktopProcess(
             HumanitecDesktopLaunchConfig(
                 frontend_base_url=system_base_url,
                 install=humanitec_desktop_install,
+                remote_debugging_port=debug_port,
             )
         )
 

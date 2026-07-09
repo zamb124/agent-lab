@@ -45,33 +45,11 @@ class NamespaceRepository(BaseRepository[Namespace]):
         """ID = name"""
         return entity.name
 
-    @override
-    async def list(self, *, limit: int, offset: int = 0) -> list[Namespace]:
-        """
-        Возвращает страницу namespace компании.
-        Перед первой страницей гарантирует системный default namespace.
-        """
-        if offset == 0 and await self.get("default") is None:
-            _ = await self._create_default()
-        return await super().list(limit=limit, offset=offset)
-
-    async def list_by_company(self, company_id: str, *, limit: int = 200, offset: int = 0) -> list[Namespace]:
-        """Алиас — компания берется из контекста."""
+    async def list_by_company(
+        self, company_id: str, *, limit: int = 200, offset: int = 0
+    ) -> list[Namespace]:
+        """Список namespace компании; company_id обязан совпадать с активной."""
         active_company_id = require_active_company().company_id
         if company_id != active_company_id:
             raise ValueError("company_id не совпадает с активной компанией")
         return await self.list(limit=limit, offset=offset)
-
-    async def _create_default(self) -> Namespace:
-        """Создает default namespace для текущей компании"""
-        company_id = require_active_company().company_id
-
-        namespace = Namespace(
-            name="default",
-            company_id=company_id,
-            description="Основное пространство",
-            is_default=True,
-        )
-
-        _ = await self.set(namespace)
-        return namespace

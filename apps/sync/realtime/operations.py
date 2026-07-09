@@ -439,7 +439,7 @@ async def op_channels_create(
         actor_user_id=user.user_id,
         company_id=company_id,
         channels=container.channel_repository,
-        namespaces=container.namespace_repository,
+        namespaces=container.namespace_service,
         user_repository=container.user_repository,
     )
     if created_new:

@@ -7,7 +7,7 @@ User Story: AI автоматически анализирует текст, в�
 import asyncio
 import json
 import time
-from collections.abc import Awaitable, Callable
+from collections.abc import Awaitable, Callable, Sequence
 from typing import cast
 
 import pytest
@@ -46,7 +46,7 @@ async def _analyze_note(
     note_id: str,
     *,
     mock_llm_redis: MockLlmRedisFactory | None = None,
-    mock_responses: list[object] | None = None,
+    mock_responses: Sequence[object] | None = None,
     prepare_mock: Callable[[], Awaitable[None]] | None = None,
     **extra: object,
 ) -> tuple[dict[str, object], _DraftResponse]:
@@ -57,7 +57,11 @@ async def _analyze_note(
     if mock_llm_redis is not None or mock_responses is not None:
         if mock_llm_redis is None or mock_responses is None:
             raise ValueError("mock_llm_redis and mock_responses must be passed together")
-        await mock_llm_redis(mock_responses)
+        # note-analyze через real TaskIQ/A2A может сделать несколько LLM-вызовов подряд.
+        expanded_responses: list[object] = []
+        for response in mock_responses:
+            expanded_responses.extend([response, response, response])
+        await mock_llm_redis(expanded_responses)
     elif prepare_mock is not None:
         await prepare_mock()
     body: dict[str, object] = {

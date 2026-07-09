@@ -18,8 +18,8 @@ from apps.crm.system_templates import (
     REQUIRED_NAMESPACE_TEMPLATE_TYPE_IDS,
 )
 from core.context import get_context
-from core.db.repositories.namespace_repository import NamespaceRepository
 from core.models.identity_models import Namespace, NamespaceCRMSettings
+from core.namespace import NamespaceService
 
 
 class NamespaceEditability(TypedDict):
@@ -43,13 +43,13 @@ class NamespaceTemplateService:
         self,
         template_repo: NamespaceTemplateRepository,
         entity_type_repo: EntityTypeRepository,
-        namespace_repo: NamespaceRepository,
+        namespace_service: NamespaceService,
         entity_repo: EntityRepository,
         company_init_service: CompanyInitService,
     ) -> None:
         self._template_repo: NamespaceTemplateRepository = template_repo
         self._entity_type_repo: EntityTypeRepository = entity_type_repo
-        self._namespace_repo: NamespaceRepository = namespace_repo
+        self._namespace_service: NamespaceService = namespace_service
         self._entity_repo: EntityRepository = entity_repo
         self._company_init_service: CompanyInitService = company_init_service
 
@@ -255,7 +255,7 @@ class NamespaceTemplateService:
     ) -> Namespace:
         company_id = self._get_company_id()
 
-        existing_namespace = await self._namespace_repo.get(namespace_name)
+        existing_namespace = await self._namespace_service.get(namespace_name)
         if existing_namespace:
             raise ValueError(f"Namespace {namespace_name} already exists")
 
@@ -269,16 +269,16 @@ class NamespaceTemplateService:
         if not template_types:
             raise ValueError(f"Template {template_id} has no types")
 
-        namespace = Namespace(
-            name=namespace_name,
-            company_id=company_id,
-            description=namespace_description,
-            is_default=False,
-        )
+        template_crm_settings: NamespaceCRMSettings | None = None
         raw_tpl_crm = template.crm_settings
         if raw_tpl_crm is not None and len(raw_tpl_crm) > 0:
-            namespace.crm_settings = NamespaceCRMSettings.model_validate(raw_tpl_crm)
-        _ = await self._namespace_repo.set(namespace)
+            template_crm_settings = NamespaceCRMSettings.model_validate(raw_tpl_crm)
+        namespace = await self._namespace_service.create(
+            name=namespace_name,
+            description=namespace_description,
+            is_default=False,
+            crm_settings=template_crm_settings,
+        )
 
         for item in template_types:
             _ = await self._materialize_entity_type_row(
@@ -351,7 +351,7 @@ class NamespaceTemplateService:
         description: str | None,
         allowed_type_ids: list[str] | None,
     ) -> Namespace:
-        namespace = await self._namespace_repo.get(namespace_name)
+        namespace = await self._namespace_service.get(namespace_name)
         if namespace is None:
             raise RuntimeError(f"Namespace {namespace_name} not found")
 
@@ -391,6 +391,6 @@ class NamespaceTemplateService:
 
         if description_is_set:
             namespace.description = description
-            _ = await self._namespace_repo.set(namespace)
+            _ = await self._namespace_service.save(namespace)
 
         return namespace
