@@ -16,6 +16,7 @@ from __future__ import annotations
 import argparse
 import asyncio
 import logging
+import os
 import sys
 from typing import Sequence
 
@@ -31,6 +32,17 @@ from core.db.migrations import (
 from core.db.postgres_service_databases import ensure_postgres_service_databases_async
 
 _SERVICE_CHOICES = tuple(sorted(get_migration_service_names()))
+
+
+def _exit_zero_after_k8s_init_migrate() -> None:
+    """
+    K8s init-container db-migrate должен завершиться сразу после upgrade.
+
+    На Python 3.14t (PYTHON_GIL=0) интерпретатор иногда не выходит после asyncio.run()
+    при параллельном старте многих pod'ов: миграции в логах уже завершены, но PID 1
+    остаётся живым → Init:1/2 бесконечно, helm --wait падает по timeout.
+    """
+    os._exit(0)
 
 
 def _build_parser() -> argparse.ArgumentParser:
@@ -105,7 +117,7 @@ def main(argv: Sequence[str] | None = None) -> None:
             await run_migrations_async(service=args.service)
 
         asyncio.run(_upgrade())
-        return
+        _exit_zero_after_k8s_init_migrate()
 
     if args.command == "revision":
         auto = bool(args.autogenerate)
