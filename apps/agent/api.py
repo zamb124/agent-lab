@@ -104,10 +104,16 @@ async def serve_local_release_artifact(platform: str) -> FileResponse:
 
 @router.get("/discover", response_model=AgentDiscoverResponse, tags=["agent", "public"])
 async def agent_discover(
+    request: Request,
     container: ContainerDep,
     origin: Annotated[str | None, Query(description="Opt-in override публичного origin (lvh.me dev)")] = None,
 ) -> AgentDiscoverResponse:
-    return await fetch_agent_discover(container, origin_override=origin)
+    return await fetch_agent_discover(
+        container,
+        origin_override=origin,
+        request_host=request.headers.get("host"),
+        url_scheme=request.url.scheme,
+    )
 
 
 def _resolve_agent_page_brand(request: Request) -> tuple[str, str]:
@@ -256,6 +262,7 @@ async def issue_device_token(
 @router.post("/register-with-auth", response_model=DeviceRegisterResponse, tags=["agent", "public"])
 async def register_agent_device_with_auth(
     body: DeviceRegisterWithAuthRequest,
+    request: Request,
     container: ContainerDep,
     origin: Annotated[str | None, Query(description="Opt-in override публичного origin (lvh.me dev)")] = None,
 ) -> DeviceRegisterResponse:
@@ -269,6 +276,8 @@ async def register_agent_device_with_auth(
         user_id=context.user.user_id,
         company_id=company.company_id,
         origin_override=origin,
+        request_host=request.headers.get("host"),
+        url_scheme=request.url.scheme,
     )
 
 
@@ -286,4 +295,6 @@ async def register_agent_device(
         body,
         client_key=client_key,
         origin_override=origin,
+        request_host=request.headers.get("host"),
+        url_scheme=request.url.scheme,
     )

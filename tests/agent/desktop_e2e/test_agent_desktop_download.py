@@ -7,12 +7,11 @@ from pathlib import Path
 import pytest
 from httpx import AsyncClient
 
-from apps.agent.desktop.artifact_verify import is_placeholder_artifact
 from apps.agent.config import reset_agent_settings
-from apps.frontend.config import get_frontend_public_base_url
+from apps.agent.desktop.artifact_verify import is_placeholder_artifact
+from scripts.agent_build import detect_host_platform
 from tests.agent._helpers import AGENT_API_PREFIX
 from tests.agent.fixtures.local_releases import require_local_release_asset_name
-from scripts.agent_build import detect_host_platform
 
 
 @pytest.mark.asyncio
@@ -64,6 +63,7 @@ def test_d3_release_artifact_installed(
 @pytest.mark.asyncio
 async def test_d_discover_url_bundle(
     agent_frontend_http_client: AsyncClient,
+    agent_base_url: str,
     agent_local_release_artifact: Path,
 ) -> None:
     reset_agent_settings()
@@ -71,8 +71,7 @@ async def test_d_discover_url_bundle(
     response = await agent_frontend_http_client.get(f"{AGENT_API_PREFIX}/discover")
     assert response.status_code == 200
     body = response.json()
-    base = get_frontend_public_base_url()
-    assert body["frontend_base_url"] == base
-    assert body["platform_mcp_url"] == f"{base}/flows/api/v1/agent/platform-mcp"
+    assert body["frontend_base_url"] == agent_base_url
+    assert body["platform_mcp_url"] == f"{agent_base_url}/flows/api/v1/agent/platform-mcp"
     assert body["tunnel_ws_url"].startswith("ws://")
     assert body["releases"]["ready"] is True

@@ -66,7 +66,16 @@ export class PlatformRagRetrievalPanel extends PlatformElement {
     }
 
     _emitValue(next) {
-        this.emit('change', { value: next });
+        this.dispatchEvent(new CustomEvent('change', {
+            detail: { value: next },
+            bubbles: true,
+            composed: true,
+        }));
+    }
+
+    _onFieldChange(e, field, normalize) {
+        e.stopPropagation();
+        this._patch(field, normalize(e));
     }
 
     _patch(field, rawValue) {
@@ -111,10 +120,7 @@ export class PlatformRagRetrievalPanel extends PlatformElement {
                         .label=${this.t('rag_retrieval_panel.platform_defaults')}
                         .value=${panel.usePlatformDefaults === true}
                         ?disabled=${this.disabled}
-                        @change=${(e) => {
-                            const checked = e.detail && e.detail.value === true;
-                            this._patch('usePlatformDefaults', checked);
-                        }}
+                        @change=${(e) => this._onFieldChange(e, 'usePlatformDefaults', (ev) => ev.detail && ev.detail.value === true)}
                     ></platform-field>
                 ` : ''}
                 <div class=${gridClass}>
@@ -125,10 +131,9 @@ export class PlatformRagRetrievalPanel extends PlatformElement {
                         .value=${typeof panel.retrievalMode === 'string' ? panel.retrievalMode : 'platform'}
                         .config=${this._retrievalModeEnumConfig()}
                         ?disabled=${fieldsDisabled}
-                        @change=${(e) => {
-                            const v = e.detail && typeof e.detail.value === 'string' ? e.detail.value : 'platform';
-                            this._patch('retrievalMode', v);
-                        }}
+                        @change=${(e) => this._onFieldChange(e, 'retrievalMode', (ev) => (
+                            ev.detail && typeof ev.detail.value === 'string' ? ev.detail.value : 'platform'
+                        ))}
                     ></platform-field>
                     <platform-field
                         type="string"
@@ -136,10 +141,9 @@ export class PlatformRagRetrievalPanel extends PlatformElement {
                         .label=${this.t('rag_retrieval_panel.rrf_k')}
                         .value=${typeof panel.rrfK === 'string' ? panel.rrfK : ''}
                         ?disabled=${fieldsDisabled}
-                        @change=${(e) => {
-                            const v = e.detail && typeof e.detail.value === 'string' ? e.detail.value : '';
-                            this._patch('rrfK', v);
-                        }}
+                        @change=${(e) => this._onFieldChange(e, 'rrfK', (ev) => (
+                            ev.detail && typeof ev.detail.value === 'string' ? ev.detail.value : ''
+                        ))}
                     ></platform-field>
                     <platform-field
                         type="string"
@@ -147,10 +151,9 @@ export class PlatformRagRetrievalPanel extends PlatformElement {
                         .label=${this.t('rag_retrieval_panel.per_channel_top_k')}
                         .value=${typeof panel.perChannelTopK === 'string' ? panel.perChannelTopK : ''}
                         ?disabled=${fieldsDisabled}
-                        @change=${(e) => {
-                            const v = e.detail && typeof e.detail.value === 'string' ? e.detail.value : '';
-                            this._patch('perChannelTopK', v);
-                        }}
+                        @change=${(e) => this._onFieldChange(e, 'perChannelTopK', (ev) => (
+                            ev.detail && typeof ev.detail.value === 'string' ? ev.detail.value : ''
+                        ))}
                     ></platform-field>
                     <platform-field
                         type="enum"
@@ -159,10 +162,9 @@ export class PlatformRagRetrievalPanel extends PlatformElement {
                         .value=${typeof panel.rerank === 'string' ? panel.rerank : ''}
                         .config=${this._rerankEnumConfig()}
                         ?disabled=${fieldsDisabled}
-                        @change=${(e) => {
-                            const v = e.detail && typeof e.detail.value === 'string' ? e.detail.value : '';
-                            this._patch('rerank', v);
-                        }}
+                        @change=${(e) => this._onFieldChange(e, 'rerank', (ev) => (
+                            ev.detail && typeof ev.detail.value === 'string' ? ev.detail.value : ''
+                        ))}
                     ></platform-field>
                     <platform-field
                         type="string"
@@ -170,10 +172,9 @@ export class PlatformRagRetrievalPanel extends PlatformElement {
                         .label=${this.t('rag_retrieval_panel.rerank_max_candidates')}
                         .value=${typeof panel.rerankMaxCandidates === 'string' ? panel.rerankMaxCandidates : ''}
                         ?disabled=${fieldsDisabled}
-                        @change=${(e) => {
-                            const v = e.detail && typeof e.detail.value === 'string' ? e.detail.value : '';
-                            this._patch('rerankMaxCandidates', v);
-                        }}
+                        @change=${(e) => this._onFieldChange(e, 'rerankMaxCandidates', (ev) => (
+                            ev.detail && typeof ev.detail.value === 'string' ? ev.detail.value : ''
+                        ))}
                     ></platform-field>
                     <platform-field
                         type="string"
@@ -181,10 +182,9 @@ export class PlatformRagRetrievalPanel extends PlatformElement {
                         .label=${this.t('rag_retrieval_panel.freshness_weight')}
                         .value=${typeof panel.freshnessWeight === 'string' ? panel.freshnessWeight : ''}
                         ?disabled=${fieldsDisabled}
-                        @change=${(e) => {
-                            const v = e.detail && typeof e.detail.value === 'string' ? e.detail.value : '';
-                            this._patch('freshnessWeight', v);
-                        }}
+                        @change=${(e) => this._onFieldChange(e, 'freshnessWeight', (ev) => (
+                            ev.detail && typeof ev.detail.value === 'string' ? ev.detail.value : ''
+                        ))}
                     ></platform-field>
                     <platform-field
                         type="string"
@@ -192,10 +192,9 @@ export class PlatformRagRetrievalPanel extends PlatformElement {
                         .label=${this.t('rag_retrieval_panel.freshness_half_life_days')}
                         .value=${typeof panel.freshnessHalfLifeDays === 'string' ? panel.freshnessHalfLifeDays : ''}
                         ?disabled=${fieldsDisabled}
-                        @change=${(e) => {
-                            const v = e.detail && typeof e.detail.value === 'string' ? e.detail.value : '';
-                            this._patch('freshnessHalfLifeDays', v);
-                        }}
+                        @change=${(e) => this._onFieldChange(e, 'freshnessHalfLifeDays', (ev) => (
+                            ev.detail && typeof ev.detail.value === 'string' ? ev.detail.value : ''
+                        ))}
                     ></platform-field>
                 </div>
             </div>

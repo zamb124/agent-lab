@@ -49,6 +49,17 @@ function requireItems(payload, eventType) {
     return payload.items;
 }
 
+function requireCalendarEventId(event, eventType) {
+    if (!event || typeof event !== 'object') {
+        throw new Error(`${eventType}: payload.event must be an object`);
+    }
+    const eventId = event.event_id;
+    if (typeof eventId !== 'string' || eventId.length === 0) {
+        throw new Error(`${eventType}: payload.event.event_id must be a non-empty string`);
+    }
+    return eventId;
+}
+
 export function calendarReducer(state = initialCalendarState, event) {
     switch (event.type) {
         case CALENDAR_EVENTS.EVENTS_LOAD_REQUESTED:
@@ -60,17 +71,33 @@ export function calendarReducer(state = initialCalendarState, event) {
         case CALENDAR_EVENTS.EVENT_CREATED: {
             const ev = event.payload && event.payload.event;
             if (!ev) return state;
+            const eventId = requireCalendarEventId(ev, event.type);
+            const exists = state.events.some((item) => item.event_id === eventId);
+            if (exists) {
+                return {
+                    ...state,
+                    events: state.events.map((item) => (item.event_id === eventId ? ev : item)),
+                };
+            }
             return { ...state, events: [...state.events, ev] };
         }
         case CALENDAR_EVENTS.EVENT_UPDATED: {
             const ev = event.payload && event.payload.event;
             if (!ev) return state;
-            return { ...state, events: state.events.map((e) => (e.id === ev.id ? ev : e)) };
+            const eventId = requireCalendarEventId(ev, event.type);
+            const exists = state.events.some((item) => item.event_id === eventId);
+            if (!exists) {
+                return { ...state, events: [...state.events, ev] };
+            }
+            return {
+                ...state,
+                events: state.events.map((item) => (item.event_id === eventId ? ev : item)),
+            };
         }
         case CALENDAR_EVENTS.EVENT_DELETED: {
-            const id = event.payload && event.payload.event_id;
-            if (!id) return state;
-            return { ...state, events: state.events.filter((e) => e.id !== id) };
+            const eventId = event.payload && event.payload.event_id;
+            if (!eventId) return state;
+            return { ...state, events: state.events.filter((item) => item.event_id !== eventId) };
         }
         case CALENDAR_EVENTS.INTEGRATIONS_LOADED:
             return { ...state, integrations: requireItems(event.payload, event.type) };

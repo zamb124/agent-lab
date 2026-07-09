@@ -396,9 +396,11 @@ export class FlowsLibraryPickerModal extends PlatformModal {
             }
             .mcp-picker-server {
                 gap: 0;
-                padding: 0;
                 min-width: 0;
                 height: var(--flows-tool-picker-mcp-panel-height);
+            }
+            .mcp-picker-server .content-panel-body {
+                padding: var(--space-4, 1rem);
             }
             .mcp-picker-server-head {
                 display: flex;
@@ -483,13 +485,13 @@ export class FlowsLibraryPickerModal extends PlatformModal {
             }
             .mcp-picker-tools-grid {
                 display: grid;
-                grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
-                gap: var(--space-2);
+                grid-template-columns: repeat(auto-fill, minmax(172px, 1fr));
+                gap: var(--space-3);
                 align-items: stretch;
             }
             .mcp-picker-tools-grid platform-picker-card {
                 display: block;
-                min-height: 132px;
+                min-height: 140px;
                 height: 100%;
             }
             .mcp-picker-tool-icon .mcp-server-icon-img {
@@ -515,9 +517,10 @@ export class FlowsLibraryPickerModal extends PlatformModal {
                 line-height: 1.3;
             }
             .mcp-picker-tool-desc {
-                font-size: 10px;
+                font-size: var(--text-xs);
                 color: var(--text-secondary);
-                line-height: 1.3;
+                line-height: 1.35;
+                word-break: break-word;
                 display: -webkit-box;
                 -webkit-box-orient: vertical;
                 -webkit-line-clamp: 3;

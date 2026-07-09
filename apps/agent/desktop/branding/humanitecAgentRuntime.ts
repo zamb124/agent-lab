@@ -194,11 +194,13 @@ async function registerDevicePayload(
   sessionToken?: string,
 ): Promise<HumanitecAgentCredentials> {
   const frontendBase = resolveFrontendBaseUrl();
+  const originParam = `origin=${encodeURIComponent(frontendBase)}`;
   const headers: Record<string, string> = { 'Content-Type': 'application/json' };
   if (sessionToken) {
     headers.Authorization = `Bearer ${sessionToken}`;
   }
-  const response = await fetch(`${frontendBase}/frontend/api/agent/${pathSuffix}`, {
+  const response = await fetch(
+    `${frontendBase}/frontend/api/agent/${pathSuffix}?${originParam}`, {
     method: 'POST',
     headers,
     body: JSON.stringify(payload),

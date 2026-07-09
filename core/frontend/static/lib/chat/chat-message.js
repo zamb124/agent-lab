@@ -151,6 +151,14 @@ export class FlowsChatMessage extends PlatformElement {
             --flows-chat-warning: var(--warning, #f59e0b);
             --flows-chat-warning-bg: var(--warning-bg, rgba(245, 158, 11, 0.1));
             --flows-chat-warning-border: var(--warning-border, rgba(245, 158, 11, 0.28));
+            --flows-chat-on-accent: var(--platform-chat-on-accent, #ffffff);
+            --flows-chat-user-fg: var(--flows-chat-on-accent, #ffffff);
+            --flows-chat-user-fg-muted: color-mix(in srgb, var(--flows-chat-user-fg) 78%, transparent);
+        }
+
+        :host([variant='embed']) {
+            --flows-chat-user-fg: var(--flows-chat-text);
+            --flows-chat-user-fg-muted: var(--flows-chat-muted);
         }
 
         .message {
@@ -226,7 +234,7 @@ export class FlowsChatMessage extends PlatformElement {
             width: auto;
             max-width: 100%;
             background: var(--flows-chat-accent);
-            color: white;
+            color: var(--flows-chat-user-fg);
             border: none;
             border-bottom-right-radius: var(--flows-chat-radius-sm);
         }
@@ -299,7 +307,7 @@ export class FlowsChatMessage extends PlatformElement {
         }
 
         :host([header-compact]) .message.user .bubble-meta .timestamp {
-            color: rgba(255, 255, 255, 0.78);
+            color: var(--flows-chat-user-fg-muted);
         }
 
         :host([header-compact]) .bubble-meta {
@@ -336,7 +344,7 @@ export class FlowsChatMessage extends PlatformElement {
 
         .message.user .role,
         .message.user .timestamp {
-            color: rgba(255, 255, 255, 0.78);
+            color: var(--flows-chat-user-fg-muted);
         }
 
         .timestamp {
@@ -397,7 +405,7 @@ export class FlowsChatMessage extends PlatformElement {
 
         .message.user .text,
         .message.user .markdown {
-            color: white;
+            color: var(--flows-chat-user-fg);
             white-space: pre-wrap;
             word-break: normal;
             overflow-wrap: break-word;
@@ -692,7 +700,7 @@ export class FlowsChatMessage extends PlatformElement {
         }
 
         .message.user .file-name {
-            color: white;
+            color: var(--flows-chat-user-fg);
         }
 
         .file-size {
@@ -750,13 +758,13 @@ export class FlowsChatMessage extends PlatformElement {
 
         :host([variant='embed']) .message.user .content {
             background: var(--flows-chat-accent-muted, rgba(153, 166, 249, 0.2));
-            color: var(--flows-chat-text, rgba(255, 255, 255, 0.92));
+            color: var(--flows-chat-user-fg);
             border: 1px solid var(--flows-chat-border, rgba(255, 255, 255, 0.12));
         }
 
         :host([variant='embed']) .message.user .markdown,
         :host([variant='embed']) .message.user .text {
-            color: var(--flows-chat-text, rgba(255, 255, 255, 0.92));
+            color: var(--flows-chat-user-fg);
         }
 
         :host([variant='embed']) .assistant-actions,

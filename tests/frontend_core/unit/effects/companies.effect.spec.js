@@ -31,7 +31,7 @@ describe('companiesEffect', () => {
     });
 
     it('SLUG_CHECKED dispatch с available', async () => {
-        fetchMock.respondJson('POST', '/svc/api/companies/check-slug', { available: true });
+        fetchMock.respondJson('POST', '/frontend/api/companies/check-slug', { available: true });
         const dispatched = [];
         await createCompaniesEffect({ baseUrl: '/svc' })(ev(COMPANIES_EVENTS.SLUG_CHECK_REQUESTED, { slug: 'foo' }), buildCtx(() => ({}), dispatched));
         const checked = dispatched.find((d) => d.type === COMPANIES_EVENTS.SLUG_CHECKED);
@@ -43,7 +43,7 @@ describe('companiesEffect', () => {
     });
 
     it('CREATED содержит redirect_url', async () => {
-        fetchMock.respondJson('POST', '/svc/api/companies', { id: 'c2', redirect_url: '/dash' });
+        fetchMock.respondJson('POST', '/frontend/api/companies', { id: 'c2', redirect_url: '/dash' });
         const dispatched = [];
         await createCompaniesEffect({ baseUrl: '/svc' })(ev(COMPANIES_EVENTS.CREATE_REQUESTED, { name: 'X', slug: 'x' }), buildCtx(() => ({}), dispatched));
         const created = dispatched.find((d) => d.type === COMPANIES_EVENTS.CREATED);

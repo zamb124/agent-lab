@@ -9,6 +9,7 @@ from typing import Any
 import pytest
 import pytest_asyncio
 
+from tests.agent._helpers import AGENT_TEST_PUBLIC_ORIGIN
 from tests.agent.desktop_e2e.desktop_app import (
     HumanitecDesktopInstall,
     ensure_humanitec_desktop_release_artifact,
@@ -45,19 +46,16 @@ def pytest_collection_modifyitems(items: list[pytest.Item]) -> None:
 @pytest.fixture(scope="session", autouse=True)
 def agent_desktop_lvh_me_profile() -> None:
     os.environ.setdefault("UI_E2E_USE_LVH_ME", "1")
-    os.environ.setdefault(
-        "AGENT_DESKTOP_E2E_BASE_URL",
-        "http://system.lvh.me:9004",
-    )
     os.environ.setdefault("AGENT_ARTIFACT_MODE", "release")
 
 
 @pytest.fixture(scope="session")
 def agent_desktop_base_url() -> str:
+    """System-company frontend origin для сценариев с ui_page_system (pairing в settings)."""
     configured = os.environ.get("AGENT_DESKTOP_E2E_BASE_URL")
-    if not configured:
-        raise ValueError("AGENT_DESKTOP_E2E_BASE_URL is required")
-    return configured.rstrip("/")
+    if configured:
+        return configured.rstrip("/")
+    return AGENT_TEST_PUBLIC_ORIGIN.rstrip("/")
 
 
 @pytest.fixture(scope="session")
@@ -76,15 +74,36 @@ def humanitec_desktop_install(
     install.cleanup()
 
 
-@pytest.fixture
-def humanitec_desktop_process_factory(
+@pytest_asyncio.fixture
+async def humanitec_desktop_process_factory(
     humanitec_desktop_install: HumanitecDesktopInstall,
-    agent_desktop_base_url: str,
+    agent_base_url: str,
 ) -> Callable[[], HumanitecDesktopProcess]:
+    """Desktop на Host той же test-компании, что auth_token и agent_frontend_http_client."""
+
     def _factory() -> HumanitecDesktopProcess:
         return HumanitecDesktopProcess(
             HumanitecDesktopLaunchConfig(
-                frontend_base_url=agent_desktop_base_url,
+                frontend_base_url=agent_base_url,
+                install=humanitec_desktop_install,
+            )
+        )
+
+    return _factory
+
+
+@pytest.fixture
+def humanitec_desktop_system_process_factory(
+    humanitec_desktop_install: HumanitecDesktopInstall,
+) -> Callable[[], HumanitecDesktopProcess]:
+    """Desktop на system.lvh.me — только для pairing через ui_page_system."""
+
+    system_base_url = AGENT_TEST_PUBLIC_ORIGIN.rstrip("/")
+
+    def _factory() -> HumanitecDesktopProcess:
+        return HumanitecDesktopProcess(
+            HumanitecDesktopLaunchConfig(
+                frontend_base_url=system_base_url,
                 install=humanitec_desktop_install,
             )
         )

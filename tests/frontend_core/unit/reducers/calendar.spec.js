@@ -15,24 +15,30 @@ describe('calendarReducer', () => {
     });
 
     it('EVENTS_LOADED заполняет events; без массива — throw', () => {
-        const next = calendarReducer(initialCalendarState, ev(CALENDAR_EVENTS.EVENTS_LOADED, { items: [{ id: 'e1' }] }));
-        expect(next.events).toEqual([{ id: 'e1' }]);
+        const next = calendarReducer(initialCalendarState, ev(CALENDAR_EVENTS.EVENTS_LOADED, { items: [{ event_id: 'e1' }] }));
+        expect(next.events).toEqual([{ event_id: 'e1' }]);
         expect(() => calendarReducer(initialCalendarState, ev(CALENDAR_EVENTS.EVENTS_LOADED, {}))).toThrow(/items/);
     });
 
     it('EVENT_CREATED добавляет', () => {
-        const next = calendarReducer(initialCalendarState, ev(CALENDAR_EVENTS.EVENT_CREATED, { event: { id: 'e1' } }));
-        expect(next.events).toEqual([{ id: 'e1' }]);
+        const next = calendarReducer(initialCalendarState, ev(CALENDAR_EVENTS.EVENT_CREATED, { event: { event_id: 'e1' } }));
+        expect(next.events).toEqual([{ event_id: 'e1' }]);
     });
 
-    it('EVENT_UPDATED заменяет по id', () => {
-        const seeded = calendarReducer(initialCalendarState, ev(CALENDAR_EVENTS.EVENT_CREATED, { event: { id: 'e1', title: 'a' } }));
-        const next = calendarReducer(seeded, ev(CALENDAR_EVENTS.EVENT_UPDATED, { event: { id: 'e1', title: 'b' } }));
+    it('EVENT_CREATED с тем же event_id заменяет', () => {
+        const seeded = calendarReducer(initialCalendarState, ev(CALENDAR_EVENTS.EVENT_CREATED, { event: { event_id: 'e1', title: 'a' } }));
+        const next = calendarReducer(seeded, ev(CALENDAR_EVENTS.EVENT_CREATED, { event: { event_id: 'e1', title: 'b' } }));
+        expect(next.events).toEqual([{ event_id: 'e1', title: 'b' }]);
+    });
+
+    it('EVENT_UPDATED заменяет по event_id', () => {
+        const seeded = calendarReducer(initialCalendarState, ev(CALENDAR_EVENTS.EVENT_CREATED, { event: { event_id: 'e1', title: 'a' } }));
+        const next = calendarReducer(seeded, ev(CALENDAR_EVENTS.EVENT_UPDATED, { event: { event_id: 'e1', title: 'b' } }));
         expect(next.events[0].title).toBe('b');
     });
 
     it('EVENT_DELETED удаляет', () => {
-        const seeded = calendarReducer(initialCalendarState, ev(CALENDAR_EVENTS.EVENT_CREATED, { event: { id: 'e1' } }));
+        const seeded = calendarReducer(initialCalendarState, ev(CALENDAR_EVENTS.EVENT_CREATED, { event: { event_id: 'e1' } }));
         const next = calendarReducer(seeded, ev(CALENDAR_EVENTS.EVENT_DELETED, { event_id: 'e1' }));
         expect(next.events).toEqual([]);
     });

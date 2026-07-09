@@ -89,7 +89,7 @@ export class OfficeExplorerTree extends PlatformElement {
                 display: inline-flex;
                 align-items: center;
                 justify-content: center;
-                width: 1.25rem;
+                width: 1.5rem;
                 height: 1.75rem;
                 border: none;
                 background: transparent;
@@ -104,10 +104,10 @@ export class OfficeExplorerTree extends PlatformElement {
             .toggle.expanded platform-icon {
                 transform: rotate(90deg);
             }
-            .item {
+            .treeitem {
                 display: flex;
                 align-items: center;
-                gap: var(--space-2);
+                gap: var(--space-1);
                 flex: 1;
                 min-width: 0;
                 padding: var(--space-2) var(--space-3);
@@ -117,22 +117,35 @@ export class OfficeExplorerTree extends PlatformElement {
                 color: var(--text-primary);
                 font-size: var(--text-sm);
                 font-weight: 500;
-                text-align: left;
-                cursor: pointer;
                 transition: var(--motion-transition-interactive);
             }
-            .item:hover {
+            .treeitem:hover {
                 background: var(--glass-solid-subtle);
             }
-            .item.active {
+            .treeitem.active {
                 background: var(--documents-selected-bg, var(--accent-subtle));
                 border-color: var(--documents-selected-stroke, var(--accent));
                 color: var(--documents-selected-text, var(--accent));
                 font-weight: 600;
             }
-            .item.drop-target {
+            .treeitem.drop-target {
                 border-color: var(--accent);
                 background: var(--accent-subtle);
+            }
+            .item-main {
+                display: flex;
+                align-items: center;
+                gap: var(--space-2);
+                flex: 1;
+                min-width: 0;
+                padding: 0;
+                border: none;
+                background: transparent;
+                color: inherit;
+                font-size: inherit;
+                font-weight: inherit;
+                text-align: left;
+                cursor: pointer;
             }
             .item-label {
                 flex: 1;
@@ -141,12 +154,12 @@ export class OfficeExplorerTree extends PlatformElement {
                 text-overflow: ellipsis;
                 white-space: nowrap;
             }
-            .count {
+            .item-main .count {
                 font-size: var(--text-xs);
                 color: var(--text-tertiary);
                 flex-shrink: 0;
             }
-            .item.active .count {
+            .treeitem.active .item-main .count {
                 color: inherit;
                 opacity: 0.8;
             }
@@ -161,15 +174,16 @@ export class OfficeExplorerTree extends PlatformElement {
                 opacity: 0;
                 flex-shrink: 0;
             }
-            .tree-row:hover .row-actions {
+            .treeitem:hover .row-actions,
+            .treeitem:focus-within .row-actions {
                 opacity: 1;
             }
             .mini-btn {
                 display: inline-flex;
                 align-items: center;
                 justify-content: center;
-                width: 1.5rem;
-                height: 1.5rem;
+                width: 1.75rem;
+                height: 1.75rem;
                 border: 1px solid var(--glass-border-medium);
                 border-radius: var(--radius-md);
                 background: var(--glass-solid-subtle);
@@ -317,46 +331,50 @@ export class OfficeExplorerTree extends PlatformElement {
                     ?disabled=${!hasChildren}
                     @click=${() => this._toggleCatalog(catalog.catalog_id, hasChildren)}
                 >
-                    <platform-icon name="chevron-right" size="12"></platform-icon>
+                    <platform-icon name="chevron-right" size="14"></platform-icon>
                 </button>
-                <button
-                    class="item ${active ? 'active' : ''} ${dropTarget ? 'drop-target' : ''}"
-                    type="button"
+                <div
+                    class="treeitem ${active ? 'active' : ''} ${dropTarget ? 'drop-target' : ''}"
                     role="treeitem"
-                    @click=${() => this._selectCatalog(catalog.catalog_id)}
                     @contextmenu=${(e) => this._openContextMenuFromEvent(e, catalog, hasChildren)}
                     @dragover=${(e) => this._onCatalogDragOver(e, catalog.catalog_id)}
                     @dragleave=${(e) => this._onCatalogDragLeave(e, catalog.catalog_id)}
                     @drop=${(e) => this._onCatalogDrop(e, catalog)}
                 >
-                    <platform-icon name="folder" size="16"></platform-icon>
-                    <span class="item-label">${catalog.title}</span>
-                    ${ragEnabled ? html`
-                        <span class="rag-badge" title=${this.t('catalog_context_menu.rag')}>
-                            <platform-icon name="search" size="12"></platform-icon>
-                        </span>
-                    ` : null}
-                    <span class="count">${catalog.file_count}</span>
-                </button>
-                <div class="row-actions">
                     <button
-                        class="mini-btn"
+                        class="item-main"
                         type="button"
-                        title=${this.t('tree.newSubcatalog')}
-                        @click=${(e) => { e.stopPropagation(); this._createCatalog(catalog.catalog_id); }}
+                        @click=${() => this._selectCatalog(catalog.catalog_id)}
                     >
-                        <platform-icon name="plus" size="12"></platform-icon>
+                        <platform-icon name="folder" size="16"></platform-icon>
+                        <span class="item-label">${catalog.title}</span>
+                        ${ragEnabled ? html`
+                            <span class="rag-badge" title=${this.t('catalog_context_menu.rag')}>
+                                <platform-icon name="search" size="12"></platform-icon>
+                            </span>
+                        ` : null}
+                        <span class="count">${catalog.file_count}</span>
                     </button>
-                    ${catalog.is_owner === true ? html`
+                    <div class="row-actions">
                         <button
                             class="mini-btn"
                             type="button"
-                            title=${this.t('tree.catalogMenu')}
-                            @click=${(e) => this._openContextMenuFromButton(e, catalog, hasChildren)}
+                            title=${this.t('tree.newSubcatalog')}
+                            @click=${(e) => { e.stopPropagation(); this._createCatalog(catalog.catalog_id); }}
                         >
-                            <platform-icon name="more-vertical" size="12"></platform-icon>
+                            <platform-icon name="plus" size="14"></platform-icon>
                         </button>
-                    ` : null}
+                        ${catalog.is_owner === true ? html`
+                            <button
+                                class="mini-btn"
+                                type="button"
+                                title=${this.t('tree.catalogMenu')}
+                                @click=${(e) => this._openContextMenuFromButton(e, catalog, hasChildren)}
+                            >
+                                <platform-icon name="more-vertical" size="14"></platform-icon>
+                            </button>
+                        ` : null}
+                    </div>
                 </div>
             </div>
             ${expanded ? html`

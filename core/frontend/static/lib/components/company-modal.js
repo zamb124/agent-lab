@@ -227,7 +227,7 @@ export class CompanyModal extends PlatformFormModal {
                             .value=${this.companySlug}
                             @input=${this._onSlug}
                             placeholder="moya-kompaniya"
-                            pattern="[a-z0-9-]+"
+                            pattern="[-a-z0-9]+"
                             minlength="3"
                             maxlength="63"
                             ?disabled=${this.loading}

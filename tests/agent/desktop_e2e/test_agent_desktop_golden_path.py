@@ -5,7 +5,6 @@ from __future__ import annotations
 import pytest
 from httpx import AsyncClient
 
-from apps.frontend.config import get_frontend_public_base_url
 from tests.agent._helpers import (
     AGENT_API_PREFIX,
     assert_audit_event_in_redis,
@@ -21,6 +20,7 @@ from tests.agent.desktop_e2e.pairing_helper import fetch_pairing_code_from_setti
 async def test_d5_register_url_bundle(
     agent_frontend_http_client: AsyncClient,
     auth_token: str,
+    agent_base_url: str,
     unique_id: str,
 ) -> None:
     pairing_response = await agent_frontend_http_client.post(f"{AGENT_API_PREFIX}/pairing")
@@ -39,11 +39,11 @@ async def test_d5_register_url_bundle(
     )
     assert response.status_code == 200
     body = response.json()
-    base = get_frontend_public_base_url()
-    assert body["frontend_base_url"] == base
-    assert body["tunnel_ws_url"] == "ws://system.lvh.me:9004/frontend/api/agent/tunnel"
+    assert body["frontend_base_url"] == agent_base_url
+    parsed = __import__("urllib.parse").urlparse(agent_base_url)
+    assert body["tunnel_ws_url"] == f"ws://{parsed.netloc}/frontend/api/agent/tunnel"
     assert body["company_id"] == company_id_from_auth_token(auth_token)
-    assert body["platform_mcp_url"] == f"{base}/flows/api/v1/agent/platform-mcp"
+    assert body["platform_mcp_url"] == f"{agent_base_url}/flows/api/v1/agent/platform-mcp"
 
 
 @pytest.mark.asyncio
@@ -252,8 +252,8 @@ async def test_d15_device_mcp_offline(
 @pytest.mark.e2e
 @pytest.mark.real_taskiq
 async def test_d_gold_pairing_tunnel_mcp_audit(
-    agent_frontend_http_client: AsyncClient,
-    auth_token: str,
+    agent_frontend_http_client_system: AsyncClient,
+    auth_token_system: str,
     ui_page_system,
     agent_desktop_base_url: str,
     flows_client_http: AsyncClient,
@@ -262,26 +262,26 @@ async def test_d_gold_pairing_tunnel_mcp_audit(
     unique_id: str,
     mock_llm_with_queue,
     frontend_container,
-    humanitec_desktop_process_factory,
+    humanitec_desktop_system_process_factory,
 ) -> None:
     _ = flows_service, flows_worker
-    company_id = company_id_from_auth_token(auth_token)
+    company_id = company_id_from_auth_token(auth_token_system)
     pairing_code = await fetch_pairing_code_from_settings(
         ui_page_system,
         f"{agent_desktop_base_url}/settings",
     )
 
-    desktop = humanitec_desktop_process_factory()
+    desktop = humanitec_desktop_system_process_factory()
     try:
         desktop.start()
         desktop.pair_via_deep_link(pairing_code)
         credentials = desktop.wait_for_credentials()
         device_id = credentials["device_id"]
-        await desktop.wait_for_tunnel_online(agent_frontend_http_client, device_id)
+        await desktop.wait_for_tunnel_online(agent_frontend_http_client_system, device_id)
 
         flow_id = await ensure_example_react_flow(
             flows_client_http,
-            {"Cookie": f"auth_token={auth_token}"},
+            {"Cookie": f"auth_token={auth_token_system}"},
             unique_id,
         )
         await mock_llm_with_queue([{"type": "text", "content": "D-GOLD ok"}])

@@ -403,6 +403,7 @@ export class PlatformChat extends LitElement {
             --flows-chat-surface-subtle: var(--platform-chat-surface-subtle);
             --flows-chat-accent: var(--platform-chat-accent);
             --flows-chat-accent-muted: var(--platform-chat-accent-muted);
+            --flows-chat-on-accent: var(--platform-chat-on-accent);
             --flows-chat-info-bg: var(--platform-chat-interrupt-bg);
             --flows-chat-info-border: var(--platform-chat-accent);
         }

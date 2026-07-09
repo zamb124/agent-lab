@@ -158,5 +158,10 @@ describe('flows library picker tabs', () => {
         const panelBody = host.querySelector('.mcp-picker-server .content-panel-body');
         expect(panelBody).to.not.equal(null);
         expect(panelBody.querySelector('.mcp-picker-tools-grid')).to.not.equal(null);
+
+        const card = panelBody.querySelector('platform-picker-card');
+        expect(card).to.not.equal(null);
+        const cardInner = card.shadowRoot.querySelector('.picker-card');
+        expect(getComputedStyle(cardInner).paddingTop).to.not.equal('0px');
     });
 });

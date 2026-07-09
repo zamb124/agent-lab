@@ -2291,8 +2291,20 @@ export class PlatformCalendarModal extends PlatformModal {
         this.useEvent(TEAM_EVENTS.MEMBERS_LOAD_FAILED, (e) => {
             this.toast('err_load_team', { type: 'error', vars: { message: e.payload?.message || '' } });
         });
-        this.useEvent(CALENDAR_EVENTS.EVENT_CREATED, () => { this._saving = false; });
-        this.useEvent(CALENDAR_EVENTS.EVENT_UPDATED, () => { this._saving = false; });
+        this.useEvent(CALENDAR_EVENTS.EVENT_CREATED, () => {
+            this._saving = false;
+            this._resetEventFormAfterSave();
+            this._reload();
+        });
+        this.useEvent(CALENDAR_EVENTS.EVENT_UPDATED, () => {
+            this._saving = false;
+            this._resetEventFormAfterSave();
+            this._reload();
+        });
+        this.useEvent(CALENDAR_EVENTS.EVENT_DELETED, () => {
+            this._resetEventFormAfterSave();
+            this._reload();
+        });
         this.useEvent(CALENDAR_EVENTS.SYNC_COMPLETED, () => { this._syncing = false; });
         this.useEvent(CALENDAR_EVENTS.INTEGRATION_CONNECTED, () => { this._saving = false; });
         this.useEvent(FILES_EVENTS.UPLOAD_COMPLETED, (e) => this._onFileUploadCompleted(e));
@@ -3201,6 +3213,29 @@ export class PlatformCalendarModal extends PlatformModal {
         this._eventAttachments = this._eventAttachments.filter((item) => item.file_id !== fileId);
     }
 
+    _resetEventFormAfterSave() {
+        this._selectedEventId = null;
+        this._selectedEventSource = 'platform';
+        this._selectedEventKind = 'meeting';
+        this._selectedEventNamespace = null;
+        this._eventForm = {
+            ...this._eventForm,
+            kind: 'meeting',
+            color: DEFAULT_EVENT_COLOR,
+            title: '',
+            description: '',
+            location: '',
+            attendees: [],
+            recurrence: 'none',
+        };
+        this._eventMetadata = {};
+        this._eventDeepLink = null;
+        this._eventAttachments = [];
+        this._attendeeDraft = '';
+        this._attendeeDropdownOpen = false;
+        this._eventDialogOpen = false;
+    }
+
     _saveEvent() {
         if (this._selectedEventId && !this._isEventEditable(this._selectedEventSource)) {
             this.toast('err_edit_remote', { type: 'error', vars: { label: this._sourceLabel(this._selectedEventSource) } });
@@ -3253,26 +3288,6 @@ export class PlatformCalendarModal extends PlatformModal {
         } else {
             this.dispatch(CALENDAR_EVENTS.EVENT_CREATE_REQUESTED, payload);
         }
-        this._selectedEventId = null;
-        this._selectedEventSource = 'platform';
-        this._selectedEventKind = 'meeting';
-        this._selectedEventNamespace = null;
-        this._eventForm = {
-            ...this._eventForm,
-            kind: 'meeting',
-            color: DEFAULT_EVENT_COLOR,
-            title: '',
-            description: '',
-            location: '',
-            attendees: [],
-            recurrence: 'none',
-        };
-        this._eventMetadata = {};
-        this._eventDeepLink = null;
-        this._eventAttachments = [];
-        this._attendeeDraft = '';
-        this._attendeeDropdownOpen = false;
-        this._eventDialogOpen = false;
     }
 
     _deleteSelectedEvent() {
@@ -3285,14 +3300,6 @@ export class PlatformCalendarModal extends PlatformModal {
             return;
         }
         this.dispatch(CALENDAR_EVENTS.EVENT_DELETE_REQUESTED, { event_id: this._selectedEventId });
-        this._selectedEventId = null;
-        this._selectedEventSource = 'platform';
-        this._selectedEventKind = 'meeting';
-        this._selectedEventNamespace = null;
-        this._eventMetadata = {};
-        this._eventAttachments = [];
-        this._eventDeepLink = null;
-        this._eventDialogOpen = false;
     }
 
     _saveIntegration() {

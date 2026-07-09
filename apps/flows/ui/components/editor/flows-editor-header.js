@@ -104,13 +104,13 @@ export class FlowsEditorHeader extends PlatformElement {
                 display: flex;
                 align-items: center;
                 gap: var(--space-2);
-                min-width: 0;
-                flex: 1 1 auto;
+                min-width: min(200px, 28vw);
+                flex: 1 1 0;
             }
 
             .flow-name-field {
                 flex: 1 1 auto;
-                min-width: 0;
+                min-width: 120px;
                 max-width: min(320px, 40vw);
             }
 
@@ -142,25 +142,36 @@ export class FlowsEditorHeader extends PlatformElement {
             }
 
             .chrome-row-branches {
-                overflow-x: auto;
-                overflow-y: hidden;
-                scrollbar-width: thin;
+                min-width: 0;
+                gap: var(--space-2);
             }
 
             .branches-slot {
                 display: none;
-                flex: 1 1 auto;
+                flex: 0 1 auto;
                 min-width: 0;
+                max-width: min(400px, 34vw);
                 align-items: center;
                 gap: var(--space-2);
+                overflow: hidden;
+            }
+
+            .branches-scroll {
+                flex: 1 1 auto;
+                min-width: 0;
                 overflow-x: auto;
                 overflow-y: hidden;
                 scrollbar-width: thin;
             }
 
-            .branches-slot platform-segmented-control {
-                flex-shrink: 0;
-                max-width: 100%;
+            .branches-scroll platform-segmented-control {
+                display: block;
+                width: max-content;
+                max-width: none;
+            }
+
+            .branches-add {
+                flex: 0 0 auto;
             }
 
             @media (min-width: 768px) {
@@ -181,13 +192,12 @@ export class FlowsEditorHeader extends PlatformElement {
                 display: flex;
                 align-items: center;
                 gap: var(--space-2);
-                width: max-content;
-                min-width: 100%;
+                min-width: 0;
+                width: 100%;
             }
 
-            .branches-row platform-segmented-control {
-                flex-shrink: 0;
-                max-width: 100%;
+            .branches-row .branches-scroll {
+                flex: 1 1 auto;
             }
 
             .header-actions {
@@ -579,7 +589,7 @@ export class FlowsEditorHeader extends PlatformElement {
         `;
     }
 
-    _renderBranchesControls(branchItems) {
+    _renderBranchTabs(branchItems) {
         return html`
             <platform-segmented-control
                 density="compact"
@@ -589,10 +599,29 @@ export class FlowsEditorHeader extends PlatformElement {
                 @change=${(e) => this._selectBranch(e.detail.value)}
                 @segment-close=${(e) => { void this._deleteBranch(e.detail.value); }}
             ></platform-segmented-control>
-            <platform-button variant="ghost" density="compact" @click=${this._createBranch}>
+        `;
+    }
+
+    _renderBranchAddButton() {
+        return html`
+            <platform-button
+                class="branches-add-btn"
+                variant="ghost"
+                density="compact"
+                aria-label=${this.t('branches_tabs.add')}
+                title=${this.t('branches_tabs.add')}
+                @click=${this._createBranch}
+            >
                 <platform-icon name="plus" size="14"></platform-icon>
                 ${this.t('branches_tabs.add')}
             </platform-button>
+        `;
+    }
+
+    _renderBranchesControls(branchItems) {
+        return html`
+            <div class="branches-scroll">${this._renderBranchTabs(branchItems)}</div>
+            <div class="branches-add">${this._renderBranchAddButton()}</div>
         `;
     }
 
@@ -686,9 +715,7 @@ export class FlowsEditorHeader extends PlatformElement {
         }
         return html`
             <div class="chrome-row chrome-row-branches">
-                <div class="branches-row">
-                    ${this._renderBranchesControls(branchItems)}
-                </div>
+                <div class="branches-row">${this._renderBranchesControls(branchItems)}</div>
             </div>
         `;
     }

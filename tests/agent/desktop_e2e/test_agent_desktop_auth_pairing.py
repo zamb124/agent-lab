@@ -42,19 +42,19 @@ async def test_d5_auth_device_token_deep_link(
 @pytest.mark.asyncio
 @pytest.mark.e2e
 async def test_d6_pairing_deep_link_playwright(
-    agent_frontend_http_client: AsyncClient,
+    agent_frontend_http_client_system: AsyncClient,
     ui_page_system,
-    auth_token: str,
+    auth_token_system: str,
     unique_id: str,
     agent_desktop_base_url: str,
-    humanitec_desktop_process_factory,
+    humanitec_desktop_system_process_factory,
 ) -> None:
-    _ = agent_frontend_http_client, auth_token, unique_id
+    _ = agent_frontend_http_client_system, auth_token_system, unique_id
     pairing_code = await fetch_pairing_code_from_settings(
         ui_page_system,
         f"{agent_desktop_base_url}/settings",
     )
-    desktop = humanitec_desktop_process_factory()
+    desktop = humanitec_desktop_system_process_factory()
     try:
         desktop.start()
         desktop.pair_via_deep_link(pairing_code)
@@ -62,7 +62,7 @@ async def test_d6_pairing_deep_link_playwright(
         assert credentials["device_id"] != "pending"
         device_id = credentials["device_id"]
         device_item = await desktop.wait_for_tunnel_online(
-            agent_frontend_http_client,
+            agent_frontend_http_client_system,
             device_id,
         )
         assert device_item["is_tunnel_online"] is True

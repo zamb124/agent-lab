@@ -72,6 +72,12 @@ describe('flows-editor-header flow settings entry', () => {
 
         const branchesSlot = el.shadowRoot.querySelector('.branches-slot platform-segmented-control');
         expect(branchesSlot).to.not.equal(null);
+
+        const branchesScroll = el.shadowRoot.querySelector('.branches-slot .branches-scroll');
+        const branchesAdd = el.shadowRoot.querySelector('.branches-slot .branches-add');
+        expect(branchesScroll).to.not.equal(null);
+        expect(branchesAdd).to.not.equal(null);
+        expect(branchesScroll.contains(branchesSlot)).to.equal(true);
     });
 
     it('mobile overflow menu uses block ghost buttons at 390px', async () => {

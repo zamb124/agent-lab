@@ -31,13 +31,16 @@ export class PlatformPickerCard extends PlatformElement {
                 align-items: flex-start;
                 gap: var(--space-2);
                 width: 100%;
+                height: 100%;
                 box-sizing: border-box;
-                padding: var(--space-4);
+                padding: var(--platform-picker-card-padding, var(--space-4, 1rem));
                 border-radius: var(--radius-xl);
                 text-align: left;
                 cursor: pointer;
                 color: inherit;
                 font: inherit;
+                min-width: 0;
+                overflow: hidden;
             }
 
             :host([disabled]) .picker-card {
@@ -73,12 +76,23 @@ export class PlatformPickerCard extends PlatformElement {
                 font-size: var(--text-sm);
                 font-weight: var(--font-semibold);
                 color: var(--text-primary);
+                width: 100%;
+                min-width: 0;
+                word-break: break-word;
             }
 
             .picker-subtitle {
                 font-size: var(--text-xs);
                 line-height: 1.45;
                 color: var(--text-secondary);
+                width: 100%;
+                min-width: 0;
+                word-break: break-word;
+            }
+
+            ::slotted(:not([slot='icon'])) {
+                width: 100%;
+                min-width: 0;
             }
         `,
     ];

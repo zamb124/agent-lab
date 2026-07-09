@@ -5,6 +5,9 @@
 import { httpRequest } from '../http.js';
 import { COMPANIES_EVENTS } from '../reducers/companies.js';
 
+/** Создание и check-slug — только frontend API; GET /me — на baseUrl сервиса (core router). */
+const FRONTEND_COMPANIES_API_PREFIX = '/frontend/api/companies';
+
 export function createCompaniesEffect({ baseUrl }) {
     const base = baseUrl || '';
     return async function companiesEffect(event, ctx) {
@@ -25,7 +28,7 @@ export function createCompaniesEffect({ baseUrl }) {
                 const slug = event.payload && event.payload.slug;
                 if (!slug) throw new Error('companies.effect: slug required');
                 try {
-                    const r = await httpRequest({ method: 'POST', url: `${base}/api/companies/check-slug`, body: { slug } });
+                    const r = await httpRequest({ method: 'POST', url: `${FRONTEND_COMPANIES_API_PREFIX}/check-slug`, body: { slug } });
                     ctx.dispatch(COMPANIES_EVENTS.SLUG_CHECKED, { slug, available: !!r.available }, { causation_id: event.id, source: 'http' });
                 } catch (err) {
                     ctx.dispatch(COMPANIES_EVENTS.SLUG_CHECK_FAILED, { slug, message: String(err && err.message ? err.message : err) }, { causation_id: event.id, source: 'http' });
@@ -36,7 +39,7 @@ export function createCompaniesEffect({ baseUrl }) {
                 const { name, slug } = event.payload || {};
                 if (!name || !slug) throw new Error('companies.effect: name and slug required');
                 try {
-                    const data = await httpRequest({ method: 'POST', url: `${base}/api/companies`, body: { name, slug } });
+                    const data = await httpRequest({ method: 'POST', url: FRONTEND_COMPANIES_API_PREFIX, body: { name, slug } });
                     const redirectUrl = (data && typeof data.redirect_url === 'string') ? data.redirect_url : null;
                     ctx.dispatch(
                         COMPANIES_EVENTS.CREATED,

@@ -423,4 +423,39 @@ describe('flows-chat-message shared surface', () => {
         expect(style.wordBreak).to.equal('normal');
         expect(style.overflowWrap).to.equal('break-word');
     });
+
+    it('user embed bubble uses readable meta and file colors on light palette', async () => {
+        const el = await fixture(html`
+            <flows-chat-message
+                variant="embed"
+                role="user"
+                .showHeader=${true}
+                .headerCompact=${true}
+                .timestamp=${'2026-07-09T17:54:00.000Z'}
+                locale="ru"
+                .content=${'fd'}
+                .files=${[{
+                    file_id: 'file-docx-1',
+                    original_name: '2607 - Bibligami Proposition - RU (1).docx',
+                    content_type: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+                    file_size: 1024,
+                }]}
+                .labels=${LABELS}
+                style="--flows-chat-text: #1c1f2e; --flows-chat-muted: rgba(28, 31, 46, 0.52); --flows-chat-accent-muted: rgba(109, 98, 232, 0.2);"
+            ></flows-chat-message>
+        `);
+        await elementUpdated(el);
+
+        const timestamp = el.shadowRoot.querySelector('.bubble-meta .timestamp');
+        const fileName = el.shadowRoot.querySelector('.file-name');
+        expect(timestamp).to.not.equal(null);
+        expect(fileName).to.not.equal(null);
+
+        const timestampColor = getComputedStyle(timestamp).color;
+        const fileNameColor = getComputedStyle(fileName).color;
+        expect(timestampColor).to.not.equal('rgb(255, 255, 255)');
+        expect(fileNameColor).to.not.equal('rgb(255, 255, 255)');
+        expect(timestampColor).to.equal('rgba(28, 31, 46, 0.52)');
+        expect(fileNameColor).to.equal('rgb(28, 31, 46)');
+    });
 });

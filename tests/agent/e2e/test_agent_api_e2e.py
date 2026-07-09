@@ -126,9 +126,9 @@ async def test_e2e_list_devices_unauthorized(agent_frontend_http_anon: AsyncClie
 async def test_e2e_register_url_bundle(
     agent_frontend_http_client: AsyncClient,
     auth_token: str,
+    agent_base_url: str,
     unique_id: str,
 ) -> None:
-    from apps.frontend.config import get_frontend_public_base_url
     from tests.agent._helpers import create_pairing_via_http, register_device_via_http
 
     pairing_body = await create_pairing_via_http(
@@ -146,7 +146,7 @@ async def test_e2e_register_url_bundle(
         os_name="darwin",
         hostname=f"host-{unique_id}",
     )
-    frontend_base = get_frontend_public_base_url().rstrip("/")
+    frontend_base = agent_base_url.rstrip("/")
     assert register_body["frontend_base_url"] == frontend_base
     assert register_body["platform_mcp_url"] == (
         f"{frontend_base}/flows/api/v1/agent/platform-mcp"

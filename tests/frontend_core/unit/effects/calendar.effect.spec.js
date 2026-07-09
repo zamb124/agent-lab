@@ -27,11 +27,11 @@ describe('calendarEffect', () => {
     });
 
     it('EVENT_CREATE_REQUESTED → EVENT_CREATED', async () => {
-        fetchMock.respondJson('POST', '/svc/api/calendar/events', { id: 'e1', title: 'M' });
+        fetchMock.respondJson('POST', '/svc/api/calendar/events', { event_id: 'e1', title: 'M' });
         const dispatched = [];
         await createCalendarEffect({ baseUrl: '/svc' })(ev(CALENDAR_EVENTS.EVENT_CREATE_REQUESTED, { title: 'M' }), buildCtx(() => ({}), dispatched));
         const created = dispatched.find((d) => d.type === CALENDAR_EVENTS.EVENT_CREATED);
-        expect(created.payload.event).toEqual({ id: 'e1', title: 'M' });
+        expect(created.payload.event).toEqual({ event_id: 'e1', title: 'M' });
     });
 
     it('EVENT_UPDATE_REQUESTED требует event_id', async () => {

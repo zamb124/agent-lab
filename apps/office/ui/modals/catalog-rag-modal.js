@@ -329,7 +329,7 @@ export class OfficeCatalogRagModal extends PlatformFormModal {
             || this._rebuild.busy || this._settings.busy;
         return html`
             <div class="footer-actions">
-                <button class="btn" type="button" @click=${() => this.close()}>${this.t('catalog_rag_modal.close')}</button>
+                <button class="btn btn-secondary" type="button" @click=${() => this.close()}>${this.t('catalog_rag_modal.close')}</button>
                 ${enabled ? html`
                     <button class="btn btn-primary" type="button" ?disabled=${busy} @click=${this._onRebuild}>
                         ${this.t('catalog_rag_modal.rebuild')}

@@ -47,7 +47,11 @@ from core.db.storage import Storage
 from core.logging import get_logger
 from core.platform_brand.resolver import resolve_oauth_brand_origin
 from core.types import JsonObject, parse_json_object
-from core.utils.domain import is_allowed_integration_return_origin
+from core.utils.domain import (
+    get_protocol,
+    is_allowed_integration_return_origin,
+    split_host_port,
+)
 from core.utils.tokens import TokenService
 
 logger = get_logger(__name__)
@@ -315,17 +319,39 @@ def build_agent_llm_bundle(frontend_base_url: str) -> AgentLlmBundle:
     return AgentLlmBundle(api_base_url=_llm_api_url(frontend_base_url))
 
 
-def resolve_frontend_base_url(origin_override: str | None = None) -> str:
+def _frontend_origin_from_request_host(host: str, url_scheme: str) -> str:
+    scheme = url_scheme if url_scheme in ("http", "https") else get_protocol(host)
+    hostname, port = split_host_port(host)
+    if not hostname:
+        raise ValueError("request Host must include hostname")
+    origin = f"{scheme}://{hostname}"
+    if port is not None:
+        origin = f"{origin}:{port}"
+    return origin.rstrip("/")
+
+
+def resolve_frontend_base_url(
+    origin_override: str | None = None,
+    *,
+    request_host: str | None = None,
+    url_scheme: str | None = None,
+) -> str:
+    platform_public_base_url = get_frontend_public_base_url()
     if origin_override is not None:
         ro = origin_override.rstrip("/")
-        platform_public_base_url = get_frontend_public_base_url()
         if not is_allowed_integration_return_origin(ro, platform_public_base_url):
             raise HTTPException(
                 status_code=400,
                 detail="origin не разрешён для register/discover",
             )
         return ro
-    return get_frontend_public_base_url()
+    if request_host is not None and str(request_host).strip():
+        host = str(request_host).strip()
+        resolved_scheme = url_scheme if url_scheme in ("http", "https") else get_protocol(host)
+        host_origin = _frontend_origin_from_request_host(host, resolved_scheme)
+        if is_allowed_integration_return_origin(host_origin, platform_public_base_url):
+            return host_origin
+    return platform_public_base_url
 
 
 def build_tunnel_ws_url(frontend_base_url: str) -> str:
@@ -364,9 +390,15 @@ async def fetch_agent_discover(
     container: FrontendContainer,
     *,
     origin_override: str | None = None,
+    request_host: str | None = None,
+    url_scheme: str | None = None,
 ) -> AgentDiscoverResponse:
     _ = container
-    frontend_base_url = resolve_frontend_base_url(origin_override)
+    frontend_base_url = resolve_frontend_base_url(
+        origin_override,
+        request_host=request_host,
+        url_scheme=url_scheme,
+    )
     releases = await fetch_latest_release_status()
     return AgentDiscoverResponse(
         frontend_base_url=frontend_base_url,
@@ -609,6 +641,8 @@ async def register_device(
     *,
     client_key: str,
     origin_override: str | None = None,
+    request_host: str | None = None,
+    url_scheme: str | None = None,
 ) -> DeviceRegisterResponse:
     await _enforce_register_rate_limit(container, client_key)
     redis_key = _pairing_storage_key(request.pairing_code)
@@ -690,7 +724,11 @@ async def register_device(
     if company_record is None:
         raise HTTPException(status_code=404, detail=f"Компания не найдена: {company_id}")
 
-    frontend_base_url = resolve_frontend_base_url(origin_override)
+    frontend_base_url = resolve_frontend_base_url(
+        origin_override,
+        request_host=request_host,
+        url_scheme=url_scheme,
+    )
     return build_device_register_response(
         device_id=request.device_id,
         token=token,
@@ -707,6 +745,8 @@ async def register_device_with_auth(
     user_id: str,
     company_id: str,
     origin_override: str | None = None,
+    request_host: str | None = None,
+    url_scheme: str | None = None,
 ) -> DeviceRegisterResponse:
     device_key = _device_storage_key(request.device_id)
     existing_raw = await container.shared_storage.get(device_key, force_global=True)
@@ -779,7 +819,11 @@ async def register_device_with_auth(
     if company_record is None:
         raise HTTPException(status_code=404, detail=f"Компания не найдена: {company_id}")
 
-    frontend_base_url = resolve_frontend_base_url(origin_override)
+    frontend_base_url = resolve_frontend_base_url(
+        origin_override,
+        request_host=request_host,
+        url_scheme=url_scheme,
+    )
     return build_device_register_response(
         device_id=request.device_id,
         token=token,
