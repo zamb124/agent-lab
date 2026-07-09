@@ -163,6 +163,7 @@ export class SyncApp extends PlatformApp {
             return;
         }
         this.dispatch(TEAM_EVENTS.MEMBERS_LOAD_REQUESTED, null);
+    }
 
     connectedCallback() {
         super.connectedCallback();

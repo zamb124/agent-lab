@@ -9,6 +9,7 @@ from .code import router as code_router
 from .company import router as company_router
 from .evaluation import router as evaluation_router
 from .flows import router as flows_router
+from .internal_company import router as internal_company_router
 from .internal_work_items import router as internal_work_items_router
 from .lara_actions import router as lara_actions_router
 from .mcp import router as mcp_router
@@ -48,4 +49,5 @@ api_v1_router.include_router(company_router)
 api_v1_router.include_router(mcp_router, prefix="/mcp")
 api_v1_router.include_router(resources_router, prefix="/resources")
 api_v1_router.include_router(internal_work_items_router, prefix="/internal")
+api_v1_router.include_router(internal_company_router, prefix="/internal")
 api_v1_router.include_router(browser_preview_router, prefix="/browser-preview")

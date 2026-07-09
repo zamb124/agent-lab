@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import time
 import uuid
 from dataclasses import dataclass
 
@@ -28,12 +29,21 @@ from core.llm_context.resolver import (
     resolve_company_llm_context_patch,
     resolve_llm_context_policy,
 )
+from core.logging import get_logger
+from core.logging.attributes import (
+    EVENT_LLM_CONTEXT_COMPILED,
+    LOG_LLM_CONTEXT_COMPILE_MS,
+    LOG_LLM_CONTEXT_DROPPED_BLOCKS,
+    LOG_LLM_CONTEXT_SELECTED_BLOCKS,
+)
 from core.types import JsonObject, JsonValue, require_json_object
 
 LLMContextInput = LLMContextPatch | LLMContextProfile | JsonObject
 _OPENAI_PROVIDER = "openai"
 _OPENAI_PROMPT_CACHE_KEY_FIELD = "prompt_cache_key"
 _ANTHROPIC_CACHE_CONTROL_FIELD = "cache_control"
+
+_logger = get_logger(__name__)
 
 
 @dataclass(frozen=True)
@@ -43,6 +53,7 @@ class PreparedLLMContextMessages:
     messages: list[Message]
     openai_messages: list[JsonObject]
     compiled_context: CompiledLLMContext | None = None
+    compile_ms: float | None = None
 
 
 async def prepare_messages_for_context_layer(
@@ -97,6 +108,7 @@ async def prepare_messages_for_context_layer(
                     )
                 )
             )
+    compile_start = time.perf_counter()
     compiled = (compiler or LLMContextCompiler()).compile(
         LLMContextCompileRequest(
             messages=openai_messages,
@@ -108,10 +120,20 @@ async def prepare_messages_for_context_layer(
             metadata=metadata or {},
         )
     )
+    compile_ms = round((time.perf_counter() - compile_start) * 1000.0, 2)
+    _logger.info(
+        EVENT_LLM_CONTEXT_COMPILED,
+        **{
+            LOG_LLM_CONTEXT_COMPILE_MS: compile_ms,
+            LOG_LLM_CONTEXT_SELECTED_BLOCKS: len(compiled.selected_blocks),
+            LOG_LLM_CONTEXT_DROPPED_BLOCKS: len(compiled.dropped_blocks),
+        },
+    )
     return PreparedLLMContextMessages(
         messages=openai_messages_to_a2a_messages(compiled.messages),
         openai_messages=compiled.messages,
         compiled_context=compiled,
+        compile_ms=compile_ms,
     )
 
 
@@ -145,11 +167,13 @@ def _is_openrouter_anthropic_model(model: str | None) -> bool:
 
 def llm_context_trace_metadata(
     compiled_context: CompiledLLMContext | None,
+    *,
+    compile_ms: float | None = None,
 ) -> JsonObject | None:
     """Компактные metadata context layer без содержимого для traces и LLM status events."""
     if compiled_context is None:
         return None
-    return {
+    metadata: JsonObject = {
         "usage": require_json_object(
             compiled_context.usage.model_dump(mode="json", exclude_none=True),
             "llm_context.usage",
@@ -166,6 +190,11 @@ def llm_context_trace_metadata(
             if key in {"stable_prefix_block_keys", "stable_prefix_hash"}
         },
     }
+    if compile_ms is not None:
+        metadata["compile_ms"] = round(compile_ms, 2)
+    compacted_messages = compiled_context.usage.tool_result_compacted_messages
+    metadata["tool_blocks_compacted"] = compacted_messages
+    return metadata
 
 
 def openai_messages_to_a2a_messages(messages: list[JsonObject]) -> list[Message]:

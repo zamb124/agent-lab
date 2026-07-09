@@ -59,6 +59,11 @@ from apps.flows.src.models.branch_contracts import (
 )
 from apps.flows.src.models.enums import ChannelType, NodeType
 from apps.flows.src.models.flow_config import FlowConfig
+from apps.flows.src.observability.flow_timing import (
+    maybe_record_flow_terminal,
+    record_flow_task_enqueued,
+)
+from apps.flows.src.observability.handoff_timing import record_handoff_initiated
 from apps.flows.src.services.flow_speech_resolve import attach_flow_speech_layers_to_context
 from apps.flows.src.services.flow_validator import FlowValidator, ValidationSeverity
 from apps.flows.src.state import collect_flow_node_files
@@ -351,6 +356,12 @@ class BaseChannel(ABC):
             terminal_task_state,
             error=error,
         )
+        await maybe_record_flow_terminal(
+            container.redis_client,
+            task_id=state.task_id,
+            flow_id=self.flow_id,
+            terminal_state=terminal_task_state,
+        )
 
     async def _resolve_session_id_for_a2a_lookup(self, lookup_id: str) -> str | None:
         """А2A ``tasks/get`` / ``tasks/cancel`` передают ``id`` (= task_id из стрима или context_id).
@@ -590,6 +601,11 @@ class BaseChannel(ABC):
                 await _kick_flow_task()
         else:
             await _kick_flow_task()
+        await record_flow_task_enqueued(
+            self.container.redis_client,
+            task_id=params.task_id,
+            flow_id=target.flow_id,
+        )
         logger.debug(f"[create_task] Task kicked to TaskIQ: task_id={params.task_id}")
 
     # === Основной метод выполнения задачи ===
@@ -1139,6 +1155,7 @@ class BaseChannel(ABC):
         async with traced_operation(
             HANDOFF_OP_INITIATED,
             trace_ctx=active_trace,
+            operation_category="handoff",
             extra_attributes=span_attrs,
         ):
             await emitter.emit_handoff_initiated(
@@ -1158,6 +1175,10 @@ class BaseChannel(ABC):
                 child_depth=child_depth,
                 trace_id=parent_state.handoff_trace_id,
                 span_id=initiated_span_id,
+            )
+            await record_handoff_initiated(
+                self.container.redis_client,
+                child_session_id=child_session_id,
             )
 
             if self.context is None:

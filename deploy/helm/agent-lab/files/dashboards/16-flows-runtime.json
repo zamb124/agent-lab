@@ -1,0 +1,174 @@
+{
+  "schemaVersion": 39,
+  "id": null,
+  "uid": "flows-runtime",
+  "title": "Flows Runtime",
+  "tags": ["flows", "runtime", "product"],
+  "timezone": "utc",
+  "refresh": "30s",
+  "time": {"from": "now-1h", "to": "now"},
+  "templating": {
+    "list": [
+      {
+        "name": "service",
+        "type": "query",
+        "query": "label_values(service)",
+        "datasource": {"type": "loki", "uid": "loki"},
+        "multi": true,
+        "includeAll": true,
+        "allValue": ".+",
+        "current": {"text": ["All"], "value": ["$__all"]}
+      },
+      {
+        "name": "mcp_server_id",
+        "type": "query",
+        "query": "label_values({service=~\"$service\"} | json | message=\"operation_finished\" | operation_category=\"mcp\", platform_mcp_server_id)",
+        "datasource": {"type": "loki", "uid": "loki"},
+        "multi": true,
+        "includeAll": true,
+        "allValue": ".+",
+        "current": {"text": ["All"], "value": ["$__all"]}
+      },
+      {
+        "name": "tool_name",
+        "type": "query",
+        "query": "label_values({service=~\"$service\"} | json | message=\"tool_call_finished\", platform_tool_name)",
+        "datasource": {"type": "loki", "uid": "loki"},
+        "multi": true,
+        "includeAll": true,
+        "allValue": ".+",
+        "current": {"text": ["All"], "value": ["$__all"]}
+      }
+    ]
+  },
+  "panels": [
+    {
+      "id": 1,
+      "title": "Flow E2E Terminal P99",
+      "type": "timeseries",
+      "gridPos": {"h": 6, "w": 12, "x": 0, "y": 0},
+      "datasource": {"type": "loki", "uid": "loki"},
+      "targets": [
+        {
+          "expr": "quantile_over_time(0.99, {service=~\"$service\"} | json | message=\"flow_terminal\" | unwrap flow_terminal_ms [5m]) by (flow_terminal_state)",
+          "legendFormat": "{{flow_terminal_state}}",
+          "refId": "A",
+          "queryType": "range"
+        }
+      ],
+      "fieldConfig": {"defaults": {"unit": "ms", "min": 0, "custom": {"lineWidth": 2, "fillOpacity": 10}}}
+    },
+    {
+      "id": 2,
+      "title": "Tool Call P99 by Tool",
+      "type": "timeseries",
+      "gridPos": {"h": 6, "w": 12, "x": 12, "y": 0},
+      "datasource": {"type": "loki", "uid": "loki"},
+      "targets": [
+        {
+          "expr": "quantile_over_time(0.99, {service=~\"$service\"} | json | message=\"tool_call_finished\" | platform_tool_name=~\"$tool_name\" | unwrap platform_tool_duration_ms [5m]) by (platform_tool_name)",
+          "legendFormat": "{{platform_tool_name}}",
+          "refId": "A",
+          "queryType": "range"
+        }
+      ],
+      "fieldConfig": {"defaults": {"unit": "ms", "min": 0, "custom": {"lineWidth": 2, "fillOpacity": 10}}}
+    },
+    {
+      "id": 3,
+      "title": "MCP Call P99 by Server",
+      "type": "timeseries",
+      "gridPos": {"h": 6, "w": 12, "x": 0, "y": 6},
+      "datasource": {"type": "loki", "uid": "loki"},
+      "targets": [
+        {
+          "expr": "quantile_over_time(0.99, {service=~\"$service\"} | json | message=\"operation_finished\" | operation_name=\"flows.mcp.tool_call\" | platform_mcp_server_id=~\"$mcp_server_id\" | unwrap operation_duration_ms [5m]) by (platform_mcp_server_id)",
+          "legendFormat": "{{platform_mcp_server_id}}",
+          "refId": "A",
+          "queryType": "range"
+        }
+      ],
+      "fieldConfig": {"defaults": {"unit": "ms", "min": 0, "custom": {"lineWidth": 2, "fillOpacity": 10}}}
+    },
+    {
+      "id": 4,
+      "title": "MCP Error Rate",
+      "type": "timeseries",
+      "gridPos": {"h": 6, "w": 12, "x": 12, "y": 6},
+      "datasource": {"type": "loki", "uid": "loki"},
+      "targets": [
+        {
+          "expr": "sum by (platform_mcp_server_id) (rate({service=~\"$service\"} | json | message=\"operation_finished\" | operation_name=\"flows.mcp.tool_call\" | operation_status=\"error\" [5m])) / sum by (platform_mcp_server_id) (rate({service=~\"$service\"} | json | message=\"operation_finished\" | operation_name=\"flows.mcp.tool_call\" [5m])) * 100",
+          "legendFormat": "{{platform_mcp_server_id}}",
+          "refId": "A",
+          "queryType": "range"
+        }
+      ],
+      "fieldConfig": {"defaults": {"unit": "percent", "min": 0, "custom": {"lineWidth": 2, "fillOpacity": 10}}}
+    },
+    {
+      "id": 5,
+      "title": "Node Execution P99 by Type",
+      "type": "timeseries",
+      "gridPos": {"h": 6, "w": 12, "x": 0, "y": 12},
+      "datasource": {"type": "loki", "uid": "loki"},
+      "targets": [
+        {
+          "expr": "quantile_over_time(0.99, {service=~\"$service\"} | json | message=\"operation_finished\" | operation_category=\"flow_node\" | unwrap operation_duration_ms [5m]) by (platform_node_type)",
+          "legendFormat": "{{platform_node_type}}",
+          "refId": "A",
+          "queryType": "range"
+        }
+      ],
+      "fieldConfig": {"defaults": {"unit": "ms", "min": 0, "custom": {"lineWidth": 2, "fillOpacity": 10}}}
+    },
+    {
+      "id": 6,
+      "title": "ReAct Iterations P99",
+      "type": "timeseries",
+      "gridPos": {"h": 6, "w": 12, "x": 12, "y": 12},
+      "datasource": {"type": "loki", "uid": "loki"},
+      "targets": [
+        {
+          "expr": "quantile_over_time(0.99, {service=~\"$service\"} | json | message=\"flow_react_completed\" | unwrap flow_react_iterations [5m]) by (service)",
+          "legendFormat": "{{service}}",
+          "refId": "A",
+          "queryType": "range"
+        }
+      ],
+      "fieldConfig": {"defaults": {"unit": "short", "min": 0, "custom": {"lineWidth": 2, "fillOpacity": 10}}}
+    },
+    {
+      "id": 7,
+      "title": "Handoff Wall Time P99",
+      "type": "timeseries",
+      "gridPos": {"h": 6, "w": 12, "x": 0, "y": 18},
+      "datasource": {"type": "loki", "uid": "loki"},
+      "targets": [
+        {
+          "expr": "quantile_over_time(0.99, {service=~\"$service\"} | json | message=\"handoff_wall_time\" | unwrap platform_handoff_wall_ms [5m]) by (platform_handoff_target_flow_id)",
+          "legendFormat": "{{platform_handoff_target_flow_id}}",
+          "refId": "A",
+          "queryType": "range"
+        }
+      ],
+      "fieldConfig": {"defaults": {"unit": "ms", "min": 0, "custom": {"lineWidth": 2, "fillOpacity": 10}}}
+    },
+    {
+      "id": 8,
+      "title": "HITL Operator TTR P99",
+      "type": "timeseries",
+      "gridPos": {"h": 6, "w": 12, "x": 12, "y": 18},
+      "datasource": {"type": "loki", "uid": "loki"},
+      "targets": [
+        {
+          "expr": "quantile_over_time(0.99, {service=~\"$service\"} | json | message=\"hitl_operator_responded\" | unwrap platform_hitl_wait_ms [5m]) by (platform_hitl_queue_slug)",
+          "legendFormat": "{{platform_hitl_queue_slug}}",
+          "refId": "A",
+          "queryType": "range"
+        }
+      ],
+      "fieldConfig": {"defaults": {"unit": "ms", "min": 0, "custom": {"lineWidth": 2, "fillOpacity": 10}}}
+    }
+  ]
+}

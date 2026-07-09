@@ -17,10 +17,16 @@ from apps.flows.src.container_contracts import as_flow_runtime_container
 from apps.flows.src.dependencies import ContainerDep
 from apps.flows.src.models.mcp import MCPServerConfig, MCPServerSource, MCPTransportType
 from apps.flows.src.models.mcp_branding import MCPServerBrandingResolved
+from apps.flows.src.services.mcp_catalog_ids import server_id_from_catalog_id
 from apps.flows.src.services.mcp_catalog_provisioner import (
     apply_catalog_entry_to_server,
     mark_server_override_locked,
     mcp_server_update_triggers_override,
+)
+from apps.flows.src.services.mcp_catalog_store import (
+    install_catalog_entry_for_company,
+    list_store_catalog_entries,
+    uninstall_catalog_entry_from_company,
 )
 from apps.flows.src.services.mcp_server_display_order import sort_mcp_servers_for_display
 from apps.flows.src.services.mcp_sync import resolve_mcp_client_variables, sync_mcp_server_tools
@@ -80,6 +86,7 @@ class MCPServerResponse(BaseModel):
     source: str
     catalog_id: str | None
     catalog_snapshot_hash: str | None
+    catalog_auto_provisioned: bool
     override_locked: bool
     override_locked_at: datetime | None
     override_locked_by_user_id: str | None
@@ -139,6 +146,22 @@ class MCPTestResponse(BaseModel):
     url: str
 
 
+class MCPCatalogStoreItemResponse(BaseModel):
+    """Запись MCP Store (opt-in tier)."""
+
+    catalog_id: str
+    registry_name: str
+    title: str
+    description: str | None
+    upstream_url: str
+    transport_type: str
+    auth_policy: str
+    verify_status: str
+    tool_count_snapshot: int
+    installed: bool
+    icon_url: str | None = None
+
+
 def _server_to_response(
     server: MCPServerConfig,
     *,
@@ -158,6 +181,7 @@ def _server_to_response(
         source=server.source.value,
         catalog_id=server.catalog_id,
         catalog_snapshot_hash=server.catalog_snapshot_hash,
+        catalog_auto_provisioned=server.catalog_auto_provisioned,
         override_locked=server.override_locked,
         override_locked_at=server.override_locked_at,
         override_locked_by_user_id=server.override_locked_by_user_id,
@@ -194,15 +218,100 @@ async def list_servers(
     limit: Annotated[int, Query(ge=1, le=1000)] = 200,
     offset: Annotated[int, Query(ge=0)] = 0,
 ) -> OffsetPage[MCPServerResponse]:
-    servers, total, icon_url_map = await asyncio.gather(
+    servers, total = await asyncio.gather(
         container.mcp_server_repository.list(limit=5000, offset=0),
         container.mcp_server_repository.count_all(),
-        container.mcp_branding_service.build_icon_url_map(),
     )
     ordered_servers = sort_mcp_servers_for_display(servers)
     page_servers = ordered_servers[offset : offset + limit]
+    icon_url_map = await container.mcp_branding_service.build_icon_url_map_for_server_ids(
+        [server.server_id for server in page_servers]
+    )
     items = [_server_to_response(s, icon_url=icon_url_map.get(s.server_id)) for s in page_servers]
     return OffsetPage[MCPServerResponse](items=items, total=total, limit=limit, offset=offset)
+
+
+@router.get("/catalog", response_model=OffsetPage[MCPCatalogStoreItemResponse])
+async def list_mcp_catalog(
+    container: ContainerDep,
+    tier: Annotated[str, Query()] = "store",
+    search: Annotated[str, Query()] = "",
+    limit: Annotated[int, Query(ge=1, le=200)] = 50,
+    offset: Annotated[int, Query(ge=0)] = 0,
+) -> OffsetPage[MCPCatalogStoreItemResponse]:
+    if tier != "store":
+        raise HTTPException(status_code=400, detail="Only tier=store is supported")
+
+    runtime = as_flow_runtime_container(container)
+    page_entries, total = await list_store_catalog_entries(
+        container=runtime,
+        search=search,
+        limit=limit,
+        offset=offset,
+    )
+    icon_url_map = await container.mcp_branding_service.build_icon_url_map_for_server_ids(
+        [server_id_from_catalog_id(entry.catalog_id) for entry, _installed in page_entries]
+    )
+    items = [
+        MCPCatalogStoreItemResponse(
+            catalog_id=entry.catalog_id,
+            registry_name=entry.registry_name,
+            title=entry.title,
+            description=entry.description,
+            upstream_url=entry.upstream_url,
+            transport_type=entry.transport_type,
+            auth_policy=entry.auth_policy.value,
+            verify_status=entry.verify_status.value,
+            tool_count_snapshot=entry.tool_count_snapshot,
+            installed=installed,
+            icon_url=icon_url_map.get(server_id_from_catalog_id(entry.catalog_id)),
+        )
+        for entry, installed in page_entries
+    ]
+    return OffsetPage[MCPCatalogStoreItemResponse](
+        items=items,
+        total=total,
+        limit=limit,
+        offset=offset,
+    )
+
+
+@router.post("/catalog/{catalog_id}/install", response_model=MCPServerResponse)
+async def install_mcp_catalog_entry(
+    catalog_id: str,
+    container: ContainerDep,
+) -> MCPServerResponse:
+    runtime = as_flow_runtime_container(container)
+    try:
+        server = await install_catalog_entry_for_company(
+            container=runtime,
+            catalog_id=catalog_id,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except MCPClientError as exc:
+        raise HTTPException(status_code=502, detail=f"MCP server error: {exc}") from exc
+    except Exception as exc:
+        raise HTTPException(status_code=502, detail=f"Connection error: {exc}") from exc
+
+    return await _server_response(container, server)
+
+
+@router.delete("/catalog/{catalog_id}/install")
+async def uninstall_mcp_catalog_entry(
+    catalog_id: str,
+    container: ContainerDep,
+) -> dict[str, str]:
+    runtime = as_flow_runtime_container(container)
+    try:
+        await uninstall_catalog_entry_from_company(
+            container=runtime,
+            catalog_id=catalog_id,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    return {"status": "uninstalled", "catalog_id": catalog_id}
 
 
 @router.post("/servers", response_model=MCPServerResponse)

@@ -84,6 +84,26 @@ async def test_observability_pipeline_e2e():
 
         assert trace_found, f"Трейс {trace_id} не найден в Tempo за 30 секунд. OTLP -> Alloy -> Tempo пайплайн не сработал."
 
+        operation_query = (
+            '{service="provider_litserve"} | json | message="operation_finished"'
+        )
+        operation_found = False
+        for _ in range(10):
+            await asyncio.sleep(2.0)
+            try:
+                op_resp = await client.get(loki_url, params={"query": operation_query})
+                if op_resp.status_code == 200:
+                    op_results = op_resp.json().get("data", {}).get("result", [])
+                    if op_results:
+                        operation_found = True
+                        break
+            except Exception:
+                pass
+        assert operation_found, (
+            "operation_finished не найден в Loki для provider_litserve "
+            "(mirror completion logs pipeline)"
+        )
+
         # 4. Проверяем что provisioned дашборды загрузились в Grafana
         dash_list = await client.get(
             "http://grafana-test:3000/api/search",
@@ -103,6 +123,11 @@ async def test_observability_pipeline_e2e():
             "WebSocket / Realtime",
             "Database",
             "Security",
+            "Product Performance",
+            "Voice Latency",
+            "Flows Runtime",
+            "RAG Search",
+            "Platform Economics",
         }
         missing = expected - titles
         assert not missing, f"Provisioned dashboards missing in Grafana: {missing}"
@@ -124,6 +149,11 @@ async def test_observability_pipeline_e2e():
                 "log-contract-violations",
                 "slow-http-p99",
                 "high-db-latency",
+                "flow-task-pickup-p99-high",
+                "llm-ttft-p99-high",
+                "flow-e2e-terminal-p99-high",
+                "tool-call-p99-high",
+                "mcp-error-rate-high",
             }
             missing_alerts = expected_alerts - uids
             assert not missing_alerts, f"Alert rules missing: {missing_alerts}"

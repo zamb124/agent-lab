@@ -144,15 +144,17 @@ def create_broker(
             queue_name=effective_queue,
         )
 
+    session_lock_middleware.set_queue_name(effective_queue)
+
     broker = (
         stream_broker
         .with_result_backend(result_backend)
         .with_middlewares(
+            session_lock_middleware,
             build_logging_middleware(
                 queue_name=effective_queue,
                 service_name=effective_service,
             ),
-            session_lock_middleware,
             retry_middleware,
         )
     )

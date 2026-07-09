@@ -130,6 +130,107 @@ class TestLogQLExpressions:
                             f"{name}: unwrap uses dot notation: {field} in {expr}"
                         )
 
+    def test_product_performance_dashboard_exists(self, dashboards):
+        assert "14-product-performance.json" in dashboards
+        assert dashboards["14-product-performance.json"]["uid"] == "product-performance"
+
+    def test_voice_latency_dashboard_exists(self, dashboards):
+        assert "15-voice-latency.json" in dashboards
+        assert dashboards["15-voice-latency.json"]["uid"] == "voice-latency"
+
+    def test_flows_runtime_dashboard_exists(self, dashboards):
+        assert "16-flows-runtime.json" in dashboards
+        assert dashboards["16-flows-runtime.json"]["uid"] == "flows-runtime"
+
+    def test_rag_search_dashboard_exists(self, dashboards):
+        assert "17-rag-search.json" in dashboards
+        assert dashboards["17-rag-search.json"]["uid"] == "rag-search"
+
+    def test_platform_economics_dashboard_exists(self, dashboards):
+        assert "18-platform-economics.json" in dashboards
+        assert dashboards["18-platform-economics.json"]["uid"] == "platform-economics"
+
+    def test_flows_runtime_dashboard_has_operation_finished_panels(self, dashboards):
+        flows_runtime = dashboards["16-flows-runtime.json"]
+        exprs = [
+            target.get("expr", "")
+            for panel in flows_runtime.get("panels", [])
+            for target in panel.get("targets", [])
+        ]
+        assert any('message="flow_terminal"' in expr for expr in exprs)
+        assert any('message="tool_call_finished"' in expr for expr in exprs)
+        assert any('message="operation_finished"' in expr and "flows.mcp.tool_call" in expr for expr in exprs)
+
+    def test_rag_search_dashboard_has_search_and_rerank_panels(self, dashboards):
+        rag_search = dashboards["17-rag-search.json"]
+        exprs = [
+            target.get("expr", "")
+            for panel in rag_search.get("panels", [])
+            for target in panel.get("targets", [])
+        ]
+        assert any("rag.search.namespace" in expr for expr in exprs)
+        assert any("rag.rerank.after_retrieve" in expr for expr in exprs)
+
+    def test_platform_economics_dashboard_has_billing_lag_panel(self, dashboards):
+        economics = dashboards["18-platform-economics.json"]
+        exprs = [
+            target.get("expr", "")
+            for panel in economics.get("panels", [])
+            for target in panel.get("targets", [])
+        ]
+        assert any('message="billing_settlement_lag"' in expr for expr in exprs)
+
+    def test_product_performance_has_ws_and_context_panels(self, dashboards):
+        product = dashboards["14-product-performance.json"]
+        exprs = [
+            target.get("expr", "")
+            for panel in product.get("panels", [])
+            for target in panel.get("targets", [])
+        ]
+        assert any('message="ws_command_finished"' in expr for expr in exprs)
+        assert any('message="llm_context_compiled"' in expr for expr in exprs)
+
+    def test_voice_latency_has_tts_ttfa_panel(self, dashboards):
+        voice = dashboards["15-voice-latency.json"]
+        exprs = [
+            target.get("expr", "")
+            for panel in voice.get("panels", [])
+            for target in panel.get("targets", [])
+        ]
+        assert any("tts_ttfa_ms" in expr for expr in exprs)
+
+    def test_e2e_observability_expected_dashboards_includes_14_to_18(self, dashboards):
+        titles = {db["title"] for db in dashboards.values()}
+        expected_titles = {
+            "Product Performance",
+            "Voice Latency",
+            "Flows Runtime",
+            "RAG Search",
+            "Platform Economics",
+        }
+        missing = expected_titles - titles
+        assert not missing, f"Missing dashboards for E2E observability: {missing}"
+
+    def test_alert_rules_include_tier_a_product_metrics(self):
+        path = ALERTS_DIR / "alert-rules.yaml"
+        with open(path, encoding="utf-8") as f:
+            data = yaml.safe_load(f)
+        uids: set[str] = set()
+        for group in data.get("groups", []):
+            for rule in group.get("rules", []):
+                uid = rule.get("uid")
+                if isinstance(uid, str):
+                    uids.add(uid)
+        expected = {
+            "flow-task-pickup-p99-high",
+            "llm-ttft-p99-high",
+            "flow-e2e-terminal-p99-high",
+            "tool-call-p99-high",
+            "mcp-error-rate-high",
+        }
+        missing = expected - uids
+        assert not missing, f"Missing Tier A product metric alerts: {missing}"
+
     def test_all_logql_have_svc_selector_or_explicit_scope(self, dashboards):
         """
         Все LogQL запросы должны фильтровать по svc (или service) или иметь

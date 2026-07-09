@@ -1336,6 +1336,33 @@ class TestLlmNode:
     """Тесты LlmNode (node_type: 'llm_node')."""
 
     @pytest.mark.asyncio
+    async def test_llm_node_execute_accepts_canvas_position_fields(
+        self, client, app, container, mock_llm_redis
+    ):
+        """pos_x/pos_y — метаданные canvas редактора, не влияют на runtime."""
+        await mock_llm_redis([{"type": "text", "content": "Canvas ok"}])
+
+        response = await client.post(
+            "/flows/api/v1/code/execute",
+            json={
+                "node_type": "llm_node",
+                "node_config": {
+                    "type": "llm_node",
+                    "prompt": "You are a helpful assistant.",
+                    "tools": [],
+                    "llm": {"model": "gpt-4o", "temperature": 0.2},
+                    "pos_x": -177.26,
+                    "pos_y": -190.04,
+                },
+                "state": {"content": "Hello"},
+            },
+        )
+        assert response.status_code == 200
+
+        data = response.json()
+        assert_execute_response(data, expected_success=True)
+
+    @pytest.mark.asyncio
     async def test_llm_node_basic_execution(self, client, app, container, mock_llm_redis):
         """prompt + tools + llm."""
         await mock_llm_redis([

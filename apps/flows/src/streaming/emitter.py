@@ -6,6 +6,7 @@ import json
 from datetime import datetime, timezone
 from typing import override
 
+from apps.flows.src.observability.flow_timing import maybe_record_flow_first_content_chunk
 from core.clients.redis_client import RedisClient
 from core.logging import get_logger
 from core.state import ExecutionState
@@ -37,6 +38,7 @@ class Emitter(BaseEmitter):
     """
 
     redis: RedisClient
+    _first_content_chunk_recorded: bool
 
     def __init__(self, redis_client: RedisClient, state: ExecutionState):
         """
@@ -46,6 +48,36 @@ class Emitter(BaseEmitter):
         """
         super().__init__(state)
         self.redis = redis_client
+        self._first_content_chunk_recorded = False
+
+    @override
+    async def emit_text(
+        self,
+        text: str,
+        append: bool = True,
+        last_chunk: bool = False,
+        *,
+        artifact_name: str = "response",
+    ) -> None:
+        if (
+            artifact_name == "response"
+            and text != ""
+            and not self._first_content_chunk_recorded
+        ):
+            self._first_content_chunk_recorded = True
+            flow_id = self.state.session_flow_id
+            await maybe_record_flow_first_content_chunk(
+                self.redis,
+                task_id=self.state.task_id,
+                flow_id=flow_id,
+                text=text,
+            )
+        await super().emit_text(
+            text,
+            append=append,
+            last_chunk=last_chunk,
+            artifact_name=artifact_name,
+        )
 
     @override
     async def _publish(self, event: StreamEvent) -> None:

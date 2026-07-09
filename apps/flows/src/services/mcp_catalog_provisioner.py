@@ -43,7 +43,11 @@ def _catalog_entry_is_provisionable(entry: MCPCatalogEntry, auto_provision: str)
     raise ValueError(f"Unknown mcp_catalog.auto_provision: {auto_provision!r}")
 
 
-def catalog_entry_to_server_config(entry: MCPCatalogEntry) -> MCPServerConfig:
+def catalog_entry_to_server_config(
+    entry: MCPCatalogEntry,
+    *,
+    catalog_auto_provisioned: bool,
+) -> MCPServerConfig:
     server_id = server_id_from_catalog_id(entry.catalog_id)
     is_active = entry.verify_status != MCPCatalogVerifyStatus.UNREACHABLE
     return MCPServerConfig(
@@ -57,6 +61,7 @@ def catalog_entry_to_server_config(entry: MCPCatalogEntry) -> MCPServerConfig:
         source=MCPServerSource.CATALOG,
         catalog_id=entry.catalog_id,
         catalog_snapshot_hash=entry.catalog_snapshot_hash,
+        catalog_auto_provisioned=catalog_auto_provisioned,
         override_locked=False,
         override_locked_at=None,
         override_locked_by_user_id=None,
@@ -74,7 +79,7 @@ def apply_catalog_entry_to_server(
         raise ValueError(
             f"catalog_id mismatch: server={server.catalog_id!r} entry={entry.catalog_id!r}"
         )
-    return catalog_entry_to_server_config(entry)
+    return catalog_entry_to_server_config(entry, catalog_auto_provisioned=server.catalog_auto_provisioned)
 
 
 async def provision_mcp_catalog_for_company(
@@ -112,7 +117,7 @@ async def provision_mcp_catalog_for_company(
         if not _catalog_entry_is_provisionable(entry, auto_provision):
             continue
         provisionable_ids.add(entry.catalog_id)
-        desired = catalog_entry_to_server_config(entry)
+        desired = catalog_entry_to_server_config(entry, catalog_auto_provisioned=True)
         existing = existing_by_catalog_id.get(entry.catalog_id)
         if existing is None:
             _ = await container.mcp_server_repository.set(desired)
@@ -182,6 +187,8 @@ async def provision_mcp_catalog_for_company(
         if server.source != MCPServerSource.CATALOG:
             continue
         if server.catalog_id is None:
+            continue
+        if not server.catalog_auto_provisioned:
             continue
         if server.catalog_id in provisionable_ids:
             continue

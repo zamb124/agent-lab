@@ -178,7 +178,10 @@ class FlowContainer(BaseContainer):
 
     @lazy
     def hitl_work_item_service(self) -> HitlWorkItemService:
-        return HitlWorkItemService(work_item_service=self.work_item_service)
+        return HitlWorkItemService(
+            work_item_service=self.work_item_service,
+            redis_client=self.redis_client,
+        )
 
     @lazy
     def handoff_context_service(self) -> HandoffContextService:

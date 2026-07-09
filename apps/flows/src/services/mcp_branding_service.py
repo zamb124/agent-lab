@@ -106,6 +106,20 @@ class MCPServerBrandingService:
                 icon_map[alias_server_id] = canonical_url
         return icon_map
 
+    async def build_icon_url_map_for_server_ids(
+        self,
+        server_ids: list[str],
+    ) -> dict[str, str]:
+        if not server_ids:
+            return {}
+        unique_ids = list(dict.fromkeys(server_ids))
+        icon_map: dict[str, str] = {}
+        for server_id in unique_ids:
+            icon_url = await self.get_icon_url(server_id)
+            if icon_url is not None:
+                icon_map[server_id] = icon_url
+        return icon_map
+
     async def get_icon_url(self, server_id: str) -> str | None:
         branding = await self._branding_repository.get(server_id)
         if branding is None:

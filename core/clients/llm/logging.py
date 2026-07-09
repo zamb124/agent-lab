@@ -15,15 +15,31 @@ from core.logging.attributes import (
     LOG_LLM_INPUT_TOKENS,
     LOG_LLM_MODEL,
     LOG_LLM_OUTPUT_TOKENS,
+    LOG_LLM_OUTPUT_TPS,
     LOG_LLM_PROVIDER,
     LOG_LLM_SOURCE,
     LOG_LLM_STREAM,
     LOG_LLM_TOTAL_TOKENS,
+    LOG_LLM_TTFT_MS,
     LOG_LLM_URL,
 )
 from core.types import JsonArray, JsonObject
 
 _logger = get_logger(__name__)
+
+
+def compute_llm_output_tokens_per_second(
+    *,
+    output_tokens: int,
+    duration_ms: float,
+    ttft_ms: float | None,
+) -> float:
+    """Скорость генерации output-токенов после первого токена (tokens/sec)."""
+    if output_tokens <= 0:
+        return 0.0
+    generation_ms = duration_ms - (ttft_ms if ttft_ms is not None else 0.0)
+    generation_seconds = max(generation_ms / 1000.0, 0.001)
+    return round(output_tokens / generation_seconds, 2)
 
 
 def log_llm_stream_response(
@@ -35,6 +51,8 @@ def log_llm_stream_response(
     model: str | None = None,
     source: str | None = None,
     duration_ms: float | None = None,
+    ttft_ms: float | None = None,
+    output_tokens_per_second: float | None = None,
     reasoning: str | None = None,
     tool_calls: JsonArray | None = None,
 ) -> None:
@@ -57,6 +75,10 @@ def log_llm_stream_response(
         fields[LOG_LLM_SOURCE] = source
     if duration_ms is not None:
         fields[LOG_LLM_DURATION_MS] = round(duration_ms, 2)
+    if ttft_ms is not None:
+        fields[LOG_LLM_TTFT_MS] = round(ttft_ms, 2)
+    if output_tokens_per_second is not None:
+        fields[LOG_LLM_OUTPUT_TPS] = round(output_tokens_per_second, 2)
 
     raw_input_tokens = usage.get("input_tokens") or usage.get("prompt_tokens") or 0
     raw_output_tokens = usage.get("output_tokens") or usage.get("completion_tokens") or 0
@@ -79,6 +101,12 @@ def log_llm_stream_response(
     fields[LOG_LLM_INPUT_TOKENS] = input_tokens
     fields[LOG_LLM_OUTPUT_TOKENS] = output_tokens
     fields[LOG_LLM_TOTAL_TOKENS] = total_tokens
+    if output_tokens_per_second is None and duration_ms is not None:
+        fields[LOG_LLM_OUTPUT_TPS] = compute_llm_output_tokens_per_second(
+            output_tokens=output_tokens,
+            duration_ms=duration_ms,
+            ttft_ms=ttft_ms,
+        )
 
     _logger.info(
         EVENT_LLM_STREAM_RESPONSE,

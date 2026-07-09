@@ -20,6 +20,7 @@ from apps.flows.src.durable_execution import (
     create_initial_state,
 )
 from apps.flows.src.models.enums import NodeType
+from apps.flows.src.observability.handoff_timing import maybe_record_handoff_wall_time
 from apps.flows.src.runtime.a2a_messages import build_tool_result_message
 from apps.flows.src.services.handoff_context_service import (
     HandoffContextService,
@@ -339,6 +340,7 @@ class HandoffOrchestratorService:
         )
         async with traced_operation(
             HANDBACK_OP_COMPLETED,
+            operation_category="handoff",
             extra_attributes=span_attrs,
         ):
             await self._complete_handback_impl(
@@ -348,6 +350,12 @@ class HandoffOrchestratorService:
                 trace_context=trace_context,
                 parent_session_id=parent_session_id,
             )
+        await maybe_record_handoff_wall_time(
+            self._redis,
+            child_session_id=child_state.session_id,
+            target_flow_id=child_state.session_flow_id,
+            depth=child_state.handoff_depth,
+        )
 
     async def _complete_handback_impl(
         self,

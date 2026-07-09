@@ -136,3 +136,57 @@ export const mcpBrandingRemoveOp = createAsyncOp({
         });
     },
 });
+
+export const mcpCatalogStoreLoadOp = createAsyncOp({
+    name: 'flows/mcp_catalog_store_load',
+    silent: true,
+    restMirror: { method: 'GET', path: '/flows/api/v1/mcp/catalog' },
+    request: async ({ payload }) => {
+        const search = payload && typeof payload.search === 'string' ? payload.search : '';
+        const limit = payload && typeof payload.limit === 'number' ? payload.limit : 50;
+        const offset = payload && typeof payload.offset === 'number' ? payload.offset : 0;
+        const params = new URLSearchParams({
+            tier: 'store',
+            search,
+            limit: String(limit),
+            offset: String(offset),
+        });
+        return httpRequest({
+            method: 'GET',
+            url: `/flows/api/v1/mcp/catalog?${params.toString()}`,
+        });
+    },
+});
+
+export const mcpCatalogInstallOp = createAsyncOp({
+    name: 'flows/mcp_catalog_install',
+    successToastKey: 'flows:toast.mcp_catalog_installed',
+    errorToastKey: 'flows:toast.mcp_catalog_install_error',
+    restMirror: { method: 'POST', path: '/flows/api/v1/mcp/catalog/{catalog_id}/install' },
+    request: async ({ payload }) => {
+        if (!payload || typeof payload.catalog_id !== 'string' || payload.catalog_id.length === 0) {
+            throw new Error('mcpCatalogInstallOp: { catalog_id } required');
+        }
+        return httpRequest({
+            method: 'POST',
+            url: `/flows/api/v1/mcp/catalog/${encodeURIComponent(payload.catalog_id)}/install`,
+            body: {},
+        });
+    },
+});
+
+export const mcpCatalogUninstallOp = createAsyncOp({
+    name: 'flows/mcp_catalog_uninstall',
+    successToastKey: 'flows:toast.mcp_catalog_uninstalled',
+    errorToastKey: 'flows:toast.mcp_catalog_uninstall_error',
+    restMirror: { method: 'DELETE', path: '/flows/api/v1/mcp/catalog/{catalog_id}/install' },
+    request: async ({ payload }) => {
+        if (!payload || typeof payload.catalog_id !== 'string' || payload.catalog_id.length === 0) {
+            throw new Error('mcpCatalogUninstallOp: { catalog_id } required');
+        }
+        return httpRequest({
+            method: 'DELETE',
+            url: `/flows/api/v1/mcp/catalog/${encodeURIComponent(payload.catalog_id)}/install`,
+        });
+    },
+});

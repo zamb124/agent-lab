@@ -134,6 +134,7 @@ class BillingSettlementSpan(BaseModel):
     trace_id: str
     operation_name: str
     service_name: str
+    end_time: datetime | None = None
     company_id: str | None = None
     user_id: str | None = None
     event_type: str | None = None

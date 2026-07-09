@@ -46,6 +46,8 @@ LOG_TASK_ID = "task.id"
 LOG_TASK_NAME = "task.name"
 LOG_TASK_QUEUE = "task.queue"
 LOG_TASK_DURATION_MS = "task.duration_ms"
+LOG_TASK_QUEUE_WAIT_MS = "task.queue_wait_ms"
+LOG_TASK_LOCK_WAIT_MS = "task.lock_wait_ms"
 LOG_TASK_RETRY = "task.retry"
 LOG_TASK_KIND = "task.kind"
 
@@ -63,6 +65,8 @@ LOG_LLM_INPUT_TOKENS = "llm.tokens.input"
 LOG_LLM_OUTPUT_TOKENS = "llm.tokens.output"
 LOG_LLM_TOTAL_TOKENS = "llm.tokens.total"
 LOG_LLM_DURATION_MS = "llm.duration_ms"
+LOG_LLM_TTFT_MS = "llm.ttft_ms"
+LOG_LLM_OUTPUT_TPS = "llm.output_tokens_per_second"
 LOG_LLM_HAS_TOOL_CALLS = "llm.has_tool_calls"
 LOG_LLM_STREAM = "llm.stream"
 LOG_LLM_URL = "llm.url"
@@ -71,6 +75,80 @@ LOG_LLM_URL = "llm.url"
 LOG_FILE_ID = "file.id"
 LOG_FILE_SIZE = "file.size"
 LOG_FILE_MIME = "file.mime"
+
+# Voice STT / TTS (синхронизировано с core/tracing/attributes.py)
+LOG_STT_PROVIDER = "stt.provider"
+LOG_STT_MODEL = "stt.model"
+LOG_STT_AUDIO_BYTES = "stt.audio_bytes"
+LOG_STT_DURATION_MS = "stt.duration_ms"
+LOG_STT_TEXT_LENGTH = "stt.text_length"
+LOG_STT_MODE = "stt.mode"
+LOG_STT_CHUNK_COUNT = "stt.chunk_count"
+
+LOG_TTS_PROVIDER = "tts.provider"
+LOG_TTS_VOICE = "tts.voice"
+LOG_TTS_LANGUAGE = "tts.language"
+LOG_TTS_TEXT_LENGTH = "tts.text_length"
+LOG_TTS_AUDIO_BYTES = "tts.audio_bytes"
+LOG_TTS_DURATION_MS = "tts.duration_ms"
+LOG_TTS_TTFA_MS = "tts.ttfa_ms"
+
+# Flows product SLI
+LOG_FLOW_ID = "flow.id"
+LOG_FLOW_FIRST_CHUNK_MS = "flow.first_content_chunk_ms"
+LOG_FLOW_TERMINAL_MS = "flow.terminal_ms"
+LOG_FLOW_TERMINAL_STATE = "flow.terminal_state"
+LOG_FLOW_MEMORY_SUMMARIZE_MS = "flow.memory.summarize_ms"
+LOG_FLOW_MEMORY_COMPACTION = "flow.memory.compaction"
+LOG_FLOW_REACT_ITERATIONS = "flow.react.iterations"
+LOG_FLOW_REACT_MAX_ITERATIONS = "flow.react.max_iterations"
+LOG_FLOW_REACT_INTERRUPTED = "flow.react.interrupted"
+
+# Generic operation mirror (Loki product metrics)
+LOG_OPERATION_NAME = "operation_name"
+LOG_OPERATION_CATEGORY = "operation_category"
+LOG_OPERATION_DURATION_MS = "operation_duration_ms"
+LOG_OPERATION_STATUS = "operation_status"
+
+# Tool call
+LOG_TOOL_NAME = "platform.tool.name"
+LOG_TOOL_DURATION_MS = "platform.tool.duration_ms"
+LOG_TOOL_ERROR = "platform.tool.error"
+LOG_TOOL_IS_AGENT = "platform.tool.is_agent"
+
+# MCP (mirror from spans)
+LOG_MCP_SERVER_ID = "platform.mcp.server_id"
+LOG_MCP_METHOD = "platform.mcp.method"
+LOG_MCP_TOOL_NAME = "platform.mcp.tool_name"
+
+# Node execution
+LOG_NODE_TYPE = "platform.node_type"
+LOG_NODE_ID = "platform.node_id"
+
+# Handoff / HITL
+LOG_HANDOFF_WALL_MS = "platform.handoff.wall_ms"
+LOG_HANDOFF_DEPTH = "platform.handoff.depth"
+LOG_HANDOFF_TARGET_FLOW_ID = "platform.handoff.target_flow_id"
+LOG_HITL_WAIT_MS = "platform.hitl.wait_ms"
+LOG_HITL_QUEUE_SLUG = "platform.hitl.queue_slug"
+LOG_HITL_WORK_ITEM_ID = "platform.hitl.work_item_id"
+
+# RAG
+LOG_RAG_DOCUMENT_ID = "platform.rag.document_id"
+LOG_RAG_STAGE = "platform.rag.stage"
+LOG_RAG_SEARCH_POOL_SIZE = "platform.rag.search_pool_size"
+
+# LLM context compile
+LOG_LLM_CONTEXT_COMPILE_MS = "platform.llm.context.compile_ms"
+LOG_LLM_CONTEXT_SELECTED_BLOCKS = "platform.llm.context.selected_blocks_count"
+LOG_LLM_CONTEXT_DROPPED_BLOCKS = "platform.llm.context.dropped_blocks_count"
+
+# Billing settlement
+LOG_BILLING_SETTLEMENT_LAG_MS = "platform.billing.settlement_lag_ms"
+
+# WS command duration
+LOG_WS_COMMAND_DURATION_MS = "ws.command_duration_ms"
+LOG_WS_COMMAND_STATUS = "ws.command_status"
 
 # Исключение
 LOG_EXCEPTION_TYPE = "exception.type"
@@ -84,12 +162,27 @@ EVENT_TASK_STARTED = "task_started"
 EVENT_TASK_FINISHED = "task_finished"
 EVENT_TASK_FAILED = "task_failed"
 EVENT_TASK_SCHEDULED = "task_scheduled"
+EVENT_TASK_LOCK_ACQUIRED = "task_lock_acquired"
 EVENT_WS_CONNECTED = "ws_connected"
 EVENT_WS_DISCONNECTED = "ws_disconnected"
 EVENT_WS_COMMAND = "ws_command"
 EVENT_LLM_REQUEST = "llm_request"
 EVENT_LLM_RESPONSE = "llm_response"
 EVENT_LLM_STREAM_RESPONSE = "llm_stream_response"
+EVENT_VOICE_STT_RESPONSE = "voice_stt_response"
+EVENT_VOICE_TTS_RESPONSE = "voice_tts_response"
+EVENT_FLOW_TASK_ENQUEUED = "flow_task_enqueued"
+EVENT_FLOW_FIRST_CONTENT_CHUNK = "flow_first_content_chunk"
+EVENT_FLOW_MEMORY_SUMMARIZE = "flow_memory_summarize"
+EVENT_FLOW_TERMINAL = "flow_terminal"
+EVENT_FLOW_REACT_COMPLETED = "flow_react_completed"
+EVENT_OPERATION_FINISHED = "operation_finished"
+EVENT_TOOL_CALL_FINISHED = "tool_call_finished"
+EVENT_LLM_CONTEXT_COMPILED = "llm_context_compiled"
+EVENT_HANDOFF_WALL_TIME = "handoff_wall_time"
+EVENT_HITL_OPERATOR_RESPONDED = "hitl_operator_responded"
+EVENT_BILLING_SETTLEMENT_LAG = "billing_settlement_lag"
+EVENT_WS_COMMAND_FINISHED = "ws_command_finished"
 EVENT_UI_EVENT_PUBLISHED = "ui_event_published"
 EVENT_UI_EVENT_RECEIVED = "ui_event_received"
 EVENT_BACKGROUND_TASK_STARTED = "background_task_started"

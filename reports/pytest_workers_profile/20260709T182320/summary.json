@@ -1,0 +1,56 @@
+{
+  "run_id": "20260709T182320",
+  "pytest_workers": "10",
+  "pytest_workers_numeric": 10,
+  "phase1_passed": true,
+  "phase1_exit_code": 0,
+  "failed_count": 0,
+  "parallelism_suspect_count": 0,
+  "phase1_wall_time_seconds": null,
+  "max_worker_restart": 2,
+  "stack_scale_factor": 1.0,
+  "stack_capacity": {
+    "secrets": 1,
+    "flows": 2,
+    "rag": 1,
+    "crm": 1,
+    "frontend": 1,
+    "sync": 1,
+    "office": 1,
+    "search": 2,
+    "provider_litserve": 1,
+    "voice": 1,
+    "capability_gateway": 6,
+    "code_runner_python": 12,
+    "code_runner_node": 1,
+    "code_runner_go": 1,
+    "code_runner_csharp": 1,
+    "worktracker": 1,
+    "flows_worker": 1,
+    "rag_worker": 1,
+    "search_worker": 2,
+    "sync_worker": 2,
+    "crm_worker": 1
+  },
+  "xdist_counts": {
+    "total_phase1_estimate": 1659,
+    "code_sandbox_estimate": 106,
+    "real_taskiq_estimate": 12,
+    "parallelizable_estimate": 1541
+  },
+  "failed_nodeids": [],
+  "issues": [],
+  "recommendations": [
+    "Параллелизм phase 1 в норме; сравните delta с прошлым прогоном"
+  ],
+  "issue_count_error": 0,
+  "issue_count_warn": 0,
+  "delta_vs_previous": {
+    "has_previous": true,
+    "previous_run_id": "20260709T180252",
+    "failed_count_delta": -8,
+    "parallelism_suspect_count_delta": 0,
+    "phase1_wall_time_seconds_delta": null,
+    "issue_count_error_delta": -1
+  }
+}

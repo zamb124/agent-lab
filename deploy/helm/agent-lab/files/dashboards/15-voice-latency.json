@@ -1,0 +1,192 @@
+{
+  "schemaVersion": 39,
+  "id": null,
+  "uid": "voice-latency",
+  "title": "Voice Latency",
+  "tags": ["voice", "stt", "tts", "latency"],
+  "timezone": "utc",
+  "refresh": "30s",
+  "time": {"from": "now-1h", "to": "now"},
+  "templating": {
+    "list": [
+      {
+        "name": "service",
+        "type": "query",
+        "query": "label_values(service)",
+        "datasource": {"type": "loki", "uid": "loki"},
+        "multi": true,
+        "includeAll": true,
+        "allValue": ".+",
+        "current": {"text": ["All"], "value": ["$__all"]}
+      }
+    ]
+  },
+  "panels": [
+    {
+      "id": 1,
+      "title": "STT Requests / min",
+      "type": "timeseries",
+      "gridPos": {"h": 6, "w": 12, "x": 0, "y": 0},
+      "datasource": {"type": "loki", "uid": "loki"},
+      "targets": [
+        {
+          "expr": "sum by (stt_provider, stt_mode) (rate({service=~\"$service\"} | json | message=\"voice_stt_response\" [2m])) * 60",
+          "legendFormat": "{{stt_provider}} / {{stt_mode}}",
+          "refId": "A",
+          "queryType": "range"
+        }
+      ],
+      "fieldConfig": {"defaults": {"unit": "short", "min": 0, "custom": {"lineWidth": 2, "fillOpacity": 10}}}
+    },
+    {
+      "id": 2,
+      "title": "TTS Requests / min",
+      "type": "timeseries",
+      "gridPos": {"h": 6, "w": 12, "x": 12, "y": 0},
+      "datasource": {"type": "loki", "uid": "loki"},
+      "targets": [
+        {
+          "expr": "sum by (tts_provider) (rate({service=~\"$service\"} | json | message=\"voice_tts_response\" [2m])) * 60",
+          "legendFormat": "{{tts_provider}}",
+          "refId": "A",
+          "queryType": "range"
+        }
+      ],
+      "fieldConfig": {"defaults": {"unit": "short", "min": 0, "custom": {"lineWidth": 2, "fillOpacity": 10}}}
+    },
+    {
+      "id": 3,
+      "title": "STT P50/P95/P99",
+      "type": "timeseries",
+      "gridPos": {"h": 6, "w": 12, "x": 0, "y": 6},
+      "datasource": {"type": "loki", "uid": "loki"},
+      "targets": [
+        {
+          "expr": "quantile_over_time(0.50, {service=~\"$service\"} | json | message=\"voice_stt_response\" | unwrap stt_duration_ms [5m]) by (stt_provider)",
+          "legendFormat": "P50 {{stt_provider}}",
+          "refId": "A",
+          "queryType": "range"
+        },
+        {
+          "expr": "quantile_over_time(0.95, {service=~\"$service\"} | json | message=\"voice_stt_response\" | unwrap stt_duration_ms [5m]) by (stt_provider)",
+          "legendFormat": "P95 {{stt_provider}}",
+          "refId": "B",
+          "queryType": "range"
+        },
+        {
+          "expr": "quantile_over_time(0.99, {service=~\"$service\"} | json | message=\"voice_stt_response\" | unwrap stt_duration_ms [5m]) by (stt_provider)",
+          "legendFormat": "P99 {{stt_provider}}",
+          "refId": "C",
+          "queryType": "range"
+        }
+      ],
+      "fieldConfig": {"defaults": {"unit": "ms", "min": 0, "custom": {"lineWidth": 2, "fillOpacity": 10}}}
+    },
+    {
+      "id": 4,
+      "title": "TTS P50/P95/P99",
+      "type": "timeseries",
+      "gridPos": {"h": 6, "w": 12, "x": 12, "y": 6},
+      "datasource": {"type": "loki", "uid": "loki"},
+      "targets": [
+        {
+          "expr": "quantile_over_time(0.50, {service=~\"$service\"} | json | message=\"voice_tts_response\" | unwrap tts_duration_ms [5m]) by (tts_provider)",
+          "legendFormat": "P50 {{tts_provider}}",
+          "refId": "A",
+          "queryType": "range"
+        },
+        {
+          "expr": "quantile_over_time(0.95, {service=~\"$service\"} | json | message=\"voice_tts_response\" | unwrap tts_duration_ms [5m]) by (tts_provider)",
+          "legendFormat": "P95 {{tts_provider}}",
+          "refId": "B",
+          "queryType": "range"
+        },
+        {
+          "expr": "quantile_over_time(0.99, {service=~\"$service\"} | json | message=\"voice_tts_response\" | unwrap tts_duration_ms [5m]) by (tts_provider)",
+          "legendFormat": "P99 {{tts_provider}}",
+          "refId": "C",
+          "queryType": "range"
+        }
+      ],
+      "fieldConfig": {"defaults": {"unit": "ms", "min": 0, "custom": {"lineWidth": 2, "fillOpacity": 10}}}
+    },
+    {
+      "id": 5,
+      "title": "STT by Mode",
+      "type": "timeseries",
+      "gridPos": {"h": 6, "w": 12, "x": 0, "y": 12},
+      "datasource": {"type": "loki", "uid": "loki"},
+      "targets": [
+        {
+          "expr": "quantile_over_time(0.99, {service=~\"$service\"} | json | message=\"voice_stt_response\" | unwrap stt_duration_ms [5m]) by (stt_mode)",
+          "legendFormat": "{{stt_mode}}",
+          "refId": "A",
+          "queryType": "range"
+        }
+      ],
+      "fieldConfig": {"defaults": {"unit": "ms", "min": 0, "custom": {"lineWidth": 2, "fillOpacity": 10}}}
+    },
+    {
+      "id": 6,
+      "title": "Chunked STT chunk_count",
+      "type": "timeseries",
+      "gridPos": {"h": 6, "w": 12, "x": 12, "y": 12},
+      "datasource": {"type": "loki", "uid": "loki"},
+      "targets": [
+        {
+          "expr": "avg_over_time({service=~\"$service\"} | json | message=\"voice_stt_response\" | stt_mode=\"batch_chunked\" | unwrap stt_chunk_count [5m])",
+          "legendFormat": "avg chunks",
+          "refId": "A",
+          "queryType": "range"
+        }
+      ],
+      "fieldConfig": {"defaults": {"unit": "short", "min": 0, "custom": {"lineWidth": 2, "fillOpacity": 10}}}
+    },
+    {
+      "id": 9,
+      "title": "Realtime TTS TTFA P99",
+      "type": "timeseries",
+      "gridPos": {"h": 6, "w": 12, "x": 0, "y": 18},
+      "datasource": {"type": "loki", "uid": "loki"},
+      "targets": [
+        {
+          "expr": "quantile_over_time(0.99, {service=~\"$service\"} | json | message=\"voice_tts_response\" | tts_ttfa_ms > 0 | unwrap tts_ttfa_ms [5m]) by (tts_provider)",
+          "legendFormat": "{{tts_provider}}",
+          "refId": "A",
+          "queryType": "range"
+        }
+      ],
+      "fieldConfig": {"defaults": {"unit": "ms", "min": 0, "custom": {"lineWidth": 2, "fillOpacity": 10}}}
+    },
+    {
+      "id": 7,
+      "title": "Recent Voice STT Logs",
+      "type": "logs",
+      "gridPos": {"h": 10, "w": 12, "x": 0, "y": 24},
+      "datasource": {"type": "loki", "uid": "loki"},
+      "targets": [
+        {
+          "expr": "{service=~\"$service\"} | json | message=\"voice_stt_response\"",
+          "refId": "A",
+          "queryType": "logs"
+        }
+      ],
+      "options": {"showTime": true, "wrapLogMessage": true, "sortOrder": "Descending"}
+    },
+    {
+      "id": 8,
+      "title": "Recent Voice TTS Logs",
+      "type": "logs",
+      "gridPos": {"h": 10, "w": 12, "x": 12, "y": 24},
+      "datasource": {"type": "loki", "uid": "loki"},
+      "targets": [
+        {
+          "expr": "{service=~\"$service\"} | json | message=\"voice_tts_response\"",
+          "refId": "A",
+          "queryType": "logs"
+        }
+      ],
+      "options": {"showTime": true, "wrapLogMessage": true, "sortOrder": "Descending"}
+    }
+  ]
+}

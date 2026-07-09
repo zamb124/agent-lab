@@ -4,6 +4,7 @@
 
 import { fixture, fixtureCleanup, html, expect, elementUpdated } from '../helpers/render.js';
 import { resetPlatformState, bootstrapTestBus } from '../helpers/reset.js';
+import { CoreEvents } from '@platform/lib/events/contract.js';
 import { collectFactories } from '@platform/lib/events/factories/register.js';
 import { registerFactory } from '@platform/lib/events/factory-registry.js';
 import { editorResource } from '../../../../apps/flows/ui/events/resources/editor.resource.js';
@@ -78,6 +79,44 @@ describe('flows-editor-header flow settings entry', () => {
         expect(branchesScroll).to.not.equal(null);
         expect(branchesAdd).to.not.equal(null);
         expect(branchesScroll.contains(branchesSlot)).to.equal(true);
+    });
+
+    it('overflow anchor не поднимает глобальный z-index без открытого меню', async () => {
+        for (const factory of FACTORIES) {
+            registerFactory(factory);
+        }
+        const collected = collectFactories(FACTORIES);
+        bootstrapTestBus({ slices: collected.slices, effects: [] });
+
+        const el = await fixture(html`
+            <flows-editor-header flow-id="flow-demo" branch-id="base"></flows-editor-header>
+        `);
+        await elementUpdated(el);
+
+        const overflowAnchor = el.shadowRoot.querySelector('.overflow-anchor');
+        expect(overflowAnchor).to.not.equal(null);
+        expect(overflowAnchor.hasAttribute('data-open')).to.equal(false);
+        expect(window.getComputedStyle(overflowAnchor).zIndex).to.equal('auto');
+    });
+
+    it('overflow menu закрывается при UI_MODAL_OPEN', async () => {
+        for (const factory of FACTORIES) {
+            registerFactory(factory);
+        }
+        const collected = collectFactories(FACTORIES);
+        const { bus } = bootstrapTestBus({ slices: collected.slices, effects: [] });
+
+        const el = await fixture(html`
+            <flows-editor-header flow-id="flow-demo" branch-id="base"></flows-editor-header>
+        `);
+        el._overflowOpen = true;
+        await elementUpdated(el);
+
+        bus.dispatch(CoreEvents.UI_MODAL_OPEN, { kind: 'flows.flow_edit', props: { flowId: 'flow-demo' } });
+        await elementUpdated(el);
+
+        expect(el._overflowOpen).to.equal(false);
+        expect(el.shadowRoot.querySelector('.menu-flyout')).to.equal(null);
     });
 
     it('mobile overflow menu uses block ghost buttons at 390px', async () => {

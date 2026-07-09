@@ -21,7 +21,7 @@ import { flowsResource, flowUpdateOp, flowReloadFromBundleOp, flowVersionsListOp
 import { flowsVoiceCatalogLoadOp } from '../events/resources/voice-catalog.resource.js';
 import { toolsResource, toolsAllOp } from '../events/resources/tools.resource.js';
 import { resourcesBundleResource, resourceUpdateOp } from '../events/resources/resources-bundle.resource.js';
-import { mcpServersResource, mcpServerUpdateOp, mcpServerSyncOp, mcpServerTestOp, mcpServerResetCatalogDefaultsOp, mcpBrandingLoadOp, mcpBrandingUpsertOp, mcpBrandingRemoveOp } from '../events/resources/mcp.resource.js';
+import { mcpServersResource, mcpServerUpdateOp, mcpServerSyncOp, mcpServerTestOp, mcpServerResetCatalogDefaultsOp, mcpBrandingLoadOp, mcpBrandingUpsertOp, mcpBrandingRemoveOp, mcpCatalogStoreLoadOp, mcpCatalogInstallOp, mcpCatalogUninstallOp } from '../events/resources/mcp.resource.js';
 import { triggersListOp, triggerGetOp, triggerCreateOp, triggerUpdateOp,
          triggerRemoveOp, triggerVerifyOp, triggerReregisterOp, triggerTestOp } from '../events/resources/triggers.resource.js';
 import { secretsVariablesResource } from '@platform/lib/events/resources/secrets-variables.resource.js';
@@ -174,6 +174,9 @@ export class FlowsApp extends PlatformApp {
         mcpBrandingLoadOp,
         mcpBrandingUpsertOp,
         mcpBrandingRemoveOp,
+        mcpCatalogStoreLoadOp,
+        mcpCatalogInstallOp,
+        mcpCatalogUninstallOp,
         triggersListOp,
         triggerGetOp,
         triggerCreateOp,

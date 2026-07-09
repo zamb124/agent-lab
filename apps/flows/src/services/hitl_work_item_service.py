@@ -20,8 +20,13 @@ from uuid import UUID
 
 from apps.flows.config import get_settings as get_flows_settings
 from apps.flows.src.models.hitl_schemas import HitlHandoffCommand, HitlInterruptSnapshot
+from apps.flows.src.observability.hitl_timing import (
+    maybe_record_hitl_operator_response,
+    record_hitl_interrupt,
+)
 from apps.flows.src.tasks.task_names import TASK_PROCESS_FLOW
 from apps.flows_worker.broker_core import broker as flows_broker
+from core.clients.redis_client import RedisClient
 from core.context import get_context
 from core.files.storage import CANONICAL_DOWNLOAD_URL_PREFIX
 from core.logging import get_logger
@@ -78,8 +83,14 @@ def _format_dialog(comments: list[WorkItemComment], resolution_text: str) -> str
 class HitlWorkItemService:
     """Регистрация operator-handoff как WorkItem и возобновление flow по hook."""
 
-    def __init__(self, *, work_item_service: WorkItemService) -> None:
+    def __init__(
+        self,
+        *,
+        work_item_service: WorkItemService,
+        redis_client: RedisClient,
+    ) -> None:
         self._work_items: WorkItemService = work_item_service
+        self._redis: RedisClient = redis_client
 
     async def register_handoff(
         self,
@@ -170,6 +181,10 @@ class HitlWorkItemService:
             correlation_id=cid_str,
             session_id=state.session_id,
         )
+        await record_hitl_interrupt(
+            self._redis,
+            work_item_id=work_item.work_item_id,
+        )
         return cid, work_item.work_item_id
 
     async def resume_from_completion(
@@ -196,13 +211,27 @@ class HitlWorkItemService:
         if not isinstance(channel, str) or not channel:
             raise ValueError("context_data_snapshot не содержит строковый channel")
 
+        a2a_task_id = binding.get("a2a_task_id")
+        tid = a2a_task_id if isinstance(a2a_task_id, str) else ""
+        interrupt_snapshot = binding.get("interrupt_snapshot")
+        queue_slug = ""
+        if isinstance(interrupt_snapshot, dict):
+            raw_queue = interrupt_snapshot.get("assignee_queue")
+            if isinstance(raw_queue, str):
+                queue_slug = raw_queue
+        await maybe_record_hitl_operator_response(
+            self._redis,
+            work_item_id=work_item_id,
+            queue_slug=queue_slug,
+            task_id=tid,
+            flow_id=flow_id,
+        )
+
         content = resolution.text
         if binding.get("handoff_mode") == HandoffMode.TAKEOVER.value:
             comments = await self._work_items.list_comments(company_id, work_item_id)
             content = _format_dialog(comments, resolution.text)
 
-        a2a_task_id = binding.get("a2a_task_id")
-        tid = a2a_task_id if isinstance(a2a_task_id, str) else ""
         context_id = binding.get("context_id")
         cid = (
             context_id

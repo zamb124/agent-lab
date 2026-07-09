@@ -64,6 +64,7 @@ ATTR_MEMORY_CURSOR_START = "platform.memory.cursor_start"
 ATTR_MEMORY_CURSOR_END = "platform.memory.cursor_end"
 ATTR_MEMORY_SCOPE = "platform.memory.scope"
 ATTR_MEMORY_COMPACTION = "platform.memory.compaction"
+ATTR_MEMORY_SUMMARIZE_MS = "platform.memory.summarize_ms"
 
 # Рефлексия
 ATTR_REFLECTION_POLICY_ID = "platform.reflection.policy_id"
@@ -108,6 +109,8 @@ ATTR_LLM_INPUT_TOKENS = "platform.llm.input_tokens"
 ATTR_LLM_OUTPUT_TOKENS = "platform.llm.output_tokens"
 ATTR_LLM_TOTAL_TOKENS = "platform.llm.total_tokens"
 ATTR_LLM_DURATION_MS = "platform.llm.duration_ms"
+ATTR_LLM_TTFT_MS = "platform.llm.ttft_ms"
+ATTR_LLM_OUTPUT_TPS = "platform.llm.output_tokens_per_second"
 ATTR_LLM_HAS_TOOL_CALLS = "platform.llm.has_tool_calls"
 ATTR_LLM_STREAM = "platform.llm.stream"
 ATTR_LLM_REQUEST = "platform.llm.request"
@@ -119,6 +122,11 @@ ATTR_LLM_CONTEXT_DROPPED_BLOCKS_COUNT = "platform.llm.context.dropped_blocks_cou
 ATTR_LLM_CONTEXT_TOTAL_INPUT_TOKENS = "platform.llm.context.total_input_tokens"
 ATTR_LLM_CONTEXT_MAX_INPUT_TOKENS = "platform.llm.context.max_input_tokens"
 ATTR_LLM_CONTEXT_MODEL_CONTEXT_LENGTH = "platform.llm.context.model_context_length"
+ATTR_LLM_CONTEXT_COMPILE_MS = "platform.llm.context.compile_ms"
+ATTR_LLM_CONTEXT_TOOL_BLOCKS_COMPACTED = "platform.llm.context.tool_blocks_compacted"
+
+ATTR_TASK_QUEUE_WAIT_MS = "platform.task.queue_wait_ms"
+ATTR_TASK_LOCK_WAIT_MS = "platform.task.lock_wait_ms"
 
 # Инструмент (tool)
 ATTR_TOOL_NAME = "platform.tool.name"
@@ -157,6 +165,7 @@ ATTR_BILLING_COST_ORIGIN = "platform.billing.cost_origin"
 # id custom OpenAI-compatible провайдера компании, если использовался (для аналитики)
 ATTR_BILLING_CUSTOM_PROVIDER_ID = "platform.billing.custom_provider_id"
 ATTR_OPERATION_CATEGORY = "platform.operation.category"
+ATTR_OPERATION_LOG_MIRROR = "platform.operation.log_mirror"
 
 # RAG / embeddings
 ATTR_EMBED_MODEL = "platform.embed.model"
@@ -170,6 +179,20 @@ ATTR_SYNC_COMMAND_TYPE = "platform.sync.command_type"
 ATTR_STT_PROVIDER = "platform.stt.provider"
 ATTR_STT_AUDIO_BYTES = "platform.stt.audio_bytes"
 ATTR_STT_CHUNK_COUNT = "platform.stt.chunk_count"
+ATTR_STT_DURATION_MS = "platform.stt.duration_ms"
+ATTR_STT_MODEL = "platform.stt.model"
+ATTR_STT_MODE = "platform.stt.mode"
+ATTR_STT_TEXT_LENGTH = "platform.stt.text_length"
+
+ATTR_TTS_PROVIDER = "platform.tts.provider"
+ATTR_TTS_VOICE = "platform.tts.voice"
+ATTR_TTS_LANGUAGE = "platform.tts.language"
+ATTR_TTS_TEXT_LENGTH = "platform.tts.text_length"
+ATTR_TTS_AUDIO_BYTES = "platform.tts.audio_bytes"
+ATTR_TTS_DURATION_MS = "platform.tts.duration_ms"
+ATTR_TTS_TTFA_MS = "platform.tts.ttfa_ms"
+
+ATTR_FLOW_FIRST_CHUNK_MS = "platform.flow.first_content_chunk_ms"
 ATTR_LIVEKIT_OPERATION = "platform.livekit.operation"
 ATTR_LIVEKIT_ROOM = "platform.livekit.room_name"
 ATTR_LIVEKIT_EGRESS_ID = "platform.livekit.egress_id"

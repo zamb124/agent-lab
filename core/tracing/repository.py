@@ -805,6 +805,7 @@ class SpanRepository:
             trace_id=row.trace_id,
             operation_name=row.operation_name,
             service_name=row.service_name,
+            end_time=row.end_time,
             company_id=row.company_id,
             user_id=row.user_id,
             event_type=row.event_type,

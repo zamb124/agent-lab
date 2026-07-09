@@ -11,6 +11,7 @@ import hashlib
 from collections import defaultdict
 from dataclasses import dataclass
 
+import core.tracing.attributes as trace_attributes
 from core.ai.models import AICostOrigin, ResolvedAIModel
 from core.ai.providers import AICapability
 from core.ai.rerank_client import AIRerankerClientError
@@ -25,6 +26,7 @@ from core.cache.ttl_model_cache import RedisTextCache
 from core.config.base import BaseSettings
 from core.rag.models import RAGSearchResult
 from core.rag_indexing_schema import IndexProfileSearchDefaults
+from core.tracing.operation_span import traced_operation
 
 
 class RerankScoreCache:
@@ -218,42 +220,49 @@ async def apply_rerank_after_retrieve(
     pool = list(results)
     if max_candidates is not None:
         pool = pool[:max_candidates]
-    scores = await _rerank_pool_scores(
-        pool=pool,
-        query=query,
-        url=url,
-        resolution=resolution,
-        settings=settings,
-        score_cache=score_cache,
-    )
-    adjusted: list[tuple[float, float, RAGSearchResult]] = []
-    for rerank_score, item in zip(scores, pool):
-        # Rerank-скор перекрывает RRF, поэтому freshness-сигнал (multiplier
-        # из retrieval-этапа) переносится на итоговый скор явно.
-        freshness_multiplier = item.provenance.get("freshness_multiplier")
-        final_score = rerank_score
-        if isinstance(freshness_multiplier, (int, float)) and not isinstance(freshness_multiplier, bool):
-            final_score = rerank_score * float(freshness_multiplier)
-        adjusted.append((final_score, rerank_score, item))
-    adjusted.sort(key=lambda entry: entry[0], reverse=True)
-    out: list[RAGSearchResult] = []
-    for final_score, rerank_score, item in adjusted:
-        prov = dict(item.provenance)
-        prov["rerank"] = True
-        prov["rerank_score"] = rerank_score
-        out.append(
-            RAGSearchResult(
-                content=item.content,
-                score=final_score,
-                document_id=item.document_id,
-                document_name=item.document_name,
-                metadata=item.metadata,
-                namespace=item.namespace,
-                chunk_id=item.chunk_id,
-                provenance=prov,
-            )
+    async with traced_operation(
+        "rag.rerank.after_retrieve",
+        event_type="rag.rerank",
+        operation_category="rag_rerank",
+        extra_attributes={
+            trace_attributes.ATTR_RAG_STAGE: "rerank",
+            "platform.rag.rerank_pool_size": len(pool),
+        },
+    ):
+        scores = await _rerank_pool_scores(
+            pool=pool,
+            query=query,
+            url=url,
+            resolution=resolution,
+            settings=settings,
+            score_cache=score_cache,
         )
-    return out
+        adjusted: list[tuple[float, float, RAGSearchResult]] = []
+        for rerank_score, item in zip(scores, pool):
+            freshness_multiplier = item.provenance.get("freshness_multiplier")
+            final_score = rerank_score
+            if isinstance(freshness_multiplier, (int, float)) and not isinstance(freshness_multiplier, bool):
+                final_score = rerank_score * float(freshness_multiplier)
+            adjusted.append((final_score, rerank_score, item))
+        adjusted.sort(key=lambda entry: entry[0], reverse=True)
+        out: list[RAGSearchResult] = []
+        for final_score, rerank_score, item in adjusted:
+            prov = dict(item.provenance)
+            prov["rerank"] = True
+            prov["rerank_score"] = rerank_score
+            out.append(
+                RAGSearchResult(
+                    content=item.content,
+                    score=final_score,
+                    document_id=item.document_id,
+                    document_name=item.document_name,
+                    metadata=item.metadata,
+                    namespace=item.namespace,
+                    chunk_id=item.chunk_id,
+                    provenance=prov,
+                )
+            )
+        return out
 
 
 async def _rerank_pool_scores(

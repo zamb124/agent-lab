@@ -27,6 +27,7 @@ ack'аются `system/ws/invalid_frame`.
 from __future__ import annotations
 
 import json
+import time
 import uuid
 
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect
@@ -41,10 +42,13 @@ from core.logging import (
 )
 from core.logging.attributes import (
     EVENT_WS_COMMAND,
+    EVENT_WS_COMMAND_FINISHED,
     EVENT_WS_CONNECTED,
     EVENT_WS_DISCONNECTED,
     LOG_USER_ID,
     LOG_WS_COMMAND,
+    LOG_WS_COMMAND_DURATION_MS,
+    LOG_WS_COMMAND_STATUS,
     LOG_WS_REQUEST_ID,
 )
 from core.models.context_models import Context
@@ -182,17 +186,21 @@ async def _handle_command_frame(
     context = _build_ws_context(user)
     _ = set_context(context)
     try:
+        command_start = time.perf_counter()
         logger.info(EVENT_WS_COMMAND, **{LOG_WS_COMMAND: command_type})
         reply_payload: JsonObject | None
+        command_status = "ok"
         try:
             reply_type, reply_payload = await dispatch_ws_command(command_type, payload, user)
         except WsCommandError as err:
+            command_status = "error"
             reply_type = derive_failed_type(command_type)
             reply_payload = {
                 "error_code": err.code,
                 "error_detail": err.detail,
             }
         except Exception as exc:
+            command_status = "error"
             logger.exception(
                 "ws.command_crashed",
                 **{
@@ -202,6 +210,15 @@ async def _handle_command_frame(
             )
             reply_type = derive_failed_type(command_type)
             reply_payload = {"error_code": "ws_internal_error", "error_detail": str(exc)}
+        command_duration_ms = round((time.perf_counter() - command_start) * 1000.0, 3)
+        logger.info(
+            EVENT_WS_COMMAND_FINISHED,
+            **{
+                LOG_WS_COMMAND: command_type,
+                LOG_WS_COMMAND_DURATION_MS: command_duration_ms,
+                LOG_WS_COMMAND_STATUS: command_status,
+            },
+        )
         out_payload = reply_payload
         if reply_payload is not None and reply_type.endswith("_failed"):
             out_payload = _merge_ws_failure_payload(

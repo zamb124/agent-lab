@@ -3,6 +3,7 @@
 import asyncio
 import subprocess
 import tempfile
+import time
 from pathlib import Path
 
 import httpx
@@ -10,6 +11,7 @@ import httpx
 from core.ai.runtime import create_voice_stt_client
 from core.clients.speech_override import SpeechOverride
 from core.clients.stt_client import BaseSTTClient, STTTranscriptionResult
+from core.clients.voice_logging import log_voice_stt_response
 from core.config import get_settings
 from core.files.models import AudioTranscriptionStatus
 from core.logging import get_logger
@@ -287,6 +289,7 @@ async def transcribe_audio_with_chunking(
     if company_id == "":
         raise ValueError("company_id обязателен для transcribe_audio_with_chunking.")
 
+    job_start = time.perf_counter()
     settings = get_settings()
     mt = settings.media_transcriber
     max_upload_bytes = mt.chunk_max_upload_bytes
@@ -426,4 +429,13 @@ async def transcribe_audio_with_chunking(
         raise ValueError(f"STT вернул пустые транскрипции для всех чанков job_id={job_id}.")
     if last_provider == "":
         raise ValueError("STT не вернул идентификатор провайдера (last_provider пуст).")
-    return "\n".join(chunk_texts), last_provider
+    full_text = "\n".join(chunk_texts)
+    log_voice_stt_response(
+        provider=last_provider,
+        duration_ms=(time.perf_counter() - job_start) * 1000.0,
+        audio_bytes=len(audio_bytes),
+        text_length=len(full_text),
+        mode="batch_chunked",
+        chunk_count=len(chunks),
+    )
+    return full_text, last_provider

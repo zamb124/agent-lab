@@ -13,6 +13,36 @@ alwaysApply: false
 - **Единая фабрика**: MCP-тулы создаются через `ToolFactory` как обычные ноды/тулы.
 - **State-aware**: MCP-тулы читают/пишут `ExecutionState`.
 
+## Двухуровневая модель (auto + Store)
+
+| Уровень | Как появляется | `catalog_auto_provisioned` | Uninstall из UI |
+|---|---|---|---|
+| **Tier 1 — platform + curated auto** | `ensure_default_mcp_servers` (Browser, Search) + provisioner при `auto_provision=approved_only` | `true` для catalog auto | Запрещён для auto tier |
+| **Tier 2 — MCP Store (opt-in)** | Пользователь: `POST .../mcp/catalog/{catalog_id}/install` | `false` | `DELETE .../install` |
+
+**Default policy:** `settings.mcp_catalog.auto_provision` = **`approved_only`** (не `all_verified`). Curated allowlist: `apps/flows/mcp_catalog_allowlist.yaml`.
+
+Provisioner **деактивирует** только записи с `catalog_auto_provisioned=true`, если entry исчез или не provisionable. Opt-in Store install **не** снимается provisioner-ом.
+
+### MCP Store API
+
+```
+GET  /flows/api/v1/mcp/catalog?tier=store[&q=...]
+POST /flows/api/v1/mcp/servers/{server_id}/sync
+POST /flows/api/v1/mcp/catalog/{catalog_id}/install
+DELETE /flows/api/v1/mcp/catalog/{catalog_id}/install
+```
+
+- `tier=store` — verified registry entries для UI «Каталог»; неизвестный `tier` → **400** fail-closed.
+- Install **идемпотентен**: повторный POST → тот же `server_id`, без дублей.
+- После install — `sync_mcp_server_tools` (или явный sync).
+
+### Internal company init
+
+Новая компания: `POST /flows/api/v1/internal/company/init` (signed headers через `build_internal_context_headers`) → TaskIQ `init_company_resources` → `ensure_default_mcp_servers_for_company` + `provision_mcp_catalog_for_company`. Ошибки MCP при init **не проглатываются** — raise для retry.
+
+Вызывается из `apps/idle_worker/tasks/company_init_tasks.py` при создании компании.
+
 ## Модели
 
 ```python
@@ -21,10 +51,11 @@ from apps.flows.src.models.mcp import MCPServerConfig, MCPTransportType
 server = MCPServerConfig(
     server_id="context7",
     name="Context7 Documentation",
-    url="https://mcp.context7.com/mcp",
+    url="https://mcp.example.com/mcp",
     transport_type=MCPTransportType.HTTP,
     headers={"Authorization": "@var:context7_api_key"},
     is_active=True,
+    catalog_auto_provisioned=False,  # true только для auto tier provisioner
 )
 ```
 
@@ -51,16 +82,16 @@ active_servers = await mcp_repo.list_active()
 - **Crawl:** `apps/idle_worker/tasks/mcp_catalog_tasks.py::mcp_catalog_crawl_task` — paginate registry, filter `streamable-http`/`sse` + `https://`, verify через `MCPClient.initialize()` + `list_tools()`, upsert `MCPCatalogRepository`.
 - **Provision:** `mcp_catalog_provision_companies_task` — все компании → `provision_mcp_catalog_for_company`.
 - **Resync:** `mcp_catalog_resync_tools_task` — `sync_mcp_server_tools` для `source=catalog` без `override_locked`.
-- Scheduler: `apps/scheduler/main.py` — `mcp_catalog_crawl_task` по `crawl_cron` (default `0 * * * *`, раз в час) + `crawl_run_on_start=true` (kick при старте scheduler-api, как LLM sync). `mcp_catalog.resync_tools_cron`.
+- Scheduler: `apps/scheduler/main.py` — `mcp_catalog_crawl_task` по `crawl_cron` (default `0 * * * *`, раз в hour) + `crawl_run_on_start=true`. `mcp_catalog.resync_tools_cron`.
 
-### Модели
+### Модели catalog
 
 ```python
 from apps.flows.src.models.mcp import MCPServerConfig, MCPServerSource
 from apps.flows.src.models.mcp_catalog import MCPCatalogEntry
 ```
 
-`MCPServerConfig` расширен: `source` (`platform` | `catalog` | `manual`), `catalog_id`, `catalog_snapshot_hash`, `override_locked`, `override_locked_at`, `override_locked_by_user_id`.
+`MCPServerConfig` расширен: `source` (`platform` | `catalog` | `manual`), `catalog_id`, `catalog_snapshot_hash`, `catalog_auto_provisioned`, `override_locked`, `override_locked_at`, `override_locked_by_user_id`.
 
 `MCPCatalogEntry` — global (`MCPCatalogRepository`, table `mcp_catalog`, `is_global=True`).
 
@@ -68,20 +99,18 @@ from apps.flows.src.models.mcp_catalog import MCPCatalogEntry
 
 `apps/flows/src/services/mcp_catalog_provisioner.py::provision_mcp_catalog_for_company`:
 
-- **Add:** catalog entry + policy → `MCPServerConfig(source=CATALOG, url=upstream_url, headers=auth_template)`.
+- **Add:** catalog entry + policy → `MCPServerConfig(source=CATALOG, url=upstream_url, headers=auth_template, catalog_auto_provisioned=true|false)`.
 - **Update:** если `override_locked=false` и hash изменился — merge managed fields + `sync_mcp_server_tools`.
-- **Deprecate:** entry исчез / не provisionable → `is_active=false` (если не locked).
-- **Skip:** `override_locked=true`, `source=platform|manual`.
+- **Deprecate:** entry исчез / не provisionable → `is_active=false` только для `catalog_auto_provisioned=true` (если не locked).
+- **Skip:** `override_locked=true`, `source=platform|manual`, opt-in Store без auto flag.
 
-Policy: `settings.mcp_catalog.auto_provision` — `all_verified` | `approved_only` | `disabled`. Curated allowlist: `apps/flows/mcp_catalog_allowlist.yaml`.
-
-Новая компания: `apps/flows/src/tasks/company_init_tasks.py` после `ensure_default_mcp_servers`.
+Policy: `settings.mcp_catalog.auto_provision` — `approved_only` (default) | `all_verified` | `disabled`.
 
 ### Override lock + Reset
 
 - `PUT /flows/api/v1/mcp/servers/{server_id}` — изменение managed field у `source=catalog` → `override_locked=true`.
 - `POST /flows/api/v1/mcp/servers/{server_id}/reset_catalog_defaults` — restore из `MCPCatalogEntry`, `override_locked=false`, re-sync.
-- UI: `flows-mcp-servers-modal.js` — badge source, «Изменено вручную», кнопка сброса.
+- UI: `flows-mcp-servers-modal.js` — вкладки Installed/Catalog, badge source, «Изменено вручную», кнопка сброса.
 
 ### Auth
 
@@ -93,12 +122,17 @@ Catalog хранит `auth_template`; provisioner копирует в `headers`.
 - Отдельный JSON-RPC proxy (`apps/mcp_farm`) — только если понадобится central egress
 - Crawl GitHub repos напрямую (только registry API + optional yaml)
 
+## UI: поиск и навигация
+
+- **`flows-mcp-servers-modal`:** Installed / Catalog; debounced search в каталоге; empty Installed → CTA «Открыть каталог».
+- **`flows-library-picker-modal` (MCP tab):** без поиска — группировка по серверам; **с поиском** — flat grid tools (subtitle = server); empty → CTA «MCP серверы».
+
 ## Синхронизация тулов
 
 Единая реализация — `apps/flows/src/services/mcp_sync.py::sync_mcp_server_tools(container=..., server_config=...)`.
 
 - UI и интеграции: `POST /flows/api/v1/mcp/servers/{server_id}/sync` зовёт её же.
-- Инициализация компании (TaskIQ): `sync_auto_mcp_servers_for_company` синкает все активные серверы компании.
+- Инициализация компании (TaskIQ): sync активных серверов после provision/install.
 
 Пишет `ToolReference` в `tool_repository`, обновляет `cached_tools` и `last_sync_at`, удаляет тулы, которых больше нет в `tools/list`. Переменные для резолва `@var:` в headers загружаются только если они там есть.
 
@@ -173,7 +207,7 @@ Mcp-Session-Id: {uuid}
 {"jsonrpc": "2.0", "id": 3, "method": "tools/call", "params": {"name": "tool-name", "arguments": {...}}}
 ```
 
-## API
+## API (servers)
 
 ```
 POST /flows/api/v1/mcp/servers
@@ -196,6 +230,12 @@ async def test_mcp_tool(local_mcp_http_url):
     assert len(tools) > 0
 ```
 
+**Integration:** `tests/flows/integration/test_mcp_catalog_provisioner.py` (Store, provision, idempotent install, tier 400), `tests/flows/integration/test_mcp_company_init.py` (internal init, MCP error raise).
+
+**Browser:** `tests/frontend_core/browser/flows/flows-mcp-servers-modal.spec.js`, `flows-library-picker-tabs.spec.js` (flat search, empty CTA).
+
+**E2E scenario:** `tests/ui/e2e/test_flows_mcp_scenarios.py` → `docs/scenarios/flows/general/mcp-workflow/`.
+
 ## Platform branding (icons)
 
 Глобальные иконки MCP по slug (`server_id`) — не per-company. Хранятся в `MCPServerBrandingRepository` (`is_global=True`); `icon_url` вычисляется из публичного `FileRecord` (`icon_file_id`).
@@ -216,12 +256,7 @@ Git-бандл: `apps/flows/mcp_branding/` (`manifest.yaml`, `icons/`, `SOURCES.
   - `--server-id` — только указанные slug.
   - `--dry-run` — без upload/write.
 - **Crawl hook:** после `mcp_catalog_crawl_task` при `settings.mcp_branding.seed_after_crawl=true` — seed только **новых** catalog_id (skip existing).
-- **Maintainer:** `scripts/fetch_mcp_branding_icons.py` — автозаполнение git-бандла:
-  - `uv run python scripts/fetch_mcp_branding_icons.py --from-registry --max-pages 300` — скан official registry (`isLatest`), источники: publisher `icons[]` → Simple Icons (MIT) → skip (generic при seed).
-  - `--sync-manifest-only` — восстановить `manifest.yaml` из уже скачанных файлов в `icons/`.
-  - `--refresh-existing` — перезаписать локальные brand-иконки.
-  - `--dry-run` — без записи.
-  - Результат коммитится; затем `make mcp-branding-seed`.
+- **Maintainer:** `scripts/fetch_mcp_branding_icons.py` — автозаполнение git-бандла.
 - **CI:** `scripts/check_mcp_branding_bundle.py` (`make check-mcp-branding-bundle`).
 
 ## Типичные ошибки
@@ -229,28 +264,23 @@ Git-бандл: `apps/flows/mcp_branding/` (`manifest.yaml`, `icons/`, `SOURCES.
 - **Вызов `tool.coroutine` напрямую** — минует декоратор. Только `tool.ainvoke(...)`.
 - **Забыть про `company_id`** — серверы не глобальные, `mcp_repo.get()` берёт `company_id` из контекста автоматически.
 - **`__name__` после `@tool`** — `@tool` фиксирует имя при создании; `func.__name__` ставить **до** декоратора.
+- **Путать auto и opt-in** — uninstall Store только для `catalog_auto_provisioned=false`; provisioner не трогает opt-in.
 
 ## Файлы
 
-- `apps/flows/src/models/mcp.py` — `MCPServerConfig`, `MCPServerSource`, `MCPTransportType`.
+- `apps/flows/src/models/mcp.py` — `MCPServerConfig`, `MCPServerSource`, `MCPTransportType`, `catalog_auto_provisioned`.
 - `apps/flows/src/models/mcp_catalog.py` — `MCPCatalogEntry`.
 - `apps/flows/src/db/mcp_repository.py` — `MCPServerRepository`.
 - `apps/flows/src/db/mcp_catalog_repository.py` — `MCPCatalogRepository`.
-- `apps/flows/src/db/mcp_server_branding_repository.py` — глобальные иконки по `server_id`.
-- `apps/flows/src/services/mcp_branding_service.py` — resolve `icon_url`, CRUD (write: `company_id=system` only).
-- `apps/flows/src/services/mcp_catalog_crawler.py` — registry crawl + verify.
+- `apps/flows/src/services/mcp_catalog_store.py` — Store list/install/uninstall.
 - `apps/flows/src/services/mcp_catalog_provisioner.py` — provision per company, override lock, reset.
-- `apps/flows/src/clients/mcp_client.py` — `MCPHttpClient`, `get_mcp_client`.
 - `apps/flows/src/services/mcp_sync.py` — `sync_mcp_server_tools`.
+- `apps/flows/src/tasks/company_init_tasks.py` — `init_company_resources`.
+- `apps/flows/ui/modals/flows-mcp-servers-modal.js`, `flows-library-picker-modal.js` — UI Store + picker.
 - `apps/idle_worker/tasks/mcp_catalog_tasks.py` — TaskIQ crawl/provision/resync.
 - `apps/flows/mcp_catalog_allowlist.yaml` — curated `platform_approved` / auth overrides.
-- `apps/flows/mcp_branding/` — seed bundle иконок (manifest + SVG).
-- `apps/flows/src/services/mcp_branding_seed.py` — seed в S3/БД из bundle.
-- `apps/flows/src/runtime/nodes.py` — `MCPNode`.
-- `tests/fixtures/mcp_http_stub.py` — `local_mcp_http_url`.
-- `tests/flows/integration/test_mcp_catalog_provisioner.py` — provision, override lock, reset.
-- `tests/flows/integration/test_mcp_branding.py` — global icons by slug.
-- `tests/flows/integration/test_mcp_branding_seed.py` — seed bundle, generic reuse, skip/force.
+- `tests/flows/integration/test_mcp_catalog_provisioner.py`, `test_mcp_company_init.py`.
+- `tests/ui/e2e/test_flows_mcp_scenarios.py` — документационный сценарий.
 
 Спецификация: https://modelcontextprotocol.io
 

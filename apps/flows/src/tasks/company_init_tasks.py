@@ -107,12 +107,13 @@ async def init_company_resources(
                 synced["tools"],
             )
         except Exception as mcp_err:
-            logger.warning(
-                "MCP синхронизация при init_company_resources пропущена (%s): %s",
+            logger.error(
+                "MCP синхронизация при init_company_resources failed (%s): %s",
                 company_id,
                 mcp_err,
                 exc_info=True,
             )
+            raise
 
         loader = FlowsLoader(
             bundles_dir=bundles_dir,

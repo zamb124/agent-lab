@@ -10,6 +10,7 @@
 
 import { html, css, nothing } from 'lit';
 import { PlatformPage } from '@platform/lib/base/PlatformPage.js';
+import { CoreEvents } from '@platform/lib/events/contract.js';
 import '@platform/lib/components/platform-icon.js';
 import '@platform/lib/components/platform-help-hint.js';
 import '@platform/lib/components/layout/page-header.js';
@@ -61,13 +62,16 @@ export class ChatPage extends PlatformPage {
                 display: flex;
                 align-items: center;
                 gap: var(--space-2);
+                isolation: isolate;
             }
             .chat-actions-help {
                 flex-shrink: 0;
             }
             .flow-chat-overflow-anchor {
                 position: relative;
-                z-index: 50;
+            }
+            .flow-chat-overflow-anchor[data-open] {
+                z-index: 1;
             }
             .menu-flyout {
                 position: absolute;
@@ -81,7 +85,7 @@ export class ChatPage extends PlatformPage {
                 border: 1px solid var(--glass-border, var(--border-subtle));
                 border-radius: var(--radius-md);
                 box-shadow: var(--glass-shadow-strong);
-                z-index: 40;
+                z-index: 2;
                 display: flex;
                 flex-direction: column;
                 gap: var(--space-1);
@@ -142,6 +146,11 @@ export class ChatPage extends PlatformPage {
                 ? resolveVoiceHttpOrigin()
                 : '';
         this._restoredSessionId = '';
+        this.useEvent(CoreEvents.UI_MODAL_OPEN, () => {
+            if (this._overflowOpen) {
+                this._overflowOpen = false;
+            }
+        });
     }
 
     connectedCallback() {
@@ -535,7 +544,7 @@ export class ChatPage extends PlatformPage {
                     icon: 'ai',
                     onClick: this._openLara,
                 })}
-                <div class="flow-chat-overflow-anchor">
+                <div class="flow-chat-overflow-anchor" ?data-open=${this._overflowOpen}>
                     ${this._renderHeaderIconButton({
                         title: this.t('platform_chat.overflow_aria'),
                         icon: 'more-vertical',

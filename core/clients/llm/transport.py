@@ -33,7 +33,7 @@ from core.clients.llm.errors import (
     LLMStreamIdleTimeoutError,
     LLMStreamUserCancelledError,
 )
-from core.clients.llm.logging import log_llm_stream_response
+from core.clients.llm.logging import compute_llm_output_tokens_per_second, log_llm_stream_response
 from core.clients.llm.messages import LLMToolCall, LLMToolCallFunction, StreamEvent
 from core.clients.llm.messages import messages_to_openai as _messages_to_openai
 from core.clients.llm.openai_compat import (
@@ -198,6 +198,12 @@ async def stream_once(
     tool_calls_buffer: dict[int, dict[str, str]] = {}
     usage_data: JsonObject = {"input_tokens": 0, "output_tokens": 0, "total_tokens": 0}
     stream_start_time = time.monotonic()
+    ttft_ms: float | None = None
+
+    def _mark_ttft() -> None:
+        nonlocal ttft_ms
+        if ttft_ms is None:
+            ttft_ms = round((time.monotonic() - stream_start_time) * 1000.0, 2)
 
     async with get_httpx_client(timeout=client.timeout, strategy=ProxyStrategy.SMART) as http_client:
         try:
@@ -372,6 +378,7 @@ async def stream_once(
                                     and not full_content
                                 ):
                                     full_content = message_content
+                                    _mark_ttft()
                                     yield TaskArtifactUpdateEvent(
                                         context_id=context_id,
                                         task_id=task_id,
@@ -395,6 +402,7 @@ async def stream_once(
                             if isinstance(content_delta, str) and content_delta:
                                 text = content_delta
                                 full_content += text
+                                _mark_ttft()
                                 yield TaskArtifactUpdateEvent(
                                     context_id=context_id,
                                     task_id=task_id,
@@ -424,6 +432,7 @@ async def stream_once(
 
                             if reasoning_text:
                                 full_reasoning += reasoning_text
+                                _mark_ttft()
                                 logger.debug(
                                     "llm.reasoning_chunk",
                                     content_length=len(reasoning_text),
@@ -459,6 +468,7 @@ async def stream_once(
                                         raise ValueError("LLM tool_call.index must be an integer")
                                     tool_call_index = tool_call_index_raw
                                     if tool_call_index not in tool_calls_buffer:
+                                        _mark_ttft()
                                         tool_call_id = tool_call_delta.get("id")
                                         tool_calls_buffer[tool_call_index] = {
                                             "id": tool_call_id if isinstance(tool_call_id, str) else "",
@@ -595,6 +605,20 @@ async def stream_once(
             final=False,
         )
 
+    stream_duration = time.monotonic() - stream_start_time
+    stream_duration_ms = stream_duration * 1000.0
+    raw_output_tokens = usage_data.get("output_tokens") or usage_data.get("completion_tokens") or 0
+    output_tokens = (
+        int(raw_output_tokens)
+        if isinstance(raw_output_tokens, (int, float)) and not isinstance(raw_output_tokens, bool)
+        else 0
+    )
+    output_tokens_per_second = compute_llm_output_tokens_per_second(
+        output_tokens=output_tokens,
+        duration_ms=stream_duration_ms,
+        ttft_ms=ttft_ms,
+    )
+
     final_message = new_agent_text_message(full_content) if full_content else None
     if final_message:
         final_message.metadata = {
@@ -602,6 +626,8 @@ async def stream_once(
             "model": client.model,
             "provider": client.llm_provider,
             "source": client.llm_source,
+            "ttft_ms": ttft_ms,
+            "output_tokens_per_second": output_tokens_per_second,
         }
     # final=False: это конец одного вызова LLM внутри задачи, не конец A2A-задачи.
     # completed+final=True рвёт EventSubscriber до node_complete и emit_complete канала.
@@ -615,7 +641,6 @@ async def stream_once(
         final=False,
     )
 
-    stream_duration = time.monotonic() - stream_start_time
     logger.info(
         "llm.stream_complete",
         provider=client.llm_provider,
@@ -646,7 +671,9 @@ async def stream_once(
         provider=client.llm_provider,
         model=client.model,
         source=client.llm_source,
-        duration_ms=stream_duration * 1000,
+        duration_ms=stream_duration_ms,
+        ttft_ms=ttft_ms,
+        output_tokens_per_second=output_tokens_per_second,
     )
 
 

@@ -1,0 +1,237 @@
+{
+  "run_id": "20260709T182320",
+  "collected_at": "2026-07-09T15:30:07.978836+00:00",
+  "pytest_workers": "10",
+  "pytest_workers_numeric": 10,
+  "phase1_exit_code": 0,
+  "max_worker_restart": 2,
+  "phase1_wall_time_seconds": null,
+  "failed_nodeids": [],
+  "junit_failures": [],
+  "stack_manifest": {
+    "created_at": "2026-07-09T15:23:19.971984+00:00",
+    "controller_pid": 88163,
+    "pytest_workers_requested": 10,
+    "stack_scale_factor": 1.0,
+    "stack_capacity": {
+      "secrets": 1,
+      "flows": 2,
+      "rag": 1,
+      "crm": 1,
+      "frontend": 1,
+      "sync": 1,
+      "office": 1,
+      "search": 2,
+      "provider_litserve": 1,
+      "voice": 1,
+      "capability_gateway": 6,
+      "code_runner_python": 12,
+      "code_runner_node": 1,
+      "code_runner_go": 1,
+      "code_runner_csharp": 1,
+      "worktracker": 1,
+      "flows_worker": 1,
+      "rag_worker": 1,
+      "search_worker": 2,
+      "sync_worker": 2,
+      "crm_worker": 1
+    },
+    "processes": [
+      {
+        "name": "secrets",
+        "kind": "granian",
+        "pid": 88165,
+        "port": 9022,
+        "stream_name": null,
+        "log_file": "/tmp/platform_test_stack/secrets.log",
+        "err_file": "/tmp/platform_test_stack/secrets.err"
+      },
+      {
+        "name": "flows",
+        "kind": "granian",
+        "pid": 88166,
+        "port": 9001,
+        "stream_name": null,
+        "log_file": "/tmp/platform_test_stack/flows.log",
+        "err_file": "/tmp/platform_test_stack/flows.err"
+      },
+      {
+        "name": "rag",
+        "kind": "granian",
+        "pid": 88167,
+        "port": 9002,
+        "stream_name": null,
+        "log_file": "/tmp/platform_test_stack/rag.log",
+        "err_file": "/tmp/platform_test_stack/rag.err"
+      },
+      {
+        "name": "crm",
+        "kind": "granian",
+        "pid": 88168,
+        "port": 9003,
+        "stream_name": null,
+        "log_file": "/tmp/platform_test_stack/crm.log",
+        "err_file": "/tmp/platform_test_stack/crm.err"
+      },
+      {
+        "name": "frontend",
+        "kind": "granian",
+        "pid": 88169,
+        "port": 9004,
+        "stream_name": null,
+        "log_file": "/tmp/platform_test_stack/frontend.log",
+        "err_file": "/tmp/platform_test_stack/frontend.err"
+      },
+      {
+        "name": "sync",
+        "kind": "granian",
+        "pid": 88170,
+        "port": 9005,
+        "stream_name": null,
+        "log_file": "/tmp/platform_test_stack/sync.log",
+        "err_file": "/tmp/platform_test_stack/sync.err"
+      },
+      {
+        "name": "office",
+        "kind": "granian",
+        "pid": 88171,
+        "port": 9008,
+        "stream_name": null,
+        "log_file": "/tmp/platform_test_stack/office.log",
+        "err_file": "/tmp/platform_test_stack/office.err"
+      },
+      {
+        "name": "search",
+        "kind": "granian",
+        "pid": 88172,
+        "port": 9010,
+        "stream_name": null,
+        "log_file": "/tmp/platform_test_stack/search.log",
+        "err_file": "/tmp/platform_test_stack/search.err"
+      },
+      {
+        "name": "provider_litserve",
+        "kind": "granian",
+        "pid": 88173,
+        "port": 9014,
+        "stream_name": null,
+        "log_file": "/tmp/platform_test_stack/provider_litserve.log",
+        "err_file": "/tmp/platform_test_stack/provider_litserve.err"
+      },
+      {
+        "name": "voice",
+        "kind": "granian",
+        "pid": 88174,
+        "port": 9015,
+        "stream_name": null,
+        "log_file": "/tmp/platform_test_stack/voice.log",
+        "err_file": "/tmp/platform_test_stack/voice.err"
+      },
+      {
+        "name": "capability_gateway",
+        "kind": "granian",
+        "pid": 88175,
+        "port": 9016,
+        "stream_name": null,
+        "log_file": "/tmp/platform_test_stack/capability_gateway.log",
+        "err_file": "/tmp/platform_test_stack/capability_gateway.err"
+      },
+      {
+        "name": "code_runner_python",
+        "kind": "granian",
+        "pid": 88176,
+        "port": 9017,
+        "stream_name": null,
+        "log_file": "/tmp/platform_test_stack/code_runner_python.log",
+        "err_file": "/tmp/platform_test_stack/code_runner_python.err"
+      },
+      {
+        "name": "code_runner_node",
+        "kind": "granian",
+        "pid": 88177,
+        "port": 9018,
+        "stream_name": null,
+        "log_file": "/tmp/platform_test_stack/code_runner_node.log",
+        "err_file": "/tmp/platform_test_stack/code_runner_node.err"
+      },
+      {
+        "name": "code_runner_go",
+        "kind": "granian",
+        "pid": 88178,
+        "port": 9019,
+        "stream_name": null,
+        "log_file": "/tmp/platform_test_stack/code_runner_go.log",
+        "err_file": "/tmp/platform_test_stack/code_runner_go.err"
+      },
+      {
+        "name": "code_runner_csharp",
+        "kind": "granian",
+        "pid": 88179,
+        "port": 9020,
+        "stream_name": null,
+        "log_file": "/tmp/platform_test_stack/code_runner_csharp.log",
+        "err_file": "/tmp/platform_test_stack/code_runner_csharp.err"
+      },
+      {
+        "name": "worktracker",
+        "kind": "granian",
+        "pid": 88189,
+        "port": 9021,
+        "stream_name": null,
+        "log_file": "/tmp/platform_test_stack/worktracker.log",
+        "err_file": "/tmp/platform_test_stack/worktracker.err"
+      },
+      {
+        "name": "flows_worker",
+        "kind": "taskiq",
+        "pid": 88190,
+        "port": null,
+        "stream_name": "flows_worker",
+        "log_file": "/tmp/platform_test_stack/flows_worker.log",
+        "err_file": "/tmp/platform_test_stack/flows_worker.err"
+      },
+      {
+        "name": "rag_worker",
+        "kind": "taskiq",
+        "pid": 88191,
+        "port": null,
+        "stream_name": "rag",
+        "log_file": "/tmp/platform_test_stack/rag_worker.log",
+        "err_file": "/tmp/platform_test_stack/rag_worker.err"
+      },
+      {
+        "name": "search_worker",
+        "kind": "taskiq",
+        "pid": 88192,
+        "port": null,
+        "stream_name": "search",
+        "log_file": "/tmp/platform_test_stack/search_worker.log",
+        "err_file": "/tmp/platform_test_stack/search_worker.err"
+      },
+      {
+        "name": "sync_worker",
+        "kind": "taskiq",
+        "pid": 88193,
+        "port": null,
+        "stream_name": "sync",
+        "log_file": "/tmp/platform_test_stack/sync_worker.log",
+        "err_file": "/tmp/platform_test_stack/sync_worker.err"
+      },
+      {
+        "name": "crm_worker",
+        "kind": "taskiq",
+        "pid": 88194,
+        "port": null,
+        "stream_name": "crm",
+        "log_file": "/tmp/platform_test_stack/crm_worker.log",
+        "err_file": "/tmp/platform_test_stack/crm_worker.err"
+      }
+    ]
+  },
+  "xdist_counts": {
+    "total_phase1_estimate": 1659,
+    "code_sandbox_estimate": 106,
+    "real_taskiq_estimate": 12,
+    "parallelizable_estimate": 1541
+  }
+}

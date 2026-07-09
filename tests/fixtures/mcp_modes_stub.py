@@ -200,6 +200,9 @@ def _registry_handler_factory(state: MCPStubState) -> type[BaseHTTPRequestHandle
                         error={"code": -32601, "message": "Tool not found"},
                     )
                     return
+                if mode.tool_call_rpc_error is not None:
+                    self._write_jsonrpc(req_id=req_id, error=mode.tool_call_rpc_error)
+                    return
                 result_payload = mode.tool_call_result if mode.tool_call_result is not None else default_tool_call_success()
                 self._write_jsonrpc(req_id=req_id, result=result_payload)
                 return

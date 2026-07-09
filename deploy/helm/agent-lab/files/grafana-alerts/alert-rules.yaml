@@ -467,3 +467,255 @@ groups:
           description: "Sitemap failures per minute: {{ $values.A }}"
         labels:
           severity: warning
+
+      - uid: flow-task-pickup-p99-high
+        title: Flow Task Pickup P99 High
+        condition: C
+        data:
+          - refId: A
+            queryType: instant
+            relativeTimeRange:
+              from: 300
+              to: 0
+            datasourceUid: loki
+            model:
+              expr: 'quantile_over_time(0.99, {service=~"flows_worker"} | json | message="task_started" | task_name="process_flow_task" | unwrap task_queue_wait_ms [5m])'
+              refId: A
+          - refId: C
+            relativeTimeRange:
+              from: 0
+              to: 0
+            datasourceUid: __expr__
+            model:
+              conditions:
+                - evaluator:
+                    params: [30000]
+                    type: gt
+                  operator:
+                    type: and
+                  query:
+                    params: [A]
+                  reducer:
+                    type: last
+                  type: query
+              expression: A
+              refId: C
+              type: threshold
+        noDataState: OK
+        execErrState: Error
+        for: 5m
+        annotations:
+          summary: "Flow task queue pickup P99 > 30s"
+          description: "P99 queue wait for process_flow_task is {{ $values.A }}ms"
+        labels:
+          severity: warning
+
+      - uid: llm-ttft-p99-high
+        title: LLM TTFT P99 High
+        condition: C
+        data:
+          - refId: A
+            queryType: instant
+            relativeTimeRange:
+              from: 300
+              to: 0
+            datasourceUid: loki
+            model:
+              expr: 'quantile_over_time(0.99, {service=~".+"} | json | message="llm_stream_response" | unwrap llm_ttft_ms [5m])'
+              refId: A
+          - refId: C
+            relativeTimeRange:
+              from: 0
+              to: 0
+            datasourceUid: __expr__
+            model:
+              conditions:
+                - evaluator:
+                    params: [10000]
+                    type: gt
+                  operator:
+                    type: and
+                  query:
+                    params: [A]
+                  reducer:
+                    type: last
+                  type: query
+              expression: A
+              refId: C
+              type: threshold
+        noDataState: OK
+        execErrState: Error
+        for: 5m
+        annotations:
+          summary: "LLM TTFT P99 > 10s"
+          description: "P99 time-to-first-token is {{ $values.A }}ms"
+        labels:
+          severity: warning
+
+      - uid: stt-p99-high
+        title: STT P99 High
+        condition: C
+        data:
+          - refId: A
+            queryType: instant
+            relativeTimeRange:
+              from: 300
+              to: 0
+            datasourceUid: loki
+            model:
+              expr: 'quantile_over_time(0.99, {service=~".+"} | json | message="voice_stt_response" | unwrap stt_duration_ms [5m])'
+              refId: A
+          - refId: C
+            relativeTimeRange:
+              from: 0
+              to: 0
+            datasourceUid: __expr__
+            model:
+              conditions:
+                - evaluator:
+                    params: [60000]
+                    type: gt
+                  operator:
+                    type: and
+                  query:
+                    params: [A]
+                  reducer:
+                    type: last
+                  type: query
+              expression: A
+              refId: C
+              type: threshold
+        noDataState: OK
+        execErrState: Error
+        for: 5m
+        annotations:
+          summary: "STT P99 > 60s"
+          description: "P99 STT latency is {{ $values.A }}ms"
+        labels:
+          severity: warning
+
+      - uid: flow-e2e-terminal-p99-high
+        title: Flow E2E Terminal P99 High
+        condition: C
+        data:
+          - refId: A
+            queryType: instant
+            relativeTimeRange:
+              from: 300
+              to: 0
+            datasourceUid: loki
+            model:
+              expr: 'quantile_over_time(0.99, {service=~"flows_worker"} | json | message="flow_terminal" | unwrap flow_terminal_ms [5m])'
+              refId: A
+          - refId: C
+            relativeTimeRange:
+              from: 0
+              to: 0
+            datasourceUid: __expr__
+            model:
+              conditions:
+                - evaluator:
+                    params: [120000]
+                    type: gt
+                  operator:
+                    type: and
+                  query:
+                    params: [A]
+                  reducer:
+                    type: last
+                  type: query
+              expression: A
+              refId: C
+              type: threshold
+        noDataState: OK
+        execErrState: Error
+        for: 5m
+        annotations:
+          summary: "Flow E2E terminal P99 > 120s"
+          description: "P99 flow terminal latency is {{ $values.A }}ms"
+        labels:
+          severity: warning
+
+      - uid: tool-call-p99-high
+        title: Tool Call P99 High
+        condition: C
+        data:
+          - refId: A
+            queryType: instant
+            relativeTimeRange:
+              from: 300
+              to: 0
+            datasourceUid: loki
+            model:
+              expr: 'quantile_over_time(0.99, {service=~"flows_worker"} | json | message="tool_call_finished" | unwrap platform_tool_duration_ms [5m])'
+              refId: A
+          - refId: C
+            relativeTimeRange:
+              from: 0
+              to: 0
+            datasourceUid: __expr__
+            model:
+              conditions:
+                - evaluator:
+                    params: [30000]
+                    type: gt
+                  operator:
+                    type: and
+                  query:
+                    params: [A]
+                  reducer:
+                    type: last
+                  type: query
+              expression: A
+              refId: C
+              type: threshold
+        noDataState: OK
+        execErrState: Error
+        for: 5m
+        annotations:
+          summary: "Tool call P99 > 30s"
+          description: "P99 tool call latency is {{ $values.A }}ms"
+        labels:
+          severity: warning
+
+      - uid: mcp-error-rate-high
+        title: MCP Error Rate High
+        condition: C
+        data:
+          - refId: A
+            queryType: instant
+            relativeTimeRange:
+              from: 300
+              to: 0
+            datasourceUid: loki
+            model:
+              expr: 'sum(rate({service=~"flows_worker"} | json | message="operation_finished" | operation_name="flows.mcp.tool_call" | operation_status="error" [5m])) / sum(rate({service=~"flows_worker"} | json | message="operation_finished" | operation_name="flows.mcp.tool_call" [5m])) * 100'
+              refId: A
+          - refId: C
+            relativeTimeRange:
+              from: 0
+              to: 0
+            datasourceUid: __expr__
+            model:
+              conditions:
+                - evaluator:
+                    params: [10]
+                    type: gt
+                  operator:
+                    type: and
+                  query:
+                    params: [A]
+                  reducer:
+                    type: last
+                  type: query
+              expression: A
+              refId: C
+              type: threshold
+        noDataState: OK
+        execErrState: Error
+        for: 5m
+        annotations:
+          summary: "MCP tool call error rate > 10%"
+          description: "MCP error rate is {{ $values.A }}%"
+        labels:
+          severity: warning

@@ -37,6 +37,7 @@ from core.types import (
 if TYPE_CHECKING:
     from core.state import ExecutionState
 from .context import TraceContext
+from .operation_log_mirror import log_operation_finished, log_tool_call_finished
 from .provider import ensure_tracer_provider
 
 if TYPE_CHECKING:
@@ -273,6 +274,13 @@ class PlatformTracer:
         )
 
         await _span_repository.save_span(span_data)
+
+        log_operation_finished(
+            operation_name=operation_name,
+            duration_ms=duration_ms,
+            status="error" if status == "ERROR" else "ok",
+            span_attributes=all_attrs,
+        )
 
     def create_trace_context(
         self,
@@ -694,6 +702,8 @@ class PlatformTracer:
         llm_provider: str | None = None,
         llm_model: str | None = None,
         candidate_source: str | None = None,
+        ttft_ms: float | None = None,
+        output_tokens_per_second: float | None = None,
         provider_reported_cost: float | None = None,
         provider_upstream_inference_cost: float | None = None,
         settlement_quantity_rub: int | None = None,
@@ -713,6 +723,10 @@ class PlatformTracer:
                 attr.ATTR_LLM_DURATION_MS: duration_ms,
             }
         )
+        if ttft_ms is not None:
+            span.set_attribute(attr.ATTR_LLM_TTFT_MS, ttft_ms)
+        if output_tokens_per_second is not None:
+            span.set_attribute(attr.ATTR_LLM_OUTPUT_TPS, output_tokens_per_second)
         resolved_model = llm_model.strip() if llm_model is not None else None
         if resolved_model:
             span.set_attribute(attr.ATTR_LLM_MODEL, resolved_model)
@@ -753,6 +767,14 @@ class PlatformTracer:
             span.set_attribute(attr.ATTR_BILLING_CUSTOM_PROVIDER_ID, custom_provider_id)
         if llm_context is not None:
             self._record_llm_context(span, llm_context)
+        compile_ms = llm_context.get("compile_ms") if llm_context is not None else None
+        if isinstance(compile_ms, (int, float)) and not isinstance(compile_ms, bool):
+            span.set_attribute(attr.ATTR_LLM_CONTEXT_COMPILE_MS, compile_ms)
+        tool_blocks_compacted = (
+            llm_context.get("tool_blocks_compacted") if llm_context is not None else None
+        )
+        if isinstance(tool_blocks_compacted, int) and not isinstance(tool_blocks_compacted, bool):
+            span.set_attribute(attr.ATTR_LLM_CONTEXT_TOOL_BLOCKS_COMPACTED, tool_blocks_compacted)
 
         if response_content is not None or tool_calls:
             response_data = {
@@ -841,6 +863,21 @@ class PlatformTracer:
         if error:
             span.set_status(Status(StatusCode.ERROR, error))
             span.set_attribute(attr.ATTR_TOOL_ERROR, error)
+
+        readable_span = _sdk_span(span)
+        span_attributes = require_json_object(
+            otel_attributes_to_json_object(readable_span.attributes),
+            "tool_span.attributes",
+        )
+        tool_name_raw = span_attributes.get(attr.ATTR_TOOL_NAME)
+        if not isinstance(tool_name_raw, str) or tool_name_raw.strip() == "":
+            raise ValueError("tool span missing platform.tool.name for observability log")
+        log_tool_call_finished(
+            tool_name=tool_name_raw.strip(),
+            duration_ms=duration_ms,
+            error=error,
+            span_attributes=span_attributes,
+        )
 
     def record_state_snapshot(self, span: Span, state: "ExecutionState") -> None:
         """Записывает projection snapshot в span."""

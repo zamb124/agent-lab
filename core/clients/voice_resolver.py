@@ -67,6 +67,7 @@ from core.clients.vad_client import (
     BaseVADClient,
     VADClientFactory,
 )
+from core.clients.voice_observability import ObservedSTTClient, ObservedTTSClient
 from core.config import get_settings
 from core.config.models import ProviderLitserveTTSModelEntry
 from core.db.models.platform import CompanyPronunciationRule, PlatformPronunciationRule
@@ -442,13 +443,18 @@ async def get_stt_client(
         source_language=resolved.source_language,
     )
 
-    return STTClientFactory.create_for_voice(
-        cfg=settings_voice_stt,
-        provider_name=resolved.provider,
+    return ObservedSTTClient(
+        STTClientFactory.create_for_voice(
+            cfg=settings_voice_stt,
+            provider_name=resolved.provider,
+            model=resolved.model,
+            default_language=resolved.language,
+            timeout_s=timeout_s,
+            secrets=sec,
+        ),
+        provider=resolved.provider,
         model=resolved.model,
-        default_language=resolved.language,
-        timeout_s=timeout_s,
-        secrets=sec,
+        mode="batch",
     )
 
 
@@ -656,12 +662,17 @@ async def get_tts_client(
         override=override,
     )
 
-    return PronunciationAwareTTSClient(
-        base_client,
-        pronunciation,
-        provider_name=provider_name,
-        default_voice=voice,
-        default_language=locale_for_tts,
+    return ObservedTTSClient(
+        PronunciationAwareTTSClient(
+            base_client,
+            pronunciation,
+            provider_name=provider_name,
+            default_voice=voice,
+            default_language=locale_for_tts,
+        ),
+        provider=provider_name,
+        voice=voice,
+        language=locale_for_tts,
     )
 
 

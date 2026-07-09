@@ -17,6 +17,7 @@
 
 import { html, css, nothing } from 'lit';
 import { PlatformElement } from '@platform/lib/platform-element/index.js';
+import { CoreEvents } from '@platform/lib/events/contract.js';
 import '@platform/lib/components/platform-icon.js';
 import '@platform/lib/components/platform-button.js';
 import '@platform/lib/components/platform-segmented-control.js';
@@ -205,11 +206,15 @@ export class FlowsEditorHeader extends PlatformElement {
                 display: flex;
                 align-items: center;
                 gap: var(--space-2);
+                isolation: isolate;
             }
 
             .overflow-anchor {
                 position: relative;
-                z-index: 50;
+            }
+
+            .overflow-anchor[data-open] {
+                z-index: 1;
             }
 
             .menu-flyout {
@@ -224,7 +229,7 @@ export class FlowsEditorHeader extends PlatformElement {
                 border: 1px solid var(--glass-border, var(--border-subtle));
                 border-radius: var(--radius-md);
                 box-shadow: var(--glass-shadow-strong);
-                z-index: 40;
+                z-index: 2;
                 display: flex;
                 flex-direction: column;
                 gap: var(--space-1);
@@ -305,6 +310,11 @@ export class FlowsEditorHeader extends PlatformElement {
         this._reload = this.useOp('flows/flow_reload_from_bundle');
         this._flows = this.useResource('flows/flows');
         this._branchRemove = this.useOp('flows/branch_remove');
+        this.useEvent(CoreEvents.UI_MODAL_OPEN, () => {
+            if (this._overflowOpen) {
+                this._overflowOpen = false;
+            }
+        });
     }
 
     connectedCallback() {
@@ -525,7 +535,7 @@ export class FlowsEditorHeader extends PlatformElement {
 
     _renderOverflowMenu(hasBundleUpdate) {
         return html`
-            <div class="overflow-anchor">
+            <div class="overflow-anchor" ?data-open=${this._overflowOpen}>
                 <span class="overflow-btn-wrap">
                     ${this._renderHeaderIconButton({
                         title: this.t('editor_header.overflow_aria'),

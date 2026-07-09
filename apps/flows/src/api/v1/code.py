@@ -36,7 +36,7 @@ from apps.flows.src.durable_execution import (
     build_state_delta,
     create_initial_state,
 )
-from apps.flows.src.models.node_config import NodeConfig
+from apps.flows.src.models.node_config import GraphNodeConfig
 from apps.flows.src.runtime.nodes import create_node
 from apps.flows.src.state import collect_flow_node_files
 from core.capabilities import (
@@ -1429,8 +1429,7 @@ async def _build_node_config(request: ExecuteRequest) -> JsonObject:
         config["entrypoint"] = request.entrypoint
 
     _validate_node_config(config)
-    validation_config: JsonObject = {**config, "node_id": "test_node"}
-    _ = NodeConfig.model_validate(validation_config)
+    _ = GraphNodeConfig.model_validate(config)
 
     return config
 

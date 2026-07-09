@@ -27,11 +27,13 @@
 from __future__ import annotations
 
 import asyncio
+import time
 
 from apps.voice.services.voice_client_channel import VoiceSynthesisChannel
 from apps.voice.services.voice_session import VoiceSession
 from core.clients.tts_streaming import BaseTTSStreamer
 from core.clients.voice_chunker import VoiceChunker
+from core.clients.voice_logging import log_voice_tts_response
 from core.logging import get_logger
 
 logger = get_logger(__name__)
@@ -54,6 +56,8 @@ async def run_speak_worker(
     barge-in на своей стороне.
     """
     chunker = chunker or VoiceChunker()
+    utterance_started_at: float | None = None
+    ttfa_logged = False
 
     while session.active:
         try:
@@ -68,18 +72,32 @@ async def run_speak_worker(
                 chunker=chunker,
                 channel=channel,
             )
+            utterance_started_at = None
+            ttfa_logged = False
             continue
 
         if text_piece == "":
             continue
 
         await _announce_tts_started(session=session, channel=channel)
+        if utterance_started_at is None:
+            utterance_started_at = time.perf_counter()
         try:
             for speakable in chunker.feed(text_piece):
                 if not session.active:
                     break
                 audio_bytes = await tts_streamer.synthesize_chunk(speakable)
                 if audio_bytes:
+                    if not ttfa_logged:
+                        ttfa_ms = (time.perf_counter() - utterance_started_at) * 1000.0
+                        log_voice_tts_response(
+                            provider=tts_streamer.provider,
+                            duration_ms=ttfa_ms,
+                            text_length=len(speakable),
+                            audio_bytes=len(audio_bytes),
+                            ttfa_ms=ttfa_ms,
+                        )
+                        ttfa_logged = True
                     await channel.send_pcm(audio_bytes)
         except asyncio.CancelledError:
             raise

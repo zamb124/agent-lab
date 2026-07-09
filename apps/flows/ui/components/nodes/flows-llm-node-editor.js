@@ -106,6 +106,40 @@ function _toolListEntryKey(t) {
     return `tool:${id}`;
 }
 
+function _appendPickerDetailToTools(detail, tools, existingKeys) {
+    if (detail === null || typeof detail !== 'object') {
+        return;
+    }
+    if (typeof detail.tool_id !== 'string' || detail.tool_id.length === 0) {
+        return;
+    }
+    const toolId = detail.tool_id;
+    const kind = detail.kind === 'flow' ? 'flow' : 'tool';
+    const newKey = kind === 'flow' ? `flow:${toolId}` : `tool:${toolId}`;
+    if (existingKeys.has(newKey)) {
+        return;
+    }
+    existingKeys.add(newKey);
+    if (kind === 'flow') {
+        tools.push({ type: 'flow', tool_id: toolId });
+        return;
+    }
+    const item = isPlainObject(detail.item) ? detail.item : null;
+    const ref = (item !== null && isMcpToolRegistryItem(item)) || toolId.startsWith('mcp:')
+        ? _mcpToolRefFromPicker(toolId, item)
+        : { tool_id: toolId };
+    if (
+        item !== null
+        && typeof item.code === 'string'
+        && item.code.length > 0
+        && typeof item.language === 'string'
+        && item.language.length > 0
+    ) {
+        ref.language = item.language;
+    }
+    tools.push(ref);
+}
+
 function _mcpToolRefFromPicker(toolId, item) {
     const ref = {
         tool_id: toolId,
@@ -725,33 +759,30 @@ export class FlowsLlmNodeEditor extends PlatformElement {
         this.openModal('flows.tool_picker', {
             pickMode: 'all',
             onPick: (detail) => {
-                if (!detail || typeof detail !== 'object' || typeof detail.tool_id !== 'string') {
-                    return;
-                }
-                const toolId = detail.tool_id;
-                const kind = detail.kind === 'flow' ? 'flow' : 'tool';
                 const tools = Array.isArray(this.nodeConfig?.tools) ? [...this.nodeConfig.tools] : [];
-                const newKey = kind === 'flow' ? `flow:${toolId}` : `tool:${toolId}`;
-                if (tools.some((t) => _toolListEntryKey(t) === newKey)) {
+                const existingKeys = new Set(tools.map((t) => _toolListEntryKey(t)));
+                _appendPickerDetailToTools(detail, tools, existingKeys);
+                this._emitPatch({ tools });
+            },
+            onPickBatch: (detail) => {
+                if (detail === null || typeof detail !== 'object' || !Array.isArray(detail.items)) {
                     return;
                 }
-                if (kind === 'flow') {
-                    tools.push({ type: 'flow', tool_id: toolId });
-                } else {
-                    const item = isPlainObject(detail.item) ? detail.item : null;
-                    const ref = (item !== null && isMcpToolRegistryItem(item)) || toolId.startsWith('mcp:')
-                        ? _mcpToolRefFromPicker(toolId, item)
-                        : { tool_id: toolId };
-                    if (
-                        item !== null
-                        && typeof item.code === 'string'
-                        && item.code.length > 0
-                        && typeof item.language === 'string'
-                        && item.language.length > 0
-                    ) {
-                        ref.language = item.language;
+                const tools = Array.isArray(this.nodeConfig?.tools) ? [...this.nodeConfig.tools] : [];
+                const existingKeys = new Set(tools.map((t) => _toolListEntryKey(t)));
+                for (const item of detail.items) {
+                    if (!isPlainObject(item) || typeof item.tool_id !== 'string' || item.tool_id.length === 0) {
+                        continue;
                     }
-                    tools.push(ref);
+                    _appendPickerDetailToTools(
+                        {
+                            kind: 'tool',
+                            tool_id: item.tool_id,
+                            item,
+                        },
+                        tools,
+                        existingKeys,
+                    );
                 }
                 this._emitPatch({ tools });
             },

@@ -49,8 +49,10 @@ from core.logging.attributes import (
     LOG_SESSION_ID,
     LOG_TASK_DURATION_MS,
     LOG_TASK_ID,
+    LOG_TASK_LOCK_WAIT_MS,
     LOG_TASK_NAME,
     LOG_TASK_QUEUE,
+    LOG_TASK_QUEUE_WAIT_MS,
     LOG_TASK_RETRY,
 )
 from core.tasks.kicker import build_log_labels
@@ -87,6 +89,7 @@ _LOG_LABEL_KEYS = frozenset(
 
 _START_TIME_LABEL = "_logging_start_perf"
 _SCOPE_TOKEN_LABEL = "_logging_scope_token"
+_LABEL_ENQUEUED_AT = "enqueued_at"
 
 
 class LoggingMiddleware(TaskiqMiddleware):
@@ -143,6 +146,7 @@ class LoggingMiddleware(TaskiqMiddleware):
                 labels[key] = value.strip()
 
         set_task_message_string_labels(message, labels)
+        set_task_message_string_label(message, _LABEL_ENQUEUED_AT, str(time.time()))
         return message
 
     @override
@@ -214,13 +218,21 @@ class LoggingMiddleware(TaskiqMiddleware):
         # в side-канале по message id.
         _scope_tokens[id(message)] = token
 
+        task_started_fields: dict[str, str | float] = {
+            LOG_TASK_ID: message.task_id,
+            LOG_TASK_NAME: message.task_name,
+            LOG_TASK_QUEUE: self._queue_name,
+        }
+        queue_wait_ms = self._queue_wait_ms(message)
+        if queue_wait_ms is not None:
+            task_started_fields[LOG_TASK_QUEUE_WAIT_MS] = queue_wait_ms
+        lock_wait_ms = self._lock_wait_ms(message)
+        if lock_wait_ms is not None:
+            task_started_fields[LOG_TASK_LOCK_WAIT_MS] = lock_wait_ms
+
         self._logger.info(
             EVENT_TASK_STARTED,
-            **{
-                LOG_TASK_ID: message.task_id,
-                LOG_TASK_NAME: message.task_name,
-                LOG_TASK_QUEUE: self._queue_name,
-            },
+            **task_started_fields,
         )
         return message
 
@@ -312,6 +324,27 @@ class LoggingMiddleware(TaskiqMiddleware):
         except (TypeError, ValueError):
             return None
         return round((time.perf_counter() - start) * 1000.0, 3)
+
+    @staticmethod
+    def _queue_wait_ms(message: TaskiqMessage) -> float | None:
+        raw = task_message_string_label(message, _LABEL_ENQUEUED_AT)
+        if raw is None:
+            return None
+        try:
+            enqueued_at = float(raw)
+        except (TypeError, ValueError):
+            return None
+        return round((time.time() - enqueued_at) * 1000.0, 3)
+
+    @staticmethod
+    def _lock_wait_ms(message: TaskiqMessage) -> float | None:
+        raw = task_message_string_label(message, "_session_lock_wait_ms")
+        if raw is None:
+            return None
+        try:
+            return round(float(raw), 3)
+        except (TypeError, ValueError):
+            return None
 
     @staticmethod
     def _auto_id(prefix: str) -> str:

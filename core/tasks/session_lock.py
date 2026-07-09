@@ -15,6 +15,7 @@ Session Lock Middleware для TaskIQ.
 """
 
 import asyncio
+import time
 from typing import override
 
 from taskiq import TaskiqMessage, TaskiqMiddleware, TaskiqResult
@@ -22,6 +23,14 @@ from taskiq import TaskiqMessage, TaskiqMiddleware, TaskiqResult
 from core.clients.redis_client import RedisClient
 from core.config import get_settings
 from core.logging import get_logger
+from core.logging.attributes import (
+    EVENT_TASK_LOCK_ACQUIRED,
+    LOG_SESSION_ID,
+    LOG_TASK_ID,
+    LOG_TASK_LOCK_WAIT_MS,
+    LOG_TASK_NAME,
+    LOG_TASK_QUEUE,
+)
 from core.tasks.message_contract import (
     set_task_message_string_label,
     task_message_string_arg,
@@ -53,6 +62,12 @@ class SessionLockMiddleware(TaskiqMiddleware):
         super().__init__()
         self._redis_client: RedisClient | None = None
         self._locks_held: set[str] = set()
+        self._queue_name: str = "taskiq"
+
+    def set_queue_name(self, queue_name: str) -> None:
+        if not queue_name.strip():
+            raise ValueError("SessionLockMiddleware: queue_name обязателен")
+        self._queue_name = queue_name
 
     async def _get_redis(self) -> RedisClient:
         """Получить Redis клиент (lazy initialization)"""
@@ -141,10 +156,23 @@ class SessionLockMiddleware(TaskiqMiddleware):
         if not session_id:
             return message
 
+        lock_wait_start = time.perf_counter()
         # Пытаемся взять lock (с ожиданием если занят)
         if await self._wait_for_lock(session_id):
+            lock_wait_ms = round((time.perf_counter() - lock_wait_start) * 1000.0, 3)
             # Lock получен, сохраняем session_id для post_execute
             set_task_message_string_label(message, "_session_lock_id", session_id)
+            set_task_message_string_label(message, "_session_lock_wait_ms", str(lock_wait_ms))
+            logger.info(
+                EVENT_TASK_LOCK_ACQUIRED,
+                **{
+                    LOG_TASK_ID: message.task_id,
+                    LOG_TASK_NAME: message.task_name,
+                    LOG_TASK_QUEUE: self._queue_name,
+                    LOG_TASK_LOCK_WAIT_MS: lock_wait_ms,
+                    LOG_SESSION_ID: session_id,
+                },
+            )
         else:
             logger.error("session_lock.acquire_failed", session_id=session_id)
 

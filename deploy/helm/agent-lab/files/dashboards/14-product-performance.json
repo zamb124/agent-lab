@@ -1,0 +1,218 @@
+{
+  "schemaVersion": 39,
+  "id": null,
+  "uid": "product-performance",
+  "title": "Product Performance",
+  "tags": ["product", "sli", "latency"],
+  "timezone": "utc",
+  "refresh": "30s",
+  "time": {"from": "now-1h", "to": "now"},
+  "templating": {
+    "list": [
+      {
+        "name": "service",
+        "type": "query",
+        "query": "label_values(service)",
+        "datasource": {"type": "loki", "uid": "loki"},
+        "multi": true,
+        "includeAll": true,
+        "allValue": ".+",
+        "current": {"text": ["All"], "value": ["$__all"]}
+      }
+    ]
+  },
+  "panels": [
+    {
+      "id": 1,
+      "title": "Flow Task Pickup P99",
+      "type": "timeseries",
+      "gridPos": {"h": 6, "w": 12, "x": 0, "y": 0},
+      "datasource": {"type": "loki", "uid": "loki"},
+      "targets": [
+        {
+          "expr": "quantile_over_time(0.99, {service=~\"$service\"} | json | message=\"task_started\" | task_name=\"process_flow_task\" | unwrap task_queue_wait_ms [5m]) by (service)",
+          "legendFormat": "{{service}}",
+          "refId": "A",
+          "queryType": "range"
+        }
+      ],
+      "fieldConfig": {"defaults": {"unit": "ms", "min": 0, "custom": {"lineWidth": 2, "fillOpacity": 10}}}
+    },
+    {
+      "id": 2,
+      "title": "Flow First Content Chunk P99",
+      "type": "timeseries",
+      "gridPos": {"h": 6, "w": 12, "x": 12, "y": 0},
+      "datasource": {"type": "loki", "uid": "loki"},
+      "targets": [
+        {
+          "expr": "quantile_over_time(0.99, {service=~\"$service\"} | json | message=\"flow_first_content_chunk\" | unwrap flow_first_content_chunk_ms [5m]) by (service)",
+          "legendFormat": "{{service}}",
+          "refId": "A",
+          "queryType": "range"
+        }
+      ],
+      "fieldConfig": {"defaults": {"unit": "ms", "min": 0, "custom": {"lineWidth": 2, "fillOpacity": 10}}}
+    },
+    {
+      "id": 3,
+      "title": "LLM TTFT P99 by Provider/Model",
+      "type": "timeseries",
+      "gridPos": {"h": 6, "w": 12, "x": 0, "y": 6},
+      "datasource": {"type": "loki", "uid": "loki"},
+      "targets": [
+        {
+          "expr": "quantile_over_time(0.99, {service=~\"$service\"} | json | message=\"llm_stream_response\" | unwrap llm_ttft_ms [5m]) by (llm_provider, llm_model)",
+          "legendFormat": "{{llm_provider}} / {{llm_model}}",
+          "refId": "A",
+          "queryType": "range"
+        }
+      ],
+      "fieldConfig": {"defaults": {"unit": "ms", "min": 0, "custom": {"lineWidth": 2, "fillOpacity": 10}}}
+    },
+    {
+      "id": 4,
+      "title": "Aggregate Output Tokens/sec",
+      "type": "timeseries",
+      "gridPos": {"h": 6, "w": 12, "x": 12, "y": 6},
+      "datasource": {"type": "loki", "uid": "loki"},
+      "targets": [
+        {
+          "expr": "sum by (llm_provider, llm_model) (rate({service=~\"$service\"} | json | message=\"llm_stream_response\" | unwrap llm_tokens_output [2m]))",
+          "legendFormat": "{{llm_provider}} / {{llm_model}}",
+          "refId": "A",
+          "queryType": "range"
+        }
+      ],
+      "fieldConfig": {"defaults": {"unit": "tps", "min": 0, "custom": {"lineWidth": 2, "fillOpacity": 10}}}
+    },
+    {
+      "id": 5,
+      "title": "STT P99 by Provider",
+      "type": "timeseries",
+      "gridPos": {"h": 6, "w": 12, "x": 0, "y": 12},
+      "datasource": {"type": "loki", "uid": "loki"},
+      "targets": [
+        {
+          "expr": "quantile_over_time(0.99, {service=~\"$service\"} | json | message=\"voice_stt_response\" | unwrap stt_duration_ms [5m]) by (stt_provider)",
+          "legendFormat": "{{stt_provider}}",
+          "refId": "A",
+          "queryType": "range"
+        }
+      ],
+      "fieldConfig": {"defaults": {"unit": "ms", "min": 0, "custom": {"lineWidth": 2, "fillOpacity": 10}}}
+    },
+    {
+      "id": 6,
+      "title": "TTS P99 by Provider",
+      "type": "timeseries",
+      "gridPos": {"h": 6, "w": 12, "x": 12, "y": 12},
+      "datasource": {"type": "loki", "uid": "loki"},
+      "targets": [
+        {
+          "expr": "quantile_over_time(0.99, {service=~\"$service\"} | json | message=\"voice_tts_response\" | unwrap tts_duration_ms [5m]) by (tts_provider)",
+          "legendFormat": "{{tts_provider}}",
+          "refId": "A",
+          "queryType": "range"
+        }
+      ],
+      "fieldConfig": {"defaults": {"unit": "ms", "min": 0, "custom": {"lineWidth": 2, "fillOpacity": 10}}}
+    },
+    {
+      "id": 7,
+      "title": "Memory Summarize P99",
+      "type": "timeseries",
+      "gridPos": {"h": 6, "w": 12, "x": 0, "y": 18},
+      "datasource": {"type": "loki", "uid": "loki"},
+      "targets": [
+        {
+          "expr": "quantile_over_time(0.99, {service=~\"$service\"} | json | message=\"flow_memory_summarize\" | unwrap flow_memory_summarize_ms [5m]) by (service)",
+          "legendFormat": "{{service}}",
+          "refId": "A",
+          "queryType": "range"
+        }
+      ],
+      "fieldConfig": {"defaults": {"unit": "ms", "min": 0, "custom": {"lineWidth": 2, "fillOpacity": 10}}}
+    },
+    {
+      "id": 8,
+      "title": "Session Lock Wait P99",
+      "type": "timeseries",
+      "gridPos": {"h": 6, "w": 12, "x": 12, "y": 18},
+      "datasource": {"type": "loki", "uid": "loki"},
+      "targets": [
+        {
+          "expr": "quantile_over_time(0.99, {service=~\"$service\"} | json | message=\"task_started\" | unwrap task_lock_wait_ms [5m]) by (service)",
+          "legendFormat": "{{service}}",
+          "refId": "A",
+          "queryType": "range"
+        }
+      ],
+      "fieldConfig": {"defaults": {"unit": "ms", "min": 0, "custom": {"lineWidth": 2, "fillOpacity": 10}}}
+    },
+    {
+      "id": 9,
+      "title": "Flow E2E Terminal P99",
+      "type": "timeseries",
+      "gridPos": {"h": 6, "w": 12, "x": 0, "y": 24},
+      "datasource": {"type": "loki", "uid": "loki"},
+      "targets": [
+        {
+          "expr": "quantile_over_time(0.99, {service=~\"$service\"} | json | message=\"flow_terminal\" | unwrap flow_terminal_ms [5m]) by (service)",
+          "legendFormat": "{{service}}",
+          "refId": "A",
+          "queryType": "range"
+        }
+      ],
+      "fieldConfig": {"defaults": {"unit": "ms", "min": 0, "custom": {"lineWidth": 2, "fillOpacity": 10}}}
+    },
+    {
+      "id": 10,
+      "title": "Tool Call P99",
+      "type": "timeseries",
+      "gridPos": {"h": 6, "w": 12, "x": 12, "y": 24},
+      "datasource": {"type": "loki", "uid": "loki"},
+      "targets": [
+        {
+          "expr": "quantile_over_time(0.99, {service=~\"$service\"} | json | message=\"tool_call_finished\" | unwrap platform_tool_duration_ms [5m]) by (platform_tool_name)",
+          "legendFormat": "{{platform_tool_name}}",
+          "refId": "A",
+          "queryType": "range"
+        }
+      ],
+      "fieldConfig": {"defaults": {"unit": "ms", "min": 0, "custom": {"lineWidth": 2, "fillOpacity": 10}}}
+    },
+    {
+      "id": 11,
+      "title": "WS Command P99",
+      "type": "timeseries",
+      "gridPos": {"h": 6, "w": 12, "x": 0, "y": 30},
+      "datasource": {"type": "loki", "uid": "loki"},
+      "targets": [
+        {
+          "expr": "quantile_over_time(0.99, {service=~\"$service\"} | json | message=\"ws_command_finished\" | unwrap ws_command_duration_ms [5m]) by (ws_command)",
+          "legendFormat": "{{ws_command}}",
+          "refId": "A",
+          "queryType": "range"
+        }
+      ],
+      "fieldConfig": {"defaults": {"unit": "ms", "min": 0, "custom": {"lineWidth": 2, "fillOpacity": 10}}}
+    },
+    {
+      "id": 12,
+      "title": "LLM Context Compile P99",
+      "type": "timeseries",
+      "gridPos": {"h": 6, "w": 12, "x": 12, "y": 30},
+      "datasource": {"type": "loki", "uid": "loki"},
+      "targets": [
+        {
+          "expr": "quantile_over_time(0.99, {service=~\"$service\"} | json | message=\"llm_context_compiled\" | unwrap platform_llm_context_compile_ms [5m]) by (service)",
+          "legendFormat": "{{service}}",
+          "refId": "A",
+          "queryType": "range"
+        }
+      ],
+      "fieldConfig": {"defaults": {"unit": "ms", "min": 0, "custom": {"lineWidth": 2, "fillOpacity": 10}}}
+    }
+  ]
+}

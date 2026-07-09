@@ -98,6 +98,13 @@ class MCPServerConfig(BaseModel):
         default=None,
         description="Hash catalog snapshot при последнем provision/reset",
     )
+    catalog_auto_provisioned: bool = Field(
+        default=False,
+        description=(
+            "True — сервер создан auto-provisioner (platform_approved tier); "
+            "False — opt-in install из MCP Store или запись без catalog_auto_provisioned"
+        ),
+    )
     override_locked: bool = Field(
         default=False,
         description="True — catalog provisioner не обновляет запись",

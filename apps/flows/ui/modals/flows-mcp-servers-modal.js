@@ -367,8 +367,28 @@ export class FlowsMcpServersModal extends PlatformModal {
             }
             .mcp-list-toolbar {
                 display: flex;
-                justify-content: flex-end;
+                justify-content: space-between;
+                align-items: center;
+                gap: var(--space-2);
                 margin-bottom: var(--space-2);
+            }
+            .mcp-tab-bar {
+                display: inline-flex;
+                gap: var(--space-1);
+                flex-wrap: wrap;
+            }
+            .mcp-tab-btn[aria-selected='true'] {
+                background: var(--accent-subtle);
+                color: var(--accent);
+            }
+            .mcp-error-panel {
+                text-align: center;
+                color: var(--error);
+                padding: var(--space-6);
+                display: flex;
+                flex-direction: column;
+                align-items: center;
+                gap: var(--space-3);
             }
             .mcp-branding-link {
                 border: none;
@@ -390,6 +410,7 @@ export class FlowsMcpServersModal extends PlatformModal {
         this.size = 'lg';
         this._saving = false;
         this._view = 'list';
+        this._listTab = 'installed';
         this._editing = null;
         this._form = {
             server_id: '',
@@ -418,6 +439,15 @@ export class FlowsMcpServersModal extends PlatformModal {
         this._brandingLoadOp = this.useOp('flows/mcp_branding_load');
         this._brandingUpsertOp = this.useOp('flows/mcp_branding_upsert');
         this._brandingRemoveOp = this.useOp('flows/mcp_branding_remove');
+        this._catalogLoadOp = this.useOp('flows/mcp_catalog_store_load');
+        this._catalogInstallOp = this.useOp('flows/mcp_catalog_install');
+        this._catalogUninstallOp = this.useOp('flows/mcp_catalog_uninstall');
+        this._catalogItems = [];
+        this._catalogLoading = false;
+        this._catalogError = null;
+        this._catalogInstallingId = null;
+        this._catalogTotal = 0;
+        this._catalogSearchTimer = null;
         this._search = '';
     }
 
@@ -425,6 +455,7 @@ export class FlowsMcpServersModal extends PlatformModal {
         super.updated(changedProperties);
         if (changedProperties.has('open') && this.open) {
             this._view = 'list';
+            this._listTab = 'installed';
             this._editing = null;
             this._formError = null;
             this._saving = false;
@@ -434,10 +465,27 @@ export class FlowsMcpServersModal extends PlatformModal {
             this._brandingSaving = false;
             this._brandingUploadFiles = [];
             this._search = '';
+            this._catalogItems = [];
+            this._catalogLoading = false;
+            this._catalogError = null;
+            this._catalogInstallingId = null;
+            this._catalogTotal = 0;
+            if (this._catalogSearchTimer !== null) {
+                clearTimeout(this._catalogSearchTimer);
+                this._catalogSearchTimer = null;
+            }
             this._resetFormFields();
             this._resetBrandingFormFields();
             this.size = 'lg';
         }
+    }
+
+    disconnectedCallback() {
+        if (this._catalogSearchTimer !== null) {
+            clearTimeout(this._catalogSearchTimer);
+            this._catalogSearchTimer = null;
+        }
+        super.disconnectedCallback();
     }
 
     _onSearchInput(e) {
@@ -446,6 +494,112 @@ export class FlowsMcpServersModal extends PlatformModal {
             throw new TypeError('flows-mcp-servers-modal: search expects string detail.value');
         }
         this._search = v;
+        if (this._view === 'list' && this._listTab === 'catalog') {
+            if (this._catalogSearchTimer !== null) {
+                clearTimeout(this._catalogSearchTimer);
+            }
+            this._catalogSearchTimer = setTimeout(() => {
+                this._catalogSearchTimer = null;
+                void this._loadCatalog();
+            }, 250);
+        }
+    }
+
+    _renderInstalledEmptyState(messageKey) {
+        return html`
+            <div class="mcp-empty">
+                <div>${this.t(messageKey)}</div>
+                <platform-button variant="primary" density="compact" @click=${() => { void this._switchListTab('catalog'); }}>
+                    ${this.t('mcp_servers_modal.action_open_catalog')}
+                </platform-button>
+            </div>
+        `;
+    }
+
+    _hasPlatformDefaults(items) {
+        const ids = new Set(
+            items
+                .map((item) => (typeof item.server_id === 'string' ? item.server_id : ''))
+                .filter((id) => id.length > 0),
+        );
+        return PLATFORM_MCP_SLUGS.every((slug) => ids.has(slug));
+    }
+
+    _isOptInCatalogServer(server) {
+        return server.source === 'catalog' && server.catalog_auto_provisioned !== true;
+    }
+
+    async _retryServersLoad() {
+        await this._servers.load();
+    }
+
+    async _loadCatalog() {
+        this._catalogLoading = true;
+        this._catalogError = null;
+        try {
+            const payload = await this._catalogLoadOp.run({
+                search: this._search,
+                limit: 100,
+                offset: 0,
+            });
+            if (!isPlainObject(payload)) {
+                throw new Error('flows-mcp-servers-modal: catalog load invalid response');
+            }
+            this._catalogItems = asArray(payload.items);
+            if (typeof payload.total === 'number') {
+                this._catalogTotal = payload.total;
+            }
+        } catch (err) {
+            this._catalogItems = [];
+            this._catalogError = err instanceof Error ? err.message : String(err);
+        } finally {
+            this._catalogLoading = false;
+        }
+    }
+
+    async _switchListTab(tab) {
+        if (tab !== 'installed' && tab !== 'catalog') {
+            throw new Error(`flows-mcp-servers-modal: invalid list tab ${tab}`);
+        }
+        this._listTab = tab;
+        if (tab === 'catalog' && this._catalogItems.length === 0 && this._catalogError === null) {
+            await this._loadCatalog();
+        }
+    }
+
+    async _installCatalogEntry(entry) {
+        if (!isPlainObject(entry) || typeof entry.catalog_id !== 'string') {
+            throw new Error('flows-mcp-servers-modal: catalog install requires catalog_id');
+        }
+        this._catalogInstallingId = entry.catalog_id;
+        try {
+            await this._catalogInstallOp.run({ catalog_id: entry.catalog_id });
+            await Promise.all([this._servers.load(), this._loadCatalog()]);
+        } finally {
+            this._catalogInstallingId = null;
+        }
+    }
+
+    async _uninstallCatalogEntry(entry) {
+        if (!isPlainObject(entry) || typeof entry.catalog_id !== 'string') {
+            throw new Error('flows-mcp-servers-modal: catalog uninstall requires catalog_id');
+        }
+        const title = typeof entry.title === 'string' ? entry.title : entry.catalog_id;
+        const ok = await platformConfirm(
+            this.t('mcp_servers_modal.catalog_uninstall_message', { title }),
+            {
+                title: this.t('mcp_servers_modal.catalog_uninstall_title'),
+                variant: 'danger',
+                confirmVariant: 'danger',
+                confirmText: this.t('mcp_servers_modal.catalog_uninstall'),
+                cancelText: this.t('common.action_cancel'),
+            },
+        );
+        if (!ok) {
+            return;
+        }
+        await this._catalogUninstallOp.run({ catalog_id: entry.catalog_id });
+        await Promise.all([this._servers.load(), this._loadCatalog()]);
     }
 
     _renderHeaderSearch() {
@@ -896,6 +1050,10 @@ export class FlowsMcpServersModal extends PlatformModal {
     }
 
     async _delete(s) {
+        if (this._isOptInCatalogServer(s) && typeof s.catalog_id === 'string' && s.catalog_id.length > 0) {
+            await this._uninstallCatalogEntry({ catalog_id: s.catalog_id, title: s.name });
+            return;
+        }
         const ok = await platformConfirm(
             this.t('mcp_servers_modal.delete_message', { id: s.server_id }),
             {
@@ -924,12 +1082,26 @@ export class FlowsMcpServersModal extends PlatformModal {
     }
 
     _renderList() {
-        const items = this._filterServers(asArray(this._servers.items));
-        if (this._servers.loading && asArray(this._servers.items).length === 0) {
+        const allItems = asArray(this._servers.items);
+        const items = this._filterServers(allItems);
+        if (typeof this._servers.error === 'string' && this._servers.error.length > 0) {
+            return html`
+                <div class="mcp-error-panel" role="alert">
+                    <div>${this.t('mcp_servers_modal.load_error', { message: this._servers.error })}</div>
+                    <platform-button variant="primary" density="compact" @click=${() => { void this._retryServersLoad(); }}>
+                        ${this.t('mcp_servers_modal.action_retry')}
+                    </platform-button>
+                </div>
+            `;
+        }
+        if (this._servers.loading && allItems.length === 0) {
             return html`<div class="mcp-empty"><glass-spinner></glass-spinner></div>`;
         }
-        if (asArray(this._servers.items).length === 0) {
-            return html`<div class="mcp-empty">${this.t('mcp_servers_modal.empty')}</div>`;
+        if (allItems.length === 0) {
+            return this._renderInstalledEmptyState('mcp_servers_modal.empty_init_pending');
+        }
+        if (!this._hasPlatformDefaults(allItems) && this._search.trim().length === 0) {
+            return this._renderInstalledEmptyState('mcp_servers_modal.empty_init_pending');
         }
         if (items.length === 0) {
             return html`<div class="mcp-empty">${this.t('mcp_servers_modal.empty_search')}</div>`;
@@ -988,6 +1160,7 @@ export class FlowsMcpServersModal extends PlatformModal {
                             icon-only
                             density="dense"
                             danger
+                            ?disabled=${s.source === 'platform'}
                             @click=${() => this._delete(s)}
                             title=${this.t('mcp_servers_modal.action_delete_aria')}
                             aria-label=${this.t('mcp_servers_modal.action_delete_aria')}
@@ -1024,19 +1197,130 @@ export class FlowsMcpServersModal extends PlatformModal {
         `);
     }
 
+    _renderCatalogList() {
+        if (typeof this._catalogError === 'string' && this._catalogError.length > 0) {
+            return html`
+                <div class="mcp-error-panel" role="alert">
+                    <div>${this.t('mcp_servers_modal.catalog_load_error', { message: this._catalogError })}</div>
+                    <platform-button variant="primary" density="compact" @click=${() => { void this._loadCatalog(); }}>
+                        ${this.t('mcp_servers_modal.action_retry')}
+                    </platform-button>
+                </div>
+            `;
+        }
+        if (this._catalogLoading && this._catalogItems.length === 0) {
+            return html`<div class="mcp-empty"><glass-spinner></glass-spinner></div>`;
+        }
+        if (this._catalogItems.length === 0) {
+            const msg = this._search.trim().length > 0
+                ? this.t('mcp_servers_modal.catalog_empty_search')
+                : this.t('mcp_servers_modal.catalog_empty');
+            return html`<div class="mcp-empty">${msg}</div>`;
+        }
+        return this._catalogItems.map((entry) => {
+            const catalogId = typeof entry.catalog_id === 'string' ? entry.catalog_id : '';
+            const title = typeof entry.title === 'string' ? entry.title : catalogId;
+            const installed = entry.installed === true;
+            const toolCount = typeof entry.tool_count_snapshot === 'number' ? entry.tool_count_snapshot : 0;
+            const installing = this._catalogInstallingId === catalogId;
+            return html`
+                <div class="mcp-card content-panel">
+                    <div class="mcp-card-top">
+                        <div class="mcp-card-head-row">
+                            <div class="mcp-card-icon glass-subtle">${renderMcpServerIcon(entry, 28)}</div>
+                            <div class="mcp-card-titles">
+                                <h3>${title}</h3>
+                                <div class="sub"><code>${catalogId}</code></div>
+                            </div>
+                        </div>
+                        <div class="mcp-card-actions">
+                            ${installed
+                                ? html`
+                                    <span class="mcp-chip">${this.t('mcp_servers_modal.catalog_installed')}</span>
+                                    <platform-button
+                                        variant="ghost"
+                                        icon-only
+                                        density="dense"
+                                        danger
+                                        @click=${() => { void this._uninstallCatalogEntry(entry); }}
+                                        title=${this.t('mcp_servers_modal.catalog_uninstall')}
+                                        aria-label=${this.t('mcp_servers_modal.catalog_uninstall')}
+                                    >
+                                        <platform-icon name="trash" size="16"></platform-icon>
+                                    </platform-button>
+                                `
+                                : html`
+                                    <platform-button
+                                        variant="primary"
+                                        density="compact"
+                                        ?disabled=${installing || this._catalogInstallOp.busy}
+                                        @click=${() => { void this._installCatalogEntry(entry); }}
+                                    >
+                                        ${installing
+                                            ? html`<glass-spinner size="sm"></glass-spinner>`
+                                            : this.t('mcp_servers_modal.catalog_install')}
+                                    </platform-button>
+                                `}
+                        </div>
+                    </div>
+                    <div class="mcp-card-url">${typeof entry.upstream_url === 'string' ? entry.upstream_url : ''}</div>
+                    <div class="mcp-card-meta">
+                        <span class="mcp-chip">${this._transportLabel(entry.transport_type)}</span>
+                        <span>${this.t('mcp_servers_modal.catalog_tools_count', { n: toolCount })}</span>
+                    </div>
+                    ${typeof entry.description === 'string' && entry.description.length > 0
+                        ? html`<div class="mcp-headers-line">${entry.description}</div>`
+                        : ''}
+                </div>
+            `;
+        });
+    }
+
+    _renderListTabs() {
+        const catalogLabel = this._catalogTotal > 0
+            ? this.t('mcp_servers_modal.tab_catalog_count', { n: this._catalogTotal })
+            : this.t('mcp_servers_modal.tab_catalog');
+        return html`
+            <div class="mcp-tab-bar" role="tablist">
+                <platform-button
+                    class="mcp-tab-btn"
+                    variant="ghost"
+                    density="compact"
+                    role="tab"
+                    aria-selected=${this._listTab === 'installed' ? 'true' : 'false'}
+                    @click=${() => { void this._switchListTab('installed'); }}
+                >
+                    ${this.t('mcp_servers_modal.tab_installed')}
+                </platform-button>
+                <platform-button
+                    class="mcp-tab-btn"
+                    variant="ghost"
+                    density="compact"
+                    role="tab"
+                    aria-selected=${this._listTab === 'catalog' ? 'true' : 'false'}
+                    @click=${() => { void this._switchListTab('catalog'); }}
+                >
+                    ${catalogLabel}
+                </platform-button>
+            </div>
+        `;
+    }
+
     _renderListView() {
         const brandingBtn = this._isSystemCompany()
             ? html`
-                <div class="mcp-list-toolbar">
-                    <platform-button variant="ghost" density="compact" @click=${() => { void this._goBranding(); }}>
-                        ${this.t('mcp_servers_modal.branding_title')}
-                    </platform-button>
-                </div>
+                <platform-button variant="ghost" density="compact" @click=${() => { void this._goBranding(); }}>
+                    ${this.t('mcp_servers_modal.branding_title')}
+                </platform-button>
             `
             : html``;
+        const listContent = this._listTab === 'catalog' ? this._renderCatalogList() : this._renderList();
         return html`
-            ${brandingBtn}
-            <div class="mcp-cards ${this._isFullscreen ? 'is-fullscreen' : ''}">${this._renderList()}</div>
+            <div class="mcp-list-toolbar">
+                ${this._renderListTabs()}
+                ${brandingBtn}
+            </div>
+            <div class="mcp-cards ${this._isFullscreen ? 'is-fullscreen' : ''}">${listContent}</div>
         `;
     }
 
@@ -1310,16 +1594,21 @@ export class FlowsMcpServersModal extends PlatformModal {
     renderHeaderActions() {
         if (this._view === 'list') {
             const addLabel = this.t('mcp_servers_modal.action_add');
+            const showAdd = this._listTab === 'installed';
             return html`
-                <platform-button
-                    variant="primary"
-                    icon-only
-                    density="dense"
-                    aria-label=${addLabel}
-                    @click=${() => this._goAdd()}
-                >
-                    <platform-icon name="plus" size="16"></platform-icon>
-                </platform-button>
+                ${showAdd
+                    ? html`
+                        <platform-button
+                            variant="primary"
+                            icon-only
+                            density="dense"
+                            aria-label=${addLabel}
+                            @click=${() => this._goAdd()}
+                        >
+                            <platform-icon name="plus" size="16"></platform-icon>
+                        </platform-button>
+                    `
+                    : ''}
             `;
         }
         if (this._view === 'branding') {

@@ -405,6 +405,7 @@ async def test_provision_approved_only_provisions_platform_approved_entry(
     body = get_response.json()
     assert body["source"] == "catalog"
     assert body["headers"] == {"Authorization": "Bearer @var:mcp_token"}
+    assert body["catalog_auto_provisioned"] is True
 
     await cleanup_catalog_and_server(
         container=container,
@@ -776,3 +777,174 @@ def test_mcp_catalog_config_model_default_auto_provision() -> None:
     from core.config.models import MCPCatalogConfig
 
     assert MCPCatalogConfig().auto_provision == "approved_only"
+
+
+@pytest.mark.asyncio
+async def test_provision_does_not_deactivate_opt_in_installed_server(
+    client,
+    local_mcp_http_url: str,
+    unique_id: str,
+) -> None:
+    """Opt-in MCP Store сервер не деактивируется auto-provisioner при approved_only."""
+    catalog_id = f"opt_in_{unique_id}"
+    server_id = server_id_from_catalog_id(catalog_id)
+    container = as_flow_runtime_container(get_container())
+    entry = build_verified_catalog_entry(
+        catalog_id=catalog_id,
+        upstream_url=local_mcp_http_url,
+        platform_approved=False,
+    )
+    _ = await persist_catalog_entry(container=container, entry=entry)
+
+    install_response = await client.post(f"/flows/api/v1/mcp/catalog/{catalog_id}/install")
+    assert install_response.status_code == 200, install_response.text
+    body = install_response.json()
+    assert body["catalog_auto_provisioned"] is False
+
+    deprecated_entry = entry.model_copy(update={"is_deprecated": True})
+    deprecated_entry.catalog_snapshot_hash = deprecated_entry.recompute_snapshot_hash()
+    _ = await persist_catalog_entry(container=container, entry=deprecated_entry)
+
+    with mcp_catalog_settings(auto_provision="approved_only"):
+        stats = await provision_mcp_catalog_for_company(container=container)
+
+    assert stats.deprecated == 0
+    get_response = await client.get(f"/flows/api/v1/mcp/servers/{server_id}")
+    assert get_response.status_code == 200
+    assert get_response.json()["is_active"] is True
+
+    uninstall_response = await client.delete(f"/flows/api/v1/mcp/catalog/{catalog_id}/install")
+    assert uninstall_response.status_code == 200
+    _ = await container.mcp_catalog_repository.delete(catalog_id)
+
+
+@pytest.mark.asyncio
+async def test_mcp_catalog_store_list_install_uninstall_api(
+    client,
+    local_mcp_http_url: str,
+    unique_id: str,
+) -> None:
+    """MCP Store API: list tier=store, install, uninstall."""
+    catalog_id = f"store_api_{unique_id}"
+    server_id = server_id_from_catalog_id(catalog_id)
+    container = as_flow_runtime_container(get_container())
+    entry = build_verified_catalog_entry(
+        catalog_id=catalog_id,
+        upstream_url=local_mcp_http_url,
+        platform_approved=False,
+        title=f"Store API {unique_id}",
+    )
+    _ = await persist_catalog_entry(container=container, entry=entry)
+
+    list_response = await client.get(
+        "/flows/api/v1/mcp/catalog",
+        params={"tier": "store", "search": unique_id, "limit": 20, "offset": 0},
+    )
+    assert list_response.status_code == 200, list_response.text
+    list_body = list_response.json()
+    assert list_body["total"] == 1
+    assert list_body["items"][0]["catalog_id"] == catalog_id
+    assert list_body["items"][0]["installed"] is False
+
+    install_response = await client.post(f"/flows/api/v1/mcp/catalog/{catalog_id}/install")
+    assert install_response.status_code == 200, install_response.text
+    assert install_response.json()["server_id"] == server_id
+
+    list_after_install = await client.get(
+        "/flows/api/v1/mcp/catalog",
+        params={"tier": "store", "search": unique_id},
+    )
+    assert list_after_install.json()["items"][0]["installed"] is True
+
+    tools_response = await client.get("/flows/api/v1/tools/all")
+    mcp_tools = [
+        tool
+        for tool in tools_response.json()["items"]
+        if tool.get("mcp_server_id") == server_id
+    ]
+    assert len(mcp_tools) == 1
+
+    uninstall_response = await client.delete(f"/flows/api/v1/mcp/catalog/{catalog_id}/install")
+    assert uninstall_response.status_code == 200
+
+    get_response = await client.get(f"/flows/api/v1/mcp/servers/{server_id}")
+    assert get_response.status_code == 404
+
+    tools_after = await client.get("/flows/api/v1/tools/all")
+    mcp_tools_after = [
+        tool
+        for tool in tools_after.json()["items"]
+        if tool.get("mcp_server_id") == server_id
+    ]
+    assert len(mcp_tools_after) == 0
+
+    _ = await container.mcp_catalog_repository.delete(catalog_id)
+
+
+@pytest.mark.asyncio
+async def test_auto_provisioned_catalog_entry_rejects_store_uninstall(
+    client,
+    local_mcp_http_url: str,
+    unique_id: str,
+) -> None:
+    """Auto tier catalog сервер нельзя удалить через MCP Store uninstall API."""
+    catalog_id = f"auto_tier_{unique_id}"
+    container = as_flow_runtime_container(get_container())
+    entry = build_verified_catalog_entry(
+        catalog_id=catalog_id,
+        upstream_url=local_mcp_http_url,
+        platform_approved=True,
+    )
+    _ = await persist_catalog_entry(container=container, entry=entry)
+
+    with mcp_catalog_settings(auto_provision="approved_only"):
+        _ = await provision_mcp_catalog_for_company(container=container)
+
+    uninstall_response = await client.delete(f"/flows/api/v1/mcp/catalog/{catalog_id}/install")
+    assert uninstall_response.status_code == 400
+
+    await cleanup_catalog_and_server(
+        container=container,
+        client=client,
+        catalog_id=catalog_id,
+        server_id=server_id_from_catalog_id(catalog_id),
+    )
+
+
+@pytest.mark.asyncio
+async def test_mcp_catalog_install_is_idempotent(
+    client,
+    local_mcp_http_url: str,
+    unique_id: str,
+) -> None:
+    """Повторный POST install возвращает тот же server без дублей."""
+    catalog_id = f"idempotent_{unique_id}"
+    server_id = server_id_from_catalog_id(catalog_id)
+    container = as_flow_runtime_container(get_container())
+    entry = build_verified_catalog_entry(
+        catalog_id=catalog_id,
+        upstream_url=local_mcp_http_url,
+        platform_approved=False,
+    )
+    _ = await persist_catalog_entry(container=container, entry=entry)
+
+    first = await client.post(f"/flows/api/v1/mcp/catalog/{catalog_id}/install")
+    second = await client.post(f"/flows/api/v1/mcp/catalog/{catalog_id}/install")
+    assert first.status_code == 200, first.text
+    assert second.status_code == 200, second.text
+    assert first.json()["server_id"] == server_id
+    assert second.json()["server_id"] == server_id
+
+    list_response = await client.get("/flows/api/v1/mcp/servers", params={"limit": 500})
+    server_ids = [item["server_id"] for item in list_response.json()["items"]]
+    assert server_ids.count(server_id) == 1
+
+    _ = await client.delete(f"/flows/api/v1/mcp/catalog/{catalog_id}/install")
+    _ = await container.mcp_catalog_repository.delete(catalog_id)
+
+
+@pytest.mark.asyncio
+async def test_mcp_catalog_list_rejects_unknown_tier(client) -> None:
+    response = await client.get("/flows/api/v1/mcp/catalog", params={"tier": "unknown"})
+    assert response.status_code == 400
+    assert response.json()["detail"] == "Only tier=store is supported"

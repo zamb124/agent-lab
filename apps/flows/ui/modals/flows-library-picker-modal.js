@@ -179,6 +179,7 @@ export class FlowsLibraryPickerModal extends PlatformModal {
     static properties = {
         ...PlatformModal.properties,
         onPick: { type: Object, attribute: false },
+        onPickBatch: { type: Object, attribute: false },
         onCommit: { type: Object, attribute: false },
         pickMode: { type: String, attribute: 'pick-mode' },
         _search: { state: true },
@@ -531,12 +532,35 @@ export class FlowsLibraryPickerModal extends PlatformModal {
                 color: var(--text-tertiary);
                 padding: var(--space-2) 0;
             }
+            .mcp-picker-tool-server {
+                display: inline-flex;
+                align-items: center;
+                gap: var(--space-1);
+                font-size: var(--text-xs);
+                color: var(--text-secondary);
+                margin-top: var(--space-1);
+            }
+            .mcp-picker-flat-hint {
+                font-size: var(--text-sm);
+                color: var(--text-tertiary);
+                margin-bottom: var(--space-2);
+            }
+            .lib-empty-actions {
+                display: flex;
+                flex-direction: column;
+                align-items: center;
+                gap: var(--space-3);
+                padding: var(--space-6);
+                text-align: center;
+                color: var(--text-tertiary);
+            }
         `,
     ];
 
     constructor() {
         super();
         this.onPick = null;
+        this.onPickBatch = null;
         this.onCommit = null;
         this.pickMode = 'all';
         this._search = '';
@@ -904,6 +928,116 @@ export class FlowsLibraryPickerModal extends PlatformModal {
         return groups;
     }
 
+    _mcpSearchActive() {
+        return _lower(this._search).length > 0;
+    }
+
+    /**
+     * @returns {Array<{ tool: Record<string, unknown>, server: Record<string, unknown> }>}
+     */
+    _buildMcpFlatSearchTools() {
+        const q = _lower(this._search);
+        if (q.length === 0) {
+            return [];
+        }
+        const flat = [];
+        for (const tool of this._mcpToolsBase()) {
+            if (!this._toolMatchesSearch(tool, q)) {
+                continue;
+            }
+            const serverId = this._mcpServerIdFromTool(tool);
+            const server = this._mcpServerById(serverId);
+            if (server === null) {
+                flat.push({
+                    tool,
+                    server: {
+                        server_id: serverId,
+                        name: serverId,
+                        url: '',
+                        transport_type: 'http',
+                        source: 'manual',
+                    },
+                });
+                continue;
+            }
+            flat.push({ tool, server });
+        }
+        flat.sort((left, right) => {
+            const leftTitle = registryItemTitle(left.tool);
+            const rightTitle = registryItemTitle(right.tool);
+            const byTitle = leftTitle.localeCompare(rightTitle, undefined, { sensitivity: 'base' });
+            if (byTitle !== 0) {
+                return byTitle;
+            }
+            const leftServer = typeof left.server.name === 'string' ? left.server.name : '';
+            const rightServer = typeof right.server.name === 'string' ? right.server.name : '';
+            return leftServer.localeCompare(rightServer, undefined, { sensitivity: 'base' });
+        });
+        return flat;
+    }
+
+    _renderMcpFlatToolCard(entry) {
+        const { tool, server } = entry;
+        const title = registryItemTitle(tool);
+        const desc = typeof tool.description === 'string' ? _truncateText(tool.description, 120) : '';
+        const serverName = typeof server.name === 'string' && server.name.length > 0
+            ? server.name
+            : server.server_id;
+        return html`
+            <platform-picker-card
+                value=${typeof tool.tool_id === 'string' ? tool.tool_id : title}
+                title=${title}
+                @select=${() => this._pickToolLike(tool)}
+            >
+                <div slot="icon">
+                    <div class="mcp-picker-tool-icon">
+                        ${renderMcpServerIcon(server, 18)}
+                    </div>
+                </div>
+                <div class="mcp-picker-tool-server">
+                    ${renderMcpServerIcon(server, 14)}
+                    <span>${serverName}</span>
+                </div>
+                ${desc.length > 0 ? html`<div class="mcp-picker-tool-desc">${desc}</div>` : nothing}
+            </platform-picker-card>
+        `;
+    }
+
+    _renderMcpEmptyState() {
+        return html`
+            <div class="lib-empty-actions">
+                <div>${this.t('tool_picker_modal.empty_mcp')}</div>
+                <platform-button variant="primary" density="compact" @click=${() => this.openModal('flows.mcp_servers', {})}>
+                    ${this.t('tool_picker_modal.action_manage_mcp')}
+                </platform-button>
+            </div>
+        `;
+    }
+
+    _renderMcpFlatSearchBody(showTabs) {
+        const flat = this._buildMcpFlatSearchTools();
+        if (flat.length === 0) {
+            return html`
+                ${showTabs ? this._renderToolCategoryTabs() : nothing}
+                <div class="lib-empty">${this.t('tool_picker_modal.mcp_empty_search')}</div>
+            `;
+        }
+        return html`
+            ${showTabs ? this._renderToolCategoryTabs() : nothing}
+            <div class="mcp-picker-flat-hint">${this.t('tool_picker_modal.mcp_flat_search_hint')}</div>
+            <div class="mcp-picker-tools-grid" role="list">
+                ${repeat(
+                    flat,
+                    (entry) => {
+                        const toolId = typeof entry.tool.tool_id === 'string' ? entry.tool.tool_id : registryItemTitle(entry.tool);
+                        return `${entry.server.server_id}:${toolId}`;
+                    },
+                    (entry) => this._renderMcpFlatToolCard(entry),
+                )}
+            </div>
+        `;
+    }
+
     _mcpServerById(serverId) {
         if (typeof serverId !== 'string' || serverId.length === 0) {
             return null;
@@ -1087,6 +1221,23 @@ export class FlowsLibraryPickerModal extends PlatformModal {
                         </div>
                     </div>
                     <div class="mcp-picker-server-actions">
+                        ${this._mcpBulkAddEnabled() && tools.length > 0
+                            ? html`
+                                <platform-button
+                                    variant="ghost"
+                                    icon-only
+                                    density="dense"
+                                    title=${this.t('tool_picker_modal.mcp_add_all_aria')}
+                                    aria-label=${this.t('tool_picker_modal.mcp_add_all_aria')}
+                                    @click=${(e) => {
+                                        e.stopPropagation();
+                                        this._pickAllMcpToolsFromServer(tools);
+                                    }}
+                                >
+                                    <platform-icon name="list-checks" size="16"></platform-icon>
+                                </platform-button>
+                            `
+                            : nothing}
                         <platform-button
                             variant="ghost"
                             icon-only
@@ -1155,11 +1306,19 @@ export class FlowsLibraryPickerModal extends PlatformModal {
                 <glass-spinner></glass-spinner>
             `;
         }
+        if (this._mcpSearchActive()) {
+            return this._renderMcpFlatSearchBody(showTabs);
+        }
         const groups = this._buildMcpServerGroups();
         if (groups.length === 0) {
+            const hasMcpTools = this._mcpToolsBase().length > 0;
+            const hasServers = asArray(this._mcpServers.items).length > 0;
+            const emptyContent = (!hasMcpTools && !hasServers)
+                ? this._renderMcpEmptyState()
+                : html`<div class="lib-empty">${this.t('tool_picker_modal.empty')}</div>`;
             return html`
                 ${showTabs ? this._renderToolCategoryTabs() : nothing}
-                <div class="lib-empty">${this.t('tool_picker_modal.empty')}</div>
+                ${emptyContent}
             `;
         }
         return html`
@@ -1401,6 +1560,10 @@ export class FlowsLibraryPickerModal extends PlatformModal {
         `;
     }
 
+    _mcpBulkAddEnabled() {
+        return typeof this.onPickBatch === 'function';
+    }
+
     _pickToolLike(t) {
         const fn = this.onPick;
         this.close();
@@ -1416,6 +1579,29 @@ export class FlowsLibraryPickerModal extends PlatformModal {
                 kind,
                 tool_id: t.tool_id,
                 item: t,
+            });
+        });
+    }
+
+    _pickAllMcpToolsFromServer(tools) {
+        const fn = this.onPickBatch;
+        if (typeof fn !== 'function') {
+            return;
+        }
+        if (!Array.isArray(tools) || tools.length === 0) {
+            return;
+        }
+        const items = tools.filter(
+            (t) => isPlainObject(t) && typeof t.tool_id === 'string' && t.tool_id.length > 0,
+        );
+        if (items.length === 0) {
+            return;
+        }
+        this.close();
+        queueMicrotask(() => {
+            fn({
+                kind: 'tool',
+                items,
             });
         });
     }

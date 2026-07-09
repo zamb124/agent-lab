@@ -13,6 +13,11 @@ from core.billing.settlement_rules import SettlementRulesDocument
 from core.billing.span_billing_settlement import SpanBillingSettlement
 from core.context import Context, set_context
 from core.logging import get_logger
+from core.logging.attributes import (
+    EVENT_BILLING_SETTLEMENT_LAG,
+    LOG_BILLING_SETTLEMENT_LAG_MS,
+    LOG_OPERATION_NAME,
+)
 from core.models.identity_models import Company, User
 
 logger = get_logger(__name__)
@@ -75,6 +80,17 @@ async def span_billing_settlement_tick(
         if rules_doc is None:
             rules_doc = await billing.load_settlement_rules_document_for_company(company_id)
             rules_by_company[company_id] = rules_doc
+        if span.end_time is not None:
+            settlement_lag_ms = int((now - span.end_time).total_seconds() * 1000)
+            logger.info(
+                EVENT_BILLING_SETTLEMENT_LAG,
+                **{
+                    LOG_BILLING_SETTLEMENT_LAG_MS: settlement_lag_ms,
+                    LOG_OPERATION_NAME: span.operation_name,
+                    "span_id": span.span_id,
+                    "company_id": company_id,
+                },
+            )
         try:
             n = await billing.settle_pending_span_in_job(
                 span=span,

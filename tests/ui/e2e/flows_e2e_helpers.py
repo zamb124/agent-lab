@@ -379,3 +379,89 @@ async def flows_publish_editor(page: Page) -> None:
     await expect(inner).to_be_enabled(timeout=30_000)
     await inner.click()
     await expect(inner).to_be_enabled(timeout=30_000)
+
+
+async def flows_seed_mcp_store_catalog_entry(
+    unique_id: str,
+    *,
+    upstream_url: str,
+) -> str:
+    """Глобальная catalog entry для UI/E2E MCP Store."""
+    from apps.flows.src.container import get_container
+    from apps.flows.src.container_contracts import as_flow_runtime_container
+    from tests.flows.integration.mcp_catalog_helpers import (
+        build_verified_catalog_entry,
+        persist_catalog_entry,
+    )
+
+    catalog_id = f"ui_doc_{unique_id}"
+    container = as_flow_runtime_container(get_container())
+    entry = build_verified_catalog_entry(
+        catalog_id=catalog_id,
+        upstream_url=upstream_url,
+        platform_approved=False,
+        title=f"Doc MCP {unique_id}",
+    )
+    _ = await persist_catalog_entry(container=container, entry=entry)
+    return catalog_id
+
+
+async def flows_api_sync_mcp_server(
+    origin: str,
+    auth_token: str,
+    server_id: str,
+) -> None:
+    async with _flows_client(origin, auth_token) as client:
+        response = await client.post(f"/flows/api/v1/mcp/servers/{server_id}/sync")
+    if response.status_code >= 400:
+        raise AssertionError(
+            f"POST /flows/api/v1/mcp/servers/{server_id}/sync failed: "
+            f"{response.status_code} {response.text}"
+        )
+
+
+async def flows_open_mcp_servers_modal(page: Page) -> Locator:
+    home = page.locator("flows-home-page").first
+    await expect(home).to_be_visible(timeout=30_000)
+    mcp_button = home.locator("platform-button").filter(has_text=re.compile(r"^\s*MCP\s*$", re.I))
+    await expect(mcp_button.first).to_be_visible(timeout=30_000)
+    await mcp_button.first.locator("button").first.click()
+    modal = page.locator("flows-mcp-servers-modal").first
+    await expect(modal).to_be_visible(timeout=30_000)
+    return modal
+
+
+async def flows_drop_mcp_node(page: Page, *, x: int = 720, y: int = 420) -> None:
+    """Открывает MCP tool picker через drop на канву (fallback через _applyPaletteDrop)."""
+    canvas = page.locator("flows-flow-canvas").first
+    await expect(canvas).to_be_visible(timeout=30_000)
+    await canvas.evaluate(
+        """
+        (el, point) => {
+            if (!el || typeof el._applyPaletteDrop !== 'function') {
+                throw new Error('flows-flow-canvas._applyPaletteDrop is unavailable');
+            }
+            el._applyPaletteDrop({
+                local: { x: point.x, y: point.y },
+                nodeType: 'mcp',
+                resourceType: '',
+                htmlTargetNodeId: null,
+            });
+        }
+        """,
+        {"x": x, "y": y},
+    )
+    picker = page.locator("flows-library-picker-modal").first
+    await expect(picker).to_be_visible(timeout=30_000)
+
+
+async def flows_pick_first_mcp_tool_in_picker(page: Page) -> None:
+    picker = page.locator("flows-library-picker-modal").first
+    await expect(picker).to_be_visible(timeout=30_000)
+    mcp_tab = picker.locator("platform-segmented-control").first
+    if await mcp_tab.count() > 0:
+        await flows_click_platform_button(picker, "MCP")
+    card = picker.locator("platform-picker-card").first
+    await expect(card).to_be_visible(timeout=30_000)
+    await card.click()
+    await expect(picker).to_be_hidden(timeout=30_000)

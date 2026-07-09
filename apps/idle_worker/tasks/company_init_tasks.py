@@ -30,6 +30,7 @@ from __future__ import annotations
 from apps.idle_worker.broker import broker as idle_broker
 from apps.idle_worker.container import get_container
 from core.clients.service_client import ServiceClientError
+from core.internal_context_headers import build_internal_context_headers
 from core.logging import get_logger
 from core.types import JsonObject, require_json_object
 
@@ -105,12 +106,16 @@ async def initialize_new_company_task(
     try:
         flows_response = await service_client.post(
             "flows",
-            "/flows/api/v1/company/init",
+            "/flows/api/v1/internal/company/init",
             json={
                 "company_id": company_id,
                 "company_name": company_name,
                 "subdomain": subdomain,
             },
+            headers=build_internal_context_headers(
+                company_id=company_id,
+                user_id=owner_user_id,
+            ),
         )
         flows_init_payload = require_json_object(
             flows_response, "flows /flows/api/v1/company/init response"

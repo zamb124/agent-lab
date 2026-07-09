@@ -100,6 +100,17 @@ from core.llm_context import (
     LLMContextSourceRegistry,
 )
 from core.logging import get_logger
+from core.logging.attributes import (
+    EVENT_FLOW_MEMORY_SUMMARIZE,
+    EVENT_FLOW_REACT_COMPLETED,
+    LOG_FLOW_ID,
+    LOG_FLOW_MEMORY_COMPACTION,
+    LOG_FLOW_MEMORY_SUMMARIZE_MS,
+    LOG_FLOW_REACT_INTERRUPTED,
+    LOG_FLOW_REACT_ITERATIONS,
+    LOG_FLOW_REACT_MAX_ITERATIONS,
+    LOG_TASK_ID,
+)
 from core.state import (
     ExecutionExceptionRecord,
     ExecutionState,
@@ -120,6 +131,7 @@ from core.tracing.attributes import (
     ATTR_WORKFLOW_SESSION_ID,
 )
 from core.tracing.context import get_current_trace_context
+from core.tracing.operation_span import traced_operation
 from core.types import JsonObject, JsonValue, require_json_object, require_json_value
 
 from .base_runner import BaseLlmNodeRunner, LlmNodeRunnerHost
@@ -406,13 +418,32 @@ class LlmNodeRunner(BaseLlmNodeRunner):
     async def _summarize_context_memory_episode(self, text: str) -> str:
         effective = resolve_effective_llm_config_for_node(self.node_config)
         llm_config = effective.config
-        return await self.container.text_transform_service.summarize(
-            text,
-            max_output_tokens=700,
-            instruction=LLM_CONTEXT_MEMORY_SUMMARY_INSTRUCTION,
-            provider=llm_config.provider,
-            model=llm_config.model,
+        summarize_start = time.perf_counter()
+        async with traced_operation(
+            "flows.memory.summarize",
+            event_type="llm_context.memory_summarize",
+            operation_category="llm",
+            resource_type="llm_context_memory",
+            trace_ctx=_get_trace_ctx_from_state(),
+        ):
+            summary = await self.container.text_transform_service.summarize(
+                text,
+                max_output_tokens=700,
+                instruction=LLM_CONTEXT_MEMORY_SUMMARY_INSTRUCTION,
+                provider=llm_config.provider,
+                model=llm_config.model,
+            )
+        summarize_ms = round((time.perf_counter() - summarize_start) * 1000.0, 3)
+        logger.info(
+            EVENT_FLOW_MEMORY_SUMMARIZE,
+            **{
+                LOG_FLOW_MEMORY_SUMMARIZE_MS: summarize_ms,
+                LOG_FLOW_MEMORY_COMPACTION: "llm_summary",
+                "summary_text_length": len(summary),
+                "source_text_length": len(text),
+            },
         )
+        return summary
 
     def _resolve_tool_by_call_name(self, call_name: str) -> BaseTool | None:
         """Резолвит tool по имени вызова, включая API-совместимую санитизацию."""
@@ -831,6 +862,8 @@ class LlmNodeRunner(BaseLlmNodeRunner):
                         resolved_llm_model: str | None = None
                         resolved_llm_provider: str | None = None
                         resolved_llm_source: str | None = None
+                        resolved_ttft_ms: float | None = None
+                        resolved_output_tps: float | None = None
                         llm_context_trace: JsonObject | None = None
 
                         llm, max_tok = self._resolve_llm_client(
@@ -899,6 +932,15 @@ class LlmNodeRunner(BaseLlmNodeRunner):
                                             md_source = md.get("source")
                                             if isinstance(md_source, str) and md_source.strip():
                                                 resolved_llm_source = md_source.strip()
+                                            md_ttft = md.get("ttft_ms")
+                                            if isinstance(md_ttft, (int, float)) and not isinstance(md_ttft, bool):
+                                                resolved_ttft_ms = float(md_ttft)
+                                            md_output_tps = md.get("output_tokens_per_second")
+                                            if isinstance(md_output_tps, (int, float)) and not isinstance(
+                                                md_output_tps,
+                                                bool,
+                                            ):
+                                                resolved_output_tps = float(md_output_tps)
                                             context_raw = md.get("llm_context")
                                             if isinstance(context_raw, dict):
                                                 llm_context_trace = require_json_object(
@@ -975,6 +1017,8 @@ class LlmNodeRunner(BaseLlmNodeRunner):
                                 settlement_quantity_rub=settlement_quantity_rub,
                                 billing_resource_name=billing_res,
                                 llm_context=llm_context_trace,
+                                ttft_ms=resolved_ttft_ms,
+                                output_tokens_per_second=resolved_output_tps,
                             )
 
                         if tool_calls:
@@ -1232,6 +1276,18 @@ class LlmNodeRunner(BaseLlmNodeRunner):
                 tracer.record_state_snapshot(llm_node_span, state)
                 raise
             finally:
+                if iteration > 0:
+                    logger.info(
+                        EVENT_FLOW_REACT_COMPLETED,
+                        **{
+                            LOG_FLOW_REACT_ITERATIONS: iteration,
+                            LOG_FLOW_REACT_MAX_ITERATIONS: max_iterations,
+                            LOG_FLOW_REACT_INTERRUPTED: bool(state.interrupt),
+                            LOG_TASK_ID: task_id,
+                            LOG_FLOW_ID: state.session_flow_id,
+                            "llm_node_label": llm_node_label,
+                        },
+                    )
                 if final_response:
                     state.response = final_response
                     tracer.record_state_snapshot(llm_node_span, state)

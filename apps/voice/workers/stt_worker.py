@@ -23,6 +23,7 @@ STT отдаёт огрызок (см. `voice.mdc` секция «Streaming VAD�
 from __future__ import annotations
 
 import asyncio
+import time
 from collections.abc import Awaitable, Callable
 from typing import Literal
 
@@ -30,6 +31,7 @@ from apps.voice.providers.base import BaseSTTProvider, BaseVADProvider
 from apps.voice.services.voice_barge_in import BargeInController
 from apps.voice.services.voice_client_channel import VoiceClientChannel
 from apps.voice.services.voice_session import MicFinalizeRequest, VoiceSession
+from core.clients.voice_logging import log_voice_stt_response
 from core.config import get_settings
 from core.logging import get_logger
 
@@ -258,6 +260,7 @@ async def run_stt_worker(
             if on_vad_state is not None:
                 await on_vad_state(session, "ended")
 
+            flush_start = time.perf_counter()
             try:
                 result = await stt_provider.flush_buffer()
             except Exception as exc:
@@ -285,6 +288,13 @@ async def run_stt_worker(
                 "voice.stt_worker.transcription",
                 session_id=session.session_id,
                 text_length=len(result.text),
+            )
+            log_voice_stt_response(
+                provider=result.provider,
+                duration_ms=(time.perf_counter() - flush_start) * 1000.0,
+                audio_bytes=0,
+                text_length=len(result.text),
+                mode="final",
             )
             if on_final_transcription is not None:
                 await on_final_transcription(session, result.text, language)

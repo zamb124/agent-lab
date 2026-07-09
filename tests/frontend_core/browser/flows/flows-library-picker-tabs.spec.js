@@ -164,4 +164,129 @@ describe('flows library picker tabs', () => {
         const cardInner = card.shadowRoot.querySelector('.picker-card');
         expect(getComputedStyle(cardInner).paddingTop).to.not.equal('0px');
     });
+
+    it('shows MCP bulk-add control when onPickBatch is provided', async () => {
+        let batchPayload = null;
+        const modal = await fixture(html`
+            <flows-library-picker-modal pick-mode="all"></flows-library-picker-modal>
+        `);
+        modal._modalKind = 'flows.tool_picker';
+        modal._modalId = 'picker-test';
+        modal.onPickBatch = (detail) => {
+            batchPayload = detail;
+        };
+        const host = await fixture(html`
+            <div>
+                ${modal._renderMcpServerSection({
+                    server: {
+                        server_id: 'test-server',
+                        name: 'Test MCP',
+                        url: 'https://example.test/mcp',
+                        transport_type: 'http',
+                        source: 'manual',
+                    },
+                    tools: [
+                        {
+                            tool_id: 'mcp:test-server:echo',
+                            title: 'echo',
+                            item_type: 'tool',
+                            code_mode: 'mcp_tool',
+                            mcp_server_id: 'test-server',
+                            description: 'Echo tool',
+                        },
+                        {
+                            tool_id: 'mcp:test-server:ping',
+                            title: 'ping',
+                            item_type: 'tool',
+                            code_mode: 'mcp_tool',
+                            mcp_server_id: 'test-server',
+                            description: 'Ping tool',
+                        },
+                    ],
+                })}
+            </div>
+        `);
+
+        const bulkButtons = host.querySelectorAll('.mcp-picker-server-actions platform-button');
+        expect(bulkButtons.length).to.be.greaterThan(0);
+        bulkButtons[0].shadowRoot.querySelector('button').click();
+        await aTimeout(0);
+        expect(batchPayload).to.not.equal(null);
+        expect(Array.isArray(batchPayload.items)).to.equal(true);
+        expect(batchPayload.items).to.have.length(2);
+    });
+
+    it('flat MCP search finds tool by name across servers', async () => {
+        const modal = await fixture(html`
+            <flows-library-picker-modal pick-mode="mcp_only"></flows-library-picker-modal>
+        `);
+        modal._modalKind = 'flows.tool_picker';
+        modal._toolsAllItems = () => ([
+            {
+                tool_id: 'mcp:alpha:find_me',
+                title: 'find_me',
+                item_type: 'tool',
+                code_mode: 'mcp_tool',
+                mcp_server_id: 'alpha',
+                description: 'Alpha tool',
+            },
+            {
+                tool_id: 'mcp:beta:other',
+                title: 'other',
+                item_type: 'tool',
+                code_mode: 'mcp_tool',
+                mcp_server_id: 'beta',
+                description: 'Beta tool',
+            },
+        ]);
+        modal._mcpServers = {
+            items: [
+                {
+                    server_id: 'alpha',
+                    name: 'Alpha Server',
+                    url: 'https://alpha.test/mcp',
+                    transport_type: 'http',
+                    source: 'catalog',
+                    is_active: true,
+                },
+                {
+                    server_id: 'beta',
+                    name: 'Beta Server',
+                    url: 'https://beta.test/mcp',
+                    transport_type: 'http',
+                    source: 'manual',
+                    is_active: true,
+                },
+            ],
+            loading: false,
+            error: null,
+            load: async () => {},
+        };
+        modal._search = 'find_me';
+        const flat = modal._buildMcpFlatSearchTools();
+        expect(flat).to.have.length(1);
+        expect(flat[0].tool.tool_id).to.equal('mcp:alpha:find_me');
+        expect(flat[0].server.server_id).to.equal('alpha');
+
+        const host = await fixture(html`<div>${modal._renderMcpFlatSearchBody(false)}</div>`);
+        expect(host.querySelector('.mcp-picker-flat-hint')).to.not.equal(null);
+        expect(host.querySelectorAll('platform-picker-card')).to.have.length(1);
+    });
+
+    it('shows manage MCP CTA when MCP servers and tools are empty', async () => {
+        const modal = await fixture(html`
+            <flows-library-picker-modal pick-mode="mcp_only"></flows-library-picker-modal>
+        `);
+        modal._modalKind = 'flows.tool_picker';
+        modal._toolsAllItems = () => [];
+        modal._mcpServers = {
+            items: [],
+            loading: false,
+            error: null,
+            load: async () => {},
+        };
+        const host = await fixture(html`<div>${modal._renderMcpEmptyState()}</div>`);
+        expect(host.textContent).to.include('tool_picker_modal.action_manage_mcp');
+        expect(host.querySelector('platform-button')).to.not.equal(null);
+    });
 });

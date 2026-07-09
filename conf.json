@@ -1311,7 +1311,7 @@
     "sync_meeting_reminder_limit": 500
   },
   "mcp_catalog": {
-    "auto_provision": "all_verified"
+    "auto_provision": "approved_only"
   },
   "agent": {
     "releases": {

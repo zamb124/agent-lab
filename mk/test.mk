@@ -1,4 +1,4 @@
-.PHONY: test test-until-fail test-all test-static test-up test-down test-reset test-cov test-cov-all test-cov-report test-unit test-network test-ui test-ui-chat test-ui-doc test-ui-components test-ui-kit test-ui-kit-playwright test-ui-kit-doc ui ui-doc test-frontend-core test-frontend-core-canon test-frontend-core-unit test-frontend-core-browser test-profile check-strict-agent-architecture check-wider-repo-strictness agent-ensure test-agent test-agent-e2e test-agent-desktop-e2e
+.PHONY: test test-until-fail test-all test-static test-up test-down test-reset test-cov test-cov-all test-cov-report test-unit test-network test-ui test-ui-chat test-ui-doc test-ui-components test-ui-kit test-ui-kit-playwright test-ui-kit-doc ui ui-doc test-frontend-core test-frontend-core-canon test-frontend-core-unit test-frontend-core-browser test-profile check-strict-agent-architecture check-wider-repo-strictness agent-ensure test-agent test-agent-e2e test-agent-desktop-e2e test-observability
 
 WORKERS ?= 10
 DB_PROFILE ?= 1
@@ -74,6 +74,13 @@ test-unit: test-up
 	uv run python scripts/pytest_with_timeout.py $(PYTEST_COMMAND_TIMEOUT_SECONDS) uv run pytest tests/ $(_PYTEST_XDIST) \
 		$(_PYTEST_IGNORE_UI) \
 		-m "not integration and not network"
+
+test-observability: test-up
+	@echo "Запуск observability product-metric тестов..."
+	uv run pytest tests/unit/test_observability_dashboards.py \
+		tests/core/tracing/test_operation_log_mirror.py \
+		tests/observability/ -q --tb=short
+	uv run pytest tests/observability/ -m real_taskiq -q --tb=short
 
 # Live-тесты с реальными HTTP-запросами в интернет (маркер network) — вне дефолтного прогона
 test-network: test-up

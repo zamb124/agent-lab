@@ -7,6 +7,7 @@ from typing import Annotated
 from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel
 
+import core.tracing.attributes as trace_attributes
 from apps.rag.config import get_rag_settings
 from core.ai.rerank_client import AIRerankerClientError
 from core.billing.exceptions import BillingBalanceBlockedError
@@ -20,6 +21,7 @@ from core.rag.post_retrieval_rerank import (
 )
 from core.rag.rag_http_namespace_search import filter_search_request_options
 from core.rag.search_options_resolver import resolve_platform_search_options
+from core.tracing.operation_span import traced_operation
 
 from ..dependencies import ContainerDep
 from .namespace_access import require_registered_rag_namespace
@@ -71,24 +73,36 @@ async def search_in_namespace(
             per_channel_top_k=request.per_channel_top_k,
         )
 
-        results = await rag_provider.search(
-            namespace_id=namespace_id,
-            query=request.query,
-            limit=request.limit,
-            filters=request.filters,
-            search_options=resolved_search_options,
-        )
+        async with traced_operation(
+            "rag.search.namespace",
+            event_type="rag.search",
+            operation_category="rag_search",
+            resource_type="rag.namespace",
+            resource_id=namespace_id,
+            extra_attributes={
+                trace_attributes.ATTR_RAG_STAGE: "search",
+                "platform.rag.search_pool_size": request.limit,
+            },
+        ) as span:
+            results = await rag_provider.search(
+                namespace_id=namespace_id,
+                query=request.query,
+                limit=request.limit,
+                filters=request.filters,
+                search_options=resolved_search_options,
+            )
 
-        results = await apply_rerank_after_retrieve(
-            results=results,
-            query=request.query,
-            provider_name=provider_name,
-            request_rerank=resolved_search_options.rerank,
-            profile_sd=None,
-            settings=settings,
-            request_rerank_max_candidates=resolved_search_options.rerank_max_candidates,
-            score_cache=container.rerank_score_cache,
-        )
+            results = await apply_rerank_after_retrieve(
+                results=results,
+                query=request.query,
+                provider_name=provider_name,
+                request_rerank=resolved_search_options.rerank,
+                profile_sd=None,
+                settings=settings,
+                request_rerank_max_candidates=resolved_search_options.rerank_max_candidates,
+                score_cache=container.rerank_score_cache,
+            )
+            span.set_attribute("platform.rag.result_count", len(results))
 
         logger.info(f"Поиск '{request.query}' в {namespace_id}: найдено {len(results)} результатов")
 

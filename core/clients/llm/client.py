@@ -486,11 +486,13 @@ class LLMClient:
                         yield _attach_llm_context_metadata(
                             event,
                             prepared_context.compiled_context,
+                            compile_ms=prepared_context.compile_ms,
                         )
                     else:
                         yield _attach_llm_context_metadata(
                             await agen.__anext__(),
                             prepared_context.compiled_context,
+                            compile_ms=prepared_context.compile_ms,
                         )
             except StopAsyncIteration:
                 return
@@ -915,8 +917,10 @@ def _max_output_token_reserve(
 def _attach_llm_context_metadata(
     event: StreamEvent,
     compiled_context: CompiledLLMContext | None,
+    *,
+    compile_ms: float | None = None,
 ) -> StreamEvent:
-    metadata = llm_context_trace_metadata(compiled_context)
+    metadata = llm_context_trace_metadata(compiled_context, compile_ms=compile_ms)
     if not metadata or not isinstance(event, TaskStatusUpdateEvent):
         return event
     if event.status.message is None:
