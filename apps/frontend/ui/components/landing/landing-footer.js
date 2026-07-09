@@ -3,6 +3,7 @@
  */
 import { html, css } from 'lit';
 import { PlatformElement } from '@platform/lib/platform-element/index.js';
+import { getPlatformBrandBootstrap } from '@platform/lib/utils/platform-brand.js';
 
 export class LandingFooter extends PlatformElement {
     static i18nNamespace = 'landing';
@@ -264,7 +265,9 @@ export class LandingFooter extends PlatformElement {
 
         const t = (key, params) => this.t(key, params);
         const year = new Date().getFullYear();
-        const supportMail = 'helpme@humanitec.ru';
+        const brand = getPlatformBrandBootstrap();
+        const supportMail = brand.supportEmail;
+        const platformName = brand.platformName;
 
         return html`
             <footer class="footer-container">
@@ -273,7 +276,7 @@ export class LandingFooter extends PlatformElement {
                         <a href="mailto:${supportMail}" class="footer-email">
                             ${supportMail}
                         </a>
-                        <h2 class="footer-logo">Humanitec</h2>
+                        <h2 class="footer-logo">${platformName}</h2>
                         ${legal
                             ? html`
                                   <div class="footer-requisites">

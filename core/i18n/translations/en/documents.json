@@ -54,6 +54,9 @@
         "colAuthor": "Author",
         "creatorAria": "Author: {{name}}",
         "colType": "Type",
+        "colRetention": "Retention",
+        "retentionPermanent": "Permanent",
+        "retentionExpired": "Expired",
         "docType": {
             "word": "Document",
             "cell": "Spreadsheet",
@@ -175,6 +178,7 @@
         "catalogPrivate": "Members only",
         "owner": "Owner",
         "type": "Type",
+        "retention": "Retention",
         "size": "Size",
         "updated": "Modified",
         "created": "Created"

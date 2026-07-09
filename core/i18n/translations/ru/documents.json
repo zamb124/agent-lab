@@ -54,6 +54,9 @@
         "colAuthor": "Автор",
         "creatorAria": "Автор: {{name}}",
         "colType": "Тип",
+        "colRetention": "Хранение",
+        "retentionPermanent": "Бессрочно",
+        "retentionExpired": "Срок истёк",
         "docType": {
             "word": "Текст",
             "cell": "Таблица",
@@ -175,6 +178,7 @@
         "catalogPrivate": "Только участники",
         "owner": "Владелец",
         "type": "Тип",
+        "retention": "Хранение",
         "size": "Размер",
         "updated": "Изменён",
         "created": "Создан"

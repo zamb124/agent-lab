@@ -38,7 +38,7 @@ export class PlatformFileTable extends PlatformElement {
             }
             .head-row {
                 display: grid;
-                grid-template-columns: var(--platform-file-row-columns, 2rem 1fr 6rem 8rem 8rem 6rem 2.5rem);
+                grid-template-columns: var(--platform-file-row-columns, 2rem 1fr 6rem 8rem 7rem 8rem 6rem 2.5rem);
                 gap: var(--space-3);
                 align-items: center;
                 min-height: 2.5rem;

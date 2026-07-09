@@ -12,6 +12,7 @@ import {
 } from '../../utils/public-search-files.js';
 import { markPublicSearchLandingTransition } from '../../utils/public-search-transition.js';
 import { bindInputVisibleInVisualViewport } from '@platform/lib/utils/ensure-input-visible-in-visual-viewport.js';
+import { getPlatformBrandBootstrap } from '@platform/lib/utils/platform-brand.js';
 import '@platform/lib/components/platform-icon.js';
 
 const SEARCH_MODES = Object.freeze([
@@ -808,9 +809,11 @@ export class LandingHero extends PlatformElement {
 
     render() {
         const t = (key) => this.t(key);
+        const brand = getPlatformBrandBootstrap();
+        const heroWordmark = brand.platformName.toUpperCase();
         return html`
             <div class="hero-container">
-                <h1 class="hero-title">HUMANITEC</h1>
+                <h1 class="hero-title">${heroWordmark}</h1>
                 <p class="hero-subtitle">${t('hero.subtitle')}</p>
                 
                     <div class="hero-image-wrapper">

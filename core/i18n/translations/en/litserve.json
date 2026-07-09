@@ -4,7 +4,7 @@
         "profile": "Profile"
     },
     "sidebar": {
-        "title": "Humanitec Models",
+        "title": "{modelsProductName}",
         "models": "Models"
     },
     "routes": {
@@ -13,7 +13,7 @@
     },
     "models": {
         "title": "Model registry",
-        "subtitle": "Humanitec system models for embeddings and rerank",
+        "subtitle": "{platformName} system models for embeddings and rerank",
         "kind": "Kind",
         "kind_embedding": "Embedding",
         "kind_rerank": "Rerank",

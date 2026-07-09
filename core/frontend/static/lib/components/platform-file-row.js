@@ -17,6 +17,7 @@ export class PlatformFileRow extends PlatformElement {
         mimeType: { type: String, attribute: 'mime-type' },
         fileSize: { type: Number, attribute: 'file-size' },
         dateLabel: { type: String, attribute: 'date-label' },
+        retentionLabel: { type: String, attribute: 'retention-label' },
         typeLabel: { type: String, attribute: 'type-label' },
         authorUserId: { type: String, attribute: 'author-user-id' },
         authorName: { type: String, attribute: 'author-name' },
@@ -34,7 +35,7 @@ export class PlatformFileRow extends PlatformElement {
             }
             .row {
                 display: grid;
-                grid-template-columns: var(--platform-file-row-columns, 2rem 1fr 6rem 8rem 8rem 6rem 2.5rem);
+                grid-template-columns: var(--platform-file-row-columns, 2rem 1fr 6rem 8rem 7rem 8rem 6rem 2.5rem);
                 gap: var(--space-3);
                 align-items: center;
                 min-height: var(--documents-explorer-table-row-height, 3.25rem);
@@ -102,6 +103,7 @@ export class PlatformFileRow extends PlatformElement {
         this.mimeType = '';
         this.fileSize = 0;
         this.dateLabel = '';
+        this.retentionLabel = '';
         this.typeLabel = '';
         this.authorUserId = '';
         this.authorName = '';
@@ -167,6 +169,7 @@ export class PlatformFileRow extends PlatformElement {
                 </div>
                 <div class="cell cell-meta cell-hide-mobile" role="cell">${this._sizeLabel()}</div>
                 <div class="cell cell-meta cell-hide-mobile" role="cell">${this.dateLabel}</div>
+                <div class="cell cell-meta cell-hide-mobile" role="cell">${this.retentionLabel}</div>
                 <div class="cell cell-meta cell-hide-mobile" role="cell">
                     ${this.authorUserId
                         ? html`<platform-user-chip user-id=${this.authorUserId}></platform-user-chip>`

@@ -5,12 +5,23 @@ from __future__ import annotations
 from urllib.parse import urlparse
 
 from apps.office.config import get_office_settings
+from core.config import get_settings
 from core.platform_brand.resolver import (
     resolve_brand,
     resolve_context_host,
     resolve_public_base_url,
 )
 from core.types import JsonObject
+
+
+def _resolve_editor_brand(*, brand_host: str | None = None):
+    if brand_host is not None and str(brand_host).strip():
+        return resolve_brand(str(brand_host).strip())
+    context_host = resolve_context_host()
+    if context_host is not None:
+        return resolve_brand(context_host)
+    settings = get_settings()
+    return settings.platform_brands[settings.primary_platform_domain]
 
 
 def _editor_header_brand_base_url(*, brand_host: str | None = None) -> str:
@@ -40,12 +51,9 @@ def onlyoffice_editor_customization_payload(*, brand_host: str | None = None) ->
         "uiTheme": ec.ui_theme,
         "features": {"featuresTips": ec.features_tips},
     }
-    platform_name = "HUMANITEC"
-    logo_path = "/static/core/assets/service_logos/frontend_logo.svg"
-    if brand_host is not None and str(brand_host).strip():
-        brand = resolve_brand(str(brand_host).strip())
-        platform_name = brand.platform_name.upper()
-        logo_path = brand.logo_path
+    brand = _resolve_editor_brand(brand_host=brand_host)
+    platform_name = brand.platform_name.upper()
+    logo_path = brand.logo_path
     image = ec.logo_image_url.strip()
     link_explicit = ec.logo_link_url.strip()
     if image:

@@ -39,6 +39,7 @@ describe('platform-i18n-vars', () => {
     it('getPlatformI18nVars returns brand product labels', () => {
         expect(getPlatformI18nVars()).toEqual({
             platformName: 'Linnex',
+            supportEmail: 'support@linnex.io',
             agentProductName: 'LinnexAgent',
             modelsProductName: 'Linnex Models',
             voiceProductName: 'Linnex Voice',
@@ -50,6 +51,7 @@ describe('platform-i18n-vars', () => {
     it('mergePlatformI18nVars merges caller vars over brand defaults', () => {
         expect(mergePlatformI18nVars({ year: 2026 })).toEqual({
             platformName: 'Linnex',
+            supportEmail: 'support@linnex.io',
             agentProductName: 'LinnexAgent',
             modelsProductName: 'Linnex Models',
             voiceProductName: 'Linnex Voice',

@@ -7,6 +7,7 @@ import { getPlatformBrandBootstrap } from './platform-brand.js';
 /**
  * @returns {{
  *   platformName: string,
+ *   supportEmail: string,
  *   agentProductName: string,
  *   modelsProductName: string,
  *   voiceProductName: string,
@@ -21,6 +22,7 @@ export function getPlatformI18nVars() {
     }
     return {
         platformName: brand.platformName,
+        supportEmail: brand.supportEmail,
         agentProductName: brand.agentProductName,
         modelsProductName: brand.modelsProductName,
         voiceProductName: brand.voiceProductName,

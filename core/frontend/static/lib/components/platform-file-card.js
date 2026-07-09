@@ -14,6 +14,7 @@ export class PlatformFileCard extends PlatformElement {
         mimeType: { type: String, attribute: 'mime-type' },
         fileSize: { type: Number, attribute: 'file-size' },
         dateLabel: { type: String, attribute: 'date-label' },
+        retentionLabel: { type: String, attribute: 'retention-label' },
         typeLabel: { type: String, attribute: 'type-label' },
         selected: { type: Boolean, reflect: true },
         itemKey: { type: String, attribute: 'item-key' },
@@ -82,6 +83,7 @@ export class PlatformFileCard extends PlatformElement {
         this.mimeType = '';
         this.fileSize = 0;
         this.dateLabel = '';
+        this.retentionLabel = '';
         this.typeLabel = '';
         this.selected = false;
         this.itemKey = '';
@@ -113,6 +115,7 @@ export class PlatformFileCard extends PlatformElement {
                 </div>
                 <div class="title" title=${this.fileName}>${this.fileName}</div>
                 <div class="meta">${this._sizeLabel()} · ${this.dateLabel}</div>
+                ${this.retentionLabel ? html`<div class="meta">${this.retentionLabel}</div>` : ''}
                 ${this.typeLabel ? html`<div class="meta">${this.typeLabel}</div>` : ''}
             </div>
         `;

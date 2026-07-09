@@ -25,7 +25,7 @@
     },
     "services_page": {
         "title": "Сервисы платформы",
-        "subtitle": "Быстрый переход между продуктами Humanitec"
+        "subtitle": "Быстрый переход между продуктами {platformName}"
     },
     "services_modal": {
         "title": "Сервисы"
@@ -98,9 +98,9 @@
             "description": "Совместное редактирование Office-файлов: список привязок, редактор в iframe, изоляция по namespace, секреты только на BFF"
         },
         "litserve": {
-            "name": "Humanitec Models",
+            "name": "{modelsProductName}",
             "menu_description": "Локальные эмбеддинги и реранк",
-            "description": "Реестр моделей Humanitec: эмбеддинги и реранк на инфраструктуре платформы для RAG и сценариев без внешних API"
+            "description": "Реестр {modelsProductName}: эмбеддинги и реранк на инфраструктуре платформы для RAG и сценариев без внешних API"
         },
         "grafana": {
             "name": "Grafana",

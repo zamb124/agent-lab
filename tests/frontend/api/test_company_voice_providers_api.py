@@ -49,6 +49,30 @@ async def test_company_voice_providers_put_litserve_null_model_accepted(
 
 
 @pytest.mark.asyncio
+async def test_company_voice_providers_put_litserve_unknown_model_rejected_linnex(
+    frontend_client: AsyncClient,
+    auth_headers_system,
+) -> None:
+    response = await frontend_client.put(
+        "/frontend/api/companies/system/voice-providers/stt",
+        headers={**auth_headers_system, "Host": "linnex.io"},
+        json={
+            "provider": "litserve",
+            "model": "totally-not-a-real-model-id",
+            "voice": None,
+            "language": None,
+            "sample_rate": None,
+            "threshold": None,
+            "response_format": None,
+        },
+    )
+    assert response.status_code == 400, response.text
+    detail = response.json()["detail"]
+    assert "Linnex Voice" in detail
+    assert "Humanitec" not in detail
+
+
+@pytest.mark.asyncio
 async def test_company_voice_providers_put_litserve_unknown_model_rejected(
     frontend_client: AsyncClient,
     auth_headers_system,

@@ -51,7 +51,10 @@ def test_registry_custom_provider_options_use_label_and_custom_ref():
 
 
 def test_registry_platform_provider_options_labels_humanitec_llm():
-    options = _platform_provider_options(["openrouter", HUMANITEC_LLM_PROVIDER])
+    options = _platform_provider_options(
+        ["openrouter", HUMANITEC_LLM_PROVIDER],
+        llms_display_label=HUMANITEC_LLMS_DISPLAY_LABEL,
+    )
     assert options[0] == "openrouter"
     assert not isinstance(options[1], str)
     assert options[1].model_dump(mode="json", exclude_none=True) == {
@@ -381,3 +384,19 @@ class TestFlowSchema:
         response = await client.get("/flows/api/v1/registry/flows/example_react/schema")
         html = response.text
         assert "Главный" in html or "главн" in html.lower()
+
+
+@pytest.mark.asyncio
+async def test_registry_providers_values_linnex_llms_label(client) -> None:
+    response = await client.get(
+        "/flows/api/v1/registry/providers/values",
+        headers={"Host": "linnex.io"},
+    )
+    assert response.status_code == 200
+    items = response.json()
+    humanitec_llm = next(
+        item for item in items
+        if isinstance(item, dict) and item.get("value") == HUMANITEC_LLM_PROVIDER
+    )
+    assert humanitec_llm["label"] == "Linnex LLMs"
+    assert "Humanitec" not in humanitec_llm["label"]

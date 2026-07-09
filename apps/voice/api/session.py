@@ -110,7 +110,7 @@ async def voice_session(
         str | None,
         Query(
             description=(
-                "Язык сессии (ISO 639-1): STT и выбор TTS-модели Humanitec Voice "
+                "Язык сессии (ISO 639-1): STT и выбор TTS-модели платформенного voice-провайдера "
                 "по `synthesis_locale` в каталоге."
             ),
         ),

@@ -11,6 +11,7 @@ import { documentsExplorerStyles } from '../styles/documents-explorer.styles.js'
 import { CoreEvents } from '@platform/lib/events/contract.js';
 import { platformConfirm } from '@platform/lib/components/platform-confirm-modal.js';
 import { formatPlatformDateTime } from '@platform/lib/utils/format-platform-date.js';
+import { formatFileRetentionRemaining } from '@platform/lib/utils/format-file-retention.js';
 import { platformStorageKey } from '@platform/lib/utils/storage-keys.js';
 import '@platform/lib/components/platform-icon.js';
 import '@platform/lib/components/platform-file-table.js';
@@ -637,9 +638,29 @@ export class OfficeDocumentsExplorerPage extends PlatformPage {
             { key: 'title', label: this.t('list.colTitle'), sortable: true },
             { key: 'file_size', label: this.t('list.colSize'), sortable: true, hideMobile: true },
             { key: 'updated_at', label: this.t('list.colUpdated'), sortable: true, hideMobile: true },
+            { key: 'file_expires_at', label: this.t('list.colRetention'), hideMobile: true },
             { key: 'created_by', label: this.t('list.colAuthor'), hideMobile: true },
             { key: 'file_category', label: this.t('list.colType'), hideMobile: true },
         ];
+    }
+
+    _retentionLabel(doc) {
+        const locale = this._localeSel.value;
+        if (typeof locale !== 'string' || locale.length === 0) {
+            throw new Error('OfficeDocumentsExplorerPage: i18n locale required');
+        }
+        if (this._isFileMissing(doc)) {
+            return '—';
+        }
+        const expiresAt = doc.file_expires_at;
+        const remaining = formatFileRetentionRemaining(expiresAt, locale);
+        if (remaining === 'permanent') {
+            return this.t('list.retentionPermanent');
+        }
+        if (remaining === 'expired') {
+            return this.t('list.retentionExpired');
+        }
+        return remaining;
     }
 
     _selectedDocument() {
@@ -742,6 +763,7 @@ export class OfficeDocumentsExplorerPage extends PlatformPage {
                         file-name=${doc.title}
                         file-size=${doc.file_size}
                         date-label=${this._formatDate(doc.updated_at)}
+                        retention-label=${this._retentionLabel(doc)}
                         type-label=${this._docTypeLabel(doc)}
                         author-user-id=${doc.created_by_user_id}
                         ?selected=${state.selectedBindingId === doc.binding_id || selectedIds.has(doc.binding_id)}
@@ -772,6 +794,7 @@ export class OfficeDocumentsExplorerPage extends PlatformPage {
                         file-name=${doc.title}
                         file-size=${doc.file_size}
                         date-label=${this._formatDate(doc.updated_at)}
+                        retention-label=${this._retentionLabel(doc)}
                         type-label=${this._docTypeLabel(doc)}
                         ?selected=${state.selectedBindingId === doc.binding_id}
                         @open=${() => this._onSelectDocument(doc.binding_id)}

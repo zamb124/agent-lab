@@ -4,14 +4,14 @@
   "updated_at": "March 29, 2026",
   "section_1": {
     "title": "1. Parties and acceptance",
-    "p1": "These Terms of Service form a legally binding agreement between {{company_name_en}} ({{legal_form_en}}) and the user of Humanitec services.",
-    "p2": "By accessing or using Humanitec website, web application, integrations or bots, you confirm that you have read and accepted these Terms.",
+    "p1": "These Terms of Service form a legally binding agreement between {{company_name_en}} ({{legal_form_en}}) and the user of {platformName} services.",
+    "p2": "By accessing or using {platformName} website, web application, integrations or bots, you confirm that you have read and accepted these Terms.",
     "p3": "If you do not agree with these Terms, you must stop using the services."
   },
   "section_2": {
     "title": "2. Services scope",
     "list": [
-      "Humanitec provides a technology platform for AI agents, automation flows and related operational tooling.",
+      "{platformName} provides a technology platform for AI agents, automation flows and related operational tooling.",
       "Service functionality may evolve, be improved, restricted or discontinued according to product and legal requirements.",
       "Some features may require a separate order, plan or additional terms."
     ]

@@ -12,6 +12,7 @@ import {
 import { resolveFileIconKey } from '@platform/lib/utils/file-icons.js';
 import { formatFileSize } from '@platform/lib/utils/format-file-size.js';
 import { formatPlatformDateTime } from '@platform/lib/utils/format-platform-date.js';
+import { formatFileRetentionRemaining } from '@platform/lib/utils/format-file-retention.js';
 import '@platform/lib/components/platform-icon.js';
 import '@platform/lib/components/platform-user-chip.js';
 
@@ -176,6 +177,24 @@ export class OfficeFileDetailsPanel extends PlatformElement {
         return formatPlatformDateTime(iso, locale);
     }
 
+    _retentionLabel(doc) {
+        const locale = this._localeSel.value;
+        if (typeof locale !== 'string' || locale.length === 0) {
+            throw new Error('OfficeFileDetailsPanel: i18n locale required');
+        }
+        if (this._isFileMissing(doc)) {
+            return '—';
+        }
+        const remaining = formatFileRetentionRemaining(doc.file_expires_at, locale);
+        if (remaining === 'permanent') {
+            return this.t('list.retentionPermanent');
+        }
+        if (remaining === 'expired') {
+            return this.t('list.retentionExpired');
+        }
+        return remaining;
+    }
+
     _renderCatalogSummary() {
         const catalog = this.catalog;
         if (!catalog) {
@@ -289,6 +308,10 @@ export class OfficeFileDetailsPanel extends PlatformElement {
                 <div class="meta-row">
                     <span class="meta-label">${this.t('details.size')}</span>
                     <span class="meta-value">${sizeLabel}</span>
+                </div>
+                <div class="meta-row">
+                    <span class="meta-label">${this.t('details.retention')}</span>
+                    <span class="meta-value">${this._retentionLabel(doc)}</span>
                 </div>
                 <div class="meta-row">
                     <span class="meta-label">${this.t('details.updated')}</span>

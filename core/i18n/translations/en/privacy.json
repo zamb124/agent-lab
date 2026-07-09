@@ -5,7 +5,7 @@
   "section_1": {
     "title": "1. Controller and scope",
     "p1": "{{company_name_en}} ({{legal_form_en}}) acts as the controller for personal data described in this Privacy Policy.",
-    "p2": "This Policy applies to all Humanitec channels: website, web application, integrations, bots and related support communications.",
+    "p2": "This Policy applies to all {platformName} channels: website, web application, integrations, bots and related support communications.",
     "p3": "Controller contact: {{contact_email}}. Data protection contact: {{dpo_email}}. Legal address: {{legal_address_en}}."
   },
   "section_2": {
@@ -27,7 +27,7 @@
   "section_4": {
     "title": "4. Purposes of processing",
     "list": [
-      "To provide, operate and secure Humanitec services across channels.",
+      "To provide, operate and secure {platformName} services across channels.",
       "To authenticate users, manage access, and prevent abuse, fraud and security incidents.",
       "To provide customer support and service communications.",
       "To perform billing, accounting and legal compliance obligations.",

@@ -38,6 +38,8 @@ _lint-py:
 	@bash scripts/check_files_ui_canon.sh
 	@echo "=== lint: mcp branding bundle ==="
 	uv run python scripts/check_mcp_branding_bundle.py
+	@echo "=== lint: platform brand hardcode ==="
+	uv run python scripts/check_platform_brand_hardcode.py
 	@echo "=== lint: basedpyright ==="
 	uv run basedpyright $(BASEDPYRIGHT_CHECK_ARGS)
 	@echo "=== lint: local imports ==="

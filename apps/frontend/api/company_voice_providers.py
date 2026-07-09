@@ -18,7 +18,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, ClassVar, Literal
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel, ConfigDict, Field
 
 from apps.frontend.api.voice_providers_catalog_helpers import (
@@ -34,6 +34,7 @@ from core.clients.speech_provider_catalog import (
     cloud_ru_tts_model_ids,
 )
 from core.config import get_settings
+from core.config.models import PlatformBrandConfig
 from core.db.company_voice_provider_secrets import (
     SecretsPatchValue,
     merge_secrets,
@@ -42,6 +43,7 @@ from core.db.company_voice_provider_secrets import (
 from core.db.models.platform import CompanyVoiceProvider
 from core.db.repositories.company_voice_provider_repository import VoiceKind
 from core.logging import get_logger
+from core.platform_brand.resolver import UnknownPlatformDomainError, resolve_brand
 
 if TYPE_CHECKING:
     from core.models.identity_models import User
@@ -132,6 +134,16 @@ def _reject_vad_path_kind(kind: str) -> None:
         )
 
 
+def _resolve_brand_for_voice_providers(host: str | None) -> PlatformBrandConfig:
+    if host is not None and str(host).strip():
+        try:
+            return resolve_brand(str(host).strip())
+        except UnknownPlatformDomainError:
+            pass
+    settings = get_settings()
+    return settings.platform_brands[settings.primary_platform_domain]
+
+
 def _validate_kind(kind: str) -> VoiceKind:
     if kind == "stt":
         return "stt"
@@ -156,7 +168,11 @@ def _validate_provider(kind: VoiceKind, provider: str) -> None:
 
 
 def _validate_model_for_voice(
-    *, kind: VoiceKind, provider: str, model_value: str | None
+    *,
+    kind: VoiceKind,
+    provider: str,
+    model_value: str | None,
+    voice_product_name: str,
 ) -> None:
     """Если model задан — должен быть из каталога провайдера; пустое значение допустимо
     для всех провайдеров (резолвер `voice_resolver` подставит default из настроек)."""
@@ -201,7 +217,10 @@ def _validate_model_for_voice(
         allowed = frozenset(m.api_model_id for m in infra.tts_models)
 
     if model_value not in allowed:
-        raise HTTPException(status_code=400, detail=f"Неизвестная модель Humanitec Voice: {model_value!r}")
+        raise HTTPException(
+            status_code=400,
+            detail=f"Неизвестная модель {voice_product_name}: {model_value!r}",
+        )
 
 
 def _item_kind(value: str) -> Literal["stt", "tts"]:
@@ -281,6 +300,7 @@ async def upsert_company_voice_provider(
     company_id: str,
     kind: str,
     payload: CompanyVoiceProviderUpsertRequest,
+    request: Request,
     container: ContainerDep,
 ) -> CompanyVoiceProviderItem:
     """Создать/обновить override для конкретного kind-а."""
@@ -289,6 +309,8 @@ async def upsert_company_voice_provider(
     _reject_vad_path_kind(kind)
     voice_kind = _validate_kind(kind)
     _validate_provider(voice_kind, payload.provider)
+    brand = _resolve_brand_for_voice_providers(request.headers.get("host"))
+    voice_product_name = brand.voice_product_name
 
     effective_model = payload.model
     if effective_model == "":
@@ -299,12 +321,14 @@ async def upsert_company_voice_provider(
             kind=voice_kind,
             provider=payload.provider,
             model_value=effective_model,
+            voice_product_name=voice_product_name,
         )
     elif payload.provider == "cloud_ru":
         _validate_model_for_voice(
             kind=voice_kind,
             provider=payload.provider,
             model_value=effective_model,
+            voice_product_name=voice_product_name,
         )
     elif _credential_providers_needing_optional_model(payload.provider):
         if effective_model is not None:
@@ -312,6 +336,7 @@ async def upsert_company_voice_provider(
                 kind=voice_kind,
                 provider=payload.provider,
                 model_value=effective_model,
+                voice_product_name=voice_product_name,
             )
 
     existing = await container.company_voice_provider_repository.get(

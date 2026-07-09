@@ -7,9 +7,11 @@ from collections.abc import Awaitable, Callable
 from core.config import get_settings
 from core.context import require_active_company, require_context
 from core.documents.placement import DocsBindResult, DocsPlacement
-from core.files.create_spec import FileCreateSpec, FilePostCreate
+from core.files.create_spec import FileCreateSpec, FilePostCreate, FileSourceKind
 from core.files.file_repository import FileRepository
 from core.files.models import FileRecord
+from core.files.retention import FileRetentionKind
+from core.files.retention_promote import promote_file_retention_record
 from core.files.storage import FileStorage, retention_fields_from_spec
 from core.logging import get_logger
 from core.types import JsonObject
@@ -145,6 +147,23 @@ class FilesService:
 
     async def save(self, file_record: FileRecord) -> FileRecord:
         return await self._storage.save(file_record)
+
+    async def promote_retention(
+        self,
+        file_id: str,
+        *,
+        retention_kind: FileRetentionKind,
+        source_kind: FileSourceKind | None = None,
+    ) -> FileRecord:
+        record = await self.get(file_id)
+        promoted, changed = promote_file_retention_record(
+            record,
+            retention_kind=retention_kind,
+            source_kind=source_kind,
+        )
+        if not changed:
+            return record
+        return await self.save(promoted)
 
     async def _run_post_create(
         self,

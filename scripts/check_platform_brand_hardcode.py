@@ -61,7 +61,10 @@ BRAND_LITERAL_PATTERNS: tuple[re.Pattern[str], ...] = (
     re.compile(r'''["']Humanitec Search["']'''),
     re.compile(r'''["']Humanitec Docs["']'''),
     re.compile(r'''["']Humanitec Platform["']'''),
+    re.compile(r"\bHUMANITEC\b"),
 )
+
+I18N_BRAND_LITERAL_PATTERN = re.compile(r"Humanitec")
 
 BRAND_LITERAL_LINE_ALLOWLIST_SUBSTRINGS: tuple[str, ...] = (
     "humanitec_llm",
@@ -77,6 +80,10 @@ BRAND_LITERAL_LINE_ALLOWLIST_SUBSTRINGS: tuple[str, ...] = (
     "__PLATFORM_NAME__",
     "{platformName}",
     "{agentProductName}",
+    "{modelsProductName}",
+    "{voiceProductName}",
+    "{llmsDisplayLabel}",
+    "{flowsProductLabel}",
     "product_humanitec_agent",
     "humanitec_llms_",
     "dashboardHumanitecModels",
@@ -84,9 +91,7 @@ BRAND_LITERAL_LINE_ALLOWLIST_SUBSTRINGS: tuple[str, ...] = (
     "HumanitecModelsSidebar",
     "humanitec-embed-autoload",
     "хуманитэк",
-    "humanitec.ru",
     "agents-lab.ru",
-    "linnex.io",
 )
 
 
@@ -158,6 +163,27 @@ def _line_allowed_for_brand_literal(line: str) -> bool:
     return any(marker in line for marker in BRAND_LITERAL_LINE_ALLOWLIST_SUBSTRINGS)
 
 
+def _scan_i18n_brand_literals() -> list[str]:
+    errors: list[str] = []
+    translations_root = REPO_ROOT / "core" / "i18n" / "translations"
+    if not translations_root.is_dir():
+        return errors
+    for path in translations_root.rglob("*.json"):
+        if path.name.startswith("_"):
+            continue
+        try:
+            lines = path.read_text(encoding="utf-8").splitlines()
+        except UnicodeDecodeError:
+            continue
+        rel = path.relative_to(REPO_ROOT)
+        for line_no, line in enumerate(lines, start=1):
+            if _line_allowed_for_brand_literal(line):
+                continue
+            if I18N_BRAND_LITERAL_PATTERN.search(line):
+                errors.append(f"{rel}:{line_no}: hardcoded brand literal in i18n JSON")
+    return errors
+
+
 def _scan_brand_literals() -> list[str]:
     errors: list[str] = []
     for root in SCAN_ROOTS:
@@ -193,6 +219,7 @@ def main() -> int:
     errors = _scan()
     errors.extend(_scan_html_apex())
     errors.extend(_scan_i18n_product_meta())
+    errors.extend(_scan_i18n_brand_literals())
     errors.extend(_scan_brand_literals())
     if errors:
         print("check_platform_brand_hardcode: FAIL", file=sys.stderr)

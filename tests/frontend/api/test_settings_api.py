@@ -876,3 +876,19 @@ class TestSettingsAPI:
         assert company.monthly_budget == 3000.0
         assert "updated" in company.metadata
         assert company.metadata["updated"] is True
+
+
+@pytest.mark.asyncio
+async def test_search_providers_catalog_linnex_platform_name(
+    frontend_client: AsyncClient,
+    auth_headers_system,
+) -> None:
+    response = await frontend_client.get(
+        "/frontend/api/settings/search-providers",
+        headers={**auth_headers_system, "Host": "linnex.io"},
+    )
+    assert response.status_code == 200
+    catalog = response.json()["catalog"]
+    linkup = next(item for item in catalog if item["id"] == "linkup")
+    assert "Linnex" in linkup["tooltip"]
+    assert "Humanitec" not in linkup["tooltip"]

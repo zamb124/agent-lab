@@ -54,6 +54,20 @@ async def test_public_blog_post_found_and_missing(frontend_client) -> None:
 
 
 @pytest.mark.asyncio
+async def test_public_blog_post_linnex_brand_in_body(frontend_client) -> None:
+    """Текст блога подставляет platform_name для linnex.io."""
+    response = await frontend_client.get(
+        "/frontend/api/public/blog/post",
+        params={"slug": "ai-agent-support-rag"},
+        headers={"Host": "linnex.io"},
+    )
+    assert response.status_code == 200
+    data = response.json()
+    assert "Linnex" in data["body_en"]
+    assert "Humanitec" not in data["body_en"]
+
+
+@pytest.mark.asyncio
 async def test_public_startup_card_contract(frontend_client) -> None:
     """Карточка продукта для внешних каталогов имеет ожидаемые поля."""
     response = await frontend_client.get("/frontend/api/public/startup-card")

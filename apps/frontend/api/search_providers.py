@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, ClassVar
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
 from apps.frontend.dependencies import ContainerDep
@@ -27,8 +27,11 @@ from core.company_search import (
     SearchCredentialSource,
     SearchProviderId,
 )
+from core.config import get_settings
+from core.config.models import PlatformBrandConfig
 from core.context import require_context
 from core.models.identity_models import Company, User
+from core.platform_brand.resolver import UnknownPlatformDomainError, resolve_brand
 from core.types import JsonObject
 
 if TYPE_CHECKING:
@@ -212,7 +215,17 @@ def _platform_provider_config(
         return platform_config.tavily
 
 
-def _catalog() -> list[JsonObject]:
+def _resolve_brand_for_search_providers(host: str | None) -> PlatformBrandConfig:
+    if host is not None and str(host).strip():
+        try:
+            return resolve_brand(str(host).strip())
+        except UnknownPlatformDomainError:
+            pass
+    settings = get_settings()
+    return settings.platform_brands[settings.primary_platform_domain]
+
+
+def _catalog(platform_name: str) -> list[JsonObject]:
     return [
         {
             "id": "tinyfish",
@@ -229,7 +242,10 @@ def _catalog() -> list[JsonObject]:
             "logo": "LU",
             "tone": "green",
             "description": "LLM-oriented web search with controllable depth.",
-            "tooltip": "Можно выбирать глубину fast/standard/deep. BYOK не списывает баланс Humanitec.",
+            "tooltip": (
+                f"Можно выбирать глубину fast/standard/deep. "
+                f"BYOK не списывает баланс {platform_name}."
+            ),
             "docs_url": "https://app.linkup.so",
         },
         {
@@ -254,13 +270,14 @@ def _catalog() -> list[JsonObject]:
 
 
 @router.get("")
-async def get_search_providers() -> JsonObject:
+async def get_search_providers(request: Request) -> JsonObject:
     _, company = _require_admin()
     settings = _load_settings(company)
+    brand = _resolve_brand_for_search_providers(request.headers.get("host"))
     return {
         "provider_order": list(settings.provider_order),
         "providers": [_provider_public(provider_id, settings) for provider_id in _PROVIDER_IDS],
-        "catalog": _catalog(),
+        "catalog": _catalog(brand.platform_name),
     }
 
 

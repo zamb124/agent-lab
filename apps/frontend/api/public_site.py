@@ -28,14 +28,14 @@ _BLOG_POSTS: tuple[PublicBlogPost, ...] = (
         summary_en="How to combine RAG with an operator queue and cut repetitive tickets without losing quality control.",
         body_ru=(
             "<p>RAG позволяет отвечать опираясь на ваши документы и регламенты, а не на «общие знания» модели. "
-            "Humanitec объединяет Knowledge Base, AI Studio и каналы связи так, что эскалация к человеку остаётся "
+            "{platformName} объединяет Knowledge Base, AI Studio и каналы связи так, что эскалация к человеку остаётся "
             "явной частью процесса.</p>"
             "<p>На практике это означает предсказуемые ответы по базе знаний, журналирование и возможность "
             "быстро обновить источники без передеплоя кода.</p>"
         ),
         body_en=(
             "<p>RAG lets answers cite your documents and policies instead of generic model knowledge. "
-            "Humanitec connects Knowledge Base, AI Studio, and channels so human escalation stays an explicit "
+            "{platformName} connects Knowledge Base, AI Studio, and channels so human escalation stays an explicit "
             "part of the flow.</p>"
             "<p>In practice you get predictable answers from your knowledge base, logging, and fast source updates "
             "without redeploying code.</p>"
@@ -61,6 +61,15 @@ _BLOG_POSTS: tuple[PublicBlogPost, ...] = (
 )
 
 
+def _apply_platform_name_to_post(post: PublicBlogPost, platform_name: str) -> PublicBlogPost:
+    return post.model_copy(
+        update={
+            "body_ru": post.body_ru.replace("{platformName}", platform_name),
+            "body_en": post.body_en.replace("{platformName}", platform_name),
+        }
+    )
+
+
 @router.get("/site-bundle", response_model=PublicSiteBundle)
 async def get_site_bundle(request: Request, container: ContainerDep) -> PublicSiteBundle:
     _ = container
@@ -72,20 +81,30 @@ async def get_site_bundle(request: Request, container: ContainerDep) -> PublicSi
 
 
 @router.get("/blog", response_model=PublicBlogListResponse)
-async def list_public_blog_posts(container: ContainerDep) -> PublicBlogListResponse:
+async def list_public_blog_posts(request: Request, container: ContainerDep) -> PublicBlogListResponse:
     _ = container
-    return PublicBlogListResponse(items=_BLOG_POSTS)
+    host = request.headers.get("host")
+    if host is None or not str(host).strip():
+        raise HTTPException(status_code=400, detail="Host header is required")
+    brand = resolve_brand(str(host).strip())
+    items = tuple(_apply_platform_name_to_post(post, brand.platform_name) for post in _BLOG_POSTS)
+    return PublicBlogListResponse(items=items)
 
 
 @router.get("/blog/post", response_model=PublicBlogPost)
 async def get_public_blog_post(
+    request: Request,
     container: ContainerDep,
     slug: Annotated[str, Query(min_length=1)],
 ) -> PublicBlogPost:
     _ = container
+    host = request.headers.get("host")
+    if host is None or not str(host).strip():
+        raise HTTPException(status_code=400, detail="Host header is required")
+    brand = resolve_brand(str(host).strip())
     for post in _BLOG_POSTS:
         if post.slug == slug:
-            return post
+            return _apply_platform_name_to_post(post, brand.platform_name)
     raise HTTPException(status_code=404, detail="Post not found")
 
 

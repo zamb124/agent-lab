@@ -6,6 +6,24 @@ import {
     mountFromScript,
     readDatasetBool,
 } from '../../../../core/frontend/static/lib/chat/embed-autoload.js';
+import { setPlatformBrandBootstrap } from '@platform/lib/utils/platform-brand.js';
+
+const TEST_PLATFORM_BRAND = {
+    isProduction: false,
+    baseDomain: 'localhost',
+    portSuffix: ':8002',
+    protocol: 'http',
+    platformName: 'Humanitec',
+    supportEmail: 'support@humanitec.ru',
+    logoPath: '/static/core/assets/service_logos/frontend_logo.svg',
+    apexOrigin: 'http://localhost:8002/',
+    supportedDomains: ['humanitec.ru', 'linnex.io', 'localhost', 'lvh.me'],
+    agentProductName: 'HumanitecAgent',
+    modelsProductName: 'Humanitec Models',
+    voiceProductName: 'Humanitec Voice',
+    llmsDisplayLabel: 'Humanitec LLMs',
+    flowsProductLabel: 'Humanitec Flows',
+};
 
 function createMockScript(dataset = {}, src = 'https://cdn.example.com/humanitec-embed-autoload.js') {
     const script = {
@@ -54,6 +72,7 @@ beforeEach(() => {
     originalWindow = globalThis.window;
     originalCustomElements = globalThis.customElements;
 
+    setPlatformBrandBootstrap(TEST_PLATFORM_BRAND);
     globalThis.fetch = fetchMock;
     globalThis.document = {
         body: {
@@ -99,7 +118,14 @@ beforeEach(() => {
         addEventListener: vi.fn(),
     };
     globalThis.window = {
-        location: { origin: 'https://customer.example', href: 'https://customer.example/page' },
+        location: {
+            origin: 'https://customer.example',
+            href: 'https://customer.example/page',
+            hostname: 'customer.example',
+            host: 'customer.example',
+            protocol: 'https:',
+            port: '',
+        },
         innerWidth: 1280,
         innerHeight: 720,
         humanitecEmbed: undefined,
@@ -115,6 +141,9 @@ afterEach(() => {
     globalThis.document = originalDocument;
     globalThis.window = originalWindow;
     globalThis.customElements = originalCustomElements;
+    if (typeof globalThis.window !== 'undefined') {
+        delete globalThis.window.__PLATFORM_BRAND__;
+    }
     vi.restoreAllMocks();
 });
 
@@ -132,17 +161,17 @@ describe('readDatasetBool', () => {
 });
 
 describe('mountFromScript', () => {
-    it('требует data-embed-id и data-flows-base-url', () => {
-        expect(() => mountFromScript(createMockScript({ flowsBaseUrl: 'https://api/flows' }))).toThrow(
+    it('требует data-embed-id и data-flows-base-url', async () => {
+        await expect(mountFromScript(createMockScript({ flowsBaseUrl: 'https://api/flows' }))).rejects.toThrow(
             /data-embed-id required/,
         );
-        expect(() => mountFromScript(createMockScript({ embedId: 'embed_x' }))).toThrow(
+        await expect(mountFromScript(createMockScript({ embedId: 'embed_x' }))).rejects.toThrow(
             /data-flows-base-url required/,
         );
     });
 
-    it('монтирует platform-chat drawer embed_public с dataset attrs', () => {
-        mountFromScript(
+    it('монтирует platform-chat drawer embed_public с dataset attrs', async () => {
+        await mountFromScript(
             createMockScript({
                 embedId: 'embed_abc',
                 flowsBaseUrl: 'https://api.humanitec.ru/flows',
@@ -181,7 +210,7 @@ describe('mountFromScript', () => {
     });
 
     it('data-static-bearer не вызывает fetch', async () => {
-        mountFromScript(
+        await mountFromScript(
             createMockScript({
                 embedId: 'embed_static',
                 flowsBaseUrl: 'https://api/flows',
@@ -200,7 +229,7 @@ describe('mountFromScript', () => {
             json: async () => ({ token: 'short-lived-jwt' }),
         });
 
-        mountFromScript(
+        await mountFromScript(
             createMockScript({
                 embedId: 'embed_token',
                 flowsBaseUrl: 'https://api/flows',
@@ -225,7 +254,7 @@ describe('mountFromScript', () => {
     it('бросает при 4xx token response и missing token field', async () => {
         fetchMock.mockResolvedValue({ ok: false, status: 401 });
 
-        mountFromScript(
+        await mountFromScript(
             createMockScript({
                 embedId: 'embed_fail',
                 flowsBaseUrl: 'https://api/flows',
@@ -238,7 +267,7 @@ describe('mountFromScript', () => {
     });
 
     it('humanitecEmbed API меняет chat и metadata hooks', async () => {
-        mountFromScript(
+        await mountFromScript(
             createMockScript({
                 embedId: 'embed_api',
                 flowsBaseUrl: 'https://api/flows',
@@ -275,7 +304,7 @@ describe('mountFromScript', () => {
     });
 
     it('defaults metadata/context variables from page', async () => {
-        mountFromScript(
+        await mountFromScript(
             createMockScript({
                 embedId: 'embed_meta',
                 flowsBaseUrl: 'https://api/flows',
@@ -292,8 +321,8 @@ describe('mountFromScript', () => {
         });
     });
 
-    it('data-initial-open и show-launcher false', () => {
-        mountFromScript(
+    it('data-initial-open и show-launcher false', async () => {
+        await mountFromScript(
             createMockScript({
                 embedId: 'embed_open',
                 flowsBaseUrl: 'https://api/flows',

@@ -266,7 +266,7 @@
         "connecting": "Connecting…",
         "participants_abbr": "{{n}} ppl",
         "login_account": "Sign in",
-        "login_account_title": "Sign in to Humanitec",
+        "login_account_title": "Sign in to {platformName}",
         "copy_link_title": "Copy call link",
         "copy_link_bad_response": "Server did not return a call link.",
         "copy_link_clipboard_failed": "Could not copy the link. Select and copy it manually.",

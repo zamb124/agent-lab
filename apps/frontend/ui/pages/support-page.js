@@ -9,10 +9,10 @@ import '@platform/lib/components/platform-button.js';
 import '@platform/lib/components/platform-icon.js';
 import '@platform/lib/components/fields/platform-field.js';
 import { isValidEmail } from '@platform/lib/utils/validators.js';
+import { getPlatformBrandBootstrap } from '@platform/lib/utils/platform-brand.js';
 import '../components/landing/landing-header.js';
 import '../components/landing/landing-footer.js';
 
-const SUPPORT_EMAIL = 'helpme@humanitec.ru';
 const MAX_SUBJECT = 200;
 const MAX_MESSAGE = 12000;
 const MAX_MAILTO_HREF = 1950;
@@ -81,6 +81,10 @@ export class SupportPage extends PlatformPage {
         return null;
     }
 
+    _supportEmail() {
+        return getPlatformBrandBootstrap().supportEmail;
+    }
+
     _submit(e) {
         e.preventDefault();
         const err = this._validate();
@@ -97,7 +101,7 @@ export class SupportPage extends PlatformPage {
         }
         const href =
             'mailto:' +
-            SUPPORT_EMAIL +
+            this._supportEmail() +
             '?subject=' +
             encodeURIComponent(subject) +
             '&body=' +
@@ -113,6 +117,7 @@ export class SupportPage extends PlatformPage {
     render() {
         const status = this._status;
         const statusText = status.i18nKey.length > 0 ? this.t(status.i18nKey) : '';
+        const supportEmail = this._supportEmail();
         return html`
             <landing-header></landing-header>
             <div class="marketing-page-container">
@@ -130,7 +135,7 @@ export class SupportPage extends PlatformPage {
                                     <platform-icon name="mail" size="20"></platform-icon>
                                 </div>
                                 <div>
-                                    <a class="marketing-contact-link" href="mailto:${SUPPORT_EMAIL}">${SUPPORT_EMAIL}</a>
+                                    <a class="marketing-contact-link" href="mailto:${supportEmail}">${supportEmail}</a>
                                 </div>
                             </div>
                         </section>

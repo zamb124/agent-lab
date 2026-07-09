@@ -7,6 +7,8 @@ from apps.office.db.repositories.document_binding_repository import DocumentBind
 from apps.office.services.file_binding_metadata import resolve_binding_metadata
 from core.documents.placement import DocsBindResult, DocsPlacement
 from core.documents.placement_paths import build_path_segments
+from core.files.create_spec import FileSourceKind
+from core.files.retention import FileRetentionKind
 from core.files.service import FilesService
 
 
@@ -33,6 +35,11 @@ class DocsPlacementService:
             placement.namespace,
         )
         if existing is not None:
+            _ = await self._files_service.promote_retention(
+                placement.file_id,
+                retention_kind=FileRetentionKind.OFFICE_DOCUMENT,
+                source_kind=FileSourceKind.OFFICE_DOCUMENT,
+            )
             return DocsBindResult(
                 binding_id=existing.binding_id,
                 catalog_id=existing.catalog_id,
@@ -67,6 +74,11 @@ class DocsPlacementService:
             onlyoffice_document_type=onlyoffice_document_type,
             title=title,
             created_by_user_id=user_id,
+        )
+        _ = await self._files_service.promote_retention(
+            placement.file_id,
+            retention_kind=FileRetentionKind.OFFICE_DOCUMENT,
+            source_kind=FileSourceKind.OFFICE_DOCUMENT,
         )
         return DocsBindResult(
             binding_id=row.binding_id,

@@ -6,6 +6,7 @@ import { html, css } from 'lit';
 import { PlatformElement } from '@platform/lib/platform-element/index.js';
 import { sidebarStyles, sidebarNavItemStyles } from '@platform/lib/styles/shared/sidebar.styles.js';
 import { readShellSidebarCollapsed } from '@platform/lib/utils/shell-sidebar-preference.js';
+import { getPlatformBrandBootstrap } from '@platform/lib/utils/platform-brand.js';
 import '@platform/lib/components/layout/platform-service-sidebar.js';
 import '@platform/lib/components/platform-icon.js';
 import '@platform/lib/components/platform-user.js';
@@ -114,11 +115,12 @@ export class FrontendSidebar extends PlatformElement {
         const auth = this._authSel.value;
         const isSystem = auth.activeCompanyId === 'system';
         const t = (k, fallback) => this.t(k) || fallback;
+        const logoText = getPlatformBrandBootstrap().platformName.toUpperCase();
 
         return html`
             <platform-service-sidebar
                 logo-src="/static/core/assets/service_logos/frontend_logo.svg"
-                logo-text="HUMANITEC"
+                logo-text=${logoText}
                 ?logo-opens-services=${true}
                 ?collapsed=${this.collapsed}
                 ?mobile-open=${this.mobileOpen}

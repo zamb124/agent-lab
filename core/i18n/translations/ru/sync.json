@@ -266,7 +266,7 @@
         "connecting": "Подключение…",
         "participants_abbr": "{{n}} уч.",
         "login_account": "Войти",
-        "login_account_title": "Войти в аккаунт Humanitec",
+        "login_account_title": "Войти в аккаунт {platformName}",
         "copy_link_title": "Скопировать ссылку на звонок",
         "copy_link_bad_response": "Сервер не вернул ссылку на звонок.",
         "copy_link_clipboard_failed": "Не удалось скопировать ссылку. Выделите и скопируйте её вручную.",

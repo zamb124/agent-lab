@@ -4,7 +4,7 @@
         "profile": "Профиль"
     },
     "sidebar": {
-        "title": "Humanitec Models",
+        "title": "{modelsProductName}",
         "models": "Модели"
     },
     "routes": {
@@ -13,7 +13,7 @@
     },
     "models": {
         "title": "Реестр моделей",
-        "subtitle": "Системные модели Humanitec для эмбеддингов и реранка",
+        "subtitle": "Системные модели {platformName} для эмбеддингов и реранка",
         "kind": "Тип",
         "kind_embedding": "Эмбеддинги",
         "kind_rerank": "Реранк",

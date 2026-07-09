@@ -7,6 +7,8 @@ from datetime import datetime, timedelta, timezone
 from apps.office.container import OfficeContainer
 from apps.office.db.models import OfficeDocumentBinding
 from apps.office.models.api import OfficeDocumentItem
+from core.files.create_spec import FileSourceKind
+from core.files.retention import FileRetentionKind
 from core.logging import get_logger
 from core.models.identity_models import User
 from core.types import JsonObject
@@ -48,12 +50,18 @@ async def binding_to_item(
             onlyoffice_document_type=row.onlyoffice_document_type,
             file_availability="missing",
             file_size=0,
+            file_expires_at=None,
             created_at=row.created_at,
             updated_at=row.updated_at,
             created_by_user_id=row.created_by_user_id,
             created_by_display_name=display_name,
             created_by_avatar_url=avatar_url,
         )
+    file_record = await container.files_service.promote_retention(
+        row.file_id,
+        retention_kind=FileRetentionKind.OFFICE_DOCUMENT,
+        source_kind=FileSourceKind.OFFICE_DOCUMENT,
+    )
     return OfficeDocumentItem(
         binding_id=row.binding_id,
         catalog_id=row.catalog_id,
@@ -63,6 +71,7 @@ async def binding_to_item(
         onlyoffice_document_type=row.onlyoffice_document_type,
         file_availability="available",
         file_size=file_record.file_size,
+        file_expires_at=file_record.expires_at,
         created_at=row.created_at,
         updated_at=file_record.updated_at,
         created_by_user_id=row.created_by_user_id,
