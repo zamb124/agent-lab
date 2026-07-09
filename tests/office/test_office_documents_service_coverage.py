@@ -128,8 +128,18 @@ async def test_documents_list_multiple_catalog_ids(
 
 @pytest.mark.asyncio
 async def test_company_members_lists_company_from_shared_storage(
-    office_client, auth_headers_system, system_user_id
+    office_client,
+    auth_headers_system,
+    system_user_id,
+    frontend_container,
 ):
+    company = await frontend_container.company_repository.get("system")
+    if company is None:
+        raise AssertionError("system company must exist")
+    if system_user_id not in company.members:
+        company.members[system_user_id] = ["owner", "admin"]
+        await frontend_container.company_repository.set(company)
+
     r = await office_client.get(
         "/documents/api/v1/company-members",
         headers=auth_headers_system,

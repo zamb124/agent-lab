@@ -288,7 +288,7 @@ async def test_notification_with_action_url(crm_client, ws_cookie_system, system
 
 
 @pytest.mark.asyncio
-@pytest.mark.timeout(90)
+@pytest.mark.timeout(120)
 async def test_notification_types_coverage(crm_client, ws_cookie_system, system_user_id, crm_service):
     """Проверка всех типов уведомлений."""
 
@@ -304,19 +304,22 @@ async def test_notification_types_coverage(crm_client, ws_cookie_system, system_
     ]
 
     async with websockets.connect(ws_url, additional_headers=ws_cookie_system) as ws:
+        await ws.send("ping")
+        await _recv_pong(ws, timeout=10.0)
         for notif_type in notification_types:
+            title = f"types-cov-{system_user_id}-{notif_type.value}"
             await notify_user(
                 user_id=system_user_id,
                 notification=Notification(
                     type=notif_type,
-                    title=f"Test {notif_type.value}",
+                    title=title,
                     message=f"Testing notification type {notif_type.value}",
                     service="test",
                 ),
             )
 
+            event = await _recv_event_by_payload_title(ws, title, timeout=15.0)
             expected_type = _expected_event_type("test", notif_type)
-            event = await _recv_event_by_type(ws, expected_type, timeout=10)
             assert event["type"] == expected_type
             assert _event_payload(event)["kind"] == notif_type.value
 

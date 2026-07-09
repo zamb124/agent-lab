@@ -42,10 +42,11 @@ from core.db.utils import get_rowcount
 from core.logging import get_logger
 from core.rag import RAGRepository
 from core.rag.constants import RAG_IN_PROCESS_PROVIDER_ID
-from core.rag.models import RAGMetadata, RAGMetadataFilter
+from core.rag.models import RAGMetadata, RAGMetadataFilter, RAGSearchOptions
 from core.rag.post_retrieval_rerank import RerankScoreCache, apply_rerank_after_retrieve
 from core.rag.providers.pgvector_provider import PgVectorProvider
 from core.rag.search_options_resolver import resolve_platform_search_options
+from core.rag_indexing_schema import SearchChannelsDefaults
 from core.tracing.operation_span import traced_operation
 from core.types import JsonObject
 
@@ -873,9 +874,15 @@ class EntityRepository(BaseCRMRepository[CRMEntity]):
             # сохранить достаточное число кандидатов.
             settings = get_settings()
             retrieve_limit = max(limit * 4, limit)
+            # Similarity-пороги dedup/suggest калиброваны под cross-encoder rerank после
+            # semantic retrieve; hybrid RRF и сырой cosine без rerank дают другую шкалу.
             resolved_search_options = resolve_platform_search_options(
                 settings=settings,
                 per_channel_top_k=retrieve_limit * 3,
+                overrides=RAGSearchOptions(
+                    channels=SearchChannelsDefaults(semantic=True, lexical=False),
+                    rerank=True,
+                ),
             )
             search_results = await self._rag.search(
                 namespace_id=resolved_namespace,

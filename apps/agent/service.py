@@ -318,7 +318,8 @@ def build_agent_llm_bundle(frontend_base_url: str) -> AgentLlmBundle:
 def resolve_frontend_base_url(origin_override: str | None = None) -> str:
     if origin_override is not None:
         ro = origin_override.rstrip("/")
-        if not is_allowed_integration_return_origin(ro, None):
+        platform_public_base_url = get_frontend_public_base_url()
+        if not is_allowed_integration_return_origin(ro, platform_public_base_url):
             raise HTTPException(
                 status_code=400,
                 detail="origin не разрешён для register/discover",

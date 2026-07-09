@@ -6,6 +6,6 @@
 
 ![Открыта страница настроек платформы](screenshots/001.png)
 
-## Шаг 2. Вкладка LinnexAgent видна на странице настроек
+## Шаг 2. Вкладка HumanitecAgent видна на странице настроек
 
-![Вкладка LinnexAgent видна на странице настроек](screenshots/002.png)
+![Вкладка HumanitecAgent видна на странице настроек](screenshots/002.png)

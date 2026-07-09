@@ -6,9 +6,9 @@ The LinnexAgent tab shows help text about the pairing code.
 
 ![Platform settings page opened](screenshots/001.png)
 
-## Step 2. LinnexAgent settings tab opened
+## Step 2. HumanitecAgent settings tab opened
 
-![LinnexAgent settings tab opened](screenshots/002.png)
+![HumanitecAgent settings tab opened](screenshots/002.png)
 
 ## Step 3. Pairing help text is visible
 

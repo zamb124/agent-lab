@@ -6,9 +6,9 @@ The connect button creates a pairing code on the LinnexAgent tab.
 
 ![Platform settings page opened](screenshots/001.png)
 
-## Step 2. LinnexAgent tab opened
+## Step 2. HumanitecAgent tab opened
 
-![LinnexAgent tab opened](screenshots/002.png)
+![HumanitecAgent tab opened](screenshots/002.png)
 
 ## Step 3. Pairing code is created and visible
 

@@ -6,10 +6,10 @@ The LinnexAgent tab shows the connect section title and button.
 
 ![Platform settings page opened](screenshots/001.png)
 
-## Step 2. LinnexAgent settings tab opened
+## Step 2. HumanitecAgent settings tab opened
 
-![LinnexAgent settings tab opened](screenshots/002.png)
+![HumanitecAgent settings tab opened](screenshots/002.png)
 
-## Step 3. LinnexAgent connect section is visible
+## Step 3. HumanitecAgent connect section is visible
 
-![LinnexAgent connect section is visible](screenshots/003.png)
+![HumanitecAgent connect section is visible](screenshots/003.png)

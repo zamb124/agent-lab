@@ -94,26 +94,26 @@ agent: agent-release
 
 test-agent-goose-one:
 	@test -n "$(TEST)" || (echo "TEST is required, e.g. TEST=tests/agent/desktop_e2e/test_agent_desktop_goose_extensions.py::test_goose_dev_01_list_directory" >&2; exit 1)
-	uv run pytest $(TEST) -n0 -v --timeout=900
+	AGENT_DESKTOP_E2E_RUN=1 uv run pytest $(TEST) -n0 -v --timeout=900
 
 test-agent-goose-extensions: test-up
 	uv run python scripts/check_agent_e2e_coverage.py
 	uv run python scripts/check_agent_goose_tool_contract.py
 	AGENT_ARTIFACT_MODE=release uv run python scripts/agent_build.py ensure-local --artifact-mode release --version-sha "$$(git rev-parse HEAD)"
-	RUN_UI_IN_TEST=1 UI_E2E_USE_LVH_ME=1 uv run pytest tests/agent/desktop_e2e/test_agent_desktop_goose_extensions.py tests/agent/desktop_e2e/test_agent_desktop_goose_cc_av_tut.py tests/agent/desktop_e2e/test_agent_desktop_goose_platform_ext.py tests/agent/desktop_e2e/test_agent_desktop_goosed_config.py -n0 --timeout=900
+	RUN_UI_IN_TEST=1 UI_E2E_USE_LVH_ME=1 AGENT_DESKTOP_E2E_RUN=1 uv run pytest tests/agent/desktop_e2e/test_agent_desktop_goose_extensions.py tests/agent/desktop_e2e/test_agent_desktop_goose_cc_av_tut.py tests/agent/desktop_e2e/test_agent_desktop_goose_platform_ext.py tests/agent/desktop_e2e/test_agent_desktop_goosed_config.py -n0 --timeout=900
 
 test-agent-desktop-full: test-up
 	uv run python scripts/check_agent_e2e_coverage.py
 	uv run python scripts/check_agent_goose_tool_contract.py
 	AGENT_ARTIFACT_MODE=release uv run python scripts/agent_build.py ensure-local --artifact-mode release --version-sha "$$(git rev-parse HEAD)"
-	RUN_UI_IN_TEST=1 UI_E2E_USE_LVH_ME=1 uv run pytest tests/agent/desktop_e2e tests/ui/e2e/test_frontend_settings_agent.py -n0 --timeout=900
+	RUN_UI_IN_TEST=1 UI_E2E_USE_LVH_ME=1 AGENT_DESKTOP_E2E_RUN=1 uv run pytest tests/agent/desktop_e2e tests/ui/e2e/test_frontend_settings_agent.py -n0 --timeout=900
 
 test-agent: test-up
 	uv run python scripts/check_agent_e2e_coverage.py
 	uv run python scripts/check_agent_goose_tool_contract.py
 	uv run python scripts/check_agent_test_no_monkeypatch.py
 	AGENT_ARTIFACT_MODE=release uv run python scripts/agent_build.py ensure-local --artifact-mode release --version-sha "$$(git rev-parse HEAD)"
-	RUN_UI_IN_TEST=1 UI_E2E_USE_LVH_ME=1 uv run pytest tests/agent tests/frontend/api/test_humanitec_agent_api.py tests/flows/api/test_agent_platform_mcp.py tests/ui/e2e/test_frontend_settings_agent.py -v -n0 --timeout=900
+	RUN_UI_IN_TEST=1 UI_E2E_USE_LVH_ME=1 AGENT_DESKTOP_E2E_RUN=1 uv run pytest tests/agent tests/frontend/api/test_humanitec_agent_api.py tests/flows/api/test_agent_platform_mcp.py tests/ui/e2e/test_frontend_settings_agent.py -v -n0 --timeout=900
 
 test-agent-e2e: test-up
 	uv run pytest tests/agent/e2e -v -n0 --timeout=180
@@ -122,7 +122,7 @@ test-agent-desktop-e2e: test-up
 	uv run python scripts/check_agent_e2e_coverage.py
 	uv run python scripts/check_agent_goose_tool_contract.py
 	AGENT_ARTIFACT_MODE=release uv run python scripts/agent_build.py ensure-local --artifact-mode release --version-sha "$$(git rev-parse HEAD)"
-	RUN_UI_IN_TEST=1 UI_E2E_USE_LVH_ME=1 uv run pytest tests/agent/desktop_e2e tests/ui/e2e/test_frontend_settings_agent.py -v -n0 --timeout=900
+	RUN_UI_IN_TEST=1 UI_E2E_USE_LVH_ME=1 AGENT_DESKTOP_E2E_RUN=1 uv run pytest tests/agent/desktop_e2e tests/ui/e2e/test_frontend_settings_agent.py -v -n0 --timeout=900
 
 test-agent-ui-e2e: test-up
 	UI_E2E_USE_LVH_ME=1 RUN_UI_IN_TEST=1 uv run pytest tests/ui/e2e/test_frontend_settings_agent.py -n0 --timeout=300
@@ -134,4 +134,4 @@ test-agent-desktop-mcp-ui-e2e: test-up
 	uv run python scripts/check_agent_e2e_coverage.py
 	uv run python scripts/check_agent_goose_tool_contract.py
 	AGENT_ARTIFACT_MODE=release uv run python scripts/agent_build.py ensure-local --artifact-mode release --version-sha "$$(git rev-parse HEAD)"
-	RUN_UI_IN_TEST=1 UI_E2E_USE_LVH_ME=1 uv run pytest tests/agent/desktop_e2e/test_agent_desktop_mcp_ui.py tests/agent/desktop_e2e/test_agent_desktop_mcp_flows.py -v -n0 --timeout=900
+	RUN_UI_IN_TEST=1 UI_E2E_USE_LVH_ME=1 AGENT_DESKTOP_E2E_RUN=1 uv run pytest tests/agent/desktop_e2e/test_agent_desktop_mcp_ui.py tests/agent/desktop_e2e/test_agent_desktop_mcp_flows.py -v -n0 --timeout=900

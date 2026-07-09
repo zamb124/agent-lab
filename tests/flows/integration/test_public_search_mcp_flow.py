@@ -7,6 +7,7 @@ import pytest
 from apps.flows.src.services.mcp_sync import sync_mcp_server_tools
 from core.integrations.mcp import mcp_tool_reference_id
 from tests.search.conftest import make_search_index_slug
+from tests.search.integration.snippet_support import strip_snippet_highlight
 
 # Search MCP system context требует bootstrap system-admin (ensure_platform_search_worker_prerequisites
 # — autouse session fixture в tests/search/conftest.py). Без регистрации плагина autouse-фикстура не
@@ -192,7 +193,8 @@ async def test_public_search_flow_calls_search_mcp_without_monkeypatches(
     assert markdown_sources.startswith("1. [")
     assert f"]({first_url})" in markdown_sources
     assert search_artifact["providers"]["index"]["ok"] is True
-    assert marker in search_artifact["results"][0].get("snippet", "")
+    snippet = strip_snippet_highlight(search_artifact["results"][0].get("snippet", ""))
+    assert marker in snippet
     assert search_artifact["suggestions"]
     assert search_artifact["followups"]
     assert search_artifact["result_insights"]

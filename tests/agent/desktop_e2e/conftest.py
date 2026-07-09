@@ -33,6 +33,8 @@ def pytest_collection_modifyitems(items: list[pytest.Item]) -> None:
         item.add_marker(pytest.mark.timeout(900))
 
     if not os.environ.get("AGENT_DESKTOP_E2E_RUN"):
+        # Явный opt-in: desktop E2E не должны стартовать из широкого `pytest tests/` (xdist, без Electron).
+        # Make-цели phase 4 / test-agent-desktop-e2e выставляют AGENT_DESKTOP_E2E_RUN=1.
         skip_desktop = pytest.mark.skip(reason="AGENT_DESKTOP_E2E_RUN not set")
         for item in items:
             path = str(item.fspath) if hasattr(item, "fspath") else ""

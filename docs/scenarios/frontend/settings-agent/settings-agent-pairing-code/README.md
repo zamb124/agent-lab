@@ -6,9 +6,9 @@
 
 ![Открыта страница настроек платформы](screenshots/001.png)
 
-## Шаг 2. Открыта вкладка LinnexAgent
+## Шаг 2. Открыта вкладка HumanitecAgent
 
-![Открыта вкладка LinnexAgent](screenshots/002.png)
+![Открыта вкладка HumanitecAgent](screenshots/002.png)
 
 ## Шаг 3. Pairing code создан и отображается
 

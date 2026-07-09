@@ -6,10 +6,10 @@
 
 ![Открыта страница настроек платформы](screenshots/001.png)
 
-## Шаг 2. Открыта вкладка LinnexAgent
+## Шаг 2. Открыта вкладка HumanitecAgent
 
-![Открыта вкладка LinnexAgent](screenshots/002.png)
+![Открыта вкладка HumanitecAgent](screenshots/002.png)
 
-## Шаг 3. Секция подключения LinnexAgent отображается
+## Шаг 3. Секция подключения HumanitecAgent отображается
 
-![Секция подключения LinnexAgent отображается](screenshots/003.png)
+![Секция подключения HumanitecAgent отображается](screenshots/003.png)

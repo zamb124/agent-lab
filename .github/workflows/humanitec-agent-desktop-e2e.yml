@@ -38,6 +38,7 @@ jobs:
 
       - name: Desktop E2E
         env:
+          AGENT_DESKTOP_E2E_RUN: "1"
           UI_E2E_USE_LVH_ME: "1"
           RUN_UI_IN_TEST: "1"
           AGENT_DESKTOP_E2E_BASE_URL: "http://system.lvh.me:9004"
