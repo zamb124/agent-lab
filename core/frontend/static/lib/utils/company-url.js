@@ -3,6 +3,11 @@
  * Согласовано с core.utils.subdomain.build_subdomain_url (dev: localhost / lvh.me + порт).
  */
 
+import {
+    extractBaseDomainFromHostname,
+    getPlatformBrandBootstrap,
+} from './platform-brand.js';
+
 /**
  * @typedef {{ isProduction: boolean, baseDomain: string, portSuffix: string, protocol: string }} CompanyHostContext
  */
@@ -13,6 +18,7 @@
 export function getCompanyHostContext() {
     const hostname = window.location.hostname;
     const rawPort = window.location.port;
+    const protocol = window.location.protocol.replace(':', '');
 
     const devPortSuffix = () => {
         if (rawPort && rawPort !== '80' && rawPort !== '443') {
@@ -48,29 +54,24 @@ export function getCompanyHostContext() {
         };
     }
 
-    if (hostname === 'humanitec.ru' || hostname.endsWith('.humanitec.ru')) {
+    const brand = getPlatformBrandBootstrap();
+    if (brand) {
         return {
-            isProduction: true,
-            baseDomain: 'humanitec.ru',
-            portSuffix: '',
-            protocol: 'https',
+            isProduction: brand.isProduction,
+            baseDomain: brand.baseDomain,
+            portSuffix: brand.portSuffix,
+            protocol: brand.protocol,
         };
     }
 
-    if (hostname === 'agents-lab.ru' || hostname.endsWith('.agents-lab.ru')) {
-        return {
-            isProduction: true,
-            baseDomain: 'agents-lab.ru',
-            portSuffix: '',
-            protocol: 'https',
-        };
-    }
-
+    const baseDomain = extractBaseDomainFromHostname(hostname);
+    const portSuffix = rawPort && rawPort !== '80' && rawPort !== '443' ? `:${rawPort}` : '';
+    const isProduction = protocol === 'https' && portSuffix === '';
     return {
-        isProduction: true,
-        baseDomain: 'humanitec.ru',
-        portSuffix: '',
-        protocol: 'https',
+        isProduction,
+        baseDomain,
+        portSuffix,
+        protocol,
     };
 }
 

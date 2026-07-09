@@ -167,11 +167,6 @@ export function getCompanyHostContextFromLocation() {
  * @returns {string}
  */
 function extractBaseDomainFromHostname(hostname) {
-    const brand = getPlatformBrandBootstrap();
-    if (!brand || !Array.isArray(brand.supportedDomains) || brand.supportedDomains.length === 0) {
-        throw new Error('platform brand bootstrap required for production host resolution');
-    }
-    const supported = brand.supportedDomains;
     const h = hostname.toLowerCase();
     if (h === 'localhost' || h.endsWith('.localhost')) {
         return 'localhost';
@@ -182,12 +177,17 @@ function extractBaseDomainFromHostname(hostname) {
     if (/^(?:\d{1,3}\.){3}\d{1,3}$/.test(h)) {
         return h;
     }
+    const brand = getPlatformBrandBootstrap();
+    if (!brand || !Array.isArray(brand.supportedDomains) || brand.supportedDomains.length === 0) {
+        throw new Error('platform brand bootstrap required for production host resolution');
+    }
+    const supported = brand.supportedDomains;
     for (const domain of supported) {
         if (h === domain || h.endsWith(`.${domain}`)) {
             return domain;
         }
     }
-    if (brand && typeof brand.baseDomain === 'string' && brand.baseDomain.length > 0) {
+    if (typeof brand.baseDomain === 'string' && brand.baseDomain.length > 0) {
         return brand.baseDomain;
     }
     throw new Error(`unsupported host domain: ${hostname}`);

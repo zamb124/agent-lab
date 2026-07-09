@@ -3,35 +3,11 @@
  * Используется, чтобы не держать консоль и сервисы на apex без субдомена компании.
  */
 
+import { extractBaseDomainFromHostname } from './platform-brand.js';
 import {
     getCompanyHostContext,
     buildCompanySubdomainUrl,
 } from './company-url.js';
-
-const SUPPORTED_PRODUCTION = ['humanitec.ru', 'agents-lab.ru'];
-
-/**
- * @param {string} hostname
- * @returns {string}
- */
-function extractBaseDomain(hostname) {
-    const h = hostname.toLowerCase();
-    if (h === 'localhost' || h.endsWith('.localhost')) {
-        return 'localhost';
-    }
-    if (h === 'lvh.me' || h.endsWith('.lvh.me')) {
-        return 'lvh.me';
-    }
-    if (/^(?:\d{1,3}\.){3}\d{1,3}$/.test(h)) {
-        return h;
-    }
-    for (const d of SUPPORTED_PRODUCTION) {
-        if (h === d || h.endsWith(`.${d}`)) {
-            return d;
-        }
-    }
-    return 'humanitec.ru';
-}
 
 /**
  * @param {string} hostname
@@ -42,7 +18,7 @@ export function extractSubdomainFromHostname(hostname) {
         throw new Error('extractSubdomainFromHostname: hostname required');
     }
     const h = hostname.toLowerCase();
-    const base = extractBaseDomain(h);
+    const base = extractBaseDomainFromHostname(h);
     if (h === base || h === `www.${base}`) {
         return null;
     }
