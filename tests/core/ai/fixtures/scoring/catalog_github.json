@@ -1,0 +1,63 @@
+[
+  {
+    "provider": "github",
+    "model_id": "openai/gpt-4o-mini",
+    "capabilities": [
+      "llm_chat",
+      "llm_summarize",
+      "llm_format_markdown",
+      "llm_codegen"
+    ],
+    "input_modalities": [],
+    "output_modalities": [],
+    "supported_parameters": [],
+    "context_length": null,
+    "created": null,
+    "native_dimension": null,
+    "storage_dimension": null,
+    "mrl_output_dimension": null,
+    "supports_tools": false,
+    "supports_structured_output": false,
+    "is_free": null,
+    "free_reason": null,
+    "free_policy": null,
+    "pricing": null,
+    "availability_status": "unknown",
+    "metadata_status": "discovered",
+    "last_seen_at": null,
+    "raw": {
+      "id": "openai/gpt-4o-mini",
+      "name": "OpenAI GPT-4o mini",
+      "publisher": "OpenAI",
+      "summary": "An affordable, efficient AI solution for diverse text and image tasks.",
+      "rate_limit_tier": "low",
+      "supported_input_modalities": [
+        "text",
+        "image",
+        "audio"
+      ],
+      "supported_output_modalities": [
+        "text"
+      ],
+      "tags": [
+        "multipurpose",
+        "multilingual",
+        "multimodal"
+      ],
+      "registry": "azure-openai",
+      "version": "2024-07-18",
+      "capabilities": [
+        "agents",
+        "assistants",
+        "streaming",
+        "tool-calling",
+        "agentsV2"
+      ],
+      "limits": {
+        "max_input_tokens": 131072,
+        "max_output_tokens": 4096
+      },
+      "html_url": "https://github.com/marketplace/models/azure-openai/gpt-4o-mini"
+    }
+  }
+]

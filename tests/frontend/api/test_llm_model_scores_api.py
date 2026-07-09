@@ -3,6 +3,10 @@ from __future__ import annotations
 import pytest
 from httpx import AsyncClient
 
+from core.ai.models import AIModelRecord
+from core.ai.providers import AICapability
+from core.ai.scoring import split_score_dimensions
+
 
 @pytest.mark.asyncio
 async def test_llm_model_scores_api_is_system_admin_only(
@@ -32,13 +36,27 @@ async def test_llm_model_scores_api_upserts_lists_and_deletes_real_shared_row(
 ) -> None:
     provider = "openrouter"
     model_id = f"unit/test-score-{unique_id}"
+    await frontend_container.ai_model_catalog_repository.set(
+        AIModelRecord(
+            provider=provider,
+            model_id=model_id,
+            capabilities=(AICapability.LLM_CHAT,),
+            input_modalities=("text",),
+            output_modalities=("text",),
+            context_length=262144,
+            supported_parameters=("tools",),
+            is_free=True,
+            free_reason="zero_price_catalog",
+            raw={"name": "Unit Test 80B"},
+        )
+    )
     payload = {
         "provider": provider,
         "model_id": model_id,
         "capability": "llm_chat",
-        "score": 77.5,
         "enabled": True,
-        "score_dimensions": {"quality": 77.5},
+        "editorial_prior": 1.5,
+        "score_dimensions": {"coding": 77.5, "general_chat": 70.0},
         "note": "unit test",
     }
 
@@ -53,13 +71,23 @@ async def test_llm_model_scores_api_upserts_lists_and_deletes_real_shared_row(
     assert body["item"]["provider"] == provider
     assert body["item"]["model_id"] == model_id
     assert body["item"]["capability"] == "llm_chat"
-    assert body["item"]["score"] == 77.5
+    assert body["item"]["score"] > 0.0
     assert body["item"]["source"] == "manual"
-    assert body["item"]["score_dimensions"] == {"quality": 77.5}
+    assert body["item"]["editorial_prior"] == 1.5
+    assert body["item"]["score_dimensions"] == {"coding": 77.5, "general_chat": 70.0}
+    assert body["item"]["score_breakdown"]
     assert "cache_rescore" in body
 
-    score_map = await frontend_container.llm_model_score_repository.list_enabled_score_map("llm_chat")
-    assert score_map[(provider, model_id)] == 77.5
+    row = await frontend_container.llm_model_score_repository.get(
+        provider=provider,
+        model_id=model_id,
+        capability="llm_chat",
+    )
+    assert row is not None
+    assert row.score > 0.0
+    editorial_prior, hint_dimensions = split_score_dimensions(row.score_dimensions)
+    assert editorial_prior == 1.5
+    assert hint_dimensions == {"coding": 77.5, "general_chat": 70.0}
 
     list_response = await frontend_client.get(
         "/frontend/api/platform/llm-model-scores",
@@ -99,7 +127,7 @@ async def test_llm_model_score_seed_is_create_once_unless_forced(
                 "provider": provider,
                 "model_id": model_id,
                 "capability": "llm_chat",
-                "score": 10,
+                "score_dimensions": {"general_chat": 10.0},
                 "enabled": True,
                 "note": "initial",
             }
@@ -114,7 +142,7 @@ async def test_llm_model_score_seed_is_create_once_unless_forced(
                 "provider": provider,
                 "model_id": model_id,
                 "capability": "llm_chat",
-                "score": 99,
+                "score_dimensions": {"general_chat": 99.0},
                 "enabled": True,
                 "note": "should not overwrite",
             }
@@ -124,7 +152,9 @@ async def test_llm_model_score_seed_is_create_once_unless_forced(
     row = await repo.get(provider=provider, model_id=model_id, capability="llm_chat")
     assert skipped == {"created": 0, "updated": 0, "skipped": 1}
     assert row is not None
-    assert row.score == 10
+    _, hint_dimensions = split_score_dimensions(row.score_dimensions)
+    assert hint_dimensions == {"general_chat": 10.0}
+    assert row.note == "initial"
 
     forced = await repo.seed_many(
         [
@@ -132,7 +162,8 @@ async def test_llm_model_score_seed_is_create_once_unless_forced(
                 "provider": provider,
                 "model_id": model_id,
                 "capability": "llm_chat",
-                "score": 99,
+                "score_dimensions": {"general_chat": 99.0},
+                "editorial_prior": -1.0,
                 "enabled": False,
                 "note": "forced",
             }
@@ -142,7 +173,10 @@ async def test_llm_model_score_seed_is_create_once_unless_forced(
     row = await repo.get(provider=provider, model_id=model_id, capability="llm_chat")
     assert forced == {"created": 0, "updated": 1, "skipped": 0}
     assert row is not None
-    assert row.score == 99
+    editorial_prior, hint_dimensions = split_score_dimensions(row.score_dimensions)
+    assert hint_dimensions == {"general_chat": 99.0}
+    assert editorial_prior == -1.0
     assert row.enabled is False
+    assert row.note == "forced"
 
     _ = await repo.delete(provider=provider, model_id=model_id, capability="llm_chat")

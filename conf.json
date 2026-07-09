@@ -418,26 +418,41 @@
         "provider": "openrouter",
         "model": "qwen/qwen-2.5-7b-instruct"
       },
-      "max_candidates_per_provider": 20,
+      "max_candidates_per_provider": 35,
       "max_candidates_total": 50,
       "include_provider_router_as_last_free_fallback": true
     },
     "model_scoring": {
       "seed_enabled": true,
       "force_seed_refresh": false,
+      "dimension_weights": {
+        "coding": 1.0,
+        "agentic": 0.8,
+        "general_chat": 1.0,
+        "reasoning": 0.9,
+        "roleplay": 0.5,
+        "vision": 0.6
+      },
+      "editorial_prior_cap": 5.0,
+      "hint_blend_ratio": 0.3,
       "items": [
         {
           "provider": "openrouter",
           "model_id": "qwen/qwen3-coder:free",
           "capability": "llm_chat",
-          "score": 96,
+          "score_dimensions": {
+            "coding": 96
+          },
           "note": "2026 seed: strongest coding/free candidate in current pool"
         },
         {
           "provider": "openrouter",
           "model_id": "nvidia/nemotron-3-super-120b-a12b:free",
           "capability": "llm_chat",
-          "score": 94,
+          "score_dimensions": {
+            "agentic": 94,
+            "reasoning": 92
+          },
           "note": "2026 seed: large MoE reasoning/instruct candidate"
         },
         {
@@ -451,14 +466,20 @@
           "provider": "bothub",
           "model_id": "gpt-oss-120b:free",
           "capability": "llm_chat",
-          "score": 92.5,
+          "editorial_prior": -0.5,
+          "score_dimensions": {
+            "general_chat": 93
+          },
           "note": "2026 seed: BotHub mirror of large OpenAI OSS candidate"
         },
         {
           "provider": "openrouter",
           "model_id": "nousresearch/hermes-3-llama-3.1-405b:free",
           "capability": "llm_chat",
-          "score": 91,
+          "score_dimensions": {
+            "general_chat": 75,
+            "roleplay": 95
+          },
           "note": "2026 seed: very large open-weight instruct model, older family"
         },
         {
@@ -514,7 +535,9 @@
           "provider": "openrouter",
           "model_id": "openrouter/owl-alpha",
           "capability": "llm_chat",
-          "score": 78,
+          "score_dimensions": {
+            "general_chat": 88
+          },
           "note": "2026 seed: OpenRouter free experimental candidate"
         },
         {
@@ -642,9 +665,53 @@
           "capability": "llm_chat",
           "score": 10,
           "note": "2026 seed: music/audio-oriented model, weak text-chat candidate"
+        },
+        {
+          "provider": "openrouter",
+          "model_id": "tencent/hy3:free",
+          "capability": "llm_chat",
+          "score_dimensions": {
+            "coding": 94,
+            "agentic": 93,
+            "general_chat": 88
+          },
+          "note": "2026 seed: strong coding/agentic free candidate, SWE-Bench ~78%"
+        },
+        {
+          "provider": "openrouter",
+          "model_id": "moonshotai/kimi-k2.6:free",
+          "capability": "llm_chat",
+          "score_dimensions": {
+            "coding": 97,
+            "agentic": 96,
+            "general_chat": 85
+          },
+          "note": "2026 seed: strong free agentic coder"
+        },
+        {
+          "provider": "openrouter",
+          "model_id": "nvidia/nemotron-3-ultra-550b-a55b:free",
+          "capability": "llm_chat",
+          "score_dimensions": {
+            "agentic": 95,
+            "reasoning": 94,
+            "general_chat": 92
+          },
+          "note": "2026 seed: large frontier free candidate"
+        },
+        {
+          "provider": "google",
+          "model_id": "gemini-2.5-flash-lite",
+          "capability": "llm_chat",
+          "score_dimensions": {
+            "general_chat": 83,
+            "agentic": 75
+          },
+          "note": "2026 seed: account free-tier fast Gemini candidate"
         }
       ]
-    },    "timeout": 300
+    },
+    "timeout": 300
   },
   "text_transforms": {
     "markdown_max_chunk_chars": 6000,
@@ -834,7 +901,7 @@
             "provider": "openrouter",
             "model": "qwen/qwen-2.5-7b-instruct"
           },
-          "max_candidates_per_provider": 20,
+          "max_candidates_per_provider": 35,
           "max_candidates_total": 50,
           "include_provider_router_as_last_free_fallback": true
         },

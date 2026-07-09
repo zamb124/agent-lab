@@ -36,6 +36,7 @@ test-static:
 	@uv run python scripts/check_agent_e2e_coverage.py
 	@uv run python scripts/check_agent_goose_tool_contract.py
 	@uv run python scripts/check_agent_test_no_monkeypatch.py
+	@uv run pytest -q tests/core/ai/test_platform_model_scoring_fixtures.py
 
 check-strict-agent-architecture:
 	@uv run python scripts/check_strict_agent_architecture.py

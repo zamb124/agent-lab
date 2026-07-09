@@ -49,7 +49,16 @@ alwaysApply: true
 - Модели: `auto` и concrete refs вида `<provider>:<model_id>` из shared free catalog.
 - Free pool строится из `AIModelCatalogRepository` и canonical `core.ai.providers.PLATFORM_FREE_MODEL_CANDIDATE_PROVIDER_ORDER`.
 - `llm.platform_free_pool.providers` в конфиге запрещён.
-- `auto` выбирает по `AIRequestRequirements + scoring + availability`.
+- `auto` выбирает по `AIRequestRequirements + computed_scoring + availability`.
+
+## Platform model scoring
+
+- Финальный `score` в `llm_model_scores` и Redis free-pool cache — **всегда computed** через `core.ai.scoring.compute_platform_model_score()`.
+- `conf.json` `llm.model_scoring.items[]` и Settings UI задают только **рекомендательные hints**: `score_dimensions`, `editorial_prior`, `enabled`, `note`.
+- Legacy `score` в conf seed конвертируется в `score_dimensions.general_chat` при seed; в runtime не используется как финальный рейтинг.
+- `source` в БД: `config_seed` / `manual` / `benchmark_import` — откуда hints; после refresh computed строки получают `source=computed` для persisted score, hints сохраняются в `score_dimensions`.
+- Scoring применяется ко **всем** free-моделям каталога, не только к seeded rows; unseeded модели ранжируются по `base_catalog_score` (size, context, tools, benchmarks из `raw`, free policy, availability).
+- Settings UI: редактируются только hints; computed `score` и `score_breakdown` — read-only.
 
 ## Embedding / Rerank / Fallback
 
@@ -69,5 +78,14 @@ alwaysApply: true
 
 ```bash
 make test-static
+uv run pytest -q tests/core/ai/test_platform_model_scoring_fixtures.py
 uv run pytest -q tests/core/clients/test_llm_external_provider_live.py --tb=short
+uv run pytest -q tests/core/ai/test_platform_model_scoring_live.py -m network  # conf.local.json keys
+```
+
+Обновление scoring fixtures после смены catalog/conf hints:
+
+```bash
+uv run python scripts/generate_llm_scoring_fixtures.py
+uv run python scripts/generate_llm_scoring_fixtures.py --check  # drift gate, network + keys
 ```

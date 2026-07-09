@@ -1,0 +1,110 @@
+[
+  {
+    "provider": "huggingface",
+    "model_id": "meta-llama/Llama-3.1-8B-Instruct",
+    "capabilities": [
+      "llm_chat",
+      "llm_summarize",
+      "llm_format_markdown",
+      "llm_codegen"
+    ],
+    "input_modalities": [
+      "text"
+    ],
+    "output_modalities": [
+      "text"
+    ],
+    "supported_parameters": [],
+    "context_length": null,
+    "created": 1721292960,
+    "native_dimension": null,
+    "storage_dimension": null,
+    "mrl_output_dimension": null,
+    "supports_tools": false,
+    "supports_structured_output": false,
+    "is_free": null,
+    "free_reason": null,
+    "free_policy": null,
+    "pricing": null,
+    "availability_status": "unknown",
+    "metadata_status": "discovered",
+    "last_seen_at": null,
+    "raw": {
+      "id": "meta-llama/Llama-3.1-8B-Instruct",
+      "object": "model",
+      "created": 1721292960,
+      "owned_by": "meta-llama",
+      "architecture": {
+        "input_modalities": [
+          "text"
+        ],
+        "output_modalities": [
+          "text"
+        ]
+      },
+      "providers": [
+        {
+          "provider": "novita",
+          "status": "live",
+          "context_length": 16384,
+          "pricing": {
+            "input": 0.02,
+            "output": 0.05
+          },
+          "is_free": false,
+          "supports_tools": false,
+          "supports_structured_output": false,
+          "first_token_latency_ms": 447.6,
+          "throughput": 100.19402361482734,
+          "is_model_author": false
+        },
+        {
+          "provider": "nscale",
+          "status": "live",
+          "context_length": 131072,
+          "pricing": {
+            "input": 0.06,
+            "output": 0.06
+          },
+          "is_free": false,
+          "supports_tools": false,
+          "supports_structured_output": true,
+          "first_token_latency_ms": 570.2,
+          "throughput": 106.63473985767055,
+          "is_model_author": false
+        },
+        {
+          "provider": "featherless-ai",
+          "status": "live",
+          "is_free": false,
+          "is_model_author": false
+        },
+        {
+          "provider": "scaleway",
+          "status": "live",
+          "is_free": false,
+          "supports_tools": true,
+          "supports_structured_output": true,
+          "first_token_latency_ms": 584,
+          "throughput": 134.54177808128074,
+          "is_model_author": false
+        },
+        {
+          "provider": "deepinfra",
+          "status": "live",
+          "context_length": 131072,
+          "pricing": {
+            "input": 0.02,
+            "output": 0.05
+          },
+          "is_free": false,
+          "supports_tools": false,
+          "supports_structured_output": true,
+          "first_token_latency_ms": 539.2,
+          "throughput": 25.49195928433243,
+          "is_model_author": false
+        }
+      ]
+    }
+  }
+]

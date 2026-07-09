@@ -1,0 +1,67 @@
+[
+  {
+    "provider": "groq",
+    "model_id": "llama-3.1-8b-instant",
+    "capabilities": [
+      "llm_chat",
+      "llm_summarize",
+      "llm_format_markdown",
+      "llm_codegen"
+    ],
+    "input_modalities": [],
+    "output_modalities": [],
+    "supported_parameters": [],
+    "context_length": 131072,
+    "created": 1693721698,
+    "native_dimension": null,
+    "storage_dimension": null,
+    "mrl_output_dimension": null,
+    "supports_tools": false,
+    "supports_structured_output": false,
+    "is_free": false,
+    "free_reason": null,
+    "free_policy": null,
+    "pricing": null,
+    "availability_status": "unknown",
+    "metadata_status": "discovered",
+    "last_seen_at": null,
+    "raw": {
+      "id": "llama-3.1-8b-instant",
+      "object": "model",
+      "created": 1693721698,
+      "owned_by": "Meta",
+      "active": true,
+      "context_window": 131072,
+      "public_apps": null,
+      "max_completion_tokens": 131072,
+      "hugging_face_id": "meta-llama/Llama-3.1-8B-Instruct",
+      "name": "Llama 3.1 8B",
+      "input_modalities": [
+        "text"
+      ],
+      "output_modalities": [
+        "text"
+      ],
+      "context_length": 131072,
+      "max_output_length": 131072,
+      "pricing": {
+        "prompt": "0.00000005",
+        "completion": "0.00000008",
+        "image": "0",
+        "request": "0",
+        "input_cache_read": "0.000000025"
+      },
+      "supported_sampling_parameters": [
+        "temperature",
+        "top_p",
+        "stop",
+        "seed",
+        "max_tokens"
+      ],
+      "supported_features": [
+        "tools",
+        "json_mode"
+      ]
+    }
+  }
+]

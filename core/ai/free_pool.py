@@ -19,6 +19,7 @@ from core.ai.providers import (
     AICapability,
     humanitec_llms_model_ref,
 )
+from core.ai.scoring import PlatformModelScoreHint, compute_platform_model_score
 from core.clients.redis_client import RedisClient
 from core.config.base import BaseSettings
 from core.config.models import (
@@ -26,6 +27,7 @@ from core.config.models import (
     GoogleLLMProviderConfig,
     GroqProviderConfig,
     HuggingFaceProviderConfig,
+    LLMModelScoringConfig,
 )
 from core.logging import get_logger
 from core.types import (
@@ -75,10 +77,20 @@ class PlatformFreeModelRecord:
 
 
 class PlatformModelScoreProvider(Protocol):
-    async def list_enabled_score_map(
+    async def list_hints(
         self,
         capability: AICapability,
-    ) -> Mapping[tuple[str, str], float]: ...
+    ) -> Mapping[tuple[str, str], PlatformModelScoreHint]: ...
+
+    async def update_computed_score(
+        self,
+        *,
+        provider: str,
+        model_id: str,
+        capability: AICapability,
+        score: float,
+        score_breakdown: Mapping[str, float],
+    ) -> None: ...
 
 
 def _json_str(value: JsonValue | None) -> str | None:
@@ -161,6 +173,53 @@ def apply_platform_model_score_overrides(
             scored.append(record)
             continue
         scored.append(replace(record, score=float(override)))
+    return scored
+
+
+def _catalog_record_map(
+    catalog_records: Iterable[AIModelRecord],
+) -> dict[tuple[str, str], AIModelRecord]:
+    return {
+        (record.provider, record.model_id): record
+        for record in catalog_records
+    }
+
+
+def catalog_record_map(
+    catalog_records: Iterable[AIModelRecord],
+) -> dict[tuple[str, str], AIModelRecord]:
+    return _catalog_record_map(catalog_records)
+
+
+def provider_is_configured_for_free_pool(settings: BaseSettings, provider: str) -> bool:
+    return _provider_is_configured_for_free_pool(settings, provider)
+
+
+def compute_platform_free_record_scores(
+    records: Iterable[PlatformFreeModelRecord],
+    *,
+    catalog_records: Iterable[AIModelRecord],
+    hints: Mapping[tuple[str, str], PlatformModelScoreHint] | None,
+    scoring_config: LLMModelScoringConfig,
+) -> list[PlatformFreeModelRecord]:
+    catalog_by_key = _catalog_record_map(catalog_records)
+    hint_map = hints or {}
+    scored: list[PlatformFreeModelRecord] = []
+    for record in records:
+        hint = hint_map.get((record.provider, record.id))
+        if hint is not None and not hint.enabled:
+            continue
+        catalog_record = catalog_by_key.get((record.provider, record.id))
+        if catalog_record is None:
+            scored.append(record)
+            continue
+        computed = compute_platform_model_score(
+            catalog_record,
+            AICapability.LLM_CHAT,
+            hint=hint,
+            scoring_config=scoring_config,
+        )
+        scored.append(replace(record, score=float(computed.score)))
     return scored
 
 
@@ -319,9 +378,15 @@ async def fetch_platform_free_model_records(
     settings: BaseSettings,
     model_catalog_repository: AIModelCatalogRepository,
     *,
-    score_overrides: Mapping[tuple[str, str], float] | None = None,
+    model_score_provider: PlatformModelScoreProvider | None = None,
 ) -> list[PlatformFreeModelRecord]:
     pool_config = settings.llm.platform_free_pool
+    scoring_config = settings.llm.model_scoring
+    hints = (
+        await model_score_provider.list_hints(AICapability.LLM_CHAT)
+        if model_score_provider is not None
+        else None
+    )
     all_records: list[PlatformFreeModelRecord] = []
     for provider_slug in PLATFORM_FREE_MODEL_CANDIDATE_PROVIDER_ORDER:
         if not _provider_is_configured_for_free_pool(settings, provider_slug):
@@ -335,9 +400,11 @@ async def fetch_platform_free_model_records(
             catalog_records,
             settings=settings,
         )
-        provider_records = apply_platform_model_score_overrides(
+        provider_records = compute_platform_free_record_scores(
             provider_records,
-            score_overrides,
+            catalog_records=catalog_records,
+            hints=hints,
+            scoring_config=scoring_config,
         )
         provider_records = _sort_provider_records(
             provider_records,
@@ -504,16 +571,45 @@ async def refresh_platform_free_models_cache(
     *,
     model_score_provider: PlatformModelScoreProvider | None = None,
 ) -> JsonObject:
-    score_overrides = (
-        await model_score_provider.list_enabled_score_map(AICapability.LLM_CHAT)
-        if model_score_provider is not None
-        else None
-    )
     records = await fetch_platform_free_model_records(
         settings,
         model_catalog_repository,
-        score_overrides=score_overrides,
+        model_score_provider=model_score_provider,
     )
+    hints_count = 0
+    if model_score_provider is not None:
+        catalog_records_by_key: dict[tuple[str, str], AIModelRecord] = {}
+        for provider_slug in PLATFORM_FREE_MODEL_CANDIDATE_PROVIDER_ORDER:
+            if not _provider_is_configured_for_free_pool(settings, provider_slug):
+                continue
+            provider_catalog = await model_catalog_repository.list_by_provider_capability(
+                provider_slug,
+                AICapability.LLM_CHAT,
+            )
+            catalog_records_by_key.update(_catalog_record_map(provider_catalog))
+        hints = await model_score_provider.list_hints(AICapability.LLM_CHAT)
+        hints_count = len(hints)
+        scoring_config = settings.llm.model_scoring
+        for record in records:
+            hint = hints.get((record.provider, record.id))
+            if hint is None:
+                continue
+            catalog_record = catalog_records_by_key.get((record.provider, record.id))
+            if catalog_record is None:
+                continue
+            computed = compute_platform_model_score(
+                catalog_record,
+                AICapability.LLM_CHAT,
+                hint=hint,
+                scoring_config=scoring_config,
+            )
+            await model_score_provider.update_computed_score(
+                provider=record.provider,
+                model_id=record.id,
+                capability=AICapability.LLM_CHAT,
+                score=computed.score,
+                score_breakdown=computed.breakdown,
+            )
     payload = serialize_platform_free_models(records)
     redis_ok = await redis_client.set(
         PLATFORM_FREE_MODELS_CACHE_KEY,
@@ -528,7 +624,7 @@ async def refresh_platform_free_models_cache(
             provider: platform_free_model_policy_for_provider(provider)
             for provider in PLATFORM_FREE_MODEL_CANDIDATE_PROVIDER_ORDER
         },
-        score_overrides_count=len(score_overrides or {}),
+        score_overrides_count=hints_count,
         redis_ok=redis_ok,
         ttl_seconds=settings.llm.platform_free_pool.cache_ttl_seconds,
     )
@@ -540,7 +636,7 @@ async def refresh_platform_free_models_cache(
             for provider in PLATFORM_FREE_MODEL_CANDIDATE_PROVIDER_ORDER
         },
         "models": [f"{record.provider}:{record.id}" for record in records],
-        "score_overrides_count": len(score_overrides or {}),
+        "score_overrides_count": hints_count,
         "redis_ok": bool(redis_ok),
     }
 
@@ -548,11 +644,15 @@ async def refresh_platform_free_models_cache(
 async def rescore_cached_platform_free_models(
     redis_client: RedisClient,
     settings: BaseSettings,
+    model_catalog_repository: AIModelCatalogRepository,
     *,
     model_score_provider: PlatformModelScoreProvider,
 ) -> JsonObject:
-    raw_cache_payload = await redis_client.get(PLATFORM_FREE_MODELS_CACHE_KEY)
-    records = parse_platform_free_models(raw_cache_payload)
+    records = await fetch_platform_free_model_records(
+        settings,
+        model_catalog_repository,
+        model_score_provider=model_score_provider,
+    )
     if not records:
         return {
             "cache_present": False,
@@ -562,11 +662,38 @@ async def rescore_cached_platform_free_models(
             "redis_ok": True,
         }
 
-    score_overrides = await model_score_provider.list_enabled_score_map(AICapability.LLM_CHAT)
-    records = sort_platform_free_records(
-        apply_platform_model_score_overrides(records, score_overrides),
-        max_candidates=settings.llm.platform_free_pool.max_candidates_total,
-    )
+    hints = await model_score_provider.list_hints(AICapability.LLM_CHAT)
+    catalog_records_by_key: dict[tuple[str, str], AIModelRecord] = {}
+    for provider_slug in PLATFORM_FREE_MODEL_CANDIDATE_PROVIDER_ORDER:
+        if not _provider_is_configured_for_free_pool(settings, provider_slug):
+            continue
+        provider_catalog = await model_catalog_repository.list_by_provider_capability(
+            provider_slug,
+            AICapability.LLM_CHAT,
+        )
+        catalog_records_by_key.update(_catalog_record_map(provider_catalog))
+    scoring_config = settings.llm.model_scoring
+    for record in records:
+        hint = hints.get((record.provider, record.id))
+        if hint is None:
+            continue
+        catalog_record = catalog_records_by_key.get((record.provider, record.id))
+        if catalog_record is None:
+            continue
+        computed = compute_platform_model_score(
+            catalog_record,
+            AICapability.LLM_CHAT,
+            hint=hint,
+            scoring_config=scoring_config,
+        )
+        await model_score_provider.update_computed_score(
+            provider=record.provider,
+            model_id=record.id,
+            capability=AICapability.LLM_CHAT,
+            score=computed.score,
+            score_breakdown=computed.breakdown,
+        )
+
     redis_ok = await redis_client.set(
         PLATFORM_FREE_MODELS_CACHE_KEY,
         serialize_platform_free_models(records),
@@ -576,14 +703,14 @@ async def rescore_cached_platform_free_models(
         "platform_free_models.cache_rescored",
         count=len(records),
         providers=sorted({record.provider for record in records}),
-        score_overrides_count=len(score_overrides),
+        score_overrides_count=len(hints),
         redis_ok=redis_ok,
     )
     return {
         "cache_present": True,
         "count": len(records),
         "providers": sorted({record.provider for record in records}),
-        "score_overrides_count": len(score_overrides),
+        "score_overrides_count": len(hints),
         "redis_ok": bool(redis_ok),
     }
 
@@ -594,6 +721,7 @@ __all__ = [
     "PLATFORM_PAID_FALLBACK_SOURCE",
     "PlatformFreeModelRecord",
     "apply_platform_model_score_overrides",
+    "compute_platform_free_record_scores",
     "fetch_platform_free_model_records",
     "parse_platform_free_models",
     "platform_free_model_policy_for_provider",

@@ -537,7 +537,7 @@ class LLMModelScore(Base):
     __table_args__: _TableArgs = (
         CheckConstraint("score >= 0 AND score <= 1000", name="llm_model_scores_score_range_check"),
         CheckConstraint(
-            "source IN ('config_seed','manual','benchmark_import')",
+            "source IN ('config_seed','manual','benchmark_import','computed')",
             name="llm_model_scores_source_check",
         ),
         Index("ix_llm_model_scores_provider", "provider"),

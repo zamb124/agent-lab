@@ -1682,14 +1682,20 @@ class ModelConfig(BaseModel):
 
 
 class LLMModelScoreSeedItem(BaseModel):
-    """Initial seed row for shared ``llm_model_scores``."""
+    """Recommendatory seed hints for shared ``llm_model_scores``.
+
+    ``score`` is legacy-only: when ``score_dimensions`` are empty it is converted
+    to ``general_chat`` hint at seed time. Runtime ranking always recomputes score
+    from catalog signals plus these hints.
+    """
 
     provider: str
     model_id: str
     capability: AICapability
-    score: float = Field(ge=0, le=1000)
     enabled: bool = True
+    editorial_prior: float = Field(default=0.0, ge=-50.0, le=50.0)
     score_dimensions: dict[str, float] = Field(default_factory=dict)
+    score: float | None = Field(default=None, ge=0, le=1000)
     note: str | None = None
 
     @field_validator("provider")
@@ -1709,16 +1715,42 @@ class LLMModelScoreSeedItem(BaseModel):
             raise ValueError("model_id не может быть пустым")
         return model_id
 
+    @model_validator(mode="after")
+    def _normalize_legacy_score_hint(self) -> Self:
+        if self.score_dimensions:
+            return self
+        if self.score is None:
+            return self
+        return self.model_copy(
+            update={
+                "score_dimensions": {
+                    "general_chat": float(self.score),
+                },
+            },
+        )
+
 
 class LLMModelScoringConfig(BaseModel):
-    """Config seed for shared LLM model scoring table.
+    """Recommendatory config seed for shared LLM model scoring hints.
 
     ``force_seed_refresh=false`` means config creates only missing rows.
-    Manual edits in DB remain authoritative.
+    Manual hint edits in DB remain authoritative until the next refresh.
     """
 
     seed_enabled: bool = True
     force_seed_refresh: bool = False
+    dimension_weights: dict[str, float] = Field(
+        default_factory=lambda: {
+            "coding": 1.0,
+            "agentic": 0.8,
+            "general_chat": 1.0,
+            "reasoning": 0.9,
+            "roleplay": 0.5,
+            "vision": 0.6,
+        }
+    )
+    editorial_prior_cap: float = Field(default=5.0, ge=0.0, le=50.0)
+    hint_blend_ratio: float = Field(default=0.3, ge=0.0, le=1.0)
     items: tuple[LLMModelScoreSeedItem, ...] = Field(default_factory=tuple)
 
 

@@ -6,6 +6,7 @@ from typing import cast
 from core.ai.free_pool import (
     PlatformFreeModelRecord,
     apply_platform_model_score_overrides,
+    compute_platform_free_record_scores,
     humanitec_llms_model_options_from_records,
     parse_platform_free_models,
     platform_free_model_policy_for_provider,
@@ -15,7 +16,9 @@ from core.ai.free_pool import (
 )
 from core.ai.models import AIModelRecord
 from core.ai.providers import OPENAI_COMPATIBLE_LLM_PROVIDER_ORDER, AICapability
+from core.ai.scoring import PlatformModelScoreHint
 from core.config.base import BaseSettings
+from core.config.models import LLMModelScoringConfig
 
 
 def _settings_stub() -> BaseSettings:
@@ -242,6 +245,63 @@ def test_platform_free_model_sort_is_power_first_then_capabilities_then_confiden
         ("groq", "llama-3.1-8b-instant"),
         ("openrouter", "verified-unknown"),
     ]
+
+
+def test_compute_platform_free_record_scores_uses_hints_and_catalog() -> None:
+    catalog_record = AIModelRecord(
+        provider="openrouter",
+        model_id="tencent/hy3:free",
+        capabilities=(AICapability.LLM_CHAT,),
+        input_modalities=("text",),
+        output_modalities=("text",),
+        context_length=262144,
+        supported_parameters=("tools",),
+        is_free=True,
+        free_reason="zero_price_catalog",
+        raw={"name": "Hy3 295B"},
+    )
+    records = compute_platform_free_record_scores(
+        platform_free_records_from_model_records([catalog_record], settings=_settings_stub()),
+        catalog_records=[catalog_record],
+        hints={
+            ("openrouter", "tencent/hy3:free"): PlatformModelScoreHint(
+                editorial_prior=1.0,
+                score_dimensions={"coding": 94.0, "agentic": 93.0},
+                enabled=True,
+                source="config_seed",
+                note=None,
+            )
+        },
+        scoring_config=LLMModelScoringConfig(),
+    )
+    assert len(records) == 1
+    assert records[0].score > 20.0
+
+
+def test_compute_platform_free_record_scores_skips_disabled_hints() -> None:
+    catalog_record = AIModelRecord(
+        provider="openrouter",
+        model_id="vendor/disabled:free",
+        capabilities=(AICapability.LLM_CHAT,),
+        input_modalities=("text",),
+        output_modalities=("text",),
+        is_free=True,
+    )
+    records = compute_platform_free_record_scores(
+        platform_free_records_from_model_records([catalog_record], settings=_settings_stub()),
+        catalog_records=[catalog_record],
+        hints={
+            ("openrouter", "vendor/disabled:free"): PlatformModelScoreHint(
+                editorial_prior=0.0,
+                score_dimensions={"general_chat": 90.0},
+                enabled=False,
+                source="manual",
+                note=None,
+            )
+        },
+        scoring_config=LLMModelScoringConfig(),
+    )
+    assert records == []
 
 
 def test_platform_model_score_overrides_replace_heuristic_score() -> None:
