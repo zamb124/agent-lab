@@ -1,4 +1,4 @@
-API для управления компаниями в платформе Humanitec.
+API для управления компаниями на Платформе.
 
 ## Возможности
 
@@ -16,7 +16,7 @@ API для управления компаниями в платформе Human
 ### Создание компании
 
 ```bash
-curl -X POST https://humanitec.ru/api/companies \
+curl -X POST https://linnex.io/api/companies \
   -H "Content-Type: application/json" \
   -H "Cookie: auth_token=your_token" \
   -d '{
@@ -25,10 +25,14 @@ curl -X POST https://humanitec.ru/api/companies \
   }'
 ```
 
+!!! note "Legacy-домен"
+
+    На `humanitec.ru` те же пути API. Подставьте `https://humanitec.ru/api/companies`, если интеграция привязана к legacy apex.
+
 ### Проверка slug
 
 ```bash
-curl -X POST https://humanitec.ru/api/companies/check-slug \
+curl -X POST https://linnex.io/api/companies/check-slug \
   -H "Content-Type: application/json" \
   -d '{
     "slug": "my-company"

@@ -16,6 +16,15 @@ from core.llm_context import (
     LLMContextRetrievalPolicy,
     LLMContextSourceRequest,
 )
+from core.rag.models import RAGSearchOptions
+from core.rag.search_options_resolver import resolve_platform_search_options
+from core.rag_indexing_schema import SearchChannelsDefaults
+from core.types import JsonObject
+
+
+def _expected_search_options(**kwargs: object) -> JsonObject:
+    overrides = RAGSearchOptions.model_validate(kwargs)
+    return resolve_platform_search_options(overrides=overrides).model_dump(exclude_none=True)
 
 
 class InMemoryStore:
@@ -40,6 +49,8 @@ def _policy(
     retrieval: LLMContextRetrievalMode = "hybrid",
     top_k: int = 4,
     min_score: float | None = None,
+    rrf_k: int | None = None,
+    freshness_weight: float | None = None,
 ) -> LLMContextProfile:
     return LLMContextProfile(
         mode="smart",
@@ -50,6 +61,8 @@ def _policy(
             top_k=top_k,
             rerank=False,
             min_score=min_score,
+            rrf_k=rrf_k,
+            freshness_weight=freshness_weight,
         ),
         compaction="auto",
         cache="auto",
@@ -118,10 +131,11 @@ async def test_memory_source_recalls_and_outputs_chronological_memory_blocks() -
     assert store.requests[0].top_k == 3
     assert store.requests[0].session_id == "flow:ctx"
     assert store.requests[0].search_options is not None
-    assert store.requests[0].search_options.model_dump(exclude_none=True) == {
-        "channels": {"semantic": True, "lexical": True},
-        "rerank": False,
-    }
+    assert store.requests[0].search_options.model_dump(exclude_none=True) == _expected_search_options(
+        channels=SearchChannelsDefaults(semantic=True, lexical=True),
+        rerank=False,
+        retrieval=True,
+    )
 
 
 @pytest.mark.asyncio
@@ -159,15 +173,17 @@ async def test_memory_source_search_options_cover_single_channel_modes() -> None
     )
 
     assert store.requests[0].search_options is not None
-    assert store.requests[0].search_options.model_dump(exclude_none=True) == {
-        "channels": {"semantic": False, "lexical": True},
-        "rerank": False,
-    }
+    assert store.requests[0].search_options.model_dump(exclude_none=True) == _expected_search_options(
+        channels=SearchChannelsDefaults(semantic=False, lexical=True),
+        rerank=False,
+        retrieval=True,
+    )
     assert store.requests[1].search_options is not None
-    assert store.requests[1].search_options.model_dump(exclude_none=True) == {
-        "channels": {"semantic": True, "lexical": False},
-        "rerank": False,
-    }
+    assert store.requests[1].search_options.model_dump(exclude_none=True) == _expected_search_options(
+        channels=SearchChannelsDefaults(semantic=True, lexical=False),
+        rerank=False,
+        retrieval=True,
+    )
     assert "created_at=unknown score=n/a" in lexical_blocks[0].content
     assert semantic_blocks[0].stable_key == "memory:flow:unknown:plain"
 
@@ -221,3 +237,25 @@ async def test_memory_source_uses_policy_top_k_and_min_score_before_chronologica
         "memory:session:2026-01-03T00:00:00+00:00:relevant-new",
     ]
     assert [block.score for block in blocks] == [0.91, 0.94]
+
+
+@pytest.mark.asyncio
+async def test_memory_source_passes_advanced_retrieval_options() -> None:
+    store = InMemoryStore([])
+    source = LLMContextMemorySource(store=store, session_id="flow:ctx")
+
+    await source.collect(
+        LLMContextSourceRequest(
+            query="billing",
+            policy=_policy(rrf_k=40, freshness_weight=0.2),
+        )
+    )
+
+    assert store.requests[0].search_options is not None
+    assert store.requests[0].search_options.model_dump(exclude_none=True) == _expected_search_options(
+        channels=SearchChannelsDefaults(semantic=True, lexical=True),
+        rerank=False,
+        retrieval=True,
+        rrf_k=40,
+        freshness_weight=0.2,
+    )

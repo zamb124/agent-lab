@@ -1,0 +1,191 @@
+{
+  "search_index_id": "runet",
+  "description": "Golden-набор запросов для оценки качества платформенного поиска runet. Релевантность задаётся подстроками URL (домен или домен+путь) с градацией 0-3: 3 — точный ответ, 2 — сильно релевантно, 1 — частично релевантно.",
+  "queries": [
+    {
+      "query": "новости экономики России сегодня",
+      "recency_sensitive": true,
+      "relevant": [
+        {"url_substring": "tass.ru/ekonomika", "grade": 3},
+        {"url_substring": "rbc.ru", "grade": 2},
+        {"url_substring": "ria.ru/economy", "grade": 2},
+        {"url_substring": "lenta.ru", "grade": 1}
+      ]
+    },
+    {
+      "query": "ключевая ставка ЦБ последнее решение",
+      "recency_sensitive": true,
+      "relevant": [
+        {"url_substring": "cbr.ru", "grade": 3},
+        {"url_substring": "rbc.ru", "grade": 2},
+        {"url_substring": "tass.ru", "grade": 2}
+      ]
+    },
+    {
+      "query": "как настроить kubernetes ingress",
+      "recency_sensitive": false,
+      "relevant": [
+        {"url_substring": "habr.com", "grade": 3},
+        {"url_substring": "selectel.ru", "grade": 2},
+        {"url_substring": "timeweb", "grade": 1}
+      ]
+    },
+    {
+      "query": "асинхронное программирование python asyncio",
+      "recency_sensitive": false,
+      "relevant": [
+        {"url_substring": "habr.com", "grade": 3},
+        {"url_substring": "docs.python.org", "grade": 3},
+        {"url_substring": "tproger.ru", "grade": 1}
+      ]
+    },
+    {
+      "query": "налоговый вычет за квартиру как получить",
+      "recency_sensitive": false,
+      "relevant": [
+        {"url_substring": "gosuslugi.ru", "grade": 3},
+        {"url_substring": "nalog.gov.ru", "grade": 3},
+        {"url_substring": "consultant.ru", "grade": 2},
+        {"url_substring": "banki.ru", "grade": 1}
+      ]
+    },
+    {
+      "query": "статья 228 УК РФ наказание",
+      "recency_sensitive": false,
+      "relevant": [
+        {"url_substring": "consultant.ru", "grade": 3},
+        {"url_substring": "garant.ru", "grade": 3}
+      ]
+    },
+    {
+      "query": "курс доллара прогноз",
+      "recency_sensitive": true,
+      "relevant": [
+        {"url_substring": "rbc.ru", "grade": 3},
+        {"url_substring": "banki.ru", "grade": 2},
+        {"url_substring": "tass.ru", "grade": 2}
+      ]
+    },
+    {
+      "query": "лучшие стартапы России",
+      "recency_sensitive": true,
+      "relevant": [
+        {"url_substring": "vc.ru", "grade": 3},
+        {"url_substring": "rb.ru", "grade": 2},
+        {"url_substring": "habr.com", "grade": 1}
+      ]
+    },
+    {
+      "query": "рецепт борща классический",
+      "recency_sensitive": false,
+      "relevant": [
+        {"url_substring": "eda.ru", "grade": 3},
+        {"url_substring": "gastronom.ru", "grade": 3},
+        {"url_substring": "povarenok.ru", "grade": 2}
+      ]
+    },
+    {
+      "query": "погода в Москве на неделю",
+      "recency_sensitive": true,
+      "relevant": [
+        {"url_substring": "gismeteo.ru", "grade": 3},
+        {"url_substring": "pogoda.mail.ru", "grade": 2},
+        {"url_substring": "meteoinfo.ru", "grade": 2}
+      ]
+    },
+    {
+      "query": "что такое машинное обучение простыми словами",
+      "recency_sensitive": false,
+      "relevant": [
+        {"url_substring": "habr.com", "grade": 3},
+        {"url_substring": "skillbox.ru", "grade": 2},
+        {"url_substring": "practicum.yandex.ru", "grade": 2}
+      ]
+    },
+    {
+      "query": "оформление загранпаспорта документы",
+      "recency_sensitive": false,
+      "relevant": [
+        {"url_substring": "gosuslugi.ru", "grade": 3},
+        {"url_substring": "mid.ru", "grade": 2},
+        {"url_substring": "consultant.ru", "grade": 1}
+      ]
+    },
+    {
+      "query": "новые законы с 2026 года",
+      "recency_sensitive": true,
+      "relevant": [
+        {"url_substring": "consultant.ru", "grade": 3},
+        {"url_substring": "garant.ru", "grade": 3},
+        {"url_substring": "rbc.ru", "grade": 2},
+        {"url_substring": "tass.ru", "grade": 2}
+      ]
+    },
+    {
+      "query": "обзор российского рынка недвижимости",
+      "recency_sensitive": true,
+      "relevant": [
+        {"url_substring": "rbc.ru", "grade": 3},
+        {"url_substring": "cian.ru", "grade": 2},
+        {"url_substring": "vc.ru", "grade": 1}
+      ]
+    },
+    {
+      "query": "postgresql оптимизация запросов индексы",
+      "recency_sensitive": false,
+      "relevant": [
+        {"url_substring": "habr.com", "grade": 3},
+        {"url_substring": "postgrespro.ru", "grade": 3},
+        {"url_substring": "selectel.ru", "grade": 1}
+      ]
+    },
+    {
+      "query": "как открыть ИП пошаговая инструкция",
+      "recency_sensitive": false,
+      "relevant": [
+        {"url_substring": "gosuslugi.ru", "grade": 3},
+        {"url_substring": "nalog.gov.ru", "grade": 3},
+        {"url_substring": "tinkoff.ru", "grade": 2},
+        {"url_substring": "vc.ru", "grade": 1}
+      ]
+    },
+    {
+      "query": "итоги чемпионата России по футболу",
+      "recency_sensitive": true,
+      "relevant": [
+        {"url_substring": "sport-express.ru", "grade": 3},
+        {"url_substring": "championat.com", "grade": 3},
+        {"url_substring": "sports.ru", "grade": 3},
+        {"url_substring": "tass.ru/sport", "grade": 2}
+      ]
+    },
+    {
+      "query": "история Санкт-Петербурга кратко",
+      "recency_sensitive": false,
+      "relevant": [
+        {"url_substring": "culture.ru", "grade": 3},
+        {"url_substring": "spb.ru", "grade": 2},
+        {"url_substring": "dzen.ru", "grade": 1}
+      ]
+    },
+    {
+      "query": "нейросети для генерации изображений сравнение",
+      "recency_sensitive": true,
+      "relevant": [
+        {"url_substring": "habr.com", "grade": 3},
+        {"url_substring": "vc.ru", "grade": 2},
+        {"url_substring": "tproger.ru", "grade": 1}
+      ]
+    },
+    {
+      "query": "ипотека с господдержкой условия",
+      "recency_sensitive": true,
+      "relevant": [
+        {"url_substring": "domclick.ru", "grade": 3},
+        {"url_substring": "banki.ru", "grade": 3},
+        {"url_substring": "gosuslugi.ru", "grade": 2},
+        {"url_substring": "rbc.ru", "grade": 1}
+      ]
+    }
+  ]
+}

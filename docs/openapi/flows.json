@@ -14593,6 +14593,149 @@
         ],
         "title": "LaraPendingActionsApplyBody"
       },
+      "LegalConfig": {
+        "properties": {
+          "company_name_ru": {
+            "type": "string",
+            "title": "Company Name Ru",
+            "default": "ООО «Энжилабс»"
+          },
+          "company_name_en": {
+            "type": "string",
+            "title": "Company Name En",
+            "default": "Angilabs LLC"
+          },
+          "legal_form_ru": {
+            "type": "string",
+            "title": "Legal Form Ru",
+            "default": "Общество с ограниченной ответственностью"
+          },
+          "legal_form_en": {
+            "type": "string",
+            "title": "Legal Form En",
+            "default": "Limited Liability Company"
+          },
+          "inn": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Inn"
+          },
+          "ogrn": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ogrn"
+          },
+          "legal_address_ru": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Legal Address Ru"
+          },
+          "legal_address_en": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Legal Address En"
+          },
+          "contact_email": {
+            "type": "string",
+            "title": "Contact Email",
+            "default": "info@angilabs.ru"
+          },
+          "support_email": {
+            "type": "string",
+            "title": "Support Email",
+            "default": "support@angilabs.ru"
+          },
+          "dpo_email": {
+            "type": "string",
+            "title": "Dpo Email",
+            "default": "dpo@angilabs.ru"
+          },
+          "phone": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Phone"
+          },
+          "min_age": {
+            "type": "integer",
+            "title": "Min Age",
+            "default": 18
+          },
+          "retention_logs": {
+            "type": "string",
+            "title": "Retention Logs",
+            "default": "30 дней / 30 days"
+          },
+          "retention_messages": {
+            "type": "string",
+            "title": "Retention Messages",
+            "default": "1 год / 1 year"
+          },
+          "retention_accounts": {
+            "type": "string",
+            "title": "Retention Accounts",
+            "default": "3 года после последней активности / 3 years after last activity"
+          },
+          "cloud_provider": {
+            "type": "string",
+            "title": "Cloud Provider",
+            "default": "AWS/Yandex Cloud"
+          },
+          "cloud_region": {
+            "type": "string",
+            "title": "Cloud Region",
+            "default": "EU/RU"
+          },
+          "analytics_tools": {
+            "type": "string",
+            "title": "Analytics Tools",
+            "default": "Internal analytics"
+          },
+          "billing_provider": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Billing Provider"
+          }
+        },
+        "type": "object",
+        "title": "LegalConfig",
+        "description": "Конфигурация юридической информации компании"
+      },
       "ListResponse_CalendarIntegrationPublic_": {
         "properties": {
           "items": {
@@ -16833,6 +16976,81 @@
         ],
         "title": "PickerCategory"
       },
+      "PlatformBrandResponse": {
+        "properties": {
+          "base_domain": {
+            "type": "string",
+            "title": "Base Domain"
+          },
+          "platform_name": {
+            "type": "string",
+            "title": "Platform Name"
+          },
+          "support_email": {
+            "type": "string",
+            "title": "Support Email"
+          },
+          "agent_product_name": {
+            "type": "string",
+            "title": "Agent Product Name"
+          },
+          "models_product_name": {
+            "type": "string",
+            "title": "Models Product Name"
+          },
+          "voice_product_name": {
+            "type": "string",
+            "title": "Voice Product Name"
+          },
+          "llms_display_label": {
+            "type": "string",
+            "title": "Llms Display Label"
+          },
+          "flows_product_label": {
+            "type": "string",
+            "title": "Flows Product Label"
+          },
+          "logo_path": {
+            "type": "string",
+            "title": "Logo Path"
+          },
+          "apex_origin": {
+            "type": "string",
+            "title": "Apex Origin"
+          },
+          "legal": {
+            "$ref": "#/components/schemas/LegalConfig"
+          },
+          "public_site": {
+            "$ref": "#/components/schemas/PublicSiteConfig"
+          },
+          "supported_domains": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Supported Domains",
+            "description": "Все registrable apex platform brands (для JS host guard)."
+          }
+        },
+        "type": "object",
+        "required": [
+          "base_domain",
+          "platform_name",
+          "support_email",
+          "agent_product_name",
+          "models_product_name",
+          "voice_product_name",
+          "llms_display_label",
+          "flows_product_label",
+          "logo_path",
+          "apex_origin",
+          "legal",
+          "public_site",
+          "supported_domains"
+        ],
+        "title": "PlatformBrandResponse"
+      },
       "PlatformToolDoc": {
         "properties": {
           "tool_id": {
@@ -16966,6 +17184,46 @@
         ],
         "title": "PromptHistoryItem",
         "description": "Запись истории изменений системного промпта."
+      },
+      "PublicSiteConfig": {
+        "properties": {
+          "telegram_community_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Telegram Community Url"
+          },
+          "yandex_metrika_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Yandex Metrika Id"
+          },
+          "google_analytics_measurement_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Google Analytics Measurement Id"
+          }
+        },
+        "type": "object",
+        "title": "PublicSiteConfig",
+        "description": "Публичные настройки маркетингового слоя сайта (виджеты, аналитика, комьюнити)."
       },
       "PushSuccessResponse": {
         "properties": {
@@ -18718,7 +18976,7 @@
           "message": {
             "type": "string",
             "title": "Message",
-            "default": "Это тестовое push-уведомление от Humanitec"
+            "default": "Это тестовое push-уведомление"
           }
         },
         "additionalProperties": false,

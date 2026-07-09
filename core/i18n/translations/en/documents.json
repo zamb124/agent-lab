@@ -152,6 +152,9 @@
         "include_subcatalogs_hint": "Extends search, status, and rebuild scope to indexed subcatalogs.",
         "subtree_scope_hint": "Search and status include this catalog and indexed subcatalogs.",
         "current_catalog_scope_hint": "Search and status cover only this catalog.",
+        "search_options_title": "Semantic search parameters",
+        "search_options_hint": "Defaults for explorer semantic search in this catalog. Empty fields use platform settings.",
+        "search_options_save": "Save search settings",
         "rebuild": "Rebuild index",
         "close": "Close"
     },
@@ -381,6 +384,8 @@
         "catalog_rag_disabled": "RAG indexing disabled",
         "catalog_rag_disable_failed": "Failed to disable RAG indexing",
         "catalog_rag_rebuild_started": "RAG reindex started",
-        "catalog_rag_rebuild_failed": "Failed to start RAG reindex"
+        "catalog_rag_rebuild_failed": "Failed to start RAG reindex",
+        "catalog_rag_settings_saved": "Search settings saved",
+        "catalog_rag_settings_failed": "Failed to save search settings"
     }
 }

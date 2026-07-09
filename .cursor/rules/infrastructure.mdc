@@ -15,7 +15,7 @@ alwaysApply: false
 
 Связь между нодами — через Calico/Flannel CNI. Postgres и Redis доступны из любой ноды по ClusterIP `postgres.platform.svc.cluster.local:5432` / `redis.platform.svc.cluster.local:6379` — без проброса портов на хост и `ufw allow`.
 
-Домен apex и wildcard: `humanitec.ru` (DNS `@` и `*` → `84.38.184.105`).
+Домены apex (multi-brand): **primary** `linnex.io`, **legacy** `humanitec.ru` (и другие из `platform_brands`). DNS `@` и `*` на оба apex → `84.38.184.105`. Smoke: [`deploy/docs/multi-brand-prod-smoke.md`](../../deploy/docs/multi-brand-prod-smoke.md).
 
 Одноразовая настройка нод — `deploy/cluster-setup.md` (установка MicroK8s, `microk8s add-node`/`join`, `microk8s enable gpu`, лейбл `accelerator=nvidia-gpu`).
 
@@ -120,7 +120,11 @@ Alembic миграции — **Helm hook Job** `migrations` (`post-install`, `po
 
 | Хост | TLS Secret | Маршруты |
 |---|---|---|
-| `humanitec.ru` + `*.humanitec.ru` | `platform-tls` | `platform-services`: префиксы `/flows`, `/crm`, … — `router.priority: "10"`; `platform-frontend`: catch-all `/` — `router.priority: "-100"`. Низкий приоритет у frontend обязателен: иначе Traefik отдаёт wildcard `*.humanitec.ru` выше точного host (`grafana.humanitec.ru` и т.д.) и на поддоменах сервисов открывается SPA вместо целевого backend (см. traefik/traefik#4161). |
+| `linnex.io` + `*.linnex.io` | `platform-tls` | `platform-services`: префиксы `/flows`, `/crm`, … — `router.priority: "10"`; `platform-frontend`: catch-all `/` — `router.priority: "-100"`. Низкий приоритет у frontend обязателен: иначе Traefik отдаёт wildcard `*.linnex.io` выше точного host (`grafana.linnex.io` и т.д.) и на поддоменах сервисов открывается SPA вместо целевого backend (см. traefik/traefik#4161). |
+| `livekit.linnex.io` | `platform-tls` | `/` → livekit:7880; `router.priority: "1000"` |
+| `onlyoffice.linnex.io` | `platform-tls` | `/` → onlyoffice:80; `router.priority: "1000"` |
+| `grafana.linnex.io` | `platform-tls` | `/` → grafana:3000; `router.priority: "1000"` |
+| `humanitec.ru` + `*.humanitec.ru` | `platform-tls` | те же правила (legacy brand, regression) |
 | `livekit.humanitec.ru` | `platform-tls` | `/` → livekit:7880; `router.priority: "1000"` |
 | `onlyoffice.humanitec.ru` | `platform-tls` | `/` → onlyoffice:80; `router.priority: "1000"` |
 | `grafana.humanitec.ru` | `platform-tls` | `/` → grafana:3000; `router.priority: "1000"` |
@@ -135,7 +139,7 @@ Alembic миграции — **Helm hook Job** `migrations` (`post-install`, `po
 
 `ClusterIssuer letsencrypt-prod` создаётся чартом (`templates/80-ingress/cluster-issuer.yaml`); email — `values.certManager.email`. cert-manager должен быть установлен (`microk8s enable cert-manager`).
 
-**Wildcard TLS:** при HTTP-01 доступен только apex. Для `*.humanitec.ru` нужен DNS-01 — отдельный webhook (например `cert-manager-webhook-regru`) и `Certificate`-объект, монтируемый в тот же Secret `platform-tls`. Конфигурация webhook вне чарта (одноразовая, см. `deploy/cluster-setup.md`).
+**Wildcard TLS:** при HTTP-01 доступен только apex. Для `*.linnex.io` и `*.humanitec.ru` нужен DNS-01 — отдельный webhook (например `cert-manager-webhook-regru`) и `Certificate`-объект, монтируемый в тот же Secret `platform-tls`. Конфигурация webhook вне чарта (одноразовая, см. `deploy/cluster-setup.md`, `deploy/docs/multi-brand-prod-smoke.md`).
 
 `AuthMiddleware` каждого сервиса читает `Host` и резолвит `company_id` для поддоменов.
 
@@ -145,7 +149,7 @@ PWA-маршруты (`/manifest.json`, `/sw.js`, `/offline.html`, `/.well-known
 
 ## DNS
 
-Две A-записи у регистратора (reg.ru): `@` → `84.38.184.105`, `*` → `84.38.184.105`.
+A-записи у регистратора на `84.38.184.105` для каждого apex: `@`, `*` (и отдельные `livekit`, `onlyoffice`, `grafana`, `cdn`, `api` при multi-brand setup). Скрипт: `deploy/scripts/setup-brand-dns.sh`. Primary apex — `linnex.io`; `humanitec.ru` — legacy regression.
 
 ## GPU-нода (provider_litserve)
 
@@ -157,7 +161,7 @@ LitServe — единственный под на GPU-ноде через `nodeS
 - Кэш моделей: PVC `litserve-model-cache` (50Gi).
 - Доступ к Postgres/Redis: ClusterIP `postgres:5432` / `redis:6379`.
 - Доступ от других сервисов: ClusterIP `provider-litserve.platform.svc.cluster.local:8014` (env `PROVIDER_LITSERVE__API__BASE_URL=http://provider-litserve:8014/v1` — задано в `agentlab.appEnv`).
-- Внешний URL: `https://humanitec.ru/litserve/*`.
+- Внешний URL: `https://linnex.io/litserve/*` (primary); `https://humanitec.ru/litserve/*` (legacy).
 
 NVIDIA driver и `nvidia-container-toolkit` ставятся на GPU-ноду один раз (`microk8s enable gpu` или скрипт из `deploy/cluster-setup.md`). На уровне Pod больше ничего настраивать не нужно — Device Plugin сам пробрасывает `/dev/nvidia*` при request `nvidia.com/gpu`.
 
@@ -166,6 +170,8 @@ NVIDIA driver и `nvidia-container-toolkit` ставятся на GPU-ноду �
 ```bash
 kubectl get pods -n platform -o wide | grep provider-litserve   # должен быть на GPU-ноде
 kubectl exec -n platform deployment/provider-litserve -- nvidia-smi
+curl -fsS https://linnex.io/litserve/health
+# legacy regression:
 curl -fsS https://humanitec.ru/litserve/health
 ```
 
@@ -189,14 +195,14 @@ CI (`.github/workflows/deploy.yml`, `workflow_dispatch` или push в `main`):
 |---|---|---|---|
 | **Loki** | StatefulSet (master) | 100Gi | Логи (14 дней, `files/loki.yaml`) |
 | **Tempo** | StatefulSet (master) | 50Gi | Трейсы (`files/tempo.yaml`) |
-| **Grafana** | Deployment (master) | 10Gi | UI, дашборды, Explore. `https://grafana.humanitec.ru` |
+| **Grafana** | Deployment (master) | 10Gi | UI, дашборды, Explore. `https://grafana.linnex.io` (primary), `https://grafana.humanitec.ru` (legacy) |
 | **Alloy** | DaemonSet (все ноды) | — | Сбор pod-логов через kubelet API + OTLP relay в Tempo |
 
 **Сбор логов:** Alloy DaemonSet с `ServiceAccount` + `ClusterRole` на чтение pods/namespaces/nodes. Конфиг `files/alloy.config`: `discovery.kubernetes role=pod`, фильтр `spec.nodeName=$HOSTNAME`, метки потока `namespace`, `pod`, `container`, `service` (из лейбла `app=<name>`), `node`. JSON-парсер вытаскивает `level` как Loki label; остальные поля (`trace_id`, `request_id`, `user_id`, …) остаются в теле, достаются `| json | field = "value"`.
 
 **Сбор трейсов:** OTLP gRPC `alloy:4317` (`OTEL_EXPORTER_OTLP_ENDPOINT=http://alloy:4317` в `agentlab.appEnv`); Alloy форвардит в Tempo через `tempo.platform.svc.cluster.local:4317`.
 
-**Авторизация Grafana:** `auth.proxy` в Grafana (`GF_AUTH_PROXY_HEADER_NAME=X-Auth-User`). Traefik `Middleware` `forwardAuth` на Ingress `grafana` вызывает `http://frontend.<namespace>.svc.cluster.local:<port>/frontend/api/auth/grafana-check`; тот же JWT cookie, что у платформы; только `company_id == "system"`. Ответ 200 с заголовком `X-Auth-User` Traefik пробрасывает в Grafana. **Traefik v3.x:** аннотация `traefik.ingress.kubernetes.io/router.middlewares` для CRD Middleware — **`<k8s-namespace>-grafana-forward-auth@kubernetescrd`** (например `platform-grafana-forward-auth@kubernetescrd`). Вид `grafana-forward-auth@kubernetescrd` без префикса namespace даёт в логах Traefik `middleware ... does not exist`, роут Grafana не создаётся, трафик уходит на catch-all frontend для `*.humanitec.ru` → главная landing. Хост `grafana.<domain>` не является company subdomain: `core.utils.domain.extract_company_subdomain` исключает субдомен `grafana`, иначе в production `CompanyResolver` отдавал бы 404 до handler. Шаблоны: [`deploy/helm/agent-lab/templates/80-ingress/grafana-forward-auth-middleware.yaml`](deploy/helm/agent-lab/templates/80-ingress/grafana-forward-auth-middleware.yaml), [`grafana-ingress.yaml`](deploy/helm/agent-lab/templates/80-ingress/grafana-ingress.yaml) (внутри же второй Ingress **`grafana-health`**: `path: /api/health`, `pathType: Exact`, `router.priority: "1001"`, без middleware — иначе forwardAuth даёт 401 без JWT и падает `cluster-health.sh` §13 / внешние пробы). При `applications.frontend.enabled=false` middleware не создаётся и аннотация не ставится.
+**Авторизация Grafana:** `auth.proxy` в Grafana (`GF_AUTH_PROXY_HEADER_NAME=X-Auth-User`). Traefik `Middleware` `forwardAuth` на Ingress `grafana` вызывает `http://frontend.<namespace>.svc.cluster.local:<port>/frontend/api/auth/grafana-check`; тот же JWT cookie, что у платформы; только `company_id == "system"`. Ответ 200 с заголовком `X-Auth-User` Traefik пробрасывает в Grafana. **Traefik v3.x:** аннотация `traefik.ingress.kubernetes.io/router.middlewares` для CRD Middleware — **`<k8s-namespace>-grafana-forward-auth@kubernetescrd`** (например `platform-grafana-forward-auth@kubernetescrd`). Вид `grafana-forward-auth@kubernetescrd` без префикса namespace даёт в логах Traefik `middleware ... does not exist`, роут Grafana не создаётся, трафик уходит на catch-all frontend для `*.linnex.io` / `*.humanitec.ru` → главная landing. Хост `grafana.<domain>` не является company subdomain: `core.utils.domain.extract_company_subdomain` исключает субдомен `grafana`, иначе в production `CompanyResolver` отдавал бы 404 до handler. Шаблоны: [`deploy/helm/agent-lab/templates/80-ingress/grafana-forward-auth-middleware.yaml`](deploy/helm/agent-lab/templates/80-ingress/grafana-forward-auth-middleware.yaml), [`grafana-ingress.yaml`](deploy/helm/agent-lab/templates/80-ingress/grafana-ingress.yaml) (внутри же второй Ingress **`grafana-health`**: `path: /api/health`, `pathType: Exact`, `router.priority: "1001"`, без middleware — иначе forwardAuth даёт 401 без JWT и падает `cluster-health.sh` §13 / внешние пробы). При `applications.frontend.enabled=false` middleware не создаётся и аннотация не ставится.
 
 **Корреляция:** `trace_id` в логах (Loki) → Derived Field → Tempo waterfall. Поиск:
 
@@ -229,7 +235,7 @@ make app             # все Python сервисы локально через 
 - `microk8s enable dns ingress cert-manager hostpath-storage gpu`.
 - `microk8s add-node` на master, `microk8s join` на GPU.
 - `kubectl label node <gpu-node> accelerator=nvidia-gpu`.
-- DNS-01 webhook для wildcard `*.humanitec.ru` (cert-manager-webhook-regru или аналог).
+- DNS-01 webhook для wildcard `*.linnex.io` и `*.humanitec.ru` (cert-manager-webhook-regru или аналог).
 - A-записи у регистратора домена.
 - Создание секрета `KUBECONFIG_B64` в GitHub Settings.
 

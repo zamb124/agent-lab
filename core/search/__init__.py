@@ -15,6 +15,7 @@ from core.search.models import (
     SearchSuggestionKind,
     SearchSuggestRequest,
     SearchSuggestResponse,
+    SerpClickEvent,
     WebSearchResult,
 )
 from core.search.public import (
@@ -47,6 +48,7 @@ __all__ = [
     "SearchSuggestResponse",
     "SearchSuggestion",
     "SearchSuggestionKind",
+    "SerpClickEvent",
     "WebSearchResult",
     "public_search_branch_id",
     "public_search_embed_id",

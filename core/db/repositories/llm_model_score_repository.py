@@ -411,7 +411,7 @@ def _seed_hint_fields(item: Mapping[str, JsonValue]) -> tuple[float, dict[str, f
     legacy_score = item.get("score")
     if not dimensions:
         if isinstance(legacy_score, bool) or not isinstance(legacy_score, (int, float)):
-            raise ValueError("seed item должен содержать score_dimensions или legacy score")
+            raise ValueError("seed item должен содержать score_dimensions или seed score")
         dimensions["general_chat"] = float(legacy_score)
 
     editorial_prior_raw = item.get("editorial_prior")

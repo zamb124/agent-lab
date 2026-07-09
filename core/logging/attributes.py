@@ -160,6 +160,20 @@ EVENT_CRAWL_SCHEDULE_CREATED = "crawl.schedule.created"
 EVENT_CRAWL_SCHEDULE_RESUMED = "crawl.schedule.resumed"
 EVENT_CRAWL_SCHEDULE_RECONCILED = "crawl.schedule.reconciled"
 
+# SERP quality (flat snake_case keys for Loki LogQL)
+LOG_SERP_CACHE_KEY = "serp_cache_key"
+LOG_SERP_QUERY = "serp_query"
+LOG_SERP_MODE = "serp_mode"
+LOG_SERP_RESULTS_COUNT = "serp_results_count"
+LOG_SERP_TOTAL_COUNT = "serp_total_count"
+LOG_SERP_PROVIDERS_SELECTED = "serp_providers_selected"
+LOG_SERP_CLICK_URL = "serp_click_url"
+LOG_SERP_CLICK_POSITION = "serp_click_position"
+LOG_SERP_CLICK_PROVIDER = "serp_click_provider"
+
+EVENT_SEARCH_SERP_SERVED = "search.serp.served"
+EVENT_SEARCH_SERP_CLICK = "search.serp.click"
+
 EVENT_REDIS_INVENTORY_TICK_STARTED = "redis.inventory.tick_started"
 EVENT_REDIS_INVENTORY_TICK_COMPLETED = "redis.inventory.tick_completed"
 EVENT_REDIS_INVENTORY_TICK_FAILED = "redis.inventory.tick_failed"

@@ -1,6 +1,6 @@
-# Frontend: HumanitecAgent download link
+# Frontend: LinnexAgent download link
 
-The HumanitecAgent tab includes a link to the desktop client download page.
+The LinnexAgent tab includes a link to the desktop client download page.
 
 ## Step 1. Platform settings page opened
 

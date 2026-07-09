@@ -46,11 +46,11 @@ describe('platform-llm-context-editor', () => {
         await elementUpdated(el);
 
         const fields = Array.from(el.shadowRoot.querySelectorAll('platform-field'));
-        expect(fields.length).to.equal(18);
+        expect(fields.length).to.equal(23);
         expect(fields.every((field) => typeof field.hint === 'string' && field.hint.length > 0)).to.equal(true);
         expect(fields.some((field) => field.type === 'integer' && field.value === 16)).to.equal(true);
         expect(fields.some((field) => field.type === 'number' && field.value === 0.7)).to.equal(true);
-        expect(fields.filter((field) => field.type === 'integer')).to.have.lengthOf(9);
+        expect(fields.filter((field) => field.type === 'integer')).to.have.lengthOf(12);
         expect(fields.filter((field) => field.type === 'boolean')).to.have.lengthOf(0);
     });
 
@@ -148,6 +148,29 @@ describe('platform-llm-context-editor', () => {
         el._setRetrieval('rerank', true);
 
         expect(last).to.deep.equal({ retrieval: { mode: 'hybrid', rerank: true } });
+    });
+
+    it('advanced пишет rrf_k и freshness_weight в retrieval patch', async () => {
+        const el = await fixture(html`
+            <platform-llm-context-editor .config=${{ retrieval: { mode: 'hybrid' } }}></platform-llm-context-editor>
+        `);
+        await elementUpdated(el);
+
+        el.shadowRoot.querySelector('glass-button').click();
+        await elementUpdated(el);
+
+        let last = null;
+        el.addEventListener('change', (e) => {
+            last = e.detail.config;
+        });
+
+        el._onRetrievalNumber('rrf_k')({ detail: { value: 40 } });
+        expect(last).to.deep.equal({ retrieval: { mode: 'hybrid', rrf_k: 40 } });
+
+        el.config = last;
+        await elementUpdated(el);
+        el._onRetrievalNumber('freshness_weight')({ detail: { value: 0.2 } });
+        expect(last).to.deep.equal({ retrieval: { mode: 'hybrid', rrf_k: 40, freshness_weight: 0.2 } });
     });
 
     it('resource surface роутит llm_context в специализированный редактор', async () => {

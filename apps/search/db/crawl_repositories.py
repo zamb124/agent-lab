@@ -672,7 +672,24 @@ class CrawlUrlRepository:
                     )
                     inserted += 1
                     continue
-                existing.sitemap_lastmod = entry.lastmod
+                if entry.lastmod is not None:
+                    lastmod_advanced = (
+                        existing.sitemap_lastmod is None or entry.lastmod > existing.sitemap_lastmod
+                    )
+                    crawled_before_lastmod = (
+                        existing.last_crawled_at is None or entry.lastmod > existing.last_crawled_at
+                    )
+                    # Изменившийся lastmod у уже обработанного URL — сигнал re-fetch:
+                    # страница обновилась после последнего обхода.
+                    if (
+                        lastmod_advanced
+                        and crawled_before_lastmod
+                        and existing.crawl_status in ("indexed", "skipped", "failed")
+                    ):
+                        existing.crawl_status = "pending"
+                        existing.fetch_attempts = 0
+                        existing.next_retry_after = None
+                    existing.sitemap_lastmod = entry.lastmod
                 existing.updated_at = now
                 updated += 1
             await session.commit()
@@ -705,13 +722,18 @@ class CrawlUrlRepository:
     async def claim_pending_batch(self, crawl_domain_id: str, limit: int) -> list[CrawlUrl]:
         now = datetime.now(UTC)
         async with self._db.session() as session:
+            # Приоритет свежести: сначала URL с самым новым sitemap_lastmod,
+            # URL без lastmod — в хвосте по дате постановки (новые раньше).
             select_stmt = (
                 select(CrawlUrlRow.crawl_url_id)
                 .where(
                     CrawlUrlRow.crawl_domain_id == crawl_domain_id,
                     CrawlUrlRow.crawl_status == "pending",
                 )
-                .order_by(CrawlUrlRow.created_at)
+                .order_by(
+                    CrawlUrlRow.sitemap_lastmod.desc().nulls_last(),
+                    CrawlUrlRow.created_at.desc(),
+                )
                 .limit(limit)
             )
             ids = list((await session.execute(select_stmt)).scalars().all())
@@ -885,6 +907,62 @@ class CrawlUrlRepository:
             stmt = update(CrawlUrlRow).where(CrawlUrlRow.crawl_url_id == crawl_url_id).values(**values)
             _ = await session.execute(stmt)
             await session.commit()
+
+    async def mark_gone(self, crawl_url_id: str, *, error: str) -> None:
+        """
+        Страница окончательно недоступна (404/410): документ удалён из индекса,
+        URL выводится из очереди до нового sitemap_lastmod.
+        """
+        now = datetime.now(UTC)
+        async with self._db.session() as session:
+            stmt = (
+                update(CrawlUrlRow)
+                .where(CrawlUrlRow.crawl_url_id == crawl_url_id)
+                .values(
+                    crawl_status="skipped",
+                    document_id=None,
+                    last_error=error,
+                    fetch_attempts=0,
+                    next_retry_after=None,
+                    last_crawled_at=now,
+                    updated_at=now,
+                )
+            )
+            _ = await session.execute(stmt)
+            await session.commit()
+
+    async def domain_change_stats(
+        self,
+        crawl_domain_id: str,
+        *,
+        since: datetime,
+    ) -> tuple[int, int]:
+        """
+        Наблюдаемая частота изменений домена за окно: (changed, unchanged).
+
+        changed — URL, проиндексированные заново (контент изменился),
+        unchanged — URL, пропущенные как content_unchanged.
+        """
+        async with self._db.session() as session:
+            stmt = (
+                select(CrawlUrlRow.crawl_status, func.count())
+                .where(
+                    CrawlUrlRow.crawl_domain_id == crawl_domain_id,
+                    CrawlUrlRow.crawl_status.in_(["indexed", "skipped"]),
+                    CrawlUrlRow.last_crawled_at.is_not(None),
+                    CrawlUrlRow.last_crawled_at >= since,
+                )
+                .group_by(CrawlUrlRow.crawl_status)
+            )
+            rows: Sequence[tuple[str, int]] = (await session.execute(stmt)).tuples().all()
+        changed = 0
+        unchanged = 0
+        for status_cell, count_cell in rows:
+            if status_cell == "indexed":
+                changed = count_cell
+            elif status_cell == "skipped":
+                unchanged = count_cell
+        return changed, unchanged
 
     async def reclaim_stale_fetching(self, *, stale_before: datetime) -> int:
         now = datetime.now(UTC)

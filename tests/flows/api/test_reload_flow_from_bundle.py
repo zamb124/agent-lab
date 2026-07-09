@@ -100,6 +100,16 @@ async def test_reload_from_bundle_returns_404_when_flow_absent(client, auth_head
 
 
 @pytest.mark.asyncio
+async def test_list_flows_returns_200_for_system_company(client, auth_headers_system) -> None:
+    """GET /flows/api/v1/flows не падает 500 при сборке bundle update flags."""
+    response = await client.get("/flows/api/v1/flows", headers=auth_headers_system)
+    assert response.status_code == 200, response.text
+    payload = response.json()
+    assert isinstance(payload.get("items"), list)
+    assert isinstance(payload.get("total"), int)
+
+
+@pytest.mark.asyncio
 async def test_reload_from_bundle_returns_400_when_no_bundle_directory(
     client, unique_id, auth_headers_system
 ):

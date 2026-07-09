@@ -87,6 +87,16 @@ class SearchCrawlConfig(BaseModel):
     min_extract_chars: int = Field(default=200, ge=50, le=5000)
     max_fetch_attempts: int = Field(default=5, ge=1, le=20)
     fetch_retry_base_seconds: int = Field(default=600, ge=60, le=86400)
+    adaptive_refresh_enabled: bool = True
+    adaptive_refresh_min_seconds: int = Field(default=3600, ge=60, le=86_400)
+    adaptive_refresh_max_seconds: int = Field(default=604_800, ge=3600, le=2_592_000)
+    adaptive_refresh_min_samples: int = Field(default=5, ge=1, le=1000)
+    adaptive_refresh_lookback_factor: float = Field(default=4.0, ge=1.0, le=20.0)
+    politeness_enabled: bool = True
+    robots_user_agent: str = Field(default="LinnexBot", min_length=1, max_length=64)
+    robots_cache_ttl_seconds: int = Field(default=21_600, ge=300, le=604_800)
+    fetch_min_interval_seconds: float = Field(default=1.0, ge=0.0, le=60.0)
+    max_crawl_delay_seconds: float = Field(default=30.0, ge=1.0, le=120.0)
     browser_fetch_timeout_seconds: float = Field(default=120.0, ge=30.0, le=300.0)
     tranco_seed_limit: int = Field(default=2000, ge=1, le=5000)
     bootstrap_tranco_on_empty: bool = True

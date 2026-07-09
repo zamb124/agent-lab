@@ -1,10 +1,10 @@
 ---
-description: "HumanitecAgent: desktop, pairing, tunnel WS, Platform MCP (flows как MCP tools); интеграция для внешних MCP-клиентов"
+description: "LinnexAgent: desktop, pairing, tunnel WS, Platform MCP (flows как MCP tools); интеграция для внешних MCP-клиентов"
 alwaysApply: false
 ---
-# HumanitecAgent и Platform MCP
+# LinnexAgent и Platform MCP
 
-HumanitecAgent — desktop-клиент (Goose fork) с доступом к flow компании и локальным MCP на ПК пользователя. **Код домена** — `apps/agent/`; **маршруты** монтируются в два сервиса по зоне ответственности (как A2A живёт в flows, а не в frontend).
+LinnexAgent — desktop-клиент (Goose fork) с доступом к flow компании и локальным MCP на ПК пользователя. На legacy brand `humanitec.ru` продукт называется **HumanitecAgent** (`platform_brands.humanitec.ru.agent_product_name`). **Код домена** — `apps/agent/`; **маршруты** монтируются в два сервиса по зоне ответственности (как A2A живёт в flows, а не в frontend).
 
 ## Два HTTP-surface
 
@@ -75,7 +75,7 @@ Auth: **session JWT** или **device JWT**.
 
 - Distro: `apps/agent/desktop/distro/humanitec.json` — `default_extensions`: `developer`, `computercontroller` (platform groups — runtime из catalog)
 - Branding: `humanitecToolkitsSync.ts`, `humanitecToolkitsCatalog.ts`, `humanitecAgentRuntime.ts`
-- Releases: GitHub assets `HumanitecAgent-{platform}-{sha}.{ext}`
+- Releases: GitHub assets `HumanitecAgent-{platform}-{sha}.{ext}` (имя артефакта; на linnex.io UI — LinnexAgent)
 
 ## Prod-инварианты
 

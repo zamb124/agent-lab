@@ -898,6 +898,14 @@ class EmbeddingApiConfig(BaseModel):
             + "и L2-нормализуется перед сохранением. Совпадение с dimension — плотный вектор без паддинга."
         ),
     )
+    query_instruction: str | None = Field(
+        default="Given a web search query, retrieve relevant passages that answer the query",
+        description=(
+            "Asymmetric instruct-префикс для поисковых запросов (Qwen3-Embedding и совместимые): "
+            + "запрос оборачивается в 'Instruct: {task}\\nQuery: {query}', документы индексируются без префикса. "
+            + "Пустая строка/None — выключено."
+        ),
+    )
 
 
 class EmbeddingConfig(BaseModel):
@@ -1684,7 +1692,7 @@ class ModelConfig(BaseModel):
 class LLMModelScoreSeedItem(BaseModel):
     """Recommendatory seed hints for shared ``llm_model_scores``.
 
-    ``score`` is legacy-only: when ``score_dimensions`` are empty it is converted
+    ``score`` is seed-only: when ``score_dimensions`` are empty it is converted
     to ``general_chat`` hint at seed time. Runtime ranking always recomputes score
     from catalog signals plus these hints.
     """

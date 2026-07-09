@@ -14,7 +14,16 @@ from core.types import JsonObject
 RAG_API_V1_PREFIX = "/rag/api/v1"
 
 SEARCH_REQUEST_OPTION_KEYS = frozenset(
-    {"channels", "rrf_k", "per_channel_top_k", "rerank", "retrieval"}
+    {
+        "channels",
+        "rrf_k",
+        "per_channel_top_k",
+        "rerank",
+        "rerank_max_candidates",
+        "retrieval",
+        "freshness_weight",
+        "freshness_half_life_days",
+    }
 )
 
 
@@ -52,7 +61,22 @@ def merge_search_request_options(
             else bind_model.per_channel_top_k
         ),
         rerank=call_model.rerank if call_model.rerank is not None else bind_model.rerank,
+        rerank_max_candidates=(
+            call_model.rerank_max_candidates
+            if call_model.rerank_max_candidates is not None
+            else bind_model.rerank_max_candidates
+        ),
         retrieval=call_model.retrieval if call_model.retrieval is not None else bind_model.retrieval,
+        freshness_weight=(
+            call_model.freshness_weight
+            if call_model.freshness_weight is not None
+            else bind_model.freshness_weight
+        ),
+        freshness_half_life_days=(
+            call_model.freshness_half_life_days
+            if call_model.freshness_half_life_days is not None
+            else bind_model.freshness_half_life_days
+        ),
     )
 
 
@@ -90,6 +114,12 @@ def build_namespace_search_json_body(
             body["per_channel_top_k"] = merged_search_options.per_channel_top_k
         if merged_search_options.rerank is not None:
             body["rerank"] = merged_search_options.rerank
+        if merged_search_options.rerank_max_candidates is not None:
+            body["rerank_max_candidates"] = merged_search_options.rerank_max_candidates
         if merged_search_options.retrieval is not None:
             body["retrieval"] = merged_search_options.retrieval
+        if merged_search_options.freshness_weight is not None:
+            body["freshness_weight"] = merged_search_options.freshness_weight
+        if merged_search_options.freshness_half_life_days is not None:
+            body["freshness_half_life_days"] = merged_search_options.freshness_half_life_days
     return body

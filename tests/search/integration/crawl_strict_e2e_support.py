@@ -11,6 +11,7 @@ from typing import TYPE_CHECKING
 
 from core.crawl.models import CrawlDomainSeed, SitemapEntry
 from tests.search.conftest import make_search_index_slug
+from tests.search.integration.snippet_support import strip_snippet_highlight
 
 if TYPE_CHECKING:
     from httpx import AsyncClient
@@ -190,6 +191,9 @@ async def poll_indexed_url_count(
                 crawl_profile_id=crawl_profile_id,
                 crawl_status="indexed",
                 domain=None,
+                content_type=None,
+                primary_topic=None,
+                enriched_only=None,
                 limit=200,
                 offset=0,
             )
@@ -279,7 +283,7 @@ async def poll_index_search_hits(
                     url = item.get("url", "")
                     if url_domain not in url:
                         continue
-                    snippet = item.get("snippet", "")
+                    snippet = strip_snippet_highlight(item.get("snippet", ""))
                     title = item.get("title", "")
                     haystack = f"{snippet} {title}".lower()
                     if content_marker.lower() in haystack:

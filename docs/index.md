@@ -1,10 +1,10 @@
 ---
-title: "Документация Humanitec"
-description: "Современная документация Humanitec: быстрый старт, API, руководства и автособранные инструкции интерфейса."
+title: "Документация Платформы"
+description: "Документация Платформы: быстрый старт, API, руководства и автособранные инструкции интерфейса."
 ---
 
 <div class="docs-home">
-  <p class="docs-page-kicker">Документация Humanitec</p>
+  <p class="docs-page-kicker">Документация Платформы</p>
   <p class="docs-lead">Документация для платформы ИИ-агентов, Flows, Sync, NetWorkle и RAG. Здесь есть быстрый старт, публичные API и автособранные E2E-инструкции с реальными скриншотами интерфейса.</p>
   <div class="docs-hero-actions">
     <a class="docs-button docs-button-primary" href="quickstart/">Начать интеграцию</a>
@@ -12,7 +12,7 @@ description: "Современная документация Humanitec: быс�
   </div>
   <div class="docs-home-visual">
     <div class="docs-product-shot">
-      <img src="scenarios/flows/screenshots/001.png" alt="Интерфейс Flows в Humanitec">
+      <img src="scenarios/flows/screenshots/001.png" alt="Интерфейс Flows на Платформе">
     </div>
     <div class="docs-endpoint-panel">
       <span class="docs-method">POST</span>

@@ -816,7 +816,8 @@
       "api": {
         "model": "qwen/qwen3-embedding-0.6b",
         "dimension": 1024,
-        "mrl_output_dimension": 1024
+        "mrl_output_dimension": 1024,
+        "query_instruction": "Given a web search query, retrieve relevant passages that answer the query"
       }
     },
     "reranker": {
@@ -825,7 +826,20 @@
         "timeout_seconds": 60
       }
     },
-    "document_indexing": {},
+    "document_indexing": {
+      "search_defaults": {
+        "channels": {
+          "semantic": true,
+          "lexical": true
+        },
+        "rrf_k": 60,
+        "per_channel_top_k": 120,
+        "reranker": {
+          "enabled": true,
+          "max_candidates": 30
+        }
+      }
+    },
     "index_profiles": {
       "runet_web": {
         "split": {

@@ -2,7 +2,7 @@
 
 Конспект по экранам **Apple Developer** и **App Store Connect**. Тексты витрины, скриншоты и метаданные вводятся **только в веб-интерфейсе** App Store Connect (или через **Transporter** для билдов) — отдельного конвейера в репозитории нет.
 
-**Поля и черновики текстов под платформу Humanitec:** [`APP_STORE_HUMANITEC.md`](APP_STORE_HUMANITEC.md).
+**Поля и черновики текстов под Платформу:** [`APP_STORE_HUMANITEC.md`](APP_STORE_HUMANITEC.md).
 
 ---
 

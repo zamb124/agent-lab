@@ -39,6 +39,7 @@ import { embedConfigsResource, embedCodeLoadOp } from '../events/resources/embed
 import { landingAgentsLoadOp, landingDemoSessionOp } from '../events/resources/landing-demo.resource.js';
 import {
     publicSearchRunOp,
+    publicSearchSerpClickOp,
     publicSearchSerpMoreOp,
     publicSearchSourceDescribeOp,
 } from '../events/resources/public-search.resource.js';
@@ -291,6 +292,7 @@ export class FrontendApp extends PlatformApp {
         landingAgentsLoadOp,
         landingDemoSessionOp,
         publicSearchRunOp,
+        publicSearchSerpClickOp,
         publicSearchSerpMoreOp,
         publicSearchSourceDescribeOp,
         flowsCatalogOp,

@@ -1,6 +1,6 @@
-# Frontend: HumanitecAgent toolkits section
+# Frontend: LinnexAgent toolkits section
 
-HumanitecAgent tab shows platform toolkit groups list.
+LinnexAgent tab shows platform toolkit groups list.
 
 ## Step 1. Platform settings page opened
 

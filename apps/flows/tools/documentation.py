@@ -16,6 +16,8 @@ from core.docs.assistant import (
     docs_url_for_page,
     normalize_docs_language,
 )
+from core.rag.models import RAGSearchOptions
+from core.rag.search_options_resolver import resolve_platform_search_options
 from core.types import JsonObject, JsonValue, require_json_array, require_json_object
 
 if TYPE_CHECKING:
@@ -151,6 +153,10 @@ async def _search_docs(
         current_page_url,
     )
     collection_id = docs_collection_for_language(resolved_language)
+    resolved_search_options = resolve_platform_search_options(
+        per_channel_top_k=max(limit * 3, 8),
+        overrides=RAGSearchOptions(rerank=False),
+    )
     client = RagClient()
     try:
         raw = await client.search(
@@ -158,9 +164,14 @@ async def _search_docs(
             query.strip(),
             limit=limit,
             filters={"collection_id": collection_id},
-            channels={"semantic": True, "lexical": True},
-            per_channel_top_k=max(limit * 3, 8),
-            rerank=False,
+            channels=resolved_search_options.channels,
+            rrf_k=resolved_search_options.rrf_k,
+            per_channel_top_k=resolved_search_options.per_channel_top_k,
+            rerank=resolved_search_options.rerank,
+            rerank_max_candidates=resolved_search_options.rerank_max_candidates,
+            retrieval=resolved_search_options.retrieval,
+            freshness_weight=resolved_search_options.freshness_weight,
+            freshness_half_life_days=resolved_search_options.freshness_half_life_days,
         )
     except ServiceClientError as exc:
         return {

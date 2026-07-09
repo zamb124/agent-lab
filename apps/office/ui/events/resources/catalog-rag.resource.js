@@ -1,16 +1,13 @@
 /**
  * Office Catalog RAG — управление RAG-индексом каталога.
- *
- * Backend (`/documents/api/v1/catalogs/{catalog_id}/rag-index/...`):
- *   GET  /status   → OfficeCatalogRagIndexStatusResponse
- *   POST /enable   → OfficeCatalogRagIndexEnableResponse
- *   POST /disable  → OfficeCatalogRagIndexDisableResponse
- *   POST /rebuild  → OfficeCatalogRagIndexRebuildResponse (202)
- *   PATCH /settings → OfficeCatalogRagIndexSettingsResponse
  */
 
 import { createAsyncOp } from '@platform/lib/events/index.js';
 import { httpRequest } from '@platform/lib/events/http.js';
+import {
+    packAdvancedRetrievalPayload,
+    packSearchRequestOptions,
+} from '@platform/lib/rag/pack_search_request_options.js';
 import { nsHeader } from './_namespace-header.js';
 
 function _catalogIdFromPayload(payload, opName) {
@@ -18,6 +15,24 @@ function _catalogIdFromPayload(payload, opName) {
         throw new Error(`${opName}: payload.catalogId required`);
     }
     return payload.catalogId;
+}
+
+function _settingsPatchBody(payload) {
+    /** @type {Record<string, unknown>} */
+    const body = {
+        ...packSearchRequestOptions(payload),
+        ...packAdvancedRetrievalPayload(payload),
+    };
+    if (payload && typeof payload.includeSubcatalogs === 'boolean') {
+        body.include_subcatalogs = payload.includeSubcatalogs;
+    }
+    if (payload && payload.clearSearchOptions === true) {
+        body.clear_search_options = true;
+    }
+    if (Object.keys(body).length === 0) {
+        throw new Error('office/catalog_rag_settings: patch body must not be empty');
+    }
+    return body;
 }
 
 export const catalogRagStatusOp = createAsyncOp({
@@ -102,21 +117,19 @@ export const catalogRagRebuildOp = createAsyncOp({
 
 export const catalogRagSettingsOp = createAsyncOp({
     name: 'office/catalog_rag_settings',
-    silent: true,
+    successToastKey: 'documents:toast.catalog_rag_settings_saved',
+    errorToastKey: 'documents:toast.catalog_rag_settings_failed',
     restMirror: {
         method: 'PATCH',
         path: '/documents/api/v1/catalogs/:catalog_id/rag-index/settings',
     },
     request: ({ payload, ctx }) => {
         const catalogId = _catalogIdFromPayload(payload, 'office/catalog_rag_settings');
-        if (!payload || typeof payload.includeSubcatalogs !== 'boolean') {
-            throw new Error('office/catalog_rag_settings: payload.includeSubcatalogs (boolean) required');
-        }
         return httpRequest({
             method: 'PATCH',
             url: `/documents/api/v1/catalogs/${encodeURIComponent(catalogId)}/rag-index/settings`,
             headers: nsHeader(ctx),
-            body: { include_subcatalogs: payload.includeSubcatalogs },
+            body: _settingsPatchBody(payload),
         });
     },
     onSuccess: (ctx, _result, event) => {

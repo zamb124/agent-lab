@@ -18,7 +18,7 @@
 
 | Шаг | Где | Что сделать |
 |-----|-----|-------------|
-| 2.1 | **All apps → Create app** | App name: `Humanitec`. Default language: `Russian`. App or game: `App`. Free or paid: `Free`. Согласиться с Developer Program Policies и US export laws. |
+| 2.1 | **All apps → Create app** | App name: `Linnex`. Default language: `Russian`. App or game: `App`. Free or paid: `Free`. Согласиться с Developer Program Policies и US export laws. |
 | 2.2 | После создания — слева раздел **Dashboard** показывает мастер «Get your app ready for review» | Шаги 3–7 ниже соответствуют пунктам этого мастера. |
 
 ---
@@ -27,7 +27,7 @@
 
 Это блок-список обязательных деклараций. Каждый пункт — отдельная страница.
 
-| Подраздел | Ответ Humanitec |
+| Подраздел | Ответ Платформы |
 |-----------|-----------------|
 | **Privacy policy** | URL рабочей страницы политики на вашем домене (тот же, что в App Store Connect). |
 | **App access** | `All or some functionality is restricted` → дать тестовый логин/пароль для ревью (Sign-in required). |

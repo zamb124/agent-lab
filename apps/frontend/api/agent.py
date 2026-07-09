@@ -1,4 +1,4 @@
-"""HumanitecAgent settings API (REST-зеркало для frontend UI)."""
+"""LinnexAgent settings API (REST-зеркало для frontend UI)."""
 
 from fastapi import APIRouter, HTTPException
 

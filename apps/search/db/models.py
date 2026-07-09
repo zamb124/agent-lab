@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from sqlalchemy import Boolean, DateTime, ForeignKey, Integer, String, Text, UniqueConstraint
+from sqlalchemy import Boolean, DateTime, Float, ForeignKey, Integer, String, Text, UniqueConstraint
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 
@@ -27,8 +27,19 @@ class SearchIndexRow(Base):
     retrieval_semantic: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
     retrieval_lexical: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
     retrieval_rerank: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    retrieval_rerank_max_candidates: Mapped[int | None] = mapped_column(Integer, nullable=True)
     retrieval_rrf_k: Mapped[int | None] = mapped_column(Integer, nullable=True)
     retrieval_per_channel_top_k: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    retrieval_freshness_weight: Mapped[float] = mapped_column(Float, nullable=False, default=0.0)
+    retrieval_freshness_half_life_days: Mapped[float] = mapped_column(
+        Float, nullable=False, default=180.0
+    )
+    retrieval_freshness_recency_half_life_days: Mapped[float] = mapped_column(
+        Float, nullable=False, default=30.0
+    )
+    retrieval_domain_authority_weight: Mapped[float] = mapped_column(
+        Float, nullable=False, default=0.0
+    )
     snippet_max_chars: Mapped[int] = mapped_column(Integer, nullable=False, default=2000)
     indexing_profile_key: Mapped[str | None] = mapped_column(String(64), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)

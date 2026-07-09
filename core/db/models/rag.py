@@ -87,7 +87,12 @@ class VectorDocument(Base):
     content: Mapped[str] = mapped_column(Text, nullable=False)
     content_tsv: Mapped[str] = mapped_column(
         TSVECTOR,
-        Computed("to_tsvector('simple', coalesce(content, ''))", persisted=True),
+        Computed(
+            "setweight(to_tsvector('russian', coalesce(metadata->>'page_title', document_name, '')), 'A') "
+            + "|| setweight(to_tsvector('russian', coalesce(metadata->>'heading_trail', '')), 'B') "
+            + "|| setweight(to_tsvector('russian', coalesce(content, '')), 'D')",
+            persisted=True,
+        ),
     )
     embedding: Mapped[list[float] | None] = mapped_column(Vector(1024), nullable=True)
     embedding_model: Mapped[str | None] = mapped_column(

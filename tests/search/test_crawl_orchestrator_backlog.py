@@ -73,6 +73,10 @@ def _orchestrator(
         crawl_job_repository=job_repo,  # pyright: ignore[reportArgumentType]
         fetch_service=AsyncMock(),
         page_enrichment_service=AsyncMock(),
+        politeness_service=AsyncMock(
+            is_url_allowed=AsyncMock(return_value=True),
+            wait_for_fetch_slot=AsyncMock(return_value=0.0),
+        ),
         rag_client=AsyncMock(create_namespace=AsyncMock()),
         build_system_context=AsyncMock(),
         crawl_config=get_search_settings().crawl,
@@ -117,6 +121,11 @@ async def test_run_tick_prioritizes_backlog_over_cooldown(monkeypatch: pytest.Mo
 
         async def count_pending_for_profile(self, crawl_profile_id: str) -> int:
             return 100
+
+        async def domain_change_stats(
+            self, crawl_domain_id: str, *, since: datetime
+        ) -> tuple[int, int]:
+            return (0, 0)
 
     job = CrawlJob(
         crawl_job_id="job-1",

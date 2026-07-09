@@ -572,6 +572,11 @@ class AgentsetRAGProvider(BaseRAGProvider):
         """Семантический поиск в Agentset"""
         if search_options is not None and search_options.channels is not None and search_options.channels.lexical:
             raise ValueError("Лексический канал и гибридный поиск (RRF) поддерживаются только провайдером pgvector")
+        if search_options is not None and (
+            search_options.freshness_weight is not None
+            or search_options.freshness_half_life_days is not None
+        ):
+            raise ValueError("freshness_weight/freshness_half_life_days поддерживаются только провайдером pgvector")
 
         payload: JsonObject = {
             "query": query,

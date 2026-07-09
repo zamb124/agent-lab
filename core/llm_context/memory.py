@@ -8,10 +8,11 @@ from typing import Protocol
 from pydantic import Field, field_validator, model_validator
 
 from core.llm_context.models import LLMContextBlock, LLMContextMemoryScope
+from core.llm_context.retrieval_rag_bridge import rag_search_options_override_from_retrieval
 from core.llm_context.sources import LLMContextSourceRequest
 from core.models import StrictBaseModel
 from core.rag.models import RAGSearchOptions
-from core.rag_indexing_schema import SearchChannelsDefaults
+from core.rag.search_options_resolver import resolve_platform_search_options
 from core.types import JsonObject
 
 
@@ -181,14 +182,8 @@ def _chronological(records: list[LLMContextMemoryRecord]) -> list[LLMContextMemo
 
 
 def _search_options_from_request(request: LLMContextSourceRequest) -> RAGSearchOptions:
-    mode = request.policy.retrieval.mode
-    if mode == "hybrid":
-        channels = SearchChannelsDefaults(semantic=True, lexical=True)
-    elif mode == "lexical":
-        channels = SearchChannelsDefaults(semantic=False, lexical=True)
-    else:
-        channels = SearchChannelsDefaults(semantic=True, lexical=False)
-    return RAGSearchOptions(channels=channels, rerank=request.policy.retrieval.rerank)
+    policy_override = rag_search_options_override_from_retrieval(request.policy.retrieval)
+    return resolve_platform_search_options(overrides=policy_override)
 
 
 def _record_to_block(record: LLMContextMemoryRecord, *, rank: int) -> LLMContextBlock:

@@ -1,0 +1,13 @@
+component: platform-rag-retrieval-panel
+doc_slug: platform-rag-retrieval-panel
+tier: T0
+title_ru: Rag Retrieval Panel
+title_en: Rag Retrieval Panel
+import: "@platform/lib/components/rag/platform-rag-retrieval-panel.js"
+variants:
+  - id: default
+    props: {}
+    scenarios: [render]
+playwright:
+  min_steps: 2
+  min_screenshots: 1

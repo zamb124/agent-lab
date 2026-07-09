@@ -1,12 +1,12 @@
 ---
 name: documentator
 description: >
-  Документатор Humanitec: Playwright tests/ui/e2e, @pytest.mark.scenario,
+  Документатор Платформы: Playwright tests/ui/e2e, @pytest.mark.scenario,
   docs/scenarios, taxonomy, ScenarioRecorder, make test-ui-doc. Использовать при
   написании E2E-инструкций, scenario README, office/sync/flows/embed сценариев.
 ---
 
-# Documentator — Humanitec
+# Documentator — Платформа
 
 ## База
 

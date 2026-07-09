@@ -1,14 +1,14 @@
-# Frontend: статус релиза HumanitecAgent
+# Frontend: статус релиза LinnexAgent
 
-На вкладке HumanitecAgent отображается блок статуса desktop-релиза.
+На вкладке LinnexAgent отображается блок статуса desktop-релиза.
 
 ## Шаг 1. Открыта страница настроек платформы
 
 ![Открыта страница настроек платформы](screenshots/001.png)
 
-## Шаг 2. Открыта вкладка HumanitecAgent
+## Шаг 2. Открыта вкладка LinnexAgent
 
-![Открыта вкладка HumanitecAgent](screenshots/002.png)
+![Открыта вкладка LinnexAgent](screenshots/002.png)
 
 ## Шаг 3. Блок статуса релиза отображается
 

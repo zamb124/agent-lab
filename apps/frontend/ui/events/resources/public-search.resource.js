@@ -1003,6 +1003,39 @@ export const publicSearchSerpMoreOp = createAsyncOp({
     },
 });
 
+export const publicSearchSerpClickOp = createAsyncOp({
+    name: 'frontend/public_search_serp_click',
+    silent: true,
+    restMirror: { method: 'POST', path: '/frontend/api/public/search/serp/click' },
+    request: async ({ payload }) => {
+        const body = _requireObject(payload, 'serp_click payload');
+        const mode = _requireSearchRunMode(body.mode, 'serp_click.mode');
+        const query = _requireNonEmptyString(body.query, 'serp_click.query');
+        const url = _requireNonEmptyString(body.url, 'serp_click.url');
+        const position = _requireNumber(body.position, 'serp_click.position');
+        const provider = _requireString(body.provider, 'serp_click.provider');
+        const searchIndexId = _requireString(body.search_index_id, 'serp_click.search_index_id');
+        const serpCacheKey = _requireString(body.serp_cache_key, 'serp_click.serp_cache_key');
+        const session = await _issuePublicSearchSession(mode, { consumeSearchQuota: false });
+        await httpRequest({
+            method: 'POST',
+            url: '/frontend/api/public/search/serp/click',
+            credentials: 'same-origin',
+            headers: { Authorization: `${session.token_type} ${session.token}` },
+            body: {
+                query,
+                mode,
+                url,
+                position,
+                provider,
+                search_index_id: searchIndexId,
+                serp_cache_key: serpCacheKey,
+            },
+        });
+        return { logged: true };
+    },
+});
+
 export const publicSearchSourceDescribeOp = createAsyncOp({
     name: 'frontend/public_search_source_describe',
     silent: true,

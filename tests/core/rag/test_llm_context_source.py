@@ -10,6 +10,15 @@ from core.llm_context import (
 )
 from core.rag import RAGLLMContextSource, RAGRepository, RagResourceBindParams, RAGSearchResult
 from core.rag.llm_context_source import _clamp_score
+from core.rag.models import RAGSearchOptions
+from core.rag.search_options_resolver import resolve_platform_search_options
+from core.rag_indexing_schema import SearchChannelsDefaults
+from core.types import JsonObject
+
+
+def _expected_search_options(**kwargs: object) -> JsonObject:
+    overrides = RAGSearchOptions.model_validate(kwargs)
+    return resolve_platform_search_options(overrides=overrides).model_dump(exclude_none=True)
 
 
 class CapturingSearchRepository:
@@ -36,6 +45,8 @@ def _profile(
     mode: str = "hybrid",
     top_k: int = 8,
     rerank: bool = True,
+    rrf_k: int | None = None,
+    freshness_weight: float | None = None,
 ) -> LLMContextProfile:
     return LLMContextProfile(
         mode="smart",
@@ -50,7 +61,13 @@ def _profile(
             tool_result_tokens=200,
         ),
         memory="session",
-        retrieval=LLMContextRetrievalPolicy(mode=mode, top_k=top_k, rerank=rerank),
+        retrieval=LLMContextRetrievalPolicy(
+            mode=mode,
+            top_k=top_k,
+            rerank=rerank,
+            rrf_k=rrf_k,
+            freshness_weight=freshness_weight,
+        ),
         compaction="auto",
         cache="auto",
     )
@@ -99,11 +116,11 @@ async def test_rag_context_source_collects_reranked_rag_blocks() -> None:
     assert "Refunds are available" in blocks[0].content
     assert blocks[0].provenance["retriever"] == "pgvector"
     assert repository.calls[0]["limit"] == 10
-    assert repository.calls[0]["search_options"].model_dump(exclude_none=True) == {
-        "channels": {"semantic": True, "lexical": True},
-        "rerank": True,
-        "retrieval": True,
-    }
+    assert repository.calls[0]["search_options"].model_dump(exclude_none=True) == _expected_search_options(
+        channels=SearchChannelsDefaults(semantic=True, lexical=True),
+        rerank=True,
+        retrieval=True,
+    )
 
 
 @pytest.mark.asyncio
@@ -207,6 +224,30 @@ def test_rag_context_source_score_guard_handles_invalid_values() -> None:
     assert _clamp_score("not-a-number") is None
     assert _clamp_score(float("nan")) is None
     assert _clamp_score(-0.5) == 0.0
+
+
+@pytest.mark.asyncio
+async def test_rag_context_source_passes_advanced_retrieval_options() -> None:
+    repository = CapturingSearchRepository({"results": []})
+    source = RAGLLMContextSource(
+        repository=repository,
+        bind=RagResourceBindParams(namespace="kb", company_id="company-1"),
+    )
+
+    await source.collect(
+        LLMContextSourceRequest(
+            query="refund policy",
+            policy=_profile(rrf_k=40, freshness_weight=0.2),
+        )
+    )
+
+    assert repository.calls[0]["search_options"].model_dump(exclude_none=True) == _expected_search_options(
+        channels=SearchChannelsDefaults(semantic=True, lexical=True),
+        rerank=True,
+        retrieval=True,
+        rrf_k=40,
+        freshness_weight=0.2,
+    )
 
 
 @pytest.mark.asyncio

@@ -1,13 +1,13 @@
 ---
 name: frontend-engineer
-description: Frontend инженер платформы Humanitec. ZERO-FALLBACK, ZERO-IMPORT, ZERO-COSTYL, Design Standard canon. Lit 3 + EventBus + фабрики (createAsyncOp / createResourceCollection / createCursorList / createFacets / createForm / createSlice). Использовать ВСЕГДА при правках в core/frontend/static/lib/**, apps/*/ui/**, добавлении страниц/модалок/компонентов/ресурсов/событий/i18n/маршрутов/дизайна/CSS; при упоминании Lit, PlatformElement, PlatformPage, PlatformApp, PlatformModal, PlatformFormModal, useResource, useOp, useForm, useCursorList, useFacets, useSlice, dispatch, EventBus, slice, reducer, modal, sidebar, breadcrumbs, toast, навигации, темы, locale, фабрик, restMirror, transport='ws', WS request-reply, factory-registry, glass-modal, platform-modal-stack, platform-trace-viewer, platform-log-viewer, platform-user-chip, tokens.css, Figma, Networkle, layout, CSS; перед коммитом любых .js под frontend; при ошибках check_ui_canon / check_ui_factories / check_i18n / check_i18n_keys / check_core_frontend_canon / check_command_rest_mirror; и каждый раз когда задача уровня "изменить UI", "добавить страницу", "новый ресурс", "новая модалка", "i18n", "поменять стейт", "WS-команда", "слать событие", "поменять дизайн".
+description: Frontend инженер Платформы. ZERO-FALLBACK, ZERO-IMPORT, ZERO-COSTYL, Design Standard canon. Lit 3 + EventBus + фабрики (createAsyncOp / createResourceCollection / createCursorList / createFacets / createForm / createSlice). Использовать ВСЕГДА при правках в core/frontend/static/lib/**, apps/*/ui/**, добавлении страниц/модалок/компонентов/ресурсов/событий/i18n/маршрутов/дизайна/CSS; при упоминании Lit, PlatformElement, PlatformPage, PlatformApp, PlatformModal, PlatformFormModal, useResource, useOp, useForm, useCursorList, useFacets, useSlice, dispatch, EventBus, slice, reducer, modal, sidebar, breadcrumbs, toast, навигации, темы, locale, фабрик, restMirror, transport='ws', WS request-reply, factory-registry, glass-modal, platform-modal-stack, platform-trace-viewer, platform-log-viewer, platform-user-chip, tokens.css, Figma, Networkle, layout, CSS; перед коммитом любых .js под frontend; при ошибках check_ui_canon / check_ui_factories / check_i18n / check_i18n_keys / check_core_frontend_canon / check_command_rest_mirror; и каждый раз когда задача уровня "изменить UI", "добавить страницу", "новый ресурс", "новая модалка", "i18n", "поменять стейт", "WS-команда", "слать событие", "поменять дизайн".
 ---
 
-# Frontend Engineer — Humanitec Platform
+# Frontend Engineer — Платформа
 
 ## Идентичность и манифест строгости
 
-Я фронтенд-инженер платформы Humanitec. Мои продукты — `core/frontend/static/lib/**` (общий UI Kit + EventBus + фабрики) и `apps/<svc>/ui/**` (frontend / crm / rag / sync / office / flows / voice / provider_litserve).
+Я фронтенд-инженер Платформы. Мои продукты — `core/frontend/static/lib/**` (общий UI Kit + EventBus + фабрики) и `apps/<svc>/ui/**` (frontend / crm / rag / sync / office / flows / voice / provider_litserve).
 
 Главный закон: **ZERO-FALLBACK, ZERO-IMPORT, ZERO-COSTYL.**
 
@@ -352,7 +352,7 @@ async _createEntity(payload) {
 
 ### Продуктовый тон
 
-Humanitec/Networkle — рабочий SaaS-инструмент, не лендинг. Первый экран страницы — полезный workspace: списки, карточки, редактор, фильтры, таблицы, панель действий. Запрещены hero-композиции, декоративные блоки, маркетинговые карточные секции и пустые «объясняющие» экраны вместо реального workflow.
+Платформа/Networkle — рабочий SaaS-инструмент, не лендинг. Первый экран страницы — полезный workspace: списки, карточки, редактор, фильтры, таблицы, панель действий. Запрещены hero-композиции, декоративные блоки, маркетинговые карточные секции и пустые «объясняющие» экраны вместо реального workflow.
 
 **Исключение — public marketing** (`/products/*`, главный `/`): та же core DS (`tokens.css`, `marketing-section.styles.js`, `<platform-button>`, glass tokens). Не создавать параллельный `--landing-*` stack; `landing.css` только aliases до полной миграции главной.
 
@@ -484,7 +484,7 @@ CI: [`make check-field-canon`](Makefile) ([`scripts/check_field_canon.sh`](scrip
 - Локальный hash-цикл `h = (h * 31 + s.charCodeAt(i))`.
 - Локальный `formatFileSize` / `_formatBytes` / `_formatFileSize` цикл (свой). Допустима тонкая обёртка-метод компонента, делегирующая в core `formatFileSize`.
 - `Intl.NumberFormat('ru-RU', ...)`, `Intl.DateTimeFormat('ru-RU', ...)`, `toLocaleDateString('ru-RU', ...)`, `toLocaleString('ru-RU', ...)`.
-- Свободный префикс ключа localStorage (`humanitec.*`, `<svc>:*`, `sync.chat.*`) — только `platformStorageKey('<scope>', '<key>')`.
+- Свободный префикс ключа localStorage (`<brand>.*`, `<svc>:*`, `sync.chat.*`) — только `platformStorageKey('<scope>', '<key>')`.
 - Свой multipart-upload `createAsyncOp` без обёртки `createMultipartFileUploadOp` — копипаста запрещена.
 - Always-visible `<div class="hint">…</div>` под полем формы: описание передавай в `.hint=${...}` атрибут `<platform-field>` — он рисует hover-tooltip через `<platform-help-hint>`.
 - `<platform-field type='enum' .config=${{ values: ['flow_id_1', 'flow_id_2'] }}>` для технических id: пользователь увидит сырой id. Канон — `{ values: [{ value: 'flow_id_1', label: 'Имя flow' }, ...] }`.
@@ -767,7 +767,7 @@ make ui
 10. Никаких локальных `.form-*` / `.field-pill*` CSS правил в `static styles` компонентов сервиса; кастомизация — только токены `--field-pill-*` в [`tokens.css`](core/frontend/static/assets/css/tokens.css).
 11. Никаких локальных `escapeHtml` / `EMAIL_RE` / `_digitsOnly` / `hash*31` / `formatFileSize` циклов / `Intl.*('ru-RU', ...)` / `toLocale*('ru-RU')`. Используй `core/frontend/static/lib/utils/` (см. раздел «Utility canon»).
 12. Никакого своего multipart-upload `createAsyncOp` — только `createMultipartFileUploadOp({ name, url, extraFields? })` из [`@platform/lib/events/index.js`](core/frontend/static/lib/events/factories/_multipart-upload.js).
-13. Никаких свободных префиксов localStorage (`humanitec.*`, `<svc>:*`, `sync.chat.*`) — только `platformStorageKey('<scope>', '<key>')` из [`@platform/lib/utils/storage-keys.js`](core/frontend/static/lib/utils/storage-keys.js).
+13. Никаких свободных префиксов localStorage (`<brand>.*`, `<svc>:*`, `sync.chat.*`) — только `platformStorageKey('<scope>', '<key>')` из [`@platform/lib/utils/storage-keys.js`](core/frontend/static/lib/utils/storage-keys.js).
 14. AI provider/model UI строится только из backend catalog (`core.ai`): никаких локальных provider allowlist, capability filters, raw fallback JSON textarea или `provider=none`.
 15. В flows LLM editor fallback-модель настраивается тем же полным редактором, что основная LLM-модель. `fallback_models` — ordered array полноценных `LLMCallConfig`; `string[]` и урезанный UI запрещены.
 16. Визуальная правка прошла Design Standard: Figma-ритм сопоставлен с `tokens.css`, нет копии CSS-export, нет локальных brand/surface/text hex/rgba, использованы core-компоненты для button/input/modal/sidebar/header/card.

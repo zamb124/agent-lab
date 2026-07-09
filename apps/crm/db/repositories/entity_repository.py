@@ -43,8 +43,9 @@ from core.logging import get_logger
 from core.rag import RAGRepository
 from core.rag.constants import RAG_IN_PROCESS_PROVIDER_ID
 from core.rag.models import RAGMetadata, RAGMetadataFilter
-from core.rag.post_retrieval_rerank import apply_rerank_after_retrieve
+from core.rag.post_retrieval_rerank import RerankScoreCache, apply_rerank_after_retrieve
 from core.rag.providers.pgvector_provider import PgVectorProvider
+from core.rag.search_options_resolver import resolve_platform_search_options
 from core.tracing.operation_span import traced_operation
 from core.types import JsonObject
 
@@ -73,9 +74,15 @@ class EntityRepository(BaseCRMRepository[CRMEntity]):
     Семантика -- ``RAGRepository`` (загрузка текста и поиск через in-process провайдер ``RAG_IN_PROCESS_PROVIDER_ID``).
     """
 
-    def __init__(self, db: CRMDatabase, rag_repository: RAGRepository) -> None:
+    def __init__(
+        self,
+        db: CRMDatabase,
+        rag_repository: RAGRepository,
+        rerank_score_cache: RerankScoreCache,
+    ) -> None:
         super().__init__(db=db)
         self._rag: RAGRepository = rag_repository
+        self._rerank_score_cache: RerankScoreCache = rerank_score_cache
 
     @property
     @override
@@ -864,20 +871,28 @@ class EntityRepository(BaseCRMRepository[CRMEntity]):
 
             # Берем больше chunk-результатов, чтобы после дедупа по document_id
             # сохранить достаточное число кандидатов.
+            settings = get_settings()
+            retrieve_limit = max(limit * 4, limit)
+            resolved_search_options = resolve_platform_search_options(
+                settings=settings,
+                per_channel_top_k=retrieve_limit * 3,
+            )
             search_results = await self._rag.search(
                 namespace_id=resolved_namespace,
                 query=query,
-                limit=max(limit * 4, limit),
+                limit=retrieve_limit,
                 filters=search_filters,
+                search_options=resolved_search_options,
             )
-            settings = get_settings()
             search_results = await apply_rerank_after_retrieve(
                 results=search_results,
                 query=query,
                 provider_name=RAG_IN_PROCESS_PROVIDER_ID,
-                request_rerank=None,
+                request_rerank=resolved_search_options.rerank,
                 profile_sd=None,
                 settings=settings,
+                request_rerank_max_candidates=resolved_search_options.rerank_max_candidates,
+                score_cache=self._rerank_score_cache,
             )
             if not search_results:
                 logger.info(f"search_with_similarity('{query[:50]}...') -> 0 entities")

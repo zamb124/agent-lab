@@ -1,4 +1,4 @@
-"""Playwright E2E: CTA «Скачать HumanitecAgent» на лендинге и в Flows home."""
+"""Playwright E2E: CTA «Скачать LinnexAgent» на лендинге и в Flows home."""
 
 from __future__ import annotations
 
@@ -18,7 +18,7 @@ os.environ.setdefault("UI_E2E_USE_LVH_ME", "1")
     service="frontend",
     tag="agent-download",
     doc_slug="landing-hero-download-link",
-    title="Frontend: ссылка на скачивание HumanitecAgent в hero лендинга",
+    title="Frontend: ссылка на скачивание LinnexAgent в hero лендинга",
     description="На главной странице есть floating-карточка со ссылкой на /agent.",
 )
 @pytest.mark.asyncio
@@ -47,7 +47,7 @@ async def test_landing_hero_agent_download_link(
     service="flows",
     tag="agent-download",
     doc_slug="flows-home-download-link",
-    title="Flows: ссылка на скачивание HumanitecAgent на главной",
+    title="Flows: ссылка на скачивание LinnexAgent на главной",
     description="На flows home в hero actions есть ссылка с href, содержащим /agent.",
 )
 @pytest.mark.asyncio

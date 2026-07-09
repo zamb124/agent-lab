@@ -1,4 +1,4 @@
-"""Playwright E2E: вкладка HumanitecAgent в настройках frontend."""
+"""Playwright E2E: вкладка LinnexAgent в настройках frontend."""
 
 from __future__ import annotations
 
@@ -75,10 +75,10 @@ async def _wait_agent_releases_status(page: Page) -> None:
     service="frontend",
     tag="settings-agent",
     doc_slug="settings-agent-tab",
-    title="Frontend: вкладка HumanitecAgent в настройках",
-    title_en="Frontend: HumanitecAgent tab in settings",
-    description="Страница настроек открывается, вкладка HumanitecAgent доступна.",
-    description_en="Settings page opens and the HumanitecAgent tab is available.",
+    title="Frontend: вкладка LinnexAgent в настройках",
+    title_en="Frontend: LinnexAgent tab in settings",
+    description="Страница настроек открывается, вкладка LinnexAgent доступна.",
+    description_en="Settings page opens and the LinnexAgent tab is available.",
 )
 @pytest.mark.asyncio
 @pytest.mark.e2e
@@ -113,10 +113,10 @@ async def test_f1_settings_agent_tab_visible(
     service="frontend",
     tag="settings-agent",
     doc_slug="settings-agent-connect-section",
-    title="Frontend: секция подключения HumanitecAgent",
-    title_en="Frontend: HumanitecAgent connect section",
-    description="На вкладке HumanitecAgent отображаются заголовок и кнопка подключения.",
-    description_en="The HumanitecAgent tab shows the connect section title and button.",
+    title="Frontend: секция подключения LinnexAgent",
+    title_en="Frontend: LinnexAgent connect section",
+    description="На вкладке LinnexAgent отображаются заголовок и кнопка подключения.",
+    description_en="The LinnexAgent tab shows the connect section title and button.",
 )
 @pytest.mark.asyncio
 @pytest.mark.e2e
@@ -153,10 +153,10 @@ async def test_f2_settings_agent_connect_section(
     service="frontend",
     tag="settings-agent",
     doc_slug="settings-agent-devices-empty",
-    title="Frontend: пустой список устройств HumanitecAgent",
-    title_en="Frontend: empty HumanitecAgent devices list",
-    description="На вкладке HumanitecAgent показывается пустое состояние списка устройств.",
-    description_en="The HumanitecAgent tab shows the empty devices list state.",
+    title="Frontend: пустой список устройств LinnexAgent",
+    title_en="Frontend: empty LinnexAgent devices list",
+    description="На вкладке LinnexAgent показывается пустое состояние списка устройств.",
+    description_en="The LinnexAgent tab shows the empty devices list state.",
 )
 @pytest.mark.asyncio
 @pytest.mark.e2e
@@ -194,10 +194,10 @@ async def test_f3_settings_agent_devices_empty(
     service="frontend",
     tag="settings-agent",
     doc_slug="settings-agent-audit-empty",
-    title="Frontend: пустой audit HumanitecAgent",
-    title_en="Frontend: empty HumanitecAgent audit log",
-    description="На вкладке HumanitecAgent показывается пустой audit log.",
-    description_en="The HumanitecAgent tab shows an empty audit log.",
+    title="Frontend: пустой audit LinnexAgent",
+    title_en="Frontend: empty LinnexAgent audit log",
+    description="На вкладке LinnexAgent показывается пустой audit log.",
+    description_en="The LinnexAgent tab shows an empty audit log.",
 )
 @pytest.mark.asyncio
 @pytest.mark.e2e
@@ -235,10 +235,10 @@ async def test_f4_settings_agent_audit_empty(
     service="frontend",
     tag="settings-agent",
     doc_slug="settings-agent-pairing-code",
-    title="Frontend: создание pairing code HumanitecAgent",
-    title_en="Frontend: create HumanitecAgent pairing code",
-    description="Кнопка подключения создаёт pairing code на вкладке HumanitecAgent.",
-    description_en="The connect button creates a pairing code on the HumanitecAgent tab.",
+    title="Frontend: создание pairing code LinnexAgent",
+    title_en="Frontend: create LinnexAgent pairing code",
+    description="Кнопка подключения создаёт pairing code на вкладке LinnexAgent.",
+    description_en="The connect button creates a pairing code on the LinnexAgent tab.",
 )
 @pytest.mark.asyncio
 @pytest.mark.e2e
@@ -278,10 +278,10 @@ async def test_f5_settings_agent_pairing_code(
     service="frontend",
     tag="settings-agent",
     doc_slug="settings-agent-download-link",
-    title="Frontend: ссылка на скачивание HumanitecAgent",
-    title_en="Frontend: HumanitecAgent download link",
-    description="На вкладке HumanitecAgent есть ссылка на страницу загрузки desktop-клиента.",
-    description_en="The HumanitecAgent tab includes a link to the desktop client download page.",
+    title="Frontend: ссылка на скачивание LinnexAgent",
+    title_en="Frontend: LinnexAgent download link",
+    description="На вкладке LinnexAgent есть ссылка на страницу загрузки desktop-клиента.",
+    description_en="The LinnexAgent tab includes a link to the desktop client download page.",
 )
 @pytest.mark.asyncio
 @pytest.mark.e2e
@@ -312,10 +312,10 @@ async def test_f6_settings_agent_download_link(
     service="frontend",
     tag="settings-agent",
     doc_slug="settings-agent-release-banner",
-    title="Frontend: статус релиза HumanitecAgent",
-    title_en="Frontend: HumanitecAgent release status",
-    description="На вкладке HumanitecAgent отображается блок статуса desktop-релиза.",
-    description_en="The HumanitecAgent tab shows the desktop release status block.",
+    title="Frontend: статус релиза LinnexAgent",
+    title_en="Frontend: LinnexAgent release status",
+    description="На вкладке LinnexAgent отображается блок статуса desktop-релиза.",
+    description_en="The LinnexAgent tab shows the desktop release status block.",
 )
 @pytest.mark.asyncio
 @pytest.mark.e2e
@@ -355,10 +355,10 @@ async def test_f7_settings_agent_release_banner(
     service="frontend",
     tag="settings-agent",
     doc_slug="settings-agent-help-text",
-    title="Frontend: подсказка pairing HumanitecAgent",
-    title_en="Frontend: HumanitecAgent pairing help text",
-    description="На вкладке HumanitecAgent отображается help-текст про pairing code.",
-    description_en="The HumanitecAgent tab shows help text about the pairing code.",
+    title="Frontend: подсказка pairing LinnexAgent",
+    title_en="Frontend: LinnexAgent pairing help text",
+    description="На вкладке LinnexAgent отображается help-текст про pairing code.",
+    description_en="The LinnexAgent tab shows help text about the pairing code.",
 )
 @pytest.mark.asyncio
 @pytest.mark.e2e
@@ -571,10 +571,10 @@ async def test_f15_settings_agent_pairing_code_ttl(
     service="frontend",
     tag="settings-agent",
     doc_slug="settings-agent-toolkits",
-    title="Frontend: группы инструментов HumanitecAgent",
-    title_en="Frontend: HumanitecAgent toolkits section",
-    description="Вкладка HumanitecAgent показывает список групп инструментов платформы.",
-    description_en="HumanitecAgent tab shows platform toolkit groups list.",
+    title="Frontend: группы инструментов LinnexAgent",
+    title_en="Frontend: LinnexAgent toolkits section",
+    description="Вкладка LinnexAgent показывает список групп инструментов платформы.",
+    description_en="LinnexAgent tab shows platform toolkit groups list.",
 )
 @pytest.mark.asyncio
 @pytest.mark.e2e

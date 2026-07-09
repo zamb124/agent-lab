@@ -1,11 +1,34 @@
-import { describe, it, expect, afterEach, vi } from 'vitest';
+import { describe, it, expect, afterEach, beforeEach, vi } from 'vitest';
 import { createAuthCompanyNavigationEffect } from '@platform/lib/events/effects/auth-company-navigation.effect.js';
 import { CoreEvents } from '@platform/lib/events/contract.js';
+import { setPlatformBrandBootstrap } from '@platform/lib/utils/platform-brand.js';
 import { buildCtx } from '../../helpers/bus-fixtures.js';
 
 const ev = (type, payload = null) => ({ id: `id_${type}`, type, payload, meta: { ts: 0, source: 'http' } });
 
+/** @type {import('@platform/lib/utils/platform-brand.js').PlatformBrandBootstrap} */
+const HUMANITEC_BRAND = {
+    baseDomain: 'humanitec.ru',
+    isProduction: true,
+    portSuffix: '',
+    protocol: 'https',
+    platformName: 'Humanitec',
+    supportEmail: 'support@humanitec.ru',
+    logoPath: '/static/core/assets/service_logos/frontend_logo.svg',
+    apexOrigin: 'https://humanitec.ru/',
+    supportedDomains: ['humanitec.ru', 'linnex.io'],
+    agentProductName: 'HumanitecAgent',
+    modelsProductName: 'Humanitec Models',
+    voiceProductName: 'Humanitec Voice',
+    llmsDisplayLabel: 'Humanitec LLMs',
+    flowsProductLabel: 'Humanitec Flows',
+};
+
 describe('authCompanyNavigationEffect', () => {
+    beforeEach(() => {
+        setPlatformBrandBootstrap(HUMANITEC_BRAND);
+    });
+
     afterEach(() => {
         vi.unstubAllGlobals();
     });

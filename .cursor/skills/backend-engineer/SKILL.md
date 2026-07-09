@@ -1,9 +1,9 @@
 ---
 name: backend-engineer
-description: Backend инженер платформы Humanitec. Использовать при правках Python в core/**, apps/**, tests/**; при DI/ContainerDep, FastAPI routes, repositories, services, TaskIQ, flows runtime, LLM config, Pydantic models, migrations, ruff, basedpyright, локальных импортах, циклических зависимостях, тестовой инфраструктуре и архитектурных рефакторах.
+description: Backend инженер Платформы. Использовать при правках Python в core/**, apps/**, tests/**; при DI/ContainerDep, FastAPI routes, repositories, services, TaskIQ, flows runtime, LLM config, Pydantic models, migrations, ruff, basedpyright, локальных импортах, циклических зависимостях, тестовой инфраструктуре и архитектурных рефакторах.
 ---
 
-# Backend Engineer — Humanitec Platform
+# Backend Engineer — Платформа
 
 ## База
 

@@ -35,9 +35,14 @@ def search_index_row_to_definition(row: SearchIndexRow) -> SearchIndexDefinition
             semantic=row.retrieval_semantic,
             lexical=row.retrieval_lexical,
             rerank=row.retrieval_rerank,
+            rerank_max_candidates=row.retrieval_rerank_max_candidates,
             rrf_k=row.retrieval_rrf_k,
             per_channel_top_k=row.retrieval_per_channel_top_k,
             snippet_max_chars=row.snippet_max_chars,
+            freshness_weight=row.retrieval_freshness_weight,
+            freshness_half_life_days=row.retrieval_freshness_half_life_days,
+            freshness_recency_half_life_days=row.retrieval_freshness_recency_half_life_days,
+            domain_authority_weight=row.retrieval_domain_authority_weight,
         ),
         indexing_profile_key=row.indexing_profile_key,
         created_at=row.created_at,
@@ -107,8 +112,13 @@ class SearchIndexRepository:
             retrieval_semantic=body.retrieval.semantic,
             retrieval_lexical=body.retrieval.lexical,
             retrieval_rerank=body.retrieval.rerank,
+            retrieval_rerank_max_candidates=body.retrieval.rerank_max_candidates,
             retrieval_rrf_k=body.retrieval.rrf_k,
             retrieval_per_channel_top_k=body.retrieval.per_channel_top_k,
+            retrieval_freshness_weight=body.retrieval.freshness_weight,
+            retrieval_freshness_half_life_days=body.retrieval.freshness_half_life_days,
+            retrieval_freshness_recency_half_life_days=body.retrieval.freshness_recency_half_life_days,
+            retrieval_domain_authority_weight=body.retrieval.domain_authority_weight,
             snippet_max_chars=body.retrieval.snippet_max_chars,
             indexing_profile_key=body.indexing_profile_key,
             created_at=now,
@@ -151,8 +161,15 @@ class SearchIndexRepository:
                 row.retrieval_semantic = body.retrieval.semantic
                 row.retrieval_lexical = body.retrieval.lexical
                 row.retrieval_rerank = body.retrieval.rerank
+                row.retrieval_rerank_max_candidates = body.retrieval.rerank_max_candidates
                 row.retrieval_rrf_k = body.retrieval.rrf_k
                 row.retrieval_per_channel_top_k = body.retrieval.per_channel_top_k
+                row.retrieval_freshness_weight = body.retrieval.freshness_weight
+                row.retrieval_freshness_half_life_days = body.retrieval.freshness_half_life_days
+                row.retrieval_freshness_recency_half_life_days = (
+                    body.retrieval.freshness_recency_half_life_days
+                )
+                row.retrieval_domain_authority_weight = body.retrieval.domain_authority_weight
                 row.snippet_max_chars = body.retrieval.snippet_max_chars
             row.updated_at = datetime.now(UTC)
             await session.commit()

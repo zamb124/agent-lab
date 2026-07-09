@@ -1,4 +1,4 @@
-# Деплой Humanitec Platform
+# Деплой Платформы
 
 Платформа разворачивается единым **Helm-чартом** в **MicroK8s** кластере (master + GPU worker нода). Всё, что нужно для деплоя, лежит в [`deploy/helm/agent-lab/`](helm/agent-lab/).
 
@@ -272,4 +272,4 @@ deploy/helm/agent-lab/
 
 ## Wildcard TLS
 
-Wildcard для `humanitec.ru` + `*.humanitec.ru` выпускается через DNS-01 (cert-manager + [`flant/cert-manager-webhook-regru`](https://github.com/flant/cert-manager-webhook-regru)) и хранится в одном общем Secret `platform-tls`. На него ссылаются все 4 ingress'а. Webhook + ClusterIssuer `letsencrypt-prod-dns01` + Certificate ставит `deploy/scripts/setup-wildcard-tls.sh` (вызывается из CI перед `helm upgrade`). Подробности — [`cluster-setup.md`](cluster-setup.md).
+Wildcard для primary apex `linnex.io` + `*.linnex.io` и legacy `humanitec.ru` + `*.humanitec.ru` выпускается через DNS-01 (cert-manager + [`flant/cert-manager-webhook-regru`](https://github.com/flant/cert-manager-webhook-regru)) и хранится в одном общем Secret `platform-tls`. На него ссылаются все 4 ingress'а. Webhook + ClusterIssuer `letsencrypt-prod-dns01` + Certificate ставит `deploy/scripts/setup-wildcard-tls.sh` (вызывается из CI перед `helm upgrade`). Подробности — [`cluster-setup.md`](cluster-setup.md), multi-brand smoke — [`docs/multi-brand-prod-smoke.md`](docs/multi-brand-prod-smoke.md).

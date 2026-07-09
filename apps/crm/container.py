@@ -44,6 +44,7 @@ from core.clients.redis_client import RedisClient
 from core.config import get_settings
 from core.container import BaseContainer, ContainerRegistry, lazy
 from core.logging import get_logger
+from core.rag.post_retrieval_rerank import RerankScoreCache
 from core.worktracker.db import WorktrackerDatabase
 from core.worktracker.hook_dispatcher import ServiceClientHookDispatcher
 from core.worktracker.repository import WorktrackerRepository
@@ -99,7 +100,16 @@ class CRMContainer(BaseContainer):
 
     @lazy
     def entity_repository(self) -> EntityRepository:
-        return EntityRepository(db=self.crm_db, rag_repository=self.rag_repository)
+        return EntityRepository(
+            db=self.crm_db,
+            rag_repository=self.rag_repository,
+            rerank_score_cache=self.rerank_score_cache,
+        )
+
+    @lazy
+    def rerank_score_cache(self) -> RerankScoreCache:
+        """Кэш rerank-скорингов по (model, query, chunk_id) — как в сервисе rag."""
+        return RerankScoreCache(self.redis_client)
 
     @lazy
     def company_mapping_repository(self) -> CompanyMappingRepository:

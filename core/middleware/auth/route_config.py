@@ -180,6 +180,7 @@ ROUTE_RULES: list[RouteRule] = [
     RouteRule("/frontend/api/public/search/session", auth_required=False, context_type="anonymous"),
     RouteRule("/frontend/api/public/search/favicon", auth_required=False, context_type="anonymous"),
     RouteRule("/frontend/api/public/search/serp/more", context_type="api", auth_required=True),
+    RouteRule("/frontend/api/public/search/serp/click", context_type="api", auth_required=True),
     RouteRule("/api/public/site-bundle", auth_required=False, context_type="anonymous"),
     RouteRule("/frontend/api/public/site-bundle", auth_required=False, context_type="anonymous"),
     RouteRule("/api/platform/brand", auth_required=False, context_type="anonymous"),

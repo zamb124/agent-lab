@@ -77,7 +77,22 @@ class RAGSearchOptions(StrictBaseModel):
     rrf_k: int | None = PydanticField(default=None, gt=0)
     per_channel_top_k: int | None = PydanticField(default=None, gt=0)
     rerank: bool | None = None
+    rerank_max_candidates: int | None = PydanticField(default=None, gt=0)
     retrieval: bool | None = None
+    freshness_weight: float | None = PydanticField(
+        default=None,
+        ge=0.0,
+        le=1.0,
+        description=(
+            "Вес freshness-канала в гибридном скоринге: доля RRF-score, "
+            + "умножаемая на экспоненциальный decay возраста документа. 0/None — выключено."
+        ),
+    )
+    freshness_half_life_days: float | None = PydanticField(
+        default=None,
+        gt=0.0,
+        description="Период полураспада freshness decay в днях.",
+    )
 
 
 class RAGNamespaceSearchRequest(RAGSearchOptions):

@@ -69,8 +69,13 @@ from core.logging.attributes import (
 
 logger = get_logger("platform.crawl")
 
-CrawlOutcome = Literal["indexed", "skipped", "failed", "enriched", "enrichment_failed"]
-CrawlSkipReason = Literal["extract_too_short", "content_unchanged", "filter_rejected"]
+CrawlOutcome = Literal["indexed", "skipped", "failed", "gone", "enriched", "enrichment_failed"]
+CrawlSkipReason = Literal[
+    "extract_too_short",
+    "content_unchanged",
+    "filter_rejected",
+    "robots_disallowed",
+]
 CrawlTrigger = Literal["scheduler", "manual", "api"]
 
 

@@ -4,6 +4,7 @@ import pytest
 
 from apps.flows.tools.index_search import index_search
 from tests.search.conftest import make_search_index_slug
+from tests.search.integration.snippet_support import strip_snippet_highlight
 
 pytestmark = pytest.mark.timeout(120, func_only=True)
 
@@ -73,7 +74,7 @@ async def test_index_search_tool_calls_real_search_service(
     assert response["providers"]["index"]["ok"] is True
     assert response["results"]
     assert response["results"][0]["search_index_id"] == search_index_id
-    assert marker in response["results"][0].get("snippet", "")
+    assert marker in strip_snippet_highlight(response["results"][0].get("snippet", ""))
 
 
 @pytest.mark.asyncio

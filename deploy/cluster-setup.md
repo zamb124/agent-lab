@@ -6,9 +6,17 @@
 
 ## 0. Предусловия (вне кластера)
 
+Primary apex — **linnex.io**; legacy apex **humanitec.ru** остаётся для regression. DNS для обоих apex настраивается скриптом [`setup-brand-dns.sh`](scripts/setup-brand-dns.sh); см. [`docs/multi-brand-prod-smoke.md`](docs/multi-brand-prod-smoke.md).
+
 | Что | Где | Действие |
 |---|---|---|
-| DNS A `humanitec.ru` → `84.38.184.105` | reg.ru панель | один раз |
+| DNS A `linnex.io` → `84.38.184.105` | reg.ru панель | один раз |
+| DNS A `*.linnex.io` → `84.38.184.105` | reg.ru панель | один раз |
+| DNS A `livekit.linnex.io` → `84.38.184.105` | reg.ru панель | один раз |
+| DNS A `onlyoffice.linnex.io` → `84.38.184.105` | reg.ru панель | один раз |
+| DNS A `grafana.linnex.io` → `84.38.184.105` | reg.ru панель | один раз |
+| DNS A `api.linnex.io` / `cdn.linnex.io` → `84.38.184.105` | reg.ru панель | один раз |
+| DNS A `humanitec.ru` → `84.38.184.105` | reg.ru панель | один раз (legacy) |
 | DNS A `*.humanitec.ru` → `84.38.184.105` | reg.ru панель | один раз |
 | DNS A `livekit.humanitec.ru` → `84.38.184.105` | reg.ru панель | один раз |
 | DNS A `onlyoffice.humanitec.ru` → `84.38.184.105` | reg.ru панель | один раз |

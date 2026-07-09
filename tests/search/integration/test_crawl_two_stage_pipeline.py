@@ -120,7 +120,7 @@ async def test_layer2_enrich_uses_stored_markdown_without_http_refetch(
     enriched_page = deterministic_enriched_page(unique_id)
     enrich_calls: list[str] = []
 
-    async def _deterministic_enrich_markdown(*, markdown: str, url: str, profile, crawl_domain_id: str):
+    async def _deterministic_enrich_markdown(*, markdown: str, url: str, profile, crawl_domain_id: str, **kwargs: object):
         enrich_calls.append(markdown)
         return enriched_page
 

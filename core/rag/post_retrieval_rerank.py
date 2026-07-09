@@ -6,6 +6,8 @@
 
 from __future__ import annotations
 
+import asyncio
+import hashlib
 from collections import defaultdict
 from dataclasses import dataclass
 
@@ -19,9 +21,76 @@ from core.ai.resolver import (
     resolve_ai_model,
 )
 from core.ai.runtime import rerank_scores
+from core.cache.ttl_model_cache import RedisTextCache
 from core.config.base import BaseSettings
 from core.rag.models import RAGSearchResult
 from core.rag_indexing_schema import IndexProfileSearchDefaults
+
+
+class RerankScoreCache:
+    """
+    Redis-кэш rerank-скорингов по ``(model, query_hash, chunk_id)``.
+
+    Кросс-энкодер детерминирован для пары (query, passage), поэтому скор
+    можно переиспользовать между повторными запросами (пагинация SERP,
+    повторные поиски) без нового GPU-вызова.
+    """
+
+    def __init__(
+        self,
+        redis_text_cache: RedisTextCache,
+        *,
+        ttl_seconds: int = 1800,
+        key_prefix: str = "rag:rerank_score",
+    ) -> None:
+        if ttl_seconds <= 0:
+            raise ValueError("RerankScoreCache: ttl_seconds must be positive")
+        self._redis: RedisTextCache = redis_text_cache
+        self._ttl_seconds: int = ttl_seconds
+        self._key_prefix: str = key_prefix
+
+    def _key(self, *, model: str, query: str, chunk_id: str) -> str:
+        query_hash = hashlib.sha256(f"{model}\n{query}".encode("utf-8")).hexdigest()[:32]
+        return f"{self._key_prefix}:{query_hash}:{chunk_id}"
+
+    async def get_scores(
+        self,
+        *,
+        model: str,
+        query: str,
+        chunk_ids: list[str],
+    ) -> dict[str, float]:
+        raw_values = await asyncio.gather(
+            *(self._redis.get(self._key(model=model, query=query, chunk_id=chunk_id)) for chunk_id in chunk_ids)
+        )
+        cached: dict[str, float] = {}
+        for chunk_id, raw_value in zip(chunk_ids, raw_values):
+            if raw_value is None:
+                continue
+            # Кэш — внешняя граница: испорченное значение просто пере-скорится.
+            try:
+                cached[chunk_id] = float(raw_value)
+            except ValueError:
+                continue
+        return cached
+
+    async def set_scores(
+        self,
+        *,
+        model: str,
+        query: str,
+        scores_by_chunk_id: dict[str, float],
+    ) -> None:
+        _ = await asyncio.gather(
+            *(
+                self._redis.set(
+                    self._key(model=model, query=query, chunk_id=chunk_id),
+                    repr(score),
+                    ttl=self._ttl_seconds,
+                )
+                for chunk_id, score in scores_by_chunk_id.items()
+            )
+        )
 
 
 @dataclass(frozen=True)
@@ -125,11 +194,15 @@ async def apply_rerank_after_retrieve(
     request_rerank: bool | None,
     profile_sd: IndexProfileSearchDefaults | None,
     settings: BaseSettings,
+    request_rerank_max_candidates: int | None = None,
+    score_cache: RerankScoreCache | None = None,
 ) -> list[RAGSearchResult]:
     resolution = rerank_options(request_rerank, profile_sd, settings)
     enabled = resolution.enabled
     url = resolution.url
-    max_candidates = resolution.max_candidates
+    max_candidates = request_rerank_max_candidates
+    if max_candidates is None:
+        max_candidates = resolution.max_candidates
     if not enabled:
         return results
     if provider_name != "pgvector":
@@ -142,34 +215,36 @@ async def apply_rerank_after_retrieve(
             status_code=422,
             detail="rerank включён, но URL реранкера не задан (профиль или rag.reranker.base_url)",
         )
-    rr = settings.rag.reranker
     pool = list(results)
     if max_candidates is not None:
         pool = pool[:max_candidates]
-    passages = [item.content for item in pool]
-    scores = await rerank_scores(
-        endpoint_url=url,
+    scores = await _rerank_pool_scores(
+        pool=pool,
         query=query,
-        passages=passages,
-        timeout_seconds=rr.timeout_seconds,
-        cost_per_1m_tokens=rr.cost_per_1m_tokens,
-        platform_markup=rr.platform_markup,
-        billing_resource_id=resolution.billing_resource_id or resolution.model or rr.billing_model_id,
-        cost_origin=_runtime_cost_origin(resolution.cost_origin),
-        model=resolution.model,
-        api_key=resolution.api_key,
-        extra_request_headers=resolution.extra_request_headers,
+        url=url,
+        resolution=resolution,
+        settings=settings,
+        score_cache=score_cache,
     )
-    paired = sorted(zip(scores, pool), key=lambda item: item[0], reverse=True)
+    adjusted: list[tuple[float, float, RAGSearchResult]] = []
+    for rerank_score, item in zip(scores, pool):
+        # Rerank-скор перекрывает RRF, поэтому freshness-сигнал (multiplier
+        # из retrieval-этапа) переносится на итоговый скор явно.
+        freshness_multiplier = item.provenance.get("freshness_multiplier")
+        final_score = rerank_score
+        if isinstance(freshness_multiplier, (int, float)) and not isinstance(freshness_multiplier, bool):
+            final_score = rerank_score * float(freshness_multiplier)
+        adjusted.append((final_score, rerank_score, item))
+    adjusted.sort(key=lambda entry: entry[0], reverse=True)
     out: list[RAGSearchResult] = []
-    for score, item in paired:
+    for final_score, rerank_score, item in adjusted:
         prov = dict(item.provenance)
         prov["rerank"] = True
-        prov["rerank_score"] = score
+        prov["rerank_score"] = rerank_score
         out.append(
             RAGSearchResult(
                 content=item.content,
-                score=score,
+                score=final_score,
                 document_id=item.document_id,
                 document_name=item.document_name,
                 metadata=item.metadata,
@@ -181,6 +256,75 @@ async def apply_rerank_after_retrieve(
     return out
 
 
+async def _rerank_pool_scores(
+    *,
+    pool: list[RAGSearchResult],
+    query: str,
+    url: str,
+    resolution: RerankResolution,
+    settings: BaseSettings,
+    score_cache: RerankScoreCache | None,
+) -> list[float]:
+    """
+    Скор для каждого элемента pool: сперва Redis-кэш по chunk_id,
+    затем один batch-вызов реранкера только для непокрытых чанков.
+    """
+    rr = settings.rag.reranker
+    cache_model = resolution.model or resolution.billing_resource_id or rr.billing_model_id
+    # Кэшируются только чанки со стабильным chunk_id; элементы без него
+    # (не-pgvector источники) всегда скорятся заново.
+    chunk_ids: list[str | None] = [item.chunk_id for item in pool]
+    cacheable_chunk_ids = [chunk_id for chunk_id in chunk_ids if chunk_id is not None]
+    cached_scores: dict[str, float] = {}
+    if score_cache is not None and cacheable_chunk_ids:
+        cached_scores = await score_cache.get_scores(
+            model=cache_model, query=query, chunk_ids=cacheable_chunk_ids
+        )
+    missing_indexes = [
+        index
+        for index, chunk_id in enumerate(chunk_ids)
+        if chunk_id is None or chunk_id not in cached_scores
+    ]
+    fresh_scores_by_index: dict[int, float] = {}
+    if missing_indexes:
+        passages = [pool[index].content for index in missing_indexes]
+        fresh_scores = await rerank_scores(
+            endpoint_url=url,
+            query=query,
+            passages=passages,
+            timeout_seconds=rr.timeout_seconds,
+            cost_per_1m_tokens=rr.cost_per_1m_tokens,
+            platform_markup=rr.platform_markup,
+            billing_resource_id=resolution.billing_resource_id or resolution.model or rr.billing_model_id,
+            cost_origin=_runtime_cost_origin(resolution.cost_origin),
+            model=resolution.model,
+            api_key=resolution.api_key,
+            extra_request_headers=resolution.extra_request_headers,
+        )
+        fresh_scores_by_index = dict(zip(missing_indexes, fresh_scores))
+        if score_cache is not None:
+            fresh_scores_by_chunk_id: dict[str, float] = {}
+            for index, score in fresh_scores_by_index.items():
+                fresh_chunk_id = chunk_ids[index]
+                if fresh_chunk_id is not None:
+                    fresh_scores_by_chunk_id[fresh_chunk_id] = score
+            if fresh_scores_by_chunk_id:
+                await score_cache.set_scores(
+                    model=cache_model,
+                    query=query,
+                    scores_by_chunk_id=fresh_scores_by_chunk_id,
+                )
+    ordered_scores: list[float] = []
+    for index, chunk_id in enumerate(chunk_ids):
+        if index in fresh_scores_by_index:
+            ordered_scores.append(fresh_scores_by_index[index])
+        else:
+            if chunk_id is None:
+                raise RuntimeError("rerank pool scoring: элемент без chunk_id не покрыт batch-скорингом")
+            ordered_scores.append(cached_scores[chunk_id])
+    return ordered_scores
+
+
 async def apply_rerank_after_retrieve_grouped(
     *,
     results_by_namespace: dict[str, list[RAGSearchResult]],
@@ -190,6 +334,8 @@ async def apply_rerank_after_retrieve_grouped(
     request_rerank: bool | None,
     profile_sd: IndexProfileSearchDefaults | None,
     settings: BaseSettings,
+    request_rerank_max_candidates: int | None = None,
+    score_cache: RerankScoreCache | None = None,
 ) -> dict[str, list[RAGSearchResult]]:
     empty = {ns: list(results_by_namespace.get(ns, [])) for ns in namespace_order}
     flat = [r for ns in namespace_order for r in results_by_namespace.get(ns, [])]
@@ -203,6 +349,8 @@ async def apply_rerank_after_retrieve_grouped(
         request_rerank=request_rerank,
         profile_sd=profile_sd,
         settings=settings,
+        request_rerank_max_candidates=request_rerank_max_candidates,
+        score_cache=score_cache,
     )
     by_ns: dict[str, list[RAGSearchResult]] = defaultdict(list)
     for item in reranked:

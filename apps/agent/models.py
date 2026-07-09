@@ -1,5 +1,5 @@
 """
-Модели данных для HumanitecAgent.
+Модели данных для десктопного агента платформы (LinnexAgent).
 """
 
 from datetime import datetime, timezone
@@ -11,7 +11,7 @@ AgentPlatform = Literal["windows", "macos-arm64", "macos-x64", "linux-deb", "lin
 
 
 class DevicePolicy(BaseModel):
-    """Политика безопасности для устройства HumanitecAgent."""
+    """Политика безопасности для устройства десктопного агента платформы."""
 
     model_config: ClassVar[ConfigDict] = ConfigDict(extra="forbid")
 
@@ -48,7 +48,7 @@ class DevicePolicy(BaseModel):
 
 
 class AgentDeviceRecord(BaseModel):
-    """Зарегистрированное устройство HumanitecAgent в БД."""
+    """Зарегистрированное устройство десктопного агента платформы в БД."""
 
     model_config: ClassVar[ConfigDict] = ConfigDict(extra="forbid")
 
@@ -75,7 +75,7 @@ class AgentDeviceRecord(BaseModel):
 
 
 class DeviceRegisterRequest(BaseModel):
-    """Запрос на регистрацию устройства от HumanitecAgent."""
+    """Запрос на регистрацию устройства от десктопного агента платформы."""
 
     model_config: ClassVar[ConfigDict] = ConfigDict(extra="forbid")
 
@@ -91,7 +91,7 @@ class DeviceRegisterRequest(BaseModel):
 
 
 class AgentLlmBundle(BaseModel):
-    """OpenAI-compatible LLM endpoint для HumanitecAgent после pairing."""
+    """OpenAI-compatible LLM endpoint для десктопного агента платформы после pairing."""
 
     model_config: ClassVar[ConfigDict] = ConfigDict(extra="forbid")
 
@@ -108,9 +108,9 @@ class DeviceRegisterResponse(BaseModel):
     device_id: str
     token: str = Field(description="Device JWT (30 дней)")
     platform_mcp_url: str = Field(description="URL Platform MCP endpoint для Goose")
-    toolkits_url: str = Field(description="URL каталога групп инструментов HumanitecAgent")
+    toolkits_url: str = Field(description="URL каталога групп инструментов десктопного агента платформы")
     frontend_base_url: str = Field(description="Публичный origin frontend для API и deep links")
-    tunnel_ws_url: str = Field(description="WebSocket URL tunnel HumanitecAgent")
+    tunnel_ws_url: str = Field(description="WebSocket URL tunnel десктопного агента платформы")
     company_id: str = Field(description="ID компании, привязанной при pairing")
     company_subdomain: str | None = Field(
         default=None,
@@ -181,7 +181,7 @@ class AgentReleaseStatusResponse(BaseModel):
 
 
 class AgentDiscoverResponse(BaseModel):
-    """Публичный discover HumanitecAgent до pairing."""
+    """Публичный discover десктопного агента платформы до pairing."""
 
     model_config: ClassVar[ConfigDict] = ConfigDict(extra="forbid")
 
@@ -202,7 +202,7 @@ class AgentDeviceListResponse(BaseModel):
 
 
 class DevicePolicyUpdateRequest(BaseModel):
-    """Обновление политики устройства HumanitecAgent."""
+    """Обновление политики устройства десктопного агента платформы."""
 
     model_config: ClassVar[ConfigDict] = ConfigDict(extra="forbid")
 
@@ -210,7 +210,7 @@ class DevicePolicyUpdateRequest(BaseModel):
 
 
 class AgentAuditEvent(BaseModel):
-    """Запись audit-лога HumanitecAgent."""
+    """Запись audit-лога десктопного агента платформы."""
 
     model_config: ClassVar[ConfigDict] = ConfigDict(extra="forbid")
 
@@ -230,7 +230,7 @@ class AgentAuditListResponse(BaseModel):
 
 
 class AgentLoginResponse(BaseModel):
-    """Контекст для страницы логина HumanitecAgent."""
+    """Контекст для страницы логина десктопного агента платформы."""
 
     redirect_uri: str = Field(default="humanitec://auth/callback")
     already_logged_in: bool = Field(default=False)

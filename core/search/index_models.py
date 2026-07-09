@@ -13,10 +13,40 @@ class SearchIndexRetrievalConfig(StrictBaseModel):
     semantic: bool = True
     lexical: bool = True
     rerank: bool = True
+    rerank_max_candidates: int | None = Field(
+        default=None,
+        gt=0,
+        description="Сколько верхних кандидатов после RRF+freshness уходит в reranker.",
+    )
     rrf_k: int | None = 60
     per_channel_top_k: int | None = None
     retrieve_limit: int = Field(default=120, ge=10, le=200)
     snippet_max_chars: int = Field(default=2000, ge=200, le=8000)
+    freshness_weight: float = Field(
+        default=0.0,
+        ge=0.0,
+        le=1.0,
+        description="Вес freshness decay в гибридном скоринге; 0 — выключено.",
+    )
+    freshness_half_life_days: float = Field(
+        default=180.0,
+        gt=0.0,
+        description="Half-life decay для обычных запросов, в днях.",
+    )
+    freshness_recency_half_life_days: float = Field(
+        default=30.0,
+        gt=0.0,
+        description="Усиленный half-life для recency-sensitive запросов (новости/годы/«сегодня»).",
+    )
+    domain_authority_weight: float = Field(
+        default=0.0,
+        ge=0.0,
+        le=1.0,
+        description=(
+            "Вес авторитета домена (Tranco domain_rank): score *= 1 + weight * authority, "
+            + "authority = 1 - log10(rank)/6 в [0, 1]. 0 — выключено."
+        ),
+    )
 
 
 class SearchIndexCrawlTaxonomy(StrictBaseModel):

@@ -1,10 +1,10 @@
 ---
-title: "Humanitec Documentation"
-description: "Modern Humanitec documentation hub: quickstart, API reference, guides, and generated UI instructions."
+title: "Platform Documentation"
+description: "Platform documentation hub: quickstart, API reference, guides, and generated UI instructions."
 ---
 
 <div class="docs-home">
-  <p class="docs-page-kicker">Humanitec Docs</p>
+  <p class="docs-page-kicker">Platform Docs</p>
   <p class="docs-lead">Documentation for the AI agent, Flows, Sync, NetWorkle, and RAG platform. Start with a working A2A request, browse generated API reference, or inspect UI instructions with real screenshots.</p>
   <div class="docs-hero-actions">
     <a class="docs-button docs-button-primary" href="quickstart/">Start building</a>
@@ -12,7 +12,7 @@ description: "Modern Humanitec documentation hub: quickstart, API reference, gui
   </div>
   <div class="docs-home-visual">
     <div class="docs-product-shot">
-      <img src="scenarios/sync/spaces/create-space/screenshots/001.png" alt="Humanitec Sync interface">
+      <img src="scenarios/sync/spaces/create-space/screenshots/001.png" alt="Sync interface on the Platform">
     </div>
     <div class="docs-endpoint-panel">
       <span class="docs-method">POST</span>

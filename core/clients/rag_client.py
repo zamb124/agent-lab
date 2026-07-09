@@ -189,7 +189,10 @@ class RagClient:
         rrf_k: int | None = None,
         per_channel_top_k: int | None = None,
         rerank: bool | None = None,
+        rerank_max_candidates: int | None = None,
         retrieval: bool | None = None,
+        freshness_weight: float | None = None,
+        freshness_half_life_days: float | None = None,
     ) -> RAGSearchOptions | None:
         channels_model = (
             SearchChannelsDefaults.model_validate(channels)
@@ -201,7 +204,10 @@ class RagClient:
             rrf_k=rrf_k,
             per_channel_top_k=per_channel_top_k,
             rerank=rerank,
+            rerank_max_candidates=rerank_max_candidates,
             retrieval=retrieval,
+            freshness_weight=freshness_weight,
+            freshness_half_life_days=freshness_half_life_days,
         )
         return merge_search_request_options(None, raw)
 
@@ -217,14 +223,20 @@ class RagClient:
         rrf_k: int | None = None,
         per_channel_top_k: int | None = None,
         rerank: bool | None = None,
+        rerank_max_candidates: int | None = None,
         retrieval: bool | None = None,
+        freshness_weight: float | None = None,
+        freshness_half_life_days: float | None = None,
     ) -> JsonObject:
         merged_opts = self._pack_search_options(
             channels=channels,
             rrf_k=rrf_k,
             per_channel_top_k=per_channel_top_k,
             rerank=rerank,
+            rerank_max_candidates=rerank_max_candidates,
             retrieval=retrieval,
+            freshness_weight=freshness_weight,
+            freshness_half_life_days=freshness_half_life_days,
         )
         body = build_namespace_search_json_body(
             query=query,
@@ -250,27 +262,31 @@ class RagClient:
         rrf_k: int | None = None,
         per_channel_top_k: int | None = None,
         rerank: bool | None = None,
+        rerank_max_candidates: int | None = None,
         retrieval: bool | None = None,
+        freshness_weight: float | None = None,
+        freshness_half_life_days: float | None = None,
     ) -> JsonObject:
         params: dict[str, str] = {}
         if provider is not None:
             params["provider"] = provider
-        body: JsonObject = {
-            "namespace_ids": namespace_ids,
-            "query": query,
-            "limit": limit,
-        }
-        if filters is not None:
-            body["filters"] = filters
         merged_opts = self._pack_search_options(
             channels=channels,
             rrf_k=rrf_k,
             per_channel_top_k=per_channel_top_k,
             rerank=rerank,
+            rerank_max_candidates=rerank_max_candidates,
             retrieval=retrieval,
+            freshness_weight=freshness_weight,
+            freshness_half_life_days=freshness_half_life_days,
         )
-        if merged_opts:
-            body.update(merged_opts)
+        body = build_namespace_search_json_body(
+            query=query,
+            limit=limit,
+            filters=filters,
+            merged_search_options=merged_opts,
+        )
+        body["namespace_ids"] = namespace_ids
         return _json_object_response(
             await self._http.post(
                 "rag",

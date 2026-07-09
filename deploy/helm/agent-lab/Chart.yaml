@@ -1,10 +1,10 @@
 apiVersion: v2
 name: agent-lab
-description: Платформа Humanitec — единый Helm-чарт всего стека (приложения, БД, observability, ingress, GPU)
+description: Платформа — единый Helm-чарт всего стека (приложения, БД, observability, ingress, GPU)
 type: application
 version: 1.0.0
 appVersion: latest
-home: https://humanitec.ru
+home: https://linnex.io
 maintainers:
-  - name: Humanitec Platform
-    email: ops@humanitec.ru
+  - name: Platform Ops
+    email: ops@linnex.io

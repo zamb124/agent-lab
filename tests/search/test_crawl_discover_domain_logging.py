@@ -76,6 +76,10 @@ async def test_discover_domain_logs_structured_failure_on_generic_exception() ->
         crawl_job_repository=AsyncMock(),
         fetch_service=AsyncMock(),
         page_enrichment_service=AsyncMock(),
+        politeness_service=AsyncMock(
+            is_url_allowed=AsyncMock(return_value=True),
+            wait_for_fetch_slot=AsyncMock(return_value=0.0),
+        ),
         rag_client=AsyncMock(),
         build_system_context=AsyncMock(),
         crawl_config=get_search_settings().crawl,

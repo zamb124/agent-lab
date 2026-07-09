@@ -230,8 +230,6 @@ async def _get_bundle_update_flags(
     # Иначе _defaults пустой: _apply_defaults не мержит registry.yaml defaults.llm,
     # а после reload в БД llm уже с defaults — вечный has_bundle_update.
     loader.load_registry_yaml()
-    await loader.load_tools_cache()
-    await loader.load_nodes_cache()
 
     flags: dict[str, bool] = {}
     for flow_cfg in flows:
@@ -245,7 +243,6 @@ async def _get_bundle_update_flags(
                 status_code=500, detail=f"Bundle mapping not found for flow '{flow_cfg.flow_id}'"
             )
 
-        await loader.preload_nodes_to_cache(bundle_id)
         bundle_cfg = await loader.build_flow_bundle_config(bundle_id)
         if bundle_cfg is None:
             raise HTTPException(

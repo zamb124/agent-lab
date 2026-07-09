@@ -170,6 +170,11 @@ class LLMContextRetrievalPolicy(StrictBaseModel):
     top_k: int = Field(default=8, ge=1, le=256)
     rerank: bool = False
     min_score: float | None = Field(default=None, ge=0.0, le=1.0)
+    rrf_k: int | None = Field(default=None, gt=0)
+    per_channel_top_k: int | None = Field(default=None, gt=0)
+    rerank_max_candidates: int | None = Field(default=None, gt=0)
+    freshness_weight: float | None = Field(default=None, ge=0.0, le=1.0)
+    freshness_half_life_days: float | None = Field(default=None, gt=0.0)
 
     @model_validator(mode="after")
     def disabled_retrieval_must_not_rerank(self) -> "LLMContextRetrievalPolicy":
@@ -185,6 +190,11 @@ class LLMContextRetrievalPatch(StrictBaseModel):
     top_k: int | None = Field(default=None, ge=1, le=256)
     rerank: bool | None = None
     min_score: float | None = Field(default=None, ge=0.0, le=1.0)
+    rrf_k: int | None = Field(default=None, gt=0)
+    per_channel_top_k: int | None = Field(default=None, gt=0)
+    rerank_max_candidates: int | None = Field(default=None, gt=0)
+    freshness_weight: float | None = Field(default=None, ge=0.0, le=1.0)
+    freshness_half_life_days: float | None = Field(default=None, gt=0.0)
 
 
 class LLMContextProfile(StrictBaseModel):

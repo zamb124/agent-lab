@@ -1,12 +1,28 @@
 ---
-description: "Главные правила платформы Humanitec — стиль, паттерны, запреты"
+description: "Главные правила Платформы — стиль, паттерны, запреты"
 alwaysApply: true
 ---
-# Платформа Humanitec — Кодекс
+# Платформа — Кодекс
 
 ## Язык
 
 Отвечай на русском. Без эмодзи в коде, комментариях, логах.
+
+## Multi-brand (имена и домены)
+
+Платформа развёрнута на нескольких apex-доменах (`linnex.io`, `humanitec.ru`, …). Runtime — `platform_brands` + `resolve_brand(host)` ([`configuration.mdc`](configuration.mdc)).
+
+| Слой | Канон в prose | Не использовать в prose |
+|---|---|---|
+| Продукт (generic) | **Платформа** | Humanitec Platform, Платформа Humanitec |
+| Primary apex | **linnex.io** | humanitec.ru как дефолт в новых примерах |
+| Legacy apex | **humanitec.ru** | только второй brand / regression |
+| Desktop-агент | **LinnexAgent** | HumanitecAgent — только при явной привязке к brand `humanitec.ru` |
+| Per-brand UI labels | `platform_brands.*` | хардкод одного бренда в общих rules |
+
+**Не переименовывать** (технические идентификаторы): `humanitec_llm`, `humanitec_agent.mdc` (имя файла), `apps/agent/desktop/distro/humanitec.json`, workflows `humanitec-agent-build*.yml`, пути `humanitecToolkitsSync.ts`, toolkit id `humanitec_core`, seed pronunciation `Humanitec → хуманитэк`.
+
+**Фаза 2** (отдельный проход): `docs/`, `deploy/`, `core/i18n/`, `mobile/docs/` — синхронизация user-facing copy с multi-brand.
 
 ## Lint gate (обязательно после правок кода)
 
@@ -329,7 +345,7 @@ Cursor — `base64url(json({"ts": "<created_at.isoformat()>", "id": "<entity_id>
 - **Utility canon:** все «общие» утилиты (`formatFileSize`, `formatDurationSeconds`/`Ms`, `formatPlatformNumber`/`CurrencyRub`, `formatPlatformDate`/`DateTime`/`Time`, `escapeHtml`, `hashString31`/`hueFromString`/`indexFromSeed`/`initialsFromName`, `md5HexUtf8`, `sanitizeToolName`, `EMAIL_RE`/`isValidEmail`/`digitsOnly`/`isValidPhone`, `platformStorageKey`, `createMultipartFileUploadOp`) живут в `core/frontend/static/lib/utils/` и `core/frontend/static/lib/events/factories/_multipart-upload.js`. Локальные копии в `apps/<svc>/ui/**` запрещены. Локаль форматтеров — из `state.i18n.locale`, хардкод `'ru-RU'` / `'en-US'` запрещён. CI: `scripts/check_ui_canon.sh` п.19 → **`frontend.mdc`**.
 - **Mobile shell 2026 (Radical Reachability):** единый мобильный шелл на `≤767px` — `<platform-bottom-nav>` (Liquid Glass капсула первичной навигации) + `<platform-bottom-sheet-stack>` (вторичная сложность) + опционально `<platform-top-bar>` (sticky-header). Без гамбургер-меню, без мобильных левых drawer-ов. `<platform-sidebar>` принудительно скрыт на мобиле. Каждый `PlatformApp`-наследник декларативно описывает `static bottomNavItems`, `static bottomNavHideOnRoutes`, при необходимости `static topBarEnabled`. Route обязан иметь `titleKey: 'routes.<key>'`; i18n bundle сервиса — парные ключи `routes.*` и `bottom_nav.*` в ru+en. Новые «mobile-app-header» компоненты и локальные `position: fixed; bottom: 0` навигации в `apps/**` — запрещены. Платформенный sheet `kind: 'platform.service_switcher'` — единый узел профиля/сервисов/настроек/уведомлений/logout. Детали → **`frontend.mdc`**, **`ui_components.mdc`**, **`ui_factories.mdc`**.
 - **Pill canon полей (на ВСЕЙ платформе):** любое поле формы — **`<platform-field>`** (имя/email/url/password/query/description в любом сервисе, типизированные атрибуты CRM). `<glass-input>`/`<glass-textarea>` удалены. Сырые `<input>`/`<textarea>`/`<select>` в `apps/<svc>/ui/{pages,modals,components}/**` запрещены, кроме whitelist по `type` (`file|hidden|range|color|checkbox|radio|search`) и `data-canon` (`composer|mention|inline-edit|search-as-you-type|combobox`). Классы `form-input`/`field-pill-input` на сырой разметке в приложениях не освобождают от этого правила. Стили — только в **`field-pill.styles.js`**, токены **`--field-pill-*`** в **`tokens.css`**. Локальные `.form-*` / `.field-pill*` overrides в `apps/**` запрещены. Атрибут `flat` удалён. CI: **`make check-field-canon`** (`scripts/check_field_canon.sh`); `scripts/check_ui_canon.sh` п.17/18 (`*.mdc`: **`data-types.mdc`**, **`frontend.mdc`**, **`ui_components.mdc`**).
-- **HumanitecAgent / Platform MCP:** control plane и tunnel WS — `frontend` (`/frontend/api/agent/*`); исполнение flow как MCP tools — `flows` (`/flows/api/v1/agent/platform-mcp`, router из `apps/agent/platform_mcp.py`). Внешний MCP host может вызывать Platform MCP без desktop. Правки pairing/tunnel/audit → **`humanitec_agent.mdc`**; внешние MCP servers в llm_node → **`mcp.mdc`**.
+- **LinnexAgent / Platform MCP:** control plane и tunnel WS — `frontend` (`/frontend/api/agent/*`); исполнение flow как MCP tools — `flows` (`/flows/api/v1/agent/platform-mcp`, router из `apps/agent/platform_mcp.py`). Внешний MCP host может вызывать Platform MCP без desktop. На brand `humanitec.ru` продукт — HumanitecAgent. Правки pairing/tunnel/audit → **`humanitec_agent.mdc`**; внешние MCP servers в llm_node → **`mcp.mdc`**.
 
 ## Навигация
 
@@ -360,7 +376,7 @@ Cursor — `base64url(json({"ts": "<created_at.isoformat()>", "id": "<entity_id>
 | Tools для flows | `tools.mdc` |
 | Eval sandbox, namespace, безопасность тулов | `eval.mdc` |
 | MCP серверы (внешние → flows) | `mcp.mdc` |
-| HumanitecAgent, Platform MCP, tunnel, pairing | `humanitec_agent.mdc` |
+| LinnexAgent, Platform MCP, tunnel, pairing | `humanitec_agent.mdc` |
 | TaskIQ: воркеры, задачи, scheduler | `taskiq.mdc` |
 | Streaming, Redis Pub/Sub, Emitter | `streaming.mdc` |
 | Интеграции: A2A, OAuth, HTTP | `integrations.mdc` |

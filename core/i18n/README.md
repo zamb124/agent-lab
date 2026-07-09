@@ -1,11 +1,11 @@
 # Директория переводов
 
-Эта директория содержит все файлы системы интернационализации (i18n) для Humanitec.
+Эта директория содержит все файлы системы интернационализации (i18n) для Платформы.
 
 ## 📁 Структура
 
 ```
-app/i18n/
+core/i18n/
 ├── translations/               # Основные файлы переводов (модульная структура)
 │   ├── ru/                    # Русский язык
 │   │   ├── _meta.json         # Метаданные языка (версия, статистика)
@@ -94,7 +94,7 @@ app/i18n/
 Редактируйте нужный модуль напрямую:
 
 ```json
-// Пример: app/i18n/translations/en/common.json
+// Пример: core/i18n/translations/en/common.json
 {
   "save": "Save",                      // ✅ Переведено
   "cancel": "[TODO: common.cancel]",   // ❌ Требует перевода
@@ -103,7 +103,7 @@ app/i18n/
 ```
 
 ```json
-// Пример: app/i18n/translations/en/models/agent.json
+// Пример: core/i18n/translations/en/models/agent.json
 {
   "fields": {
     "name": {
@@ -186,15 +186,15 @@ fetch('/frontend/i18n/stats').then(r => r.json()).then(console.log)
 
 ```bash
 # Поиск непереведенных ключей
-grep -r "\[TODO:" app/i18n/translations/
+grep -r "\[TODO:" core/i18n/translations/
 
 # Подсчет процента завершенности
-jq '.meta.completeness' app/i18n/translations/en.json
+jq '.meta.completeness' core/i18n/translations/en.json
 ```
 
 ## 📊 Пример файла перевода
 
-### app/i18n/translations/ru.json
+### core/i18n/translations/ru.json
 ```json
 {
   "meta": {

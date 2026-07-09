@@ -49,6 +49,19 @@ from core.types import (
 
 logger = get_logger(__name__)
 
+_INLINE_SELF_CONTAINED_TOOL_TYPES = frozenset(
+    {
+        "channel",
+        "flow",
+        "mcp",
+        "external_api",
+        "remote_flow",
+        "code",
+        "resource",
+    }
+)
+
+
 def _function_tool_template_code(tool_instance: FunctionTool) -> str:
     """Маркер platform builtin для материализации FunctionTool в ToolRegistry."""
     tool_name = tool_instance.name
@@ -79,8 +92,9 @@ class FlowsLoader:
         self._bundle_registry: FlowBundleRegistry = FlowBundleRegistry()
         self._defaults: JsonObject = {}
         self._loaded_nodes: list[str] = []
-        self._tools_cache: dict[str, ToolReference] = {}  # Кеш tool refs для сборки flow config
-        self._nodes_cache: dict[str, NodeConfig] = {}  # Кеш nodes для инлайнинга
+        self._tools_cache: dict[str, ToolReference] = {}  # session memo: tool refs для инлайнинга
+        self._nodes_cache: dict[str, NodeConfig] = {}  # session memo: nodes для инлайнинга
+        self._preloaded_bundle_ids: set[str] = set()
         self._target_company_id: str | None = None
 
     def load_registry_yaml(self) -> None:
@@ -104,9 +118,6 @@ class FlowsLoader:
             Кортеж (список загруженных flow_id, список загруженных node_id)
         """
         self._target_company_id = "system"
-        # Загружаем кеши для инлайнинга
-        await self.load_tools_cache()
-        await self.load_nodes_cache()
 
         if not self.registry_path.exists():
             logger.warning(f"Registry не найден: {self.registry_path}")
@@ -148,35 +159,137 @@ class FlowsLoader:
         return loaded_flow_ids, self._loaded_nodes
 
     async def preload_nodes_to_cache(self, bundle_id: str) -> None:
-        """Предзагрузка nodes из каталога bundle в кеш (без сохранения flow в БД)."""
+        """Предзагрузка nodes из каталога bundle в session memo (без сохранения flow в БД)."""
+        if bundle_id in self._preloaded_bundle_ids:
+            return
+
         bundle_dir = self.bundles_dir / bundle_id
 
         nodes_path = bundle_dir / "nodes.json"
         if not nodes_path.exists():
+            self._preloaded_bundle_ids.add(bundle_id)
             return
 
         await self._load_nodes(bundle_dir, nodes_path)
+        self._preloaded_bundle_ids.add(bundle_id)
 
-    async def load_tools_cache(self) -> None:
-        """Загружает tool refs из БД в кеш. MCP-тулы пропускаются — они проксируются через MCP-сервер."""
-        tools = await self.tool_repository.list(limit=10000)
-        for tool in tools:
-            if tool.tool_id.startswith("mcp:"):
+    async def _ensure_references_resolved(self, reference_ids: set[str]) -> None:
+        """Подгружает tool/node refs по явным ID через repository.get_many (demand-driven)."""
+        if not reference_ids:
+            return
+
+        missing_tool_lookup = [
+            ref_id
+            for ref_id in reference_ids
+            if ref_id not in self._tools_cache and ref_id not in self._nodes_cache
+        ]
+        if not missing_tool_lookup:
+            return
+
+        resolved_tools = await self.tool_repository.get_many(missing_tool_lookup)
+        for ref_id, tool_ref in resolved_tools.items():
+            if tool_ref.tool_id.startswith("mcp:"):
                 continue
-            if not tool.code:
+            if not tool_ref.code:
                 raise ValueError(
-                    f"Tool '{tool.tool_id}' в БД не имеет code. Пользовательские code tools должны иметь inline code для isolated runner."
+                    f"Tool '{tool_ref.tool_id}' в БД не имеет code. "
+                    + "Пользовательские code tools должны иметь inline code для isolated runner."
                 )
-            self._tools_cache[tool.tool_id] = tool
+            self._tools_cache[ref_id] = tool_ref
 
-        logger.info(f"Загружен кеш из {len(self._tools_cache)} tool refs")
+        still_missing = [
+            ref_id
+            for ref_id in missing_tool_lookup
+            if ref_id not in self._tools_cache and ref_id not in self._nodes_cache
+        ]
+        if not still_missing:
+            logger.info(
+                "Резолвнуто %s tool refs для инлайнинга (nodes: 0)",
+                len(resolved_tools),
+            )
+            return
 
-    async def load_nodes_cache(self) -> None:
-        """Загружает все nodes из БД в кеш для инлайнинга."""
-        nodes = await self.node_repository.list(limit=10000)
-        for node in nodes:
-            self._nodes_cache[node.node_id] = node
-        logger.info(f"Загружен кеш из {len(self._nodes_cache)} nodes")
+        resolved_nodes = await self.node_repository.get_many(still_missing)
+        for ref_id, node_config in resolved_nodes.items():
+            self._nodes_cache[ref_id] = node_config
+
+        logger.info(
+            "Резолвнуто %s tool refs и %s nodes для инлайнинга",
+            len(resolved_tools),
+            len(resolved_nodes),
+        )
+
+    def _collect_reference_ids_from_tool(self, tool: JsonValue) -> set[str]:
+        if isinstance(tool, str):
+            return {tool}
+
+        if isinstance(tool, dict):
+            tool_payload = tool
+            tool_id = tool_payload.get("tool_id")
+            exec_kind = tool_payload.get("type")
+            code_mode = tool_payload.get("code_mode")
+
+            if exec_kind == "llm_node" or tool_payload.get("prompt"):
+                nested_tools = tool_payload.get("tools")
+                if isinstance(nested_tools, list):
+                    return self._collect_reference_ids_from_tools(
+                        require_json_array(nested_tools, "tool.tools")
+                    )
+                return set()
+
+            if exec_kind in _INLINE_SELF_CONTAINED_TOOL_TYPES:
+                return set()
+            if code_mode == CodeMode.MCP_TOOL.value:
+                return set()
+
+            if isinstance(tool_id, str) and tool_id and not tool_payload.get("code"):
+                return {tool_id}
+
+            if tool_payload.get("code") or tool_payload.get("prompt"):
+                return set()
+
+            return set()
+
+        return set()
+
+    def _collect_reference_ids_from_tools(self, tools: JsonArray) -> set[str]:
+        reference_ids: set[str] = set()
+        for tool in tools:
+            reference_ids.update(self._collect_reference_ids_from_tool(tool))
+        return reference_ids
+
+    def _collect_reference_ids_from_nodes(self, nodes: dict[str, JsonObject]) -> set[str]:
+        reference_ids: set[str] = set()
+        for node_id, node_config in nodes.items():
+            if node_config.get("type") == "code":
+                tool_id = node_config.get("tool_id")
+                if isinstance(tool_id, str) and tool_id and not node_config.get("code"):
+                    reference_ids.add(tool_id)
+
+            tools_raw = node_config.get("tools", [])
+            reference_ids.update(
+                self._collect_reference_ids_from_tools(
+                    require_json_array(tools_raw, f"nodes.{node_id}.tools")
+                )
+            )
+        return reference_ids
+
+    def _collect_reference_ids(
+        self,
+        nodes: dict[str, JsonObject],
+        branches: dict[str, JsonObject],
+    ) -> set[str]:
+        reference_ids = self._collect_reference_ids_from_nodes(nodes)
+        for branch_id, branch_cfg in branches.items():
+            branch_nodes_raw = branch_cfg.get("nodes", {})
+            if not isinstance(branch_nodes_raw, dict):
+                continue
+            branch_nodes = {
+                node_id: require_json_object(node_payload, f"branch.{branch_id}.nodes.{node_id}")
+                for node_id, node_payload in branch_nodes_raw.items()
+            }
+            reference_ids.update(self._collect_reference_ids_from_nodes(branch_nodes))
+        return reference_ids
 
     async def _load_flow_bundle(self, bundle_id: str) -> str | None:
         """Один каталог bundle -> FlowConfig в БД. Nodes предзагружены в preload_nodes_to_cache."""
@@ -198,18 +311,23 @@ class FlowsLoader:
             logger.warning(f"flow.json не найден: {bundle_dir}")
             return None
 
+        if not self._defaults and self.registry_path.exists():
+            self.load_registry_yaml()
+
+        await self.preload_nodes_to_cache(bundle_id)
+
         with open(config_path, "r", encoding="utf-8") as f:
             raw_config = require_json_object(cast(JsonValue, json.load(f)), "flow.json")
 
         nodes = await self._load_nodes_with_prompts(bundle_dir, raw_config)
         nodes = self._apply_defaults(nodes)
-        if not self._tools_cache:
-            await self.load_tools_cache()
+        branches = await self._load_branches_with_prompts(bundle_dir, raw_config)
+        reference_ids = self._collect_reference_ids(nodes, branches)
+        await self._ensure_references_resolved(reference_ids)
         nodes = self._inline_tools_in_nodes(nodes)
+        branches = self._inline_tools_in_branches(branches)
 
         edges = require_json_array(raw_config.get("edges", []), "flow.edges")
-        branches = await self._load_branches_with_prompts(bundle_dir, raw_config)
-        branches = self._inline_tools_in_branches(branches)
 
         triggers: dict[str, TriggerConfig] = {}
         raw_triggers = raw_config.get("triggers")
@@ -835,16 +953,7 @@ class FlowsLoader:
 
             # Tool с tool_id без code — ищем в caches
             # Полностью определённые inline tools (не требуют поиска в кэшах)
-            inline_node_types = {
-                "channel",
-                "flow",
-                "mcp",
-                "external_api",
-                "remote_flow",
-                "code",
-                "resource",
-            }
-            if exec_kind in inline_node_types:
+            if exec_kind in _INLINE_SELF_CONTAINED_TOOL_TYPES:
                 logger.debug(f"{context}: inline tool '{tool_id}' с type='{exec_kind}'")
                 return tool_payload
             if code_mode == CodeMode.MCP_TOOL.value:
@@ -1031,9 +1140,6 @@ class FlowsLoader:
             {"flows": count, "tools": count, "nodes": count}
         """
         self._target_company_id = company_id
-        # Загружаем кеши для инлайнинга
-        await self.load_tools_cache()
-        await self.load_nodes_cache()
 
         if not self.registry_path.exists():
             logger.warning(f"Registry не найден: {self.registry_path}")
@@ -1164,14 +1270,12 @@ class FlowsLoader:
         """
         Перезаписывает один flow и связанные nodes из каталога ``bundles/<bundle_id>/`` в БД.
 
-        Использует тот же путь, что и полная загрузка registry: кеш tools/nodes, defaults из registry.
+        Использует тот же путь, что и полная загрузка registry: demand-driven резолв refs, defaults из registry.
         """
         context = get_context()
         if not context or not context.active_company or not context.active_company.company_id:
             raise ValueError("reload_flow_bundle требует active_company в контексте")
         self._target_company_id = context.active_company.company_id
-        await self.load_tools_cache()
-        await self.load_nodes_cache()
 
         if not self.registry_path.exists():
             raise ValueError(f"Registry не найден: {self.registry_path}")

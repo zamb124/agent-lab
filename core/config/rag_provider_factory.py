@@ -100,6 +100,7 @@ def _runtime_from_company_embedding(
         base_url=base_url,
         mrl_output_dimension=resolved.mrl_output_dimension,
         extra_request_headers={key: str(value) for key, value in resolved.headers.items()} or None,
+        query_instruction=settings.rag.embedding.api.query_instruction,
     )
 
 
@@ -151,6 +152,7 @@ def _bundle_cache_key(bundle: ResolvedRagProvider) -> str:
             "base_url": bundle.embedding_runtime.base_url,
             "mrl_output_dimension": bundle.embedding_runtime.mrl_output_dimension,
             "extra_request_headers": bundle.embedding_runtime.extra_request_headers,
+            "query_instruction": bundle.embedding_runtime.query_instruction,
         }
     payload: JsonObject = {
         "provider_key": bundle.provider_key,

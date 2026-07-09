@@ -4,6 +4,10 @@
 
 import { createAsyncOp } from '@platform/lib/events/index.js';
 import { httpRequest } from '@platform/lib/events/http.js';
+import {
+    packAdvancedRetrievalPayload,
+    packSearchRequestOptions,
+} from '@platform/lib/rag/pack_search_request_options.js';
 import { nsHeader } from './_namespace-header.js';
 
 function _catalogIdFromPayload(payload, opName) {
@@ -31,7 +35,12 @@ export const catalogRagSearchOp = createAsyncOp({
             method: 'POST',
             url: `/documents/api/v1/catalogs/${encodeURIComponent(catalogId)}/rag-index/search`,
             headers: nsHeader(ctx),
-            body: { query, limit },
+            body: {
+                query,
+                limit,
+                ...packSearchRequestOptions(payload),
+                ...packAdvancedRetrievalPayload(payload),
+            },
         });
     },
 });

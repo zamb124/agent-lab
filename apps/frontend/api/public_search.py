@@ -33,7 +33,7 @@ from core.logging import get_logger
 from core.models.embed_models import EmbedStatus
 from core.models.identity_models import User
 from core.search import PUBLIC_SEARCH_FLOW_ID, PUBLIC_SEARCH_SESSION_ISSUER, PublicSearchMode
-from core.search.models import MetaSearchResponse, MetaSearchSerpMoreRequest
+from core.search.models import MetaSearchResponse, MetaSearchSerpMoreRequest, SerpClickEvent
 from core.types import JsonObject
 from core.utils.tokens import TokenType, get_token_service
 
@@ -324,6 +324,24 @@ async def public_search_serp_more(
             raise HTTPException(status_code=404, detail=message) from exc
         raise HTTPException(status_code=502, detail=message) from exc
     return MetaSearchResponse.model_validate(payload)
+
+
+@router.post("/serp/click", status_code=204)
+async def public_search_serp_click(
+    body: SerpClickEvent,
+    container: ContainerDep,
+) -> None:
+    _ = container
+    _validate_public_search_guest()
+    client = ServiceClient()
+    try:
+        _ = await client.post(
+            "search",
+            "/search/api/v1/search/serp/click",
+            json=body.model_dump(mode="json"),
+        )
+    except Exception as exc:
+        raise HTTPException(status_code=502, detail=str(exc)) from exc
 
 
 @router.get("/favicon")

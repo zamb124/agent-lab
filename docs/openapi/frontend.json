@@ -972,7 +972,7 @@
           "recorded_at"
         ],
         "title": "AgentAuditEvent",
-        "description": "Запись audit-лога HumanitecAgent."
+        "description": "Запись audit-лога десктопного агента платформы."
       },
       "AgentAuditListResponse": {
         "properties": {
@@ -1113,7 +1113,7 @@
           "releases"
         ],
         "title": "AgentDiscoverResponse",
-        "description": "Публичный discover HumanitecAgent до pairing."
+        "description": "Публичный discover десктопного агента платформы до pairing."
       },
       "AgentLlmBundle": {
         "properties": {
@@ -1141,7 +1141,7 @@
           "api_base_url"
         ],
         "title": "AgentLlmBundle",
-        "description": "OpenAI-compatible LLM endpoint для HumanitecAgent после pairing."
+        "description": "OpenAI-compatible LLM endpoint для десктопного агента платформы после pairing."
       },
       "AgentReleaseAssetChecksum": {
         "properties": {
@@ -5377,7 +5377,7 @@
         "additionalProperties": false,
         "type": "object",
         "title": "DevicePolicy",
-        "description": "Политика безопасности для устройства HumanitecAgent."
+        "description": "Политика безопасности для устройства десктопного агента платформы."
       },
       "DevicePolicyUpdateRequest": {
         "properties": {
@@ -5391,7 +5391,7 @@
           "policy"
         ],
         "title": "DevicePolicyUpdateRequest",
-        "description": "Обновление политики устройства HumanitecAgent."
+        "description": "Обновление политики устройства десктопного агента платформы."
       },
       "DeviceRegisterRequest": {
         "properties": {
@@ -5437,7 +5437,7 @@
           "hostname"
         ],
         "title": "DeviceRegisterRequest",
-        "description": "Запрос на регистрацию устройства от HumanitecAgent."
+        "description": "Запрос на регистрацию устройства от десктопного агента платформы."
       },
       "DeviceRegisterResponse": {
         "properties": {
@@ -5458,7 +5458,7 @@
           "toolkits_url": {
             "type": "string",
             "title": "Toolkits Url",
-            "description": "URL каталога групп инструментов HumanitecAgent"
+            "description": "URL каталога групп инструментов десктопного агента платформы"
           },
           "frontend_base_url": {
             "type": "string",
@@ -5468,7 +5468,7 @@
           "tunnel_ws_url": {
             "type": "string",
             "title": "Tunnel Ws Url",
-            "description": "WebSocket URL tunnel HumanitecAgent"
+            "description": "WebSocket URL tunnel десктопного агента платформы"
           },
           "company_id": {
             "type": "string",
@@ -7318,9 +7318,15 @@
             "enum": [
               "config_seed",
               "manual",
-              "benchmark_import"
+              "benchmark_import",
+              "computed"
             ],
             "title": "Source"
+          },
+          "editorial_prior": {
+            "type": "number",
+            "title": "Editorial Prior",
+            "default": 0.0
           },
           "score_dimensions": {
             "additionalProperties": {
@@ -7328,6 +7334,13 @@
             },
             "type": "object",
             "title": "Score Dimensions"
+          },
+          "score_breakdown": {
+            "additionalProperties": {
+              "type": "number"
+            },
+            "type": "object",
+            "title": "Score Breakdown"
           },
           "note": {
             "anyOf": [
@@ -7352,14 +7365,33 @@
             "title": "Updated By User Id"
           },
           "created_at": {
-            "type": "string",
-            "format": "date-time",
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
             "title": "Created At"
           },
           "updated_at": {
-            "type": "string",
-            "format": "date-time",
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
             "title": "Updated At"
+          },
+          "has_hint_row": {
+            "type": "boolean",
+            "title": "Has Hint Row",
+            "default": false
           }
         },
         "additionalProperties": false,
@@ -7370,9 +7402,7 @@
           "capability",
           "score",
           "enabled",
-          "source",
-          "created_at",
-          "updated_at"
+          "source"
         ],
         "title": "LLMModelScoreDTO"
       },
@@ -7453,16 +7483,17 @@
           "capability": {
             "$ref": "#/components/schemas/AICapability"
           },
-          "score": {
-            "type": "number",
-            "maximum": 1000.0,
-            "minimum": 0.0,
-            "title": "Score"
-          },
           "enabled": {
             "type": "boolean",
             "title": "Enabled",
             "default": true
+          },
+          "editorial_prior": {
+            "type": "number",
+            "maximum": 50.0,
+            "minimum": -50.0,
+            "title": "Editorial Prior",
+            "default": 0.0
           },
           "score_dimensions": {
             "additionalProperties": {
@@ -7488,8 +7519,7 @@
         "required": [
           "provider",
           "model_id",
-          "capability",
-          "score"
+          "capability"
         ],
         "title": "LLMModelScoreUpsertRequest"
       },
@@ -8755,6 +8785,81 @@
         ],
         "title": "PlatformBillingUsageReportResponse",
         "description": "Строки usage из shared БД для админки."
+      },
+      "PlatformBrandResponse": {
+        "properties": {
+          "base_domain": {
+            "type": "string",
+            "title": "Base Domain"
+          },
+          "platform_name": {
+            "type": "string",
+            "title": "Platform Name"
+          },
+          "support_email": {
+            "type": "string",
+            "title": "Support Email"
+          },
+          "agent_product_name": {
+            "type": "string",
+            "title": "Agent Product Name"
+          },
+          "models_product_name": {
+            "type": "string",
+            "title": "Models Product Name"
+          },
+          "voice_product_name": {
+            "type": "string",
+            "title": "Voice Product Name"
+          },
+          "llms_display_label": {
+            "type": "string",
+            "title": "Llms Display Label"
+          },
+          "flows_product_label": {
+            "type": "string",
+            "title": "Flows Product Label"
+          },
+          "logo_path": {
+            "type": "string",
+            "title": "Logo Path"
+          },
+          "apex_origin": {
+            "type": "string",
+            "title": "Apex Origin"
+          },
+          "legal": {
+            "$ref": "#/components/schemas/LegalConfig"
+          },
+          "public_site": {
+            "$ref": "#/components/schemas/PublicSiteConfig"
+          },
+          "supported_domains": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Supported Domains",
+            "description": "Все registrable apex platform brands (для JS host guard)."
+          }
+        },
+        "type": "object",
+        "required": [
+          "base_domain",
+          "platform_name",
+          "support_email",
+          "agent_product_name",
+          "models_product_name",
+          "voice_product_name",
+          "llms_display_label",
+          "flows_product_label",
+          "logo_path",
+          "apex_origin",
+          "legal",
+          "public_site",
+          "supported_domains"
+        ],
+        "title": "PlatformBrandResponse"
       },
       "PlatformPronunciationRuleCreateRequest": {
         "properties": {
@@ -10839,7 +10944,7 @@
         "properties": {
           "name": {
             "type": "string",
-            "const": "Humanitec",
+            "minLength": 1,
             "title": "Name"
           },
           "tagline_ru": {
@@ -11066,6 +11171,19 @@
             "title": "Rerank",
             "default": true
           },
+          "rerank_max_candidates": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "exclusiveMinimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Rerank Max Candidates",
+            "description": "Сколько верхних кандидатов после RRF+freshness уходит в reranker."
+          },
           "rrf_k": {
             "anyOf": [
               {
@@ -11102,6 +11220,36 @@
             "minimum": 200.0,
             "title": "Snippet Max Chars",
             "default": 2000
+          },
+          "freshness_weight": {
+            "type": "number",
+            "maximum": 1.0,
+            "minimum": 0.0,
+            "title": "Freshness Weight",
+            "description": "Вес freshness decay в гибридном скоринге; 0 — выключено.",
+            "default": 0.0
+          },
+          "freshness_half_life_days": {
+            "type": "number",
+            "exclusiveMinimum": 0.0,
+            "title": "Freshness Half Life Days",
+            "description": "Half-life decay для обычных запросов, в днях.",
+            "default": 180.0
+          },
+          "freshness_recency_half_life_days": {
+            "type": "number",
+            "exclusiveMinimum": 0.0,
+            "title": "Freshness Recency Half Life Days",
+            "description": "Усиленный half-life для recency-sensitive запросов (новости/годы/«сегодня»).",
+            "default": 30.0
+          },
+          "domain_authority_weight": {
+            "type": "number",
+            "maximum": 1.0,
+            "minimum": 0.0,
+            "title": "Domain Authority Weight",
+            "description": "Вес авторитета домена (Tranco domain_rank): score *= 1 + weight * authority, authority = 1 - log10(rank)/6 в [0, 1]. 0 — выключено.",
+            "default": 0.0
           }
         },
         "additionalProperties": false,
@@ -11231,6 +11379,65 @@
         "additionalProperties": false,
         "type": "object",
         "title": "SearchProviderUpdateRequest"
+      },
+      "SerpClickEvent": {
+        "properties": {
+          "query": {
+            "type": "string",
+            "maxLength": 500,
+            "minLength": 1,
+            "title": "Query"
+          },
+          "mode": {
+            "type": "string",
+            "enum": [
+              "quick",
+              "deep",
+              "research"
+            ],
+            "title": "Mode",
+            "default": "quick"
+          },
+          "url": {
+            "type": "string",
+            "maxLength": 2048,
+            "minLength": 1,
+            "title": "Url"
+          },
+          "position": {
+            "type": "integer",
+            "maximum": 1000.0,
+            "minimum": 1.0,
+            "title": "Position"
+          },
+          "provider": {
+            "type": "string",
+            "maxLength": 64,
+            "title": "Provider",
+            "default": ""
+          },
+          "search_index_id": {
+            "type": "string",
+            "maxLength": 64,
+            "title": "Search Index Id",
+            "default": ""
+          },
+          "serp_cache_key": {
+            "type": "string",
+            "maxLength": 64,
+            "title": "Serp Cache Key",
+            "default": ""
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "query",
+          "url",
+          "position"
+        ],
+        "title": "SerpClickEvent",
+        "description": "Клик по результату SERP: сигнал качества ранжирования для Loki/Grafana."
       },
       "ServiceStatus": {
         "properties": {
@@ -11706,7 +11913,7 @@
           "message": {
             "type": "string",
             "title": "Message",
-            "default": "Это тестовое push-уведомление от Humanitec"
+            "default": "Это тестовое push-уведомление"
           }
         },
         "additionalProperties": false,

@@ -1,17 +1,19 @@
 /**
  * OfficeCatalogRagModal — RAG-индексация каталога документов.
- *
- * props: { catalogId, catalogTitle }.
- * useOp('office/catalog_rag_status') — статус при открытии;
- * enable/disable/rebuild — отдельные ops.
  */
 
 import { html, css } from 'lit';
 import { PlatformFormModal } from '@platform/lib/components/glass-form-modal.js';
 import { registerModalKind } from '@platform/lib/utils/modal-registry.js';
 import { formatPlatformDateTime } from '@platform/lib/utils/format-platform-date.js';
+import {
+    buildAdvancedRetrievalPayloadFromPanel,
+    defaultRetrievalPanelValue,
+    panelValueFromSearchOptions,
+} from '@platform/lib/rag/pack_search_request_options.js';
 import '@platform/lib/components/platform-switch.js';
 import '@platform/lib/components/platform-icon.js';
+import '@platform/lib/components/rag/platform-rag-retrieval-panel.js';
 
 const STATUS_OP = 'office/catalog_rag_status';
 const ENABLE_OP = 'office/catalog_rag_enable';
@@ -28,6 +30,7 @@ export class OfficeCatalogRagModal extends PlatformFormModal {
         ...PlatformFormModal.properties,
         catalogId: { type: String },
         catalogTitle: { type: String },
+        _retrievalPanel: { state: true },
     };
 
     static styles = [
@@ -83,14 +86,26 @@ export class OfficeCatalogRagModal extends PlatformFormModal {
                 color: var(--text-tertiary);
                 font-size: var(--text-sm);
             }
+            .search-options-section {
+                display: flex;
+                flex-direction: column;
+                gap: var(--space-3);
+                padding-top: var(--space-2);
+                border-top: 1px solid var(--glass-border-subtle);
+            }
+            .search-options-hint {
+                font-size: var(--text-xs);
+                color: var(--text-tertiary);
+            }
         `,
     ];
 
     constructor() {
         super();
-        this.size = 'sm';
+        this.size = 'md';
         this.catalogId = '';
         this.catalogTitle = '';
+        this._retrievalPanel = defaultRetrievalPanelValue();
         this._status = this.useOp(STATUS_OP);
         this._enable = this.useOp(ENABLE_OP);
         this._disable = this.useOp(DISABLE_OP);
@@ -105,6 +120,24 @@ export class OfficeCatalogRagModal extends PlatformFormModal {
         if (typeof this.catalogId === 'string' && this.catalogId.length > 0) {
             this._status.run({ catalogId: this.catalogId });
         }
+    }
+
+    updated(changed) {
+        super.updated(changed);
+        if (changed.has('_status') || changed.has('catalogId')) {
+            this._syncRetrievalPanelFromStatus();
+        }
+    }
+
+    _syncRetrievalPanelFromStatus() {
+        const status = this._statusPayload();
+        if (!status) {
+            return;
+        }
+        const searchOptions = status.search_options;
+        this._retrievalPanel = panelValueFromSearchOptions(
+            searchOptions && typeof searchOptions === 'object' ? searchOptions : null,
+        );
     }
 
     renderHeader() {
@@ -172,6 +205,33 @@ export class OfficeCatalogRagModal extends PlatformFormModal {
         this._catalogs.load(null);
     }
 
+    async _onSaveSearchOptions() {
+        if (typeof this.catalogId !== 'string' || this.catalogId.length === 0) {
+            return;
+        }
+        const panel = this._retrievalPanel;
+        if (!panel || typeof panel !== 'object' || Array.isArray(panel)) {
+            throw new Error('OfficeCatalogRagModal: invalid retrieval panel state');
+        }
+        /** @type {Record<string, unknown>} */
+        const payload = { catalogId: this.catalogId };
+        if (panel.usePlatformDefaults === true) {
+            payload.clearSearchOptions = true;
+        } else {
+            Object.assign(payload, buildAdvancedRetrievalPayloadFromPanel(panel));
+        }
+        await this._settings.run(payload);
+        this._catalogs.load(null);
+    }
+
+    _onRetrievalPanelChange(e) {
+        const value = e.detail && e.detail.value;
+        if (!value || typeof value !== 'object' || Array.isArray(value)) {
+            throw new Error('OfficeCatalogRagModal: invalid retrieval panel value');
+        }
+        this._retrievalPanel = value;
+    }
+
     _renderTotals(totals) {
         if (!totals || typeof totals !== 'object') {
             return '';
@@ -229,6 +289,24 @@ export class OfficeCatalogRagModal extends PlatformFormModal {
                             ?disabled=${busy}
                             @change=${this._onToggleIncludeSubcatalogs}
                         ></platform-switch>
+                    </div>
+                    <div class="search-options-section">
+                        <div class="switch-label">${this.t('catalog_rag_modal.search_options_title')}</div>
+                        <div class="search-options-hint">${this.t('catalog_rag_modal.search_options_hint')}</div>
+                        <platform-rag-retrieval-panel
+                            compact
+                            .value=${this._retrievalPanel}
+                            ?disabled=${busy}
+                            @change=${this._onRetrievalPanelChange}
+                        ></platform-rag-retrieval-panel>
+                        <button
+                            type="button"
+                            class="btn btn-secondary"
+                            ?disabled=${busy}
+                            @click=${this._onSaveSearchOptions}
+                        >
+                            ${this.t('catalog_rag_modal.search_options_save')}
+                        </button>
                     </div>
                     ${this._renderTotals(totals)}
                     <div class="hint">

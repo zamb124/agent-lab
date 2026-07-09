@@ -6,6 +6,7 @@ import time
 import pytest
 
 from tests.search.conftest import make_search_index_slug
+from tests.search.integration.snippet_support import strip_snippet_highlight
 
 pytestmark = pytest.mark.timeout(120, func_only=True)
 
@@ -149,7 +150,7 @@ async def test_index_search_finds_rag_content_with_source_url(
     assert top["search_index_id"] == search_index_id
     assert top["source_type"] == "platform_index"
     assert top["url"] == source_url
-    assert marker in top.get("snippet", "")
+    assert marker in strip_snippet_highlight(top.get("snippet", ""))
 
 
 @pytest.mark.asyncio
@@ -208,7 +209,9 @@ async def test_meta_search_runet_alias_resolves_to_index_provider(
         query=doc_text,
     )
     assert payload["providers"]["index"]["ok"] is True
-    assert any(marker in item.get("snippet", "") for item in payload["results"])
+    assert any(
+        marker in strip_snippet_highlight(item.get("snippet", "")) for item in payload["results"]
+    )
 
     alias_response = await search_client.post(
         "/search/api/v1/search",
@@ -221,7 +224,10 @@ async def test_meta_search_runet_alias_resolves_to_index_provider(
     assert alias_response.status_code == 200
     alias_payload = alias_response.json()
     assert alias_payload["providers"]["index"]["ok"] is True
-    assert any(marker in item.get("snippet", "") for item in alias_payload["results"])
+    assert any(
+        marker in strip_snippet_highlight(item.get("snippet", ""))
+        for item in alias_payload["results"]
+    )
 
 
 @pytest.mark.asyncio

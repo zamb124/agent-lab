@@ -1,6 +1,6 @@
-# Humanitec — Platform
+# Платформа (linnex.io)
 
-Платформа для ИИ-агентов (Flows), командного чата (Sync), графа знаний (NetWorkle/CRM), семантического поиска (RAG), документов (Office), задач (Worktracker), голоса (Voice) и desktop-агента (HumanitecAgent).
+Платформа для ИИ-агентов (Flows), командного чата (Sync), графа знаний (NetWorkle/CRM), семантического поиска (RAG), документов (Office), задач (Worktracker), голоса (Voice) и desktop-агента (LinnexAgent). Primary apex — **linnex.io**; также доступна на **humanitec.ru** и других доменах из `platform_brands` ([`configuration.mdc`](.cursor/rules/configuration.mdc)).
 
 **Инвариант**: Database-First — конфигурация flows, tools и resources в базе данных; код задаёт только поведение.
 
@@ -108,7 +108,7 @@ agent-lab/
 ├── apps/              # Микросервисы (flows, frontend, crm, rag, sync, office, …)
 │   ├── flows/         # Flow runtime, API, UI, bundles
 │   ├── frontend/      # Платформенный shell, auth, billing
-│   ├── agent/         # HumanitecAgent desktop (Electron)
+│   ├── agent/         # LinnexAgent desktop (Electron)
 │   ├── *_worker/      # TaskIQ-воркеры по доменам
 │   └── …
 ├── core/              # Общая платформа (ai, clients, db, frontend lib, llm_context, …)
@@ -147,7 +147,7 @@ agent-lab/
 | `make test` | CI-прогон unit/API |
 | `make test-ui` / `make ui-doc` | Playwright E2E + doc scenarios |
 | `make migrate` | Alembic всех сервисных деревьев |
-| `make agent` | HumanitecAgent desktop — сборка и GitHub Release |
+| `make agent` | LinnexAgent desktop — сборка и GitHub Release |
 | `make doc` | Zensical RU+EN build |
 
 Миграции: `make migrate-new m="описание" s=shared` (домены: `shared`, `flows`, `crm`, `rag`, `sync`, `office`, `worktracker`, `secrets`, `search`, `tracing`). См. [.cursor/rules/migrations.mdc](.cursor/rules/migrations.mdc).
@@ -184,7 +184,7 @@ make k8s-rollback                   # helm rollback
 
 Copyright (c) 2024-2026 Шведов Виктор Викторович.
 
-Исходный код платформы Humanitec распространяется под [Elastic License 2.0](LICENSE)
+Исходный код Платформы распространяется под [Elastic License 2.0](LICENSE)
 (SPDX: `Elastic-2.0`). Это source-available лицензия, **не** OSI open source: запрещено
 предлагать продукт третьим лицам как hosted или managed service с существенной частью
 функциональности платформы.

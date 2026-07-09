@@ -1,4 +1,4 @@
-# Frontend: ссылка на скачивание HumanitecAgent в hero лендинга
+# Frontend: ссылка на скачивание LinnexAgent в hero лендинга
 
 На главной странице есть floating-карточка со ссылкой на /agent.
 

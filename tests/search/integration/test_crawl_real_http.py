@@ -10,6 +10,7 @@ from apps.search_worker.tasks.crawl_tasks import crawl_discover_domain, crawl_fe
 from core.crawl.models import CrawlDomainSeed, CrawlProfileCreateRequest
 from core.search.index_models import SearchIndexCreateRequest
 from tests.search.conftest import make_search_index_slug
+from tests.search.integration.snippet_support import strip_snippet_highlight
 
 pytestmark = [pytest.mark.timeout(180, func_only=True), pytest.mark.network]
 
@@ -165,6 +166,6 @@ async def test_crawl_fetch_indexes_example_com_and_search_finds_content(
     assert top["search_index_id"] == search_index_id
     assert top["source_type"] == "platform_index"
     assert REAL_CRAWL_DOMAIN in top["url"]
-    snippet = top.get("snippet", "")
+    snippet = strip_snippet_highlight(top.get("snippet", ""))
     title = top.get("title", "")
     assert REAL_CRAWL_QUERY.lower() in snippet.lower() or REAL_CRAWL_QUERY.lower() in title.lower()

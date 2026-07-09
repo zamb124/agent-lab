@@ -22,6 +22,7 @@ from apps.search.services.crawl.bootstrap_service import CrawlBootstrapService
 from apps.search.services.crawl.fetch_service import CrawlFetchService
 from apps.search.services.crawl.orchestrator_service import CrawlOrchestratorService
 from apps.search.services.crawl.page_enrichment_service import CrawlPageEnrichmentService
+from apps.search.services.crawl.politeness_service import CrawlPolitenessService
 from apps.search.services.crawl.report_service import CrawlReportService
 from apps.search.services.crawl_service import SearchCrawlService
 from apps.search.services.search_index_service import SearchIndexService
@@ -162,6 +163,13 @@ class SearchContainer(BaseContainer):
         return CrawlPageEnrichmentService(get_search_settings().crawl.enrichment)
 
     @lazy
+    def crawl_politeness_service(self) -> CrawlPolitenessService:
+        return CrawlPolitenessService(
+            redis_client=self.redis_client,
+            crawl_config=get_search_settings().crawl,
+        )
+
+    @lazy
     def crawl_orchestrator_service(self) -> CrawlOrchestratorService:
         return CrawlOrchestratorService(
             crawl_profile_repository=self.crawl_profile_repository,
@@ -170,6 +178,7 @@ class SearchContainer(BaseContainer):
             crawl_job_repository=self.crawl_job_repository,
             fetch_service=self.crawl_fetch_service,
             page_enrichment_service=self.crawl_page_enrichment_service,
+            politeness_service=self.crawl_politeness_service,
             rag_client=self.rag_client,
             build_system_context=self._build_index_system_context,
             crawl_config=get_search_settings().crawl,

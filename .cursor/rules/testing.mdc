@@ -235,7 +235,7 @@ async def test_integration(mock_llm_redis, flows_client, unique_id):
 - **Состав команды/членов компании:** не ассертить полный состав `system` (session-фикстуры других gw добавляют участников). Сравнение множеств — только на выделенной компании теста (`test_team_members_consistent_across_services`).
 - **Миграции:** только `make test-up` (`scripts/test_migrate.py`). Никакой pytest-фикстуре нельзя гонять Alembic (в т.ч. `tests/sync/conftest.py::sync_database` — verify-only через `setup_database_before_tests`).
 
-**HumanitecAgent artifact (read-only в pytest):** единственный writer — `AGENT_ARTIFACT_MODE=release make agent-ensure` до pytest (`mk/test.mk`). Fixture `agent_local_release_artifact` только verify через `resolve_local_release_artifact_path()`; **запрещён** `apply_branding` из pytest. `apply_branding.sh` держит mkdir-lock `apps/agent/desktop/.branding.lock.d`.
+**LinnexAgent artifact (read-only в pytest):** единственный writer — `AGENT_ARTIFACT_MODE=release make agent-ensure` до pytest (`mk/test.mk`). Fixture `agent_local_release_artifact` только verify через `resolve_local_release_artifact_path()`; **запрещён** `apply_branding` из pytest. `apply_branding.sh` держит mkdir-lock `apps/agent/desktop/.branding.lock.d`.
 
 **Timeout-политика по пакетам (`pytest_collection_modifyitems`):** `real_taskiq` — 180 c func_only=False; `tests/sync/db/**` — 60 c; RAG global maintenance — 120 c func_only=False; `tests/crm/e2e/**` — 60 c **func_only=False** (setup `crm_client` + poll до 9s в одном бюджете; иначе setup >5s убивает xdist-gw); notification WS e2e — 120 c; sandbox runtime — 180 c.
 

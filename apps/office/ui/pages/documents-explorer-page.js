@@ -130,10 +130,29 @@ export class OfficeDocumentsExplorerPage extends PlatformPage {
         const catalogId = this._activeCatalogId();
         const query = typeof state.searchQuery === 'string' ? state.searchQuery.trim() : '';
         if (!catalogId || query.length === 0) return;
-        const key = `${catalogId}|${query}`;
+        const catalogOptions = this._activeCatalogSearchOptions();
+        const key = `${catalogId}|${query}|${JSON.stringify(catalogOptions)}`;
         if (key === this._lastSemanticSearchKey) return;
         this._lastSemanticSearchKey = key;
-        this._catalogRagSearch.run({ catalogId, query, limit: 20 });
+        this._catalogRagSearch.run({
+            catalogId,
+            query,
+            limit: 20,
+            ...catalogOptions,
+        });
+    }
+
+    _activeCatalogSearchOptions() {
+        const catalogId = this._activeCatalogId();
+        if (!catalogId) {
+            return {};
+        }
+        const catalogs = this._catalogItems();
+        const active = catalogs.find((item) => item.catalog_id === catalogId);
+        if (!active || !active.rag_index_search_options || typeof active.rag_index_search_options !== 'object') {
+            return {};
+        }
+        return active.rag_index_search_options;
     }
 
     _semanticSearchItems() {

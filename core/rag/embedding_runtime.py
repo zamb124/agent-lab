@@ -30,6 +30,7 @@ class RagEmbeddingRuntime:
     base_url: str
     mrl_output_dimension: int | None = None
     extra_request_headers: dict[str, str] | None = None
+    query_instruction: str | None = None
 
 
 def resolve_rag_embedding_runtime(
@@ -66,4 +67,5 @@ def resolve_rag_embedding_runtime(
         dimension=api.dimension,
         base_url=bu,
         mrl_output_dimension=api.mrl_output_dimension,
+        query_instruction=api.query_instruction,
     )

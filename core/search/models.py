@@ -144,6 +144,20 @@ class MetaSearchSerpMoreRequest(BaseModel):
     limit: int = Field(default=10, ge=1, le=25)
 
 
+class SerpClickEvent(BaseModel):
+    """Клик по результату SERP: сигнал качества ранжирования для Loki/Grafana."""
+
+    model_config: ClassVar[ConfigDict] = ConfigDict(extra="forbid", str_strip_whitespace=True)
+
+    query: str = Field(..., min_length=1, max_length=500)
+    mode: SearchMode = "quick"
+    url: str = Field(..., min_length=1, max_length=2048)
+    position: int = Field(..., ge=1, le=1000)
+    provider: str = Field(default="", max_length=64)
+    search_index_id: str = Field(default="", max_length=64)
+    serp_cache_key: str = Field(default="", max_length=64)
+
+
 class SearchProvidersSnapshot(BaseModel):
     model_config: ClassVar[ConfigDict] = ConfigDict(extra="forbid", str_strip_whitespace=True)
 

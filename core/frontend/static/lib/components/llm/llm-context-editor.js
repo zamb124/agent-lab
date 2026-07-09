@@ -298,6 +298,21 @@ export class PlatformLlmContextEditor extends PlatformElement {
             if (value !== null && key === 'min_score') {
                 value = clampNumber(value, 0, 1);
             }
+            if (value !== null && key === 'rrf_k') {
+                value = clampNumber(Math.round(value), 1, 10_000);
+            }
+            if (value !== null && key === 'per_channel_top_k') {
+                value = clampNumber(Math.round(value), 1, 256);
+            }
+            if (value !== null && key === 'rerank_max_candidates') {
+                value = clampNumber(Math.round(value), 1, 256);
+            }
+            if (value !== null && key === 'freshness_weight') {
+                value = clampNumber(value, 0, 1);
+            }
+            if (value !== null && key === 'freshness_half_life_days') {
+                value = clampNumber(value, 0.01, 3650);
+            }
             this._setRetrieval(key, value);
         };
     }
@@ -381,6 +396,17 @@ export class PlatformLlmContextEditor extends PlatformElement {
         const retrievalMode = typeof retrieval.mode === 'string' ? retrieval.mode : '';
         const topK = typeof retrieval.top_k === 'number' ? retrieval.top_k : null;
         const minScore = typeof retrieval.min_score === 'number' ? retrieval.min_score : null;
+        const rrfK = typeof retrieval.rrf_k === 'number' ? retrieval.rrf_k : null;
+        const perChannelTopK = typeof retrieval.per_channel_top_k === 'number' ? retrieval.per_channel_top_k : null;
+        const rerankMaxCandidates = typeof retrieval.rerank_max_candidates === 'number'
+            ? retrieval.rerank_max_candidates
+            : null;
+        const freshnessWeight = typeof retrieval.freshness_weight === 'number'
+            ? retrieval.freshness_weight
+            : null;
+        const freshnessHalfLifeDays = typeof retrieval.freshness_half_life_days === 'number'
+            ? retrieval.freshness_half_life_days
+            : null;
         const rerank = typeof retrieval.rerank === 'boolean' ? String(retrieval.rerank) : '';
         const compaction = typeof patch.compaction === 'string' ? patch.compaction : '';
         const cache = typeof patch.cache === 'string' ? patch.cache : '';
@@ -503,6 +529,51 @@ export class PlatformLlmContextEditor extends PlatformElement {
                                             this.t('llm_context_editor.disabled'),
                                         )}
                                         @change=${this._onRetrievalBoolEnum('rerank')}
+                                    ></platform-field>
+                                    <platform-field
+                                        type="integer"
+                                        mode="edit"
+                                        .label=${this.t('llm_context_editor.rrf_k')}
+                                        .hint=${this._hint('rrf_k')}
+                                        .value=${rrfK}
+                                        .placeholder=${typeof effectiveRetrieval.rrf_k === 'number' ? String(effectiveRetrieval.rrf_k) : ''}
+                                        @change=${this._onRetrievalNumber('rrf_k')}
+                                    ></platform-field>
+                                    <platform-field
+                                        type="integer"
+                                        mode="edit"
+                                        .label=${this.t('llm_context_editor.per_channel_top_k')}
+                                        .hint=${this._hint('per_channel_top_k')}
+                                        .value=${perChannelTopK}
+                                        .placeholder=${typeof effectiveRetrieval.per_channel_top_k === 'number' ? String(effectiveRetrieval.per_channel_top_k) : ''}
+                                        @change=${this._onRetrievalNumber('per_channel_top_k')}
+                                    ></platform-field>
+                                    <platform-field
+                                        type="integer"
+                                        mode="edit"
+                                        .label=${this.t('llm_context_editor.rerank_max_candidates')}
+                                        .hint=${this._hint('rerank_max_candidates')}
+                                        .value=${rerankMaxCandidates}
+                                        .placeholder=${typeof effectiveRetrieval.rerank_max_candidates === 'number' ? String(effectiveRetrieval.rerank_max_candidates) : ''}
+                                        @change=${this._onRetrievalNumber('rerank_max_candidates')}
+                                    ></platform-field>
+                                    <platform-field
+                                        type="number"
+                                        mode="edit"
+                                        .label=${this.t('llm_context_editor.freshness_weight')}
+                                        .hint=${this._hint('freshness_weight')}
+                                        .value=${freshnessWeight}
+                                        .placeholder=${typeof effectiveRetrieval.freshness_weight === 'number' ? String(effectiveRetrieval.freshness_weight) : ''}
+                                        @change=${this._onRetrievalNumber('freshness_weight')}
+                                    ></platform-field>
+                                    <platform-field
+                                        type="number"
+                                        mode="edit"
+                                        .label=${this.t('llm_context_editor.freshness_half_life_days')}
+                                        .hint=${this._hint('freshness_half_life_days')}
+                                        .value=${freshnessHalfLifeDays}
+                                        .placeholder=${typeof effectiveRetrieval.freshness_half_life_days === 'number' ? String(effectiveRetrieval.freshness_half_life_days) : ''}
+                                        @change=${this._onRetrievalNumber('freshness_half_life_days')}
                                     ></platform-field>
                                     <platform-field
                                         type="enum"

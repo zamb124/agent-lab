@@ -117,7 +117,7 @@ Reg.ru API принимает запросы **только с whitelist IP**. �
 
 Полное описание назначения — в [`deploy/README.md`](README.md).
 
-## 4. HumanitecAgent desktop release (`humanitec-agent-build.yml`)
+## 4. LinnexAgent desktop release (`humanitec-agent-build.yml`)
 
 Запускается **только вручную** (`workflow_dispatch` в GitHub Actions). Без секретов ниже macOS/Windows job'ы собирают **unsigned** артефакты; Linux-сборки проходят как обычно.
 
@@ -141,7 +141,7 @@ Release tag по умолчанию: `humanitec-agent-{short_sha}` (тот же 
 
 Phase 1 публикует signed macOS `.dmg` сразу и шлёт submit в Apple (`AGENT_MACOS_NOTARIZE=submit-only`).
 
-## 5. HumanitecAgent macOS notarize follow-up (`humanitec-agent-macos-notarize.yml`)
+## 5. LinnexAgent macOS notarize follow-up (`humanitec-agent-macos-notarize.yml`)
 
 Триггеры: cron каждые 30 мин, успешный `humanitec-agent-build`, `workflow_dispatch`.
 

@@ -1,14 +1,14 @@
-# Frontend: empty HumanitecAgent devices list
+# Frontend: empty LinnexAgent devices list
 
-The HumanitecAgent tab shows the empty devices list state.
+The LinnexAgent tab shows the empty devices list state.
 
 ## Step 1. Platform settings page opened
 
 ![Platform settings page opened](screenshots/001.png)
 
-## Step 2. HumanitecAgent settings tab opened
+## Step 2. LinnexAgent settings tab opened
 
-![HumanitecAgent settings tab opened](screenshots/002.png)
+![LinnexAgent settings tab opened](screenshots/002.png)
 
 ## Step 3. Empty devices list is visible
 

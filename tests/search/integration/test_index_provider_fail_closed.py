@@ -6,6 +6,7 @@ import time
 import pytest
 
 from tests.search.conftest import make_search_index_slug
+from tests.search.integration.snippet_support import strip_snippet_highlight
 
 pytestmark = pytest.mark.timeout(120, func_only=True)
 
@@ -215,4 +216,4 @@ async def test_index_provider_ok_with_source_url(
     assert payload["providers"]["index"]["ok"] is True
     assert payload["results"]
     assert payload["results"][0]["url"] == source_url
-    assert marker in payload["results"][0].get("snippet", "")
+    assert marker in strip_snippet_highlight(payload["results"][0].get("snippet", ""))

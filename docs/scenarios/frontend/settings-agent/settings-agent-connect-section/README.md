@@ -1,15 +1,15 @@
-# Frontend: секция подключения HumanitecAgent
+# Frontend: секция подключения LinnexAgent
 
-На вкладке HumanitecAgent отображаются заголовок и кнопка подключения.
+На вкладке LinnexAgent отображаются заголовок и кнопка подключения.
 
 ## Шаг 1. Открыта страница настроек платформы
 
 ![Открыта страница настроек платформы](screenshots/001.png)
 
-## Шаг 2. Открыта вкладка HumanitecAgent
+## Шаг 2. Открыта вкладка LinnexAgent
 
-![Открыта вкладка HumanitecAgent](screenshots/002.png)
+![Открыта вкладка LinnexAgent](screenshots/002.png)
 
-## Шаг 3. Секция подключения HumanitecAgent отображается
+## Шаг 3. Секция подключения LinnexAgent отображается
 
-![Секция подключения HumanitecAgent отображается](screenshots/003.png)
+![Секция подключения LinnexAgent отображается](screenshots/003.png)

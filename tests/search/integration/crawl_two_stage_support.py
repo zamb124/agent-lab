@@ -15,6 +15,7 @@ from core.crawl.models import (
 )
 from core.search.index_models import SearchIndexCreateRequest
 from tests.search.conftest import make_search_index_slug
+from tests.search.integration.snippet_support import strip_snippet_highlight
 from tests.search.unit.crawl_enrichment_fixtures import sample_enriched_page
 
 if TYPE_CHECKING:
@@ -111,6 +112,9 @@ async def run_layer1_fetch(
         crawl_profile_id=crawl_profile_id,
         crawl_status="indexed",
         domain=REAL_CRAWL_DOMAIN,
+        content_type=None,
+        primary_topic=None,
+        enriched_only=None,
         limit=1,
         offset=0,
     )
@@ -177,7 +181,8 @@ async def poll_index_search(
                     url = item.get("url", "")
                     if url_domain not in url:
                         continue
-                    haystack = f"{item.get('snippet', '')} {item.get('title', '')}".lower()
+                    snippet = strip_snippet_highlight(item.get("snippet", ""))
+                    haystack = f"{snippet} {item.get('title', '')}".lower()
                     if content_marker.lower() in haystack:
                         return item
                     return item

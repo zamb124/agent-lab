@@ -5,9 +5,11 @@
 from datetime import datetime, timezone
 
 from sqlalchemy import Boolean, DateTime, ForeignKey, Index, Integer, String, Text
+from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column
 
 from core.db.models import Base
+from core.types import JsonObject
 
 
 class OfficeDocumentCatalog(Base):
@@ -29,6 +31,7 @@ class OfficeDocumentCatalog(Base):
     is_public: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
     rag_index_enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     rag_index_include_subcatalogs: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    rag_index_search_options: Mapped[JsonObject | None] = mapped_column(JSONB, nullable=True)
     rag_index_updated_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     link_enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     link_token_hash: Mapped[str | None] = mapped_column(String(128), nullable=True, unique=True)

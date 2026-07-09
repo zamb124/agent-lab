@@ -929,6 +929,7 @@ async def list_catalogs(container: ContainerDep) -> OfficeCatalogListResponse:
         user_id=ctx.user.user_id,
     )
     out: list[OfficeCatalogListItem] = []
+    rag_service = container.catalog_rag_index_service
     for cat, file_count in rows:
         display_name, avatar_url = await _user_display(container, cat.owner_user_id)
         out.append(
@@ -944,6 +945,7 @@ async def list_catalogs(container: ContainerDep) -> OfficeCatalogListResponse:
                 is_public=cat.is_public,
                 rag_index_enabled=cat.rag_index_enabled,
                 rag_index_include_subcatalogs=cat.rag_index_include_subcatalogs,
+                rag_index_search_options=rag_service.catalog_search_options_model(cat),
             )
         )
     return OfficeCatalogListResponse(items=out)
@@ -1250,9 +1252,9 @@ async def patch_catalog_rag_index_settings(
             status_code=403, detail="Только владелец может управлять RAG-индексом каталога"
         )
     try:
-        return await container.catalog_rag_index_service.set_include_subcatalogs(
+        return await container.catalog_rag_index_service.patch_rag_index_settings(
             catalog_id,
-            include_subcatalogs=body.include_subcatalogs,
+            body,
         )
     except ValueError as exc:
         raise _http_exception_from_catalog_rag_value_error(exc) from exc
@@ -1280,8 +1282,7 @@ async def search_catalog_rag_index(
     try:
         return await container.catalog_rag_index_service.search_catalog(
             catalog_id,
-            body.query,
-            limit=body.limit,
+            body,
         )
     except ServiceClientError as exc:
         raise _http_exception_from_service_client("rag", exc) from exc

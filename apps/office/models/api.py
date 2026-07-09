@@ -9,6 +9,7 @@ from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from core.documents.viewer.models import DocumentOpenConfigResponse
 from core.pagination import ListResponse
+from core.rag.models import RAGNamespaceSearchRequest, RAGSearchOptions
 
 SpreadsheetCellValue: TypeAlias = str | int | float | bool | None
 
@@ -312,6 +313,7 @@ class OfficeCatalogListItem(BaseModel):
     is_public: bool
     rag_index_enabled: bool
     rag_index_include_subcatalogs: bool
+    rag_index_search_options: RAGSearchOptions | None = None
 
 
 OfficeCatalogListResponse = ListResponse[OfficeCatalogListItem]
@@ -369,20 +371,37 @@ class OfficeCatalogRagIndexStatusResponse(BaseModel):
     enabled: bool
     rag_namespace_id: str
     include_subcatalogs: bool
+    search_options: RAGSearchOptions | None = None
     totals: OfficeCatalogRagIndexStatusTotals
     rag_index_updated_at: datetime | None = None
 
 
-class OfficeCatalogRagIndexSettingsPatchRequest(BaseModel):
-    include_subcatalogs: bool
+class OfficeCatalogRagIndexSettingsPatchRequest(RAGSearchOptions):
+    include_subcatalogs: bool | None = None
+    clear_search_options: bool | None = None
+
+    @model_validator(mode="after")
+    def patch_must_include_at_least_one_field(self) -> "OfficeCatalogRagIndexSettingsPatchRequest":
+        has_include = self.include_subcatalogs is not None
+        has_clear = self.clear_search_options is True
+        has_search_options = any(
+            getattr(self, field_name) is not None
+            for field_name in RAGSearchOptions.model_fields
+        )
+        if not has_include and not has_clear and not has_search_options:
+            raise ValueError(
+                "patch должен содержать include_subcatalogs, clear_search_options "
+                + "или хотя бы одно поле search_options"
+            )
+        return self
 
 
 class OfficeCatalogRagIndexSettingsResponse(BaseModel):
     include_subcatalogs: bool
+    search_options: RAGSearchOptions | None = None
 
 
-class OfficeCatalogSemanticSearchRequest(BaseModel):
-    query: str = Field(min_length=1, max_length=500)
+class OfficeCatalogSemanticSearchRequest(RAGNamespaceSearchRequest):
     limit: int = Field(default=20, ge=1, le=50)
 
 

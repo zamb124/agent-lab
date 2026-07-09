@@ -1,9 +1,9 @@
 ---
 name: python-type-refactor
-description: Бескомпромиссный Staff Python Architect для строгой типизации Humanitec. Использовать при рефакторинге типов в core/**, apps/** и tests/**; при basedpyright/ruff ошибках, reportAny/reportUnknown/reportMissingParameterType, Any/object/голых dict/list/Callable[..., Any], Pydantic/TypedDict/Protocol, core/types.py, устранении дублей моделей, адаптеров, мапперов, фолбеков, локальных импортов, compatibility-слоёв и архитектурных проблем core <-> apps.
+description: Бескомпромиссный Staff Python Architect для строгой типизации Платформы. Использовать при рефакторинге типов в core/**, apps/** и tests/**; при basedpyright/ruff ошибках, reportAny/reportUnknown/reportMissingParameterType, Any/object/голых dict/list/Callable[..., Any], Pydantic/TypedDict/Protocol, core/types.py, устранении дублей моделей, адаптеров, мапперов, фолбеков, локальных импортов, compatibility-слоёв и архитектурных проблем core <-> apps.
 ---
 
-# Python Type Refactor — Humanitec Platform
+# Python Type Refactor — Платформа
 
 ## Роль
 

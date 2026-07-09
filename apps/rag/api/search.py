@@ -18,6 +18,8 @@ from core.rag.post_retrieval_rerank import (
     apply_rerank_after_retrieve,
     apply_rerank_after_retrieve_grouped,
 )
+from core.rag.rag_http_namespace_search import filter_search_request_options
+from core.rag.search_options_resolver import resolve_platform_search_options
 
 from ..dependencies import ContainerDep
 from .namespace_access import require_registered_rag_namespace
@@ -63,21 +65,29 @@ async def search_in_namespace(
         rag_provider = get_rag_provider(provider, settings=settings) if provider else get_rag_provider(settings=settings)
         provider_name = provider or settings.rag.default_provider
 
+        resolved_search_options = resolve_platform_search_options(
+            settings=settings,
+            overrides=filter_search_request_options(request),
+            per_channel_top_k=request.per_channel_top_k,
+        )
+
         results = await rag_provider.search(
             namespace_id=namespace_id,
             query=request.query,
             limit=request.limit,
             filters=request.filters,
-            search_options=request,
+            search_options=resolved_search_options,
         )
 
         results = await apply_rerank_after_retrieve(
             results=results,
             query=request.query,
             provider_name=provider_name,
-            request_rerank=request.rerank,
+            request_rerank=resolved_search_options.rerank,
             profile_sd=None,
             settings=settings,
+            request_rerank_max_candidates=resolved_search_options.rerank_max_candidates,
+            score_cache=container.rerank_score_cache,
         )
 
         logger.info(f"Поиск '{request.query}' в {namespace_id}: найдено {len(results)} результатов")
@@ -143,12 +153,18 @@ async def global_search(
         if request.filters is not None:
             validate_metadata_filters(request.filters)
 
+        resolved_search_options = resolve_platform_search_options(
+            settings=settings,
+            overrides=filter_search_request_options(request),
+            per_channel_top_k=request.per_channel_top_k,
+        )
+
         results = await rag_provider.search_multiple_namespaces(
             namespace_ids=valid_namespace_ids,
             query=request.query,
             limit=request.limit,
             filters=request.filters,
-            search_options=request,
+            search_options=resolved_search_options,
         )
 
         results = await apply_rerank_after_retrieve_grouped(
@@ -156,9 +172,11 @@ async def global_search(
             namespace_order=valid_namespace_ids,
             query=request.query,
             provider_name=provider_name,
-            request_rerank=request.rerank,
+            request_rerank=resolved_search_options.rerank,
             profile_sd=None,
             settings=settings,
+            request_rerank_max_candidates=resolved_search_options.rerank_max_candidates,
+            score_cache=container.rerank_score_cache,
         )
 
         total_results = sum(len(r) for r in results.values())

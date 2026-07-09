@@ -33,6 +33,7 @@ from core.search import (
     MetaSearchSerpMoreRequest,
     WebSearchResult,
 )
+from core.search.logging_events import log_serp_served
 from core.tracing import attributes as trace_attr
 from core.tracing.operation_span import traced_operation
 
@@ -348,6 +349,14 @@ class MetaSearchService:
         for rank, item in enumerate(page_items, start=page_start + 1):
             ranked_page.append(item.model_copy(update={"rank": rank}))
         has_more = page_end < total_count and serp_cache_key is not None
+        log_serp_served(
+            query=request.query,
+            mode=request.mode,
+            serp_cache_key=serp_cache_key if serp_cache_key is not None else "",
+            results_count=len(ranked_page),
+            total_count=total_count,
+            providers_selected=[name for name, status in statuses.items() if status.selected],
+        )
         return MetaSearchResponse(
             query=request.query,
             results=ranked_page,

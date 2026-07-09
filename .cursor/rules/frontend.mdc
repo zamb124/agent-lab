@@ -322,7 +322,7 @@ Composer / mention / inline-edit / search-as-you-type / combobox: `data-canon="c
 - Локальный hash-цикл `h = (h * 31 + s.charCodeAt(i))`.
 - Локальный `formatFileSize` / `_formatBytes` / `_formatFileSize` цикл (свой). Допустима тонкая обёртка-метод компонента, делегирующая в core `formatFileSize`.
 - `Intl.NumberFormat('ru-RU', ...)`, `Intl.DateTimeFormat('ru-RU', ...)`, `toLocaleDateString('ru-RU', ...)`, `toLocaleString('ru-RU', ...)`.
-- Свободный префикс ключа localStorage (`humanitec.*`, `<svc>:*`, `sync.chat.*`) — только `platformStorageKey('<scope>', '<key>')`.
+- Свободный префикс ключа localStorage (`<brand>.*`, `<svc>:*`, `sync.chat.*`) — только `platformStorageKey('<scope>', '<key>')`.
 - Свой multipart-upload `createAsyncOp` без обёртки `createMultipartFileUploadOp` — копипаста запрещена.
 
 CI: `scripts/check_ui_canon.sh` п.19 — детекторы `'ru-RU'`, `EMAIL_RE`/`_digitsOnly`, `escapeHtml`, hash×31.

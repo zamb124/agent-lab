@@ -248,6 +248,11 @@ components:
   doc_slug: platform-picker-card
   status: production
   tier: T1
+- component: platform-rag-retrieval-panel
+  doc_slug: platform-rag-retrieval-panel
+  status: backlog
+  tier: T0
+  deadline: 2026-Q3
 - component: platform-searchable-combobox
   doc_slug: platform-searchable-combobox
   status: backfill

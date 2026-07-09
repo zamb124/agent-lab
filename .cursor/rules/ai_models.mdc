@@ -1,5 +1,5 @@
 ---
-description: "AI models/provider canon: core.ai catalog, resolver, runtime, shared model catalog, Humanitec LLMs"
+description: "AI models/provider canon: core.ai catalog, resolver, runtime, shared model catalog, platform free LLMs (humanitec_llm)"
 alwaysApply: true
 ---
 # AI Models — единый канон
@@ -42,9 +42,9 @@ alwaysApply: true
 - `get_llm(...)`, `core.clients.llm.factory`, прямой `AIEmbeddingClient(...)`, прямой `AIRerankerHTTPClient(...)`, прямые `httpx` к AI provider endpoints вне adapters/runtime запрещены.
 - Старые concrete resolver-ы (`resolve_llm_for_capability`, `resolve_embedding_for_company`, `resolve_rerank_for_company`) запрещены.
 
-## Humanitec LLMs
+## Platform free LLMs (humanitec_llm)
 
-`humanitec_llm` — virtual provider поверх free pool, не отдельный внешний provider.
+`humanitec_llm` — virtual provider поверх free pool, не отдельный внешний provider. Технический id провайдера; UI label — `platform_brands.*.llms_display_label` (например Linnex LLMs / Humanitec LLMs).
 
 - Модели: `auto` и concrete refs вида `<provider>:<model_id>` из shared free catalog.
 - Free pool строится из `AIModelCatalogRepository` и canonical `core.ai.providers.PLATFORM_FREE_MODEL_CANDIDATE_PROVIDER_ORDER`.

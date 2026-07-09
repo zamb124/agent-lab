@@ -1,14 +1,14 @@
-# Frontend: create HumanitecAgent pairing code
+# Frontend: create LinnexAgent pairing code
 
-The connect button creates a pairing code on the HumanitecAgent tab.
+The connect button creates a pairing code on the LinnexAgent tab.
 
 ## Step 1. Platform settings page opened
 
 ![Platform settings page opened](screenshots/001.png)
 
-## Step 2. HumanitecAgent tab opened
+## Step 2. LinnexAgent tab opened
 
-![HumanitecAgent tab opened](screenshots/002.png)
+![LinnexAgent tab opened](screenshots/002.png)
 
 ## Step 3. Pairing code is created and visible
 

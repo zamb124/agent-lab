@@ -1662,6 +1662,7 @@ export class PublicSearchPage extends PlatformPage {
         super();
         this._search = this.useOp('frontend/public_search_run');
         this._serpMore = this.useOp('frontend/public_search_serp_more');
+        this._serpClick = this.useOp('frontend/public_search_serp_click');
         this._sourceDescribe = this.useOp('frontend/public_search_source_describe');
         this._route = this.select((state) => state.router);
         this._query = '';
@@ -2332,6 +2333,22 @@ export class PublicSearchPage extends PlatformPage {
         }
     }
 
+    _reportSourceClick(stream, result, index) {
+        if (stream.query === '') {
+            return;
+        }
+        const position = result.rank > 0 ? result.rank : index + 1;
+        void this._serpClick.run({
+            query: stream.query,
+            mode: stream.mode,
+            url: result.url,
+            position,
+            provider: result.provider,
+            search_index_id: '',
+            serp_cache_key: stream.serp_cache_key,
+        });
+    }
+
     _renderSource(stream, result, index) {
         const insight = this._insightForUrl(stream, result.url);
         const activeUrl = this._sourceDescribe.state.active_url;
@@ -2362,7 +2379,13 @@ export class PublicSearchPage extends PlatformPage {
                         </div>
                         <div class="source-header">
                             <div class="source-main">
-                                <a class="source-title" href=${result.url} target="_blank" rel="noopener noreferrer">${result.title}</a>
+                                <a
+                                    class="source-title"
+                                    href=${result.url}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    @click=${() => this._reportSourceClick(stream, result, index)}
+                                >${result.title}</a>
                             </div>
                             <button
                                 class="source-ai-button"

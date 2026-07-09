@@ -1149,3 +1149,89 @@ async def test_write_reembed_chunk_embeddings_empty_input_is_noop(rag_provider_p
 async def test_embedding_model_name_matches_runtime_model(rag_provider_pgvector):
     """Public ``embedding_model_name()`` совпадает с конфигом ``AIEmbeddingClient.model``."""
     assert rag_provider_pgvector.embedding_model_name() == rag_provider_pgvector.embedding_client.model
+
+
+# -- Freshness decay: единый контракт semantic-only и hybrid путей --
+
+
+FRESHNESS_SEARCH_OPTIONS = RAGSearchOptions(
+    freshness_weight=0.9,
+    freshness_half_life_days=30.0,
+)
+
+FRESHNESS_HYBRID_SEARCH_OPTIONS = RAGSearchOptions(
+    channels=SearchChannelsDefaults(semantic=True, lexical=True),
+    freshness_weight=0.9,
+    freshness_half_life_days=30.0,
+)
+
+
+async def _upload_fresh_and_stale_docs(rag_provider_pgvector, ns_name, rag_company_id):
+    stale = await rag_provider_pgvector.upload_document_from_text(
+        namespace_id=ns_name,
+        text="Курс рубля к доллару обновился на бирже сегодня утром.",
+        document_name="stale.txt",
+        metadata=_upload_metadata(
+            rag_company_id,
+            {"date_published": "2020-01-01T00:00:00+00:00"},
+        ),
+    )
+    fresh = await rag_provider_pgvector.upload_document_from_text(
+        namespace_id=ns_name,
+        text="Курс рубля к доллару обновился на бирже сегодня утром!",
+        document_name="fresh.txt",
+        metadata=_upload_metadata(rag_company_id),
+    )
+    return stale, fresh
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "search_options",
+    [FRESHNESS_SEARCH_OPTIONS, FRESHNESS_HYBRID_SEARCH_OPTIONS],
+    ids=["semantic_only", "hybrid_rrf"],
+)
+async def test_freshness_decay_applies_in_both_search_paths(
+    rag_provider_pgvector, ns_name, rag_company_id, search_options
+):
+    """
+    Freshness decay работает одинаково в semantic-only и hybrid путях:
+    свежий документ выше устаревшего, provenance содержит freshness-поля.
+    """
+    stale, fresh = await _upload_fresh_and_stale_docs(
+        rag_provider_pgvector, ns_name, rag_company_id
+    )
+
+    results = await rag_provider_pgvector.search(
+        ns_name,
+        "курс рубля к доллару",
+        limit=5,
+        search_options=search_options,
+    )
+    assert len(results) >= 2
+
+    by_document_id = {item.document_id: item for item in results}
+    assert set(by_document_id) == {stale.document_id, fresh.document_id}
+    for item in results:
+        assert "freshness_multiplier" in item.provenance
+        assert "freshness_age_days" in item.provenance
+        assert "freshness_age_source" in item.provenance
+
+    stale_result = by_document_id[stale.document_id]
+    fresh_result = by_document_id[fresh.document_id]
+    assert stale_result.provenance["freshness_age_source"] == "date_published"
+    assert fresh_result.provenance["freshness_age_source"] == "created_at"
+    assert fresh_result.provenance["freshness_multiplier"] > stale_result.provenance["freshness_multiplier"]
+    assert results[0].document_id == fresh.document_id
+
+
+@pytest.mark.asyncio
+async def test_semantic_search_without_freshness_has_no_freshness_provenance(
+    rag_provider_pgvector, ns_name, rag_company_id
+):
+    """Без freshness-опций semantic-путь не добавляет freshness-поля в provenance."""
+    _ = await _upload_fresh_and_stale_docs(rag_provider_pgvector, ns_name, rag_company_id)
+    results = await rag_provider_pgvector.search(ns_name, "курс рубля к доллару", limit=5)
+    assert results
+    for item in results:
+        assert "freshness_multiplier" not in item.provenance

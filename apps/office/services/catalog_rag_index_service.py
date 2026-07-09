@@ -9,19 +9,27 @@ from apps.office.models.api import (
     OfficeCatalogRagIndexBindingItem,
     OfficeCatalogRagIndexEnableResponse,
     OfficeCatalogRagIndexRebuildResponse,
+    OfficeCatalogRagIndexSettingsPatchRequest,
     OfficeCatalogRagIndexSettingsResponse,
     OfficeCatalogRagIndexStatusResponse,
     OfficeCatalogRagIndexStatusTotals,
     OfficeCatalogSemanticSearchHit,
+    OfficeCatalogSemanticSearchRequest,
     OfficeCatalogSemanticSearchResponse,
 )
 from apps.rag_worker.broker import broker as rag_worker_broker
 from apps.rag_worker.tasks.indexing_tasks import RAG_INDEX_OFFICE_CATALOG_TASK_NAME
 from core.clients.rag_client import RagClient
 from core.clients.service_client import ServiceClientError
+from core.config import get_settings
 from core.context import get_context
 from core.logging import get_logger
-from core.rag.models import RAGMetadata, RAGSearchResult
+from core.rag.models import RAGMetadata, RAGSearchOptions, RAGSearchResult
+from core.rag.rag_http_namespace_search import (
+    filter_search_request_options,
+    merge_search_request_options,
+)
+from core.rag.search_options_resolver import resolve_platform_search_options
 from core.tasks.kicker import kiq_task_name_with_context
 from core.types import JsonObject, JsonValue, require_json_object
 
@@ -278,24 +286,55 @@ class OfficeCatalogRagIndexService:
         )
         return task.task_id
 
+    async def patch_rag_index_settings(
+        self,
+        catalog_id: str,
+        request: OfficeCatalogRagIndexSettingsPatchRequest,
+    ) -> OfficeCatalogRagIndexSettingsResponse:
+        company_id, workspace_namespace, _user_id = self._require_context()
+        call_opts = filter_search_request_options(request)
+        update_search_options = request.clear_search_options is True or call_opts is not None
+        search_options_json: JsonObject | None = None
+        if request.clear_search_options is True:
+            search_options_json = None
+        elif call_opts is not None:
+            search_options_json = call_opts.model_dump(exclude_none=True)
+            if search_options_json == {}:
+                search_options_json = None
+        updated = await self._catalog_repository.patch_rag_index_settings(
+            catalog_id,
+            company_id,
+            workspace_namespace,
+            include_subcatalogs=request.include_subcatalogs,
+            search_options=search_options_json,
+            update_search_options=update_search_options,
+        )
+        if updated is None:
+            raise ValueError("Каталог не найден")
+        return OfficeCatalogRagIndexSettingsResponse(
+            include_subcatalogs=updated.rag_index_include_subcatalogs,
+            search_options=self.catalog_search_options_model(updated),
+        )
+
     async def set_include_subcatalogs(
         self,
         catalog_id: str,
         *,
         include_subcatalogs: bool,
     ) -> OfficeCatalogRagIndexSettingsResponse:
-        company_id, workspace_namespace, _user_id = self._require_context()
-        updated = await self._catalog_repository.set_rag_index_include_subcatalogs(
+        return await self.patch_rag_index_settings(
             catalog_id,
-            company_id,
-            workspace_namespace,
-            include_subcatalogs=include_subcatalogs,
+            OfficeCatalogRagIndexSettingsPatchRequest(include_subcatalogs=include_subcatalogs),
         )
-        if updated is None:
-            raise ValueError("Каталог не найден")
-        return OfficeCatalogRagIndexSettingsResponse(
-            include_subcatalogs=updated.rag_index_include_subcatalogs,
-        )
+
+    @staticmethod
+    def catalog_search_options_model(
+        catalog: OfficeDocumentCatalog,
+    ) -> RAGSearchOptions | None:
+        raw = catalog.rag_index_search_options
+        if raw is None:
+            return None
+        return filter_search_request_options(raw)
 
     async def rebuild_catalog(self, catalog_id: str) -> OfficeCatalogRagIndexRebuildResponse:
         company_id, workspace_namespace, user_id = self._require_context()
@@ -376,6 +415,7 @@ class OfficeCatalogRagIndexService:
             enabled=catalog.rag_index_enabled,
             rag_namespace_id=rag_namespace_id,
             include_subcatalogs=catalog.rag_index_include_subcatalogs,
+            search_options=self.catalog_search_options_model(catalog),
             totals=totals,
             rag_index_updated_at=catalog.rag_index_updated_at,
         )
@@ -438,9 +478,7 @@ class OfficeCatalogRagIndexService:
     async def search_catalog(
         self,
         catalog_id: str,
-        query: str,
-        *,
-        limit: int = 20,
+        request: OfficeCatalogSemanticSearchRequest,
     ) -> OfficeCatalogSemanticSearchResponse:
         company_id, workspace_namespace, _user_id = self._require_context()
         catalog = await self._get_catalog_or_raise(
@@ -448,9 +486,10 @@ class OfficeCatalogRagIndexService:
             company_id=company_id,
             workspace_namespace=workspace_namespace,
         )
-        normalized_query = query.strip()
+        normalized_query = request.query.strip()
         if normalized_query == "":
             raise ValueError("query обязателен")
+        limit = request.limit
 
         searchable_catalog_ids = await self._searchable_catalog_ids_in_scope(
             catalog,
@@ -461,15 +500,48 @@ class OfficeCatalogRagIndexService:
             raise ValueError("Нет проиндексированных каталогов для поиска")
 
         namespace_ids = [self.rag_namespace_id(searchable_id) for searchable_id in searchable_catalog_ids]
+        settings = get_settings()
+        catalog_overrides = self.catalog_search_options_model(catalog)
+        request_overrides = filter_search_request_options(request)
+        merged_overrides = merge_search_request_options(catalog_overrides, request_overrides)
+        resolved_search_options = resolve_platform_search_options(
+            settings=settings,
+            per_channel_top_k=max(limit * 3, limit),
+            overrides=merged_overrides,
+        )
         if len(namespace_ids) == 1:
             search_payload = require_json_object(
-                await self._rag_client.search(namespace_ids[0], normalized_query, limit=limit),
+                await self._rag_client.search(
+                    namespace_ids[0],
+                    normalized_query,
+                    limit=limit,
+                    channels=resolved_search_options.channels,
+                    rrf_k=resolved_search_options.rrf_k,
+                    per_channel_top_k=resolved_search_options.per_channel_top_k,
+                    rerank=resolved_search_options.rerank,
+                    rerank_max_candidates=resolved_search_options.rerank_max_candidates,
+                    retrieval=resolved_search_options.retrieval,
+                    freshness_weight=resolved_search_options.freshness_weight,
+                    freshness_half_life_days=resolved_search_options.freshness_half_life_days,
+                ),
                 "Office catalog RAG search response",
             )
             hits = self._parse_search_results(search_payload["results"])
         else:
             global_payload = require_json_object(
-                await self._rag_client.global_search(namespace_ids, normalized_query, limit=limit),
+                await self._rag_client.global_search(
+                    namespace_ids,
+                    normalized_query,
+                    limit=limit,
+                    channels=resolved_search_options.channels,
+                    rrf_k=resolved_search_options.rrf_k,
+                    per_channel_top_k=resolved_search_options.per_channel_top_k,
+                    rerank=resolved_search_options.rerank,
+                    rerank_max_candidates=resolved_search_options.rerank_max_candidates,
+                    retrieval=resolved_search_options.retrieval,
+                    freshness_weight=resolved_search_options.freshness_weight,
+                    freshness_half_life_days=resolved_search_options.freshness_half_life_days,
+                ),
                 "Office catalog RAG global search response",
             )
             raw_results_by_namespace = global_payload["results"]

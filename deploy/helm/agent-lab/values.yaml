@@ -1,4 +1,4 @@
-# Дефолтные значения чарта Humanitec Platform. Production-overrides — values-prod.yaml.
+# Дефолтные значения чарта Платформы. Production-overrides — values-prod.yaml.
 
 namespace: platform
 

@@ -33,7 +33,7 @@ npx cap open ios
 
 **Минимальный набор для продуктовой заявки**
 
-- [ ] Нативный **splash** / launch screen (бренд Humanitec).
+- [ ] Нативный **splash** / launch screen (бренд Linnex).
 - [ ] Работа **offline** на уровне ожиданий: показ [`/offline.html`](../../core/app/pwa_routes.py) или эквивалент при отсутствии сети.
 - [ ] Экран **«О приложении»** или раздел настроек с версией, ссылками на Privacy Policy и поддержку.
 - [ ] Описание в App Store явно перечисляет: чаты, звонки, CRM, агенты — то, что отличает клиент от «оболочки вокруг сайта».
@@ -109,7 +109,7 @@ npx cap open ios
 
 Вёрстка общая с PWA и вебом: **`viewport-fit=cover`**, токены **`--platform-safe-*`** в **`core/frontend/static/assets/css/tokens.css`**, хедер страниц **`page-header`** со sticky и отступом под вырез, контейнер **`platform-island`** с нижним inset на мобилке, полноэкранный **`glass-modal`** без полей у overlay на fullscreen. В **`capacitor.config.json`** для iOS задано **`contentInset: "never"`** (safe area только из CSS, без дублирования от WKWebView). Подробнее — **`.cursor/rules/frontend.mdc`**, раздел «Высота вьюпорта» и safe area.
 
-## Иконка приложения (Humanitec)
+## Иконка приложения (Linnex)
 
 Единый знак с главной: **`core/frontend/static/assets/service_logos/frontend_logo.svg`** на фоне **`#1a1a2e`** (как **`background_color`** в PWA manifest). PNG для PWA: **`core/frontend/static/pwa/icons/`**; иконка App Store / Xcode: **`mobile/ios/App/App/Assets.xcassets/AppIcon.appiconset/AppIcon-512@2x.png`** (1024×1024).
 

@@ -15,10 +15,10 @@ learning_paths:
     label_ru: Новый пользователь
     label_en: New user
     intro_ru: >-
-      Если вы впервые на Humanitec — пройдите эти шаги по порядку: войти на сайт,
+      Если вы впервые на Платформе — пройдите эти шаги по порядку: войти на сайт,
       открыть Dashboard и разобраться с меню аккаунта.
     intro_en: >-
-      First time on Humanitec? Follow these steps in order: sign in, open the Dashboard,
+      First time on the Platform? Follow these steps in order: sign in, open the Dashboard,
       and learn the account menu.
     steps:
       - label_ru: Основные инструкции — вход, Dashboard и меню
@@ -210,8 +210,8 @@ services:
         label_en: Evaluation Lab
         order: 5
       agent-download:
-        label_ru: Скачивание HumanitecAgent
-        label_en: HumanitecAgent download
+        label_ru: Скачивание LinnexAgent
+        label_en: LinnexAgent download
         order: 6
 
   crm:
@@ -249,9 +249,9 @@ services:
     label_ru: Frontend
     label_en: Frontend
     intro_ru: >-
-      Платформенная оболочка, настройки HumanitecAgent и ссылки на desktop-клиент.
+      Платформенная оболочка, настройки LinnexAgent и ссылки на desktop-клиент.
     intro_en: >-
-      Platform shell, HumanitecAgent settings, and desktop client download links.
+      Platform shell, LinnexAgent settings, and desktop client download links.
     featured_slug: frontend-shell
     tags:
       general:
@@ -259,12 +259,12 @@ services:
         label_en: General
         order: 1
       settings-agent:
-        label_ru: HumanitecAgent в настройках
-        label_en: HumanitecAgent settings
+        label_ru: LinnexAgent в настройках
+        label_en: LinnexAgent settings
         order: 2
       agent-download:
-        label_ru: Скачивание HumanitecAgent
-        label_en: HumanitecAgent download
+        label_ru: Скачивание LinnexAgent
+        label_en: LinnexAgent download
         order: 3
 
   office:

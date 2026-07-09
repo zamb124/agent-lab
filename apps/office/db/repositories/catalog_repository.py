@@ -15,6 +15,7 @@ from apps.office.db.models import (
     OfficeDocumentBinding,
     OfficeDocumentCatalog,
 )
+from core.types import JsonObject
 
 
 class CatalogRepository:
@@ -313,6 +314,35 @@ class CatalogRepository:
                     catalog_ids.append(descendant.catalog_id)
                     seen.add(descendant.catalog_id)
         return catalog_ids
+
+    async def patch_rag_index_settings(
+        self,
+        catalog_id: str,
+        company_id: str,
+        namespace: str,
+        *,
+        include_subcatalogs: bool | None = None,
+        search_options: JsonObject | None = None,
+        update_search_options: bool = False,
+    ) -> OfficeDocumentCatalog | None:
+        async with self._db.session() as session:
+            result = await session.execute(
+                select(OfficeDocumentCatalog).where(
+                    OfficeDocumentCatalog.catalog_id == catalog_id,
+                    OfficeDocumentCatalog.company_id == company_id,
+                    OfficeDocumentCatalog.namespace == namespace,
+                )
+            )
+            row = result.scalar_one_or_none()
+            if row is None:
+                return None
+            if include_subcatalogs is not None:
+                row.rag_index_include_subcatalogs = include_subcatalogs
+            if update_search_options:
+                row.rag_index_search_options = search_options
+            await session.commit()
+            await session.refresh(row)
+            return row
 
     async def set_rag_index_include_subcatalogs(
         self,

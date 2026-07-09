@@ -4,13 +4,13 @@
 
 PWA-манифест платформы: [`core/frontend/pwa/manifest.json`](../../core/frontend/pwa/manifest.json) — `start_url` и `scope` задают область установки.
 
-Мультитенантность компаний описана в [`core/frontend/static/lib/utils/tenant-url.js`](../../core/frontend/static/lib/utils/tenant-url.js): поддомены `slug.humanitec.ru` и т.д.
+Мультитенантность компаний описана в [`core/frontend/static/lib/utils/tenant-url.js`](../../core/frontend/static/lib/utils/tenant-url.js): поддомены `slug.linnex.io` (primary), `slug.humanitec.ru` (legacy) и т.д.
 
 ## Решение для v1 оболочек
 
 | Вариант | Поведение |
 |---------|-----------|
-| A — один вход | TWA/Capacitor открывают канонический URL (например `https://humanitec.ru/` или путь входа в shell). Пользователь выбирает компанию внутри приложения. |
+| A — один вход | TWA/Capacitor открывают канонический URL (например `https://linnex.io/` или путь входа в shell). Пользователь выбирает компанию внутри приложения. |
 | B — поддомен как старт | Если продукт требует старт с конкретного tenant, `start_url` в манифесте для отдельной «сборки» должен совпадать с этим origin/path; для магазинов это обычно отдельные билды или query (сложнее). |
 
 **Рекомендация по умолчанию:** вариант A — одна оболочка на production host, авторизация и выбор компании в вебе. Это согласуется с одним `assetlinks.json` и одним `applicationId` Android.

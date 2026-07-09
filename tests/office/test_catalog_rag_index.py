@@ -248,6 +248,7 @@ async def test_enable_creates_namespace_and_sets_flag(
         "enabled": True,
         "rag_namespace_id": rag_namespace_id,
         "include_subcatalogs": False,
+        "search_options": None,
         "totals": status_payload["totals"],
         "rag_index_updated_at": status_payload["rag_index_updated_at"],
     }
@@ -1215,6 +1216,113 @@ async def test_patch_rag_settings_persists_include_subcatalogs(
     )
     status_payload = await _rag_index_status(office_client, catalog_id, auth_headers_system)
     assert status_payload["include_subcatalogs"] is False
+
+
+@pytest.mark.asyncio
+async def test_patch_rag_settings_persists_search_options(
+    office_client,
+    auth_headers_system,
+    unique_id,
+):
+    catalog_id = await _create_catalog(
+        office_client,
+        auth_headers_system,
+        f"rag-search-opts-{unique_id}",
+    )
+    await _enable_rag_index(office_client, catalog_id, auth_headers_system)
+
+    patch_response = await office_client.patch(
+        f"/documents/api/v1/catalogs/{catalog_id}/rag-index/settings",
+        headers=auth_headers_system,
+        json={"rrf_k": 40, "freshness_weight": 0.2},
+    )
+    assert patch_response.status_code == 200
+    patch_payload = patch_response.json()
+    assert patch_payload["search_options"] is not None
+    assert patch_payload["search_options"]["rrf_k"] == 40
+    assert patch_payload["search_options"]["freshness_weight"] == 0.2
+
+    status_payload = await _rag_index_status(office_client, catalog_id, auth_headers_system)
+    status_search_options = status_payload["search_options"]
+    assert isinstance(status_search_options, dict)
+    assert status_search_options["rrf_k"] == 40
+    assert status_search_options["freshness_weight"] == 0.2
+
+    list_response = await office_client.get(
+        "/documents/api/v1/catalogs",
+        headers=auth_headers_system,
+    )
+    assert list_response.status_code == 200
+    catalog_item = next(
+        item for item in list_response.json()["items"] if item["catalog_id"] == catalog_id
+    )
+    catalog_search_options = catalog_item["rag_index_search_options"]
+    assert isinstance(catalog_search_options, dict)
+    assert catalog_search_options["rrf_k"] == 40
+
+    clear_response = await office_client.patch(
+        f"/documents/api/v1/catalogs/{catalog_id}/rag-index/settings",
+        headers=auth_headers_system,
+        json={"clear_search_options": True},
+    )
+    assert clear_response.status_code == 200
+    assert clear_response.json()["search_options"] is None
+
+
+@pytest.mark.asyncio
+async def test_catalog_semantic_search_applies_catalog_search_options(
+    office_client,
+    auth_headers_system,
+    unique_id,
+    monkeypatch,
+):
+    catalog_id = await _create_catalog(
+        office_client,
+        auth_headers_system,
+        f"rag-search-merge-{unique_id}",
+    )
+    await _enable_rag_index(office_client, catalog_id, auth_headers_system)
+    await office_client.patch(
+        f"/documents/api/v1/catalogs/{catalog_id}/rag-index/settings",
+        headers=auth_headers_system,
+        json={"rrf_k": 55, "freshness_weight": 0.15},
+    )
+
+    captured: dict[str, object] = {}
+
+    async def _capture_search(
+        namespace_id: str,
+        query: str,
+        *,
+        limit: int,
+        channels=None,
+        rrf_k=None,
+        per_channel_top_k=None,
+        rerank=None,
+        rerank_max_candidates=None,
+        retrieval=None,
+        freshness_weight=None,
+        freshness_half_life_days=None,
+    ) -> dict[str, object]:
+        captured["namespace_id"] = namespace_id
+        captured["query"] = query
+        captured["limit"] = limit
+        captured["rrf_k"] = rrf_k
+        captured["freshness_weight"] = freshness_weight
+        return {"results": []}
+
+    container = get_office_container()
+    monkeypatch.setattr(container.rag_client, "search", _capture_search)
+
+    search_response = await office_client.post(
+        f"/documents/api/v1/catalogs/{catalog_id}/rag-index/search",
+        headers=auth_headers_system,
+        json={"query": "needle", "limit": 10},
+    )
+    assert search_response.status_code == 200
+    assert captured["rrf_k"] == 55
+    assert captured["freshness_weight"] == 0.15
+    assert captured["namespace_id"] == _rag_namespace_id(catalog_id)
 
 
 @pytest.mark.asyncio

@@ -236,7 +236,7 @@ Exit 1 на нарушении:
 
 ## Сбор логов
 
-Stdout → **Grafana Alloy** → **Loki** (retention 14 дней). Поиск: `https://grafana.humanitec.ru` → Explore → Loki.
+Stdout → **Grafana Alloy** → **Loki** (retention 14 дней). Поиск: `https://grafana.linnex.io` (primary) / `https://grafana.humanitec.ru` (legacy) → Explore → Loki.
 
 ```
 {service="crm"} | json | level="ERROR"

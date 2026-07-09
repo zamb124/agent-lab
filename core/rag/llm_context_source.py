@@ -6,10 +6,11 @@ import hashlib
 import math
 
 from core.llm_context import LLMContextBlock, LLMContextSourceRequest
+from core.llm_context.retrieval_rag_bridge import rag_search_options_override_from_retrieval
 from core.rag.models import RAGMetadataFilter, RAGSearchOptions, RAGSearchResult
 from core.rag.rag_resource_bind import RagResourceBindParams
 from core.rag.repository import RAGRepository
-from core.rag_indexing_schema import SearchChannelsDefaults
+from core.rag.search_options_resolver import resolve_platform_search_options
 from core.types import JsonObject, JsonValue, require_json_object
 
 
@@ -52,20 +53,8 @@ class RAGLLMContextSource:
 
 
 def _search_options_from_policy(request: LLMContextSourceRequest) -> RAGSearchOptions:
-    retrieval = request.policy.retrieval
-    return RAGSearchOptions(
-        channels=_channels_from_retrieval_mode(retrieval.mode),
-        rerank=retrieval.rerank,
-        retrieval=retrieval.mode != "off",
-    )
-
-
-def _channels_from_retrieval_mode(mode: str) -> SearchChannelsDefaults:
-    if mode == "hybrid":
-        return SearchChannelsDefaults(semantic=True, lexical=True)
-    if mode == "lexical":
-        return SearchChannelsDefaults(semantic=False, lexical=True)
-    return SearchChannelsDefaults(semantic=True, lexical=False)
+    policy_override = rag_search_options_override_from_retrieval(request.policy.retrieval)
+    return resolve_platform_search_options(overrides=policy_override)
 
 
 def _coerce_results(response: JsonObject) -> list[RAGSearchResult]:

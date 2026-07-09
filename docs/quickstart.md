@@ -1,13 +1,13 @@
 ---
 title: "Быстрый старт"
-description: "Первый запрос к агенту Humanitec через A2A JSON-RPC."
+description: "Первый запрос к агенту Платформы через A2A JSON-RPC."
 ---
 
 <p class="docs-page-kicker">Quickstart</p>
 <p class="docs-lead">За несколько минут проверьте Agent Card, отправьте сообщение агенту и перейдите к полной API-документации.</p>
 
 <div class="docs-api-strip">
-  <div><span>Base URL</span><code>https://humanitec.ru/flows/api/v1/{flow_id}</code></div>
+  <div><span>Base URL</span><code>https://linnex.io/flows/api/v1/{flow_id}</code></div>
   <div><span>Auth</span><code>Authorization: Bearer {token}</code></div>
   <div><span>Protocol</span><code>JSON-RPC 2.0</code></div>
 </div>
@@ -17,14 +17,18 @@ description: "Первый запрос к агенту Humanitec через A2A
 Для примеров ниже нужны идентификатор flow и токен доступа.
 
 ```bash
-export HUMANITEC_TOKEN="your_token"
-export HUMANITEC_FLOW_ID="my-agent"
-export HUMANITEC_BASE_URL="https://humanitec.ru/flows/api/v1/${HUMANITEC_FLOW_ID}"
+export PLATFORM_TOKEN="your_token"
+export PLATFORM_FLOW_ID="my-agent"
+export PLATFORM_BASE_URL="https://linnex.io/flows/api/v1/${PLATFORM_FLOW_ID}"
 ```
 
 !!! tip
 
     Для серверных интеграций используйте API token в заголовке `Authorization: Bearer ...`. Для встроенных виджетов доступен короткоживущий embed session token.
+
+!!! note "Legacy-домен"
+
+    На `humanitec.ru` те же пути API и контракт JSON-RPC. Подставьте `https://humanitec.ru/flows/api/v1/{flow_id}` вместо `linnex.io`, если интеграция привязана к legacy apex.
 
 ## 2. Получите Agent Card
 
@@ -33,15 +37,15 @@ Agent Card описывает flow, поддерживаемые capabilities, �
 === "curl"
 
     ```bash
-    curl -H "Authorization: Bearer ${HUMANITEC_TOKEN}" \
-      "${HUMANITEC_BASE_URL}"
+    curl -H "Authorization: Bearer ${PLATFORM_TOKEN}" \
+      "${PLATFORM_BASE_URL}"
     ```
 
 === "HTTP"
 
     ```http
     GET /flows/api/v1/{flow_id} HTTP/1.1
-    Host: humanitec.ru
+    Host: linnex.io
     Authorization: Bearer {token}
     ```
 
@@ -52,8 +56,8 @@ Agent Card описывает flow, поддерживаемые capabilities, �
 === "curl"
 
     ```bash
-    curl -X POST "${HUMANITEC_BASE_URL}" \
-      -H "Authorization: Bearer ${HUMANITEC_TOKEN}" \
+    curl -X POST "${PLATFORM_BASE_URL}" \
+      -H "Authorization: Bearer ${PLATFORM_TOKEN}" \
       -H "Content-Type: application/json" \
       -d '{
         "jsonrpc": "2.0",
@@ -95,8 +99,8 @@ Agent Card описывает flow, поддерживаемые capabilities, �
 Для потоковых ответов замените метод на `message/stream`. Ответ приходит через Server-Sent Events.
 
 ```bash
-curl -N -X POST "${HUMANITEC_BASE_URL}" \
-  -H "Authorization: Bearer ${HUMANITEC_TOKEN}" \
+curl -N -X POST "${PLATFORM_BASE_URL}" \
+  -H "Authorization: Bearer ${PLATFORM_TOKEN}" \
   -H "Content-Type: application/json" \
   -d '{
     "jsonrpc": "2.0",

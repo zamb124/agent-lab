@@ -4,11 +4,13 @@
 from typing import override
 
 from apps.rag.config import get_rag_settings
+from core.clients.redis_client import RedisClient
 from core.container import BaseContainer, ContainerRegistry, lazy
 from core.db.repositories.document_status_repository import DocumentStatusRepository
 from core.logging import get_logger
 from core.rag.base_provider import BaseRAGProvider
 from core.rag.factory import get_rag_provider
+from core.rag.post_retrieval_rerank import RerankScoreCache
 
 logger = get_logger(__name__)
 
@@ -20,6 +22,16 @@ class RAGContainer(BaseContainer):
     def document_status_repository(self) -> DocumentStatusRepository:
         """Получает репозиторий статусов документов"""
         return DocumentStatusRepository(self.required_db_url)
+
+    @lazy
+    def redis_client(self) -> RedisClient:
+        """Redis-клиент процесса (кэши RAG)."""
+        return RedisClient(get_rag_settings().database.redis_url)
+
+    @lazy
+    def rerank_score_cache(self) -> RerankScoreCache:
+        """Кэш rerank-скорингов по (model, query, chunk_id)."""
+        return RerankScoreCache(self.redis_client)
 
     @property
     @override

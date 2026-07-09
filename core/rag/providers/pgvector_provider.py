@@ -3,9 +3,11 @@ RAG провайдер на базе pgvector (PostgreSQL).
 Хранит векторные документы в таблице vector_documents через SQLAlchemy 2+.
 """
 
+import math
 import os
 import uuid
 from collections.abc import Sequence
+from datetime import datetime, timezone
 from typing import ClassVar, Literal, override
 
 import tiktoken
@@ -80,6 +82,81 @@ _EMBEDDING_API_KEY_PLACEHOLDERS: frozenset[str] = frozenset(
         "YOUR_OPENROUTER_API_KEY",
     }
 )
+
+# Конфигурация текстового поиска lexical-канала. Должна совпадать с конфигом
+# generated column ``vector_documents.content_tsv`` (миграция rag_0006):
+# ``russian`` стеммит и русские (Snowball), и ascii-слова (english_stem).
+LEXICAL_TS_CONFIG = "russian"
+TS_HEADLINE_OPTIONS = (
+    'StartSel=**, StopSel=**, MaxFragments=2, MaxWords=25, MinWords=8, FragmentDelimiter=" … "'
+)
+# Для evergreen-контента freshness decay ослабляется: half-life растягивается.
+FRESHNESS_EVERGREEN_HALF_LIFE_FACTOR = 4.0
+
+
+def _parse_metadata_document_date(metadata: RAGMetadata, key: str) -> datetime | None:
+    """ISO-дата из metadata краулера; metadata — внешняя граница, битая дата → None."""
+    raw_value = metadata.get(key)
+    if not isinstance(raw_value, str) or not raw_value.strip():
+        return None
+    try:
+        parsed = datetime.fromisoformat(raw_value.strip())
+    except ValueError:
+        return None
+    if parsed.tzinfo is None:
+        return parsed.replace(tzinfo=timezone.utc)
+    return parsed
+
+
+def _document_freshness_age_days(doc: VectorDocument, *, now: datetime) -> tuple[float, str]:
+    """
+    Возраст документа в днях для freshness decay.
+
+    Приоритет: ``metadata.date_modified`` → ``metadata.date_published`` →
+    ``vector_documents.created_at`` (дата индексации, есть всегда).
+    """
+    metadata = doc.metadata_ or {}
+    for key in ("date_modified", "date_published"):
+        parsed = _parse_metadata_document_date(metadata, key)
+        if parsed is not None:
+            return max(0.0, (now - parsed).total_seconds() / 86400.0), key
+    created_at = doc.created_at
+    if created_at.tzinfo is None:
+        created_at = created_at.replace(tzinfo=timezone.utc)
+    return max(0.0, (now - created_at).total_seconds() / 86400.0), "created_at"
+
+
+def _freshness_multiplier(*, age_days: float, half_life_days: float, weight: float) -> float:
+    """``(1 - weight) + weight * 0.5 ** (age / half_life)`` — множитель в (1-weight, 1]."""
+    decay = math.pow(0.5, age_days / half_life_days)
+    return (1.0 - weight) + weight * decay
+
+
+def _freshness_score_and_provenance(
+    doc: VectorDocument,
+    base_score: float,
+    *,
+    weight: float,
+    half_life_days: float,
+    now: datetime,
+) -> tuple[float, RAGMetadata]:
+    """Итоговый score с freshness decay и provenance-поля — единый расчёт для всех каналов."""
+    age_days, age_source = _document_freshness_age_days(doc, now=now)
+    effective_half_life = half_life_days
+    metadata = doc.metadata_ or {}
+    if metadata.get("freshness_relevance") == "evergreen":
+        effective_half_life *= FRESHNESS_EVERGREEN_HALF_LIFE_FACTOR
+    multiplier = _freshness_multiplier(
+        age_days=age_days,
+        half_life_days=effective_half_life,
+        weight=weight,
+    )
+    freshness_provenance: RAGMetadata = {
+        "freshness_multiplier": round(multiplier, 6),
+        "freshness_age_days": round(age_days, 2),
+        "freshness_age_source": age_source,
+    }
+    return base_score * multiplier, freshness_provenance
 
 
 def _normalize_embedding_api_key(raw: str | None) -> str:
@@ -174,6 +251,13 @@ class PgVectorProvider(BaseRAGProvider):
         if use_deterministic_embeddings:
             logger.info("PgVector провайдер: mock embeddings для тестов")
 
+        query_instruction = embedding_runtime.query_instruction
+        self._query_instruction: str | None = (
+            query_instruction.strip()
+            if query_instruction is not None and query_instruction.strip()
+            else None
+        )
+
         self._file_reader: FileReader = FileReader()
         self._chunk_size: int = config.chunk_size
         self._chunk_overlap: int = config.chunk_overlap
@@ -198,6 +282,18 @@ class PgVectorProvider(BaseRAGProvider):
     def embedding_model_name(self) -> str:
         """Идентификатор текущей модели эмбеддинга для записи в embedding_model."""
         return self._embedding_client.model
+
+    def _query_embedding_text(self, query: str) -> str:
+        """
+        Asymmetric instruct-префикс для запроса (Qwen3-Embedding и совместимые модели).
+
+        Документы индексируются без префикса; запрос оборачивается в
+        ``Instruct: {task}\\nQuery: {query}``, если в ``rag.embedding.api.query_instruction``
+        задана инструкция.
+        """
+        if self._query_instruction is None:
+            return query
+        return f"Instruct: {self._query_instruction}\nQuery: {query}"
 
     # -- Чанкинг --
 
@@ -1026,9 +1122,26 @@ class PgVectorProvider(BaseRAGProvider):
                 embedding_model=embedding_model,
                 rrf_k=search_options.rrf_k,
                 per_channel_top_k=search_options.per_channel_top_k,
+                freshness_weight=search_options.freshness_weight,
+                freshness_half_life_days=search_options.freshness_half_life_days,
             )
 
-        query_embedding = await self._embedding_client.generate_embedding(query)
+        query_embedding = await self._embedding_client.generate_embedding(
+            self._query_embedding_text(query)
+        )
+
+        freshness_weight = search_options.freshness_weight if search_options is not None else None
+        freshness_half_life_days = (
+            search_options.freshness_half_life_days if search_options is not None else None
+        )
+        freshness_enabled = (
+            freshness_weight is not None
+            and freshness_weight > 0.0
+            and freshness_half_life_days is not None
+        )
+        # Freshness переранжирует расширенный пул кандидатов до среза limit —
+        # тот же контракт, что в _hybrid_search_rrf.
+        fetch_limit = limit * 3 if freshness_enabled else limit
 
         async with self._session_factory() as session:
             _ = await session.execute(text("SET hnsw.iterative_scan = relaxed_order"))
@@ -1041,7 +1154,7 @@ class PgVectorProvider(BaseRAGProvider):
                 .where(VectorDocument.embedding.isnot(None))
                 .where(VectorDocument.embedding_model == embedding_model)
                 .order_by(distance_expr)
-                .limit(limit)
+                .limit(fetch_limit)
             )
 
             if filters:
@@ -1050,7 +1163,35 @@ class PgVectorProvider(BaseRAGProvider):
             result = await session.execute(stmt)
             rows: Sequence[tuple[VectorDocument, float | None]] = result.tuples().all()
 
-        return self._build_search_results(rows, namespace_id)
+        results = self._build_search_results(rows, namespace_id)
+        if not freshness_enabled or freshness_weight is None or freshness_half_life_days is None:
+            return results
+
+        now = datetime.now(timezone.utc)
+        docs_by_chunk_id = {doc.id: doc for doc, _similarity in rows}
+        rescored: list[RAGSearchResult] = []
+        for item in results:
+            doc = docs_by_chunk_id[item.chunk_id] if item.chunk_id is not None else None
+            if doc is None:
+                rescored.append(item)
+                continue
+            final_score, freshness_provenance = _freshness_score_and_provenance(
+                doc,
+                item.score,
+                weight=freshness_weight,
+                half_life_days=freshness_half_life_days,
+                now=now,
+            )
+            rescored.append(
+                item.model_copy(
+                    update={
+                        "score": final_score,
+                        "provenance": {**item.provenance, **freshness_provenance},
+                    }
+                )
+            )
+        rescored.sort(key=lambda entry: entry.score, reverse=True)
+        return rescored[:limit]
 
     async def _hybrid_search_rrf(
         self,
@@ -1062,12 +1203,26 @@ class PgVectorProvider(BaseRAGProvider):
         embedding_model: str,
         rrf_k: int | None = None,
         per_channel_top_k: int | None = None,
+        freshness_weight: float | None = None,
+        freshness_half_life_days: float | None = None,
     ) -> list[RAGSearchResult]:
-        """Двухканальный поиск: семантический (cosine) + лексический (tsquery), слияние RRF."""
-        query_embedding = await self._embedding_client.generate_embedding(query)
+        """
+        Двухканальный поиск: семантический (cosine) + лексический (websearch tsquery,
+        ``ts_rank_cd``), слияние RRF. При заданных ``freshness_weight``/``freshness_half_life_days``
+        итоговый score = RRF * мультипликативный экспоненциальный decay возраста документа,
+        применённый к полному fused-пулу кандидатов до среза ``limit``.
+        """
+        query_embedding = await self._embedding_client.generate_embedding(
+            self._query_embedding_text(query)
+        )
 
         rrf_k_int = 60 if rrf_k is None else int(rrf_k)
         per_channel = limit * 3 if per_channel_top_k is None else int(per_channel_top_k)
+        freshness_enabled = (
+            freshness_weight is not None
+            and freshness_weight > 0.0
+            and freshness_half_life_days is not None
+        )
 
         async with self._session_factory() as session:
             _ = await session.execute(text("SET hnsw.iterative_scan = relaxed_order"))
@@ -1086,9 +1241,10 @@ class PgVectorProvider(BaseRAGProvider):
                 semantic_stmt = semantic_stmt.where(self._build_metadata_filter_expression(filters))
             semantic_stmt = semantic_stmt.order_by(distance_expr).limit(per_channel)
 
-            # Лексический канал (tsquery по content_tsv)
-            tsquery_expr = func.plainto_tsquery("simple", query)
-            rank_expr = func.ts_rank(VectorDocument.content_tsv, tsquery_expr).label("lexical_rank")
+            # Лексический канал: websearch-синтаксис + русская морфология (Snowball),
+            # ранг с учётом плотности/близости терминов (ts_rank_cd).
+            tsquery_expr = func.websearch_to_tsquery(LEXICAL_TS_CONFIG, query)
+            rank_expr = func.ts_rank_cd(VectorDocument.content_tsv, tsquery_expr).label("lexical_rank")
 
             lexical_stmt = (
                 select(VectorDocument.id, rank_expr)
@@ -1109,36 +1265,99 @@ class PgVectorProvider(BaseRAGProvider):
             lexical_ids = [row[0] for row in lexical_rows]
 
             fused = reciprocal_rank_fusion([semantic_ids, lexical_ids], k=rrf_k_int)
+            if not fused:
+                return []
 
-            fused_ordered = fused[:limit]
-            score_by_id = dict(fused_ordered)
-            top_ids = [doc_id for doc_id, _score in fused_ordered]
+            # Freshness переранжирует полный fused-пул, поэтому документы
+            # загружаются для всех кандидатов, а не только для top-limit.
+            candidate_pairs = fused if freshness_enabled else fused[:limit]
+            candidate_ids = [doc_id for doc_id, _score in candidate_pairs]
 
+            docs_stmt = select(VectorDocument).where(VectorDocument.id.in_(candidate_ids))
+            docs_rows = list((await session.execute(docs_stmt)).scalars().all())
+            by_id = {doc.id: doc for doc in docs_rows}
+
+            scored: list[tuple[str, float, RAGMetadata]] = []
+            now = datetime.now(timezone.utc)
+            freshness_provenance: dict[str, RAGMetadata] = {}
+            for doc_id, rrf_score in candidate_pairs:
+                doc = by_id.get(doc_id)
+                if doc is None:
+                    continue
+                final_score = float(rrf_score)
+                if freshness_enabled and freshness_weight is not None and freshness_half_life_days is not None:
+                    final_score, freshness_provenance[doc_id] = _freshness_score_and_provenance(
+                        doc,
+                        final_score,
+                        weight=freshness_weight,
+                        half_life_days=freshness_half_life_days,
+                        now=now,
+                    )
+                scored.append((doc_id, final_score, doc.metadata_ or {}))
+
+            scored.sort(key=lambda item: item[1], reverse=True)
+            top = scored[:limit]
+            top_ids = [doc_id for doc_id, _score, _metadata in top]
             if not top_ids:
                 return []
 
-            docs_stmt = select(VectorDocument).where(VectorDocument.id.in_(top_ids))
-            docs_rows = list((await session.execute(docs_stmt)).scalars().all())
+            headline_by_id = await self._lexical_headlines(
+                session,
+                doc_ids=top_ids,
+                query=query,
+            )
 
-        by_id = {doc.id: doc for doc in docs_rows}
+        score_by_id = {doc_id: final_score for doc_id, final_score, _metadata in top}
         ordered: list[RAGSearchResult] = []
         for doc_id in top_ids:
             doc = by_id.get(doc_id)
             if doc is None:
                 continue
+            provenance: RAGMetadata = {"channel": "hybrid_rrf", "rrf_k": rrf_k_int}
+            if doc_id in freshness_provenance:
+                provenance.update(freshness_provenance[doc_id])
+            headline = headline_by_id.get(doc_id)
+            if headline:
+                provenance["headline"] = headline
             ordered.append(
                 RAGSearchResult(
                     content=doc.content,
-                    score=float(score_by_id[doc_id]),
+                    score=score_by_id[doc_id],
                     document_id=doc.document_id,
                     document_name=doc.document_name or "",
                     metadata=doc.metadata_ or {},
                     namespace=namespace_id,
                     chunk_id=doc.id,
-                    provenance={"channel": "hybrid_rrf", "rrf_k": rrf_k_int},
+                    provenance=provenance,
                 )
             )
         return ordered
+
+    async def _lexical_headlines(
+        self,
+        session: AsyncSession,
+        *,
+        doc_ids: list[str],
+        query: str,
+    ) -> dict[str, str]:
+        """Сниппеты ``ts_headline`` с подсветкой терминов запроса для финальной выдачи."""
+        tsquery_expr = func.websearch_to_tsquery(LEXICAL_TS_CONFIG, query)
+        headline_expr = func.ts_headline(
+            LEXICAL_TS_CONFIG,
+            VectorDocument.content,
+            tsquery_expr,
+            TS_HEADLINE_OPTIONS,
+        )
+        stmt = select(VectorDocument.id, headline_expr).where(VectorDocument.id.in_(doc_ids))
+        rows: Sequence[tuple[str, str | None]] = (await session.execute(stmt)).tuples().all()
+        headlines: dict[str, str] = {}
+        for doc_id, headline in rows:
+            if headline is None:
+                continue
+            normalized = headline.strip()
+            if normalized:
+                headlines[doc_id] = normalized
+        return headlines
 
     def _build_search_results(
         self,

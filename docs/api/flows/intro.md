@@ -14,8 +14,10 @@ A2A API для Flows - это внешний HTTP-интерфейс, через
 Главный публичный URL:
 
 ```text
-https://humanitec.ru/flows/api/v1/{flow_id}
+https://linnex.io/flows/api/v1/{flow_id}
 ```
+
+На legacy apex `humanitec.ru` тот же путь: `https://humanitec.ru/flows/api/v1/{flow_id}`.
 
 Локально в dev-окружении обычно используется:
 
@@ -116,12 +118,12 @@ Accept: application/json
 Пример с переменной окружения:
 
 ```bash
-export HUMANITEC_TOKEN="hum_your_api_key"
+export PLATFORM_TOKEN="hum_your_api_key"
 export FLOW_ID="support_agent"
-export A2A_URL="https://humanitec.ru/flows/api/v1/${FLOW_ID}"
+export A2A_URL="https://linnex.io/flows/api/v1/${FLOW_ID}"
 
 curl -sS "$A2A_URL" \
-  -H "Authorization: Bearer ${HUMANITEC_TOKEN}" \
+  -H "Authorization: Bearer ${PLATFORM_TOKEN}" \
   -H "Accept: application/json"
 ```
 
@@ -301,7 +303,7 @@ POST /flows/api/v1/{flow_id}?v=20260603123000000000
 - `parts` - массив частей сообщения. Минимум одна часть.
 - `contextId` - опционально. Нужен, если вы хотите продолжать тот же диалог.
 - `taskId` - опционально. Обычно можно не передавать: сервер сам создаст task id и вернет его.
-- `metadata` - техническое поле сообщения A2A. Для настроек запуска в Humanitec используйте `params.metadata`, а не `message.metadata`.
+- `metadata` - техническое поле сообщения A2A. Для настроек запуска на Платформе используйте `params.metadata`, а не `message.metadata`.
 
 Правильное место для настроек запуска:
 
@@ -363,12 +365,12 @@ Runtime variables лежат только внутри `params.metadata.variable
 ## Первый рабочий запрос
 
 ```bash
-export HUMANITEC_TOKEN="hum_your_api_key"
+export PLATFORM_TOKEN="hum_your_api_key"
 export FLOW_ID="support_agent"
-export A2A_URL="https://humanitec.ru/flows/api/v1/${FLOW_ID}"
+export A2A_URL="https://linnex.io/flows/api/v1/${FLOW_ID}"
 
 curl -sS -X POST "$A2A_URL" \
-  -H "Authorization: Bearer ${HUMANITEC_TOKEN}" \
+  -H "Authorization: Bearer ${PLATFORM_TOKEN}" \
   -H "Content-Type: application/json" \
   -H "Accept: application/json" \
   -d '{
@@ -424,7 +426,7 @@ Agent Card помогает понять, что опубликовано нар
 
 ```bash
 curl -sS "$A2A_URL" \
-  -H "Authorization: Bearer ${HUMANITEC_TOKEN}" \
+  -H "Authorization: Bearer ${PLATFORM_TOKEN}" \
   -H "Accept: application/json"
 ```
 
@@ -435,7 +437,7 @@ curl -sS "$A2A_URL" \
   "name": "Support Agent",
   "description": "Помогает клиентам с вопросами поддержки",
   "version": "1.0.0",
-  "url": "https://humanitec.ru/flows/api/v1/support_agent",
+  "url": "https://linnex.io/flows/api/v1/support_agent",
   "capabilities": {
     "streaming": true,
     "pushNotifications": false,
@@ -457,7 +459,7 @@ curl -sS "$A2A_URL" \
     "company_name": {
       "title": "Company name",
       "description": "Название компании для ответов",
-      "value": "Humanitec"
+      "value": "Linnex"
     }
   }
 }
@@ -490,7 +492,7 @@ Agent Card не должна раскрывать secrets. Если переме
 
 ```bash
 curl -sS -X POST "$A2A_URL" \
-  -H "Authorization: Bearer ${HUMANITEC_TOKEN}" \
+  -H "Authorization: Bearer ${PLATFORM_TOKEN}" \
   -H "Content-Type: application/json" \
   -d '{
     "jsonrpc": "2.0",
@@ -532,7 +534,7 @@ curl -sS -X POST "$A2A_URL" \
 
 ```bash
 curl -sS -X POST "$A2A_URL" \
-  -H "Authorization: Bearer ${HUMANITEC_TOKEN}" \
+  -H "Authorization: Bearer ${PLATFORM_TOKEN}" \
   -H "Content-Type: application/json" \
   -d '{
     "jsonrpc": "2.0",
@@ -616,7 +618,7 @@ curl -sS -X POST "$A2A_URL" \
 
 ```bash
 curl -N -sS -X POST "$A2A_URL" \
-  -H "Authorization: Bearer ${HUMANITEC_TOKEN}" \
+  -H "Authorization: Bearer ${PLATFORM_TOKEN}" \
   -H "Content-Type: application/json" \
   -H "Accept: text/event-stream" \
   -d '{
@@ -673,7 +675,7 @@ data: {"jsonrpc":"2.0","id":"stream-1","error":{"code":-32000,"message":"Task fa
 const response = await fetch(process.env.A2A_URL, {
   method: 'POST',
   headers: {
-    'Authorization': `Bearer ${process.env.HUMANITEC_TOKEN}`,
+    'Authorization': `Bearer ${process.env.PLATFORM_TOKEN}`,
     'Content-Type': 'application/json',
     'Accept': 'text/event-stream',
   },
@@ -732,7 +734,7 @@ while (true) {
 
 ```bash
 curl -sS -X POST "$A2A_URL" \
-  -H "Authorization: Bearer ${HUMANITEC_TOKEN}" \
+  -H "Authorization: Bearer ${PLATFORM_TOKEN}" \
   -H "Content-Type: application/json" \
   -d '{
     "jsonrpc": "2.0",
@@ -797,7 +799,7 @@ curl -sS -X POST "$A2A_URL" \
 
 ```bash
 curl -sS -X POST "$A2A_URL" \
-  -H "Authorization: Bearer ${HUMANITEC_TOKEN}" \
+  -H "Authorization: Bearer ${PLATFORM_TOKEN}" \
   -H "Content-Type: application/json" \
   -d '{
     "jsonrpc": "2.0",
@@ -856,7 +858,7 @@ curl -sS -X POST "$A2A_URL" \
 
 ```bash
 curl -N -sS -X POST "$A2A_URL" \
-  -H "Authorization: Bearer ${HUMANITEC_TOKEN}" \
+  -H "Authorization: Bearer ${PLATFORM_TOKEN}" \
   -H "Content-Type: application/json" \
   -H "Accept: text/event-stream" \
   -d '{
@@ -1050,7 +1052,7 @@ Branch - это вариант flow. Например:
 
 ```bash
 curl -sS "$A2A_URL/branches" \
-  -H "Authorization: Bearer ${HUMANITEC_TOKEN}" \
+  -H "Authorization: Bearer ${PLATFORM_TOKEN}" \
   -H "Accept: application/json"
 ```
 
@@ -1079,7 +1081,7 @@ curl -sS "$A2A_URL/branches" \
 
 ```bash
 curl -sS "$A2A_URL/branches/support" \
-  -H "Authorization: Bearer ${HUMANITEC_TOKEN}" \
+  -H "Authorization: Bearer ${PLATFORM_TOKEN}" \
   -H "Accept: application/json"
 ```
 
@@ -1124,7 +1126,7 @@ curl -sS "$A2A_URL/branches/support" \
 
 ```bash
 curl -sS "$A2A_URL/branches/support/tools" \
-  -H "Authorization: Bearer ${HUMANITEC_TOKEN}" \
+  -H "Authorization: Bearer ${PLATFORM_TOKEN}" \
   -H "Accept: application/json"
 ```
 
@@ -1181,7 +1183,7 @@ curl -sS "$A2A_URL/branches/support/tools" \
 
 ```bash
 curl -sS "$A2A_URL/schema" \
-  -H "Authorization: Bearer ${HUMANITEC_TOKEN}" \
+  -H "Authorization: Bearer ${PLATFORM_TOKEN}" \
   -H "Accept: application/json"
 ```
 
@@ -1195,7 +1197,7 @@ curl -sS "$A2A_URL/schema" \
 
 ```bash
 curl -sS -X POST "$A2A_URL/branches" \
-  -H "Authorization: Bearer ${HUMANITEC_TOKEN}" \
+  -H "Authorization: Bearer ${PLATFORM_TOKEN}" \
   -H "Content-Type: application/json" \
   -d '{
     "branch_id": "support",
@@ -1274,7 +1276,7 @@ curl -sS -X POST "$A2A_URL/branches" \
 
 ```bash
 curl -sS -X PUT "$A2A_URL/branches/support" \
-  -H "Authorization: Bearer ${HUMANITEC_TOKEN}" \
+  -H "Authorization: Bearer ${PLATFORM_TOKEN}" \
   -H "Content-Type: application/json" \
   -d '{
     "name": "Support v2",
@@ -1327,7 +1329,7 @@ curl -sS -X PUT "$A2A_URL/branches/support" \
 
 ```bash
 curl -sS -X DELETE "$A2A_URL/branches/support" \
-  -H "Authorization: Bearer ${HUMANITEC_TOKEN}" \
+  -H "Authorization: Bearer ${PLATFORM_TOKEN}" \
   -H "Accept: application/json"
 ```
 
@@ -1795,14 +1797,14 @@ http://demo.lvh.me:8002/embed-configs
 
 ```html
 <script type="module"
-  src="https://cdn.humanitec.ru/lib/embed-chat/humanitec-embed-autoload.js"
+  src="https://cdn.linnex.io/lib/embed-chat/humanitec-embed-autoload.js"
   data-embed-id="embed_abc123"
   data-assistant-title="AI-помощник"
   data-theme="auto"
   data-locale="ru"
   data-show-launcher="true"
-  data-flows-base-url="https://api.humanitec.ru/flows"
-  data-platform-ui-origin="https://api.humanitec.ru"
+  data-flows-base-url="https://api.linnex.io/flows"
+  data-platform-ui-origin="https://api.linnex.io"
   data-chat-token-url="/api/chat-token"
   data-token-expires-seconds="300"
   data-use-credentials="false"
@@ -1810,7 +1812,7 @@ http://demo.lvh.me:8002/embed-configs
   data-toggle-event-name="humanitec-embed-chat-toggle"
   data-voice-enabled="false"
   data-voice-default-on="false"
-  data-voice-base-url="https://api.humanitec.ru/voice"
+  data-voice-base-url="https://api.linnex.io/voice"
   data-company-id="your_company_id"
 ></script>
 ```
@@ -1852,13 +1854,13 @@ import express from "express";
 const app = express();
 app.use(express.json());
 
-const HUMANITEC_API_BASE = "https://api.humanitec.ru";
-const HUMANITEC_API_KEY = process.env.HUMANITEC_API_KEY;
-const HUMANITEC_EMBED_ID = process.env.HUMANITEC_EMBED_ID;
+const PLATFORM_API_BASE = "https://api.linnex.io";
+const PLATFORM_API_KEY = process.env.PLATFORM_API_KEY;
+const PLATFORM_EMBED_ID = process.env.PLATFORM_EMBED_ID;
 
 app.post("/api/chat-token", async (req, res) => {
   const embedId = String(req.body?.embed_id || "");
-  if (embedId !== HUMANITEC_EMBED_ID) {
+  if (embedId !== PLATFORM_EMBED_ID) {
     return res.status(400).json({ error: "Unknown embed_id" });
   }
 
@@ -1866,12 +1868,12 @@ app.post("/api/chat-token", async (req, res) => {
   const ttl = Number(req.body?.expires_in_seconds || 300);
 
   const platformResponse = await fetch(
-    `${HUMANITEC_API_BASE}/frontend/api/embed/configs/${encodeURIComponent(embedId)}/session-token`,
+    `${PLATFORM_API_BASE}/frontend/api/embed/configs/${encodeURIComponent(embedId)}/session-token`,
     {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        "Authorization": `Bearer ${HUMANITEC_API_KEY}`,
+        "Authorization": `Bearer ${PLATFORM_API_KEY}`,
       },
       body: JSON.stringify({
         origin: browserOrigin,
@@ -1901,7 +1903,7 @@ app.post("/api/chat-token", async (req, res) => {
 
 Что нельзя делать:
 
-- нельзя возвращать `HUMANITEC_API_KEY` в браузер;
+- нельзя возвращать `PLATFORM_API_KEY` в браузер;
 - нельзя вставлять `hum_...` в `data-*` атрибуты;
 - нельзя хранить `hum_...` в localStorage/sessionStorage;
 - нельзя делать browser fetch напрямую на `/frontend/api/embed/configs/{embed_id}/session-token` с company API key;
@@ -1924,14 +1926,14 @@ app.post("/api/chat-token", async (req, res) => {
     </main>
 
     <script type="module"
-      src="https://cdn.humanitec.ru/lib/embed-chat/humanitec-embed-autoload.js"
+      src="https://cdn.linnex.io/lib/embed-chat/humanitec-embed-autoload.js"
       data-embed-id="embed_abc123"
       data-assistant-title="AI-помощник"
       data-theme="auto"
       data-locale="ru"
       data-show-launcher="true"
-      data-flows-base-url="https://api.humanitec.ru/flows"
-      data-platform-ui-origin="https://api.humanitec.ru"
+      data-flows-base-url="https://api.linnex.io/flows"
+      data-platform-ui-origin="https://api.linnex.io"
       data-chat-token-url="/api/chat-token"
       data-token-expires-seconds="300"
       data-use-credentials="false"
@@ -1939,7 +1941,7 @@ app.post("/api/chat-token", async (req, res) => {
       data-toggle-event-name="humanitec-embed-chat-toggle"
       data-voice-enabled="false"
       data-voice-default-on="false"
-      data-voice-base-url="https://api.humanitec.ru/voice"
+      data-voice-base-url="https://api.linnex.io/voice"
       data-company-id="your_company_id"
     ></script>
   </body>
@@ -1959,8 +1961,8 @@ app.post("/api/chat-token", async (req, res) => {
 | `data-theme` | Нет | Тема виджета: `light`, `dark`, `auto`. | `auto` подстраивается под окружение. Для фиксированного сайта можно поставить `light` или `dark`. |
 | `data-locale` | Нет | Язык UI виджета: `ru`, `en`, `auto`. | Для русского сайта ставьте `ru`, для английского `en`. |
 | `data-show-launcher` | Нет | Показывать стандартную плавающую кнопку открытия. | `true` - виджет сам показывает кнопку. `false` - открывайте своей кнопкой через event. |
-| `data-flows-base-url` | Да | Base URL сервиса Flows с префиксом `/flows`. | В production используйте значение из консоли, например `https://api.humanitec.ru/flows`. |
-| `data-platform-ui-origin` | Да для CDN/внешнего сайта | Origin платформы для вспомогательных ресурсов UI. | Оставьте значение из консоли. Обычно это `https://api.humanitec.ru`. |
+| `data-flows-base-url` | Да | Base URL сервиса Flows с префиксом `/flows`. | В production используйте значение из консоли, например `https://api.linnex.io/flows`. |
+| `data-platform-ui-origin` | Да для CDN/внешнего сайта | Origin платформы для вспомогательных ресурсов UI. | Оставьте значение из консоли. Обычно это `https://api.linnex.io`. |
 | `data-chat-token-url` | Да для безопасной схемы | URL вашего backend endpoint, который выдает короткий token браузеру. | Обычно `/api/chat-token`. Можно указать полный URL, если backend на другом origin и CORS настроен. |
 | `data-token-expires-seconds` | Нет | TTL короткого token, который браузер просит у вашего backend. | Значение должно быть положительным. Platform endpoint принимает 60..900 секунд. Обычно `300`. |
 | `data-use-credentials` | Нет | Управляет browser credentials для запросов виджета. | Обычно `false`. `true` нужно только если вы сознательно используете cookie-based схему на том же домене. |
@@ -2285,7 +2287,7 @@ Content-Type: application/json
 Пример `message/stream` с коротким token:
 
 ```bash
-curl -N "https://api.humanitec.ru/flows/api/v1/embed/embed_abc123" \
+curl -N "https://api.linnex.io/flows/api/v1/embed/embed_abc123" \
   -H "Authorization: Bearer $EMBED_SESSION_TOKEN" \
   -H "Content-Type: application/json" \
   -H "Origin: https://example.com" \
@@ -2692,11 +2694,11 @@ export async function callFlowA2A({
   params,
   requestId = crypto.randomUUID(),
 }) {
-  const url = `https://humanitec.ru/flows/api/v1/${encodeURIComponent(flowId)}`;
+  const url = `https://linnex.io/flows/api/v1/${encodeURIComponent(flowId)}`;
   const response = await fetch(url, {
     method: 'POST',
     headers: {
-      'Authorization': `Bearer ${process.env.HUMANITEC_TOKEN}`,
+      'Authorization': `Bearer ${process.env.PLATFORM_TOKEN}`,
       'Content-Type': 'application/json',
       'Accept': 'application/json',
     },
@@ -2759,12 +2761,12 @@ import httpx
 
 
 async def call_flow_a2a(flow_id: str, method: str, params: dict) -> dict:
-    url = f"https://humanitec.ru/flows/api/v1/{flow_id}"
+    url = f"https://linnex.io/flows/api/v1/{flow_id}"
     async with httpx.AsyncClient(timeout=60) as client:
         response = await client.post(
             url,
             headers={
-                "Authorization": f"Bearer {os.environ['HUMANITEC_TOKEN']}",
+                "Authorization": f"Bearer {os.environ['PLATFORM_TOKEN']}",
                 "Content-Type": "application/json",
                 "Accept": "application/json",
             },

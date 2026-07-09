@@ -2,10 +2,13 @@
 
 from __future__ import annotations
 
+import math
 import time
 from collections.abc import Awaitable, Callable
 from datetime import UTC, datetime, timedelta
 from typing import Literal
+
+import httpx
 
 from apps.search.config import SearchCrawlConfig
 from apps.search.db.crawl_repositories import (
@@ -17,6 +20,7 @@ from apps.search.db.crawl_repositories import (
 from apps.search.services.crawl.fetch_service import CrawlFetchService
 from apps.search.services.crawl.ingest_service import CrawlIngestService
 from apps.search.services.crawl.page_enrichment_service import CrawlPageEnrichmentService
+from apps.search.services.crawl.politeness_service import CrawlPolitenessService
 from apps.search.services.crawl.seed_loader import import_tranco_domains
 from apps.search.services.crawl.sitemap_parser import discover_sitemap_urls
 from apps.search_worker.broker import broker as search_worker_broker
@@ -69,6 +73,13 @@ async def _enqueue_task(task_name: str, *args: object, **kwargs: object) -> None
     _ = await task.kiq(*args, **kwargs)
 
 
+def _gone_http_status(exc: BaseException) -> int | None:
+    """HTTP-статус окончательно недоступной страницы (404/410) или None."""
+    if isinstance(exc, httpx.HTTPStatusError) and exc.response.status_code in (404, 410):
+        return exc.response.status_code
+    return None
+
+
 class CrawlOrchestratorService:
     def __init__(
         self,
@@ -79,6 +90,7 @@ class CrawlOrchestratorService:
         crawl_job_repository: CrawlJobRepository,
         fetch_service: CrawlFetchService,
         page_enrichment_service: CrawlPageEnrichmentService,
+        politeness_service: CrawlPolitenessService,
         rag_client: RagClient,
         build_system_context: Callable[[str], Awaitable[Context]],
         crawl_config: SearchCrawlConfig,
@@ -89,6 +101,7 @@ class CrawlOrchestratorService:
         self._crawl_job_repository: CrawlJobRepository = crawl_job_repository
         self._fetch_service: CrawlFetchService = fetch_service
         self._page_enrichment_service: CrawlPageEnrichmentService = page_enrichment_service
+        self._politeness_service: CrawlPolitenessService = politeness_service
         self._ingest_service: CrawlIngestService = CrawlIngestService(rag_client)
         self._rag_client: RagClient = rag_client
         self._build_system_context: Callable[[str], Awaitable[Context]] = build_system_context
@@ -353,6 +366,22 @@ class CrawlOrchestratorService:
         profile = profile_bundle.profile
         prompt_version = self._crawl_config.enrichment.prompt_version
         search_index_id = profile_bundle.search_index.search_index_id
+        if not await self._politeness_service.is_url_allowed(crawl_url.url):
+            await self._crawl_url_repository.mark_skipped(crawl_url.crawl_url_id, None)
+            await self._crawl_job_repository.increment(crawl_job_id, urls_skipped=1)
+            log_crawl_url_outcome(
+                crawl_profile_id=crawl_profile_id,
+                crawl_job_id=crawl_job_id,
+                crawl_domain_id=domain.crawl_domain_id,
+                crawl_url_id=crawl_url.crawl_url_id,
+                search_index_id=search_index_id,
+                domain=domain.domain,
+                canonical_url=crawl_url.canonical_url,
+                crawl_outcome="skipped",
+                crawl_skip_reason="robots_disallowed",
+            )
+            return
+        _ = await self._politeness_service.wait_for_fetch_slot(crawl_url.url)
         try:
             fetched = await self._fetch_service.fetch_markdown(
                 crawl_url.url,
@@ -449,6 +478,34 @@ class CrawlOrchestratorService:
                 crawl_skip_reason="extract_too_short",
             )
         except Exception as exc:
+            gone_status = _gone_http_status(exc)
+            if gone_status is not None:
+                # Гигиена индекса: мёртвая страница удаляется из RAG и выводится
+                # из очереди до появления нового sitemap_lastmod.
+                if crawl_url.document_id is not None:
+                    _ = await self._rag_client.delete_namespace_document(
+                        profile_bundle.search_index.rag_namespace_id,
+                        crawl_url.document_id,
+                    )
+                await self._crawl_url_repository.mark_gone(
+                    crawl_url.crawl_url_id,
+                    error=f"http_{gone_status}",
+                )
+                await self._crawl_job_repository.increment(crawl_job_id, urls_skipped=1)
+                log_crawl_url_outcome(
+                    crawl_profile_id=crawl_profile_id,
+                    crawl_job_id=crawl_job_id,
+                    crawl_domain_id=domain.crawl_domain_id,
+                    crawl_url_id=crawl_url.crawl_url_id,
+                    search_index_id=search_index_id,
+                    domain=domain.domain,
+                    canonical_url=crawl_url.canonical_url,
+                    crawl_outcome="gone",
+                    document_id=crawl_url.document_id,
+                    exception_type=type(exc).__name__,
+                    exception_message=str(exc),
+                )
+                return
             await self._crawl_url_repository.mark_failed(
                 crawl_url.crawl_url_id,
                 str(exc),
@@ -677,6 +734,44 @@ class CrawlOrchestratorService:
             return domain.refresh_interval_seconds
         return profile_bundle.profile.refresh_interval_seconds
 
+    async def _adaptive_refresh_interval(
+        self,
+        domain: CrawlDomain,
+        profile_bundle: CrawlProfileWithIndex,
+        *,
+        now: datetime,
+    ) -> int:
+        """
+        Интервал re-crawl домена по наблюдаемой частоте изменений.
+
+        Доля изменившихся страниц (indexed vs skipped/content_unchanged) за
+        lookback-окно масштабирует базовый интервал: часто меняющиеся домены
+        (новостники) обходятся до 4x чаще, статичные — до 4x реже.
+        Явный per-domain override отключает адаптацию.
+        """
+        if domain.refresh_interval_seconds is not None:
+            return domain.refresh_interval_seconds
+        base = profile_bundle.profile.refresh_interval_seconds
+        if not self._crawl_config.adaptive_refresh_enabled:
+            return base
+        lookback_seconds = base * self._crawl_config.adaptive_refresh_lookback_factor
+        changed, unchanged = await self._crawl_url_repository.domain_change_stats(
+            domain.crawl_domain_id,
+            since=now - timedelta(seconds=lookback_seconds),
+        )
+        sampled = changed + unchanged
+        if sampled < self._crawl_config.adaptive_refresh_min_samples:
+            return base
+        change_ratio = changed / sampled
+        # ratio=1 -> base/4, ratio=0.5 -> base, ratio=0 -> base*4.
+        adaptive = base * math.pow(4.0, 1.0 - 2.0 * change_ratio)
+        return int(
+            min(
+                max(adaptive, self._crawl_config.adaptive_refresh_min_seconds),
+                self._crawl_config.adaptive_refresh_max_seconds,
+            )
+        )
+
     async def _schedule_domain_for_tick(
         self,
         *,
@@ -687,7 +782,7 @@ class CrawlOrchestratorService:
         now: datetime,
     ) -> bool:
         profile = profile_bundle.profile
-        refresh_interval = self._effective_refresh_interval(domain, profile_bundle)
+        refresh_interval = await self._adaptive_refresh_interval(domain, profile_bundle, now=now)
         if domain.domain in profile.denylist_domains:
             await self._crawl_domain_repository.schedule_next(
                 domain.crawl_domain_id,

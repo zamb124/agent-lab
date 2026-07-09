@@ -58,6 +58,9 @@ _RAG_SEARCH_DESCRIPTION = """
 - query (строка): запрос естественным языком.
 - limit (целое, по умолчанию 5): максимум результатов (разумно 3–20).
 - filters (объект, опционально): дополнительные фильтры по metadata на стороне провайдера; collection_id вшивается поверх.
+- channels/rrf_k/per_channel_top_k (опционально): гибридный поиск semantic+lexical с RRF-слиянием.
+- rerank/rerank_max_candidates (опционально): пост-retrieval реранк кросс-энкодером и кап кандидатов.
+- freshness_weight/freshness_half_life_days (опционально): множитель свежести документов (экспоненциальный decay по возрасту).
 
 Когда вызывать: нужно найти релевантные куски из ранее добавленных в RAG текстов.
 """.strip()
@@ -122,9 +125,25 @@ class RagSearchArgs(StrictBaseModel):
         None,
         description="Включить пост-retrieval реранк; None — дефолты сервера/профиля.",
     )
+    rerank_max_candidates: int | None = Field(
+        None,
+        ge=1,
+        description="Верхняя граница кандидатов, отправляемых в реранкер; опционально.",
+    )
     retrieval: bool | None = Field(
         None,
         description="Флаг retrieval в теле поиска; семантика на стороне провайдера.",
+    )
+    freshness_weight: float | None = Field(
+        None,
+        ge=0.0,
+        le=1.0,
+        description="Вес freshness decay в итоговом скоре (0..1); None/0 — выключено.",
+    )
+    freshness_half_life_days: float | None = Field(
+        None,
+        gt=0.0,
+        description="Период полураспада freshness decay в днях; опционально.",
     )
 
 
@@ -203,7 +222,10 @@ async def rag_search(
     rrf_k: int | None = None,
     per_channel_top_k: int | None = None,
     rerank: bool | None = None,
+    rerank_max_candidates: int | None = None,
     retrieval: bool | None = None,
+    freshness_weight: float | None = None,
+    freshness_half_life_days: float | None = None,
 ) -> JsonObject:
     merged_filters: RAGMetadataFilter = dict(filters) if filters is not None else {}
     if "collection_id" in merged_filters and merged_filters["collection_id"] != collection_id:
@@ -222,7 +244,10 @@ async def rag_search(
             rrf_k=rrf_k,
             per_channel_top_k=per_channel_top_k,
             rerank=rerank,
+            rerank_max_candidates=rerank_max_candidates,
             retrieval=retrieval,
+            freshness_weight=freshness_weight,
+            freshness_half_life_days=freshness_half_life_days,
         )
     except ServiceClientError as exc:
         return {"success": False, "error": str(exc)}

@@ -153,3 +153,40 @@ async def test_serp_more_accepts_platform_session_user(
     )
     if response.status_code == 403:
         assert response.json()["detail"] != "Недопустимый тип сессии для SERP"
+
+
+def _serp_click_body() -> dict[str, object]:
+    return {
+        "query": "тестовый запрос",
+        "mode": "quick",
+        "url": "https://example.ru/articles/tech",
+        "position": 2,
+        "provider": "index",
+        "search_index_id": "",
+        "serp_cache_key": "",
+    }
+
+
+@pytest.mark.asyncio
+async def test_serp_click_rejects_anonymous_without_session(
+    public_search_client: AsyncClient,
+):
+    response = await public_search_client.post(
+        "/frontend/api/public/search/serp/click",
+        headers=_public_search_session_headers(),
+        json=_serp_click_body(),
+    )
+    assert response.status_code in (401, 403)
+
+
+@pytest.mark.asyncio
+async def test_serp_click_accepts_platform_session_user(
+    public_search_client_with_auth: AsyncClient,
+):
+    response = await public_search_client_with_auth.post(
+        "/frontend/api/public/search/serp/click",
+        headers=_public_search_session_headers(),
+        json=_serp_click_body(),
+    )
+    if response.status_code == 403:
+        assert response.json()["detail"] != "Недопустимый тип сессии для SERP"

@@ -1,6 +1,6 @@
-# Humanitec: что заполнить в Google Play Console
+# Linnex: что заполнить в Google Play Console
 
-Черновики текстов согласованы с лендингом и [`PLAY_MANUAL.md`](PLAY_MANUAL.md). Подставьте **реальные URL** поддержки и политики; юридические формулировки проверьте у себя.
+Черновики текстов согласованы с лендингом и [`PLAY_MANUAL.md`](PLAY_MANUAL.md). Primary brand — **Linnex** (`linnex.io`). Подставьте **реальные URL** поддержки и политики; юридические формулировки проверьте у себя.
 
 ---
 
@@ -9,7 +9,7 @@
 | Поле | Значение |
 |------|----------|
 | **applicationId** (package name) | `ru.humanitec.app` (тот же, что iOS bundle id; не менять после первого релиза). |
-| **App name** | `Humanitec` (≤30 символов). |
+| **App name** | `Linnex` (≤30 символов). |
 | **Default language** | Russian (ru-RU). Дополнительно — English (en-US). |
 | **Category** | Productivity (основная) или Business. |
 | **Tags** | `Productivity`, `Business`, `Communication`. |
@@ -22,14 +22,14 @@
 
 | Поле | Лимит | Черновик (RU) |
 |------|-------|----------------|
-| **App name** | 30 | `Humanitec` |
+| **App name** | 30 | `Linnex` |
 | **Short description** | 80 | `AI-агенты, чаты, видеозвонки, граф контактов и база знаний — в одном клиенте.` |
 | **Full description** | 4000 | См. ниже. |
 
 ### Full description (RU, черновик)
 
 ```
-Humanitec — платформа для автоматизации бизнеса и совместной работы команд.
+Linnex — платформа для автоматизации бизнеса и совместной работы команд.
 
 В одном клиенте:
 • AI Studio — конструктор AI-агентов и сценариев (flows)
@@ -38,11 +38,11 @@ Humanitec — платформа для автоматизации бизнес�
 • Knowledge Base — умная база знаний с семантическим поиском
 • Documents — совместное редактирование документов
 
-Android-клиент Humanitec — нативная оболочка для платформы. Логин, выбор компании, управление ролями и биллингом — там же, что и в браузере; приложение добавляет нативные уведомления, оффлайн-заглушку и быстрый доступ через иконку в системе.
+Android-клиент Linnex — нативная оболочка для платформы. Логин, выбор компании, управление ролями и биллингом — там же, что и в браузере; приложение добавляет нативные уведомления, оффлайн-заглушку и быстрый доступ через иконку в системе.
 
 Подходит для команд от 3 человек: тех, кто строит AI-ассистентов на базе своих данных и общается в единой среде, не разнося чаты, агенты и базу знаний по разным сервисам.
 
-Узнать больше: https://humanitec.ru
+Узнать больше: https://linnex.io
 ```
 
 ### Tags / Categorization
@@ -56,12 +56,12 @@ Android-клиент Humanitec — нативная оболочка для пл
 
 | Поле | Лимит | Черновик (EN) |
 |------|-------|----------------|
-| **App name** | 30 | `Humanitec` |
+| **App name** | 30 | `Linnex` |
 | **Short description** | 80 | `AI agents, chat, video calls, CRM and knowledge base in one client.` |
 | **Full description** | 4000 | См. ниже. |
 
 ```
-Humanitec is a platform for business automation and team collaboration.
+Linnex is a platform for business automation and team collaboration.
 
 In a single app:
 • AI Studio — visual builder for AI agents and workflows
@@ -70,11 +70,11 @@ In a single app:
 • Knowledge Base — smart documents with semantic search
 • Documents — collaborative editing
 
-The Humanitec Android client is a native shell over the platform: the same login, company switch, roles, and billing as in the browser, plus native push notifications, an offline screen, and a system app icon for quick access.
+The Linnex Android client is a native shell over the platform: the same login, company switch, roles, and billing as in the browser, plus native push notifications, an offline screen, and a system app icon for quick access.
 
 Built for teams of 3+ who build AI assistants on top of their own data and want chats, agents, and knowledge in one place.
 
-Learn more: https://humanitec.ru
+Learn more: https://linnex.io
 ```
 
 ---
@@ -93,8 +93,8 @@ Learn more: https://humanitec.ru
 
 | Поле | Черновик |
 |------|----------|
-| **Website** | `https://humanitec.ru` |
-| **Email** | `support@humanitec.ru` (или ваш контакт поддержки) |
+| **Website** | `https://linnex.io` |
+| **Email** | `support@linnex.io` (или ваш контакт поддержки) |
 | **Phone** | По желанию |
 | **Privacy Policy** | URL вашей страницы политики (тот же, что в App Store Connect и в Setup → App content) |
 
@@ -112,15 +112,15 @@ Learn more: https://humanitec.ru
 - **App info and performance**: crash logs, diagnostics
 - **Device or other IDs**: FCM registration token (для push)
 
-Все категории — **Collected**, **Linked to user**, **Encrypted in transit** (HTTPS), **User can request deletion** (через `support@humanitec.ru` или `/settings`).
+Все категории — **Collected**, **Linked to user**, **Encrypted in transit** (HTTPS), **User can request deletion** (через `support@linnex.io` или `/settings`).
 
 ---
 
 ## Build → Release notes (Russian)
 
 ```
-Первая публичная сборка Humanitec для Android: чаты Sync с голосом и видеозвонками, AI-агенты, CRM, база знаний.
-Поддержка push-уведомлений (FCM) и App Links на humanitec.ru / humanetic.ru / agents-lab.ru.
+Первая публичная сборка Linnex для Android: чаты Sync с голосом и видеозвонками, AI-агенты, CRM, база знаний.
+Поддержка push-уведомлений (FCM) и App Links на linnex.io, humanitec.ru, humanetic.ru и agents-lab.ru.
 ```
 
 ---
@@ -129,10 +129,16 @@ Learn more: https://humanitec.ru
 
 | В витрине / в тексте | Смысл |
 |----------------------|--------|
-| Humanitec | Название платформы |
+| Linnex | Название платформы (primary brand) |
 | AI Studio | Конструктор AI-агентов (flows) |
 | Sync | Чаты и видеозвонки |
 | NetWorkle | CRM / граф контактов |
 | Knowledge Base | Документы и семантический поиск |
 
 При необходимости сокращайте под лимиты Google Play.
+
+---
+
+## Legacy brand (humanitec.ru)
+
+Для legacy apex используйте имя **Humanitec** на витрине, `https://humanitec.ru` и `support@humanitec.ru`. Package name `ru.humanitec.app` остаётся без изменений.

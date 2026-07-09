@@ -86,7 +86,7 @@ async def test_crm_settings_hub_loads(
     service="frontend",
     doc_slug="frontend-shell",
     title="Frontend: корневая оболочка платформы",
-    description="Главная оболочка Humanitec на порту frontend-сервиса.",
+    description="Главная оболочка Платформы на порту frontend-сервиса.",
 )
 @pytest.mark.asyncio
 @pytest.mark.e2e

@@ -1,4 +1,4 @@
-# Flows: ссылка на скачивание HumanitecAgent на главной
+# Flows: ссылка на скачивание LinnexAgent на главной
 
 На flows home в hero actions есть ссылка с href, содержащим /agent.
 

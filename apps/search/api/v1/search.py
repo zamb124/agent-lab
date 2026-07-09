@@ -7,11 +7,13 @@ from fastapi import APIRouter, HTTPException
 from apps.search.config import get_search_settings
 from apps.search.dependencies import ContainerDep
 from core.context import get_context
+from core.search.logging_events import log_serp_click
 from core.search.models import (
     MetaSearchRequest,
     MetaSearchResponse,
     MetaSearchSerpMoreRequest,
     SearchProvidersSnapshot,
+    SerpClickEvent,
 )
 
 router = APIRouter(tags=["search"])
@@ -34,6 +36,20 @@ async def meta_search_serp_more(body: MetaSearchSerpMoreRequest, container: Cont
         return await container.meta_search_service.serp_more(body)
     except ValueError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+
+@router.post("/search/serp/click", status_code=204)
+async def meta_search_serp_click(body: SerpClickEvent, container: ContainerDep) -> None:
+    _ = container
+    log_serp_click(
+        serp_cache_key=body.serp_cache_key,
+        query=body.query,
+        mode=body.mode,
+        url=body.url,
+        position=body.position,
+        provider=body.provider,
+        search_index_id=body.search_index_id,
+    )
 
 
 @router.get("/providers", response_model=SearchProvidersSnapshot)

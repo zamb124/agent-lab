@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import math
+import re
 import time
 import uuid
 from collections.abc import Awaitable, Callable
@@ -28,6 +29,49 @@ from core.types import require_json_array
 
 _MIN_USEFUL_CHUNK_CHARS = 40
 _MAX_RETRIEVE_LIMIT = 200
+
+# Признаки recency-sensitive запроса: годы, новостная/актуальная лексика (RU+EN).
+_RECENCY_QUERY_RE = re.compile(
+    r"(?:\b20\d{2}\b|нов(?:ост|ейш|инк)|сегодня|вчера|последн|свеж|актуальн|сейчас"
+    + r"|недавн|обновлен|итоги|прогноз|курс|news|latest|today|recent|breaking|update)",
+    re.IGNORECASE,
+)
+
+# Нормировка Tranco domain_rank: rank 1 -> 1.0, rank 10^6 и хуже -> 0.0.
+_DOMAIN_AUTHORITY_LOG_CEILING = 6.0
+
+
+def is_recency_sensitive_query(query: str) -> bool:
+    return _RECENCY_QUERY_RE.search(query) is not None
+
+
+def _domain_authority(metadata: RAGMetadata) -> float:
+    domain_rank = metadata.get("domain_rank")
+    if not isinstance(domain_rank, int) or domain_rank < 1:
+        return 0.0
+    normalized = math.log10(domain_rank) / _DOMAIN_AUTHORITY_LOG_CEILING
+    return max(0.0, 1.0 - min(1.0, normalized))
+
+
+def _apply_domain_authority(
+    rag_results: list[RAGSearchResult],
+    *,
+    weight: float,
+) -> list[RAGSearchResult]:
+    if weight <= 0.0:
+        return rag_results
+    boosted: list[RAGSearchResult] = []
+    for rag_result in rag_results:
+        authority = _domain_authority(rag_result.metadata)
+        if authority <= 0.0:
+            boosted.append(rag_result)
+            continue
+        boosted.append(
+            rag_result.model_copy(
+                update={"score": rag_result.score * (1.0 + weight * authority)}
+            )
+        )
+    return boosted
 
 
 def _metadata_text_field(metadata: RAGMetadata, field: str) -> str | None:
@@ -233,6 +277,15 @@ class IndexSearchProvider:
         per_channel_top_k = definition.retrieval.per_channel_top_k
         if per_channel_top_k is None:
             per_channel_top_k = max(retrieve_limit * 3, 150)
+        freshness_weight: float | None = None
+        freshness_half_life_days: float | None = None
+        if definition.retrieval.freshness_weight > 0.0:
+            freshness_weight = definition.retrieval.freshness_weight
+            freshness_half_life_days = (
+                definition.retrieval.freshness_recency_half_life_days
+                if is_recency_sensitive_query(query)
+                else definition.retrieval.freshness_half_life_days
+            )
         raw = await self._rag_client.search(
             definition.rag_namespace_id,
             query,
@@ -242,6 +295,10 @@ class IndexSearchProvider:
             rrf_k=definition.retrieval.rrf_k,
             per_channel_top_k=per_channel_top_k,
             rerank=definition.retrieval.rerank,
+            rerank_max_candidates=definition.retrieval.rerank_max_candidates,
+            retrieval=True,
+            freshness_weight=freshness_weight,
+            freshness_half_life_days=freshness_half_life_days,
         )
         payload = raw
         results_raw = require_json_array(payload.get("results"), "rag search results")
@@ -249,6 +306,10 @@ class IndexSearchProvider:
         for item in results_raw:
             if isinstance(item, dict):
                 rag_results.append(RAGSearchResult.model_validate(item))
+        rag_results = _apply_domain_authority(
+            rag_results,
+            weight=definition.retrieval.domain_authority_weight,
+        )
         deduped_rag = _dedupe_rag_results(rag_results)
         out: list[WebSearchResult] = []
         for index, rag_result in enumerate(deduped_rag, start=1):
@@ -273,8 +334,9 @@ class IndexSearchProvider:
             return None
         source_url = source_url_value.strip()
         snippet_limit = definition.retrieval.snippet_max_chars
+        headline = _metadata_text_field(rag_result.provenance, "headline")
         snippet = _resolve_index_snippet(
-            content=rag_result.content,
+            content=headline if headline is not None else rag_result.content,
             metadata=rag_result.metadata,
             snippet_limit=snippet_limit,
         )

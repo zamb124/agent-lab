@@ -7,7 +7,7 @@
 См. полный гайд в [`deploy/cluster-setup.md`](mdc:deploy/cluster-setup.md). Краткая выжимка:
 
 ```bash
-# 1. DNS A-записи у регистратора (humanitec.ru, *.humanitec.ru, livekit/onlyoffice/grafana → 84.38.184.105)
+# 1. DNS A-записи у регистратора (primary: linnex.io @/* + livekit/onlyoffice/grafana/cdn/api; legacy: humanitec.ru — те же субдомены → 84.38.184.105)
 
 # 2. На master:
 ssh root@84.38.184.105

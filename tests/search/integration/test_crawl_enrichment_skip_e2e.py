@@ -87,6 +87,9 @@ async def test_crawl_enrichment_second_fetch_skips_unchanged_url(
         crawl_profile_id=crawl_profile_id,
         crawl_status="indexed",
         domain=REAL_CRAWL_DOMAIN,
+        content_type=None,
+        primary_topic=None,
+        enriched_only=None,
         limit=1,
         offset=0,
     )

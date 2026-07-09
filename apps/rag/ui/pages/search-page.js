@@ -1,17 +1,18 @@
 /**
  * SearchPage — семантический поиск по выбранному namespace.
- *
- * Список namespaces — `useResource('rag/namespaces')` (autoload), запрос —
- * `useOp('rag/search')`. Локальные UI-state поля (query/limit/выбранный
- * namespace) объявлены через `static properties` с `state: true`.
  */
 
 import { html, css } from 'lit';
 import { PlatformPage } from '@platform/lib/base/PlatformPage.js';
 import { buttonStyles } from '@platform/lib/styles/shared/button.styles.js';
+import {
+    buildAdvancedRetrievalPayloadFromPanel,
+    defaultRetrievalPanelValue,
+} from '@platform/lib/rag/pack_search_request_options.js';
 import '@platform/lib/components/layout/page-header.js';
 import '@platform/lib/components/fields/platform-field.js';
 import '@platform/lib/components/platform-breadcrumbs.js';
+import '@platform/lib/components/rag/platform-rag-retrieval-panel.js';
 
 const LIMIT_OPTIONS = [3, 5, 10, 20];
 
@@ -22,6 +23,8 @@ export class SearchPage extends PlatformPage {
         _query: { state: true },
         _selectedNamespace: { state: true },
         _limit: { state: true },
+        _showAdvanced: { state: true },
+        _retrievalPanel: { state: true },
     };
 
     static styles = [
@@ -41,6 +44,13 @@ export class SearchPage extends PlatformPage {
                 gap: var(--space-3);
             }
             .query-row .query-field { flex: 1; min-width: 0; }
+            .advanced-toggle { align-self: flex-start; }
+            .advanced-wrap {
+                padding: var(--space-4);
+                background: var(--glass-solid-subtle);
+                border: 1px solid var(--glass-border-subtle);
+                border-radius: var(--radius-lg);
+            }
             .results { flex: 1; display: flex; flex-direction: column; gap: var(--space-4); }
             .result-card {
                 padding: var(--space-4); background: var(--glass-solid-subtle);
@@ -72,6 +82,8 @@ export class SearchPage extends PlatformPage {
         this._query = '';
         this._selectedNamespace = '';
         this._limit = 5;
+        this._showAdvanced = false;
+        this._retrievalPanel = defaultRetrievalPanelValue();
         this._namespaces = this.useResource('rag/namespaces', { autoload: true });
         this._search = this.useOp('rag/search');
     }
@@ -88,7 +100,20 @@ export class SearchPage extends PlatformPage {
             namespaceId: ns,
             query: q,
             limit: this._limit,
+            ...buildAdvancedRetrievalPayloadFromPanel(this._retrievalPanel),
         });
+    }
+
+    _toggleAdvanced() {
+        this._showAdvanced = !this._showAdvanced;
+    }
+
+    _onRetrievalPanelChange(e) {
+        const value = e.detail && e.detail.value;
+        if (!value || typeof value !== 'object' || Array.isArray(value)) {
+            throw new Error('SearchPage: invalid retrieval panel value');
+        }
+        this._retrievalPanel = value;
     }
 
     _onNamespaceChange(e) {
@@ -215,6 +240,26 @@ export class SearchPage extends PlatformPage {
                             : this.t('search_view.find_button')}
                     </button>
                 </div>
+
+                <button
+                    type="button"
+                    class="btn btn-secondary advanced-toggle"
+                    @click=${this._toggleAdvanced}
+                >
+                    ${this._showAdvanced
+                        ? this.t('search_view.toggle_advanced_hide')
+                        : this.t('search_view.toggle_advanced')}
+                </button>
+
+                ${this._showAdvanced ? html`
+                    <div class="advanced-wrap">
+                        <platform-rag-retrieval-panel
+                            .value=${this._retrievalPanel}
+                            ?disabled=${loading}
+                            @change=${this._onRetrievalPanelChange}
+                        ></platform-rag-retrieval-panel>
+                    </div>
+                ` : ''}
             </form>
 
             ${hasResults ? this._renderResults() : (loading ? '' : html`
