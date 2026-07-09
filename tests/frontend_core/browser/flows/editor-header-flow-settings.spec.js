@@ -104,7 +104,7 @@ describe('flows-editor-header flow settings entry', () => {
             registerFactory(factory);
         }
         const collected = collectFactories(FACTORIES);
-        const { bus } = bootstrapTestBus({ slices: collected.slices, effects: [] });
+        const bus = bootstrapTestBus({ slices: collected.slices, effects: [] });
 
         const el = await fixture(html`
             <flows-editor-header flow-id="flow-demo" branch-id="base"></flows-editor-header>

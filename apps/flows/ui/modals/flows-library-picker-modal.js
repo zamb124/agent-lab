@@ -8,7 +8,6 @@
  */
 
 import { html, css, nothing } from 'lit';
-import { repeat } from 'lit/directives/repeat.js';
 import { unsafeHTML } from 'lit/directives/unsafe-html.js';
 import { PlatformModal } from '@platform/lib/components/glass-modal.js';
 import { registerModalKind } from '@platform/lib/utils/modal-registry.js';
@@ -1026,14 +1025,7 @@ export class FlowsLibraryPickerModal extends PlatformModal {
             ${showTabs ? this._renderToolCategoryTabs() : nothing}
             <div class="mcp-picker-flat-hint">${this.t('tool_picker_modal.mcp_flat_search_hint')}</div>
             <div class="mcp-picker-tools-grid" role="list">
-                ${repeat(
-                    flat,
-                    (entry) => {
-                        const toolId = typeof entry.tool.tool_id === 'string' ? entry.tool.tool_id : registryItemTitle(entry.tool);
-                        return `${entry.server.server_id}:${toolId}`;
-                    },
-                    (entry) => this._renderMcpFlatToolCard(entry),
-                )}
+                ${flat.map((entry) => this._renderMcpFlatToolCard(entry))}
             </div>
         `;
     }
@@ -1278,11 +1270,7 @@ export class FlowsLibraryPickerModal extends PlatformModal {
                         ? html`<div class="mcp-picker-server-empty">${this.t('tool_picker_modal.mcp_server_empty')}</div>`
                         : html`
                             <div class="mcp-picker-tools-grid" role="list">
-                                ${repeat(
-                                    tools,
-                                    (t) => (typeof t.tool_id === 'string' ? t.tool_id : registryItemTitle(t)),
-                                    (t) => this._renderMcpToolCard(t),
-                                )}
+                                ${tools.map((t) => this._renderMcpToolCard(t))}
                             </div>
                         `}
                 </div>
@@ -1324,11 +1312,7 @@ export class FlowsLibraryPickerModal extends PlatformModal {
         return html`
             ${showTabs ? this._renderToolCategoryTabs() : nothing}
             <div class="mcp-picker-servers">
-                ${repeat(
-                    groups,
-                    (group) => group.server.server_id,
-                    (group) => this._renderMcpServerSection(group),
-                )}
+                ${groups.map((group) => this._renderMcpServerSection(group))}
             </div>
         `;
     }
