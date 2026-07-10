@@ -62,6 +62,12 @@ function _emptyStream() {
         has_more: false,
         results_offset: 0,
         page_limit: 10,
+        research_brief: '',
+        research_sub_questions: [],
+        research_outline: [],
+        research_steps: [],
+        research_sources: [],
+        report: '',
     };
 }
 
@@ -249,6 +255,35 @@ function _normalizeInsights(value) {
     return _requireArray(value, 'result_insights').map((item, index) => _normalizeInsight(item, index));
 }
 
+function _normalizeResearchStep(value, index) {
+    const item = _requireObject(value, `research_steps[${index}]`);
+    return {
+        phase: _requireNonEmptyString(item.phase, `research_steps[${index}].phase`),
+        count: _requireNumber(item.count, `research_steps[${index}].count`),
+        title: _requireString(item.title, `research_steps[${index}].title`),
+    };
+}
+
+function _normalizeResearchSteps(value) {
+    return _requireArray(value, 'research_steps').map((item, index) => _normalizeResearchStep(item, index));
+}
+
+function _normalizeResearchSource(value, index) {
+    const item = _requireObject(value, `research_sources[${index}]`);
+    return {
+        index: _requireNumber(item.index, `research_sources[${index}].index`),
+        url: _requireNonEmptyString(item.url, `research_sources[${index}].url`),
+        title: _requireNonEmptyString(item.title, `research_sources[${index}].title`),
+        provider: _requireString(item.provider, `research_sources[${index}].provider`),
+        site_name: _requireString(item.site_name, `research_sources[${index}].site_name`),
+        snippet: _requireString(item.snippet, `research_sources[${index}].snippet`),
+    };
+}
+
+function _normalizeResearchSources(value) {
+    return _requireArray(value, 'research_sources').map((item, index) => _normalizeResearchSource(item, index));
+}
+
 function _normalizeRunPayload(payload) {
     const body = _requireObject(payload, 'frontend/public_search_run payload');
     const runId = _requireNonEmptyString(body.run_id, 'run_id');
@@ -344,6 +379,12 @@ function _normalizeStreamPayload(value) {
         has_more: _requireBoolean(stream.has_more, 'stream.has_more'),
         results_offset: _requireNumber(stream.results_offset, 'stream.results_offset'),
         page_limit: _requireNumber(stream.page_limit, 'stream.page_limit'),
+        research_brief: _requireString(stream.research_brief, 'stream.research_brief'),
+        research_sub_questions: _normalizeStringArray(stream.research_sub_questions, 'stream.research_sub_questions'),
+        research_outline: _normalizeStringArray(stream.research_outline, 'stream.research_outline'),
+        research_steps: _normalizeResearchSteps(stream.research_steps),
+        research_sources: _normalizeResearchSources(stream.research_sources),
+        report: _requireString(stream.report, 'stream.report'),
     };
 }
 
@@ -527,6 +568,60 @@ function _applySearchUiEvent(stream, event) {
         stream.result_insights = _normalizeInsights(payload.result_insights);
         return;
     }
+    if (eventType === 'search/research/plan_ready') {
+        stream.phase = 'plan';
+        stream.query = _requireNonEmptyString(payload.query, 'plan_ready.query');
+        stream.research_brief = _requireString(payload.brief, 'plan_ready.brief');
+        stream.research_sub_questions = _normalizeStringArray(payload.sub_questions, 'plan_ready.sub_questions');
+        stream.research_outline = _normalizeStringArray(payload.outline, 'plan_ready.outline');
+        const plannedQueries = _normalizeStringArray(payload.queries, 'plan_ready.queries');
+        stream.research_steps = [...stream.research_steps, { phase: 'plan', count: plannedQueries.length, title: '' }];
+        return;
+    }
+    if (eventType === 'search/research/search_ready') {
+        stream.phase = 'searching';
+        const found = _requireNumber(payload.found, 'search_ready.found');
+        stream.research_steps = [...stream.research_steps, { phase: 'search', count: found, title: '' }];
+        return;
+    }
+    if (eventType === 'search/research/source_read') {
+        stream.phase = 'reading';
+        const sourceIndex = _requireNumber(payload.index, 'source_read.index');
+        const sourceTitle = _requireNonEmptyString(payload.title, 'source_read.title');
+        const sourceUrl = _requireNonEmptyString(payload.url, 'source_read.url');
+        const sourceProvider = _requireString(payload.provider, 'source_read.provider');
+        const sourceSiteName = _requireString(payload.site_name, 'source_read.site_name');
+        if (!stream.research_sources.some((item) => item.index === sourceIndex)) {
+            stream.research_sources = [...stream.research_sources, {
+                index: sourceIndex,
+                url: sourceUrl,
+                title: sourceTitle,
+                provider: sourceProvider,
+                site_name: sourceSiteName,
+                snippet: '',
+            }];
+        }
+        stream.research_steps = [...stream.research_steps, { phase: 'read', count: sourceIndex, title: sourceTitle }];
+        return;
+    }
+    if (eventType === 'search/research/reflection_ready') {
+        stream.phase = 'reflecting';
+        const iteration = _requireNumber(payload.iteration, 'reflection_ready.iteration');
+        stream.research_steps = [...stream.research_steps, { phase: 'reflect', count: iteration, title: '' }];
+        return;
+    }
+    if (eventType === 'search/serp/completed' && payload.kind === 'public_search_research_report') {
+        stream.phase = 'completed';
+        stream.mode = 'research';
+        stream.query = _requireNonEmptyString(payload.query, 'research_completed.query');
+        stream.research_brief = _requireString(payload.brief, 'research_completed.brief');
+        stream.research_outline = _normalizeStringArray(payload.outline, 'research_completed.outline');
+        stream.research_sub_questions = _normalizeStringArray(payload.sub_questions, 'research_completed.sub_questions');
+        stream.report = _requireNonEmptyString(payload.report, 'research_completed.report');
+        stream.research_sources = _normalizeResearchSources(payload.sources);
+        stream.completed = true;
+        return;
+    }
     if (eventType === 'search/serp/completed') {
         stream.phase = 'completed';
         stream.mode = _requireSearchRunMode(payload.mode, 'completed.mode');
@@ -564,8 +659,14 @@ function _applyRuntimeEvents(stream, events) {
         }
         if (runtimeEvent.type === 'content_chunk') {
             const payload = _requireObject(runtimeEvent.payload, 'content_chunk.payload');
-            stream.answer = `${stream.answer}${_requireString(payload.text, 'content_chunk.text')}`;
-            stream.phase = stream.phase === 'insights' ? 'answering' : stream.phase;
+            const chunk = _requireString(payload.text, 'content_chunk.text');
+            if (stream.mode === 'research') {
+                stream.report = `${stream.report}${chunk}`;
+                stream.phase = 'synthesizing';
+            } else {
+                stream.answer = `${stream.answer}${chunk}`;
+                stream.phase = stream.phase === 'insights' ? 'answering' : stream.phase;
+            }
             continue;
         }
         if (runtimeEvent.type === 'ui_event') {

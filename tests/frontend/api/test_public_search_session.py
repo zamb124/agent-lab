@@ -11,6 +11,7 @@ from httpx import ASGITransport, AsyncClient
 from apps.frontend.api.public_session_security import (
     PUBLIC_SEARCH_ANONYMOUS_DAILY_LIMIT,
     PUBLIC_SEARCH_QUOTA_EXHAUSTED_DETAIL,
+    PUBLIC_SEARCH_RESEARCH_QUOTA_COST,
 )
 from core.search import PUBLIC_SEARCH_SESSION_ISSUER
 from core.utils.tokens import TokenType, get_token_service
@@ -165,6 +166,51 @@ def _serp_click_body() -> dict[str, object]:
         "search_index_id": "",
         "serp_cache_key": "",
     }
+
+
+@pytest.mark.asyncio
+async def test_anonymous_research_session_costs_five_quota_units(
+    public_search_client: AsyncClient,
+):
+    headers = _public_search_session_headers()
+    max_research_runs = PUBLIC_SEARCH_ANONYMOUS_DAILY_LIMIT // PUBLIC_SEARCH_RESEARCH_QUOTA_COST
+    for index in range(max_research_runs):
+        response = await public_search_client.post(
+            "/frontend/api/public/search/session",
+            headers=headers,
+            json=_public_search_session_body(mode="research"),
+        )
+        assert response.status_code == 200, f"request {index + 1}: {response.text}"
+
+    exhausted = await public_search_client.post(
+        "/frontend/api/public/search/session",
+        headers=headers,
+        json=_public_search_session_body(mode="research"),
+    )
+    assert exhausted.status_code == 429
+    assert exhausted.json()["detail"] == PUBLIC_SEARCH_QUOTA_EXHAUSTED_DETAIL
+
+
+@pytest.mark.asyncio
+async def test_anonymous_quick_session_still_costs_one_quota_unit(
+    public_search_client: AsyncClient,
+):
+    headers = _public_search_session_headers()
+    for index in range(PUBLIC_SEARCH_ANONYMOUS_DAILY_LIMIT):
+        response = await public_search_client.post(
+            "/frontend/api/public/search/session",
+            headers=headers,
+            json=_public_search_session_body(mode="quick"),
+        )
+        assert response.status_code == 200, f"request {index + 1}: {response.text}"
+
+    exhausted = await public_search_client.post(
+        "/frontend/api/public/search/session",
+        headers=headers,
+        json=_public_search_session_body(mode="quick"),
+    )
+    assert exhausted.status_code == 429
+    assert exhausted.json()["detail"] == PUBLIC_SEARCH_QUOTA_EXHAUSTED_DETAIL
 
 
 @pytest.mark.asyncio

@@ -13,6 +13,7 @@ from fastapi.responses import Response
 from pydantic import BaseModel, ConfigDict, Field
 
 from apps.frontend.api.public_session_security import (
+    PUBLIC_SEARCH_RESEARCH_QUOTA_COST,
     enforce_public_search_run_quota,
     enforce_public_session_issue_rate_limit,
     new_embed_session_id,
@@ -193,9 +194,13 @@ async def issue_public_search_session(
 
     platform_user = await _resolve_platform_authenticated_user(request, container)
     if platform_user is None and body.consume_search_quota:
+        quota_cost = (
+            PUBLIC_SEARCH_RESEARCH_QUOTA_COST if body.mode == "research" else 1
+        )
         await enforce_public_search_run_quota(
             redis_client=container.redis_client,
             request=request,
+            cost=quota_cost,
         )
 
     mapping = await container.embed_mapping_repository.get(config.embed_id)

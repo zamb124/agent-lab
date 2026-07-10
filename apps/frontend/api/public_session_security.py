@@ -20,6 +20,10 @@ PUBLIC_SESSION_SCOPE_DAILY_LIMIT = 1000
 PUBLIC_SEARCH_ANONYMOUS_DAILY_LIMIT = 20
 PUBLIC_SEARCH_QUOTA_REDIS_PREFIX = "public_search:quota:client_day"
 PUBLIC_SEARCH_QUOTA_EXHAUSTED_DETAIL = "search_quota_exhausted"
+# Deep research стоит дороже quick/deep (несколько провайдерных поисков, чтение
+# страниц и несколько LLM-вызовов), поэтому один research-запуск списывает больше
+# единиц дневной анонимной квоты.
+PUBLIC_SEARCH_RESEARCH_QUOTA_COST = 5
 
 _RATE_LIMIT_LUA = """
 for i = 1, #KEYS do
@@ -40,11 +44,12 @@ return 1
 
 _SEARCH_RUN_QUOTA_LUA = """
 local cur = tonumber(redis.call("GET", KEYS[1]) or "0")
-if cur >= tonumber(ARGV[1]) then
+local cost = tonumber(ARGV[3])
+if cur + cost > tonumber(ARGV[1]) then
   return 0
 end
-local n = redis.call("INCR", KEYS[1])
-if n == 1 then
+local n = redis.call("INCRBY", KEYS[1], cost)
+if n == cost then
   redis.call("EXPIRE", KEYS[1], tonumber(ARGV[2]))
 end
 return n
@@ -105,7 +110,10 @@ async def enforce_public_search_run_quota(
     *,
     redis_client: RedisClient,
     request: Request,
+    cost: int = 1,
 ) -> None:
+    if cost < 1:
+        raise ValueError("public_search quota cost must be >= 1")
     scope_key = _key_part("public_search")
     client_key = _key_part(_client_identity(request))
     quota_key = f"{PUBLIC_SEARCH_QUOTA_REDIS_PREFIX}:{scope_key}:{client_key}"
@@ -116,6 +124,7 @@ async def enforce_public_search_run_quota(
             quota_key,
             str(PUBLIC_SEARCH_ANONYMOUS_DAILY_LIMIT),
             "86400",
+            str(cost),
         )
     except Exception:
         logger.exception("public_search_run_quota_unavailable")

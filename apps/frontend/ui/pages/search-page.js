@@ -1803,6 +1803,86 @@ export class PublicSearchPage extends PlatformPage {
                     background: rgba(16, 20, 34, 0.03);
                 }
             }
+
+            .research-brief {
+                margin: 0 0 14px;
+                font-size: 15px;
+                line-height: 1.55;
+                color: var(--landing-text, var(--text-primary));
+            }
+
+            .research-timeline {
+                display: flex;
+                flex-direction: column;
+                gap: 10px;
+            }
+
+            .research-step {
+                display: flex;
+                align-items: flex-start;
+                gap: 10px;
+                font-size: 13px;
+                line-height: 1.4;
+                color: var(--landing-text-dim, var(--text-secondary));
+            }
+
+            .research-step .step-icon {
+                flex: 0 0 auto;
+                margin-top: 1px;
+                color: var(--landing-accent, #5768fe);
+            }
+
+            .research-step[data-active="true"] {
+                color: var(--landing-text, var(--text-primary));
+                font-weight: 600;
+            }
+
+            .research-subquestions {
+                list-style: none;
+                margin: 0;
+                padding: 0;
+                display: flex;
+                flex-direction: column;
+                gap: 6px;
+            }
+
+            .research-subquestions li {
+                position: relative;
+                padding-left: 16px;
+                font-size: 13px;
+                line-height: 1.45;
+                color: var(--landing-text-dim, var(--text-secondary));
+            }
+
+            .research-subquestions li::before {
+                content: "";
+                position: absolute;
+                left: 2px;
+                top: 8px;
+                width: 5px;
+                height: 5px;
+                border-radius: 50%;
+                background: var(--landing-accent, #5768fe);
+            }
+
+            .research-report .answer-text {
+                font-size: 15px;
+                line-height: 1.65;
+            }
+
+            .research-report table {
+                border-collapse: collapse;
+                width: 100%;
+                margin: 12px 0;
+                font-size: 13.5px;
+            }
+
+            .research-report th,
+            .research-report td {
+                border: 1px solid rgba(255, 255, 255, 0.12);
+                padding: 6px 10px;
+                text-align: left;
+            }
         `,
     ];
 
@@ -2752,10 +2832,205 @@ export class PublicSearchPage extends PlatformPage {
         `;
     }
 
+    _researchReportTemplate(stream) {
+        const streaming = !stream.completed;
+        const text = stream.report !== '' ? stream.report : stream.answer;
+        let out = flowsChatMarkdownToHtml(text, { streaming });
+        const sources = stream.research_sources;
+        if (sources.length > 0) {
+            out = applyInlineCitations(out, (index) => {
+                if (!Number.isInteger(index) || index < 1) {
+                    return null;
+                }
+                const match = sources.find((item) => item.index === index);
+                if (match === undefined || !/^https?:\/\//.test(match.url)) {
+                    return null;
+                }
+                return { url: match.url, label: match.title };
+            });
+        }
+        return unsafeHTML(out);
+    }
+
+    _researchPhaseLabelKey(phase) {
+        if (phase === 'plan') {
+            return 'search_page.research_phase_plan';
+        }
+        if (phase === 'searching' || phase === 'search') {
+            return 'search_page.research_phase_search';
+        }
+        if (phase === 'reading' || phase === 'read') {
+            return 'search_page.research_phase_read';
+        }
+        if (phase === 'reflecting' || phase === 'reflect') {
+            return 'search_page.research_phase_reflect';
+        }
+        if (phase === 'synthesizing') {
+            return 'search_page.research_phase_synthesize';
+        }
+        return 'search_page.research_phase_start';
+    }
+
+    _renderResearchStep(step) {
+        if (step.phase === 'plan') {
+            return this.t('search_page.research_step_plan', { count: String(step.count) });
+        }
+        if (step.phase === 'search') {
+            return this.t('search_page.research_step_search', { count: String(step.count) });
+        }
+        if (step.phase === 'read') {
+            return this.t('search_page.research_step_read', { title: step.title });
+        }
+        if (step.phase === 'reflect') {
+            return this.t('search_page.research_step_reflect', { count: String(step.count) });
+        }
+        return step.phase;
+    }
+
+    _renderResearchTimeline(stream) {
+        const steps = stream.research_steps;
+        return html`
+            <section class="answer-panel">
+                <p class="panel-label">
+                    ${stream.completed ? html`<platform-icon name="check" size="14"></platform-icon>` : html`<span class="stream-dot"></span>`}
+                    <span>${this.t('search_page.research_timeline_label')}</span>
+                </p>
+                <div class="research-timeline">
+                    ${steps.length === 0
+                        ? html`<div class="research-step" data-active="true">
+                            <platform-icon class="step-icon" name="sparkle" size="14"></platform-icon>
+                            <span>${this.t(this._researchPhaseLabelKey(stream.phase))}</span>
+                        </div>`
+                        : repeat(
+                            steps,
+                            (step, index) => `${step.phase}-${index}-${step.count}`,
+                            (step) => html`
+                                <div class="research-step">
+                                    <platform-icon class="step-icon" name="check" size="14"></platform-icon>
+                                    <span>${this._renderResearchStep(step)}</span>
+                                </div>
+                            `,
+                        )}
+                    ${!stream.completed && steps.length > 0 ? html`
+                        <div class="research-step" data-active="true">
+                            <span class="stream-dot"></span>
+                            <span>${this.t(this._researchPhaseLabelKey(stream.phase))}</span>
+                        </div>
+                    ` : nothing}
+                </div>
+            </section>
+        `;
+    }
+
+    _renderResearchPlan(stream) {
+        if (stream.research_sub_questions.length === 0) {
+            return nothing;
+        }
+        return html`
+            <section class="suggest-panel">
+                <p class="panel-label">
+                    <platform-icon name="layers" size="14"></platform-icon>
+                    <span>${this.t('search_page.research_subquestions_label')}</span>
+                </p>
+                <ul class="research-subquestions">
+                    ${stream.research_sub_questions.map((question) => html`<li>${question}</li>`)}
+                </ul>
+            </section>
+        `;
+    }
+
+    _renderResearchReport(stream) {
+        const error = this._search.error;
+        if (typeof error === 'string' && error !== '') {
+            return this._renderSearchError();
+        }
+        const hasReport = stream.report.trim() !== '' || stream.answer.trim() !== '';
+        return html`
+            <section class="answer-panel research-report">
+                <p class="panel-label">
+                    ${stream.completed ? html`<platform-icon name="sparkle" size="14"></platform-icon>` : html`<span class="stream-dot"></span>`}
+                    <span>${this.t('search_page.research_report_label')}</span>
+                </p>
+                ${stream.research_brief !== '' ? html`<p class="research-brief">${stream.research_brief}</p>` : nothing}
+                ${hasReport
+                    ? html`<div class="answer-text" data-role="answer-text" @click=${this._onResearchReportClick}>${this._researchReportTemplate(stream)}</div>`
+                    : html`<div class="answer-placeholder">${this.t('search_page.research_report_pending')}</div>`}
+            </section>
+        `;
+    }
+
+    _onResearchReportClick(event) {
+        const rank = this._citationRankFromEvent(event);
+        if (rank === 0) {
+            return;
+        }
+        const stream = this._search.state.stream;
+        const match = stream.research_sources.find((item) => item.index === rank);
+        if (match === undefined) {
+            return;
+        }
+        window.open(match.url, '_blank', 'noopener');
+    }
+
+    _renderResearchSources(stream) {
+        const sources = stream.research_sources;
+        if (sources.length === 0 && !this._search.busy) {
+            return nothing;
+        }
+        return html`
+            <section class="sources-panel">
+                <p class="panel-label">
+                    <platform-icon name="link" size="14"></platform-icon>
+                    <span>${this.t('search_page.sources_label')}</span>
+                    <span class="panel-count">${sources.length}</span>
+                </p>
+                <div class="source-list">
+                    ${sources.length === 0 && this._search.busy ? html`
+                        <div class="skeleton"></div>
+                        <div class="skeleton"></div>
+                    ` : nothing}
+                    ${repeat(
+                        sources,
+                        (source) => source.url,
+                        (source) => html`
+                            <article class="source-card">
+                                <div class="source-body">
+                                    <div class="source-head">
+                                        <span class="source-rank">${source.index}</span>
+                                        <a class="source-title" href=${source.url} target="_blank" rel="noopener">${source.title}</a>
+                                    </div>
+                                    <p class="source-snippet">${source.snippet !== '' ? source.snippet : source.url}</p>
+                                </div>
+                            </article>
+                        `,
+                    )}
+                </div>
+            </section>
+        `;
+    }
+
+    _renderResearch(stream) {
+        return html`
+            <main class="results-wrap">
+                <div class="primary-column">
+                    ${this._renderResearchReport(stream)}
+                    ${this._renderResearchSources(stream)}
+                </div>
+                <aside class="side-column">
+                    ${this._renderResearchTimeline(stream)}
+                    ${this._renderResearchPlan(stream)}
+                </aside>
+            </main>
+        `;
+    }
+
     _renderBody(stream) {
         const active = this._isStreamActive(stream);
         if (!active) {
             return html`<div class="empty-shell">${this.t('search_page.empty_hint')}</div>`;
+        }
+        if (stream.mode === 'research') {
+            return this._renderResearch(stream);
         }
         return html`
             <main class="results-wrap">

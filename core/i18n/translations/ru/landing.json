@@ -118,7 +118,21 @@
         "load_more_error": "Не удалось подгрузить выдачу. Повторите поиск.",
         "providers_label": "Провайдеры",
         "suggestions_label": "Подсказки",
-        "empty_hint": "Введите запрос, чтобы запустить публичный search-flow"
+        "empty_hint": "Введите запрос, чтобы запустить публичный search-flow",
+        "research_report_label": "Исследовательский отчёт",
+        "research_report_pending": "Планирую исследование, ищу и читаю источники…",
+        "research_timeline_label": "Ход исследования",
+        "research_subquestions_label": "Под-вопросы",
+        "research_phase_start": "Запускаю исследование",
+        "research_phase_plan": "Составляю план исследования",
+        "research_phase_search": "Ищу источники по под-вопросам",
+        "research_phase_read": "Читаю релевантные страницы",
+        "research_phase_reflect": "Проверяю покрытие и ищу пробелы",
+        "research_phase_synthesize": "Синтезирую итоговый отчёт",
+        "research_step_plan": "План готов: {count} стартовых запросов",
+        "research_step_search": "Поиск завершён: найдено {count} источников-кандидатов",
+        "research_step_read": "Прочитан источник: {title}",
+        "research_step_reflect": "Рефлексия {count}: оценка покрытия под-вопросов"
     },
     "about": {
         "title": "{platformName} — платформа из пяти продуктов",

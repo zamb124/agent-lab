@@ -5,7 +5,10 @@ from typing import Any
 import pytest
 
 from apps.flows.src.services.mcp_sync import sync_mcp_server_tools
+from apps.flows.tools.builtin_specs import builtin_tool_ids
+from apps.flows.tools.index_search import web_search
 from core.integrations.mcp import mcp_tool_reference_id
+from core.state import ExecutionState
 from tests.search.conftest import make_search_index_slug
 from tests.search.integration.snippet_support import strip_snippet_highlight
 
@@ -118,6 +121,53 @@ def _captured_tool_names(calls: list[dict[str, Any]]) -> set[str]:
             if isinstance(name, str):
                 names.add(name)
     return names
+
+
+def _collect_ui_events(stream_text: str) -> list[tuple[str, dict[str, Any]]]:
+    events: list[tuple[str, dict[str, Any]]] = []
+    for event in _parse_sse_results(stream_text):
+        if event.get("kind") != "artifact-update":
+            continue
+        artifact = event.get("artifact")
+        if not isinstance(artifact, dict) or artifact.get("name") != "ui_event":
+            continue
+        data = _artifact_data_part(artifact)
+        event_type = data.get("type")
+        payload = data.get("payload")
+        if isinstance(event_type, str) and isinstance(payload, dict):
+            events.append((event_type, payload))
+    return events
+
+
+async def _post_research_stream(
+    client,
+    *,
+    unique_id: str,
+    content: str,
+    variables: dict[str, object] | None = None,
+) -> str:
+    metadata: dict[str, object] = {"branch": "research"}
+    if variables is not None:
+        metadata["variables"] = variables
+    stream_response = await client.post(
+        "/flows/api/v1/public_search",
+        json={
+            "jsonrpc": "2.0",
+            "id": f"public-search-research-stream-{unique_id}",
+            "method": "message/stream",
+            "params": {
+                "message": {
+                    "messageId": f"public-search-research-stream-message-{unique_id}",
+                    "role": "user",
+                    "parts": [{"kind": "text", "text": content}],
+                },
+                "metadata": metadata,
+            },
+        },
+    )
+    assert stream_response.status_code == 200, stream_response.text
+    assert "text/event-stream" in stream_response.headers.get("content-type", "")
+    return stream_response.text
 
 
 @pytest.mark.asyncio
@@ -506,3 +556,332 @@ async def test_public_search_runet_empty_index_honest(
     assert query in prompt_text
     assert "index returned no results" in prompt_text
     assert search_artifact["answer"] == "EMPTY_RUNET_OK"
+
+
+@pytest.mark.asyncio
+@pytest.mark.real_taskiq
+@pytest.mark.timeout(240, func_only=True)
+async def test_public_search_research_branch_runs_agentic_loop(
+    search_service,
+    rag_service,
+    rag_client,
+    rag_worker,
+    provider_litserve_service,
+    auth_headers_system,
+    client,
+    container,
+    mock_llm_redis,
+    mock_llm_capture,
+    unique_id,
+) -> None:
+    # rag_service (HTTP :9002) обязателен: web_search index provider ходит в RAG по HTTP.
+    # Браузер (browser_page_markdown) в тестовой среде недоступен, поэтому read-wave
+    # переносит сбои чтения без падения графа — проверяем именно durable-цикл и контракт отчёта.
+    _ = search_service, rag_service, rag_worker, provider_litserve_service
+    assert "web_search" in builtin_tool_ids()
+
+    marker = f"public_search_research_marker_{unique_id}"
+    query = await _ingest_runet_marker(
+        rag_client,
+        auth_headers_system,
+        unique_id,
+        marker,
+    )
+
+    plan_json = json.dumps(
+        {
+            "brief": f"Исследование по маркеру {marker}",
+            "sub_questions": ["Что это за документ?", "Какие ключевые условия?"],
+            "queries": [query],
+            "outline": ["Обзор", "Детали"],
+        },
+        ensure_ascii=False,
+    )
+    reflect_json = json.dumps(
+        {"need_more": False, "gap_queries": [], "coverage_note": "Данных достаточно"},
+        ensure_ascii=False,
+    )
+    report_text = (
+        "RESEARCH_REPORT_OK\n\n## Обзор\nКлючевой факт исследования.\n\n"
+        "## Что дальше\n- Проверить дополнительные источники."
+    )
+    await mock_llm_redis(
+        [
+            {"type": "text", "content": plan_json},
+            {"type": "text", "content": reflect_json},
+            {"type": "text", "content": report_text},
+        ]
+    )
+
+    response = await client.post(
+        "/flows/api/v1/tasks/submit",
+        json={
+            "flow_id": "public_search",
+            "branch_id": "research",
+            "session_id": f"public_search:research-{unique_id}",
+            "content": query,
+            "metadata": {
+                "variables": {
+                    "search_providers": ["runet"],
+                }
+            },
+        },
+    )
+
+    assert response.status_code == 200, response.text
+    payload = response.json()
+    assert payload["status"]["state"] == "completed", payload
+    artifact = json.loads(_task_response_text(payload))
+    assert artifact["kind"] == "public_search_research_report"
+    assert artifact["version"] == 1
+    assert artifact["flow_id"] == "public_search"
+    assert artifact["mode"] == "research"
+    assert artifact["query"] == query
+    assert artifact["brief"] == f"Исследование по маркеру {marker}"
+    assert artifact["sub_questions"] == ["Что это за документ?", "Какие ключевые условия?"]
+    assert artifact["outline"] == ["Обзор", "Детали"]
+    assert "RESEARCH_REPORT_OK" in artifact["report"]
+    assert isinstance(artifact["sources"], list)
+    assert artifact["iterations"] >= 1
+    assert artifact["coverage_note"] == "Данных достаточно"
+    assert isinstance(artifact["markdown_sources"], str)
+
+    calls = await mock_llm_capture()
+    prompt_text = "\n".join(_captured_text(call) for call in calls)
+    assert "Humanitec Deep Research" in prompt_text
+    assert query in prompt_text
+
+
+@pytest.mark.asyncio
+@pytest.mark.real_taskiq
+@pytest.mark.timeout(180, func_only=True)
+async def test_web_search_builtin_returns_runet_results(
+    search_service,
+    rag_service,
+    rag_client,
+    rag_worker,
+    provider_litserve_service,
+    auth_headers_system,
+    search_system_context,
+    unique_id,
+) -> None:
+    _ = search_service, rag_service, rag_worker, provider_litserve_service, search_system_context
+    marker = f"public_search_web_search_marker_{unique_id}"
+    query = await _ingest_runet_marker(
+        rag_client,
+        auth_headers_system,
+        unique_id,
+        marker,
+    )
+    state = ExecutionState.create(
+        task_id=f"web-search-{unique_id}",
+        context_id=f"ctx-{unique_id}",
+        user_id="test-user",
+        session_id=f"public_search:web-search-{unique_id}",
+        content=query,
+    )
+    raw = await web_search.run(
+        {
+            "query": query,
+            "providers": ["runet"],
+            "provider_strategy": "merge",
+            "language": "ru",
+            "region": "ru",
+            "mode": "research",
+            "limit": 5,
+        },
+        state,
+    )
+    assert isinstance(raw, dict)
+    assert raw["success"] is True
+    results = raw["results"]
+    assert isinstance(results, list)
+    assert len(results) >= 1
+    first = results[0]
+    assert isinstance(first, dict)
+    assert marker in strip_snippet_highlight(str(first.get("snippet", "")))
+
+
+@pytest.mark.asyncio
+@pytest.mark.real_taskiq
+@pytest.mark.timeout(240, func_only=True)
+async def test_public_search_research_branch_streams_ui_events(
+    search_service,
+    rag_service,
+    rag_client,
+    rag_worker,
+    provider_litserve_service,
+    auth_headers_system,
+    client,
+    mock_llm_redis,
+    unique_id,
+) -> None:
+    _ = search_service, rag_service, rag_worker, provider_litserve_service
+    marker = f"public_search_research_stream_marker_{unique_id}"
+    query = await _ingest_runet_marker(
+        rag_client,
+        auth_headers_system,
+        unique_id,
+        marker,
+    )
+    plan_json = json.dumps(
+        {
+            "brief": f"Исследование по маркеру {marker}",
+            "sub_questions": ["Что это за документ?"],
+            "queries": [query],
+            "outline": ["Обзор"],
+        },
+        ensure_ascii=False,
+    )
+    reflect_json = json.dumps(
+        {"need_more": False, "gap_queries": [], "coverage_note": "Данных достаточно"},
+        ensure_ascii=False,
+    )
+    report_text = "RESEARCH_STREAM_OK\n\n## Обзор\nКлючевой факт."
+    await mock_llm_redis(
+        [
+            {"type": "text", "content": plan_json},
+            {"type": "text", "content": reflect_json},
+            {"type": "text", "content": report_text},
+        ]
+    )
+
+    stream_text = await _post_research_stream(
+        client,
+        unique_id=unique_id,
+        content=query,
+        variables={"search_providers": ["runet"]},
+    )
+    ui_events = _collect_ui_events(stream_text)
+    event_types = [event_type for event_type, _payload in ui_events]
+
+    assert "search/research/plan_ready" in event_types
+    assert event_types.count("search/research/search_ready") >= 1
+    assert "search/research/reflection_ready" in event_types
+    assert "search/serp/completed" in event_types
+
+    plan_payload = next(payload for et, payload in ui_events if et == "search/research/plan_ready")
+    assert plan_payload["kind"] == "public_search_research_update"
+    assert plan_payload["phase"] == "plan"
+    assert plan_payload["mode"] == "research"
+    assert plan_payload["brief"] == f"Исследование по маркеру {marker}"
+    assert plan_payload["queries"] == [query]
+
+    search_payloads = [payload for et, payload in ui_events if et == "search/research/search_ready"]
+    first_search = search_payloads[0]
+    assert first_search["phase"] == "search"
+    assert first_search["iteration"] == 0
+    assert first_search["queries"][0]["error"] == ""
+    assert first_search["queries"][0]["count"] >= 1, first_search["queries"]
+    assert first_search["found"] >= 1, first_search
+
+    reflect_payload = next(
+        payload for et, payload in ui_events if et == "search/research/reflection_ready"
+    )
+    assert reflect_payload["phase"] == "reflect"
+    assert reflect_payload["need_more"] is False
+    assert reflect_payload["coverage_note"] == "Данных достаточно"
+
+    completed_payload = next(payload for et, payload in ui_events if et == "search/serp/completed")
+    assert completed_payload["kind"] == "public_search_research_report"
+    assert completed_payload["mode"] == "research"
+    assert "RESEARCH_STREAM_OK" in completed_payload["report"]
+
+
+@pytest.mark.asyncio
+@pytest.mark.real_taskiq
+@pytest.mark.timeout(240, func_only=True)
+async def test_public_search_research_branch_runs_second_search_wave(
+    search_service,
+    rag_service,
+    rag_client,
+    rag_worker,
+    provider_litserve_service,
+    auth_headers_system,
+    client,
+    mock_llm_redis,
+    mock_llm_capture,
+    unique_id,
+) -> None:
+    _ = search_service, rag_service, rag_worker, provider_litserve_service
+    marker_a = f"public_search_research_wave_a_{unique_id}"
+    marker_b = f"public_search_research_wave_b_{unique_id}"
+    query_a = await _ingest_runet_marker(
+        rag_client,
+        auth_headers_system,
+        f"{unique_id}-a",
+        marker_a,
+    )
+    gap_query = await _ingest_runet_marker(
+        rag_client,
+        auth_headers_system,
+        f"{unique_id}-b",
+        marker_b,
+    )
+
+    plan_json = json.dumps(
+        {
+            "brief": f"Исследование по маркерам {marker_a}",
+            "sub_questions": ["Что это за документ A?"],
+            "queries": [query_a],
+            "outline": ["Обзор", "Детали"],
+        },
+        ensure_ascii=False,
+    )
+    reflect_json = json.dumps(
+        {
+            "need_more": True,
+            "gap_queries": [gap_query],
+            "coverage_note": "Нужны дополнительные данные по маркеру B",
+        },
+        ensure_ascii=False,
+    )
+    report_text = (
+        "RESEARCH_SECOND_WAVE_OK\n\n## Обзор\nОтчёт после второй волны поиска.\n\n"
+        "## Что дальше\n- Проверить дополнительные источники."
+    )
+    await mock_llm_redis(
+        [
+            {"type": "text", "content": plan_json},
+            {"type": "text", "content": reflect_json},
+            {"type": "text", "content": report_text},
+        ]
+    )
+
+    stream_text = await _post_research_stream(
+        client,
+        unique_id=unique_id,
+        content=query_a,
+        variables={"search_providers": ["runet"]},
+    )
+    ui_events = _collect_ui_events(stream_text)
+    search_payloads = [payload for et, payload in ui_events if et == "search/research/search_ready"]
+    assert len(search_payloads) >= 2
+    assert search_payloads[0]["iteration"] == 0
+    assert search_payloads[0]["queries"][0]["error"] == ""
+    assert search_payloads[0]["queries"][0]["count"] >= 1, search_payloads[0]["queries"]
+    assert search_payloads[0]["found"] >= 1, search_payloads[0]
+    assert search_payloads[1]["iteration"] == 1
+    assert search_payloads[1]["queries"][0]["query"] == gap_query
+    assert search_payloads[1]["queries"][0]["error"] == ""
+    assert search_payloads[1]["queries"][0]["count"] >= 1, search_payloads[1]["queries"]
+    assert search_payloads[1]["found"] >= 1, search_payloads[1]
+
+    reflect_payload = next(
+        payload for et, payload in ui_events if et == "search/research/reflection_ready"
+    )
+    assert reflect_payload["need_more"] is True
+    assert reflect_payload["gap_queries"] == [gap_query]
+    assert reflect_payload["coverage_note"] == "Нужны дополнительные данные по маркеру B"
+
+    completed_payload = next(payload for et, payload in ui_events if et == "search/serp/completed")
+    assert completed_payload["kind"] == "public_search_research_report"
+    assert completed_payload["mode"] == "research"
+    assert completed_payload["coverage_note"] == "Нужны дополнительные данные по маркеру B"
+    assert completed_payload["iterations"] == 1
+    assert "RESEARCH_SECOND_WAVE_OK" in completed_payload["report"]
+
+    calls = await mock_llm_capture()
+    prompt_text = "\n".join(_captured_text(call) for call in calls)
+    assert marker_a in prompt_text
+    assert "Humanitec Deep Research" in prompt_text

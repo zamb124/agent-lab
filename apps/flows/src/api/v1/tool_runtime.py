@@ -21,6 +21,7 @@ from core.capabilities import (
     verify_execution_context,
 )
 from core.context import clear_context, get_context, set_context
+from core.context.job_context import build_job_context
 from core.models import StrictBaseModel
 from core.models.context_models import Context
 from core.models.i18n_models import Language
@@ -238,12 +239,19 @@ async def _build_context(container: ContainerDep, execution_context: CapabilityE
     company = await container.company_repository.get(execution_context.company_id)
     if company is None:
         raise HTTPException(status_code=401, detail=f"Company not found: {execution_context.company_id}")
-    return Context(
+    if execution_context.trace_id is None:
+        raise HTTPException(status_code=401, detail="Capability context requires trace_id")
+    company_subdomain = company.subdomain
+    if company_subdomain is None or company_subdomain.strip() == "":
+        host = company.company_id
+    else:
+        host = company_subdomain.strip()
+    job_context = build_job_context(
+        company=company,
         user=user,
-        active_company=company,
-        user_companies=[company],
+        host=host,
+        trace_id=execution_context.trace_id,
         session_id=execution_context.session_id,
         channel=execution_context.channel,
-        flow_id=execution_context.flow_id,
-        trace_id=execution_context.trace_id,
     )
+    return job_context.model_copy(update={"flow_id": execution_context.flow_id})

@@ -283,19 +283,167 @@
     },
     "research": {
       "name": "Research",
-      "description": "Максимальная SERP-подготовка для будущего исследовательского режима: merge провайдеров, больше источников, research follow-ups.",
+      "description": "Агентный deep research: декомпозиция запроса, параллельные под-поиски по нескольким провайдерам, чтение самых релевантных страниц, итеративные дозапросы по пробелам и синтез структурированного отчёта с инлайн-цитатами и видимым таймлайном шагов.",
       "tags": [
         "search",
-        "research"
+        "research",
+        "deep_research"
       ],
       "permission": [],
+      "entry": "research_prepare_inputs",
+      "nodes_mode": "replace",
+      "edges_mode": "replace",
       "variables": {
         "search_mode": "research",
-        "search_result_limit": 10,
-        "search_retrieve_limit": 40,
-        "search_suggestion_limit": 8,
-        "search_provider_strategy": "merge"
-      }
+        "search_provider_strategy": "merge",
+        "search_providers": ["auto"],
+        "search_language": "ru",
+        "search_region": "ru",
+        "research_max_iterations": 2,
+        "research_max_sources": 8,
+        "research_max_queries_per_wave": 5,
+        "research_search_limit_per_query": 8,
+        "research_page_max_chars": 6000,
+        "research_iteration": 0
+      },
+      "nodes": {
+        "research_prepare_inputs": {
+          "type": "code",
+          "entrypoint": "run",
+          "code": "import re\n\nFILE_BLOCK_PATTERN = r'\\n?\\[FILE\\]\\n.*?\\n\\[/FILE\\]'\n\n\nasync def run(args, state):\n    content = state['content']\n    if not isinstance(content, str):\n        raise TypeError('research inputs: state.content must be string')\n    text = re.sub(FILE_BLOCK_PATTERN, '', content, flags=re.DOTALL)\n    text = re.sub(r'\\n{3,}', '\\n\\n', text).strip()\n    if text == '':\n        text = 'проанализировать запрос пользователя'\n    variables = dict(state['variables'])\n    variables['research_query'] = text\n    return {'research_query': text, 'variables': variables}\n"
+        },
+        "research_plan": {
+          "type": "llm_node",
+          "name": "Research Planner",
+          "prompt": "Ты — планировщик Humanitec Deep Research.\n\nЗадача пользователя:\n{research_query}\n\nСоставь план исследования и верни СТРОГО JSON без markdown по схеме:\n{\"brief\": \"...\", \"sub_questions\": [\"...\"], \"queries\": [\"...\"], \"outline\": [\"...\"]}\n\nПравила:\n- brief: 1-2 предложения о цели исследования.\n- sub_questions: 3-6 под-вопросов, покрывающих разные аспекты задачи.\n- queries: 3-6 поисковых запросов для веба (можно на разных языках), сформулированных под поисковик.\n- outline: 3-6 разделов будущего отчёта.\n- Верни только JSON-объект, без пояснений и без markdown-ограждения.",
+          "output_key": "response",
+          "llm": {
+            "provider": "humanitec_llm",
+            "model": "auto",
+            "temperature": 0.1
+          }
+        },
+        "research_init": {
+          "type": "code",
+          "entrypoint": "run",
+          "code": "import json\n\n\ndef _clean_json(raw):\n    text = raw.strip()\n    if text.startswith('```'):\n        text = text.strip('`')\n        nl = text.find('\\n')\n        if nl != -1:\n            text = text[nl + 1:]\n    return text.strip()\n\n\ndef _str_list(value, limit):\n    out = []\n    if isinstance(value, list):\n        for item in value:\n            if isinstance(item, str):\n                s = item.strip()\n                if s != '':\n                    out.append(s)\n            if len(out) >= limit:\n                break\n    return out\n\n\nasync def run(args, state):\n    response = state.get('response')\n    if not isinstance(response, str) or response.strip() == '':\n        raise ValueError('research plan: empty response')\n    payload = json.loads(_clean_json(response))\n    if not isinstance(payload, dict):\n        raise TypeError('research plan: JSON object expected')\n    query = state.get('research_query')\n    brief = payload.get('brief')\n    if not isinstance(brief, str) or brief.strip() == '':\n        brief = query\n    brief = brief.strip()\n    sub_questions = _str_list(payload.get('sub_questions'), 6)\n    outline = _str_list(payload.get('outline'), 6)\n    queries = _str_list(payload.get('queries'), 6)\n    if len(queries) == 0:\n        queries = [query]\n    max_queries = int(state['variables'].get('research_max_queries_per_wave', 5))\n    pending = queries[:max_queries]\n    if sub_questions:\n        subquestions_text = '\\n'.join('- ' + q for q in sub_questions)\n    else:\n        subquestions_text = '- (под-вопросы не выделены)'\n    await capability(\n        'state.push_ui_event',\n        event_type='search/research/plan_ready',\n        payload={\n            'kind': 'public_search_research_update',\n            'version': 1,\n            'flow_id': 'public_search',\n            'phase': 'plan',\n            'mode': 'research',\n            'query': query,\n            'brief': brief,\n            'sub_questions': sub_questions,\n            'outline': outline,\n            'queries': pending,\n        },\n        source='public_search',\n    )\n    variables = dict(state['variables'])\n    variables['research_brief'] = brief\n    variables['research_subquestions_text'] = subquestions_text\n    return {\n        'variables': variables,\n        'research_brief': brief,\n        'research_sub_questions': sub_questions,\n        'research_subquestions_text': subquestions_text,\n        'research_outline': outline,\n        'research_pending_queries': pending,\n        'research_iteration': 0,\n        'research_sources': [],\n        'research_seen_urls': [],\n        'research_candidates': [],\n        'research_sources_digest': 'Пока нет прочитанных источников.',\n        'research_coverage_note': '',\n    }\n"
+        },
+        "research_search_wave": {
+          "type": "code",
+          "entrypoint": "run",
+          "max_visits_per_run": 4,
+          "node_timeout_seconds": 60,
+          "code": "import asyncio\n\nTRACKING_KEYS = {'fbclid', 'gclid', 'yclid', 'ref', 'ref_src'}\n\n\ndef _canonical_url(url):\n    u = url.strip()\n    if '://' in u:\n        _, rest = u.split('://', 1)\n    else:\n        rest = u\n    rest = rest.split('#', 1)[0]\n    if '?' in rest:\n        path, query = rest.split('?', 1)\n    else:\n        path, query = rest, ''\n    path = path.lower()\n    if path.endswith('/') and len(path) > 1:\n        path = path.rstrip('/')\n    kept = []\n    for pair in query.split('&'):\n        if pair == '':\n            continue\n        key = pair.split('=', 1)[0].lower()\n        if key in TRACKING_KEYS or key.startswith('utm_'):\n            continue\n        kept.append(pair)\n    if kept:\n        return path + '?' + '&'.join(sorted(kept))\n    return path\n\n\nasync def _search_one(query, limit, providers, strategy, language, region):\n    raw = await tools.web_search(\n        query=query,\n        limit=limit,\n        providers=providers,\n        provider_strategy=strategy,\n        language=language,\n        region=region,\n        mode='research',\n    )\n    if raw.get('success') is not True:\n        return {'query': query, 'results': [], 'error': str(raw.get('error', 'web_search failed'))}\n    results = raw.get('results')\n    if not isinstance(results, list):\n        return {'query': query, 'results': [], 'error': 'web_search: results is not a list'}\n    return {'query': query, 'results': results, 'error': ''}\n\n\nasync def run(args, state):\n    if state.get('research_continue') is False:\n        return {'research_candidates': []}\n    pending = state.get('research_pending_queries')\n    if not isinstance(pending, list):\n        raise TypeError('research search: research_pending_queries must be array')\n    queries = []\n    for item in pending:\n        s = str(item).strip()\n        if s != '':\n            queries.append(s)\n    if len(queries) == 0:\n        return {'research_candidates': []}\n    variables = state['variables']\n    limit = int(variables.get('research_search_limit_per_query', 8))\n    strategy = variables.get('search_provider_strategy', 'merge')\n    providers = variables.get('search_providers', ['auto'])\n    language = variables.get('search_language', 'ru')\n    region = variables.get('search_region', 'ru')\n    outcomes = await asyncio.gather(*[\n        _search_one(q, limit, providers, strategy, language, region) for q in queries\n    ])\n    seen = state.get('research_seen_urls')\n    seen_set = set(seen) if isinstance(seen, list) else set()\n    scores = {}\n    candidates = {}\n    for outcome in outcomes:\n        for item in outcome['results']:\n            if not isinstance(item, dict):\n                continue\n            url = str(item.get('url', '')).strip()\n            title = str(item.get('title', '')).strip()\n            if url == '' or title == '':\n                continue\n            key = _canonical_url(url)\n            if key == '' or key in seen_set:\n                continue\n            rank = item.get('provider_rank')\n            rank_val = rank if isinstance(rank, int) and rank >= 1 else 50\n            score = 1.0 / (60.0 + float(rank_val))\n            if key not in candidates:\n                provider = str(item.get('provider', '')).strip()\n                if provider == '':\n                    provider = 'web'\n                candidates[key] = {\n                    'url': url,\n                    'title': title,\n                    'snippet': str(item.get('snippet', '')).strip(),\n                    'provider': provider,\n                    'site_name': str(item.get('site_name', '')).strip(),\n                }\n                scores[key] = score\n            else:\n                scores[key] += score\n    ranked_keys = sorted(candidates.keys(), key=lambda k: -scores[k])\n    ranked = [candidates[k] for k in ranked_keys]\n    query_stats = [\n        {'query': o['query'], 'count': len(o['results']), 'error': o['error']}\n        for o in outcomes\n    ]\n    await capability(\n        'state.push_ui_event',\n        event_type='search/research/search_ready',\n        payload={\n            'kind': 'public_search_research_update',\n            'version': 1,\n            'flow_id': 'public_search',\n            'phase': 'search',\n            'mode': 'research',\n            'query': state.get('research_query'),\n            'iteration': int(state.get('research_iteration', 0)),\n            'queries': query_stats,\n            'found': len(ranked),\n            'candidates': [\n                {'url': c['url'], 'title': c['title'], 'provider': c['provider'], 'site_name': c['site_name']}\n                for c in ranked[:12]\n            ],\n        },\n        source='public_search',\n    )\n    return {'research_candidates': ranked}\n"
+        },
+        "research_read_wave": {
+          "type": "code",
+          "entrypoint": "run",
+          "max_visits_per_run": 4,
+          "node_timeout_seconds": 90,
+          "code": "import asyncio\n\n\nasync def _read_one(candidate, max_chars):\n    raw = await tools.browser_page_markdown(\n        url=candidate['url'],\n        max_markdown_chars=max_chars,\n        navigation_timeout_ms=20000,\n    )\n    if raw.get('success') is not True:\n        return {'candidate': candidate, 'ok': False, 'content': '', 'truncated': False}\n    markdown = raw.get('markdown')\n    if not isinstance(markdown, str) or markdown.strip() == '':\n        return {'candidate': candidate, 'ok': False, 'content': '', 'truncated': False}\n    return {'candidate': candidate, 'ok': True, 'content': markdown.strip(), 'truncated': raw.get('truncated') is True}\n\n\nasync def run(args, state):\n    candidates = state.get('research_candidates')\n    if not isinstance(candidates, list):\n        candidates = []\n    sources = state.get('research_sources')\n    if not isinstance(sources, list):\n        sources = []\n    seen = state.get('research_seen_urls')\n    seen_set = set(seen) if isinstance(seen, list) else set()\n    variables = state['variables']\n    max_sources = int(variables.get('research_max_sources', 8))\n    remaining = max_sources - len(sources)\n    if remaining < 0:\n        remaining = 0\n    to_read = candidates[:remaining]\n    max_chars = int(variables.get('research_page_max_chars', 6000))\n    if to_read:\n        read_results = await asyncio.gather(*[_read_one(c, max_chars) for c in to_read])\n    else:\n        read_results = []\n    new_sources = []\n    for r in read_results:\n        cand = r['candidate']\n        seen_set.add(cand['url'])\n        if r['ok']:\n            index = len(sources) + len(new_sources) + 1\n            source = {\n                'index': index,\n                'url': cand['url'],\n                'title': cand['title'],\n                'provider': cand['provider'],\n                'site_name': cand['site_name'],\n                'snippet': cand['snippet'],\n                'content': r['content'],\n                'truncated': r['truncated'],\n            }\n            new_sources.append(source)\n            await capability(\n                'state.push_ui_event',\n                event_type='search/research/source_read',\n                payload={\n                    'kind': 'public_search_research_update',\n                    'version': 1,\n                    'flow_id': 'public_search',\n                    'phase': 'read',\n                    'mode': 'research',\n                    'index': index,\n                    'url': cand['url'],\n                    'title': cand['title'],\n                    'provider': cand['provider'],\n                    'site_name': cand['site_name'],\n                },\n                source='public_search',\n            )\n    all_sources = sources + new_sources\n    digest_lines = []\n    for s in all_sources:\n        snippet = s['snippet']\n        if len(snippet) > 200:\n            snippet = snippet[:200]\n        label = s['site_name'] if s['site_name'] != '' else s['provider']\n        digest_lines.append(str(s['index']) + '. ' + s['title'] + ' (' + label + '): ' + snippet)\n    if digest_lines:\n        digest = '\\n'.join(digest_lines)\n    else:\n        digest = 'Пока нет прочитанных источников.'\n    variables = dict(state['variables'])\n    variables['research_sources_digest'] = digest\n    return {\n        'variables': variables,\n        'research_sources': all_sources,\n        'research_seen_urls': list(seen_set),\n        'research_candidates': [],\n        'research_sources_digest': digest,\n    }\n"
+        },
+        "research_search_wave_2": {
+          "type": "code",
+          "entrypoint": "run",
+          "node_timeout_seconds": 60,
+          "code": "import asyncio\n\nTRACKING_KEYS = {'fbclid', 'gclid', 'yclid', 'ref', 'ref_src'}\n\n\ndef _canonical_url(url):\n    u = url.strip()\n    if '://' in u:\n        _, rest = u.split('://', 1)\n    else:\n        rest = u\n    rest = rest.split('#', 1)[0]\n    if '?' in rest:\n        path, query = rest.split('?', 1)\n    else:\n        path, query = rest, ''\n    path = path.lower()\n    if path.endswith('/') and len(path) > 1:\n        path = path.rstrip('/')\n    kept = []\n    for pair in query.split('&'):\n        if pair == '':\n            continue\n        key = pair.split('=', 1)[0].lower()\n        if key in TRACKING_KEYS or key.startswith('utm_'):\n            continue\n        kept.append(pair)\n    if kept:\n        return path + '?' + '&'.join(sorted(kept))\n    return path\n\n\nasync def _search_one(query, limit, providers, strategy, language, region):\n    raw = await tools.web_search(\n        query=query,\n        limit=limit,\n        providers=providers,\n        provider_strategy=strategy,\n        language=language,\n        region=region,\n        mode='research',\n    )\n    if raw.get('success') is not True:\n        return {'query': query, 'results': [], 'error': str(raw.get('error', 'web_search failed'))}\n    results = raw.get('results')\n    if not isinstance(results, list):\n        return {'query': query, 'results': [], 'error': 'web_search: results is not a list'}\n    return {'query': query, 'results': results, 'error': ''}\n\n\nasync def run(args, state):\n    if state.get('research_continue') is not True:\n        return {'research_candidates': []}\n    pending = state.get('research_pending_queries')\n    if not isinstance(pending, list):\n        raise TypeError('research search: research_pending_queries must be array')\n    queries = []\n    for item in pending:\n        s = str(item).strip()\n        if s != '':\n            queries.append(s)\n    if len(queries) == 0:\n        return {'research_candidates': []}\n    variables = state['variables']\n    limit = int(variables.get('research_search_limit_per_query', 8))\n    strategy = variables.get('search_provider_strategy', 'merge')\n    providers = variables.get('search_providers', ['auto'])\n    language = variables.get('search_language', 'ru')\n    region = variables.get('search_region', 'ru')\n    outcomes = await asyncio.gather(*[\n        _search_one(q, limit, providers, strategy, language, region) for q in queries\n    ])\n    seen = state.get('research_seen_urls')\n    seen_set = set(seen) if isinstance(seen, list) else set()\n    scores = {}\n    candidates = {}\n    for outcome in outcomes:\n        for item in outcome['results']:\n            if not isinstance(item, dict):\n                continue\n            url = str(item.get('url', '')).strip()\n            title = str(item.get('title', '')).strip()\n            if url == '' or title == '':\n                continue\n            key = _canonical_url(url)\n            if key == '' or key in seen_set:\n                continue\n            rank = item.get('provider_rank')\n            rank_val = rank if isinstance(rank, int) and rank >= 1 else 50\n            score = 1.0 / (60.0 + float(rank_val))\n            if key not in candidates:\n                provider = str(item.get('provider', '')).strip()\n                if provider == '':\n                    provider = 'web'\n                candidates[key] = {\n                    'url': url,\n                    'title': title,\n                    'snippet': str(item.get('snippet', '')).strip(),\n                    'provider': provider,\n                    'site_name': str(item.get('site_name', '')).strip(),\n                }\n                scores[key] = score\n            else:\n                scores[key] += score\n    ranked_keys = sorted(candidates.keys(), key=lambda k: -scores[k])\n    ranked = [candidates[k] for k in ranked_keys]\n    query_stats = [\n        {'query': o['query'], 'count': len(o['results']), 'error': o['error']}\n        for o in outcomes\n    ]\n    await capability(\n        'state.push_ui_event',\n        event_type='search/research/search_ready',\n        payload={\n            'kind': 'public_search_research_update',\n            'version': 1,\n            'flow_id': 'public_search',\n            'phase': 'search',\n            'mode': 'research',\n            'query': state.get('research_query'),\n            'iteration': int(state.get('research_iteration', 0)),\n            'queries': query_stats,\n            'found': len(ranked),\n            'candidates': [\n                {'url': c['url'], 'title': c['title'], 'provider': c['provider'], 'site_name': c['site_name']}\n                for c in ranked[:12]\n            ],\n        },\n        source='public_search',\n    )\n    return {'research_candidates': ranked}\n"
+        },
+        "research_read_wave_2": {
+          "type": "code",
+          "entrypoint": "run",
+          "node_timeout_seconds": 90,
+          "code": "import asyncio\n\n\nasync def _read_one(candidate, max_chars):\n    raw = await tools.browser_page_markdown(\n        url=candidate['url'],\n        max_markdown_chars=max_chars,\n        navigation_timeout_ms=20000,\n    )\n    if raw.get('success') is not True:\n        return {'candidate': candidate, 'ok': False, 'content': '', 'truncated': False}\n    markdown = raw.get('markdown')\n    if not isinstance(markdown, str) or markdown.strip() == '':\n        return {'candidate': candidate, 'ok': False, 'content': '', 'truncated': False}\n    return {'candidate': candidate, 'ok': True, 'content': markdown.strip(), 'truncated': raw.get('truncated') is True}\n\n\nasync def run(args, state):\n    candidates = state.get('research_candidates')\n    if not isinstance(candidates, list):\n        candidates = []\n    sources = state.get('research_sources')\n    if not isinstance(sources, list):\n        sources = []\n    seen = state.get('research_seen_urls')\n    seen_set = set(seen) if isinstance(seen, list) else set()\n    variables = state['variables']\n    max_sources = int(variables.get('research_max_sources', 8))\n    remaining = max_sources - len(sources)\n    if remaining < 0:\n        remaining = 0\n    to_read = candidates[:remaining]\n    max_chars = int(variables.get('research_page_max_chars', 6000))\n    if to_read:\n        read_results = await asyncio.gather(*[_read_one(c, max_chars) for c in to_read])\n    else:\n        read_results = []\n    new_sources = []\n    for r in read_results:\n        cand = r['candidate']\n        seen_set.add(cand['url'])\n        if r['ok']:\n            index = len(sources) + len(new_sources) + 1\n            source = {\n                'index': index,\n                'url': cand['url'],\n                'title': cand['title'],\n                'provider': cand['provider'],\n                'site_name': cand['site_name'],\n                'snippet': cand['snippet'],\n                'content': r['content'],\n                'truncated': r['truncated'],\n            }\n            new_sources.append(source)\n            await capability(\n                'state.push_ui_event',\n                event_type='search/research/source_read',\n                payload={\n                    'kind': 'public_search_research_update',\n                    'version': 1,\n                    'flow_id': 'public_search',\n                    'phase': 'read',\n                    'mode': 'research',\n                    'index': index,\n                    'url': cand['url'],\n                    'title': cand['title'],\n                    'provider': cand['provider'],\n                    'site_name': cand['site_name'],\n                },\n                source='public_search',\n            )\n    all_sources = sources + new_sources\n    digest_lines = []\n    for s in all_sources:\n        snippet = s['snippet']\n        if len(snippet) > 200:\n            snippet = snippet[:200]\n        label = s['site_name'] if s['site_name'] != '' else s['provider']\n        digest_lines.append(str(s['index']) + '. ' + s['title'] + ' (' + label + '): ' + snippet)\n    if digest_lines:\n        digest = '\\n'.join(digest_lines)\n    else:\n        digest = 'Пока нет прочитанных источников.'\n    variables = dict(state['variables'])\n    variables['research_sources_digest'] = digest\n    return {\n        'variables': variables,\n        'research_sources': all_sources,\n        'research_seen_urls': list(seen_set),\n        'research_candidates': [],\n        'research_sources_digest': digest,\n    }\n"
+        },
+        "research_reflect": {
+          "type": "llm_node",
+          "name": "Research Reflector",
+          "max_visits_per_run": 4,
+          "prompt": "Ты — ревьюер Humanitec Deep Research.\n\nЗадача:\n{research_brief}\n\nПод-вопросы:\n{research_subquestions_text}\n\nУже собранные источники (номер, заголовок, краткое описание):\n{research_sources_digest}\n\nОцени, достаточно ли собранных источников, чтобы закрыть под-вопросы. Верни СТРОГО JSON без markdown по схеме:\n{\"need_more\": true, \"gap_queries\": [\"...\"], \"coverage_note\": \"...\"}\n\nПравила:\n- Если по каким-то под-вопросам данных мало или их нет — need_more=true и предложи 2-4 новых поисковых запроса в gap_queries, нацеленных строго на пробелы.\n- Если данных достаточно для качественного отчёта — need_more=false и gap_queries=[].\n- coverage_note: 1-2 предложения о том, что покрыто и чего не хватает.\n- Верни только JSON-объект, без пояснений и без markdown-ограждения.",
+          "output_key": "response",
+          "llm": {
+            "provider": "humanitec_llm",
+            "model": "auto",
+            "temperature": 0.1
+          }
+        },
+        "research_reflect_apply": {
+          "type": "code",
+          "entrypoint": "run",
+          "max_visits_per_run": 4,
+          "code": "import json\n\n\ndef _clean_json(raw):\n    text = raw.strip()\n    if text.startswith('```'):\n        text = text.strip('`')\n        nl = text.find('\\n')\n        if nl != -1:\n            text = text[nl + 1:]\n    return text.strip()\n\n\ndef _str_list(value, limit):\n    out = []\n    if isinstance(value, list):\n        for item in value:\n            if isinstance(item, str):\n                s = item.strip()\n                if s != '':\n                    out.append(s)\n            if len(out) >= limit:\n                break\n    return out\n\n\nasync def run(args, state):\n    response = state.get('response')\n    if not isinstance(response, str) or response.strip() == '':\n        raise ValueError('research reflect: empty response')\n    payload = json.loads(_clean_json(response))\n    if not isinstance(payload, dict):\n        raise TypeError('research reflect: JSON object expected')\n    variables = state['variables']\n    iteration = int(state.get('research_iteration', 0)) + 1\n    max_iter = int(variables.get('research_max_iterations', 2))\n    max_queries = int(variables.get('research_max_queries_per_wave', 5))\n    max_sources = int(variables.get('research_max_sources', 8))\n    sources = state.get('research_sources')\n    source_count = len(sources) if isinstance(sources, list) else 0\n    need_more = payload.get('need_more') is True\n    gap = _str_list(payload.get('gap_queries'), max_queries)\n    coverage = payload.get('coverage_note')\n    coverage_text = coverage.strip() if isinstance(coverage, str) else ''\n    has_room = source_count < max_sources\n    should_continue = need_more and len(gap) > 0 and iteration < max_iter and has_room\n    await capability(\n        'state.push_ui_event',\n        event_type='search/research/reflection_ready',\n        payload={\n            'kind': 'public_search_research_update',\n            'version': 1,\n            'flow_id': 'public_search',\n            'phase': 'reflect',\n            'mode': 'research',\n            'query': state.get('research_query'),\n            'iteration': iteration,\n            'need_more': should_continue,\n            'coverage_note': coverage_text,\n            'gap_queries': gap if should_continue else [],\n            'source_count': source_count,\n        },\n        source='public_search',\n    )\n    return {\n        'research_iteration': iteration,\n        'research_continue': should_continue,\n        'research_pending_queries': gap[:max_queries] if should_continue else [],\n        'research_coverage_note': coverage_text,\n    }\n"
+        },
+        "research_prepare_prompt": {
+          "type": "code",
+          "entrypoint": "run",
+          "code": "MAX_SOURCES = 8\n\n\ndef _md_label(text):\n    return ' '.join(text.replace('[', '(').replace(']', ')').split())\n\n\nasync def run(args, state):\n    variables = dict(state['variables'])\n    sources = state.get('research_sources')\n    if not isinstance(sources, list):\n        sources = []\n    lines = []\n    blocks = []\n    for src in sources[:MAX_SOURCES]:\n        index = src['index']\n        title = src['title']\n        url = src['url']\n        provider = src['provider']\n        lines.append(str(index) + '. [' + _md_label(title) + '](' + url + ') — ' + provider)\n        blocks.append('[Источник ' + str(index) + '] ' + title + ' (' + url + ')\\n' + src['content'])\n    if lines:\n        markdown_sources = '\\n'.join(lines)\n    else:\n        markdown_sources = 'Источники отсутствуют.'\n    if blocks:\n        context = '\\n\\n---\\n\\n'.join(blocks)\n    else:\n        context = 'Нет прочитанных источников.'\n    outline = state.get('research_outline')\n    if isinstance(outline, list) and outline:\n        outline_text = '\\n'.join('- ' + o for o in outline)\n    else:\n        outline_text = '- (план разделов не задан)'\n    coverage = state.get('research_coverage_note')\n    if not isinstance(coverage, str):\n        coverage = ''\n    brief = state.get('research_brief')\n    if not isinstance(brief, str):\n        brief = ''\n    variables['research_query'] = state.get('research_query')\n    variables['research_brief'] = brief\n    variables['research_outline_text'] = outline_text\n    variables['research_markdown_sources'] = markdown_sources\n    variables['research_context'] = context\n    variables['research_coverage_note'] = coverage\n    return {'variables': variables, 'research_markdown_sources': markdown_sources}\n"
+        },
+        "research_synthesize": {
+          "type": "llm_node",
+          "name": "Research Synthesizer",
+          "prompt": "Ты — аналитик Humanitec Deep Research. Составь глубокий, структурированный отчёт по задаче пользователя, опираясь ТОЛЬКО на прочитанные источники ниже.\n\nЗадача:\n{research_query}\n\nБриф исследования:\n{research_brief}\n\nПлан разделов:\n{research_outline_text}\n\nЗаметка о покрытии:\n{research_coverage_note}\n\nПронумерованные источники:\n{research_markdown_sources}\n\nПолные выдержки из источников:\n{research_context}\n\nПравила:\n1) Пиши развёрнутый markdown-отчёт с разделами по плану (заголовки уровня ##).\n2) При каждом фактическом утверждении ставь инлайн-цитату [N] с номером источника из списка выше. Для нескольких источников — [1][2].\n3) Используй markdown-таблицы там, где это помогает сравнить данные.\n4) Не выдумывай факты вне выдержек. Если данных по разделу мало — честно укажи это.\n5) В конце добавь раздел \"## Источники\" и продублируй пронумерованный список источников (markdown-ссылки).\n6) После источников добавь раздел \"## Что дальше\" с 2-3 направлениями для углубления.",
+          "output_key": "response",
+          "llm": {
+            "provider": "humanitec_llm",
+            "model": "auto",
+            "temperature": 0.2
+          }
+        },
+        "research_build_artifact": {
+          "type": "code",
+          "entrypoint": "run",
+          "code": "import json\n\n\nasync def run(args, state):\n    report = state.get('response')\n    if not isinstance(report, str) or report.strip() == '':\n        raise ValueError('research artifact: empty report')\n    sources = state.get('research_sources')\n    if not isinstance(sources, list):\n        sources = []\n    public_sources = [\n        {\n            'index': s['index'],\n            'url': s['url'],\n            'title': s['title'],\n            'provider': s['provider'],\n            'site_name': s['site_name'],\n            'snippet': s['snippet'],\n        }\n        for s in sources\n    ]\n    markdown_sources = state.get('research_markdown_sources')\n    if not isinstance(markdown_sources, str):\n        markdown_sources = ''\n    brief = state.get('research_brief')\n    if not isinstance(brief, str):\n        brief = ''\n    coverage = state.get('research_coverage_note')\n    if not isinstance(coverage, str):\n        coverage = ''\n    outline = state.get('research_outline')\n    if not isinstance(outline, list):\n        outline = []\n    sub_questions = state.get('research_sub_questions')\n    if not isinstance(sub_questions, list):\n        sub_questions = []\n    artifact = {\n        'kind': 'public_search_research_report',\n        'version': 1,\n        'flow_id': 'public_search',\n        'mode': 'research',\n        'query': state.get('research_query'),\n        'brief': brief,\n        'outline': outline,\n        'sub_questions': sub_questions,\n        'report': report.strip(),\n        'markdown_sources': markdown_sources,\n        'sources': public_sources,\n        'coverage_note': coverage,\n        'iterations': int(state.get('research_iteration', 0)),\n    }\n    await capability(\n        'state.push_ui_event',\n        event_type='search/serp/completed',\n        payload=artifact,\n        source='public_search',\n    )\n    return {'response': json.dumps(artifact, ensure_ascii=False, separators=(',', ':'))}\n"
+        }
+      },
+      "edges": [
+        {
+          "from_node": "research_prepare_inputs",
+          "to_node": "research_plan"
+        },
+        {
+          "from_node": "research_plan",
+          "to_node": "research_init"
+        },
+        {
+          "from_node": "research_init",
+          "to_node": "research_search_wave"
+        },
+        {
+          "from_node": "research_search_wave",
+          "to_node": "research_read_wave"
+        },
+        {
+          "from_node": "research_read_wave",
+          "to_node": "research_reflect"
+        },
+        {
+          "from_node": "research_reflect",
+          "to_node": "research_reflect_apply"
+        },
+        {
+          "from_node": "research_reflect_apply",
+          "to_node": "research_search_wave_2"
+        },
+        {
+          "from_node": "research_search_wave_2",
+          "to_node": "research_read_wave_2"
+        },
+        {
+          "from_node": "research_read_wave_2",
+          "to_node": "research_prepare_prompt"
+        },
+        {
+          "from_node": "research_prepare_prompt",
+          "to_node": "research_synthesize"
+        },
+        {
+          "from_node": "research_synthesize",
+          "to_node": "research_build_artifact"
+        },
+        {
+          "from_node": "research_build_artifact",
+          "to_node": null
+        }
+      ]
     },
     "source": {
       "name": "Source AI",
