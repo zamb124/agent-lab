@@ -98,7 +98,7 @@
         "related_label": "Related searches",
         "answer_pending": "Searching sources and composing the answer",
         "error_timeout_title": "Search took longer than expected",
-        "error_timeout_text": "Query preparation exceeded the limit. The timeout is now higher, but this run needs to be retried.",
+        "error_timeout_text": "Search exceeded the time limit. Retry the query — the timeout has already been increased.",
         "error_service_title": "Search service is unavailable",
         "error_service_text": "Could not connect to the search service. Make sure the service is running, then retry the query.",
         "error_runtime_title": "Code execution service is unavailable",

@@ -2473,10 +2473,6 @@ export class PublicSearchPage extends PlatformPage {
         const isQuotaExhausted = kind === 'search_quota_exhausted';
         return html`
             <section class="answer-panel" data-state="error">
-                <p class="panel-label">
-                    <platform-icon name="notification-error" size="14"></platform-icon>
-                    <span>${this.t('search_page.answer_label')}</span>
-                </p>
                 <div class="answer-error">
                     <div class="answer-error-main">
                         <span class="answer-error-icon">
