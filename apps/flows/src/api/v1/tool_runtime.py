@@ -239,8 +239,13 @@ async def _build_context(container: ContainerDep, execution_context: CapabilityE
     company = await container.company_repository.get(execution_context.company_id)
     if company is None:
         raise HTTPException(status_code=401, detail=f"Company not found: {execution_context.company_id}")
-    if execution_context.trace_id is None:
-        raise HTTPException(status_code=401, detail="Capability context requires trace_id")
+    trace_id = execution_context.trace_id
+    if trace_id is None:
+        request_id = execution_context.request_id
+        if isinstance(request_id, str) and request_id.strip():
+            trace_id = request_id.strip()
+        else:
+            trace_id = f"tool-runtime:{execution_context.session_id}"
     company_subdomain = company.subdomain
     if company_subdomain is None or company_subdomain.strip() == "":
         host = company.company_id
@@ -250,7 +255,7 @@ async def _build_context(container: ContainerDep, execution_context: CapabilityE
         company=company,
         user=user,
         host=host,
-        trace_id=execution_context.trace_id,
+        trace_id=trace_id,
         session_id=execution_context.session_id,
         channel=execution_context.channel,
     )

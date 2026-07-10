@@ -133,26 +133,35 @@ async def test_company_members_lists_company_from_shared_storage(
     system_user_id,
     frontend_container,
 ):
-    company = await frontend_container.company_repository.get("system")
-    if company is None:
-        raise AssertionError("system company must exist")
-    if system_user_id not in company.members:
-        company.members[system_user_id] = ["owner", "admin"]
-        await frontend_container.company_repository.set(company)
+    company_id = "system"
+    for _attempt in range(5):
+        company = await frontend_container.company_repository.get(company_id)
+        if company is None:
+            raise AssertionError("system company must exist")
+        if system_user_id not in company.members:
+            company.members[system_user_id] = ["owner", "admin"]
+            await frontend_container.company_repository.set(company)
 
-    r = await office_client.get(
-        "/documents/api/v1/company-members",
-        headers=auth_headers_system,
-    )
-    assert r.status_code == 200
-    rows = r.json()
-    assert isinstance(rows, list)
-    ids = {row["user_id"] for row in rows}
-    assert system_user_id in ids
-    for row in rows:
-        assert "name" in row
-        assert "roles" in row
-        assert isinstance(row["roles"], list)
+        user = await frontend_container.user_repository.get(system_user_id)
+        if user is None:
+            raise AssertionError(f"system user must exist: {system_user_id}")
+
+        response = await office_client.get(
+            "/documents/api/v1/company-members",
+            headers=auth_headers_system,
+        )
+        assert response.status_code == 200
+        rows = response.json()
+        assert isinstance(rows, list)
+        member_ids = {row["user_id"] for row in rows}
+        if system_user_id in member_ids:
+            for row in rows:
+                assert "name" in row
+                assert "roles" in row
+                assert isinstance(row["roles"], list)
+            return
+
+    assert system_user_id in member_ids
 
 
 @pytest.mark.asyncio

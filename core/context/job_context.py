@@ -13,6 +13,20 @@ if TYPE_CHECKING:
     from core.db.repositories.user_repository import UserRepository
 
 
+def resolve_user_roles_in_company(user: User, company: Company) -> list[str]:
+    """Роли пользователя в компании: user.companies, иначе company.members."""
+    company_id = company.company_id
+    user_roles = user.companies.get(company_id)
+    if user_roles is not None:
+        return user_roles
+    member_roles = company.members.get(user.user_id)
+    if member_roles is None:
+        raise ValueError(
+            f"resolve_user_roles_in_company: пользователь {user.user_id} не состоит в компании {company_id}",
+        )
+    return member_roles
+
+
 def build_job_context(
     *,
     company: Company,
@@ -29,11 +43,7 @@ def build_job_context(
     компании невалиден и контекст не должен молча создаваться.
     """
     cid = company.company_id
-    if cid not in user.companies:
-        raise ValueError(
-            f"build_job_context: пользователь {user.user_id} не состоит в компании {cid}",
-        )
-    roles = user.companies[cid]
+    roles = resolve_user_roles_in_company(user, company)
     auth_token = get_token_service().create_token(
         user_id=user.user_id,
         company_id=cid,
