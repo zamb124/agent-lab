@@ -345,3 +345,39 @@ def test_inspector_code_reads_link_mcp_output_to_downstream_emit():
 
     mcp_writes = {desc.path for desc in result.nodes["search_result_insights"].writes}
     assert "search_result_insights" in mcp_writes
+
+
+def test_inspector_optional_state_get_read_not_marked_missing():
+    """build_search_artifact: state.get('search_results_refined') is optional fallback."""
+    result = inspect(
+        entry="answer",
+        nodes_payload={
+            "answer": {
+                "type": "code",
+                "language": "python",
+                "code": (
+                    "def _require_list(state, key):\n"
+                    "    return state[key]\n"
+                    "\n"
+                    "async def run(args, state):\n"
+                    "    refined = state.get('search_results_refined')\n"
+                    "    if isinstance(refined, list) and refined:\n"
+                    "        results = refined\n"
+                    "    else:\n"
+                    "        results = _require_list(state, 'search_results')\n"
+                    "    return {'response': results}\n"
+                ),
+            },
+        },
+        edges_payload=[],
+        sample_state={"search_results": []},
+    )
+    artifact = result.nodes["answer"]
+    refined_read = next(row for row in artifact.reads if row.source_path == "search_results_refined")
+    assert refined_read.status == "ok"
+    assert not any(
+        issue.code == "missing_state_path" and issue.path == "search_results_refined"
+        for issue in artifact.issues
+    )
+    refined_chip = next(chip for chip in artifact.canvas.inputs if chip.label == "search_results_refined")
+    assert refined_chip.status == "ok"

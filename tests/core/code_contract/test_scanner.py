@@ -29,6 +29,39 @@ async def run(args, state):
     assert "label" in contract.reads
 
 
+def test_scan_python_detects_state_get_and_helper_reads():
+    code = """
+def _require_list(state, key):
+    return state[key]
+
+async def run(args, state):
+    refined = state.get("search_results_refined")
+    results = _require_list(state, "search_results")
+    return {"response": refined or results}
+"""
+    contract = scan_code_contract("python", code)
+
+    assert "get" not in contract.reads
+    assert "search_results_refined" in contract.optional_reads
+    assert "search_results_refined" not in contract.reads
+    assert "search_results" in contract.reads
+
+
+def test_scan_python_detects_variables_dict_writes():
+    code = """
+async def run(args, state):
+    variables = dict(state["variables"])
+    variables["search_query"] = state["search_user_query"]
+    variables["search_results"] = "[]"
+    return {"variables": variables}
+"""
+    contract = scan_code_contract("python", code)
+
+    assert "search_query" in contract.variable_writes
+    assert "search_results" in contract.variable_writes
+    assert "variables" in contract.return_keys
+
+
 def test_scan_python_state_update_writes():
     code = "async def run(a, state):\n    state.update({'merged': 1})\n    return {}"
     contract = scan_code_contract("python", code)
@@ -115,7 +148,9 @@ def test_scan_empty_code_returns_empty_contract():
     contract = scan_code_contract("python", "")
 
     assert contract.reads == []
+    assert contract.optional_reads == []
     assert contract.writes == []
+    assert contract.variable_writes == []
     assert contract.return_keys == []
 
 
@@ -123,7 +158,9 @@ def test_scan_whitespace_code_returns_empty_contract():
     contract = scan_code_contract("python", "   \n  ")
 
     assert contract.reads == []
+    assert contract.optional_reads == []
     assert contract.writes == []
+    assert contract.variable_writes == []
     assert contract.return_keys == []
 
 

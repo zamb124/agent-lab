@@ -743,6 +743,19 @@ def _inspect_code_reads(
                     path=path,
                 )
             )
+    for path in contract.optional_reads:
+        if not path:
+            continue
+        desc = incoming.get(path)
+        reads.append(
+            DataflowConfigRead(
+                source_kind="state",
+                source_path=path,
+                config_path=f"code.run.{path}",
+                status="ok",
+                type=desc.type if desc else "any",
+            )
+        )
     return reads
 
 
@@ -842,9 +855,16 @@ def _infer_node_writes(
                 )
             )
     elif node_type == "code":
-        direct_fields = _infer_code_state_writes(node)
+        contract = _code_contract_for_node(node)
+        direct_fields = set(contract.writes)
         for field in direct_fields:
             add(field, source="code.state_assignment", confidence="inferred_code")
+        for key in contract.variable_writes:
+            add(
+                f"variables.{key}",
+                source="code.variables_assignment",
+                confidence="inferred_code",
+            )
         if output_mapping:
             pass
         elif return_keys:
@@ -1118,7 +1138,13 @@ def _append_write_issues(path: str, source: str, issues: list[DataflowIssue]) ->
 def _code_contract_for_node(node: JsonObject) -> CodeContract:
     code = node.get("code")
     if not isinstance(code, str) or not code.strip():
-        return CodeContract(reads=[], writes=[], return_keys=[])
+        return CodeContract(
+            reads=[],
+            optional_reads=[],
+            writes=[],
+            variable_writes=[],
+            return_keys=[],
+        )
     language = str(node.get("language") or "python")
     return scan_code_contract(language, code)
 

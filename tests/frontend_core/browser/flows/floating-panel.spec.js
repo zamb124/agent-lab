@@ -55,7 +55,7 @@ describe('flows-floating-panel', () => {
             </flows-floating-panel>
         `);
         await elementUpdated(el);
-        const collapseBtn = panelButtonByIcon(el, 'minus');
+        const collapseBtn = panelButtonByIcon(el, 'minimize');
         expect(collapseBtn).to.not.equal(null);
         clickPanelButton(collapseBtn);
         await elementUpdated(el);

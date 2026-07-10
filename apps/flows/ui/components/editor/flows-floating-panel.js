@@ -781,7 +781,7 @@ export class FlowsFloatingPanel extends PlatformElement {
                                 : this.t('floating_panel.minimize_panel')}
                             @click=${this._toggleCollapsed}
                         >
-                            <platform-icon name=${this._collapsed ? 'fullscreen' : 'minus'} size="14"></platform-icon>
+                            <platform-icon name=${this._collapsed ? 'fullscreen' : 'minimize'} size="14"></platform-icon>
                         </platform-button>
                         <platform-button
                             variant="ghost"

@@ -185,6 +185,42 @@ def test_inspector_prompt_variable_satisfied_by_upstream_producer():
     assert not any(issue.code == "unknown_prompt_variable" for issue in node.issues)
 
 
+def test_inspector_prompt_variable_satisfied_by_upstream_variables_assignment():
+    """public_search: prepare_search_prompt sets variables.search_query for search_answer."""
+    result = inspect_flow_dataflow(
+        flow_id="flow_1",
+        branch_id="default",
+        entry="prepare",
+        variables={},
+        nodes=_nodes({
+            "prepare": {
+                "type": "code",
+                "language": "python",
+                "code": (
+                    "async def run(args, state):\n"
+                    "    variables = dict(state['variables'])\n"
+                    "    variables['search_query'] = state['search_user_query']\n"
+                    "    return {'variables': variables}\n"
+                ),
+            },
+            "search_answer": {
+                "type": "llm_node",
+                "prompt": "Исходный запрос:\n{search_query}",
+            },
+        }),
+        edges=_edges([{"from_node": "prepare", "to_node": "search_answer"}]),
+        sample_state={"search_user_query": "test", "variables": {}},
+    )
+
+    node = result.nodes["search_answer"]
+    required_by_name = {req.name: req for req in node.required_inputs}
+    assert required_by_name["search_query"].satisfied is True
+    assert not any(
+        issue.code == "unknown_prompt_variable" and issue.target == "search_query"
+        for issue in node.issues
+    )
+
+
 def test_inspector_reports_missing_required_code_argument():
     result = inspect_flow_dataflow(
         flow_id="flow_1",

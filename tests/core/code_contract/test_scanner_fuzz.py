@@ -15,7 +15,9 @@ _LANGUAGES = st.sampled_from(
 def test_scan_never_crashes(language: str, code: str) -> None:
     contract = scan_code_contract(language, code)
     assert contract.reads == sorted(set(contract.reads))
+    assert contract.optional_reads == sorted(set(contract.optional_reads))
     assert contract.writes == sorted(set(contract.writes))
+    assert contract.variable_writes == sorted(set(contract.variable_writes))
     assert contract.return_keys == sorted(set(contract.return_keys))
 
 
@@ -26,7 +28,9 @@ def test_empty_or_whitespace_code_is_empty_contract(language: str, whitespace: s
         return
     contract = scan_code_contract(language, whitespace)
     assert contract.reads == []
+    assert contract.optional_reads == []
     assert contract.writes == []
+    assert contract.variable_writes == []
     assert contract.return_keys == []
 
 

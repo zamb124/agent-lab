@@ -940,7 +940,7 @@ export class FlowsExecutionPanel extends PlatformElement {
                             @click=${this._toggleCollapsed}
                         >
                             <platform-icon
-                                name=${this._collapsed ? 'fullscreen' : 'minus'}
+                                name=${this._collapsed ? 'fullscreen' : 'minimize'}
                                 size="14"
                             ></platform-icon>
                         </platform-button>

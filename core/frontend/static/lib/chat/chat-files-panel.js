@@ -717,7 +717,7 @@ export class FlowsChatFilesPanel extends PlatformElement {
                             @click=${() => this._toggleEditorCollapsed()}
                         >
                             <platform-icon
-                                name=${this._editorCollapsed ? 'fullscreen' : 'minus'}
+                                name=${this._editorCollapsed ? 'fullscreen' : 'minimize'}
                                 size="16"
                             ></platform-icon>
                         </button>
