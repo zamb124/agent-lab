@@ -80,7 +80,7 @@
         "offset": "search_serp_offset",
         "limit": "search_serp_page_limit"
       },
-      "node_timeout_seconds": 25
+      "node_timeout_seconds": 45
     },
     "emit_search_results": {
       "type": "code",
@@ -260,7 +260,7 @@
       "variables": {
         "search_mode": "quick",
         "search_result_limit": 10,
-        "search_retrieve_limit": 40,
+        "search_retrieve_limit": 30,
         "search_suggestion_limit": 5,
         "search_provider_strategy": "first_available"
       }
