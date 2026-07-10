@@ -2830,7 +2830,7 @@ export class PublicSearchPage extends PlatformPage {
 
     _researchReportTemplate(stream) {
         const streaming = !stream.completed;
-        const text = stream.report !== '' ? stream.report : stream.answer;
+        const text = stream.report;
         let out = flowsChatMarkdownToHtml(text, { streaming });
         const sources = stream.research_sources;
         if (sources.length > 0) {
@@ -2918,20 +2918,54 @@ export class PublicSearchPage extends PlatformPage {
         `;
     }
 
+    _researchReportPendingKey(stream) {
+        if (stream.phase === 'synthesizing') {
+            return 'search_page.research_report_synthesizing';
+        }
+        if (stream.phase === 'plan') {
+            return 'search_page.research_phase_plan';
+        }
+        if (stream.phase === 'searching' || stream.phase === 'search') {
+            return 'search_page.research_phase_search';
+        }
+        if (stream.phase === 'reading' || stream.phase === 'read') {
+            return 'search_page.research_phase_read';
+        }
+        if (stream.phase === 'reflecting' || stream.phase === 'reflect') {
+            return 'search_page.research_phase_reflect';
+        }
+        return 'search_page.research_report_pending';
+    }
+
     _renderResearchPlan(stream) {
-        if (stream.research_sub_questions.length === 0) {
+        const subQuestions = stream.research_sub_questions;
+        const outline = stream.research_outline;
+        if (subQuestions.length === 0 && outline.length === 0) {
             return nothing;
         }
         return html`
-            <section class="suggest-panel">
-                <p class="panel-label">
-                    <platform-icon name="layers" size="14"></platform-icon>
-                    <span>${this.t('search_page.research_subquestions_label')}</span>
-                </p>
-                <ul class="research-subquestions">
-                    ${stream.research_sub_questions.map((question) => html`<li>${question}</li>`)}
-                </ul>
-            </section>
+            ${subQuestions.length > 0 ? html`
+                <section class="suggest-panel">
+                    <p class="panel-label">
+                        <platform-icon name="layers" size="14"></platform-icon>
+                        <span>${this.t('search_page.research_subquestions_label')}</span>
+                    </p>
+                    <ul class="research-subquestions">
+                        ${subQuestions.map((question) => html`<li>${question}</li>`)}
+                    </ul>
+                </section>
+            ` : nothing}
+            ${outline.length > 0 ? html`
+                <section class="suggest-panel">
+                    <p class="panel-label">
+                        <platform-icon name="list" size="14"></platform-icon>
+                        <span>${this.t('search_page.research_outline_label')}</span>
+                    </p>
+                    <ul class="research-subquestions">
+                        ${outline.map((section) => html`<li>${section}</li>`)}
+                    </ul>
+                </section>
+            ` : nothing}
         `;
     }
 
@@ -2940,7 +2974,8 @@ export class PublicSearchPage extends PlatformPage {
         if (typeof error === 'string' && error !== '') {
             return this._renderSearchError();
         }
-        const hasReport = stream.report.trim() !== '' || stream.answer.trim() !== '';
+        const showReport = stream.completed || stream.phase === 'synthesizing';
+        const hasReport = showReport && stream.report.trim() !== '';
         return html`
             <section class="answer-panel research-report">
                 <p class="panel-label">
@@ -2950,7 +2985,7 @@ export class PublicSearchPage extends PlatformPage {
                 ${stream.research_brief !== '' ? html`<p class="research-brief">${stream.research_brief}</p>` : nothing}
                 ${hasReport
                     ? html`<div class="answer-text" data-role="answer-text" @click=${this._onResearchReportClick}>${this._researchReportTemplate(stream)}</div>`
-                    : html`<div class="answer-placeholder">${this.t('search_page.research_report_pending')}</div>`}
+                    : html`<div class="answer-placeholder">${this.t(this._researchReportPendingKey(stream))}</div>`}
             </section>
         `;
     }

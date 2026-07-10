@@ -570,6 +570,7 @@ function _applySearchUiEvent(stream, event) {
     }
     if (eventType === 'search/research/plan_ready') {
         stream.phase = 'plan';
+        stream.report = '';
         stream.query = _requireNonEmptyString(payload.query, 'plan_ready.query');
         stream.research_brief = _requireString(payload.brief, 'plan_ready.brief');
         stream.research_sub_questions = _normalizeStringArray(payload.sub_questions, 'plan_ready.sub_questions');
@@ -605,7 +606,11 @@ function _applySearchUiEvent(stream, event) {
         return;
     }
     if (eventType === 'search/research/reflection_ready') {
-        stream.phase = 'reflecting';
+        const needMore = _requireBoolean(payload.need_more, 'reflection_ready.need_more');
+        stream.phase = needMore ? 'reflecting' : 'synthesizing';
+        if (needMore === false) {
+            stream.report = '';
+        }
         const iteration = _requireNumber(payload.iteration, 'reflection_ready.iteration');
         stream.research_steps = [...stream.research_steps, { phase: 'reflect', count: iteration, title: '' }];
         return;
@@ -661,8 +666,9 @@ function _applyRuntimeEvents(stream, events) {
             const payload = _requireObject(runtimeEvent.payload, 'content_chunk.payload');
             const chunk = _requireString(payload.text, 'content_chunk.text');
             if (stream.mode === 'research') {
-                stream.report = `${stream.report}${chunk}`;
-                stream.phase = 'synthesizing';
+                if (stream.phase === 'synthesizing') {
+                    stream.report = `${stream.report}${chunk}`;
+                }
             } else {
                 stream.answer = `${stream.answer}${chunk}`;
                 stream.phase = stream.phase === 'insights' ? 'answering' : stream.phase;
