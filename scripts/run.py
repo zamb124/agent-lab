@@ -227,6 +227,42 @@ SERVICES = {
     },
 }
 
+# Granian --reload удобен для dev, но сервисы с multiprocessing + тяжёлым runtime
+# (LitServe/torch, Playwright) на reload часто не освобождают память: старые worker'ы
+# остаются с PPID=1 и копят RSS до OOM. В тестах и prod reload нет.
+GRANIAN_RELOAD_DISABLED_SERVICES = frozenset({"provider_litserve", "browser"})
+
+GRANIAN_RELOAD_IGNORE_DIRS = (
+    "__pycache__",
+    ".pytest_cache",
+    ".git",
+    ".venv",
+    "node_modules",
+    "reports",
+    "data",
+    ".cursor",
+    "documentation-dist",
+)
+
+
+def _granian_reload_enabled(service: str) -> bool:
+    raw = os.environ.get("APP_RELOAD", "1").strip().lower()
+    if raw in ("0", "false", "no", "off"):
+        return False
+    return service not in GRANIAN_RELOAD_DISABLED_SERVICES
+
+
+def _append_granian_reload_args(cmd: list[str], *, service: str) -> None:
+    if not _granian_reload_enabled(service):
+        return
+    cmd.append("--reload")
+    for path in ("apps", "core"):
+        cmd += ["--reload-paths", path]
+    for ignore_dir in GRANIAN_RELOAD_IGNORE_DIRS:
+        cmd += ["--reload-ignore-dirs", ignore_dir]
+    for ignore_path in ("reports", "data"):
+        cmd += ["--reload-ignore-paths", ignore_path]
+
 
 def _python_m_prefix() -> list[str]:
     uv_bin = shutil.which("uv")
@@ -253,13 +289,9 @@ def build_command(service: str) -> list[str]:
             "--http",
             "auto",
             "--ws",
-            "--reload",
-            "--reload-paths",
-            "apps",
-            "--reload-paths",
-            "core",
             "--no-access-log",
         ]
+        _append_granian_reload_args(cmd, service=service)
         static = config.get("static") or []
         if not isinstance(static, list):
             raise ValueError(f"SERVICES[{service!r}].static must be list[tuple[str,str]]")

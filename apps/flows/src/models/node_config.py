@@ -549,6 +549,7 @@ class GraphNodeConfig(StrictBaseModel):
     incoming_policy: Literal["any", "all"] = Field(default="any")
     structured_output: bool = Field(default=False)
     input_mapping: NodeInputMapping = Field(default_factory=NodeInputMapping)
+    input_schema: dict[str, JsonValue] | None = Field(default=None)
     output_mapping: dict[str, str] | None = Field(default=None)
     output_schema: dict[str, JsonValue] | None = Field(default=None)
 

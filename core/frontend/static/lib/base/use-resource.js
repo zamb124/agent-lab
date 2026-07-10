@@ -44,6 +44,7 @@ function _bindActions(target, actions, controllerName, factoryName) {
  *   const ctl = new ResourceController(this, apiKeysResource, { autoload: true });
  *   ctl.items, ctl.byId, ctl.loading, ctl.createInFlight, ctl.error, ctl.busyIds
  *   ctl.load(query?), ctl.create(payload), ctl.update(id, payload), ctl.remove(id)
+ *   ctl.fetchItem(id) — Promise с mapped item после ITEM_LOADED
  */
 export class ResourceController {
     constructor(host, resource, opts) {
@@ -88,6 +89,47 @@ export class ResourceController {
             { [this.resource.idField]: id },
             { source: 'local' },
         );
+    }
+    fetchItem(id) {
+        if (!id) throw new Error(`ResourceController(${this.resource.name}).fetchItem: id required`);
+        const okType = this.resource.events.ITEM_LOADED;
+        const failType = this.resource.events.ITEM_FAILED;
+        const idField = this.resource.idField;
+        const requested = this.bus.dispatch(
+            this.resource.events.ITEM_REQUESTED,
+            { [idField]: id },
+            { source: 'local' },
+        );
+        if (!requested || typeof requested.id !== 'string') {
+            throw new Error(`ResourceController(${this.resource.name}).fetchItem: dispatch returned no event with id`);
+        }
+        const requestedId = requested.id;
+        return new Promise((resolve, reject) => {
+            let unsubOk = null;
+            let unsubFail = null;
+            const cleanup = () => {
+                if (typeof unsubOk === 'function') unsubOk();
+                if (typeof unsubFail === 'function') unsubFail();
+            };
+            unsubOk = this.bus.subscribeType(okType, (event) => {
+                if (!event || !event.meta || event.meta.causation_id !== requestedId) return;
+                cleanup();
+                const item = this.byId[id];
+                if (!item || typeof item !== 'object') {
+                    reject(new Error(`ResourceController(${this.resource.name}).fetchItem: item "${id}" missing after ITEM_LOADED`));
+                    return;
+                }
+                resolve(item);
+            });
+            unsubFail = this.bus.subscribeType(failType, (event) => {
+                if (!event || !event.meta || event.meta.causation_id !== requestedId) return;
+                cleanup();
+                const message = event.payload && typeof event.payload.message === 'string'
+                    ? event.payload.message
+                    : `ResourceController(${this.resource.name}).fetchItem failed`;
+                reject(new Error(message));
+            });
+        });
     }
     create(payload) {
         if (!payload || typeof payload !== 'object') {

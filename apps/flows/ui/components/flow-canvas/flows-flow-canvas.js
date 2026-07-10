@@ -66,6 +66,23 @@ import {
 import { getBlankCodeNodeConfig } from '../../_helpers/code-node-defaults.js';
 import { getBlankExternalApiNodeConfig } from '../../_helpers/flows-external-api-defaults.js';
 import { getBlankReflectionNodeConfig } from '../../_helpers/flows-reflection-defaults.js';
+import {
+    hasControlPath,
+    buildDataWires,
+    buildLineageSet,
+    countNodeDataflowProblems,
+    dataflowChipAnchor,
+    dataflowChipLabel,
+    dataflowChipRect,
+    dataflowNodeChipLayout,
+    findOutputChipIndex,
+    resolveDataWireEndpoints,
+    dataWirePathFor,
+    DATAFLOW_CHIP_W,
+    DATAFLOW_CHIP_ZONE_W,
+    DATAFLOW_CHIP_INSET,
+    DATAFLOW_CHIP_HOST_W,
+} from '../../_helpers/flows-dataflow-canvas.js';
 const NODE_RADIUS = 12;
 const PORT_R = 6;
 const SNAP_THRESHOLD = 4;
@@ -128,6 +145,9 @@ export class FlowsFlowCanvas extends PlatformElement {
         _paletteDndActive: { state: true },
         _paletteDndHoverNodeId: { state: true },
         _paletteDndMode: { state: true },
+        _variableDropHoverNodeId: { state: true },
+        _hoverNodeId: { state: true },
+        _variableWire: { state: true },
     };
 
     static styles = [
@@ -409,17 +429,45 @@ export class FlowsFlowCanvas extends PlatformElement {
                 pointer-events: none;
                 transition: opacity var(--motion-duration-micro) var(--motion-ease-standard);
             }
-            g.node:hover .node-dataflow-edge,
+            g.node[data-dataflow-visible] .node-dataflow-edge,
             g.node[data-selected] .node-dataflow-edge,
-            g.node[data-multi-selected] .node-dataflow-edge {
+            g.node[data-multi-selected] .node-dataflow-edge,
+            .canvas-host[data-show-data-wires] g.node .node-dataflow-edge {
                 opacity: 1;
+            }
+            .node-dataflow-edge foreignObject,
+            .node-dataflow-edge .node-dataflow-stack,
+            .node-dataflow-chip {
+                pointer-events: none;
+            }
+            .node-dataflow-chip-hit {
+                fill: transparent;
+                stroke: transparent;
+                cursor: grab;
+                pointer-events: none;
+            }
+            g.node[data-dataflow-visible] .node-dataflow-chip-hit,
+            g.node[data-selected] .node-dataflow-chip-hit,
+            g.node[data-multi-selected] .node-dataflow-chip-hit,
+            .canvas-host[data-show-data-wires] g.node .node-dataflow-chip-hit {
+                pointer-events: all;
+            }
+            .node-dataflow-hover-pad {
+                fill: transparent;
+                stroke: transparent;
+                pointer-events: all;
+            }
+            .node-dataflow-chip-hit:active {
+                cursor: grabbing;
             }
             .node-dataflow-stack {
                 display: flex;
                 flex-direction: column;
                 gap: 4px;
-                width: 112px;
-                max-width: 112px;
+                width: 132px;
+                max-width: 132px;
+                height: 100%;
+                overflow: visible;
                 font-family: var(--font-sans);
             }
             .node-dataflow-stack[data-side="in"] {
@@ -429,12 +477,13 @@ export class FlowsFlowCanvas extends PlatformElement {
                 align-items: flex-start;
             }
             .node-dataflow-chip {
-                max-width: 112px;
+                max-width: 132px;
+                height: 24px;
                 box-sizing: border-box;
                 display: inline-flex;
                 align-items: center;
                 gap: 4px;
-                padding: 3px 7px;
+                padding: 0 7px;
                 border-radius: 7px;
                 border: 1px solid color-mix(in oklab, var(--node-accent) 22%, var(--glass-border-subtle));
                 background: color-mix(in oklab, var(--glass-solid-strong) 88%, var(--node-accent) 12%);
@@ -444,10 +493,33 @@ export class FlowsFlowCanvas extends PlatformElement {
                 line-height: 1.1;
                 box-shadow: 0 4px 12px rgba(0, 0, 0, 0.14);
             }
+            .node-dataflow-chip[data-has-producer="true"] {
+                height: 30px;
+            }
             .node-dataflow-chip[data-status="missing"] {
                 border-color: color-mix(in oklab, var(--error) 48%, var(--glass-border-subtle));
                 background: color-mix(in oklab, var(--error) 13%, var(--glass-solid-strong));
                 color: var(--error);
+            }
+            .node-dataflow-chip[data-required="true"] {
+                border-color: color-mix(in oklab, var(--node-accent) 46%, var(--glass-border-subtle));
+            }
+            .node-dataflow-chip .body {
+                display: flex;
+                flex-direction: column;
+                gap: 1px;
+                min-width: 0;
+            }
+            .node-dataflow-chip .label-row {
+                display: inline-flex;
+                align-items: center;
+                gap: 4px;
+                min-width: 0;
+            }
+            .node-dataflow-chip .req {
+                flex-shrink: 0;
+                color: var(--node-accent, var(--accent));
+                font-weight: var(--font-bold);
             }
             .node-dataflow-chip .label {
                 min-width: 0;
@@ -455,9 +527,44 @@ export class FlowsFlowCanvas extends PlatformElement {
                 text-overflow: ellipsis;
                 white-space: nowrap;
             }
+            .node-dataflow-chip .type {
+                flex-shrink: 0;
+                color: var(--text-tertiary);
+                font-weight: var(--font-medium);
+                font-size: 9px;
+                opacity: 0.85;
+            }
+            .node-dataflow-chip .producer {
+                color: var(--text-tertiary);
+                font-weight: var(--font-medium);
+                font-size: 9px;
+                overflow: hidden;
+                text-overflow: ellipsis;
+                white-space: nowrap;
+            }
             .node-dataflow-chip .dir {
                 flex-shrink: 0;
                 color: var(--text-tertiary);
+            }
+            .node-dataflow-chip[data-draggable="true"] {
+                cursor: grab;
+            }
+            .node-dataflow-chip[data-draggable="true"]:active {
+                cursor: grabbing;
+            }
+            svg.canvas-host[data-variable-wire-active] {
+                cursor: crosshair;
+            }
+            .edge-temp.variable-wire {
+                stroke: color-mix(in oklab, var(--accent) 82%, var(--success));
+                stroke-width: 2.25;
+            }
+            g.node[data-var-drop-target] .node-card {
+                stroke: var(--accent);
+                stroke-width: 2.5;
+            }
+            g.node[data-var-drop-target] .node-aura {
+                fill: color-mix(in oklab, var(--accent) 16%, transparent);
             }
 
             /* Бейджи */
@@ -468,6 +575,24 @@ export class FlowsFlowCanvas extends PlatformElement {
             }
             .badge-inherited {
                 fill: var(--text-tertiary);
+            }
+            .badge-problems-bg {
+                fill: var(--warning);
+                stroke: var(--bg-primary);
+                stroke-width: 1.5;
+            }
+            .badge-problems[data-severity="error"] .badge-problems-bg {
+                fill: var(--error);
+            }
+            .badge-problems-count {
+                fill: var(--bg-primary);
+                font-size: 9px;
+                font-weight: var(--font-bold);
+                font-family: var(--font-sans);
+                pointer-events: none;
+            }
+            g.node[data-has-errors] .node-card {
+                stroke: color-mix(in oklab, var(--error) 62%, var(--glass-border-subtle));
             }
 
             /* Бейдж fan-in на входном порту (>=2 входящих рёбер) */
@@ -515,6 +640,32 @@ export class FlowsFlowCanvas extends PlatformElement {
             }
             .port.in:hover {
                 fill: var(--node-accent, var(--accent));
+            }
+
+            /* Связи по данным (data-flow), отличаются от control-рёбер */
+            .data-wires-layer {
+                pointer-events: none;
+            }
+            .data-wire-path {
+                fill: none;
+                stroke: color-mix(in oklab, var(--accent) 70%, transparent);
+                stroke-width: 1.75;
+                stroke-dasharray: 5 4;
+                stroke-linecap: round;
+                opacity: 0.9;
+            }
+            .data-wire-label {
+                fill: var(--accent);
+                font-family: var(--font-sans);
+                font-size: 9px;
+                font-weight: var(--font-semibold);
+                paint-order: stroke;
+                stroke: var(--bg-primary);
+                stroke-width: 3;
+            }
+            g.node[data-dimmed] {
+                opacity: 0.28;
+                transition: opacity var(--motion-duration-micro) var(--motion-ease-standard);
             }
 
             /* Рёбра */
@@ -699,6 +850,10 @@ export class FlowsFlowCanvas extends PlatformElement {
         this._paletteDndActive = false;
         this._paletteDndHoverNodeId = null;
         this._paletteDndMode = null;
+        this._variableDropHoverNodeId = null;
+        this._hoverNodeId = null;
+        this._variableWire = null;
+        this._lineageSet = null;
         this._editor = this.useOp('flows/editor');
         this._bulkDelete = this.useOp('flows/editor_bulk_delete');
         this._stickyUpsert = this.useOp('flows/sticky_note_upsert');
@@ -804,6 +959,16 @@ export class FlowsFlowCanvas extends PlatformElement {
         return { x, y };
     }
 
+    _getSvgScreenScale() {
+        const svgEl = this.renderRoot.querySelector('svg.canvas-host');
+        if (!svgEl) return 1;
+        const ctm = svgEl.getScreenCTM();
+        if (!ctm) return 1;
+        const scale = ctm.a;
+        if (!(scale > 0)) return 1;
+        return scale;
+    }
+
     _localPoint(clientX, clientY) {
         const svgEl = this.renderRoot.querySelector('svg.canvas-host');
         if (!svgEl) return { x: 0, y: 0 };
@@ -848,6 +1013,22 @@ export class FlowsFlowCanvas extends PlatformElement {
             const w = NODE_W;
             const h = getNodeCanvasHeight(node);
             if (local.x >= x && local.x <= x + w && local.y >= y && local.y <= y + h) {
+                hit = id;
+            }
+        }
+        return hit;
+    }
+
+    _findNodeAtLocalForVariableWire(local) {
+        const nodes = this._nodes();
+        let hit = null;
+        for (const [id, node] of Object.entries(nodes)) {
+            const x = asNumber(node.pos_x);
+            const y = asNumber(node.pos_y);
+            const h = getNodeCanvasHeight(node);
+            const left = x - DATAFLOW_CHIP_ZONE_W;
+            const right = x + NODE_W + DATAFLOW_CHIP_ZONE_W;
+            if (local.x >= left && local.x <= right && local.y >= y && local.y <= y + h) {
                 hit = id;
             }
         }
@@ -1106,7 +1287,12 @@ export class FlowsFlowCanvas extends PlatformElement {
         if (e.button === 0 || e.button === 1) {
             e.preventDefault();
             const vb = this._viewBox();
-            this._pan = { startClientX: e.clientX, startClientY: e.clientY, origVB: { ...vb } };
+            this._pan = {
+                startClientX: e.clientX,
+                startClientY: e.clientY,
+                origVB: { ...vb },
+                screenScale: this._getSvgScreenScale(),
+            };
             this.renderRoot.querySelector('svg.canvas-host').setPointerCapture(e.pointerId);
         }
     }
@@ -1119,12 +1305,9 @@ export class FlowsFlowCanvas extends PlatformElement {
         }
         if (this._pan) {
             const vb = this._pan.origVB;
-            const svgEl = this.renderRoot.querySelector('svg.canvas-host');
-            const rect = svgEl.getBoundingClientRect();
-            const scaleX = vb.w / rect.width;
-            const scaleY = vb.h / rect.height;
-            const dx = (e.clientX - this._pan.startClientX) * scaleX;
-            const dy = (e.clientY - this._pan.startClientY) * scaleY;
+            const scale = this._pan.screenScale;
+            const dx = (e.clientX - this._pan.startClientX) / scale;
+            const dy = (e.clientY - this._pan.startClientY) / scale;
             this._editor.setViewBox({ viewBox: { x: vb.x - dx, y: vb.y - dy, w: vb.w, h: vb.h } });
             return;
         }
@@ -1168,6 +1351,21 @@ export class FlowsFlowCanvas extends PlatformElement {
         if (this._connection) {
             const local = this._localPoint(e.clientX, e.clientY);
             this._connection = { ...this._connection, x2: local.x, y2: local.y };
+            return;
+        }
+        if (this._variableWire) {
+            const local = this._localPoint(e.clientX, e.clientY);
+            const hit = this._findNodeAtLocalForVariableWire(local);
+            let dirty = false;
+            if (this._variableWire.x2 !== local.x || this._variableWire.y2 !== local.y) {
+                this._variableWire = { ...this._variableWire, x2: local.x, y2: local.y };
+                dirty = true;
+            }
+            if (this._variableDropHoverNodeId !== hit) {
+                this._variableDropHoverNodeId = hit;
+                dirty = true;
+            }
+            if (dirty) this.requestUpdate();
             return;
         }
         if (this._selectionRect) {
@@ -1253,6 +1451,18 @@ export class FlowsFlowCanvas extends PlatformElement {
             }
             this._connection = null;
             this._pointerDownAt = null;
+            return;
+        }
+        if (this._variableWire) {
+            const wire = this._variableWire;
+            this._variableWire = null;
+            const targetNodeId = this._variableDropHoverNodeId;
+            this._variableDropHoverNodeId = null;
+            if (this._pointerMoved && targetNodeId && targetNodeId !== wire.fromNodeId) {
+                this._openVariableMapping(wire.fromNodeId, wire.path, wire.type, targetNodeId);
+            }
+            this._pointerDownAt = null;
+            this.requestUpdate();
             return;
         }
         if (this._selectionRect) {
@@ -1421,7 +1631,99 @@ export class FlowsFlowCanvas extends PlatformElement {
         if (dirty) this.requestUpdate();
     }
 
+    _isVariableDrag(e) {
+        const types = e && e.dataTransfer ? e.dataTransfer.types : null;
+        if (!types) return false;
+        return Array.from(types).includes('application/x-flow-variable');
+    }
+
+    _onOutputChipPointerDown(e, fromNodeId, chip, chipIndex) {
+        if (e.button !== 0) return;
+        e.stopPropagation();
+        e.preventDefault();
+        const path = dataflowChipLabel(chip);
+        if (!path || typeof fromNodeId !== 'string' || fromNodeId.length === 0) return;
+        const fromNode = this._nodes()[fromNodeId];
+        if (!fromNode) return;
+        const type = chip && typeof chip.type === 'string' ? chip.type : 'any';
+        const df = this._dataflowForNode(fromNodeId);
+        const outputs = df && df.canvas && Array.isArray(df.canvas.outputs) ? df.canvas.outputs : [];
+        const inputs = df && df.canvas && Array.isArray(df.canvas.inputs) ? df.canvas.inputs : [];
+        const resolvedIndex = typeof chipIndex === 'number' && chipIndex >= 0
+            ? chipIndex
+            : findOutputChipIndex(outputs, path);
+        const outIdx = resolvedIndex >= 0 ? resolvedIndex : 0;
+        const nodeX = asNumber(fromNode.pos_x);
+        const nodeY = asNumber(fromNode.pos_y);
+        const nodeH = getNodeCanvasHeight(fromNode);
+        const start = dataflowChipAnchor(nodeX, nodeY, nodeH, NODE_W, 'out', outIdx, inputs, outputs);
+        this._pointerDownAt = { x: e.clientX, y: e.clientY, button: e.button };
+        this._pointerMoved = false;
+        this._hoverNodeId = fromNodeId;
+        this._variableWire = {
+            fromNodeId,
+            path,
+            type,
+            x1: start.x,
+            y1: start.y,
+            x2: start.x,
+            y2: start.y,
+        };
+        this.renderRoot.querySelector('svg.canvas-host')?.setPointerCapture(e.pointerId);
+    }
+
+    _openVariableMapping(fromNodeId, sourcePath, sourceType, targetNodeId) {
+        if (!fromNodeId || !sourcePath || !targetNodeId || fromNodeId === targetNodeId) return;
+        const nodes = this._nodes();
+        const nameOf = (nid) => {
+            const n = nodes && typeof nodes === 'object' ? nodes[nid] : null;
+            return n && typeof n.name === 'string' && n.name.length > 0 ? n.name : nid;
+        };
+        this.openModal('flows.variable_mapping', {
+            fromNodeId,
+            fromNodeName: nameOf(fromNodeId),
+            targetNodeId,
+            targetNodeName: nameOf(targetNodeId),
+            sourcePath,
+            sourceType: typeof sourceType === 'string' ? sourceType : 'any',
+            pathExists: hasControlPath(fromNodeId, targetNodeId, asArray(this._branchData().edges)),
+        });
+    }
+
+    _onOutputChipDragStart(e, fromNodeId, chip) {
+        const path = this._dataflowChipLabel(chip);
+        if (!path || typeof fromNodeId !== 'string' || fromNodeId.length === 0) return;
+        const type = chip && typeof chip.type === 'string' ? chip.type : 'any';
+        e.dataTransfer.setData('application/x-flow-variable', JSON.stringify({ fromNode: fromNodeId, path, type }));
+        e.dataTransfer.effectAllowed = 'link';
+        e.stopPropagation();
+    }
+
+    _handleVariableDrop(e, targetNodeId) {
+        let payload = null;
+        try {
+            payload = JSON.parse(e.dataTransfer.getData('application/x-flow-variable'));
+        } catch {
+            payload = null;
+        }
+        if (!payload || typeof payload !== 'object') return;
+        const fromNode = typeof payload.fromNode === 'string' ? payload.fromNode : '';
+        const path = typeof payload.path === 'string' ? payload.path : '';
+        const type = typeof payload.type === 'string' ? payload.type : 'any';
+        this._openVariableMapping(fromNode, path, type, targetNodeId);
+    }
+
     _onNodeCardDragOver(e, nodeId) {
+        if (this._isVariableDrag(e)) {
+            e.preventDefault();
+            e.stopPropagation();
+            e.dataTransfer.dropEffect = 'link';
+            if (this._variableDropHoverNodeId !== nodeId) {
+                this._variableDropHoverNodeId = nodeId;
+                this.requestUpdate();
+            }
+            return;
+        }
         const mode = this._inferPaletteDndMode(e);
         if (!mode) return;
         e.preventDefault();
@@ -1444,6 +1746,15 @@ export class FlowsFlowCanvas extends PlatformElement {
     }
 
     _onNodeCardDragLeave(e, nodeId) {
+        if (this._isVariableDrag(e)) {
+            const rel = e.relatedTarget;
+            if (rel instanceof Node && e.currentTarget.contains(rel)) return;
+            if (this._variableDropHoverNodeId === nodeId) {
+                this._variableDropHoverNodeId = null;
+                this.requestUpdate();
+            }
+            return;
+        }
         const mode = this._inferPaletteDndMode(e);
         if (mode !== 'resource') return;
         const rel = e.relatedTarget;
@@ -1455,6 +1766,14 @@ export class FlowsFlowCanvas extends PlatformElement {
     }
 
     _onNodeCardDrop(e, nodeId) {
+        if (this._isVariableDrag(e)) {
+            e.preventDefault();
+            e.stopPropagation();
+            this._variableDropHoverNodeId = null;
+            this.requestUpdate();
+            this._handleVariableDrop(e, nodeId);
+            return;
+        }
         const nodeType = e.dataTransfer.getData('application/x-flow-node-type');
         const resourceType = e.dataTransfer.getData('application/x-flow-resource-type');
         if (!nodeType && !resourceType) return;
@@ -1899,47 +2218,193 @@ export class FlowsFlowCanvas extends PlatformElement {
     }
 
     _dataflowChipLabel(chip) {
-        const raw = chip && typeof chip.label === 'string'
-            ? chip.label
-            : chip && typeof chip.target === 'string'
-                ? chip.target
-                : '';
-        return raw.length > 0 ? raw : 'state';
+        return dataflowChipLabel(chip);
+    }
+
+    _nodeLabel(nodeId) {
+        if (typeof nodeId !== 'string' || nodeId.length === 0) return '';
+        const nodes = this._nodes();
+        const node = nodes && typeof nodes === 'object' ? nodes[nodeId] : null;
+        const name = node && typeof node.name === 'string' ? node.name : '';
+        return name.length > 0 ? name : nodeId;
+    }
+
+    _dataflowProblems(nodeId) {
+        const df = this._dataflowForNode(nodeId);
+        const canvas = df && typeof df.canvas === 'object' ? df.canvas : null;
+        return countNodeDataflowProblems(canvas);
+    }
+
+    _dataWires(nodes) {
+        const df = this._state()?.dataflow?.nodes;
+        return buildDataWires(df, nodes);
+    }
+
+    _renderDataWire(wire, nodes) {
+        const fromNode = nodes[wire.from];
+        const toNode = nodes[wire.to];
+        if (!fromNode || !toNode) return svg``;
+        const dataflowNodes = this._state()?.dataflow?.nodes;
+        const endpoints = resolveDataWireEndpoints(
+            wire,
+            fromNode,
+            toNode,
+            dataflowNodes,
+            NODE_W,
+            getNodeCanvasHeight,
+        );
+        if (!endpoints) return svg``;
+        const { start, end } = endpoints;
+        const mid = midpoint(start.x, start.y, end.x, end.y);
+        return svg`
+            <g class="data-wire">
+                <path class="data-wire-path" d=${dataWirePathFor(start.x, start.y, end.x, end.y)}></path>
+                ${wire.label ? svg`<text class="data-wire-label" x=${mid.x} y=${mid.y - 5} text-anchor="middle">${wire.label}</text>` : ''}
+            </g>
+        `;
+    }
+
+    _onNodeMouseEnter(nodeId) {
+        if (this._hoverNodeId !== nodeId) {
+            this._hoverNodeId = nodeId;
+            this.requestUpdate();
+        }
+    }
+
+    _isPointerStillInNodeHoverZone(event, nodeId) {
+        const group = this.renderRoot.querySelector(`g.node[data-node-id="${nodeId}"]`);
+        if (!group || !event || !event.relatedTarget) return false;
+        let el = event.relatedTarget;
+        while (el) {
+            if (el === group) return true;
+            const parent = el.parentNode;
+            if (parent) {
+                el = parent;
+                continue;
+            }
+            const root = typeof el.getRootNode === 'function' ? el.getRootNode() : null;
+            const host = root && typeof root === 'object' && 'host' in root ? root.host : null;
+            el = host || null;
+        }
+        return false;
+    }
+
+    _onNodeMouseLeave(event, nodeId) {
+        if (this._variableWire && this._variableWire.fromNodeId === nodeId) return;
+        if (this._variableDropHoverNodeId === nodeId) return;
+        if (this._isPointerStillInNodeHoverZone(event, nodeId)) return;
+        if (this._hoverNodeId === nodeId) {
+            this._hoverNodeId = null;
+            this.requestUpdate();
+        }
+    }
+
+    _isDataflowVisibleForNode(nodeId, { isSelected, isMulti, showAllWires }) {
+        if (showAllWires) return true;
+        if (isSelected || isMulti) return true;
+        if (this._hoverNodeId === nodeId) return true;
+        if (this._lineageSet && this._lineageSet.has(nodeId)) return true;
+        if (this._variableWire && this._variableWire.fromNodeId === nodeId) return true;
+        if (this._variableDropHoverNodeId === nodeId) return true;
+        return false;
     }
 
     _renderNodeDataflowEdgeChips(id, h) {
         const df = this._dataflowForNode(id);
         if (!df || !df.canvas || typeof df.canvas !== 'object') return svg``;
-        const inputs = Array.isArray(df.canvas.inputs) ? df.canvas.inputs.slice(0, 3) : [];
-        const outputs = Array.isArray(df.canvas.outputs) ? df.canvas.outputs.slice(0, 3) : [];
+        const inputs = Array.isArray(df.canvas.inputs) ? df.canvas.inputs : [];
+        const outputs = Array.isArray(df.canvas.outputs) ? df.canvas.outputs : [];
         if (inputs.length === 0 && outputs.length === 0) return svg``;
-        const chipHostHeight = 74;
-        const y = Math.max(-12, (h - chipHostHeight) / 2);
+        const layout = dataflowNodeChipLayout(h, inputs, outputs);
+        const y = layout.stackY;
+        const chipHostHeight = layout.chipHostHeight;
         const renderStack = (chips, side) => html`
-            <div xmlns="http://www.w3.org/1999/xhtml" class="node-dataflow-stack" data-side=${side}>
+            <div
+                xmlns="http://www.w3.org/1999/xhtml"
+                class="node-dataflow-stack"
+                data-side=${side}
+            >
                 ${chips.map((chip) => {
                     const label = this._dataflowChipLabel(chip);
                     const status = chip && chip.status === 'missing' ? 'missing' : 'ok';
+                    const type = chip && typeof chip.type === 'string' ? chip.type : '';
+                    const required = !!(chip && chip.required);
+                    const producer = side === 'in' && chip && typeof chip.producer_node === 'string'
+                        ? this._nodeLabel(chip.producer_node)
+                        : '';
+                    const title = [
+                        label,
+                        type ? `: ${type}` : '',
+                        producer ? ` (${this.t('canvas.dataflow.from')} ${producer})` : '',
+                        required ? ` — ${this.t('canvas.dataflow.required')}` : '',
+                    ].join('');
                     return html`
-                        <span class="node-dataflow-chip" data-status=${status} title=${label}>
-                            ${side === 'in' ? html`<span class="dir">←</span>` : ''}
-                            <span class="label">${label}</span>
-                            ${side === 'out' ? html`<span class="dir">→</span>` : ''}
+                        <span
+                            class="node-dataflow-chip"
+                            data-status=${status}
+                            data-required=${required ? 'true' : 'false'}
+                            data-draggable=${side === 'out' ? 'true' : 'false'}
+                            data-has-producer=${side === 'in' && producer ? 'true' : 'false'}
+                            title=${title}
+                        >
+                            <span class="body">
+                                <span class="label-row">
+                                    ${required ? html`<span class="req" title=${this.t('canvas.dataflow.required')}>*</span>` : ''}
+                                    <span class="label">${label}</span>
+                                    ${type ? html`<span class="type">${type}</span>` : ''}
+                                </span>
+                                ${producer ? html`<span class="producer">${this.t('canvas.dataflow.from')} ${producer}</span>` : ''}
+                            </span>
+                            <span class="dir" aria-hidden="true">→</span>
                         </span>
                     `;
                 })}
             </div>
         `;
+        const renderOutputHits = () => outputs.map((chip, index) => {
+            const rect = dataflowChipRect(y, layout.outputHeights, index);
+            const label = this._dataflowChipLabel(chip);
+            return svg`
+                <rect
+                    class="node-dataflow-chip-hit"
+                    x=${NODE_W + 8}
+                    y=${rect.y}
+                    width=${DATAFLOW_CHIP_W}
+                    height=${rect.height}
+                    data-output-path=${label}
+                    @pointerdown=${(ev) => this._onOutputChipPointerDown(ev, id, chip, index)}
+                ></rect>
+            `;
+        });
         return svg`
             ${inputs.length > 0 ? svg`
-                <foreignObject class="node-dataflow-edge" x="-124" y=${y} width="116" height=${chipHostHeight}>
+                <rect
+                    class="node-dataflow-hover-pad"
+                    x=${-DATAFLOW_CHIP_ZONE_W}
+                    y=${y}
+                    width=${DATAFLOW_CHIP_ZONE_W + DATAFLOW_CHIP_INSET}
+                    height=${chipHostHeight}
+                    @pointerenter=${() => this._onNodeMouseEnter(id)}
+                    @pointerleave=${(ev) => this._onNodeMouseLeave(ev, id)}
+                ></rect>
+                <foreignObject class="node-dataflow-edge" x="-144" y=${y} width="136" height=${chipHostHeight}>
                     ${renderStack(inputs, 'in')}
                 </foreignObject>
             ` : ''}
             ${outputs.length > 0 ? svg`
-                <foreignObject class="node-dataflow-edge" x=${NODE_W + 8} y=${y} width="116" height=${chipHostHeight}>
+                <rect
+                    class="node-dataflow-hover-pad"
+                    x=${NODE_W}
+                    y=${y}
+                    width=${DATAFLOW_CHIP_INSET + DATAFLOW_CHIP_HOST_W}
+                    height=${chipHostHeight}
+                    @pointerenter=${() => this._onNodeMouseEnter(id)}
+                    @pointerleave=${(ev) => this._onNodeMouseLeave(ev, id)}
+                ></rect>
+                <foreignObject class="node-dataflow-edge" x=${NODE_W + 8} y=${y} width="136" height=${chipHostHeight}>
                     ${renderStack(outputs, 'out')}
                 </foreignObject>
+                ${renderOutputHits()}
             ` : ''}
         `;
     }
@@ -1971,8 +2436,11 @@ export class FlowsFlowCanvas extends PlatformElement {
         else if (asArray(state.completedNodeIds).includes(id)) runtimeState = 'completed';
         const isInherited = asArray(state.inheritedNodeIds).includes(id);
         const isResource = this._isResourceNode(node);
+        const problems = this._dataflowProblems(id);
         const showFanInEffective = !isResource && inDegree >= 2;
         const hasToolStrip = canvasTools.length > 0;
+        const showAllWires = Boolean(state.showDataWires);
+        const dataflowVisible = this._isDataflowVisibleForNode(id, { isSelected, isMulti, showAllWires });
         const foBody = html`
             <div
                 xmlns="http://www.w3.org/1999/xhtml"
@@ -2043,9 +2511,16 @@ export class FlowsFlowCanvas extends PlatformElement {
                 data-cat=${meta.category}
                 data-state=${asString(runtimeState)}
                 style=${nodeStyle}
+                ?data-has-problems=${problems.total > 0}
+                ?data-has-errors=${problems.errors > 0}
+                ?data-var-drop-target=${this._variableDropHoverNodeId === id}
+                ?data-dataflow-visible=${dataflowVisible}
+                ?data-dimmed=${this._lineageSet != null && !this._lineageSet.has(id)}
                 ?data-palette-drop-target=${this._paletteDndMode === 'resource' && this._paletteDndHoverNodeId === id}
                 @pointerdown=${(e) => this._onPointerDownNode(e, id)}
                 @contextmenu=${(e) => this._onContextMenu(e, 'node', id)}
+                @mouseenter=${() => this._onNodeMouseEnter(id)}
+                @mouseleave=${(e) => this._onNodeMouseLeave(e, id)}
                 @dblclick=${() => this._editor.selectNode({ nodeId: id })}
             >
                 <rect class="node-aura" x="-5" y="-5" width=${NODE_W + 10} height=${h + 10} rx=${NODE_RADIUS + 5} ry=${NODE_RADIUS + 5}></rect>
@@ -2054,6 +2529,12 @@ export class FlowsFlowCanvas extends PlatformElement {
                 <foreignObject x="0" y="0" width=${NODE_W} height=${h}>${foBody}</foreignObject>
                 ${this._renderNodeDataflowEdgeChips(id, h)}
                 ${hasBp ? svg`<circle class="badge-bp-circle" cx=${NODE_W - 8} cy="8" r="5"></circle>` : ''}
+                ${problems.total > 0 ? svg`
+                    <g class="badge-problems" data-severity=${problems.errors > 0 ? 'error' : 'warning'} transform="translate(8, 8)">
+                        <circle class="badge-problems-bg" cx="0" cy="0" r="8"></circle>
+                        <text class="badge-problems-count" x="0" y="0.5" text-anchor="middle" dominant-baseline="central">${problems.total > 9 ? '9+' : problems.total}</text>
+                    </g>
+                ` : ''}
                 ${isInherited ? svg`<text class="badge-inherited" x="6" y=${h - 6} font-size="10">↑</text>` : ''}
                 ${showFanInEffective
                     ? this._renderFanInBadge(id, node)
@@ -2301,6 +2782,20 @@ export class FlowsFlowCanvas extends PlatformElement {
             inDegrees.set(to_node, prev + 1);
         }
 
+        const showAllWires = Boolean(state.showDataWires);
+        const hoverId = this._hoverNodeId;
+        let dataWires = [];
+        this._lineageSet = null;
+        if (showAllWires || hoverId) {
+            const allWires = this._dataWires(nodes);
+            if (hoverId) {
+                dataWires = allWires.filter((w) => w.from === hoverId || w.to === hoverId);
+                this._lineageSet = buildLineageSet(hoverId, dataWires);
+            } else {
+                dataWires = allWires;
+            }
+        }
+
         return html`
             <svg
                 class="canvas-host"
@@ -2309,6 +2804,8 @@ export class FlowsFlowCanvas extends PlatformElement {
                 ?data-pan-active=${panActive}
                 ?data-link-mode=${linkMode}
                 ?data-palette-dnd-active=${this._paletteDndActive}
+                ?data-show-data-wires=${showAllWires}
+                ?data-variable-wire-active=${Boolean(this._variableWire)}
                 @wheel=${this._onWheel}
                 @pointerdown=${this._onPointerDownBackground}
                 @pointermove=${this._onPointerMove}
@@ -2336,6 +2833,9 @@ export class FlowsFlowCanvas extends PlatformElement {
                     ${this._connection
                         ? svg`<path class="edge-temp" d=${pathFor(this._connection.x1, this._connection.y1, this._connection.x2, this._connection.y2)}></path>`
                         : ''}
+                    ${this._variableWire
+                        ? svg`<path class="edge-temp variable-wire" d=${pathFor(this._variableWire.x1, this._variableWire.y1, this._variableWire.x2, this._variableWire.y2)}></path>`
+                        : ''}
                 </g>
 
                 <g class="guides-layer">${this._renderSmartGuides()}</g>
@@ -2343,6 +2843,8 @@ export class FlowsFlowCanvas extends PlatformElement {
                 <g class="nodes-layer">
                     ${Object.entries(nodes).map(([id, node]) => this._renderNode(id, node, inDegrees.has(id) ? inDegrees.get(id) : 0))}
                 </g>
+
+                <g class="data-wires-layer">${dataWires.map((wire) => this._renderDataWire(wire, nodes))}</g>
 
                 ${this._renderSelectionRect()}
             </svg>

@@ -94,21 +94,35 @@ export class PlatformCompanyVariableEditorModal extends PlatformFormModal {
         this._secret = false;
         this._sharedForExecution = false;
         this._payload = _defaultPayload();
+        this._loadSeq = 0;
         this._variables = this.useResource('secrets/variables');
     }
 
     updated(changed) {
         super.updated?.(changed);
-        if (changed.has('variableKey') && this.variableKey) {
-            this._loadExisting(this.variableKey);
+        if (changed.has('variableKey')) {
+            if (this.variableKey) {
+                void this._loadExisting(this.variableKey);
+            } else {
+                this._resetCreateForm();
+            }
         }
     }
 
-    async _loadExisting(variableKey) {
-        const item = await this._variables.get(variableKey);
-        if (!item) {
-            throw new Error(`platform-company-variable-editor-modal: variable "${variableKey}" not found`);
-        }
+    _resetCreateForm() {
+        this._loadSeq += 1;
+        this._key = '';
+        this._title = '';
+        this._description = '';
+        this._order = '';
+        this._groups = '';
+        this._public = false;
+        this._secret = false;
+        this._sharedForExecution = false;
+        this._payload = _defaultPayload();
+    }
+
+    _applyItem(item) {
         this._key = item.variable_key;
         this._title = item.title ?? '';
         this._description = item.description ?? '';
@@ -118,6 +132,19 @@ export class PlatformCompanyVariableEditorModal extends PlatformFormModal {
         this._secret = Boolean(item.secret);
         this._sharedForExecution = Boolean(item.shared_for_execution);
         this._payload = _payloadFromItem(item);
+    }
+
+    async _loadExisting(variableKey) {
+        const seq = ++this._loadSeq;
+        const cached = this._variables.byId[variableKey];
+        if (cached) {
+            this._applyItem(cached);
+        }
+        const item = await this._variables.fetchItem(variableKey);
+        if (seq !== this._loadSeq) {
+            return;
+        }
+        this._applyItem(item);
     }
 
     renderHeader() {

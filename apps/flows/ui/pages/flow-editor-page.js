@@ -30,6 +30,7 @@ import '../components/editor/flows-node-ai-helper.js';
 import '../components/flow-canvas/flows-flow-canvas.js';
 import '../modals/flows-edge-condition-modal.js';
 import '../modals/flows-incoming-policy-modal.js';
+import '../modals/flows-variable-mapping-modal.js';
 import '../modals/flows-library-picker-modal.js';
 import '../modals/flows-tool-create-modal.js';
 import '../modals/flows-embedded-tool-config-modal.js';
@@ -221,6 +222,7 @@ export class FlowEditorPage extends PlatformPage {
             nodes: branchData.nodes,
             edges: Array.isArray(branchData.edges) ? branchData.edges : [],
             variables: isPlainObject(branchData.variables) ? branchData.variables : {},
+            triggers: isPlainObject(state.flowConfig?.triggers) ? state.flowConfig.triggers : {},
             sample_state: isPlainObject(state.previewExecutionState) ? state.previewExecutionState : null,
             observed_runs: isPlainObject(state.dataflowObservations) ? state.dataflowObservations : {},
         };

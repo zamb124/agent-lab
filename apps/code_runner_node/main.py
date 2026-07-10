@@ -1,5 +1,6 @@
 """FastAPI entrypoint code-runner-node."""
 
+from apps.code_runner_node.api.v1.analyze import router as analyze_router
 from apps.code_runner_node.api.v1.execute import router as execute_router
 from apps.code_runner_node.api.v1.validate import router as validate_router
 from apps.code_runner_node.config import CodeRunnerNodeSettings, get_code_runner_node_settings
@@ -10,7 +11,7 @@ app = create_service_app(
     service_name="code_runner_node",
     settings_class=CodeRunnerNodeSettings,
     get_container=get_code_runner_node_container,
-    routers=[execute_router, validate_router],
+    routers=[execute_router, validate_router, analyze_router],
     cors_origins=["*"],
     title="Platform Node Code Runner",
     description="Untrusted JavaScript/TypeScript sandbox runner",

@@ -96,6 +96,10 @@ export class FlowsBaseNodeEditor extends PlatformElement {
                 flex-direction: column;
                 gap: var(--space-5);
                 min-width: 0;
+                min-height: 0;
+            }
+            .panel-main > .section {
+                flex-shrink: 0;
             }
 
             /* Секции */
@@ -185,6 +189,9 @@ export class FlowsBaseNodeEditor extends PlatformElement {
             }
             .dataflow-mapping-shell {
                 padding: var(--space-3);
+                border: 1px solid var(--border-subtle);
+                border-radius: var(--radius-xl);
+                background: var(--glass-solid-subtle);
             }
             .dataflow-mapping-shell .section-title {
                 margin-bottom: var(--space-2);
@@ -1728,7 +1735,7 @@ export class FlowsBaseNodeEditor extends PlatformElement {
 
     _renderDataflowMapping() {
         return html`
-            <div class="section dataflow-mapping-shell content-panel">
+            <div class="section dataflow-mapping-shell">
                 <div class="section-title">${this.t('base_node_editor.section_dataflow')}</div>
                 <div class="dataflow-mapping-grid">
                     ${this._renderDataflowLanes()}

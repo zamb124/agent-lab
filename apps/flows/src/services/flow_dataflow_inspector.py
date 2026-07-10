@@ -6,7 +6,6 @@ Inspector намеренно консервативен: не исполняет
 
 from __future__ import annotations
 
-import ast
 import copy
 import re
 from collections import defaultdict, deque
@@ -26,6 +25,7 @@ from apps.flows.src.models import (
     DataflowIssue,
     DataflowMappingSource,
     DataflowNodeInfo,
+    DataflowRequiredInput,
     DataflowSeverity,
     DataflowSource,
     DataflowStateDescriptor,
@@ -33,9 +33,12 @@ from apps.flows.src.models import (
     Edge,
     FlowVariableConfig,
     GraphNodeConfig,
+    TriggerConfig,
 )
+from core.code_contract import CodeContract, scan_code_contract
 from core.state.mutation_policy import FROZEN_STATE_FIELDS
 from core.types import JsonObject, JsonValue, require_json_object
+from core.variables import scan_prompt_template
 
 SYSTEM_STATE_FIELDS: dict[str, str] = {
     "content": "string|null",
@@ -57,7 +60,8 @@ SYSTEM_STATE_FIELDS: dict[str, str] = {
 }
 
 MAX_STATE_FIELDS_PER_NODE = 220
-MAX_CANVAS_CHIPS = 3
+
+CANVAS_START_TOP_LEVEL_FIELDS = frozenset({"content", "files"})
 
 
 def inspect_flow_dataflow(
@@ -70,6 +74,7 @@ def inspect_flow_dataflow(
     variables: Mapping[str, FlowVariableConfig] | None = None,
     sample_state: JsonObject | None = None,
     observed_runs: JsonObject | None = None,
+    triggers: Mapping[str, TriggerConfig] | None = None,
 ) -> DataflowInspectResult:
     node_payloads: dict[str, JsonObject] = {
         node_id: require_json_object(
@@ -85,7 +90,10 @@ def inspect_flow_dataflow(
         entry if isinstance(entry, str) and entry else _infer_entry(node_payloads, edge_list)
     )
 
-    seed = _initial_state_map(variables or {}, sample_state or {})
+    normalized_variables = variables or {}
+    normalized_triggers = triggers or {}
+    sanitized_sample = _sanitize_sample_state_for_inspect(sample_state, normalized_variables)
+    seed = _initial_state_map(normalized_variables, sanitized_sample)
     incoming_by_node = _incoming_edges(edge_list)
     outgoing_by_node = _outgoing_edges(edge_list)
     reachable = _reachable_nodes(normalized_entry, outgoing_by_node)
@@ -138,7 +146,13 @@ def inspect_flow_dataflow(
         info.output_state = _summarize_state_map(
             out_states.get(node_id, in_states.get(node_id, seed))
         )
-        info.canvas = _canvas_summary(info)
+        info.canvas = _canvas_summary(
+            info,
+            is_entry=node_id == normalized_entry,
+            seed=in_states.get(node_id, seed),
+            variables=normalized_variables,
+            triggers=normalized_triggers,
+        )
 
     return DataflowInspectResult(
         flow_id=flow_id,
@@ -207,7 +221,7 @@ def _initial_state_map(
             protected=path in FROZEN_STATE_FIELDS,
         )
     out.update(_variable_state_map(variables))
-    for path, value in _flatten_value(sample_state).items():
+    for path, value in _flatten_sample_state_paths(sample_state, variables).items():
         existing = out.get(path)
         desc = _descriptor(
             path,
@@ -220,6 +234,110 @@ def _initial_state_map(
         )
         out[path] = _merge_descriptor(existing, desc) if existing else desc
     return out
+
+
+def _is_system_descriptor(desc: DataflowStateDescriptor) -> bool:
+    return "system" in set(_as_list(desc.source))
+
+
+def _sanitize_sample_state_for_inspect(
+    sample_state: JsonObject | None,
+    variables: Mapping[str, FlowVariableConfig],
+) -> JsonObject:
+    if not sample_state:
+        return {}
+    out: JsonObject = {}
+    if "content" in sample_state:
+        out["content"] = sample_state["content"]
+    if "files" in sample_state:
+        out["files"] = sample_state["files"]
+    raw_variables = sample_state.get("variables")
+    if isinstance(raw_variables, dict):
+        variables_obj = require_json_object(raw_variables, "sample_state.variables")
+        trimmed_variables: JsonObject = {}
+        for key in variables:
+            if key in variables_obj:
+                trimmed_variables[key] = variables_obj[key]
+        if trimmed_variables:
+            out["variables"] = trimmed_variables
+    return out
+
+
+def _flatten_sample_state_paths(
+    sample_state: JsonObject,
+    variables: Mapping[str, FlowVariableConfig],
+) -> dict[str, JsonValue]:
+    sanitized = _sanitize_sample_state_for_inspect(sample_state, variables)
+    out: dict[str, JsonValue] = {}
+    for top_key, value in sanitized.items():
+        if top_key in CANVAS_START_TOP_LEVEL_FIELDS:
+            out[top_key] = value
+            continue
+        if top_key == "variables" and isinstance(value, dict):
+            variables_obj = require_json_object(value, "variables")
+            for var_key in variables:
+                if var_key in variables_obj:
+                    out[f"variables.{var_key}"] = variables_obj[var_key]
+    return out
+
+
+def _build_entry_canvas_inputs(
+    seed: dict[str, DataflowStateDescriptor],
+    variables: Mapping[str, FlowVariableConfig],
+    triggers: Mapping[str, TriggerConfig],
+) -> list[DataflowCanvasChip]:
+    chips: list[DataflowCanvasChip] = []
+    seen_labels: set[str] = set()
+
+    def add_chip(
+        label: str,
+        *,
+        type_name: str = "any",
+        required: bool = False,
+    ) -> None:
+        if not label or label in seen_labels:
+            return
+        seen_labels.add(label)
+        descriptor = seed.get(label)
+        chips.append(
+            DataflowCanvasChip(
+                label=label,
+                target=label,
+                status="ok",
+                type=descriptor.type if descriptor else type_name,
+                required=required,
+            )
+        )
+
+    content_descriptor = seed.get("content")
+    add_chip("content", type_name=content_descriptor.type if content_descriptor else "string|null")
+
+    files_descriptor = seed.get("files")
+    if files_descriptor is not None and "preview_state" in set(_as_list(files_descriptor.source)):
+        add_chip("files", type_name=files_descriptor.type)
+
+    for key in sorted(variables):
+        if not key:
+            continue
+        path = f"variables.{key}"
+        descriptor = seed.get(path)
+        add_chip(path, type_name=descriptor.type if descriptor else "any")
+
+    for trigger_id, trigger in sorted(triggers.items()):
+        if not trigger.enabled:
+            continue
+        output_mapping = trigger.output_mapping
+        for state_key in output_mapping:
+            if state_key == "content":
+                add_chip("content", type_name=content_descriptor.type if content_descriptor else "string|null")
+            elif state_key == "context":
+                add_chip(f"triggers.{trigger_id}.context", type_name="object")
+            elif state_key.startswith("context."):
+                context_key = state_key[len("context.") :]
+                add_chip(f"triggers.{trigger_id}.context.{context_key}", type_name="any")
+        add_chip(f"triggers.{trigger_id}.payload", type_name="object")
+
+    return chips
 
 
 def _variable_state_map(
@@ -288,7 +406,11 @@ def _inspect_node(
 ) -> tuple[DataflowNodeInfo, dict[str, DataflowStateDescriptor]]:
     issues: list[DataflowIssue] = []
     input_rows = _inspect_input_mapping(node, incoming, issues)
-    reads = _inspect_config_reads(node, incoming, issues)
+    required_inputs = _derive_required_inputs(node, incoming, input_rows, issues)
+    reads = _merge_config_reads(
+        _inspect_config_reads(node, incoming, issues),
+        _inspect_code_reads(node, incoming, issues),
+    )
     writes = _infer_node_writes(node_id, node, issues)
     observed_writes = _observed_writes(node_id, observation)
     writes = _dedupe_descriptors([*writes, *observed_writes])
@@ -305,6 +427,7 @@ def _inspect_node(
         node_id=node_id,
         node_type=str(node.get("type") or ""),
         input_mapping=input_rows,
+        required_inputs=required_inputs,
         reads=reads,
         writes=writes,
         observed_writes=observed_writes,
@@ -413,6 +536,144 @@ def _inspect_input_mapping(
     return rows
 
 
+def _input_mapping_targets(input_rows: list[DataflowInputMappingRow]) -> dict[str, str]:
+    return {row.target: row.source for row in input_rows if row.target}
+
+
+def _input_satisfied_by_state(
+    name: str, incoming: dict[str, DataflowStateDescriptor]
+) -> bool:
+    return name in incoming or f"variables.{name}" in incoming
+
+
+def _derive_required_inputs(
+    node: JsonObject,
+    incoming: dict[str, DataflowStateDescriptor],
+    input_rows: list[DataflowInputMappingRow],
+    issues: list[DataflowIssue],
+) -> list[DataflowRequiredInput]:
+    """Строит контракт обязательных входов ноды.
+
+    Приоритет: явный ``input_schema`` (ручной контракт) → per-type вывод
+    (``parameters_schema`` для code, prompt-переменные для llm_node).
+    Все несоответствия — advisory issues, они не блокируют сохранение.
+    """
+
+    node_type = str(node.get("type") or "")
+    mapped_targets = _input_mapping_targets(input_rows)
+    local_variables = node.get("local_variables")
+    local_keys: set[str] = (
+        set(require_json_object(local_variables, "local_variables"))
+        if isinstance(local_variables, dict)
+        else set()
+    )
+    required: list[DataflowRequiredInput] = []
+
+    input_schema = node.get("input_schema")
+    if isinstance(input_schema, dict):
+        schema_obj = require_json_object(input_schema, "input_schema")
+        props = _schema_properties(schema_obj)
+        for name in _schema_required_names(schema_obj):
+            prop = props.get(name)
+            satisfied = (
+                name in mapped_targets
+                or _input_satisfied_by_state(name, incoming)
+                or _schema_has_default(prop)
+            )
+            source = mapped_targets.get(name)
+            required.append(
+                DataflowRequiredInput(
+                    name=name,
+                    origin="contract",
+                    type=_schema_type(prop),
+                    satisfied=satisfied,
+                    source=source,
+                )
+            )
+            if not satisfied:
+                issues.append(
+                    _issue(
+                        "missing_required_input",
+                        "error",
+                        f"Required input '{name}' (declared in input_schema) is not mapped and not available before this node.",
+                        target=name,
+                    )
+                )
+        return required
+
+    if node_type == "code":
+        params_schema = node.get("parameters_schema")
+        if isinstance(params_schema, dict):
+            schema_obj = require_json_object(params_schema, "parameters_schema")
+            props = _schema_properties(schema_obj)
+            for name in _schema_required_names(schema_obj):
+                prop = props.get(name)
+                satisfied = name in mapped_targets or _schema_has_default(prop)
+                source = mapped_targets.get(name)
+                required.append(
+                    DataflowRequiredInput(
+                        name=name,
+                        origin="parameters_schema",
+                        type=_schema_type(prop),
+                        satisfied=satisfied,
+                        source=source,
+                    )
+                )
+                if not satisfied:
+                    issues.append(
+                        _issue(
+                            "missing_required_input",
+                            "error",
+                            f"Required code argument '{name}' is not provided via input_mapping and has no default.",
+                            target=name,
+                        )
+                    )
+        return required
+
+    if node_type == "llm_node":
+        prompt = node.get("prompt")
+        scan = scan_prompt_template(prompt if isinstance(prompt, str) else None)
+        for root in scan.required_roots:
+            satisfied = (
+                root in local_keys
+                or root in mapped_targets
+                or _input_satisfied_by_state(root, incoming)
+            )
+            source = mapped_targets.get(root)
+            required.append(
+                DataflowRequiredInput(
+                    name=root,
+                    origin="prompt",
+                    type="any",
+                    satisfied=satisfied,
+                    source=source,
+                )
+            )
+            if not satisfied:
+                issues.append(
+                    _issue(
+                        "unknown_prompt_variable",
+                        "warning",
+                        f"Prompt uses {{{root}}}, but that variable is not declared as a flow/local variable and is not produced before this node.",
+                        target=root,
+                    )
+                )
+        return required
+
+    return required
+
+
+def _schema_required_names(schema: JsonObject) -> list[str]:
+    raw = schema.get("required")
+    if not isinstance(raw, list):
+        return []
+    return [name for name in raw if isinstance(name, str) and name]
+
+
+def _schema_has_default(schema: JsonValue) -> bool:
+    return isinstance(schema, dict) and "default" in require_json_object(schema, "schema")
+
+
 def _inspect_config_reads(
     node: JsonObject,
     incoming: dict[str, DataflowStateDescriptor],
@@ -448,6 +709,59 @@ def _inspect_config_reads(
                 )
             )
     return reads
+
+
+def _inspect_code_reads(
+    node: JsonObject,
+    incoming: dict[str, DataflowStateDescriptor],
+    issues: list[DataflowIssue],
+) -> list[DataflowConfigRead]:
+    if str(node.get("type") or "") != "code":
+        return []
+    contract = _code_contract_for_node(node)
+    reads: list[DataflowConfigRead] = []
+    for path in contract.reads:
+        if not path:
+            continue
+        desc = incoming.get(path)
+        status: DataflowStatus = "ok" if desc else "missing"
+        reads.append(
+            DataflowConfigRead(
+                source_kind="state",
+                source_path=path,
+                config_path=f"code.run.{path}",
+                status=status,
+                type=desc.type if desc else "any",
+            )
+        )
+        if status == "missing":
+            issues.append(
+                _issue(
+                    "missing_state_path",
+                    "warning",
+                    f"Code reads state.{path}, but that field is not produced before this node.",
+                    path=path,
+                )
+            )
+    return reads
+
+
+def _merge_config_reads(
+    config_reads: list[DataflowConfigRead],
+    code_reads: list[DataflowConfigRead],
+) -> list[DataflowConfigRead]:
+    seen_state_paths = {
+        read.source_path
+        for read in config_reads
+        if read.source_kind == "state" and read.source_path
+    }
+    merged = list(config_reads)
+    for read in code_reads:
+        if read.source_path in seen_state_paths:
+            continue
+        merged.append(read)
+        seen_state_paths.add(read.source_path)
+    return merged
 
 
 def _infer_node_writes(
@@ -801,101 +1115,20 @@ def _append_write_issues(path: str, source: str, issues: list[DataflowIssue]) ->
         )
 
 
-def _infer_code_state_writes(node: JsonObject) -> set[str]:
+def _code_contract_for_node(node: JsonObject) -> CodeContract:
     code = node.get("code")
     if not isinstance(code, str) or not code.strip():
-        return set()
-    language = str(node.get("language") or "python").lower()
-    if language == "python":
-        return _infer_python_state_writes(code)
-    return _infer_text_state_writes(code)
+        return CodeContract(reads=[], writes=[], return_keys=[])
+    language = str(node.get("language") or "python")
+    return scan_code_contract(language, code)
+
+
+def _infer_code_state_writes(node: JsonObject) -> set[str]:
+    return set(_code_contract_for_node(node).writes)
 
 
 def _infer_code_return_keys(node: JsonObject) -> set[str]:
-    code = node.get("code")
-    if not isinstance(code, str) or not code.strip():
-        return set()
-    language = str(node.get("language") or "python").lower()
-    if language == "python":
-        return _infer_python_return_keys(code)
-    return _infer_text_return_keys(code)
-
-
-def _infer_python_state_writes(code: str) -> set[str]:
-    out: set[str] = set()
-    try:
-        tree = ast.parse(code)
-    except SyntaxError:
-        return _infer_text_state_writes(code)
-    for node in ast.walk(tree):
-        if isinstance(node, (ast.Assign, ast.AnnAssign, ast.AugAssign)):
-            targets = []
-            if isinstance(node, ast.Assign):
-                targets = list(node.targets)
-            else:
-                targets = [node.target]
-            for target in targets:
-                path = _python_state_target_path(target)
-                if path:
-                    out.add(path)
-        if isinstance(node, ast.Call) and isinstance(node.func, ast.Attribute):
-            if node.func.attr == "update" and _python_is_state_expr(node.func.value):
-                if node.args and isinstance(node.args[0], ast.Dict):
-                    for key_node in node.args[0].keys:
-                        key = _literal_string(key_node)
-                        if key:
-                            out.add(key)
-    return out
-
-
-def _infer_python_return_keys(code: str) -> set[str]:
-    out: set[str] = set()
-    try:
-        tree = ast.parse(code)
-    except SyntaxError:
-        return _infer_text_return_keys(code)
-    for node in ast.walk(tree):
-        if isinstance(node, ast.Return) and isinstance(node.value, ast.Dict):
-            for key_node in node.value.keys:
-                key = _literal_string(key_node)
-                if key:
-                    out.add(key)
-    return out
-
-
-def _python_state_target_path(target: ast.AST) -> str | None:
-    if isinstance(target, ast.Attribute) and _python_is_state_expr(target.value):
-        return target.attr
-    if isinstance(target, ast.Subscript) and _python_is_state_expr(target.value):
-        return _literal_string(target.slice)
-    return None
-
-
-def _python_is_state_expr(node: ast.AST) -> bool:
-    return isinstance(node, ast.Name) and node.id == "state"
-
-
-def _literal_string(node: ast.AST | None) -> str | None:
-    if isinstance(node, ast.Constant) and isinstance(node.value, str) and node.value:
-        return node.value
-    return None
-
-
-def _infer_text_state_writes(code: str) -> set[str]:
-    out = set(re.findall(r"\bstate\.([A-Za-z_][A-Za-z0-9_]*)\s*=", code))
-    out.update(re.findall(r"\bstate\[['\"]([A-Za-z_][A-Za-z0-9_.-]*)['\"]\]\s*=", code))
-    return out
-
-
-def _infer_text_return_keys(code: str) -> set[str]:
-    returns: list[str] = re.findall(
-        r"\breturn\s+\{(?P<body>[^}]{0,4000})\}", code, flags=re.MULTILINE | re.DOTALL
-    )
-    out: set[str] = set()
-    for body in returns:
-        out.update(re.findall(r"['\"]([A-Za-z_][A-Za-z0-9_.-]*)['\"]\s*:", body))
-        out.update(re.findall(r"\b([A-Za-z_][A-Za-z0-9_]*)\s*:", body))
-    return out
+    return set(_code_contract_for_node(node).return_keys)
 
 
 def _schema_properties(schema: JsonValue) -> dict[str, JsonValue]:
@@ -949,22 +1182,6 @@ def _find_mapping_refs(value: JsonValue, config_path: str) -> list[DataflowConfi
         for idx, item in enumerate(value):
             refs.extend(_find_mapping_refs(item, f"{config_path}[{idx}]"))
     return refs
-
-
-def _flatten_value(value: JsonValue, prefix: str = "", depth: int = 0) -> dict[str, JsonValue]:
-    if depth > 3:
-        return {prefix: value} if prefix else {}
-    out: dict[str, JsonValue] = {}
-    if prefix:
-        out[prefix] = value
-    if isinstance(value, dict):
-        value_obj = require_json_object(value, prefix or "value")
-        for key, item in value_obj.items():
-            if not key:
-                continue
-            child = f"{prefix}.{key}" if prefix else key
-            out.update(_flatten_value(item, child, depth + 1))
-    return out
 
 
 def _descriptor(
@@ -1030,7 +1247,7 @@ def _summarize_state_map(
 ) -> list[DataflowStateDescriptor]:
     def sort_key(item: tuple[str, DataflowStateDescriptor]) -> tuple[int, str]:
         path, desc = item
-        if desc.source == "system":
+        if _is_system_descriptor(desc):
             return (2, path)
         if desc.producers:
             return (0, path)
@@ -1042,52 +1259,83 @@ def _summarize_state_map(
     ]
 
 
-def _canvas_summary(info: DataflowNodeInfo) -> DataflowCanvasSummary:
-    input_rows = info.input_mapping
+def _canvas_summary(
+    info: DataflowNodeInfo,
+    *,
+    is_entry: bool,
+    seed: dict[str, DataflowStateDescriptor],
+    variables: Mapping[str, FlowVariableConfig],
+    triggers: Mapping[str, TriggerConfig],
+) -> DataflowCanvasSummary:
+    required_by_target = {req.name: req for req in info.required_inputs}
+    mapped_targets = {row.target for row in info.input_mapping if row.target}
+    incoming_by_path = {desc.path: desc for desc in info.incoming_state if desc.path}
     inputs: list[DataflowCanvasChip] = []
-    for row in input_rows:
+    seen_labels: set[str] = set()
+
+    def add_chip(chip: DataflowCanvasChip) -> None:
+        if chip.label in seen_labels:
+            return
+        seen_labels.add(chip.label)
+        inputs.append(chip)
+
+    for row in info.input_mapping:
         label = row.source_path or row.source or row.target
-        inputs.append(
+        req = required_by_target.get(row.target)
+        add_chip(
             DataflowCanvasChip(
                 label=str(label),
                 target=row.target,
                 status=row.status,
                 type=row.type,
+                required=req is not None,
+                producer_node=row.producers[0] if row.producers else None,
+            )
+        )
+    for req in info.required_inputs:
+        if req.name in mapped_targets:
+            continue
+        add_chip(
+            DataflowCanvasChip(
+                label=req.name,
+                target=req.name,
+                status="ok" if req.satisfied else "missing",
+                type=req.type,
+                required=True,
             )
         )
     for read in info.reads:
         label = read.source_path
         if not label:
             continue
-        inputs.append(
+        producer_node: str | None = None
+        if read.source_kind == "state":
+            incoming_desc = incoming_by_path.get(label)
+            if incoming_desc and incoming_desc.producers:
+                producer_node = incoming_desc.producers[0]
+        add_chip(
             DataflowCanvasChip(
                 label=str(label),
                 target=read.config_path,
                 status=read.status,
                 type=read.type,
+                producer_node=producer_node,
             )
         )
-    if not inputs:
-        for desc in info.incoming_state:
-            if desc.source == "system":
-                continue
-            inputs.append(
-                DataflowCanvasChip(
-                    label=desc.path,
-                    status="ok",
-                    type=desc.type,
-                )
-            )
-            if len(inputs) >= MAX_CANVAS_CHIPS:
-                break
+    if is_entry:
+        for chip in _build_entry_canvas_inputs(seed, variables, triggers):
+            add_chip(chip)
     outputs: list[DataflowCanvasOutputChip] = [
-        DataflowCanvasOutputChip(label=desc.path, type=desc.type)
-        for desc in info.writes[:MAX_CANVAS_CHIPS]
+        DataflowCanvasOutputChip(label=desc.path, type=desc.type) for desc in info.writes
     ]
+    error_count = sum(1 for issue in info.issues if issue.severity == "error")
+    warning_count = sum(1 for issue in info.issues if issue.severity == "warning")
     return DataflowCanvasSummary(
-        inputs=inputs[:MAX_CANVAS_CHIPS],
-        outputs=outputs[:MAX_CANVAS_CHIPS],
-        has_issues=any(issue.severity in {"warning", "error"} for issue in info.issues),
+        inputs=inputs,
+        outputs=outputs,
+        has_issues=bool(error_count or warning_count),
+        error_count=error_count,
+        warning_count=warning_count,
     )
 
 

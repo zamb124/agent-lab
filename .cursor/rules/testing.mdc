@@ -298,6 +298,31 @@ uv run pytest tests/ -n 5 -m "not integration and not network and not agent_buil
 - `tests/fixtures/services.py` задаёт `PUSH__ENABLED` и VAPID-ключи для E2E push-тестов.
 - Реальные вызовы LLM API в `test_llm_providers.py` пропускаются (`skip`) при 401/403 в CI.
 
+## Property-based / fuzz (flows dataflow и core-сканеры)
+
+Hypothesis — дополнительный слой поверх детерминированных unit-тестов. Не заменяет контрактные кейсы.
+
+**Файлы:** `tests/**/test_*_fuzz.py`, `tests/frontend_core/unit/**/*.fuzz.spec.js`.
+
+**Инварианты (обязательные):**
+- Функция не падает на произвольном входе в пределах генератора.
+- `scan_prompt_template` — system refs и loop-bound vars никогда не в `required_roots`.
+- `scan_code_contract` — пустой код → пустой контракт; списки sorted unique.
+- `inspect_flow_dataflow` — всегда `DataflowInspectResult`; каждая нода имеет `canvas`, `issues`, `input_mapping`.
+- Canvas helpers (`flows-dataflow-canvas.js`) — `hasControlPath` согласован с BFS; `buildDataWires` без дублей.
+
+**Настройки CI:** `@settings(max_examples=200, deadline=None)`; `@seed(...)` на воспроизводимые регрессии.
+
+**Запуск:**
+```bash
+uv run pytest -q tests/core/variables/test_template_scan_fuzz.py tests/core/code_contract/test_scanner_fuzz.py tests/flows/unit/test_flow_dataflow_inspector_fuzz.py
+make test-frontend-core-unit  # включает *.fuzz.spec.js
+```
+
+**Pure helpers:** dataflow-логика канвы живёт в `apps/flows/ui/_helpers/flows-dataflow-canvas.js` — тестируется Vitest без DOM.
+
+**Фикстуры:** `tests/flows/fixtures/dataflow_graphs.py`, `tests/frontend_core/helpers/flows-dataflow-fixtures.js`.
+
 ## Чеклист перед коммитом
 
 - [ ] `uv run ruff check .`

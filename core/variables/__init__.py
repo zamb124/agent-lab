@@ -27,6 +27,11 @@ from core.variables.resolver import (
     get_state,
     set_state_in_context,
 )
+from core.variables.template_scan import (
+    TemplateScanResult,
+    TemplateVariableRef,
+    scan_prompt_template,
+)
 
 __all__ = [
     "PlatformVariable",
@@ -36,6 +41,8 @@ __all__ = [
     "ScopeCondition",
     "ScopeField",
     "ScopeOp",
+    "TemplateScanResult",
+    "TemplateVariableRef",
     "VariableEntry",
     "VariableMap",
     "VariableResolver",
@@ -48,6 +55,7 @@ __all__ = [
     "VarResolver",
     "get_state",
     "normalize_variables_map",
+    "scan_prompt_template",
     "set_state_in_context",
     "variable_map_to_prompt_values",
 ]

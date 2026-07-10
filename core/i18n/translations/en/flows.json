@@ -115,6 +115,7 @@
     "title_company": "Company variables",
     "title_flow": "Flow variables",
     "action_create": "Create",
+    "action_edit": "Edit",
     "delete_title": "Delete variable?",
     "delete_message": "Delete variable \"{{key}}\"?",
     "action_delete": "Delete",
@@ -933,6 +934,13 @@
     "option_all_title": "All (AND join)",
     "option_all_desc": "Wait until every incoming edge that participates in the join has completed, then run once."
   },
+  "variable_mapping_modal": {
+    "title": "Map variable",
+    "field_param": "Target parameter",
+    "field_create_edge": "Also create a connection so data reaches this node",
+    "no_path_note": "There is no execution path from {{from}} to {{to}}. Without a connection the data will not reach this node at runtime.",
+    "action_map": "Create mapping"
+  },
   "tool_picker_modal": {
     "title": "Pick a tool",
     "title_flow": "Pick a flow",
@@ -1641,6 +1649,16 @@
     "group_aria": "Flow branches"
   },
   "canvas": {
+    "dataflow": {
+      "from": "from",
+      "required": "required",
+      "show_wires": "Show data links",
+      "hide_wires": "Hide data links",
+      "problems_one": "{{count}} data problem",
+      "problems_other": "{{count}} data problems",
+      "no_problems": "No data problems",
+      "problems_title": "Data flow problems"
+    },
     "context_menu": {
       "open_properties": "Open properties",
       "toggle_entry": "Set as entry node",

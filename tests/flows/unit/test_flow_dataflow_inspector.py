@@ -132,3 +132,113 @@ def test_inspector_merges_observed_run_diff_and_llm_tool_writes():
     assert writes_by_path["observed_answer"].confidence == "observed"
     assert writes_by_path["tool_value"].confidence == "inferred_code"
     assert "observed_answer" in node.result_keys
+
+
+def test_inspector_flags_unknown_prompt_variable_as_required_input():
+    result = inspect_flow_dataflow(
+        flow_id="flow_1",
+        branch_id="default",
+        entry="llm_1",
+        variables={},
+        nodes=_nodes({
+            "llm_1": {
+                "type": "llm_node",
+                "prompt": "Summarize {topic} for {?audience}",
+            },
+        }),
+        edges=[],
+    )
+
+    node = result.nodes["llm_1"]
+    required_by_name = {req.name: req for req in node.required_inputs}
+    assert required_by_name["topic"].origin == "prompt"
+    assert required_by_name["topic"].satisfied is False
+    assert "audience" not in required_by_name
+    assert any(
+        issue.code == "unknown_prompt_variable" and issue.target == "topic" for issue in node.issues
+    )
+
+
+def test_inspector_prompt_variable_satisfied_by_upstream_producer():
+    result = inspect_flow_dataflow(
+        flow_id="flow_1",
+        branch_id="default",
+        entry="code_1",
+        variables={},
+        nodes=_nodes({
+            "code_1": {
+                "type": "code",
+                "language": "python",
+                "code": "async def run(args, state):\n    state.topic = 'ai'\n    return {}",
+            },
+            "llm_1": {
+                "type": "llm_node",
+                "prompt": "Summarize {topic}",
+            },
+        }),
+        edges=_edges([{"from_node": "code_1", "to_node": "llm_1"}]),
+    )
+
+    node = result.nodes["llm_1"]
+    required_by_name = {req.name: req for req in node.required_inputs}
+    assert required_by_name["topic"].satisfied is True
+    assert not any(issue.code == "unknown_prompt_variable" for issue in node.issues)
+
+
+def test_inspector_reports_missing_required_code_argument():
+    result = inspect_flow_dataflow(
+        flow_id="flow_1",
+        branch_id="default",
+        entry="code_1",
+        variables={},
+        nodes=_nodes({
+            "code_1": {
+                "type": "code",
+                "language": "python",
+                "code": "async def run(args, state):\n    return {}",
+                "parameters_schema": {
+                    "type": "object",
+                    "properties": {"limit": {"type": "integer"}},
+                    "required": ["limit"],
+                },
+            },
+        }),
+        edges=[],
+    )
+
+    node = result.nodes["code_1"]
+    required_by_name = {req.name: req for req in node.required_inputs}
+    assert required_by_name["limit"].origin == "parameters_schema"
+    assert required_by_name["limit"].satisfied is False
+    assert any(
+        issue.code == "missing_required_input" and issue.target == "limit" for issue in node.issues
+    )
+
+
+def test_inspector_input_schema_overrides_type_inference():
+    result = inspect_flow_dataflow(
+        flow_id="flow_1",
+        branch_id="default",
+        entry="llm_1",
+        variables={},
+        nodes=_nodes({
+            "llm_1": {
+                "type": "llm_node",
+                "prompt": "Hello {topic}",
+                "input_schema": {
+                    "type": "object",
+                    "properties": {"topic": {"type": "string"}},
+                    "required": ["topic"],
+                },
+            },
+        }),
+        edges=[],
+    )
+
+    node = result.nodes["llm_1"]
+    required_by_name = {req.name: req for req in node.required_inputs}
+    assert required_by_name["topic"].origin == "contract"
+    assert required_by_name["topic"].type == "string"
+    assert any(
+        issue.code == "missing_required_input" and issue.target == "topic" for issue in node.issues
+    )

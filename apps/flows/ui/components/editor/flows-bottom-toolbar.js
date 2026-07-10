@@ -98,6 +98,7 @@ export class FlowsBottomToolbar extends PlatformElement {
         this.openModal('flows.variables', { scope: 'flow', flowId });
     }
     _toggleGuides() { this._editor.toggleSmartGuides({}); }
+    _toggleDataWires() { this._editor.toggleDataWires({}); }
     _help() { this.openModal('flows.canvas_help', {}); }
 
     _renderIconButton({ icon, title, onClick, active = false, disabled = false }) {
@@ -120,6 +121,7 @@ export class FlowsBottomToolbar extends PlatformElement {
         const state = asObject(this._editor.state);
         const activeTool = typeof state.activeTool === 'string' && state.activeTool.length > 0 ? state.activeTool : 'select';
         const guidesOn = state.smartGuidesEnabled !== false;
+        const wiresOn = Boolean(state.showDataWires);
         return html`
             ${this._renderIconButton({ icon: 'plus', title: this.t('canvas.toolbar.zoom_in'), onClick: () => this._zoomIn() })}
             ${this._renderIconButton({ icon: 'minus', title: this.t('canvas.toolbar.zoom_out'), onClick: () => this._zoomOut() })}
@@ -164,6 +166,12 @@ export class FlowsBottomToolbar extends PlatformElement {
                 title: this.t('canvas.toolbar.toggle_guides'),
                 onClick: () => this._toggleGuides(),
                 active: guidesOn,
+            })}
+            ${this._renderIconButton({
+                icon: 'link',
+                title: wiresOn ? this.t('canvas.dataflow.hide_wires') : this.t('canvas.dataflow.show_wires'),
+                onClick: () => this._toggleDataWires(),
+                active: wiresOn,
             })}
             <platform-help-hint
                 .label=${this.t('canvas.toolbar.canvas_hint_label')}

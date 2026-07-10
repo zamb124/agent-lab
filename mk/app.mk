@@ -2,7 +2,9 @@
 
 # Все локальные сервисы (все ключи SERVICES в scripts/run.py, в т.ч. flows, frontend, crm, rag, sync, worktracker, office, browser, search,
 # provider_litserve, scheduler-api, voice :8015, воркеры TaskIQ и scheduler) — одной командой.
-# Uvicorn: --reload. TaskIQ worker без --reload (стабильнее в режиме all). Остановка: Ctrl+C.
+# Granian: --reload для HTTP (кроме provider_litserve/browser — torch/Playwright на reload
+# копят память). APP_RELOAD=0 — без reload на всех сервисах. TaskIQ worker без reload.
+# Остановка: Ctrl+C. APP_KILL=1 — освободить порты перед стартом.
 # APP_KILL=1 — перед стартом завершить процессы на портах HTTP-сервисов (8001-8021 и др.), см. scripts/run.py kill-ports.
 # Исключение: make app ex flows_worker  (коротко, работает везде; ex | x, затем имя, можно повторять).
 #   Либо: make -- app --ex flows_worker  (системный make в macOS иначе принимает --ex за свой флаг).

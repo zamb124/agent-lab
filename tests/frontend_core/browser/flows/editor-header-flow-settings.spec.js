@@ -24,6 +24,7 @@ describe('flows-editor-header flow settings entry', () => {
     });
 
     afterEach(() => {
+        document.querySelectorAll('.flows-editor-header-menu-portal').forEach((node) => node.remove());
         fixtureCleanup();
     });
 
@@ -116,7 +117,7 @@ describe('flows-editor-header flow settings entry', () => {
         await elementUpdated(el);
 
         expect(el._overflowOpen).to.equal(false);
-        expect(el.shadowRoot.querySelector('.menu-flyout')).to.equal(null);
+        expect(document.body.querySelector('.flows-editor-header-menu-portal')).to.equal(null);
     });
 
     it('mobile overflow menu uses block ghost buttons at 390px', async () => {
@@ -133,7 +134,7 @@ describe('flows-editor-header flow settings entry', () => {
         el._overflowOpen = true;
         await elementUpdated(el);
 
-        const flyout = el.shadowRoot.querySelector('.menu-flyout');
+        const flyout = document.body.querySelector('.flows-editor-header-menu-portal');
         expect(flyout).to.not.equal(null);
 
         const menuButtons = flyout.querySelectorAll('platform-button[block]');
@@ -167,7 +168,7 @@ describe('flows-editor-header flow settings entry', () => {
         el._overflowOpen = true;
         await elementUpdated(el);
 
-        const flyout = el.shadowRoot.querySelector('.menu-flyout');
+        const flyout = document.body.querySelector('.flows-editor-header-menu-portal');
         expect(flyout).to.not.equal(null);
 
         let opened = null;

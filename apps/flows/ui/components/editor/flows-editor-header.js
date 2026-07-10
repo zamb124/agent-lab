@@ -15,7 +15,7 @@
  *   - flows/branch_remove — удаление ветки.
  */
 
-import { html, css, nothing } from 'lit';
+import { html, css, nothing, render } from 'lit';
 import { PlatformElement } from '@platform/lib/platform-element/index.js';
 import { CoreEvents } from '@platform/lib/events/contract.js';
 import '@platform/lib/components/platform-icon.js';
@@ -28,8 +28,90 @@ import {
     asObject,
     isPlainObject,
     buildFlowPublishBody,
+    getBranchNodes,
 } from '../../_helpers/flows-resolvers.js';
 import { dispatchEmbedChatWindowToggle } from '@platform/lib/chat/chat-window-toggle.js';
+
+const MENU_PORTAL_STYLE_ID = 'flows-editor-header-menu-portal-styles-v1';
+const MENU_PORTAL_GAP_PX = 4;
+const MENU_PORTAL_VIEWPORT_INSET_PX = 16;
+
+function ensureMenuPortalStyles() {
+    if (typeof document === 'undefined' || document.getElementById(MENU_PORTAL_STYLE_ID)) {
+        return;
+    }
+    const style = document.createElement('style');
+    style.id = MENU_PORTAL_STYLE_ID;
+    style.textContent = `
+        .flows-editor-header-menu-portal {
+            position: fixed;
+            z-index: var(--z-dropdown);
+            width: min(320px, calc(100vw - 2 * var(--space-4, 16px)));
+            max-width: calc(100vw - 2 * var(--space-4, 16px));
+            box-sizing: border-box;
+            background: var(--glass-solid-strong);
+            border: 1px solid var(--glass-border, var(--border-subtle));
+            border-radius: var(--radius-md, 12px);
+            box-shadow: var(--glass-shadow-strong);
+            display: flex;
+            flex-direction: column;
+            gap: var(--space-1, 4px);
+            padding: var(--space-1, 4px);
+            overflow: hidden;
+            pointer-events: auto;
+        }
+        .flows-editor-header-menu-portal.problems-flyout {
+            max-height: min(60vh, 420px);
+            overflow-y: auto;
+            scrollbar-width: thin;
+        }
+        .flows-editor-header-menu-portal .problems-header {
+            padding: var(--space-1, 4px) var(--space-2, 8px);
+            font-size: var(--text-xs, 12px);
+            font-weight: var(--font-semibold, 600);
+            color: var(--text-secondary);
+            text-transform: uppercase;
+            letter-spacing: 0.04em;
+        }
+        .flows-editor-header-menu-portal .problem-item {
+            display: flex;
+            align-items: flex-start;
+            gap: var(--space-2, 8px);
+            width: 100%;
+            text-align: left;
+            padding: var(--space-2, 8px);
+            border: none;
+            border-radius: var(--radius-sm, 8px);
+            background: transparent;
+            color: var(--text-primary);
+            cursor: pointer;
+        }
+        .flows-editor-header-menu-portal .problem-item:hover {
+            background: var(--glass-solid-subtle);
+        }
+        .flows-editor-header-menu-portal .problem-item[data-severity="error"] platform-icon {
+            color: var(--error);
+        }
+        .flows-editor-header-menu-portal .problem-item[data-severity="warning"] platform-icon {
+            color: var(--warning);
+        }
+        .flows-editor-header-menu-portal .problem-body {
+            display: flex;
+            flex-direction: column;
+            gap: 1px;
+            min-width: 0;
+        }
+        .flows-editor-header-menu-portal .problem-node {
+            font-size: var(--text-xs, 12px);
+            font-weight: var(--font-semibold, 600);
+        }
+        .flows-editor-header-menu-portal .problem-msg {
+            font-size: var(--text-xs, 12px);
+            color: var(--text-secondary);
+        }
+    `;
+    document.head.appendChild(style);
+}
 
 export class FlowsEditorHeader extends PlatformElement {
     static properties = {
@@ -37,6 +119,7 @@ export class FlowsEditorHeader extends PlatformElement {
         branchId: { type: String, attribute: 'branch-id' },
         _isMobile: { state: true },
         _overflowOpen: { state: true },
+        _problemsOpen: { state: true },
     };
 
     static styles = [
@@ -76,7 +159,7 @@ export class FlowsEditorHeader extends PlatformElement {
             }
 
             .chrome-row-primary {
-                justify-content: space-between;
+                gap: var(--space-3);
             }
 
             .row-left,
@@ -89,7 +172,8 @@ export class FlowsEditorHeader extends PlatformElement {
             }
 
             .row-left {
-                flex: 1 1 auto;
+                flex: 0 1 auto;
+                max-width: min(420px, 34vw);
             }
 
             .row-center {
@@ -105,8 +189,8 @@ export class FlowsEditorHeader extends PlatformElement {
                 display: flex;
                 align-items: center;
                 gap: var(--space-2);
-                min-width: min(200px, 28vw);
-                flex: 1 1 0;
+                min-width: 0;
+                flex: 1 1 auto;
             }
 
             .flow-name-field {
@@ -149,9 +233,8 @@ export class FlowsEditorHeader extends PlatformElement {
 
             .branches-slot {
                 display: none;
-                flex: 0 1 auto;
+                flex: 1 1 0;
                 min-width: 0;
-                max-width: min(400px, 34vw);
                 align-items: center;
                 gap: var(--space-2);
                 overflow: hidden;
@@ -213,33 +296,34 @@ export class FlowsEditorHeader extends PlatformElement {
                 position: relative;
             }
 
-            .overflow-anchor[data-open] {
-                z-index: 1;
-            }
-
-            .menu-flyout {
-                position: absolute;
-                right: 0;
-                top: 100%;
-                margin-top: 4px;
-                width: min(320px, calc(100vw - 2 * var(--space-4)));
-                max-width: calc(100vw - 2 * var(--space-4));
-                box-sizing: border-box;
-                background: var(--glass-solid-strong);
-                border: 1px solid var(--glass-border, var(--border-subtle));
-                border-radius: var(--radius-md);
-                box-shadow: var(--glass-shadow-strong);
-                z-index: 2;
-                display: flex;
-                flex-direction: column;
-                gap: var(--space-1);
-                padding: var(--space-1);
-                overflow: hidden;
-            }
-
             .overflow-btn-wrap {
                 position: relative;
                 display: inline-flex;
+            }
+
+            .problems-anchor {
+                position: relative;
+                display: inline-flex;
+            }
+
+            .problems-btn {
+                display: inline-flex;
+                align-items: center;
+                gap: 4px;
+                padding: 3px var(--space-2);
+                border-radius: var(--radius-full);
+                border: 1px solid var(--warning-border);
+                background: var(--warning-bg);
+                color: var(--warning);
+                font-size: var(--text-xs);
+                font-weight: var(--font-semibold);
+                cursor: pointer;
+            }
+
+            .problems-btn[data-severity="error"] {
+                border-color: var(--error-border, var(--border-subtle));
+                background: var(--error-bg, color-mix(in oklab, var(--error) 12%, transparent));
+                color: var(--error);
             }
 
             .reload-dot {
@@ -285,16 +369,31 @@ export class FlowsEditorHeader extends PlatformElement {
             typeof window.matchMedia === 'function' &&
             window.matchMedia('(max-width: 767px)').matches;
         this._overflowOpen = false;
+        this._problemsOpen = false;
+        this._overflowPortalHost = null;
+        this._problemsPortalHost = null;
+        this._problemsPortalIssuesKey = '';
         this._editorMql = null;
         this._onEditorMobileMql = null;
+        this._onScrollResize = () => {
+            if (this._overflowOpen) {
+                this._positionOverflowPortal();
+            }
+            if (this._problemsOpen) {
+                this._positionProblemsPortal();
+            }
+        };
         this._onDocPointer = (e) => {
-            if (!this._overflowOpen) {
+            if (!this._overflowOpen && !this._problemsOpen) {
                 return;
             }
             const path = e.composedPath();
             for (const n of path) {
                 if (n === this) {
                     break;
+                }
+                if (n === this._overflowPortalHost || n === this._problemsPortalHost) {
+                    return;
                 }
                 if (n == null || typeof n !== 'object' || !('classList' in n) || !n.classList) {
                     continue;
@@ -304,6 +403,7 @@ export class FlowsEditorHeader extends PlatformElement {
                 }
             }
             this._overflowOpen = false;
+            this._problemsOpen = false;
         };
         this._editor = this.useOp('flows/editor');
         this._update = this.useOp('flows/flow_update');
@@ -313,6 +413,9 @@ export class FlowsEditorHeader extends PlatformElement {
         this.useEvent(CoreEvents.UI_MODAL_OPEN, () => {
             if (this._overflowOpen) {
                 this._overflowOpen = false;
+            }
+            if (this._problemsOpen) {
+                this._problemsOpen = false;
             }
         });
     }
@@ -335,6 +438,8 @@ export class FlowsEditorHeader extends PlatformElement {
             this._isMobile = next;
         }
         document.addEventListener('pointerdown', this._onDocPointer);
+        window.addEventListener('scroll', this._onScrollResize, true);
+        window.addEventListener('resize', this._onScrollResize);
     }
 
     disconnectedCallback() {
@@ -342,7 +447,192 @@ export class FlowsEditorHeader extends PlatformElement {
             this._editorMql.removeEventListener('change', this._onEditorMobileMql);
         }
         document.removeEventListener('pointerdown', this._onDocPointer);
+        window.removeEventListener('scroll', this._onScrollResize, true);
+        window.removeEventListener('resize', this._onScrollResize);
+        this._teardownOverflowPortal();
+        this._teardownProblemsPortal();
         super.disconnectedCallback();
+    }
+
+    updated(changed) {
+        super.updated?.(changed);
+        if (changed.has('_overflowOpen') || changed.has('_isMobile')) {
+            this._syncOverflowPortal();
+        }
+        if (changed.has('_problemsOpen')) {
+            this._syncProblemsPortal();
+        }
+        if (this._problemsOpen && (changed.has('flowId') || changed.has('branchId'))) {
+            this._syncProblemsPortal();
+        }
+    }
+
+    _positionMenuPortal(host, anchorSelector) {
+        if (!host) {
+            return;
+        }
+        const anchor = this.renderRoot?.querySelector(anchorSelector);
+        if (!anchor) {
+            return;
+        }
+        const anchorRect = anchor.getBoundingClientRect();
+        host.style.top = `${anchorRect.bottom + MENU_PORTAL_GAP_PX}px`;
+        host.style.right = `${window.innerWidth - anchorRect.right}px`;
+        host.style.left = 'auto';
+
+        const portalRect = host.getBoundingClientRect();
+        const overflowLeft = portalRect.left < MENU_PORTAL_VIEWPORT_INSET_PX;
+        if (overflowLeft) {
+            host.style.left = `${MENU_PORTAL_VIEWPORT_INSET_PX}px`;
+            host.style.right = 'auto';
+        }
+    }
+
+    _positionOverflowPortal() {
+        this._positionMenuPortal(this._overflowPortalHost, '.overflow-anchor');
+    }
+
+    _positionProblemsPortal() {
+        this._positionMenuPortal(this._problemsPortalHost, '.problems-anchor');
+    }
+
+    _schedulePortalPositionSync(positionFn) {
+        requestAnimationFrame(() => {
+            requestAnimationFrame(() => positionFn.call(this));
+        });
+    }
+
+    _teardownOverflowPortal() {
+        if (this._overflowPortalHost) {
+            render(nothing, this._overflowPortalHost);
+            this._overflowPortalHost.remove();
+            this._overflowPortalHost = null;
+        }
+    }
+
+    _teardownProblemsPortal() {
+        if (this._problemsPortalHost) {
+            render(nothing, this._problemsPortalHost);
+            this._problemsPortalHost.remove();
+            this._problemsPortalHost = null;
+            this._problemsPortalIssuesKey = '';
+        }
+    }
+
+    _renderOverflowPortalContent() {
+        return html`
+            <div class="flows-editor-header-menu-portal" @click=${(e) => e.stopPropagation()}>
+                ${this._isMobile
+                    ? this._renderMenuButton({
+                        label: this.t('editor_header.menu_settings'),
+                        icon: 'settings',
+                        onClick: this._openFlowSettings,
+                    })
+                    : nothing}
+                ${this._isMobile
+                    ? this._renderMenuButton({
+                        label: this.t('editor_header.menu_lara'),
+                        icon: 'ai',
+                        onClick: this._openLara,
+                    })
+                    : nothing}
+                ${this._renderMenuButton({
+                    label: this.t('editor_header.menu_share'),
+                    icon: 'share',
+                    onClick: this._openPreviewShare,
+                })}
+                ${this._renderMenuButton({
+                    label: this.t('editor_header.menu_triggers'),
+                    icon: 'zap',
+                    onClick: this._openTriggers,
+                })}
+                ${this._renderMenuButton({
+                    label: this.t('editor_header.menu_api'),
+                    icon: 'api',
+                    onClick: this._openApiConsole,
+                })}
+                ${this._renderMenuButton({
+                    label: this.t('editor_header.menu_eval'),
+                    icon: 'science',
+                    onClick: this._openEvaluationLab,
+                })}
+                ${this._renderMenuButton({
+                    label: this.t('editor_header.menu_code'),
+                    icon: 'code',
+                    onClick: this._openCodeView,
+                })}
+                ${this._renderMenuButton({
+                    label: this.t('editor_header.menu_reload'),
+                    icon: 'refresh',
+                    onClick: this._reloadBundle,
+                })}
+            </div>
+        `;
+    }
+
+    _renderProblemsPortalContent(issues) {
+        return html`
+            <div class="flows-editor-header-menu-portal problems-flyout" @click=${(e) => e.stopPropagation()}>
+                <div class="problems-header">${this.t('canvas.dataflow.problems_title')}</div>
+                ${issues.map((item) => html`
+                    <article
+                        class="problem-item"
+                        role="button"
+                        tabindex="0"
+                        data-severity=${item.severity}
+                        @click=${() => this._goToProblem(item.nodeId)}
+                        @keydown=${(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); this._goToProblem(item.nodeId); } }}
+                    >
+                        <platform-icon name=${item.severity === 'error' ? 'notification-error' : 'alert-triangle'} size="12"></platform-icon>
+                        <span class="problem-body">
+                            <span class="problem-node">${item.nodeName}</span>
+                            <span class="problem-msg">${item.message}</span>
+                        </span>
+                    </article>
+                `)}
+            </div>
+        `;
+    }
+
+    _syncOverflowPortal() {
+        if (!this._overflowOpen) {
+            this._teardownOverflowPortal();
+            return;
+        }
+        ensureMenuPortalStyles();
+        if (!this._overflowPortalHost) {
+            this._overflowPortalHost = document.createElement('div');
+            document.body.appendChild(this._overflowPortalHost);
+        }
+        render(this._renderOverflowPortalContent(), this._overflowPortalHost);
+        this._positionOverflowPortal();
+        this._schedulePortalPositionSync(this._positionOverflowPortal);
+    }
+
+    _syncProblemsPortal() {
+        if (!this._problemsOpen) {
+            this._teardownProblemsPortal();
+            return;
+        }
+        const state = asObject(this._editor.state);
+        const issues = this._dataflowIssues(state);
+        if (issues.length === 0) {
+            this._problemsOpen = false;
+            this._teardownProblemsPortal();
+            return;
+        }
+        const issuesKey = issues.map((item) => `${item.nodeId}:${item.severity}:${item.message}`).join('|');
+        ensureMenuPortalStyles();
+        if (!this._problemsPortalHost) {
+            this._problemsPortalHost = document.createElement('div');
+            document.body.appendChild(this._problemsPortalHost);
+        }
+        if (issuesKey !== this._problemsPortalIssuesKey) {
+            this._problemsPortalIssuesKey = issuesKey;
+            render(this._renderProblemsPortalContent(issues), this._problemsPortalHost);
+        }
+        this._positionProblemsPortal();
+        this._schedulePortalPositionSync(this._positionProblemsPortal);
     }
 
     _resolveStatusBadge(state) {
@@ -392,7 +682,11 @@ export class FlowsEditorHeader extends PlatformElement {
 
     _toggleOverflow(e) {
         e.stopPropagation();
-        this._overflowOpen = !this._overflowOpen;
+        const next = !this._overflowOpen;
+        if (next) {
+            this._problemsOpen = false;
+        }
+        this._overflowOpen = next;
     }
 
     _openCodeView() {
@@ -533,6 +827,64 @@ export class FlowsEditorHeader extends PlatformElement {
         `;
     }
 
+    _dataflowIssues(state) {
+        const dataflow = state && typeof state.dataflow === 'object' ? state.dataflow : null;
+        const nodes = dataflow && typeof dataflow.nodes === 'object' ? dataflow.nodes : null;
+        if (!nodes) return [];
+        const branchNodes = getBranchNodes(state);
+        const out = [];
+        for (const [nodeId, info] of Object.entries(nodes)) {
+            const issues = info && Array.isArray(info.issues) ? info.issues : [];
+            for (const issue of issues) {
+                if (!issue || (issue.severity !== 'error' && issue.severity !== 'warning')) continue;
+                const node = branchNodes && typeof branchNodes === 'object' ? branchNodes[nodeId] : null;
+                const nodeName = node && typeof node.name === 'string' && node.name.length > 0 ? node.name : nodeId;
+                out.push({ nodeId, nodeName, severity: issue.severity, message: String(issue.message || issue.code || '') });
+            }
+        }
+        out.sort((a, b) => (a.severity === b.severity ? 0 : a.severity === 'error' ? -1 : 1));
+        return out;
+    }
+
+    _toggleProblems(e) {
+        e.stopPropagation();
+        const next = !this._problemsOpen;
+        if (next) {
+            this._overflowOpen = false;
+        }
+        this._problemsOpen = next;
+    }
+
+    _goToProblem(nodeId) {
+        this._problemsOpen = false;
+        if (typeof nodeId === 'string' && nodeId.length > 0) {
+            this._editor.selectNode({ nodeId });
+        }
+    }
+
+    _renderProblemsButton(issues) {
+        if (issues.length === 0) return nothing;
+        const errorCount = issues.filter((i) => i.severity === 'error').length;
+        const severity = errorCount > 0 ? 'error' : 'warning';
+        const count = issues.length;
+        return html`
+            <div class="problems-anchor" ?data-open=${this._problemsOpen}>
+                <article
+                    class="problems-btn"
+                    role="button"
+                    tabindex="0"
+                    data-severity=${severity}
+                    title=${this.t('canvas.dataflow.problems_title')}
+                    @click=${this._toggleProblems}
+                    @keydown=${(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); this._toggleProblems(e); } }}
+                >
+                    <platform-icon name="alert-triangle" size="14"></platform-icon>
+                    <span class="problems-count">${count > 99 ? '99+' : count}</span>
+                </article>
+            </div>
+        `;
+    }
+
     _renderOverflowMenu(hasBundleUpdate) {
         return html`
             <div class="overflow-anchor" ?data-open=${this._overflowOpen}>
@@ -545,56 +897,6 @@ export class FlowsEditorHeader extends PlatformElement {
                     })}
                     ${hasBundleUpdate ? html`<span class="reload-dot"></span>` : nothing}
                 </span>
-                ${this._overflowOpen
-                    ? html`
-                        <div class="menu-flyout" @click=${(e) => e.stopPropagation()}>
-                            ${this._isMobile
-                                ? this._renderMenuButton({
-                                    label: this.t('editor_header.menu_settings'),
-                                    icon: 'settings',
-                                    onClick: this._openFlowSettings,
-                                })
-                                : nothing}
-                            ${this._isMobile
-                                ? this._renderMenuButton({
-                                    label: this.t('editor_header.menu_lara'),
-                                    icon: 'ai',
-                                    onClick: this._openLara,
-                                })
-                                : nothing}
-                            ${this._renderMenuButton({
-                                label: this.t('editor_header.menu_share'),
-                                icon: 'share',
-                                onClick: this._openPreviewShare,
-                            })}
-                            ${this._renderMenuButton({
-                                label: this.t('editor_header.menu_triggers'),
-                                icon: 'zap',
-                                onClick: this._openTriggers,
-                            })}
-                            ${this._renderMenuButton({
-                                label: this.t('editor_header.menu_api'),
-                                icon: 'api',
-                                onClick: this._openApiConsole,
-                            })}
-                            ${this._renderMenuButton({
-                                label: this.t('editor_header.menu_eval'),
-                                icon: 'science',
-                                onClick: this._openEvaluationLab,
-                            })}
-                            ${this._renderMenuButton({
-                                label: this.t('editor_header.menu_code'),
-                                icon: 'code',
-                                onClick: this._openCodeView,
-                            })}
-                            ${this._renderMenuButton({
-                                label: this.t('editor_header.menu_reload'),
-                                icon: 'refresh',
-                                onClick: this._reloadBundle,
-                            })}
-                        </div>
-                    `
-                    : nothing}
             </div>
         `;
     }
@@ -635,7 +937,7 @@ export class FlowsEditorHeader extends PlatformElement {
         `;
     }
 
-    _renderPrimaryRow(state, flowName, mode, saving, status, hasBundleUpdate, branchItems) {
+    _renderPrimaryRow(state, flowName, mode, saving, status, hasBundleUpdate, branchItems, issues) {
         const showBranches = typeof this.flowId === 'string' && this.flowId.length > 0;
         return html`
             <div class="chrome-row chrome-row-primary">
@@ -692,6 +994,7 @@ export class FlowsEditorHeader extends PlatformElement {
                             .docHref=${'/documentation/scenarios/flows/edit-llm-flow/'}
                             .docLabel=${this.t('help_hints.open_scenario')}
                         ></platform-help-hint>
+                        ${this._renderProblemsButton(issues)}
                         <div class="desktop-only-actions">
                             ${this._renderHeaderIconButton({
                                 title: this.t('editor_header.flow_settings'),
@@ -747,9 +1050,14 @@ export class FlowsEditorHeader extends PlatformElement {
         const hasBundleUpdate = Boolean(flow && flow.has_bundle_update);
         const branchIds = flow && flow.branches ? Object.keys(flow.branches) : [];
         const branchItems = this._branchItems(flow, branchIds);
+        const issues = this._dataflowIssues(state);
+
+        if (this._problemsOpen) {
+            queueMicrotask(() => this._syncProblemsPortal());
+        }
 
         return html`
-            ${this._renderPrimaryRow(state, flowName, mode, saving, status, hasBundleUpdate, branchItems)}
+            ${this._renderPrimaryRow(state, flowName, mode, saving, status, hasBundleUpdate, branchItems, issues)}
             ${this._renderBranchesRow(branchItems)}
         `;
     }

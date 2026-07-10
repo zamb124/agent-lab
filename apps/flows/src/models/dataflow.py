@@ -79,6 +79,8 @@ class DataflowCanvasChip(StrictBaseModel):
     target: str | None = None
     status: DataflowStatus
     type: str | None = None
+    required: bool = False
+    producer_node: str | None = None
 
 
 class DataflowCanvasOutputChip(StrictBaseModel):
@@ -91,12 +93,23 @@ class DataflowCanvasSummary(StrictBaseModel):
     inputs: list[DataflowCanvasChip] = Field(default_factory=list)
     outputs: list[DataflowCanvasOutputChip] = Field(default_factory=list)
     has_issues: bool = False
+    error_count: int = 0
+    warning_count: int = 0
+
+
+class DataflowRequiredInput(StrictBaseModel):
+    name: str
+    origin: Literal["parameters_schema", "prompt", "contract"]
+    type: str = "any"
+    satisfied: bool = False
+    source: str | None = None
 
 
 class DataflowNodeInfo(StrictBaseModel):
     node_id: str
     node_type: str
     input_mapping: list[DataflowInputMappingRow] = Field(default_factory=list)
+    required_inputs: list[DataflowRequiredInput] = Field(default_factory=list)
     reads: list[DataflowConfigRead] = Field(default_factory=list)
     writes: list[DataflowStateDescriptor] = Field(default_factory=list)
     observed_writes: list[DataflowStateDescriptor] = Field(default_factory=list)
@@ -130,6 +143,7 @@ __all__ = [
     "DataflowIssue",
     "DataflowMappingSource",
     "DataflowNodeInfo",
+    "DataflowRequiredInput",
     "DataflowSeverity",
     "DataflowSource",
     "DataflowStateDescriptor",

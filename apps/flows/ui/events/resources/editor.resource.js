@@ -271,6 +271,7 @@ export const editorResource = createAsyncOp({
         viewBox: { ...DEFAULT_VIEWBOX },
         smartGuides: [],
         smartGuidesEnabled: true,
+        showDataWires: false,
         contextMenu: null,
         stickyNotes: [],
         pendingNodeToolId: null,
@@ -304,6 +305,7 @@ export const editorResource = createAsyncOp({
         MULTI_SELECTION_CHANGED: 'multi_selection_changed',
         SMART_GUIDES_UPDATED: 'smart_guides_updated',
         SMART_GUIDES_TOGGLED: 'smart_guides_toggled',
+        DATA_WIRES_TOGGLED: 'data_wires_toggled',
         CONTEXT_MENU_OPENED: 'context_menu_opened',
         CONTEXT_MENU_CLOSED: 'context_menu_closed',
         STICKY_NOTE_ADDED: 'sticky_note_added',
@@ -342,6 +344,7 @@ export const editorResource = createAsyncOp({
         setMultiSelection: 'multi_selection_changed',
         setSmartGuides: 'smart_guides_updated',
         toggleSmartGuides: 'smart_guides_toggled',
+        toggleDataWires: 'data_wires_toggled',
         openContextMenu: 'context_menu_opened',
         closeContextMenu: 'context_menu_closed',
         addStickyNote: 'sticky_note_added',
@@ -696,6 +699,10 @@ export const editorResource = createAsyncOp({
 
         if (t === 'flows/editor/smart_guides_toggled') {
             return { ...state, smartGuidesEnabled: !state.smartGuidesEnabled };
+        }
+
+        if (t === 'flows/editor/data_wires_toggled') {
+            return { ...state, showDataWires: !state.showDataWires };
         }
 
         if (t === 'flows/editor/context_menu_opened') {

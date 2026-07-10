@@ -250,6 +250,20 @@ Resolved LLM candidate может нести `context_length`; context layer и�
 
 При срабатывании breakpoint в стриме приходит `metadata.state_snapshot` (dump `ExecutionState`). `flow-editor-page` пишет в `FlowsStore.editor.previewExecutionState` через `setPreviewExecutionStateFromBreakpoint`. После завершения прогона / ошибки выполнения — `refreshPreviewExecutionState` возвращает шаблонный preview.
 
+## Dataflow canvas chips
+
+`POST /flows/api/v1/flows/dataflow/inspect` (`flow_dataflow_inspector.py`) строит два слоя:
+
+- **`incoming_state` / `output_state`** — широкий статический анализ (cap 220) для панели ноды и autocomplete.
+- **`canvas.inputs` / `canvas.outputs`** — только то, что рисуется chip'ами на канвасе.
+
+Канон canvas inputs:
+
+- **Entry-нода** — реалистичные стартовые входы: `content`, `files` (только если есть в `sample_state`), `variables.{key}` из declared branch variables, пути из `triggers[*].output_mapping` enabled triggers (`triggers.{id}.context.*`, `triggers.{id}.payload`). Runtime/frozen поля (`breakpoint_*`, `node_history`, `task_id`, …) на canvas не показываются.
+- **Downstream** — только явный контракт ноды: `input_mapping` + `required_inputs` + `reads`; fallback dump всего `incoming_state` запрещён.
+
+`sample_state` для inspect санитизируется на backend: только `content`, `files`, top-level `variables.{declared_key}`; полный `previewExecutionState` остаётся в editor state для TestPanel.
+
 ## Трейсы
 
 Дерево в `apps/flows/src/api/v1/traces.py` строится с сортировкой по `start_time` asc на каждом уровне — порядок siblings совпадает с хронологией. `get_spans_by_task` отдаёт spans по `start_time` asc.

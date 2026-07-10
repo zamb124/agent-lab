@@ -97,6 +97,16 @@ export class FlowsVariablesModal extends PlatformModal {
                 font-size: var(--text-xs);
                 text-transform: uppercase;
             }
+            .flows-vars-table td.actions {
+                white-space: nowrap;
+                text-align: right;
+            }
+            .flows-vars-actions {
+                display: inline-flex;
+                align-items: center;
+                justify-content: flex-end;
+                gap: var(--space-1);
+            }
             .flows-vars-empty { padding: var(--space-4); text-align: center; color: var(--text-tertiary); }
             .flows-vars-badge {
                 font-size: var(--text-xs);
@@ -187,12 +197,29 @@ export class FlowsVariablesModal extends PlatformModal {
                     : _stringifyVarValue(entry.value, false)}</td>
                 <td><span class="flows-vars-badge flow">${this.t('variables_modal.badge_flow')}</span></td>
                 <td class="actions">
-                    <platform-button @click=${() => this._editFlow(entry)}>
-                        <platform-icon name="edit" size="14"></platform-icon>
-                    </platform-button>
-                    <platform-button danger @click=${() => this._deleteFlow(entry)}>
-                        <platform-icon name="trash" size="14"></platform-icon>
-                    </platform-button>
+                    <div class="flows-vars-actions">
+                        <platform-button
+                            variant="ghost"
+                            icon-only
+                            density="dense"
+                            title=${this.t('variables_modal.action_edit')}
+                            aria-label=${this.t('variables_modal.action_edit')}
+                            @click=${() => this._editFlow(entry)}
+                        >
+                            <platform-icon name="edit" size="14"></platform-icon>
+                        </platform-button>
+                        <platform-button
+                            variant="ghost"
+                            icon-only
+                            density="dense"
+                            danger
+                            title=${this.t('variables_modal.action_delete')}
+                            aria-label=${this.t('variables_modal.action_delete')}
+                            @click=${() => this._deleteFlow(entry)}
+                        >
+                            <platform-icon name="trash" size="14"></platform-icon>
+                        </platform-button>
+                    </div>
                 </td>
             </tr>
         `;

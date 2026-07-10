@@ -103,6 +103,12 @@ export class PlatformCompanyVariablesPanel extends PlatformElement {
             text-transform: uppercase;
         }
         td.actions { white-space: nowrap; text-align: right; }
+        .actions-group {
+            display: inline-flex;
+            align-items: center;
+            justify-content: flex-end;
+            gap: var(--space-1);
+        }
         .badge {
             font-size: var(--text-xs);
             padding: 2px 6px;
@@ -222,9 +228,15 @@ export class PlatformCompanyVariablesPanel extends PlatformElement {
             <div class="layout">
                 <div>
                     <div class="toolbar">
-                        <platform-button @click=${() => this._create()}>
-                            <platform-icon name="plus" size="14"></platform-icon>
-                            ${this.t('action_create')}
+                        <platform-button
+                            variant="ghost"
+                            icon-only
+                            density="dense"
+                            title=${this.t('action_create')}
+                            aria-label=${this.t('action_create')}
+                            @click=${() => this._create()}
+                        >
+                            <platform-icon name="plus" size="16"></platform-icon>
                         </platform-button>
                     </div>
                     ${this._variables.loading && items.length === 0
@@ -254,15 +266,39 @@ export class PlatformCompanyVariablesPanel extends PlatformElement {
                                                 <td>${this.t('badge_version', { version: item.version })}</td>
                                                 <td>${this.t(_accessLabelKey(item))}</td>
                                                 <td class="actions">
-                                                    <platform-button @click=${() => this._edit(item)}>
-                                                        ${this.t('action_edit')}
-                                                    </platform-button>
-                                                    <platform-button @click=${() => this._showHistory(item.variable_key)}>
-                                                        ${this.t('action_history')}
-                                                    </platform-button>
-                                                    <platform-button danger @click=${() => this._delete(item)}>
-                                                        ${this.t('action_delete')}
-                                                    </platform-button>
+                                                    <div class="actions-group">
+                                                        <platform-button
+                                                            variant="ghost"
+                                                            icon-only
+                                                            density="dense"
+                                                            title=${this.t('action_edit')}
+                                                            aria-label=${this.t('action_edit')}
+                                                            @click=${() => this._edit(item)}
+                                                        >
+                                                            <platform-icon name="edit" size="14"></platform-icon>
+                                                        </platform-button>
+                                                        <platform-button
+                                                            variant="ghost"
+                                                            icon-only
+                                                            density="dense"
+                                                            title=${this.t('action_history')}
+                                                            aria-label=${this.t('action_history')}
+                                                            @click=${() => this._showHistory(item.variable_key)}
+                                                        >
+                                                            <platform-icon name="trace-timeline" size="14"></platform-icon>
+                                                        </platform-button>
+                                                        <platform-button
+                                                            variant="ghost"
+                                                            icon-only
+                                                            density="dense"
+                                                            danger
+                                                            title=${this.t('action_delete')}
+                                                            aria-label=${this.t('action_delete')}
+                                                            @click=${() => this._delete(item)}
+                                                        >
+                                                            <platform-icon name="trash" size="14"></platform-icon>
+                                                        </platform-button>
+                                                    </div>
                                                 </td>
                                             </tr>
                                         `)}

@@ -339,4 +339,19 @@ describe('flows/editor extraReducer', () => {
         expect(s.stickyNotes).toEqual([{ id: 'n1', x: 10, y: 10, width: 100, height: 80, text: 'hi' }]);
         expect(s.entryNodeId).toBe('a');
     });
+
+    it('data_wires_toggled переключает showDataWires', () => {
+        const { bus, getState } = build();
+        expect(getState().flowsEditor.showDataWires).toBe(false);
+        bus.dispatch('flows/editor/data_wires_toggled', {});
+        expect(getState().flowsEditor.showDataWires).toBe(true);
+        bus.dispatch('flows/editor/data_wires_toggled', {});
+        expect(getState().flowsEditor.showDataWires).toBe(false);
+    });
+
+    it('dataflow_set принимает payload dataflow', () => {
+        const { bus, getState } = build();
+        bus.dispatch('flows/editor/dataflow_set', { dataflow: { nodes: { a: { issues: [] } } } });
+        expect(getState().flowsEditor.dataflow.nodes.a.issues).toEqual([]);
+    });
 });

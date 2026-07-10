@@ -115,6 +115,7 @@
     "title_company": "Переменные компании",
     "title_flow": "Переменные flow",
     "action_create": "Создать",
+    "action_edit": "Изменить",
     "delete_title": "Удалить переменную?",
     "delete_message": "Удалить переменную \"{{key}}\"?",
     "action_delete": "Удалить",
@@ -931,6 +932,13 @@
     "option_all_title": "All (AND-join)",
     "option_all_desc": "Ожидание всех входящих рёбер, участвующих в join: нода выполнится один раз, когда все предшественники завершены."
   },
+  "variable_mapping_modal": {
+    "title": "Маппинг переменной",
+    "field_param": "Целевой параметр",
+    "field_create_edge": "Также создать связь, чтобы данные дошли до ноды",
+    "no_path_note": "Нет пути исполнения от {{from}} к {{to}}. Без связи данные не дойдут до этой ноды в рантайме.",
+    "action_map": "Создать маппинг"
+  },
   "tool_picker_modal": {
     "title": "Выбор tool",
     "title_flow": "Выбор flow",
@@ -1639,6 +1647,16 @@
     "group_aria": "Ветки flow"
   },
   "canvas": {
+    "dataflow": {
+      "from": "из",
+      "required": "обязательно",
+      "show_wires": "Показать связи данных",
+      "hide_wires": "Скрыть связи данных",
+      "problems_one": "{{count}} проблема данных",
+      "problems_other": "{{count}} проблем данных",
+      "no_problems": "Нет проблем данных",
+      "problems_title": "Проблемы потока данных"
+    },
     "context_menu": {
       "open_properties": "Открыть свойства",
       "toggle_entry": "Сделать стартовой",

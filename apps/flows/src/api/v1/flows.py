@@ -665,6 +665,7 @@ class FlowDataflowInspectRequest(BaseModel):
     nodes: dict[str, GraphNodeConfig] = Field(default_factory=dict)
     edges: list[Edge] = Field(default_factory=list)
     variables: dict[str, FlowVariableConfig] = Field(default_factory=dict)
+    triggers: dict[str, TriggerConfig] = Field(default_factory=dict)
     sample_state: JsonObject | None = None
     observed_runs: JsonObject = Field(default_factory=dict)
 
@@ -675,6 +676,27 @@ class FlowDataflowInspectRequest(BaseModel):
         value: JsonValue | Mapping[str, FlowVariableConfig] | None,
     ) -> dict[str, FlowVariableConfig]:
         return _flow_variable_models(value, "variables")
+
+    @field_validator("triggers", mode="before")
+    @classmethod
+    def _normalize_triggers(
+        cls,
+        value: JsonValue | Mapping[str, TriggerConfig] | None,
+    ) -> dict[str, TriggerConfig]:
+        if value is None:
+            return {}
+        if not isinstance(value, dict):
+            msg = "triggers must be an object"
+            raise ValueError(msg)
+        out: dict[str, TriggerConfig] = {}
+        for trigger_id, trigger in value.items():
+            if not trigger_id:
+                continue
+            if isinstance(trigger, TriggerConfig):
+                out[trigger_id] = trigger
+            else:
+                out[trigger_id] = TriggerConfig.model_validate(trigger)
+        return out
 
 
 async def _attach_nested_dataflow_for_editor(
@@ -742,6 +764,7 @@ async def inspect_dataflow(
     edges: list[Edge] = request.edges
     entry = request.entry
     variables: dict[str, FlowVariableConfig] = request.variables
+    triggers: dict[str, TriggerConfig] = request.triggers
 
     if not nodes and request.flow_id:
         flow_cfg = await container.flow_repository.get(request.flow_id)
@@ -753,6 +776,7 @@ async def inspect_dataflow(
         raw_entry = effective.get("entry")
         entry = raw_entry if isinstance(raw_entry, str) else None
         variables = _flow_variable_models(effective.get("variables"), "flow.variables")
+        triggers = flow_cfg.triggers
 
     node_payloads = _graph_nodes_payload(nodes)
     node_payloads = await _inline_tools_in_nodes(copy.deepcopy(node_payloads), container)
@@ -768,6 +792,7 @@ async def inspect_dataflow(
         variables=variables,
         sample_state=request.sample_state,
         observed_runs=request.observed_runs,
+        triggers=triggers,
     )
 
 
