@@ -39,8 +39,11 @@ def _rebind_observability_module_loggers() -> None:
         module = sys.modules.get(module_name)
         if module is None:
             continue
+        fresh_logger = get_logger(module_name)
         if hasattr(module, "_logger"):
-            setattr(module, "_logger", get_logger(module_name))
+            setattr(module, "_logger", fresh_logger)
+        if hasattr(module, "logger"):
+            setattr(module, "logger", fresh_logger)
 
 
 @pytest.fixture(scope="module", autouse=True)

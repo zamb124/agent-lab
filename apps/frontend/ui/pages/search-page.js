@@ -1,7 +1,9 @@
 import { html, css, nothing } from 'lit';
 import { unsafeHTML } from 'lit/directives/unsafe-html.js';
+import { repeat } from 'lit/directives/repeat.js';
 import { PlatformPage } from '@platform/lib/base/PlatformPage.js';
 import { flowsChatMarkdownToHtml } from '@platform/lib/chat/markdown.js';
+import { applyInlineCitations } from '@platform/lib/chat/citations.js';
 import { formatFileSize } from '@platform/lib/utils/format-file-size.js';
 import { resolveFileIconKey } from '@platform/lib/utils/file-icons.js';
 import {
@@ -26,6 +28,7 @@ const SEARCH_CHROME_HIDE_DELTA_PX = 50;
 const SEARCH_CHROME_SHOW_DELTA_PX = 14;
 const SEARCH_CHROME_TOP_VISIBLE_PX = 24;
 const MOBILE_SERP_MQ = '(max-width: 640px)';
+const ANSWER_COLLAPSE_THRESHOLD_PX = 340;
 
 export class PublicSearchPage extends PlatformPage {
     static i18nNamespace = 'landing';
@@ -37,6 +40,9 @@ export class PublicSearchPage extends PlatformPage {
         _preparingFiles: { state: true },
         _searchChromeHidden: { state: true },
         _entryAnimation: { state: true },
+        _answerExpanded: { state: true },
+        _answerOverflow: { state: true },
+        _activeCitation: { state: true },
     };
 
     static styles = [
@@ -537,10 +543,92 @@ export class PublicSearchPage extends PlatformPage {
                 overflow: hidden;
             }
 
+            .sources-panel {
+                border: 0;
+                background: transparent;
+                backdrop-filter: none;
+                border-radius: 0;
+                overflow: visible;
+            }
+
             .answer-panel {
+                position: relative;
                 padding: 18px;
-                min-height: 116px;
-                animation: resultIn 300ms ease both;
+                min-height: 96px;
+                background:
+                    linear-gradient(135deg, color-mix(in srgb, var(--landing-primary, var(--accent)) 8%, transparent), transparent 46%),
+                    var(--landing-panel-bg, var(--glass-bg-subtle));
+            }
+
+            .answer-collapse {
+                position: relative;
+            }
+
+            .answer-collapse.is-collapsed {
+                max-height: 300px;
+                overflow: hidden;
+            }
+
+            .answer-collapse.is-collapsed::after {
+                content: '';
+                position: absolute;
+                left: 0;
+                right: 0;
+                bottom: 0;
+                height: 72px;
+                pointer-events: none;
+                background: linear-gradient(
+                    to bottom,
+                    transparent,
+                    var(--landing-panel-bg, var(--glass-bg-subtle))
+                );
+            }
+
+            .answer-toggle {
+                margin-top: 10px;
+                min-height: 32px;
+                display: inline-flex;
+                align-items: center;
+                gap: 6px;
+                border: 0;
+                border-radius: 999px;
+                padding: 0 13px;
+                color: var(--landing-text, var(--text-primary));
+                background: var(--landing-panel-bg-strong, var(--glass-bg-medium));
+                font: 600 13px/1 var(--font-sans);
+                cursor: pointer;
+                transition: background 180ms ease, transform 180ms ease;
+            }
+
+            .answer-toggle:hover {
+                background: var(--landing-panel-border-strong, var(--glass-border-strong));
+                transform: translateY(-1px);
+            }
+
+            .answer-citation {
+                display: inline-flex;
+                align-items: center;
+                justify-content: center;
+                min-width: 18px;
+                height: 18px;
+                margin: 0 1px;
+                padding: 0 5px;
+                border-radius: 6px;
+                vertical-align: text-top;
+                color: #c6ccff;
+                background: rgba(137, 149, 255, 0.18);
+                box-shadow: inset 0 0 0 1px rgba(137, 149, 255, 0.28);
+                font-size: 11px;
+                font-weight: 700;
+                line-height: 1;
+                text-decoration: none;
+                transition: background 160ms ease, color 160ms ease, transform 160ms ease;
+            }
+
+            .answer-citation:hover {
+                color: #fff;
+                background: rgba(137, 149, 255, 0.42);
+                transform: translateY(-1px);
             }
 
             .answer-panel[data-state='error'] {
@@ -798,21 +886,30 @@ export class PublicSearchPage extends PlatformPage {
 
             .source-list {
                 display: grid;
-                gap: 8px;
+                gap: 2px;
+                margin-top: 6px;
+            }
+
+            .source-list:has(> .skeleton) {
+                gap: 10px;
                 margin-top: 10px;
             }
 
             .source-card {
                 display: grid;
                 gap: 7px;
-                padding: 12px;
-                border-radius: 16px;
+                padding: 13px 12px;
+                border-radius: 14px;
                 color: inherit;
                 text-decoration: none;
-                background: var(--landing-panel-bg-strong, var(--glass-bg-medium));
-                border: 1px solid var(--landing-panel-border, var(--glass-border-subtle));
-                transition: transform 180ms ease, background 180ms ease, border-color 180ms ease;
-                animation: resultIn 320ms ease both;
+                background: transparent;
+                border: 1px solid transparent;
+                transition: background 160ms ease, border-color 160ms ease;
+            }
+
+            .source-card.is-cited {
+                background: color-mix(in srgb, var(--landing-primary, var(--accent)) 14%, transparent);
+                border-color: color-mix(in srgb, var(--landing-primary, var(--accent)) 42%, transparent);
             }
 
             .source-card-inner {
@@ -891,9 +988,8 @@ export class PublicSearchPage extends PlatformPage {
             }
 
             .source-card:hover {
-                transform: translateY(-2px);
-                background: rgba(255, 255, 255, 0.075);
-                border-color: rgba(137, 149, 255, 0.34);
+                background: var(--landing-panel-bg-strong, var(--glass-bg-medium));
+                border-color: var(--landing-panel-border, var(--glass-border-subtle));
             }
 
             .source-header {
@@ -1052,9 +1148,12 @@ export class PublicSearchPage extends PlatformPage {
             }
 
             .provider-panel,
-            .suggest-panel,
-            .sources-panel {
+            .suggest-panel {
                 padding: 14px;
+            }
+
+            .sources-panel {
+                padding: 2px 0 0;
             }
 
             .provider-list,
@@ -1188,6 +1287,30 @@ export class PublicSearchPage extends PlatformPage {
                 to { opacity: 1; transform: translateY(0); }
             }
 
+            .page[data-entry='direct'] .results-wrap {
+                animation: resultsFadeIn 240ms ease both;
+            }
+
+            @keyframes resultsFadeIn {
+                from { opacity: 0; transform: translateY(8px); }
+                to { opacity: 1; transform: translateY(0); }
+            }
+
+            @media (prefers-reduced-motion: reduce) {
+                .search-shell,
+                .search-head:not(.is-active) .search-shell,
+                .page[data-entry='landing'] .topbar,
+                .page[data-entry='landing'] .search-head.is-active .search-shell,
+                .page[data-entry='landing'] .results-wrap,
+                .page[data-entry='direct'] .results-wrap,
+                .source-card,
+                .answer-toggle,
+                .answer-citation {
+                    animation: none !important;
+                    transition: none !important;
+                }
+            }
+
             @keyframes streamPulse {
                 0% { box-shadow: 0 0 0 0 rgba(143, 155, 255, 0.42); }
                 100% { box-shadow: 0 0 0 13px rgba(143, 155, 255, 0); }
@@ -1290,13 +1413,38 @@ export class PublicSearchPage extends PlatformPage {
             }
 
             :host-context([data-theme="light"]) .source-card {
-                background: rgba(255, 255, 255, 0.72);
-                border-color: rgba(16, 20, 34, 0.10);
+                background: transparent;
+                border-color: transparent;
             }
 
             :host-context([data-theme="light"]) .source-card:hover {
-                background: rgba(255, 255, 255, 0.92);
-                border-color: rgba(87, 104, 254, 0.30);
+                background: rgba(16, 20, 34, 0.04);
+                border-color: rgba(16, 20, 34, 0.08);
+            }
+
+            :host-context([data-theme="light"]) .source-card.is-cited {
+                background: rgba(87, 104, 254, 0.10);
+                border-color: rgba(87, 104, 254, 0.32);
+            }
+
+            :host-context([data-theme="light"]) .answer-citation {
+                color: #3f49d7;
+                background: rgba(87, 104, 254, 0.14);
+                box-shadow: inset 0 0 0 1px rgba(87, 104, 254, 0.26);
+            }
+
+            :host-context([data-theme="light"]) .answer-citation:hover {
+                color: #fff;
+                background: rgba(87, 104, 254, 0.86);
+            }
+
+            :host-context([data-theme="light"]) .answer-toggle {
+                color: rgba(18, 19, 26, 0.9);
+                background: rgba(16, 20, 34, 0.06);
+            }
+
+            :host-context([data-theme="light"]) .answer-collapse.is-collapsed::after {
+                background: linear-gradient(to bottom, transparent, rgba(255, 255, 255, 0.9));
             }
 
             :host-context([data-theme="light"]) .panel-label,
@@ -1671,6 +1819,9 @@ export class PublicSearchPage extends PlatformPage {
         this._preparingFiles = false;
         this._searchChromeHidden = false;
         this._entryAnimation = 'direct';
+        this._answerExpanded = false;
+        this._answerOverflow = false;
+        this._activeCitation = 0;
         this._lastRouteSig = '';
         this._runSeq = 0;
         this._lastScrollY = 0;
@@ -1752,6 +1903,21 @@ export class PublicSearchPage extends PlatformPage {
             this._serpLoadBlocked = false;
         }
         this._ensureSerpSentinelObserver();
+        this._measureAnswerOverflow();
+    }
+
+    _measureAnswerOverflow() {
+        const el = this.renderRoot.querySelector('[data-role="answer-text"]');
+        if (!(el instanceof HTMLElement)) {
+            if (this._answerOverflow) {
+                this._answerOverflow = false;
+            }
+            return;
+        }
+        const overflow = el.scrollHeight > ANSWER_COLLAPSE_THRESHOLD_PX;
+        if (overflow !== this._answerOverflow) {
+            this._answerOverflow = overflow;
+        }
     }
 
     _handleWindowScroll() {
@@ -1887,6 +2053,9 @@ export class PublicSearchPage extends PlatformPage {
         if (this._preparingFiles) {
             return;
         }
+        this._answerExpanded = false;
+        this._answerOverflow = false;
+        this._activeCitation = 0;
         this._searchChromeHidden = false;
         this._lastScrollY = Math.max(0, window.scrollY);
         this._scrollAnchorY = this._lastScrollY;
@@ -1954,6 +2123,64 @@ export class PublicSearchPage extends PlatformPage {
 
     _markdownTemplate(text, streaming) {
         return unsafeHTML(flowsChatMarkdownToHtml(text, { streaming }));
+    }
+
+    _answerTemplate(stream) {
+        const streaming = !stream.completed;
+        let out = flowsChatMarkdownToHtml(stream.answer, { streaming });
+        if (stream.results.length > 0) {
+            const results = stream.results;
+            out = applyInlineCitations(out, (index) => {
+                if (!Number.isInteger(index) || index < 1 || index > results.length) {
+                    return null;
+                }
+                const result = results[index - 1];
+                if (!/^https?:\/\//.test(result.url)) {
+                    return null;
+                }
+                return { url: result.url, label: result.title };
+            });
+        }
+        return unsafeHTML(out);
+    }
+
+    _citationRankFromEvent(event) {
+        for (const node of event.composedPath()) {
+            if (node instanceof HTMLElement && node.hasAttribute('data-citation')) {
+                const value = Number(node.getAttribute('data-citation'));
+                return Number.isInteger(value) && value > 0 ? value : 0;
+            }
+        }
+        return 0;
+    }
+
+    _onAnswerClick(event) {
+        const rank = this._citationRankFromEvent(event);
+        if (rank === 0) {
+            return;
+        }
+        const stream = this._search.state.stream;
+        if (rank > stream.results.length) {
+            return;
+        }
+        this._reportSourceClick(stream, stream.results[rank - 1], rank - 1);
+    }
+
+    _onAnswerPointer(event) {
+        const rank = this._citationRankFromEvent(event);
+        if (rank !== this._activeCitation) {
+            this._activeCitation = rank;
+        }
+    }
+
+    _onAnswerPointerLeave() {
+        if (this._activeCitation !== 0) {
+            this._activeCitation = 0;
+        }
+    }
+
+    _toggleAnswerExpand() {
+        this._answerExpanded = !this._answerExpanded;
     }
 
     _insightForUrl(stream, url) {
@@ -2210,14 +2437,31 @@ export class PublicSearchPage extends PlatformPage {
             return this._renderSearchError();
         }
         const hasAnswer = stream.answer.trim() !== '';
+        const collapsible = this._answerOverflow && !this._answerExpanded;
         return html`
             <section class="answer-panel">
                 <p class="panel-label">
-                    ${stream.completed ? html`<platform-icon name="check" size="14"></platform-icon>` : html`<span class="stream-dot"></span>`}
-                    <span>${this.t('search_page.answer_label')}</span>
+                    ${stream.completed ? html`<platform-icon name="sparkle" size="14"></platform-icon>` : html`<span class="stream-dot"></span>`}
+                    <span>${this.t('search_page.ai_overview_label')}</span>
                 </p>
                 ${hasAnswer
-                    ? html`<div class="answer-text">${this._markdownTemplate(stream.answer, !stream.completed)}</div>`
+                    ? html`
+                        <div class="answer-collapse ${collapsible ? 'is-collapsed' : ''}">
+                            <div
+                                class="answer-text"
+                                data-role="answer-text"
+                                @click=${this._onAnswerClick}
+                                @pointerover=${this._onAnswerPointer}
+                                @pointerleave=${this._onAnswerPointerLeave}
+                            >${this._answerTemplate(stream)}</div>
+                        </div>
+                        ${this._answerOverflow ? html`
+                            <button class="answer-toggle" type="button" @click=${this._toggleAnswerExpand}>
+                                <span>${this._answerExpanded ? this.t('search_page.answer_show_less') : this.t('search_page.answer_show_full')}</span>
+                                <platform-icon name=${this._answerExpanded ? 'chevron-up' : 'chevron-down'} size="15"></platform-icon>
+                            </button>
+                        ` : nothing}
+                    `
                     : html`<div class="answer-placeholder">${this.t('search_page.answer_pending')}</div>`}
             </section>
         `;
@@ -2355,10 +2599,12 @@ export class PublicSearchPage extends PlatformPage {
         const describing = this._sourceDescribe.busy && activeUrl === result.url;
         const siteLabel = result.site_name !== '' ? result.site_name : result.display_url;
         const displayUrl = this._displayUrl(result);
+        const rankNum = result.rank > 0 ? result.rank : index + 1;
+        const cited = this._activeCitation === rankNum;
         return html`
             <article
-                class="source-card"
-                style=${`animation-delay: ${Math.min(index * 34, 260)}ms`}
+                class="source-card ${cited ? 'is-cited' : ''}"
+                data-rank=${rankNum}
             >
                 <div class="source-card-inner">
                     <div class="source-content">
@@ -2449,7 +2695,11 @@ export class PublicSearchPage extends PlatformPage {
                     </p>
                 ` : html``}
                 <div class="source-list">
-                    ${stream.results.map((result, index) => this._renderSource(stream, result, index))}
+                    ${repeat(
+                        stream.results,
+                        (result) => result.url,
+                        (result, index) => this._renderSource(stream, result, index),
+                    )}
                     ${stream.has_more && stream.serp_cache_key !== '' ? html`
                         <div class="source-scroll-sentinel" aria-hidden="true"></div>
                     ` : html``}
@@ -2490,7 +2740,7 @@ export class PublicSearchPage extends PlatformPage {
         }
         return html`
             <section class="suggest-panel">
-                <p class="panel-label"><platform-icon name="sparkle" size="14"></platform-icon><span>${this.t('search_page.suggestions_label')}</span></p>
+                <p class="panel-label"><platform-icon name="search" size="14"></platform-icon><span>${this.t('search_page.related_label')}</span></p>
                 <div class="suggest-list">
                     ${suggestions.map((item) => html`
                         <button class="suggest-chip" type="button" ?disabled=${this._preparingFiles} @click=${() => this._suggest(item.text)}>

@@ -35,6 +35,7 @@ let activeSearchRun = null;
 const publicSearchSessionByMode = new Map();
 
 const PUBLIC_SEARCH_SESSION_EXPIRY_SKEW_MS = 30_000;
+const PUBLIC_SEARCH_STREAM_THROTTLE_MS = 90;
 
 function _emptyStream() {
     return {
@@ -403,6 +404,59 @@ function _publishStream(ctx, eventId, stream) {
     );
 }
 
+/**
+ * Коалесинг публикаций stream'а во время стрима LLM-ответа: `content_chunk`
+ * приходят десятками в секунду и без троттлинга каждый вызывает полный re-render
+ * страницы (мерцание, layout-shift). Редкие важные кадры (results/suggestions/
+ * insights/completed/task_started/failed) публикуются немедленно.
+ */
+function _createStreamPublisher(ctx, eventId, publishFn) {
+    let timer = 0;
+    let pending = null;
+    const flush = () => {
+        if (timer !== 0) {
+            clearTimeout(timer);
+            timer = 0;
+        }
+        if (pending !== null) {
+            const stream = pending;
+            pending = null;
+            publishFn(ctx, eventId, stream);
+        }
+    };
+    return {
+        publish: (stream, immediate) => {
+            pending = stream;
+            if (immediate === true) {
+                flush();
+                return;
+            }
+            if (timer === 0) {
+                timer = setTimeout(flush, PUBLIC_SEARCH_STREAM_THROTTLE_MS);
+            }
+        },
+        cancel: () => {
+            if (timer !== 0) {
+                clearTimeout(timer);
+                timer = 0;
+            }
+            pending = null;
+        },
+    };
+}
+
+function _mappedEventsNeedImmediatePublish(events) {
+    for (const runtimeEvent of events) {
+        if (!runtimeEvent || typeof runtimeEvent !== 'object') {
+            continue;
+        }
+        if (runtimeEvent.type !== 'content_chunk' && runtimeEvent.type !== 'activity') {
+            return true;
+        }
+    }
+    return false;
+}
+
 function _publishSourceDescribeStream(ctx, eventId, sourceStream) {
     ctx.dispatch(
         PUBLIC_SEARCH_SOURCE_STREAM_EVENT,
@@ -687,7 +741,8 @@ async function _runPublicSearch({ payload, ctx, event }) {
     const request = _normalizeRunPayload(payload);
     const session = await _issuePublicSearchSession(request.mode, { force: true, consumeSearchQuota: true });
     const stream = _streamFromRunPayload(request);
-    _publishStream(ctx, event.id, stream);
+    const publisher = _createStreamPublisher(ctx, event.id, _publishStream);
+    publisher.publish(stream, true);
 
     let streamError = null;
     const controller = new AbortController();
@@ -718,7 +773,7 @@ async function _runPublicSearch({ payload, ctx, event }) {
                 stream.task_primed = true;
             }
             _applyRuntimeEvents(stream, mapped.events);
-            _publishStream(ctx, event.id, stream);
+            publisher.publish(stream, _mappedEventsNeedImmediatePublish(mapped.events));
         } catch (error) {
             streamError = new Error(_errorMessage(error));
             controller.abort();
@@ -745,6 +800,7 @@ async function _runPublicSearch({ payload, ctx, event }) {
         }
         throw error;
     } finally {
+        publisher.cancel();
         _clearActiveSearchRun(request.run_id, controller);
     }
     if (streamError !== null) {

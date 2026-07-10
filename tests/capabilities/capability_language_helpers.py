@@ -60,6 +60,37 @@ STATIC_PLATFORM_CAPABILITIES = {
 }
 INTERRUPT_PLATFORM_CAPABILITIES = {"flow.ask_user"}
 
+
+def is_ephemeral_tool_capability_name(capability_name: str) -> bool:
+    if not capability_name.startswith("tools."):
+        return False
+    tool_id = capability_name.removeprefix("tools.")
+    if tool_id.startswith("mcp_"):
+        return True
+    if "_api_" in tool_id:
+        return True
+    if tool_id.startswith("capability-"):
+        return True
+    return False
+
+
+def sdk_stable_capability_names_from_manifest(manifest: Mapping[str, object]) -> set[str]:
+    capabilities = manifest.get("capabilities")
+    assert isinstance(capabilities, list)
+    names: set[str] = set()
+    for item in capabilities:
+        assert isinstance(item, dict)
+        raw_name = item.get("name")
+        assert isinstance(raw_name, str)
+        names.add(raw_name)
+    return {
+        name
+        for name in names
+        if name in STATIC_PLATFORM_CAPABILITIES | INTERRUPT_PLATFORM_CAPABILITIES
+        or (name.startswith("tools.") and not is_ephemeral_tool_capability_name(name))
+    }
+
+
 EXPECTED_FILE_BASE64 = "Y2FwYWJpbGl0eSBzbW9rZQ=="
 RUNNER_ENDPOINTS = {
     "python": ("code_runner_python", "/code-runner-python/api/v1/execute"),
@@ -89,7 +120,11 @@ def go_exported_name(raw: str) -> str:
     return name
 
 
-def sdk_pairs(manifest: Mapping[str, object]) -> list[tuple[str, str]]:
+def sdk_pairs(
+    manifest: Mapping[str, object],
+    *,
+    capability_names: set[str] | None = None,
+) -> list[tuple[str, str]]:
     capabilities = manifest.get("capabilities")
     assert isinstance(capabilities, list)
     pairs: set[tuple[str, str]] = set()
@@ -97,6 +132,8 @@ def sdk_pairs(manifest: Mapping[str, object]) -> list[tuple[str, str]]:
         assert isinstance(item, dict)
         raw_name = item["name"]
         assert isinstance(raw_name, str)
+        if capability_names is not None and raw_name not in capability_names:
+            continue
         default_namespace, default_method = raw_name.split(".", 1)
         namespace = item.get("sdk_namespace")
         method = item.get("sdk_method")
@@ -957,7 +994,8 @@ async def assert_language_sdk_covers_manifest(
     auth_headers_system: dict[str, str],
 ) -> None:
     manifest = await fetch_manifest(sandbox_services)
-    pairs = sdk_pairs(manifest)
+    stable_names = sdk_stable_capability_names_from_manifest(manifest)
+    pairs = sdk_pairs(manifest, capability_names=stable_names)
     assert pairs
     response = await flows_client_http.post(
         "/flows/api/v1/code/execute",

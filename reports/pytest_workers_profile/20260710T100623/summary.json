@@ -1,0 +1,74 @@
+{
+  "run_id": "20260710T100623",
+  "pytest_workers": "10",
+  "pytest_workers_numeric": 10,
+  "phase1_passed": false,
+  "phase1_exit_code": 1,
+  "failed_count": 2,
+  "parallelism_suspect_count": 1,
+  "phase1_wall_time_seconds": null,
+  "max_worker_restart": 2,
+  "stack_scale_factor": 1.0,
+  "stack_capacity": {
+    "secrets": 1,
+    "flows": 2,
+    "rag": 1,
+    "crm": 1,
+    "frontend": 1,
+    "sync": 1,
+    "office": 1,
+    "search": 2,
+    "provider_litserve": 1,
+    "voice": 1,
+    "capability_gateway": 6,
+    "code_runner_python": 12,
+    "code_runner_node": 1,
+    "code_runner_go": 1,
+    "code_runner_csharp": 1,
+    "worktracker": 1,
+    "flows_worker": 1,
+    "rag_worker": 1,
+    "search_worker": 2,
+    "sync_worker": 2,
+    "crm_worker": 1
+  },
+  "xdist_counts": {
+    "total_phase1_estimate": 1683,
+    "code_sandbox_estimate": 106,
+    "real_taskiq_estimate": 12,
+    "parallelizable_estimate": 1565
+  },
+  "failed_nodeids": [
+    "tests/capabilities/test_python_capabilities.py::test_python_sdk_contains_every_manifest_capability",
+    "tests/observability/test_flows_runtime_metrics.py::test_flow_react_completed_emitted_after_llm_node"
+  ],
+  "issues": [
+    {
+      "severity": "error",
+      "code": "phase1_failed",
+      "message": "pytest phase 1 завершился с exit_code=1",
+      "nodeid": null,
+      "pattern": null
+    },
+    {
+      "severity": "warn",
+      "code": "likely_parallelism_failure",
+      "message": "AssertionError: {'success': False, 'input_state': {}, 'output_state': None, 'diff': [], 'error': \"AttributeError: code_runner_python/python/user: 'types.SimpleNamespace' object has no attribute 'mcp_s",
+      "nodeid": "tests.capabilities.test_python_capabilities::test_python_sdk_contains_every_manifest_capability",
+      "pattern": "code_runner"
+    }
+  ],
+  "recommendations": [
+    "Дождитесь phase 2 retry или запустите: make test с меньшим WORKERS"
+  ],
+  "issue_count_error": 1,
+  "issue_count_warn": 1,
+  "delta_vs_previous": {
+    "has_previous": true,
+    "previous_run_id": "20260710T003054",
+    "failed_count_delta": -1,
+    "parallelism_suspect_count_delta": 1,
+    "phase1_wall_time_seconds_delta": null,
+    "issue_count_error_delta": 0
+  }
+}
