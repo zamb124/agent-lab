@@ -6,6 +6,7 @@ from __future__ import annotations
 
 from apps.flows.config import get_settings
 from apps.flows.src.models.mcp import MCPServerConfig, MCPServerSource, MCPTransportType
+from core.search import PUBLIC_SEARCH_WALL_TIME_SECONDS
 
 
 def build_default_mcp_servers() -> list[MCPServerConfig]:
@@ -37,5 +38,6 @@ def build_default_mcp_servers() -> list[MCPServerConfig]:
             is_active=True,
             description="Platform Search MCP (SERP providers, suggestions, result insights)",
             source=MCPServerSource.PLATFORM,
+            request_timeout_seconds=PUBLIC_SEARCH_WALL_TIME_SECONDS,
         ),
     ]

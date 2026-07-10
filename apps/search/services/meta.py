@@ -22,12 +22,17 @@ from apps.search.services.company_config import (
 from apps.search.services.index_resolver import preprocess_meta_search_request
 from apps.search.services.provider_availability import ProviderAvailabilityStore
 from apps.search.services.serp_cache import SerpCacheMissError, SerpCacheService
+from core.ai.runtime import rerank_scores
 from core.billing.exceptions import BillingBalanceBlockedError
 from core.billing.service import BALANCE_BLOCK_OPERATION_SEARCH, BillingService
+from core.config import get_settings
 from core.models.billing_models import UsageType
 from core.models.identity_models import Company
+from core.rag.post_retrieval_rerank import rerank_options
 from core.search import (
+    PUBLIC_SEARCH_WALL_TIME_SECONDS,
     MetaSearchProviderStatus,
+    MetaSearchRefineRequest,
     MetaSearchRequest,
     MetaSearchResponse,
     MetaSearchSerpMoreRequest,
@@ -143,6 +148,83 @@ class MetaSearchService:
             limit=body.limit,
             serp_cache_key=body.serp_cache_key,
         )
+
+    async def refine(self, body: MetaSearchRefineRequest) -> MetaSearchResponse:
+        """Доранжирует закэшированный preview-пул реранкером и отдаёт refined-страницу."""
+        try:
+            entry = await self._serp_cache_service.load_entry(body.serp_cache_key)
+        except SerpCacheMissError as exc:
+            raise ValueError(str(exc)) from exc
+        reranked_pool = await self._rerank_serp_pool(query=body.query, pool=entry.ranked)
+        serp_cache_key = await self._serp_cache_service.store_pool(
+            query=entry.query,
+            mode=entry.mode,
+            index_ids=entry.index_ids,
+            ranked=reranked_pool,
+        )
+        total_count = len(reranked_pool)
+        page_items = reranked_pool[body.offset : body.offset + body.limit]
+        ranked_page: list[WebSearchResult] = []
+        for rank, item in enumerate(page_items, start=body.offset + 1):
+            ranked_page.append(item.model_copy(update={"rank": rank}))
+        has_more = body.offset + len(page_items) < total_count
+        return MetaSearchResponse(
+            query=entry.query,
+            results=ranked_page,
+            providers={},
+            total_count=total_count,
+            has_more=has_more,
+            offset=body.offset,
+            limit=body.limit,
+            serp_cache_key=serp_cache_key,
+            rank_stage="refined",
+        )
+
+    async def _rerank_serp_pool(
+        self,
+        *,
+        query: str,
+        pool: list[WebSearchResult],
+    ) -> list[WebSearchResult]:
+        if not pool:
+            return list(pool)
+        settings = get_settings()
+        resolution = rerank_options(None, None, settings)
+        if not resolution.enabled or resolution.url is None:
+            raise ValueError("serp refine: reranker is not configured")
+        rr = settings.rag.reranker
+        passages = [f"{item.title}\n{item.snippet}".strip() for item in pool]
+        async with traced_operation(
+            "search.serp.refine",
+            event_type="search.serp.refine",
+            operation_category="search",
+            extra_attributes={
+                "platform.search.refine_pool_size": len(pool),
+            },
+        ) as span:
+            scores = await rerank_scores(
+                endpoint_url=resolution.url,
+                query=query,
+                passages=passages,
+                timeout_seconds=PUBLIC_SEARCH_WALL_TIME_SECONDS,
+                cost_per_1m_tokens=rr.cost_per_1m_tokens,
+                platform_markup=rr.platform_markup,
+                billing_resource_id=resolution.billing_resource_id or resolution.model or rr.billing_model_id,
+                cost_origin="platform",
+                model=resolution.model,
+                api_key=resolution.api_key,
+                extra_request_headers=resolution.extra_request_headers,
+            )
+            span.set_attribute("platform.search.refine_scored", len(scores))
+        ordered = sorted(
+            zip(pool, scores, strict=True),
+            key=lambda pair: pair[1],
+            reverse=True,
+        )
+        reranked: list[WebSearchResult] = []
+        for rank, (item, score) in enumerate(ordered, start=1):
+            reranked.append(item.model_copy(update={"rank": rank, "score": round(float(score), 6)}))
+        return reranked
 
     async def search(
         self,
@@ -335,7 +417,12 @@ class MetaSearchService:
     ) -> MetaSearchResponse:
         total_count = len(ranked_pool)
         serp_cache_key: str | None = None
-        if total_count > request.limit:
+        # quick staged поиск всегда кэширует пул, чтобы refine мог доранжировать
+        # его реранкером даже когда total_count <= limit.
+        should_cache_pool = total_count > 0 and (
+            total_count > request.limit or request.mode == "quick"
+        )
+        if should_cache_pool:
             serp_cache_key = await self._serp_cache_service.store_pool(
                 query=request.query,
                 mode=request.mode,

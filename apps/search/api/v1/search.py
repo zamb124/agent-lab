@@ -9,6 +9,7 @@ from apps.search.dependencies import ContainerDep
 from core.context import get_context
 from core.search.logging_events import log_serp_click
 from core.search.models import (
+    MetaSearchRefineRequest,
     MetaSearchRequest,
     MetaSearchResponse,
     MetaSearchSerpMoreRequest,
@@ -34,6 +35,14 @@ async def meta_search(body: MetaSearchRequest, container: ContainerDep) -> MetaS
 async def meta_search_serp_more(body: MetaSearchSerpMoreRequest, container: ContainerDep) -> MetaSearchResponse:
     try:
         return await container.meta_search_service.serp_more(body)
+    except ValueError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+
+@router.post("/search/serp/refine", response_model=MetaSearchResponse)
+async def meta_search_serp_refine(body: MetaSearchRefineRequest, container: ContainerDep) -> MetaSearchResponse:
+    try:
+        return await container.meta_search_service.refine(body)
     except ValueError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
 

@@ -62,7 +62,11 @@ class MCPClient:
         variables_copy: dict[str, JsonValue] = dict(variables) if variables is not None else {}
         self.config: MCPServerConfig = config
         self._variables: Mapping[str, JsonValue] = MappingProxyType(variables_copy)
-        self.timeout: float = timeout
+        self.timeout: float = (
+            float(config.request_timeout_seconds)
+            if config.request_timeout_seconds is not None
+            else timeout
+        )
         self.session_id: str | None = None
         self.protocol_version: str | None = None
         self._request_id: int = 0

@@ -114,6 +114,7 @@
         "error_details": "Technical details",
         "sources_label": "Sources",
         "results_shown_of_total": "Showing {shown} of {total}",
+        "refining_order": "Refining order…",
         "loading_more": "Loading more results…",
         "load_more_error": "Could not load more results. Run the search again.",
         "providers_label": "Providers",

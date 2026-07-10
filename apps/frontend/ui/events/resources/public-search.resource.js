@@ -58,6 +58,7 @@ function _emptyStream() {
         markdown_sources: '',
         completed: false,
         serp_cache_key: '',
+        rank_stage: 'preview',
         total_count: 0,
         has_more: false,
         results_offset: 0,
@@ -140,6 +141,17 @@ function _requireNullableString(value, label) {
         return null;
     }
     return _requireString(value, label);
+}
+
+function _requireRankStage(value, label) {
+    if (value === undefined) {
+        return 'preview';
+    }
+    const stage = _requireNonEmptyString(value, label);
+    if (stage !== 'preview' && stage !== 'refined') {
+        throw new Error(`${label} is invalid`);
+    }
+    return stage;
 }
 
 function _requireSearchRunMode(value, label) {
@@ -375,6 +387,7 @@ function _normalizeStreamPayload(value) {
         markdown_sources: _requireString(stream.markdown_sources, 'stream.markdown_sources'),
         completed: _requireBoolean(stream.completed, 'stream.completed'),
         serp_cache_key: _requireString(stream.serp_cache_key, 'stream.serp_cache_key'),
+        rank_stage: _requireRankStage(stream.rank_stage, 'stream.rank_stage'),
         total_count: _requireNumber(stream.total_count, 'stream.total_count'),
         has_more: _requireBoolean(stream.has_more, 'stream.has_more'),
         results_offset: _requireNumber(stream.results_offset, 'stream.results_offset'),
@@ -539,6 +552,7 @@ function _applySearchUiEvent(stream, event) {
     const payload = _requireObject(event.payload, 'ui_event.payload');
     if (eventType === 'search/serp/results_ready') {
         stream.phase = 'results';
+        stream.rank_stage = 'preview';
         stream.results = _normalizeResults(payload.results);
         stream.providers = _normalizeProviders(payload.providers);
         stream.total_count = _requireNumber(payload.total_count, 'results_ready.total_count');
@@ -554,6 +568,21 @@ function _applySearchUiEvent(stream, event) {
         }
         if (Object.prototype.hasOwnProperty.call(payload, 'limit')) {
             stream.page_limit = _requireNumber(payload.limit, 'results_ready.limit');
+        }
+        return;
+    }
+    if (eventType === 'search/serp/results_refined') {
+        // Refined-порядок доранжирования: обновляем результаты и cache key,
+        // но НЕ меняем phase — LLM-ответ уже мог стартовать по preview.
+        stream.rank_stage = 'refined';
+        stream.results = _normalizeResults(payload.results);
+        if (Object.prototype.hasOwnProperty.call(payload, 'serp_cache_key')) {
+            const cacheKey = payload.serp_cache_key;
+            if (cacheKey === null) {
+                stream.serp_cache_key = '';
+            } else {
+                stream.serp_cache_key = _requireNonEmptyString(cacheKey, 'results_refined.serp_cache_key');
+            }
         }
         return;
     }

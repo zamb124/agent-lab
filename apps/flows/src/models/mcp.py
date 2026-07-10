@@ -76,6 +76,13 @@ class MCPServerConfig(BaseModel):
             "из state.variables company_id/user_id."
         ),
     )
+    request_timeout_seconds: int | None = Field(
+        default=None,
+        description=(
+            "Per-server HTTP timeout (сек) для MCP JSON-RPC вызовов. None — общий default клиента. "
+            "Для platform search server поднят до окна public search chain."
+        ),
+    )
     is_active: bool = Field(default=True, description="Активен ли сервер")
     cached_tools: list[str] = Field(
         default_factory=list,

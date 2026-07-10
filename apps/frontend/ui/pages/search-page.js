@@ -670,6 +670,18 @@ export class PublicSearchPage extends PlatformPage {
                 text-transform: none;
             }
 
+            .panel-refining {
+                display: inline-flex;
+                align-items: center;
+                gap: 6px;
+                color: var(--landing-text-muted, var(--text-tertiary));
+                font-size: 11px;
+                font-weight: 500;
+                letter-spacing: 0.02em;
+                text-transform: none;
+                opacity: 0.85;
+            }
+
             .answer-text {
                 margin: 0;
                 overflow-wrap: anywhere;
@@ -1939,6 +1951,10 @@ export class PublicSearchPage extends PlatformPage {
         this._serpObservedSentinel = null;
         this._serpLoadBlocked = false;
         this._lastSerpCacheKey = '';
+        /** @type {Map<string, DOMRect>} */
+        this._serpRects = new Map();
+        /** @type {string | undefined} */
+        this._serpOrderSignature = undefined;
         this._handleWindowScroll = this._handleWindowScroll.bind(this);
         /** @type {(() => void) | null} */
         this._releaseSearchInputViewport = null;
@@ -2010,7 +2026,59 @@ export class PublicSearchPage extends PlatformPage {
             this._serpLoadBlocked = false;
         }
         this._ensureSerpSentinelObserver();
+        this._animateSerpReorder();
         this._measureAnswerOverflow();
+    }
+
+    /**
+     * FLIP-переупорядочивание SERP: когда refined-этап меняет порядок карточек
+     * (keyed repeat переносит те же DOM-узлы), плавно анимируем их из прошлой
+     * позиции в новую. Анимация запускается только при смене порядка, чтобы
+     * стриминг ответа над списком не дёргал карточки.
+     */
+    _animateSerpReorder() {
+        const cards = this.renderRoot.querySelectorAll('.source-card[data-url]');
+        const nextRects = new Map();
+        const order = [];
+        for (const el of cards) {
+            const url = el.getAttribute('data-url');
+            if (url === null) {
+                continue;
+            }
+            order.push(url);
+            nextRects.set(url, el.getBoundingClientRect());
+        }
+        const orderSignature = order.join('|');
+        const prevRects = this._serpRects instanceof Map ? this._serpRects : new Map();
+        const orderChanged = this._serpOrderSignature !== undefined
+            && orderSignature !== this._serpOrderSignature;
+        if (orderChanged) {
+            for (const el of cards) {
+                const url = el.getAttribute('data-url');
+                if (url === null) {
+                    continue;
+                }
+                const oldRect = prevRects.get(url);
+                const newRect = nextRects.get(url);
+                if (oldRect === undefined || newRect === undefined) {
+                    continue;
+                }
+                const dx = oldRect.left - newRect.left;
+                const dy = oldRect.top - newRect.top;
+                if (Math.abs(dx) <= 1 && Math.abs(dy) <= 1) {
+                    continue;
+                }
+                el.animate(
+                    [
+                        { transform: `translate(${dx}px, ${dy}px)` },
+                        { transform: 'translate(0, 0)' },
+                    ],
+                    { duration: 340, easing: 'cubic-bezier(0.22, 0.61, 0.36, 1)' },
+                );
+            }
+        }
+        this._serpRects = nextRects;
+        this._serpOrderSignature = orderSignature;
     }
 
     _measureAnswerOverflow() {
@@ -2708,6 +2776,7 @@ export class PublicSearchPage extends PlatformPage {
             <article
                 class="source-card ${cited ? 'is-cited' : ''}"
                 data-rank=${rankNum}
+                data-url=${result.url}
             >
                 <div class="source-card-inner">
                     <div class="source-content">
@@ -2788,6 +2857,12 @@ export class PublicSearchPage extends PlatformPage {
                     <platform-icon name="link" size="14"></platform-icon>
                     <span>${this.t('search_page.sources_label')}</span>
                     <span class="panel-count">${stream.results.length}</span>
+                    ${stream.rank_stage === 'preview' && !stream.completed ? html`
+                        <span class="panel-refining">
+                            <span class="stream-dot"></span>
+                            <span>${this.t('search_page.refining_order')}</span>
+                        </span>
+                    ` : html``}
                 </p>
                 ${stream.total_count > 0 ? html`
                     <p class="source-results-meta">

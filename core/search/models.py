@@ -63,6 +63,19 @@ class MetaSearchProviderStatus(BaseModel):
     billing_resource_name: str | None = None
 
 
+class MetaSearchRetrievalOverrides(BaseModel):
+    """Per-request override retrieval-параметров индекс-провайдера.
+
+    Используется staged quick-поиском: preview идёт с rerank=false и меньшим
+    per_channel_top_k (быстрая выдача), refine доранжирует пул реранкером.
+    """
+
+    model_config: ClassVar[ConfigDict] = ConfigDict(extra="forbid")
+
+    rerank: bool | None = Field(default=None)
+    per_channel_top_k: int | None = Field(default=None, ge=1, le=500)
+
+
 class MetaSearchRequest(BaseModel):
     model_config: ClassVar[ConfigDict] = ConfigDict(extra="forbid", str_strip_whitespace=True)
 
@@ -70,6 +83,7 @@ class MetaSearchRequest(BaseModel):
     limit: int = Field(default=10, ge=1, le=25)
     offset: int = Field(default=0, ge=0)
     retrieve_limit: int | None = Field(default=None, ge=1, le=200)
+    retrieval_overrides: MetaSearchRetrievalOverrides | None = Field(default=None)
     serp_cache_key: str | None = Field(default=None, min_length=1, max_length=64)
     providers: list[str] = Field(default_factory=lambda: ["auto"])
     provider_strategy: Literal["first_available", "merge"] = "first_available"
@@ -123,6 +137,9 @@ class MetaSearchRequest(BaseModel):
         return out or ["auto"]
 
 
+SerpRankStage = Literal["preview", "refined"]
+
+
 class MetaSearchResponse(BaseModel):
     model_config: ClassVar[ConfigDict] = ConfigDict(extra="forbid", str_strip_whitespace=True)
 
@@ -134,6 +151,19 @@ class MetaSearchResponse(BaseModel):
     offset: int = Field(default=0, ge=0)
     limit: int = Field(default=0, ge=0)
     serp_cache_key: str | None = None
+    rank_stage: SerpRankStage = "preview"
+
+
+class MetaSearchRefineRequest(BaseModel):
+    """Доранжирование ранее закэшированного SERP-пула реранкером."""
+
+    model_config: ClassVar[ConfigDict] = ConfigDict(extra="forbid", str_strip_whitespace=True)
+
+    serp_cache_key: str = Field(..., min_length=1, max_length=64)
+    query: str = Field(..., min_length=1, max_length=500)
+    limit: int = Field(default=10, ge=1, le=25)
+    offset: int = Field(default=0, ge=0)
+    mode: SearchMode = "quick"
 
 
 class MetaSearchSerpMoreRequest(BaseModel):

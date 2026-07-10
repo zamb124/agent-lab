@@ -17,7 +17,12 @@ from core.clients.service_client import ServiceClientError
 from core.context import Context, clear_context, set_context
 from core.rag.models import RAGMetadata, RAGSearchResult
 from core.rag_indexing_schema import SearchChannelsDefaults
-from core.search import MetaSearchProviderStatus, MetaSearchRequest, WebSearchResult
+from core.search import (
+    PUBLIC_SEARCH_WALL_TIME_SECONDS,
+    MetaSearchProviderStatus,
+    MetaSearchRequest,
+    WebSearchResult,
+)
 from core.search.index_models import SearchIndexDefinition
 from core.search.presentation import (
     build_favicon_proxy_url,
@@ -198,8 +203,17 @@ class IndexSearchProvider:
         try:
             try:
                 per_index_limit = max(1, math.ceil(retrieve_limit / len(definitions)))
+                overrides = request.retrieval_overrides
+                rerank_override = overrides.rerank if overrides is not None else None
+                per_channel_override = overrides.per_channel_top_k if overrides is not None else None
                 tasks = [
-                    self._search_single_index(definition, request.query, per_index_limit)
+                    self._search_single_index(
+                        definition,
+                        request.query,
+                        per_index_limit,
+                        rerank_override=rerank_override,
+                        per_channel_override=per_channel_override,
+                    )
                     for definition in definitions
                 ]
                 batches = await asyncio.gather(*tasks)
@@ -269,12 +283,20 @@ class IndexSearchProvider:
         definition: SearchIndexDefinition,
         query: str,
         retrieve_limit: int,
+        *,
+        rerank_override: bool | None = None,
+        per_channel_override: int | None = None,
     ) -> list[WebSearchResult]:
         channels = SearchChannelsDefaults(
             semantic=definition.retrieval.semantic,
             lexical=definition.retrieval.lexical,
         )
-        per_channel_top_k = definition.retrieval.per_channel_top_k
+        rerank = definition.retrieval.rerank if rerank_override is None else rerank_override
+        per_channel_top_k = (
+            per_channel_override
+            if per_channel_override is not None
+            else definition.retrieval.per_channel_top_k
+        )
         if per_channel_top_k is None:
             per_channel_top_k = max(retrieve_limit * 3, 150)
         freshness_weight: float | None = None
@@ -294,11 +316,12 @@ class IndexSearchProvider:
             channels=channels,
             rrf_k=definition.retrieval.rrf_k,
             per_channel_top_k=per_channel_top_k,
-            rerank=definition.retrieval.rerank,
+            rerank=rerank,
             rerank_max_candidates=definition.retrieval.rerank_max_candidates,
             retrieval=True,
             freshness_weight=freshness_weight,
             freshness_half_life_days=freshness_half_life_days,
+            timeout=PUBLIC_SEARCH_WALL_TIME_SECONDS,
         )
         payload = raw
         results_raw = require_json_array(payload.get("results"), "rag search results")

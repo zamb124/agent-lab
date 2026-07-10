@@ -114,6 +114,7 @@
         "error_details": "Технические детали",
         "sources_label": "Источники",
         "results_shown_of_total": "Показано {shown} из {total}",
+        "refining_order": "Уточняем порядок…",
         "loading_more": "Загружаем ещё результаты…",
         "load_more_error": "Не удалось подгрузить выдачу. Повторите поиск.",
         "providers_label": "Провайдеры",

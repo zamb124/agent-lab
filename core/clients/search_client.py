@@ -16,7 +16,8 @@ from core.crawl.models import (
     CrawlUrlAddRequest,
     UpsertStats,
 )
-from core.search.models import MetaSearchRequest, MetaSearchResponse
+from core.search.models import MetaSearchRefineRequest, MetaSearchRequest, MetaSearchResponse
+from core.search.public import PUBLIC_SEARCH_WALL_TIME_SECONDS
 
 
 class SearchClient:
@@ -28,6 +29,16 @@ class SearchClient:
             "search",
             "/search/api/v1/search",
             json=request.model_dump(mode="json"),
+            timeout=PUBLIC_SEARCH_WALL_TIME_SECONDS,
+        )
+        return MetaSearchResponse.model_validate(response)
+
+    async def refine_serp(self, request: MetaSearchRefineRequest) -> MetaSearchResponse:
+        response = await self._client.post(
+            "search",
+            "/search/api/v1/search/serp/refine",
+            json=request.model_dump(mode="json"),
+            timeout=PUBLIC_SEARCH_WALL_TIME_SECONDS,
         )
         return MetaSearchResponse.model_validate(response)
 

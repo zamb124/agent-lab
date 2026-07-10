@@ -10,6 +10,7 @@
     "ai"
   ],
   "permission": [],
+  "timeout": 300,
   "entry": "prepare_search_inputs",
   "nodes": {
     "prepare_search_inputs": {
@@ -18,7 +19,7 @@
       "language": "python",
       "entrypoint": "run",
       "code": "import re\n\nFILE_BLOCK_PATTERN = r\"\\n?\\[FILE\\]\\n.*?\\n\\[/FILE\\]\"\n\n\ndef _require_string(value, label):\n    if not isinstance(value, str):\n        raise TypeError(f\"public_search inputs: {label} must be string\")\n    return value\n\n\ndef _clean_user_query(content):\n    text = re.sub(FILE_BLOCK_PATTERN, \"\", content, flags=re.DOTALL)\n    text = re.sub(r\"\\n{3,}\", \"\\n\\n\", text).strip()\n    if text == \"\":\n        return \"проанализировать приложенные файлы\"\n    return text\n\n\nasync def run(args, state):\n    content = _require_string(state[\"content\"], \"state.content\")\n    files = state[\"files\"]\n    if not isinstance(files, list):\n        raise TypeError(\"public_search inputs: state.files must be array\")\n\n    file_names = []\n    for index, item in enumerate(files):\n        if not isinstance(item, dict):\n            raise TypeError(f\"public_search inputs: state.files[{index}] must be object\")\n        original_name = item[\"original_name\"]\n        if not isinstance(original_name, str) or original_name.strip() == \"\":\n            raise TypeError(f\"public_search inputs: state.files[{index}].original_name must be non-empty string\")\n        file_names.append(original_name.strip())\n\n    user_query = _clean_user_query(content)\n    return {\n        \"search_user_query\": user_query,\n        \"search_effective_query\": user_query,\n        \"search_has_files\": len(file_names) > 0,\n        \"search_file_names\": file_names,\n        \"search_file_context\": \"\",\n    }\n",
-      "node_timeout_seconds": 30
+      "node_timeout_seconds": 300
     },
     "summarize_attached_files": {
       "type": "llm_node",
@@ -45,7 +46,8 @@
           "active_window_tokens": 14000,
           "tool_result_tokens": 12000
         }
-      }
+      },
+      "node_timeout_seconds": 300
     },
     "build_search_query": {
       "type": "code",
@@ -53,7 +55,7 @@
       "language": "python",
       "entrypoint": "run",
       "code": "MAX_FILE_CONTEXT_CHARS = 2500\n\n\ndef _require_non_empty_string(value, label):\n    if not isinstance(value, str):\n        raise TypeError(f\"public_search query: {label} must be string\")\n    text = value.strip()\n    if text == \"\":\n        raise ValueError(f\"public_search query: {label} must be non-empty\")\n    return text\n\n\ndef _require_string(value, label):\n    if not isinstance(value, str):\n        raise TypeError(f\"public_search query: {label} must be string\")\n    return value\n\n\nasync def run(args, state):\n    user_query = _require_non_empty_string(state[\"search_user_query\"], \"state.search_user_query\")\n    file_context = _require_string(state[\"search_file_context\"], \"state.search_file_context\").strip()\n    if file_context == \"\":\n        return {\"search_effective_query\": user_query}\n\n    clipped_context = file_context[:MAX_FILE_CONTEXT_CHARS].strip()\n    effective_query = (\n        f\"{user_query}\\n\\n\"\n        \"Краткий контекст приложенных файлов для поиска:\\n\"\n        f\"{clipped_context}\"\n    )\n    return {\"search_effective_query\": effective_query}\n",
-      "node_timeout_seconds": 30
+      "node_timeout_seconds": 300
     },
     "primary_search": {
       "type": "mcp",
@@ -64,6 +66,7 @@
         "query": "@state:search_effective_query",
         "limit": "@var:search_result_limit",
         "retrieve_limit": "@var:search_retrieve_limit",
+        "retrieval_overrides": "@var:search_retrieval_overrides",
         "language": "@var:search_language",
         "region": "@var:search_region",
         "providers": "@var:search_providers",
@@ -80,15 +83,45 @@
         "offset": "search_serp_offset",
         "limit": "search_serp_page_limit"
       },
-      "node_timeout_seconds": 45
+      "node_timeout_seconds": 300
     },
     "emit_search_results": {
       "type": "code",
       "name": "Emit Search Results SSE Event",
       "language": "python",
       "entrypoint": "run",
-      "code": "VALID_SEARCH_MODES = {\"quick\", \"deep\", \"research\"}\n\n\ndef _mode(state):\n    variables = state[\"variables\"]\n    if not isinstance(variables, dict):\n        raise TypeError(\"public_search results event: state.variables must be object\")\n    mode = variables[\"search_mode\"]\n    if mode not in VALID_SEARCH_MODES:\n        raise ValueError(\"public_search results event: variables.search_mode is invalid\")\n    return mode\n\n\ndef _require_int(value, label):\n    if not isinstance(value, int):\n        raise TypeError(f\"public_search results event: {label} must be int\")\n    return value\n\n\ndef _optional_string(value, label):\n    if value is None:\n        return None\n    if not isinstance(value, str):\n        raise TypeError(f\"public_search results event: {label} must be string or null\")\n    text = value.strip()\n    if text == \"\":\n        return None\n    return text\n\n\nasync def run(args, state):\n    payload = {\n        \"kind\": \"public_search_serp_update\",\n        \"version\": 1,\n        \"flow_id\": \"public_search\",\n        \"phase\": \"results\",\n        \"mode\": _mode(state),\n        \"query\": state[\"search_user_query\"],\n        \"results\": state[\"search_results\"],\n        \"providers\": state[\"search_providers_status\"],\n        \"total_count\": _require_int(state[\"search_serp_total_count\"], \"search_serp_total_count\"),\n        \"has_more\": state[\"search_serp_has_more\"] is True,\n        \"serp_cache_key\": _optional_string(state[\"search_serp_cache_key\"], \"search_serp_cache_key\"),\n        \"offset\": _require_int(state[\"search_serp_offset\"], \"search_serp_offset\"),\n        \"limit\": _require_int(state[\"search_serp_page_limit\"], \"search_serp_page_limit\"),\n    }\n    await capability(\n        \"state.push_ui_event\",\n        event_type=\"search/serp/results_ready\",\n        payload=payload,\n        source=\"public_search\",\n    )\n    return {}\n",
-      "node_timeout_seconds": 20
+      "code": "VALID_SEARCH_MODES = {\"quick\", \"deep\", \"research\"}\n\n\ndef _mode(state):\n    variables = state[\"variables\"]\n    if not isinstance(variables, dict):\n        raise TypeError(\"public_search results event: state.variables must be object\")\n    mode = variables[\"search_mode\"]\n    if mode not in VALID_SEARCH_MODES:\n        raise ValueError(\"public_search results event: variables.search_mode is invalid\")\n    return mode\n\n\ndef _require_int(value, label):\n    if not isinstance(value, int):\n        raise TypeError(f\"public_search results event: {label} must be int\")\n    return value\n\n\ndef _optional_string(value, label):\n    if value is None:\n        return None\n    if not isinstance(value, str):\n        raise TypeError(f\"public_search results event: {label} must be string or null\")\n    text = value.strip()\n    if text == \"\":\n        return None\n    return text\n\n\nasync def run(args, state):\n    payload = {\n        \"kind\": \"public_search_serp_update\",\n        \"version\": 1,\n        \"flow_id\": \"public_search\",\n        \"phase\": \"results\",\n        \"mode\": _mode(state),\n        \"query\": state[\"search_user_query\"],\n        \"results\": state[\"search_results\"],\n        \"providers\": state[\"search_providers_status\"],\n        \"total_count\": _require_int(state[\"search_serp_total_count\"], \"search_serp_total_count\"),\n        \"has_more\": state[\"search_serp_has_more\"] is True,\n        \"serp_cache_key\": _optional_string(state[\"search_serp_cache_key\"], \"search_serp_cache_key\"),\n        \"offset\": _require_int(state[\"search_serp_offset\"], \"search_serp_offset\"),\n        \"limit\": _require_int(state[\"search_serp_page_limit\"], \"search_serp_page_limit\"),\n        \"rank_stage\": \"preview\",\n    }\n    await capability(\n        \"state.push_ui_event\",\n        event_type=\"search/serp/results_ready\",\n        payload=payload,\n        source=\"public_search\",\n    )\n    return {\"search_serp_has_pool\": payload[\"serp_cache_key\"] is not None}\n",
+      "node_timeout_seconds": 300
+    },
+    "refine_search": {
+      "type": "mcp",
+      "name": "Refine SERP",
+      "server_id": "search",
+      "tool_name": "refine_serp",
+      "input_mapping": {
+        "serp_cache_key": "@state:search_serp_cache_key",
+        "query": "@state:search_user_query",
+        "limit": "@var:search_result_limit",
+        "offset": "@var:search_refine_offset",
+        "mode": "@var:search_mode"
+      },
+      "output_mapping": {
+        "results": "search_results_refined",
+        "serp_cache_key": "search_serp_cache_key_refined",
+        "total_count": "search_serp_total_count_refined",
+        "has_more": "search_serp_has_more_refined",
+        "offset": "search_serp_offset_refined",
+        "limit": "search_serp_page_limit_refined"
+      },
+      "node_timeout_seconds": 300
+    },
+    "emit_search_refined": {
+      "type": "code",
+      "name": "Emit Search Refined SSE Event",
+      "language": "python",
+      "entrypoint": "run",
+      "code": "VALID_SEARCH_MODES = {\"quick\", \"deep\", \"research\"}\n\n\ndef _mode(state):\n    variables = state[\"variables\"]\n    if not isinstance(variables, dict):\n        raise TypeError(\"public_search refined event: state.variables must be object\")\n    mode = variables[\"search_mode\"]\n    if mode not in VALID_SEARCH_MODES:\n        raise ValueError(\"public_search refined event: variables.search_mode is invalid\")\n    return mode\n\n\ndef _optional_string(value, label):\n    if value is None:\n        return None\n    if not isinstance(value, str):\n        raise TypeError(f\"public_search refined event: {label} must be string or null\")\n    text = value.strip()\n    if text == \"\":\n        return None\n    return text\n\n\nasync def run(args, state):\n    results = state[\"search_results_refined\"]\n    if not isinstance(results, list):\n        raise TypeError(\"public_search refined event: search_results_refined must be array\")\n    payload = {\n        \"kind\": \"public_search_serp_update\",\n        \"version\": 1,\n        \"flow_id\": \"public_search\",\n        \"phase\": \"results\",\n        \"mode\": _mode(state),\n        \"query\": state[\"search_user_query\"],\n        \"results\": results,\n        \"serp_cache_key\": _optional_string(state[\"search_serp_cache_key_refined\"], \"search_serp_cache_key_refined\"),\n        \"rank_stage\": \"refined\",\n    }\n    await capability(\n        \"state.push_ui_event\",\n        event_type=\"search/serp/results_refined\",\n        payload=payload,\n        source=\"public_search\",\n    )\n    return {}\n",
+      "node_timeout_seconds": 300
     },
     "search_suggestions": {
       "type": "mcp",
@@ -106,7 +139,7 @@
         "suggestions": "search_suggestions",
         "followups": "search_followups"
       },
-      "node_timeout_seconds": 5
+      "node_timeout_seconds": 300
     },
     "emit_search_suggestions": {
       "type": "code",
@@ -114,7 +147,7 @@
       "language": "python",
       "entrypoint": "run",
       "code": "VALID_SEARCH_MODES = {\"quick\", \"deep\", \"research\"}\n\n\ndef _mode(state):\n    variables = state[\"variables\"]\n    if not isinstance(variables, dict):\n        raise TypeError(\"public_search suggestions event: state.variables must be object\")\n    mode = variables[\"search_mode\"]\n    if mode not in VALID_SEARCH_MODES:\n        raise ValueError(\"public_search suggestions event: variables.search_mode is invalid\")\n    return mode\n\n\nasync def run(args, state):\n    payload = {\n        \"kind\": \"public_search_serp_update\",\n        \"version\": 1,\n        \"flow_id\": \"public_search\",\n        \"phase\": \"suggestions\",\n        \"mode\": _mode(state),\n        \"query\": state[\"search_user_query\"],\n        \"suggestions\": state[\"search_suggestions\"],\n        \"followups\": state[\"search_followups\"],\n    }\n    await capability(\n        \"state.push_ui_event\",\n        event_type=\"search/serp/suggestions_ready\",\n        payload=payload,\n        source=\"public_search\",\n    )\n    return {}\n",
-      "node_timeout_seconds": 20
+      "node_timeout_seconds": 300
     },
     "search_result_insights": {
       "type": "mcp",
@@ -130,7 +163,7 @@
       "output_mapping": {
         "insights": "search_result_insights"
       },
-      "node_timeout_seconds": 5
+      "node_timeout_seconds": 300
     },
     "emit_search_insights": {
       "type": "code",
@@ -138,7 +171,7 @@
       "language": "python",
       "entrypoint": "run",
       "code": "VALID_SEARCH_MODES = {\"quick\", \"deep\", \"research\"}\n\n\ndef _mode(state):\n    variables = state[\"variables\"]\n    if not isinstance(variables, dict):\n        raise TypeError(\"public_search insights event: state.variables must be object\")\n    mode = variables[\"search_mode\"]\n    if mode not in VALID_SEARCH_MODES:\n        raise ValueError(\"public_search insights event: variables.search_mode is invalid\")\n    return mode\n\n\nasync def run(args, state):\n    payload = {\n        \"kind\": \"public_search_serp_update\",\n        \"version\": 1,\n        \"flow_id\": \"public_search\",\n        \"phase\": \"insights\",\n        \"mode\": _mode(state),\n        \"query\": state[\"search_user_query\"],\n        \"result_insights\": state[\"search_result_insights\"],\n    }\n    await capability(\n        \"state.push_ui_event\",\n        event_type=\"search/serp/insights_ready\",\n        payload=payload,\n        source=\"public_search\",\n    )\n    return {}\n",
-      "node_timeout_seconds": 20
+      "node_timeout_seconds": 300
     },
     "prepare_search_prompt": {
       "type": "code",
@@ -146,7 +179,7 @@
       "language": "python",
       "entrypoint": "run",
       "code": "import json\n\nVALID_SEARCH_MODES = {\"quick\", \"deep\", \"research\"}\nMAX_MARKDOWN_SOURCES = 10\n\n\ndef _require_results(value):\n    if not isinstance(value, list):\n        raise TypeError(\"public_search prompt: search_results must be array\")\n    return value\n\n\ndef _result_text(item, key, index):\n    value = item[key]\n    if not isinstance(value, str):\n        raise TypeError(f\"public_search prompt: search_results[{index}].{key} must be string\")\n    text = value.strip()\n    if text == \"\":\n        raise ValueError(f\"public_search prompt: search_results[{index}].{key} must be non-empty\")\n    return text\n\n\ndef _markdown_label(text):\n    return \" \".join(text.replace(\"[\", \"(\").replace(\"]\", \")\").split())\n\n\ndef _markdown_url(url):\n    return url.replace(\" \", \"%20\").replace(\"(\", \"%28\").replace(\")\", \"%29\")\n\n\ndef _source_host(url):\n    rest = url\n    marker = \"://\"\n    if marker in rest:\n        rest = rest.split(marker, 1)[1]\n    host = rest.split(\"/\", 1)[0].split(\"?\", 1)[0].split(\"#\", 1)[0].lower()\n    if \"@\" in host:\n        host = host.rsplit(\"@\", 1)[1]\n    if host.startswith(\"www.\"):\n        host = host[4:]\n    return host\n\n\ndef _markdown_sources(results):\n    lines = []\n    for index, item in enumerate(results[:MAX_MARKDOWN_SOURCES], start=1):\n        if not isinstance(item, dict):\n            raise TypeError(f\"public_search prompt: search_results[{index}] must be object\")\n        title = _result_text(item, \"title\", index)\n        url = _result_text(item, \"url\", index)\n        provider = _result_text(item, \"provider\", index)\n        host = _source_host(url)\n        meta = provider if host == \"\" else f\"{provider}, {host}\"\n        lines.append(f\"{index}. [{_markdown_label(title)}]({_markdown_url(url)}) — {meta}\")\n    if not lines:\n        return \"Источники отсутствуют.\"\n    return \"\\n\".join(lines)\n\n\nasync def run(args, state):\n    raw_variables = state[\"variables\"]\n    if not isinstance(raw_variables, dict):\n        raise TypeError(\"public_search prompt: state.variables must be object\")\n    variables = dict(raw_variables)\n    mode = variables[\"search_mode\"]\n    if mode not in VALID_SEARCH_MODES:\n        raise ValueError(\"public_search prompt: variables.search_mode is invalid\")\n\n    search_results = _require_results(state[\"search_results\"])\n    markdown_sources = _markdown_sources(search_results)\n    variables[\"search_query\"] = state[\"search_user_query\"]\n    variables[\"search_effective_query\"] = state[\"search_effective_query\"]\n    variables[\"search_file_context\"] = state[\"search_file_context\"]\n    variables[\"search_results\"] = json.dumps(search_results, ensure_ascii=False, indent=2)\n    variables[\"search_markdown_sources\"] = markdown_sources\n    variables[\"search_providers_status\"] = json.dumps(state[\"search_providers_status\"], ensure_ascii=False, indent=2)\n    variables[\"search_suggestions\"] = json.dumps(state[\"search_suggestions\"], ensure_ascii=False, indent=2)\n    variables[\"search_followups\"] = json.dumps(state[\"search_followups\"], ensure_ascii=False, indent=2)\n    variables[\"search_result_insights\"] = json.dumps(state[\"search_result_insights\"], ensure_ascii=False, indent=2)\n    return {\"search_markdown_sources\": markdown_sources, \"variables\": variables}\n",
-      "node_timeout_seconds": 30
+      "node_timeout_seconds": 300
     },
     "search_answer": {
       "type": "llm_node",
@@ -159,15 +192,16 @@
         "provider": "humanitec_llm",
         "model": "auto",
         "temperature": 0.15
-      }
+      },
+      "node_timeout_seconds": 300
     },
     "build_search_artifact": {
       "type": "code",
       "name": "Build Public Search SERP Artifact",
       "language": "python",
       "entrypoint": "run",
-      "code": "import json\n\nVALID_SEARCH_MODES = {\"quick\", \"deep\", \"research\"}\n\n\ndef _require_dict(state, key):\n    if key not in state:\n        raise ValueError(f\"public_search artifact: state.{key} is required\")\n    value = state[key]\n    if not isinstance(value, dict):\n        raise TypeError(f\"public_search artifact: state.{key} must be object\")\n    return value\n\n\ndef _require_list(state, key):\n    if key not in state:\n        raise ValueError(f\"public_search artifact: state.{key} is required\")\n    value = state[key]\n    if not isinstance(value, list):\n        raise TypeError(f\"public_search artifact: state.{key} must be array\")\n    return value\n\n\ndef _require_bool(state, key):\n    if key not in state:\n        raise ValueError(f\"public_search artifact: state.{key} is required\")\n    value = state[key]\n    if not isinstance(value, bool):\n        raise TypeError(f\"public_search artifact: state.{key} must be boolean\")\n    return value\n\n\ndef _require_string(state, key):\n    if key not in state:\n        raise ValueError(f\"public_search artifact: state.{key} is required\")\n    value = state[key]\n    if not isinstance(value, str):\n        raise TypeError(f\"public_search artifact: state.{key} must be string\")\n    return value.strip()\n\n\ndef _require_str(state, key):\n    text = _require_string(state, key)\n    if text == \"\":\n        raise ValueError(f\"public_search artifact: state.{key} must be non-empty\")\n    return text\n\n\nasync def run(args, state):\n    variables = _require_dict(state, \"variables\")\n    if \"search_mode\" not in variables:\n        raise ValueError(\"public_search artifact: variables.search_mode is required\")\n    mode = variables[\"search_mode\"]\n    if mode not in VALID_SEARCH_MODES:\n        raise ValueError(\"public_search artifact: variables.search_mode is invalid\")\n    has_files = _require_bool(state, \"search_has_files\")\n\n    artifact = {\n        \"kind\": \"public_search_serp\",\n        \"version\": 1,\n        \"flow_id\": \"public_search\",\n        \"mode\": mode,\n        \"query\": _require_str(state, \"search_user_query\"),\n        \"effective_query\": _require_str(state, \"search_effective_query\"),\n        \"file_context\": _require_string(state, \"search_file_context\") if has_files else \"\",\n        \"answer\": _require_str(state, \"response\"),\n        \"markdown_sources\": _require_str(state, \"search_markdown_sources\"),\n        \"results\": _require_list(state, \"search_results\"),\n        \"providers\": _require_dict(state, \"search_providers_status\"),\n        \"suggestions\": _require_list(state, \"search_suggestions\"),\n        \"followups\": _require_list(state, \"search_followups\"),\n        \"result_insights\": _require_list(state, \"search_result_insights\"),\n    }\n    await capability(\n        \"state.push_ui_event\",\n        event_type=\"search/serp/completed\",\n        payload=artifact,\n        source=\"public_search\",\n    )\n    response = json.dumps(artifact, ensure_ascii=False, separators=(\",\", \":\"))\n    return {\"response\": response}\n",
-      "node_timeout_seconds": 20
+      "code": "import json\n\nVALID_SEARCH_MODES = {\"quick\", \"deep\", \"research\"}\n\n\ndef _require_dict(state, key):\n    if key not in state:\n        raise ValueError(f\"public_search artifact: state.{key} is required\")\n    value = state[key]\n    if not isinstance(value, dict):\n        raise TypeError(f\"public_search artifact: state.{key} must be object\")\n    return value\n\n\ndef _require_list(state, key):\n    if key not in state:\n        raise ValueError(f\"public_search artifact: state.{key} is required\")\n    value = state[key]\n    if not isinstance(value, list):\n        raise TypeError(f\"public_search artifact: state.{key} must be array\")\n    return value\n\n\ndef _require_bool(state, key):\n    if key not in state:\n        raise ValueError(f\"public_search artifact: state.{key} is required\")\n    value = state[key]\n    if not isinstance(value, bool):\n        raise TypeError(f\"public_search artifact: state.{key} must be boolean\")\n    return value\n\n\ndef _require_string(state, key):\n    if key not in state:\n        raise ValueError(f\"public_search artifact: state.{key} is required\")\n    value = state[key]\n    if not isinstance(value, str):\n        raise TypeError(f\"public_search artifact: state.{key} must be string\")\n    return value.strip()\n\n\ndef _require_str(state, key):\n    text = _require_string(state, key)\n    if text == \"\":\n        raise ValueError(f\"public_search artifact: state.{key} must be non-empty\")\n    return text\n\n\nasync def run(args, state):\n    variables = _require_dict(state, \"variables\")\n    if \"search_mode\" not in variables:\n        raise ValueError(\"public_search artifact: variables.search_mode is required\")\n    mode = variables[\"search_mode\"]\n    if mode not in VALID_SEARCH_MODES:\n        raise ValueError(\"public_search artifact: variables.search_mode is invalid\")\n    has_files = _require_bool(state, \"search_has_files\")\n    refined_results = state.get(\"search_results_refined\")\n    if isinstance(refined_results, list) and refined_results:\n        results = refined_results\n    else:\n        results = _require_list(state, \"search_results\")\n\n    artifact = {\n        \"kind\": \"public_search_serp\",\n        \"version\": 1,\n        \"flow_id\": \"public_search\",\n        \"mode\": mode,\n        \"query\": _require_str(state, \"search_user_query\"),\n        \"effective_query\": _require_str(state, \"search_effective_query\"),\n        \"file_context\": _require_string(state, \"search_file_context\") if has_files else \"\",\n        \"answer\": _require_str(state, \"response\"),\n        \"markdown_sources\": _require_str(state, \"search_markdown_sources\"),\n        \"results\": results,\n        \"providers\": _require_dict(state, \"search_providers_status\"),\n        \"suggestions\": _require_list(state, \"search_suggestions\"),\n        \"followups\": _require_list(state, \"search_followups\"),\n        \"result_insights\": _require_list(state, \"search_result_insights\"),\n    }\n    await capability(\n        \"state.push_ui_event\",\n        event_type=\"search/serp/completed\",\n        payload=artifact,\n        source=\"public_search\",\n    )\n    response = json.dumps(artifact, ensure_ascii=False, separators=(\",\", \":\"))\n    return {\"response\": response}\n",
+      "node_timeout_seconds": 300
     }
   },
   "edges": [
@@ -208,6 +242,24 @@
       "to_node": "search_suggestions"
     },
     {
+      "from_node": "emit_search_results",
+      "to_node": "refine_search",
+      "condition": {
+        "type": "simple",
+        "variable": "search_serp_has_pool",
+        "operator": "==",
+        "value": true
+      }
+    },
+    {
+      "from_node": "refine_search",
+      "to_node": "emit_search_refined"
+    },
+    {
+      "from_node": "emit_search_refined",
+      "to_node": null
+    },
+    {
       "from_node": "search_suggestions",
       "to_node": "emit_search_suggestions"
     },
@@ -246,7 +298,12 @@
     "search_providers": [
       "runet"
     ],
-    "search_provider_strategy": "first_available"
+    "search_provider_strategy": "first_available",
+    "search_refine_offset": 0,
+    "search_retrieval_overrides": {
+      "rerank": false,
+      "per_channel_top_k": 40
+    }
   },
   "branches": {
     "quick": {
@@ -332,26 +389,26 @@
           "type": "code",
           "entrypoint": "run",
           "max_visits_per_run": 4,
-          "node_timeout_seconds": 120,
+          "node_timeout_seconds": 300,
           "code": "import asyncio\n\nTRACKING_KEYS = {'fbclid', 'gclid', 'yclid', 'ref', 'ref_src'}\n\n\ndef _canonical_url(url):\n    u = url.strip()\n    if '://' in u:\n        _, rest = u.split('://', 1)\n    else:\n        rest = u\n    rest = rest.split('#', 1)[0]\n    if '?' in rest:\n        path, query = rest.split('?', 1)\n    else:\n        path, query = rest, ''\n    path = path.lower()\n    if path.endswith('/') and len(path) > 1:\n        path = path.rstrip('/')\n    kept = []\n    for pair in query.split('&'):\n        if pair == '':\n            continue\n        key = pair.split('=', 1)[0].lower()\n        if key in TRACKING_KEYS or key.startswith('utm_'):\n            continue\n        kept.append(pair)\n    if kept:\n        return path + '?' + '&'.join(sorted(kept))\n    return path\n\n\nasync def _search_one(query, limit, providers, strategy, language, region):\n    raw = await tools.web_search(\n        query=query,\n        limit=limit,\n        providers=providers,\n        provider_strategy=strategy,\n        language=language,\n        region=region,\n        mode='research',\n    )\n    if raw.get('success') is not True:\n        return {'query': query, 'results': [], 'error': str(raw.get('error', 'web_search failed'))}\n    results = raw.get('results')\n    if not isinstance(results, list):\n        return {'query': query, 'results': [], 'error': 'web_search: results is not a list'}\n    return {'query': query, 'results': results, 'error': ''}\n\n\nasync def run(args, state):\n    if state.get('research_continue') is False:\n        return {'research_candidates': []}\n    pending = state.get('research_pending_queries')\n    if not isinstance(pending, list):\n        raise TypeError('research search: research_pending_queries must be array')\n    queries = []\n    for item in pending:\n        s = str(item).strip()\n        if s != '':\n            queries.append(s)\n    if len(queries) == 0:\n        return {'research_candidates': []}\n    variables = state['variables']\n    limit = int(variables.get('research_search_limit_per_query', 8))\n    strategy = variables.get('search_provider_strategy', 'merge')\n    providers = variables.get('search_providers', ['auto'])\n    language = variables.get('search_language', 'ru')\n    region = variables.get('search_region', 'ru')\n    outcomes = await asyncio.gather(*[\n        _search_one(q, limit, providers, strategy, language, region) for q in queries\n    ])\n    seen = state.get('research_seen_urls')\n    seen_set = set(seen) if isinstance(seen, list) else set()\n    scores = {}\n    candidates = {}\n    for outcome in outcomes:\n        for item in outcome['results']:\n            if not isinstance(item, dict):\n                continue\n            url = str(item.get('url', '')).strip()\n            title = str(item.get('title', '')).strip()\n            if url == '' or title == '':\n                continue\n            key = _canonical_url(url)\n            if key == '' or key in seen_set:\n                continue\n            rank = item.get('provider_rank')\n            rank_val = rank if isinstance(rank, int) and rank >= 1 else 50\n            score = 1.0 / (60.0 + float(rank_val))\n            if key not in candidates:\n                provider = str(item.get('provider', '')).strip()\n                if provider == '':\n                    provider = 'web'\n                candidates[key] = {\n                    'url': url,\n                    'title': title,\n                    'snippet': str(item.get('snippet', '')).strip(),\n                    'provider': provider,\n                    'site_name': str(item.get('site_name', '')).strip(),\n                }\n                scores[key] = score\n            else:\n                scores[key] += score\n    ranked_keys = sorted(candidates.keys(), key=lambda k: -scores[k])\n    ranked = [candidates[k] for k in ranked_keys]\n    query_stats = [\n        {'query': o['query'], 'count': len(o['results']), 'error': o['error']}\n        for o in outcomes\n    ]\n    await capability(\n        'state.push_ui_event',\n        event_type='search/research/search_ready',\n        payload={\n            'kind': 'public_search_research_update',\n            'version': 1,\n            'flow_id': 'public_search',\n            'phase': 'search',\n            'mode': 'research',\n            'query': state.get('research_query'),\n            'iteration': int(state.get('research_iteration', 0)),\n            'queries': query_stats,\n            'found': len(ranked),\n            'candidates': [\n                {'url': c['url'], 'title': c['title'], 'provider': c['provider'], 'site_name': c['site_name']}\n                for c in ranked[:12]\n            ],\n        },\n        source='public_search',\n    )\n    return {'research_candidates': ranked}\n"
         },
         "research_read_wave": {
           "type": "code",
           "entrypoint": "run",
           "max_visits_per_run": 4,
-          "node_timeout_seconds": 90,
+          "node_timeout_seconds": 300,
           "code": "import asyncio\n\n\nasync def _read_one(candidate, max_chars):\n    raw = await tools.browser_page_markdown(\n        url=candidate['url'],\n        max_markdown_chars=max_chars,\n        navigation_timeout_ms=20000,\n    )\n    if raw.get('success') is not True:\n        return {'candidate': candidate, 'ok': False, 'content': '', 'truncated': False}\n    markdown = raw.get('markdown')\n    if not isinstance(markdown, str) or markdown.strip() == '':\n        return {'candidate': candidate, 'ok': False, 'content': '', 'truncated': False}\n    return {'candidate': candidate, 'ok': True, 'content': markdown.strip(), 'truncated': raw.get('truncated') is True}\n\n\nasync def run(args, state):\n    candidates = state.get('research_candidates')\n    if not isinstance(candidates, list):\n        candidates = []\n    sources = state.get('research_sources')\n    if not isinstance(sources, list):\n        sources = []\n    seen = state.get('research_seen_urls')\n    seen_set = set(seen) if isinstance(seen, list) else set()\n    variables = state['variables']\n    max_sources = int(variables.get('research_max_sources', 8))\n    remaining = max_sources - len(sources)\n    if remaining < 0:\n        remaining = 0\n    to_read = candidates[:remaining]\n    max_chars = int(variables.get('research_page_max_chars', 6000))\n    if to_read:\n        read_results = await asyncio.gather(*[_read_one(c, max_chars) for c in to_read])\n    else:\n        read_results = []\n    new_sources = []\n    for r in read_results:\n        cand = r['candidate']\n        seen_set.add(cand['url'])\n        if r['ok']:\n            index = len(sources) + len(new_sources) + 1\n            source = {\n                'index': index,\n                'url': cand['url'],\n                'title': cand['title'],\n                'provider': cand['provider'],\n                'site_name': cand['site_name'],\n                'snippet': cand['snippet'],\n                'content': r['content'],\n                'truncated': r['truncated'],\n            }\n            new_sources.append(source)\n            await capability(\n                'state.push_ui_event',\n                event_type='search/research/source_read',\n                payload={\n                    'kind': 'public_search_research_update',\n                    'version': 1,\n                    'flow_id': 'public_search',\n                    'phase': 'read',\n                    'mode': 'research',\n                    'index': index,\n                    'url': cand['url'],\n                    'title': cand['title'],\n                    'provider': cand['provider'],\n                    'site_name': cand['site_name'],\n                },\n                source='public_search',\n            )\n    all_sources = sources + new_sources\n    digest_lines = []\n    for s in all_sources:\n        snippet = s['snippet']\n        if len(snippet) > 200:\n            snippet = snippet[:200]\n        label = s['site_name'] if s['site_name'] != '' else s['provider']\n        digest_lines.append(str(s['index']) + '. ' + s['title'] + ' (' + label + '): ' + snippet)\n    if digest_lines:\n        digest = '\\n'.join(digest_lines)\n    else:\n        digest = 'Пока нет прочитанных источников.'\n    variables = dict(state['variables'])\n    variables['research_sources_digest'] = digest\n    return {\n        'variables': variables,\n        'research_sources': all_sources,\n        'research_seen_urls': list(seen_set),\n        'research_candidates': [],\n        'research_sources_digest': digest,\n    }\n"
         },
         "research_search_wave_2": {
           "type": "code",
           "entrypoint": "run",
-          "node_timeout_seconds": 120,
+          "node_timeout_seconds": 300,
           "code": "import asyncio\n\nTRACKING_KEYS = {'fbclid', 'gclid', 'yclid', 'ref', 'ref_src'}\n\n\ndef _canonical_url(url):\n    u = url.strip()\n    if '://' in u:\n        _, rest = u.split('://', 1)\n    else:\n        rest = u\n    rest = rest.split('#', 1)[0]\n    if '?' in rest:\n        path, query = rest.split('?', 1)\n    else:\n        path, query = rest, ''\n    path = path.lower()\n    if path.endswith('/') and len(path) > 1:\n        path = path.rstrip('/')\n    kept = []\n    for pair in query.split('&'):\n        if pair == '':\n            continue\n        key = pair.split('=', 1)[0].lower()\n        if key in TRACKING_KEYS or key.startswith('utm_'):\n            continue\n        kept.append(pair)\n    if kept:\n        return path + '?' + '&'.join(sorted(kept))\n    return path\n\n\nasync def _search_one(query, limit, providers, strategy, language, region):\n    raw = await tools.web_search(\n        query=query,\n        limit=limit,\n        providers=providers,\n        provider_strategy=strategy,\n        language=language,\n        region=region,\n        mode='research',\n    )\n    if raw.get('success') is not True:\n        return {'query': query, 'results': [], 'error': str(raw.get('error', 'web_search failed'))}\n    results = raw.get('results')\n    if not isinstance(results, list):\n        return {'query': query, 'results': [], 'error': 'web_search: results is not a list'}\n    return {'query': query, 'results': results, 'error': ''}\n\n\nasync def run(args, state):\n    if state.get('research_continue') is not True:\n        return {'research_candidates': []}\n    pending = state.get('research_pending_queries')\n    if not isinstance(pending, list):\n        raise TypeError('research search: research_pending_queries must be array')\n    queries = []\n    for item in pending:\n        s = str(item).strip()\n        if s != '':\n            queries.append(s)\n    if len(queries) == 0:\n        return {'research_candidates': []}\n    variables = state['variables']\n    limit = int(variables.get('research_search_limit_per_query', 8))\n    strategy = variables.get('search_provider_strategy', 'merge')\n    providers = variables.get('search_providers', ['auto'])\n    language = variables.get('search_language', 'ru')\n    region = variables.get('search_region', 'ru')\n    outcomes = await asyncio.gather(*[\n        _search_one(q, limit, providers, strategy, language, region) for q in queries\n    ])\n    seen = state.get('research_seen_urls')\n    seen_set = set(seen) if isinstance(seen, list) else set()\n    scores = {}\n    candidates = {}\n    for outcome in outcomes:\n        for item in outcome['results']:\n            if not isinstance(item, dict):\n                continue\n            url = str(item.get('url', '')).strip()\n            title = str(item.get('title', '')).strip()\n            if url == '' or title == '':\n                continue\n            key = _canonical_url(url)\n            if key == '' or key in seen_set:\n                continue\n            rank = item.get('provider_rank')\n            rank_val = rank if isinstance(rank, int) and rank >= 1 else 50\n            score = 1.0 / (60.0 + float(rank_val))\n            if key not in candidates:\n                provider = str(item.get('provider', '')).strip()\n                if provider == '':\n                    provider = 'web'\n                candidates[key] = {\n                    'url': url,\n                    'title': title,\n                    'snippet': str(item.get('snippet', '')).strip(),\n                    'provider': provider,\n                    'site_name': str(item.get('site_name', '')).strip(),\n                }\n                scores[key] = score\n            else:\n                scores[key] += score\n    ranked_keys = sorted(candidates.keys(), key=lambda k: -scores[k])\n    ranked = [candidates[k] for k in ranked_keys]\n    query_stats = [\n        {'query': o['query'], 'count': len(o['results']), 'error': o['error']}\n        for o in outcomes\n    ]\n    await capability(\n        'state.push_ui_event',\n        event_type='search/research/search_ready',\n        payload={\n            'kind': 'public_search_research_update',\n            'version': 1,\n            'flow_id': 'public_search',\n            'phase': 'search',\n            'mode': 'research',\n            'query': state.get('research_query'),\n            'iteration': int(state.get('research_iteration', 0)),\n            'queries': query_stats,\n            'found': len(ranked),\n            'candidates': [\n                {'url': c['url'], 'title': c['title'], 'provider': c['provider'], 'site_name': c['site_name']}\n                for c in ranked[:12]\n            ],\n        },\n        source='public_search',\n    )\n    return {'research_candidates': ranked}\n"
         },
         "research_read_wave_2": {
           "type": "code",
           "entrypoint": "run",
-          "node_timeout_seconds": 90,
+          "node_timeout_seconds": 300,
           "code": "import asyncio\n\n\nasync def _read_one(candidate, max_chars):\n    raw = await tools.browser_page_markdown(\n        url=candidate['url'],\n        max_markdown_chars=max_chars,\n        navigation_timeout_ms=20000,\n    )\n    if raw.get('success') is not True:\n        return {'candidate': candidate, 'ok': False, 'content': '', 'truncated': False}\n    markdown = raw.get('markdown')\n    if not isinstance(markdown, str) or markdown.strip() == '':\n        return {'candidate': candidate, 'ok': False, 'content': '', 'truncated': False}\n    return {'candidate': candidate, 'ok': True, 'content': markdown.strip(), 'truncated': raw.get('truncated') is True}\n\n\nasync def run(args, state):\n    candidates = state.get('research_candidates')\n    if not isinstance(candidates, list):\n        candidates = []\n    sources = state.get('research_sources')\n    if not isinstance(sources, list):\n        sources = []\n    seen = state.get('research_seen_urls')\n    seen_set = set(seen) if isinstance(seen, list) else set()\n    variables = state['variables']\n    max_sources = int(variables.get('research_max_sources', 8))\n    remaining = max_sources - len(sources)\n    if remaining < 0:\n        remaining = 0\n    to_read = candidates[:remaining]\n    max_chars = int(variables.get('research_page_max_chars', 6000))\n    if to_read:\n        read_results = await asyncio.gather(*[_read_one(c, max_chars) for c in to_read])\n    else:\n        read_results = []\n    new_sources = []\n    for r in read_results:\n        cand = r['candidate']\n        seen_set.add(cand['url'])\n        if r['ok']:\n            index = len(sources) + len(new_sources) + 1\n            source = {\n                'index': index,\n                'url': cand['url'],\n                'title': cand['title'],\n                'provider': cand['provider'],\n                'site_name': cand['site_name'],\n                'snippet': cand['snippet'],\n                'content': r['content'],\n                'truncated': r['truncated'],\n            }\n            new_sources.append(source)\n            await capability(\n                'state.push_ui_event',\n                event_type='search/research/source_read',\n                payload={\n                    'kind': 'public_search_research_update',\n                    'version': 1,\n                    'flow_id': 'public_search',\n                    'phase': 'read',\n                    'mode': 'research',\n                    'index': index,\n                    'url': cand['url'],\n                    'title': cand['title'],\n                    'provider': cand['provider'],\n                    'site_name': cand['site_name'],\n                },\n                source='public_search',\n            )\n    all_sources = sources + new_sources\n    digest_lines = []\n    for s in all_sources:\n        snippet = s['snippet']\n        if len(snippet) > 200:\n            snippet = snippet[:200]\n        label = s['site_name'] if s['site_name'] != '' else s['provider']\n        digest_lines.append(str(s['index']) + '. ' + s['title'] + ' (' + label + '): ' + snippet)\n    if digest_lines:\n        digest = '\\n'.join(digest_lines)\n    else:\n        digest = 'Пока нет прочитанных источников.'\n    variables = dict(state['variables'])\n    variables['research_sources_digest'] = digest\n    return {\n        'variables': variables,\n        'research_sources': all_sources,\n        'research_seen_urls': list(seen_set),\n        'research_candidates': [],\n        'research_sources_digest': digest,\n    }\n"
         },
         "research_reflect": {
@@ -484,7 +541,8 @@
               "active_window_tokens": 14000,
               "tool_result_tokens": 12000
             }
-          }
+          },
+          "node_timeout_seconds": 300
         }
       },
       "edges": [

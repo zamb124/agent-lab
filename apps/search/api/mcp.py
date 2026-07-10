@@ -15,6 +15,7 @@ from core.context import get_context
 from core.integrations.mcp import MCP_PROTOCOL_VERSION, MCPToolDefinition
 from core.models.identity_models import Company
 from core.search import (
+    MetaSearchRefineRequest,
     MetaSearchRequest,
     MetaSearchResponse,
     SearchResultInsightsRequest,
@@ -97,6 +98,20 @@ def _tools() -> list[MCPToolDefinition]:
             },
         ),
         MCPToolDefinition(
+            name="refine_serp",
+            title="Refine SERP",
+            description=(
+                "Доранжирование ранее закэшированного preview-пула SERP реранкером. "
+                "Возвращает refined-порядок результатов для плавного reorder в UI."
+            ),
+            parameters_schema=_schema_for_model(MetaSearchRefineRequest),
+            output_schema=_schema_for_model(MetaSearchResponse),
+            annotations={
+                "readOnlyHint": True,
+                "openWorldHint": False,
+            },
+        ),
+        MCPToolDefinition(
             name="search_suggest",
             title="Search Suggestions",
             description=(
@@ -161,6 +176,15 @@ async def _tool_call(
         payload = require_json_object(response.model_dump(mode="json"), "MetaSearchResponse")
         return McpToolCallResult(
             content=_json_text_content(require_json_value(payload, "meta_web_search result")),
+            structuredContent=payload,
+            isError=False,
+        )
+    if tool_name == "refine_serp":
+        refine_request = MetaSearchRefineRequest.model_validate(arguments)
+        refine_response = await container.meta_search_service.refine(refine_request)
+        payload = require_json_object(refine_response.model_dump(mode="json"), "MetaSearchResponse")
+        return McpToolCallResult(
+            content=_json_text_content(require_json_value(payload, "refine_serp result")),
             structuredContent=payload,
             isError=False,
         )

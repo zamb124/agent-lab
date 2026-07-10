@@ -227,6 +227,7 @@ class RagClient:
         retrieval: bool | None = None,
         freshness_weight: float | None = None,
         freshness_half_life_days: float | None = None,
+        timeout: float | None = None,
     ) -> JsonObject:
         merged_opts = self._pack_search_options(
             channels=channels,
@@ -245,10 +246,11 @@ class RagClient:
             merged_search_options=merged_opts,
         )
         path = build_namespace_search_path(namespace_id, provider=provider)
-        return _json_object_response(
-            await self._http.post("rag", path, json=body),
-            operation="search",
-        )
+        if timeout is None:
+            response = await self._http.post("rag", path, json=body)
+        else:
+            response = await self._http.post("rag", path, json=body, timeout=timeout)
+        return _json_object_response(response, operation="search")
 
     async def global_search(
         self,

@@ -1,5 +1,6 @@
 import base64
 import json
+from pathlib import Path
 from typing import Any
 
 import pytest
@@ -8,6 +9,7 @@ from apps.flows.src.services.mcp_sync import sync_mcp_server_tools
 from apps.flows.tools.builtin_specs import builtin_tool_ids
 from apps.flows.tools.index_search import web_search
 from core.integrations.mcp import mcp_tool_reference_id
+from core.search import PUBLIC_SEARCH_WALL_TIME_SECONDS
 from core.state import ExecutionState
 from tests.search.conftest import make_search_index_slug
 from tests.search.integration.snippet_support import strip_snippet_highlight
@@ -323,6 +325,94 @@ async def test_public_search_flow_calls_search_mcp_without_monkeypatches(
     assert ui_payloads["search/serp/completed"]["kind"] == "public_search_serp"
     assert ui_payloads["search/serp/completed"]["answer"] == "SEARCH_FLOW_STREAM_OK"
     assert ui_payloads["search/serp/completed"]["markdown_sources"].startswith("1. [")
+
+
+@pytest.mark.asyncio
+@pytest.mark.real_taskiq
+@pytest.mark.timeout(180, func_only=True)
+async def test_public_search_quick_streams_staged_preview_then_refined(
+    search_service,
+    rag_service,
+    rag_client,
+    rag_worker,
+    provider_litserve_service,
+    auth_headers_system,
+    client,
+    mock_llm_redis,
+    unique_id,
+) -> None:
+    # rag_service (HTTP :9002) обязателен: search MCP index_search ходит в RAG по HTTP.
+    # provider_litserve_service нужен для reranker в refine-стадии.
+    _ = search_service, rag_service, rag_worker, provider_litserve_service
+    marker = f"public_search_staged_marker_{unique_id}"
+    query = await _ingest_runet_marker(
+        rag_client,
+        auth_headers_system,
+        unique_id,
+        marker,
+    )
+    await mock_llm_redis([{"type": "text", "content": "STAGED_OK"}])
+
+    stream_response = await client.post(
+        "/flows/api/v1/public_search",
+        json={
+            "jsonrpc": "2.0",
+            "id": f"public-search-staged-{unique_id}",
+            "method": "message/stream",
+            "params": {
+                "message": {
+                    "messageId": f"public-search-staged-message-{unique_id}",
+                    "role": "user",
+                    "parts": [{"kind": "text", "text": query}],
+                },
+                "metadata": {"branch": "quick"},
+            },
+        },
+    )
+    assert stream_response.status_code == 200, stream_response.text
+    ui_events = _collect_ui_events(stream_response.text)
+    event_types = [event_type for event_type, _payload in ui_events]
+
+    # Preview-стадия: ранний SERP без реранка, помеченный rank_stage=preview и с serp_cache_key
+    # (для quick пул кэшируется всегда, чтобы refine мог его доранжировать).
+    assert "search/serp/results_ready" in event_types
+    preview = next(payload for et, payload in ui_events if et == "search/serp/results_ready")
+    assert preview["rank_stage"] == "preview"
+    assert preview["results"]
+    assert isinstance(preview["serp_cache_key"], str) and preview["serp_cache_key"] != ""
+
+    # Refined-стадия: доранжированный порядок доезжает отдельным событием, не перезапуская ответ.
+    assert "search/serp/results_refined" in event_types
+    refined = next(payload for et, payload in ui_events if et == "search/serp/results_refined")
+    assert refined["rank_stage"] == "refined"
+    assert refined["results"]
+
+
+def test_public_search_bundle_timeouts_cover_public_search_window() -> None:
+    """Регрессия таймаутов: bundle и все node timeouts не меньше окна public search chain."""
+    bundle_path = (
+        Path(__file__).resolve().parents[3]
+        / "apps"
+        / "flows"
+        / "bundles"
+        / "public_search"
+        / "flow.json"
+    )
+    bundle = json.loads(bundle_path.read_text(encoding="utf-8"))
+    assert bundle["timeout"] == PUBLIC_SEARCH_WALL_TIME_SECONDS
+
+    def _assert_node_timeouts(nodes: dict[str, Any], scope: str) -> None:
+        for node_id, node in nodes.items():
+            timeout = node.get("node_timeout_seconds")
+            if timeout is None:
+                continue
+            assert timeout >= PUBLIC_SEARCH_WALL_TIME_SECONDS, f"{scope}:{node_id} timeout={timeout}"
+
+    _assert_node_timeouts(bundle["nodes"], "base")
+    for branch_id, branch in bundle.get("branches", {}).items():
+        branch_nodes = branch.get("nodes")
+        if isinstance(branch_nodes, dict):
+            _assert_node_timeouts(branch_nodes, branch_id)
 
 
 @pytest.mark.asyncio

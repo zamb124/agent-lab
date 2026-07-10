@@ -9,6 +9,11 @@ PublicSearchMode = Literal["quick", "deep", "research", "source"]
 PUBLIC_SEARCH_FLOW_ID: Final = "public_search"
 PUBLIC_SEARCH_SESSION_ISSUER: Final = "frontend.public_search"
 
+# Единый wall-clock лимит цепочки public search (flow nodes, MCP flows->search,
+# search->rag HTTP, rerank). RAG hybrid retrieve + rerank + LLM answer суммарно
+# укладываются в это окно; более жёсткие 30-45с рвали медленные runet-запросы.
+PUBLIC_SEARCH_WALL_TIME_SECONDS: Final = 300
+
 PUBLIC_SEARCH_EMBED_ID_BY_MODE: Final[dict[PublicSearchMode, str]] = {
     "quick": "public_search_quick",
     "deep": "public_search_deep",
