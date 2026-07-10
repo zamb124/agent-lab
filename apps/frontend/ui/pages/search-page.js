@@ -645,9 +645,16 @@ export class PublicSearchPage extends PlatformPage {
                 margin: 0 0 10px;
                 color: var(--landing-text-muted, var(--text-tertiary));
                 font-size: 12px;
+                font-weight: 600;
                 line-height: 1;
+                letter-spacing: 0.04em;
                 text-transform: uppercase;
-                letter-spacing: 0;
+            }
+
+            .sources-panel .panel-label {
+                margin-bottom: 8px;
+                font-weight: 500;
+                letter-spacing: 0.02em;
             }
 
             .panel-count {
@@ -1369,11 +1376,27 @@ export class PublicSearchPage extends PlatformPage {
             }
 
             :host-context([data-theme="light"]) .answer-panel,
-            :host-context([data-theme="light"]) .sources-panel,
             :host-context([data-theme="light"]) .suggest-panel,
             :host-context([data-theme="light"]) .provider-panel {
                 background: rgba(255, 255, 255, 0.78);
                 border-color: rgba(16, 20, 34, 0.10);
+            }
+
+            :host-context([data-theme="light"]) .sources-panel {
+                background: transparent;
+                border: 0;
+                box-shadow: none;
+                backdrop-filter: none;
+            }
+
+            :host-context([data-theme="light"]) .source-list > .skeleton {
+                background: linear-gradient(
+                    90deg,
+                    rgba(16, 20, 34, 0.05),
+                    rgba(16, 20, 34, 0.10),
+                    rgba(16, 20, 34, 0.05)
+                );
+                background-size: 220% 100%;
             }
 
             :host-context([data-theme="light"]) .answer-panel[data-state='error'] {
@@ -1451,6 +1474,10 @@ export class PublicSearchPage extends PlatformPage {
             :host-context([data-theme="light"]) .answer-placeholder,
             :host-context([data-theme="light"]) .provider-count {
                 color: rgba(30, 34, 48, 0.54);
+            }
+
+            :host-context([data-theme="light"]) .sources-panel .panel-label {
+                color: rgba(30, 34, 48, 0.44);
             }
 
             :host-context([data-theme="light"]) .answer-text,
