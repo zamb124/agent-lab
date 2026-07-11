@@ -69,7 +69,7 @@ async def test_build_job_context_raises_for_non_member(unique_id) -> None:
         owner_user_id=f"u_alien_{unique_id}",
         members={f"u_alien_{unique_id}": ["owner"]},
     )
-    outsider = User(user_id=f"u_alien_{unique_id}", name="Outsider", companies={})
+    outsider = User(user_id=f"u_outsider_{unique_id}", name="Outsider", companies={})
     with pytest.raises(ValueError, match="не состоит в компании"):
         build_job_context(
             company=company,

@@ -51,6 +51,7 @@ class PreparedTaskParams:
     message: Message | None
     metadata: JsonObject | None
     user_id: str
+    initiator_user_id: str | None
     is_takeover_user_reply: bool
     takeover_work_item_id: str | None
     is_handoff_user_reply: bool
@@ -70,6 +71,7 @@ class PreparedTaskParams:
         message: Message | None,
         metadata: JsonObject | None,
         user_id: str | None = None,
+        initiator_user_id: str | None = None,
         is_takeover_user_reply: bool = False,
         takeover_work_item_id: str | None = None,
         is_handoff_user_reply: bool = False,
@@ -87,6 +89,7 @@ class PreparedTaskParams:
         self.message = message
         self.metadata = metadata
         self.user_id = user_id or context_id
+        self.initiator_user_id = initiator_user_id
         self.is_takeover_user_reply = is_takeover_user_reply
         self.takeover_work_item_id = takeover_work_item_id
         self.is_handoff_user_reply = is_handoff_user_reply

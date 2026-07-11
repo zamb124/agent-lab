@@ -172,3 +172,27 @@ async def frontend_ui(frontend_service) -> AppUI:
 @pytest_asyncio.fixture
 async def office_ui(office_service, _ui_subdomain_mappings) -> AppUI:
     return AppUI(SERVICE_UI_REGISTRY["office"])
+
+
+@pytest_asyncio.fixture
+async def worktracker_ui(worktracker_http_service, flows_service) -> AppUI:
+    return AppUI(SERVICE_UI_REGISTRY["worktracker"])
+
+
+@pytest_asyncio.fixture
+async def hitl_demo_ready(
+    flows_service,
+    worktracker_http_service,
+    flows_ui: AppUI,
+    auth_token_system: str,
+    system_user_id: str,
+) -> str:
+    """Демо-очередь example_hitl и участник system owner для HITL E2E."""
+    _ = flows_service, worktracker_http_service
+    from tests.ui.e2e.hitl_e2e_bridge import hitl_ensure_demo_queue_member
+
+    return await hitl_ensure_demo_queue_member(
+        flows_ui.origin,
+        auth_token_system,
+        system_user_id,
+    )

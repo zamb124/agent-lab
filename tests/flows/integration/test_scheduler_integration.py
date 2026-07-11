@@ -24,7 +24,7 @@ from apps.scheduler.container import scheduler_broker_for_queue
 from core.config import get_settings
 from core.scheduler.service import SchedulerService
 
-pytestmark = pytest.mark.real_taskiq
+pytestmark = [pytest.mark.integration, pytest.mark.real_taskiq]
 _TEST_COMPANY_ID = "system"
 
 
@@ -330,6 +330,7 @@ class TestScheduledTaskExecution:
         """Одноразовая задача выполняется когда время пришло."""
         from apps.flows.src.models import FlowConfig
         from apps.flows.src.tasks.scheduled_tasks import execute_scheduled_task
+        from core.models.identity_models import User
         from core.scheduler.models import ContentType, ScheduledTaskStatus
 
         flow_id = f"scheduler_test_agent_{unique_id}"
@@ -349,6 +350,14 @@ class TestScheduledTaskExecution:
         service = container.schedule_service
         session_id = f"{flow_id}:{unique_id}"
         user_id = f"test-user-{unique_id}"
+        await container.user_repository.set(
+            User(
+                user_id=user_id,
+                name="Scheduler Test User",
+                companies={"system": ["member"]},
+                active_company_id="system",
+            )
+        )
         task = await service.schedule_one_time_task(
             flow_id=flow_id,
             session_id=session_id,
@@ -377,13 +386,36 @@ class TestScheduledTaskExecution:
     @pytest.mark.asyncio
     async def test_tool_call_task_executes_tool(self, app, container, unique_id):
         """Tool call задача вызывает указанный tool."""
+        from apps.flows.src.models import FlowConfig
         from apps.flows.src.tasks.scheduled_tasks import execute_scheduled_task
+        from core.models.identity_models import User
         from core.scheduler.models import ContentType
 
-        service = container.schedule_service
         flow_id = f"test_agent_{unique_id}"
+        flow_config = FlowConfig(
+            flow_id=flow_id,
+            name="Scheduler Tool Agent",
+            entry="main",
+            nodes={
+                "main": {
+                    "type": "code",
+                    "code": "async def run(args, state):\n    return state",
+                }
+            },
+            edges=[{"from_node": "main", "to_node": None}],
+        )
+        await container.flow_repository.set(flow_config)
+        service = container.schedule_service
         session_id = f"{flow_id}:{unique_id}"
         user_id = f"test-user-{unique_id}"
+        await container.user_repository.set(
+            User(
+                user_id=user_id,
+                name="Scheduler Tool User",
+                companies={"system": ["member"]},
+                active_company_id="system",
+            )
+        )
         task = await service.schedule_one_time_task(
             flow_id=flow_id,
             session_id=session_id,

@@ -54,10 +54,10 @@ from apps.flows.src.runtime.exceptions import (
 )
 from apps.flows.src.runtime.state_diff import (
     build_canvas_result_preview,
+    compute_state_diff,
     execution_state_to_diff_json,
     infer_primary_field,
     top_state_diff_items,
-    compute_state_diff,
 )
 from apps.flows.src.state.cancellation import FlowCancelled, check_cancellation
 from apps.flows.src.state.interrupt_manager import InterruptManager

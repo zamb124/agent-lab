@@ -193,6 +193,7 @@ class HandoffOrchestratorService:
             session_id=child_session_id,
             content=initial_content,
             branch_id=body.target_branch_id,
+            initiator_user_id=parent_state.initiator_user_id,
         )
         child_state.user_groups = list(parent_state.user_groups)
         child_state.variables = dict(body.variables)

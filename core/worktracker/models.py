@@ -74,7 +74,6 @@ class WorkItemPriority(StrEnum):
 
 class ActorKind(StrEnum):
     USER = "user"
-    AGENT = "agent"
     SYSTEM = "system"
 
 
@@ -83,18 +82,12 @@ class UserActor(WorktrackerModel):
     user_id: str = Field(..., min_length=1)
 
 
-class AgentActor(WorktrackerModel):
-    actor_kind: Literal[ActorKind.AGENT] = ActorKind.AGENT
-    flow_id: str = Field(..., min_length=1)
-    session_id: str | None = None
-
-
 class SystemActor(WorktrackerModel):
     actor_kind: Literal[ActorKind.SYSTEM] = ActorKind.SYSTEM
 
 
 WorkActor = Annotated[
-    UserActor | AgentActor | SystemActor,
+    UserActor | SystemActor,
     Field(discriminator="actor_kind"),
 ]
 
@@ -106,7 +99,6 @@ class AssigneeKind(StrEnum):
     UNASSIGNED = "unassigned"
     USERS = "users"
     QUEUE = "queue"
-    AGENT = "agent"
 
 
 class UnassignedAssignment(WorktrackerModel):
@@ -124,14 +116,8 @@ class QueueAssignment(WorktrackerModel):
     claimed_by_user_id: str | None = None
 
 
-class AgentAssignment(WorktrackerModel):
-    assignee_kind: Literal[AssigneeKind.AGENT] = AssigneeKind.AGENT
-    flow_id: str = Field(..., min_length=1)
-    branch_id: str | None = None
-
-
 WorkItemAssignment = Annotated[
-    UnassignedAssignment | UsersAssignment | QueueAssignment | AgentAssignment,
+    UnassignedAssignment | UsersAssignment | QueueAssignment,
     Field(discriminator="assignee_kind"),
 ]
 

@@ -12,15 +12,15 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from apps.flows.src.services.platform_facades import get_work_item_service
 from apps.flows.src.tools.decorator import tool
-from core.context import require_active_company
+from core.context import require_active_company, require_context
 from core.files.file_ref import FileRef
+from core.identity.flow_employee import flow_employee_user_id
 from core.types import JsonObject
 from core.variables.models import normalize_variables_map
 from core.worktracker.models import (
-    AgentActor,
-    AgentAssignment,
     QueueAssignment,
     UnassignedAssignment,
+    UserActor,
     UsersAssignment,
     WorkActor,
     WorkItemAssignment,
@@ -73,11 +73,11 @@ class WorkItemListArgs(BaseModel):
 async def _build_assignment(args: WorkItemCreateArgs, state: "ExecutionState") -> WorkItemAssignment:
     company_id = require_active_company().company_id
     if args.assignee_type == "self":
-        return AgentAssignment(flow_id=state.session_flow_id)
+        return UsersAssignment(user_ids=[flow_employee_user_id(state.session_flow_id)])
     if args.assignee_type == "agent":
         if not args.assignee_flow_id:
             raise ValueError("assignee_type=agent требует assignee_flow_id")
-        return AgentAssignment(flow_id=args.assignee_flow_id)
+        return UsersAssignment(user_ids=[flow_employee_user_id(args.assignee_flow_id)])
     if args.assignee_type == "user":
         if not args.assignee_user_id:
             raise ValueError("assignee_type=user требует assignee_user_id")
@@ -120,7 +120,7 @@ async def work_item_create(
     )
     company_id = require_active_company().company_id
     assignment = await _build_assignment(args, state)
-    created_by: WorkActor = AgentActor(flow_id=state.session_flow_id, session_id=state.session_id)
+    created_by: WorkActor = UserActor(user_id=require_context().user.user_id)
     kind = WorkItemKind.AGENT_JOB if args.assignee_type in ("self", "agent") else WorkItemKind.GENERIC
     work_item = await get_work_item_service().create(
         company_id=company_id,

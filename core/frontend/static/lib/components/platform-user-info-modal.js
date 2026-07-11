@@ -45,12 +45,14 @@ import { PlatformFormModal } from './glass-form-modal.js';
 import { registerModalKind } from '../utils/modal-registry.js';
 import { TEAM_EVENTS } from '../events/reducers/team.js';
 import { hasFactory } from '../events/factory-registry.js';
+import { httpRequest } from '../events/http.js';
 
 import { CoreEvents } from '../events/contract.js';
 import { resolveAvatarImageSrc } from '../utils/placeholder-avatar.js';
 import './platform-button.js';
 import './platform-icon.js';
 import './platform-work-item-badge.js';
+import './platform-user-chip.js';
 
 const TEAM_MEMBERS_RESOURCE_NAME = 'frontend/team_members';
 const SYNC_SHARED_CHANNELS_OP_NAME = 'sync/shared_channels';
@@ -456,6 +458,9 @@ export class PlatformUserInfoModal extends PlatformFormModal {
                     avatar_url: member.avatar_url,
                     roles: Array.isArray(member.roles) ? member.roles : [],
                     joined_at: member.joined_at || null,
+                    is_flow_employee: member.is_flow_employee === true,
+                    flow_id: typeof member.flow_id === 'string' ? member.flow_id : null,
+                    curator_user_ids: Array.isArray(member.curator_user_ids) ? member.curator_user_ids : [],
                 },
             };
         }
@@ -492,6 +497,17 @@ export class PlatformUserInfoModal extends PlatformFormModal {
         const raw = auth.user && auth.user.raw;
         if (!raw || !Array.isArray(raw.roles)) return false;
         return raw.roles.includes('owner') || raw.roles.includes('admin');
+    }
+
+    _canActAs(user) {
+        if (!user || user.is_flow_employee !== true) return false;
+        const auth = this._authSel.value;
+        const raw = auth.user && auth.user.raw;
+        if (!raw) return false;
+        const currentId = raw.user_id || (auth.user && auth.user.id);
+        const curators = Array.isArray(user.curator_user_ids) ? user.curator_user_ids : [];
+        if (currentId && curators.includes(currentId)) return true;
+        return Array.isArray(raw.roles) && (raw.roles.includes('owner') || raw.roles.includes('admin'));
     }
 
     _isMemberOwner(memberRoles) {
@@ -638,6 +654,9 @@ export class PlatformUserInfoModal extends PlatformFormModal {
             <div class="user-card">
                 ${this._renderAvatarLg(user)}
                 <div class="name">${user.name}</div>
+                ${user.is_flow_employee
+                    ? html`<span class="role-chip">${this.t('user_info_modal.flow_employee_badge')}</span>`
+                    : null}
                 ${user.email ? html`<div class="email">${user.email}</div>` : null}
                 <div class="meta">
                     ${user.roles.length > 0
@@ -660,10 +679,47 @@ export class PlatformUserInfoModal extends PlatformFormModal {
                         : null}
                 </div>
             </div>
+            ${user.is_flow_employee ? this._renderEmployeeSection(user) : null}
             ${this._renderSharedChannels()}
             ${this._renderActiveTasks(user, false)}
             ${showRolesEditor ? this._renderRolesEditor(user) : null}
         `;
+    }
+
+    _renderEmployeeSection(user) {
+        const curators = Array.isArray(user.curator_user_ids) ? user.curator_user_ids : [];
+        return html`
+            <div class="channels-section">
+                <div class="channels-section-title">${this.t('user_info_modal.flow_employee_section')}</div>
+                ${user.flow_id
+                    ? html`<a class="channels-empty" href="/flows/editor/${encodeURIComponent(user.flow_id)}">
+                            ${this.t('user_info_modal.flow_employee_open_editor')}
+                          </a>`
+                    : null}
+                ${curators.length > 0
+                    ? html`<div class="curators">
+                            <div class="meta-label">${this.t('user_info_modal.flow_employee_curators')}</div>
+                            <div class="curators-chips">
+                                ${curators.map((cid) => html`<platform-user-chip user-id=${cid}></platform-user-chip>`)}
+                            </div>
+                          </div>`
+                    : null}
+            </div>
+        `;
+    }
+
+    async _actAs(user) {
+        if (!user || typeof user.user_id !== 'string' || user.user_id === '') return;
+        try {
+            await httpRequest({
+                method: 'POST',
+                url: `/frontend/api/team/employees/${encodeURIComponent(user.user_id)}/act-as`,
+            });
+            this.toast('user_info_modal.act_as_started', { type: 'success' });
+            window.location.reload();
+        } catch (err) {
+            this.toast('user_info_modal.act_as_failed', { type: 'error' });
+        }
     }
 
     _renderSharedChannels() {
@@ -884,6 +940,7 @@ export class PlatformUserInfoModal extends PlatformFormModal {
             `;
         }
         const showSave = this._canEditRoles() && this._rolesDirty;
+        const showActAs = this._canActAs(resolved.user);
         return html`
             <div class="actions ${showSave ? 'with-save' : ''}">
                 ${showSave ? html`
@@ -903,6 +960,11 @@ export class PlatformUserInfoModal extends PlatformFormModal {
                 <platform-button variant="secondary" @click=${() => this._openTeamPage()}>
                     ${this.t('user_info_modal.action_open_team')}
                 </platform-button>
+                ${showActAs ? html`
+                    <platform-button variant="ghost" @click=${() => this._actAs(resolved.user)}>
+                        ${this.t('user_info_modal.action_act_as')}
+                    </platform-button>
+                ` : null}
             </div>
         `;
     }

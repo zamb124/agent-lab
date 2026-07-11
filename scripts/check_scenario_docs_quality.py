@@ -347,9 +347,7 @@ def _parse_cli_args(argv: list[str] | None = None) -> _CliArgs:
         help="Не падать на предупреждения taxonomy (orphan tags)",
     )
     ns = parser.parse_args(argv)
-    warnings_ok = getattr(ns, "warnings_ok", False)
-    if not isinstance(warnings_ok, bool):
-        raise TypeError("warnings_ok must be bool")
+    warnings_ok = bool(ns.warnings_ok)
     return _CliArgs(warnings_ok=warnings_ok)
 
 

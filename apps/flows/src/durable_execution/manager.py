@@ -52,12 +52,14 @@ def create_initial_state(
     session_id: str,
     content: str | None = None,
     branch_id: str = "default",
+    initiator_user_id: str | None = None,
 ) -> ExecutionState:
     """Создаёт новую проекцию ExecutionState для сессии workflow."""
     return ExecutionState(
         task_id=task_id,
         context_id=context_id,
         user_id=user_id,
+        initiator_user_id=initiator_user_id,
         session_id=session_id,
         content=content,
         branch_id=branch_id,

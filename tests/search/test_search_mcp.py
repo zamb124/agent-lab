@@ -13,6 +13,7 @@ def test_search_mcp_exposes_search_tools() -> None:
 
     assert [tool.name for tool in tools] == [
         "meta_web_search",
+        "refine_serp",
         "search_suggest",
         "search_result_insights",
     ]
@@ -73,8 +74,9 @@ async def test_search_mcp_jsonrpc_endpoint_contract() -> None:
         tools = await _post_mcp(client, {"jsonrpc": "2.0", "id": 4, "method": "tools/list"})
         assert tools.status_code == 200
         assert tools.json()["result"]["tools"][0]["name"] == "meta_web_search"
-        assert tools.json()["result"]["tools"][1]["name"] == "search_suggest"
-        assert tools.json()["result"]["tools"][2]["name"] == "search_result_insights"
+        assert tools.json()["result"]["tools"][1]["name"] == "refine_serp"
+        assert tools.json()["result"]["tools"][2]["name"] == "search_suggest"
+        assert tools.json()["result"]["tools"][3]["name"] == "search_result_insights"
 
         missing_name = await _post_mcp(
             client,

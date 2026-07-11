@@ -22,6 +22,26 @@ def _minimal_node(node_type: str) -> dict[str, object]:
         return {"type": node_type, "channel": "telegram", "action": "send"}
     if node_type == "hitl_node":
         return {"type": node_type, "work_queue_slug": "ops"}
+    if node_type == "reflection":
+        return {
+            "type": node_type,
+            "llm": {"model": "mock-gpt-4", "temperature": 0.0},
+            "critic_policy": {
+                "policy_id": "fuzz-policy",
+                "gate": "final_answer",
+                "target": {"kind": "response"},
+                "instruction": "Check response.",
+                "criteria": [
+                    {
+                        "criterion_id": "ok",
+                        "description": "Must be safe.",
+                        "severity": "error",
+                    }
+                ],
+                "min_confidence": 0.5,
+                "block_on_severities": ["error", "critical"],
+            },
+        }
     if node_type in {"flow", "remote_flow"}:
         return {"type": node_type, "flow_id": "nested"}
     if node_type == "mcp":

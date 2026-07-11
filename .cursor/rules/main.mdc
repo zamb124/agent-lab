@@ -142,6 +142,7 @@ alwaysApply: true
 | Namespace | `namespace`, `Namespace` | Человеческое workspace/space имя внутри `company_id`; UI может писать "workspace/space" только в текстах и названиях компонентов. Код/API/DB/backend routes — `namespace`/`namespaces`, не `/workspace` и не `/spaces`. |
 | RAG/vector namespace | `namespace_id` | Только технический id индекса/векторного хранилища, обычно производный от `company_id` + `namespace`. Не подменяет CRM/Sync/Office `namespace`. |
 | Flow | `flow_id`, `FlowConfig`, `flow` | Исполняемый граф. Не `agent_id`; термин `agent` допустим только в A2A spec (`agent-card`, `Role.agent`, `new_agent_text_message`) и legacy test names до миграции. |
+| Flow employee | `flow_employee_{flow_id}` (user_id), `attributes.kind=flow_employee` | Flow как сотрудник — обычный `User` (двустороннее членство в `company.members`), а не отдельная сущность Agent. Ось идентичности агента одна — `user_id`; `AgentActor`/`AgentAssignment`/`platform-agent:*` запрещены. У сотрудника обязателен `attributes.curator_user_ids` (минимум один человек). Хелперы — `core.identity.flow_employee`. |
 | Branch | `branch_id`, `BranchConfig`, `branch` | Вариант графа внутри `flow_id`; не `skill_id`, не `scenario_id`. |
 | Node | `node_id`, `NodeConfig`, `node` | `node_type` для типа ноды; не голый `id`, не голый `type` в доменном коде. |
 | Tool | `tool_id`, `ToolReference`, `tool` | `parameters_schema` — единственный JSON Schema контракт аргументов. `CallParameter`/`args_schema` запрещены. |

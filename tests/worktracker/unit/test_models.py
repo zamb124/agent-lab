@@ -8,8 +8,6 @@ from pydantic import TypeAdapter
 
 from core.worktracker.models import (
     TERMINAL_WORK_ITEM_STATES,
-    AgentActor,
-    AgentAssignment,
     CrmEntityLink,
     FlowSessionLink,
     QueueAssignment,
@@ -43,7 +41,6 @@ def test_actor_discriminated_union_roundtrip() -> None:
     adapter: TypeAdapter[WorkActor] = TypeAdapter(WorkActor)
     for actor in (
         UserActor(user_id="user_1"),
-        AgentActor(flow_id="flow_1", session_id="flow_1:ctx"),
         SystemActor(),
     ):
         restored = adapter.validate_python(actor.model_dump(mode="json"))
@@ -56,7 +53,6 @@ def test_assignment_discriminated_union_roundtrip() -> None:
         UnassignedAssignment(),
         UsersAssignment(user_ids=["user_1", "user_2"]),
         QueueAssignment(work_queue_id="wq_1", claimed_by_user_id="user_9"),
-        AgentAssignment(flow_id="flow_1", branch_id="main"),
     ]
     for assignment in cases:
         restored = adapter.validate_python(assignment.model_dump(mode="json"))

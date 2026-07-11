@@ -36,7 +36,11 @@ from a2a.types import (
 from a2a.utils.message import new_agent_text_message
 
 from apps.flows.config import get_settings
-from apps.flows.src.channels.request_context_variables import flow_variables_from_request_context
+from apps.flows.src.channels.request_context_variables import (
+    flow_employee_variables_from_user,
+    flow_user_identity_overrides,
+    flow_variables_from_request_context,
+)
 from apps.flows.src.channels.types import ChannelRequestContext, FlowTaskResult, PreparedTaskParams
 from apps.flows.src.container_contracts import FlowRuntimeContainer
 from apps.flows.src.durable_execution import (
@@ -64,6 +68,7 @@ from apps.flows.src.observability.flow_timing import (
     record_flow_task_enqueued,
 )
 from apps.flows.src.observability.handoff_timing import record_handoff_initiated
+from apps.flows.src.services.execution_identity import resolve_execution_context
 from apps.flows.src.services.flow_speech_resolve import attach_flow_speech_layers_to_context
 from apps.flows.src.services.flow_validator import FlowValidator, ValidationSeverity
 from apps.flows.src.state import collect_flow_node_files
@@ -509,11 +514,24 @@ class BaseChannel(ABC):
         if self.context is None:
             raise ValueError("Context is not set. Context must be created in middleware.")
 
-        context_data = self.context.to_dict()
         target = await self.container.handoff_orchestrator_service.resolve_execution_target(
             parent_flow_id=self.flow_id,
             params=params,
         )
+
+        # Единая точка подмены identity: flow-сотрудник исполняется от собственного имени.
+        # Инициатор (собеседник/человек) сохраняется для аудита, эскалаций и prompt-переменных.
+        target_flow_config = await self.container.flow_repository.get(target.flow_id)
+        if target_flow_config is None:
+            raise ValueError(f"create_task: flow {target.flow_id} not found")
+        execution_identity = await resolve_execution_context(
+            self.container,
+            flow_config=target_flow_config,
+            initiator_context=self.context,
+        )
+        context_data = execution_identity.context.to_dict()
+        effective_user_id = execution_identity.context.user.user_id
+        initiator_user_id = execution_identity.initiator_user_id
 
         # Создаем trace context для propagation в worker
         trace_context_data: JsonObject | None = None
@@ -578,7 +596,8 @@ class BaseChannel(ABC):
                 flows_broker,
                 flow_id=target.flow_id,
                 session_id=target.session_id,
-                user_id=params.user_id,
+                user_id=effective_user_id,
+                initiator_user_id=initiator_user_id,
                 content=params.content,
                 branch_id=target.branch_id,
                 channel=self.name,
@@ -741,6 +760,7 @@ class BaseChannel(ABC):
 
         user_id = ctx.user.user_id
         user_groups = self._get_user_groups_from_context(ctx)
+        initiator_user_id = params.initiator_user_id or user_id
         state = saved_state
         state_is_new = state is None
 
@@ -752,6 +772,7 @@ class BaseChannel(ABC):
                 session_id=params.session_id,
                 content=params.content,
                 branch_id=params.branch_id,
+                initiator_user_id=initiator_user_id,
             )
             logger.info(f"[state] Created workflow projection for session {params.session_id}")
         else:
@@ -775,6 +796,7 @@ class BaseChannel(ABC):
         state.terminal_task_state = None
         state.terminal_task_error = None
         state.user_id = user_id
+        state.initiator_user_id = initiator_user_id
         state.user_groups = user_groups
 
         try:
@@ -823,6 +845,12 @@ class BaseChannel(ABC):
                 override_vars = final_override_vars
 
             identity_vars = flow_variables_from_request_context(ctx)
+            # Flow-сотрудник: user_* = собеседник (инициатор), employee_* = сам сотрудник (актор).
+            if initiator_user_id != user_id:
+                identity_vars.update(flow_employee_variables_from_user(ctx.user))
+                initiator_user = await container.user_repository.get(initiator_user_id)
+                if initiator_user is not None:
+                    identity_vars.update(flow_user_identity_overrides(initiator_user))
 
             if state_is_new:
                 cfg_nodes_raw = (runtime_flow.config or {}).get("nodes") or {}

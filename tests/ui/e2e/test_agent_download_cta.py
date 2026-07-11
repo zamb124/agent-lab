@@ -49,20 +49,12 @@ async def test_landing_hero_agent_download_link(
     )
 
 
-@pytest.mark.scenario(
-    service="flows",
-    tag="agent-download",
-    doc_slug="flows-home-download-link",
-    title="Flows: ссылка на скачивание LinnexAgent на главной",
-    description="На flows home в hero actions есть ссылка с href, содержащим /agent.",
-    title_en="Flows: LinnexAgent download link on home",
-    description_en="Flows home hero actions include a link with href containing /agent.",
-)
+# Поведенческий E2E (не публикуется как инструкция): CTA скачивания на flows home
+# документируется в сценарии getting-started/flows-home-tour.
 @pytest.mark.asyncio
 @pytest.mark.e2e
 @pytest.mark.timeout(180)
 async def test_flows_home_agent_download_link(
-    scenario: ScenarioRecorder,
     flows_ui: AppUI,
     ui_page_system: Page,
 ) -> None:
@@ -70,7 +62,6 @@ async def test_flows_home_agent_download_link(
     await page.goto(f"{flows_ui.origin}/flows/", wait_until="domcontentloaded")
     await expect(page.locator("flows-app")).to_be_visible(timeout=30_000)
     await expect(page.locator("flows-home-page")).to_be_visible(timeout=30_000)
-    await scenario.step("Flows home открыта", page, label_en="Flows home opened")
     download_link = page.locator('flows-home-page a.hero-download-link[href*="/agent"]')
     await expect(download_link).to_be_visible(timeout=30_000)
     await expect(
@@ -81,8 +72,3 @@ async def test_flows_home_agent_download_link(
     href = await download_link.get_attribute("href")
     assert href is not None
     assert "/agent" in href
-    await scenario.step(
-        "Ссылка на download page видна на flows home",
-        page,
-        label_en="The download link is visible on Flows home.",
-    )

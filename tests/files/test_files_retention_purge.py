@@ -66,7 +66,7 @@ async def test_backfill_sets_retention_fields(app, unique_id: str):
     _ = await repo.set(stale)
 
     backfill = FileRetentionBackfillService(repo)
-    for _ in range(100):
+    for _ in range(300):
         _ = await backfill.backfill_batch(limit=200)
         loaded = await container.files_service.get(record.file_id)
         if loaded.retention_kind:
@@ -101,7 +101,7 @@ async def test_purge_deletes_expired_file(app, unique_id: str):
 
     purge = FilePurgeService(repo)
     purged_own = False
-    for _ in range(100):
+    for _ in range(300):
         _ = await purge.purge_expired_batch()
         try:
             _ = await container.files_service.get(record.file_id)

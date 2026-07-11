@@ -28,6 +28,7 @@ async def process_flow_task(
     files: list[JsonObject] | None = None,
     context_data: JsonObject | None = None,
     trace_context: JsonObject | None = None,
+    initiator_user_id: str | None = None,
 ) -> JsonObject:
     """
     Обрабатывает запрос через агента.
@@ -76,6 +77,7 @@ async def process_flow_task(
         message=None,
         metadata=metadata,
         user_id=user_id,
+        initiator_user_id=initiator_user_id,
     )
 
     result = await channel_instance.process_task(params)

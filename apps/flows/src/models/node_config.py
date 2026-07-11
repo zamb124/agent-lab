@@ -592,6 +592,11 @@ class GraphNodeConfig(StrictBaseModel):
     handoff_task_title: str | None = Field(default=None)
     handoff_user_message: str | None = Field(default=None)
 
+    critic_policy: CriticPolicy | None = Field(
+        default=None,
+        description="Typed ReflectionNode policy: target, criteria and gate decision contract.",
+    )
+
     save_to_messages: bool = Field(default=False)
     message_field: str | None = Field(default=None)
     exception_as_response: bool = Field(default=False)
@@ -600,3 +605,40 @@ class GraphNodeConfig(StrictBaseModel):
     max_visits_per_run: int | None = Field(default=None)
 
     dataflow_nested: JsonObject | None = Field(default=None, alias="__dataflow_nested")
+
+    @model_validator(mode="after")
+    def validate_graph_node_type_constraints(self) -> "GraphNodeConfig":
+        if self.type == NodeType.REFLECTION:
+            if self.critic_policy is None:
+                raise ValueError("reflection node: critic_policy is required")
+            if self.llm is None:
+                raise ValueError("reflection node: llm is required")
+            if self.llm.model is None:
+                raise ValueError("reflection node: llm.model is required")
+            if self.llm.fallback_models:
+                raise ValueError("reflection node: fallback_models are not allowed")
+            if self.tools:
+                raise ValueError("reflection node: tools must be empty")
+            if self.prompt is not None and str(self.prompt).strip():
+                raise ValueError("reflection node: prompt must be empty")
+            if self.react is not None:
+                raise ValueError("reflection node: react is not allowed")
+            if self.structured_output:
+                raise ValueError("reflection node: structured_output must be False")
+            return self
+
+        if self.type != NodeType.RESOURCE:
+            return self
+        if self.prompt is not None and str(self.prompt).strip():
+            raise ValueError("resource node: prompt must be empty")
+        if self.tools:
+            raise ValueError("resource node: tools must be empty")
+        if self.react is not None:
+            raise ValueError("resource node: react is not allowed")
+        if self.structured_output:
+            raise ValueError("resource node: structured_output must be False")
+        if self.llm is not None:
+            raise ValueError("resource node: llm is not allowed")
+        if self.llm_context is not None or self.llm_context_resource_key is not None:
+            raise ValueError("resource node: llm_context is not allowed")
+        return self

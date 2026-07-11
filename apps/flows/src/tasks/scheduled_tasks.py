@@ -8,12 +8,19 @@ from datetime import datetime, timezone
 from apps.flows.config import get_settings
 from apps.flows.src.channels.types import PreparedTaskParams
 from apps.flows.src.container import FlowContainer, get_container
+from apps.flows.src.container_contracts import as_flow_runtime_container
+from apps.flows.src.services.execution_identity import resolve_execution_context
 from apps.flows.src.tasks.task_names import TASK_EXECUTE_SCHEDULED
 from apps.flows.src.tools.base import ToolArguments
 from apps.flows_worker.broker_core import broker
-from core.context import Context, set_context
+from core.context import set_context
+from core.context.job_context import build_job_context
+from core.identity.flow_employee import (
+    flow_employee_curator_user_ids,
+    is_flow_employee,
+    is_flow_employee_user_id,
+)
 from core.logging import get_logger
-from core.models.identity_models import Company, User
 from core.scheduler import get_schedule_source
 from core.scheduler.models import ContentType, PlatformScheduleType, ScheduledTaskStatus
 from core.state import ExecutionState
@@ -21,6 +28,21 @@ from core.types import JsonObject, require_json_object, require_json_value
 from core.websocket.publisher import Notification, NotificationType, notify_user
 
 logger = get_logger(__name__)
+
+
+async def _resolve_escalation_targets(container: FlowContainer, user_id: str) -> list[str]:
+    """Кому слать эскалацию/уведомление о завершении.
+
+    Обычный пользователь — самому себе. Если таргет — flow-сотрудник (фоновый
+    запуск без человека-инициатора), эскалация уходит его кураторам.
+    """
+    if not is_flow_employee_user_id(user_id):
+        return [user_id]
+    employee = await container.user_repository.get(user_id)
+    if employee is None or not is_flow_employee(employee):
+        return [user_id]
+    curators = flow_employee_curator_user_ids(employee)
+    return curators if curators else [user_id]
 
 
 @broker.task(task_name=TASK_EXECUTE_SCHEDULED, queue_name="flows_worker")
@@ -80,14 +102,32 @@ async def execute_scheduled_task(
         company_id=company_id, schedule_task_id=schedule_task_id
     )
 
-    context = Context(
-        user=User(user_id=user_id, name="Scheduler"),
-        active_company=Company(company_id=company_id, name=company_id),
+    company = await container.company_repository.get(company_id)
+    if company is None:
+        raise ValueError(f"scheduled task: company {company_id} not found")
+    initiator_user = await container.user_repository.get(user_id)
+    if initiator_user is None:
+        raise ValueError(f"scheduled task: user {user_id} not found")
+    initiator_context = build_job_context(
+        company=company,
+        user=initiator_user,
+        host="",
+        trace_id="",
         session_id=session_id,
-        flow_id=effective_flow_id,
         channel="scheduler",
     )
-    set_context(context)
+    initiator_context.flow_id = effective_flow_id
+
+    flow_config = await container.flow_repository.get(effective_flow_id)
+    if flow_config is None:
+        raise ValueError(f"scheduled task: flow {effective_flow_id} not found")
+    execution = await resolve_execution_context(
+        as_flow_runtime_container(container),
+        flow_config=flow_config,
+        initiator_context=initiator_context,
+    )
+    set_context(execution.context)
+    actor_user_id = execution.context.user.user_id
 
     try:
         if task_content_type == ContentType.MESSAGE:
@@ -95,7 +135,8 @@ async def execute_scheduled_task(
                 container=container,
                 flow_id=effective_flow_id,
                 session_id=session_id,
-                user_id=user_id,
+                user_id=actor_user_id,
+                initiator_user_id=user_id,
                 content=content,
             )
         elif task_content_type == ContentType.TOOL_CALL:
@@ -104,7 +145,7 @@ async def execute_scheduled_task(
             result = await _execute_tool_call_task(
                 container=container,
                 session_id=session_id,
-                user_id=user_id,
+                user_id=actor_user_id,
                 tool_name=content,
                 tool_args=tool_args,
             )
@@ -152,6 +193,7 @@ async def _execute_message_task(
     session_id: str,
     user_id: str,
     content: str,
+    initiator_user_id: str | None = None,
 ) -> JsonObject:
     """Выполняет message task - отправляет сообщение агенту."""
     channel_instance = container.get_channel("a2a", flow_id)
@@ -169,30 +211,34 @@ async def _execute_message_task(
         message=None,
         metadata={"scheduled": True},
         user_id=user_id,
+        initiator_user_id=initiator_user_id,
     )
 
     result = await channel_instance.process_task(params)
 
-    # Отправляем уведомление о завершении задачи (WebSocket + Web Push)
+    # Уведомление о завершении шлётся инициатору (создателю расписания), не актору-агенту.
+    # Если инициатор сам flow-сотрудник (фоновый запуск), эскалация уходит его кураторам.
+    notify_targets = await _resolve_escalation_targets(container, initiator_user_id or user_id)
     if result.task_state == "completed":
         final_response = result.response
         preview = final_response[:100] + ("..." if len(final_response) > 100 else "")
 
-        await notify_user(
-            user_id=user_id,
-            notification=Notification(
-                type=NotificationType.TASK_COMPLETED,
-                title="Задача выполнена",
-                message=preview,
-                service="flows",
-                action_url=f"/chat/{flow_id}?session={session_id}",
-                data={
-                    "flow_id": flow_id,
-                    "session_id": session_id,
-                    "task_id": task_id
-                }
+        for notify_target in notify_targets:
+            await notify_user(
+                user_id=notify_target,
+                notification=Notification(
+                    type=NotificationType.TASK_COMPLETED,
+                    title="Задача выполнена",
+                    message=preview,
+                    service="flows",
+                    action_url=f"/chat/{flow_id}?session={session_id}",
+                    data={
+                        "flow_id": flow_id,
+                        "session_id": session_id,
+                        "task_id": task_id,
+                    },
+                ),
             )
-        )
 
     return require_json_object(
         result.model_dump(mode="json", exclude_none=False),

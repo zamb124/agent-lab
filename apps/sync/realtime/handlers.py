@@ -65,6 +65,7 @@ from apps.sync.realtime.task_names import (
 from apps.sync.sender_display import sender_brief_for_message
 from core.calls.livekit_client import LiveKitClient
 from core.calls.livekit_usage_spans import trace_livekit_egress_composite_usage
+from core.clients.service_client import ServiceClient
 from core.config import get_settings
 from core.db.repositories.user_repository import UserRepository
 from core.files.models import (
@@ -72,6 +73,7 @@ from core.files.models import (
     AudioTranscriptionStatus,
     VideoAttachmentContent,
 )
+from core.identity.flow_employee import is_flow_employee
 from core.logging import get_logger
 from core.namespace import NamespaceService
 from core.tasks.kicker import kiq_task_name_with_context
@@ -271,6 +273,32 @@ def _notification_preview_from_message(message: MessageRead) -> str:
     return "Новое сообщение"
 
 
+async def _dispatch_flow_employee_inbox(
+    *,
+    employee_user_id: str,
+    sender_user_id: str,
+    channel_id: str,
+    message_id: str,
+    company_id: str,
+    text: str,
+) -> None:
+    """Диспатч входящего sync-сообщения flow-сотруднику в единый inbox flows."""
+    client = ServiceClient()
+    _ = await client.post(
+        "flows",
+        "/flows/api/v1/internal/employee/inbox",
+        json={
+            "source": "sync_message",
+            "company_id": company_id,
+            "employee_user_id": employee_user_id,
+            "sender_user_id": sender_user_id,
+            "channel_id": channel_id,
+            "message_id": message_id,
+            "text": text,
+        },
+    )
+
+
 async def _enqueue_channel_message_notifications(
     *,
     channel_id: str,
@@ -279,12 +307,14 @@ async def _enqueue_channel_message_notifications(
     company_id: str,
     actor_user_id: str,
     channels: ChannelRepository,
+    user_repository: UserRepository,
 ) -> None:
     entity = await channels.get(channel_id)
     if entity is None:
         raise ValueError(f"Канал {channel_id} не найден.")
     preview = _notification_preview_from_message(message)
-    if entity.type == ChannelType.DIRECT.value:
+    is_direct = entity.type == ChannelType.DIRECT.value
+    if is_direct:
         title = message.sender.display_name
     else:
         title = entity.name or "Канал"
@@ -294,6 +324,17 @@ async def _enqueue_channel_message_notifications(
 
     for uid in member_ids:
         if uid == actor_user_id:
+            continue
+        recipient = await user_repository.get(uid)
+        if recipient is not None and is_flow_employee(recipient) and (uid in mentioned or is_direct):
+            await _dispatch_flow_employee_inbox(
+                employee_user_id=uid,
+                sender_user_id=actor_user_id,
+                channel_id=channel_id,
+                message_id=message.message_id,
+                company_id=company_id,
+                text=preview,
+            )
             continue
         if uid in mentioned:
             _ = await deliver_sync_mention_notification.kiq(
@@ -820,6 +861,7 @@ async def send_message_with_side_effects(
         company_id=company_id,
         actor_user_id=user.user_id,
         channels=container.channel_repository,
+        user_repository=container.user_repository,
     )
     recipients = await channel_recipient_user_ids(
         container.channel_repository, channel_id, company_id

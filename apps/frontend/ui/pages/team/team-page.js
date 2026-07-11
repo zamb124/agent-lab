@@ -366,7 +366,12 @@ export class FrontendTeamPage extends PlatformPage {
                     </div>
                 </div>
                 <div class="member-card-email">${m.email || ''}</div>
-                <div class="member-card-roles">${this._renderRoles(m)}</div>
+                <div class="member-card-roles">
+                    ${m.is_flow_employee === true
+                        ? html`<span class="role-tag">${this.t('team_page.flow_employee_badge')}</span>`
+                        : ''}
+                    ${this._renderRoles(m)}
+                </div>
             </div>
         `;
     }

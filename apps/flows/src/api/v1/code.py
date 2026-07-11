@@ -38,7 +38,8 @@ from apps.flows.src.durable_execution import (
 )
 from apps.flows.src.models.node_config import GraphNodeConfig
 from apps.flows.src.runtime.nodes import create_node
-from apps.flows.src.runtime.state_diff import DiffItem as StateDiffItem, compute_state_diff
+from apps.flows.src.runtime.state_diff import DiffItem as StateDiffItem
+from apps.flows.src.runtime.state_diff import compute_state_diff
 from apps.flows.src.state import collect_flow_node_files
 from core.capabilities import (
     CAPABILITY_LANGUAGE_SET,

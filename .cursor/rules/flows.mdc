@@ -38,6 +38,10 @@ alwaysApply: false
 
 Доменных WS-команд у flows нет. HITL и задачи оператора ведутся в платформенном ядре `WorkItem` (сервис **worktracker**, `/worktracker/api/v1/work-items*`, → **`worktracker.mdc`**). flows предоставляет только internal-эндпоинты для хуков: `POST /flows/api/v1/internal/work-items/{completed,assigned,comment}`.
 
+## Flow как сотрудник (employee)
+
+`FlowConfig.employee` (`FlowEmployeeConfig`: `enabled`, `roles`, `curator_user_ids` ≥1, `display_name`, `avatar_url`) при `create_flow`/`update_flow` провижнит flow как платформенного `User` `flow_employee_{flow_id}` (`core.identity.flow_employee`, двустороннее членство `company.members`), при `enabled=False`/удалении — деактивирует. Employee-flow **всегда** исполняется от своего имени: `apps/flows/src/services/execution_identity.resolve_execution_context` минтит SESSION JWT через `build_job_context` во всех точках входа (channels, tasks, handoff, scheduler, inbox) до сериализации `context_data`; `ExecutionState.initiator_user_id` хранит запустившего (уведомления/`ask_user`/prompt-переменные собеседника — от инициатора, identity/memory — от актора). Направление «платформа → flow» — единый **inbox** `POST /flows/api/v1/internal/employee/inbox` (typed `sync_message | work_item_assigned`, signed internal headers). Куратор: эскалации фоновых запусков/сбоев идут `curator_user_ids`; act-as (вход как сотрудник) — `POST /{svc}/api/team/employees/{user_id}/act-as` (только flow-сотрудник, только куратор/админ, `impersonated_by` в JWT metadata → `Context.metadata`). Ось идентичности одна — `user_id`; `AgentActor`/`AgentAssignment`/`platform-agent:*` удалены.
+
 ## Push-события (sync открытых редакторов)
 
 Бэкенд публикует через `core.ui_events.publish_ui_event_to_user` после успешного REST PUT/DELETE flow, POST `reload-from-bundle`, и POST/PUT/DELETE branch:

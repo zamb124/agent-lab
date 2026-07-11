@@ -54,6 +54,8 @@ BUILTIN_TOOL_SPECS: tuple[tuple[str, str], ...] = (
     ("apps.flows.tools.agent_session_tools", "ask_user"),
     ("apps.flows.tools.summarize_text", "summarize_text"),
     ("apps.flows.tools.agent_session_tools", "hitl_operator_task"),
+    ("apps.flows.tools.sync_tools", "sync_send_message"),
+    ("apps.flows.tools.sync_tools", "sync_list_messages"),
     ("apps.flows.tools.work_item_tools", "work_item_create"),
     ("apps.flows.tools.work_item_tools", "work_item_complete"),
     ("apps.flows.tools.work_item_tools", "work_item_list"),

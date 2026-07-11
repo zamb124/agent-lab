@@ -9,6 +9,7 @@ from __future__ import annotations
 
 from core.models.context_models import Context
 from core.models.i18n_models import Language
+from core.models.identity_models import User
 from core.types import JsonObject
 
 
@@ -59,4 +60,28 @@ def flow_variables_from_request_context(context: Context | None) -> JsonObject:
         "user_language": lang,
         "interface_language_code": interface_language_code,
         "interface_language_name": interface_language_name,
+    }
+
+
+def flow_employee_variables_from_user(user: User) -> JsonObject:
+    """Переменные самого сотрудника-агента (актора) для промпта: employee_*."""
+    email = user.emails[0] if user.emails else ""
+    return {
+        "employee_id": user.user_id,
+        "employee_name": user.name or "",
+        "employee_email": email,
+        "employee_first_name": user.first_name or "",
+        "employee_last_name": user.last_name or "",
+    }
+
+
+def flow_user_identity_overrides(user: User) -> JsonObject:
+    """Переменные собеседника (инициатора) для промпта: user_* от имени человека."""
+    email = user.emails[0] if user.emails else ""
+    return {
+        "user_id": user.user_id,
+        "user_name": user.name or "",
+        "user_email": email,
+        "user_first_name": user.first_name or "",
+        "user_last_name": user.last_name or "",
     }

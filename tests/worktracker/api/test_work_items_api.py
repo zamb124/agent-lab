@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-import io
-
 import pytest
 
 from tests.worktracker.conftest import API_PREFIX

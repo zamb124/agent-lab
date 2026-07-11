@@ -599,6 +599,7 @@
         "empty_title": "Нет участников",
         "empty_description": "Скопируйте ссылку-приглашение и отправьте коллеге",
         "remove": "Удалить",
+        "flow_employee_badge": "AI-сотрудник",
         "member_fallback": "участника",
         "confirm_remove": "Удалить {{name}} из команды?",
         "toast_invite_generated": "Ссылка-приглашение скопирована",

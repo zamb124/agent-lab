@@ -181,6 +181,7 @@ async def test_public_search_flow_calls_search_mcp_without_monkeypatches(
     rag_client,
     rag_worker,
     provider_litserve_service,
+    enable_serp_rerank,
     auth_headers_system,
     client,
     container,
@@ -190,7 +191,7 @@ async def test_public_search_flow_calls_search_mcp_without_monkeypatches(
 ) -> None:
     # rag_service (HTTP :9002) обязателен: search MCP index_search ходит в RAG по HTTP,
     # а rag_client — только in-process ASGI и сервер не поднимает.
-    _ = search_service, rag_service, rag_worker, provider_litserve_service
+    _ = search_service, rag_service, rag_worker, provider_litserve_service, enable_serp_rerank
     marker = f"public_search_runet_marker_{unique_id}"
     doc_text = await _ingest_runet_marker(
         rag_client,
@@ -215,6 +216,7 @@ async def test_public_search_flow_calls_search_mcp_without_monkeypatches(
     )
     assert set(synced_tool_ids) >= {
         mcp_tool_reference_id("search", "meta_web_search"),
+        mcp_tool_reference_id("search", "refine_serp"),
         mcp_tool_reference_id("search", "search_suggest"),
         mcp_tool_reference_id("search", "search_result_insights"),
     }
@@ -336,6 +338,7 @@ async def test_public_search_quick_streams_staged_preview_then_refined(
     rag_client,
     rag_worker,
     provider_litserve_service,
+    enable_serp_rerank,
     auth_headers_system,
     client,
     mock_llm_redis,
@@ -343,7 +346,7 @@ async def test_public_search_quick_streams_staged_preview_then_refined(
 ) -> None:
     # rag_service (HTTP :9002) обязателен: search MCP index_search ходит в RAG по HTTP.
     # provider_litserve_service нужен для reranker в refine-стадии.
-    _ = search_service, rag_service, rag_worker, provider_litserve_service
+    _ = search_service, rag_service, rag_worker, provider_litserve_service, enable_serp_rerank
     marker = f"public_search_staged_marker_{unique_id}"
     query = await _ingest_runet_marker(
         rag_client,
@@ -420,12 +423,14 @@ def test_public_search_bundle_timeouts_cover_public_search_window() -> None:
 @pytest.mark.timeout(180, func_only=True)
 async def test_public_search_with_file_reads_file_before_search(
     search_service,
+    provider_litserve_service,
+    enable_serp_rerank,
     client,
     mock_llm_redis,
     mock_llm_capture,
     unique_id,
 ) -> None:
-    _ = search_service
+    _ = search_service, provider_litserve_service, enable_serp_rerank
     query = f"Найди официальные условия договора {unique_id}"
     file_name = f"contract-search-{unique_id}.txt"
     file_text = (

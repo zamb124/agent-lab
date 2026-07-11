@@ -15,8 +15,11 @@ from datetime import datetime, timezone
 
 from pydantic import Field
 
+from core.clients.service_client import ServiceClient
 from core.files.file_attachments import file_ref_ids
 from core.files.file_ref import FileRef
+from core.identity.flow_employee import is_flow_employee_user_id
+from core.internal_context_headers import build_internal_context_headers
 from core.logging import get_logger
 from core.types import JsonObject, require_json_object
 from core.variables.models import VariableMap, normalize_variables_map
@@ -31,7 +34,11 @@ from core.worktracker.events import (
     WorkItemRealtimeEvent,
     publish_work_item_events,
 )
-from core.worktracker.hook_dispatcher import NoopHookDispatcher, WorkItemHookDispatcher
+from core.worktracker.hook_dispatcher import (
+    NoopHookDispatcher,
+    WorkItemHookDispatcher,
+    hook_dispatch_internal_user_id,
+)
 from core.worktracker.models import (
     TERMINAL_WORK_ITEM_STATES,
     Board,
@@ -744,6 +751,7 @@ class WorkItemService:
 
     async def _after_assignment_change(self, item: WorkItem) -> None:
         await self._notify_assignees(item, NotificationType.WORK_ITEM_ASSIGNED)
+        await self._dispatch_employee_assignments(item)
         await self._dispatch_hooks(
             item,
             WorkItemHookEvent.ASSIGNED,
@@ -801,6 +809,8 @@ class WorkItemService:
         if not isinstance(item.assignment, UsersAssignment):
             return
         for user_id in item.assignment.user_ids:
+            if is_flow_employee_user_id(user_id):
+                continue
             await notify_user(
                 user_id,
                 Notification(
@@ -811,6 +821,40 @@ class WorkItemService:
                     action_url=f"/worktracker/tasks/{item.work_item_id}",
                     data={"work_item_id": item.work_item_id},
                 ),
+            )
+
+    async def _dispatch_employee_assignments(self, item: WorkItem) -> None:
+        """Назначение задачи flow-сотруднику диспатчится в его inbox во flows."""
+        if not isinstance(item.assignment, UsersAssignment):
+            return
+        employee_user_ids = [
+            user_id
+            for user_id in item.assignment.user_ids
+            if is_flow_employee_user_id(user_id)
+        ]
+        if not employee_user_ids:
+            return
+        sender_user_id = hook_dispatch_internal_user_id(item)
+        service_client = ServiceClient()
+        text = item.title if not item.description else f"{item.title}\n\n{item.description}"
+        for employee_user_id in employee_user_ids:
+            payload: JsonObject = {
+                "source": "work_item_assigned",
+                "company_id": item.company_id,
+                "employee_user_id": employee_user_id,
+                "sender_user_id": sender_user_id,
+                "work_item_id": item.work_item_id,
+                "text": text,
+            }
+            headers = build_internal_context_headers(
+                company_id=item.company_id,
+                user_id=sender_user_id,
+            )
+            _ = await service_client.post(
+                "flows",
+                "/flows/api/v1/internal/employee/inbox",
+                json=payload,
+                headers=headers,
             )
 
 

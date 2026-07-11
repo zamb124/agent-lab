@@ -101,6 +101,11 @@ class ContextFactory:
         )
         metadata["grps"] = permission_groups
 
+        if token_data is not None:
+            impersonated_by = token_data.metadata.get("impersonated_by")
+            if isinstance(impersonated_by, str) and impersonated_by:
+                metadata["impersonated_by"] = impersonated_by
+
         active_namespace = await self._resolve_active_namespace(
             request,
             company,

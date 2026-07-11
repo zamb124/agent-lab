@@ -31,7 +31,7 @@ async def test_platform_search_mcp_test_endpoint(search_service, client, contain
     assert test_response.status_code == 200, test_response.text
     body = test_response.json()
     assert body["success"] is True
-    assert body["tools_count"] == 3
+    assert body["tools_count"] == 4
     assert body["transport_type"] == "http"
     assert body["url"] == expected_url
 
@@ -47,10 +47,11 @@ async def test_platform_search_mcp_sync_endpoint(search_service, client, contain
     assert sync_response.status_code == 200, sync_response.text
     body = sync_response.json()
     assert body["success"] is True
-    assert body["tools_count"] == 3
+    assert body["tools_count"] == 4
     tool_names = sorted(tool["name"] for tool in body["tools"])
     assert tool_names == [
         "meta_web_search",
+        "refine_serp",
         "search_result_insights",
         "search_suggest",
     ]
@@ -62,7 +63,7 @@ async def test_platform_search_mcp_sync_endpoint(search_service, client, contain
         for tool in tools_response.json()["items"]
         if tool.get("mcp_server_id") == "search"
     ]
-    assert len(mcp_tools) == 3
+    assert len(mcp_tools) == 4
     assert mcp_tool_reference_id("search", "meta_web_search") in {
         tool["tool_id"] for tool in mcp_tools
     }

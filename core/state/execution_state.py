@@ -252,7 +252,14 @@ class ExecutionState(FlexibleBaseModel):
 
     task_id: str = Field(..., description="ID задачи A2A")
     context_id: str = Field(..., description="ID контекста A2A")
-    user_id: str = Field(..., description="ID пользователя")
+    user_id: str = Field(..., description="ID актора выполнения (сотрудник-агент или инициатор)")
+    initiator_user_id: str | None = Field(
+        default=None,
+        description=(
+            "Кто инициировал запуск: человек/собеседник. Для flow-сотрудника отличается от "
+            "user_id (актор). Используется для уведомлений, эскалаций и prompt-переменных собеседника."
+        ),
+    )
     session_id: str = Field(..., description="ID сессии в формате flow_id:context_id")
 
     # ========================================================================

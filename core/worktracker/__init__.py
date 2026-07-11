@@ -18,8 +18,6 @@ from core.worktracker.events import (
 )
 from core.worktracker.models import (
     TERMINAL_WORK_ITEM_STATES,
-    AgentActor,
-    AgentAssignment,
     Board,
     BoardColumn,
     CalendarEventLink,
@@ -53,8 +51,6 @@ from core.worktracker.models import (
 
 __all__ = [
     "TERMINAL_WORK_ITEM_STATES",
-    "AgentActor",
-    "AgentAssignment",
     "Board",
     "BoardColumn",
     "CalendarEventLink",

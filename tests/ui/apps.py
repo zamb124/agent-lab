@@ -64,4 +64,11 @@ SERVICE_UI_REGISTRY: dict[str, ServiceUiSpec] = {
         title=None,
         subdomain_prefix="system",
     ),
+    "worktracker": ServiceUiSpec(
+        key="worktracker",
+        port=9021,
+        spa_path="/worktracker/",
+        shell_selector="worktracker-app",
+        title="Tasks",
+    ),
 }

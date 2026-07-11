@@ -16,7 +16,7 @@ alwaysApply: false
 - **Назначение гибкое и сменяемое**: `reassign(company_id, work_item_id, assignment)` меняет исполнителя любой non-terminal задачи любого `kind` (HITL-задачу можно перекинуть на flow, CRM-задачу — на агента/человека).
 - **HITL = частный случай**: `kind=operator_handoff`, `blocking=true`, хук `completed → flows`. На завершении WorkItem flows возобновляется. Завершить может кто угодно — хук срабатывает одинаково.
 - **Fire-and-forget**: `blocking=false`, без хуков — агент создаёт и не ждёт.
-- **Исполнитель**: `UsersAssignment` / `QueueAssignment` / `AgentAssignment(flow_id)` / `UnassignedAssignment`.
+- **Исполнитель**: `UsersAssignment(user_ids)` / `QueueAssignment` / `UnassignedAssignment`. Отдельной оси «агент» нет: flow-сотрудник — обычный `User` (`flow_employee_{flow_id}`, см. `main.mdc`), назначается через `UsersAssignment`.
 
 ## Слои
 
@@ -49,8 +49,8 @@ alwaysApply: false
 - `created_at`, `updated_at`
 
 Дискриминированные union (StrEnum-дискриминатор, `core.models.StrictBaseModel`):
-- `WorkActor` (`actor_kind`): `user(user_id)` | `agent(flow_id, session_id?)` | `system`
-- `WorkItemAssignment` (`assignee_kind`): `unassigned` | `users(user_ids)` | `queue(work_queue_id, claimed_by_user_id?)` | `agent(flow_id, branch_id?)`
+- `WorkActor` (`actor_kind`): `user(user_id)` | `system`
+- `WorkItemAssignment` (`assignee_kind`): `unassigned` | `users(user_ids)` | `queue(work_queue_id, claimed_by_user_id?)`
 - `WorkItemLink` (`link_kind`): `crm_entity(entity_id)` | `flow_session(session_id, a2a_task_id, context_id)` | `sync_message(channel_id, message_id)` | `rag_document(document_id)` | `file(file_id)` | `calendar_event(event_id)` | `work_item(work_item_id, relation: blocks|related|parent)`
 - `WorkItemHook`: `event: WorkItemHookEvent (assigned|comment|completed)`, `service`, `path`, `binding: JsonObject`. Ядро диспатчит подходящие хуки на переходах: `assigned` (create/reassign), `comment` (add_comment), `completed` (terminal).
 - `WorkItemResolution`: `text`, `files: list[FileRef]`, `resolved_by: WorkActor | None`
@@ -58,7 +58,7 @@ alwaysApply: false
 Очереди и доски:
 - `WorkQueue` / `work_queue_id`, `work_queue_slug` (unique per company); `WorkQueueMember(work_queue_id, member: WorkActor, role)` — участник полиморфен (пользователь **или** агент-flow), `member_kind`/`member_ref` в БД.
 - `Board` / `board_id`, `BoardColumn` / `board_column_id` (`label`, `state: WorkItemState`, `position`); `board_key` (`generic|operator|task|task:<subtype>`) для резолва доски per `(company, namespace, board_key)`.
-- `WorkItemComment` (`comment_id`, `work_item_id`, `author: WorkActor`, `role: operator|user|system|agent`, `text`, `files: list[FileRef]`, `created_at`) — takeover-диалог.
+- `WorkItemComment` (`comment_id`, `work_item_id`, `author: WorkActor`, `role: operator|user|system|agent`, `text`, `files: list[FileRef]`, `created_at`) — takeover-диалог (`agent` — метка авторства реплики flow-сотрудника, автор всё равно `UserActor`).
 
 Файлы: канон `FileRef` (`file_id`, `original_name`, `content_type`, `file_size`, `url?`). Upload — `POST /frontend/api/v1/files/` (`platform/file_create` + `FileCreateSpec`); open — `PlatformElement.openFile` → OnlyOffice viewer (`office.mdc`, `files.mdc`). UI — `platform-file-attachments.js`. Переменные — `platform-variables-panel.js` + `VariableResolver` в `prompt-editor`.
 
@@ -100,7 +100,7 @@ AuthMiddleware: правила в `core/middleware/auth/route_config.py` — API
 
 ## Агент как исполнитель
 
-`AgentAssignment(flow_id)` + `assigned`-хук → flows endpoint `/internal/work-items/assigned` запускает flow с WorkItem на входе («инбокс агента»), в т.ч. для задач, переназначенных на агента (бывших HITL/CRM). Агент создаёт задачи себе/другому агенту/оператору/человеку через tools `work_item_create/complete/list`.
+Назначение задачи на flow-сотрудника = `UsersAssignment(user_ids=[flow_employee_{flow_id}])`. В `_after_assignment_change` для employee-исполнителей вместо notify идёт автодиспатч в flows employee inbox (`POST /flows/api/v1/internal/employee/inbox`, source `work_item_assigned`) — flow запускается с WorkItem на входе от собственного имени. Агент создаёт задачи себе/другому агенту/оператору/человеку через tools `work_item_create/complete/list` (self/agent → `UsersAssignment` на employee user_id, `created_by` — `UserActor` актора). `assigned`/`comment`/`completed` хуки для HITL остаются.
 
 ## CRM (Networkle)
 

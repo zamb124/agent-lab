@@ -4,7 +4,8 @@ from __future__ import annotations
 
 import pytest
 
-from core.worktracker.models import AgentActor, BoardColumn, UserActor, WorkItemState
+from core.identity.flow_employee import flow_employee_user_id
+from core.worktracker.models import BoardColumn, UserActor, WorkItemState
 
 pytestmark = pytest.mark.asyncio
 
@@ -51,21 +52,24 @@ async def test_queue_members_and_is_member(worktracker_service, unique_id: str) 
     assert not await worktracker_service.is_member(queue.work_queue_id, UserActor(user_id=user_id))
 
 
-async def test_add_agent_queue_member(worktracker_service, unique_id: str) -> None:
+async def test_add_flow_employee_queue_member(worktracker_service, unique_id: str) -> None:
     queue = await worktracker_service.create_queue(
         company_id="system",
         name="Agents",
         slug=f"ag-{unique_id}",
     )
-    flow_id = f"flow_{unique_id}"
+    employee_user_id = flow_employee_user_id(f"flow_{unique_id}")
     await worktracker_service.add_queue_member(
         company_id="system",
         work_queue_id=queue.work_queue_id,
-        member=AgentActor(flow_id=flow_id),
+        member=UserActor(user_id=employee_user_id),
         role="agent",
     )
     members = await worktracker_service.list_queue_members(queue.work_queue_id)
-    assert any(isinstance(m.member, AgentActor) for m in members)
+    assert any(
+        isinstance(m.member, UserActor) and m.member.user_id == employee_user_id
+        for m in members
+    )
 
 
 async def test_list_boards_by_namespace(worktracker_service, unique_id: str) -> None:

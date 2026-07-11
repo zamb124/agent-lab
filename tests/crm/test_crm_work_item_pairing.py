@@ -25,8 +25,12 @@ import pytest
 from httpx import AsyncClient, Response
 
 from apps.crm.services.crm_work_item_service import CrmTaskWorkSeed
+from core.identity.flow_employee import flow_employee_user_id
+from tests.fixtures.flow_employee_test_helpers import (
+    cleanup_flow_employee_for_tests,
+    provision_flow_employee_for_tests,
+)
 from core.worktracker.models import (
-    AgentAssignment,
     CrmEntityLink,
     QueueAssignment,
     UnassignedAssignment,
@@ -36,7 +40,7 @@ from core.worktracker.models import (
     WorkItemState,
 )
 
-pytestmark = pytest.mark.asyncio
+pytestmark = [pytest.mark.integration, pytest.mark.asyncio]
 
 
 def _http_json(response: Response) -> dict[str, object]:
@@ -197,31 +201,39 @@ async def test_delete_for_task_missing_is_noop(app, crm_container, unique_id):
 
 async def test_reassign_crm_work_item_to_agent_and_queue(app, crm_container, unique_id):
     """CRM-задачу можно перевести на агента или очередь (межсервисная гибкость)."""
-    crm_svc = crm_container.crm_work_item_service
-    wi_svc = crm_container.work_item_service
-    entity_id = f"ent_reassign_{unique_id}"
-    item = await crm_svc.sync_for_task(
-        company_id="system",
-        entity_id=entity_id,
-        namespace=f"ns-{unique_id}",
-        title="t",
-        seed=CrmTaskWorkSeed(assignees=["u1"]),
+    agent_flow_id = f"flow_{unique_id}"
+    await provision_flow_employee_for_tests(
+        flow_id=agent_flow_id,
+        curator_user_id=f"cur_{unique_id}",
     )
-    to_agent = await wi_svc.reassign(
-        company_id="system",
-        work_item_id=item.work_item_id,
-        assignment=AgentAssignment(flow_id=f"flow_{unique_id}"),
-    )
-    assert isinstance(to_agent.assignment, AgentAssignment)
-    assert to_agent.kind is WorkItemKind.CRM_ACTIVITY
+    try:
+        crm_svc = crm_container.crm_work_item_service
+        wi_svc = crm_container.work_item_service
+        entity_id = f"ent_reassign_{unique_id}"
+        item = await crm_svc.sync_for_task(
+            company_id="system",
+            entity_id=entity_id,
+            namespace=f"ns-{unique_id}",
+            title="t",
+            seed=CrmTaskWorkSeed(assignees=["u1"]),
+        )
+        to_agent = await wi_svc.reassign(
+            company_id="system",
+            work_item_id=item.work_item_id,
+            assignment=UsersAssignment(user_ids=[flow_employee_user_id(agent_flow_id)]),
+        )
+        assert isinstance(to_agent.assignment, UsersAssignment)
+        assert to_agent.kind is WorkItemKind.CRM_ACTIVITY
 
-    queue = await wi_svc.create_queue(company_id="system", name="Q", slug=f"crm-q-{unique_id}")
-    to_queue = await wi_svc.reassign(
-        company_id="system",
-        work_item_id=item.work_item_id,
-        assignment=QueueAssignment(work_queue_id=queue.work_queue_id),
-    )
-    assert isinstance(to_queue.assignment, QueueAssignment)
+        queue = await wi_svc.create_queue(company_id="system", name="Q", slug=f"crm-q-{unique_id}")
+        to_queue = await wi_svc.reassign(
+            company_id="system",
+            work_item_id=item.work_item_id,
+            assignment=QueueAssignment(work_queue_id=queue.work_queue_id),
+        )
+        assert isinstance(to_queue.assignment, QueueAssignment)
+    finally:
+        await cleanup_flow_employee_for_tests(flow_id=agent_flow_id)
 
 
 # ======================= Часть B: пара через CRM API (HTTP) =======================

@@ -10,6 +10,7 @@ STATE_DIFF_SKIP_KEYS: frozenset[str] = frozenset({
     "task_id",
     "context_id",
     "user_id",
+    "initiator_user_id",
     "session_id",
     "messages",
     "prompt_history",

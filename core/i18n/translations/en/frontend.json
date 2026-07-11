@@ -599,6 +599,7 @@
         "empty_title": "No members yet",
         "empty_description": "Copy the invite link and send it to a teammate",
         "remove": "Remove",
+        "flow_employee_badge": "AI employee",
         "member_fallback": "this member",
         "confirm_remove": "Remove {{name}} from the team?",
         "toast_invite_generated": "Invite link copied",

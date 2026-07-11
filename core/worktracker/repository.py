@@ -16,6 +16,7 @@ from sqlalchemy.sql import Select
 from core.db.utils import get_rowcount
 from core.files.file_attachments import minimal_file_refs_from_file_ids, parse_file_refs
 from core.files.file_ref import FileRef
+from core.identity.flow_employee import flow_employee_user_id
 from core.types import JsonArray, JsonObject, require_json_object
 from core.variables.models import VariableMap, normalize_variables_map
 from core.worktracker.db import WorktrackerDatabase
@@ -29,7 +30,6 @@ from core.worktracker.db_models import (
 from core.worktracker.models import (
     TERMINAL_WORK_ITEM_STATES,
     ActorKind,
-    AgentActor,
     AssigneeKind,
     Board,
     BoardColumn,
@@ -66,16 +66,12 @@ def _actor_from_json(raw: JsonObject) -> WorkActor:
 def _member_kind_ref(actor: WorkActor) -> tuple[str, str]:
     if isinstance(actor, UserActor):
         return ("user", actor.user_id)
-    if isinstance(actor, AgentActor):
-        return ("agent", actor.flow_id)
-    raise ValueError("Участник очереди должен быть пользователем или агентом")
+    raise ValueError("Участник очереди должен быть пользователем")
 
 
 def _member_actor(member_kind: str, member_ref: str) -> WorkActor:
     if member_kind == "user":
         return UserActor(user_id=member_ref)
-    if member_kind == "agent":
-        return AgentActor(flow_id=member_ref)
     raise ValueError(f"Неизвестный member_kind {member_kind!r}")
 
 
@@ -118,8 +114,10 @@ def _apply_work_item_filters(
         )
     if assignee_flow_id is not None:
         stmt = stmt.where(
-            _assignment_text("assignee_kind") == AssigneeKind.AGENT.value,
-            _assignment_text("flow_id") == assignee_flow_id,
+            _assignment_text("assignee_kind") == AssigneeKind.USERS.value,
+            WorkItemRow.assignment["user_ids"].contains(
+                [flow_employee_user_id(assignee_flow_id)]
+            ),
         )
     if assignee_user_id is not None:
         stmt = stmt.where(

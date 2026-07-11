@@ -24,11 +24,15 @@ from apps.flows.tools.work_item_tools import (
     work_item_list,
 )
 from core.files.file_ref import FileRef
+from core.identity.flow_employee import flow_employee_user_id
+from tests.fixtures.flow_employee_test_helpers import (
+    cleanup_flow_employee_for_tests,
+    provision_flow_employee_for_tests,
+)
 from core.state import ExecutionState
 from core.state.interrupt import HandoffMode
 from core.variables.models import normalize_variables_map
 from core.worktracker.models import (
-    AgentAssignment,
     BoardColumn,
     CrmEntityLink,
     QueueAssignment,
@@ -377,36 +381,43 @@ async def test_hitl_resume_with_invalid_binding_raises(app, container, unique_id
 
 async def test_agent_tool_creates_self_assigned_job(app, container, unique_id):
     flow_id = f"agent_{unique_id}"
-    state = ExecutionState(
-        task_id=f"t-{unique_id}",
-        context_id=f"c-{unique_id}",
-        user_id="test_user",
-        session_id=f"{flow_id}:c-{unique_id}",
+    await provision_flow_employee_for_tests(
+        flow_id=flow_id,
+        curator_user_id=f"cur_{unique_id}",
     )
-    created = await work_item_create.run(
-        {
-            "title": f"job-{unique_id}",
-            "description": "self job",
-            "assignee_type": "self",
-            "priority": "high",
-            "blocking": False,
-        },
-        state,
-    )
-    work_item_id = created["work_item_id"]
-    item = await container.work_item_service.get("system", work_item_id)
-    assert item.kind is WorkItemKind.AGENT_JOB
-    assert item.blocking is False
-    assert isinstance(item.assignment, AgentAssignment)
-    assert item.assignment.flow_id == flow_id
+    try:
+        state = ExecutionState(
+            task_id=f"t-{unique_id}",
+            context_id=f"c-{unique_id}",
+            user_id="test_user",
+            session_id=f"{flow_id}:c-{unique_id}",
+        )
+        created = await work_item_create.run(
+            {
+                "title": f"job-{unique_id}",
+                "description": "self job",
+                "assignee_type": "self",
+                "priority": "high",
+                "blocking": False,
+            },
+            state,
+        )
+        work_item_id = created["work_item_id"]
+        item = await container.work_item_service.get("system", work_item_id)
+        assert item.kind is WorkItemKind.AGENT_JOB
+        assert item.blocking is False
+        assert isinstance(item.assignment, UsersAssignment)
+        assert item.assignment.user_ids == [flow_employee_user_id(flow_id)]
 
-    listed = await work_item_list.run({"state_filter": "open"}, state)
-    assert any(row["work_item_id"] == work_item_id for row in listed["items"])
+        listed = await work_item_list.run({"state_filter": "open"}, state)
+        assert any(row["work_item_id"] == work_item_id for row in listed["items"])
 
-    done = await work_item_complete.run(
-        {"work_item_id": work_item_id, "resolution_text": "finished"}, state
-    )
-    assert done["state"] == WorkItemState.DONE.value
+        done = await work_item_complete.run(
+            {"work_item_id": work_item_id, "resolution_text": "finished"}, state
+        )
+        assert done["state"] == WorkItemState.DONE.value
+    finally:
+        await cleanup_flow_employee_for_tests(flow_id=flow_id)
 
 
 async def test_agent_tool_queue_assignment_requires_existing_queue(app, container, unique_id):
@@ -496,33 +507,41 @@ async def test_crm_task_work_item_visible_in_namespace_list(app, container, uniq
 
 async def test_reassign_between_user_agent_queue(app, container, unique_id):
     """Любая задача переназначается на человека/агента/очередь в любой момент."""
-    svc = container.work_item_service
-    queue = await svc.create_queue(company_id="system", name="Q", slug=f"reassign-{unique_id}")
-    item = await svc.create(
-        company_id="system", title=f"flex-{unique_id}", created_by=SystemActor()
+    agent_flow_id = f"flow_{unique_id}"
+    await provision_flow_employee_for_tests(
+        flow_id=agent_flow_id,
+        curator_user_id=f"cur_{unique_id}",
     )
-    assert isinstance(item.assignment, UnassignedAssignment)
+    try:
+        svc = container.work_item_service
+        queue = await svc.create_queue(company_id="system", name="Q", slug=f"reassign-{unique_id}")
+        item = await svc.create(
+            company_id="system", title=f"flex-{unique_id}", created_by=SystemActor()
+        )
+        assert isinstance(item.assignment, UnassignedAssignment)
 
-    to_user = await svc.reassign(
-        company_id="system",
-        work_item_id=item.work_item_id,
-        assignment=UsersAssignment(user_ids=["u1"]),
-    )
-    assert isinstance(to_user.assignment, UsersAssignment)
+        to_user = await svc.reassign(
+            company_id="system",
+            work_item_id=item.work_item_id,
+            assignment=UsersAssignment(user_ids=["u1"]),
+        )
+        assert isinstance(to_user.assignment, UsersAssignment)
 
-    to_agent = await svc.reassign(
-        company_id="system",
-        work_item_id=item.work_item_id,
-        assignment=AgentAssignment(flow_id=f"flow_{unique_id}"),
-    )
-    assert isinstance(to_agent.assignment, AgentAssignment)
+        to_agent = await svc.reassign(
+            company_id="system",
+            work_item_id=item.work_item_id,
+            assignment=UsersAssignment(user_ids=[flow_employee_user_id(agent_flow_id)]),
+        )
+        assert isinstance(to_agent.assignment, UsersAssignment)
 
-    to_queue = await svc.reassign(
-        company_id="system",
-        work_item_id=item.work_item_id,
-        assignment=QueueAssignment(work_queue_id=queue.work_queue_id),
-    )
-    assert isinstance(to_queue.assignment, QueueAssignment)
+        to_queue = await svc.reassign(
+            company_id="system",
+            work_item_id=item.work_item_id,
+            assignment=QueueAssignment(work_queue_id=queue.work_queue_id),
+        )
+        assert isinstance(to_queue.assignment, QueueAssignment)
+    finally:
+        await cleanup_flow_employee_for_tests(flow_id=agent_flow_id)
 
 
 async def test_reassign_terminal_raises(app, container, unique_id):
@@ -535,7 +554,7 @@ async def test_reassign_terminal_raises(app, container, unique_id):
         await svc.reassign(
             company_id="system",
             work_item_id=item.work_item_id,
-            assignment=AgentAssignment(flow_id="f"),
+            assignment=UsersAssignment(user_ids=[flow_employee_user_id("f")]),
         )
 
 
@@ -569,37 +588,45 @@ class _RecordingHookDispatcher:
 
 
 async def test_hooks_dispatched_on_assigned_comment_completed(app, container, unique_id):
-    recorder = _RecordingHookDispatcher()
-    svc = WorkItemService(
-        repository=container.worktracker_repository, hook_dispatcher=recorder
+    agent_flow_id = f"flow_{unique_id}"
+    await provision_flow_employee_for_tests(
+        flow_id=agent_flow_id,
+        curator_user_id=f"cur_{unique_id}",
     )
-    hooks = [
-        WorkItemHook(event=WorkItemHookEvent.ASSIGNED, service="flows", path="/x"),
-        WorkItemHook(event=WorkItemHookEvent.COMMENT, service="flows", path="/y"),
-        WorkItemHook(event=WorkItemHookEvent.COMPLETED, service="flows", path="/z"),
-    ]
-    item = await svc.create(
-        company_id="system",
-        title=f"hooks-{unique_id}",
-        created_by=SystemActor(),
-        kind=WorkItemKind.AGENT_JOB,
-        assignment=AgentAssignment(flow_id=f"flow_{unique_id}"),
-        hooks=hooks,
-    )
-    # create с AgentAssignment → assigned-хук
-    assert "assigned" in recorder.events
+    try:
+        recorder = _RecordingHookDispatcher()
+        svc = WorkItemService(
+            repository=container.worktracker_repository, hook_dispatcher=recorder
+        )
+        hooks = [
+            WorkItemHook(event=WorkItemHookEvent.ASSIGNED, service="flows", path="/x"),
+            WorkItemHook(event=WorkItemHookEvent.COMMENT, service="flows", path="/y"),
+            WorkItemHook(event=WorkItemHookEvent.COMPLETED, service="flows", path="/z"),
+        ]
+        item = await svc.create(
+            company_id="system",
+            title=f"hooks-{unique_id}",
+            created_by=SystemActor(),
+            kind=WorkItemKind.AGENT_JOB,
+            assignment=UsersAssignment(user_ids=[flow_employee_user_id(agent_flow_id)]),
+            hooks=hooks,
+        )
+        # create с назначением на flow-сотрудника → assigned-хук
+        assert "assigned" in recorder.events
 
-    await svc.add_comment(
-        company_id="system",
-        work_item_id=item.work_item_id,
-        author=UserActor(user_id="op1"),
-        role=WorkItemCommentRole.OPERATOR,
-        text="hi",
-    )
-    assert "comment" in recorder.events
+        await svc.add_comment(
+            company_id="system",
+            work_item_id=item.work_item_id,
+            author=UserActor(user_id="op1"),
+            role=WorkItemCommentRole.OPERATOR,
+            text="hi",
+        )
+        assert "comment" in recorder.events
 
-    _ = await svc.complete(company_id="system", work_item_id=item.work_item_id)
-    assert "completed" in recorder.events
+        _ = await svc.complete(company_id="system", work_item_id=item.work_item_id)
+        assert "completed" in recorder.events
+    finally:
+        await cleanup_flow_employee_for_tests(flow_id=agent_flow_id)
 
 
 async def test_work_item_attachments_variables_comment_files_roundtrip(app, container, unique_id):
@@ -645,20 +672,28 @@ async def test_work_item_attachments_variables_comment_files_roundtrip(app, cont
 
 
 async def test_reassign_to_agent_dispatches_assigned_hook(app, container, unique_id):
-    recorder = _RecordingHookDispatcher()
-    svc = WorkItemService(
-        repository=container.worktracker_repository, hook_dispatcher=recorder
+    agent_flow_id = f"flow_{unique_id}"
+    await provision_flow_employee_for_tests(
+        flow_id=agent_flow_id,
+        curator_user_id=f"cur_{unique_id}",
     )
-    item = await svc.create(
-        company_id="system",
-        title=f"reassign-hook-{unique_id}",
-        created_by=SystemActor(),
-        hooks=[WorkItemHook(event=WorkItemHookEvent.ASSIGNED, service="flows", path="/x")],
-    )
-    recorder.events.clear()
-    await svc.reassign(
-        company_id="system",
-        work_item_id=item.work_item_id,
-        assignment=AgentAssignment(flow_id=f"flow_{unique_id}"),
-    )
-    assert recorder.events == ["assigned"]
+    try:
+        recorder = _RecordingHookDispatcher()
+        svc = WorkItemService(
+            repository=container.worktracker_repository, hook_dispatcher=recorder
+        )
+        item = await svc.create(
+            company_id="system",
+            title=f"reassign-hook-{unique_id}",
+            created_by=SystemActor(),
+            hooks=[WorkItemHook(event=WorkItemHookEvent.ASSIGNED, service="flows", path="/x")],
+        )
+        recorder.events.clear()
+        await svc.reassign(
+            company_id="system",
+            work_item_id=item.work_item_id,
+            assignment=UsersAssignment(user_ids=[flow_employee_user_id(agent_flow_id)]),
+        )
+        assert recorder.events == ["assigned"]
+    finally:
+        await cleanup_flow_employee_for_tests(flow_id=agent_flow_id)

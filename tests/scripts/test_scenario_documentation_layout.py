@@ -86,7 +86,14 @@ class ScenarioScreenshotLayoutTest(unittest.TestCase):
                 f"![Сообщение]({names[1]})\n"
             )
             _ = (slug_dir / "README.md").write_text(markdown, encoding="utf-8")
-            _ = (slug_dir / "README.en.md").write_text(markdown, encoding="utf-8")
+            _ = (slug_dir / "README.en.md").write_text(
+                "# How to send a message\n\n"
+                "## Step 1. Open the channel\n\n"
+                f"![Channel]({names[0]})\n\n"
+                "## Step 2. Verify the message\n\n"
+                f"![Message]({names[1]})\n",
+                encoding="utf-8",
+            )
 
             self.assertEqual(check_readme_quality(scenarios_root), [])
 

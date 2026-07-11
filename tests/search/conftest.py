@@ -128,6 +128,18 @@ def crawl_search_container(search_crawl_low_min_extract_chars, setup_database_be
     reset_search_container()
 
 
+@pytest.fixture
+def enable_serp_rerank(monkeypatch):
+    """Включает SERP refine (reranker) — в общем conftest по умолчанию выключен."""
+    monkeypatch.setenv("RAG__DOCUMENT_INDEXING__SEARCH_DEFAULTS__RERANKER__ENABLED", "true")
+    import core.config.base as config_base
+
+    config_base._settings_instance = None
+    reset_search_settings()
+    yield
+    config_base._settings_instance = None
+    reset_search_settings()
+
 @pytest_asyncio.fixture(scope="session", autouse=True)
 async def ensure_platform_search_worker_prerequisites(
     setup_database_before_tests,

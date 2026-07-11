@@ -13,6 +13,14 @@ from __future__ import annotations
 import pytest
 
 
+def pytest_collection_modifyitems(items: list[pytest.Item]) -> None:
+    """pytestmark в conftest не наследуется модулями — маркируем integration явно."""
+    for item in items:
+        if item.nodeid.startswith("tests/flows/integration/"):
+            if item.get_closest_marker("integration") is None:
+                item.add_marker(pytest.mark.integration)
+
+
 @pytest.fixture(autouse=True)
 def _ensure_sandbox_contour(sandbox_services: dict[str, str]) -> None:
     _ = sandbox_services

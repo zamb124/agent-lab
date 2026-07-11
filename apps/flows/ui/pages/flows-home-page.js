@@ -6,7 +6,7 @@ import { html, css } from 'lit';
 import { repeat } from 'lit/directives/repeat.js';
 import { PlatformPage } from '@platform/lib/base/PlatformPage.js';
 import { formatPlatformDateTime } from '@platform/lib/utils/format-platform-date.js';
-import { buildFrontendPublicPath } from '@platform/lib/utils/build-service-entry-url.js';
+import { buildFrontendPublicPath, buildServiceEntryUrl } from '@platform/lib/utils/build-service-entry-url.js';
 import '@platform/lib/components/layout/page-header.js';
 import '@platform/lib/components/platform-icon.js';
 import '@platform/lib/components/platform-button.js';
@@ -31,6 +31,13 @@ const QUICK_ACTIONS = Object.freeze([
         tone: 'info',
         titleKey: 'flows_home.quick_sessions_title',
         descKey: 'flows_home.quick_sessions_desc',
+    }),
+    Object.freeze({
+        id: 'operator',
+        icon: 'inbox',
+        tone: 'warning',
+        titleKey: 'flows_home.quick_operator_title',
+        descKey: 'flows_home.quick_operator_desc',
     }),
 ]);
 
@@ -566,6 +573,14 @@ export class FlowsHomePage extends PlatformPage {
                 background: var(--glass-solid-subtle);
                 border: 1px solid var(--border-subtle);
             }
+            .readiness-row-link {
+                cursor: pointer;
+                transition: border-color var(--transition-fast), background var(--transition-fast);
+            }
+            .readiness-row-link:hover {
+                border-color: var(--border-strong);
+                background: var(--glass-solid);
+            }
             .row-main {
                 min-width: 0;
                 display: flex;
@@ -663,6 +678,7 @@ export class FlowsHomePage extends PlatformPage {
         this._tools = this.useOp('flows/tools_all');
         this._bundles = this.useOp('flows/flow_store_bundles');
         this._integrations = this.useOp('flows/integrations_list');
+        this._workItemCounts = this.useOp('platform/work_item_counts');
         this._authSel = this.select((s) => {
             const auth = isPlainObject(s.auth) ? s.auth : {};
             return {
@@ -695,6 +711,7 @@ export class FlowsHomePage extends PlatformPage {
         void this._tools.run({ limit: 2000, offset: 0 });
         void this._bundles.run({});
         void this._integrations.run({});
+        void this._workItemCounts.run({});
         this._installMobileModeListener();
     }
 
@@ -761,7 +778,19 @@ export class FlowsHomePage extends PlatformPage {
             this.openModal('flows.sessions', {});
             return;
         }
+        if (id === 'operator') {
+            this._openOperatorInbox();
+            return;
+        }
         throw new Error(`flows-home-page: unknown quick action "${id}"`);
+    }
+
+    _worktrackerInboxHref() {
+        return buildServiceEntryUrl('worktracker');
+    }
+
+    _openOperatorInbox() {
+        window.location.assign(this._worktrackerInboxHref());
     }
 
     _openConnectAction(id) {
@@ -867,6 +896,15 @@ export class FlowsHomePage extends PlatformPage {
                 >
                     <platform-icon name="chat" size="16"></platform-icon>
                 </platform-button>
+                <platform-button
+                    variant="ghost"
+                    icon-only
+                    density="dense"
+                    aria-label=${this.t('flows_home.header_operator')}
+                    @click=${() => this._openOperatorInbox()}
+                >
+                    <platform-icon name="inbox" size="16"></platform-icon>
+                </platform-button>
                 <platform-help-hint
                     .label=${this.t('flows_home.header_help_label')}
                     .summary=${this.t('flows_home.header_help_summary')}
@@ -931,6 +969,10 @@ export class FlowsHomePage extends PlatformPage {
                         <platform-button variant="ghost" density="compact" @click=${() => this.openModal('flows.sessions', {})}>
                             <platform-icon name="chat" size="16"></platform-icon>
                             <span>${this.t('flows_home.hero_sessions')}</span>
+                        </platform-button>
+                        <platform-button variant="ghost" density="compact" @click=${() => this._openOperatorInbox()}>
+                            <platform-icon name="inbox" size="16"></platform-icon>
+                            <span>${this.t('flows_home.hero_operator')}</span>
                         </platform-button>
                         <platform-button variant="ghost" density="compact" @click=${() => this.openModal('flows.mcp_servers', {})}>
                             <platform-icon name="mcp" size="16"></platform-icon>
@@ -1261,6 +1303,36 @@ export class FlowsHomePage extends PlatformPage {
         `;
     }
 
+    _renderOperatorTasksRow() {
+        const counts = this._workItemCounts.state;
+        const totalOpen = typeof counts.total_open_count === 'number' ? counts.total_open_count : 0;
+        return html`
+            <article
+                class="readiness-row readiness-row-link"
+                role="button"
+                tabindex="0"
+                aria-label=${this.t('flows_home.ready_operator_tasks_hint')}
+                @click=${() => this._openOperatorInbox()}
+                @keydown=${(e) => this._onOperatorTasksKeydown(e)}
+            >
+                <span class="row-main">
+                    <span class="tone-icon tone-warning">
+                        <platform-icon name="inbox" size="16"></platform-icon>
+                    </span>
+                    <span class="row-title">${this.t('flows_home.ready_operator_tasks')}</span>
+                </span>
+                <span class="metric-value">${String(totalOpen)}</span>
+            </article>
+        `;
+    }
+
+    _onOperatorTasksKeydown(e) {
+        if (e.key === 'Enter' || e.key === ' ') {
+            e.preventDefault();
+            this._openOperatorInbox();
+        }
+    }
+
     _renderActivitySection() {
         const sessions = asArray(this._sessions.items).slice(0, 5);
         const bundles = resultItems(this._bundles.lastResult);
@@ -1282,6 +1354,7 @@ export class FlowsHomePage extends PlatformPage {
                     <div class="readiness-list">
                         ${this._renderReadinessRow('box', 'flows_home.ready_bundles', `${installedBundles}/${bundles.length}`)}
                         ${this._renderReadinessRow('code', 'flows_home.ready_tools', String(toolsCount))}
+                        ${this._renderOperatorTasksRow()}
                     </div>
                 </div>
             </section>

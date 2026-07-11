@@ -5,6 +5,7 @@ service_order:
   - platform
   - sync
   - flows
+  - worktracker
   - crm
   - rag
   - frontend
@@ -40,9 +41,12 @@ learning_paths:
       - label_ru: Быстрый старт — первый запрос к агенту
         label_en: Quickstart — first agent request
         href: quickstart/
-      - label_ru: Flows — API Console и A2A
-        label_en: Flows — API Console and A2A
-        href: scenarios/flows/api-console/
+      - label_ru: Flows — знакомство и первый агент
+        label_en: Flows — home tour and first agent
+        href: scenarios/flows/flows-home-tour/
+      - label_ru: Flows — первый запрос через API Console
+        label_en: Flows — first request via API Console
+        href: scenarios/flows/api-first-request/
       - label_ru: UI Kit — каталог core-компонентов
         label_en: UI Kit — core component catalog
         href: scenarios/platform/ui-kit/
@@ -178,41 +182,70 @@ services:
     label_ru: Flows
     label_en: Flows
     intro_ru: >-
-      ИИ-агенты и графы: главная сервиса, чат агента, редактор flow, API Console,
-      операции с published flow и Evaluation Lab.
+      ИИ-агенты и графы: от знакомства с главной и создания первого агента до
+      настройки нод, тестирования, триггеров, API, публикации, проверки качества
+      и работы с операторами.
     intro_en: >-
-      AI agents and graphs: service home, agent chat, flow editor, API Console,
-      published-flow operations, and Evaluation Lab.
-    featured_slug: flows-home-overview
+      AI agents and graphs: from the home tour and first agent to node setup,
+      testing, triggers, API, publishing, quality evaluation, and operator handoff.
+    featured_slug: flows-home-tour
     tags:
-      general:
-        label_ru: Обзор сервиса
-        label_en: Service overview
+      getting-started:
+        label_ru: Первые шаги
+        label_en: Getting started
         order: 0
-      chat:
-        label_ru: Чат агента
-        label_en: Agent chat
-        order: 1
       editor:
-        label_ru: Редактор
-        label_en: Editor
+        label_ru: Редактор графа
+        label_en: Graph editor
+        order: 1
+      nodes:
+        label_ru: Возможности агента
+        label_en: Agent capabilities
         order: 2
-      api:
-        label_ru: API Console
-        label_en: API Console
+      data:
+        label_ru: Данные и переменные
+        label_en: Data and variables
         order: 3
-      operations:
-        label_ru: Операции
-        label_en: Operations
+      execution:
+        label_ru: Тестирование и отладка
+        label_en: Testing and debugging
         order: 4
-      evaluation:
-        label_ru: Evaluation Lab
-        label_en: Evaluation Lab
+      triggers:
+        label_ru: Триггеры
+        label_en: Triggers
         order: 5
-      agent-download:
-        label_ru: Скачивание LinnexAgent
-        label_en: LinnexAgent download
+      api:
+        label_ru: API и доступ
+        label_en: API and access
         order: 6
+      operations:
+        label_ru: Публикация и управление
+        label_en: Publishing and operations
+        order: 7
+      evaluation:
+        label_ru: Проверка качества
+        label_en: Quality evaluation
+        order: 8
+      setup:
+        label_ru: Подключения компании
+        label_en: Company connections
+        order: 9
+
+  worktracker:
+    label_ru: Операторы
+    label_en: Operators
+    intro_ru: >-
+      Работа операторов с задачами от агентов: очереди поддержки, входящие,
+      ответы клиенту, перехват диалога, маршрутизация и канбан-доски.
+    intro_en: >-
+      Operators handling agent tasks: support queues, inbox, customer replies,
+      dialog takeover, routing, and kanban boards.
+    featured_slug: operator-inbox-single-reply
+    tags:
+      operators:
+        label_ru: Операторы
+        label_en: Operators
+        order: 0
 
   crm:
     label_ru: NetWorkle

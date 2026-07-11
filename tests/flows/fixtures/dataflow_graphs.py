@@ -124,6 +124,24 @@ MINIMAL_NODE_CONFIGS: dict[str, dict[str, object]] = {
     NodeType.MCP.value: {"type": "mcp", "server_id": "srv", "tool_name": "tool"},
     NodeType.CHANNEL.value: {"type": "channel", "channel": "telegram", "action": "send"},
     NodeType.HITL_NODE.value: {"type": "hitl_node", "work_queue_slug": "ops"},
-    NodeType.REFLECTION.value: {"type": "reflection"},
+    NodeType.REFLECTION.value: {
+        "type": "reflection",
+        "llm": {"model": "mock-gpt-4", "temperature": 0.0},
+        "critic_policy": {
+            "policy_id": "final-answer-safety",
+            "gate": "final_answer",
+            "target": {"kind": "response"},
+            "instruction": "Block unsafe final answers.",
+            "criteria": [
+                {
+                    "criterion_id": "safety",
+                    "description": "No destructive instructions.",
+                    "severity": "critical",
+                }
+            ],
+            "min_confidence": 0.8,
+            "block_on_severities": ["error", "critical"],
+        },
+    },
     NodeType.RESOURCE.value: {"type": "resource"},
 }

@@ -40,6 +40,7 @@ class WorkItemCompletedBody(StrictBaseModel):
     state: str
     resolution_text: str = ""
     resolution_files: list[FileRef] = Field(default_factory=list)
+    resolution_file_ids: list[str] = Field(default_factory=list)
     binding: JsonObject
 
 

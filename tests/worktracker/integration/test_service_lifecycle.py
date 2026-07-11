@@ -4,12 +4,13 @@ from __future__ import annotations
 
 import pytest
 
+from core.identity.flow_employee import flow_employee_user_id
 from core.worktracker.models import (
-    AgentAssignment,
     BoardColumn,
     QueueAssignment,
     SystemActor,
     UserActor,
+    UsersAssignment,
     WorkItemResolution,
     WorkItemState,
 )
@@ -58,7 +59,7 @@ async def test_reassign_terminal_forbidden(worktracker_service, unique_id: str) 
         await worktracker_service.reassign(
             company_id="system",
             work_item_id=item.work_item_id,
-            assignment=AgentAssignment(flow_id="flow_x"),
+            assignment=UsersAssignment(user_ids=[flow_employee_user_id("flow_x")]),
         )
 
 

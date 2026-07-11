@@ -20,6 +20,7 @@ from typing import Any, List
 
 import pytest
 import pytest_asyncio
+from pytest import FixtureRequest
 from httpx import ASGITransport, AsyncClient
 
 from tests.fixtures.test_database_env import TEST_DATABASE_ENV
@@ -90,7 +91,7 @@ os.environ.setdefault("RAG__EMBEDDING__API__MODEL", "qwen/qwen3-embedding-0.6b")
 os.environ.setdefault("RAG__EMBEDDING__API__DIMENSION", "1024")
 os.environ.setdefault("RAG__EMBEDDING__API__MRL_OUTPUT_DIMENSION", "1024")
 os.environ["PROVIDER_LITSERVE__API__BASE_URL"] = "http://localhost:9014/v1"
-os.environ.setdefault("RAG__DOCUMENT_INDEXING__SEARCH_DEFAULTS__RERANKER__ENABLED", "false")
+os.environ.setdefault("RAG__DOCUMENT_INDEXING__SEARCH_DEFAULTS__RERANKER__ENABLED", "true")
 os.environ.setdefault("LLM__OPENROUTER__API_KEY", "sk-test-key")
 import core.config.base  # noqa: E402
 
@@ -302,6 +303,34 @@ def _is_notification_ws_e2e_test(nodeid: str) -> bool:
     return nodeid.startswith("tests/core/websocket/test_notification_e2e.py")
 
 
+def _is_files_retention_purge_test(nodeid: str) -> bool:
+    return nodeid.startswith("tests/files/test_files_retention_purge.py")
+
+
+def _is_flows_session_search_test(nodeid: str) -> bool:
+    return nodeid.startswith("tests/flows/core/db/test_session_repository_search.py")
+
+
+def _is_flows_tools_all_api_test(nodeid: str) -> bool:
+    return "test_list_all_tools_includes_builtin_registry_tools" in nodeid
+
+
+def _is_flows_variables_api_test(nodeid: str) -> bool:
+    return nodeid.startswith("tests/flows/api/test_flows_variables.py")
+
+
+def _is_flows_sessions_api_test(nodeid: str) -> bool:
+    return nodeid.startswith("tests/flows/api/test_sessions_api.py")
+
+
+def _is_frontend_team_act_as_test(nodeid: str) -> bool:
+    return nodeid.startswith("tests/frontend/test_team_act_as.py")
+
+
+def _is_frontend_public_search_session_test(nodeid: str) -> bool:
+    return nodeid.startswith("tests/frontend/api/test_public_search_session.py")
+
+
 @pytest.hookimpl(tryfirst=True)
 def pytest_collection_modifyitems(items: list[pytest.Item]) -> None:
     """Timeout-политика по типам тестов. Никаких xdist_group: все тесты параллельны,
@@ -334,6 +363,28 @@ def pytest_collection_modifyitems(items: list[pytest.Item]) -> None:
         elif _is_sandbox_runtime_test(item.nodeid):
             if item.get_closest_marker("timeout") is None:
                 item.add_marker(pytest.mark.timeout(180, func_only=True))
+        elif _is_files_retention_purge_test(item.nodeid):
+            if item.get_closest_marker("timeout") is None:
+                # Глобальный purge_expired_batch под -n10: setup + batch-цикл >5s.
+                item.add_marker(pytest.mark.timeout(60, func_only=True))
+        elif _is_flows_session_search_test(item.nodeid):
+            if item.get_closest_marker("timeout") is None:
+                item.add_marker(pytest.mark.timeout(60, func_only=True))
+        elif _is_flows_tools_all_api_test(item.nodeid):
+            if item.get_closest_marker("timeout") is None:
+                item.add_marker(pytest.mark.timeout(60, func_only=True))
+        elif _is_flows_variables_api_test(item.nodeid):
+            if item.get_closest_marker("timeout") is None:
+                item.add_marker(pytest.mark.timeout(60, func_only=True))
+        elif _is_flows_sessions_api_test(item.nodeid):
+            if item.get_closest_marker("timeout") is None:
+                item.add_marker(pytest.mark.timeout(60, func_only=True))
+        elif _is_frontend_team_act_as_test(item.nodeid):
+            if item.get_closest_marker("timeout") is None:
+                item.add_marker(pytest.mark.timeout(30, func_only=True))
+        elif _is_frontend_public_search_session_test(item.nodeid):
+            if item.get_closest_marker("timeout") is None:
+                item.add_marker(pytest.mark.timeout(60, func_only=True))
 
 @pytest.hookimpl(wrapper=True, tryfirst=True)
 def pytest_runtest_call(item) -> Generator[None, object, object]:
@@ -363,17 +414,37 @@ def pytest_runtest_call(item) -> Generator[None, object, object]:
         faulthandler.cancel_dump_traceback_later()
 
 
+def _skip_autouse_test_context(request: pytest.FixtureRequest) -> bool:
+    """ASGI-клиенты с Bearer auth: контекст выставляет AuthMiddleware, не test_user."""
+    asgi_client_fixtures = (
+        "frontend_client",
+        "flows_client",
+        "crm_client",
+        "worktracker_client",
+        "office_client",
+        "sync_client",
+        "rag_client",
+        "voice_client",
+    )
+    if not any(name in request.fixturenames for name in asgi_client_fixtures):
+        return False
+    if "api" in request.node.nodeid:
+        return True
+    return any(
+        name.startswith("auth_headers") or name.startswith("auth_token")
+        for name in request.fixturenames
+    )
+
+
 @pytest.fixture(autouse=True)
 def test_context(request):
     """
     Автоматически устанавливает тестовый контекст для всех тестов.
     Это необходимо для работы с репозиториями, которые требуют активную компанию.
 
-    Не применяется к API тестам (они используют middleware).
+    Не применяется к API/ASGI тестам с Bearer auth (контекст — AuthMiddleware).
     """
-    if "api" in request.node.nodeid and (
-        "frontend_client" in request.fixturenames or "flows_client" in request.fixturenames
-    ):
+    if _skip_autouse_test_context(request):
         yield None
         return
     from core.context import clear_context, set_context

@@ -231,6 +231,52 @@ class BranchConfig(StrictBaseModel):
         return normalize_flow_variables_payload(data)
 
 
+class FlowEmployeeConfig(StrictBaseModel):
+    """Конфигурация flow как сотрудника платформы (runtime-identity).
+
+    Включённый режим делает flow полноценным ``User`` компании: он действует от
+    собственного имени во всех сервисах (RBAC, ACL, sync, worktracker, биллинг),
+    и платформа диспатчит ему работу так же, как человеку. У каждого сотрудника
+    обязателен куратор-человек (``curator_user_ids``) — нет AI-сотрудника без
+    ответственного.
+    """
+
+    enabled: bool = Field(
+        default=False,
+        description="Активировать runtime-identity: flow становится сотрудником компании",
+    )
+    roles: list[str] = Field(
+        default_factory=list,
+        description="Роли сотрудника в компании (RBAC). Задаются явно, без дефолта-угадывания",
+    )
+    curator_user_ids: list[str] = Field(
+        default_factory=list,
+        description="user_id кураторов-людей. Обязателен минимум один при enabled=True",
+    )
+    display_name: str | None = Field(
+        default=None,
+        description="Отображаемое имя сотрудника. None = FlowConfig.name",
+    )
+    avatar_url: str | None = Field(
+        default=None,
+        description="URL аватара сотрудника для team UI и user-chip",
+    )
+
+    @model_validator(mode="after")
+    def _validate_enabled_invariants(self) -> "FlowEmployeeConfig":
+        if not self.enabled:
+            return self
+        clean_roles = [role.strip() for role in self.roles if role.strip()]
+        if not clean_roles:
+            raise ValueError("FlowEmployeeConfig: enabled требует непустой roles")
+        clean_curators = [uid.strip() for uid in self.curator_user_ids if uid.strip()]
+        if not clean_curators:
+            raise ValueError(
+                "FlowEmployeeConfig: enabled требует минимум одного curator_user_ids"
+            )
+        return self
+
+
 class FlowConfig(StrictBaseModel):
     """
     СТРОГАЯ конфигурация агента.
@@ -400,6 +446,11 @@ class FlowConfig(StrictBaseModel):
     triggers: dict[str, TriggerConfig] = Field(
         default_factory=dict,
         description="Триггеры flow {trigger_id: TriggerConfig}"
+    )
+
+    employee: FlowEmployeeConfig = Field(
+        default_factory=FlowEmployeeConfig,
+        description="Конфигурация flow как сотрудника компании (runtime-identity)",
     )
 
     # Контроль доступа для UI

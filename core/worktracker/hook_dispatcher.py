@@ -17,7 +17,6 @@ from core.internal_context_headers import build_internal_context_headers
 from core.logging import get_logger
 from core.types import JsonObject
 from core.worktracker.models import (
-    AgentActor,
     UserActor,
     WorkItem,
     WorkItemHook,
@@ -26,6 +25,8 @@ from core.worktracker.models import (
 logger = get_logger(__name__)
 
 _PLATFORM_SYSTEM_HOOK_USER_ID = "platform-worktracker-system"
+# flows `/internal/work-items/completed` ждёт завершения durable resume (до platform flow timeout).
+_WORK_ITEM_HOOK_DISPATCH_TIMEOUT_SECONDS = 630.0
 
 
 def hook_dispatch_internal_user_id(work_item: WorkItem) -> str:
@@ -33,8 +34,6 @@ def hook_dispatch_internal_user_id(work_item: WorkItem) -> str:
     created_by = work_item.created_by
     if isinstance(created_by, UserActor):
         return created_by.user_id
-    if isinstance(created_by, AgentActor):
-        return f"platform-agent:{created_by.flow_id}"
     return _PLATFORM_SYSTEM_HOOK_USER_ID
 
 
@@ -77,6 +76,7 @@ class ServiceClientHookDispatcher:
             hook.path,
             json=payload,
             headers=internal_headers,
+            timeout=_WORK_ITEM_HOOK_DISPATCH_TIMEOUT_SECONDS,
         )
 
 

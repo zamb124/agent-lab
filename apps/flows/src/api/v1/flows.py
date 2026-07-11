@@ -25,6 +25,7 @@ from apps.flows.src.models import (
     ExternalAgentStatus,
     FlowChatSettings,
     FlowConfig,
+    FlowEmployeeConfig,
     FlowType,
     FlowVariableConfig,
     GraphNodeConfig,
@@ -40,6 +41,10 @@ from apps.flows.src.services.agent_toolkit_service import (
 )
 from apps.flows.src.services.flow_dataflow_inspector import (
     inspect_flow_dataflow,
+)
+from apps.flows.src.services.flow_employee_provisioning import (
+    remove_flow_employee,
+    sync_flow_employee,
 )
 from apps.flows.src.services.flow_speech_resolve import (
     effective_flow_speech_settings,
@@ -533,6 +538,7 @@ class FlowCreateRequest(BaseModel):
     store_card_image_url: str | None = None
     speech: FlowSpeechSettings | None = None
     chat: FlowChatSettings | None = None
+    employee: FlowEmployeeConfig = Field(default_factory=FlowEmployeeConfig)
     agent_toolkit_ids: list[str] = Field(default_factory=list)
 
     @field_validator("store_card_image_url", mode="before")
@@ -599,6 +605,8 @@ class FlowResponse(BaseModel):
     speech: JsonObject | None = None
 
     chat: FlowChatSettings = Field(default_factory=FlowChatSettings)
+
+    employee: FlowEmployeeConfig = Field(default_factory=FlowEmployeeConfig)
 
     agent_toolkit_ids: list[str] = Field(default_factory=list)
 
@@ -1100,9 +1108,11 @@ async def create_flow(request: FlowCreateRequest, container: ContainerDep) -> Fl
         store_card_image_url=request.store_card_image_url,
         speech=request.speech,
         chat=request.chat if request.chat is not None else FlowChatSettings(),
+        employee=request.employee,
     )
 
     _ = await container.flow_repository.set(flow_config)
+    await sync_flow_employee(container, flow_config)
     await set_flow_toolkit_membership(
         container.agent_toolkit_repository,
         flow_id=flow_config.flow_id,
@@ -1132,6 +1142,7 @@ async def create_flow(request: FlowCreateRequest, container: ContainerDep) -> Fl
         store_card_image_url=flow_config.store_card_image_url,
         speech=_speech_to_json(flow_config.speech),
         chat=flow_config.chat,
+        employee=flow_config.employee,
         agent_toolkit_ids=list(request.agent_toolkit_ids),
     )
 
@@ -1224,6 +1235,7 @@ async def get_flow(flow_id: str, container: ContainerDep) -> FlowResponse:
             store_card_image_url=flow_cfg.store_card_image_url,
             speech=_speech_to_json(flow_cfg.speech),
             chat=flow_cfg.chat,
+            employee=flow_cfg.employee,
             agent_toolkit_ids=await _flow_agent_toolkit_ids(container, flow_cfg.flow_id),
         )
     except HTTPException:
@@ -1455,9 +1467,11 @@ async def update_flow(
         store_card_image_url=request.store_card_image_url,
         speech=speech_merged,
         chat=chat_merged,
+        employee=request.employee,
     )
 
     _ = await container.flow_repository.set(flow_config)
+    await sync_flow_employee(container, flow_config)
     await set_flow_toolkit_membership(
         container.agent_toolkit_repository,
         flow_id=flow_id,
@@ -1498,6 +1512,7 @@ async def update_flow(
         store_card_image_url=flow_config.store_card_image_url,
         speech=_speech_to_json(flow_config.speech),
         chat=flow_config.chat,
+        employee=flow_config.employee,
         agent_toolkit_ids=list(request.agent_toolkit_ids),
     )
 
@@ -1641,6 +1656,8 @@ async def delete_flow(flow_id: str, container: ContainerDep) -> JsonObject:
     deleted = await container.flow_repository.delete(flow_id)
     if not deleted:
         raise HTTPException(status_code=404, detail="Flow not found")
+
+    await remove_flow_employee(container, flow_id)
 
     ctx = get_context()
     if ctx and ctx.user and ctx.user.user_id:

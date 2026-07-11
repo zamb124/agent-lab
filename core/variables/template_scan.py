@@ -7,7 +7,7 @@
 
 Грамматика (совпадает с render_template):
 - ``{variable}`` — обязательная подстановка
-- ``{variable|default}`` — обязательная с fallback (не считается строго обязательной)
+- ``{variable|default}`` — обязательная с default при отсутствии значения (не строго обязательная)
 - ``{?variable}`` / ``{?variable|default}`` — опциональная
 - ``?variable`` / ``?variable|default`` — короткий формат опциональной
 - ``{for item in list}...{endfor}`` — цикл; ``list`` читается, ``item`` — локальная
