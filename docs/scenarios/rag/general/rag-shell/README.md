@@ -4,8 +4,8 @@
 
 ## Шаг 1. SPA RAG открыт
 
-![SPA RAG открыт](screenshots/001.png)
+![SPA RAG открыт](rag-shell--01-spa-rag-otkryt.png)
 
 ## Шаг 2. Оболочка rag-app видна
 
-![Оболочка rag-app видна](screenshots/002.png)
+![Оболочка rag-app видна](rag-shell--02-obolochka-rag-app-vidna.png)

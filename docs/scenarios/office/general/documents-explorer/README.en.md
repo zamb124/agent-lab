@@ -1,11 +1,11 @@
-# Документы: file explorer
+# Documents: file explorer
 
-Главная страница /documents — explorer с деревом каталогов или empty state.
+The main `/documents` page is an explorer with a catalog tree or an empty state.
 
-## Step 1. SPA Документы открыт
+## Step 1. Documents SPA opened
 
-![SPA Документы открыт](screenshots/001.png)
+![Documents SPA opened](documents-explorer--01-spa-dokumenty-otkryt.png)
 
-## Step 2. File explorer загружен
+## Step 2. File explorer loaded
 
-![File explorer загружен](screenshots/002.png)
+![File explorer loaded](documents-explorer--02-file-explorer-zagruzhen.png)

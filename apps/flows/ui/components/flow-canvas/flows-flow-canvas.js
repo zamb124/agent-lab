@@ -28,7 +28,7 @@
  *     рендерится оверлеем и эмитит `action`/`close`.
  */
 
-import { html, css, svg } from 'lit';
+import { html, css, svg, nothing } from 'lit';
 import { PlatformElement } from '@platform/lib/platform-element/index.js';
 import { resolveUiIconFile } from '@platform/lib/utils/file-icons.js';
 import { getNodeTypeMeta, getCategoryToken } from '../../constants/node-icons.js';
@@ -57,6 +57,15 @@ import {
     FLOWS_EDITOR_DEFAULT_VIEWBOX,
 } from '../../_helpers/flows-viewbox.js';
 import {
+    buildNodeRunViewModel,
+    CANVAS_RUN_RESULT_GAP,
+    CANVAS_RUN_RESULT_PILL_COLLAPSED_H,
+    countNodeRunDiffChanges,
+    getNodeRunResultPillHeight,
+    nodeRunResultExpandKey,
+    pickLatestNodeRunResult,
+} from '../../_helpers/flows-node-run-result.js';
+import {
     normalizedLlmToolsForCanvas,
     getToolRefVisualMeta,
     getToolLabel,
@@ -70,7 +79,11 @@ import {
     hasControlPath,
     buildDataWires,
     buildLineageSet,
+    buildLineageSetFromWireKeys,
+    chipRefKey,
+    chipRefKeysForWireKeys,
     countNodeDataflowProblems,
+    dataWireKey,
     dataflowChipAnchor,
     dataflowChipLabel,
     dataflowChipRect,
@@ -78,12 +91,15 @@ import {
     findOutputChipIndex,
     resolveDataWireEndpoints,
     dataWirePathFor,
+    wiresForChipHover,
     DATAFLOW_CHIP_W,
     DATAFLOW_CHIP_ZONE_W,
     DATAFLOW_CHIP_INSET,
     DATAFLOW_CHIP_HOST_W,
 } from '../../_helpers/flows-dataflow-canvas.js';
+import { buildNodeOrbitPath, nodeOrbitPerimeter } from '../../_helpers/flows-node-orbit.js';
 const NODE_RADIUS = 12;
+const NODE_RUN_ORBIT_DUR = '2.2s';
 const PORT_R = 6;
 const SNAP_THRESHOLD = 4;
 const GRID_STEP = 24;
@@ -147,6 +163,7 @@ export class FlowsFlowCanvas extends PlatformElement {
         _paletteDndMode: { state: true },
         _variableDropHoverNodeId: { state: true },
         _hoverNodeId: { state: true },
+        _hoverChipRef: { state: true },
         _variableWire: { state: true },
     };
 
@@ -225,10 +242,13 @@ export class FlowsFlowCanvas extends PlatformElement {
             g.node[data-multi-selected] .node-card {
                 stroke-dasharray: 6 3;
             }
+            g.node[data-state="running"] .node-aura,
+            g.node[data-state="breakpoint-hit"] .node-aura {
+                opacity: 0.14;
+            }
             g.node[data-state="running"] .node-card {
                 stroke: var(--info);
                 stroke-width: 2;
-                animation: nodePulseRunning 1.4s ease-in-out infinite;
                 filter:
                     drop-shadow(0 16px 34px rgba(0, 0, 0, 0.26))
                     drop-shadow(0 0 18px color-mix(in srgb, var(--info) 36%, transparent));
@@ -247,15 +267,78 @@ export class FlowsFlowCanvas extends PlatformElement {
             g.node[data-state="breakpoint-hit"] .node-card {
                 stroke: var(--warning);
                 stroke-width: 2;
-                animation: nodePulseRunning 1s ease-in-out infinite;
                 filter:
                     drop-shadow(0 16px 34px rgba(0, 0, 0, 0.24))
                     drop-shadow(0 0 16px color-mix(in srgb, var(--warning) 34%, transparent));
             }
 
+            .node-run-orbit {
+                pointer-events: none;
+            }
+            .node-run-track {
+                fill: none;
+                stroke-width: 1;
+                stroke-linecap: round;
+                vector-effect: non-scaling-stroke;
+                opacity: 0.22;
+            }
+            .node-run-orbit[data-run-tone="info"] .node-run-track {
+                stroke: color-mix(in srgb, var(--info) 55%, var(--node-accent) 45%);
+            }
+            .node-run-orbit[data-run-tone="warning"] .node-run-track {
+                stroke: var(--warning);
+            }
+            .node-run-arc {
+                fill: none;
+                stroke-width: 2.5;
+                stroke-linecap: round;
+                vector-effect: non-scaling-stroke;
+                stroke-dasharray: 8 92;
+                animation: nodeRunArcTravel 2.2s linear infinite;
+            }
+            .node-run-orbit[data-run-tone="info"] .node-run-arc {
+                stroke: color-mix(in srgb, var(--info) 78%, white 22%);
+            }
+            .node-run-orbit[data-run-tone="warning"] .node-run-arc {
+                stroke: color-mix(in srgb, var(--warning) 78%, white 22%);
+            }
+            @keyframes nodeRunArcTravel {
+                from { stroke-dashoffset: 0; }
+                to { stroke-dashoffset: -100; }
+            }
+            .node-run-firefly-head {
+                fill: white;
+                opacity: 1;
+            }
+            .node-run-firefly-trail-1 {
+                opacity: 0.55;
+            }
+            .node-run-firefly-trail-2 {
+                opacity: 0.28;
+            }
+            .node-run-orbit[data-run-tone="info"] .node-run-firefly-head,
+            .node-run-orbit[data-run-tone="info"] .node-run-firefly-trail {
+                fill: color-mix(in srgb, var(--info) 72%, white 28%);
+            }
+            .node-run-orbit[data-run-tone="warning"] .node-run-firefly-head,
+            .node-run-orbit[data-run-tone="warning"] .node-run-firefly-trail {
+                fill: color-mix(in srgb, var(--warning) 72%, white 28%);
+            }
+
             @keyframes nodePulseRunning {
                 0%, 100% { stroke-opacity: 1; }
                 50%      { stroke-opacity: 0.45; }
+            }
+
+            @media (prefers-reduced-motion: reduce) {
+                g.node[data-state="running"] .node-run-orbit,
+                g.node[data-state="breakpoint-hit"] .node-run-orbit {
+                    display: none;
+                }
+                g.node[data-state="running"] .node-card,
+                g.node[data-state="breakpoint-hit"] .node-card {
+                    animation: nodePulseRunning 1.4s ease-in-out infinite;
+                }
             }
 
             .node-icon-wrap {
@@ -333,6 +416,125 @@ export class FlowsFlowCanvas extends PlatformElement {
                 min-width: 0;
                 flex: 1;
                 min-height: 44px;
+            }
+            .node-run-result foreignObject {
+                pointer-events: all;
+            }
+            .node-run-result-pill {
+                box-sizing: border-box;
+                width: 100%;
+                min-height: ${CANVAS_RUN_RESULT_PILL_COLLAPSED_H}px;
+                padding: 6px 8px;
+                border-radius: var(--radius-md);
+                border: 1px solid var(--glass-border-subtle);
+                background: var(--glass-solid-subtle);
+                font-family: var(--font-sans);
+                cursor: pointer;
+                user-select: none;
+            }
+            .node-run-result-pill[data-tone='ok'] {
+                border-color: var(--success-border);
+                background: var(--success-bg);
+            }
+            .node-run-result-pill[data-tone='error'] {
+                border-color: var(--error-border);
+                background: var(--error-bg);
+            }
+            .node-run-result-pill[data-tone='running'] {
+                border-color: var(--info);
+                animation: nodePulseRunning 1.4s ease-in-out infinite;
+            }
+            .node-run-result-pill[data-expanded] {
+                cursor: default;
+            }
+            .node-run-result-primary {
+                font-size: 11px;
+                font-weight: var(--font-semibold);
+                line-height: 1.35;
+                color: var(--text-primary);
+                word-break: break-word;
+                display: -webkit-box;
+                -webkit-box-orient: vertical;
+                -webkit-line-clamp: 2;
+                overflow: hidden;
+            }
+            .node-run-result-meta {
+                margin-top: 2px;
+                font-size: 10px;
+                line-height: 1.3;
+                color: var(--text-tertiary);
+                display: flex;
+                flex-wrap: wrap;
+                gap: 6px;
+                align-items: center;
+            }
+            .node-run-result-run-badge {
+                display: inline-flex;
+                align-items: center;
+                padding: 0 6px;
+                border-radius: var(--radius-full);
+                border: 1px solid var(--glass-border-subtle);
+                background: var(--glass-solid-medium);
+                font-size: 10px;
+                font-weight: var(--font-semibold);
+                color: var(--text-secondary);
+            }
+            .node-run-result-changes {
+                margin: 6px 0 0;
+                padding: 0;
+                list-style: none;
+                display: flex;
+                flex-direction: column;
+                gap: 4px;
+            }
+            .node-run-result-change {
+                display: grid;
+                grid-template-columns: 16px 1fr;
+                gap: 4px 6px;
+                align-items: start;
+                font-size: 10px;
+                line-height: 1.35;
+            }
+            .node-run-result-change-badge {
+                display: inline-flex;
+                align-items: center;
+                justify-content: center;
+                width: 16px;
+                height: 16px;
+                border-radius: var(--radius-sm);
+                font-size: 11px;
+                font-weight: var(--font-bold);
+                font-family: var(--font-mono);
+                flex-shrink: 0;
+            }
+            .node-run-result-change[data-change-type='added'] .node-run-result-change-badge {
+                color: var(--success);
+                background: var(--success-bg);
+                border: 1px solid var(--success-border);
+            }
+            .node-run-result-change[data-change-type='changed'] .node-run-result-change-badge {
+                color: var(--warning);
+                background: var(--warning-bg);
+                border: 1px solid var(--warning-border);
+            }
+            .node-run-result-change[data-change-type='removed'] .node-run-result-change-badge {
+                color: var(--error);
+                background: var(--error-bg);
+                border: 1px solid var(--error-border);
+            }
+            .node-run-result-change-body {
+                min-width: 0;
+            }
+            .node-run-result-change-label {
+                font-weight: var(--font-semibold);
+                color: var(--text-primary);
+                word-break: break-word;
+            }
+            .node-run-result-change-detail {
+                margin-top: 1px;
+                font-family: var(--font-mono);
+                color: var(--text-secondary);
+                word-break: break-word;
             }
             .node-tools-row {
                 display: flex;
@@ -653,6 +855,29 @@ export class FlowsFlowCanvas extends PlatformElement {
                 stroke-dasharray: 5 4;
                 stroke-linecap: round;
                 opacity: 0.9;
+                transition:
+                    opacity var(--motion-duration-micro) var(--motion-ease-standard),
+                    stroke var(--motion-duration-micro) var(--motion-ease-standard),
+                    stroke-width var(--motion-duration-micro) var(--motion-ease-standard);
+            }
+            .data-wire-path[data-dimmed] {
+                opacity: 0.12;
+            }
+            .data-wire-path[data-highlighted] {
+                opacity: 1;
+                stroke: var(--accent);
+                stroke-width: 2.5;
+                stroke-dasharray: none;
+                filter: drop-shadow(0 0 6px color-mix(in srgb, var(--accent) 35%, transparent));
+            }
+            .data-wire-label[data-highlighted] {
+                fill: var(--accent);
+                font-size: 10px;
+            }
+            .node-dataflow-chip[data-wire-highlight="true"] {
+                border-color: color-mix(in oklab, var(--accent) 65%, var(--glass-border-subtle));
+                background: color-mix(in oklab, var(--accent) 18%, var(--glass-solid-strong));
+                box-shadow: 0 0 0 1px color-mix(in oklab, var(--accent) 40%, transparent);
             }
             .data-wire-label {
                 fill: var(--accent);
@@ -662,6 +887,10 @@ export class FlowsFlowCanvas extends PlatformElement {
                 paint-order: stroke;
                 stroke: var(--bg-primary);
                 stroke-width: 3;
+                transition: opacity var(--motion-duration-micro) var(--motion-ease-standard);
+            }
+            .data-wire-label[data-dimmed] {
+                opacity: 0.12;
             }
             g.node[data-dimmed] {
                 opacity: 0.28;
@@ -852,8 +1081,11 @@ export class FlowsFlowCanvas extends PlatformElement {
         this._paletteDndMode = null;
         this._variableDropHoverNodeId = null;
         this._hoverNodeId = null;
+        this._hoverChipRef = null;
         this._variableWire = null;
         this._lineageSet = null;
+        this._highlightWireKeys = null;
+        this._highlightChipKeys = null;
         this._editor = this.useOp('flows/editor');
         this._bulkDelete = this.useOp('flows/editor_bulk_delete');
         this._stickyUpsert = this.useOp('flows/sticky_note_upsert');
@@ -1456,6 +1688,7 @@ export class FlowsFlowCanvas extends PlatformElement {
         if (this._variableWire) {
             const wire = this._variableWire;
             this._variableWire = null;
+            this._hoverChipRef = null;
             const targetNodeId = this._variableDropHoverNodeId;
             this._variableDropHoverNodeId = null;
             if (this._pointerMoved && targetNodeId && targetNodeId !== wire.fromNodeId) {
@@ -1659,6 +1892,7 @@ export class FlowsFlowCanvas extends PlatformElement {
         const start = dataflowChipAnchor(nodeX, nodeY, nodeH, NODE_W, 'out', outIdx, inputs, outputs);
         this._pointerDownAt = { x: e.clientX, y: e.clientY, button: e.button };
         this._pointerMoved = false;
+        this._hoverChipRef = null;
         this._hoverNodeId = fromNodeId;
         this._variableWire = {
             fromNodeId,
@@ -2256,10 +2490,26 @@ export class FlowsFlowCanvas extends PlatformElement {
         if (!endpoints) return svg``;
         const { start, end } = endpoints;
         const mid = midpoint(start.x, start.y, end.x, end.y);
+        const wireKey = dataWireKey(wire);
+        const chipWireHighlightActive = this._highlightWireKeys instanceof Set && this._highlightWireKeys.size > 0;
+        const highlighted = chipWireHighlightActive && this._highlightWireKeys.has(wireKey);
+        const dimmed = chipWireHighlightActive && !highlighted;
         return svg`
-            <g class="data-wire">
-                <path class="data-wire-path" d=${dataWirePathFor(start.x, start.y, end.x, end.y)}></path>
-                ${wire.label ? svg`<text class="data-wire-label" x=${mid.x} y=${mid.y - 5} text-anchor="middle">${wire.label}</text>` : ''}
+            <g class="data-wire" data-wire-key=${wireKey}>
+                <path
+                    class="data-wire-path"
+                    d=${dataWirePathFor(start.x, start.y, end.x, end.y)}
+                    ?data-highlighted=${highlighted}
+                    ?data-dimmed=${dimmed}
+                ></path>
+                ${wire.label ? svg`<text
+                    class="data-wire-label"
+                    x=${mid.x}
+                    y=${mid.y - 5}
+                    text-anchor="middle"
+                    ?data-highlighted=${highlighted}
+                    ?data-dimmed=${dimmed}
+                >${wire.label}</text>` : ''}
             </g>
         `;
     }
@@ -2299,10 +2549,50 @@ export class FlowsFlowCanvas extends PlatformElement {
         }
     }
 
+    _isPointerStillInChipHitZone(event, nodeId, side, chipIndex) {
+        const hit = this.renderRoot.querySelector(
+            `rect.node-dataflow-chip-hit[data-chip-node-id="${nodeId}"][data-chip-side="${side}"][data-chip-index="${chipIndex}"]`,
+        );
+        if (!hit || !event || !event.relatedTarget) return false;
+        let el = event.relatedTarget;
+        while (el) {
+            if (el === hit) return true;
+            const parent = el.parentNode;
+            if (parent) {
+                el = parent;
+                continue;
+            }
+            const root = typeof el.getRootNode === 'function' ? el.getRootNode() : null;
+            const host = root && typeof root === 'object' && 'host' in root ? root.host : null;
+            el = host || null;
+        }
+        return false;
+    }
+
+    _onChipPointerEnter(nodeId, side, chipIndex) {
+        if (this._variableWire) return;
+        const cur = this._hoverChipRef;
+        if (cur && cur.nodeId === nodeId && cur.side === side && cur.index === chipIndex) return;
+        this._hoverChipRef = { nodeId, side, index: chipIndex };
+        this._hoverNodeId = nodeId;
+        this.requestUpdate();
+    }
+
+    _onChipPointerLeave(event, nodeId, side, chipIndex) {
+        if (this._variableWire) return;
+        if (this._isPointerStillInChipHitZone(event, nodeId, side, chipIndex)) return;
+        const cur = this._hoverChipRef;
+        if (cur && cur.nodeId === nodeId && cur.side === side && cur.index === chipIndex) {
+            this._hoverChipRef = null;
+            this.requestUpdate();
+        }
+    }
+
     _isDataflowVisibleForNode(nodeId, { isSelected, isMulti, showAllWires }) {
         if (showAllWires) return true;
         if (isSelected || isMulti) return true;
         if (this._hoverNodeId === nodeId) return true;
+        if (this._hoverChipRef && this._hoverChipRef.nodeId === nodeId) return true;
         if (this._lineageSet && this._lineageSet.has(nodeId)) return true;
         if (this._variableWire && this._variableWire.fromNodeId === nodeId) return true;
         if (this._variableDropHoverNodeId === nodeId) return true;
@@ -2318,13 +2608,17 @@ export class FlowsFlowCanvas extends PlatformElement {
         const layout = dataflowNodeChipLayout(h, inputs, outputs);
         const y = layout.stackY;
         const chipHostHeight = layout.chipHostHeight;
+        const isChipWireHighlighted = (side, chipIndex) => {
+            if (!(this._highlightChipKeys instanceof Set)) return false;
+            return this._highlightChipKeys.has(chipRefKey({ nodeId: id, side, index: chipIndex }));
+        };
         const renderStack = (chips, side) => html`
             <div
                 xmlns="http://www.w3.org/1999/xhtml"
                 class="node-dataflow-stack"
                 data-side=${side}
             >
-                ${chips.map((chip) => {
+                ${chips.map((chip, chipIndex) => {
                     const label = this._dataflowChipLabel(chip);
                     const status = chip && chip.status === 'missing' ? 'missing' : 'ok';
                     const type = chip && typeof chip.type === 'string' ? chip.type : '';
@@ -2338,6 +2632,7 @@ export class FlowsFlowCanvas extends PlatformElement {
                         producer ? ` (${this.t('canvas.dataflow.from')} ${producer})` : '',
                         required ? ` — ${this.t('canvas.dataflow.required')}` : '',
                     ].join('');
+                    const wireHighlighted = isChipWireHighlighted(side, chipIndex);
                     return html`
                         <span
                             class="node-dataflow-chip"
@@ -2345,6 +2640,7 @@ export class FlowsFlowCanvas extends PlatformElement {
                             data-required=${required ? 'true' : 'false'}
                             data-draggable=${side === 'out' ? 'true' : 'false'}
                             data-has-producer=${side === 'in' && producer ? 'true' : 'false'}
+                            data-wire-highlight=${wireHighlighted ? 'true' : 'false'}
                             title=${title}
                         >
                             <span class="body">
@@ -2361,6 +2657,24 @@ export class FlowsFlowCanvas extends PlatformElement {
                 })}
             </div>
         `;
+        const inputChipHitX = -DATAFLOW_CHIP_ZONE_W + (DATAFLOW_CHIP_HOST_W - DATAFLOW_CHIP_W);
+        const renderInputHits = () => inputs.map((chip, index) => {
+            const rect = dataflowChipRect(y, layout.inputHeights, index);
+            return svg`
+                <rect
+                    class="node-dataflow-chip-hit"
+                    x=${inputChipHitX}
+                    y=${rect.y}
+                    width=${DATAFLOW_CHIP_W}
+                    height=${rect.height}
+                    data-chip-node-id=${id}
+                    data-chip-side="in"
+                    data-chip-index=${index}
+                    @pointerenter=${() => this._onChipPointerEnter(id, 'in', index)}
+                    @pointerleave=${(ev) => this._onChipPointerLeave(ev, id, 'in', index)}
+                ></rect>
+            `;
+        });
         const renderOutputHits = () => outputs.map((chip, index) => {
             const rect = dataflowChipRect(y, layout.outputHeights, index);
             const label = this._dataflowChipLabel(chip);
@@ -2372,6 +2686,11 @@ export class FlowsFlowCanvas extends PlatformElement {
                     width=${DATAFLOW_CHIP_W}
                     height=${rect.height}
                     data-output-path=${label}
+                    data-chip-node-id=${id}
+                    data-chip-side="out"
+                    data-chip-index=${index}
+                    @pointerenter=${() => this._onChipPointerEnter(id, 'out', index)}
+                    @pointerleave=${(ev) => this._onChipPointerLeave(ev, id, 'out', index)}
                     @pointerdown=${(ev) => this._onOutputChipPointerDown(ev, id, chip, index)}
                 ></rect>
             `;
@@ -2390,6 +2709,7 @@ export class FlowsFlowCanvas extends PlatformElement {
                 <foreignObject class="node-dataflow-edge" x="-144" y=${y} width="136" height=${chipHostHeight}>
                     ${renderStack(inputs, 'in')}
                 </foreignObject>
+                ${renderInputHits()}
             ` : ''}
             ${outputs.length > 0 ? svg`
                 <rect
@@ -2406,6 +2726,153 @@ export class FlowsFlowCanvas extends PlatformElement {
                 </foreignObject>
                 ${renderOutputHits()}
             ` : ''}
+        `;
+    }
+
+    _renderNodeRunOrbit(h, runtimeState) {
+        const path = buildNodeOrbitPath(NODE_W, h, NODE_RADIUS);
+        const perimeter = nodeOrbitPerimeter(NODE_W, h, NODE_RADIUS);
+        const tone = runtimeState === 'breakpoint-hit' ? 'warning' : 'info';
+        return svg`
+            <g class="node-run-orbit" data-run-tone=${tone}>
+                <path class="node-run-track" d=${path}></path>
+                <path
+                    class="node-run-arc"
+                    d=${path}
+                    pathLength="100"
+                    style=${`--node-run-perimeter:${perimeter}`}
+                ></path>
+                <circle class="node-run-firefly-trail node-run-firefly-trail-2" r="2.2" filter="url(#flows-node-firefly-glow)">
+                    <animateMotion dur=${NODE_RUN_ORBIT_DUR} repeatCount="indefinite" begin="-0.14s" path=${path}></animateMotion>
+                </circle>
+                <circle class="node-run-firefly-trail node-run-firefly-trail-1" r="2.8" filter="url(#flows-node-firefly-glow)">
+                    <animateMotion dur=${NODE_RUN_ORBIT_DUR} repeatCount="indefinite" begin="-0.07s" path=${path}></animateMotion>
+                </circle>
+                <circle class="node-run-firefly-head" r="3.2" filter="url(#flows-node-firefly-glow)">
+                    <animateMotion dur=${NODE_RUN_ORBIT_DUR} repeatCount="indefinite" path=${path}></animateMotion>
+                </circle>
+            </g>
+        `;
+    }
+
+    _onNodeRunResultPointerDown(e) {
+        e.preventDefault();
+        e.stopPropagation();
+    }
+
+    _onNodeRunResultToggle(e, nodeId, runIndex) {
+        e.preventDefault();
+        e.stopPropagation();
+        this._editor.toggleNodeRunResultExpand({ nodeId, runIndex });
+    }
+
+    _renderNodeRunResult(nodeId, cardHeight, runtimeState) {
+        const state = this._state();
+        if (!state.showCanvasRunResults) {
+            return '';
+        }
+        const y = cardHeight + CANVAS_RUN_RESULT_GAP;
+        if (runtimeState === 'running') {
+            const pillH = CANVAS_RUN_RESULT_PILL_COLLAPSED_H;
+            const body = html`
+                <div
+                    xmlns="http://www.w3.org/1999/xhtml"
+                    class="node-run-result-pill"
+                    data-tone="running"
+                >
+                    <div class="node-run-result-primary">${this.t('canvas_run_result.running')}</div>
+                </div>
+            `;
+            return svg`
+                <foreignObject
+                    class="node-run-result"
+                    x="0" y=${y} width=${NODE_W} height=${pillH}
+                    @pointerdown=${this._onNodeRunResultPointerDown}
+                    @dblclick=${this._onNodeRunResultPointerDown}
+                >
+                    ${body}
+                </foreignObject>
+            `;
+        }
+        const resultsMap = state.nodeRunResults;
+        if (!isPlainObject(resultsMap)) {
+            return '';
+        }
+        const results = resultsMap[nodeId];
+        if (!Array.isArray(results) || results.length === 0) {
+            return '';
+        }
+        const latest = pickLatestNodeRunResult(results);
+        if (latest === null) {
+            return '';
+        }
+        const kind = latest.kind;
+        if (kind !== 'ok' && kind !== 'error') {
+            throw new Error('flows-flow-canvas: node run result kind must be ok or error');
+        }
+        let runIndex = latest.run_index;
+        if (typeof runIndex !== 'number' || !Number.isFinite(runIndex)) {
+            runIndex = results.length - 1;
+        }
+        const expandKey = nodeRunResultExpandKey(nodeId, runIndex);
+        const expandedKeys = asArray(state.expandedNodeRunKeys);
+        const expanded = expandedKeys.includes(expandKey);
+        const viewModel = buildNodeRunViewModel(latest, (key, params) => this.t(key, params));
+        const pillH = getNodeRunResultPillHeight(latest, expanded, (key, params) => this.t(key, params));
+        const metaParts = [];
+        const durationMs = latest.duration_ms;
+        if (typeof durationMs === 'number' && Number.isFinite(durationMs)) {
+            metaParts.push(this.t('canvas_run_result.duration_ms', { ms: String(Math.round(durationMs)) }));
+        }
+        if (kind === 'ok') {
+            const changeCount = countNodeRunDiffChanges(latest);
+            if (changeCount > 0) {
+                metaParts.push(this.t('canvas_run_result.changes_count', { count: String(changeCount) }));
+            }
+        }
+        const changeRows = expanded && kind === 'ok' ? viewModel.changeRows : [];
+        const runBadge = results.length > 1
+            ? html`<span class="node-run-result-run-badge">${this.t('canvas_run_result.run_count', { count: String(results.length) })}</span>`
+            : nothing;
+        const body = html`
+            <div
+                xmlns="http://www.w3.org/1999/xhtml"
+                class="node-run-result-pill"
+                data-tone=${kind === 'error' ? 'error' : 'ok'}
+                ?data-expanded=${expanded}
+                @pointerdown=${this._onNodeRunResultPointerDown}
+                @dblclick=${this._onNodeRunResultPointerDown}
+                @click=${(e) => this._onNodeRunResultToggle(e, nodeId, runIndex)}
+            >
+                <div class="node-run-result-primary">${viewModel.headline.length > 0 ? viewModel.headline : this.t('canvas_run_result.empty')}</div>
+                <div class="node-run-result-meta">
+                    ${metaParts.map((part) => html`<span>${part}</span>`)}
+                    ${runBadge}
+                </div>
+                ${changeRows.length > 0 ? html`
+                    <ul class="node-run-result-changes">
+                        ${changeRows.map((row) => html`
+                            <li class="node-run-result-change" data-change-type=${row.changeType}>
+                                <span class="node-run-result-change-badge" title=${row.badgeLabel} aria-label=${row.badgeLabel}>${row.badge}</span>
+                                <div class="node-run-result-change-body">
+                                    <div class="node-run-result-change-label">${row.label}</div>
+                                    <div class="node-run-result-change-detail">${row.detail}</div>
+                                </div>
+                            </li>
+                        `)}
+                    </ul>
+                ` : nothing}
+            </div>
+        `;
+        return svg`
+            <foreignObject
+                class="node-run-result"
+                x="0" y=${y} width=${NODE_W} height=${pillH}
+                @pointerdown=${this._onNodeRunResultPointerDown}
+                @dblclick=${this._onNodeRunResultPointerDown}
+            >
+                ${body}
+            </foreignObject>
         `;
     }
 
@@ -2525,6 +2992,9 @@ export class FlowsFlowCanvas extends PlatformElement {
             >
                 <rect class="node-aura" x="-5" y="-5" width=${NODE_W + 10} height=${h + 10} rx=${NODE_RADIUS + 5} ry=${NODE_RADIUS + 5}></rect>
                 <rect class="node-card" x="0" y="0" width=${NODE_W} height=${h} rx=${NODE_RADIUS} ry=${NODE_RADIUS}></rect>
+                ${runtimeState === 'running' || runtimeState === 'breakpoint-hit'
+                    ? this._renderNodeRunOrbit(h, runtimeState)
+                    : ''}
                 <rect class="node-sheen" x="10" y="1" width=${NODE_W - 20} height="1.5" rx="1" ry="1"></rect>
                 <foreignObject x="0" y="0" width=${NODE_W} height=${h}>${foBody}</foreignObject>
                 ${this._renderNodeDataflowEdgeChips(id, h)}
@@ -2553,6 +3023,7 @@ export class FlowsFlowCanvas extends PlatformElement {
                     @pointerdown=${(e) => this._onPointerDownPort(e, id, 'out')}
                 ></circle>
                 ` : ''}
+                ${this._renderNodeRunResult(id, h, runtimeState)}
             </g>
         `;
     }
@@ -2784,12 +3255,40 @@ export class FlowsFlowCanvas extends PlatformElement {
 
         const showAllWires = Boolean(state.showDataWires);
         const hoverId = this._hoverNodeId;
+        const chipHoverRef = this._hoverChipRef;
+        const chipHoverActive = chipHoverRef
+            && typeof chipHoverRef.nodeId === 'string'
+            && chipHoverRef.nodeId.length > 0
+            && (chipHoverRef.side === 'in' || chipHoverRef.side === 'out')
+            && typeof chipHoverRef.index === 'number'
+            && chipHoverRef.index >= 0;
         let dataWires = [];
         this._lineageSet = null;
-        if (showAllWires || hoverId) {
+        this._highlightWireKeys = null;
+        this._highlightChipKeys = null;
+        if (showAllWires || hoverId || chipHoverActive) {
             const allWires = this._dataWires(nodes);
-            if (hoverId) {
-                dataWires = allWires.filter((w) => w.from === hoverId || w.to === hoverId);
+            const dataflowNodes = state.dataflow && typeof state.dataflow === 'object'
+                ? state.dataflow.nodes
+                : null;
+            if (chipHoverActive) {
+                this._highlightWireKeys = wiresForChipHover(allWires, chipHoverRef, dataflowNodes);
+                if (this._highlightWireKeys.size > 0) {
+                    dataWires = allWires;
+                    this._lineageSet = buildLineageSetFromWireKeys(this._highlightWireKeys, allWires);
+                    this._highlightChipKeys = chipRefKeysForWireKeys(this._highlightWireKeys, allWires, dataflowNodes);
+                    this._highlightChipKeys.add(chipRefKey(chipHoverRef));
+                } else {
+                    this._highlightChipKeys = new Set([chipRefKey(chipHoverRef)]);
+                    if (showAllWires) {
+                        dataWires = allWires;
+                    } else if (hoverId) {
+                        dataWires = allWires.filter((wire) => wire.from === hoverId || wire.to === hoverId);
+                    }
+                    this._lineageSet = new Set([chipHoverRef.nodeId]);
+                }
+            } else if (hoverId) {
+                dataWires = allWires.filter((wire) => wire.from === hoverId || wire.to === hoverId);
                 this._lineageSet = buildLineageSet(hoverId, dataWires);
             } else {
                 dataWires = allWires;
@@ -2819,6 +3318,13 @@ export class FlowsFlowCanvas extends PlatformElement {
                         <path d="M 1 0 L 1 1 L 0 1" class="grid-pattern" stroke-width="0"></path>
                         <circle cx="0" cy="0" r="0.8" class="grid-pattern"></circle>
                     </pattern>
+                    <filter id="flows-node-firefly-glow" x="-50%" y="-50%" width="200%" height="200%">
+                        <feGaussianBlur in="SourceGraphic" stdDeviation="2.5" result="blur"></feGaussianBlur>
+                        <feMerge>
+                            <feMergeNode in="blur"></feMergeNode>
+                            <feMergeNode in="SourceGraphic"></feMergeNode>
+                        </feMerge>
+                    </filter>
                 </defs>
                 <rect x="-1000000" y="-1000000" width="2000000" height="2000000" fill="url(#canvas-grid)"></rect>
 

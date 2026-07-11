@@ -34,6 +34,10 @@ from tests.ui.scenario_doc import ScenarioRecorder
         "Короткая инструкция: где искать MCP серверы, как установить из каталога, "
         "как добавить MCP tool в LLM-ноду и как поставить MCP-ноду на канву."
     ),
+    description_en=(
+        "Short guide: where to find MCP servers, how to install from the catalog, "
+        "how to add an MCP tool to an LLM node, and how to place an MCP node on the canvas."
+    ),
 )
 @pytest.mark.asyncio
 @pytest.mark.e2e

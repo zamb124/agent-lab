@@ -30,6 +30,10 @@ from tests.ui.scenario_doc import ScenarioRecorder
     description=(
         "Пользователь открывает настройки topic-канала и включает «Не беспокоить»."
     ),
+    title_en="Sync: mute notifications in channel settings",
+    description_en=(
+        "The user opens topic channel settings and enables «Do not disturb»."
+    ),
 )
 @pytest.mark.asyncio
 @pytest.mark.e2e
@@ -55,14 +59,22 @@ async def test_user_mutes_channel_notifications(
     await expect(settings_modal.locator(".modal-title")).to_contain_text(
         re.compile(r"Настройки канала|Channel settings")
     )
-    await scenario.step("Открыты настройки канала", ui_page_system)
+    await scenario.step(
+        "Открыты настройки канала",
+        ui_page_system,
+        label_en="Channel settings opened",
+    )
 
     mute_switch = settings_modal.locator(".toggle-row").filter(
         has_text=re.compile(r"Не беспокоить|Do not disturb")
     ).locator("platform-switch")
     await mute_switch.click()
     await expect(mute_switch).to_have_attribute("checked", "", timeout=15_000)
-    await scenario.step("Включён мьют уведомлений", ui_page_system)
+    await scenario.step(
+        "Включён мьют уведомлений",
+        ui_page_system,
+        label_en="Notifications muted",
+    )
 
     await sync_e2e_click_platform_button(settings_modal, "Сохранить", "Save")
     await expect(settings_modal).to_be_hidden()
@@ -76,6 +88,11 @@ async def test_user_mutes_channel_notifications(
     description=(
         "В канал добавлен участник; его сообщение создаётся через API; владелец открывает профиль "
         "по кнопке на аватаре в пузырьке чужого сообщения."
+    ),
+    title_en="Sync: sender profile from a message",
+    description_en=(
+        "A member is added to the channel; their message is created via API; the owner opens the profile "
+        "by clicking the avatar on someone else's message bubble."
     ),
 )
 @pytest.mark.asyncio
@@ -108,7 +125,11 @@ async def test_owner_opens_peer_profile_from_message_bubble(
     )
     await sync_sidebar_channel_nav(ui_page_system, channel_name).click()
     await sync_e2e_expect_ws_open(ui_page_system)
-    await scenario.step("В канал добавлен второй участник", ui_page_system)
+    await scenario.step(
+        "В канал добавлен второй участник",
+        ui_page_system,
+        label_en="Second member added to the channel",
+    )
 
     await sync_api_post_plain_message(
         sync_ui.origin,
@@ -116,7 +137,11 @@ async def test_owner_opens_peer_profile_from_message_bubble(
         channel_id,
         msg_text,
     )
-    await scenario.step("Сообщение от второго участника отправлено через API", ui_page_system)
+    await scenario.step(
+        "Сообщение от второго участника отправлено через API",
+        ui_page_system,
+        label_en="Message from the second member sent via API",
+    )
 
     await ui_page_system.reload(wait_until="domcontentloaded")
     await sync_ui.expect_shell(ui_page_system)
@@ -134,4 +159,8 @@ async def test_owner_opens_peer_profile_from_message_bubble(
     )
     await expect(user_modal.get_by_text("System User 2", exact=False)).to_be_visible()
     await expect(user_modal.get_by_text(re.compile(r"Каналы вместе|Shared channels"))).to_be_visible()
-    await scenario.step("Открыта модалка профиля отправителя", ui_page_system)
+    await scenario.step(
+        "Открыта модалка профиля отправителя",
+        ui_page_system,
+        label_en="Sender profile modal opened",
+    )

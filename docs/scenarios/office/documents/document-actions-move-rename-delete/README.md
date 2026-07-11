@@ -4,20 +4,20 @@
 
 ## Шаг 1. Документ в каталоге
 
-![Документ в каталоге](screenshots/001.png)
+![Документ в каталоге](document-actions-move-rename-delete--01-document-in-catalog.png)
 
 ## Шаг 2. Документ открыт и закрыт
 
-![Документ открыт и закрыт](screenshots/002.png)
+![Документ открыт и закрыт](document-actions-move-rename-delete--02-document-opened-and-closed.png)
 
 ## Шаг 3. Документ переименован
 
-![Документ переименован](screenshots/003.png)
+![Документ переименован](document-actions-move-rename-delete--03-document-renamed.png)
 
 ## Шаг 4. Меню действий файла
 
-![Меню действий файла](screenshots/004.png)
+![Меню действий файла](document-actions-move-rename-delete--04-file-actions-menu.png)
 
 ## Шаг 5. Документ удалён
 
-![Документ удалён](screenshots/005.png)
+![Документ удалён](document-actions-move-rename-delete--05-document-deleted.png)

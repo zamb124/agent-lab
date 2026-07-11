@@ -155,6 +155,40 @@ describe('flows-editor-header flow settings entry', () => {
         expect(el._overflowOpen).to.equal(false);
     });
 
+    it('overflow menu exposes guest preview share action', async () => {
+        for (const factory of FACTORIES) {
+            registerFactory(factory);
+        }
+        const collected = collectFactories(FACTORIES);
+        bootstrapTestBus({ slices: collected.slices, effects: [] });
+
+        const el = await fixture(html`
+            <flows-editor-header flow-id="flow-demo" branch-id="base"></flows-editor-header>
+        `);
+        el._overflowOpen = true;
+        await elementUpdated(el);
+
+        const flyout = document.body.querySelector('.flows-editor-header-menu-portal');
+        expect(flyout).to.not.equal(null);
+
+        let opened = null;
+        el.openModal = (kind, props) => {
+            opened = { kind, props };
+        };
+
+        const menuButtons = [...flyout.querySelectorAll('platform-button')];
+        expect(menuButtons.length).to.be.greaterThan(0);
+
+        menuButtons[0].click();
+        await elementUpdated(el);
+
+        expect(opened).to.deep.equal({
+            kind: 'flows.preview_share',
+            props: { flowId: 'flow-demo', branchId: 'default' },
+        });
+        expect(el._overflowOpen).to.equal(false);
+    });
+
     it('overflow menu exposes API console action', async () => {
         for (const factory of FACTORIES) {
             registerFactory(factory);

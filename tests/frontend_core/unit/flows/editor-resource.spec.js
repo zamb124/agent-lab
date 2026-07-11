@@ -173,6 +173,34 @@ describe('flows/editor extraReducer', () => {
         expect(getState().flowsEditor.agentExecutionRunning).toBe(false);
     });
 
+    it('flows/run/node_completed сохраняет nodeRunResults', () => {
+        const { bus, getState } = build();
+        bus.dispatch('flows/run/flow_started', { task_id: 't1' });
+        bus.dispatch('flows/run/node_completed', {
+            node_id: 'a',
+            node_type: 'code',
+            run_index: 0,
+            duration_ms: 42,
+            result_preview: 'done',
+            primary_field: 'response',
+            diff: [
+                { path: 'response', old_value: null, new_value: 'done', change_type: 'added' },
+            ],
+        });
+        const s = getState().flowsEditor;
+        expect(s.nodeRunResults.a).toHaveLength(1);
+        expect(s.nodeRunResults.a[0].kind).toBe('ok');
+        expect(s.nodeRunResults.a[0].duration_ms).toBe(42);
+        expect(s.nodeRunResults.a[0].result_preview).toBe('done');
+    });
+
+    it('flows/editor/canvas_run_results_toggled переключает showCanvasRunResults', () => {
+        const { bus, getState } = build();
+        expect(getState().flowsEditor.showCanvasRunResults).toBe(true);
+        bus.dispatch('flows/editor/canvas_run_results_toggled', { value: false });
+        expect(getState().flowsEditor.showCanvasRunResults).toBe(false);
+    });
+
     it('flows/run/edge_executed и node_started обновляют runningEdgeIndices / completedEdgeIndices', () => {
         const { bus, getState } = build();
         bus.dispatch('flows/editor/flow_loaded', {
@@ -235,6 +263,9 @@ describe('flows/editor extraReducer', () => {
 
         bus.dispatch('flows/breakpoint/hit', { node_id: 'b', task_id: 't1' });
         expect(getState().flowsEditor.breakpointHitNodeId).toBe('b');
+
+        bus.dispatch('flows/breakpoint/clear', {});
+        expect(getState().flowsEditor.breakpointHitNodeId).toBe(null);
     });
 
     it('multi_selection_changed синхронизирует selectedNodeId', () => {

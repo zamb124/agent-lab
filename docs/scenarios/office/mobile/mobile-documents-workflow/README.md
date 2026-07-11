@@ -4,12 +4,12 @@ Bottom nav, выбор пространства и каталога, редак�
 
 ## Шаг 1. Мобильная нижняя навигация
 
-![Мобильная нижняя навигация](screenshots/001.png)
+![Мобильная нижняя навигация](mobile-documents-workflow--01-mobile-bottom-navigation.png)
 
 ## Шаг 2. Переключение Files / Recent
 
-![Переключение Files / Recent](screenshots/002.png)
+![Переключение Files / Recent](mobile-documents-workflow--02-files-and-recent-tabs.png)
 
 ## Шаг 3. Выбор каталога на мобильном
 
-![Выбор каталога на мобильном](screenshots/003.png)
+![Выбор каталога на мобильном](mobile-documents-workflow--03-mobile-catalog-picker.png)

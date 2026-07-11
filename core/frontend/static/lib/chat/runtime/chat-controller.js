@@ -322,6 +322,98 @@ export class ChatController {
         }
     }
 
+    /**
+     * Resume после breakpoint: пустой turn без user bubble, тот же contextId/taskId на backend.
+     *
+     * @param {{ metadata?: object|null }} input
+     */
+    async sendResume(input) {
+        if (!input || typeof input !== 'object') {
+            throw new Error('ChatController.sendResume: input required');
+        }
+        if (this._sending) {
+            throw new Error('ChatController.sendResume: stream already active');
+        }
+        stopStreamTtsPlayback();
+
+        const contextId = this._state.currentContextId;
+        if (typeof contextId !== 'string' || contextId.length === 0) {
+            throw new Error('ChatController.sendResume: contextId required');
+        }
+
+        const body = buildA2aMessageStreamBody({
+            message: '',
+            contextId,
+            branchId: this._target.branchId != null ? this._target.branchId : null,
+            files: [],
+            metadata: input.metadata || null,
+        });
+
+        const streamState = { contextId, taskId: null, taskPrimed: false };
+        this._sending = true;
+        this._streamAbort = new AbortController();
+        this._onChange(this._state);
+        if (this._onRunEvent) {
+            this._onRunEvent('flows/run/flow_started', {});
+        }
+        let terminal = false;
+        try {
+            const headers = await this._getHeaders();
+            await consumeA2aStream(
+                {
+                    url: a2aEndpointUrl(this._target),
+                    body,
+                    headers,
+                    credentials: this._credentials,
+                    signal: this._streamAbort.signal,
+                },
+                (frame) => {
+                    if (terminal) {
+                        return;
+                    }
+                    terminal = this.relayA2aFrame(frame, streamState).terminal;
+                },
+            );
+            this.applyRuntimeVerb('send_succeeded', {
+                task_id: streamState.taskId,
+                context_id: streamState.contextId,
+            });
+            if (!terminal && typeof streamState.taskId === 'string' && streamState.taskId.length > 0) {
+                this.applyRuntimeVerb('failed', {
+                    task_id: streamState.taskId,
+                    context_id: streamState.contextId,
+                    error_i18n_key: STREAM_INCOMPLETE_I18N_KEY,
+                });
+            }
+        } catch (err) {
+            if (err instanceof Error && err.name === 'AbortError') {
+                this.applyRuntimeVerb('a2a_interrupted', {
+                    task_id: streamState.taskId,
+                    context_id: streamState.contextId,
+                });
+            } else {
+                const errorText = err instanceof Error ? err.message : String(err);
+                if (typeof streamState.taskId === 'string' && streamState.taskId.length > 0) {
+                    this.applyRuntimeVerb('failed', {
+                        task_id: streamState.taskId,
+                        context_id: streamState.contextId,
+                        error: errorText,
+                    });
+                } else {
+                    this.applyRuntimeVerb('send_failed', {});
+                }
+                throw err;
+            }
+        } finally {
+            this._streamAbort = null;
+            this._sending = false;
+            if (this._onRunEvent) {
+                this._onRunEvent('flows/run/flow_done', {});
+            }
+            this._onChange(this._state);
+        }
+    }
+
     /** Отмена активного выполнения: abort SSE + JSON-RPC tasks/cancel. */
     async cancel() {
         if (this._cancelBusy) {

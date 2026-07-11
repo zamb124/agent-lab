@@ -383,6 +383,40 @@ describe('flows-chat-message shared surface', () => {
         expect(historyDetail).to.deep.equal({ sessionId: 'flow-1:ctx-1' });
     });
 
+    it('breakpoint card shows node_id and dispatches continue-breakpoint', async () => {
+        let continueDetail = null;
+        let viewStateDetail = null;
+        const el = await fixture(html`
+            <flows-chat-message
+                role="assistant"
+                .breakpoint=${{ node_id: 'build_search_query', state: { foo: 1 } }}
+                .labels=${{
+                    ...LABELS,
+                    breakpoint_continue: 'Continue',
+                    breakpoint_view_state: 'View state',
+                }}
+            ></flows-chat-message>
+        `);
+        el.addEventListener('continue-breakpoint', (event) => {
+            continueDetail = event.detail;
+        });
+        el.addEventListener('view-breakpoint-state', (event) => {
+            viewStateDetail = event.detail;
+        });
+        await elementUpdated(el);
+
+        const title = el.shadowRoot.querySelector('.breakpoint-title');
+        expect(title).to.not.equal(null);
+        expect(title.textContent).to.include('build_search_query');
+
+        const buttons = el.shadowRoot.querySelectorAll('.breakpoint-actions button');
+        expect(buttons.length).to.equal(2);
+        buttons[0].click();
+        buttons[1].click();
+        expect(continueDetail.breakpoint.node_id).to.equal('build_search_query');
+        expect(viewStateDetail.breakpoint.state).to.deep.equal({ foo: 1 });
+    });
+
     it('durable history action shows without taskId when sessionId is set', async () => {
         const el = await fixture(html`
             <flows-chat-message

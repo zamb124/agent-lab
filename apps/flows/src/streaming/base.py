@@ -54,6 +54,12 @@ class BaseEmitter(ABC):
     def __init__(self, state: ExecutionState):
         self.state = state
         self._span_context = None
+        self._node_run_counts: dict[str, int] = {}
+
+    def next_node_run_index(self, node_id: str) -> int:
+        current = self._node_run_counts.get(node_id, 0)
+        self._node_run_counts[node_id] = current + 1
+        return current
 
     def _create_message(
         self,
@@ -283,17 +289,34 @@ class BaseEmitter(ABC):
     async def emit_node_complete(
         self,
         node_id: str,
+        *,
+        node_type: str,
         result_preview: str = "",
+        duration_ms: int,
+        run_index: int,
+        primary_field: str = "",
+        diff: list[JsonObject] | None = None,
+        steps: list[JsonObject] | None = None,
     ) -> None:
         """Публикует событие завершения ноды."""
+        payload: JsonObject = {
+            "event": "node_complete",
+            "node_id": node_id,
+            "node_type": node_type,
+            "result_preview": result_preview[:200],
+            "duration_ms": duration_ms,
+            "run_index": run_index,
+        }
+        if primary_field:
+            payload["primary_field"] = primary_field
+        if diff is not None:
+            payload["diff"] = diff
+        if steps is not None:
+            payload["steps"] = steps
         artifact = Artifact(
             artifact_id=str(uuid.uuid4()),
             name=f"node_complete_{node_id}",
-            parts=[_data_part({
-                "event": "node_complete",
-                "node_id": node_id,
-                "result_preview": result_preview[:200],
-            })],
+            parts=[_data_part(payload)],
         )
 
         event = TaskArtifactUpdateEvent(
@@ -308,6 +331,10 @@ class BaseEmitter(ABC):
         self,
         node_id: str,
         error: str,
+        *,
+        node_type: str,
+        duration_ms: int,
+        run_index: int,
     ) -> None:
         """Публикует событие ошибки в ноде."""
         artifact = Artifact(
@@ -316,7 +343,10 @@ class BaseEmitter(ABC):
             parts=[_data_part({
                 "event": "node_error",
                 "node_id": node_id,
+                "node_type": node_type,
                 "error": error[:500],
+                "duration_ms": duration_ms,
+                "run_index": run_index,
             })],
         )
 

@@ -1,11 +1,11 @@
-# Sync: загрузка оболочки чата
+# Sync: chat shell loads
 
-После входа под системным пользователем открывается SPA Sync; на экране отображается корневой элемент приложения (sync-app).
+After signing in as the system user the Sync SPA opens; the root application element (sync-app) is visible on screen.
 
-## Step 1. Приложение Sync открыто по URL SPA
+## Step 1. Sync application opened via SPA URL
 
-![Приложение Sync открыто по URL SPA](screenshots/001.png)
+![Sync application opened via SPA URL](sync-chat-shell--01-prilozhenie-sync-otkryto-po-url-spa.png)
 
-## Step 2. Оболочка sync-app отображается
+## Step 2. sync-app shell is displayed
 
-![Оболочка sync-app отображается](screenshots/002.png)
+![sync-app shell is displayed](sync-chat-shell--02-obolochka-sync-app-otobrazhaetsya.png)

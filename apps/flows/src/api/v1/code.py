@@ -38,6 +38,7 @@ from apps.flows.src.durable_execution import (
 )
 from apps.flows.src.models.node_config import GraphNodeConfig
 from apps.flows.src.runtime.nodes import create_node
+from apps.flows.src.runtime.state_diff import DiffItem as StateDiffItem, compute_state_diff
 from apps.flows.src.state import collect_flow_node_files
 from core.capabilities import (
     CAPABILITY_LANGUAGE_SET,
@@ -1045,104 +1046,16 @@ class ExecuteRequest(BaseModel):
     branch_id: str | None = None
 
 
-class DiffItem(BaseModel):
-    """Элемент diff"""
-
-    path: str
-    old_value: JsonValue
-    new_value: JsonValue
-    change_type: str
-
-
 class ExecuteResponse(BaseModel):
     """Результат выполнения"""
 
     success: bool
     input_state: JsonObject | None = None
     output_state: JsonObject | None = None
-    diff: list[DiffItem] = []
+    diff: list[StateDiffItem] = []
     error: str | None = None
     error_payload: JsonObject | None = None
     duration_ms: int = 0
-
-
-def _compute_diff(old: JsonObject, new: JsonObject, path: str = "") -> list[DiffItem]:
-    """Вычисляет diff между двумя state."""
-    diff_items: list[DiffItem] = []
-    SKIP_KEYS = {
-        "task_id",
-        "context_id",
-        "user_id",
-        "session_id",
-        "messages",
-        "prompt_history",
-        "node_history",
-        "nested_states",
-        "current_nodes",
-        "branch_id",
-        "flow_config_version",
-        "user_groups",
-        "interrupt_path",
-        "tool_results",
-        "triggers",
-        "files",
-        "breakpoints",
-        "scheduled_tasks",
-        "reasoning_history",
-        "reflection_history",
-        "pending_reasoning",
-        "breakpoint_hit",
-        "breakpoint_state",
-        "interrupt",
-        "join_arrived_preds",
-        "hitl_handoff_correlation_id",
-        "flow_deadline_monotonic",
-        "flow_timeout_effective_seconds",
-        "terminal_task_state",
-        "terminal_task_error",
-        "llm_context_memory_cursor",
-        "handoff_depth",
-        "handoff_trace_id",
-        "handoff_parent_session_id",
-        "handback_return_variables",
-    }
-    all_keys = set(old.keys()) | set(new.keys())
-
-    for key in all_keys:
-        current_path = f"{path}.{key}" if path else key
-        if key in SKIP_KEYS:
-            continue
-
-        old_val = old.get(key)
-        new_val = new.get(key)
-
-        if key not in old:
-            diff_items.append(
-                DiffItem(path=current_path, old_value=None, new_value=new_val, change_type="added")
-            )
-        elif key not in new:
-            diff_items.append(
-                DiffItem(
-                    path=current_path, old_value=old_val, new_value=None, change_type="removed"
-                )
-            )
-        elif isinstance(old_val, dict) and isinstance(new_val, dict):
-            diff_items.extend(
-                _compute_diff(
-                    require_json_object(old_val, f"diff.old.{current_path}"),
-                    require_json_object(new_val, f"diff.new.{current_path}"),
-                    current_path,
-                )
-            )
-        elif old_val != new_val:
-            diff_items.append(
-                DiffItem(
-                    path=current_path, old_value=old_val, new_value=new_val, change_type="changed"
-                )
-            )
-
-    return diff_items
-
 
 async def _merge_execute_state_with_flow(
     input_state: JsonObject,
@@ -1351,7 +1264,7 @@ async def execute_code(container: ContainerDep, request: ExecuteRequest) -> Exec
         )
 
         duration_ms = int((time.time() - start_time) * 1000)
-        diff = _compute_diff(input_state_normalized, output_state)
+        diff = compute_state_diff(input_state_normalized, output_state)
 
         return ExecuteResponse(
             success=True,

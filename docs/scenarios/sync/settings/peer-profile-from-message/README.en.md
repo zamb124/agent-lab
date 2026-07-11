@@ -1,11 +1,11 @@
-# Sync: профиль отправителя из сообщения
+# Sync: sender profile from a message
 
-В канал добавлен участник; его сообщение создаётся через API; владелец открывает профиль по кнопке на аватаре в пузырьке чужого сообщения.
+A member is added to the channel; their message is created via API; the owner opens the profile by clicking the avatar on someone else's message bubble.
 
-## Step 1. В канал добавлен второй участник
+## Step 1. Second member added to the channel
 
-![В канал добавлен второй участник](screenshots/001.png)
+![Second member added to the channel](peer-profile-from-message--01-v-kanal-dobavlen-vtoroy-uchastnik.png)
 
-## Step 2. Сообщение от второго участника отправлено через API
+## Step 2. Message from the second member sent via API
 
-![Сообщение от второго участника отправлено через API](screenshots/002.png)
+![Message from the second member sent via API](peer-profile-from-message--02-soobshchenie-ot-vtorogo-uchastnika-otpravleno-cherez-api.png)

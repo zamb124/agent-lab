@@ -1,11 +1,11 @@
-# Frontend: ссылка на скачивание LinnexAgent в hero лендинга
+# Frontend: LinnexAgent download link in the landing hero
 
-На главной странице есть floating-карточка со ссылкой на /agent.
+The home page has a floating card with a link to /agent.
 
 ## Step 1. Landing home page opened
 
-![Landing home page opened](screenshots/001.png)
+![Landing home page opened](landing-hero-download-link--01-landing-home-page-opened.png)
 
-## Step 2. Floating-карточка download page видна на лендинге
+## Step 2. The floating download card is visible on the landing page.
 
-![Floating-карточка download page видна на лендинге](screenshots/002.png)
+![The floating download card is visible on the landing page.](landing-hero-download-link--02-floating-kartochka-download-page-vidna-na-lendinge.png)

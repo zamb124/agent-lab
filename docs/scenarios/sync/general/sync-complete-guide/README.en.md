@@ -1,122 +1,122 @@
-# Sync: полная инструкция по сервису
+# Sync: complete service guide
 
-Длинная инструкция по основному рабочему маршруту Sync: пространство, канал, сообщения, упоминания, вложения, меню сообщения, закрепы, треды, настройки канала, профиль участника и реальные realtime-обновления.
+A long walkthrough of the main Sync workflow: space, channel, messages, mentions, attachments, message menu, pins, threads, channel settings, member profile, and real realtime updates.
 
-## Step 1. Открыт Sync в выбранном пространстве
+## Step 1. Sync opened in the selected space
 
-На первом экране важно проверить три зоны интерфейса:
+On the first screen, check three interface areas:
 
-- слева находится список чатов, поиск и переключатель области поиска;
-- сверху у списка выбранное пространство, карандаш настроек и кнопка встречи;
-- в центре показаны карточки каналов выбранного пространства.
+- on the left are the chat list, search, and search scope switch;
+- above the list are the selected space, settings pencil, and meeting button;
+- in the center are channel cards for the selected space.
 
-Пространство в Sync — это платформенный namespace. Оно общее для сервисов платформы, а Sync хранит в нём только свои настройки: авто-расшифровку голосовых и режим «речь звонка в ленту».
+A Sync space is a platform namespace. It is shared across platform services, and Sync stores only its own settings there: auto-transcription of voice messages and the «speech from calls into the feed» mode.
 
-![Открыт Sync в выбранном пространстве](screenshots/001.png)
+![Sync opened in the selected space](sync-complete-guide--01-otkryt-sync-v-vybrannom-prostranstve.png)
 
-## Step 2. Открыты Sync-настройки пространства
+## Step 2. Sync space settings opened
 
-Карандаш рядом с пространством не создаёт и не переименовывает namespace. Он открывает именно Sync-настройки выбранного пространства.
+The pencil next to the space does not create or rename the namespace. It opens Sync settings for the selected space.
 
-- «Авто-транскрипция голосовых» включает STT для новых голосовых сообщений в каналах этого пространства.
-- «Речь звонка в ленту» публикует сегменты речи участников звонка в ленту канала, когда backend и LiveKit egress настроены.
+- «Auto-transcribe voice messages» enables STT for new voice messages in channels of this space.
+- «Speech from calls into the feed» publishes speech segments from call participants into the channel feed when the backend and LiveKit egress are configured.
 
-Эти значения работают как дефолты пространства; у конкретного канала их можно переопределить в настройках канала.
+These values act as space defaults; a specific channel can override them in channel settings.
 
-![Открыты Sync-настройки пространства](screenshots/002.png)
+![Sync space settings opened](sync-complete-guide--02-otkryty-sync-nastroyki-prostranstva.png)
 
-## Step 3. Открыта форма создания канала
+## Step 3. Channel creation form opened
 
-Канал — основная рабочая единица Sync. В форме есть:
+A channel is the main working unit in Sync. The form includes:
 
-- «Название» — человекочитаемое имя канала в сайдбаре и карточках;
-- «Участники» — коллеги, которых можно сразу добавить в канал;
-- «Приватный канал» — доступ только приглашённым пользователям;
-- «Авто-расшифровка голосовых» — STT для голосовых сообщений этого канала;
-- «Речь звонка в ленту» — публикация речи из звонка прямо в чат.
+- «Name» — the human-readable channel name in the sidebar and cards;
+- «Members» — colleagues you can add to the channel right away;
+- «Private channel» — access only for invited users;
+- «Auto-transcribe voice messages» — STT for voice messages in this channel;
+- «Speech from calls into the feed» — publish speech from calls directly into the chat.
 
-Если флаги включены и на пространстве, и на канале, итоговое поведение канала видно пользователю без обращения к API.
+If flags are enabled on both the space and the channel, the final channel behavior is visible to the user without calling the API.
 
-![Открыта форма создания канала](screenshots/003.png)
+![Channel creation form opened](sync-complete-guide--03-otkryta-forma-sozdaniya-kanala.png)
 
-## Step 4. Заполнены название и параметры канала
+## Step 4. Channel name and options filled in
 
-Перед созданием канала полезно сразу включить нужные флаги. Так команда не будет искать эти настройки после первого звонка или после первого голосового сообщения.
+Before creating a channel it helps to enable the needed flags right away. That way the team will not hunt for these settings after the first call or after the first voice message.
 
-![Заполнены название и параметры канала](screenshots/004.png)
+![Channel name and options filled in](sync-complete-guide--04-zapolneny-nazvanie-i-parametry-kanala.png)
 
-## Step 5. Канал создан и открыт
+## Step 5. Channel created and opened
 
-Открытый канал состоит из шапки, ленты и композера.
+An open channel consists of a header, feed, and composer.
 
-- В шапке видны аватар, название, подзаголовок, кнопки звонка, видео, настроек и меню дополнительных действий.
-- Лента показывает сообщения, даты, статусы доставки, реакции и закрепы.
-- Композер снизу отправляет текст, файлы, голосовые, упоминания и ответы в тред.
+- The header shows the avatar, name, subtitle, call, video, settings buttons, and a menu of extra actions.
+- The feed shows messages, dates, delivery status, reactions, and pins.
+- The composer at the bottom sends text, files, voice messages, mentions, and thread replies.
 
-![Канал создан и открыт](screenshots/005.png)
+![Channel created and opened](sync-complete-guide--05-kanal-sozdan-i-otkryt.png)
 
-## Step 6. Отправлено первое сообщение
+## Step 6. First message sent
 
-Текстовое сообщение уходит через realtime-команду Sync и сразу появляется в ленте. Для пользователя это обычный чат, но технически событие также обновляет превью канала, дату последнего сообщения и unread-состояние у других участников.
+A text message goes through a Sync realtime command and appears in the feed right away. For the user it is a normal chat, but technically the event also updates the channel preview, last message date, and unread state for other members.
 
-![Отправлено первое сообщение](screenshots/006.png)
+![First message sent](sync-complete-guide--06-otpravleno-pervoe-soobshchenie.png)
 
-## Step 7. Открыт popup упоминаний
+## Step 7. Mention popup opened
 
-Упоминание начинается с символа `@`. Popup ищет участников компании, а после выбора вставляет технический user_id. В ленте пользователь видит нормальное имя, потому что Sync преобразует id через список участников компании.
+A mention starts with `@`. The popup searches company members, and after selection inserts the technical user_id. In the feed the user sees a normal name because Sync resolves the id through the company member list.
 
-Упоминание важно не только визуально: backend валидирует участника канала и отправляет отдельное mention-уведомление.
+Mentions matter beyond visuals: the backend validates the channel member and sends a separate mention notification.
 
-![Открыт popup упоминаний](screenshots/007.png)
+![Mention popup opened](sync-complete-guide--07-otkryt-popup-upominaniy.png)
 
-## Step 8. Сообщение с упоминанием появилось в ленте
+## Step 8. Message with mention appeared in the feed
 
-После отправки упоминание выглядит как имя человека, а не как `@user_id`. По клику на такое имя открывается карточка профиля и общие каналы.
+After sending, the mention looks like a person's name, not `@user_id`. Clicking that name opens the profile card and shared channels.
 
-![Сообщение с упоминанием появилось в ленте](screenshots/008.png)
+![Message with mention appeared in the feed](sync-complete-guide--08-soobshchenie-s-upominaniem-poyavilos-v-lente.png)
 
-## Step 9. Отправлено сообщение с изображением
+## Step 9. Message with image sent
 
-Кнопка вложения загружает файл в файловый backend и добавляет его в сообщение как контент-блок. Для изображений Sync показывает превью, для документов — строку файла со скачиванием. Подпись сообщения остаётся обычным текстовым блоком.
+The attachment button uploads the file to the file backend and adds it to the message as a content block. Sync shows a preview for images and a file row with download for documents. The message caption remains a normal text block.
 
-![Отправлено сообщение с изображением](screenshots/009.png)
+![Message with image sent](sync-complete-guide--09-otpravleno-soobshchenie-s-izobrazheniem.png)
 
-## Step 10. Открыто меню сообщения
+## Step 10. Message menu opened
 
-Контекстное меню открывается правым кликом по сообщению. В нём есть быстрые реакции и действия:
+The context menu opens with a right click on a message. It includes quick reactions and actions:
 
-- «Ответить» — включает режим ответа в композере;
-- «Открыть тред» — создаёт или открывает ветку обсуждения;
-- «Редактировать» — доступно для своих текстовых сообщений;
-- «Скопировать» — копирует текст;
-- «Переслать» — открывает выбор канала назначения;
-- «Закрепить» — добавляет сообщение в верхнюю полоску закрепов;
-- «Удалить» — доступно для своих сообщений.
+- «Reply» — enables reply mode in the composer;
+- «Open thread» — creates or opens a discussion branch;
+- «Edit» — available for your own text messages;
+- «Copy» — copies the text;
+- «Forward» — opens destination channel selection;
+- «Pin» — adds the message to the top pin strip;
+- «Delete» — available for your own messages.
 
-![Открыто меню сообщения](screenshots/010.png)
+![Message menu opened](sync-complete-guide--10-otkryto-menyu-soobshcheniya.png)
 
-## Step 11. Сообщение закреплено
+## Step 11. Message pinned
 
-Закрепы хранятся на канале. Полоска сверху показывает превью текущего закреплённого сообщения и счётчик. Клик по полоске прокручивает ленту к закрепу; если закрепов несколько, переход идёт по кругу.
+Pins are stored on the channel. The strip at the top shows a preview of the current pinned message and a counter. Clicking the strip scrolls the feed to the pin; if there are several pins, navigation cycles through them.
 
-![Сообщение закреплено](screenshots/011.png)
+![Message pinned](sync-complete-guide--11-soobshchenie-zakrepleno.png)
 
-## Step 12. Открыт тред и отправлен ответ
+## Step 12. Thread opened and reply sent
 
-Тред — боковая панель справа от основной ленты. Он нужен, когда обсуждение не должно засорять общий канал. Ответы внутри треда связаны с корневым сообщением, но основной чат остаётся доступен.
+A thread is a side panel to the right of the main feed. Use it when a discussion should not clutter the shared channel. Replies inside the thread are tied to the root message, but the main chat stays available.
 
-![Открыт тред и отправлен ответ](screenshots/012.png)
+![Thread opened and reply sent](sync-complete-guide--12-otkryt-tred-i-otpravlen-otvet.png)
 
-## Step 13. Открыты настройки канала
+## Step 13. Channel settings opened
 
-Настройки канала отличаются от настроек пространства. Здесь меняются локальные параметры конкретного канала:
+Channel settings differ from space settings. Here you change local parameters for a specific channel:
 
-- имя и аватар;
-- «Не беспокоить» для уведомлений;
-- авто-транскрипция голосовых именно в этом канале;
-- «речь звонка в ленту» именно для этого канала;
-- список участников и кнопка добавления новых участников.
+- name and avatar;
+- «Do not disturb» for notifications;
+- auto-transcription of voice messages in this channel only;
+- «speech from calls into the feed» for this channel only;
+- member list and a button to add new members.
 
-Если пользователь не видит канал в сайдбаре, первым делом проверьте, добавлен ли он в участники канала.
+If a user does not see the channel in the sidebar, first check whether they are added as a channel member.
 
-![Открыты настройки канала](screenshots/013.png)
+![Channel settings opened](sync-complete-guide--13-otkryty-nastroyki-kanala.png)

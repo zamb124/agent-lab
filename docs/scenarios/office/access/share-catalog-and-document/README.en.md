@@ -4,12 +4,12 @@ Access modal: enable link, copy, rotate, and document-level sharing.
 
 ## Step 1. Catalog with document ready
 
-![Catalog with document ready](screenshots/001.png)
+![Catalog with document ready](share-catalog-and-document--01-catalog-with-document-ready.png)
 
 ## Step 2. Catalog access modal
 
-![Catalog access modal](screenshots/002.png)
+![Catalog access modal](share-catalog-and-document--02-catalog-access-modal.png)
 
 ## Step 3. Public link enabled
 
-![Public link enabled](screenshots/003.png)
+![Public link enabled](share-catalog-and-document--03-public-link-enabled.png)

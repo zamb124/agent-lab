@@ -1,15 +1,15 @@
-# Sync: чат в оверлее звонка синхронизирован с каналом
+# Sync: call overlay chat stays in sync with the channel
 
-Сообщение из основного чата видно в call-overlay, а сообщение из call-overlay после завершения звонка отображается в ленте канала.
+A message from the main chat appears in the call overlay, and a message from the call overlay appears in the channel feed after the call ends.
 
-## Step 1. Сообщение из основного чата отправлено
+## Step 1. Message sent from the main chat
 
-![Сообщение из основного чата отправлено](screenshots/001.png)
+![Message sent from the main chat](call-overlay-chat-sync--01-soobshchenie-iz-osnovnogo-chata-otpravleno.png)
 
-## Step 2. Чат в оверлее принимает и отправляет сообщения
+## Step 2. Call overlay chat accepts and sends messages
 
-![Чат в оверлее принимает и отправляет сообщения](screenshots/002.png)
+![Call overlay chat accepts and sends messages](call-overlay-chat-sync--02-chat-v-overlee-prinimaet-i-otpravlyaet-soobshcheniya.png)
 
-## Step 3. Сообщение из оверлея видно в основном чате канала
+## Step 3. Message from the overlay is visible in the main channel chat
 
-![Сообщение из оверлея видно в основном чате канала](screenshots/003.png)
+![Message from the overlay is visible in the main channel chat](call-overlay-chat-sync--03-soobshchenie-iz-overleya-vidno-v-osnovnom-chate-kanala.png)

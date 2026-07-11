@@ -31,6 +31,12 @@ from tests.ui.scenario_doc import ScenarioRecorder
         "В композере после «@» открывается список участников; выбор вставляет @user_id; "
         "в пузырьке mention показывает имя из company members, не сырой id."
     ),
+    title_en="Sync: @ mention in a channel",
+    description_en=(
+        "A channel is created and a second company member is added via API. "
+        "After «@» in the composer a member list opens; selecting one inserts @user_id; "
+        "the bubble shows the name from company members, not the raw id."
+    ),
 )
 @pytest.mark.asyncio
 @pytest.mark.e2e
@@ -66,7 +72,11 @@ async def test_user_mentions_channel_member_from_popup(
 
     await sync_sidebar_channel_nav(ui_page_system, channel_name).click()
     await expect(ui_page_system.locator("sync-channel-page")).to_be_visible()
-    await scenario.step("Канал с двумя участниками открыт", ui_page_system)
+    await scenario.step(
+        "Канал с двумя участниками открыт",
+        ui_page_system,
+        label_en="Channel with two members opened",
+    )
 
     composer = ui_page_system.locator("sync-message-composer")
     await expect(composer).to_be_visible()
@@ -81,12 +91,20 @@ async def test_user_mentions_channel_member_from_popup(
         f'.mention-popup .item[data-user-id="{peer_uid}"]'
     )
     await expect(member_btn).to_be_visible(timeout=30_000)
-    await scenario.step("Попап со списком участников", ui_page_system)
+    await scenario.step(
+        "Попап со списком участников",
+        ui_page_system,
+        label_en="Popup with member list",
+    )
 
     await member_btn.click()
     await ta.click()
     await ta.press_sequentially("нужен апрув")
-    await scenario.step("Выбран участник, текст дописан", ui_page_system)
+    await scenario.step(
+        "Выбран участник, текст дописан",
+        ui_page_system,
+        label_en="Member selected, text appended",
+    )
 
     send_btn = composer.locator('button.send[aria-label="Отправить"], button.send[aria-label="Send"]')
     await expect(send_btn).to_be_visible(timeout=15_000)
@@ -95,7 +113,11 @@ async def test_user_mentions_channel_member_from_popup(
     await expect(bubble.locator(".body")).to_be_visible(timeout=30_000)
     await expect(bubble.locator(".body .mention")).to_contain_text("System User 2")
     await expect(bubble.locator(".body")).to_contain_text("нужен апрув")
-    await scenario.step("Сообщение с упоминанием в ленте", ui_page_system)
+    await scenario.step(
+        "Сообщение с упоминанием в ленте",
+        ui_page_system,
+        label_en="Message with mention in the feed",
+    )
 
 
 @pytest.mark.scenario(
@@ -106,6 +128,11 @@ async def test_user_mentions_channel_member_from_popup(
     description=(
         "После отправки сообщения с упоминанием клик по подсвеченному имени открывает карточку профиля; "
         "видны имя, блок каналов вместе; в сетке есть строка канала как в сайдбаре."
+    ),
+    title_en="Sync: click @mention opens profile card",
+    description_en=(
+        "After sending a message with a mention, clicking the highlighted name opens the profile card; "
+        "the name and shared channels block are visible; the grid shows a channel row like in the sidebar."
     ),
 )
 @pytest.mark.asyncio
@@ -169,7 +196,11 @@ async def test_click_mention_opens_profile_modal_with_shared_channel(
     bubble = ui_page_system.locator("sync-message-bubble").last
     mention = bubble.locator(".mention")
     await expect(mention).to_be_visible(timeout=30_000)
-    await scenario.step("Упоминание в ленте", ui_page_system)
+    await scenario.step(
+        "Упоминание в ленте",
+        ui_page_system,
+        label_en="Mention in the feed",
+    )
 
     await mention.click()
     user_modal = ui_page_system.locator("platform-user-info-modal[open]")
@@ -182,7 +213,11 @@ async def test_click_mention_opens_profile_modal_with_shared_channel(
     await expect(user_modal.locator("sync-channel-row").filter(has_text=channel_name)).to_be_visible(
         timeout=45_000
     )
-    await scenario.step("Модалка профиля: общий канал в сетке", ui_page_system)
+    await scenario.step(
+        "Модалка профиля: общий канал в сетке",
+        ui_page_system,
+        label_en="Profile modal: shared channel in the grid",
+    )
 
     await user_modal.locator(".channels-grid .channel-cell").filter(
         has_text=channel_name
@@ -193,4 +228,8 @@ async def test_click_mention_opens_profile_modal_with_shared_channel(
         "",
         timeout=15_000,
     )
-    await scenario.step("Переход в канал из карточки профиля", ui_page_system)
+    await scenario.step(
+        "Переход в канал из карточки профиля",
+        ui_page_system,
+        label_en="Navigate to channel from profile card",
+    )

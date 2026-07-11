@@ -1,19 +1,19 @@
-# Sync: упоминание @ в канале
+# Sync: @ mention in a channel
 
-Создаётся канал, второй участник компании добавлен в канал через API. В композере после «@» открывается список участников; выбор вставляет @user_id; в пузырьке mention показывает имя из company members, не сырой id.
+A channel is created and a second company member is added via API. After «@» in the composer a member list opens; selecting one inserts @user_id; the bubble shows the name from company members, not the raw id.
 
-## Step 1. Канал с двумя участниками открыт
+## Step 1. Channel with two members opened
 
-![Канал с двумя участниками открыт](screenshots/001.png)
+![Channel with two members opened](mention-from-popup--01-kanal-s-dvumya-uchastnikami-otkryt.png)
 
-## Step 2. Попап со списком участников
+## Step 2. Popup with member list
 
-![Попап со списком участников](screenshots/002.png)
+![Popup with member list](mention-from-popup--02-popap-so-spiskom-uchastnikov.png)
 
-## Step 3. Выбран участник, текст дописан
+## Step 3. Member selected, text appended
 
-![Выбран участник, текст дописан](screenshots/003.png)
+![Member selected, text appended](mention-from-popup--03-vybran-uchastnik-tekst-dopisan.png)
 
-## Step 4. Сообщение с упоминанием в ленте
+## Step 4. Message with mention in the feed
 
-![Сообщение с упоминанием в ленте](screenshots/004.png)
+![Message with mention in the feed](mention-from-popup--04-soobshchenie-s-upominaniem-v-lente.png)

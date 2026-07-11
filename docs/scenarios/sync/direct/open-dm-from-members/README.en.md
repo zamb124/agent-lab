@@ -1,15 +1,15 @@
-# Sync: открытие чата с участником компании
+# Sync: open a chat with a company member
 
-В разделе «Личные» пользователь находит коллегу по имени и открывает с ним диалог.
+In the «Direct» section the user finds a colleague by name and opens a conversation with them.
 
-## Step 1. Sync открыт, раздел «Личные» доступен
+## Step 1. Sync opened, Direct section is available
 
-![Sync открыт, раздел «Личные» доступен](screenshots/001.png)
+![Sync opened, Direct section is available](open-dm-from-members--01-sync-otkryt-razdel-lichnye-dostupen.png)
 
-## Step 2. Поиск по имени участника
+## Step 2. Search by member name
 
-![Поиск по имени участника](screenshots/002.png)
+![Search by member name](open-dm-from-members--02-poisk-po-imeni-uchastnika.png)
 
-## Step 3. Открыт чат с выбранным участником
+## Step 3. Chat opened with the selected member
 
-![Открыт чат с выбранным участником](screenshots/003.png)
+![Chat opened with the selected member](open-dm-from-members--03-otkryt-chat-s-vybrannym-uchastnikom.png)

@@ -16,6 +16,8 @@ from tests.ui.scenario_doc import ScenarioRecorder
     doc_slug="rag-shell",
     title="RAG: оболочка сервиса",
     description="Доступ к RAG UI на system.localhost после входа и маппинга субдомена.",
+    title_en="RAG: service shell",
+    description_en="Access to RAG UI on system.localhost after sign-in and subdomain mapping.",
 )
 @pytest.mark.asyncio
 @pytest.mark.e2e
@@ -26,9 +28,9 @@ async def test_rag_shell_loads(
     ui_page_system: Page,
 ) -> None:
     await rag_ui.open(ui_page_system)
-    await scenario.step("SPA RAG открыт", ui_page_system)
+    await scenario.step("SPA RAG открыт", ui_page_system, label_en="RAG SPA opened")
     await rag_ui.expect_shell(ui_page_system)
-    await scenario.step("Оболочка rag-app видна", ui_page_system)
+    await scenario.step("Оболочка rag-app видна", ui_page_system, label_en="The rag-app shell is visible")
 
 
 @pytest.mark.scenario(
@@ -36,6 +38,8 @@ async def test_rag_shell_loads(
     doc_slug="crm-shell",
     title="NetWorkle: оболочка записной книжки",
     description="Доступ к NetWorkle UI на system.localhost после входа.",
+    title_en="NetWorkle: notebook shell",
+    description_en="Access to NetWorkle UI on system.localhost after sign-in.",
 )
 @pytest.mark.asyncio
 @pytest.mark.e2e
@@ -46,9 +50,9 @@ async def test_crm_shell_loads(
     ui_page_system: Page,
 ) -> None:
     await crm_ui.open(ui_page_system)
-    await scenario.step("SPA NetWorkle открыт", ui_page_system)
+    await scenario.step("SPA NetWorkle открыт", ui_page_system, label_en="NetWorkle SPA opened")
     await crm_ui.expect_shell(ui_page_system)
-    await scenario.step("Оболочка NetWorkle видна", ui_page_system)
+    await scenario.step("Оболочка NetWorkle видна", ui_page_system, label_en="The NetWorkle shell is visible")
 
 
 @pytest.mark.scenario(
@@ -56,6 +60,8 @@ async def test_crm_shell_loads(
     doc_slug="crm-settings-hub",
     title="NetWorkle: хаб настроек",
     description="Переход на /crm/settings и проверка отображения settings-hub-page с карточками.",
+    title_en="NetWorkle: settings hub",
+    description_en="Navigate to /crm/settings and verify settings-hub-page displays with cards.",
 )
 @pytest.mark.asyncio
 @pytest.mark.e2e
@@ -66,7 +72,11 @@ async def test_crm_settings_hub_loads(
     ui_page_system: Page,
 ) -> None:
     await ui_page_system.goto(f"{crm_ui.origin}/crm/settings", wait_until="domcontentloaded")
-    await scenario.step("Открыт раздел настроек NetWorkle", ui_page_system)
+    await scenario.step(
+        "Открыт раздел настроек NetWorkle",
+        ui_page_system,
+        label_en="NetWorkle settings section opened",
+    )
     await expect(ui_page_system.locator("crm-app")).to_be_visible(timeout=30_000)
     hub = ui_page_system.locator("crm-settings-hub-page")
     await expect(hub).to_be_visible(timeout=30_000)
@@ -79,7 +89,11 @@ async def test_crm_settings_hub_loads(
     await expect(
         hub.get_by_text(re.compile(r"Пространства|Namespaces"))
     ).to_be_visible(timeout=30_000)
-    await scenario.step("Хаб настроек NetWorkle отображен с карточками", ui_page_system)
+    await scenario.step(
+        "Хаб настроек NetWorkle отображен с карточками",
+        ui_page_system,
+        label_en="NetWorkle settings hub is displayed with cards",
+    )
 
 
 @pytest.mark.scenario(
@@ -87,6 +101,8 @@ async def test_crm_settings_hub_loads(
     doc_slug="frontend-shell",
     title="Frontend: корневая оболочка платформы",
     description="Главная оболочка Платформы на порту frontend-сервиса.",
+    title_en="Frontend: platform root shell",
+    description_en="Main Platform shell on the frontend service port.",
 )
 @pytest.mark.asyncio
 @pytest.mark.e2e
@@ -97,6 +113,6 @@ async def test_frontend_shell_loads(
     ui_page_system: Page,
 ) -> None:
     await frontend_ui.open(ui_page_system)
-    await scenario.step("Корневой SPA открыт", ui_page_system)
+    await scenario.step("Корневой SPA открыт", ui_page_system, label_en="Root SPA opened")
     await frontend_ui.expect_shell(ui_page_system)
-    await scenario.step("Оболочка frontend-app видна", ui_page_system)
+    await scenario.step("Оболочка frontend-app видна", ui_page_system, label_en="The frontend-app shell is visible")

@@ -6,7 +6,7 @@
 
 Откройте route вида `/flows/<flow_id>/editor`. В header видны статус черновика, запуск, reload, preview-share, triggers, Lara, Evaluation Lab, Code и Publish.
 
-![Редактор flow в светлой теме: слева палитра нод, в центре канва, сверху publish/eval/share/triggers/code/run actions.](screenshots/001.png)
+![Редактор flow в светлой теме: слева палитра нод, в центре канва, сверху publish/eval/share/triggers/code/run actions.](operate-published-flow--01-flow-editor-in-the-light-theme-node-palette-on-the-left-canvas.png)
 
 ## Шаг 2. Публикуем изменения
 

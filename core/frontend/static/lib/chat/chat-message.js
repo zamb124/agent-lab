@@ -1266,7 +1266,7 @@ export class FlowsChatMessage extends PlatformElement {
         if (!this.breakpoint || typeof this.breakpoint !== 'object') {
             return nothing;
         }
-        const nodeId = asString(this.breakpoint.nodeId);
+        const nodeId = asString(this.breakpoint.nodeId) || asString(this.breakpoint.node_id);
         return html`
             <div class="breakpoint">
                 <div class="breakpoint-header">

@@ -6,7 +6,7 @@ After building a flow, a developer must publish it, test it, inspect observabili
 
 Open a route such as `/flows/<flow_id>/editor`. The header shows draft state, run, reload, preview-share, triggers, Lara, Evaluation Lab, Code, and Publish.
 
-![Flow editor in the light theme: node palette on the left, canvas in the center, and publish/eval/share/triggers/code/run actions at the top.](screenshots/001.png)
+![Flow editor in the light theme: node palette on the left, canvas in the center, and publish/eval/share/triggers/code/run actions at the top.](operate-published-flow--01-flow-editor-in-the-light-theme-node-palette-on-the-left-canvas.png)
 
 ## Step 2. Publish changes
 

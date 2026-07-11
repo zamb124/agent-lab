@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import inspect
 import os
-import shutil
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -14,6 +13,8 @@ from tests.ui.scenario_doc import (
     _await_screenshot_ready,
     _normalize_segment,
     _strip_optional,
+    build_screenshot_filename,
+    prepare_flat_screenshot_output,
 )
 
 _REPO_ROOT = Path(__file__).resolve().parents[2]
@@ -89,16 +90,12 @@ class ComponentDocRecorder:
         value = os.environ.get(_ENV_DISABLE, "").strip().lower()
         return value in ("0", "false", "no", "off")
 
-    def _prepare_screenshot_dir(self) -> Path:
-        shot_dir = self.out_dir / "screenshots"
+    def _prepare_screenshot_output(self) -> Path:
         if not self._screenshots_prepared:
-            if shot_dir.exists():
-                shutil.rmtree(shot_dir)
-            shot_dir.mkdir(parents=True, exist_ok=True)
             self._screenshots_prepared = True
-            return shot_dir
-        shot_dir.mkdir(parents=True, exist_ok=True)
-        return shot_dir
+            return prepare_flat_screenshot_output(self.out_dir, self.slug)
+        self.out_dir.mkdir(parents=True, exist_ok=True)
+        return self.out_dir
 
     async def step(
         self,
@@ -107,17 +104,24 @@ class ComponentDocRecorder:
         *,
         full_page: bool = True,
         label_en: str | None = None,
+        screenshot_name: str | None = None,
         details: str | None = None,
         details_en: str | None = None,
     ) -> None:
         rel: str | None = None
         if page is not None and not self.disabled():
             step_no = len(self.steps) + 1
-            shot_dir = self._prepare_screenshot_dir()
-            fname = f"{step_no:03d}.png"
+            shot_dir = self._prepare_screenshot_output()
+            fname = build_screenshot_filename(
+                self.slug,
+                step_no,
+                label,
+                label_en=label_en,
+                screenshot_name=screenshot_name,
+            )
             await _await_screenshot_ready(page)
             await page.screenshot(path=str(shot_dir / fname), full_page=full_page)
-            rel = f"screenshots/{fname}"
+            rel = fname
         self.steps.append(
             _StepRecord(
                 label=label,
@@ -128,25 +132,42 @@ class ComponentDocRecorder:
             )
         )
 
-    async def screenshot(self, page: Page, *, full_page: bool = True) -> None:
+    async def screenshot(
+        self,
+        page: Page,
+        *,
+        full_page: bool = True,
+        screenshot_name: str | None = None,
+    ) -> None:
         if self.disabled():
             return
         step_no = len(self.steps)
         if step_no == 0:
-            await self.step("Preview", page=page, full_page=full_page)
+            await self.step(
+                "Preview",
+                page=page,
+                full_page=full_page,
+                screenshot_name=screenshot_name,
+            )
             return
-        shot_dir = self._prepare_screenshot_dir()
-        fname = f"{step_no:03d}.png"
+        shot_dir = self._prepare_screenshot_output()
+        last = self.steps[-1]
+        fname = last.image_rel or build_screenshot_filename(
+            self.slug,
+            step_no,
+            last.label,
+            label_en=last.label_en,
+            screenshot_name=screenshot_name,
+        )
         await _await_screenshot_ready(page)
         await page.screenshot(path=str(shot_dir / fname), full_page=full_page)
-        last = self.steps[-1]
         if last.image_rel is None:
             self.steps[-1] = _StepRecord(
                 label=last.label,
                 label_en=last.label_en,
                 details=last.details,
                 details_en=last.details_en,
-                image_rel=f"screenshots/{fname}",
+                image_rel=fname,
             )
 
     def _render_readme(self, *, lang: str) -> str:

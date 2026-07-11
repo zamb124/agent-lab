@@ -3,14 +3,33 @@
  * Статика из documentation-dist/ монтируется на /documentation/; у frontend дубль на /frontend/documentation/.
  */
 
-const SCENARIO_SERVICES = new Set(['sync', 'flows', 'crm', 'rag', 'frontend']);
+const SCENARIO_SERVICES = new Set(['sync', 'flows', 'crm', 'rag', 'frontend', 'platform', 'office']);
 
-export function getDocumentationBasePath() {
+function normalizeDocumentationLocale(locale) {
+    if (typeof locale !== 'string') {
+        return 'ru';
+    }
+    const normalized = locale.trim().toLowerCase();
+    if (normalized === 'en') {
+        return 'en';
+    }
+    return 'ru';
+}
+
+function documentationLocalePrefix(locale) {
+    return normalizeDocumentationLocale(locale) === 'en' ? 'en/' : '';
+}
+
+/**
+ * @param {{ locale?: string }} [options]
+ */
+export function getDocumentationBasePath(options = {}) {
+    const localePrefix = documentationLocalePrefix(options.locale);
     const p = window.location.pathname;
     if (p === '/frontend' || p.startsWith('/frontend/')) {
-        return '/frontend/documentation/';
+        return `/frontend/documentation/${localePrefix}`;
     }
-    return '/documentation/';
+    return `/documentation/${localePrefix}`;
 }
 
 export function getDocumentationScenarioServiceKey() {
@@ -32,7 +51,30 @@ export function getDocumentationScenarioServiceKey() {
 }
 
 /**
- * @param {{ service?: string, tag?: string | null, slug?: string | null }} options
+ * Преобразует путь вида /documentation/scenarios/... в locale-aware URL.
+ * @param {string} href
+ * @param {{ locale?: string }} [options]
+ */
+export function resolveDocumentationHref(href, options = {}) {
+    const raw = typeof href === 'string' ? href.trim() : '';
+    if (raw === '') {
+        return raw;
+    }
+    const localePrefix = documentationLocalePrefix(options.locale);
+    if (localePrefix === '') {
+        return raw;
+    }
+    if (raw.startsWith('/frontend/documentation/') && !raw.startsWith('/frontend/documentation/en/')) {
+        return raw.replace('/frontend/documentation/', '/frontend/documentation/en/');
+    }
+    if (raw.startsWith('/documentation/') && !raw.startsWith('/documentation/en/')) {
+        return raw.replace('/documentation/', '/documentation/en/');
+    }
+    return raw;
+}
+
+/**
+ * @param {{ service?: string, tag?: string | null, slug?: string | null, locale?: string }} options
  *   service — ключ из pytest scenario / docs/scenarios/<service>/; по умолчанию из URL.
  *   tag — необязательный сегмент пути для старых групповых ссылок.
  *   slug — необязательный slug сценария. В сборке docs_prepare теги исходников
@@ -43,7 +85,7 @@ export function buildScenarioDocumentationUrl(options = {}) {
     const service = options.service ?? getDocumentationScenarioServiceKey();
     const tag = options.tag;
     const slug = options.slug;
-    const base = getDocumentationBasePath();
+    const base = getDocumentationBasePath({ locale: options.locale });
     let path = `scenarios/${service}/`;
     if (typeof slug === 'string' && slug.trim()) {
         const seg = slug.trim().replace(/^\/+|\/+$/g, '');

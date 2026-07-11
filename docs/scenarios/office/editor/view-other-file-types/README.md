@@ -4,16 +4,16 @@ Inline-просмотр текста и возврат к списку доку�
 
 ## Шаг 1. Текстовый файл в каталоге
 
-![Текстовый файл в каталоге](screenshots/001.png)
+![Текстовый файл в каталоге](view-other-file-types--01-text-file-in-catalog.png)
 
 ## Шаг 2. Текстовый просмотрщик открыт
 
-![Текстовый просмотрщик открыт](screenshots/002.png)
+![Текстовый просмотрщик открыт](view-other-file-types--02-text-viewer-opened.png)
 
 ## Шаг 3. Возврат к проводнику
 
-![Возврат к проводнику](screenshots/003.png)
+![Возврат к проводнику](view-other-file-types--03-back-to-explorer.png)
 
 ## Шаг 4. Список документов после просмотра
 
-![Список документов после просмотра](screenshots/004.png)
+![Список документов после просмотра](view-other-file-types--04-document-list-after-preview.png)

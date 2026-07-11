@@ -317,6 +317,7 @@ export class PlatformServiceSwitcherSheet extends PlatformBottomSheet {
         }));
         this._companiesSelect = this.select((s) => s.companies.list);
         this._themeSelect = this.select((s) => s.theme.mode);
+        this._localeSelect = this.select((s) => s.i18n.locale);
     }
 
     connectedCallback() {
@@ -393,7 +394,10 @@ export class PlatformServiceSwitcherSheet extends PlatformBottomSheet {
 
     _openDocumentation() {
         this._requestClose();
-        const url = buildScenarioDocumentationUrl({ tag: null });
+        const url = buildScenarioDocumentationUrl({
+            tag: null,
+            locale: this._localeSelect.value,
+        });
         window.open(url, '_blank', 'noopener,noreferrer');
     }
 

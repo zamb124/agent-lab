@@ -1,11 +1,11 @@
-# NetWorkle: оболочка записной книжки
+# NetWorkle: notebook shell
 
-Доступ к NetWorkle UI на system.localhost после входа.
+Access to NetWorkle UI on system.localhost after sign-in.
 
-## Step 1. SPA NetWorkle открыт
+## Step 1. NetWorkle SPA opened
 
-![SPA NetWorkle открыт](screenshots/001.png)
+![NetWorkle SPA opened](crm-shell--01-spa-networkle-otkryt.png)
 
-## Step 2. Оболочка NetWorkle видна
+## Step 2. The NetWorkle shell is visible
 
-![Оболочка NetWorkle видна](screenshots/002.png)
+![The NetWorkle shell is visible](crm-shell--02-obolochka-networkle-vidna.png)

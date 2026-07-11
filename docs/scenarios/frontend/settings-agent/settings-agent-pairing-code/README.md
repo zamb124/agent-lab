@@ -4,12 +4,12 @@
 
 ## Шаг 1. Открыта страница настроек платформы
 
-![Открыта страница настроек платформы](screenshots/001.png)
+![Открыта страница настроек платформы](settings-agent-pairing-code--01-platform-settings-page-opened.png)
 
 ## Шаг 2. Открыта вкладка HumanitecAgent
 
-![Открыта вкладка HumanitecAgent](screenshots/002.png)
+![Открыта вкладка HumanitecAgent](settings-agent-pairing-code--02-humanitecagent-tab-opened.png)
 
 ## Шаг 3. Pairing code создан и отображается
 
-![Pairing code создан и отображается](screenshots/003.png)
+![Pairing code создан и отображается](settings-agent-pairing-code--03-pairing-code-is-created-and-visible.png)

@@ -86,6 +86,12 @@ async def _click_context_item(page: Page, *labels: str) -> None:
         "сообщения, упоминания, вложения, меню сообщения, закрепы, треды, настройки "
         "канала, профиль участника и реальные realtime-обновления."
     ),
+    title_en="Sync: complete service guide",
+    description_en=(
+        "A long walkthrough of the main Sync workflow: space, channel, "
+        "messages, mentions, attachments, message menu, pins, threads, channel settings, "
+        "member profile, and real realtime updates."
+    ),
 )
 @pytest.mark.asyncio
 @pytest.mark.e2e
@@ -131,6 +137,7 @@ async def test_sync_complete_service_guide(
     await scenario.step(
         "Открыт Sync в выбранном пространстве",
         ui_page_system,
+        label_en="Sync opened in the selected space",
         details=(
             "На первом экране важно проверить три зоны интерфейса:\n\n"
             "- слева находится список чатов, поиск и переключатель области поиска;\n"
@@ -140,6 +147,15 @@ async def test_sync_complete_service_guide(
             "платформы, а Sync хранит в нём только свои настройки: авто-расшифровку "
             "голосовых и режим «речь звонка в ленту»."
         ),
+        details_en=(
+            "On the first screen, check three interface areas:\n\n"
+            "- on the left are the chat list, search, and search scope switch;\n"
+            "- above the list are the selected space, settings pencil, and meeting button;\n"
+            "- in the center are channel cards for the selected space.\n\n"
+            "A Sync space is a platform namespace. It is shared across platform services, "
+            "and Sync stores only its own settings there: auto-transcription of voice messages "
+            "and the «speech from calls into the feed» mode."
+        ),
     )
 
     await ui_page_system.locator("platform-sidebar-namespace-select button.btn-edit").click()
@@ -148,6 +164,7 @@ async def test_sync_complete_service_guide(
     await scenario.step(
         "Открыты Sync-настройки пространства",
         ui_page_system,
+        label_en="Sync space settings opened",
         details=(
             "Карандаш рядом с пространством не создаёт и не переименовывает namespace. "
             "Он открывает именно Sync-настройки выбранного пространства.\n\n"
@@ -157,6 +174,16 @@ async def test_sync_complete_service_guide(
             "канала, когда backend и LiveKit egress настроены.\n\n"
             "Эти значения работают как дефолты пространства; у конкретного канала их "
             "можно переопределить в настройках канала."
+        ),
+        details_en=(
+            "The pencil next to the space does not create or rename the namespace. "
+            "It opens Sync settings for the selected space.\n\n"
+            "- «Auto-transcribe voice messages» enables STT for new voice messages "
+            "in channels of this space.\n"
+            "- «Speech from calls into the feed» publishes speech segments from call participants "
+            "into the channel feed when the backend and LiveKit egress are configured.\n\n"
+            "These values act as space defaults; a specific channel can override them "
+            "in channel settings."
         ),
     )
     for index in range(2):
@@ -172,6 +199,7 @@ async def test_sync_complete_service_guide(
     await scenario.step(
         "Открыта форма создания канала",
         ui_page_system,
+        label_en="Channel creation form opened",
         details=(
             "Канал — основная рабочая единица Sync. В форме есть:\n\n"
             "- «Название» — человекочитаемое имя канала в сайдбаре и карточках;\n"
@@ -182,6 +210,16 @@ async def test_sync_complete_service_guide(
             "Если флаги включены и на пространстве, и на канале, итоговое поведение "
             "канала видно пользователю без обращения к API."
         ),
+        details_en=(
+            "A channel is the main working unit in Sync. The form includes:\n\n"
+            "- «Name» — the human-readable channel name in the sidebar and cards;\n"
+            "- «Members» — colleagues you can add to the channel right away;\n"
+            "- «Private channel» — access only for invited users;\n"
+            "- «Auto-transcribe voice messages» — STT for voice messages in this channel;\n"
+            "- «Speech from calls into the feed» — publish speech from calls directly into the chat.\n\n"
+            "If flags are enabled on both the space and the channel, the final channel behavior "
+            "is visible to the user without calling the API."
+        ),
     )
     await create_modal.locator("input.field-pill-input").first.fill(channel_name)
     # В форме создания три переключателя: private, transcribe, speech-to-chat.
@@ -190,10 +228,16 @@ async def test_sync_complete_service_guide(
     await scenario.step(
         "Заполнены название и параметры канала",
         ui_page_system,
+        label_en="Channel name and options filled in",
         details=(
             "Перед созданием канала полезно сразу включить нужные флаги. "
             "Так команда не будет искать эти настройки после первого звонка или "
             "после первого голосового сообщения."
+        ),
+        details_en=(
+            "Before creating a channel it helps to enable the needed flags right away. "
+            "That way the team will not hunt for these settings after the first call or "
+            "after the first voice message."
         ),
     )
     await sync_e2e_click_platform_button(create_modal, "Создать", "Create")
@@ -205,6 +249,7 @@ async def test_sync_complete_service_guide(
     await scenario.step(
         "Канал создан и открыт",
         ui_page_system,
+        label_en="Channel created and opened",
         details=(
             "Открытый канал состоит из шапки, ленты и композера.\n\n"
             "- В шапке видны аватар, название, подзаголовок, кнопки звонка, видео, "
@@ -212,6 +257,14 @@ async def test_sync_complete_service_guide(
             "- Лента показывает сообщения, даты, статусы доставки, реакции и закрепы.\n"
             "- Композер снизу отправляет текст, файлы, голосовые, упоминания и ответы "
             "в тред."
+        ),
+        details_en=(
+            "An open channel consists of a header, feed, and composer.\n\n"
+            "- The header shows the avatar, name, subtitle, call, video, settings buttons, "
+            "and a menu of extra actions.\n"
+            "- The feed shows messages, dates, delivery status, reactions, and pins.\n"
+            "- The composer at the bottom sends text, files, voice messages, mentions, and "
+            "thread replies."
         ),
     )
 
@@ -232,11 +285,17 @@ async def test_sync_complete_service_guide(
     await scenario.step(
         "Отправлено первое сообщение",
         ui_page_system,
+        label_en="First message sent",
         details=(
             "Текстовое сообщение уходит через realtime-команду Sync и сразу появляется "
             "в ленте. Для пользователя это обычный чат, но технически событие также "
             "обновляет превью канала, дату последнего сообщения и unread-состояние "
             "у других участников."
+        ),
+        details_en=(
+            "A text message goes through a Sync realtime command and appears in the feed right away. "
+            "For the user it is a normal chat, but technically the event also updates the channel "
+            "preview, last message date, and unread state for other members."
         ),
     )
 
@@ -252,6 +311,7 @@ async def test_sync_complete_service_guide(
     await scenario.step(
         "Открыт popup упоминаний",
         ui_page_system,
+        label_en="Mention popup opened",
         details=(
             "Упоминание начинается с символа `@`. Popup ищет участников компании, "
             "а после выбора вставляет технический user_id. В ленте пользователь "
@@ -259,6 +319,13 @@ async def test_sync_complete_service_guide(
             "участников компании.\n\n"
             "Упоминание важно не только визуально: backend валидирует участника канала "
             "и отправляет отдельное mention-уведомление."
+        ),
+        details_en=(
+            "A mention starts with `@`. The popup searches company members, "
+            "and after selection inserts the technical user_id. In the feed the user "
+            "sees a normal name because Sync resolves the id through the company member list.\n\n"
+            "Mentions matter beyond visuals: the backend validates the channel member "
+            "and sends a separate mention notification."
         ),
     )
     await member_btn.click()
@@ -274,9 +341,14 @@ async def test_sync_complete_service_guide(
     await scenario.step(
         "Сообщение с упоминанием появилось в ленте",
         ui_page_system,
+        label_en="Message with mention appeared in the feed",
         details=(
             "После отправки упоминание выглядит как имя человека, а не как `@user_id`. "
             "По клику на такое имя открывается карточка профиля и общие каналы."
+        ),
+        details_en=(
+            "After sending, the mention looks like a person's name, not `@user_id`. "
+            "Clicking that name opens the profile card and shared channels."
         ),
     )
 
@@ -302,11 +374,18 @@ async def test_sync_complete_service_guide(
     await scenario.step(
         "Отправлено сообщение с изображением",
         ui_page_system,
+        label_en="Message with image sent",
         details=(
             "Кнопка вложения загружает файл в файловый backend и добавляет его в "
             "сообщение как контент-блок. Для изображений Sync показывает превью, "
             "для документов — строку файла со скачиванием. Подпись сообщения остаётся "
             "обычным текстовым блоком."
+        ),
+        details_en=(
+            "The attachment button uploads the file to the file backend and adds it to "
+            "the message as a content block. Sync shows a preview for images "
+            "and a file row with download for documents. The message caption remains "
+            "a normal text block."
         ),
     )
 
@@ -314,6 +393,7 @@ async def test_sync_complete_service_guide(
     await scenario.step(
         "Открыто меню сообщения",
         ui_page_system,
+        label_en="Message menu opened",
         details=(
             "Контекстное меню открывается правым кликом по сообщению. В нём есть "
             "быстрые реакции и действия:\n\n"
@@ -325,6 +405,17 @@ async def test_sync_complete_service_guide(
             "- «Закрепить» — добавляет сообщение в верхнюю полоску закрепов;\n"
             "- «Удалить» — доступно для своих сообщений."
         ),
+        details_en=(
+            "The context menu opens with a right click on a message. It includes "
+            "quick reactions and actions:\n\n"
+            "- «Reply» — enables reply mode in the composer;\n"
+            "- «Open thread» — creates or opens a discussion branch;\n"
+            "- «Edit» — available for your own text messages;\n"
+            "- «Copy» — copies the text;\n"
+            "- «Forward» — opens destination channel selection;\n"
+            "- «Pin» — adds the message to the top pin strip;\n"
+            "- «Delete» — available for your own messages."
+        ),
     )
     await _click_context_item(ui_page_system, "Закрепить", "Pin")
     await expect(ui_page_system.locator("sync-pin-strip .row")).to_be_visible(
@@ -333,10 +424,16 @@ async def test_sync_complete_service_guide(
     await scenario.step(
         "Сообщение закреплено",
         ui_page_system,
+        label_en="Message pinned",
         details=(
             "Закрепы хранятся на канале. Полоска сверху показывает превью текущего "
             "закреплённого сообщения и счётчик. Клик по полоске прокручивает ленту "
             "к закрепу; если закрепов несколько, переход идёт по кругу."
+        ),
+        details_en=(
+            "Pins are stored on the channel. The strip at the top shows a preview of the current "
+            "pinned message and a counter. Clicking the strip scrolls the feed "
+            "to the pin; if there are several pins, navigation cycles through them."
         ),
     )
 
@@ -353,10 +450,16 @@ async def test_sync_complete_service_guide(
     await scenario.step(
         "Открыт тред и отправлен ответ",
         ui_page_system,
+        label_en="Thread opened and reply sent",
         details=(
             "Тред — боковая панель справа от основной ленты. Он нужен, когда обсуждение "
             "не должно засорять общий канал. Ответы внутри треда связаны с корневым "
             "сообщением, но основной чат остаётся доступен."
+        ),
+        details_en=(
+            "A thread is a side panel to the right of the main feed. Use it when a discussion "
+            "should not clutter the shared channel. Replies inside the thread are tied to the root "
+            "message, but the main chat stays available."
         ),
     )
     await thread_drawer.locator("button.close").click()
@@ -368,6 +471,7 @@ async def test_sync_complete_service_guide(
     await scenario.step(
         "Открыты настройки канала",
         ui_page_system,
+        label_en="Channel settings opened",
         details=(
             "Настройки канала отличаются от настроек пространства. Здесь меняются "
             "локальные параметры конкретного канала:\n\n"
@@ -378,6 +482,17 @@ async def test_sync_complete_service_guide(
             "- список участников и кнопка добавления новых участников.\n\n"
             "Если пользователь не видит канал в сайдбаре, первым делом проверьте, "
             "добавлен ли он в участники канала."
+        ),
+        details_en=(
+            "Channel settings differ from space settings. Here you change "
+            "local parameters for a specific channel:\n\n"
+            "- name and avatar;\n"
+            "- «Do not disturb» for notifications;\n"
+            "- auto-transcription of voice messages in this channel only;\n"
+            "- «speech from calls into the feed» for this channel only;\n"
+            "- member list and a button to add new members.\n\n"
+            "If a user does not see the channel in the sidebar, first check "
+            "whether they are added as a channel member."
         ),
     )
     await sync_e2e_click_platform_button(settings_modal, "Сохранить", "Save")
@@ -410,9 +525,15 @@ async def test_sync_complete_service_guide(
     await scenario.step(
         "Открыта карточка профиля участника",
         ui_page_system,
+        label_en="Member profile card opened",
         details=(
             "Профиль открывается из аватара отправителя или из `@mention`. В карточке "
             "видно имя участника и общие каналы. Это быстрый способ понять, где ещё "
             "вы пересекаетесь с человеком, и перейти в нужный канал без ручного поиска."
+        ),
+        details_en=(
+            "The profile opens from the sender avatar or from `@mention`. The card "
+            "shows the member name and shared channels. It is a quick way to see where else "
+            "you overlap with someone and jump to the right channel without manual search."
         ),
     )

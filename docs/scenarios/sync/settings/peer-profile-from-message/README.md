@@ -4,8 +4,8 @@
 
 ## Шаг 1. В канал добавлен второй участник
 
-![В канал добавлен второй участник](screenshots/001.png)
+![В канал добавлен второй участник](peer-profile-from-message--01-v-kanal-dobavlen-vtoroy-uchastnik.png)
 
 ## Шаг 2. Сообщение от второго участника отправлено через API
 
-![Сообщение от второго участника отправлено через API](screenshots/002.png)
+![Сообщение от второго участника отправлено через API](peer-profile-from-message--02-soobshchenie-ot-vtorogo-uchastnika-otpravleno-cherez-api.png)

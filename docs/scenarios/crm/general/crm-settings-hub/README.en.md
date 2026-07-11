@@ -1,11 +1,11 @@
-# NetWorkle: хаб настроек
+# NetWorkle: settings hub
 
-Переход на /crm/settings и проверка отображения settings-hub-page с карточками.
+Navigate to /crm/settings and verify settings-hub-page displays with cards.
 
-## Step 1. Открыт раздел настроек NetWorkle
+## Step 1. NetWorkle settings section opened
 
-![Открыт раздел настроек NetWorkle](screenshots/001.png)
+![NetWorkle settings section opened](crm-settings-hub--01-otkryt-razdel-nastroek-networkle.png)
 
-## Step 2. Хаб настроек NetWorkle отображен с карточками
+## Step 2. NetWorkle settings hub is displayed with cards
 
-![Хаб настроек NetWorkle отображен с карточками](screenshots/002.png)
+![NetWorkle settings hub is displayed with cards](crm-settings-hub--02-khab-nastroek-networkle-otobrazhen-s-kartochkami.png)

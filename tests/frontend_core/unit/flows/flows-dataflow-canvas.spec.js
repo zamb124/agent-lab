@@ -3,15 +3,22 @@ import {
     hasControlPath,
     buildDataWires,
     buildLineageSet,
+    buildLineageSetFromWireKeys,
+    chipRefKey,
+    chipRefKeysForWireKeys,
+    chipRefsForWire,
     countNodeDataflowProblems,
     aggregateDataflowIssues,
+    dataWireKey,
     dataflowChipAnchor,
     dataflowChipCenterY,
     dataflowNodeChipLayout,
+    resolveChipStatePaths,
     resolveDataWireEndpoints,
     dataWirePathFor,
     dataflowInputChipAnchorX,
     dataflowOutputChipAnchorX,
+    wiresForChipHover,
     DATAFLOW_CHIP_INSET,
     DATAFLOW_CHIP_ZONE_W,
 } from '../../../../apps/flows/ui/_helpers/flows-dataflow-canvas.js';
@@ -281,5 +288,126 @@ describe('flows-dataflow-canvas helpers', () => {
         expect(issues).to.have.length(2);
         expect(issues[0].severity).to.equal('error');
         expect(issues[1].severity).to.equal('warning');
+    });
+
+    it('dataWireKey matches buildDataWires dedupe key', () => {
+        const wire = {
+            from: 'code_1',
+            to: 'llm_1',
+            label: 'topic',
+            sourceLabel: 'topic',
+            targetParam: 'topic',
+        };
+        expect(dataWireKey(wire)).to.equal('code_1\u0000llm_1\u0000topic\u0000topic');
+    });
+
+    it('wiresForChipHover highlights all wires for the same state path (fan-out)', () => {
+        const dataflowNodes = {
+            code_1: {
+                canvas: {
+                    outputs: [
+                        { label: 'topic', type: 'string' },
+                        { label: 'meta', type: 'object' },
+                    ],
+                    inputs: [],
+                },
+            },
+            llm_1: {
+                input_mapping: [
+                    {
+                        target: 'topic',
+                        source_kind: 'state',
+                        source_path: 'topic',
+                        producers: ['code_1'],
+                    },
+                ],
+                canvas: {
+                    inputs: [{ label: 'topic', target: 'topic', producer_node: 'code_1' }],
+                    outputs: [],
+                },
+            },
+            mcp_1: {
+                input_mapping: [
+                    {
+                        target: 'topic',
+                        source_kind: 'state',
+                        source_path: 'topic',
+                        producers: ['code_1'],
+                    },
+                ],
+                canvas: {
+                    inputs: [{ label: 'topic', target: 'topic', producer_node: 'code_1' }],
+                    outputs: [],
+                },
+            },
+        };
+        const graphNodes = { code_1: {}, llm_1: {}, mcp_1: {} };
+        const wires = buildDataWires(dataflowNodes, graphNodes);
+        expect(wires).to.have.length(2);
+
+        const topicOutKeys = wiresForChipHover(wires, { nodeId: 'code_1', side: 'out', index: 0 }, dataflowNodes);
+        expect(topicOutKeys.size).to.equal(2);
+        expect(topicOutKeys.has(dataWireKey(wires[0]))).toBe(true);
+        expect(topicOutKeys.has(dataWireKey(wires[1]))).toBe(true);
+
+        const topicInKeys = wiresForChipHover(wires, { nodeId: 'mcp_1', side: 'in', index: 0 }, dataflowNodes);
+        expect(topicInKeys).toEqual(topicOutKeys);
+
+        const metaOutKeys = wiresForChipHover(wires, { nodeId: 'code_1', side: 'out', index: 1 }, dataflowNodes);
+        expect(metaOutKeys.size).to.equal(0);
+
+        expect(resolveChipStatePaths({ nodeId: 'llm_1', side: 'in', index: 0 }, dataflowNodes, wires)).toEqual(
+            new Set(['topic']),
+        );
+    });
+
+    it('wiresForChipHover returns empty set for chip without state path', () => {
+        const dataflowNodes = {
+            code_1: {
+                canvas: {
+                    outputs: [{ label: 'topic', type: 'string' }],
+                    inputs: [],
+                },
+            },
+            llm_1: {
+                input_mapping: [{
+                    target: 'topic',
+                    source_kind: 'state',
+                    source_path: 'topic',
+                    producers: ['code_1'],
+                }],
+                canvas: {
+                    inputs: [{ label: 'topic', target: 'topic', producer_node: 'code_1' }],
+                    outputs: [],
+                },
+            },
+        };
+        const graphNodes = { code_1: {}, llm_1: {} };
+        const wires = buildDataWires(dataflowNodes, graphNodes);
+        const noWireKeys = wiresForChipHover(wires, { nodeId: 'code_1', side: 'out', index: 99 }, dataflowNodes);
+        expect(noWireKeys.size).to.equal(0);
+    });
+
+    it('chipRefsForWire returns endpoint chip indices', () => {
+        const wire = {
+            from: 'code_1',
+            to: 'llm_1',
+            label: 'topic',
+            sourceLabel: 'topic',
+            targetParam: 'topic',
+        };
+        const dataflowNodes = {
+            code_1: { canvas: { outputs: [{ label: 'topic', type: 'string' }], inputs: [] } },
+            llm_1: { canvas: { inputs: [{ label: 'topic', target: 'topic', producer_node: 'code_1' }], outputs: [] } },
+        };
+        const refs = chipRefsForWire(wire, dataflowNodes);
+        expect(refs).to.deep.equal([
+            { nodeId: 'code_1', side: 'out', index: 0 },
+            { nodeId: 'llm_1', side: 'in', index: 0 },
+        ]);
+        expect(chipRefKeysForWireKeys(new Set([dataWireKey(wire)]), [wire], dataflowNodes)).toEqual(
+            new Set([chipRefKey(refs[0]), chipRefKey(refs[1])]),
+        );
+        expect(buildLineageSetFromWireKeys(new Set([dataWireKey(wire)]), [wire])?.has('llm_1')).toBe(true);
     });
 });

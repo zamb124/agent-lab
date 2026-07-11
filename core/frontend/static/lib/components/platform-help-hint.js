@@ -10,6 +10,7 @@
 import { html, css } from '../../assets/js/lit/lit.min.js';
 import { PlatformElement } from '../platform-element/index.js';
 import { nextModalLayerZIndex } from '../utils/modal-z-stack.js';
+import { resolveDocumentationHref } from '../utils/documentation-url.js';
 
 const PORTAL_STYLE_ID = 'platform-help-hint-portal-styles-v2';
 const PORTAL_GAP_PX = 8;
@@ -197,6 +198,7 @@ export class PlatformHelpHint extends PlatformElement {
         this._onPortalBubbleLeave = () => this._scheduleClose();
         this._onPortalBubbleFocusIn = () => this._cancelClose();
         this._onPortalBubbleFocusOut = (e) => this._onPortalFocusOut(e);
+        this._localeSelect = this.select((s) => s.i18n.locale);
     }
 
     disconnectedCallback() {
@@ -358,7 +360,9 @@ export class PlatformHelpHint extends PlatformElement {
         if (this._hasDocLink()) {
             const link = document.createElement('a');
             link.className = 'platform-help-hint-portal-link';
-            link.href = this.docHref.trim();
+            link.href = resolveDocumentationHref(this.docHref.trim(), {
+                locale: this._localeSelect.value,
+            });
             link.target = '_blank';
             link.rel = 'noopener noreferrer';
             link.textContent = this._textValue(this.docLabel) || 'Open documentation';

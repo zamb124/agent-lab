@@ -1,19 +1,19 @@
-# Flows: создание flow
+# Flows: creating a flow
 
-Пошаговая инструкция для обычного пользователя: открыть Flows, выбрать шаблон, заполнить понятные поля и попасть в редактор с готовой канвой.
+A step-by-step guide for a regular user: open Flows, pick a template, fill in the fields, and land in the editor with a ready canvas.
 
-## Step 1. Открываем Flows. Это список ваших flow: здесь можно найти готового агента или создать нового.
+## Step 1. Open Flows. This is your flow list where you can find an existing agent or create a new one.
 
-![Открываем Flows. Это список ваших flow: здесь можно найти готового агента или создать нового.](screenshots/001.png)
+![Open Flows. This is your flow list where you can find an existing agent or create a new one.](create-flow--01-otkryvaem-flows-eto-spisok-vashikh-flow-zdes-mozhno-nayti.png)
 
-## Step 2. Нажимаем плюс. Открывается мастер создания: сначала выбираем тип будущего flow.
+## Step 2. Click the plus button. The creation wizard opens: first you choose the type of flow.
 
-![Нажимаем плюс. Открывается мастер создания: сначала выбираем тип будущего flow.](screenshots/002.png)
+![Click the plus button. The creation wizard opens: first you choose the type of flow.](create-flow--02-nazhimaem-plyus-otkryvaetsya-master-sozdaniya-snachala-vybiraem.png)
 
-## Step 3. Заполняем ID, название и описание. ID нужен системе, а название и описание видит человек.
+## Step 3. Fill in ID, name, and description. The ID is for the system; the name and description are for people.
 
-![Заполняем ID, название и описание. ID нужен системе, а название и описание видит человек.](screenshots/003.png)
+![Fill in ID, name, and description. The ID is for the system; the name and description are for people.](create-flow--03-zapolnyaem-id-nazvanie-i-opisanie-id-nuzhen-sisteme-a-nazvanie.png)
 
-## Step 4. После создания мы сразу попадаем в редактор. На канве уже есть две ноды: Start и End.
+## Step 4. After creation you land in the editor. The canvas already has two nodes: Start and End.
 
-![После создания мы сразу попадаем в редактор. На канве уже есть две ноды: Start и End.](screenshots/004.png)
+![After creation you land in the editor. The canvas already has two nodes: Start and End.](create-flow--04-posle-sozdaniya-my-srazu-popadaem-v-redaktor-na-kanve-uzhe-est.png)

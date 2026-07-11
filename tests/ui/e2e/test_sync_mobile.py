@@ -18,6 +18,11 @@ from tests.ui.scenario_doc import ScenarioRecorder
         "При ширине viewport как на телефоне Sync показывает список чатов прямо на главном экране, "
         "без дополнительного раскрытия сайдбара."
     ),
+    title_en="Sync: mobile chat list",
+    description_en=(
+        "At a phone-like viewport width Sync shows the chat list directly on the main screen "
+        "without an extra sidebar expand step."
+    ),
 )
 @pytest.mark.asyncio
 @pytest.mark.e2e
@@ -31,11 +36,19 @@ async def test_mobile_opens_sidebar_from_header_menu(
 
     await sync_ui.open(ui_page_system)
     await sync_ui.expect_shell(ui_page_system)
-    await scenario.step("Sync на узком viewport", ui_page_system)
+    await scenario.step(
+        "Sync на узком viewport",
+        ui_page_system,
+        label_en="Sync on a narrow viewport",
+    )
 
     mobile_list = ui_page_system.locator("sync-shell-page sync-chat-list")
     await expect(mobile_list).to_be_visible(timeout=30_000)
     await expect(
         mobile_list.locator("input.sync-chat-list-search-input")
     ).to_be_visible(timeout=30_000)
-    await scenario.step("Список чатов доступен без лишнего клика", ui_page_system)
+    await scenario.step(
+        "Список чатов доступен без лишнего клика",
+        ui_page_system,
+        label_en="Chat list is available without an extra click",
+    )

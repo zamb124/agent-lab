@@ -1,15 +1,15 @@
-# Sync: реакция и редактирование своего сообщения
+# Sync: react to and edit your own message
 
-Сообщение отправляется из UI; реакция ставится через API; после перезагрузки видна метка реакции; редактирование текста выполняется в UI.
+A message is sent from the UI; a reaction is added via API; after reload the reaction badge is visible; text editing is done in the UI.
 
-## Step 1. Сообщение отправлено
+## Step 1. Message sent
 
-![Сообщение отправлено](screenshots/001.png)
+![Message sent](reaction-edit-message--01-soobshchenie-otpravleno.png)
 
-## Step 2. Поставлена реакция
+## Step 2. Reaction added
 
-![Поставлена реакция](screenshots/002.png)
+![Reaction added](reaction-edit-message--02-postavlena-reaktsiya.png)
 
-## Step 3. Текст сообщения изменён
+## Step 3. Message text changed
 
-![Текст сообщения изменён](screenshots/003.png)
+![Message text changed](reaction-edit-message--03-tekst-soobshcheniya-izmenyon.png)

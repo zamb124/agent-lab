@@ -4,12 +4,12 @@
 
 ## Шаг 1. Сообщение отправлено
 
-![Сообщение отправлено](screenshots/001.png)
+![Сообщение отправлено](reaction-edit-message--01-soobshchenie-otpravleno.png)
 
 ## Шаг 2. Поставлена реакция
 
-![Поставлена реакция](screenshots/002.png)
+![Поставлена реакция](reaction-edit-message--02-postavlena-reaktsiya.png)
 
 ## Шаг 3. Текст сообщения изменён
 
-![Текст сообщения изменён](screenshots/003.png)
+![Текст сообщения изменён](reaction-edit-message--03-tekst-soobshcheniya-izmenyon.png)

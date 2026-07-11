@@ -1,138 +1,336 @@
 ---
 name: documentator
 description: >
-  Документатор Платформы: Playwright tests/ui/e2e, @pytest.mark.scenario,
-  docs/scenarios, taxonomy, ScenarioRecorder, make test-ui-doc. Использовать при
-  написании E2E-инструкций, scenario README, office/sync/flows/embed сценариев.
+  Документатор Платформы для пользовательских UI-инструкций из Playwright
+  tests/ui/e2e: @pytest.mark.scenario, ScenarioRecorder, docs/scenarios,
+  taxonomy и make test-ui-doc. Использовать при создании или изменении
+  сценарных E2E-тестов, README-инструкций и сценариев для обучающих видео.
+  Каждый @pytest.mark.scenario трактовать как понятный первокурснику учебный
+  маршрут длительностью 1–2 минуты с целью, решаемой проблемой, объяснёнными
+  шагами, обязательной демонстрацией результата и кратким выводом. Скриншоты
+  хранить рядом с README и давать им стабильные смысловые имена.
 ---
 
 # Documentator — Платформа
 
-## База
+## Непереговорный контракт
 
-Полный канон: [`testing.mdc`](../../rules/testing.mdc) § UI E2E, [`tests/ui/README.md`](../../../tests/ui/README.md), [`doc-sources.md`](../../../doc-sources.md). Этот skill — **операционные решения**, которые легко забыть.
+Считать каждый тест с `@pytest.mark.scenario` **исходником публичной пользовательской инструкции**, а не просто E2E-проверкой. `ScenarioRecorder` превращает метаданные теста, `scenario.step(...)` и скриншоты в `docs/scenarios/**/README.md`, поэтому текст в тесте увидит конечный пользователь и по нему будет записано обучающее видео.
 
-**Сюда:** Playwright E2E в `tests/ui/e2e/`, `@pytest.mark.scenario` → `docs/scenarios/` через [`ScenarioRecorder`](../../../tests/ui/scenario_doc.py).
+Писать для человека, который впервые открыл продукт и знает его на уровне студента первого курса: уважительно, простыми предложениями, без нерасшифрованного внутреннего жаргона и без предположения, что читатель знает устройство платформы.
 
-**Не сюда:** unit JS (`tests/frontend_core/`), engine (`tests/ui/engine/`) — только smoke при необходимости.
+Инструкция считается готовой, только если в ней есть все пять частей:
+
+1. **Для чего нужна инструкция** — какую пользовательскую цель человек достигнет.
+2. **Какие проблемы она решает** — в какой практической ситуации этот маршрут полезен и какую трудность снимает.
+3. **Пошаговый маршрут** — 4–7 осмысленных пользовательских этапов; у каждого объяснено, что сделать, зачем это нужно и какой результат должен быть виден.
+4. **Демонстрация результата** — последний шаг показывает созданный или изменённый результат в реальном пользовательском контексте и подтверждает его Playwright-ассертом.
+5. **Краткий вывод** — 1–2 предложения о том, что пользователь теперь умеет и где применит результат.
+
+Отсутствие любой части — блокирующий дефект. Не объявлять работу завершённой и не считать зелёный тест достаточным доказательством качества.
+
+## Отделять инструкцию от технического E2E
+
+`@pytest.mark.scenario` — обещание опубликовать самостоятельный учебный материал.
+
+| Проверяемый маршрут | Как оформить |
+|---|---|
+| Пользователь решает практическую задачу и получает видимый результат | E2E с `@pytest.mark.scenario` и `ScenarioRecorder` |
+| Проверяется shell, selector, `href`, редирект, загрузка SPA или наличие технического элемента | Обычный E2E без `@pytest.mark.scenario`; не публиковать как инструкцию |
+| Полезный маршрут укладывается меньше чем в 4 содержательных шага | Объединить с ближайшим пользовательским действием в законченный сценарий или оставить обычным E2E |
+| Маршрут требует больше 7 шагов или дольше 2 минут | Разделить на несколько самостоятельных инструкций с отдельным результатом у каждой |
+
+Запрещено публиковать сценарии вида «SPA открыт → оболочка видна», «ссылка содержит `/agent`», «модальное окно отображается». Это технические проверки, а не ответ пользователю на вопрос «как решить задачу».
+
+## Сначала спроектировать сценарий
+
+До написания Playwright-кода зафиксировать карточку сценария:
+
+```text
+Пользовательская цель: что человек сможет сделать после инструкции?
+Практическая проблема: почему без инструкции это трудно или непонятно?
+Предусловия: где находится пользователь и что уже должно быть доступно?
+Ожидаемый результат: какой объект, состояние или эффект получится?
+Шаги: 4–7 этапов от входной точки до результата.
+Демонстрация: на каком экране однозначно видно, что задача решена?
+Вывод: что пользователь научился делать?
+```
+
+Если нельзя кратко и конкретно заполнить цель, проблему, демонстрацию и вывод, не ставить маркер `scenario`: сначала найти полноценную пользовательскую задачу.
+
+## Как части инструкции отображаются в tests/ui
+
+| Часть будущей инструкции | Источник в тесте | Жёсткое требование |
+|---|---|---|
+| Для чего | `description` маркера | Абзац с префиксом `**Для чего:**` |
+| Какие проблемы решает | `description` маркера | Абзац с префиксом `**Какие проблемы решает:**` |
+| Что получится | `description` маркера | Короткий абзац `**Результат:**` |
+| Пошаговый маршрут | `label` и `details` каждого `scenario.step` | 4–7 шагов; `details` обязателен у каждого |
+| Имя скриншота | `screenshot_name` каждого `scenario.step` | Короткое kebab-case имя состояния; без номера, префикса и `.png` |
+| Демонстрация | Последний `scenario.step(..., page)` | Реальный результат на экране, сильный `expect`, итоговый скриншот |
+| Краткий вывод | `details` последнего шага | Явный фрагмент `**Итог.**` в 1–2 предложениях |
+
+У `ScenarioRecorder` нет отдельного поля `conclusion`. Поэтому писать вывод в `details` последнего демонстрационного шага и менять исходный тест, а не сгенерированный README вручную.
+
+## Обязательный шаблон
+
+Использовать этот каркас для каждого нового `@pytest.mark.scenario`; адаптировать содержание, но не удалять смысловые блоки:
+
+```python
+@pytest.mark.scenario(
+    service="sync",
+    tag="chat",
+    doc_slug="send-message-in-channel",
+    title="Как отправить сообщение в канал Sync",
+    description=(
+        "**Для чего:** эта инструкция поможет отправить сообщение коллегам "
+        "в общем канале Sync.\n\n"
+        "**Какие проблемы решает:** вы узнаете, где выбрать нужный канал, "
+        "куда ввести текст и как убедиться, что сообщение отправлено.\n\n"
+        "**Результат:** сообщение появится в ленте выбранного канала."
+    ),
+)
+@pytest.mark.asyncio
+@pytest.mark.e2e
+@pytest.mark.timeout(120)
+async def test_user_sends_message(
+    scenario: ScenarioRecorder,
+    sync_ui: AppUI,
+    page: Page,
+    unique_id: str,
+) -> None:
+    # Технический seed и подготовка выполняются до первого документируемого шага.
+
+    # Выполнить пользовательское действие, проверить видимое состояние и только
+    # затем зафиксировать экран с текстом, по которому человек повторит действие.
+    await expect(page.locator("sync-channel-page")).to_be_visible()
+    await scenario.step(
+        "Откройте нужный канал",
+        page,
+        screenshot_name="channel-opened",
+        details=(
+            "Выберите канал в левом меню. Это нужно, чтобы сообщение попало "
+            "в правильное обсуждение. После выбора в центре появятся название "
+            "канала, история сообщений и поле ввода."
+        ),
+    )
+
+    # ...ещё 2–5 содержательных этапов...
+
+    await expect(page.get_by_text(message_text, exact=True)).to_be_visible()
+    await scenario.step(
+        "Проверьте отправленное сообщение",
+        page,
+        screenshot_name="message-visible-in-channel",
+        details=(
+            "**Демонстрация результата.** Найдите свой текст в ленте выбранного "
+            "канала. Видимое сообщение подтверждает, что оно отправлено и доступно "
+            "участникам.\n\n"
+            "**Итог.** Теперь вы умеете выбрать канал, отправить сообщение и "
+            "самостоятельно проверить результат."
+        ),
+    )
+```
+
+## Правила каждого шага
+
+Каждый `scenario.step` обязан:
+
+1. Описывать один понятный пользовательский этап, а не внутреннее состояние приложения.
+2. Иметь заголовок в форме прямого действия: «Откройте», «Выберите», «Введите», «Сохраните», «Проверьте».
+3. Передавать `page`, чтобы у шага был скриншот. Снимок делать после действия и после `expect`, подтверждающего нужное состояние.
+4. Передавать короткий непустой `screenshot_name` в kebab-case, описывающий именно состояние на снимке: `channel-opened`, `message-visible`, `flow-run-result`. Не включать `doc_slug`, номер шага, путь или `.png` — движок добавит их сам.
+5. Передавать непустой `details`, который отвечает на три вопроса:
+   - что именно нажать, выбрать или ввести;
+   - зачем пользователь делает это сейчас;
+   - что должно появиться или измениться после действия.
+6. Называть элементы так, как они подписаны в интерфейсе, и указывать их расположение, если его нельзя понять без контекста.
+7. Не включать API seed, авторизационные cookie, `unique_id`, локаторы, ожидание shell и другой тестовый setup в пользовательские шаги.
+
+Не дробить инструкцию на снимок каждого клика. Объединять неразрывные микро-действия в один этап, но не смешивать в одном шаге разные пользовательские цели.
+
+Fallback из `label_en`/`label` существует только для совместимости со старыми тестами. В новом или изменяемом сценарии не полагаться на него: всегда задавать `screenshot_name` явно.
+
+## Обязательная демонстрация
+
+Последний шаг — не формальность и не повтор предыдущего скриншота. Он должен показать, что пользовательская задача действительно решена:
+
+- созданный объект открыть там, где им будут пользоваться;
+- изменённое значение показать после сохранения и повторного открытия, если это существенно;
+- отправленное сообщение показать в ленте;
+- запущенный flow показать вместе с наблюдаемым результатом выполнения;
+- загруженный документ показать в списке или viewer, а не только в форме загрузки.
+
+Перед последним `scenario.step` выполнить сильный Playwright-assert по пользовательскому результату. Проверка только видимости кнопки, формы, toast или shell не считается демонстрацией, если основной результат находится в другом месте.
+
+В `details` последнего шага обязательно использовать два явных фрагмента:
+
+```markdown
+**Демонстрация результата.** Что именно видно на экране и почему это доказывает успех.
+
+**Итог.** Что пользователь теперь умеет делать.
+```
+
+## Язык для первокурсника
+
+- Обращаться к пользователю на «вы» и использовать короткие прямые предложения.
+- Сначала называть действие, затем объяснять его смысл и ожидаемый эффект.
+- Не использовать слова `seed`, `shell`, `selector`, `locator`, `href`, `payload`, `namespace`, `runtime`, если это не термин самого интерфейса. Неизбежный термин объяснить при первом употреблении простыми словами.
+- Не описывать внутреннюю реализацию backend, realtime, Redis или API, если она не помогает пользователю принять решение в интерфейсе.
+- Не писать «очевидно», «просто», «как обычно» и не предполагать знание предыдущей инструкции.
+- Не использовать подписи в прошедшем времени вроде «Форма открыта» без объяснения, как её открыть и зачем она нужна.
+- Давать конкретные ориентиры: название раздела, подпись кнопки, положение элемента и видимый признак успеха.
+
+Инструкция должна быть самостоятельной: пользователь понимает цель, стартовую точку и результат, даже если открыл только этот README.
+
+## Хронометраж видео: 1–2 минуты
+
+Длительность относится к пользовательскому рассказу и демонстрации, а не к runtime pytest.
+
+- Проектировать 4–7 шагов.
+- Держать ориентир **140–260 слов** в `description` и всех `details` вместе.
+- После генерации пройти маршрут вслух с интерфейсом. Норма — **60–120 секунд**.
+- Если получается меньше 60 секунд, добавить недостающий контекст, объяснение причин и полноценную демонстрацию; не добавлять пустые фразы.
+- Если получается больше 120 секунд, разделить материал на две самостоятельные инструкции, у каждой оставить собственные цель, проблему, демонстрацию и вывод.
+
+## База механизма
+
+Полный технический канон: [`testing.mdc`](../../rules/testing.mdc) § UI E2E, [`tests/ui/README.md`](../../../tests/ui/README.md), [`doc-sources.md`](../../../doc-sources.md). Этот skill задаёт более строгий авторский стандарт поверх минимального технического gate.
+
+Путь данных:
+
+```text
+@pytest.mark.scenario + scenario.step(...)
+    → fixture scenario в tests/ui/conftest.py
+    → ScenarioRecorder.finalize()
+    → docs/scenarios/<service>/<tag>/<slug>/README*.md
+      + <slug>--<номер>-<screenshot_name>.png в том же каталоге
+    → check_scenario_docs_quality.py
+    → docs_prepare.py и опубликованная документация
+```
+
+`scripts/check_scenario_docs_quality.py` проверяет технический минимум, taxonomy, плоское размещение PNG и формат имени. Его успешный результат **не означает**, что учебный контракт этого skill выполнен.
 
 ## Команды
 
 | Команда | Назначение |
 |---|---|
-| `make test-up` | Postgres / Redis / MinIO — предусловие session HTTP |
-| `make test-ui` | Полный прогон; **всегда** `UI_E2E_USE_LVH_ME=1` ([`mk/test.mk`](../../../mk/test.mk)) |
-| `make test-ui-doc` | E2E + `check_scenario_docs_quality` + `make doc` |
-| `uv run pytest tests/ui/e2e/test_*.py -k ... -v --tb=short` | Точечный прогон |
+| `make test-up` | Поднять PostgreSQL, Redis, MinIO и HTTP-сервисы |
+| `make test-ui` | Полный E2E UI; всегда с `UI_E2E_USE_LVH_ME=1` через `mk/test.mk` |
+| `make test-ui-doc` | E2E, генерация README/скриншотов, quality gate и сборка docs |
+| `uv run pytest tests/ui/e2e/test_*.py -k ... -v --tb=short` | Точечно проверить изменённый сценарий |
 
-## Анатомия теста
+После точечного прогона обязательно открыть сгенерированные `README.md` и `README.en.md` как самостоятельные инструкции. Если текст слабый, менять `description`, `label` или `details` в тесте и генерировать заново; не чинить сгенерированный README вручную.
 
-```python
-@pytest.mark.scenario(
-    service="sync",           # ключ taxonomy
-    tag="chat",               # должен быть в taxonomy.yaml
-    doc_slug="send-message",  # kebab-case, уникален в service
-    title="Sync: …",
-    title_en="Sync: …",       # если есть — label_en у каждого step
-    description="…",
-)
-@pytest.mark.asyncio
-@pytest.mark.e2e
-@pytest.mark.timeout(120)     # complete guide — до 360
-async def test_…(
-    scenario: ScenarioRecorder,
-    sync_ui: AppUI,
-    page: Page,
-    unique_id: str,
-    auth_token_system: str,
-) -> None:
-    # 1. API seed (httpx + cookie), не page.evaluate(fetch)
-    # 2. await sync_ui.open(page); await sync_ui.expect_shell(page)
-    await scenario.step("Краткая подпись шага", page, label_en="Step label")
-    await expect(page.locator("sync-app")).to_be_visible()
-```
+## Технический паттерн теста
+
+**Порядок:** API seed → открыть shell → выполнить пользовательские действия → на каждом ключевом экране `expect` → `scenario.step(..., page, details=...)` → финальная демонстрация → итог.
 
 **Фикстуры:** `scenario`, `*_ui` (`flows_ui`, `office_ui`, …), `ui_page_system` / `ui_page_company2` / `ui_page_anonymous`, `auth_token_*`, `unique_id`. Гость: `ui_page_anonymous` без cookie.
 
-**Паттерн:** seed → open shell → действия → `scenario.step(..., page)` на ключевых экранах → `expect`. Эталоны: [`test_sync_complete_guide.py`](../../../tests/ui/e2e/test_sync_complete_guide.py), [`test_flows_editor_scenarios.py`](../../../tests/ui/e2e/test_flows_editor_scenarios.py).
+**Seed:** использовать `httpx` с auth cookie или готовый repo helper, а не `page.evaluate(fetch)`. Технически подготовленные данные не выдавать за действия пользователя.
 
-## AppUI, origins, auth
+**Эталоны механики:** [`test_sync_complete_guide.py`](../../../tests/ui/e2e/test_sync_complete_guide.py) показывает использование `details`; [`test_flows_api_console_docs.py`](../../../tests/ui/e2e/test_flows_api_console_docs.py) показывает двуязычные `details`. Не копировать их объём целиком: новый сценарий обязан укладываться в 1–2 минуты и 4–7 шагов.
 
-[`AppUI`](../../../tests/ui/harness.py) + реестр [`tests/ui/apps.py`](../../../tests/ui/apps.py): `port`, `spa_path`, `shell_selector`, `subdomain_prefix`.
+## Локализация
+
+У **каждого** `@pytest.mark.scenario` обязательны `title_en` и `description_en`. У **каждого** `scenario.step` — `label_en`; если есть `details=` — также `details_en`. Финальные `**Result demonstration.**` и `**Summary.**` — в `details_en` последнего шага.
+
+Не допускать русский fallback в `README.en.md`. После правок EN-метаданных без E2E: `uv run python scripts/regenerate_scenario_readme_en.py`.
+
+## AppUI, origins и auth
+
+[`AppUI`](../../../tests/ui/harness.py) и реестр [`tests/ui/apps.py`](../../../tests/ui/apps.py) задают `port`, `spa_path`, `shell_selector`, `subdomain_prefix`.
 
 | Режим | Host | Когда |
 |---|---|---|
 | `UI_E2E_USE_LVH_ME=1` | `system.lvh.me:900N` | `make test-ui`, subdomain-сервисы |
 | default | `system.localhost:900N` / `localhost:900N` | локальный pytest без env |
 
-**Cookies** [`browser_auth.py`](../../../tests/ui/browser_auth.py): `auth_token` на `localhost`, `system.localhost`, `company2.localhost`, **`.lvh.me`** — оба набора, иначе auth ломается при переключении режима.
+Cookies из [`browser_auth.py`](../../../tests/ui/browser_auth.py): `auth_token` на `localhost`, `system.localhost`, `company2.localhost` и `.lvh.me`.
 
-**Embed / cross-origin:** frontend API и embed script — **`http://localhost:9004`**, не `system.lvh.me` (CORS/cookie). External host page — `localhost`, не `127.0.0.1`.
+Для embed/cross-origin frontend API и embed script использовать `http://localhost:9004`; external host page — `localhost`, не `127.0.0.1`.
 
-**Тема:** session init script → light ([`conftest.py`](../../../tests/ui/conftest.py)).
+Тема задаётся session init script в [`conftest.py`](../../../tests/ui/conftest.py): документационные скриншоты должны оставаться в light theme.
 
-## Инфраструктура фикстур
+## Инфраструктура и helpers
 
-Порты = [`tests/fixtures/services.py`](../../../tests/fixtures/services.py).
+Порты задаёт [`tests/fixtures/services.py`](../../../tests/fixtures/services.py).
 
-| Сервис | Порт | `*_ui` | Зависимости / нюанс |
-|---|---|---|---|
-| flows | 9001 | `flows_ui` | `secrets_service` (9022) при `@var:` / external API в flow |
+| Сервис | Порт | UI fixture | Важный нюанс |
+|---|---:|---|---|
+| flows | 9001 | `flows_ui` | `secrets_service` при `@var:` и external API |
 | rag | 9002 | `rag_ui` | subdomain `system` |
 | crm | 9003 | `crm_ui` | subdomain `system` |
-| frontend | 9004 | `frontend_ui` | settings, agent CTA |
+| frontend | 9004 | `frontend_ui` | settings и agent CTA |
 | sync | 9005 | `sync_ui` | `taskiq_worker` для transcribe |
-| office | 9008 | `office_ui` | `X-Platform-Namespace`; дерево в sidebar, не отдельная explorer-страница |
+| office | 9008 | `office_ui` | `X-Platform-Namespace`; дерево в sidebar |
 
-Seed: **httpx + auth cookie** или repo helper ([`sync_e2e_helpers.py`](../../../tests/ui/e2e/sync_e2e_helpers.py)). Office API: `office_client_http`; RAG-сценарии — `rag_service`, `rag_worker`.
+Один helper-модуль на сервис: `tests/ui/e2e/<service>_e2e_helpers.py`. Выносить локаторы, seed и навигацию, чтобы тело теста читалось как пользовательский сценарий.
 
-## Helpers
-
-Один модуль на сервис: `tests/ui/e2e/<service>_e2e_helpers.py` — локаторы, seed, navigation. Префикс: `sync_e2e_*`, `flows_e2e_*`, `office_e2e_*`.
-
-- **Flows API:** edges `from_node`/`to_node`; code node — top-level `code`/`language`, не nested `config` ([`flows_e2e_helpers.py`](../../../tests/ui/e2e/flows_e2e_helpers.py)).
-- **Flows UI:** закрыть `flows-floating-panel[show-backdrop]` перед Publish.
-- **Office:** 4–7 `scenario.step` на инструкцию; namespace через API + init script/localStorage. Матрица: [`office_e2e_coverage_matrix.md`](../../../tests/ui/e2e/office_e2e_coverage_matrix.md).
-
-## Локаторы и assert
-
-- Ждать **shell** из registry: `flows-app`, `office-app`, `sync-app`, …
-- Custom elements: `platform-field`, `platform-button`, `platform-modal-stack`, `platform-bottom-sheet-stack`.
-- i18n: regex `(Открыть|Open)`, `(Сохранить|Save)` — не хардкод одного языка.
-- Sync: sidebar vs chat header — helpers различают контекст.
-- **Запрещено:** ослаблять assert «чтобы прошло»; `networkidle` как единственный sync; моки кроме platform MockLLM; `page.evaluate(fetch)` для setup.
-
-## Scenario → документация
-
-1. `tag` ∈ [`docs/scenarios/taxonomy.yaml`](../../../docs/scenarios/taxonomy.yaml) — иначе CI.
-2. `doc_slug` уникален внутри `service`; URL: `/documentation/scenarios/{service}/{doc_slug}/`.
-3. Минимум **2 шага + 1 скрин**; **Office — 4–7** шагов.
-4. `title_en` в маркере → `label_en` у **каждого** `scenario.step`.
-5. README: `## Шаг N.` / `## Step N.`; prose перед скрином — зачем шаг и что на экране.
-6. После добавления: `make test-ui-doc`.
+- Использовать сервисные префиксы helpers: `sync_e2e_*`, `flows_e2e_*`, `office_e2e_*`.
+- Flows API: edges `from_node`/`to_node`; code node — top-level `code`/`language`.
+- Flows UI: закрывать `flows-floating-panel[show-backdrop]` перед Publish.
+- Sync: helpers должны различать одноимённые элементы sidebar и шапки чата.
+- Office: namespace через API и init script/localStorage; API seed через `office_client_http`; для RAG подключать `rag_service` и `rag_worker`; матрица — [`office_e2e_coverage_matrix.md`](../../../tests/ui/e2e/office_e2e_coverage_matrix.md).
 
 ## Embed / ESM
 
-- Imports в embed-closure: только **relative** / `lit-shim`; `@platform/...` ловит [`scripts/check_embed_esm_closure.py`](../../../scripts/check_embed_esm_closure.py).
-- Fixture `embed_browser_http_stack_ready` зависит от `secrets_service` при flow с переменными.
-- Host page и API base — согласованный origin (`localhost:9004`).
+- В embed-closure разрешены только relative imports и `lit-shim`; `@platform/...` проверяет [`check_embed_esm_closure.py`](../../../scripts/check_embed_esm_closure.py).
+- `embed_browser_http_stack_ready` должен зависеть от `secrets_service`, если flow использует переменные.
+- Host page и API base должны использовать согласованный origin `localhost:9004`.
 
-## Чеклист перед merge
+## Локаторы и asserts
 
-- [ ] `tag` + `doc_slug` в taxonomy при `@pytest.mark.scenario`
-- [ ] helpers вынесены; тест читается как сценарий
-- [ ] session fixtures: `secrets_service`, `taskiq_worker`, `rag_worker` — по необходимости
-- [ ] `make lint` при правках `tests/ui`
-- [ ] целевой pytest или `make test-ui` зелёный
-- [ ] scenario — `make test-ui-doc`
+- Ждать shell из registry: `flows-app`, `office-app`, `sync-app`, …
+- Для custom elements учитывать `platform-field`, `platform-button`, `platform-modal-stack`, `platform-bottom-sheet-stack`.
+- Для i18n использовать regex `(Открыть|Open)`, `(Сохранить|Save)`, а не один язык.
+- В Sync использовать контекстные helpers для sidebar и шапки чата, а не неоднозначный text locator.
+- Запрещено ослаблять assert «чтобы прошло», использовать `networkidle` как единственный sync, добавлять моки кроме platform MockLLM и делать setup через `page.evaluate(fetch)`.
+- Последний assert должен доказывать пользовательский результат, а не только техническую готовность страницы.
+
+## Taxonomy и путь документации
+
+1. `tag` должен существовать в [`docs/scenarios/taxonomy.yaml`](../../../docs/scenarios/taxonomy.yaml).
+2. `doc_slug` — kebab-case и уникален внутри `service`.
+3. Репозиторий: `docs/scenarios/<service>/<tag>/<slug>/`.
+4. Публичный URL: `/documentation/scenarios/<service>/<slug>/`.
+5. README генерируется только из теста; ручные правки будут перезаписаны следующим прогоном.
+
+## Жёсткий gate перед завершением
+
+Не завершать задачу, пока не подтверждён каждый пункт:
+
+- [ ] Сценарий решает практическую пользовательскую задачу; технические smoke-проверки не помечены `scenario`.
+- [ ] `description` явно содержит `**Для чего:**`, `**Какие проблемы решает:**` и `**Результат:**`.
+- [ ] Есть 4–7 пользовательских шагов.
+- [ ] У каждого шага есть `page`, сильный предшествующий `expect` и непустой `details` с действием, причиной и видимым результатом.
+- [ ] У каждого шага задан понятный `screenshot_name`; итоговый файл имеет вид `<doc_slug>--<номер>-<screenshot_name>.png` и лежит рядом с README.
+- [ ] В каталоге инструкции нет папки `screenshots/`, числовых `001.png` и неиспользуемых PNG.
+- [ ] Технический setup не попал в пользовательский рассказ.
+- [ ] Последний шаг действительно демонстрирует итоговый объект или эффект.
+- [ ] Последний `details` содержит `**Демонстрация результата.**` и `**Итог.**`.
+- [ ] Текст понятен первокурснику без знания архитектуры проекта.
+- [ ] Маршрут занимает 60–120 секунд; ориентир текста — 140–260 слов.
+- [ ] При наличии `title_en` заполнены `description_en`, все `label_en` и все `details_en`.
+- [ ] Подключены нужные session fixtures (`secrets_service`, `taskiq_worker`, `rag_worker`) для выбранного маршрута.
+- [ ] Helpers вынесены, а тело теста читается как последовательность пользовательских действий.
+- [ ] После правок в `tests/ui` выполнен `make lint`.
+- [ ] Целевой E2E зелёный, скриншоты показывают нужные состояния.
+- [ ] Сгенерированные RU/EN README прочитаны целиком как самостоятельные инструкции.
+- [ ] `make test-ui-doc` или эквивалентный полный цикл документации завершён успешно.
+
+Любой незакрытый пункт означает, что инструкция ещё не готова.
 
 ## Карта файлов
 
 | Файл | Роль |
 |---|---|
-| [`tests/ui/conftest.py`](../../../tests/ui/conftest.py) | `page`, `*_ui`, personas, `scenario`, light theme |
-| [`tests/ui/harness.py`](../../../tests/ui/harness.py) | `AppUI`, origins, `ui_e2e_use_lvh_me()` |
-| [`tests/ui/apps.py`](../../../tests/ui/apps.py) | порты, shell selectors, subdomain |
-| [`tests/ui/scenario_doc.py`](../../../tests/ui/scenario_doc.py) | шаги, скрины, README.md/en |
+| [`tests/ui/conftest.py`](../../../tests/ui/conftest.py) | fixture `scenario`, страницы, персоны, light theme |
+| [`tests/ui/scenario_doc.py`](../../../tests/ui/scenario_doc.py) | поля шага, скриншоты и генерация README RU/EN |
+| [`scripts/check_scenario_docs_quality.py`](../../../scripts/check_scenario_docs_quality.py) | минимальный автоматический gate |
+| [`scripts/docs_prepare.py`](../../../scripts/docs_prepare.py) | публикация сценариев в дерево документации |
+| [`tests/ui/harness.py`](../../../tests/ui/harness.py) | `AppUI` и origins |
+| [`tests/ui/apps.py`](../../../tests/ui/apps.py) | порты, shell selectors и subdomain |
 | [`tests/ui/browser_auth.py`](../../../tests/ui/browser_auth.py) | cookie domains |
-| [`tests/fixtures/services.py`](../../../tests/fixtures/services.py) | session HTTP servers |
+| [`docs/scenarios/taxonomy.yaml`](../../../docs/scenarios/taxonomy.yaml) | сервисы, темы и порядок публикации |

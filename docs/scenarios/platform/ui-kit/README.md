@@ -56,6 +56,7 @@
 | [platform-onlyoffice-host](../platform-onlyoffice-host/) | T0 | backlog |
 | [platform-palette-color-picker](../platform-palette-color-picker/) | T0 | backlog |
 | [platform-picker-card](../platform-picker-card/) | T1 | production |
+| [platform-rag-retrieval-panel](../platform-rag-retrieval-panel/) | T0 | backlog |
 | [platform-searchable-combobox](../platform-searchable-combobox/) | T0 | backfill |
 | [platform-segmented-control](../platform-segmented-control/) | T1 | production |
 | [platform-service-sidebar](../platform-service-sidebar/) | T0 | backlog |

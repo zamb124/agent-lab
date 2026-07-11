@@ -25,6 +25,11 @@ from tests.ui.scenario_doc import ScenarioRecorder
         "После создания пространства пользователь создаёт topic-канал через «+» у раздела «Каналы» "
         "и подтверждает создание."
     ),
+    title_en="Sync: create a channel in a space",
+    description_en=(
+        "After creating a space the user creates a topic channel via «+» next to «Channels» "
+        "and confirms creation."
+    ),
 )
 @pytest.mark.asyncio
 @pytest.mark.e2e
@@ -38,21 +43,37 @@ async def test_user_creates_topic_channel(
     channel_name = f"Канал {unique_id}"
 
     await sync_e2e_open_with_namespace(sync_ui, ui_page_system, unique_id, suffix="ch")
-    await scenario.step("Выбрано пространство Sync", ui_page_system)
+    await scenario.step(
+        "Выбрано пространство Sync",
+        ui_page_system,
+        label_en="Sync space selected",
+    )
 
     await sync_e2e_click_create_channel(ui_page_system)
     ch_modal = ui_page_system.locator("sync-channel-create-modal")
     await expect(ch_modal).to_be_visible()
-    await scenario.step("Открыто создание канала", ui_page_system)
+    await scenario.step(
+        "Открыто создание канала",
+        ui_page_system,
+        label_en="Channel creation opened",
+    )
 
     await ch_modal.locator("input.field-pill-input").first.fill(channel_name)
-    await scenario.step("Введено название канала", ui_page_system)
+    await scenario.step(
+        "Введено название канала",
+        ui_page_system,
+        label_en="Channel name entered",
+    )
 
     await sync_e2e_click_platform_button(ch_modal, "Создать", "Create")
     await expect(sync_sidebar_channel_nav(ui_page_system, channel_name)).to_be_visible(
         timeout=30_000
     )
-    await scenario.step("Канал появился в сайдбаре", ui_page_system)
+    await scenario.step(
+        "Канал появился в сайдбаре",
+        ui_page_system,
+        label_en="Channel appeared in the sidebar",
+    )
 
 
 @pytest.mark.scenario(
@@ -63,6 +84,11 @@ async def test_user_creates_topic_channel(
     description=(
         "Пользователь открывает канал, вводит текст в поле «Сообщение…» и отправляет его; "
         "текст отображается в ленте."
+    ),
+    title_en="Sync: send a message in a channel",
+    description_en=(
+        "The user opens a channel, types text in the «Message…» field, and sends it; "
+        "the text appears in the feed."
     ),
 )
 @pytest.mark.asyncio
@@ -84,7 +110,11 @@ async def test_user_sends_message_in_channel(
     )
 
     await expect(ui_page_system.locator("sync-channel-page")).to_be_visible()
-    await scenario.step("Выбран канал, открыт чат", ui_page_system)
+    await scenario.step(
+        "Выбран канал, открыт чат",
+        ui_page_system,
+        label_en="Channel selected, chat opened",
+    )
 
     composer = ui_page_system.locator("sync-message-composer")
     await expect(composer).to_be_visible()
@@ -93,4 +123,8 @@ async def test_user_sends_message_in_channel(
     await expect(
         ui_page_system.locator("sync-message-bubble").get_by_text(message_text, exact=True)
     ).to_be_visible(timeout=30_000)
-    await scenario.step("Сообщение отображается в ленте", ui_page_system)
+    await scenario.step(
+        "Сообщение отображается в ленте",
+        ui_page_system,
+        label_en="Message appears in the feed",
+    )

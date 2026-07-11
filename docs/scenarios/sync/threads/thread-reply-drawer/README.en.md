@@ -1,19 +1,19 @@
-# Sync: панель тредов после ответа на сообщение
+# Sync: threads panel after replying to a message
 
-Пользователь отвечает на сообщение в основной ленте и открывает панель «Треды»: заголовок и область списка отображаются (список может быть пустым, если thread_id ещё не задан у сообщений в ленте).
+The user replies to a message in the main feed and opens the «Threads» panel: the header and list area are displayed (the list may be empty if thread_id is not yet set on feed messages).
 
-## Step 1. Созданы пространство и канал
+## Step 1. Space and channel created
 
-![Созданы пространство и канал](screenshots/001.png)
+![Space and channel created](thread-reply-drawer--01-sozdany-prostranstvo-i-kanal.png)
 
-## Step 2. Отправлено корневое сообщение
+## Step 2. Root message sent
 
-![Отправлено корневое сообщение](screenshots/002.png)
+![Root message sent](thread-reply-drawer--02-otpravleno-kornevoe-soobshchenie.png)
 
-## Step 3. Открыт тред и отправлен ответ
+## Step 3. Thread opened and reply sent
 
-![Открыт тред и отправлен ответ](screenshots/003.png)
+![Thread opened and reply sent](thread-reply-drawer--03-otkryt-tred-i-otpravlen-otvet.png)
 
-## Step 4. Открыта панель тредов
+## Step 4. Threads panel opened
 
-![Открыта панель тредов](screenshots/004.png)
+![Threads panel opened](thread-reply-drawer--04-otkryta-panel-tredov.png)

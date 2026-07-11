@@ -1,11 +1,11 @@
-# RAG: оболочка сервиса
+# RAG: service shell
 
-Доступ к RAG UI на system.localhost после входа и маппинга субдомена.
+Access to RAG UI on system.localhost after sign-in and subdomain mapping.
 
-## Step 1. SPA RAG открыт
+## Step 1. RAG SPA opened
 
-![SPA RAG открыт](screenshots/001.png)
+![RAG SPA opened](rag-shell--01-spa-rag-otkryt.png)
 
-## Step 2. Оболочка rag-app видна
+## Step 2. The rag-app shell is visible
 
-![Оболочка rag-app видна](screenshots/002.png)
+![The rag-app shell is visible](rag-shell--02-obolochka-rag-app-vidna.png)

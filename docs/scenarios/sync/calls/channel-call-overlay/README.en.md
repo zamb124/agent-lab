@@ -1,11 +1,11 @@
-# Sync: старт звонка из шапки канала
+# Sync: start a call from the channel header
 
-В topic-канале пользователь нажимает «Звонок в этом канале»; после ответа сервера отображается оверлей звонка (атрибут data-call-active на sync-app).
+In a topic channel the user clicks «Call in this channel»; after the server responds the call overlay appears (data-call-active on sync-app).
 
-## Step 1. Открыт topic-канал
+## Step 1. Topic channel opened
 
-![Открыт topic-канал](screenshots/001.png)
+![Topic channel opened](channel-call-overlay--01-otkryt-topic-kanal.png)
 
-## Step 2. Отображается оверлей звонка
+## Step 2. Call overlay is displayed
 
-![Отображается оверлей звонка](screenshots/002.png)
+![Call overlay is displayed](channel-call-overlay--02-otobrazhaetsya-overley-zvonka.png)

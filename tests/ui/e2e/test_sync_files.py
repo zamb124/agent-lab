@@ -28,6 +28,10 @@ _MIN_PNG = (
     description=(
         "Пользователь прикрепляет изображение к сообщению; после отправки в ленту попадает блок с картинкой."
     ),
+    title_en="Sync: send a message with an image",
+    description_en=(
+        "The user attaches an image to a message; after sending, the feed shows a block with the picture."
+    ),
 )
 @pytest.mark.asyncio
 @pytest.mark.e2e
@@ -50,7 +54,11 @@ async def test_user_sends_message_with_image_attachment(
         unique_id,
         channel_prefix="Канал файлов",
     )
-    await scenario.step("Канал открыт", ui_page_system)
+    await scenario.step(
+        "Канал открыт",
+        ui_page_system,
+        label_en="Channel opened",
+    )
 
     composer = ui_page_system.locator("sync-message-composer")
     file_input = composer.locator("input#photopick")
@@ -66,4 +74,8 @@ async def test_user_sends_message_with_image_attachment(
     await expect(ui_page_system.locator("sync-message-bubble").locator(".image-wrap img")).to_be_visible(
         timeout=15_000
     )
-    await scenario.step("Сообщение с превью изображения в ленте", ui_page_system)
+    await scenario.step(
+        "Сообщение с превью изображения в ленте",
+        ui_page_system,
+        label_en="Message with image preview in the feed",
+    )

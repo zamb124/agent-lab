@@ -1,11 +1,11 @@
-# Sync: мобильный список чатов
+# Sync: mobile chat list
 
-При ширине viewport как на телефоне Sync показывает список чатов прямо на главном экране, без дополнительного раскрытия сайдбара.
+At a phone-like viewport width Sync shows the chat list directly on the main screen without an extra sidebar expand step.
 
-## Step 1. Sync на узком viewport
+## Step 1. Sync on a narrow viewport
 
-![Sync на узком viewport](screenshots/001.png)
+![Sync on a narrow viewport](mobile-sidebar-menu--01-sync-na-uzkom-viewport.png)
 
-## Step 2. Список чатов доступен без лишнего клика
+## Step 2. Chat list is available without an extra click
 
-![Список чатов доступен без лишнего клика](screenshots/002.png)
+![Chat list is available without an extra click](mobile-sidebar-menu--02-spisok-chatov-dostupen-bez-lishnego-klika.png)

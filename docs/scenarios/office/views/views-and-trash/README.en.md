@@ -4,24 +4,24 @@ Nav-rail Recent/Starred/Deleted, restore and permanent delete.
 
 ## Step 1. Document in recent
 
-![Document in recent](screenshots/001.png)
+![Document in recent](views-and-trash--01-document-in-recent.png)
 
 ## Step 2. Recent view
 
-![Recent view](screenshots/002.png)
+![Recent view](views-and-trash--02-recent-view.png)
 
 ## Step 3. Starred view
 
-![Starred view](screenshots/003.png)
+![Starred view](views-and-trash--03-starred-view.png)
 
 ## Step 4. Deleted view
 
-![Deleted view](screenshots/004.png)
+![Deleted view](views-and-trash--04-deleted-view.png)
 
 ## Step 5. Document restored
 
-![Document restored](screenshots/005.png)
+![Document restored](views-and-trash--05-document-restored.png)
 
 ## Step 6. Document permanently deleted
 
-![Document permanently deleted](screenshots/006.png)
+![Document permanently deleted](views-and-trash--06-document-permanently-deleted.png)

@@ -74,6 +74,8 @@ def _problems_payload(flow_id: str) -> dict[str, object]:
     doc_slug="dataflow-wiring",
     title="Flows: визуализация dataflow wiring",
     description="Показывает переключатель data wires и проблемы после inspect на канве.",
+    title_en="Flows: dataflow wiring visualization",
+    description_en="Shows the data wires toggle and problems after inspect on the canvas.",
 )
 @pytest.mark.asyncio
 @pytest.mark.e2e
@@ -96,6 +98,7 @@ async def test_flows_dataflow_wiring_scenario(
     await scenario.step(
         "Открываем редактор flow с code и llm нодами. Канва показывает граф с потенциальным dataflow.",
         page,
+        label_en="Open the flow editor with code and LLM nodes. The canvas shows a graph with potential dataflow.",
     )
 
     wires_btn = page.locator("flows-bottom-toolbar platform-button").filter(
@@ -106,6 +109,7 @@ async def test_flows_dataflow_wiring_scenario(
     await scenario.step(
         "Включаем показ data wires в нижней панели. На канве появляются связи по данным.",
         page,
+        label_en="Turn on data wires in the bottom toolbar. Data connections appear on the canvas.",
     )
     await expect(page.locator("flows-flow-canvas [data-wires-layer] g.data-wire")).to_have_count(
         1, timeout=30_000
@@ -122,6 +126,8 @@ async def test_flows_dataflow_wiring_scenario(
     doc_slug="dataflow-problems",
     title="Flows: навигация по dataflow problems",
     description="Показывает счётчик проблем в шапке и переход к проблемной ноде.",
+    title_en="Flows: navigating dataflow problems",
+    description_en="Shows the problem counter in the header and navigation to the problematic node.",
 )
 @pytest.mark.asyncio
 @pytest.mark.e2e
@@ -143,6 +149,7 @@ async def test_flows_dataflow_problems_navigation_scenario(
     await scenario.step(
         "Открываем flow с намеренно незамапленной prompt-переменной.",
         page,
+        label_en="Open a flow with an intentionally unmapped prompt variable.",
     )
 
     problems_btn = page.locator("flows-editor-header .problems-btn")
@@ -152,6 +159,7 @@ async def test_flows_dataflow_problems_navigation_scenario(
     await scenario.step(
         "В шапке виден счётчик проблем dataflow. Открываем список issues.",
         page,
+        label_en="The header shows a dataflow problem count. Open the issues list.",
     )
 
     await page.locator("flows-editor-header .problem-item").first.click()
@@ -159,4 +167,5 @@ async def test_flows_dataflow_problems_navigation_scenario(
     await scenario.step(
         "Клик по issue выделяет проблемную ноду на канве.",
         page,
+        label_en="Clicking an issue selects the problematic node on the canvas.",
     )

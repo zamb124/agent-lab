@@ -1,11 +1,11 @@
-# Sync: отправка сообщения с изображением
+# Sync: send a message with an image
 
-Пользователь прикрепляет изображение к сообщению; после отправки в ленту попадает блок с картинкой.
+The user attaches an image to a message; after sending, the feed shows a block with the picture.
 
-## Step 1. Канал открыт
+## Step 1. Channel opened
 
-![Канал открыт](screenshots/001.png)
+![Channel opened](message-with-image--01-kanal-otkryt.png)
 
-## Step 2. Сообщение с превью изображения в ленте
+## Step 2. Message with image preview in the feed
 
-![Сообщение с превью изображения в ленте](screenshots/002.png)
+![Message with image preview in the feed](message-with-image--02-soobshchenie-s-prevyu-izobrazheniya-v-lente.png)

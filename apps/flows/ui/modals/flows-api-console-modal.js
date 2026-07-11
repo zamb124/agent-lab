@@ -772,6 +772,7 @@ export class FlowsApiConsoleModal extends PlatformModal {
         this._lastError = '';
         this._editor = this.useOp('flows/editor');
         this._run = this.useOp('flows/api_console_run');
+        this._localeSelect = this.select((s) => s.i18n.locale);
     }
 
     willUpdate(changed) {
@@ -874,7 +875,11 @@ export class FlowsApiConsoleModal extends PlatformModal {
     }
 
     _documentationUrl() {
-        return buildScenarioDocumentationUrl({ service: 'flows', slug: 'api-console' });
+        return buildScenarioDocumentationUrl({
+            service: 'flows',
+            slug: 'api-console',
+            locale: this._localeSelect.value,
+        });
     }
 
     _metadataForMode(variables, mode) {

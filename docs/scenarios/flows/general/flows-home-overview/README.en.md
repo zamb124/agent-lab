@@ -6,7 +6,7 @@ The `/flows/` page is the service cockpit. A developer can find flows, start com
 
 Open `/flows/`. The left sidebar contains the flow catalog with search and create actions. The main workspace shows the overview, metrics, quick actions, and current flow cards.
 
-![Flows home in the light theme: flow catalog on the left, overview, metrics, quick start, and agent cards in the main area.](screenshots/001.png)
+![Flows home in the light theme: flow catalog on the left, overview, metrics, quick start, and agent cards in the main area.](flows-home-overview--01-flows-home-in-the-light-theme-flow-catalog-on-the-left-overview.png)
 
 ## What to check on this page
 

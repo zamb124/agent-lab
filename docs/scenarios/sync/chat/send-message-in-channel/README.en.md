@@ -1,11 +1,11 @@
-# Sync: отправка сообщения в канал
+# Sync: send a message in a channel
 
-Пользователь открывает канал, вводит текст в поле «Сообщение…» и отправляет его; текст отображается в ленте.
+The user opens a channel, types text in the «Message…» field, and sends it; the text appears in the feed.
 
-## Step 1. Выбран канал, открыт чат
+## Step 1. Channel selected, chat opened
 
-![Выбран канал, открыт чат](screenshots/001.png)
+![Channel selected, chat opened](send-message-in-channel--01-vybran-kanal-otkryt-chat.png)
 
-## Step 2. Сообщение отображается в ленте
+## Step 2. Message appears in the feed
 
-![Сообщение отображается в ленте](screenshots/002.png)
+![Message appears in the feed](send-message-in-channel--02-soobshchenie-otobrazhaetsya-v-lente.png)

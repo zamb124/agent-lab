@@ -6,7 +6,7 @@ The `/flows/<flow_id>` chat is the user-facing flow surface. Use it to verify pu
 
 On the Flows home page, select a flow or click the chat action on a flow card. A route such as `/flows/tutor` opens.
 
-![Flow chat in the light theme: flow catalog on the left, actions at the top, empty dialog in the center, and composer at the bottom.](screenshots/001.png)
+![Flow chat in the light theme: flow catalog on the left, actions at the top, empty dialog in the center, and composer at the bottom.](run-flow-chat--01-flow-chat-in-the-light-theme-flow-catalog-on-the-left-actions.png)
 
 ## Step 2. Send a message
 

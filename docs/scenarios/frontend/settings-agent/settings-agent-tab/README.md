@@ -4,8 +4,8 @@
 
 ## Шаг 1. Открыта страница настроек платформы
 
-![Открыта страница настроек платформы](screenshots/001.png)
+![Открыта страница настроек платформы](settings-agent-tab--01-platform-settings-page-opened.png)
 
 ## Шаг 2. Вкладка HumanitecAgent видна на странице настроек
 
-![Вкладка HumanitecAgent видна на странице настроек](screenshots/002.png)
+![Вкладка HumanitecAgent видна на странице настроек](settings-agent-tab--02-humanitecagent-tab-is-visible-in-settings.png)

@@ -16,6 +16,7 @@ Flow - выполнение графа нод.
 from __future__ import annotations
 
 import asyncio
+import time
 from collections.abc import Mapping, Sequence
 
 from apps.flows.src.constants.execution_limits import get_graph_max_iterations
@@ -50,6 +51,13 @@ from apps.flows.src.runtime.exceptions import (
     BreakpointInterrupt,
     EdgeConditionError,
     FlowInterrupt,
+)
+from apps.flows.src.runtime.state_diff import (
+    build_canvas_result_preview,
+    execution_state_to_diff_json,
+    infer_primary_field,
+    top_state_diff_items,
+    compute_state_diff,
 )
 from apps.flows.src.state.cancellation import FlowCancelled, check_cancellation
 from apps.flows.src.state.interrupt_manager import InterruptManager
@@ -524,6 +532,9 @@ class Flow:
                 # Выполнение всех нод текущего уровня
                 async def _run(node_id: str, run_state: ExecutionState) -> ExecutionState:
                     node_type = self._node_type_from_config(self.nodes[node_id])
+                    run_index = emitter.next_node_run_index(node_id)
+                    before_json = execution_state_to_diff_json(run_state)
+                    started_at = time.perf_counter()
                     async with tracer.node_span(node_id, node_type, trace_ctx):
                         await emitter.emit_node_start(node_id, node_type)
                         try:
@@ -531,15 +542,38 @@ class Flow:
                         except (FlowInterrupt, BreakpointInterrupt):
                             raise
                         except Exception as exc:
-                            await emitter.emit_node_error(node_id, str(exc))
+                            duration_ms = int((time.perf_counter() - started_at) * 1000)
+                            await emitter.emit_node_error(
+                                node_id,
+                                str(exc),
+                                node_type=node_type,
+                                duration_ms=duration_ms,
+                                run_index=run_index,
+                            )
                             raise
-                        preview = ""
-                        if result_state.response:
-                            preview = str(result_state.response)
-                        elif result_state.result is not None:
-                            preview = str(result_state.result)
+                        duration_ms = int((time.perf_counter() - started_at) * 1000)
+                        after_json = execution_state_to_diff_json(result_state)
+                        diff_items = top_state_diff_items(
+                            compute_state_diff(before_json, after_json),
+                        )
+                        primary_field = infer_primary_field(after_json, diff_items)
+                        preview = build_canvas_result_preview(
+                            node_type,
+                            after_json,
+                            diff_items,
+                            primary_field,
+                        )
+                        diff_payload = [item.model_dump(mode="json") for item in diff_items]
                         await self._emit_pending_ui_events(emitter, result_state)
-                        await emitter.emit_node_complete(node_id, preview)
+                        await emitter.emit_node_complete(
+                            node_id,
+                            node_type=node_type,
+                            result_preview=preview,
+                            duration_ms=duration_ms,
+                            run_index=run_index,
+                            primary_field=primary_field,
+                            diff=diff_payload,
+                        )
                         return result_state
 
                 try:

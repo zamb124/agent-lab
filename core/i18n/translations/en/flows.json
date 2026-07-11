@@ -1628,6 +1628,7 @@
     "mocks_title": "Mocks",
     "reset_chat": "Reset chat",
     "reset_chat_title": "New session: clear message history",
+    "toggle_canvas_results_aria": "Show node results on canvas",
     "close_panel": "Close",
     "minimize_panel": "Minimize panel",
     "restore_panel": "Restore panel",
@@ -1647,6 +1648,26 @@
     "add": "Branch",
     "delete": "Delete branch",
     "group_aria": "Flow branches"
+  },
+  "canvas_run_result": {
+    "running": "Running…",
+    "empty": "No changes",
+    "duration_ms": "{{ms}} ms",
+    "changes_count": "{{count}} changes",
+    "run_count": "×{{count}}",
+    "change_added": "Added",
+    "change_changed": "Changed",
+    "change_removed": "Removed",
+    "value_array_items_one": "{{count}} item",
+    "value_array_items_other": "{{count}} items",
+    "value_object_fields_one": "{{count}} field",
+    "value_object_fields_other": "{{count}} fields",
+    "value_null": "null",
+    "value_true": "true",
+    "value_false": "false",
+    "headline_external_api": "HTTP {{status}}",
+    "headline_channel_ok": "Message sent",
+    "headline_hitl": "Handoff to operator"
   },
   "canvas": {
     "dataflow": {

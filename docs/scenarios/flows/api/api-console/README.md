@@ -19,7 +19,7 @@ samples из текущего `flow_id`, активной ветки и теку
 какой `branch_id` выбран, какой протокол используется и какой режим активен. Ниже четыре вкладки:
 `Старт`, `Примеры`, `Поля A2A`, `Запуск`.
 
-![Открываем API Console из редактора flow](screenshots/001.png)
+![Открываем API Console из редактора flow](api-console--01-open-api-console-from-the-flow-editor.png)
 
 ## Шаг 2. Разбираем вкладку Старт и режимы A2A
 
@@ -43,7 +43,7 @@ samples из текущего `flow_id`, активной ветки и теку
 `message/stream`, `message/send` и `tasks/get`; остальные методы нужны для отмены, resubscribe,
 Agent Card и push notification config.
 
-![Разбираем вкладку Старт и режимы A2A](screenshots/002.png)
+![Разбираем вкладку Старт и режимы A2A](api-console--02-read-the-start-tab-and-a2a-modes.png)
 
 ## Шаг 3. Берем готовые curl, Python и JS примеры
 
@@ -69,7 +69,7 @@ Agent Card и push notification config.
 - `params.metadata.branch` выбирает ветку выполнения.
 - `params.metadata.variables` передает runtime variables только для этого запуска.
 
-![Берем готовые curl, Python и JS примеры](screenshots/003.png)
+![Берем готовые curl, Python и JS примеры](api-console--03-use-ready-curl-python-and-js-examples.png)
 
 ## Шаг 4. Проверяем каждое поле A2A и правила variables
 
@@ -101,7 +101,7 @@ Agent Card и push notification config.
 авторизованного HTTP-контекста после клиентских variables, поэтому внешний клиент не может подделать
 пользователя или компанию через `metadata.variables`.
 
-![Проверяем каждое поле A2A и правила variables](screenshots/004.png)
+![Проверяем каждое поле A2A и правила variables](api-console--04-check-every-a2a-field-and-variables-rule.png)
 
 ## Шаг 5. Запускаем Streaming и видим настоящий ответ API
 
@@ -121,7 +121,7 @@ Agent Card и push notification config.
 этих событий. Это режим по умолчанию для чатового UX: пользователь видит ответ по мере генерации,
 а разработчик может смотреть каждое событие отдельно.
 
-![Запускаем Streaming и видим настоящий ответ API](screenshots/005.png)
+![Запускаем Streaming и видим настоящий ответ API](api-console--05-run-streaming-and-inspect-the-real-api-response.png)
 
 ## Шаг 6. Открываем инспектор ответа: JSON, SSE, headers, raw и полный result
 
@@ -146,7 +146,7 @@ Agent Card и push notification config.
 - `Полный result` — полный объект, который вернул frontend resource: request envelope, response
   envelope, parsed body, raw text, frames, polls, extracted text и ошибки.
 
-![Открываем инспектор ответа: JSON, SSE, headers, raw и полный result](screenshots/006.png)
+![Открываем инспектор ответа: JSON, SSE, headers, raw и полный result](api-console--06-open-the-response-inspector-json-sse-headers-raw-and-full-result.png)
 
 ## Шаг 7. Проверяем синхронный режим message/send
 
@@ -162,7 +162,7 @@ HTTP-запрос ждет завершения flow и возвращает JSO
 проще для backend-to-backend интеграций, cron jobs и коротких deterministic flow. Если flow может
 работать долго, лучше использовать Streaming или Async, чтобы не держать HTTP request открытым.
 
-![Проверяем синхронный режим message/send](screenshots/007.png)
+![Проверяем синхронный режим message/send](api-console--07-test-synchronous-message-send-mode.png)
 
 ## Шаг 8. Проверяем async submit и последующие tasks/get опросы
 
@@ -189,4 +189,4 @@ UI отправляет:
 - Ошибка `input-required`: task ждет пользовательский ввод; отправьте следующее сообщение с тем же
   `contextId`.
 
-![Проверяем async submit и последующие tasks/get опросы](screenshots/008.png)
+![Проверяем async submit и последующие tasks/get опросы](api-console--08-test-async-submit-and-subsequent-tasks-get-polls.png)

@@ -5,9 +5,9 @@
  * `<platform-chat display="panel" profile="editor_test">` (весь чат, файлы,
  * voice/TTS и SSE A2A живут внутри компонента; в editor_test виден весь runtime
  * независимо от политики flow). Панель добавляет только editor-специфику:
- *   - useOp('flows/editor') — режим, currentBranchId, previewExecutionState.breakpoints;
+ *   - useOp('flows/editor') — режим, currentBranchId, breakpointNodeIds;
  *   - useSlice('flows/execution_ui') — persistContext (→ fresh-context-per-turn);
- *   - breakpoints уходят metadata через `.getSendMetadata`;
+ *   - breakpoints уходят metadata через `.getSendMetadata` (из `breakpointNodeIds`);
  *   - события `chat-run-event` (flows/run/*) диспатчатся в bus — канвас
  *     подсвечивает ноды, agentExecutionRunning синхронизируется.
  *
@@ -31,6 +31,7 @@ import '@platform/lib/chat/platform-chat.js';
 import { resolveVoiceHttpOrigin } from '@platform/lib/voice/voice-http-origin.js';
 import '@platform/lib/chat/chat-run-trace.js';
 import {
+    asArray,
     asObject,
     asString,
     authActiveCompanyId,
@@ -55,6 +56,7 @@ export class FlowsExecutionPanel extends PlatformElement {
         _panelTab: { type: String, state: true },
         _layoutExpanded: { type: Boolean, state: true },
         _collapsed: { type: Boolean, state: true },
+        _lastCanvasBreakpointHitNodeId: { type: String, state: true },
     };
 
     static styles = [
@@ -329,6 +331,7 @@ export class FlowsExecutionPanel extends PlatformElement {
         this._ui = this.useSlice('flows/execution_ui');
         this._layoutExpanded = false;
         this._collapsed = false;
+        this._lastCanvasBreakpointHitNodeId = '';
         this._panelRect = null;
         this._dragState = null;
         this._resizeState = null;
@@ -393,6 +396,7 @@ export class FlowsExecutionPanel extends PlatformElement {
         const payload = isPlainObject(detail.payload) ? detail.payload : {};
         this.dispatch(detail.type, payload, { source: 'http' });
         if (detail.type === 'flows/run/flow_started') {
+            this._lastCanvasBreakpointHitNodeId = '';
             this._editor.setAgentExecutionRunning({ running: true });
         }
         if (detail.type === 'flows/run/flow_done') {
@@ -427,6 +431,10 @@ export class FlowsExecutionPanel extends PlatformElement {
         this.openModal('flows.durable_history', { sessionId });
     }
 
+    _onViewBreakpointState() {
+        this._openState();
+    }
+
     /** Вместо window.open (default поведение bubble) — платформенная модалка предпросмотра браузера. */
     _onBrowserPreviewOpen(e) {
         e.preventDefault();
@@ -439,15 +447,87 @@ export class FlowsExecutionPanel extends PlatformElement {
         });
     }
 
-    /** metadata верхнего уровня A2A message/stream: breakpoints превью редактора. */
+    /** metadata верхнего уровня A2A message/stream: breakpoints с канвы редактора. */
     _sendMetadataForRun() {
         const editorState = asObject(this._editor.state);
-        const preview = editorState.previewExecutionState;
-        const bps = preview && preview.breakpoints;
-        if (Array.isArray(bps) && bps.length > 0) {
-            return { breakpoints: bps };
+        const nodeIds = asArray(editorState.breakpointNodeIds);
+        if (nodeIds.length === 0) {
+            return {};
         }
-        return {};
+        const breakpoints = {};
+        for (let i = 0; i < nodeIds.length; i += 1) {
+            const nodeId = nodeIds[i];
+            if (typeof nodeId === 'string' && nodeId.length > 0) {
+                breakpoints[nodeId] = true;
+            }
+        }
+        if (Object.keys(breakpoints).length === 0) {
+            return {};
+        }
+        return { breakpoints };
+    }
+
+    _shouldHoldCanvasBreakpointHit() {
+        const editorState = asObject(this._editor.state);
+        if (Boolean(editorState.agentExecutionRunning)) {
+            return false;
+        }
+        const chatState = this._chatRuntimeState();
+        if (Boolean(chatState.streaming)) {
+            return false;
+        }
+        const chat = this._platformChat();
+        if (chat && chat._controller.sending) {
+            return false;
+        }
+        return true;
+    }
+
+    _clearCanvasBreakpointHit() {
+        const editorState = asObject(this._editor.state);
+        if (!editorState.breakpointHitNodeId) {
+            this._lastCanvasBreakpointHitNodeId = '';
+            return;
+        }
+        this._lastCanvasBreakpointHitNodeId = '';
+        this.dispatch('flows/breakpoint/clear', {}, { source: 'http' });
+    }
+
+    _syncCanvasBreakpointHit() {
+        if (!this._shouldHoldCanvasBreakpointHit()) {
+            this._clearCanvasBreakpointHit();
+            return;
+        }
+        const assistant = this._activeAssistantMessage();
+        if (!assistant || !isPlainObject(assistant.breakpoint)) {
+            this._clearCanvasBreakpointHit();
+            return;
+        }
+        const breakpoint = assistant.breakpoint;
+        let nodeId = '';
+        if (typeof breakpoint.node_id === 'string' && breakpoint.node_id.length > 0) {
+            nodeId = breakpoint.node_id;
+        } else if (typeof breakpoint.nodeId === 'string' && breakpoint.nodeId.length > 0) {
+            nodeId = breakpoint.nodeId;
+        }
+        if (nodeId.length === 0) {
+            this._clearCanvasBreakpointHit();
+            return;
+        }
+        if (this._lastCanvasBreakpointHitNodeId === nodeId) {
+            return;
+        }
+        this._lastCanvasBreakpointHitNodeId = nodeId;
+        const payload = { node_id: nodeId };
+        if (typeof assistant.taskId === 'string' && assistant.taskId.length > 0) {
+            payload.task_id = assistant.taskId;
+        }
+        this.dispatch('flows/breakpoint/hit', payload, { source: 'http' });
+    }
+
+    _onChatStateChanged() {
+        this._syncCanvasBreakpointHit();
+        this.requestUpdate();
     }
 
     _panelChatMessages() {
@@ -783,6 +863,12 @@ export class FlowsExecutionPanel extends PlatformElement {
         }
     }
 
+    _toggleCanvasRunResults() {
+        const editorState = asObject(this._editor.state);
+        const next = !Boolean(editorState.showCanvasRunResults);
+        this._editor.toggleCanvasRunResults({ value: next });
+    }
+
     _onClose() {
         this._endPanelPointerInteraction();
         this._layoutExpanded = false;
@@ -869,6 +955,7 @@ export class FlowsExecutionPanel extends PlatformElement {
     render() {
         const editorState = asObject(this._editor.state);
         const ui = this._ui.value;
+        const showCanvasRunResults = Boolean(editorState.showCanvasRunResults);
         const chatState = this._chatRuntimeState();
         const streaming = Boolean(chatState.streaming);
         const agentRun = Boolean(editorState.agentExecutionRunning);
@@ -934,6 +1021,27 @@ export class FlowsExecutionPanel extends PlatformElement {
                             variant="ghost"
                             icon-only
                             density="dense"
+                            aria-label=${this.t('execution_panel.toggle_canvas_results_aria')}
+                            title=${this.t('execution_panel.toggle_canvas_results_aria')}
+                            aria-pressed=${showCanvasRunResults ? 'true' : 'false'}
+                            @click=${this._toggleCanvasRunResults}
+                        >
+                            <platform-icon name="workflow" size="14"></platform-icon>
+                        </platform-button>
+                        <platform-button
+                            variant="ghost"
+                            icon-only
+                            density="dense"
+                            aria-label=${this.t('execution_panel.reset_chat_title')}
+                            title=${this.t('execution_panel.reset_chat_title')}
+                            @click=${() => { void this._onResetChat(); }}
+                        >
+                            <platform-icon name="rotate-ccw" size="14"></platform-icon>
+                        </platform-button>
+                        <platform-button
+                            variant="ghost"
+                            icon-only
+                            density="dense"
                             aria-label=${this._collapsed
                                 ? this.t('execution_panel.restore_panel')
                                 : this.t('execution_panel.minimize_panel')}
@@ -987,33 +1095,23 @@ export class FlowsExecutionPanel extends PlatformElement {
                     ></platform-segmented-control>
                 </div>
 
-                ${tab === 'chat' || tab === 'trace'
+                ${tab === 'trace'
                     ? html`
                         <div class="tab-toolbar">
-                            ${tab === 'trace' ? html`
-                                <platform-button
-                                    variant="primary"
-                                    density="compact"
-                                    ?disabled=${!hasContext}
-                                    title=${this.t('execution_panel.full_trace_title')}
-                                    @click=${this._openTracing}
-                                >${this.t('execution_panel.full_trace')}</platform-button>
-                                <platform-button
-                                    variant="secondary"
-                                    density="compact"
-                                    ?disabled=${!hasContext}
-                                    title=${this.t('execution_panel.open_logs_title')}
-                                    @click=${this._openLogs}
-                                >${this.t('execution_panel.open_logs')}</platform-button>
-                            ` : nothing}
-                            ${tab === 'chat' ? html`
-                                <platform-button
-                                    variant="secondary"
-                                    density="compact"
-                                    title=${this.t('execution_panel.reset_chat_title')}
-                                    @click=${() => { void this._onResetChat(); }}
-                                >${this.t('execution_panel.reset_chat')}</platform-button>
-                            ` : nothing}
+                            <platform-button
+                                variant="primary"
+                                density="compact"
+                                ?disabled=${!hasContext}
+                                title=${this.t('execution_panel.full_trace_title')}
+                                @click=${this._openTracing}
+                            >${this.t('execution_panel.full_trace')}</platform-button>
+                            <platform-button
+                                variant="secondary"
+                                density="compact"
+                                ?disabled=${!hasContext}
+                                title=${this.t('execution_panel.open_logs_title')}
+                                @click=${this._openLogs}
+                            >${this.t('execution_panel.open_logs')}</platform-button>
                         </div>
                     `
                     : nothing}
@@ -1035,11 +1133,12 @@ export class FlowsExecutionPanel extends PlatformElement {
                             ?fresh-context-per-turn=${!ui.persistContext}
                             .getSendMetadata=${() => this._sendMetadataForRun()}
                             .labels=${{ placeholder: this.t(placeholderKey) }}
-                            @chat-state-changed=${() => this.requestUpdate()}
+                            @chat-state-changed=${this._onChatStateChanged}
                             @chat-run-event=${this._onChatRunEvent}
                             @show-tracing=${this._onChatShowTracing}
                             @show-logs=${this._onChatShowLogs}
                             @show-durable-history=${this._onChatShowDurableHistory}
+                            @view-breakpoint-state=${this._onViewBreakpointState}
                             @browser-preview-open=${this._onBrowserPreviewOpen}
                         ></platform-chat>
                     </div>

@@ -1,19 +1,19 @@
-# Flows: добавление LLM-ноды
+# Flows: adding an LLM node
 
-Инструкция показывает, как добавить LLM Node на канву, открыть настройки ноды, заполнить промпт и выбрать LLM-профиль.
+Guide showing how to add an LLM Node to the canvas, open node settings, fill in the prompt, and choose an LLM profile.
 
-## Step 1. Открываем редактор flow. Слева находится палитра нод, в центре находится канва.
+## Step 1. Open the flow editor. The node palette is on the left and the canvas is in the center.
 
-![Открываем редактор flow. Слева находится палитра нод, в центре находится канва.](screenshots/001.png)
+![Open the flow editor. The node palette is on the left and the canvas is in the center.](add-llm-node--01-otkryvaem-redaktor-flow-sleva-nakhoditsya-palitra-nod-v-tsentre.png)
 
-## Step 2. Перетаскиваем LLM Node из палитры на канву. Справа открываются настройки выбранной ноды.
+## Step 2. Drag an LLM Node from the palette onto the canvas. Node settings open on the right.
 
-![Перетаскиваем LLM Node из палитры на канву. Справа открываются настройки выбранной ноды.](screenshots/002.png)
+![Drag an LLM Node from the palette onto the canvas. Node settings open on the right.](add-llm-node--02-peretaskivaem-llm-node-iz-palitry-na-kanvu-sprava-otkryvayutsya.png)
 
-## Step 3. Заполняем промпт и LLM-настройки. Промпт говорит агенту, как вести себя с пользователем.
+## Step 3. Fill in the prompt and LLM settings. The prompt tells the agent how to behave with the user.
 
-![Заполняем промпт и LLM-настройки. Промпт говорит агенту, как вести себя с пользователем.](screenshots/003.png)
+![Fill in the prompt and LLM settings. The prompt tells the agent how to behave with the user.](add-llm-node--03-zapolnyaem-prompt-i-llm-nastroyki-prompt-govorit-agentu-kak.png)
 
-## Step 4. Нажимаем Publish. Так черновик сохраняется, и flow можно запускать или продолжать редактировать позже.
+## Step 4. Click Publish. This saves the draft so you can run the flow or keep editing later.
 
-![Нажимаем Publish. Так черновик сохраняется, и flow можно запускать или продолжать редактировать позже.](screenshots/004.png)
+![Click Publish. This saves the draft so you can run the flow or keep editing later.](add-llm-node--04-nazhimaem-publish-tak-chernovik-sokhranyaetsya-i-flow-mozhno.png)

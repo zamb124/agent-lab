@@ -4,8 +4,8 @@ Private catalog, add and remove members, public catalog settings.
 
 ## Step 1. Private catalog members modal
 
-![Private catalog members modal](screenshots/001.png)
+![Private catalog members modal](catalog-access-and-members--01-private-catalog-members-modal.png)
 
 ## Step 2. Member added to catalog
 
-![Member added to catalog](screenshots/002.png)
+![Member added to catalog](catalog-access-and-members--02-member-added-to-catalog.png)

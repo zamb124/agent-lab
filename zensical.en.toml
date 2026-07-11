@@ -43,6 +43,7 @@ favicon = "assets/logo.svg"
 features = [
   "navigation.footer",
   "navigation.top",
+  "navigation.expand",
 ]
 
 [project.theme.font]

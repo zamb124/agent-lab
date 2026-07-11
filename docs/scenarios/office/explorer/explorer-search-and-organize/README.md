@@ -4,24 +4,24 @@
 
 ## Шаг 1. Список документов в каталоге
 
-![Список документов в каталоге](screenshots/001.png)
+![Список документов в каталоге](explorer-search-and-organize--01-documents-listed-in-catalog.png)
 
 ## Шаг 2. Переключение списка и сетки
 
-![Переключение списка и сетки](screenshots/002.png)
+![Переключение списка и сетки](explorer-search-and-organize--02-list-and-grid-toggle.png)
 
 ## Шаг 3. Поиск по названию
 
-![Поиск по названию](screenshots/003.png)
+![Поиск по названию](explorer-search-and-organize--03-search-by-name.png)
 
 ## Шаг 4. Панель сведений о файле
 
-![Панель сведений о файле](screenshots/004.png)
+![Панель сведений о файле](explorer-search-and-organize--04-file-details-panel.png)
 
 ## Шаг 5. Документ добавлен в избранное
 
-![Документ добавлен в избранное](screenshots/005.png)
+![Документ добавлен в избранное](explorer-search-and-organize--05-document-starred.png)
 
 ## Шаг 6. Список обновлён
 
-![Список обновлён](screenshots/006.png)
+![Список обновлён](explorer-search-and-organize--06-list-refreshed.png)

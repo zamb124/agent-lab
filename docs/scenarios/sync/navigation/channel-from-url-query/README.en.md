@@ -1,11 +1,11 @@
-# Sync: переход по прямой ссылке на канал
+# Sync: open a channel via direct link
 
-После создания канала в UI тест получает id канала через API и открывает Sync по `/sync/c/{channel_id}` — выбранный канал и чат подгружаются автоматически.
+After creating a channel in the UI the test fetches the channel id via API and opens Sync at `/sync/c/{channel_id}` — the selected channel and chat load automatically.
 
-## Step 1. Повторное открытие Sync по прямой ссылке канала
+## Step 1. Sync reopened via direct channel link
 
-![Повторное открытие Sync по прямой ссылке канала](screenshots/001.png)
+![Sync reopened via direct channel link](channel-from-url-query--01-povtornoe-otkrytie-sync-po-pryamoy-ssylke-kanala.png)
 
-## Step 2. Сообщение уходит в канал, выбранный из URL
+## Step 2. Message goes to the channel selected from the URL
 
-![Сообщение уходит в канал, выбранный из URL](screenshots/002.png)
+![Message goes to the channel selected from the URL](channel-from-url-query--02-soobshchenie-ukhodit-v-kanal-vybrannyy-iz-url.png)

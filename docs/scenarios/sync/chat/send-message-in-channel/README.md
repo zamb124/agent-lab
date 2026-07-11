@@ -4,8 +4,8 @@
 
 ## Шаг 1. Выбран канал, открыт чат
 
-![Выбран канал, открыт чат](screenshots/001.png)
+![Выбран канал, открыт чат](send-message-in-channel--01-vybran-kanal-otkryt-chat.png)
 
 ## Шаг 2. Сообщение отображается в ленте
 
-![Сообщение отображается в ленте](screenshots/002.png)
+![Сообщение отображается в ленте](send-message-in-channel--02-soobshchenie-otobrazhaetsya-v-lente.png)

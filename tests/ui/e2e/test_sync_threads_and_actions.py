@@ -52,6 +52,12 @@ async def _seed_topic_channel(
         "заголовок и область списка отображаются (список может быть пустым, если thread_id "
         "ещё не задан у сообщений в ленте)."
     ),
+    title_en="Sync: threads panel after replying to a message",
+    description_en=(
+        "The user replies to a message in the main feed and opens the «Threads» panel: "
+        "the header and list area are displayed (the list may be empty if thread_id "
+        "is not yet set on feed messages)."
+    ),
 )
 @pytest.mark.asyncio
 @pytest.mark.e2e
@@ -66,7 +72,11 @@ async def test_user_reply_opens_thread_in_drawer(
     reply_text = f"Ответ в треде {unique_id}"
 
     await _seed_topic_channel(sync_ui, ui_page_system, unique_id)
-    await scenario.step("Созданы пространство и канал", ui_page_system)
+    await scenario.step(
+        "Созданы пространство и канал",
+        ui_page_system,
+        label_en="Space and channel created",
+    )
 
     composer = ui_page_system.locator("sync-message-composer")
     await composer.locator('textarea[data-canon="composer"]').fill(root_text)
@@ -74,7 +84,11 @@ async def test_user_reply_opens_thread_in_drawer(
     await expect(
         ui_page_system.locator("sync-message-bubble").get_by_text(root_text, exact=True)
     ).to_be_visible(timeout=30_000)
-    await scenario.step("Отправлено корневое сообщение", ui_page_system)
+    await scenario.step(
+        "Отправлено корневое сообщение",
+        ui_page_system,
+        label_en="Root message sent",
+    )
 
     bubble = ui_page_system.locator("sync-message-bubble").filter(has_text=root_text)
     await _open_message_context_menu(ui_page_system, bubble)
@@ -87,10 +101,18 @@ async def test_user_reply_opens_thread_in_drawer(
     await expect(
         thread_drawer.locator("sync-message-bubble").get_by_text(reply_text, exact=True)
     ).to_be_visible(timeout=30_000)
-    await scenario.step("Открыт тред и отправлен ответ", ui_page_system)
+    await scenario.step(
+        "Открыт тред и отправлен ответ",
+        ui_page_system,
+        label_en="Thread opened and reply sent",
+    )
 
     await expect(thread_drawer.locator(".header")).to_be_visible()
-    await scenario.step("Открыта панель тредов", ui_page_system)
+    await scenario.step(
+        "Открыта панель тредов",
+        ui_page_system,
+        label_en="Threads panel opened",
+    )
 
 
 @pytest.mark.scenario(
@@ -101,6 +123,11 @@ async def test_user_reply_opens_thread_in_drawer(
     description=(
         "Сообщение отправляется из UI; реакция ставится через API; после перезагрузки видна метка "
         "реакции; редактирование текста выполняется в UI."
+    ),
+    title_en="Sync: react to and edit your own message",
+    description_en=(
+        "A message is sent from the UI; a reaction is added via API; after reload the reaction "
+        "badge is visible; text editing is done in the UI."
     ),
 )
 @pytest.mark.asyncio
@@ -124,7 +151,11 @@ async def test_user_reacts_and_edits_own_message(
     await expect(
         ui_page_system.locator("sync-message-bubble").get_by_text(first_text, exact=True)
     ).to_be_visible(timeout=30_000)
-    await scenario.step("Сообщение отправлено", ui_page_system)
+    await scenario.step(
+        "Сообщение отправлено",
+        ui_page_system,
+        label_en="Message sent",
+    )
 
     channel_name_only = f"Канал тредов {unique_id}"
     channel_id = await sync_api_channel_id_by_name(sync_ui.origin, auth_token_system, channel_name_only)
@@ -140,7 +171,11 @@ async def test_user_reacts_and_edits_own_message(
     await expect(ui_page_system.locator("sync-message-bubble .reaction").first).to_be_visible(
         timeout=30_000
     )
-    await scenario.step("Поставлена реакция", ui_page_system)
+    await scenario.step(
+        "Поставлена реакция",
+        ui_page_system,
+        label_en="Reaction added",
+    )
 
     bubble = ui_page_system.locator("sync-message-bubble").filter(has_text=first_text)
     await _open_message_context_menu(ui_page_system, bubble)
@@ -150,7 +185,11 @@ async def test_user_reacts_and_edits_own_message(
     await expect(
         ui_page_system.locator("sync-message-bubble").get_by_text(edited_text, exact=True)
     ).to_be_visible(timeout=30_000)
-    await scenario.step("Текст сообщения изменён", ui_page_system)
+    await scenario.step(
+        "Текст сообщения изменён",
+        ui_page_system,
+        label_en="Message text changed",
+    )
 
 
 @pytest.mark.scenario(
@@ -159,6 +198,8 @@ async def test_user_reacts_and_edits_own_message(
     doc_slug="delete-own-message",
     title="Sync: удаление своего сообщения",
     description="Пользователь удаляет своё сообщение через контекстное меню.",
+    title_en="Sync: delete your own message",
+    description_en="The user deletes their own message via the context menu.",
 )
 @pytest.mark.asyncio
 @pytest.mark.e2e
@@ -178,9 +219,17 @@ async def test_user_deletes_own_message(
     await composer.locator('button.send').click()
     bubble = ui_page_system.locator("sync-message-bubble").filter(has_text=msg_text)
     await expect(bubble).to_be_visible(timeout=30_000)
-    await scenario.step("Сообщение для удаления в ленте", ui_page_system)
+    await scenario.step(
+        "Сообщение для удаления в ленте",
+        ui_page_system,
+        label_en="Message to delete in the feed",
+    )
 
     await _open_message_context_menu(ui_page_system, bubble)
     await _click_context_item(ui_page_system, "Удалить", "Delete")
     await expect(bubble).to_be_hidden(timeout=30_000)
-    await scenario.step("Сообщение исчезло из ленты", ui_page_system)
+    await scenario.step(
+        "Сообщение исчезло из ленты",
+        ui_page_system,
+        label_en="Message removed from the feed",
+    )

@@ -1,11 +1,11 @@
-# Sync: ad-hoc звонок использует обычный видимый канал
+# Sync: ad-hoc call uses a normal visible channel
 
-Кнопка «Создать Sync» создаёт канал встречи с читаемым именем (дата и время), чат в оверлее работает, а после переключения каналов сообщения встречи сохраняются в этом канале.
+The «Create Sync» button creates a meeting channel with a readable name (date and time), chat works in the overlay, and after switching channels the meeting messages remain in that channel.
 
-## Step 1. Ad-hoc встреча создала видимый канал с именем по дате/времени
+## Step 1. Ad-hoc meeting created a visible channel named by date and time
 
-![Ad-hoc встреча создала видимый канал с именем по дате/времени](screenshots/001.png)
+![Ad-hoc meeting created a visible channel named by date and time](adhoc-call-visible-channel--01-ad-hoc-vstrecha-sozdala-vidimyy-kanal-s-imenem-po-date-vremeni.png)
 
-## Step 2. После переключения каналов сообщения ad-hoc канала сохранены
+## Step 2. After switching channels, ad-hoc channel messages are preserved
 
-![После переключения каналов сообщения ad-hoc канала сохранены](screenshots/002.png)
+![After switching channels, ad-hoc channel messages are preserved](adhoc-call-visible-channel--02-posle-pereklyucheniya-kanalov-soobshcheniya-ad-hoc-kanala.png)

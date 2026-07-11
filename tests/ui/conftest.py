@@ -31,7 +31,7 @@ _FORCE_LIGHT_THEME_INIT_SCRIPT = """
 
 @pytest_asyncio.fixture
 async def scenario(request: pytest.FixtureRequest) -> ScenarioRecorder:
-    """Собирает шаги и скриншоты; пишет `docs/scenarios/<service>/<tag>/<slug>/README.md` (см. `@pytest.mark.scenario`, опционально `doc_slug`)."""
+    """Пишет README RU/EN и именованные PNG рядом: docs/scenarios/<service>/<tag>/<slug>/."""
     rec = ScenarioRecorder.from_pytest_node(request.node)
     yield rec
     rec.finalize()

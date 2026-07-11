@@ -4,8 +4,8 @@
 
 ## Шаг 1. Открыты настройки канала
 
-![Открыты настройки канала](screenshots/001.png)
+![Открыты настройки канала](mute-channel-notifications--01-otkryty-nastroyki-kanala.png)
 
 ## Шаг 2. Включён мьют уведомлений
 
-![Включён мьют уведомлений](screenshots/002.png)
+![Включён мьют уведомлений](mute-channel-notifications--02-vklyuchyon-myut-uvedomleniy.png)

@@ -76,6 +76,14 @@ class TestNodeEventsStreaming:
             complete_event = collected_events[1]
             assert isinstance(complete_event, TaskArtifactUpdateEvent)
             assert complete_event.artifact.name == "node_complete_process"
+            complete_data = complete_event.artifact.parts[0].root.data
+            assert complete_data["event"] == "node_complete"
+            assert complete_data["node_id"] == "process"
+            assert complete_data["node_type"] == "code"
+            assert isinstance(complete_data["duration_ms"], int)
+            assert complete_data["run_index"] == 0
+            assert isinstance(complete_data["result_preview"], str)
+            assert isinstance(complete_data["diff"], list)
         finally:
             await redis_client.close()
 

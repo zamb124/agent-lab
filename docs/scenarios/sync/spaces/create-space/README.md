@@ -4,8 +4,8 @@
 
 ## Шаг 1. Открыт Sync со списком всех пространств
 
-![Открыт Sync со списком всех пространств](screenshots/001.png)
+![Открыт Sync со списком всех пространств](create-space--01-sync-is-open-with-all-spaces-selected.png)
 
 ## Шаг 2. Пространство выбрано в сайдбаре
 
-![Пространство выбрано в сайдбаре](screenshots/002.png)
+![Пространство выбрано в сайдбаре](create-space--02-space-is-selected-in-the-sidebar.png)

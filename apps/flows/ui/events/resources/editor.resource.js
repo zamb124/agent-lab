@@ -29,6 +29,64 @@ function _withId(list, id) {
     return [...list, id];
 }
 
+function _normalizeDiffItem(entry) {
+    if (entry === null || typeof entry !== 'object' || Array.isArray(entry)) {
+        throw new Error('flows/editor: diff entry must be an object');
+    }
+    const path = entry.path;
+    const changeType = entry.change_type;
+    if (typeof path !== 'string') {
+        throw new Error('flows/editor: diff entry.path must be a string');
+    }
+    if (typeof changeType !== 'string') {
+        throw new Error('flows/editor: diff entry.change_type must be a string');
+    }
+    if (!('old_value' in entry)) {
+        throw new Error('flows/editor: diff entry.old_value is required');
+    }
+    if (!('new_value' in entry)) {
+        throw new Error('flows/editor: diff entry.new_value is required');
+    }
+    return Object.freeze({
+        path,
+        old_value: entry.old_value,
+        new_value: entry.new_value,
+        change_type: changeType,
+    });
+}
+
+function _normalizeDiffList(raw) {
+    if (!Array.isArray(raw)) {
+        throw new Error('flows/editor: diff must be an array');
+    }
+    const out = [];
+    for (let i = 0; i < raw.length; i += 1) {
+        out.push(_normalizeDiffItem(raw[i]));
+    }
+    return Object.freeze(out);
+}
+
+function _appendNodeRunResult(nodeRunResults, nodeId, result) {
+    const base = _isPlainObject(nodeRunResults) ? nodeRunResults : {};
+    const existing = base[nodeId];
+    const nextList = Array.isArray(existing) ? [...existing] : [];
+    nextList.push(Object.freeze(result));
+    return Object.freeze({ ...base, [nodeId]: Object.freeze(nextList) });
+}
+
+function _nodeRunResultKey(nodeId, runIndex) {
+    return `${nodeId}:${String(runIndex)}`;
+}
+
+function _toggleExpandedNodeRunKey(expandedKeys, nodeId, runIndex) {
+    const key = _nodeRunResultKey(nodeId, runIndex);
+    const base = Array.isArray(expandedKeys) ? expandedKeys : [];
+    if (base.includes(key)) {
+        return base.filter((item) => item !== key);
+    }
+    return [...base, key];
+}
+
 const _DEEP_MERGE_EXCLUDE = new Set(['node_id', 'tool_id', 'flow_id']);
 
 function _isPlainObject(value) {
@@ -261,9 +319,14 @@ export const editorResource = createAsyncOp({
         runningEdgeIndices: [],
         completedEdgeIndices: [],
         failedEdgeIndices: [],
-        erroredNodes: {},
-        breakpointNodeIds: [],
+                erroredNodes: {},
+                nodeRunResults: Object.freeze({}),
+                expandedNodeRunKeys: Object.freeze([]),
+                breakpointNodeIds: [],
         breakpointHitNodeId: null,
+        nodeRunResults: Object.freeze({}),
+        expandedNodeRunKeys: Object.freeze([]),
+        showCanvasRunResults: true,
         entryNodeId: null,
         inheritedNodeIds: [],
         inheritedEdgeKeys: [],
@@ -314,6 +377,8 @@ export const editorResource = createAsyncOp({
         BREAKPOINT_TOGGLED: 'breakpoint_toggled',
         NODE_DELETED: 'node_deleted',
         PENDING_NODE_TOOL_CLEARED: 'pending_node_tool_cleared',
+        NODE_RUN_RESULT_EXPAND_TOGGLED: 'node_run_result_expand_toggled',
+        CANVAS_RUN_RESULTS_TOGGLED: 'canvas_run_results_toggled',
     },
     actions: {
         setFlow: 'flow_loaded',
@@ -353,6 +418,8 @@ export const editorResource = createAsyncOp({
         toggleBreakpoint: 'breakpoint_toggled',
         removeNode: 'node_deleted',
         clearPendingNodeTool: 'pending_node_tool_cleared',
+        toggleNodeRunResultExpand: 'node_run_result_expand_toggled',
+        toggleCanvasRunResults: 'canvas_run_results_toggled',
     },
     extraReducer: (state, event) => {
         const t = event.type;
@@ -755,6 +822,8 @@ export const editorResource = createAsyncOp({
                 completedEdgeIndices: [],
                 failedEdgeIndices: [],
                 erroredNodes: {},
+                nodeRunResults: Object.freeze({}),
+                expandedNodeRunKeys: Object.freeze([]),
                 breakpointHitNodeId: null,
                 agentExecutionRunning: true,
             };
@@ -826,17 +895,67 @@ export const editorResource = createAsyncOp({
         if (t === 'flows/run/node_completed') {
             const nodeId = p.node_id;
             if (typeof nodeId !== 'string' || nodeId.length === 0) return state;
+            const runIndex = typeof p.run_index === 'number' && Number.isFinite(p.run_index)
+                ? Math.floor(p.run_index)
+                : (() => {
+                    const existing = state.nodeRunResults && typeof state.nodeRunResults === 'object'
+                        ? state.nodeRunResults[nodeId]
+                        : null;
+                    return Array.isArray(existing) ? existing.length : 0;
+                })();
+            const nodeType = typeof p.node_type === 'string' ? p.node_type : '';
+            const resultPreview = typeof p.result_preview === 'string' ? p.result_preview : '';
+            const primaryField = typeof p.primary_field === 'string' ? p.primary_field : '';
+            let durationMs = null;
+            if (typeof p.duration_ms === 'number' && Number.isFinite(p.duration_ms)) {
+                durationMs = Math.round(p.duration_ms);
+            }
+            const diff = Array.isArray(p.diff) ? _normalizeDiffList(p.diff) : Object.freeze([]);
+            const result = Object.freeze({
+                kind: 'ok',
+                node_id: nodeId,
+                node_type: nodeType,
+                run_index: runIndex,
+                result_preview: resultPreview,
+                primary_field: primaryField,
+                duration_ms: durationMs,
+                diff,
+            });
             return {
                 ...state,
                 runningNodeIds: _withoutId(state.runningNodeIds, nodeId),
                 completedNodeIds: _withId(state.completedNodeIds, nodeId),
+                nodeRunResults: _appendNodeRunResult(state.nodeRunResults, nodeId, result),
             };
         }
 
         if (t === 'flows/run/node_failed') {
             const nodeId = p.node_id;
             if (typeof nodeId !== 'string' || nodeId.length === 0) return state;
-            const erroredCopy = { ...state.erroredNodes, [nodeId]: typeof p.error === 'string' ? p.error : '' };
+            const runIndex = typeof p.run_index === 'number' && Number.isFinite(p.run_index)
+                ? Math.floor(p.run_index)
+                : (() => {
+                    const existing = state.nodeRunResults && typeof state.nodeRunResults === 'object'
+                        ? state.nodeRunResults[nodeId]
+                        : null;
+                    return Array.isArray(existing) ? existing.length : 0;
+                })();
+            const nodeType = typeof p.node_type === 'string' ? p.node_type : '';
+            let durationMs = null;
+            if (typeof p.duration_ms === 'number' && Number.isFinite(p.duration_ms)) {
+                durationMs = Math.round(p.duration_ms);
+            }
+            const errorText = typeof p.error === 'string' ? p.error : '';
+            const result = Object.freeze({
+                kind: 'error',
+                node_id: nodeId,
+                node_type: nodeType,
+                run_index: runIndex,
+                error: errorText,
+                duration_ms: durationMs,
+                diff: Object.freeze([]),
+            });
+            const erroredCopy = { ...state.erroredNodes, [nodeId]: errorText };
             const edges = state.branchData && Array.isArray(state.branchData.edges)
                 ? state.branchData.edges
                 : [];
@@ -854,13 +973,37 @@ export const editorResource = createAsyncOp({
                 erroredNodes: erroredCopy,
                 runningEdgeIndices: Array.from(runSet),
                 failedEdgeIndices: Array.from(failSet),
+                nodeRunResults: _appendNodeRunResult(state.nodeRunResults, nodeId, result),
             };
+        }
+
+        if (t === 'flows/editor/node_run_result_expand_toggled') {
+            const nodeId = p.nodeId;
+            const runIndex = p.runIndex;
+            if (typeof nodeId !== 'string' || nodeId.length === 0) return state;
+            if (typeof runIndex !== 'number' || !Number.isFinite(runIndex)) return state;
+            return {
+                ...state,
+                expandedNodeRunKeys: Object.freeze(
+                    _toggleExpandedNodeRunKey(state.expandedNodeRunKeys, nodeId, Math.floor(runIndex)),
+                ),
+            };
+        }
+
+        if (t === 'flows/editor/canvas_run_results_toggled') {
+            if (typeof p.value !== 'boolean') return state;
+            return { ...state, showCanvasRunResults: p.value };
         }
 
         if (t === 'flows/breakpoint/hit') {
             const nodeId = p.node_id;
             if (typeof nodeId !== 'string' || nodeId.length === 0) return state;
             return { ...state, breakpointHitNodeId: nodeId };
+        }
+
+        if (t === 'flows/breakpoint/clear') {
+            if (state.breakpointHitNodeId === null) return state;
+            return { ...state, breakpointHitNodeId: null };
         }
 
         if (t === 'flows/editor/node_deleted') {

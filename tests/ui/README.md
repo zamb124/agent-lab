@@ -21,16 +21,47 @@ make test-ui-doc      # test-ui + make doc
     doc_slug="send-message-in-channel",
     title="Sync: отправка сообщения в канал",
     title_en="Sync: send a message in a channel",
-    description="…",
+    description=(
+        "**Для чего:** …\n\n"
+        "**Какие проблемы решает:** …\n\n"
+        "**Результат:** …"
+    ),
     description_en="…",
 )
 async def test_user_sends_message(scenario: ScenarioRecorder, sync_ui: AppUI, page: Page) -> None:
-    await scenario.step("Открыт канал", page, label_en="Channel opened")
-    await scenario.step("Сообщение отправлено", page, label_en="Message sent")
+    await scenario.step(
+        "Откройте канал",
+        page,
+        label_en="Open the channel",
+        screenshot_name="channel-opened",
+        details="Что сделать, зачем это нужно и что должно появиться на экране.",
+        details_en="What to do, why it matters, and what should appear on screen.",
+    )
+    # Ещё 2–5 содержательных шагов.
+    await scenario.step(
+        "Проверьте отправленное сообщение",
+        page,
+        label_en="Verify the sent message",
+        screenshot_name="message-visible",
+        details="**Демонстрация результата.** …\n\n**Итог.** …",
+        details_en="**Result demonstration.** …\n\n**Summary.** …",
+    )
 ```
 
-3. Минимум **2** вызова `scenario.step(..., page, label_en=...)` со скриншотами (для Office — целевой формат **4–7** шагов на инструкцию).
+3. Делайте **4–7** пользовательских шагов. У каждого обязательны `page`, `details` и короткий смысловой `screenshot_name`.
 4. `make test-ui-doc` — обновить README и статический сайт.
+
+README и его PNG всегда лежат в одном каталоге:
+
+```text
+docs/scenarios/sync/chat/send-message-in-channel/
+├── README.md
+├── README.en.md
+├── send-message-in-channel--01-channel-opened.png
+└── send-message-in-channel--04-message-visible.png
+```
+
+Формат имени задаёт движок: `<doc_slug>--<номер>-<screenshot_name>.png`. Папка `screenshots/` запрещена.
 
 ## Office (`/documents`)
 

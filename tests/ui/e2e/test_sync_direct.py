@@ -18,6 +18,10 @@ from tests.ui.scenario_doc import ScenarioRecorder
     description=(
         "В разделе «Личные» пользователь находит коллегу по имени и открывает с ним диалог."
     ),
+    title_en="Sync: open a chat with a company member",
+    description_en=(
+        "In the «Direct» section the user finds a colleague by name and opens a conversation with them."
+    ),
 )
 @pytest.mark.asyncio
 @pytest.mark.e2e
@@ -34,14 +38,22 @@ async def test_user_opens_direct_dm_from_member_list(
     await sync_ui.open(ui_page_system)
     await sync_ui.expect_shell(ui_page_system)
     await sync_e2e_expect_ws_open(ui_page_system)
-    await scenario.step("Sync открыт, раздел «Личные» доступен", ui_page_system)
+    await scenario.step(
+        "Sync открыт, раздел «Личные» доступен",
+        ui_page_system,
+        label_en="Sync opened, Direct section is available",
+    )
 
     chat_list = ui_page_system.locator("sync-sidebar sync-chat-list").first
     await chat_list.locator(".search-scope-btn").nth(1).click()
     search = chat_list.locator("input.sync-chat-list-search-input")
     await expect(search).to_be_visible()
     await search.fill(peer_display)
-    await scenario.step("Поиск по имени участника", ui_page_system)
+    await scenario.step(
+        "Поиск по имени участника",
+        ui_page_system,
+        label_en="Search by member name",
+    )
 
     row = ui_page_system.locator("sync-direct-member-row").filter(
         has=ui_page_system.get_by_text(peer_display, exact=True)
@@ -49,4 +61,8 @@ async def test_user_opens_direct_dm_from_member_list(
     await expect(row).to_be_visible(timeout=30_000)
     await row.click()
     await expect(ui_page_system.locator("sync-channel-page")).to_be_visible()
-    await scenario.step("Открыт чат с выбранным участником", ui_page_system)
+    await scenario.step(
+        "Открыт чат с выбранным участником",
+        ui_page_system,
+        label_en="Chat opened with the selected member",
+    )

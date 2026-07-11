@@ -6,6 +6,7 @@ import inspect
 import os
 import re
 import shutil
+import unicodedata
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -233,6 +234,134 @@ def _strip_optional(s: object | None) -> str | None:
     return t or None
 
 
+_SCREENSHOT_SEMANTIC_MAX_LENGTH = 64
+_SCREENSHOT_TRAILING_STOP_WORDS = {
+    "a",
+    "an",
+    "and",
+    "at",
+    "do",
+    "dlya",
+    "for",
+    "from",
+    "i",
+    "in",
+    "iz",
+    "k",
+    "ko",
+    "na",
+    "o",
+    "ob",
+    "of",
+    "on",
+    "or",
+    "ot",
+    "po",
+    "s",
+    "so",
+    "the",
+    "to",
+    "v",
+    "vo",
+    "with",
+}
+_CYRILLIC_TO_LATIN = str.maketrans(
+    {
+        "а": "a",
+        "б": "b",
+        "в": "v",
+        "г": "g",
+        "д": "d",
+        "е": "e",
+        "ё": "yo",
+        "ж": "zh",
+        "з": "z",
+        "и": "i",
+        "й": "y",
+        "к": "k",
+        "л": "l",
+        "м": "m",
+        "н": "n",
+        "о": "o",
+        "п": "p",
+        "р": "r",
+        "с": "s",
+        "т": "t",
+        "у": "u",
+        "ф": "f",
+        "х": "kh",
+        "ц": "ts",
+        "ч": "ch",
+        "ш": "sh",
+        "щ": "shch",
+        "ъ": "",
+        "ы": "y",
+        "ь": "",
+        "э": "e",
+        "ю": "yu",
+        "я": "ya",
+    }
+)
+
+
+def _screenshot_semantic_slug(value: str) -> str:
+    transliterated = value.strip().lower().translate(_CYRILLIC_TO_LATIN)
+    ascii_text = (
+        unicodedata.normalize("NFKD", transliterated)
+        .encode("ascii", "ignore")
+        .decode("ascii")
+    )
+    tokens: list[str] = re.findall(r"[a-z0-9]+", ascii_text)
+    selected: list[str] = []
+    for token in tokens:
+        candidate = "-".join([*selected, token])
+        if len(candidate) > _SCREENSHOT_SEMANTIC_MAX_LENGTH:
+            if not selected:
+                selected.append(token[:_SCREENSHOT_SEMANTIC_MAX_LENGTH])
+            break
+        selected.append(token)
+    while len(selected) > 1 and selected[-1] in _SCREENSHOT_TRAILING_STOP_WORDS:
+        _ = selected.pop()
+    return "-".join(selected)
+
+
+def build_screenshot_filename(
+    instruction_slug: str,
+    step_no: int,
+    label: str,
+    *,
+    label_en: str | None = None,
+    screenshot_name: str | None = None,
+) -> str:
+    """Собрать стабильное имя `<instruction>--<NN>-<meaning>.png`."""
+    explicit_name = _strip_optional(screenshot_name)
+    if screenshot_name is not None and explicit_name is None:
+        raise ValueError("scenario.step: screenshot_name не может быть пустым")
+    source = explicit_name or _strip_optional(label_en) or _strip_optional(label)
+    if source is None:
+        raise ValueError("scenario.step: для скриншота нужен непустой label или screenshot_name")
+    semantic_slug = _screenshot_semantic_slug(source)
+    if not semantic_slug:
+        requirement = "scenario.step: screenshot_name/label должен содержать понятное имя"
+        raise ValueError(
+            f"{requirement} латиницей, кириллицей или цифрами"
+        )
+    return f"{instruction_slug}--{step_no:02d}-{semantic_slug}.png"
+
+
+def prepare_flat_screenshot_output(out_dir: Path, instruction_slug: str) -> Path:
+    """Удалить legacy-папку и старые PNG инструкции, затем вернуть каталог README."""
+    out_dir.mkdir(parents=True, exist_ok=True)
+    legacy_dir = out_dir / "screenshots"
+    if legacy_dir.is_dir():
+        shutil.rmtree(legacy_dir)
+    elif legacy_dir.exists():
+        legacy_dir.unlink()
+    for old_image in out_dir.glob(f"{instruction_slug}--*.png"):
+        old_image.unlink()
+    return out_dir
+
+
 @dataclass
 class _StepRecord:
     label: str
@@ -323,16 +452,12 @@ class ScenarioRecorder:
         v = os.environ.get(_ENV_DISABLE, "").strip().lower()
         return v in ("0", "false", "no", "off")
 
-    def _prepare_screenshot_dir(self) -> Path:
-        shot_dir = self.out_dir / "screenshots"
+    def _prepare_screenshot_output(self) -> Path:
         if not self._screenshots_prepared:
-            if shot_dir.exists():
-                shutil.rmtree(shot_dir)
-            shot_dir.mkdir(parents=True, exist_ok=True)
             self._screenshots_prepared = True
-            return shot_dir
-        shot_dir.mkdir(parents=True, exist_ok=True)
-        return shot_dir
+            return prepare_flat_screenshot_output(self.out_dir, self.slug)
+        self.out_dir.mkdir(parents=True, exist_ok=True)
+        return self.out_dir
 
     async def step(
         self,
@@ -341,15 +466,23 @@ class ScenarioRecorder:
         *,
         full_page: bool = True,
         label_en: str | None = None,
+        screenshot_name: str | None = None,
         details: str | None = None,
         details_en: str | None = None,
     ) -> None:
         """Фиксирует шаг; при переданном page ждёт готовность UI и делает скриншот."""
         rel: str | None = None
+        le = _strip_optional(label_en)
         if page is not None and not self.disabled():
             n = len(self.steps) + 1
-            shot_dir = self._prepare_screenshot_dir()
-            fname = f"{n:03d}.png"
+            shot_dir = self._prepare_screenshot_output()
+            fname = build_screenshot_filename(
+                self.slug,
+                n,
+                label,
+                label_en=le,
+                screenshot_name=screenshot_name,
+            )
             await _await_screenshot_ready(page)
             await page.screenshot(
                 path=str(shot_dir / fname),
@@ -357,8 +490,7 @@ class ScenarioRecorder:
                 animations="disabled",
                 caret="hide",
             )
-            rel = f"screenshots/{fname}"
-        le = _strip_optional(label_en)
+            rel = fname
         self.steps.append(
             _StepRecord(
                 label=label,

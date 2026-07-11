@@ -32,6 +32,11 @@ from tests.ui.scenario_doc import ScenarioRecorder
         "Пошаговая инструкция для обычного пользователя: открыть Flows, выбрать шаблон, "
         "заполнить понятные поля и попасть в редактор с готовой канвой."
     ),
+    title_en="Flows: creating a flow",
+    description_en=(
+        "A step-by-step guide for a regular user: open Flows, pick a template, "
+        "fill in the fields, and land in the editor with a ready canvas."
+    ),
 )
 @pytest.mark.asyncio
 @pytest.mark.e2e
@@ -53,6 +58,7 @@ async def test_flows_create_graph_flow_scenario(
     await scenario.step(
         "Открываем Flows. Это список ваших flow: здесь можно найти готового агента или создать нового.",
         page,
+        label_en="Open Flows. This is your flow list where you can find an existing agent or create a new one.",
     )
 
     await page.locator("flows-catalog-list [data-action='create-flow']").first.click()
@@ -61,6 +67,7 @@ async def test_flows_create_graph_flow_scenario(
     await scenario.step(
         "Нажимаем плюс. Открывается мастер создания: сначала выбираем тип будущего flow.",
         page,
+        label_en="Click the plus button. The creation wizard opens: first you choose the type of flow.",
     )
 
     await modal.locator('platform-picker-card[value="graph"]').click()
@@ -74,6 +81,7 @@ async def test_flows_create_graph_flow_scenario(
     await scenario.step(
         "Заполняем ID, название и описание. ID нужен системе, а название и описание видит человек.",
         page,
+        label_en="Fill in ID, name, and description. The ID is for the system; the name and description are for people.",
     )
 
     await flows_click_platform_button(modal, "Создать", "Create")
@@ -82,6 +90,7 @@ async def test_flows_create_graph_flow_scenario(
     await scenario.step(
         "После создания мы сразу попадаем в редактор. На канве уже есть две ноды: Start и End.",
         page,
+        label_en="After creation you land in the editor. The canvas already has two nodes: Start and End.",
     )
 
     created = await flows_api_get_flow(flows_ui.origin, auth_token_system, flow_id)
@@ -97,6 +106,11 @@ async def test_flows_create_graph_flow_scenario(
     description=(
         "Инструкция показывает, как добавить LLM Node на канву, открыть настройки ноды, "
         "заполнить промпт и выбрать LLM-профиль."
+    ),
+    title_en="Flows: adding an LLM node",
+    description_en=(
+        "Guide showing how to add an LLM Node to the canvas, open node settings, "
+        "fill in the prompt, and choose an LLM profile."
     ),
 )
 @pytest.mark.asyncio
@@ -127,6 +141,7 @@ async def test_flows_add_llm_node_scenario(
     await scenario.step(
         "Открываем редактор flow. Слева находится палитра нод, в центре находится канва.",
         page,
+        label_en="Open the flow editor. The node palette is on the left and the canvas is in the center.",
     )
 
     await flows_drop_llm_node(page)
@@ -134,6 +149,7 @@ async def test_flows_add_llm_node_scenario(
     await scenario.step(
         "Перетаскиваем LLM Node из палитры на канву. Справа открываются настройки выбранной ноды.",
         page,
+        label_en="Drag an LLM Node from the palette onto the canvas. Node settings open on the right.",
     )
 
     prompt = (
@@ -154,12 +170,14 @@ async def test_flows_add_llm_node_scenario(
     await scenario.step(
         "Заполняем промпт и LLM-настройки. Промпт говорит агенту, как вести себя с пользователем.",
         page,
+        label_en="Fill in the prompt and LLM settings. The prompt tells the agent how to behave with the user.",
     )
 
     await flows_publish_editor(page)
     await scenario.step(
         "Нажимаем Publish. Так черновик сохраняется, и flow можно запускать или продолжать редактировать позже.",
         page,
+        label_en="Click Publish. This saves the draft so you can run the flow or keep editing later.",
     )
 
     saved = await flows_api_get_flow(flows_ui.origin, auth_token_system, flow_id)
@@ -177,6 +195,11 @@ async def test_flows_add_llm_node_scenario(
     description=(
         "Инструкция для повторного редактирования: открыть готовый flow, изменить название, "
         "обновить промпт LLM-ноды и сохранить изменения."
+    ),
+    title_en="Flows: editing a flow",
+    description_en=(
+        "Guide for editing an existing flow: open a ready flow, change the name, "
+        "update the LLM node prompt, and save changes."
     ),
 )
 @pytest.mark.asyncio
@@ -212,6 +235,7 @@ async def test_flows_edit_llm_flow_scenario(
     await scenario.step(
         "Открываем уже готовый flow и кликаем по LLM-ноду. Справа снова видны ее настройки.",
         page,
+        label_en="Open an existing flow and click the LLM node. Its settings appear on the right again.",
     )
 
     new_name = "Flow после редактирования"
@@ -227,12 +251,14 @@ async def test_flows_edit_llm_flow_scenario(
     await scenario.step(
         "Меняем название flow и переписываем промпт. Это обычное редактирование: как переименовать файл и исправить текст.",
         page,
+        label_en="Change the flow name and rewrite the prompt. This is everyday editing — like renaming a file and fixing its text.",
     )
 
     await flows_publish_editor(page)
     await scenario.step(
         "Сохраняем изменения через Publish. После этого новое название и промпт лежат в сохраненной версии flow.",
         page,
+        label_en="Save changes with Publish. After that, the new name and prompt are in the saved version of the flow.",
     )
 
     saved = await flows_api_get_flow(flows_ui.origin, auth_token_system, flow_id)

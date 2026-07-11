@@ -4,8 +4,8 @@
 
 ## Шаг 1. Повторное открытие Sync по прямой ссылке канала
 
-![Повторное открытие Sync по прямой ссылке канала](screenshots/001.png)
+![Повторное открытие Sync по прямой ссылке канала](channel-from-url-query--01-povtornoe-otkrytie-sync-po-pryamoy-ssylke-kanala.png)
 
 ## Шаг 2. Сообщение уходит в канал, выбранный из URL
 
-![Сообщение уходит в канал, выбранный из URL](screenshots/002.png)
+![Сообщение уходит в канал, выбранный из URL](channel-from-url-query--02-soobshchenie-ukhodit-v-kanal-vybrannyy-iz-url.png)

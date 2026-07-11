@@ -6,7 +6,7 @@
 
 На главной Flows выберите flow или нажмите кнопку чата на карточке. Откроется route вида `/flows/tutor`.
 
-![Чат flow в светлой теме: слева каталог flow, сверху действия, в центре пустой диалог и composer.](screenshots/001.png)
+![Чат flow в светлой теме: слева каталог flow, сверху действия, в центре пустой диалог и composer.](run-flow-chat--01-flow-chat-in-the-light-theme-flow-catalog-on-the-left-actions.png)
 
 ## Шаг 2. Отправляем сообщение
 

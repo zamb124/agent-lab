@@ -4135,6 +4135,22 @@
               }
             ],
             "title": "Type"
+          },
+          "required": {
+            "type": "boolean",
+            "title": "Required",
+            "default": false
+          },
+          "producer_node": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Producer Node"
           }
         },
         "additionalProperties": false,
@@ -4190,6 +4206,16 @@
             "type": "boolean",
             "title": "Has Issues",
             "default": false
+          },
+          "error_count": {
+            "type": "integer",
+            "title": "Error Count",
+            "default": 0
+          },
+          "warning_count": {
+            "type": "integer",
+            "title": "Warning Count",
+            "default": 0
           }
         },
         "additionalProperties": false,
@@ -4427,6 +4453,13 @@
             "type": "array",
             "title": "Input Mapping"
           },
+          "required_inputs": {
+            "items": {
+              "$ref": "#/components/schemas/DataflowRequiredInput"
+            },
+            "type": "array",
+            "title": "Required Inputs"
+          },
           "reads": {
             "items": {
               "$ref": "#/components/schemas/DataflowConfigRead"
@@ -4490,6 +4523,51 @@
           "node_type"
         ],
         "title": "DataflowNodeInfo"
+      },
+      "DataflowRequiredInput": {
+        "properties": {
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "origin": {
+            "type": "string",
+            "enum": [
+              "parameters_schema",
+              "prompt",
+              "contract"
+            ],
+            "title": "Origin"
+          },
+          "type": {
+            "type": "string",
+            "title": "Type",
+            "default": "any"
+          },
+          "satisfied": {
+            "type": "boolean",
+            "title": "Satisfied",
+            "default": false
+          },
+          "source": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "name",
+          "origin"
+        ],
+        "title": "DataflowRequiredInput"
       },
       "DataflowStateDescriptor": {
         "properties": {
@@ -4619,7 +4697,7 @@
           "change_type"
         ],
         "title": "DiffItem",
-        "description": "Элемент diff"
+        "description": "Элемент diff между state-снимками."
       },
       "Edge": {
         "properties": {
@@ -11442,6 +11520,13 @@
             "type": "object",
             "title": "Variables"
           },
+          "triggers": {
+            "additionalProperties": {
+              "$ref": "#/components/schemas/TriggerConfig"
+            },
+            "type": "object",
+            "title": "Triggers"
+          },
           "sample_state": {
             "anyOf": [
               {
@@ -12711,6 +12796,20 @@
           },
           "input_mapping": {
             "$ref": "#/components/schemas/NodeInputMapping"
+          },
+          "input_schema": {
+            "anyOf": [
+              {
+                "additionalProperties": {
+                  "$ref": "#/components/schemas/JsonValue"
+                },
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Input Schema"
           },
           "output_mapping": {
             "anyOf": [
@@ -14318,6 +14417,67 @@
               }
             ],
             "title": "Min Score"
+          },
+          "rrf_k": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "exclusiveMinimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Rrf K"
+          },
+          "per_channel_top_k": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "exclusiveMinimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Per Channel Top K"
+          },
+          "rerank_max_candidates": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "exclusiveMinimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Rerank Max Candidates"
+          },
+          "freshness_weight": {
+            "anyOf": [
+              {
+                "type": "number",
+                "maximum": 1.0,
+                "minimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Freshness Weight"
+          },
+          "freshness_half_life_days": {
+            "anyOf": [
+              {
+                "type": "number",
+                "exclusiveMinimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Freshness Half Life Days"
           }
         },
         "additionalProperties": false,
@@ -15056,6 +15216,83 @@
         ],
         "title": "ListResponse[str]"
       },
+      "MCPCatalogStoreItemResponse": {
+        "properties": {
+          "catalog_id": {
+            "type": "string",
+            "title": "Catalog Id"
+          },
+          "registry_name": {
+            "type": "string",
+            "title": "Registry Name"
+          },
+          "title": {
+            "type": "string",
+            "title": "Title"
+          },
+          "description": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Description"
+          },
+          "upstream_url": {
+            "type": "string",
+            "title": "Upstream Url"
+          },
+          "transport_type": {
+            "type": "string",
+            "title": "Transport Type"
+          },
+          "auth_policy": {
+            "type": "string",
+            "title": "Auth Policy"
+          },
+          "verify_status": {
+            "type": "string",
+            "title": "Verify Status"
+          },
+          "tool_count_snapshot": {
+            "type": "integer",
+            "title": "Tool Count Snapshot"
+          },
+          "installed": {
+            "type": "boolean",
+            "title": "Installed"
+          },
+          "icon_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Icon Url"
+          }
+        },
+        "type": "object",
+        "required": [
+          "catalog_id",
+          "registry_name",
+          "title",
+          "description",
+          "upstream_url",
+          "transport_type",
+          "auth_policy",
+          "verify_status",
+          "tool_count_snapshot",
+          "installed"
+        ],
+        "title": "MCPCatalogStoreItemResponse",
+        "description": "Запись MCP Store (opt-in tier)."
+      },
       "MCPServerBrandingListResponse": {
         "properties": {
           "items": {
@@ -15272,6 +15509,10 @@
             ],
             "title": "Catalog Snapshot Hash"
           },
+          "catalog_auto_provisioned": {
+            "type": "boolean",
+            "title": "Catalog Auto Provisioned"
+          },
           "override_locked": {
             "type": "boolean",
             "title": "Override Locked"
@@ -15325,6 +15566,7 @@
           "source",
           "catalog_id",
           "catalog_snapshot_hash",
+          "catalog_auto_provisioned",
           "override_locked",
           "override_locked_at",
           "override_locked_by_user_id"
@@ -16488,6 +16730,37 @@
           "offset"
         ],
         "title": "OffsetPage[FlowResponse]"
+      },
+      "OffsetPage_MCPCatalogStoreItemResponse_": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/MCPCatalogStoreItemResponse"
+            },
+            "type": "array",
+            "title": "Items"
+          },
+          "total": {
+            "type": "integer",
+            "title": "Total"
+          },
+          "limit": {
+            "type": "integer",
+            "title": "Limit"
+          },
+          "offset": {
+            "type": "integer",
+            "title": "Offset"
+          }
+        },
+        "type": "object",
+        "required": [
+          "items",
+          "total",
+          "limit",
+          "offset"
+        ],
+        "title": "OffsetPage[MCPCatalogStoreItemResponse]"
       },
       "OffsetPage_MCPServerResponse_": {
         "properties": {

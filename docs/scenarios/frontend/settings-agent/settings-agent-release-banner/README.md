@@ -4,12 +4,12 @@
 
 ## Шаг 1. Открыта страница настроек платформы
 
-![Открыта страница настроек платформы](screenshots/001.png)
+![Открыта страница настроек платформы](settings-agent-release-banner--01-platform-settings-page-opened.png)
 
 ## Шаг 2. Открыта вкладка HumanitecAgent
 
-![Открыта вкладка HumanitecAgent](screenshots/002.png)
+![Открыта вкладка HumanitecAgent](settings-agent-release-banner--02-humanitecagent-settings-tab-opened.png)
 
 ## Шаг 3. Блок статуса релиза отображается
 
-![Блок статуса релиза отображается](screenshots/003.png)
+![Блок статуса релиза отображается](settings-agent-release-banner--03-release-status-block-is-visible.png)

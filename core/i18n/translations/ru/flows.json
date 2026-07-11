@@ -1626,6 +1626,7 @@
     "mocks_title": "Моки",
     "reset_chat": "Сбросить чат",
     "reset_chat_title": "Новая сессия: очистить историю сообщений",
+    "toggle_canvas_results_aria": "Показывать результаты нод на канве",
     "close_panel": "Закрыть",
     "minimize_panel": "Свернуть панель",
     "restore_panel": "Развернуть панель",
@@ -1645,6 +1646,26 @@
     "add": "Ветка",
     "delete": "Удалить ветку",
     "group_aria": "Ветки flow"
+  },
+  "canvas_run_result": {
+    "running": "Выполняется…",
+    "empty": "Без изменений",
+    "duration_ms": "{{ms}} мс",
+    "changes_count": "{{count}} измен.",
+    "run_count": "×{{count}}",
+    "change_added": "Добавлено",
+    "change_changed": "Изменено",
+    "change_removed": "Удалено",
+    "value_array_items_one": "{{count}} элемент",
+    "value_array_items_other": "{{count}} элементов",
+    "value_object_fields_one": "{{count}} поле",
+    "value_object_fields_other": "{{count}} полей",
+    "value_null": "пусто",
+    "value_true": "да",
+    "value_false": "нет",
+    "headline_external_api": "HTTP {{status}}",
+    "headline_channel_ok": "Сообщение отправлено",
+    "headline_hitl": "Передано оператору"
   },
   "canvas": {
     "dataflow": {

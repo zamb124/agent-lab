@@ -2756,6 +2756,71 @@ export class PlatformChat extends LitElement {
         });
     }
 
+    _hasActiveBreakpoint() {
+        return this._currentMessages().some(
+            (message) => message
+                && message.role === 'assistant'
+                && message.breakpoint
+                && typeof message.breakpoint === 'object',
+        );
+    }
+
+    _onContinueBreakpoint(e) {
+        e.stopPropagation();
+        void this._sendResumeTurn();
+    }
+
+    _onBubbleViewBreakpointState(e) {
+        e.stopPropagation();
+        this.dispatchEvent(
+            new CustomEvent('view-breakpoint-state', {
+                detail: e.detail,
+                bubbles: true,
+                composed: true,
+            }),
+        );
+    }
+
+    async _sendResumeTurn() {
+        if (this._isLoading() || !this._hasActiveBreakpoint()) {
+            return;
+        }
+        if (!this.flowsBaseUrl || (!this.flowId && !this.embedId)) {
+            throw new Error('platform-chat: flowsBaseUrl and (flowId or embedId) are required');
+        }
+        stopStreamTtsPlayback();
+        if (this._streamTtsAllowed() && this._voiceTtsContextReady() && !this._voiceOn) {
+            primeStreamTtsPlaybackFromUserGesture();
+            this._ttsOnly.primeFromUserGesture();
+            await this._ttsOnly.awaitReady();
+        }
+        const { metadata, variables } = await this._composeSendMetadata();
+        this._emitAssistantEvent('context_requested', {
+            flow_id: this.flowId || null,
+            branch_id: this._branchId() || null,
+            embed_id: this.embedId || null,
+            variables,
+        });
+        this._pendingAssistantReplyNotify = true;
+        this._stickToBottom = true;
+        this._controller.setTarget(this._controllerTarget());
+        this._controller.setCredentials(this._requestCredentials());
+        try {
+            await this._controller.sendResume({ metadata });
+        } catch (err) {
+            const m = err instanceof Error ? err.message : String(err);
+            this._emitAssistantEvent('error', {
+                message: m,
+                flow_id: this.flowId || null,
+                branch_id: this._branchId() || null,
+                embed_id: this.embedId || null,
+            });
+        } finally {
+            this._notifyAssistantReplyCompleted();
+            this.requestUpdate();
+        }
+    }
+
     async _sendUserTurn(message, files) {
         if ((!message && files.length === 0) || this._isLoading()) {
             return;
@@ -3149,6 +3214,8 @@ export class PlatformChat extends LitElement {
                 @show-tracing=${this._onBubbleShowTracing}
                 @show-logs=${this._onBubbleShowLogs}
                 @show-durable-history=${this._onBubbleShowDurableHistory}
+                @continue-breakpoint=${this._onContinueBreakpoint}
+                @view-breakpoint-state=${this._onBubbleViewBreakpointState}
             ></flows-chat-message>
         `;
     }

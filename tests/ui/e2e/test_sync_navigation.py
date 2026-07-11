@@ -23,6 +23,11 @@ from tests.ui.scenario_doc import ScenarioRecorder
         "После создания канала в UI тест получает id канала через API и открывает "
         "Sync по `/sync/c/{channel_id}` — выбранный канал и чат подгружаются автоматически."
     ),
+    title_en="Sync: open a channel via direct link",
+    description_en=(
+        "After creating a channel in the UI the test fetches the channel id via API and opens "
+        "Sync at `/sync/c/{channel_id}` — the selected channel and chat load automatically."
+    ),
 )
 @pytest.mark.asyncio
 @pytest.mark.e2e
@@ -65,7 +70,11 @@ async def test_opens_channel_from_url_query(
     await ui_page_system.goto(deep_url, wait_until="domcontentloaded")
     await sync_ui.expect_shell(ui_page_system)
     await sync_e2e_expect_ws_open(ui_page_system)
-    await scenario.step("Повторное открытие Sync по прямой ссылке канала", ui_page_system)
+    await scenario.step(
+        "Повторное открытие Sync по прямой ссылке канала",
+        ui_page_system,
+        label_en="Sync reopened via direct channel link",
+    )
 
     composer = ui_page_system.locator("sync-message-composer")
     await expect(composer).to_be_visible(timeout=30_000)
@@ -74,4 +83,8 @@ async def test_opens_channel_from_url_query(
     await expect(
         ui_page_system.locator("sync-message-bubble").get_by_text(msg_text, exact=True)
     ).to_be_visible(timeout=60_000)
-    await scenario.step("Сообщение уходит в канал, выбранный из URL", ui_page_system)
+    await scenario.step(
+        "Сообщение уходит в канал, выбранный из URL",
+        ui_page_system,
+        label_en="Message goes to the channel selected from the URL",
+    )

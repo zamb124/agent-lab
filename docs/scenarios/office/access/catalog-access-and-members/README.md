@@ -4,8 +4,8 @@
 
 ## Шаг 1. Модалка участников приватного каталога
 
-![Модалка участников приватного каталога](screenshots/001.png)
+![Модалка участников приватного каталога](catalog-access-and-members--01-private-catalog-members-modal.png)
 
 ## Шаг 2. Участник добавлен в каталог
 
-![Участник добавлен в каталог](screenshots/002.png)
+![Участник добавлен в каталог](catalog-access-and-members--02-member-added-to-catalog.png)

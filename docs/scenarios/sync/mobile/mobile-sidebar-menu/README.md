@@ -4,8 +4,8 @@
 
 ## Шаг 1. Sync на узком viewport
 
-![Sync на узком viewport](screenshots/001.png)
+![Sync на узком viewport](mobile-sidebar-menu--01-sync-na-uzkom-viewport.png)
 
 ## Шаг 2. Список чатов доступен без лишнего клика
 
-![Список чатов доступен без лишнего клика](screenshots/002.png)
+![Список чатов доступен без лишнего клика](mobile-sidebar-menu--02-spisok-chatov-dostupen-bez-lishnego-klika.png)

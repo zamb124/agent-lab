@@ -185,11 +185,11 @@ async def test_integration(mock_llm_redis, flows_client, unique_id):
 
 Фикстура `scenario` (`tests/ui/scenario_doc.py`). Маркер `@pytest.mark.scenario(service="sync"|"flows"|...)`; **`tag`** обязан быть в [`docs/scenarios/taxonomy.yaml`](../docs/scenarios/taxonomy.yaml) (по умолчанию `general`). Путь в репозитории: `docs/scenarios/<service>/<tag>/<slug>/`. В опубликованной документации **все теги схлопываются**: URL `/documentation/scenarios/<service>/<slug>/`; группировка по тегам — на hub-странице сервиса. **`doc_slug`** — из маркера (kebab-case, уникален внутри `service`) или `nodeid` pytest.
 
-**Качество:** `scripts/check_scenario_docs_quality.py` (в `make doc`) — минимум 2 секции `## Шаг`, минимум 1 `screenshots/*.png`, валидный `tag` в taxonomy.
+**Качество:** `scripts/check_scenario_docs_quality.py` (в `make doc`) — минимум 2 секции `## Шаг`, минимум 1 PNG, валидный `tag` в taxonomy, обязательный `README.en.md` без кириллицы в title/step headings, AST-проверка `title_en`/`description_en` на маркере и `label_en` на каждом `scenario.step` (`details_en` — если есть `details=`). PNG лежат рядом с README, без `screenshots/`, и называются `<doc_slug>--<номер>-<понятное-имя>.png`.
 
-**Стиль шага:** одно действие = один шаг; перед скриншотом — зачем и что видно на экране (эталон: `docs/scenarios/sync/general/sync-complete-guide/README.md`).
+**Стиль шага:** одно действие = один шаг; перед скриншотом — зачем и что видно на экране. Для каждого документируемого шага задавать короткий смысловой `screenshot_name`; движок автоматически добавляет префикс `doc_slug` и номер.
 
-**Локализация:** при `title_en`/`description_en` в маркере — `label_en` у **каждого** `scenario.step(..., page)` (иначе `ValueError`). E2E пишет `README.en.md` рядом с `README.md`. Сборка: `make doc` / `make test-ui-doc`. Краткий гайд: [`tests/ui/README.md`](../tests/ui/README.md), [`doc-sources.md`](../doc-sources.md).
+**Локализация:** у `@pytest.mark.scenario` обязательны `title_en` и `description_en`; у каждого `scenario.step(..., page)` — `label_en` (при `details=` — также `details_en`). E2E пишет `README.en.md` рядом с `README.md`; без E2E-прогона — `uv run python scripts/regenerate_scenario_readme_en.py`. Сборка: `make doc` / `make test-ui-doc`. Документация: `/documentation/` (RU), `/documentation/en/` (EN); ссылки из SPA — locale-aware (`documentation-url.js`). Краткий гайд: [`tests/ui/README.md`](../tests/ui/README.md), [`doc-sources.md`](../doc-sources.md).
 
 Отключить генерацию: `UI_SCENARIO_DOCS=0`.
 

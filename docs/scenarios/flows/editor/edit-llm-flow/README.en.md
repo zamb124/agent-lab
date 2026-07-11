@@ -1,15 +1,15 @@
-# Flows: редактирование flow
+# Flows: editing a flow
 
-Инструкция для повторного редактирования: открыть готовый flow, изменить название, обновить промпт LLM-ноды и сохранить изменения.
+Guide for editing an existing flow: open a ready flow, change the name, update the LLM node prompt, and save changes.
 
-## Step 1. Открываем уже готовый flow и кликаем по LLM-ноду. Справа снова видны ее настройки.
+## Step 1. Open an existing flow and click the LLM node. Its settings appear on the right again.
 
-![Открываем уже готовый flow и кликаем по LLM-ноду. Справа снова видны ее настройки.](screenshots/001.png)
+![Open an existing flow and click the LLM node. Its settings appear on the right again.](edit-llm-flow--01-otkryvaem-uzhe-gotovyy-flow-i-klikaem-po-llm-nodu-sprava-snova.png)
 
-## Step 2. Меняем название flow и переписываем промпт. Это обычное редактирование: как переименовать файл и исправить текст.
+## Step 2. Change the flow name and rewrite the prompt. This is everyday editing — like renaming a file and fixing its text.
 
-![Меняем название flow и переписываем промпт. Это обычное редактирование: как переименовать файл и исправить текст.](screenshots/002.png)
+![Change the flow name and rewrite the prompt. This is everyday editing — like renaming a file and fixing its text.](edit-llm-flow--02-menyaem-nazvanie-flow-i-perepisyvaem-prompt-eto-obychnoe.png)
 
-## Step 3. Сохраняем изменения через Publish. После этого новое название и промпт лежат в сохраненной версии flow.
+## Step 3. Save changes with Publish. After that, the new name and prompt are in the saved version of the flow.
 
-![Сохраняем изменения через Publish. После этого новое название и промпт лежат в сохраненной версии flow.](screenshots/003.png)
+![Save changes with Publish. After that, the new name and prompt are in the saved version of the flow.](edit-llm-flow--03-sokhranyaem-izmeneniya-cherez-publish-posle-etogo-novoe-nazvanie.png)

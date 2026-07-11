@@ -15,7 +15,7 @@ import shutil
 from dataclasses import dataclass
 from pathlib import Path
 
-from scenario_taxonomy import (
+from scripts.scenario_taxonomy import (
     ScenarioTaxonomy,
     load_scenario_taxonomy,
     service_label,
@@ -123,28 +123,110 @@ def _publish_tag_hub_pages(
             _write_index_md_from_readme(readme, scenarios_dst / service / tag / "index.md")
 
 
+def _yaml_nav_label(value: str) -> str:
+    return json.dumps(value, ensure_ascii=False)
+
+
+def _scenario_nav_paths_for_service(
+    taxonomy: ScenarioTaxonomy,
+    service: str,
+    service_entries: list[ScenarioEntry],
+    svc_dir: Path,
+    *,
+    language: str,
+) -> list[str | tuple[str, list[str]]]:
+    """Sidebar: hub → featured → секции тегов → все slug-страницы (UI Kit — вложенная секция)."""
+    spec = taxonomy.services.get(service)
+    nav_items: list[str | tuple[str, list[str]]] = ["index.md"]
+
+    featured: str | None = None
+    if spec is not None:
+        featured = spec.featured_slug
+        if featured is not None:
+            featured_idx = svc_dir / featured / "index.md"
+            if featured_idx.is_file():
+                featured_heading = "Start here" if language == "en" else "С чего начать"
+                nav_items.append((featured_heading, [f"{featured}/index.md"]))
+
+    by_tag: dict[str, list[ScenarioEntry]] = {}
+    for entry in service_entries:
+        by_tag.setdefault(entry.tag, []).append(entry)
+
+    if spec is None:
+        flat_links: list[str] = []
+        for entry in sorted(service_entries, key=lambda item: item.slug):
+            idx = svc_dir / entry.slug / "index.md"
+            if idx.is_file():
+                flat_links.append(f"{entry.slug}/index.md")
+        if flat_links:
+            heading = "Pages" if language == "en" else "Инструкции"
+            nav_items.append((heading, flat_links))
+        return nav_items
+
+    ordered_tags = sorted(
+        spec.tags.keys(),
+        key=lambda tag_key: (spec.tags[tag_key].order, tag_key),
+    )
+    for tag_key in ordered_tags:
+        tag_entries = by_tag.get(tag_key, [])
+        section_title = tag_label(taxonomy, service, tag_key, language=language)
+        tag_hub_index = svc_dir / tag_key / "index.md"
+        section_links: list[str] = []
+        if tag_hub_index.is_file():
+            section_links.append(f"{tag_key}/index.md")
+        for entry in sorted(tag_entries, key=lambda item: item.slug):
+            if featured is not None and entry.slug == featured:
+                continue
+            idx = svc_dir / entry.slug / "index.md"
+            if idx.is_file():
+                section_links.append(f"{entry.slug}/index.md")
+        if not section_links:
+            continue
+        nav_items.append((section_title, section_links))
+    return nav_items
+
+
+def _render_pages_yaml(nav_items: list[str | tuple[str, list[str]]]) -> str:
+    lines = ["nav:"]
+    for item in nav_items:
+        if isinstance(item, str):
+            lines.append(f"  - {item}")
+            continue
+        section_title, section_links = item
+        lines.append(f"  - {_yaml_nav_label(section_title)}:")
+        for link in section_links:
+            lines.append(f"    - {link}")
+    return "\n".join(lines) + "\n"
+
+
 def _write_service_pages_nav(
     taxonomy: ScenarioTaxonomy,
     scenarios_dst: Path,
+    by_service: dict[str, list[ScenarioEntry]],
+    *,
+    language: str,
 ) -> None:
-    """Sidebar platform: hub + onboarding + ui-kit; страницы компонентов доступны по ссылкам из каталога."""
-    service = "platform"
-    svc_dir = scenarios_dst / service
-    if not svc_dir.is_dir() or not (svc_dir / "index.md").is_file():
-        return
-    nav_entries: list[str] = ["index.md"]
-    spec = taxonomy.services.get(service)
-    if spec is not None and spec.featured_slug is not None:
-        featured = svc_dir / spec.featured_slug / "index.md"
-        if featured.is_file():
-            nav_entries.append(f"{spec.featured_slug}/index.md")
-    ui_kit_hub = svc_dir / "ui-kit" / "index.md"
-    if ui_kit_hub.is_file():
-        nav_entries.append("ui-kit/index.md")
-    if len(nav_entries) <= 1:
-        return
-    lines = ["nav:", *[f"  - {entry}" for entry in nav_entries]]
-    (svc_dir / ".pages").write_text("\n".join(lines) + "\n", encoding="utf-8")
+    """Sidebar каждого сервиса: hub + featured + секции тегов со всеми инструкциями."""
+    for service in taxonomy.service_order:
+        service_entries = by_service.get(service, [])
+        if not service_entries:
+            continue
+        svc_dir = scenarios_dst / service
+        if not svc_dir.is_dir() or not (svc_dir / "index.md").is_file():
+            continue
+        nav_items = _scenario_nav_paths_for_service(
+            taxonomy,
+            service,
+            service_entries,
+            svc_dir,
+            language=language,
+        )
+        if len(nav_items) <= 1:
+            continue
+        (svc_dir / ".pages").write_text(
+            _render_pages_yaml(nav_items),
+            encoding="utf-8",
+        )
 
 
 def _dest_parts_for_scenario(service: str, slug_name: str) -> tuple[str, ...]:
@@ -198,8 +280,21 @@ def _title_from_index_md(index_path: Path) -> str:
     return index_path.parent.name
 
 
-def _service_intro_from_readme(scenarios_src: Path, service: str, fallback: str) -> str:
-    readme = scenarios_src / service / "README.md"
+def _service_intro_from_readme(
+    scenarios_src: Path,
+    service: str,
+    fallback: str,
+    *,
+    language: str,
+) -> str:
+    if language == "en":
+        en_readme = scenarios_src / service / "README.en.md"
+        if en_readme.is_file():
+            readme = en_readme
+        else:
+            readme = scenarios_src / service / "README.md"
+    else:
+        readme = scenarios_src / service / "README.md"
     if not readme.is_file():
         return fallback
     _, body = _readme_body_after_h1(readme.read_text(encoding="utf-8"), service)
@@ -295,12 +390,9 @@ def _grouped_sections_for_service(
         tag_entries = by_tag.get(tag_key, [])
         section_title = tag_label(taxonomy, service, tag_key, language=language)
         tag_hub_index = scenarios_dst / service / tag_key / "index.md"
-        if tag_hub_index.is_file():
-            sections.append((section_title, [(_title_from_index_md(tag_hub_index), f"{tag_key}/")]))
-            continue
-        if not tag_entries:
-            continue
         links: list[tuple[str, str]] = []
+        if tag_hub_index.is_file():
+            links.append((_title_from_index_md(tag_hub_index), f"{tag_key}/"))
         for entry in sorted(tag_entries, key=lambda e: e.slug):
             if featured is not None and entry.slug == featured:
                 continue
@@ -340,7 +432,12 @@ def _write_scenario_hub_indices(
         title = service_label(taxonomy, service, language=language)
         spec = taxonomy.services[service]
         fallback_intro = spec.intro_en if language == "en" else spec.intro_ru
-        intro = _service_intro_from_readme(scenarios_src, service, fallback_intro)
+        intro = _service_intro_from_readme(
+            scenarios_src,
+            service,
+            fallback_intro,
+            language=language,
+        )
         sections = _grouped_sections_for_service(
             taxonomy,
             service,
@@ -414,10 +511,13 @@ def _populate_scenario_index_tree(
             if en_readme.is_file():
                 readme = en_readme
         _write_index_md_from_readme(readme, dst_dir / "index.md")
-        _copy_screenshots(entry.src_dir, dst_dir)
+        copy_scenario_images(entry.src_dir, dst_dir)
     _publish_tag_hub_pages(scenarios_src, scenarios_dst, language=language)
     _write_scenario_hub_indices(taxonomy, scenarios_src, scenarios_dst, entries, language=language)
-    _write_service_pages_nav(taxonomy, scenarios_dst)
+    by_service: dict[str, list[ScenarioEntry]] = {}
+    for entry in entries.values():
+        by_service.setdefault(entry.service, []).append(entry)
+    _write_service_pages_nav(taxonomy, scenarios_dst, by_service, language=language)
     _write_scenarios_pages_file(taxonomy, scenarios_dst)
 
 
@@ -567,14 +667,18 @@ def _prepare_en_build_tree(docs_dir: Path, en_dir: Path, taxonomy: ScenarioTaxon
         _populate_scenario_index_tree(taxonomy, scenarios_src, scenarios_dst, language="en")
 
 
-def _copy_screenshots(src_slug_dir: Path, dst_slug_dir: Path) -> None:
-    shots = src_slug_dir / "screenshots"
-    if not shots.is_dir():
-        return
-    dst_shots = dst_slug_dir / "screenshots"
-    if dst_shots.exists():
-        shutil.rmtree(dst_shots)
-    shutil.copytree(shots, dst_shots)
+def copy_scenario_images(src_slug_dir: Path, dst_slug_dir: Path) -> None:
+    """Копировать соседние с README PNG в тот же каталог опубликованного сценария."""
+    legacy_dir = src_slug_dir / "screenshots"
+    if legacy_dir.exists():
+        raise ValueError(
+            f"Legacy screenshot layout запрещён: {legacy_dir}. PNG должны лежать рядом с README.md."
+        )
+    for stale_image in dst_slug_dir.glob("*.png"):
+        stale_image.unlink()
+    for image in sorted(src_slug_dir.glob("*.png")):
+        if image.is_file():
+            _ = shutil.copy2(image, dst_slug_dir / image.name)
 
 
 def _copy_service_screenshots(scenarios_src: Path, scenarios_dst: Path) -> None:
@@ -591,14 +695,7 @@ def _copy_service_screenshots(scenarios_src: Path, scenarios_dst: Path) -> None:
 
 
 def _generate_api_docs(ru_dir: Path, en_dir: Path) -> None:
-    import sys
-    from pathlib import Path as PathLib
-
-    current_dir = PathLib(__file__).resolve().parent
-    if str(current_dir) not in sys.path:
-        sys.path.insert(0, str(current_dir))
-
-    from openapi_to_markdown import main as generate_markdown
+    from scripts.openapi_to_markdown import main as generate_markdown
 
     logger = __import__("logging").getLogger(__name__)
     logger.info("Генерация документации API из OpenAPI схем...")

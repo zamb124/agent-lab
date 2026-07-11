@@ -201,7 +201,10 @@ export class PlatformUser extends PlatformElement {
         const tag = (typeof this.documentationTag === 'string' && this.documentationTag.trim())
             ? this.documentationTag.trim()
             : null;
-        const url = buildScenarioDocumentationUrl({ tag });
+        const url = buildScenarioDocumentationUrl({
+            tag,
+            locale: this._localeSelect.value,
+        });
         window.open(url, '_blank', 'noopener,noreferrer');
     }
 

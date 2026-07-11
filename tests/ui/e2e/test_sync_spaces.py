@@ -24,6 +24,11 @@ from tests.ui.scenario_doc import ScenarioRecorder
         "Пользователь открывает Sync-настройки выбранного платформенного пространства "
         "и включает опцию транскрибации голосовых сообщений."
     ),
+    title_en="Sync: space settings",
+    description_en=(
+        "The user opens Sync settings for the selected platform space "
+        "and enables voice message transcription."
+    ),
 )
 @pytest.mark.asyncio
 @pytest.mark.e2e
@@ -35,7 +40,11 @@ async def test_user_edits_space_name(
     unique_id: str,
 ) -> None:
     await sync_e2e_open_with_namespace(sync_ui, ui_page_system, unique_id, suffix="settings")
-    await scenario.step("Sync открыт", ui_page_system)
+    await scenario.step(
+        "Sync открыт",
+        ui_page_system,
+        label_en="Sync opened",
+    )
 
     await ui_page_system.locator("platform-sidebar-namespace-select button.btn-edit").click()
     edit_modal = ui_page_system.locator("sync-namespace-modal")
@@ -43,7 +52,11 @@ async def test_user_edits_space_name(
     await expect(edit_modal.locator(".modal-title")).to_contain_text(
         re.compile(r"Sync-настройки пространства|Namespace sync settings")
     )
-    await scenario.step("Открыты настройки пространства", ui_page_system)
+    await scenario.step(
+        "Открыты настройки пространства",
+        ui_page_system,
+        label_en="Space settings opened",
+    )
 
     transcribe_switch = edit_modal.locator(".row").filter(
         has_text=re.compile(r"Авто-транскрипция голосовых|Auto-transcribe voice messages")
@@ -52,4 +65,8 @@ async def test_user_edits_space_name(
     await expect(transcribe_switch).to_have_attribute("checked", "", timeout=15_000)
     await sync_e2e_click_platform_button(edit_modal, "Сохранить", "Save")
     await expect(edit_modal).to_be_hidden(timeout=30_000)
-    await scenario.step("Настройки пространства сохранены", ui_page_system)
+    await scenario.step(
+        "Настройки пространства сохранены",
+        ui_page_system,
+        label_en="Space settings saved",
+    )

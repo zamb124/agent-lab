@@ -1,4 +1,4 @@
-"""Quality gate для docs/scenarios: шаги, скриншоты, taxonomy, pytest markers."""
+"""Quality gate для docs/scenarios: шаги, плоские PNG, taxonomy, pytest markers."""
 
 from __future__ import annotations
 
@@ -9,9 +9,16 @@ import sys
 from dataclasses import dataclass
 from pathlib import Path
 
-from scenario_taxonomy import DEFAULT_SCENARIO_TAG, load_scenario_taxonomy, validate_service_tag
+from scripts.scenario_taxonomy import (
+    DEFAULT_SCENARIO_TAG,
+    load_scenario_taxonomy,
+    validate_service_tag,
+)
 
 _STEP_HEADING_RE = re.compile(r"^##\s+Шаг\b", re.MULTILINE)
+_EN_STEP_HEADING_RE = re.compile(r"^##\s+Step\b", re.MULTILINE)
+_CYRILLIC_RE = re.compile(r"[А-Яа-яЁё]")
+_IMAGE_LINK_RE = re.compile(r"!\[[^\]]*\]\(([^)]+\.png)\)")
 _MIN_STEPS = 2
 _UI_E2E_ROOT = Path("tests/ui/e2e")
 
@@ -44,11 +51,52 @@ def _count_steps(readme: Path) -> int:
     return len(_STEP_HEADING_RE.findall(text))
 
 
-def _has_screenshot(readme_dir: Path) -> bool:
-    shots = readme_dir / "screenshots"
-    if not shots.is_dir():
-        return False
-    return any(p.suffix.lower() == ".png" for p in shots.iterdir() if p.is_file())
+def _image_links(readme: Path) -> list[str]:
+    return _IMAGE_LINK_RE.findall(readme.read_text(encoding="utf-8"))
+
+
+def _check_screenshot_layout(slug_dir: Path, readme: Path, scenarios_root: Path) -> list[str]:
+    """PNG должны лежать рядом с README и иметь имя `<slug>--<NN>-<meaning>.png`."""
+    errors: list[str] = []
+    slug = slug_dir.name
+    legacy_dir = slug_dir / "screenshots"
+    if legacy_dir.exists():
+        errors.append("legacy-каталог screenshots/ запрещён; PNG должны лежать рядом с README.md")
+
+    refs = _image_links(readme)
+    if not refs:
+        errors.append("README.md не содержит ссылок на PNG-скриншоты")
+        return errors
+
+    filename_re = re.compile(
+        rf"^{re.escape(slug)}--\d{{2,}}-[a-z0-9]+(?:-[a-z0-9]+)*\.png$"
+    )
+    referenced_names: set[str] = set()
+    for target in refs:
+        target_path = Path(target)
+        if target_path.is_absolute() or len(target_path.parts) != 1:
+            errors.append(
+                f"скриншот {target!r} должен лежать рядом с README.md без подкаталога"
+            )
+            continue
+        filename = target_path.name
+        referenced_names.add(filename)
+        if filename_re.fullmatch(filename) is None:
+            errors.append(
+                f"имя {filename!r} не соответствует {slug}--<номер>-<понятное-имя>.png"
+            )
+        if not (slug_dir / filename).is_file():
+            errors.append(f"README.md ссылается на отсутствующий файл {filename!r}")
+
+    flat_pngs = {p.name for p in slug_dir.glob("*.png") if p.is_file()}
+    for filename in sorted(flat_pngs - referenced_names):
+        errors.append(f"PNG {filename!r} не используется в README.md")
+
+    en_readme = slug_dir / "README.en.md"
+    if en_readme.is_file() and _image_links(en_readme) != refs:
+        errors.append("README.en.md должен ссылаться на те же PNG и в том же порядке")
+    errors.extend(_check_en_readme(slug_dir, scenarios_root))
+    return errors
 
 
 def _title_from_readme(readme: Path) -> str:
@@ -59,6 +107,89 @@ def _title_from_readme(readme: Path) -> str:
             if title:
                 return title
     return ""
+
+
+def _en_step_headings(readme: Path) -> list[str]:
+    text = readme.read_text(encoding="utf-8")
+    headings: list[str] = []
+    for line in text.splitlines():
+        stripped = line.strip()
+        if _EN_STEP_HEADING_RE.match(stripped):
+            headings.append(stripped.split(".", 1)[-1].strip())
+    return headings
+
+
+def _check_en_readme(slug_dir: Path, scenarios_root: Path) -> list[str]:
+    if _is_ui_kit_scenario_stub(slug_dir, scenarios_root):
+        return []
+    errors: list[str] = []
+    rel = slug_dir.relative_to(scenarios_root.parent)
+    en_readme = slug_dir / "README.en.md"
+    if not en_readme.is_file():
+        errors.append(f"{rel}: отсутствует README.en.md")
+        return errors
+    title = _title_from_readme(en_readme)
+    if not title:
+        errors.append(f"{rel}: README.en.md без заголовка #")
+    elif _CYRILLIC_RE.search(title):
+        errors.append(f"{rel}: README.en.md title содержит кириллицу")
+    for heading in _en_step_headings(en_readme):
+        if _CYRILLIC_RE.search(heading):
+            errors.append(f"{rel}: README.en.md step heading содержит кириллицу: {heading[:80]!r}")
+    return errors
+
+
+def _scenario_step_calls(node: ast.AsyncFunctionDef | ast.FunctionDef) -> list[ast.Call]:
+    calls: list[ast.Call] = []
+    for child in ast.walk(node):
+        if not isinstance(child, ast.Call):
+            continue
+        func = child.func
+        if not isinstance(func, ast.Attribute) or func.attr != "step":
+            continue
+        if not isinstance(func.value, ast.Name) or func.value.id != "scenario":
+            continue
+        calls.append(child)
+    return calls
+
+
+def _check_scenario_marker_en_fields(tests_root: Path) -> list[str]:
+    errors: list[str] = []
+    for path in sorted(tests_root.rglob("test_*.py")):
+        tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
+        for node in tree.body:
+            if not isinstance(node, ast.AsyncFunctionDef | ast.FunctionDef):
+                continue
+            if not node.name.startswith("test_"):
+                continue
+            for dec in node.decorator_list:
+                if not isinstance(dec, ast.Call):
+                    continue
+                func = dec.func
+                if not isinstance(func, ast.Attribute):
+                    continue
+                if not isinstance(func.value, ast.Attribute):
+                    continue
+                if func.value.attr != "mark" or func.attr != "scenario":
+                    continue
+                kwargs = {kw.arg: kw.value for kw in dec.keywords if kw.arg is not None}
+                if "title_en" not in kwargs:
+                    errors.append(f"{path}:{node.lineno} {node.name}: @pytest.mark.scenario без title_en")
+                if "description_en" not in kwargs:
+                    errors.append(
+                        f"{path}:{node.lineno} {node.name}: @pytest.mark.scenario без description_en"
+                    )
+                for step_call in _scenario_step_calls(node):
+                    step_kwargs = {kw.arg: kw.value for kw in step_call.keywords if kw.arg is not None}
+                    if "label_en" not in step_kwargs:
+                        errors.append(
+                            f"{path}:{step_call.lineno} {node.name}: scenario.step без label_en"
+                        )
+                    if "details" in step_kwargs and "details_en" not in step_kwargs:
+                        errors.append(
+                            f"{path}:{step_call.lineno} {node.name}: scenario.step с details без details_en"
+                        )
+    return errors
 
 
 def _parse_scenario_markers(tests_root: Path) -> list[ScenarioMarker]:
@@ -116,7 +247,7 @@ def _is_ui_kit_scenario_stub(slug_dir: Path, scenarios_root: Path) -> bool:
     return len(parts) >= 2 and parts[0] == "platform" and parts[1] == "ui-kit"
 
 
-def _check_readme_quality(scenarios_root: Path) -> list[str]:
+def check_readme_quality(scenarios_root: Path) -> list[str]:
     errors: list[str] = []
     for slug_dir in _slug_readme_dirs(scenarios_root):
         if _is_ui_kit_scenario_stub(slug_dir, scenarios_root):
@@ -131,8 +262,8 @@ def _check_readme_quality(scenarios_root: Path) -> list[str]:
             errors.append(
                 f"{rel}: нужно минимум {_MIN_STEPS} секций «## Шаг …», найдено {step_count}"
             )
-        if not _has_screenshot(slug_dir):
-            errors.append(f"{rel}: нет screenshots/*.png")
+        for screenshot_error in _check_screenshot_layout(slug_dir, readme, scenarios_root):
+            errors.append(f"{rel}: {screenshot_error}")
     return errors
 
 
@@ -203,15 +334,27 @@ def _check_learning_path_hrefs(repo_root: Path) -> list[str]:
     return errors
 
 
-def main() -> int:
+@dataclass(frozen=True)
+class _CliArgs:
+    warnings_ok: bool
+
+
+def _parse_cli_args(argv: list[str] | None = None) -> _CliArgs:
     parser = argparse.ArgumentParser(description="Проверка качества docs/scenarios")
-    parser.add_argument(
+    _ = parser.add_argument(
         "--warnings-ok",
         action="store_true",
         help="Не падать на предупреждения taxonomy (orphan tags)",
     )
-    args = parser.parse_args()
+    ns = parser.parse_args(argv)
+    warnings_ok = getattr(ns, "warnings_ok", False)
+    if not isinstance(warnings_ok, bool):
+        raise TypeError("warnings_ok must be bool")
+    return _CliArgs(warnings_ok=warnings_ok)
 
+
+def main() -> int:
+    cli_args = _parse_cli_args()
     repo_root = _repo_root()
     scenarios_root = repo_root / "docs" / "scenarios"
     if not scenarios_root.is_dir():
@@ -221,7 +364,8 @@ def main() -> int:
     errors: list[str] = []
     warnings: list[str] = []
 
-    errors.extend(_check_readme_quality(scenarios_root))
+    errors.extend(check_readme_quality(scenarios_root))
+    errors.extend(_check_scenario_marker_en_fields(repo_root / _UI_E2E_ROOT))
     marker_errors, marker_warnings = _check_taxonomy_markers(repo_root)
     errors.extend(marker_errors)
     warnings.extend(marker_warnings)
@@ -236,10 +380,12 @@ def main() -> int:
             print(f"  - {err}", file=sys.stderr)
         return 1
 
-    if warnings and not args.warnings_ok:
+    if warnings and not cli_args.warnings_ok:
         print(
-            f"FAIL: {len(warnings)} предупреждений taxonomy (orphan tags). "
-            "Исправьте taxonomy или добавьте --warnings-ok.",
+            (
+                f"FAIL: {len(warnings)} предупреждений taxonomy (orphan tags). "
+                "Исправьте taxonomy или добавьте --warnings-ok."
+            ),
             file=sys.stderr,
         )
         return 1

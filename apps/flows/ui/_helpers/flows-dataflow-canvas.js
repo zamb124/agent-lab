@@ -419,6 +419,207 @@ export function buildLineageSet(hoverNodeId, wires) {
     }
     return lineage;
 }
+
+/**
+ * @param {{ from: string, to: string, label: string, sourceLabel?: string, targetParam?: string }} wire
+ * @returns {string}
+ */
+export function dataWireKey(wire) {
+    const sourceLabel = typeof wire.sourceLabel === 'string' && wire.sourceLabel.length > 0
+        ? wire.sourceLabel
+        : wire.label;
+    const targetParam = typeof wire.targetParam === 'string' && wire.targetParam.length > 0
+        ? wire.targetParam
+        : wire.label;
+    return `${wire.from}\u0000${wire.to}\u0000${sourceLabel}\u0000${targetParam}`;
+}
+
+/**
+ * @param {{ nodeId: string, side: 'in' | 'out', index: number }} ref
+ * @returns {string}
+ */
+export function chipRefKey(ref) {
+    return `${ref.nodeId}\u0000${ref.side}\u0000${ref.index}`;
+}
+
+/**
+ * @param {{ from: string, to: string, label: string, sourceLabel?: string, targetParam?: string }} wire
+ * @returns {string}
+ */
+function wireSourceLabel(wire) {
+    return typeof wire.sourceLabel === 'string' && wire.sourceLabel.length > 0
+        ? wire.sourceLabel
+        : wire.label;
+}
+
+/**
+ * Wires, напрямую подключённые к конкретному chip endpoint (node + side + index).
+ *
+ * @param {Array<{ from: string, to: string, label: string, sourceLabel?: string, targetParam?: string }>} allWires
+ * @param {{ nodeId: string, side: 'in' | 'out', index: number }} chipRef
+ * @param {Record<string, unknown> | null | undefined} dataflowNodes
+ * @returns {Set<string>}
+ */
+function wiresForChipEndpoint(allWires, chipRef, dataflowNodes) {
+    const keys = new Set();
+    if (!chipRef || typeof chipRef.nodeId !== 'string' || chipRef.nodeId.length === 0) return keys;
+    if (chipRef.side !== 'in' && chipRef.side !== 'out') return keys;
+    if (typeof chipRef.index !== 'number' || chipRef.index < 0) return keys;
+    if (!dataflowNodes || typeof dataflowNodes !== 'object') return keys;
+
+    if (chipRef.side === 'out') {
+        const fromInfo = dataflowNodes[chipRef.nodeId];
+        const outputs = canvasOutputsFromNodeInfo(fromInfo);
+        for (const wire of allWires) {
+            if (wire.from !== chipRef.nodeId) continue;
+            const sourceLabel = wireSourceLabel(wire);
+            const outIdx = findOutputChipIndex(outputs, sourceLabel);
+            if (outIdx === chipRef.index) {
+                keys.add(dataWireKey(wire));
+            }
+        }
+        return keys;
+    }
+
+    const toInfo = dataflowNodes[chipRef.nodeId];
+    const inputs = canvasInputsFromNodeInfo(toInfo);
+    for (const wire of allWires) {
+        if (wire.to !== chipRef.nodeId) continue;
+        const sourceLabel = wireSourceLabel(wire);
+        const targetParam = typeof wire.targetParam === 'string' && wire.targetParam.length > 0
+            ? wire.targetParam
+            : wire.label;
+        const inIdx = findInputChipIndex(inputs, targetParam, sourceLabel, wire.from);
+        if (inIdx === chipRef.index) {
+            keys.add(dataWireKey(wire));
+        }
+    }
+    return keys;
+}
+
+/**
+ * State path(и) переменной, которую представляет hovered chip.
+ *
+ * @param {{ nodeId: string, side: 'in' | 'out', index: number }} chipRef
+ * @param {Record<string, unknown> | null | undefined} dataflowNodes
+ * @param {Array<{ from: string, to: string, label: string, sourceLabel?: string, targetParam?: string }>} allWires
+ * @returns {Set<string>}
+ */
+export function resolveChipStatePaths(chipRef, dataflowNodes, allWires) {
+    const paths = new Set();
+    if (!chipRef || typeof chipRef.nodeId !== 'string' || chipRef.nodeId.length === 0) return paths;
+    if (chipRef.side !== 'in' && chipRef.side !== 'out') return paths;
+    if (typeof chipRef.index !== 'number' || chipRef.index < 0) return paths;
+    if (!dataflowNodes || typeof dataflowNodes !== 'object') return paths;
+
+    if (chipRef.side === 'out') {
+        const fromInfo = dataflowNodes[chipRef.nodeId];
+        const outputs = canvasOutputsFromNodeInfo(fromInfo);
+        const chip = outputs[chipRef.index];
+        const label = dataflowChipLabel(chip);
+        if (label.length > 0) {
+            paths.add(label);
+        }
+        return paths;
+    }
+
+    const endpointKeys = wiresForChipEndpoint(allWires, chipRef, dataflowNodes);
+    for (const wire of allWires) {
+        if (!endpointKeys.has(dataWireKey(wire))) continue;
+        paths.add(wireSourceLabel(wire));
+    }
+    if (paths.size === 0) {
+        const toInfo = dataflowNodes[chipRef.nodeId];
+        const inputs = canvasInputsFromNodeInfo(toInfo);
+        const chip = inputs[chipRef.index];
+        const label = dataflowChipLabel(chip);
+        if (label.length > 0) {
+            paths.add(label);
+        }
+    }
+    return paths;
+}
+
+/**
+ * @param {Array<{ from: string, to: string, label: string, sourceLabel?: string, targetParam?: string }>} allWires
+ * @param {{ nodeId: string, side: 'in' | 'out', index: number }} chipRef
+ * @param {Record<string, unknown> | null | undefined} dataflowNodes
+ * @returns {Set<string>}
+ */
+export function wiresForChipHover(allWires, chipRef, dataflowNodes) {
+    const keys = new Set();
+    const statePaths = resolveChipStatePaths(chipRef, dataflowNodes, allWires);
+    if (statePaths.size === 0) return keys;
+    for (const wire of allWires) {
+        if (statePaths.has(wireSourceLabel(wire))) {
+            keys.add(dataWireKey(wire));
+        }
+    }
+    return keys;
+}
+
+/**
+ * @param {{ from: string, to: string, label: string, sourceLabel?: string, targetParam?: string }} wire
+ * @param {Record<string, unknown> | null | undefined} dataflowNodes
+ * @returns {Array<{ nodeId: string, side: 'in' | 'out', index: number }>}
+ */
+export function chipRefsForWire(wire, dataflowNodes) {
+    if (!wire || !dataflowNodes || typeof dataflowNodes !== 'object') return [];
+    const sourceLabel = typeof wire.sourceLabel === 'string' && wire.sourceLabel.length > 0
+        ? wire.sourceLabel
+        : wire.label;
+    const targetParam = typeof wire.targetParam === 'string' && wire.targetParam.length > 0
+        ? wire.targetParam
+        : wire.label;
+    const fromInfo = dataflowNodes[wire.from];
+    const toInfo = dataflowNodes[wire.to];
+    const fromOutputs = canvasOutputsFromNodeInfo(fromInfo);
+    const toInputs = canvasInputsFromNodeInfo(toInfo);
+    const outIdx = findOutputChipIndex(fromOutputs, sourceLabel);
+    const inIdx = findInputChipIndex(toInputs, targetParam, sourceLabel, wire.from);
+    const refs = [];
+    if (outIdx >= 0) {
+        refs.push({ nodeId: wire.from, side: 'out', index: outIdx });
+    }
+    if (inIdx >= 0) {
+        refs.push({ nodeId: wire.to, side: 'in', index: inIdx });
+    }
+    return refs;
+}
+
+/**
+ * @param {Set<string>} wireKeys
+ * @param {Array<{ from: string, to: string, label: string, sourceLabel?: string, targetParam?: string }>} wires
+ * @returns {Set<string> | null}
+ */
+export function buildLineageSetFromWireKeys(wireKeys, wires) {
+    if (!wireKeys || wireKeys.size === 0) return null;
+    const lineage = new Set();
+    for (const wire of wires) {
+        if (!wireKeys.has(dataWireKey(wire))) continue;
+        lineage.add(wire.from);
+        lineage.add(wire.to);
+    }
+    return lineage.size > 0 ? lineage : null;
+}
+
+/**
+ * @param {Set<string>} wireKeys
+ * @param {Array<{ from: string, to: string, label: string, sourceLabel?: string, targetParam?: string }>} allWires
+ * @param {Record<string, unknown> | null | undefined} dataflowNodes
+ * @returns {Set<string>}
+ */
+export function chipRefKeysForWireKeys(wireKeys, allWires, dataflowNodes) {
+    const chipKeys = new Set();
+    if (!wireKeys || wireKeys.size === 0) return chipKeys;
+    for (const wire of allWires) {
+        if (!wireKeys.has(dataWireKey(wire))) continue;
+        for (const ref of chipRefsForWire(wire, dataflowNodes)) {
+            chipKeys.add(chipRefKey(ref));
+        }
+    }
+    return chipKeys;
+}
 /**
  * @param {unknown} canvas
  * @returns {{ errors: number, warnings: number, total: number }}

@@ -67,7 +67,7 @@ describe('flows-execution-panel hosts unified platform-chat', () => {
         expect(chat.freshContextPerTurn).to.equal(true);
     });
 
-    it('getSendMetadata отдаёт breakpoints превью редактора', async () => {
+    it('getSendMetadata отдаёт breakpoints с канвы редактора', async () => {
         const bus = bootstrapExecutionPanelBus();
         const el = await fixture(html`
             <flows-execution-panel .flowId=${'flow-1'} .branchId=${'base'}></flows-execution-panel>
@@ -77,11 +77,126 @@ describe('flows-execution-panel hosts unified platform-chat', () => {
         const chat = el.shadowRoot.querySelector('platform-chat');
         expect(chat.getSendMetadata()).to.deep.equal({});
 
-        bus.dispatch('flows/editor/preview_state_set', {
-            snapshot: { breakpoints: ['node_a', 'node_b'] },
+        bus.dispatch('flows/editor/breakpoint_toggled', { nodeId: 'node_a' });
+        bus.dispatch('flows/editor/breakpoint_toggled', { nodeId: 'node_b' });
+        await elementUpdated(el);
+        expect(chat.getSendMetadata()).to.deep.equal({
+            breakpoints: { node_a: true, node_b: true },
+        });
+    });
+
+    it('chat-state-changed пробрасывает breakpoint hit на bus', async () => {
+        const bus = bootstrapExecutionPanelBus();
+        const hits = [];
+        bus.subscribeType('flows/breakpoint/hit', (event) => hits.push(event.payload));
+
+        const el = await fixture(html`
+            <flows-execution-panel .flowId=${'flow-1'} .branchId=${'base'}></flows-execution-panel>
+        `);
+        await elementUpdated(el);
+
+        const chat = el.shadowRoot.querySelector('platform-chat');
+        const contextId = chat._controller.state.currentContextId;
+        chat._controller.applyRuntimeVerb('task_started', {
+            task_id: 'task-bp-1',
+            context_id: contextId,
+        });
+        chat._controller.applyRuntimeVerb('breakpoint', {
+            task_id: 'task-bp-1',
+            context_id: contextId,
+            breakpoint: { node_id: 'build_search_query' },
         });
         await elementUpdated(el);
-        expect(chat.getSendMetadata()).to.deep.equal({ breakpoints: ['node_a', 'node_b'] });
+
+        expect(hits.length).to.equal(1);
+        expect(hits[0].node_id).to.equal('build_search_query');
+        expect(hits[0].task_id).to.equal('task-bp-1');
+    });
+
+    it('resume после breakpoint снимает canvas hit-анимацию', async () => {
+        const bus = bootstrapExecutionPanelBus();
+        const clears = [];
+        bus.subscribeType('flows/breakpoint/clear', () => clears.push(true));
+
+        const el = await fixture(html`
+            <flows-execution-panel .flowId=${'flow-1'} .branchId=${'base'}></flows-execution-panel>
+        `);
+        await elementUpdated(el);
+
+        const chat = el.shadowRoot.querySelector('platform-chat');
+        const contextId = chat._controller.state.currentContextId;
+        chat._controller.applyRuntimeVerb('task_started', {
+            task_id: 'task-bp-resume',
+            context_id: contextId,
+        });
+        chat._controller.applyRuntimeVerb('breakpoint', {
+            task_id: 'task-bp-resume',
+            context_id: contextId,
+            breakpoint: { node_id: 'main' },
+        });
+        await elementUpdated(el);
+
+        bus.dispatch('flows/breakpoint/hit', { node_id: 'main', task_id: 'task-bp-resume' });
+        expect(el._editor.state.breakpointHitNodeId).to.equal('main');
+
+        chat._controller._sending = true;
+        el._syncCanvasBreakpointHit();
+        expect(clears.length).to.equal(1);
+        expect(el._editor.state.breakpointHitNodeId).to.equal(null);
+    });
+
+    it('view-breakpoint-state открывает flows.state по sessionId', async () => {
+        bootstrapExecutionPanelBus();
+        const el = await fixture(html`
+            <flows-execution-panel .flowId=${'flow-1'} .branchId=${'base'}></flows-execution-panel>
+        `);
+        await elementUpdated(el);
+
+        const chat = el.shadowRoot.querySelector('platform-chat');
+        const contextId = chat._controller.state.currentContextId;
+        let opened = null;
+        el.openModal = (kind, props) => {
+            opened = { kind, props };
+        };
+
+        chat.dispatchEvent(new CustomEvent('view-breakpoint-state', {
+            detail: { breakpoint: { node_id: 'node_a', state: { x: 1 } } },
+            bubbles: true,
+            composed: true,
+        }));
+
+        expect(opened).to.not.equal(null);
+        expect(opened.kind).to.equal('flows.state');
+        expect(opened.props.sessionId).to.equal(`flow-1:${contextId}`);
+    });
+
+    it('continue-breakpoint на platform-chat вызывает sendResume', async () => {
+        bootstrapExecutionPanelBus();
+        const el = await fixture(html`
+            <flows-execution-panel .flowId=${'flow-1'} .branchId=${'base'}></flows-execution-panel>
+        `);
+        await elementUpdated(el);
+
+        const chat = el.shadowRoot.querySelector('platform-chat');
+        const contextId = chat._controller.state.currentContextId;
+        chat._controller.applyRuntimeVerb('task_started', {
+            task_id: 'task-bp-2',
+            context_id: contextId,
+        });
+        chat._controller.applyRuntimeVerb('breakpoint', {
+            task_id: 'task-bp-2',
+            context_id: contextId,
+            breakpoint: { node_id: 'node_a' },
+        });
+
+        let resumeCalled = false;
+        chat._controller.sendResume = async () => {
+            resumeCalled = true;
+        };
+        chat._streamTtsAllowed = () => false;
+
+        await chat._sendResumeTurn();
+        expect(resumeCalled).to.equal(true);
     });
 
     it('chat-run-event ретранслируется в bus и двигает agentExecutionRunning', async () => {

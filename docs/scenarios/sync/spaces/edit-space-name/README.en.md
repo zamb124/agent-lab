@@ -1,15 +1,15 @@
-# Sync: настройки пространства
+# Sync: space settings
 
-Пользователь открывает Sync-настройки выбранного платформенного пространства и включает опцию транскрибации голосовых сообщений.
+The user opens Sync settings for the selected platform space and enables voice message transcription.
 
-## Step 1. Sync открыт
+## Step 1. Sync opened
 
-![Sync открыт](screenshots/001.png)
+![Sync opened](edit-space-name--01-sync-otkryt.png)
 
-## Step 2. Открыты настройки пространства
+## Step 2. Space settings opened
 
-![Открыты настройки пространства](screenshots/002.png)
+![Space settings opened](edit-space-name--02-otkryty-nastroyki-prostranstva.png)
 
-## Step 3. Настройки пространства сохранены
+## Step 3. Space settings saved
 
-![Настройки пространства сохранены](screenshots/003.png)
+![Space settings saved](edit-space-name--03-nastroyki-prostranstva-sokhraneny.png)

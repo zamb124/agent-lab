@@ -263,6 +263,48 @@ function _terminalEvent(events, traceEntries, contextId, taskId, state, message)
     }
 }
 
+function _nodeCompletedRunPayload(d) {
+    const nodeId = typeof d.node_id === 'string' ? d.node_id : '';
+    const payload = { node_id: nodeId };
+    if (typeof d.node_type === 'string') {
+        payload.node_type = d.node_type;
+    }
+    if (typeof d.result_preview === 'string') {
+        payload.result_preview = d.result_preview;
+    }
+    if (typeof d.duration_ms === 'number' && Number.isFinite(d.duration_ms)) {
+        payload.duration_ms = Math.round(d.duration_ms);
+    }
+    if (typeof d.run_index === 'number' && Number.isFinite(d.run_index)) {
+        payload.run_index = Math.floor(d.run_index);
+    }
+    if (typeof d.primary_field === 'string') {
+        payload.primary_field = d.primary_field;
+    }
+    if (Array.isArray(d.diff)) {
+        payload.diff = d.diff;
+    }
+    if (Array.isArray(d.steps)) {
+        payload.steps = d.steps;
+    }
+    return payload;
+}
+
+function _nodeFailedRunPayload(d, error) {
+    const nodeId = typeof d.node_id === 'string' ? d.node_id : '';
+    const payload = { node_id: nodeId, error };
+    if (typeof d.node_type === 'string') {
+        payload.node_type = d.node_type;
+    }
+    if (typeof d.duration_ms === 'number' && Number.isFinite(d.duration_ms)) {
+        payload.duration_ms = Math.round(d.duration_ms);
+    }
+    if (typeof d.run_index === 'number' && Number.isFinite(d.run_index)) {
+        payload.run_index = Math.floor(d.run_index);
+    }
+    return payload;
+}
+
 function _nodeRuntimeEventsFromArtifact(out, artifact, contextId, taskId) {
     if (!artifact || typeof artifact !== 'object' || !Array.isArray(artifact.parts)) {
         return;
@@ -322,23 +364,43 @@ function _nodeRuntimeEventsFromArtifact(out, artifact, contextId, taskId) {
                 },
             });
         } else if (ev === 'node_complete') {
-            out.runEvents.push({ type: 'flows/run/node_completed', payload: { node_id: nodeId } });
+            const completedPayload = _nodeCompletedRunPayload(d);
+            out.runEvents.push({ type: 'flows/run/node_completed', payload: completedPayload });
             out.traceEntries.push({
                 context_id: contextId,
                 task_id: taskId,
                 fields: {
                     kind: 'node_complete',
                     node_id: nodeId,
+                    node_type: typeof d.node_type === 'string' ? d.node_type : '',
                     result_preview: typeof d.result_preview === 'string' ? d.result_preview : '',
+                    duration_ms: typeof d.duration_ms === 'number' && Number.isFinite(d.duration_ms)
+                        ? Math.round(d.duration_ms)
+                        : null,
+                    run_index: typeof d.run_index === 'number' && Number.isFinite(d.run_index)
+                        ? Math.floor(d.run_index)
+                        : null,
                 },
             });
         } else if (ev === 'node_error') {
             const error = typeof d.error === 'string' && d.error.length > 0 ? d.error : 'error';
-            out.runEvents.push({ type: 'flows/run/node_failed', payload: { node_id: nodeId, error } });
+            const failedPayload = _nodeFailedRunPayload(d, error);
+            out.runEvents.push({ type: 'flows/run/node_failed', payload: failedPayload });
             out.traceEntries.push({
                 context_id: contextId,
                 task_id: taskId,
-                fields: { kind: 'node_error', node_id: nodeId, error },
+                fields: {
+                    kind: 'node_error',
+                    node_id: nodeId,
+                    error,
+                    node_type: typeof d.node_type === 'string' ? d.node_type : '',
+                    duration_ms: typeof d.duration_ms === 'number' && Number.isFinite(d.duration_ms)
+                        ? Math.round(d.duration_ms)
+                        : null,
+                    run_index: typeof d.run_index === 'number' && Number.isFinite(d.run_index)
+                        ? Math.floor(d.run_index)
+                        : null,
+                },
             });
         }
     }

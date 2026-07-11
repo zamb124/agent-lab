@@ -4,8 +4,8 @@
 
 ## Шаг 1. Канал открыт
 
-![Канал открыт](screenshots/001.png)
+![Канал открыт](message-with-image--01-kanal-otkryt.png)
 
 ## Шаг 2. Сообщение с превью изображения в ленте
 
-![Сообщение с превью изображения в ленте](screenshots/002.png)
+![Сообщение с превью изображения в ленте](message-with-image--02-soobshchenie-s-prevyu-izobrazheniya-v-lente.png)

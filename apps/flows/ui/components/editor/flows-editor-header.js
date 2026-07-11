@@ -373,6 +373,8 @@ export class FlowsEditorHeader extends PlatformElement {
         this._overflowPortalHost = null;
         this._problemsPortalHost = null;
         this._problemsPortalIssuesKey = '';
+        this._outsideCloseArmed = false;
+        this._outsideCloseFrame = null;
         this._editorMql = null;
         this._onEditorMobileMql = null;
         this._onScrollResize = () => {
@@ -387,6 +389,9 @@ export class FlowsEditorHeader extends PlatformElement {
             if (!this._overflowOpen && !this._problemsOpen) {
                 return;
             }
+            if (!this._outsideCloseArmed) {
+                return;
+            }
             const path = e.composedPath();
             for (const n of path) {
                 if (n === this) {
@@ -398,7 +403,11 @@ export class FlowsEditorHeader extends PlatformElement {
                 if (n == null || typeof n !== 'object' || !('classList' in n) || !n.classList) {
                     continue;
                 }
-                if (n.classList.contains('header-actions')) {
+                if (
+                    n.classList.contains('header-actions')
+                    || n.classList.contains('overflow-anchor')
+                    || n.classList.contains('problems-anchor')
+                ) {
                     return;
                 }
             }
@@ -422,6 +431,11 @@ export class FlowsEditorHeader extends PlatformElement {
 
     connectedCallback() {
         super.connectedCallback();
+        document.addEventListener('pointerdown', this._onDocPointer);
+        if (typeof window !== 'undefined') {
+            window.addEventListener('scroll', this._onScrollResize, true);
+            window.addEventListener('resize', this._onScrollResize);
+        }
         if (typeof window === 'undefined' || typeof window.matchMedia !== 'function') {
             return;
         }
@@ -437,9 +451,6 @@ export class FlowsEditorHeader extends PlatformElement {
         if (next !== this._isMobile) {
             this._isMobile = next;
         }
-        document.addEventListener('pointerdown', this._onDocPointer);
-        window.addEventListener('scroll', this._onScrollResize, true);
-        window.addEventListener('resize', this._onScrollResize);
     }
 
     disconnectedCallback() {
@@ -447,8 +458,15 @@ export class FlowsEditorHeader extends PlatformElement {
             this._editorMql.removeEventListener('change', this._onEditorMobileMql);
         }
         document.removeEventListener('pointerdown', this._onDocPointer);
-        window.removeEventListener('scroll', this._onScrollResize, true);
-        window.removeEventListener('resize', this._onScrollResize);
+        if (typeof window !== 'undefined') {
+            window.removeEventListener('scroll', this._onScrollResize, true);
+            window.removeEventListener('resize', this._onScrollResize);
+        }
+        if (this._outsideCloseFrame !== null) {
+            cancelAnimationFrame(this._outsideCloseFrame);
+            this._outsideCloseFrame = null;
+        }
+        this._outsideCloseArmed = false;
         this._teardownOverflowPortal();
         this._teardownProblemsPortal();
         super.disconnectedCallback();
@@ -467,8 +485,8 @@ export class FlowsEditorHeader extends PlatformElement {
         }
     }
 
-    _positionMenuPortal(host, anchorSelector) {
-        if (!host) {
+    _positionMenuPortal(panel, anchorSelector) {
+        if (!panel) {
             return;
         }
         const anchor = this.renderRoot?.querySelector(anchorSelector);
@@ -476,16 +494,27 @@ export class FlowsEditorHeader extends PlatformElement {
             return;
         }
         const anchorRect = anchor.getBoundingClientRect();
-        host.style.top = `${anchorRect.bottom + MENU_PORTAL_GAP_PX}px`;
-        host.style.right = `${window.innerWidth - anchorRect.right}px`;
-        host.style.left = 'auto';
+        panel.style.top = `${anchorRect.bottom + MENU_PORTAL_GAP_PX}px`;
+        panel.style.right = `${window.innerWidth - anchorRect.right}px`;
+        panel.style.left = 'auto';
 
-        const portalRect = host.getBoundingClientRect();
+        const portalRect = panel.getBoundingClientRect();
         const overflowLeft = portalRect.left < MENU_PORTAL_VIEWPORT_INSET_PX;
         if (overflowLeft) {
-            host.style.left = `${MENU_PORTAL_VIEWPORT_INSET_PX}px`;
-            host.style.right = 'auto';
+            panel.style.left = `${MENU_PORTAL_VIEWPORT_INSET_PX}px`;
+            panel.style.right = 'auto';
         }
+    }
+
+    _createMenuPortalHost(extraClass = '') {
+        ensureMenuPortalStyles();
+        const host = document.createElement('div');
+        host.className = extraClass
+            ? `flows-editor-header-menu-portal ${extraClass}`
+            : 'flows-editor-header-menu-portal';
+        host.addEventListener('click', (e) => e.stopPropagation());
+        document.body.appendChild(host);
+        return host;
     }
 
     _positionOverflowPortal() {
@@ -502,11 +531,33 @@ export class FlowsEditorHeader extends PlatformElement {
         });
     }
 
+    _armOutsideCloseListener() {
+        this._outsideCloseArmed = false;
+        if (this._outsideCloseFrame !== null) {
+            cancelAnimationFrame(this._outsideCloseFrame);
+        }
+        this._outsideCloseFrame = requestAnimationFrame(() => {
+            this._outsideCloseFrame = null;
+            this._outsideCloseArmed = true;
+        });
+    }
+
+    _disarmOutsideCloseListener() {
+        this._outsideCloseArmed = false;
+        if (this._outsideCloseFrame !== null) {
+            cancelAnimationFrame(this._outsideCloseFrame);
+            this._outsideCloseFrame = null;
+        }
+    }
+
     _teardownOverflowPortal() {
         if (this._overflowPortalHost) {
             render(nothing, this._overflowPortalHost);
             this._overflowPortalHost.remove();
             this._overflowPortalHost = null;
+        }
+        if (!this._problemsOpen) {
+            this._disarmOutsideCloseListener();
         }
     }
 
@@ -517,80 +568,79 @@ export class FlowsEditorHeader extends PlatformElement {
             this._problemsPortalHost = null;
             this._problemsPortalIssuesKey = '';
         }
+        if (!this._overflowOpen) {
+            this._disarmOutsideCloseListener();
+        }
     }
 
     _renderOverflowPortalContent() {
         return html`
-            <div class="flows-editor-header-menu-portal" @click=${(e) => e.stopPropagation()}>
-                ${this._isMobile
-                    ? this._renderMenuButton({
-                        label: this.t('editor_header.menu_settings'),
-                        icon: 'settings',
-                        onClick: this._openFlowSettings,
-                    })
-                    : nothing}
-                ${this._isMobile
-                    ? this._renderMenuButton({
-                        label: this.t('editor_header.menu_lara'),
-                        icon: 'ai',
-                        onClick: this._openLara,
-                    })
-                    : nothing}
-                ${this._renderMenuButton({
-                    label: this.t('editor_header.menu_share'),
-                    icon: 'share',
-                    onClick: this._openPreviewShare,
-                })}
-                ${this._renderMenuButton({
-                    label: this.t('editor_header.menu_triggers'),
-                    icon: 'zap',
-                    onClick: this._openTriggers,
-                })}
-                ${this._renderMenuButton({
-                    label: this.t('editor_header.menu_api'),
-                    icon: 'api',
-                    onClick: this._openApiConsole,
-                })}
-                ${this._renderMenuButton({
-                    label: this.t('editor_header.menu_eval'),
-                    icon: 'science',
-                    onClick: this._openEvaluationLab,
-                })}
-                ${this._renderMenuButton({
-                    label: this.t('editor_header.menu_code'),
-                    icon: 'code',
-                    onClick: this._openCodeView,
-                })}
-                ${this._renderMenuButton({
-                    label: this.t('editor_header.menu_reload'),
-                    icon: 'refresh',
-                    onClick: this._reloadBundle,
-                })}
-            </div>
+            ${this._isMobile
+                ? this._renderMenuButton({
+                    label: this.t('editor_header.menu_settings'),
+                    icon: 'settings',
+                    onClick: this._openFlowSettings,
+                })
+                : nothing}
+            ${this._isMobile
+                ? this._renderMenuButton({
+                    label: this.t('editor_header.menu_lara'),
+                    icon: 'ai',
+                    onClick: this._openLara,
+                })
+                : nothing}
+            ${this._renderMenuButton({
+                label: this.t('editor_header.menu_share'),
+                icon: 'share',
+                onClick: this._openPreviewShare,
+            })}
+            ${this._renderMenuButton({
+                label: this.t('editor_header.menu_triggers'),
+                icon: 'zap',
+                onClick: this._openTriggers,
+            })}
+            ${this._renderMenuButton({
+                label: this.t('editor_header.menu_api'),
+                icon: 'api',
+                onClick: this._openApiConsole,
+            })}
+            ${this._renderMenuButton({
+                label: this.t('editor_header.menu_eval'),
+                icon: 'science',
+                onClick: this._openEvaluationLab,
+            })}
+            ${this._renderMenuButton({
+                label: this.t('editor_header.menu_code'),
+                icon: 'code',
+                onClick: this._openCodeView,
+            })}
+            ${this._renderMenuButton({
+                label: this.t('editor_header.menu_reload'),
+                icon: 'refresh',
+                onClick: this._reloadBundle,
+            })}
         `;
     }
 
     _renderProblemsPortalContent(issues) {
         return html`
-            <div class="flows-editor-header-menu-portal problems-flyout" @click=${(e) => e.stopPropagation()}>
-                <div class="problems-header">${this.t('canvas.dataflow.problems_title')}</div>
-                ${issues.map((item) => html`
-                    <article
-                        class="problem-item"
-                        role="button"
-                        tabindex="0"
-                        data-severity=${item.severity}
-                        @click=${() => this._goToProblem(item.nodeId)}
-                        @keydown=${(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); this._goToProblem(item.nodeId); } }}
-                    >
-                        <platform-icon name=${item.severity === 'error' ? 'notification-error' : 'alert-triangle'} size="12"></platform-icon>
-                        <span class="problem-body">
-                            <span class="problem-node">${item.nodeName}</span>
-                            <span class="problem-msg">${item.message}</span>
-                        </span>
-                    </article>
-                `)}
-            </div>
+            <div class="problems-header">${this.t('canvas.dataflow.problems_title')}</div>
+            ${issues.map((item) => html`
+                <article
+                    class="problem-item"
+                    role="button"
+                    tabindex="0"
+                    data-severity=${item.severity}
+                    @click=${() => this._goToProblem(item.nodeId)}
+                    @keydown=${(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); this._goToProblem(item.nodeId); } }}
+                >
+                    <platform-icon name=${item.severity === 'error' ? 'notification-error' : 'alert-triangle'} size="12"></platform-icon>
+                    <span class="problem-body">
+                        <span class="problem-node">${item.nodeName}</span>
+                        <span class="problem-msg">${item.message}</span>
+                    </span>
+                </article>
+            `)}
         `;
     }
 
@@ -599,14 +649,13 @@ export class FlowsEditorHeader extends PlatformElement {
             this._teardownOverflowPortal();
             return;
         }
-        ensureMenuPortalStyles();
         if (!this._overflowPortalHost) {
-            this._overflowPortalHost = document.createElement('div');
-            document.body.appendChild(this._overflowPortalHost);
+            this._overflowPortalHost = this._createMenuPortalHost();
         }
         render(this._renderOverflowPortalContent(), this._overflowPortalHost);
         this._positionOverflowPortal();
         this._schedulePortalPositionSync(this._positionOverflowPortal);
+        this._armOutsideCloseListener();
     }
 
     _syncProblemsPortal() {
@@ -622,10 +671,8 @@ export class FlowsEditorHeader extends PlatformElement {
             return;
         }
         const issuesKey = issues.map((item) => `${item.nodeId}:${item.severity}:${item.message}`).join('|');
-        ensureMenuPortalStyles();
         if (!this._problemsPortalHost) {
-            this._problemsPortalHost = document.createElement('div');
-            document.body.appendChild(this._problemsPortalHost);
+            this._problemsPortalHost = this._createMenuPortalHost('problems-flyout');
         }
         if (issuesKey !== this._problemsPortalIssuesKey) {
             this._problemsPortalIssuesKey = issuesKey;
@@ -633,6 +680,7 @@ export class FlowsEditorHeader extends PlatformElement {
         }
         this._positionProblemsPortal();
         this._schedulePortalPositionSync(this._positionProblemsPortal);
+        this._armOutsideCloseListener();
     }
 
     _resolveStatusBadge(state) {
@@ -819,8 +867,17 @@ export class FlowsEditorHeader extends PlatformElement {
     }
 
     _renderMenuButton({ label, icon, onClick }) {
+        const host = this;
         return html`
-            <platform-button variant="ghost" density="compact" block @click=${onClick}>
+            <platform-button
+                variant="ghost"
+                density="compact"
+                block
+                @click=${(e) => {
+                    e.stopPropagation();
+                    onClick.call(host);
+                }}
+            >
                 <platform-icon name=${icon} size="16"></platform-icon>
                 ${label}
             </platform-button>

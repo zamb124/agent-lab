@@ -20,6 +20,8 @@ os.environ.setdefault("UI_E2E_USE_LVH_ME", "1")
     doc_slug="landing-hero-download-link",
     title="Frontend: ссылка на скачивание LinnexAgent в hero лендинга",
     description="На главной странице есть floating-карточка со ссылкой на /agent.",
+    title_en="Frontend: LinnexAgent download link in the landing hero",
+    description_en="The home page has a floating card with a link to /agent.",
 )
 @pytest.mark.asyncio
 @pytest.mark.e2e
@@ -40,7 +42,11 @@ async def test_landing_hero_agent_download_link(
             has_text=re.compile(r"Скачать HumanitecAgent|Download HumanitecAgent")
         )
     ).to_be_visible(timeout=30_000)
-    await scenario.step("Floating-карточка download page видна на лендинге", page)
+    await scenario.step(
+        "Floating-карточка download page видна на лендинге",
+        page,
+        label_en="The floating download card is visible on the landing page.",
+    )
 
 
 @pytest.mark.scenario(
@@ -49,6 +55,8 @@ async def test_landing_hero_agent_download_link(
     doc_slug="flows-home-download-link",
     title="Flows: ссылка на скачивание LinnexAgent на главной",
     description="На flows home в hero actions есть ссылка с href, содержащим /agent.",
+    title_en="Flows: LinnexAgent download link on home",
+    description_en="Flows home hero actions include a link with href containing /agent.",
 )
 @pytest.mark.asyncio
 @pytest.mark.e2e
@@ -73,4 +81,8 @@ async def test_flows_home_agent_download_link(
     href = await download_link.get_attribute("href")
     assert href is not None
     assert "/agent" in href
-    await scenario.step("Ссылка на download page видна на flows home", page)
+    await scenario.step(
+        "Ссылка на download page видна на flows home",
+        page,
+        label_en="The download link is visible on Flows home.",
+    )

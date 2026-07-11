@@ -7285,6 +7285,67 @@
               }
             ],
             "title": "Min Score"
+          },
+          "rrf_k": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "exclusiveMinimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Rrf K"
+          },
+          "per_channel_top_k": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "exclusiveMinimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Per Channel Top K"
+          },
+          "rerank_max_candidates": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "exclusiveMinimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Rerank Max Candidates"
+          },
+          "freshness_weight": {
+            "anyOf": [
+              {
+                "type": "number",
+                "maximum": 1.0,
+                "minimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Freshness Weight"
+          },
+          "freshness_half_life_days": {
+            "anyOf": [
+              {
+                "type": "number",
+                "exclusiveMinimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Freshness Half Life Days"
           }
         },
         "additionalProperties": false,
@@ -8120,6 +8181,15 @@
               }
             ],
             "title": "Serp Cache Key"
+          },
+          "rank_stage": {
+            "type": "string",
+            "enum": [
+              "preview",
+              "refined"
+            ],
+            "title": "Rank Stage",
+            "default": "preview"
           }
         },
         "additionalProperties": false,

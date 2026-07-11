@@ -1,11 +1,11 @@
-# Sync: мьют уведомлений в настройках канала
+# Sync: mute notifications in channel settings
 
-Пользователь открывает настройки topic-канала и включает «Не беспокоить».
+The user opens topic channel settings and enables «Do not disturb».
 
-## Step 1. Открыты настройки канала
+## Step 1. Channel settings opened
 
-![Открыты настройки канала](screenshots/001.png)
+![Channel settings opened](mute-channel-notifications--01-otkryty-nastroyki-kanala.png)
 
-## Step 2. Включён мьют уведомлений
+## Step 2. Notifications muted
 
-![Включён мьют уведомлений](screenshots/002.png)
+![Notifications muted](mute-channel-notifications--02-vklyuchyon-myut-uvedomleniy.png)

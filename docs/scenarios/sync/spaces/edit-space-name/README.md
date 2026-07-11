@@ -4,12 +4,12 @@
 
 ## Шаг 1. Sync открыт
 
-![Sync открыт](screenshots/001.png)
+![Sync открыт](edit-space-name--01-sync-otkryt.png)
 
 ## Шаг 2. Открыты настройки пространства
 
-![Открыты настройки пространства](screenshots/002.png)
+![Открыты настройки пространства](edit-space-name--02-otkryty-nastroyki-prostranstva.png)
 
 ## Шаг 3. Настройки пространства сохранены
 
-![Настройки пространства сохранены](screenshots/003.png)
+![Настройки пространства сохранены](edit-space-name--03-nastroyki-prostranstva-sokhraneny.png)

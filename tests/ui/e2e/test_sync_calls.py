@@ -43,6 +43,11 @@ async def _ensure_overlay_chat_open(overlay) -> None:
         "В topic-канале пользователь нажимает «Звонок в этом канале»; после ответа сервера "
         "отображается оверлей звонка (атрибут data-call-active на sync-app)."
     ),
+    title_en="Sync: start a call from the channel header",
+    description_en=(
+        "In a topic channel the user clicks «Call in this channel»; after the server responds "
+        "the call overlay appears (data-call-active on sync-app)."
+    ),
 )
 @pytest.mark.asyncio
 @pytest.mark.e2e
@@ -59,12 +64,20 @@ async def test_user_starts_channel_call_overlay(
         unique_id,
         channel_prefix="Канал звонка",
     )
-    await scenario.step("Открыт topic-канал", ui_page_system)
+    await scenario.step(
+        "Открыт topic-канал",
+        ui_page_system,
+        label_en="Topic channel opened",
+    )
 
     await _click_channel_call_button(ui_page_system)
     await expect(ui_page_system.locator("sync-app")).to_have_attribute("data-call-active", "", timeout=90_000)
     await expect(ui_page_system.locator("sync-call-overlay-modal")).to_be_visible(timeout=15_000)
-    await scenario.step("Отображается оверлей звонка", ui_page_system)
+    await scenario.step(
+        "Отображается оверлей звонка",
+        ui_page_system,
+        label_en="Call overlay is displayed",
+    )
 
 
 @pytest.mark.scenario(
@@ -73,6 +86,10 @@ async def test_user_starts_channel_call_overlay(
     doc_slug="join-invalid-token",
     title="Sync: страница входа по недействительной ссылке",
     description="Публичная страница /sync/join/{token} показывает сообщение об ошибке для несуществующего токена.",
+    title_en="Sync: join page for an invalid link",
+    description_en=(
+        "The public /sync/join/{token} page shows an error message for a nonexistent token."
+    ),
 )
 @pytest.mark.asyncio
 @pytest.mark.e2e
@@ -111,6 +128,11 @@ async def test_call_join_page_shows_error_for_invalid_token(
         "Сообщение из основного чата видно в call-overlay, а сообщение из call-overlay после завершения звонка "
         "отображается в ленте канала."
     ),
+    title_en="Sync: call overlay chat stays in sync with the channel",
+    description_en=(
+        "A message from the main chat appears in the call overlay, and a message from the call overlay "
+        "appears in the channel feed after the call ends."
+    ),
 )
 @pytest.mark.asyncio
 @pytest.mark.e2e
@@ -137,7 +159,11 @@ async def test_call_overlay_channel_chat_syncs_with_main_chat(
     await expect(ui_page_system.locator("sync-message-bubble").get_by_text(main_text, exact=True)).to_be_visible(
         timeout=30_000
     )
-    await scenario.step("Сообщение из основного чата отправлено", ui_page_system)
+    await scenario.step(
+        "Сообщение из основного чата отправлено",
+        ui_page_system,
+        label_en="Message sent from the main chat",
+    )
 
     await _click_channel_call_button(ui_page_system)
     overlay = ui_page_system.locator("sync-call-overlay-modal")
@@ -150,14 +176,22 @@ async def test_call_overlay_channel_chat_syncs_with_main_chat(
     await expect(overlay.locator(".chat-text").get_by_text(overlay_text, exact=True)).to_be_visible(
         timeout=30_000
     )
-    await scenario.step("Чат в оверлее принимает и отправляет сообщения", ui_page_system)
+    await scenario.step(
+        "Чат в оверлее принимает и отправляет сообщения",
+        ui_page_system,
+        label_en="Call overlay chat accepts and sends messages",
+    )
 
     await overlay.locator("button.ctrl.hangup").click()
     await expect(ui_page_system.locator("sync-app")).not_to_have_attribute("data-call-active", "", timeout=30_000)
     await expect(ui_page_system.locator("sync-message-bubble").get_by_text(overlay_text, exact=True)).to_be_visible(
         timeout=30_000
     )
-    await scenario.step("Сообщение из оверлея видно в основном чате канала", ui_page_system)
+    await scenario.step(
+        "Сообщение из оверлея видно в основном чате канала",
+        ui_page_system,
+        label_en="Message from the overlay is visible in the main channel chat",
+    )
 
 
 @pytest.mark.scenario(
@@ -168,6 +202,11 @@ async def test_call_overlay_channel_chat_syncs_with_main_chat(
     description=(
         "Кнопка «Создать Sync» создаёт канал встречи с читаемым именем (дата и время), чат в оверлее работает, "
         "а после переключения каналов сообщения встречи сохраняются в этом канале."
+    ),
+    title_en="Sync: ad-hoc call uses a normal visible channel",
+    description_en=(
+        "The «Create Sync» button creates a meeting channel with a readable name (date and time), "
+        "chat works in the overlay, and after switching channels the meeting messages remain in that channel."
     ),
 )
 @pytest.mark.asyncio
@@ -205,7 +244,11 @@ async def test_adhoc_call_channel_is_visible_and_survives_channel_switch(
     ).strip()
     assert not header_title.startswith("meet_")
     assert any(ch.isdigit() for ch in header_title)
-    await scenario.step("Ad-hoc встреча создала видимый канал с именем по дате/времени", ui_page_system)
+    await scenario.step(
+        "Ad-hoc встреча создала видимый канал с именем по дате/времени",
+        ui_page_system,
+        label_en="Ad-hoc meeting created a visible channel named by date and time",
+    )
 
     await overlay.locator("button.ctrl.hangup").click()
     await expect(ui_page_system.locator("sync-app")).not_to_have_attribute("data-call-active", "", timeout=30_000)
@@ -216,4 +259,8 @@ async def test_adhoc_call_channel_is_visible_and_survives_channel_switch(
     await expect(ui_page_system.locator("sync-message-bubble").get_by_text(adhoc_text, exact=True)).to_be_visible(
         timeout=30_000
     )
-    await scenario.step("После переключения каналов сообщения ad-hoc канала сохранены", ui_page_system)
+    await scenario.step(
+        "После переключения каналов сообщения ad-hoc канала сохранены",
+        ui_page_system,
+        label_en="After switching channels, ad-hoc channel messages are preserved",
+    )

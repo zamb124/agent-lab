@@ -8,7 +8,7 @@ Evaluation Lab — полноэкранная рабочая зона для п�
 
 Откройте flow и перейдите по route вида `/flows/<flow_id>/evaluation/<branch_id>`. Кнопка возврата слева ведет обратно в редактор flow. В центре всегда остаются Results matrix и Live transcript, справа открывается активная рабочая панель.
 
-![Evaluation Lab открыт в светлой теме: слева suites/cases, сверху run toolbar, в центре матрица и transcript, справа case editor.](screenshots/001.png)
+![Evaluation Lab открыт в светлой теме: слева suites/cases, сверху run toolbar, в центре матрица и transcript, справа case editor.](evaluation-lab--01-evaluation-lab-otkryt-v-svetloy-teme-sleva-suites-cases-sverkhu.png)
 
 Что важно на экране:
 
@@ -23,7 +23,7 @@ Evaluation Lab — полноэкранная рабочая зона для п�
 
 Нажмите **Шаблоны** в header. Меню сгруппировано по типам проверок: детерминированные, качество/LLM, безопасность, трассировка и продвинутые. Шаблоны покрывают основные backend check-типы: `contains`, `not_contains`, `regex`, `length`, `state_path`, `json_schema`, `trace_assertion` (`tool_called`, `node_completed`, `node_failed`), `builtin_metric`, `llm_judge`, `code`, а также многошаговый диалог.
 
-![Открыто меню Templates с группами deterministic, quality, safety, trace и advanced.](screenshots/002.png)
+![Открыто меню Templates с группами deterministic, quality, safety, trace и advanced.](evaluation-lab--02-otkryto-menyu-templates-s-gruppami-deterministic-quality-safety.png)
 
 Рекомендуемый порядок:
 
@@ -39,7 +39,7 @@ Evaluation Lab — полноэкранная рабочая зона для п�
 
 Если нужен ручной case, нажмите `+` рядом с **Cases**. В Case editor заполните название, теги, описание и input. Затем выберите check type.
 
-![Открыт Case editor с полями case и полным набором check type.](screenshots/003.png)
+![Открыт Case editor с полями case и полным набором check type.](evaluation-lab--03-otkryt-case-editor-s-polyami-case-i-polnym-naborom-check-type.png)
 
 Назначение check type:
 
@@ -60,7 +60,7 @@ Evaluation Lab — полноэкранная рабочая зона для п�
 
 Рядом с ключевыми зонами есть `?`-подсказки. Они объясняют, что делает section, какие данные ожидает поле и как это связано с backend evaluation contract.
 
-![Открыта подсказка Templates: объясняет, какие сценарии покрывают шаблоны.](screenshots/004.png)
+![Открыта подсказка Templates: объясняет, какие сценарии покрывают шаблоны.](evaluation-lab--04-otkryta-podskazka-templates-obyasnyaet-kakie-stsenarii.png)
 
 Подсказки есть у:
 

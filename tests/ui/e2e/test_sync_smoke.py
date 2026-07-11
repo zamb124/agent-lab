@@ -17,6 +17,11 @@ from tests.ui.scenario_doc import ScenarioRecorder
         "После входа под системным пользователем открывается SPA Sync; "
         "на экране отображается корневой элемент приложения (sync-app)."
     ),
+    title_en="Sync: chat shell loads",
+    description_en=(
+        "After signing in as the system user the Sync SPA opens; "
+        "the root application element (sync-app) is visible on screen."
+    ),
 )
 @pytest.mark.asyncio
 @pytest.mark.e2e
@@ -26,6 +31,14 @@ async def test_sync_chat_shell(
     ui_page_system: Page,
 ) -> None:
     await sync_ui.open(ui_page_system)
-    await scenario.step("Приложение Sync открыто по URL SPA", ui_page_system)
+    await scenario.step(
+        "Приложение Sync открыто по URL SPA",
+        ui_page_system,
+        label_en="Sync application opened via SPA URL",
+    )
     await sync_ui.expect_shell(ui_page_system)
-    await scenario.step("Оболочка sync-app отображается", ui_page_system)
+    await scenario.step(
+        "Оболочка sync-app отображается",
+        ui_page_system,
+        label_en="sync-app shell is displayed",
+    )

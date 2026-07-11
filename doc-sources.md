@@ -10,12 +10,25 @@
 | **Начни отсюда** | генерируется из `docs/scenarios/taxonomy.yaml` → `start-here.md` |
 | Быстрый старт | `docs/quickstart.md` |
 | API | OpenAPI → `scripts/openapi_to_markdown.py` |
-| Инструкции | `docs/scenarios/` + hub-страницы из taxonomy |
+| Инструкции | `docs/scenarios/` + hub-страницы из taxonomy; **sidebar** — основной путь навигации |
+
+## Навигация инструкций
+
+- **Sidebar (primary):** `scripts/docs_prepare.py` генерирует для каждого сервиса `.pages` с вложенными секциями по тегам из taxonomy; внутри секции — все slug-страницы. UI Kit (`platform/ui-kit`) — отдельная вложенная секция с hub `ui-kit/index.md` и всеми component-slugs.
+- **Hub-страницы (secondary):** `scenarios/index.md`, `scenarios/<service>/index.md` — обзорные карточки; прямые ссылки на инструкции, без единственного tag-hub-only маршрута.
+- Zensical: `navigation.expand` — автораскрытие активной ветки sidebar.
+
+## Локали документации
+
+- RU: `/documentation/`; EN: `/documentation/en/`.
+- Ссылки из SPA: `core/frontend/static/lib/utils/documentation-url.js` — locale-aware (`state.i18n.locale`).
+- `platform-help-hint` с `docHref` автоматически подставляет `/documentation/en/` при locale `en`.
 
 ## Сценарии E2E → docs/scenarios
 
-- Тесты пишут **`README.md`** / **`README.en.md`** ([`tests/ui/scenario_doc.py`](../tests/ui/scenario_doc.py)).
+- Тесты пишут **`README.md`**, **`README.en.md`** и PNG рядом с ними ([`tests/ui/scenario_doc.py`](../tests/ui/scenario_doc.py)).
 - Путь в репозитории: **`docs/scenarios/<service>/<tag>/<slug>/`**.
+- Имя PNG: **`<slug>--<номер>-<понятное-имя>.png`**. Смысловая часть задаётся через `scenario.step(..., screenshot_name="...")`; каталог `screenshots/` запрещён.
 - Тег **`tag`** — группировка на hub-странице сервиса; в URL **нет** уровня tag: **`/documentation/scenarios/<service>/<slug>/`**.
 - **`doc_slug`** задаётся маркером или из `nodeid` pytest; уникален внутри `service`.
 - **`tag`** должен быть в [`docs/scenarios/taxonomy.yaml`](scenarios/taxonomy.yaml) — иначе CI падает.
@@ -25,9 +38,12 @@
 ## Стиль инструкции (канон)
 
 - Заголовок шага: **`## Шаг N. …`** (EN: **`## Step N. …`**).
-- Минимум **2 шага** и **1 скриншот** на сценарий (`check_scenario_docs_quality.py`); для **Office** — **4–7** шагов на инструкцию (средний сценарий, не атомарный).
+- Авторский стандарт — **4–7 шагов** на инструкцию; технический gate дополнительно проверяет наличие PNG, плоское размещение и формат имени.
 - Перед скриншотом: зачем этот шаг и что видно на экране (см. `sync-complete-guide`).
-- Без непонятного жаргона; **`label_en`** обязателен у каждого `scenario.step`, если в маркере есть **`title_en`**.
+- У каждого шага обязательны понятный `details` и короткий `screenshot_name`, описывающий состояние на снимке.
+- Без непонятного жаргона.
+- **EN обязателен:** у `@pytest.mark.scenario` — `title_en` и `description_en`; у каждого `scenario.step` — `label_en`; если есть `details=` — также `details_en`.
+- После правок EN-метаданных без E2E: `uv run python scripts/regenerate_scenario_readme_en.py`.
 
 ## Taxonomy
 

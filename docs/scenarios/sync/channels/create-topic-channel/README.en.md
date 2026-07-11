@@ -1,19 +1,19 @@
-# Sync: создание канала в пространстве
+# Sync: create a channel in a space
 
-После создания пространства пользователь создаёт topic-канал через «+» у раздела «Каналы» и подтверждает создание.
+After creating a space the user creates a topic channel via «+» next to «Channels» and confirms creation.
 
-## Step 1. Выбрано пространство Sync
+## Step 1. Sync space selected
 
-![Выбрано пространство Sync](screenshots/001.png)
+![Sync space selected](create-topic-channel--01-vybrano-prostranstvo-sync.png)
 
-## Step 2. Открыто создание канала
+## Step 2. Channel creation opened
 
-![Открыто создание канала](screenshots/002.png)
+![Channel creation opened](create-topic-channel--02-otkryto-sozdanie-kanala.png)
 
-## Step 3. Введено название канала
+## Step 3. Channel name entered
 
-![Введено название канала](screenshots/003.png)
+![Channel name entered](create-topic-channel--03-vvedeno-nazvanie-kanala.png)
 
-## Step 4. Канал появился в сайдбаре
+## Step 4. Channel appeared in the sidebar
 
-![Канал появился в сайдбаре](screenshots/004.png)
+![Channel appeared in the sidebar](create-topic-channel--04-kanal-poyavilsya-v-saydbare.png)

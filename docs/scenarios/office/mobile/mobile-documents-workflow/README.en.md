@@ -4,12 +4,12 @@ Bottom nav, workspace and catalog pickers, editor without bottom navigation.
 
 ## Step 1. Mobile bottom navigation
 
-![Mobile bottom navigation](screenshots/001.png)
+![Mobile bottom navigation](mobile-documents-workflow--01-mobile-bottom-navigation.png)
 
 ## Step 2. Files and Recent tabs
 
-![Files and Recent tabs](screenshots/002.png)
+![Files and Recent tabs](mobile-documents-workflow--02-files-and-recent-tabs.png)
 
 ## Step 3. Mobile catalog picker
 
-![Mobile catalog picker](screenshots/003.png)
+![Mobile catalog picker](mobile-documents-workflow--03-mobile-catalog-picker.png)
