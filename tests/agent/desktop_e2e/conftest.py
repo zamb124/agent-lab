@@ -22,7 +22,35 @@ from tests.agent.desktop_e2e.electron_launcher import (
 )
 from tests.fixtures.e2e_scope import bind_static_e2e_scope
 
-_next_desktop_debug_port = DEFAULT_DEBUG_PORT
+_next_desktop_debug_port = DEFAULT_DEBUG_PORT + 1
+_shared_desktops_by_base_url: dict[str, HumanitecDesktopProcess] = {}
+
+
+class _SharedHumanitecDesktopProcess:
+    """Один Electron на base_url за pytest-сессию: start/stop в тестах — no-op."""
+
+    def __init__(self, process: HumanitecDesktopProcess) -> None:
+        self._process = process
+
+    def start(self) -> None:
+        if self._process._process is None:
+            self._process.start()
+
+    def stop(self) -> None:
+        return
+
+    def __getattr__(self, name: str) -> object:
+        return getattr(self._process, name)
+
+
+def _needs_fresh_desktop_process(request: pytest.FixtureRequest) -> bool:
+    if request.node.get_closest_marker("desktop_fresh_process") is not None:
+        return True
+    nodeid = request.node.nodeid
+    return (
+        "test_agent_desktop_auth_pairing.py" in nodeid
+        or "test_agent_desktop_electron.py" in nodeid
+    )
 
 
 @pytest.fixture(autouse=True)
@@ -52,6 +80,14 @@ def agent_desktop_lvh_me_profile() -> None:
     os.environ.setdefault("AGENT_ARTIFACT_MODE", "release")
 
 
+@pytest.fixture(scope="session", autouse=True)
+def _cleanup_shared_desktop_processes() -> None:
+    yield
+    for process in _shared_desktops_by_base_url.values():
+        process.stop()
+    _shared_desktops_by_base_url.clear()
+
+
 @pytest.fixture(scope="session")
 def agent_desktop_base_url() -> str:
     """System-company frontend origin для сценариев с ui_page_system (pairing в settings)."""
@@ -79,22 +115,35 @@ def humanitec_desktop_install(
 
 @pytest_asyncio.fixture
 async def humanitec_desktop_process_factory(
+    request: pytest.FixtureRequest,
     humanitec_desktop_install: HumanitecDesktopInstall,
     agent_base_url: str,
-) -> Callable[[], HumanitecDesktopProcess]:
+) -> Callable[[], HumanitecDesktopProcess | _SharedHumanitecDesktopProcess]:
     """Desktop на Host той же test-компании, что auth_token и agent_frontend_http_client."""
 
-    def _factory() -> HumanitecDesktopProcess:
-        global _next_desktop_debug_port
-        debug_port = _next_desktop_debug_port
-        _next_desktop_debug_port += 1
-        return HumanitecDesktopProcess(
-            HumanitecDesktopLaunchConfig(
-                frontend_base_url=agent_base_url,
-                install=humanitec_desktop_install,
-                remote_debugging_port=debug_port,
+    def _factory() -> HumanitecDesktopProcess | _SharedHumanitecDesktopProcess:
+        if _needs_fresh_desktop_process(request):
+            global _next_desktop_debug_port
+            debug_port = _next_desktop_debug_port
+            _next_desktop_debug_port += 1
+            return HumanitecDesktopProcess(
+                HumanitecDesktopLaunchConfig(
+                    frontend_base_url=agent_base_url,
+                    install=humanitec_desktop_install,
+                    remote_debugging_port=debug_port,
+                )
             )
-        )
+        shared = _shared_desktops_by_base_url.get(agent_base_url)
+        if shared is None:
+            shared = HumanitecDesktopProcess(
+                HumanitecDesktopLaunchConfig(
+                    frontend_base_url=agent_base_url,
+                    install=humanitec_desktop_install,
+                    remote_debugging_port=DEFAULT_DEBUG_PORT,
+                )
+            )
+            _shared_desktops_by_base_url[agent_base_url] = shared
+        return _SharedHumanitecDesktopProcess(shared)
 
     return _factory
 

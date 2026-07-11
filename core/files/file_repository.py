@@ -87,21 +87,32 @@ class FileRepository(BaseRepository[FileRecord]):
         return expired
 
     async def list_missing_retention(self, *, limit: int) -> list[FileRecord]:
-        prefix = self._get_prefix()
-        keys = await self._storage.list_by_prefix(prefix, limit=limit * 20, force_global=True)
+        final_prefix = self._build_final_key(self._get_prefix())
+        table_name = self._get_table_name()
         missing: list[FileRecord] = []
-        for key in keys:
-            if len(missing) >= limit:
+        offset = 0
+        page_size = max(limit * 20, 200)
+        while len(missing) < limit:
+            page_data = await self._storage.get_all_by_prefix_and_table(
+                final_prefix,
+                table_name,
+                page_size,
+                offset,
+            )
+            if not page_data:
                 break
-            raw = await self._storage.get(key, force_global=True)
-            if raw is None:
-                continue
-            record = FileRecord.model_validate_json(raw)
-            if record.deleted_at is not None:
-                continue
-            if record.status == FileStatus.DELETED:
-                continue
-            if record.retention_kind is not None and record.expires_at is not None:
-                continue
-            missing.append(record)
+            for data in page_data.values():
+                if len(missing) >= limit:
+                    break
+                record = FileRecord.model_validate_json(data)
+                if record.deleted_at is not None:
+                    continue
+                if record.status == FileStatus.DELETED:
+                    continue
+                if record.retention_kind is not None and record.expires_at is not None:
+                    continue
+                missing.append(record)
+            offset += len(page_data)
+            if len(page_data) < page_size:
+                break
         return missing

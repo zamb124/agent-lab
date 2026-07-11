@@ -71,6 +71,12 @@ async def pair_desktop_via_deep_link(
     *,
     page: Page | None = None,
 ) -> tuple[str, dict[str, str]]:
+    if desktop_process.credentials_path.is_file():
+        existing = desktop_process.read_credentials()
+        device_id = existing.get("device_id")
+        if isinstance(device_id, str) and device_id not in ("", "pending"):
+            return device_id, existing
+
     pairing_code = await create_pairing_code(agent_frontend_http_client, auth_token)
     if page is not None:
         code_input = page.locator("[data-humanitec-pairing-code]")

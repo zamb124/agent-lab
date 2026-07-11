@@ -621,7 +621,14 @@ Learning path **flows** (простое → сложное):
 
 ## 7. Реализация (статус)
 
-Все обязательные карточки §3 и §4a реализованы как `@pytest.mark.scenario` UI E2E-тесты с RU+EN README и PNG.
+**E2E-тесты:** 45/45 — все обязательные карточки §3 и §4a имеют `@pytest.mark.scenario` UI E2E-тесты.
+
+**Документация (README RU+EN + PNG):** 39/45. Осталось сгенерировать через scenario-прогон:
+`organize-large-graph`, `parameters-and-secrets`, `reuse-with-resources`,
+`experiment-with-branches`, `publish-and-operate`, `connect-oauth-integrations`.
+
+**Taxonomy:** теги `flows` и сервис `worktracker` — готовы; learning paths `flows`,
+`worktracker-operators` и исправленные href developer path — в `docs/scenarios/taxonomy.yaml`.
 
 ### Хелперы
 
@@ -658,6 +665,8 @@ Learning path **flows** (простое → сложное):
 Smoke-гейт (без scenario): `test_flows_helpers_smoke.py`.
 
 ### Чеклист карточек
+
+E2E-тесты (все `[x]`):
 
 - [x] 1.1 `flows-home-tour`
 - [x] 1.2 `create-first-agent`
@@ -705,9 +714,15 @@ Smoke-гейт (без scenario): `test_flows_helpers_smoke.py`.
 - [x] B4 `route-and-reassign-tasks`
 - [x] B5 `track-work-on-board`
 
+Документация (README RU+EN + PNG):
+
+- [x] 39 slug'ов с полным комплектом
+- [ ] `organize-large-graph`, `parameters-and-secrets` — папки docs ещё не созданы
+- [ ] `reuse-with-resources`, `experiment-with-branches`, `publish-and-operate`, `connect-oauth-integrations` — только частичные PNG, README отсутствуют
+
 Прогон: `make test-up && UI_E2E_USE_LVH_ME=1 uv run pytest tests/ui/e2e/test_flows_*.py tests/ui/e2e/test_worktracker_operators.py -m scenario -v --tb=short`
 
 Документация: `make test-ui-doc` → `docs/scenarios/flows/**` и `docs/scenarios/worktracker/operators/**`.
 
-Developer learning path: `scenarios/flows/api-first-request/` (см. `docs/scenarios/taxonomy.yaml`).
+Developer learning path: `scenarios/flows/api/api-first-request/` (см. `docs/scenarios/taxonomy.yaml`).
 

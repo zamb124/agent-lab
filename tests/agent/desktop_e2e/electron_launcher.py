@@ -77,7 +77,7 @@ class HumanitecDesktopProcess:
                 raise RuntimeError(f"HumanitecAgent exited early: {output}")
             if self._remote_debugging_ready():
                 return
-            time.sleep(0.5)
+            time.sleep(0.2)
         raise TimeoutError(
             f"HumanitecAgent did not open remote debugging port "
             f"{self._config.remote_debugging_port} within "

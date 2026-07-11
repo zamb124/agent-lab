@@ -15,6 +15,7 @@ from tests.ui.e2e.flows_e2e_helpers import (
     GREEN_GARDEN_SUPPORT_EMAIL,
     flows_api_create_flow,
     flows_api_get_flow,
+    flows_canvas_node_ids_of_type,
     flows_doc_flow_id,
     flows_drop_resource_type,
     flows_llm_payload,
@@ -92,11 +93,10 @@ async def test_flows_reuse_with_resources(
         ),
     )
 
-    resource_node = page.locator("flows-flow-canvas g.node[data-node-type='resource']").first
-    await resource_node.dblclick()
-    await expect(
-        page.locator("flows-resource-node-editor, flows-resource-property-panel")
-    ).to_be_visible(timeout=30_000)
+    resource_ids = await flows_canvas_node_ids_of_type(page, "resource")
+    if not resource_ids:
+        raise AssertionError("resource node missing after palette drop")
+    await flows_open_node_editor(page, resource_ids[0])
     name_field = page.locator("flows-base-resource-editor platform-field").first
     if await name_field.count() > 0:
         await flows_set_platform_field(name_field, GREEN_GARDEN_CATALOG_FILE)
@@ -200,7 +200,7 @@ async def test_flows_parameters_and_secrets(
     await flows_open_editor(page, flows_ui, flow_id)
     modal = await flows_open_variables_modal(page, scope="flow")
     add_btn = modal.locator("platform-button").filter(
-        has_text=re.compile(r"Добавить|Add")
+        has=modal.locator("platform-icon[name='plus']")
     ).first
     await expect(add_btn).to_be_visible(timeout=15_000)
     await add_btn.locator("button").first.click()

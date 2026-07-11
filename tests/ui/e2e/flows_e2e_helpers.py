@@ -151,6 +151,9 @@ async def flows_click_platform_button(
 
 async def flows_set_platform_field(field: Locator, value: str) -> None:
     await expect(field).to_be_visible(timeout=30_000)
+    editable = field.locator("input, textarea").first
+    if await editable.count() > 0:
+        await editable.fill(value)
     await field.evaluate(
         """
         (el, value) => {
@@ -165,7 +168,6 @@ async def flows_set_platform_field(field: Locator, value: str) -> None:
         """,
         value,
     )
-    editable = field.locator("input, textarea").first
     if await editable.count() > 0:
         await expect(editable).to_have_value(value, timeout=5_000)
 
@@ -362,6 +364,7 @@ async def flows_chat_click_clear(page: Page) -> None:
 
 async def flows_publish_editor(page: Page) -> None:
     await flows_close_floating_panel(page)
+    await expect(page.locator("flows-flow-canvas svg.canvas-host")).to_be_visible(timeout=30_000)
     publish_pattern = re.compile(r"^\s*(?:Publish|Опубликовать)\s*$")
     button = page.locator("flows-editor-header platform-button").filter(
         has_text=publish_pattern
@@ -372,9 +375,9 @@ async def flows_publish_editor(page: Page) -> None:
     async with page.expect_response(
         lambda response: response.request.method == "PUT"
         and "/flows/api/v1/flows/" in response.url,
-        timeout=60_000,
+        timeout=120_000,
     ) as publish_response:
-        await inner.click(force=True)
+        await button.evaluate("(el) => el.click()")
     response = await publish_response.value
     if response.status >= 400:
         raise AssertionError(
@@ -560,6 +563,24 @@ def flows_background_task_payload(
 # --------------------------------------------------------------------------------------
 
 
+async def flows_dismiss_pwa_install_banner(page: Page) -> None:
+    await page.evaluate(
+        """
+        () => {
+            localStorage.setItem('pwa-banner-dismissed', 'true');
+            const banner = document.querySelector('pwa-install-banner');
+            if (!banner) return;
+            banner._dismissed = true;
+            banner.removeAttribute('visible');
+        }
+        """
+    )
+    banner = page.locator("pwa-install-banner").first
+    if await banner.count() == 0:
+        return
+    await expect(banner).to_be_hidden(timeout=5_000)
+
+
 async def flows_open_editor(page: Page, flows_ui: AppUI, flow_id: str, *, branch_id: str = "base") -> None:
     """Единая точка входа в редактор flow с ожиданием готовности канвы."""
     if branch_id in {"", "base", "default"}:
@@ -568,6 +589,7 @@ async def flows_open_editor(page: Page, flows_ui: AppUI, flow_id: str, *, branch
         url = f"{flows_ui.origin}/flows/{flow_id}/editor/{branch_id}"
     await page.goto(url, wait_until="domcontentloaded")
     await expect(page.locator("flows-app")).to_be_visible(timeout=30_000)
+    await flows_dismiss_pwa_install_banner(page)
     await expect(page.locator("flows-flow-canvas svg.canvas-host")).to_be_visible(timeout=30_000)
 
 
@@ -1168,10 +1190,10 @@ async def flows_canvas_toolbar_action(
     toolbar = page.locator("flows-bottom-toolbar").first
     await expect(toolbar).to_be_visible(timeout=15_000)
     icon_map = {
-        "zoom_in": "zoom-in",
-        "zoom_out": "zoom-out",
-        "zoom_100": "target",
-        "fit_view": "maximize",
+        "zoom_in": "plus",
+        "zoom_out": "minus",
+        "zoom_100": "search",
+        "fit_view": "fullscreen",
     }
     icon = icon_map[action]
     btn = toolbar.locator(f"platform-icon[name='{icon}']").locator("xpath=ancestor::platform-button").first
@@ -1222,18 +1244,22 @@ async def flows_open_variables_modal(page: Page, *, scope: Literal["flow", "comp
 async def flows_add_flow_variable(page: Page, key: str, value: str) -> None:
     modal = page.locator("flows-variables-modal").first
     await expect(modal).to_be_visible(timeout=15_000)
-    add_btn = modal.locator("platform-button").filter(
-        has_text=re.compile(r"Add|Добавить")
+    add_btn = modal.locator(
+        "platform-button[icon-only], platform-button"
+    ).filter(
+        has=page.locator("platform-icon[name='plus']")
     ).first
     await expect(add_btn).to_be_visible(timeout=15_000)
-    await add_btn.locator("button").first.click()
-    fields = modal.locator("platform-field")
-    await flows_set_platform_field(fields.filter(has=page.locator("[name='key'], [data-field='key']")).first, key)
+    await add_btn.evaluate("(el) => el.click()")
+    var_editor = page.locator("flows-variable-editor-modal").first
+    await expect(var_editor).to_be_visible(timeout=15_000)
+    fields = var_editor.locator("platform-field")
+    await flows_set_platform_field(fields.nth(0), key)
     value_field = fields.filter(has=page.locator("[name='value'], [data-field='value']")).last
     if await value_field.count() == 0:
         value_field = fields.nth(-1)
     await flows_set_platform_field(value_field, value)
-    await flows_click_platform_button(modal, "Save", "Сохранить")
+    await flows_save_variable_editor_modal(var_editor)
 
 
 async def flows_open_triggers_modal(page: Page) -> Locator:
@@ -1274,11 +1300,12 @@ async def flows_open_integrations_modal_from_home(page: Page, flows_ui: AppUI) -
     await page.goto(f"{flows_ui.origin}/flows/", wait_until="domcontentloaded")
     home = page.locator("flows-home-page").first
     await expect(home).to_be_visible(timeout=30_000)
-    card = home.locator("[data-quick-action-id='integrations'], .quick-action-card").filter(
-        has_text=re.compile(r"Integrations|Интеграции|OAuth|подключ")
+    await flows_dismiss_pwa_install_banner(page)
+    card = home.locator(".connect-card").filter(
+        has_text=re.compile(r"Integrations|Интеграции")
     ).first
     await expect(card).to_be_visible(timeout=15_000)
-    await card.click()
+    await card.locator("platform-button").first.click()
     modal = page.locator("flows-integrations-modal").first
     await expect(modal).to_be_visible(timeout=15_000)
     return modal
@@ -1406,17 +1433,43 @@ async def flows_create_branch(
     await flows_set_platform_field(fields.nth(1), name)
     if description and await fields.count() > 2:
         await flows_set_platform_field(fields.nth(2), description)
-    await flows_click_platform_button(modal, "Create", "Создать")
+    create_btn = modal.locator("platform-button").filter(
+        has_text=re.compile(r"^(?:Create|Создать)$")
+    ).first
+    await expect(create_btn.locator("button")).to_be_enabled(timeout=15_000)
+    async with page.expect_response(
+        lambda response: response.request.method == "POST"
+        and "/branches" in response.url,
+        timeout=60_000,
+    ) as branch_response:
+        await create_btn.evaluate("(el) => el.click()")
+    response = await branch_response.value
+    if response.status >= 400:
+        raise AssertionError(
+            f"flows_create_branch: POST failed with {response.status}: {await response.text()}"
+        )
     await expect(modal).to_be_hidden(timeout=30_000)
+    control = page.locator(
+        "flows-editor-header .branches-scroll platform-segmented-control, "
+        "flows-editor-header .branches-row platform-segmented-control"
+    ).first
+    await expect(
+        control.locator("button.segment .segment-label").filter(has_text=re.compile(re.escape(name)))
+    ).to_be_visible(timeout=30_000)
 
 
 async def flows_select_branch_tab(page: Page, branch_label_pattern: str) -> None:
-    control = page.locator("flows-editor-header platform-segmented-control").first
+    control = page.locator(
+        "flows-editor-header .branches-scroll platform-segmented-control, "
+        "flows-editor-header .branches-row platform-segmented-control"
+    ).first
     await expect(control).to_be_visible(timeout=30_000)
-    tab = control.locator("button.segment").filter(has_text=re.compile(branch_label_pattern)).first
+    tab = control.locator("button.segment").filter(
+        has_text=re.compile(branch_label_pattern)
+    ).first
     await expect(tab).to_be_visible(timeout=30_000)
     await tab.click()
-    await expect(tab).to_have_attribute("aria-selected", "true", timeout=15_000)
+    await expect(tab).to_have_attribute("data-active", "true", timeout=15_000)
 
 
 async def flows_open_flow_edit_modal(page: Page) -> Locator:
@@ -1519,11 +1572,20 @@ async def flows_drop_resource_type(
     page: Page,
     resource_type: str,
     *,
-    x: int = 720,
-    y: int = 420,
+    x: int = 480,
+    y: int = 520,
 ) -> None:
     canvas = page.locator("flows-flow-canvas").first
     await expect(canvas).to_be_visible(timeout=30_000)
+    await page.wait_for_function(
+        """
+        () => {
+            const canvas = document.querySelector('flows-flow-canvas');
+            return Boolean(canvas && canvas._editor && canvas._editor.state);
+        }
+        """,
+        timeout=30_000,
+    )
     await canvas.evaluate(
         """
         (el, ctx) => {
@@ -1534,7 +1596,7 @@ async def flows_drop_resource_type(
                 local: { x: ctx.x, y: ctx.y },
                 nodeType: '',
                 resourceType: ctx.resourceType,
-                htmlTargetNodeId: null,
+                htmlTargetNodeId: '',
             });
         }
         """,

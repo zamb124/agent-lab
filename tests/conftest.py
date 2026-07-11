@@ -416,6 +416,13 @@ def pytest_runtest_call(item) -> Generator[None, object, object]:
 
 def _skip_autouse_test_context(request: pytest.FixtureRequest) -> bool:
     """ASGI-клиенты с Bearer auth: контекст выставляет AuthMiddleware, не test_user."""
+    direct_container_fixtures = (
+        "crm_container",
+        "flows_container",
+        "worktracker_container",
+    )
+    if any(name in request.fixturenames for name in direct_container_fixtures):
+        return False
     asgi_client_fixtures = (
         "frontend_client",
         "flows_client",

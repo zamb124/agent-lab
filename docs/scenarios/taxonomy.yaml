@@ -43,10 +43,10 @@ learning_paths:
         href: quickstart/
       - label_ru: Flows — знакомство и первый агент
         label_en: Flows — home tour and first agent
-        href: scenarios/flows/flows-home-tour/
+        href: scenarios/flows/getting-started/flows-home-tour/
       - label_ru: Flows — первый запрос через API Console
         label_en: Flows — first request via API Console
-        href: scenarios/flows/api-first-request/
+        href: scenarios/flows/api/api-first-request/
       - label_ru: UI Kit — каталог core-компонентов
         label_en: UI Kit — core component catalog
         href: scenarios/platform/ui-kit/
@@ -76,6 +76,70 @@ learning_paths:
       - label_ru: Звонок из канала
         label_en: Start a channel call
         href: scenarios/sync/channel-call-overlay/
+
+  - id: flows
+    label_ru: Flows — агенты и графы
+    label_en: Flows — agents and graphs
+    intro_ru: >-
+      Путь от знакомства с главной Flows до первого опубликованного агента с инструментами:
+      каталог, создание, настройка ответов, тест в чате и публикация.
+    intro_en: >-
+      From the Flows home tour to a published agent with tools: catalog, creation,
+      answer setup, chat testing, and publishing.
+    steps:
+      - label_ru: Знакомство с главной и каталогом
+        label_en: Home tour and agent catalog
+        href: scenarios/flows/getting-started/flows-home-tour/
+      - label_ru: Создание первого агента
+        label_en: Create your first agent
+        href: scenarios/flows/getting-started/create-first-agent/
+      - label_ru: Настройка ответов агента
+        label_en: Shape agent answers
+        href: scenarios/flows/editor/configure-agent-answers/
+      - label_ru: Тест агента в чате
+        label_en: Test the agent in chat
+        href: scenarios/flows/execution/test-agent-in-chat/
+      - label_ru: Инструменты агента
+        label_en: Agent tools
+        href: scenarios/flows/nodes/add-agent-tools/
+      - label_ru: Публикация и управление
+        label_en: Publish and operate
+        href: scenarios/flows/operations/publish-and-operate/
+
+  - id: worktracker-operators
+    label_ru: Операторы и HITL
+    label_en: Operators and HITL
+    intro_ru: >-
+      Полный маршрут передачи диалога человеку: настройка очереди, входящие оператора,
+      ожидание покупателя, перехват диалога, маршрутизация задач и наблюдение в истории.
+    intro_en: >-
+      Full operator handoff path: queue setup, operator inbox, customer waiting,
+      dialog takeover, task routing, and tracing in run history.
+    steps:
+      - label_ru: Передача сложного случая оператору
+        label_en: Escalate a hard case to an operator
+        href: scenarios/flows/nodes/escalate-to-operator/
+      - label_ru: Настройка очереди операторов
+        label_en: Set up an operator queue
+        href: scenarios/worktracker/operators/setup-operator-queue/
+      - label_ru: Входящие и ответ клиенту
+        label_en: Operator inbox and customer reply
+        href: scenarios/worktracker/operators/operator-inbox-single-reply/
+      - label_ru: Что видит покупатель при ожидании
+        label_en: What the customer sees while waiting
+        href: scenarios/flows/execution/customer-waits-for-operator/
+      - label_ru: Перехват диалога оператором
+        label_en: Operator dialog takeover
+        href: scenarios/worktracker/operators/operator-takeover-dialog/
+      - label_ru: Маршрутизация и переназначение
+        label_en: Route and reassign tasks
+        href: scenarios/worktracker/operators/route-and-reassign-tasks/
+      - label_ru: Фоновая задача от агента
+        label_en: Agent background task
+        href: scenarios/flows/nodes/agent-logs-background-task/
+      - label_ru: Передача в истории выполнения
+        label_en: Operator handoff in run history
+        href: scenarios/flows/execution/trace-operator-handoff/
 
   - id: office-documents
     label_ru: Документы Office

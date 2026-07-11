@@ -87,6 +87,54 @@ async def test_flows_home_tour(
         ),
     )
 
+    hero_actions = page.locator("flows-home-page .hero-actions").first
+    await expect(hero_actions).to_be_visible(timeout=15_000)
+    download_link = hero_actions.locator("a.hero-download-link").first
+    await expect(download_link).to_be_visible(timeout=15_000)
+    operator_button = hero_actions.locator("platform-button").filter(
+        has_text=re.compile(r"Оператор|Operator|HITL")
+    ).first
+    await expect(operator_button).to_be_visible(timeout=15_000)
+    await scenario.step(
+        "Посмотрите быстрые действия и ссылку на LinnexAgent",
+        page,
+        screenshot_name="hero-quick-actions",
+        label_en="Review quick actions and the LinnexAgent download link",
+        details=(
+            "В блоке быстрых действий есть кнопки «Сессии», «Оператор / HITL» и ссылка "
+            "«Скачать LinnexAgent» для desktop-клиента. Отсюда можно перейти к задачам "
+            "операторов или скачать приложение для pairing и Platform MCP."
+        ),
+        details_en=(
+            "The quick actions block includes Sessions, Operator / HITL, and a "
+            "Download LinnexAgent link for the desktop client. From here you can open "
+            "operator tasks or download the app for pairing and Platform MCP."
+        ),
+    )
+
+    sessions_button = hero_actions.locator("platform-button").filter(
+        has_text=re.compile(r"Сессии|Sessions")
+    ).first
+    await sessions_button.locator("button").first.click()
+    sessions_modal = page.locator("flows-sessions-modal").first
+    await expect(sessions_modal).to_be_visible(timeout=30_000)
+    await scenario.step(
+        "Откройте недавние сессии",
+        page,
+        screenshot_name="recent-sessions-modal",
+        label_en="Open recent sessions",
+        details=(
+            "Кнопка «Сессии» открывает список недавних диалогов с агентами. Здесь можно "
+            "продолжить разговор или посмотреть, какие агенты недавно запускались."
+        ),
+        details_en=(
+            "The Sessions button opens a list of recent agent conversations. Here you "
+            "can resume a dialog or see which agents ran recently."
+        ),
+    )
+    await page.keyboard.press("Escape")
+    await expect(sessions_modal).to_be_hidden(timeout=15_000)
+
     catalog = page.locator("flows-catalog-list").first
     await expect(catalog).to_be_visible(timeout=30_000)
     search = catalog.locator("platform-modal-search-field").first
@@ -122,7 +170,24 @@ async def test_flows_home_tour(
     )
 
     await card.hover()
+    editor_button = card.locator("[data-action='edit-flow']").first
     chat_button = card.locator("[data-action='open-chat']").first
+    await expect(editor_button).to_be_visible(timeout=15_000)
+    await expect(chat_button).to_be_visible(timeout=15_000)
+    await scenario.step(
+        "Раскройте карточку агента",
+        page,
+        screenshot_name="agent-card-actions",
+        label_en="Reveal agent card actions",
+        details=(
+            "Наведите курсор на карточку «Помощника Зелёного сада». Появятся кнопки "
+            "«Чат» и «Редактор» — чат для проверки агента, редактор для настройки графа."
+        ),
+        details_en=(
+            "Hover over the Green Garden Assistant card. Chat and Editor buttons appear — "
+            "chat to try the agent, editor to configure the graph."
+        ),
+    )
     await chat_button.click(force=True)
     await expect(page.locator("chat-page platform-chat")).to_be_visible(timeout=30_000)
     await scenario.step(
@@ -154,13 +219,14 @@ async def test_flows_home_tour(
             "**Демонстрация результата.** Отправьте вопрос и дождитесь ответа в ленте "
             "чата — видимый ответ подтверждает, что агент найден и работает.\n\n"
             "**Итог.** Теперь вы умеете ориентироваться на главной Flows, находить "
-            "агента в каталоге и открывать с ним рабочий чат."
+            "быстрые действия и сессии, находить агента в каталоге и открывать с ним "
+            "рабочий чат."
         ),
         details_en=(
             "**Result demonstration.** Send a question and wait for the reply in the chat "
             "feed; a visible answer confirms the agent is found and working.\n\n"
-            "**Summary.** You can now navigate the Flows home, find an agent in the "
-            "catalog, and open a working chat with it."
+            "**Summary.** You can now navigate the Flows home, use quick actions and "
+            "sessions, find an agent in the catalog, and open a working chat with it."
         ),
     )
 
